@@ -7,7 +7,6 @@ import type {
   AgentConversationInputPresentation,
   AgentTurnAnswer,
   AgentTurnInputKind,
-  AgentTurnObjective,
   AgentTurnScope
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
@@ -47,7 +46,6 @@ export interface PreservedAgentTurn {
 
 export interface AgentTurnConversationMetadata {
   readonly inputKind: AgentTurnInputKind;
-  readonly objective: AgentTurnObjective;
   readonly locale: Locale;
   readonly scope?: AgentTurnScope;
   readonly inputPresentation?: AgentConversationInputPresentation;
@@ -203,7 +201,8 @@ export class AgentTurnConversationStore {
         clientTurnId: found.clientTurnId,
         conversationId: found.conversationId,
         ...(found.parentEventId ? { parentEventId: found.parentEventId } : {})
-      } : undefined
+      } : undefined,
+      readLegacyObjective(found)
     );
     if (actualHash !== expectedInputHash || (found.inputHash !== undefined && found.inputHash !== actualHash)) {
       throw new PigeDomainError("agent_runtime.turn_changed", "The preserved Agent user turn changed before resume.");
@@ -321,7 +320,7 @@ export class AgentTurnConversationStore {
     }
     const existing = existingMatches[0];
     if (existing) {
-      return adoptMatchingInputTurn(existing, kind, expectedText, inputHash, metadata, resolved);
+      return adoptMatchingInputTurn(existing, kind, expectedText, metadata, resolved);
     }
 
     const event = ConversationEventSchema.parse({
@@ -346,7 +345,6 @@ export class AgentTurnConversationStore {
           { event: localMatches[0], locator },
           kind,
           expectedText,
-          inputHash,
           metadata,
           resolved
         ).event;
@@ -410,16 +408,27 @@ function adoptMatchingInputTurn(
   located: LocatedConversationEvent,
   kind: "user" | "blocked",
   expectedText: string,
-  inputHash: string,
   metadata: AgentTurnConversationMetadata | undefined,
   binding: ResolvedTurnBinding
 ): PreservedAgentTurn {
   const event = located.event;
   const expectedType = kind === "user" ? "user_message" : "error";
+  const storedMetadata = readTurnMetadata(event);
+  const storedInputHash = createTurnInputHash(
+    kind,
+    expectedText,
+    storedMetadata,
+    {
+      clientTurnId: binding.clientTurnId,
+      conversationId: binding.conversationId,
+      ...(binding.parentEventId ? { parentEventId: binding.parentEventId } : {})
+    },
+    readLegacyObjective(event)
+  );
   if (
     event.type !== expectedType ||
     event.text !== expectedText ||
-    event.inputHash !== inputHash ||
+    event.inputHash !== storedInputHash ||
     event.conversationId !== binding.conversationId ||
     event.parentEventId !== binding.parentEventId ||
     !hasExactTurnMetadata(event, metadata)
@@ -429,7 +438,7 @@ function adoptMatchingInputTurn(
   return {
     event,
     locator: located.locator,
-    inputHash,
+    inputHash: storedInputHash,
     ...(metadata ? { metadata } : {})
   };
 }
@@ -605,14 +614,11 @@ function readTurnMetadata(event: ConversationEvent): AgentTurnConversationMetada
     "file_picker",
     "follow_up"
   ]);
-  const objectives = new Set<AgentTurnObjective>(["auto", "capture", "vault_only"]);
   const locales = new Set<Locale>(["zh-Hans", "en", "ja", "ko", "fr", "de"]);
   if (
     typeof value.inputKind !== "string" ||
-    typeof value.objective !== "string" ||
     typeof value.locale !== "string" ||
     !inputKinds.has(value.inputKind as AgentTurnInputKind) ||
-    !objectives.has(value.objective as AgentTurnObjective) ||
     !locales.has(value.locale as Locale)
   ) {
     return undefined;
@@ -621,11 +627,17 @@ function readTurnMetadata(event: ConversationEvent): AgentTurnConversationMetada
   const inputPresentation = readInputPresentation(value.inputPresentation);
   return {
     inputKind: value.inputKind as AgentTurnInputKind,
-    objective: value.objective as AgentTurnObjective,
     locale: value.locale as Locale,
     ...(scope ? { scope } : {}),
     ...(inputPresentation ? { inputPresentation } : {})
   };
+}
+
+type LegacyAgentTurnObjective = "auto" | "capture" | "vault_only";
+
+function readLegacyObjective(event: ConversationEvent): LegacyAgentTurnObjective | undefined {
+  const value = (event as ConversationEvent & Record<string, unknown>).objective;
+  return value === "auto" || value === "capture" || value === "vault_only" ? value : undefined;
 }
 
 function readTurnScope(value: unknown): AgentTurnScope | undefined {
@@ -665,7 +677,8 @@ function assertStoredUserIntegrity(event: ConversationEvent): void {
       clientTurnId: event.clientTurnId,
       conversationId: event.conversationId,
       ...(event.parentEventId ? { parentEventId: event.parentEventId } : {})
-    } : undefined
+    } : undefined,
+    readLegacyObjective(event)
   );
   if (event.inputHash !== actualHash) {
     throw new PigeDomainError("agent_runtime.turn_changed", "The durable user turn changed after preservation.");
@@ -685,7 +698,6 @@ function hasExactTurnMetadata(
       value.inputPresentation === undefined;
   }
   return value.inputKind === metadata.inputKind &&
-    value.objective === metadata.objective &&
     value.locale === metadata.locale &&
     scopesEqual(readTurnScope(value.scope), metadata.scope) &&
     JSON.stringify(readInputPresentation(value.inputPresentation)) === JSON.stringify(metadata.inputPresentation);
@@ -1054,11 +1066,12 @@ function createTurnInputHash(
   kind: "user" | "blocked",
   text: string,
   metadata: AgentTurnConversationMetadata | undefined,
-  binding?: Pick<ResolvedTurnBinding, "clientTurnId" | "conversationId" | "parentEventId">
+  binding?: Pick<ResolvedTurnBinding, "clientTurnId" | "conversationId" | "parentEventId">,
+  legacyObjective?: LegacyAgentTurnObjective
 ): string {
   const stableMetadata = metadata ? {
     inputKind: metadata.inputKind,
-    objective: metadata.objective,
+    ...(legacyObjective ? { objective: legacyObjective } : {}),
     locale: metadata.locale,
     ...(metadata.scope ? { scope: metadata.scope } : {}),
     ...(metadata.inputPresentation ? { inputPresentation: metadata.inputPresentation } : {})

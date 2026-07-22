@@ -55,7 +55,6 @@ describe("Agent-selected URL ingress", () => {
     const outcome = await home.submitTurn({
       text: "https://example.com/article",
       inputKind: "typed_url",
-      objective: "auto",
       locale: "en"
     });
 
@@ -92,7 +91,6 @@ describe("Agent-selected URL ingress", () => {
           ? "https://example.com/article"
           : "Please read https://example.com/article and summarize it.",
         inputKind,
-        objective: "auto",
         locale: "en"
       });
 
@@ -176,7 +174,6 @@ describe("Agent-selected URL ingress", () => {
     const failed = await first.submitTurn({
       text: "Read https://example.com/article",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
     expect(failed).toMatchObject({
@@ -396,7 +393,6 @@ describe("Agent-selected URL ingress", () => {
       jobId: created.id,
       url: "https://example.com/article",
       inputKind: "typed_url",
-      objective: "capture",
       locale: "en",
       policyHash,
       catalogHash,
@@ -449,7 +445,6 @@ describe("Agent-selected URL ingress", () => {
     const outcome = await home.submitTurn({
       text: "Read https://example.com/article",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -483,7 +478,6 @@ describe("Agent-selected URL ingress", () => {
     const outcome = await home.submitTurn({
       text: "Read https://example.com/article",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -528,7 +522,6 @@ describe("Agent-selected URL ingress", () => {
     const outcome = await home.submitTurn({
       text: "Read https://example.com/article",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -566,7 +559,6 @@ describe("Agent-selected URL ingress", () => {
     const outcome = await home.submitTurn({
       text: "Compare https://example.com/one with https://example.org/two",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -597,7 +589,6 @@ describe("Agent-selected URL ingress", () => {
     const outcome = await home.submitTurn({
       text: "Read https://example.com/article",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -650,7 +641,6 @@ describe("Agent-selected URL ingress", () => {
     const outcome = await home.submitTurn({
       text: "Read https://example.com/article",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -703,7 +693,6 @@ describe("Agent-selected URL ingress", () => {
     const outcome = await home.submitTurn({
       text: "Read https://example.com/article",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -745,7 +734,6 @@ describe("Agent-selected URL ingress", () => {
     const outcome = await home.submitTurn({
       text: url,
       inputKind: "typed_url",
-      objective: "auto",
       locale: "en"
     });
 
@@ -787,7 +775,6 @@ describe("Agent-selected URL ingress", () => {
     const outcome = await home.submitTurn({
       text: "Read https://example.com/article",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -822,7 +809,6 @@ describe("Agent-selected URL ingress", () => {
     const outcome = await home.submitTurn({
       text: "Read http://internal.example/private",
       inputKind: "typed_url",
-      objective: "capture",
       locale: "en"
     });
 

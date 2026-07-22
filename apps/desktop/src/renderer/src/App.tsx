@@ -1005,7 +1005,6 @@ export function App(): React.JSX.Element {
         clientTurnId,
         ...(text?.trim() ? { text } : {}),
         inputKind,
-        objective: "auto",
         locale
       }, files);
       void submission.catch(() => undefined);
@@ -4963,7 +4962,6 @@ function HomeComposer(props: {
             schemaVersion: 1,
             text: turnText,
             inputKind: followUpConversation ? "follow_up" : classifyTextTransportKind(turnText),
-            objective: "auto",
             locale: props.locale,
             clientTurnId,
             ...(followUpConversation ? {

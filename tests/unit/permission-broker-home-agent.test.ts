@@ -76,7 +76,6 @@ describe("AR1 submitted-turn authority in Home", () => {
     const result = await home.submitTurn({
       text: "Check the stable release channel.",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en",
       clientTurnId: "turn_20260722_homeauthority"
     });

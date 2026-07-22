@@ -2143,7 +2143,6 @@ describe("Home durable Agent conversation UI", () => {
       schemaVersion: 1,
       text: "Continue with one practical example.",
       inputKind: "follow_up",
-      objective: "auto",
       locale: "en",
       conversationId: "conv_20260712_homefixture",
       expectedTailEventId: "event_20260712_assistant01"

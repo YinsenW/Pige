@@ -526,7 +526,7 @@ describe("Agent turn conversation store", () => {
   it("adopts exact client retries and enforces exact follow-up tail bindings", () => {
     const vaultPath = makeVault();
     const service = new AgentTurnConversationStore();
-    const metadata = { inputKind: "typed_text", objective: "auto", locale: "en" } as const;
+    const metadata = { inputKind: "typed_text", locale: "en" } as const;
     const firstBinding = { clientTurnId: "turn_20260712_aaaaaaaaaaaa" };
     const first = service.appendUserTurn(vaultPath, "First durable turn.", metadata, firstBinding);
     const adopted = new AgentTurnConversationStore().appendUserTurn(
@@ -546,7 +546,7 @@ describe("Agent turn conversation store", () => {
 
     for (const action of [
       () => service.appendUserTurn(vaultPath, "Changed text.", metadata, firstBinding),
-      () => service.appendUserTurn(vaultPath, "First durable turn.", { ...metadata, objective: "capture" }, firstBinding),
+      () => service.appendUserTurn(vaultPath, "First durable turn.", { ...metadata, locale: "ja" }, firstBinding),
       () => service.appendUserTurn(vaultPath, "First durable turn.", metadata, {
         ...firstBinding,
         conversationId: first.event.conversationId,
@@ -584,12 +584,40 @@ describe("Agent turn conversation store", () => {
     expect(readEvents(vaultPath, first.locator)).toHaveLength(3);
   });
 
+  it("adopts a legacy objective-bearing turn without letting its objective become current metadata", () => {
+    const vaultPath = makeVault();
+    const service = new AgentTurnConversationStore();
+    const metadata = { inputKind: "typed_text", locale: "en" } as const;
+    const binding = { clientTurnId: "turn_20260712_legacyobj001" };
+    const text = "Resume this accepted legacy turn.";
+    const current = service.appendUserTurn(vaultPath, text, metadata, binding);
+    const legacyMetadata = { inputKind: "typed_text", objective: "auto", locale: "en" };
+    const legacyInputHash = hashValue(
+      `pige.agent_turn.user.v2\0${text}\0${JSON.stringify(legacyMetadata)}\0${binding.clientTurnId}` +
+      `\0${current.event.conversationId}\0`
+    );
+    fs.writeFileSync(
+      conversationPath(vaultPath, current.locator),
+      `${JSON.stringify({ ...current.event, ...legacyMetadata, inputHash: legacyInputHash })}\n`,
+      "utf8"
+    );
+
+    const resumed = service.readUserTurn(vaultPath, current.locator, current.event.id, legacyInputHash);
+    const adopted = service.appendUserTurn(vaultPath, text, metadata, binding);
+
+    expect(resumed.inputHash).toBe(legacyInputHash);
+    expect(resumed.metadata).toEqual(metadata);
+    expect(adopted.inputHash).toBe(legacyInputHash);
+    expect(adopted.metadata).toEqual(metadata);
+    expect(readEvents(vaultPath, current.locator)).toHaveLength(1);
+  });
+
   it("isolates checksum-bound current-note conversations across restart and follow-up", () => {
     const vaultPath = makeVault();
     const service = new AgentTurnConversationStore();
     const scopeA = { kind: "current_note", pageId: "page_20260712_noteaaaa" } as const;
     const scopeB = { kind: "current_note", pageId: "page_20260712_notebbbb" } as const;
-    const metadata = { inputKind: "typed_text", objective: "auto", locale: "en", scope: scopeA } as const;
+    const metadata = { inputKind: "typed_text", locale: "en", scope: scopeA } as const;
     const first = service.appendUserTurn(vaultPath, "What does this note say?", metadata, {
       clientTurnId: "turn_20260712_noteaaaa0001"
     });

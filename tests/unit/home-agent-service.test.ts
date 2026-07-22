@@ -75,7 +75,6 @@ class TestHomeAgentService extends HomeAgentService {
       schemaVersion: 1,
       text: request.query,
       inputKind: "typed_text",
-      objective: "vault_only",
       locale: request.locale ?? "en"
     });
   }
@@ -115,7 +114,6 @@ describe("Home Pi Agent service", () => {
     const prepared = service.prepareSourceTurn({
       text: "Analyze this attachment.",
       inputKind: "file_picker",
-      objective: "auto",
       locale: "en",
       clientTurnId: "turn_20260722_sourceloop001"
     });
@@ -263,7 +261,6 @@ describe("Home Pi Agent service", () => {
     const outcome = await service.submitTurn({
       text: "Give me a direct bounded answer.",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en",
       clientTurnId: "turn_20260713_streamfixture"
     }, {
@@ -310,7 +307,6 @@ describe("Home Pi Agent service", () => {
     const outcome = await service.submitTurn({
       text: "Give me a direct bounded answer without knowledge tools.",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en",
       clientTurnId: "turn_20260717_nativestream1"
     }, {
@@ -360,7 +356,6 @@ describe("Home Pi Agent service", () => {
     const outcome = await service.submitTurn({
       text: "When is the launch?",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -398,7 +393,7 @@ describe("Home Pi Agent service", () => {
           text: "你好，我可以直接和你聊，也可以在需要时查找本地知识。"
         }]
       })
-    ).submitTurn({ text: "你好", inputKind: "typed_text", objective: "auto", locale: "zh-Hans" });
+    ).submitTurn({ text: "你好", inputKind: "typed_text", locale: "zh-Hans" });
 
     const retrievalFixture = makeFixture();
     let retrievalSearchCalls = 0;
@@ -420,7 +415,6 @@ describe("Home Pi Agent service", () => {
     ).submitTurn({
       text: "When is the launch?",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -463,7 +457,6 @@ describe("Home Pi Agent service", () => {
     ).submitTurn({
       text: "When is the launch?",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -486,7 +479,7 @@ describe("Home Pi Agent service", () => {
       makeRetrievalPort(successFixture.vault.vaultId),
       new JobsService(successFixture.vaults),
       new PiAgentRuntimeAdapter({ fauxResponses: [{ kind: "text", text: "Generation works." }] })
-    ).submitTurn({ text: "Hello", inputKind: "typed_text", objective: "auto", locale: "en" });
+    ).submitTurn({ text: "Hello", inputKind: "typed_text", locale: "en" });
 
     const failureFixture = makeFixture();
     const failure = await new TestHomeAgentService(
@@ -499,7 +492,7 @@ describe("Home Pi Agent service", () => {
           throw new PigeDomainError("model_provider.call_failed", "Synthetic provider call failed.");
         }
       }
-    ).submitTurn({ text: "Hello again", inputKind: "typed_text", objective: "auto", locale: "en" });
+    ).submitTurn({ text: "Hello again", inputKind: "typed_text", locale: "en" });
 
     const hostFailureFixture = makeFixture();
     const hostFailure = await new TestHomeAgentService(
@@ -512,7 +505,7 @@ describe("Home Pi Agent service", () => {
           throw new PigeDomainError("model_provider.binding_changed", "Synthetic model binding drifted.");
         }
       }
-    ).submitTurn({ text: "One more", inputKind: "typed_text", objective: "auto", locale: "en" });
+    ).submitTurn({ text: "One more", inputKind: "typed_text", locale: "en" });
 
     expect(success.state).toBe("completed");
     expect(failure).toMatchObject({ state: "failed", error: { code: "model_provider.call_failed" } });
@@ -544,7 +537,6 @@ describe("Home Pi Agent service", () => {
     ).submitTurn({
       text: "Translate the selected passage.",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -603,7 +595,6 @@ describe("Home Pi Agent service", () => {
     ).submitTurn({
       text: "Which region has the largest total sales?",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -717,7 +708,6 @@ describe("Home Pi Agent service", () => {
     ).submitTurn({
       text: "Compare the launch note with the bounded Dataset result.",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -773,7 +763,6 @@ describe("Home Pi Agent service", () => {
     ).submitTurn({
       text: "Summarize this Dataset.",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -808,7 +797,6 @@ describe("Home Pi Agent service", () => {
     ).submitTurn({
       text: "Answer only from my vault.",
       inputKind: "typed_text",
-      objective: "vault_only",
       locale: "en"
     });
 
@@ -849,7 +837,6 @@ describe("Home Pi Agent service", () => {
     const outcome = await service.submitTurn({
       text: "Answer only from my vault.",
       inputKind: "typed_text",
-      objective: "vault_only",
       locale: "en"
     });
 
@@ -905,7 +892,7 @@ describe("Home Pi Agent service", () => {
       makeRetrievalPort(fixture.vault.vaultId, { onSearch: () => { throw new Error("Must not search."); } }),
       new JobsService(fixture.vaults),
       { run: async () => { runtimeCalls += 1; throw new Error("Must not run Pi."); } }
-    ).submitTurn({ text: "你好", inputKind: "typed_text", objective: "auto", locale: "zh-Hans" });
+    ).submitTurn({ text: "你好", inputKind: "typed_text", locale: "zh-Hans" });
 
     expect(outcome).toMatchObject({
       state: "waiting",
@@ -942,7 +929,6 @@ describe("Home Pi Agent service", () => {
     const waiting = await service.submitTurn({
       text: "Please help after model setup.",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
     expect(waiting).toMatchObject({ state: "waiting", error: { code: "model_provider.default_model_missing" } });
@@ -980,7 +966,6 @@ describe("Home Pi Agent service", () => {
     const waiting = await service.submitTurn({
       text: "Recover my completed answer.",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
     if (waiting.state !== "waiting") throw new Error("Expected a waiting Agent turn.");
@@ -1022,7 +1007,7 @@ describe("Home Pi Agent service", () => {
     const user = conversations.appendUserTurn(
       fixture.vaultPath,
       "Keep this durable turn visible.",
-      { inputKind: "typed_text", objective: "auto", locale: "en" },
+      { inputKind: "typed_text", locale: "en" },
       { clientTurnId: "turn_20260711_obsoletejob01" }
     );
     const obsoleteJobId = "job_20260711_obsoletejob01";
@@ -1115,7 +1100,6 @@ describe("Home Pi Agent service", () => {
     const waiting = await service.submitTurn({
       text: internalInstruction,
       inputKind: "typed_text",
-      objective: "auto",
       scope: { kind: "current_note", pageId },
       locale: "en"
     }, {
@@ -1522,7 +1506,6 @@ describe("Home Pi Agent service", () => {
       schemaVersion: 1 as const,
       text: result.query,
       inputKind: "typed_text" as const,
-      objective: "auto" as const,
       locale: "en" as const,
       clientTurnId: "turn_20260714_sensitive001"
     };
@@ -1896,7 +1879,6 @@ describe("Home Pi Agent service", () => {
     ).submitTurn({
       text: "Run the requested local command.",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
     await vi.waitFor(() => expect(confirmations.pending()).toMatchObject({
@@ -1979,7 +1961,6 @@ describe("Home Pi Agent service", () => {
     ).submitTurn({
       text: empty.query,
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -2019,7 +2000,6 @@ describe("Home Pi Agent service", () => {
       clientTurnId: "turn_20260711_firstdurable001",
       text: "Remember this first turn.",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
     expect(first.state).toBe("completed");
@@ -2039,7 +2019,6 @@ describe("Home Pi Agent service", () => {
       expectedTailEventId: first.tailEventId,
       text: "Continue from the first answer.",
       inputKind: "follow_up" as const,
-      objective: "auto" as const,
       locale: "en" as const
     };
     const second = await restarted.submitTurn(followUpRequest);
@@ -2085,13 +2064,12 @@ describe("Home Pi Agent service", () => {
       clientTurnId: "turn_20260711_crashadopt00001",
       text: "Resume the exact accepted turn after restart.",
       inputKind: "typed_text" as const,
-      objective: "auto" as const,
       locale: "en" as const
     };
     const preserved = conversations.appendUserTurn(
       fixture.vaultPath,
       request.text,
-      { inputKind: request.inputKind, objective: request.objective, locale: request.locale },
+      { inputKind: request.inputKind, locale: request.locale },
       { clientTurnId: request.clientTurnId }
     );
     const preCrashJob = jobs.createAgentTurnJob({
@@ -3042,13 +3020,13 @@ SYNTHETIC_DISTRACTOR_BODY
     expect(readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"))).toEqual([]);
   });
 
-  it("treats current-note vault-only as the exact scoped read rather than requiring a vault search", async () => {
+  it("treats current-note scope as the exact read boundary rather than requiring a vault search", async () => {
     const fixture = makeFixture();
     const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId, {
-        onSearch: () => { throw new Error("Current-note vault-only must not search the vault."); }
+        onSearch: () => { throw new Error("Current-note scope must not search the vault."); }
       }),
       new JobsService(fixture.vaults),
       {
@@ -3057,7 +3035,7 @@ SYNTHETIC_DISTRACTOR_BODY
           const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
           if (!readTool) throw new Error("Missing current-note tool.");
           const signal = new AbortController().signal;
-          await readTool.execute({}, signal, { toolCallId: "pi_tool_vault_only_current_note", signal });
+          await readTool.execute({}, signal, { toolCallId: "pi_tool_scoped_current_note", signal });
           await request.beforeModelTurn?.();
           return makeRuntimeResult(request, "pige_read_current_note", {
             answer: "The scoped note says July 18. [citation_1]",
@@ -3072,7 +3050,6 @@ SYNTHETIC_DISTRACTOR_BODY
     await expect(service.submitTurn({
       text: "Read only this note.",
       inputKind: "typed_text",
-      objective: "vault_only",
       scope: { kind: "current_note", pageId: HOME_PAGE_ID },
       locale: "en",
       clientTurnId: "turn_20260716_notevaultonly"
@@ -3089,7 +3066,7 @@ SYNTHETIC_DISTRACTOR_BODY
     const first = conversations.appendUserTurn(
       fixture.vaultPath,
       "What date is in this sensitive note?",
-      { inputKind: "typed_text", objective: "auto", locale: "en", scope },
+      { inputKind: "typed_text", locale: "en", scope },
       { clientTurnId: "turn_20260716_scopehistory01" }
     );
     const assistant = conversations.appendAssistantTurn(
@@ -3239,7 +3216,7 @@ SYNTHETIC_DISTRACTOR_BODY
     const preserved = conversations.appendUserTurn(
       fixture.vaultPath,
       "Read the current note before a synthetic publication crash.",
-      { inputKind: "typed_text", objective: "auto", locale: "en", scope },
+      { inputKind: "typed_text", locale: "en", scope },
       { clientTurnId: "turn_20260716_publishcrash1" }
     );
     const binding = readCurrentNoteEvidenceBinding(fixture.vaultPath, HOME_PAGE_ID);
@@ -3296,7 +3273,7 @@ SYNTHETIC_DISTRACTOR_BODY
     const preserved = conversations.appendUserTurn(
       fixture.vaultPath,
       "Resume this current-note turn after the old scope-ref crash window.",
-      { inputKind: "typed_text", objective: "auto", locale: "en", scope },
+      { inputKind: "typed_text", locale: "en", scope },
       { clientTurnId: "turn_20260716_missingref01" }
     );
     const legacyJob = new JobsService(fixture.vaults).createAgentTurnJob({

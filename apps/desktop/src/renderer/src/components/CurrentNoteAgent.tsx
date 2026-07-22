@@ -198,7 +198,6 @@ export function CurrentNoteAgent(props: {
         schemaVersion: 1,
         text,
         inputKind: followUp ? "follow_up" : "typed_text",
-        objective: "auto",
         scope: { kind: "current_note", pageId },
         locale: props.locale,
         clientTurnId,

@@ -322,7 +322,6 @@ describe("Dataset Query Service", () => {
     const outcome = await service.submitTurn({
       text: "Inspect the Dataset and report the largest amount.",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
@@ -413,7 +412,6 @@ describe("Dataset Query Service", () => {
     ).submitTurn({
       text: "Inspect this Dataset without bypassing privacy drift.",
       inputKind: "typed_text",
-      objective: "auto",
       locale: "en"
     });
 
