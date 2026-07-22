@@ -865,10 +865,9 @@ describe("full UI Settings surface", () => {
         throw new Error("The Privacy panel must remain a truthful static projection.");
       }
     });
-    const onDevelopment = vi.fn();
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
-      root.render(createElement(PermissionsPrivacySettingsPanel, { onDevelopment, t }));
+      root.render(createElement(PermissionsPrivacySettingsPanel, { t }));
       await settle(dom);
     });
 
@@ -876,7 +875,14 @@ describe("full UI Settings surface", () => {
     expect(container.querySelector("h1")?.textContent).toBe("Permissions & Privacy");
     expect(container.textContent).toContain("Connected model services");
     expect(container.querySelector(".settings-status")?.textContent).toBe("Default policy");
-    expect(container.textContent).toContain("Connected services use this policy");
+    expect(container.textContent).toContain("Model service");
+    expect(container.textContent).toContain(
+      "Sending a message sends exactly what you wrote and the selected context to the connected model service."
+    );
+    expect(container.textContent).toContain(
+      "Pige does not classify, redact, or block message content."
+    );
+    expect(container.textContent).toContain("Uses your connected provider");
     expect(container.textContent).toContain("without a second confirmation dialog");
     expect(container.textContent).toContain("Exact high-risk effects");
     expect(container.textContent).toContain("Confirm each effect");
@@ -885,17 +891,15 @@ describe("full UI Settings surface", () => {
     expect(container.textContent).not.toContain("Default mode");
     expect(container.textContent).not.toContain("Saved scoped grants");
     expect(container.textContent).not.toContain("YOLO");
+    expect(container.textContent).not.toContain("Sensitive content confirms once");
+    expect(container.textContent).not.toContain("restricted content never sends");
+    expect(container.textContent).not.toContain("Hide obvious secrets before sending");
+    expect(container.textContent).not.toContain("Cloud-send controls");
+    expect(container.textContent).not.toContain("redaction preference");
     expect(container.querySelector('select')).toBeNull();
+    expect(container.querySelector('[data-privacy-control="cloud-policy"]')).toBeNull();
+    expect(container.querySelector(".model-egress-prompt")).toBeNull();
     expect(ipcRead).toBe(false);
-
-    const cloudPolicy = requireElement(
-      container.querySelector<HTMLButtonElement>('[data-privacy-control="cloud-policy"]')
-    );
-    await act(async () => {
-      cloudPolicy.click();
-      await settle(dom);
-    });
-    expect(onDevelopment).toHaveBeenCalledOnce();
 
     await act(async () => root.unmount());
     dom.window.close();
