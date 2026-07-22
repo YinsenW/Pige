@@ -121,7 +121,7 @@ export class ReaderSelectionProposalService {
         "The Reader transform replacement contains restricted content."
       );
     }
-    const proposalId = proposalIdForJob(input.job.id);
+    const proposalId = createReaderSelectionProposalId(input.job.id);
     const intentHash = hashIntent(input.job.id, input.action, input.selection, input.replacement);
     const existing = readRecord(vaultPath, proposalId);
     if (existing) {
@@ -321,7 +321,7 @@ export class ReaderSelectionProposalService {
   }
 }
 
-function proposalIdForJob(jobId: string): string {
+export function createReaderSelectionProposalId(jobId: string): string {
   const dateKey = /^job_(\d{8})_/u.exec(jobId)?.[1] ?? "19700101";
   const suffix = createHash("sha256")
     .update(`pige.reader-selection-proposal.v1\0${jobId}`, "utf8")

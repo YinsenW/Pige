@@ -161,7 +161,10 @@ import {
   createAgentPageUpdateOperationId
 } from "./services/agent-page-update-service";
 import { ReaderSelectionActionService } from "./services/reader-selection-action-service";
-import { ReaderSelectionProposalService } from "./services/reader-selection-proposal-service";
+import {
+  createReaderSelectionProposalId,
+  ReaderSelectionProposalService
+} from "./services/reader-selection-proposal-service";
 import {
   readCurrentNotePageForMutation,
   readCurrentNoteSelectionEvidenceBinding
@@ -886,7 +889,7 @@ const getHomeAgentService = (): HomeAgentService => {
       getDatasetQueryService(),
       getPermissionedExternalCapabilityRegistry(),
       {
-        apply: ({ vaultPath, job, selection, replacement, action }) => {
+        publish: ({ vaultPath, job, selection, replacement, action }) => {
           const proposalService = getReaderSelectionProposalService();
           if (proposalService.shouldRequireReview(selection, replacement)) {
             const selected = readCurrentNoteSelectionEvidenceBinding(vaultPath, selection);
@@ -910,6 +913,18 @@ const getHomeAgentService = (): HomeAgentService => {
             action
             }).operation.id
           };
+        },
+        readPublication: ({ job, selection }) => {
+          const operationId = createAgentPageUpdateOperationId(job.id, selection.pageId);
+          if (job.operationIds?.includes(operationId)) {
+            return { status: "applied" as const, operationId };
+          }
+          const proposalId = createReaderSelectionProposalId(job.id);
+          if (!job.proposalIds?.includes(proposalId)) return undefined;
+          const result = getReaderSelectionProposalService().get({ apiVersion: 1, proposalId });
+          return result.status === "available"
+            ? { status: "review_required" as const, proposalId: result.proposal.proposalId }
+            : undefined;
         }
       }
     );

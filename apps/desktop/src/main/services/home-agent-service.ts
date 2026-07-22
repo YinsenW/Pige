@@ -100,13 +100,15 @@ import {
   recoverDurableAssistantPublication,
   settleJobAfterAssistant,
   type HomeAgentJobSession,
-  type HomeAgentReaderSelectionMutationPort
+  type HomeAgentReaderSelectionMutationPort,
+  type HomeAgentReaderSelectionPublication
 } from "./agent-turn-publication";
 import {
   createReaderSelectionJobScope,
   readBoundReaderSelectionEvidence,
   readInitialReaderSelectionEvidence,
   readerSelectionInputPresentation,
+  readReaderSelectionTransformBinding,
   validateReaderSelectionTurnContext,
   type ReaderSelectionJobScope,
   type ReaderSelectionTurnContext
@@ -237,6 +239,7 @@ export function scheduleAcceptedAgentTurn(execute: () => Promise<unknown>): void
 
 const HOME_SEARCH_TOOL_NAME = "pige_search_knowledge";
 const HOME_READ_CURRENT_NOTE_TOOL_NAME = "pige_read_current_note";
+const HOME_REPLACE_READER_SELECTION_TOOL_NAME = "pige_replace_reader_selection";
 const HOME_QUERY_DATASET_TOOL_NAME = "pige_query_dataset";
 const HOME_FETCH_URL_TOOL_NAME = "pige_fetch_url";
 const HOME_INSPECT_URL_TOOL_NAME = "pige_inspect_url_source";
@@ -816,12 +819,16 @@ export class HomeAgentService {
         }
         const durableAssistant = this.#conversations.findAssistantTurn(vaultPath, preserved.locator, job.id);
         if (durableAssistant) {
-          recoverDurableAssistantPublication({
+          const recoveryState = recoverDurableAssistantPublication({
             session,
             assistant: durableAssistant,
-            jobs: this.#jobs
+            jobs: this.#jobs,
+            mutations: this.#readerSelectionMutations,
+            vaultPath,
+            sourceIds: collectAgentTurnSourceIds(job, job.sourceId ? [job.sourceId] : [])
           });
-          completed += 1;
+          if (recoveryState === "waiting") waiting += 1;
+          else completed += 1;
           continue;
         }
         const currentBinding = resolveReadyHomeRuntimeBinding(this.#models);
@@ -946,6 +953,8 @@ export class HomeAgentService {
         (ref) => ref.kind === "page" && ref.role === "agent_turn_current_note_scope"
       )
       : undefined;
+    const readerSelectionTransform = readReaderSelectionTransformBinding(session.current);
+    const readerSelectionMutations = this.#readerSelectionMutations;
     if (currentNoteScope) {
       const initialCurrentNote = readBoundReaderSelectionEvidence(
         vaultPath,
@@ -1309,7 +1318,25 @@ export class HomeAgentService {
           await authorizeCurrentModelTurn();
           return current;
         }
-      })] : sourceSession ? [] : [createSearchTool({
+      }), ...(readerSelectionTransform && readerSelectionMutations ? [createReaderSelectionMutationTool({
+        authorize: assertCurrentBindingAndVault,
+        publish: (replacement) => {
+          assertCurrentBindingAndVault();
+          const publication = readerSelectionMutations.publish({
+            vaultPath,
+            job: session.current,
+            selection: readerSelectionTransform.selection,
+            replacement,
+            action: readerSelectionTransform.action
+          });
+          session.current = this.#jobs.patchAgentTurnJob(session.current, publication.status === "applied" ? {
+            operationIds: Array.from(new Set([...(session.current.operationIds ?? []), publication.operationId]))
+          } : {
+            proposalIds: Array.from(new Set([...(session.current.proposalIds ?? []), publication.proposalId]))
+          });
+          return publication;
+        }
+      })] : [])] : sourceSession ? [] : [createSearchTool({
         authorize: assertCurrentBindingAndVault,
         search: async () => {
           searchToolUsed = true;
@@ -1388,6 +1415,7 @@ export class HomeAgentService {
         toolName !== HOME_INSPECT_URL_TOOL_NAME &&
         toolName !== HOME_QUERY_DATASET_TOOL_NAME &&
         toolName !== HOME_READ_CURRENT_NOTE_TOOL_NAME &&
+        toolName !== HOME_REPLACE_READER_SELECTION_TOOL_NAME &&
         toolName !== HOME_SEARCH_TOOL_NAME &&
         !sourceToolNames.has(toolName) &&
         !externalToolNames.has(toolName)
@@ -1708,6 +1736,70 @@ function createCurrentNoteTool(options: {
           totalBytes: context.modelSuppliedRange.total,
           truncated: context.modelSuppliedRange.truncated
         });
+    }
+  };
+}
+
+function createReaderSelectionMutationTool(options: {
+  readonly authorize: () => void;
+  readonly publish: (replacement: string) => HomeAgentReaderSelectionPublication;
+}): PigeAgentToolDefinition {
+  const InputSchema = z.object({
+    replacement: z.string().min(1).max(16 * 1024)
+  }).strict();
+  return {
+    name: HOME_REPLACE_READER_SELECTION_TOOL_NAME,
+    label: "Replace Reader selection",
+    description: "Apply the exact replacement text to the Host-bound Reader selection, or stage it for bounded review. Call only for the requested Reader transform.",
+    version: "1",
+    capability: "write_vault_knowledge",
+    parameters: {
+      type: "object",
+      properties: { replacement: { type: "string", minLength: 1, maxLength: 16 * 1024 } },
+      required: ["replacement"],
+      additionalProperties: false
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["applied", "review_required"] }
+      },
+      required: ["status"],
+      additionalProperties: false
+    },
+    effect: "idempotent_write",
+    inputTrust: "model_generated",
+    outputTrust: "host_validated",
+    dataBoundary: {
+      resourceScope: "current_note",
+      pathAuthority: "host_only",
+      sourceIdAuthority: "host_only",
+      modelAuthority: "none"
+    },
+    execution: "sequential",
+    idempotency: { mode: "idempotent", scope: "current_note" },
+    limits: { maxInputBytes: 20 * 1024, maxOutputBytes: 1_024, timeoutMs: 30_000 },
+    ownerService: "ReaderSelectionActionService",
+    authorize: (args) => {
+      options.authorize();
+      if (!InputSchema.safeParse(args).success) {
+        throw new PigeDomainError("agent_runtime.tool_input_invalid", "The Reader replacement tool input is invalid.");
+      }
+      return true;
+    },
+    execute: async (args) => {
+      options.authorize();
+      const parsed = InputSchema.safeParse(args);
+      if (!parsed.success) {
+        throw new PigeDomainError("agent_runtime.tool_input_invalid", "The Reader replacement tool input is invalid.");
+      }
+      const publication = options.publish(parsed.data.replacement);
+      return createPigeTextToolResult(
+        publication.status === "applied"
+          ? "The Reader selection replacement was applied."
+          : "The Reader selection replacement is ready for review.",
+        { status: publication.status }
+      );
     }
   };
 }

@@ -38,20 +38,25 @@ export type HomeAgentReaderSelectionPublication =
   | { readonly status: "review_required"; readonly proposalId: string };
 
 export interface HomeAgentReaderSelectionMutationPort {
-  apply(input: {
+  publish(input: {
     readonly vaultPath: string;
     readonly job: JobRecord;
     readonly selection: ReaderSelectionIdentity;
     readonly replacement: string;
     readonly action: ReaderSelectionTransformAction;
   }): HomeAgentReaderSelectionPublication;
+  readPublication(input: {
+    readonly vaultPath: string;
+    readonly job: JobRecord;
+    readonly selection: ReaderSelectionIdentity;
+    readonly action: ReaderSelectionTransformAction;
+  }): HomeAgentReaderSelectionPublication | undefined;
 }
 
-export function applyReaderSelectionTransform(
+export function readReaderSelectionTransformPublication(
   mutations: HomeAgentReaderSelectionMutationPort | undefined,
   vaultPath: string,
-  job: JobRecord,
-  answer: AgentTurnAnswer
+  job: JobRecord
 ): HomeAgentReaderSelectionPublication | undefined {
   const binding = readReaderSelectionTransformBinding(job);
   if (!binding) return undefined;
@@ -61,11 +66,10 @@ export function applyReaderSelectionTransform(
       "Reader selection mutation publication is unavailable."
     );
   }
-  return mutations.apply({
+  return mutations.readPublication({
     vaultPath,
     job,
     selection: binding.selection,
-    replacement: answer.answer,
     action: binding.action
   });
 }
@@ -80,11 +84,10 @@ export function settleJobAfterAssistant(input: {
   readonly sourceIds: readonly string[];
   readonly assistantContentHash?: string;
 }): boolean {
-  const publication = applyReaderSelectionTransform(
+  const publication = readReaderSelectionTransformPublication(
     input.mutations,
     input.vaultPath,
-    input.session.current,
-    input.result
+    input.session.current
   );
   if (publication?.status === "review_required") {
     input.session.current = input.jobs.settleAgentTurnJob(input.session.current, {
@@ -244,19 +247,55 @@ export function recoverDurableAssistantPublication(input: {
   readonly session: HomeAgentJobSession;
   readonly assistant: ConversationEvent;
   readonly jobs: HomeAgentTurnJobPort;
-}): "completed" {
+  readonly mutations: HomeAgentReaderSelectionMutationPort | undefined;
+  readonly vaultPath: string;
+  readonly sourceIds: readonly string[];
+}): "completed" | "waiting" {
   input.session.modelInvocationStarted = true;
-  readDurableAgentTurnAnswer(input.assistant);
+  const answer = readDurableAgentTurnAnswer(input.assistant);
+  const publication = readReaderSelectionTransformPublication(
+    input.mutations,
+    input.vaultPath,
+    input.session.current
+  );
+  if (publication?.status === "review_required") {
+    input.session.current = input.jobs.settleAgentTurnJob(input.session.current, {
+      kind: "waiting",
+      reason: "review",
+      proposalId: publication.proposalId,
+      message: "Recovered the durable assistant result and its bounded Reader review.",
+      facts: {
+        stage: "planning",
+        outputRefs: [
+          ...mergeAgentTurnOutputRefs(
+            input.session.current,
+            input.assistant.id,
+            input.sourceIds,
+            answer,
+            input.assistant.contentHash
+          ),
+          { kind: "proposal", id: publication.proposalId, role: "awaiting_review" }
+        ]
+      }
+    });
+    return "waiting";
+  }
+  const operationIds = publication?.status === "applied" ? [publication.operationId] : [];
   input.session.current = input.jobs.adoptAgentTurnCompletion(input.session.current, {
     checkpointId: "agent_turn_assistant_event_persisted",
     message: "Recovered the durable assistant result without another model call.",
     facts: {
-      outputRefs: [{
-        kind: "conversation",
-        id: input.assistant.id,
-        role: "agent_turn_assistant_event",
-        ...(input.assistant.contentHash ? { checksum: input.assistant.contentHash } : {})
-      }],
+      outputRefs: mergeAgentTurnOutputRefs(
+        input.session.current,
+        input.assistant.id,
+        input.sourceIds,
+        answer,
+        input.assistant.contentHash,
+        operationIds
+      ),
+      ...(operationIds.length > 0 ? {
+        operationIds: Array.from(new Set([...(input.session.current.operationIds ?? []), ...operationIds]))
+      } : {}),
       privacy: modelInvocationPrivacy(input.session)
     }
   });
