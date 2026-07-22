@@ -17,6 +17,7 @@ import type {
   CancelSupportBundleExportResult,
   ExportSupportBundleRequest,
   HomeAgentAskRequest,
+  HighRiskConfirmationResolveRequest,
   JobActionRequest,
   JobActionResult,
   JobsListRequest,
@@ -73,6 +74,9 @@ import type {
 import {
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
+  HighRiskConfirmationPendingResultSchema,
+  HighRiskConfirmationResolveRequestSchema,
+  HighRiskConfirmationResolveResultSchema,
   AddManualProviderRequestSchema,
   AddPresetProviderRequestSchema,
   AddManualModelRequestSchema,
@@ -164,6 +168,7 @@ import {
   type HomeAgentDraftSnapshot
 } from "./services/home-agent-service";
 import { HomeAgentUrlService } from "./services/home-agent-url-service";
+import { HighRiskConfirmationService } from "./services/high-risk-confirmation-service";
 import { LocalDatabaseRebuildWorkerService } from "./services/local-database-rebuild-worker-service";
 import { LocalDatabaseService } from "./services/local-database-service";
 import { listMarkdownTagCatalog } from "./services/markdown-page-index";
@@ -219,6 +224,7 @@ let diagnosticsService: DiagnosticsService | undefined;
 let localDatabaseService: LocalDatabaseService | undefined;
 let modelProviderRegistry: ModelProviderRegistry | undefined;
 let modelEgressApprovalService: ModelEgressApprovalService | undefined;
+let highRiskConfirmationService: HighRiskConfirmationService | undefined;
 let permissionBrokerService: PermissionBrokerService | undefined;
 let permissionSettingsService: PermissionSettingsService | undefined;
 const permissionYoloConfirmationRegistry = new PermissionYoloConfirmationRegistry();
@@ -608,6 +614,18 @@ const getPermissionSettingsService = (): PermissionSettingsService => {
     permissionSettingsService = new PermissionSettingsService(getLocalSettingsStore());
   }
   return permissionSettingsService;
+};
+
+const getHighRiskConfirmationService = (): HighRiskConfirmationService => {
+  if (!highRiskConfirmationService) {
+    highRiskConfirmationService = new HighRiskConfirmationService();
+    highRiskConfirmationService.onChanged((event) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send("confirmations.changed", event);
+      }
+    });
+  }
+  return highRiskConfirmationService;
 };
 
 const getSkillRegistryService = (): SkillRegistryService => {
@@ -1614,6 +1632,15 @@ ipcMain.handle("jobs.retry", async (_event, request: JobActionRequest) => {
     scheduleIndexRebuildProcessing();
   }
   return result;
+});
+ipcMain.handle("confirmations.pending", () =>
+  HighRiskConfirmationPendingResultSchema.parse(getHighRiskConfirmationService().pending())
+);
+ipcMain.handle("confirmations.resolve", async (_event, request: HighRiskConfirmationResolveRequest) => {
+  const parsed = HighRiskConfirmationResolveRequestSchema.parse(request);
+  return HighRiskConfirmationResolveResultSchema.parse(
+    await getHighRiskConfirmationService().resolve(parsed)
+  );
 });
 ipcMain.handle("modelEgress.pending", (_event, request: ModelEgressPendingRequestQuery) => {
   const parsed = ModelEgressPendingRequestQuerySchema.safeParse(request);

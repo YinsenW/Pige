@@ -165,6 +165,237 @@ export const JobIdSchema = z.string().regex(/^job_\d{8}_[a-z0-9]{8,}$/);
 export const ProposalIdSchema = z.string().regex(/^proposal_\d{8}_[a-z0-9]{8,}$/);
 export const OperationIdSchema = z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/);
 
+export const HighRiskConfirmationIdSchema = z.string().regex(/^confirm_\d{8}_[a-z0-9]{16,64}$/);
+export const HighRiskEffectSchema = z.enum([
+  "irreversible_delete",
+  "overwrite_user_original",
+  "write_outside_authorized_root",
+  "arbitrary_shell",
+  "install_unreviewed_package",
+  "export_secret",
+  "risky_agent_edit",
+  "authority_boundary_change"
+]);
+export const HighRiskConfirmationActionSchema = z.enum([
+  "delete_permanently",
+  "overwrite_original",
+  "write_external_item",
+  "run_shell_command",
+  "install_package",
+  "export_credential",
+  "apply_risky_edit",
+  "change_authority_boundary"
+]);
+export const HighRiskConfirmationTargetSchema = z.enum([
+  "vault_item",
+  "user_owned_original",
+  "external_location",
+  "local_system",
+  "local_toolchain",
+  "credential_material",
+  "current_note",
+  "authority_boundary"
+]);
+const INTERNAL_DISPLAY_ID_MARKERS = [
+  "vault_", "page_", "turn_", "op_", "job_", "confirm_", "secret_", "provider_", "model_"
+] as const;
+const SECRET_DISPLAY_MARKERS = [
+  "sk-", "github_pat_", "xoxb-", "xoxp-", "xoxa-", "token=", "apikey=", "api_key=", "bearer ",
+  "access_token", "accesstoken", "refresh_token", "refreshtoken", "client_secret", "clientsecret", "private_key"
+] as const;
+const COMMAND_DISPLAY_PREFIXES = [
+  "rm", "curl", "wget", "sudo", "npm", "npx", "pnpm", "yarn", "bun", "node", "bash", "zsh", "sh",
+  "powershell", "cmd", "git", "python", "python3", "pip", "uv", "chmod", "chown", "mv", "cp"
+] as const;
+const containsUnsafeDisplayIdentity = (lower: string): boolean =>
+  INTERNAL_DISPLAY_ID_MARKERS.some((marker) => lower.includes(marker)) ||
+  SECRET_DISPLAY_MARKERS.some((marker) => lower.includes(marker));
+const startsLikeCommand = (lower: string): boolean => COMMAND_DISPLAY_PREFIXES.some(
+  (command) => lower === command || lower.startsWith(`${command} `) || lower.startsWith(`${command}\t`)
+);
+const hasSafeDisplayCharacters = (value: string): boolean => {
+  if (value !== value.trim() || value.length < 1 || value.length > 80) return false;
+  if (value.includes("://") || value.includes(":")) return false;
+  const forbidden = new Set(["/", "\\", "|", ";", "&", ">", "<", "$", "`", "=", "\n", "\r", "\t"]);
+  for (const character of value) {
+    if (forbidden.has(character) || character.charCodeAt(0) < 32) return false;
+  }
+  const lower = value.toLowerCase();
+  if (["http:", "https:", "file:", "ssh:"].some((prefix) => lower.startsWith(prefix))) return false;
+  return !containsUnsafeDisplayIdentity(lower) && !startsLikeCommand(lower);
+};
+const isPackageSegment = (value: string): boolean => {
+  if (value.length < 1 || value.length > 64 || value === "." || value === "..") return false;
+  for (const character of value) {
+    const lower = character.toLowerCase();
+    if (!((lower >= "a" && lower <= "z") || (character >= "0" && character <= "9") || ".-_".includes(character))) {
+      return false;
+    }
+  }
+  return true;
+};
+const isSafePackageName = (value: string): boolean => {
+  if (value !== value.trim() || value.length > 100 || value.includes("://") || value.includes("\\")) return false;
+  if (containsUnsafeDisplayIdentity(value.toLowerCase())) return false;
+  if (value.startsWith("@")) {
+    const parts = value.slice(1).split("/");
+    return parts.length === 2 && parts.every(isPackageSegment);
+  }
+  return !value.includes("/") && isPackageSegment(value);
+};
+const isSafeExecutableName = (value: string): boolean => {
+  if (value !== value.trim() || value.length < 1 || value.length > 64) return false;
+  for (const character of value) {
+    const lower = character.toLowerCase();
+    if (!((lower >= "a" && lower <= "z") || (character >= "0" && character <= "9") || ".-_+".includes(character))) {
+      return false;
+    }
+  }
+  return !value.startsWith(".") && !value.includes("..") && !containsUnsafeDisplayIdentity(value.toLowerCase());
+};
+export const RendererSafeSubjectLabelSchema = z.string().refine(hasSafeDisplayCharacters);
+export const HighRiskConfirmationSubjectSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("item_count"), count: z.number().int().min(1).max(8) }).strict(),
+  z.object({ kind: z.literal("display_name"), value: RendererSafeSubjectLabelSchema }).strict(),
+  z.object({ kind: z.literal("package_name"), value: z.string().refine(isSafePackageName) }).strict(),
+  z.object({ kind: z.literal("executable_name"), value: z.string().refine(isSafeExecutableName) }).strict()
+]);
+const HighRiskDisplayNameSubjectSchema = z.object({
+  kind: z.literal("display_name"),
+  value: RendererSafeSubjectLabelSchema
+}).strict();
+const HighRiskItemCountSubjectSchema = z.object({
+  kind: z.literal("item_count"),
+  count: z.number().int().min(1).max(8)
+}).strict();
+export const HighRiskConfirmationOwnerSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("agent_turn"),
+    clientTurnId: AgentClientTurnIdSchema
+  }).strict(),
+  z.object({
+    kind: z.literal("operation"),
+    operationId: OperationIdSchema
+  }).strict()
+]);
+const HighRiskConfirmationSummaryBaseSchema = z.object({
+  apiVersion: z.literal(1),
+  confirmationId: HighRiskConfirmationIdSchema
+});
+const HighRiskOperationOwnerSchema = z.object({
+  kind: z.literal("operation"),
+  operationId: OperationIdSchema
+}).strict();
+export const HighRiskConfirmationSummarySchema = z.discriminatedUnion("effect", [
+  HighRiskConfirmationSummaryBaseSchema.extend({
+    effect: z.literal("irreversible_delete"),
+    presentation: z.object({
+      action: z.literal("delete_permanently"), target: z.literal("vault_item"),
+      subject: z.union([
+        HighRiskItemCountSubjectSchema,
+        HighRiskDisplayNameSubjectSchema
+      ])
+    }).strict(),
+    owner: HighRiskConfirmationOwnerSchema
+  }).strict(),
+  HighRiskConfirmationSummaryBaseSchema.extend({
+    effect: z.literal("overwrite_user_original"),
+    presentation: z.object({ action: z.literal("overwrite_original"), target: z.literal("user_owned_original"), subject: HighRiskDisplayNameSubjectSchema }).strict(),
+    owner: HighRiskConfirmationOwnerSchema
+  }).strict(),
+  HighRiskConfirmationSummaryBaseSchema.extend({
+    effect: z.literal("write_outside_authorized_root"),
+    presentation: z.object({ action: z.literal("write_external_item"), target: z.literal("external_location"), subject: HighRiskDisplayNameSubjectSchema }).strict(),
+    owner: HighRiskConfirmationOwnerSchema
+  }).strict(),
+  HighRiskConfirmationSummaryBaseSchema.extend({
+    effect: z.literal("arbitrary_shell"),
+    presentation: z.object({
+      action: z.literal("run_shell_command"), target: z.literal("local_system"),
+      subject: z.object({ kind: z.literal("executable_name"), value: z.string().refine(isSafeExecutableName) }).strict()
+    }).strict(),
+    owner: HighRiskConfirmationOwnerSchema
+  }).strict(),
+  HighRiskConfirmationSummaryBaseSchema.extend({
+    effect: z.literal("install_unreviewed_package"),
+    presentation: z.object({
+      action: z.literal("install_package"), target: z.literal("local_toolchain"),
+      subject: z.object({ kind: z.literal("package_name"), value: z.string().refine(isSafePackageName) }).strict()
+    }).strict(),
+    owner: HighRiskConfirmationOwnerSchema
+  }).strict(),
+  HighRiskConfirmationSummaryBaseSchema.extend({
+    effect: z.literal("export_secret"),
+    presentation: z.object({ action: z.literal("export_credential"), target: z.literal("credential_material"), subject: HighRiskDisplayNameSubjectSchema }).strict(),
+    owner: HighRiskConfirmationOwnerSchema
+  }).strict(),
+  HighRiskConfirmationSummaryBaseSchema.extend({
+    effect: z.literal("risky_agent_edit"),
+    presentation: z.object({
+      action: z.literal("apply_risky_edit"), target: z.literal("current_note"),
+      subject: z.union([HighRiskItemCountSubjectSchema, HighRiskDisplayNameSubjectSchema])
+    }).strict(),
+    owner: HighRiskOperationOwnerSchema
+  }).strict(),
+  HighRiskConfirmationSummaryBaseSchema.extend({
+    effect: z.literal("authority_boundary_change"),
+    presentation: z.object({ action: z.literal("change_authority_boundary"), target: z.literal("authority_boundary"), subject: HighRiskDisplayNameSubjectSchema }).strict(),
+    owner: HighRiskConfirmationOwnerSchema
+  }).strict()
+]);
+export const HighRiskConfirmationPendingResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("pending"),
+    revision: z.number().int().positive(),
+    confirmation: HighRiskConfirmationSummarySchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("none"),
+    revision: z.number().int().nonnegative()
+  }).strict()
+]);
+export const HighRiskConfirmationResolveRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  confirmationId: HighRiskConfirmationIdSchema,
+  expectedRevision: z.number().int().positive(),
+  decision: z.enum(["allow", "deny"])
+}).strict();
+export const HighRiskConfirmationResolveResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("committed"),
+    confirmationId: HighRiskConfirmationIdSchema,
+    revision: z.number().int().positive(),
+    decision: z.enum(["allow", "deny"])
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("already_resolved"),
+    confirmationId: HighRiskConfirmationIdSchema,
+    revision: z.number().int().positive(),
+    decision: z.enum(["allow", "deny"])
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("stale"),
+    current: HighRiskConfirmationPendingResultSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("not_found"),
+    revision: z.number().int().nonnegative()
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("failed"),
+    confirmationId: HighRiskConfirmationIdSchema,
+    revision: z.number().int().positive()
+  }).strict()
+]);
+export const HighRiskConfirmationChangedEventSchema = HighRiskConfirmationPendingResultSchema;
+
 export const KnowledgeActivityPageTargetSchema = z.object({
   kind: z.literal("page"),
   pageId: PageIdSchema
@@ -3645,6 +3876,18 @@ export type DatasetRevision = z.infer<typeof DatasetRevisionSchema>;
 export type DatasetSchemaRecord = z.infer<typeof DatasetSchemaRecordSchema>;
 export type DatasetTable = z.infer<typeof DatasetTableSchema>;
 export type JobClass = z.infer<typeof JobClassSchema>;
+export type HighRiskConfirmationAction = z.infer<typeof HighRiskConfirmationActionSchema>;
+export type HighRiskConfirmationChangedEvent = z.infer<typeof HighRiskConfirmationChangedEventSchema>;
+export type HighRiskConfirmationId = z.infer<typeof HighRiskConfirmationIdSchema>;
+export type HighRiskConfirmationOwner = z.infer<typeof HighRiskConfirmationOwnerSchema>;
+export type HighRiskConfirmationPendingResult = z.infer<typeof HighRiskConfirmationPendingResultSchema>;
+export type HighRiskConfirmationResolveRequest = z.infer<typeof HighRiskConfirmationResolveRequestSchema>;
+export type HighRiskConfirmationResolveResult = z.infer<typeof HighRiskConfirmationResolveResultSchema>;
+export type HighRiskConfirmationSummary = z.infer<typeof HighRiskConfirmationSummarySchema>;
+export type HighRiskConfirmationSubject = z.infer<typeof HighRiskConfirmationSubjectSchema>;
+export type HighRiskConfirmationTarget = z.infer<typeof HighRiskConfirmationTargetSchema>;
+export type HighRiskEffect = z.infer<typeof HighRiskEffectSchema>;
+export type RendererSafeSubjectLabel = z.infer<typeof RendererSafeSubjectLabelSchema>;
 export type KnowledgeActivityPageTarget = z.infer<typeof KnowledgeActivityPageTargetSchema>;
 export type KnowledgeActivitySummary = z.infer<typeof KnowledgeActivitySummarySchema>;
 export type KnowledgeActivityListRequest = z.infer<typeof KnowledgeActivityListRequestSchema>;

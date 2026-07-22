@@ -21,6 +21,10 @@ import type {
   CancelSupportBundleExportResult,
   HomeAgentAskRequest,
   HomeAgentAskResult,
+  HighRiskConfirmationChangedEvent,
+  HighRiskConfirmationPendingResult,
+  HighRiskConfirmationResolveRequest,
+  HighRiskConfirmationResolveResult,
   JobActionRequest,
   JobActionResult,
   JobsListRequest,
@@ -135,6 +139,10 @@ import type {
 import {
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
+  HighRiskConfirmationChangedEventSchema,
+  HighRiskConfirmationPendingResultSchema,
+  HighRiskConfirmationResolveRequestSchema,
+  HighRiskConfirmationResolveResultSchema,
   RetrievalSearchRequestSchema,
   RetrievalSearchResultSchema,
   NoteResolveInlineReferenceRequestSchema,
@@ -450,6 +458,25 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("jobs.cancel", request) as Promise<JobActionResult>,
     retry: async (request: JobActionRequest): Promise<JobActionResult> =>
       ipcRenderer.invoke("jobs.retry", request) as Promise<JobActionResult>
+  },
+  confirmations: {
+    pending: async (): Promise<HighRiskConfirmationPendingResult> =>
+      HighRiskConfirmationPendingResultSchema.parse(await ipcRenderer.invoke("confirmations.pending")),
+    resolve: async (
+      request: HighRiskConfirmationResolveRequest
+    ): Promise<HighRiskConfirmationResolveResult> =>
+      HighRiskConfirmationResolveResultSchema.parse(await ipcRenderer.invoke(
+        "confirmations.resolve",
+        HighRiskConfirmationResolveRequestSchema.parse(request)
+      )),
+    onChanged: (listener: (event: HighRiskConfirmationChangedEvent) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, value: unknown): void => {
+        const parsed = HighRiskConfirmationChangedEventSchema.safeParse(value);
+        if (parsed.success) listener(parsed.data);
+      };
+      ipcRenderer.on("confirmations.changed", handler);
+      return () => ipcRenderer.removeListener("confirmations.changed", handler);
+    }
   },
   modelEgress: {
     pending: async (request: ModelEgressPendingRequestQuery): Promise<ModelEgressPendingRequest | undefined> =>

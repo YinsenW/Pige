@@ -608,6 +608,40 @@ describe("desktop shell build contract", () => {
       .toBeLessThan(mainSource.indexOf("recoverInterruptedJobs()"));
   });
 
+  it("exposes one canonical high-risk confirmation with strict query, event, and resolve parsing", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const serviceSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/high-risk-confirmation-service.ts"),
+      "utf8"
+    );
+    const preloadApi = preloadSource.slice(
+      preloadSource.indexOf("confirmations: {"),
+      preloadSource.indexOf("modelEgress: {")
+    );
+
+    expect(contractsSource).toContain("readonly confirmations: {");
+    expect(contractsSource).toContain("readonly pending: () => Promise<HighRiskConfirmationPendingResult>");
+    expect(mainSource).toContain('ipcMain.handle("confirmations.pending"');
+    expect(mainSource).toContain("HighRiskConfirmationPendingResultSchema.parse(");
+    expect(mainSource).toContain('ipcMain.handle("confirmations.resolve"');
+    expect(mainSource).toContain("HighRiskConfirmationResolveRequestSchema.parse(request)");
+    expect(mainSource).toContain('window.webContents.send("confirmations.changed", event)');
+    expect(preloadApi).toContain('ipcRenderer.invoke("confirmations.pending")');
+    expect(preloadApi).toContain("HighRiskConfirmationResolveRequestSchema.parse(request)");
+    expect(preloadApi).toContain("HighRiskConfirmationResolveResultSchema.parse(");
+    expect(preloadApi).toContain("HighRiskConfirmationChangedEventSchema.safeParse(value)");
+    expect(preloadApi).toContain('ipcRenderer.on("confirmations.changed", handler)');
+    expect(serviceSource).toContain("#inFlight");
+    expect(serviceSource).toContain("withdraw(request: HighRiskConfirmationWithdrawal)");
+    for (const unsafeField of ["path", "command", "body", "hash", "credential", "provider", "rawError", "jobId"]) {
+      expect(preloadApi).not.toContain(unsafeField);
+    }
+    expect(preloadApi).not.toContain("Permission");
+    expect(preloadApi).not.toContain("ModelEgress");
+  });
+
   it("exposes machine-local permission settings through revision-fenced body-free IPC", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");

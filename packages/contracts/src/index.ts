@@ -6,6 +6,10 @@ import type {
   ChangeOperation,
   ConfirmationProposal,
   DatasetLogicalType,
+  HighRiskConfirmationChangedEvent,
+  HighRiskConfirmationPendingResult,
+  HighRiskConfirmationResolveRequest,
+  HighRiskConfirmationResolveResult,
   Locale,
   JobClass,
   JobRecord,
@@ -95,6 +99,18 @@ export type {
   PigeErrorSeverity,
   PigeErrorSummary,
   PigeWarning,
+  HighRiskConfirmationAction,
+  HighRiskConfirmationChangedEvent,
+  HighRiskConfirmationId,
+  HighRiskConfirmationOwner,
+  HighRiskConfirmationPendingResult,
+  HighRiskConfirmationResolveRequest,
+  HighRiskConfirmationResolveResult,
+  HighRiskConfirmationSummary,
+  HighRiskConfirmationSubject,
+  HighRiskConfirmationTarget,
+  HighRiskEffect,
+  RendererSafeSubjectLabel,
   VaultRevealResult,
   VaultRevealTarget,
   PermissionActionBinding,
@@ -1326,6 +1342,15 @@ export interface PigeDesktopApi {
     readonly list: (request?: JobsListRequest) => Promise<JobsListResult>;
     readonly cancel: (request: JobActionRequest) => Promise<JobActionResult>;
     readonly retry: (request: JobActionRequest) => Promise<JobActionResult>;
+  };
+  readonly confirmations: {
+    readonly pending: () => Promise<HighRiskConfirmationPendingResult>;
+    readonly resolve: (
+      request: HighRiskConfirmationResolveRequest
+    ) => Promise<HighRiskConfirmationResolveResult>;
+    readonly onChanged: (
+      listener: (event: HighRiskConfirmationChangedEvent) => void
+    ) => () => void;
   };
   readonly modelEgress: {
     readonly pending: (

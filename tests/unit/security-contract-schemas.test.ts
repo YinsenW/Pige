@@ -3,6 +3,10 @@ import {
   AddManualProviderRequestSchema,
   AddPresetProviderRequestSchema,
   DeleteProviderRequestSchema,
+  HighRiskConfirmationChangedEventSchema,
+  HighRiskConfirmationPendingResultSchema,
+  HighRiskConfirmationResolveRequestSchema,
+  HighRiskConfirmationSummarySchema,
   ModelEgressApprovalRequestRecordSchema,
   ModelEgressDecisionSchema,
   ModelEgressPendingRequestQuerySchema,
@@ -45,6 +49,149 @@ const timestamp = "2026-07-10T00:00:00.000Z";
 const policyHash = `sha256:${"a".repeat(64)}`;
 
 describe("security-sensitive shared contracts", () => {
+  it("keeps high-risk confirmation projection closed, coherent, and body-free", () => {
+    const confirmation = {
+      apiVersion: 1 as const,
+      confirmationId: "confirm_20260722_abcdefghijklmnop",
+      effect: "arbitrary_shell" as const,
+      presentation: {
+        action: "run_shell_command" as const,
+        target: "local_system" as const,
+        subject: { kind: "executable_name" as const, value: "lark-cli" }
+      },
+      owner: { kind: "agent_turn" as const, clientTurnId: "turn_20260722_abcdefghijklmnop" }
+    };
+    expect(HighRiskConfirmationSummarySchema.parse(confirmation)).toEqual(confirmation);
+    expect(HighRiskConfirmationPendingResultSchema.parse({
+      apiVersion: 1,
+      status: "pending",
+      revision: 4,
+      confirmation
+    })).toMatchObject({ status: "pending", revision: 4 });
+    expect(HighRiskConfirmationChangedEventSchema.parse({
+      apiVersion: 1,
+      status: "pending",
+      revision: 4,
+      confirmation
+    })).toMatchObject({ status: "pending", revision: 4 });
+    expect(HighRiskConfirmationResolveRequestSchema.parse({
+      apiVersion: 1,
+      confirmationId: confirmation.confirmationId,
+      expectedRevision: 4,
+      decision: "deny"
+    })).toMatchObject({ decision: "deny" });
+
+    expect(() => HighRiskConfirmationSummarySchema.parse({
+      ...confirmation,
+      effect: "export_secret",
+      presentation: {
+        action: "delete_permanently",
+        target: "current_note",
+        subject: { kind: "display_name", value: "Note" }
+      }
+    })).toThrow();
+    expect(() => HighRiskConfirmationSummarySchema.parse({
+      ...confirmation,
+      effect: "risky_agent_edit",
+      presentation: {
+        action: "apply_risky_edit",
+        target: "current_note",
+        subject: { kind: "display_name", value: "Note" }
+      }
+    })).toThrow();
+    expect(() => HighRiskConfirmationPendingResultSchema.parse({
+      apiVersion: 1,
+      status: "pending",
+      revision: 4,
+      confirmation: { ...confirmation, revision: 3 }
+    })).toThrow();
+    for (const unsafeField of ["path", "command", "body", "hash", "credential", "provider", "rawError", "jobId"]) {
+      expect(() => HighRiskConfirmationSummarySchema.parse({ ...confirmation, [unsafeField]: "private" })).toThrow();
+    }
+    for (const unsafeValue of [
+      "/Users/example/private.txt",
+      "C:\\Users\\example\\private.txt",
+      "https://example.com/package",
+      "npm install unsafe-package",
+      "rm -rf data",
+      "curl example.com",
+      "Key sk-example-secret",
+      "github_pat_example",
+      "xoxb-example",
+      "access token=example",
+      "Bearer example-secret",
+      "access_token_example",
+      "clientSecretExample",
+      "private_key_example",
+      "Review op_20260722_abcdefgh",
+      "Retry job_20260722_abcdefgh",
+      "Use provider_20260722_abcdefgh",
+      "secret_20260722_abcdefghijklmnop",
+      "note; rm -rf data"
+    ]) {
+      expect(() => HighRiskConfirmationSummarySchema.parse({
+        ...confirmation,
+        presentation: {
+          action: "run_shell_command",
+          target: "local_system",
+          subject: { kind: "executable_name", value: unsafeValue }
+        }
+      }), `executable_name accepted ${unsafeValue}`).toThrow();
+    }
+    for (const unsafeValue of [
+      "C:\\Users\\example\\private.txt",
+      "https://example.com/package",
+      "rm -rf data",
+      "curl example.com",
+      "Key sk-example-secret",
+      "github_pat_example",
+      "xoxp-example",
+      "access token=example",
+      "Review op_20260722_abcdefgh",
+      "Retry job_20260722_abcdefgh",
+      "Use provider_20260722_abcdefgh"
+    ]) {
+      expect(() => HighRiskConfirmationSummarySchema.parse({
+        apiVersion: 1,
+        confirmationId: confirmation.confirmationId,
+        effect: "write_outside_authorized_root",
+        presentation: {
+          action: "write_external_item",
+          target: "external_location",
+          subject: { kind: "display_name", value: unsafeValue }
+        },
+        owner: confirmation.owner
+      }), `display_name accepted ${unsafeValue}`).toThrow();
+    }
+    for (const unsafeValue of [
+      "sk-example-secret",
+      "github_pat_example",
+      "xoxb-example",
+      "token=example",
+      "plugin-op_20260722_abcdefgh",
+      "plugin-provider_20260722_abcdefgh"
+    ]) {
+      expect(() => HighRiskConfirmationSummarySchema.parse({
+        ...confirmation,
+        effect: "install_unreviewed_package",
+        presentation: {
+          action: "install_package",
+          target: "local_toolchain",
+          subject: { kind: "package_name", value: unsafeValue }
+        }
+      }), `package_name accepted ${unsafeValue}`).toThrow();
+    }
+    expect(HighRiskConfirmationSummarySchema.parse({
+      ...confirmation,
+      effect: "install_unreviewed_package",
+      presentation: {
+        action: "install_package",
+        target: "local_toolchain",
+        subject: { kind: "package_name", value: "@larksuite/cli" }
+      }
+    }).presentation.subject).toEqual({ kind: "package_name", value: "@larksuite/cli" });
+  });
+
   it("keeps Skill inventory and lifecycle requests strict, pathless, and body-free", () => {
     const summary = {
       apiVersion: 1 as const,
