@@ -181,7 +181,13 @@ export type HomeLargePasteItem = {
 };
 export type HomeLargePasteClassification =
   | { readonly kind: "ordinary" }
-  | { readonly kind: "staged"; readonly item: HomeLargePasteItem };
+  | { readonly kind: "staged"; readonly item: HomeLargePasteItem }
+  | {
+      readonly kind: "rejected";
+      readonly item: HomeLargePasteItem;
+      readonly reason: HomeLargePasteRejectionReason;
+    };
+export type HomeLargePasteRejectionReason = "item_limit" | "item_too_large" | "aggregate_too_large";
 export type HomeLargePasteClassificationRequest = {
   readonly composerText: string;
   readonly pastedText: string;
@@ -191,7 +197,8 @@ export interface HomeLargePasteAdapter {
 }
 type StagedComposerItem =
   | { readonly kind: "file"; readonly localId: string; readonly file: File }
-  | ({ readonly kind: "pasted_text" } & HomeLargePasteItem);
+  | ({ readonly kind: "pasted_text" } & HomeLargePasteItem)
+  | ({ readonly kind: "rejected_pasted_text"; readonly reason: HomeLargePasteRejectionReason } & HomeLargePasteItem);
 type ActiveReaderSelectionProposal = {
   readonly vaultId: string;
   readonly pageId: string;
@@ -4919,7 +4926,8 @@ function HomeComposer(props: {
     const stagedComposerFiles = stagedComposerItems
       .filter((item): item is Extract<StagedComposerItem, { kind: "file" }> => item.kind === "file")
       .map((item) => item.file);
-    const hasStagedPaste = stagedComposerItems.some((item) => item.kind === "pasted_text");
+    const hasStagedPaste = stagedComposerItems.some((item) => item.kind !== "file");
+    const hasRejectedPaste = stagedComposerItems.some((item) => item.kind === "rejected_pasted_text");
     const hasAttachments = stagedComposerItems.length > 0;
     if (
       (!hasText && !hasAttachments) ||
@@ -4928,7 +4936,9 @@ function HomeComposer(props: {
       composerSubmitInFlightRef.current
     ) return;
     if (hasStagedPaste) {
-      setCaptureError(props.t("home.largePasteSubmissionUnavailable"));
+      setCaptureError(props.t(hasRejectedPaste
+        ? "home.largePasteRejectedSubmissionBlocked"
+        : "home.largePasteSubmissionUnavailable"));
       return;
     }
     followConversationRef.current = true;
@@ -5750,14 +5760,23 @@ function HomeComposer(props: {
             <div className="attachment-list">
               {stagedComposerItems.map((item) => {
                 const label = item.kind === "file" ? item.file.name : props.t("home.pastedText");
+                const isPastedText = item.kind !== "file";
                 return (
-                <div className={`attachment-chip${item.kind === "pasted_text" ? " pasted-text-chip" : ""}`} key={item.localId}>
+                <div
+                  className={`attachment-chip${isPastedText ? " pasted-text-chip" : ""}${item.kind === "rejected_pasted_text" ? " rejected-pasted-text-chip" : ""}`}
+                  key={item.localId}
+                >
                   <span className="attachment-chip-copy">
                     <strong>{label}</strong>
-                    {item.kind === "pasted_text" ? (
+                    {isPastedText ? (
                       <small>{props.t("home.pastedTextMeta")
                         .replace("{characters}", new Intl.NumberFormat(props.locale).format(item.characterCount))
                         .replace("{size}", formatByteCount(item.byteCount, props.locale))}</small>
+                    ) : null}
+                    {item.kind === "rejected_pasted_text" ? (
+                      <small className="attachment-chip-rejection" role="status">
+                        {props.t(largePasteRejectionMessageKey(item.reason))}
+                      </small>
                     ) : null}
                   </span>
                   <button
@@ -5808,12 +5827,14 @@ function HomeComposer(props: {
           placeholder={props.t("home.placeholder")}
           rows={4}
           value={text}
-          onPaste={(event) => handleComposerPaste(event, text, props.largePasteAdapter, (item) => {
+          onPaste={(event) => handleComposerPaste(event, text, props.largePasteAdapter, (classification) => {
             stagedAttachmentRevisionRef.current += 1;
             stagedComposerAttemptRef.current = null;
             setAttachmentSubmissionNotice(null);
             setCaptureError(null);
-            setStagedComposerItems((current) => [...current, { kind: "pasted_text", ...item }]);
+            setStagedComposerItems((current) => [...current, classification.kind === "staged"
+              ? { kind: "pasted_text", ...classification.item }
+              : { kind: "rejected_pasted_text", reason: classification.reason, ...classification.item }]);
           })}
           onChange={(event) => {
             draftRevisionRef.current += 1;
@@ -6108,14 +6129,20 @@ function handleComposerPaste(
   event: ReactClipboardEvent<HTMLTextAreaElement>,
   composerText: string,
   adapter: HomeLargePasteAdapter | undefined,
-  onStage: (item: HomeLargePasteItem) => void
+  onStage: (classification: Exclude<HomeLargePasteClassification, { readonly kind: "ordinary" }>) => void
 ): void {
   if (!adapter) return;
   const pastedText = event.clipboardData.getData("text/plain");
   const classification = adapter.classifyPaste({ composerText, pastedText });
   if (classification.kind === "ordinary") return;
   event.preventDefault();
-  onStage(classification.item);
+  onStage(classification);
+}
+
+function largePasteRejectionMessageKey(reason: HomeLargePasteRejectionReason): string {
+  if (reason === "item_limit") return "home.largePasteRejectedItemLimit";
+  if (reason === "aggregate_too_large") return "home.largePasteRejectedAggregateLimit";
+  return "home.largePasteRejectedItemTooLarge";
 }
 
 function formatByteCount(byteCount: number, locale: Locale): string {

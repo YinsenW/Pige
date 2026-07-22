@@ -1872,6 +1872,51 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("keeps a structurally rejected paste visible and removable without clearing the draft or submitting", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const rejectedBody = "exact rejected fixture body that must remain local";
+    const adapter: import("../../apps/desktop/src/renderer/src/App").HomeLargePasteAdapter = {
+      classifyPaste: () => ({
+        kind: "rejected",
+        reason: "item_too_large",
+        item: {
+          localId: "paste_rejected_fixture",
+          text: rejectedBody,
+          characterCount: 4_500_000,
+          byteCount: 4_500_000
+        }
+      })
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness), adapter);
+
+    await setTextareaValue(dom, container, "Keep this exact draft.");
+    const accepted = await pasteText(dom, container, rejectedBody);
+    const chip = requireElement(container.querySelector<HTMLElement>(".rejected-pasted-text-chip"));
+
+    expect(accepted).toBe(false);
+    expect(textareaValue(container)).toBe("Keep this exact draft.");
+    expect(chip.textContent).toContain("Pasted text");
+    expect(chip.textContent).toContain("too large for one message");
+    expect(chip.textContent).not.toContain(rejectedBody);
+    expect(harness.submitRequests).toHaveLength(0);
+
+    await clickButton(dom, container, "Send");
+    expect(harness.submitRequests).toHaveLength(0);
+    expect(textareaValue(container)).toBe("Keep this exact draft.");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Remove or adjust rejected pasted text before sending"
+    );
+
+    await clickButtonByAriaLabel(dom, container, "Remove pasted text Pasted text");
+    expect(container.querySelector(".rejected-pasted-text-chip")).toBeNull();
+    expect(textareaValue(container)).toBe("Keep this exact draft.");
+    expect(dom.window.document.activeElement).toBe(homeComposer(container));
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps files and pasted text in one visible order and removes the paste locally", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);

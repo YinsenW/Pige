@@ -4131,6 +4131,15 @@ dd {
 
 .pasted-text-chip { max-width: 280px; }
 
+.rejected-pasted-text-chip {
+  border-color: color-mix(in srgb, var(--warning) 38%, var(--border-subtle));
+}
+
+.attachment-chip-copy .attachment-chip-rejection {
+  color: var(--warning);
+  white-space: normal;
+}
+
 .chip-remove {
   display: grid;
   width: 20px;
