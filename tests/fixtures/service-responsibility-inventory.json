@@ -27,7 +27,7 @@
       ["backup-service.ts", 3210, "rd"],
       ["external-file-publication-protocol.ts", 183, "prd"],
       ["generated-note-file.ts", 518, "rdf"],
-      ["home-agent-turn-lifecycle.ts", 584, "jard"],
+      ["agent-turn-publication.ts", 386, "jrd"],
       ["high-risk-confirmation-service.ts", 268, "pr"],
       ["jobs-service.ts", 6956, "japrd"],
       ["knowledge-activity-service.ts", 1622, "rd"],

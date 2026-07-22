@@ -104,7 +104,7 @@ import {
   settleJobAfterAssistant,
   type HomeAgentJobSession,
   type HomeAgentReaderSelectionMutationPort
-} from "./home-agent-turn-lifecycle";
+} from "./agent-turn-publication";
 import {
   createReaderSelectionJobScope,
   readBoundReaderSelectionEvidence,
