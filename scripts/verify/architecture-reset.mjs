@@ -140,11 +140,19 @@ function auditNoGrowthMarkers(baseRoot, relativePaths, markers, mode = "staged")
   for (const marker of markers) {
     const budget = markerBudget(marker, mode);
     const allowed = new Set(budget.allowedPaths);
+    const compatibility = new Map((budget.compatibilityPaths ?? []).map((entry) => [entry.path, entry.maximumMatches]));
     let matches = 0;
     for (const relativePath of relativePaths) {
       const source = fs.readFileSync(path.join(baseRoot, relativePath), "utf8");
       const count = source.split(marker.token).length - 1;
       if (count === 0) continue;
+      if (compatibility.has(relativePath)) {
+        const maximumMatches = compatibility.get(relativePath);
+        if (!Number.isInteger(maximumMatches) || maximumMatches < 0 || count > maximumMatches) {
+          diagnostics.push(`${marker.id} exceeded compatibility budget ${maximumMatches} in ${relativePath} with ${count} matches`);
+        }
+        continue;
+      }
       matches += count;
       if (!allowed.has(relativePath)) diagnostics.push(`${marker.id} appeared in new path ${relativePath}`);
     }
@@ -157,7 +165,8 @@ function markerBudget(marker, mode) {
   if (mode === "post-combined" && Object.hasOwn(marker, "postCombinedMaximumMatches")) {
     return {
       allowedPaths: marker.postCombinedAllowedPaths ?? [],
-      maximumMatches: marker.postCombinedMaximumMatches
+      maximumMatches: marker.postCombinedMaximumMatches,
+      compatibilityPaths: marker.postCombinedCompatibilityPaths ?? []
     };
   }
   return { allowedPaths: marker.allowedPaths ?? [], maximumMatches: marker.maximumMatches };
@@ -166,9 +175,10 @@ function markerBudget(marker, mode) {
 function auditPostCombinedZeroBudgets(contract) {
   const diagnostics = [];
   const requiredNoGrowthIds = new Set([
-    "terminal.finish_tool", "answer.schema", "answer.output_invalid",
-    "answer.completion_invalid", "egress.content_classes", "egress.audit",
-    "egress.decision", "ui.egress_confirmation"
+    "terminal.finish_tool", "completion.policy", "semantic.repair", "completion.missing",
+    "answer.schema", "answer.evidence_quotes", "answer.output_invalid",
+    "answer.completion_invalid", "turn.objective", "egress.content_classes",
+    "egress.audit", "egress.decision", "ui.egress_confirmation"
   ]);
   const markers = new Map((contract.passThroughNoGrowth ?? []).map((marker) => [marker.id, marker]));
   for (const id of requiredNoGrowthIds) {
@@ -176,6 +186,13 @@ function auditPostCombinedZeroBudgets(contract) {
     if (!marker || marker.postCombinedMaximumMatches !== 0 || marker.postCombinedAllowedPaths?.length !== 0) {
       diagnostics.push(`${id} must have an exact zero-match/no-path post-combined budget`);
     }
+  }
+  const objective = markers.get("turn.objective");
+  const objectiveCompatibility = objective?.postCombinedCompatibilityPaths ?? [];
+  if (objectiveCompatibility.length !== 1 ||
+    objectiveCompatibility[0]?.path !== "apps/desktop/src/main/services/agent-turn-conversation-store.ts" ||
+    objectiveCompatibility[0]?.maximumMatches !== 3) {
+    diagnostics.push("turn.objective must exempt only the bounded read-only legacy conversation hash compatibility owner");
   }
   const modelEgress = contract.legacyMarkers?.find((marker) => marker.id === "model.egress_approval");
   if (!modelEgress || modelEgress.postCombinedMaximumMatches !== 0 || modelEgress.postCombinedAllowedPaths?.length !== 0) {
@@ -251,6 +268,23 @@ function verifySourceScopeGuard() {
         : auditNoGrowthMarkers(fixtureRoot, mutatedSources, [marker], "post-combined");
       if (!markerDiagnostics.some((failure) => failure.includes(marker.id))) {
         diagnostics.push(`post-combined zero guard did not reject authoritative source token for ${marker.id}`);
+      }
+      for (const compatibility of marker.postCombinedCompatibilityPaths ?? []) {
+        writeFixture(
+          fixtureRoot,
+          compatibility.path,
+          Array.from({ length: compatibility.maximumMatches + 1 }, () => marker.token).join("\n")
+        );
+        const compatibilityDiagnostics = auditNoGrowthMarkers(
+          fixtureRoot,
+          collectAuthoritativeSourceFiles(fixtureRoot),
+          [marker],
+          "post-combined"
+        );
+        if (!compatibilityDiagnostics.some((failure) => failure.includes("exceeded compatibility budget"))) {
+          diagnostics.push(`post-combined compatibility budget did not reject excess token for ${marker.id}`);
+        }
+        fs.rmSync(path.join(fixtureRoot, compatibility.path), { force: true });
       }
     }
   } finally {
