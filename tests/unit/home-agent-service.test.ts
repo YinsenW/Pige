@@ -138,7 +138,8 @@ describe("Home Pi Agent service", () => {
       sourceIds: [prepared.sourceId],
       answer: {
         answer: "The attached source describes one unified Pi tool loop.",
-        grounding: "source"
+        grounding: "general",
+        citations: []
       }
     });
     expect(runtimeCalls).toBe(1);
@@ -167,7 +168,7 @@ describe("Home Pi Agent service", () => {
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
           finishHome({
-            answer: "The launch date is July 18. [1]",
+            answer: "The launch date is July 18. [citation_1]",
             citationRefs: ["citation_1"],
             grounding: "local_knowledge"
           })
@@ -179,7 +180,7 @@ describe("Home Pi Agent service", () => {
     expect(outcome.state).toBe("completed");
     if (outcome.state !== "completed") throw new Error("Expected completed Home answer.");
     expect(outcome.modelUsage).toBe("cloud");
-    expect(outcome.answer.answer).toBe("The launch date is July 18. [1]");
+    expect(outcome.answer.answer).toBe("The launch date is July 18. [citation_1]");
     expect(outcome.answer.citations).toEqual([
       expect.objectContaining({ refId: "citation_1", pageId: HOME_PAGE_ID })
     ]);
@@ -222,7 +223,7 @@ describe("Home Pi Agent service", () => {
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
           finishHome({
-            answer: "The bounded result is grounded. [1]",
+            answer: "The bounded result is grounded. [citation_1]",
             citationRefs: ["citation_1"],
             grounding: "local_knowledge"
           })
@@ -410,7 +411,7 @@ describe("Home Pi Agent service", () => {
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
           finishHome({
-            answer: "The launch date is July 18. [1]",
+            answer: "The launch date is July 18. [citation_1]",
             citationRefs: ["citation_1"],
             grounding: "local_knowledge"
           })
@@ -589,7 +590,7 @@ describe("Home Pi Agent service", () => {
             }
           },
           finishHome({
-            answer: "North has the largest total sales in the bounded Dataset result. [D1]",
+            answer: "North has the largest total sales in the bounded Dataset result. [citation_9]",
             citationRefs: ["citation_9"],
             grounding: "local_knowledge"
           })
@@ -690,7 +691,7 @@ describe("Home Pi Agent service", () => {
       ],
       trace: ["catalog", "query", "search"]
     }
-  ])("lets Pi combine bounded local evidence in either legal order: $label", async ({ toolCalls, trace }) => {
+  ])("lets Pi combine bounded local evidence in either legal order and projects only the explicitly cited ref: $label", async ({ toolCalls, trace }) => {
     const fixture = makeFixture();
     const observed: string[] = [];
     const datasets = new StaticDatasetQueryPort(false, (call) => observed.push(call));
@@ -703,8 +704,8 @@ describe("Home Pi Agent service", () => {
         fauxResponses: [
           ...toolCalls,
           finishHome({
-            answer: "The launch note and bounded Dataset both support this answer. [1] [D1]",
-            citationRefs: ["citation_1", "citation_9"],
+            answer: "The bounded Dataset supports this answer. [citation_9]",
+            citationRefs: ["citation_9"],
             grounding: "local_knowledge"
           })
         ]
@@ -726,10 +727,7 @@ describe("Home Pi Agent service", () => {
       sourceIds: [DATASET_SOURCE_ID],
       answer: {
         grounding: "local_knowledge",
-        citations: [
-          expect.objectContaining({ refId: "citation_1", pageId: HOME_PAGE_ID }),
-          expect.objectContaining({ kind: "dataset", refId: "citation_9" })
-        ],
+        citations: [expect.objectContaining({ kind: "dataset", refId: "citation_9" })],
         retrieval: expect.objectContaining({ activeVaultId: fixture.vault.vaultId }),
         datasetResult: expect.objectContaining({ tableName: "Sales" })
       }
@@ -859,8 +857,8 @@ describe("Home Pi Agent service", () => {
       state: "completed",
       answer: {
         answer: "Missing the required citation.",
-        grounding: "local_knowledge",
-        citations: [expect.objectContaining({ refId: "citation_1" })]
+        grounding: "general",
+        citations: []
       }
     });
     expect(service.conversation().messages.filter((message) => message.role === "assistant")).toHaveLength(1);
@@ -1295,7 +1293,11 @@ describe("Home Pi Agent service", () => {
         expect(outcome, `${surface}: ${restrictedValue}`).toMatchObject({
           state: "completed",
           modelUsage: "cloud",
-          answer: { answer: "The selected text reached Pi unchanged." }
+          answer: {
+            answer: "The selected text reached Pi unchanged.",
+            grounding: "general",
+            citations: []
+          }
         });
         expect(runtimeConfigReads).toBe(1);
         expect(runtimeCalls).toBe(1);
@@ -1330,15 +1332,16 @@ describe("Home Pi Agent service", () => {
       new PiAgentRuntimeAdapter({
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
-          finishHome({ answer: "Invented", citationRefs: ["citation_99"], grounding: "local_knowledge" })
+          finishHome({ answer: "Invented [citation_99]", citationRefs: ["citation_99"], grounding: "local_knowledge" })
         ]
       })
     ).submitQuery({ query: "When is the launch?" });
     expect(invalidCitation).toMatchObject({
       state: "completed",
       answer: {
-        answer: "Invented",
-        citations: [expect.objectContaining({ refId: "citation_1" })]
+        answer: "Invented [citation_99]",
+        grounding: "general",
+        citations: []
       }
     });
   });
@@ -1417,7 +1420,7 @@ describe("Home Pi Agent service", () => {
       fauxResponses: [
         { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
         finishHome({
-          answer: "The launch date is July 18. [1]",
+          answer: "The launch date is July 18. [citation_1]",
           citationRefs: ["citation_1"],
           grounding: "local_knowledge"
         })
@@ -1462,7 +1465,7 @@ describe("Home Pi Agent service", () => {
       fauxResponses: [
         { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
         finishHome({
-          answer: "The launch date is July 18. [1]",
+          answer: "The launch date is July 18. [citation_1]",
           citationRefs: ["citation_1"],
           grounding: "local_knowledge"
         })
@@ -1761,7 +1764,7 @@ describe("Home Pi Agent service", () => {
           observedToolOutput = readPiToolText(toolResult);
           await request.beforeModelTurn?.();
           return makeRuntimeResult(request, tool.name, {
-            answer: "The bounded evidence is treated only as data. [1]",
+            answer: "The bounded evidence is treated only as data. [citation_1]",
             citationRefs: ["citation_1"]
           });
         } catch (caught) {
@@ -1780,7 +1783,7 @@ describe("Home Pi Agent service", () => {
     expect(observedRuntimeError).toBeUndefined();
     expect(outcome).toMatchObject({
       state: "completed",
-      answer: { answer: "The bounded evidence is treated only as data. [1]" }
+      answer: { answer: "The bounded evidence is treated only as data. [citation_1]" }
     });
     expect(observedToolOutput.match(/<PIGE_UNTRUSTED_EVIDENCE_V1>/gu)).toHaveLength(1);
     expect(observedToolOutput.match(/<\/PIGE_UNTRUSTED_EVIDENCE_V1>/gu)).toHaveLength(1);
@@ -2366,7 +2369,7 @@ describe("Home Pi Agent service", () => {
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
           finishHome({
-            answer: "Local grounded answer. [1]",
+            answer: "Local grounded answer. [citation_1]",
             citationRefs: ["citation_1"],
             grounding: "local_knowledge"
           })
@@ -2420,7 +2423,7 @@ SYNTHETIC_DISTRACTOR_BODY
           observedModelText = result ? readPiToolText(result) : "";
           await request.beforeModelTurn?.();
           return makeRuntimeResult(request, "pige_read_current_note", {
-            answer: "This note says the launch date is July 18. [1]",
+            answer: "This note says the launch date is July 18. [citation_1]",
             citationRefs: ["citation_1"],
             grounding: "local_knowledge",
             evidenceQuotes: [{ citationRef: "citation_1", quote: "The launch date is July 18." }]
@@ -2518,7 +2521,7 @@ SYNTHETIC_DISTRACTOR_BODY
           observedModelText = readPiToolText(result);
           await request.beforeModelTurn?.();
           return makeRuntimeResult(request, "pige_read_current_note", {
-            answer: "The selected passage is synthetic. [1]",
+            answer: "The selected passage is synthetic. [citation_1]",
             citationRefs: ["citation_1"],
             grounding: "local_knowledge",
             evidenceQuotes: [{ citationRef: "citation_1", quote: selected }]
@@ -2594,7 +2597,7 @@ SYNTHETIC_DISTRACTOR_BODY
           await readTool.execute({}, signal, { toolCallId: "pi_tool_reader_review", signal });
           await request.beforeModelTurn?.();
           return makeRuntimeResult(request, "pige_read_current_note", {
-            answer: `${selected} [1]`,
+            answer: `${selected} [citation_1]`,
             citationRefs: ["citation_1"],
             grounding: "local_knowledge",
             evidenceQuotes: [{ citationRef: "citation_1", quote: selected }]
@@ -2742,7 +2745,8 @@ SYNTHETIC_DISTRACTOR_BODY
       state: "completed",
       answer: {
         answer: "The supplied range does not contain the requested tail.",
-        citations: [expect.objectContaining({ refId: "citation_1" })]
+        grounding: "general",
+        citations: []
       }
     });
   });
@@ -2766,7 +2770,7 @@ SYNTHETIC_DISTRACTOR_BODY
           observedModelText = readPiToolText(result);
           await request.beforeModelTurn?.();
           return makeRuntimeResult(request, "pige_read_current_note", {
-            answer: "The supplied range contains the repeated character. [1]",
+            answer: "The supplied range contains the repeated character. [citation_1]",
             citationRefs: ["citation_1"],
             grounding: "local_knowledge",
             evidenceQuotes: [{ citationRef: "citation_1", quote: "界界" }]
@@ -3013,7 +3017,7 @@ SYNTHETIC_DISTRACTOR_BODY
           await readTool.execute({}, signal, { toolCallId: "pi_tool_sensitive_current_note", signal });
           await request.beforeModelTurn?.();
           return makeRuntimeResult(request, "pige_read_current_note", {
-            answer: "The scoped note says July 18. [1]",
+            answer: "The scoped note says July 18. [citation_1]",
             citationRefs: ["citation_1"],
             grounding: "local_knowledge",
             evidenceQuotes: [{ citationRef: "citation_1", quote: "The launch date is July 18." }]
@@ -3056,7 +3060,7 @@ SYNTHETIC_DISTRACTOR_BODY
           await readTool.execute({}, signal, { toolCallId: "pi_tool_vault_only_current_note", signal });
           await request.beforeModelTurn?.();
           return makeRuntimeResult(request, "pige_read_current_note", {
-            answer: "The scoped note says July 18. [1]",
+            answer: "The scoped note says July 18. [citation_1]",
             citationRefs: ["citation_1"],
             grounding: "local_knowledge",
             evidenceQuotes: [{ citationRef: "citation_1", quote: "The launch date is July 18." }]
@@ -3113,7 +3117,7 @@ SYNTHETIC_DISTRACTOR_BODY
           fauxResponses: [
             { kind: "tool_call", toolName: "pige_read_current_note", args: {} },
             finishHome({
-              answer: "The date is July 18. [1]",
+              answer: "The date is July 18. [citation_1]",
               grounding: "local_knowledge",
               citationRefs: ["citation_1"],
               evidenceQuotes: [{ citationRef: "citation_1", quote: "The launch date is July 18." }]
@@ -3346,7 +3350,7 @@ SYNTHETIC_DISTRACTOR_BODY
           await currentNoteTool.execute({}, signal, { toolCallId: "pi_tool_current_note_privacy", signal });
           await request.beforeModelTurn?.();
           const result = await makeRuntimeResult(request, "pige_read_current_note", {
-            answer: "This answer must never be published after privacy drift. [1]",
+            answer: "This answer must never be published after privacy drift. [citation_1]",
             citationRefs: ["citation_1"],
             grounding: "local_knowledge",
             evidenceQuotes: [{ citationRef: "citation_1", quote: "The launch date is July 18." }]

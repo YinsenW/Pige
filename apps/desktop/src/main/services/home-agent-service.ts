@@ -1377,26 +1377,22 @@ export class HomeAgentService {
       throw new PigeDomainError("agent_runtime.tool_not_registered", "The Home Agent invoked an unavailable tool.");
     }
     const sourceResult = sourceSession?.result();
-    const sourceEvidenceUsed = runtimeResult.invokedTools.some((toolName) => sourceToolNames.has(toolName));
     const searchCitations = searchResult
       ? buildHomeQueryContextPack(searchResult).selectedEvidence.map(({ citation }) => citation)
       : [];
     const noteContext = currentNoteEvidence ? buildNoteAgentContextPack(currentNoteEvidence) : undefined;
-    const citations = Array.from(new Map([
+    const availableCitations = Array.from(new Map([
       ...searchCitations,
       ...(noteContext?.citation ? [noteContext.citation] : []),
       ...(datasetResult?.citations ?? [])
     ].map((citation) => [citation.refId, citation])).values());
+    const citations = selectExplicitAssistantCitations(runtimeResult.assistantText, availableCitations);
     const sourceIds = Array.from(new Set([
       ...(urlEvidenceInspected && urlEvidence ? [urlEvidence.sourceId] : []),
       ...(datasetResult?.evidence.sourceIds ?? []),
       ...(sourceResult && session.current.sourceId ? [session.current.sourceId] : [])
     ]));
-    const grounding: AgentTurnAnswer["grounding"] = citations.length > 0
-      ? "local_knowledge"
-      : urlEvidenceInspected || sourceResult || sourceEvidenceUsed
-        ? "source"
-        : "general";
+    const grounding: AgentTurnAnswer["grounding"] = citations.length > 0 ? "local_knowledge" : "general";
     return {
       answer: {
         answer: runtimeResult.assistantText,
@@ -1915,6 +1911,14 @@ function projectDatasetResultForHome(result: DatasetQueryExecutionResult): Datas
     })),
     evidence: projectDatasetEvidenceForHome(result.evidence)
   };
+}
+
+function selectExplicitAssistantCitations(
+  assistantText: string,
+  availableCitations: readonly AgentTurnAnswer["citations"][number][]
+): AgentTurnAnswer["citations"] {
+  const explicitRefs = new Set(assistantText.match(/\bcitation_[1-9][0-9]*\b/gu) ?? []);
+  return availableCitations.filter((citation) => explicitRefs.has(citation.refId));
 }
 
 function projectDatasetEvidenceForHome(evidence: DatasetQueryEvidenceSnapshot): DatasetQueryEvidenceSnapshot {

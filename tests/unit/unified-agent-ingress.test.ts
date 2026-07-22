@@ -94,7 +94,7 @@ describe("Unified Agent ingress", () => {
             limit: 2
           }
         },
-        { kind: "text", text: "Grace has the largest count in the attached Dataset. [D1]" }
+        { kind: "text", text: "Grace has the largest count in the attached Dataset. [citation_9]" }
       ]
     });
     const datasetQueries = new DatasetQueryService(directDatasetExecutor);
@@ -154,7 +154,7 @@ describe("Unified Agent ingress", () => {
       jobId: prepared.jobId,
       sourceIds: preserved.sourceIds,
       answer: {
-        answer: "Grace has the largest count in the attached Dataset. [D1]",
+        answer: "Grace has the largest count in the attached Dataset. [citation_9]",
         grounding: "local_knowledge",
         citations: [expect.objectContaining({ kind: "dataset", refId: "citation_9" })],
         datasetResult: expect.objectContaining({ returnedRowCount: 2, matchedRowCount: 2 })
@@ -185,7 +185,7 @@ describe("Unified Agent ingress", () => {
     expect(home.conversation()?.messages.at(-1)).toMatchObject({
       role: "assistant",
       answer: expect.objectContaining({
-        answer: "Grace has the largest count in the attached Dataset. [D1]",
+        answer: "Grace has the largest count in the attached Dataset. [citation_9]",
         datasetResult: expect.objectContaining({ returnedRowCount: 2 })
       })
     });
@@ -290,7 +290,7 @@ describe("Unified Agent ingress", () => {
               limit: 2
             }
           },
-          { kind: "text", text: "Grace remains the largest count after restart. [D1]" }
+          { kind: "text", text: "Grace remains the largest count after restart. [citation_9]" }
         ]
       }),
       datasetCapabilities,
@@ -313,7 +313,7 @@ describe("Unified Agent ingress", () => {
       .toMatchObject({
       role: "assistant",
       answer: expect.objectContaining({
-        answer: "Grace remains the largest count after restart. [D1]",
+        answer: "Grace remains the largest count after restart. [citation_9]",
         datasetResult: expect.objectContaining({ returnedRowCount: 2 })
       })
       });
@@ -366,7 +366,7 @@ describe("Unified Agent ingress", () => {
       state: "completed",
       modelUsage: "local",
       sourceIds: preserved.sourceIds,
-      answer: { grounding: "source", citations: [] }
+      answer: { grounding: "general", citations: [] }
     });
     const allJobs = jobs.list({ limit: 20 }).jobs;
     expect(allJobs).toEqual([
@@ -413,7 +413,7 @@ describe("Unified Agent ingress", () => {
       sourceIds: preserved.sourceIds,
       answer: {
         answer: "The preserved source supports a direct answer.",
-        grounding: "source",
+        grounding: "general",
         citations: []
       }
     });

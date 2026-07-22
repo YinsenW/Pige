@@ -100,7 +100,7 @@ describe("Agent-selected URL ingress", () => {
         state: "completed",
         modelUsage: "cloud",
         sourceIds: [expect.stringMatching(/^src_/u)],
-        answer: { grounding: "source", citations: [] }
+        answer: { grounding: "general", citations: [] }
       });
       expect(fetchCalls).toBe(1);
       const jobs = readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"));
@@ -534,7 +534,7 @@ describe("Agent-selected URL ingress", () => {
 
     expect(outcome).toMatchObject({
       state: "completed",
-      answer: { answer: "The source was inspected under host policy.", grounding: "source" }
+      answer: { answer: "The source was inspected under host policy.", grounding: "general" }
     });
     expect(inspectedOutput.match(/<PIGE_UNTRUSTED_EVIDENCE_V1>/gu)).toHaveLength(1);
     expect(inspectedOutput.match(/<\/PIGE_UNTRUSTED_EVIDENCE_V1>/gu)).toHaveLength(1);
