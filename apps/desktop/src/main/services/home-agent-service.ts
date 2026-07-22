@@ -21,7 +21,7 @@ import type {
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
-  AgentSubmitTurnRequestSchema,
+  AgentSubmitTurnRequestSchema as CanonicalAgentSubmitTurnRequestSchema,
   AgentTurnCurrentNoteScopeSchema,
   ConversationIdSchema,
   JobRecordSchema,
@@ -34,7 +34,6 @@ import {
   type PigeErrorSummary
 } from "@pige/schemas";
 import { z } from "zod";
-export { AgentSubmitTurnRequestSchema } from "@pige/schemas";
 import { buildAgentRuntimePolicyContext } from "./agent-policy-context";
 import {
   AgentTurnConversationStore,
@@ -118,6 +117,10 @@ import type {
   JobExecutionOutcome,
   ResumeJobInput
 } from "./job-execution-coordinator";
+
+export const AgentSubmitTurnRequestSchema = CanonicalAgentSubmitTurnRequestSchema.safeExtend({
+  objective: z.enum(["auto", "capture", "vault_only"]).optional()
+});
 
 export interface HomeAgentVaultPort {
   current(): VaultSummary | undefined;

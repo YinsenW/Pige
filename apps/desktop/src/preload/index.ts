@@ -410,11 +410,18 @@ const api: PigeDesktopApi = {
         displayName: file.name,
         internalPath: webUtils.getPathForFile(file)
       }));
-      const normalizedRequest = request.scope
-        ? { ...request, scope: { kind: "current_note" as const, pageId: request.scope.pageId } }
-        : request;
+      const canonicalRequest = {
+        schemaVersion: 1 as const,
+        inputKind: request.inputKind,
+        locale: request.locale,
+        ...(request.text === undefined ? {} : { text: request.text }),
+        ...(request.scope ? { scope: { kind: "current_note" as const, pageId: request.scope.pageId } } : {}),
+        ...(request.clientTurnId === undefined ? {} : { clientTurnId: request.clientTurnId }),
+        ...(request.conversationId === undefined ? {} : { conversationId: request.conversationId }),
+        ...(request.expectedTailEventId === undefined ? {} : { expectedTailEventId: request.expectedTailEventId })
+      };
       const payload = AgentSubmitTurnIpcPayloadSchema.parse({
-        request: normalizedRequest,
+        request: canonicalRequest,
         attachments
       });
       return AgentSubmitTurnResultSchema.parse(

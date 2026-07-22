@@ -467,7 +467,9 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain("internalPath: webUtils.getPathForFile(file)");
     expect(preloadSource).toContain('ipcRenderer.invoke("agent.submitTurn", payload)');
     expect(preloadSource).toContain("AgentSubmitTurnResultSchema.parse(");
-    expect(preloadSource).toContain("request: normalizedRequest");
+    expect(preloadSource).toContain("request: canonicalRequest");
+    expect(preloadSource).toContain("inputKind: request.inputKind");
+    expect(preloadSource).not.toContain("objective: request.objective");
     expect(preloadSource).toContain('ipcRenderer.on("agent.turnDraft", handleDraft)');
     expect(preloadSource).toContain('ipcRenderer.removeListener("agent.turnDraft", handleDraft)');
     expect(contractsSource).toContain("export interface AgentTurnDraftEvent");

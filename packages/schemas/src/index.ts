@@ -173,7 +173,6 @@ export const AgentSubmitTurnRequestSchema = z.object({
     "file_picker",
     "follow_up"
   ]),
-  objective: z.enum(["auto", "capture", "vault_only"]).optional(),
   scope: AgentTurnCurrentNoteScopeSchema.optional(),
   locale: LocaleSchema,
   clientTurnId: AgentClientTurnIdSchema.optional(),

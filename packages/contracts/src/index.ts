@@ -2,7 +2,6 @@ import type { PigeClientCapabilityTier, PigeRuntimeKind } from "@pige/domain";
 import type {
   AgentAttachmentCandidate,
   AgentSubmitTurnIpcPayload,
-  AgentSubmitTurnRequest,
   BoundaryVerification,
   CaptureFileRejection,
   CaptureFileRejectionReason,
@@ -84,7 +83,6 @@ import type {
 export type {
   AgentAttachmentCandidate,
   AgentSubmitTurnIpcPayload,
-  AgentSubmitTurnRequest,
   CaptureFileRejection,
   CaptureFileRejectionReason,
   DiagnosticError,
@@ -942,6 +940,18 @@ export interface AgentTurnCurrentNoteScope {
 }
 
 export type AgentTurnScope = AgentTurnCurrentNoteScope;
+
+export interface AgentSubmitTurnRequest {
+  readonly schemaVersion?: 1;
+  readonly text?: string;
+  readonly inputKind: AgentTurnInputKind;
+  readonly objective?: AgentTurnObjective;
+  readonly scope?: AgentTurnScope;
+  readonly locale: Locale;
+  readonly clientTurnId?: string;
+  readonly conversationId?: string;
+  readonly expectedTailEventId?: string;
+}
 
 export interface AgentTurnAnswer {
   readonly answer: string;
