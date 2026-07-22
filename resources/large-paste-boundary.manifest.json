@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "contractVersion": "2026-07-23",
-  "status": "contract_frozen_implementation_pending",
+  "status": "implementation_bound_product_status_unchanged",
   "canonicalSchemaOwner": "packages/schemas/src/index.ts",
   "implementationExports": {
     "module": "@pige/schemas",
@@ -66,5 +66,13 @@
     "rejectedItemRemainsLocalAndBlocksSend": true
   },
   "globalFileDrop": "Immediate separate Agent turn; never consumes the composer draft or staged items.",
-  "implementationBinding": "pending"
+  "implementationBinding": "bound",
+  "implementationEvidence": {
+    "strictRequestSchema": "AgentSubmitTurnRequestSchema",
+    "strictStagedResultSchema": "AgentStagedSubmitTurnResultSchema",
+    "earlyDurableReceiptSchema": "AgentSubmitTurnAcceptedResultSchema",
+    "mainReceiptBeforeScheduling": true,
+    "preloadResultValidation": "AgentSubmitTurnIpcResultSchema",
+    "productStatusPromotion": false
+  }
 }

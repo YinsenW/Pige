@@ -37,7 +37,7 @@
     "scope": "Independent review of the large-paste Agent-turn boundary: canonical Unicode and UTF-8 limits, side-effect-free ordered staging, atomic exact submission, exact-once managed-source preservation, reference-only history, safe UI projection, retry identity, and unchanged status.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 26,
-    "reviewedSha256": "03ff8895794777f57a57e268967fe814fc9cdbcd8f7a750d27d39ac7b393742e"
+    "reviewedSha256": "15a2f999b78cdc6b8b8fe7947ff3b52814c77343c504ba9ef88f3ec665b79369"
   },
   "reviewers": [{
     "reviewerId": "architecture-reset-planning-review",
@@ -59,7 +59,7 @@
     {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Numeric limits are defined once in a compact manifest and prose owners project only their own observable or durability boundary."}
   ],
   "verification": [
-    {"command":"npm run verify:large-paste-boundary","status":"passed","evidence":"Canonical values, owner markers, planned statuses and deterministic mutation controls pass."},
+    {"command":"npm run verify:large-paste-boundary","status":"passed","evidence":"Canonical values, exported schemas/types, strict request/result binding, early durable receipt, planned statuses and mutations pass."},
     {"command":"npm run verify:contracts","status":"passed","evidence":"Canonical Job reliability plus submitted-turn, high-risk and Provider-send contracts remain single-owned and fail safe."},
     {"command":"npm run verify","status":"passed","evidence":"The full merge-candidate governance suite passes after trace, semantic and reviewed-snapshot regeneration."}
   ],
@@ -69,12 +69,12 @@
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The current 8,000-code-point request bound stays authoritative while staged large-paste implementation is pending; no capture-only route is restored.",
-    "acknowledgement": "Product Planning freezes one cross-layer manifest; Development and UI bind it in one later candidate without Requirement, Exit or Phase promotion."
+    "compatibility": "The typed large-paste request/result boundary is bound while legacy non-staged file submission remains compatible; no capture-only route is restored.",
+    "acknowledgement": "Product Planning binds the exact Development schema and receipt evidence; UI integration remains separate without Requirement, Exit or Phase promotion."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The manifest is frozen but staged large-paste runtime and UI binding remain unimplemented.",
+    "Typed runtime binding is complete, while UI integration and final assembled evidence remain separate.",
     "Windows and Linux qualification remains deferred and unclaimed during early macOS-first development."
   ]
 }

@@ -17,7 +17,7 @@ function read(relativePath) {
 function validate(candidate, report) {
   const exact = [
     [candidate.schemaVersion, 1, "schemaVersion"],
-    [candidate.status, "contract_frozen_implementation_pending", "status"],
+    [candidate.status, "implementation_bound_product_status_unchanged", "status"],
     [candidate.canonicalSchemaOwner, "packages/schemas/src/index.ts", "canonicalSchemaOwner"],
     [candidate.limits?.ordinaryTextMaxCodePoints, 8000, "ordinaryTextMaxCodePoints"],
     [candidate.limits?.stagedItemMaxCount, 8, "stagedItemMaxCount"],
@@ -27,7 +27,11 @@ function validate(candidate, report) {
     [candidate.measurement?.preservedPaste, "utf8_bytes", "preservedPaste measurement"],
     [candidate.measurement?.normalization, "none", "normalization"],
     [candidate.measurement?.trimming, "none", "trimming"],
-    [candidate.implementationBinding, "pending", "implementationBinding"]
+    [candidate.implementationBinding, "bound", "implementationBinding"],
+    [candidate.implementationEvidence?.strictRequestSchema, "AgentSubmitTurnRequestSchema", "strictRequestSchema"],
+    [candidate.implementationEvidence?.strictStagedResultSchema, "AgentStagedSubmitTurnResultSchema", "strictStagedResultSchema"],
+    [candidate.implementationEvidence?.earlyDurableReceiptSchema, "AgentSubmitTurnAcceptedResultSchema", "earlyDurableReceiptSchema"],
+    [candidate.implementationEvidence?.preloadResultValidation, "AgentSubmitTurnIpcResultSchema", "preloadResultValidation"]
   ];
   for (const [actual, expected, label] of exact) {
     if (actual !== expected) report.push(`${label} must equal ${JSON.stringify(expected)}; found ${JSON.stringify(actual)}`);
@@ -61,6 +65,52 @@ function validate(candidate, report) {
   for (const key of ["preserveExactComposerText", "preserveItemsAndOrder", "preserveClientTurnId", "retryAdoptsWithoutDuplicate", "partialAcceptanceNeverClearsRejectedItems", "rejectedItemRemainsLocalAndBlocksSend"]) {
     if (candidate.failure?.[key] !== true) report.push(`failure.${key} must remain true`);
   }
+  if (candidate.implementationEvidence?.mainReceiptBeforeScheduling !== true) report.push("mainReceiptBeforeScheduling must remain true");
+  if (candidate.implementationEvidence?.productStatusPromotion !== false) report.push("implementation binding must not promote product status");
+}
+
+function requireSource(source, marker, label, report) {
+  if (!source.includes(marker)) report.push(`implemented binding is missing ${label}`);
+}
+
+function validateImplementation(sources, report) {
+  const { schema, contracts, main, preload } = sources;
+  const constants = [
+    ["AGENT_AUTHORED_TEXT_MAX_CODE_POINTS", "8_000"],
+    ["AGENT_STAGED_ITEM_MAX_COUNT", "8"],
+    ["AGENT_LARGE_PASTE_ITEM_MAX_UTF8_BYTES", "4_194_304"],
+    ["AGENT_LARGE_PASTE_AGGREGATE_MAX_UTF8_BYTES", "8_388_608"]
+  ];
+  for (const [name, value] of constants) {
+    requireSource(schema, `export const ${name} = ${value};`, `${name}=${value}`, report);
+  }
+  for (const name of ["AgentStagedItem", "AgentStagedLargePasteItem", "AgentStagedItemRejectionReason"]) {
+    requireSource(schema, `export type ${name} =`, `${name} schema export`, report);
+    requireSource(contracts, name, `${name} contracts projection`, report);
+  }
+  const schemaMarkers = [
+    ["(value) => [...value].length <= AGENT_AUTHORED_TEXT_MAX_CODE_POINTS", "Unicode code-point text validation"],
+    ["new TextEncoder().encode(item.text).byteLength !== item.utf8ByteSize", "exact UTF-8 byte validation"],
+    ["stagedItems: z.array(AgentStagedItemSchema).max(AGENT_STAGED_ITEM_MAX_COUNT).readonly().optional()", "strict shared staged-item count"],
+    ["if (item.ordinal !== index)", "strict ordered mixed items"],
+    ["aggregatePasteBytes > AGENT_LARGE_PASTE_AGGREGATE_MAX_UTF8_BYTES", "aggregate paste byte validation"],
+    ["export const AgentSubmitTurnAcceptedResultSchema", "early durable-acceptance receipt"],
+    ["state: z.literal(\"accepted\")", "accepted receipt discriminator"],
+    ["AgentStagedSubmitTurnResultSchema = z.union([", "strict staged submit result"],
+    ["result.acceptedItems.length !== result.sourceIds.length", "accepted source-reference parity"]
+  ];
+  for (const [marker, label] of schemaMarkers) requireSource(schema, marker, label, report);
+  for (const reason of ["item_limit", "item_too_large", "aggregate_too_large"]) {
+    requireSource(schema, `\"${reason}\"`, `${reason} rejection value`, report);
+  }
+  requireSource(contracts, "readonly stagedItems?: readonly AgentStagedItem[]", "typed staged request projection", report);
+  requireSource(preload, "AgentSubmitTurnIpcResultSchema.parse(", "preload result validation", report);
+  const receipt = main.indexOf("const receipt = home.acceptPreparedSourceTurn(prepared)");
+  const schedule = main.indexOf("scheduleAcceptedAgentTurn(() =>");
+  const run = main.indexOf("home.runAcceptedPreparedSourceTurn(prepared, draftContext)");
+  if (receipt < 0 || schedule <= receipt || run <= schedule) {
+    report.push("main must durably accept the staged turn before scheduling model execution");
+  }
 }
 
 let manifest = {};
@@ -88,9 +138,13 @@ for (const [relativePath, markers] of ownerMarkers) {
 }
 
 const schema = read("packages/schemas/src/index.ts");
-if (!/AgentSubmitTurnRequestSchema[\s\S]*?text:\s*z\.string\(\)\.max\(8_000\)\.optional\(\)/u.test(schema)) {
-  errors.push("AgentSubmitTurnRequestSchema must retain the current 8,000-code-point text boundary until the staged-item implementation binds the canonical manifest");
-}
+const implementationSources = {
+  schema,
+  contracts: read("packages/contracts/src/index.ts"),
+  main: read("apps/desktop/src/main/index.ts"),
+  preload: read("apps/desktop/src/preload/index.ts")
+};
+validateImplementation(implementationSources, errors);
 
 const acceptance = JSON.parse(read("resources/traceability/acceptance.manifest.json") || "{}");
 if (acceptance.requirements?.["PIGE-CAP-002"]?.status !== "planned") errors.push("PIGE-CAP-002 must remain planned");
@@ -105,6 +159,7 @@ const mutations = [
   ["preSubmitSideEffects", (copy) => { copy.preSubmitSideEffects = ["job"]; }],
   ["retryAdoptsWithoutDuplicate", (copy) => { copy.failure.retryAdoptsWithoutDuplicate = false; }],
   ["rejection enum", (copy) => { copy.rejectionReasons[0] = "too_many_items"; }],
+  ["binding status", (copy) => { copy.implementationBinding = "pending"; }],
   ["consumer hardcoding", (copy) => { copy.implementationExports.consumersImportWithoutHardcoding = false; }]
 ];
 for (const [label, mutate] of mutations) {
@@ -113,6 +168,18 @@ for (const [label, mutate] of mutations) {
   const mutationErrors = [];
   validate(copy, mutationErrors);
   if (mutationErrors.length === 0) errors.push(`large-paste verifier mutation did not fail: ${label}`);
+}
+
+const sourceMutations = [
+  ["constant", { ...implementationSources, schema: implementationSources.schema.replace("AGENT_AUTHORED_TEXT_MAX_CODE_POINTS = 8_000", "AGENT_AUTHORED_TEXT_MAX_CODE_POINTS = 8_001") }],
+  ["order", { ...implementationSources, schema: implementationSources.schema.replace("if (item.ordinal !== index)", "if (false)") }],
+  ["receipt", { ...implementationSources, main: implementationSources.main.replace("const receipt = home.acceptPreparedSourceTurn(prepared)", "const receipt = undefined") }],
+  ["preload", { ...implementationSources, preload: implementationSources.preload.replace("AgentSubmitTurnIpcResultSchema.parse(", "unvalidatedResult(") }]
+];
+for (const [label, sources] of sourceMutations) {
+  const mutationErrors = [];
+  validateImplementation(sources, mutationErrors);
+  if (mutationErrors.length === 0) errors.push(`implemented-binding source mutation did not fail: ${label}`);
 }
 
 if (errors.length > 0) {
