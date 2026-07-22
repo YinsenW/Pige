@@ -160,6 +160,7 @@ import {
   applyReaderSelectionPageUpdate,
   createAgentPageUpdateOperationId
 } from "./services/agent-page-update-service";
+import { readReaderSelectionPageUpdateOperation } from "./services/agent-turn-publication";
 import { ReaderSelectionActionService } from "./services/reader-selection-action-service";
 import {
   createReaderSelectionProposalId,
@@ -902,29 +903,61 @@ const getHomeAgentService = (): HomeAgentService => {
             });
             return { status: "review_required" as const, proposalId: proposal.proposalId };
           }
-          return {
-            status: "applied" as const,
-            operationId: applyReaderSelectionPageUpdate({
+          const result = applyReaderSelectionPageUpdate({
             vaultPath,
             job,
             target: readCurrentNotePageForMutation(vaultPath, selection.pageId),
             selection,
             replacement,
             action
-            }).operation.id
+          });
+          return {
+            status: "applied" as const,
+            operationId: result.operation.id,
+            pageContentHash: result.operation.after!.id
           };
         },
-        readPublication: ({ job, selection }) => {
+        readPublication: ({ vaultPath, job, selection, replacement, action }) => {
           const operationId = createAgentPageUpdateOperationId(job.id, selection.pageId);
+          const operation = readReaderSelectionPageUpdateOperation({
+            vaultPath,
+            job,
+            selection,
+            replacement,
+            action
+          });
+          if (operation?.after?.id) {
+            return {
+              status: "applied" as const,
+              operationId,
+              pageContentHash: operation.after.id
+            };
+          }
           if (job.operationIds?.includes(operationId)) {
-            return { status: "applied" as const, operationId };
+            throw new PigeDomainError(
+              "agent_runtime.turn_binding_invalid",
+              "The durable Reader transform Operation is unavailable."
+            );
           }
           const proposalId = createReaderSelectionProposalId(job.id);
-          if (!job.proposalIds?.includes(proposalId)) return undefined;
-          const result = getReaderSelectionProposalService().get({ apiVersion: 1, proposalId });
-          return result.status === "available"
-            ? { status: "review_required" as const, proposalId: result.proposal.proposalId }
-            : undefined;
+          const proposal = getReaderSelectionProposalService().readPublication({
+            job,
+            action,
+            selection,
+            replacement
+          });
+          if (proposal) {
+            return new Set(["ready", "resolving"]).has(proposal.state)
+              ? { status: "review_required" as const, proposalId: proposal.proposalId }
+              : { status: "resolved" as const, proposalId: proposal.proposalId };
+          }
+          if (job.proposalIds?.includes(proposalId)) {
+            throw new PigeDomainError(
+              "agent_runtime.turn_binding_invalid",
+              "The durable Reader transform proposal is unavailable."
+            );
+          }
+          return undefined;
         }
       }
     );

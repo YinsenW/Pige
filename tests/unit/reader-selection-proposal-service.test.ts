@@ -37,6 +37,32 @@ describe("Reader selection proposal service", () => {
     expect(projected).not.toContain(fixture.job.id);
   });
 
+  it("recovers only the proposal bound to the exact replacement intent", () => {
+    const fixture = makeFixture();
+    const service = makeService(fixture);
+    const replacement = "PRIVATE_REPLACEMENT ".repeat(400);
+    const preview = service.stage({
+      job: fixture.job,
+      action: "expand",
+      selection: fixture.selection,
+      selectedText: "selected",
+      replacement
+    });
+
+    expect(service.readPublication({
+      job: fixture.job,
+      action: "expand",
+      selection: fixture.selection,
+      replacement
+    })).toMatchObject({ proposalId: preview.proposalId, state: "ready" });
+    expect(() => service.readPublication({
+      job: fixture.job,
+      action: "expand",
+      selection: fixture.selection,
+      replacement: "A different structurally valid replacement."
+    })).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_binding_invalid" }));
+  });
+
   it("rejects without invoking the writer and resolves the exact awaiting-review Job", () => {
     const fixture = makeFixture();
     const { service, writer, resolveReview } = makeServiceWithPorts(fixture);
@@ -115,10 +141,12 @@ describe("Reader selection proposal service", () => {
       proposal: { state: "applied", revision: 3 }
     });
     expect(writer).toHaveBeenCalledOnce();
-    expect(service.get({ apiVersion: 1, proposalId: preview.proposalId })).toMatchObject({
-      status: "available",
-      proposal: { state: "applied", revision: 3 }
-    });
+    expect(service.readPublication({
+      job: fixture.job,
+      action: "expand",
+      selection: fixture.selection,
+      replacement: "PRIVATE_REPLACEMENT ".repeat(400)
+    })).toMatchObject({ state: "applied", revision: 3 });
     expect(writer).toHaveBeenCalledOnce();
     expect(resolveReview).toHaveBeenCalledTimes(2);
   });
@@ -140,10 +168,12 @@ describe("Reader selection proposal service", () => {
 
     expect(result).toMatchObject({ status: "rejected", proposal: { state: "rejected", revision: 2 } });
     expect(writer).not.toHaveBeenCalled();
-    expect(service.get({ apiVersion: 1, proposalId: preview.proposalId })).toMatchObject({
-      status: "available",
-      proposal: { state: "rejected", revision: 2 }
-    });
+    expect(service.readPublication({
+      job: fixture.job,
+      action: "expand",
+      selection: fixture.selection,
+      replacement: "PRIVATE_REPLACEMENT ".repeat(400)
+    })).toMatchObject({ state: "rejected", revision: 2 });
     expect(resolveReview).toHaveBeenCalledTimes(2);
   });
 

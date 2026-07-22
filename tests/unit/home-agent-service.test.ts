@@ -42,9 +42,19 @@ import { createFirstPartyReadonlyNodeOsCapabilityAdapters } from "../../apps/des
 import { readMarkdownPageByRelativePath } from "../../apps/desktop/src/main/services/markdown-page-index";
 import {
   readCurrentNoteEvidenceBinding,
+  readCurrentNotePageForMutation,
   readCurrentNoteSelectionEvidenceBinding,
   resolveCurrentNoteEvidenceQuoteLocator
 } from "../../apps/desktop/src/main/services/retrieval-evidence-boundary";
+import {
+  applyReaderSelectionPageUpdate,
+  createAgentPageUpdateOperationId
+} from "../../apps/desktop/src/main/services/agent-page-update-service";
+import {
+  readReaderSelectionPageUpdateOperation,
+  readReaderSelectionPublicationIntent,
+  stageReaderSelectionPublicationIntent
+} from "../../apps/desktop/src/main/services/agent-turn-publication";
 import {
   PiAgentRuntimeAdapter,
   type PiFauxResponse,
@@ -546,8 +556,8 @@ describe("Home Pi Agent service", () => {
         code: "agent_ingest.update_content_restricted",
         domain: "agent_ingest",
         messageKey: "errors.agent_runtime.source_turn_failed",
-        retryable: true,
-        userAction: "retry"
+        retryable: false,
+        userAction: "none"
       }
     });
     expect(JSON.stringify(outcome)).not.toContain("PRIVATE_PROVIDER_OR_REPLACEMENT_BODY");
@@ -1094,11 +1104,13 @@ describe("Home Pi Agent service", () => {
           mutationCalls += 1;
           throw new Error("Recovery must not replay a Reader mutation.");
         },
-        readPublication: ({ job }) => {
+        readPublication: () => {
           publicationReads += 1;
-          return job.operationIds?.includes(operationId)
-            ? { status: "applied" as const, operationId }
-            : undefined;
+          return {
+            status: "applied" as const,
+            operationId,
+            pageContentHash: `sha256:${"a".repeat(64)}`
+          };
         }
       }
     );
@@ -1128,7 +1140,11 @@ describe("Home Pi Agent service", () => {
     const inputRef = job?.inputRefs?.find((ref) => ref.role === "agent_turn_user_event");
     if (!inputRef?.locator || !inputRef.checksum || !inputRef.id) throw new Error("Missing transform conversation binding.");
     if (!job) throw new Error("Missing transform Job.");
-    jobs.patchAgentTurnJob(job, { operationIds: [operationId] });
+    stageReaderSelectionPublicationIntent(
+      fixture.vaultPath,
+      job,
+      "The recovery passage is polished."
+    );
     const userTurn = conversations.readUserTurn(
       fixture.vaultPath,
       inputRef.locator,
@@ -1168,6 +1184,152 @@ describe("Home Pi Agent service", () => {
       ])
     });
     expect(jobs.readAgentTurnJob(waiting.jobId)?.operationIds).toEqual([operationId]);
+  });
+
+  it("publishes a durable Reader intent after assistant recovery without another model call", async () => {
+    const fixture = makeFixture();
+    const selected = "SELECTED_RECOVERY_INTENT_PASSAGE";
+    const pagePath = writeGeneratedKnowledgePage(fixture.vaultPath, selected);
+    const selection = createReaderSelectionForPage(pagePath, HOME_PAGE_ID, selected);
+    const models = makeMutableHomeModels(false);
+    const jobs = new JobsService(fixture.vaults);
+    const conversations = new AgentTurnConversationStore();
+    let runtimeCalls = 0;
+    const operationIdForJob = (job: JobRecord) =>
+      createAgentPageUpdateOperationId(job.id, selection.pageId);
+    const publish = vi.fn(({ job }: { readonly job: JobRecord }) => ({
+      status: "applied" as const,
+      operationId: operationIdForJob(job),
+      pageContentHash: `sha256:${"b".repeat(64)}`
+    }));
+    const service = new TestHomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      { run: async () => { runtimeCalls += 1; throw new Error("Recovery must not call the model."); } },
+      undefined,
+      conversations,
+      undefined,
+      undefined,
+      undefined,
+      {
+        publish,
+        readPublication: ({ job }) => job.operationIds?.includes(operationIdForJob(job))
+          ? {
+              status: "applied" as const,
+              operationId: operationIdForJob(job),
+              pageContentHash: `sha256:${"b".repeat(64)}`
+            }
+          : undefined
+      }
+    );
+    const request = {
+      text: "Polish the selected passage.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260722_readerintentresume"
+    } as const;
+    const context = {
+      currentNoteSelection: selection,
+      currentNoteTransformAction: "polish"
+    } as const;
+    const waiting = await service.submitTurn(request, context);
+    if (waiting.state !== "waiting") throw new Error("Expected a waiting Reader transform turn.");
+    const job = jobs.readAgentTurnJob(waiting.jobId);
+    const inputRef = job?.inputRefs?.find((ref) => ref.role === "agent_turn_user_event");
+    if (!job || !inputRef?.locator || !inputRef.checksum || !inputRef.id) {
+      throw new Error("Missing durable Reader turn binding.");
+    }
+    stageReaderSelectionPublicationIntent(fixture.vaultPath, job, `${selected} revised.`);
+    const userTurn = conversations.readUserTurn(
+      fixture.vaultPath,
+      inputRef.locator,
+      inputRef.id,
+      inputRef.checksum
+    );
+    conversations.appendAssistantTurn(
+      fixture.vaultPath,
+      userTurn,
+      waiting.jobId,
+      "The selected passage was revised."
+    );
+
+    models.setReady(true);
+    expect(await service.resumeWaitingTurns()).toMatchObject({ completed: 1, failed: 0 });
+    expect(runtimeCalls).toBe(0);
+    expect(publish).toHaveBeenCalledOnce();
+    expect(jobs.readAgentTurnJob(waiting.jobId)).toMatchObject({
+      state: "completed",
+      operationIds: [operationIdForJob(job)]
+    });
+    expect(readReaderSelectionPublicationIntent(fixture.vaultPath, job)).toBeUndefined();
+
+    const completedJob = jobs.readAgentTurnJob(waiting.jobId);
+    if (!completedJob) throw new Error("Missing completed Reader Job.");
+    stageReaderSelectionPublicationIntent(fixture.vaultPath, completedJob, `${selected} revised.`);
+    expect(await service.submitTurn(request, context)).toMatchObject({
+      state: "completed",
+      jobId: waiting.jobId
+    });
+    expect(runtimeCalls).toBe(0);
+    expect(publish).toHaveBeenCalledOnce();
+    expect(readReaderSelectionPublicationIntent(fixture.vaultPath, completedJob)).toBeUndefined();
+  });
+
+  it("discards an uncommitted Reader intent when no durable assistant exists", async () => {
+    const fixture = makeFixture();
+    const selected = "SELECTED_STALE_INTENT_PASSAGE";
+    const pagePath = writeGeneratedKnowledgePage(fixture.vaultPath, selected);
+    const selection = createReaderSelectionForPage(pagePath, HOME_PAGE_ID, selected);
+    const models = makeMutableHomeModels(false);
+    const jobs = new JobsService(fixture.vaults);
+    let runtimeCalls = 0;
+    const publish = vi.fn();
+    const service = new TestHomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      {
+        run: async (request) => {
+          runtimeCalls += 1;
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, undefined, {
+            answer: "I completed the retry without applying a replacement.",
+            citationRefs: []
+          });
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { publish, readPublication: () => undefined }
+    );
+    const waiting = await service.submitTurn({
+      text: "Polish the selected passage.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en"
+    }, {
+      currentNoteSelection: selection,
+      currentNoteTransformAction: "polish"
+    });
+    if (waiting.state !== "waiting") throw new Error("Expected a waiting Reader transform turn.");
+    const job = jobs.readAgentTurnJob(waiting.jobId);
+    if (!job) throw new Error("Missing durable Reader Job.");
+    stageReaderSelectionPublicationIntent(fixture.vaultPath, job, `${selected} stale.`);
+
+    models.setReady(true);
+    expect(await service.resumeWaitingTurns()).toMatchObject({ completed: 1, failed: 0 });
+    expect(runtimeCalls).toBe(1);
+    expect(publish).not.toHaveBeenCalled();
+    expect(jobs.readAgentTurnJob(waiting.jobId)).toMatchObject({ state: "completed" });
+    expect(jobs.readAgentTurnJob(waiting.jobId)?.operationIds ?? []).toEqual([]);
+    expect(readReaderSelectionPublicationIntent(fixture.vaultPath, job)).toBeUndefined();
   });
 
   it("sends secret- and path-like authored query text unchanged without an egress operation", async () => {
@@ -2568,15 +2730,28 @@ SYNTHETIC_DISTRACTOR_BODY
       selectedContentHash: `sha256:${createHash("sha256").update(selectedBytes).digest("hex")}`
     };
     const jobs = new JobsService(fixture.vaults);
+    let runtimeCalls = 0;
+    let proposalResolved = false;
     const publish = vi.fn(() => ({
       status: "review_required" as const,
       proposalId: "proposal_20260718_abcdefgh12345678"
     }));
-    const readPublication = vi.fn(({ job }: { readonly job: JobRecord }) =>
-      job.proposalIds?.includes("proposal_20260718_abcdefgh12345678")
-        ? { status: "review_required" as const, proposalId: "proposal_20260718_abcdefgh12345678" }
-        : undefined
-    );
+    const readPublication = vi.fn(({ job }: { readonly job: JobRecord }) => {
+      if (!job.proposalIds?.includes("proposal_20260718_abcdefgh12345678")) return undefined;
+      if (!proposalResolved) {
+        return { status: "review_required" as const, proposalId: "proposal_20260718_abcdefgh12345678" };
+      }
+      const current = jobs.readAgentTurnJob(job.id);
+      if (current?.state === "awaiting_review") {
+        jobs.resolveAgentTurnReview({
+          job: current,
+          proposalId: "proposal_20260718_abcdefgh12345678",
+          result: "completed",
+          message: "The reviewed Reader transform completed."
+        });
+      }
+      return { status: "resolved" as const, proposalId: "proposal_20260718_abcdefgh12345678" };
+    });
     const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
@@ -2584,6 +2759,7 @@ SYNTHETIC_DISTRACTOR_BODY
       jobs,
       {
         run: async (request) => {
+          runtimeCalls += 1;
           const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
           const replaceTool = request.tools.find((tool) => tool.name === "pige_replace_reader_selection");
           if (!readTool || !replaceTool) throw new Error("Missing Reader transform tools.");
@@ -2651,6 +2827,104 @@ SYNTHETIC_DISTRACTOR_BODY
       }
     });
     expect(JSON.stringify(timeline)).not.toContain(internalInstruction);
+
+    proposalResolved = true;
+    const awaitingReview = jobs.readAgentTurnJob(outcome.jobId!)!;
+    stageReaderSelectionPublicationIntent(
+      fixture.vaultPath,
+      awaitingReview,
+      `${selected} with expanded detail.`
+    );
+
+    const duplicate = await service.submitTurn({
+      text: internalInstruction,
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260718_readerreview1"
+    }, {
+      currentNoteSelection: selection,
+      currentNoteTransformAction: "expand"
+    });
+
+    expect(duplicate).toMatchObject({ state: "completed", jobId: outcome.jobId });
+    expect(runtimeCalls).toBe(1);
+    expect(publish).toHaveBeenCalledOnce();
+    expect(jobs.readAgentTurnJob(outcome.jobId!)).toMatchObject({ state: "completed" });
+    expect(readReaderSelectionPublicationIntent(fixture.vaultPath, awaitingReview)).toBeUndefined();
+  });
+
+  it("does not stage a durable Reader review before final assistant publication succeeds", async () => {
+    const fixture = makeFixture();
+    const selected = "SELECTED_REVIEW_FAILURE_PASSAGE";
+    writeKnowledgePage(fixture.vaultPath, [], selected);
+    const pagePath = path.join(fixture.vaultPath, "wiki", "launch.md");
+    const markdown = fs.readFileSync(pagePath, "utf8");
+    const selectedCharacter = markdown.indexOf(selected);
+    const start = Buffer.byteLength(markdown.slice(0, selectedCharacter), "utf8");
+    const selectedBytes = Buffer.from(selected, "utf8");
+    const selection = {
+      pageId: HOME_PAGE_ID,
+      pageContentHash: `sha256:${createHash("sha256").update(markdown).digest("hex")}`,
+      span: { unit: "utf8_bytes" as const, start, endExclusive: start + selectedBytes.length },
+      selectedContentHash: `sha256:${createHash("sha256").update(selectedBytes).digest("hex")}`
+    };
+    const proposalId = "proposal_20260718_failure123456789abc";
+    const jobs = new JobsService(fixture.vaults);
+    const publish = vi.fn(() => ({ status: "review_required" as const, proposalId }));
+    const service = new TestHomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      {
+        run: async (request) => {
+          const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
+          const replaceTool = request.tools.find((tool) => tool.name === "pige_replace_reader_selection");
+          if (!readTool || !replaceTool) throw new Error("Missing Reader transform tools.");
+          const signal = new AbortController().signal;
+          await request.beforeModelTurn?.();
+          await readTool.execute({}, signal, { toolCallId: "pi_tool_reader_failure_read", signal });
+          await replaceTool.execute({ replacement: `${selected} with review detail.` }, signal, {
+            toolCallId: "pi_tool_reader_failure_replace",
+            signal
+          });
+          throw new PigeDomainError("model_provider.call_failed", "Synthetic final publication failure.");
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        publish,
+        readPublication: ({ job }) => job.proposalIds?.includes(proposalId)
+          ? { status: "review_required", proposalId }
+          : undefined
+      }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Expand the selected passage.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260722_readerreviewfailure"
+    }, {
+      currentNoteSelection: selection,
+      currentNoteTransformAction: "expand"
+    });
+
+    expect(outcome).toMatchObject({ state: "failed", error: { code: "model_provider.call_failed" } });
+    expect(publish).not.toHaveBeenCalled();
+    expect(jobs.readAgentTurnJob(outcome.jobId!)).toMatchObject({
+      state: "failed_retryable"
+    });
+    expect(jobs.readAgentTurnJob(outcome.jobId!)?.proposalIds ?? []).toEqual([]);
+    expect(fs.readFileSync(pagePath, "utf8")).toBe(markdown);
+    expect(service.conversation({ scope: { kind: "current_note", pageId: HOME_PAGE_ID } })?.messages)
+      .toHaveLength(1);
   });
 
   it("keeps ordinary Reader transform final prose from causing a durable mutation", async () => {
@@ -2727,8 +3001,7 @@ SYNTHETIC_DISTRACTOR_BODY
   it("binds an explicit Reader replacement tool publication separately from final prose", async () => {
     const fixture = makeFixture();
     const selected = "SELECTED_APPLIED_PASSAGE";
-    writeKnowledgePage(fixture.vaultPath, [], selected);
-    const pagePath = path.join(fixture.vaultPath, "wiki", "launch.md");
+    const pagePath = writeGeneratedKnowledgePage(fixture.vaultPath, selected);
     const markdown = fs.readFileSync(pagePath, "utf8");
     const start = Buffer.byteLength(markdown.slice(0, markdown.indexOf(selected)), "utf8");
     const selectedBytes = Buffer.from(selected, "utf8");
@@ -2738,14 +3011,48 @@ SYNTHETIC_DISTRACTOR_BODY
       span: { unit: "utf8_bytes" as const, start, endExclusive: start + selectedBytes.length },
       selectedContentHash: `sha256:${createHash("sha256").update(selectedBytes).digest("hex")}`
     };
-    const operationId = "op_20260722_readerreplace123456";
-    const publish = vi.fn(() => ({ status: "applied" as const, operationId }));
-    const readPublication = vi.fn(({ job }: { readonly job: JobRecord }) =>
-      job.operationIds?.includes(operationId)
-        ? { status: "applied" as const, operationId }
-        : undefined
-    );
+    const operationIdForJob = (job: JobRecord) => createAgentPageUpdateOperationId(job.id, selection.pageId);
+    const publish = vi.fn((input: {
+      readonly vaultPath: string;
+      readonly job: JobRecord;
+      readonly selection: typeof selection;
+      readonly replacement: string;
+      readonly action: "translate" | "polish" | "expand";
+    }) => {
+      const result = applyReaderSelectionPageUpdate({
+        ...input,
+        target: readCurrentNotePageForMutation(input.vaultPath, input.selection.pageId)
+      });
+      return {
+        status: "applied" as const,
+        operationId: result.operation.id,
+        pageContentHash: result.operation.after!.id
+      };
+    });
+    const readPublication = vi.fn((input: {
+      readonly vaultPath: string;
+      readonly job: JobRecord;
+      readonly selection: typeof selection;
+      readonly replacement: string;
+      readonly action: "translate" | "polish" | "expand";
+    }) => {
+      const operationId = operationIdForJob(input.job);
+      const operation = readReaderSelectionPageUpdateOperation(input);
+      return operation?.after?.id
+        ? { status: "applied" as const, operationId, pageContentHash: operation.after.id }
+        : undefined;
+    });
     const jobs = new JobsService(fixture.vaults);
+    const patchAgentTurnJob = jobs.patchAgentTurnJob.bind(jobs);
+    let publicationPatchFailures = 0;
+    vi.spyOn(jobs, "patchAgentTurnJob").mockImplementation((job, facts) => {
+      if (facts.operationIds?.length) {
+        publicationPatchFailures += 1;
+        throw new PigeDomainError("job.revision_conflict", "Synthetic publication patch interruption.");
+      }
+      return patchAgentTurnJob(job, facts);
+    });
+    let runtimeCalls = 0;
     const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
@@ -2753,6 +3060,7 @@ SYNTHETIC_DISTRACTOR_BODY
       jobs,
       {
         run: async (request) => {
+          runtimeCalls += 1;
           const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
           const replaceTool = request.tools.find((tool) => tool.name === "pige_replace_reader_selection");
           if (!readTool || !replaceTool) throw new Error("Missing Reader transform tools.");
@@ -2794,15 +3102,18 @@ SYNTHETIC_DISTRACTOR_BODY
       answer: { answer: "The requested replacement was applied." }
     });
     expect(publish).toHaveBeenCalledOnce();
+    expect(publicationPatchFailures).toBe(2);
+    expect(runtimeCalls).toBe(1);
     expect(publish).toHaveBeenCalledWith(expect.objectContaining({
       replacement: `${selected} with a precise revision.`,
       action: "polish",
       selection
     }));
     expect(readPublication).toHaveBeenCalled();
+    expect(fs.readFileSync(pagePath, "utf8")).toContain(`${selected} with a precise revision.`);
     expect(jobs.readAgentTurnJob(outcome.jobId!)).toMatchObject({
       state: "completed",
-      operationIds: [operationId]
+      operationIds: [operationIdForJob(jobs.readAgentTurnJob(outcome.jobId!)!)]
     });
   });
 
@@ -4030,6 +4341,63 @@ source_ids: ${JSON.stringify(sourceIds)}
 
 ${body}
 `, "utf8");
+}
+
+function writeGeneratedKnowledgePage(vaultPath: string, body: string): string {
+  fs.rmSync(path.join(vaultPath, "wiki", "launch.md"), { force: true });
+  const pagePath = path.join(vaultPath, "wiki", "generated", "2026", `${HOME_PAGE_ID}.md`);
+  fs.mkdirSync(path.dirname(pagePath), { recursive: true });
+  fs.writeFileSync(pagePath, `---
+id: "${HOME_PAGE_ID}"
+schema_version: 1
+title: "Launch plan"
+type: "note"
+created_at: "2026-07-10T00:00:00.000Z"
+updated_at: "2026-07-11T00:00:00.000Z"
+status: "active"
+language: "en"
+aliases: []
+tags: []
+topics: []
+entities: []
+source_ids: []
+related_page_ids: []
+provenance:
+  generated_by: "pige"
+  last_job_id: "job_20260710_seedreader01"
+  model_profile_id: "model_reader_transform"
+  confidence: "high"
+note:
+  note_kind: "summary"
+  review_state: "clean"
+---
+
+${body}
+`, "utf8");
+  return pagePath;
+}
+
+function createReaderSelectionForPage(
+  pagePath: string,
+  pageId: string,
+  selectedText: string
+): {
+  readonly pageId: string;
+  readonly pageContentHash: string;
+  readonly span: { readonly unit: "utf8_bytes"; readonly start: number; readonly endExclusive: number };
+  readonly selectedContentHash: string;
+} {
+  const markdown = fs.readFileSync(pagePath, "utf8");
+  const selectedIndex = markdown.indexOf(selectedText);
+  if (selectedIndex < 0) throw new Error("Selected Reader text is missing from the page fixture.");
+  const selectedBytes = Buffer.from(selectedText, "utf8");
+  const start = Buffer.byteLength(markdown.slice(0, selectedIndex), "utf8");
+  return {
+    pageId,
+    pageContentHash: `sha256:${createHash("sha256").update(markdown).digest("hex")}`,
+    span: { unit: "utf8_bytes", start, endExclusive: start + selectedBytes.length },
+    selectedContentHash: `sha256:${createHash("sha256").update(selectedBytes).digest("hex")}`
+  };
 }
 
 function writeSourceRecord(

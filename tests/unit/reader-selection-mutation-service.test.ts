@@ -8,6 +8,7 @@ import {
   applyReaderSelectionPageUpdate,
   createAgentPageUpdateStagedPath
 } from "../../apps/desktop/src/main/services/agent-page-update-service";
+import { readReaderSelectionPageUpdateOperation } from "../../apps/desktop/src/main/services/agent-turn-publication";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { KnowledgeActivityService } from "../../apps/desktop/src/main/services/knowledge-activity-service";
 import { readCurrentNotePageForMutation } from "../../apps/desktop/src/main/services/retrieval-evidence-boundary";
@@ -79,6 +80,49 @@ describe("Reader selection mutation", () => {
       fixture.vaultPath,
       ...createAgentPageUpdateStagedPath(first.operation.id).split("/")
     ))).toBe(false);
+  });
+
+  it("validates the exact durable Reader Operation before recovery trusts its Job ref", () => {
+    const fixture = makeFixture(undefined, "polish");
+    const applied = applyReaderSelectionPageUpdate({
+      vaultPath: fixture.vaultPath,
+      job: fixture.job,
+      target: readCurrentNotePageForMutation(fixture.vaultPath, fixture.selection.pageId),
+      selection: fixture.selection,
+      replacement: "The validated replacement remains bounded.",
+      action: "polish"
+    });
+    expect(readReaderSelectionPageUpdateOperation({
+      vaultPath: fixture.vaultPath,
+      job: fixture.job,
+      selection: fixture.selection,
+      replacement: "The validated replacement remains bounded.",
+      action: "polish"
+    })?.id).toBe(applied.operation.id);
+    expect(() => readReaderSelectionPageUpdateOperation({
+      vaultPath: fixture.vaultPath,
+      job: fixture.job,
+      selection: fixture.selection,
+      replacement: "A different but structurally valid replacement.",
+      action: "polish"
+    })).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_binding_invalid" }));
+
+    const operationPath = path.join(
+      fixture.vaultPath,
+      ".pige",
+      "operations",
+      "2026",
+      "07",
+      `${applied.operation.id}.json`
+    );
+    fs.writeFileSync(operationPath, "{}\n", "utf8");
+    expect(() => readReaderSelectionPageUpdateOperation({
+      vaultPath: fixture.vaultPath,
+      job: fixture.job,
+      selection: fixture.selection,
+      replacement: "The validated replacement remains bounded.",
+      action: "polish"
+    })).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_binding_invalid" }));
   });
 
   it("rejects a selection boundary inside a UTF-8 code point without changing the page", () => {

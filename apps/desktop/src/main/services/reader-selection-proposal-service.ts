@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type {
   PigeErrorSummary,
   ReaderSelectionIdentity,
@@ -27,6 +28,7 @@ import {
 import { z } from "zod";
 import { containsRestrictedModelContent } from "./model-egress-content";
 import {
+  createReaderSelectionPublicationIntentHash,
   createReaderSelectionReviewResolution
 } from "./reader-selection-job-binding";
 import type { ResolveJobReviewInput } from "./job-execution-coordinator";
@@ -122,7 +124,12 @@ export class ReaderSelectionProposalService {
       );
     }
     const proposalId = createReaderSelectionProposalId(input.job.id);
-    const intentHash = hashIntent(input.job.id, input.action, input.selection, input.replacement);
+    const intentHash = createReaderSelectionPublicationIntentHash(
+      input.job.id,
+      input.action,
+      input.selection,
+      input.replacement
+    );
     const existing = readRecord(vaultPath, proposalId);
     if (existing) {
       if (existing.intentHash !== intentHash || existing.activeVaultId !== vault.vaultId) {
@@ -164,6 +171,38 @@ export class ReaderSelectionProposalService {
     } catch {
       return { apiVersion: 1, status: "unavailable", reason: "record_invalid" };
     }
+  }
+
+  readPublication(input: {
+    readonly job: JobRecord;
+    readonly action: ReaderSelectionTransformAction;
+    readonly selection: ReaderSelectionIdentity;
+    readonly replacement: string;
+  }): ReaderSelectionProposalPreview | undefined {
+    const { vault, vaultPath } = this.#requireVault();
+    const proposalId = createReaderSelectionProposalId(input.job.id);
+    const record = readRecord(vaultPath, proposalId);
+    if (!record) return undefined;
+    const expectedIntentHash = createReaderSelectionPublicationIntentHash(
+      input.job.id,
+      input.action,
+      input.selection,
+      input.replacement
+    );
+    if (
+      record.activeVaultId !== vault.vaultId ||
+      record.jobId !== input.job.id ||
+      record.intentHash !== expectedIntentHash ||
+      record.action !== input.action ||
+      !isDeepStrictEqual(record.selection, input.selection) ||
+      record.replacement !== input.replacement
+    ) {
+      throw new PigeDomainError(
+        "agent_runtime.turn_binding_invalid",
+        "The durable Reader proposal does not match its exact publication intent."
+      );
+    }
+    return project(this.#reconcile(vaultPath, record));
   }
 
   decide(request: ReaderSelectionProposalDecisionRequest): ReaderSelectionProposalDecisionResult {
@@ -328,15 +367,6 @@ export function createReaderSelectionProposalId(jobId: string): string {
     .digest("hex")
     .slice(0, 20);
   return `proposal_${dateKey}_${suffix}`;
-}
-
-function hashIntent(
-  jobId: string,
-  action: ReaderSelectionTransformAction,
-  selection: ReaderSelectionIdentity,
-  replacement: string
-): string {
-  return `sha256:${createHash("sha256").update(JSON.stringify({ jobId, action, selection, replacement })).digest("hex")}`;
 }
 
 function project(record: ReaderSelectionProposalRecord, _selectedText?: string): ReaderSelectionProposalPreview {
