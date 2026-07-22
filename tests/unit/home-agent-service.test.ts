@@ -131,6 +131,11 @@ describe("Home Pi Agent service", () => {
       userIntent: "unknown",
       locale: "en"
     }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+    await expect(jobs.processQueuedAgentIngest({ jobIds: [prepared.jobId] })).resolves.toEqual({
+      processed: 0,
+      completed: 0,
+      failed: 0
+    });
 
     const outcome = await service.submitPreparedSourceTurn(prepared);
     expect(outcome).toMatchObject({

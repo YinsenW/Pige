@@ -1626,9 +1626,19 @@ export class HomeAgentService {
           }
           try {
             if (parsed.data.action === "catalog") {
+              const materializedSource = sourceSession?.result();
+              const sourceDatasetScope: DatasetQueryCatalogScope | undefined =
+                materializedSource?.outcome === "dataset_materialized" && session.current.sourceId
+                  ? {
+                      sourceId: session.current.sourceId,
+                      datasetId: materializedSource.datasetId,
+                      revisionId: materializedSource.revisionId
+                    }
+                  : undefined;
               datasetCatalog = await this.#datasets?.createCatalog(
                 vaultPath,
-                context.signal
+                context.signal,
+                sourceDatasetScope
               );
               if (!datasetCatalog || !this.#datasets) {
                 throw new PigeDomainError("dataset.query.unavailable", "The Dataset query service is unavailable.");
@@ -1757,9 +1767,11 @@ export class HomeAgentService {
           // Pi may prepare once after a terminating tool even though no provider call follows.
           const settledSource = sourceSession?.result();
           if (finalExecution || (settledSource && settledSource.outcome !== "dataset_materialized")) return;
+          session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;
           modelTurnSequence += 1;
           await authorizeCurrentModelTurn();
           await sourceSession?.beforeModelTurn();
+          session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;
           session.modelInvocationStarted = true;
         },
         completionPolicy: {
