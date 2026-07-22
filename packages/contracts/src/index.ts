@@ -190,7 +190,7 @@ export interface RecentVaultSummary {
 }
 
 export interface OnboardingStatus {
-  readonly state: "blocked_no_vault" | "capture_only" | "ready";
+  readonly state: "blocked_no_vault" | "ready";
   readonly activeVault?: VaultSummary;
   readonly hasDefaultModel: boolean;
   readonly showFirstHomeGuide: boolean;
@@ -537,37 +537,11 @@ export interface UpdateStatusEvent {
 
 export type CaptureUserIntent = "capture" | "ask" | "unknown";
 
-export interface SubmitTextCaptureRequest {
-  readonly text: string;
-  readonly inputKind: "typed_text" | "pasted_text";
-  readonly userIntent: CaptureUserIntent;
-  readonly locale: Locale;
-}
-
-export interface SubmitDroppedFilesCaptureRequest {
+export interface SubmitFilesCaptureRequest {
+  readonly filePaths: readonly string[];
   readonly inputKind: "file_drop" | "file_picker";
   readonly userIntent: CaptureUserIntent;
   readonly locale: Locale;
-}
-
-export interface SubmitFilesCaptureRequest extends SubmitDroppedFilesCaptureRequest {
-  readonly filePaths: readonly string[];
-}
-
-export interface SubmitUrlCaptureRequest {
-  readonly url: string;
-  readonly inputKind: "pasted_url" | "typed_url";
-  readonly userIntent: CaptureUserIntent;
-  readonly locale: Locale;
-}
-
-export interface CaptureSubmitResult {
-  readonly status: "queued";
-  readonly captureId: string;
-  readonly sourceId: string;
-  readonly jobId: string;
-  readonly conversationEventId: string;
-  readonly preservedAt: string;
 }
 
 export interface CaptureFileRejection {
