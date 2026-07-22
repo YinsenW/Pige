@@ -1792,6 +1792,108 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("leaves ordinary paste to the native textarea path when the fixture classifies it as ordinary", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const adapter = {
+      classifyPaste: () => ({ kind: "ordinary" as const })
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness), adapter);
+
+    const accepted = await pasteText(dom, container, "A normal paste");
+
+    expect(accepted).toBe(true);
+    expect(container.querySelector(".pasted-text-chip")).toBeNull();
+    expect(harness.submitRequests).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("stages oversized pasted text locally without rendering its body or causing side effects", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const pastedBody = "private fixture body that must not be rendered";
+    const adapter = stagedPasteAdapter({
+      localId: "paste_safe_fixture",
+      text: pastedBody,
+      characterCount: 12_345,
+      byteCount: 18_432
+    });
+    const { container, root } = await mountHome(dom, makePigeApi(harness), adapter);
+
+    const accepted = await pasteText(dom, container, pastedBody);
+    const chip = requireElement(container.querySelector<HTMLElement>(".pasted-text-chip"));
+
+    expect(accepted).toBe(false);
+    expect(chip.textContent).toContain("Pasted text");
+    expect(chip.textContent).toContain("12,345 characters");
+    expect(chip.textContent).toContain("18 KiB");
+    expect(chip.textContent).not.toContain(pastedBody);
+    expect(harness.submitRequests).toHaveLength(0);
+    expect(harness.submittedFileNames).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps files and pasted text in one visible order and removes the paste locally", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const adapter = stagedPasteAdapter({
+      localId: "paste_between_files",
+      text: "oversized body",
+      characterCount: 9_000,
+      byteCount: 9_000
+    });
+    const { container, root } = await mountHome(dom, makePigeApi(harness), adapter);
+
+    await attachFile(dom, container, "first.md", "# First\n");
+    await pasteText(dom, container, "oversized body");
+    await attachFile(dom, container, "last.csv", "value\n1\n");
+
+    expect(Array.from(container.querySelectorAll(".attachment-chip")).map((chip) =>
+      chip.querySelector("strong")?.textContent
+    )).toEqual(["first.md", "Pasted text", "last.csv"]);
+    await clickButtonByAriaLabel(dom, container, "Remove pasted text Pasted text");
+    expect(Array.from(container.querySelectorAll(".attachment-chip")).map((chip) =>
+      chip.querySelector("strong")?.textContent
+    )).toEqual(["first.md", "last.csv"]);
+    expect(dom.window.document.activeElement).toBe(homeComposer(container));
+    expect(harness.submitRequests).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("fails closed before IPC and retains the exact query and items when pasted-text submission has no owner", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const adapter = stagedPasteAdapter({
+      localId: "paste_submit_blocked",
+      text: "oversized body",
+      characterCount: 9_500,
+      byteCount: 12_000
+    });
+    const { container, root } = await mountHome(dom, makePigeApi(harness), adapter);
+
+    await attachFile(dom, container, "context.md", "# Context\n");
+    await pasteText(dom, container, "oversized body");
+    await setTextareaValue(dom, container, "Compare these exact items.");
+    await clickButton(dom, container, "Send");
+
+    expect(harness.submitRequests).toHaveLength(0);
+    expect(harness.submittedFileNames).toHaveLength(0);
+    expect(textareaValue(container)).toBe("Compare these exact items.");
+    expect(container.querySelectorAll(".attachment-chip")).toHaveLength(2);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Sending it is still in development"
+    );
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("stages multiple picker attachments in order with zero side effects until one Send", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
@@ -3263,7 +3365,8 @@ describe("Home durable Agent conversation UI", () => {
     expect(submitHomeInput).toContain('props.onFilesSelected(');
     expect(submitHomeInput).toContain('"file_picker"');
     expect(appSource).toContain('submitHomeFiles(request.files, "file_drop"');
-    expect(appSource).toContain("setStagedComposerFiles((current) => [...current, ...files])");
+    expect(appSource).toContain("setStagedComposerItems((current) => [");
+    expect(appSource).toContain('kind: "file" as const');
     expect(appSource).toContain("multiple");
     expect(retryLatestTurn).toContain("props.onRetryJob(retryableLatestTurn.jobId)");
     expect(retryLatestTurn).not.toContain("submitTurn");
@@ -4523,7 +4626,11 @@ function installResizableMatchMedia(dom: JSDOM, initialWidth: number): (width: n
   };
 }
 
-async function mountHome(dom: JSDOM, api: object): Promise<{
+async function mountHome(
+  dom: JSDOM,
+  api: object,
+  largePasteAdapter?: import("../../apps/desktop/src/renderer/src/App").HomeLargePasteAdapter
+): Promise<{
   readonly container: HTMLElement;
   readonly root: { unmount: () => void };
 }> {
@@ -4535,10 +4642,31 @@ async function mountHome(dom: JSDOM, api: object): Promise<{
   const container = requireElement(dom.window.document.getElementById("root"));
   const root = createRoot(container);
   await act(async () => {
-    root.render(createElement(App));
+    root.render(createElement(App, largePasteAdapter ? { largePasteAdapter } : {}));
     await settle(dom);
   });
   return { container, root };
+}
+
+function stagedPasteAdapter(
+  item: import("../../apps/desktop/src/renderer/src/App").HomeLargePasteItem
+): import("../../apps/desktop/src/renderer/src/App").HomeLargePasteAdapter {
+  return { classifyPaste: () => ({ kind: "staged", item }) };
+}
+
+async function pasteText(dom: JSDOM, container: HTMLElement, text: string): Promise<boolean> {
+  const composer = homeComposer(container);
+  const event = new dom.window.Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    configurable: true,
+    value: { getData: (type: string) => type === "text/plain" ? text : "" }
+  });
+  let accepted = true;
+  await act(async () => {
+    accepted = composer.dispatchEvent(event);
+    await settle(dom);
+  });
+  return accepted;
 }
 
 function installDom(dom: JSDOM): void {

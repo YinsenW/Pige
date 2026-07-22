@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ClipboardEvent as ReactClipboardEvent,
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -172,6 +173,21 @@ type ActiveSourceTurnBinding = {
   readonly pending: boolean;
   readonly sourceDisplayName: string | null;
 };
+export type HomeLargePasteItem = {
+  readonly localId: string;
+  readonly text: string;
+  readonly characterCount: number;
+  readonly byteCount: number;
+};
+export type HomeLargePasteClassification =
+  | { readonly kind: "ordinary" }
+  | { readonly kind: "staged"; readonly item: HomeLargePasteItem };
+export interface HomeLargePasteAdapter {
+  classifyPaste(text: string): HomeLargePasteClassification;
+}
+type StagedComposerItem =
+  | { readonly kind: "file"; readonly localId: string; readonly file: File }
+  | ({ readonly kind: "pasted_text" } & HomeLargePasteItem);
 type ActiveReaderSelectionProposal = {
   readonly vaultId: string;
   readonly pageId: string;
@@ -222,7 +238,7 @@ function useMediaQuery(query: string): boolean {
   return matches;
 }
 
-export function App(): React.JSX.Element {
+export function App(props: { readonly largePasteAdapter?: HomeLargePasteAdapter } = {}): React.JSX.Element {
   const macosWindowShell = /Macintosh|Mac OS X/.test(window.navigator.userAgent);
   const sidebarHomeOverlayViewport = useMediaQuery("(max-width: 719px)");
   const sidebarReaderOverlayViewport = useMediaQuery("(max-width: 839px)");
@@ -1653,6 +1669,7 @@ export function App(): React.JSX.Element {
             modelSummary={modelSummary}
             recentJobs={recentJobs}
             locale={locale}
+            {...(props.largePasteAdapter ? { largePasteAdapter: props.largePasteAdapter } : {})}
             onReaderSelectionAction={revealReaderSelectionAction}
             draftText={homeDraftText}
             onDraftChange={setHomeDraftText}
@@ -4098,6 +4115,7 @@ function HomeComposer(props: {
   readonly modelSummary: ModelProviderSettingsSummary | null;
   readonly recentJobs: readonly JobSummary[];
   readonly locale: Locale;
+  readonly largePasteAdapter?: HomeLargePasteAdapter;
   readonly onReaderSelectionAction: (result: ReaderSelectionActionResult) => void;
   readonly draftText: string;
   readonly onDraftChange: (text: string) => void;
@@ -4143,7 +4161,7 @@ function HomeComposer(props: {
   const [voiceLevels, setVoiceLevels] = useState<readonly number[]>([]);
   const [voiceCanOpenSystemSettings, setVoiceCanOpenSystemSettings] = useState(false);
   const [voiceAssetInstallProgress, setVoiceAssetInstallProgress] = useState<number | undefined>(undefined);
-  const [stagedComposerFiles, setStagedComposerFiles] = useState<readonly File[]>([]);
+  const [stagedComposerItems, setStagedComposerItems] = useState<readonly StagedComposerItem[]>([]);
   const [attachmentSubmissionNotice, setAttachmentSubmissionNotice] = useState<{
     readonly acceptedCount: number;
     readonly rejectedFiles: readonly CaptureFileRejection[];
@@ -4845,7 +4863,7 @@ function HomeComposer(props: {
     setOptimisticConversationTurns([]);
     stagedAttachmentRevisionRef.current += 1;
     stagedComposerAttemptRef.current = null;
-    setStagedComposerFiles([]);
+    setStagedComposerItems([]);
     setLiveAnswerEventId(null);
     setAgentAnswer(null);
     clearAgentDraft();
@@ -4894,13 +4912,21 @@ function HomeComposer(props: {
 
   const submitHomeInput = async (): Promise<void> => {
     const hasText = text.trim().length > 0;
-    const hasAttachments = stagedComposerFiles.length > 0;
+    const stagedComposerFiles = stagedComposerItems
+      .filter((item): item is Extract<StagedComposerItem, { kind: "file" }> => item.kind === "file")
+      .map((item) => item.file);
+    const hasStagedPaste = stagedComposerItems.some((item) => item.kind === "pasted_text");
+    const hasAttachments = stagedComposerItems.length > 0;
     if (
       (!hasText && !hasAttachments) ||
       (!homeModelSendAvailable && !hasAttachments) ||
       modelSwitching ||
       composerSubmitInFlightRef.current
     ) return;
+    if (hasStagedPaste) {
+      setCaptureError(props.t("home.largePasteSubmissionUnavailable"));
+      return;
+    }
     followConversationRef.current = true;
     composerSubmitInFlightRef.current = true;
     setComposerSubmitActive(true);
@@ -4934,7 +4960,7 @@ function HomeComposer(props: {
     draftRevisionRef.current = clearedDraftRevision;
     stagedAttachmentRevisionRef.current = clearedAttachmentRevision;
     props.onDraftChange("");
-    setStagedComposerFiles([]);
+    setStagedComposerItems([]);
     setOptimisticConversationTurns((current) => [
       ...current,
       { clientTurnId, text: turnText, attachmentNames: submittedFiles.map((file) => file.name) }
@@ -5012,7 +5038,11 @@ function HomeComposer(props: {
       }
       if (!durableUserTurnExists && stagedAttachmentRevisionRef.current === clearedAttachmentRevision) {
         stagedAttachmentRevisionRef.current += 1;
-        setStagedComposerFiles(submittedFiles);
+        setStagedComposerItems(submittedFiles.map((file) => ({
+          kind: "file" as const,
+          localId: createComposerItemId("file"),
+          file
+        })));
       }
       if (outcome.state === "completed") {
         const completedAt = new Date().toISOString();
@@ -5110,7 +5140,11 @@ function HomeComposer(props: {
         }
         if (stagedAttachmentRevisionRef.current === clearedAttachmentRevision) {
           stagedAttachmentRevisionRef.current += 1;
-          setStagedComposerFiles(submittedFiles);
+          setStagedComposerItems(submittedFiles.map((file) => ({
+            kind: "file" as const,
+            localId: createComposerItemId("file"),
+            file
+          })));
         }
       }
       setAgentError({
@@ -5145,11 +5179,11 @@ function HomeComposer(props: {
     if (
       event.repeat ||
       composerSubmitInFlightRef.current ||
-      (!homeModelSendAvailable && stagedComposerFiles.length === 0) ||
+      (!homeModelSendAvailable && stagedComposerItems.length === 0) ||
       modelSwitching ||
       agentRunState === "accepted" ||
       agentRunState === "running" ||
-      (!text.trim() && stagedComposerFiles.length === 0)
+      (!text.trim() && stagedComposerItems.length === 0)
     ) {
       return;
     }
@@ -5707,28 +5741,39 @@ function HomeComposer(props: {
           />
         ) : (
           <>
-        {stagedComposerFiles.length > 0 ? (
-          <div className="attachment-strip visible" aria-label={props.t("home.attachedFiles")}>
+        {stagedComposerItems.length > 0 ? (
+          <div className="attachment-strip visible" aria-label={props.t("home.messageItems")}>
             <div className="attachment-list">
-              {stagedComposerFiles.map((file, index) => (
-                <div className="attachment-chip" key={`${file.name}-${file.size}-${file.lastModified}-${index}`}>
-                  <span>{file.name}</span>
+              {stagedComposerItems.map((item) => {
+                const label = item.kind === "file" ? item.file.name : props.t("home.pastedText");
+                return (
+                <div className={`attachment-chip${item.kind === "pasted_text" ? " pasted-text-chip" : ""}`} key={item.localId}>
+                  <span className="attachment-chip-copy">
+                    <strong>{label}</strong>
+                    {item.kind === "pasted_text" ? (
+                      <small>{props.t("home.pastedTextMeta")
+                        .replace("{characters}", new Intl.NumberFormat(props.locale).format(item.characterCount))
+                        .replace("{size}", formatByteCount(item.byteCount, props.locale))}</small>
+                    ) : null}
+                  </span>
                   <button
                     className="chip-remove"
                     type="button"
-                    aria-label={`${props.t("home.removeAttachment")} ${file.name}`}
+                    aria-label={`${props.t(item.kind === "file" ? "home.removeAttachment" : "home.removePastedText")} ${label}`}
                     onClick={() => {
                       stagedAttachmentRevisionRef.current += 1;
                       stagedComposerAttemptRef.current = null;
                       setAttachmentSubmissionNotice(null);
-                      setStagedComposerFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
+                      setCaptureError(null);
+                      setStagedComposerItems((current) => current.filter((currentItem) => currentItem.localId !== item.localId));
                       window.requestAnimationFrame(() => composerInputRef.current?.focus({ preventScroll: true }));
                     }}
                   >
                     <PigeIcon name="close" size={13} />
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ) : null}
@@ -5759,6 +5804,13 @@ function HomeComposer(props: {
           placeholder={props.t("home.placeholder")}
           rows={4}
           value={text}
+          onPaste={(event) => handleComposerPaste(event, props.largePasteAdapter, (item) => {
+            stagedAttachmentRevisionRef.current += 1;
+            stagedComposerAttemptRef.current = null;
+            setAttachmentSubmissionNotice(null);
+            setCaptureError(null);
+            setStagedComposerItems((current) => [...current, { kind: "pasted_text", ...item }]);
+          })}
           onChange={(event) => {
             draftRevisionRef.current += 1;
             stagedComposerAttemptRef.current = null;
@@ -5890,7 +5942,14 @@ function HomeComposer(props: {
               stagedAttachmentRevisionRef.current += 1;
               stagedComposerAttemptRef.current = null;
               setAttachmentSubmissionNotice(null);
-              setStagedComposerFiles((current) => [...current, ...files]);
+              setStagedComposerItems((current) => [
+                ...current,
+                ...files.map((file) => ({
+                  kind: "file" as const,
+                  localId: createComposerItemId("file"),
+                  file
+                }))
+              ]);
               setCaptureError(null);
               window.requestAnimationFrame(() => composerInputRef.current?.focus({ preventScroll: true }));
             }}
@@ -5918,10 +5977,10 @@ function HomeComposer(props: {
             type="button"
             className="composer-send"
             aria-label={props.t("home.send")}
-            title={!homeModelSendAvailable && stagedComposerFiles.length === 0 ? props.t("home.modelUnavailable") : undefined}
+            title={!homeModelSendAvailable && stagedComposerItems.length === 0 ? props.t("home.modelUnavailable") : undefined}
             disabled={
-              (!text.trim() && stagedComposerFiles.length === 0) ||
-              (!homeModelSendAvailable && stagedComposerFiles.length === 0) ||
+              (!text.trim() && stagedComposerItems.length === 0) ||
+              (!homeModelSendAvailable && stagedComposerItems.length === 0) ||
               modelSwitching ||
               effectiveAgentRunState === "accepted" ||
               effectiveAgentRunState === "running"
@@ -5939,7 +5998,7 @@ function HomeComposer(props: {
           </>
         )}
         <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
-        {captureError ? <p className="error">{captureError}</p> : null}
+        {captureError ? <p className="error" role="alert">{captureError}</p> : null}
       </section>
     </section>
   );
@@ -6035,6 +6094,29 @@ function composerAttemptKey(text: string, files: readonly File[]): string {
     text,
     files.map((file) => [file.name, file.size, file.type, file.lastModified])
   ]);
+}
+
+function createComposerItemId(kind: "file" | "paste"): string {
+  return `${kind}_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function handleComposerPaste(
+  event: ReactClipboardEvent<HTMLTextAreaElement>,
+  adapter: HomeLargePasteAdapter | undefined,
+  onStage: (item: HomeLargePasteItem) => void
+): void {
+  if (!adapter) return;
+  const pastedText = event.clipboardData.getData("text/plain");
+  const classification = adapter.classifyPaste(pastedText);
+  if (classification.kind === "ordinary") return;
+  event.preventDefault();
+  onStage(classification.item);
+}
+
+function formatByteCount(byteCount: number, locale: Locale): string {
+  if (byteCount < 1_024) return `${new Intl.NumberFormat(locale).format(byteCount)} B`;
+  const kibibytes = byteCount / 1_024;
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: kibibytes < 10 ? 1 : 0 }).format(kibibytes)} KiB`;
 }
 
 function createNoteReferenceRequestId(): string {
