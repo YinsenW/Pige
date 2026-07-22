@@ -899,6 +899,8 @@ describe("full UI Settings surface", () => {
     expect(container.querySelector('select')).toBeNull();
     expect(container.querySelector('[data-privacy-control="cloud-policy"]')).toBeNull();
     expect(container.querySelector(".model-egress-prompt")).toBeNull();
+    expect(Object.hasOwn(enMessages, "errors.model_provider.output_invalid")).toBe(false);
+    expect(Object.hasOwn(enMessages, "errors.agent_runtime.completion_invalid")).toBe(false);
     expect(ipcRead).toBe(false);
 
     await act(async () => root.unmount());
