@@ -192,13 +192,50 @@ export const CaptureIdSchema = z.string().regex(/^cap_\d{8}_[a-z0-9]{8,}$/);
 export const ConversationIdSchema = z.string().regex(/^conv_\d{8}(?:_[a-z0-9]{4,})?$/);
 export const ConversationEventIdSchema = z.string().regex(/^evt_\d{8}_[a-z0-9]{8,}$/);
 export const AgentClientTurnIdSchema = z.string().regex(/^turn_\d{8}_[a-z0-9]{12,64}$/);
+export const AGENT_AUTHORED_TEXT_MAX_CODE_POINTS = 8_000;
+export const AGENT_STAGED_ITEM_MAX_COUNT = 8;
+export const AGENT_LARGE_PASTE_ITEM_MAX_UTF8_BYTES = 4_194_304;
+export const AGENT_LARGE_PASTE_AGGREGATE_MAX_UTF8_BYTES = 8_388_608;
+const AgentStagedItemOrdinalSchema = z.number().int().min(0).max(AGENT_STAGED_ITEM_MAX_COUNT - 1);
+const AgentStagedItemDisplayNameSchema = z.string().min(1).max(160);
+export const AgentStagedFileItemSchema = z.object({
+  kind: z.literal("file"),
+  ordinal: AgentStagedItemOrdinalSchema,
+  displayName: AgentStagedItemDisplayNameSchema
+}).strict();
+export const AgentStagedLargePasteItemSchema = z.object({
+  kind: z.literal("large_paste"),
+  ordinal: AgentStagedItemOrdinalSchema,
+  text: z.string().min(1).max(AGENT_LARGE_PASTE_ITEM_MAX_UTF8_BYTES),
+  unicodeCodePointCount: z.number().int().positive(),
+  utf8ByteSize: z.number().int().positive().max(AGENT_LARGE_PASTE_ITEM_MAX_UTF8_BYTES)
+}).strict().superRefine((item, context) => {
+  if ([...item.text].length !== item.unicodeCodePointCount) {
+    context.addIssue({ code: "custom", path: ["unicodeCodePointCount"], message: "The paste character count is invalid." });
+  }
+  if (new TextEncoder().encode(item.text).byteLength !== item.utf8ByteSize) {
+    context.addIssue({ code: "custom", path: ["utf8ByteSize"], message: "The paste byte size is invalid." });
+  }
+});
+export const AgentStagedItemSchema = z.union([
+  AgentStagedFileItemSchema,
+  AgentStagedLargePasteItemSchema
+]);
+export const AgentStagedItemRejectionReasonSchema = z.enum([
+  "item_limit",
+  "item_too_large",
+  "aggregate_too_large"
+]);
 export const AgentTurnCurrentNoteScopeSchema = z.object({
   kind: z.literal("current_note"),
   pageId: PageIdSchema
 }).strict();
 export const AgentSubmitTurnRequestSchema = z.object({
   schemaVersion: z.literal(1).optional().default(1),
-  text: z.string().max(8_000).optional(),
+  text: z.string().refine(
+    (value) => [...value].length <= AGENT_AUTHORED_TEXT_MAX_CODE_POINTS,
+    "Agent authored text exceeds the Unicode code-point limit."
+  ).optional(),
   inputKind: z.enum([
     "typed_text",
     "pasted_text",
@@ -210,13 +247,27 @@ export const AgentSubmitTurnRequestSchema = z.object({
   ]),
   scope: AgentTurnCurrentNoteScopeSchema.optional(),
   locale: LocaleSchema,
+  stagedItems: z.array(AgentStagedItemSchema).max(AGENT_STAGED_ITEM_MAX_COUNT).readonly().optional(),
   clientTurnId: AgentClientTurnIdSchema.optional(),
   conversationId: ConversationIdSchema.optional(),
   expectedTailEventId: ConversationEventIdSchema.optional()
 }).strict().superRefine((request, context) => {
+  const stagedItems = request.stagedItems ?? [];
+  for (const [index, item] of stagedItems.entries()) {
+    if (item.ordinal !== index) {
+      context.addIssue({ code: "custom", path: ["stagedItems", index, "ordinal"], message: "Staged item order is invalid." });
+    }
+  }
+  const aggregatePasteBytes = stagedItems.reduce(
+    (total, item) => total + (item.kind === "large_paste" ? item.utf8ByteSize : 0),
+    0
+  );
+  if (aggregatePasteBytes > AGENT_LARGE_PASTE_AGGREGATE_MAX_UTF8_BYTES) {
+    context.addIssue({ code: "custom", path: ["stagedItems"], message: "The aggregate paste byte limit was exceeded." });
+  }
   const fileInput = request.inputKind === "file_drop" || request.inputKind === "file_picker";
   const hasAuthoredText = request.text !== undefined && request.text.trim().length > 0;
-  if (!fileInput && !hasAuthoredText) {
+  if (!fileInput && !hasAuthoredText && stagedItems.length === 0) {
     context.addIssue({
       code: "custom",
       path: ["text"],
@@ -254,11 +305,15 @@ export const AgentSubmitTurnRequestSchema = z.object({
       message: "A current-note turn cannot attach another source."
     });
   }
+  if (stagedItems.length > 0 && !fileInput) {
+    context.addIssue({ code: "custom", path: ["stagedItems"], message: "Staged sources require a file input turn." });
+  }
 });
 const AgentAttachmentInternalPathSchema = z.string()
   .max(4_096)
   .refine((value) => !value.includes("\0"), "Attachment paths must not contain null bytes.");
 export const AgentAttachmentCandidateSchema = z.object({
+  ordinal: AgentStagedItemOrdinalSchema.optional(),
   displayName: z.string().max(512),
   internalPath: AgentAttachmentInternalPathSchema
 }).strict();
@@ -266,8 +321,17 @@ export const AgentSubmitTurnIpcPayloadSchema = z.object({
   request: AgentSubmitTurnRequestSchema,
   attachments: z.array(AgentAttachmentCandidateSchema).max(64).readonly()
 }).strict().superRefine((payload, context) => {
+  const fileItems = payload.request.stagedItems?.filter((item) => item.kind === "file");
+  if (payload.request.stagedItems === undefined && payload.attachments.some((item) => item.ordinal !== undefined)) {
+    context.addIssue({ code: "custom", path: ["attachments"], message: "Legacy file candidates cannot assert staged order." });
+  }
+  if (fileItems && (fileItems.length !== payload.attachments.length || fileItems.some((item, index) => (
+    item.ordinal !== (payload.attachments[index]?.ordinal ?? index) || item.displayName !== payload.attachments[index]?.displayName
+  )))) {
+    context.addIssue({ code: "custom", path: ["attachments"], message: "File candidates do not match the ordered staged items." });
+  }
   const fileInput = payload.request.inputKind === "file_drop" || payload.request.inputKind === "file_picker";
-  if (fileInput && payload.attachments.length === 0) {
+  if (fileInput && payload.attachments.length === 0 && (payload.request.stagedItems?.length ?? 0) === 0) {
     context.addIssue({
       code: "custom",
       path: ["attachments"],
@@ -2135,6 +2199,17 @@ export const CaptureFileRejectionSchema = z.object({
   displayName: SafeAttachmentDisplayNameSchema,
   reason: CaptureFileRejectionReasonSchema
 }).strict();
+export const AgentStagedItemAcceptedRefSchema = z.object({
+  ordinal: AgentStagedItemOrdinalSchema,
+  kind: z.enum(["file", "large_paste"]),
+  sourceId: SourceIdSchema
+}).strict();
+export const AgentStagedItemRejectedRefSchema = z.object({
+  ordinal: AgentStagedItemOrdinalSchema,
+  kind: z.literal("file"),
+  displayName: SafeAttachmentDisplayNameSchema,
+  reason: CaptureFileRejectionReasonSchema
+}).strict();
 const AgentTurnAnswerSchema = z.object({
   answer: z.string().max(8_000),
   grounding: z.enum(["general", "local_knowledge", "source", "insufficient_evidence"]),
@@ -2146,8 +2221,43 @@ const AgentSubmitTurnResultBaseSchema = z.object({
   requestId: z.string().min(1).max(120),
   modelUsage: z.enum(["none", "local", "cloud"]),
   sourceIds: z.array(SourceIdSchema).max(8).readonly(),
-  rejectedFiles: z.array(CaptureFileRejectionSchema).max(64).readonly().optional()
+  rejectedFiles: z.array(CaptureFileRejectionSchema).max(64).readonly().optional(),
+  acceptedItems: z.array(AgentStagedItemAcceptedRefSchema).max(AGENT_STAGED_ITEM_MAX_COUNT).readonly().optional(),
+  rejectedItems: z.array(AgentStagedItemRejectedRefSchema).max(64).readonly().optional()
 });
+export const AgentSubmitTurnAcceptedResultSchema = AgentSubmitTurnResultBaseSchema.extend({
+  jobId: JobIdSchema,
+  conversationEventId: ConversationEventIdSchema,
+  conversationId: ConversationIdSchema,
+  tailEventId: ConversationEventIdSchema,
+  state: z.literal("accepted")
+}).strict().superRefine((result, context) => {
+  if (result.acceptedItems && (
+    result.acceptedItems.length !== result.sourceIds.length ||
+    result.acceptedItems.some((item, index) => item.sourceId !== result.sourceIds[index])
+  )) {
+    context.addIssue({ code: "custom", path: ["acceptedItems"], message: "Accepted item refs must match source order." });
+  }
+  const acceptedOrdinals = new Set(result.acceptedItems?.map((item) => item.ordinal) ?? []);
+  if (acceptedOrdinals.size !== (result.acceptedItems?.length ?? 0)) {
+    context.addIssue({ code: "custom", path: ["acceptedItems"], message: "Accepted item ordinals must be unique." });
+  }
+  const rejectedOrdinals = new Set(result.rejectedItems?.map((item) => item.ordinal) ?? []);
+  if (rejectedOrdinals.size !== (result.rejectedItems?.length ?? 0)) {
+    context.addIssue({ code: "custom", path: ["rejectedItems"], message: "Rejected item ordinals must be unique." });
+  }
+  if (result.rejectedItems?.some((item) => acceptedOrdinals.has(item.ordinal))) {
+    context.addIssue({ code: "custom", path: ["rejectedItems"], message: "One staged item cannot be both accepted and rejected." });
+  }
+});
+export const AgentSubmitTurnFailedResultSchema = AgentSubmitTurnResultBaseSchema.extend({
+  jobId: JobIdSchema.optional(),
+  conversationEventId: ConversationEventIdSchema.optional(),
+  conversationId: ConversationIdSchema.optional(),
+  tailEventId: ConversationEventIdSchema.optional(),
+  state: z.literal("failed"),
+  error: PigeErrorSummarySchema
+}).strict();
 export const AgentSubmitTurnResultSchema = z.discriminatedUnion("state", [
   AgentSubmitTurnResultBaseSchema.extend({
     jobId: JobIdSchema,
@@ -2165,14 +2275,15 @@ export const AgentSubmitTurnResultSchema = z.discriminatedUnion("state", [
     state: z.literal("waiting"),
     error: PigeErrorSummarySchema
   }).strict(),
-  AgentSubmitTurnResultBaseSchema.extend({
-    jobId: JobIdSchema.optional(),
-    conversationEventId: ConversationEventIdSchema.optional(),
-    conversationId: ConversationIdSchema.optional(),
-    tailEventId: ConversationEventIdSchema.optional(),
-    state: z.literal("failed"),
-    error: PigeErrorSummarySchema
-  }).strict()
+  AgentSubmitTurnFailedResultSchema
+]);
+export const AgentStagedSubmitTurnResultSchema = z.union([
+  AgentSubmitTurnAcceptedResultSchema,
+  AgentSubmitTurnFailedResultSchema
+]);
+export const AgentSubmitTurnIpcResultSchema = z.union([
+  AgentSubmitTurnAcceptedResultSchema,
+  AgentSubmitTurnResultSchema
 ]);
 
 export const ReaderSelectionActionRequestIdSchema = z.string()
@@ -3275,9 +3386,17 @@ export type CloudSendPolicy = z.infer<typeof CloudSendPolicySchema>;
 export type ConfirmationProposal = z.infer<typeof ConfirmationProposalSchema>;
 export type ConversationEvent = z.infer<typeof ConversationEventSchema>;
 export type AgentSubmitTurnRequest = z.input<typeof AgentSubmitTurnRequestSchema>;
+export type AgentStagedItem = z.input<typeof AgentStagedItemSchema>;
+export type AgentStagedLargePasteItem = z.input<typeof AgentStagedLargePasteItemSchema>;
+export type AgentStagedItemRejectionReason = z.output<typeof AgentStagedItemRejectionReasonSchema>;
+export type AgentStagedItemAcceptedRef = z.output<typeof AgentStagedItemAcceptedRefSchema>;
+export type AgentStagedItemRejectedRef = z.output<typeof AgentStagedItemRejectedRefSchema>;
 export type AgentAttachmentCandidate = z.output<typeof AgentAttachmentCandidateSchema>;
 export type AgentSubmitTurnIpcPayload = z.output<typeof AgentSubmitTurnIpcPayloadSchema>;
 export type AgentSubmitTurnResult = z.output<typeof AgentSubmitTurnResultSchema>;
+export type AgentSubmitTurnAcceptedResult = z.output<typeof AgentSubmitTurnAcceptedResultSchema>;
+export type AgentStagedSubmitTurnResult = z.output<typeof AgentStagedSubmitTurnResultSchema>;
+export type AgentSubmitTurnIpcResult = z.output<typeof AgentSubmitTurnIpcResultSchema>;
 export type CaptureFileRejection = z.output<typeof CaptureFileRejectionSchema>;
 export type CaptureFileRejectionReason = z.output<typeof CaptureFileRejectionReasonSchema>;
 export type AgentAnswerCitation = z.infer<typeof AgentAnswerCitationSchema>;

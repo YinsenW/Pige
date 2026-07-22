@@ -39,6 +39,25 @@ export interface AgentTurnFilePreservationBinding {
   readonly attachmentSetHash?: string;
 }
 
+export interface AgentTurnTextPreservationBinding {
+  readonly jobId: string;
+  readonly sourceId: string;
+  readonly inputChecksum: string;
+  readonly ordinal: number;
+  readonly attachmentSetHash: string;
+}
+
+export interface AgentTurnTextPreservationRequest {
+  readonly text: string;
+  readonly locale: AgentSubmitTurnRequest["locale"];
+}
+
+export interface AgentTurnTextPreservationResult {
+  readonly sourceId: string;
+  readonly captureId: string;
+  readonly inputChecksum: string;
+}
+
 export interface AgentTurnUrlPreservationBinding {
   readonly jobId: string;
   readonly sourceId: string;
@@ -177,6 +196,101 @@ export class CaptureService {
       throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The source preservation binding is invalid.");
     }
     return this.#preserveFiles(request, binding);
+  }
+
+  preserveTextForAgentTurn(
+    request: AgentTurnTextPreservationRequest,
+    binding: AgentTurnTextPreservationBinding
+  ): AgentTurnTextPreservationResult {
+    if (
+      !/^job_\d{8}_[a-z0-9]{8,}$/u.test(binding.jobId) ||
+      !/^src_\d{8}_[a-z0-9]{8,}$/u.test(binding.sourceId) ||
+      !/^sha256:[a-f0-9]{64}$/u.test(binding.inputChecksum) ||
+      !Number.isInteger(binding.ordinal) ||
+      binding.ordinal < 0 ||
+      binding.ordinal > 7 ||
+      !/^sha256:[a-f0-9]{64}$/u.test(binding.attachmentSetHash)
+    ) {
+      throw new PigeDomainError(
+        "agent_runtime.turn_binding_invalid",
+        "The pasted-text preservation binding is invalid."
+      );
+    }
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!this.#vaults.current() || !vaultPath) {
+      throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
+    }
+    this.#vaults.assertWriterLease?.(vaultPath);
+    const body = Buffer.from(request.text, "utf8");
+    const checksum = checksumBuffer(body);
+    if (checksum !== binding.inputChecksum) {
+      throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The pasted text changed before preservation.");
+    }
+    const dateKey = binding.sourceId.slice(4, 12);
+    const monthKey = `${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}`;
+    const managedCopyPath = vaultRelativePath("raw", "text", monthKey, `${binding.sourceId}.txt`);
+    const sourceRecordPath = vaultRelativePath(".pige", "source-records", monthKey, `${binding.sourceId}.json`);
+    const recordTarget = resolveVaultPath(vaultPath, sourceRecordPath);
+    if (fs.existsSync(recordTarget)) {
+      const existing = SourceRecordSchema.parse(JSON.parse(fs.readFileSync(recordTarget, "utf8")));
+      const managedTarget = existing.managedCopy ? resolveVaultPath(vaultPath, existing.managedCopy.path) : undefined;
+      if (
+        existing.id !== binding.sourceId ||
+        existing.kind !== "text" ||
+        existing.semanticOrchestration !== "agent_turn" ||
+        existing.metadata.agentTurnJobId !== binding.jobId ||
+        existing.metadata.agentTurnAttachmentOrdinal !== binding.ordinal ||
+        existing.metadata.agentTurnAttachmentSetHash !== binding.attachmentSetHash ||
+        existing.managedCopy?.checksum !== checksum ||
+        existing.managedCopy.size !== body.byteLength ||
+        !managedTarget ||
+        !fs.existsSync(managedTarget) ||
+        checksumBuffer(fs.readFileSync(managedTarget)) !== checksum
+      ) {
+        throw new PigeDomainError(
+          "agent_runtime.turn_binding_invalid",
+          "The existing pasted-text source does not match the Agent turn."
+        );
+      }
+      return {
+        sourceId: binding.sourceId,
+        captureId: String(existing.metadata.captureId),
+        inputChecksum: checksum
+      };
+    }
+    const timestamp = new Date().toISOString();
+    const captureId = createDatedId("cap", timestamp.slice(0, 10).replaceAll("-", ""));
+    writeFileAtomic(resolveVaultPath(vaultPath, managedCopyPath), body);
+    const sourceRecord: SourceRecord = CurrentSourceRecordSchema.parse({
+      id: binding.sourceId,
+      kind: "text",
+      storageStrategy: "copy_to_source_library",
+      semanticOrchestration: "agent_turn",
+      original: {
+        uri: `pige://pasted-text/${binding.sourceId}`,
+        displayName: "Pasted text",
+        lastKnownSize: body.byteLength,
+        checksum
+      },
+      managedCopy: { path: managedCopyPath, checksum, size: body.byteLength },
+      artifacts: [],
+      metadata: {
+        inputKind: "file_picker",
+        locale: request.locale,
+        captureId,
+        agentTurnJobId: binding.jobId,
+        agentTurnAttachmentOrdinal: binding.ordinal,
+        agentTurnAttachmentSetHash: binding.attachmentSetHash,
+        unicodeCodePointCount: [...request.text].length,
+        utf8ByteSize: body.byteLength,
+        parserStatus: "text_ready",
+        parserRequired: false
+      },
+      createdAt: timestamp,
+      updatedAt: timestamp
+    });
+    writeJsonAtomic(recordTarget, sourceRecord);
+    return { sourceId: binding.sourceId, captureId, inputChecksum: checksum };
   }
 
   async #preserveFiles(

@@ -16,6 +16,7 @@ import {
   type AgentIngestModelConfigPort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
 import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { HomeAgentAttachmentService } from "../../apps/desktop/src/main/services/home-agent-attachment-service";
 import { executeDatasetQuery } from "../../apps/desktop/src/main/services/dataset-query-core";
 import { DatasetQueryService } from "../../apps/desktop/src/main/services/dataset-query-service";
 import {
@@ -27,6 +28,7 @@ import { DatasetService, type DatasetImportPlanner } from "../../apps/desktop/sr
 import type { DatasetIngestPlan } from "../../apps/desktop/src/main/services/dataset-ingest-types";
 import {
   HomeAgentService,
+  scheduleAcceptedAgentTurn,
   type HomeAgentDatasetQueryPort,
   type HomeAgentModelPort,
   type HomeAgentRetrievalPort
@@ -70,6 +72,135 @@ afterEach(() => {
 });
 
 describe("Unified Agent ingress", () => {
+  it("schedules accepted execution after the receipt-producing call stack returns", async () => {
+    const order: string[] = [];
+    scheduleAcceptedAgentTurn(async () => {
+      order.push("runtime");
+    });
+    order.push("receipt");
+
+    expect(order).toEqual(["receipt"]);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(order).toEqual(["receipt", "runtime"]);
+  });
+
+  it("acknowledges an exact pasted source after durable preservation and before model execution", async () => {
+    const fixture = makeVault();
+    const jobs = new JobsService(fixture.vaultPort);
+    const home = new HomeAgentService(fixture.vaultPort, createMutableModels(false), neverRetrieval, jobs);
+    const text = "  exact pasted body\npassword=literal\n😀  ";
+    const stagedItems = [{
+      kind: "large_paste" as const,
+      ordinal: 0,
+      text,
+      unicodeCodePointCount: [...text].length,
+      utf8ByteSize: Buffer.byteLength(text)
+    }];
+    const attachments = new HomeAgentAttachmentService(new CaptureService(fixture.vaultPort));
+    const preparedItems = await attachments.prepare([], stagedItems);
+    const prepared = home.prepareSourceTurn({
+      inputKind: "file_picker",
+      locale: "en",
+      clientTurnId: "turn_20260723_largepaste001",
+      stagedItems
+    }, {
+      count: preparedItems.entries.length,
+      attachmentSetHash: preparedItems.attachmentSetHash,
+      inputChecksums: preparedItems.entries.map((entry) => entry.inputChecksum)
+    });
+    const preserved = await attachments.preserve({
+      prepared: preparedItems,
+      turn: prepared.request,
+      jobId: prepared.jobId,
+      firstSourceId: prepared.sourceId
+    });
+
+    expect(preserved).toMatchObject({ status: "preserved", sourceIds: prepared.sourceIds });
+    expect(home.acceptPreparedSourceTurn(prepared)).toEqual({
+      requestId: "turn_20260723_largepaste001",
+      jobId: prepared.jobId,
+      conversationEventId: prepared.preservedTurn.event.id,
+      conversationId: prepared.preservedTurn.event.conversationId,
+      tailEventId: prepared.preservedTurn.event.id,
+      state: "accepted",
+      modelUsage: "none",
+      sourceIds: prepared.sourceIds
+    });
+    expect(jobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
+      state: "queued",
+      inputRefs: expect.arrayContaining([
+        expect.objectContaining({ kind: "source", id: prepared.sourceId, role: "agent_turn_source" })
+      ])
+    });
+    expect(home.conversation()?.messages).toEqual([
+      expect.objectContaining({ role: "user", text: "Organize these files." })
+    ]);
+  });
+
+  it("keeps one client turn and adopts one pasted source after a pre-accept preservation failure", async () => {
+    const fixture = makeVault();
+    const jobs = new JobsService(fixture.vaultPort);
+    const home = new HomeAgentService(fixture.vaultPort, createMutableModels(false), neverRetrieval, jobs);
+    const text = "retry this exact pasted body";
+    const stagedItems = [{
+      kind: "large_paste" as const,
+      ordinal: 0,
+      text,
+      unicodeCodePointCount: [...text].length,
+      utf8ByteSize: Buffer.byteLength(text)
+    }];
+    const request = {
+      schemaVersion: 1 as const,
+      inputKind: "file_picker" as const,
+      locale: "en" as const,
+      clientTurnId: "turn_20260723_largepaste002",
+      stagedItems
+    };
+    const realCapture = new CaptureService(fixture.vaultPort);
+    const failingAttachments = new HomeAgentAttachmentService({
+      preserveFilesForAgentTurn: (captureRequest, binding) =>
+        realCapture.preserveFilesForAgentTurn(captureRequest, binding),
+      preserveTextForAgentTurn: () => {
+        throw new Error("synthetic pre-accept failure");
+      }
+    });
+    const preparedItems = await failingAttachments.prepare([], stagedItems);
+    const prepare = () => home.prepareSourceTurn(request, {
+      count: preparedItems.entries.length,
+      attachmentSetHash: preparedItems.attachmentSetHash,
+      inputChecksums: preparedItems.entries.map((entry) => entry.inputChecksum)
+    });
+    const first = prepare();
+    expect(await failingAttachments.preserve({
+      prepared: preparedItems,
+      turn: request,
+      jobId: first.jobId,
+      firstSourceId: first.sourceId
+    })).toMatchObject({ status: "failed", sourceIds: [] });
+    home.failPreparedSourceTurn(first);
+
+    const retried = prepare();
+    expect(retried).toMatchObject({
+      jobId: first.jobId,
+      sourceIds: first.sourceIds,
+      preservedTurn: { event: { id: first.preservedTurn.event.id } }
+    });
+    const retryAttachments = new HomeAgentAttachmentService(realCapture);
+    expect(await retryAttachments.preserve({
+      prepared: preparedItems,
+      turn: request,
+      jobId: retried.jobId,
+      firstSourceId: retried.sourceId
+    })).toMatchObject({ status: "preserved", sourceIds: retried.sourceIds });
+    expect(home.acceptPreparedSourceTurn(retried)).toMatchObject({
+      state: "accepted",
+      jobId: first.jobId,
+      sourceIds: first.sourceIds
+    });
+    expect(home.conversation()?.messages).toHaveLength(1);
+    expect(listFiles(path.join(fixture.vaultPath, ".pige", "source-records"), ".json")).toHaveLength(1);
+  });
+
   it.each([
     ["en", "Organize these files."],
     ["zh-Hans", "整理这些文件。"],

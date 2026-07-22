@@ -75,6 +75,7 @@ import {
   AgentSubmitTurnIpcPayloadSchema,
   AgentSubmitTurnRequestSchema,
   AgentSubmitTurnResultSchema,
+  AgentStagedSubmitTurnResultSchema,
   UpdateProviderCredentialRequestSchema,
   DeleteProviderRequestSchema,
   NoteResolveInlineReferenceRequestSchema,
@@ -144,6 +145,7 @@ import { LibraryService } from "./services/library-service";
 import { KnowledgeActivityService } from "./services/knowledge-activity-service";
 import {
   HomeAgentService,
+  scheduleAcceptedAgentTurn,
   type HomeAgentDraftSnapshot
 } from "./services/home-agent-service";
 import { HomeAgentUrlService } from "./services/home-agent-url-service";
@@ -1417,6 +1419,7 @@ ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
     schemaVersion: 1,
     inputKind: request.inputKind,
     locale: request.locale,
+    ...(request.stagedItems === undefined ? {} : { stagedItems: request.stagedItems }),
     ...(request.text === undefined ? {} : { text: request.text }),
     ...(request.scope === undefined ? {} : { scope: request.scope }),
     ...(request.clientTurnId === undefined ? {} : { clientTurnId: request.clientTurnId }),
@@ -1430,8 +1433,9 @@ ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
     }
   });
   const draftContext = { onDraft: (draft: HomeAgentDraftSnapshot) => draftPublisher.publish(draft) };
+  let backgroundOwnsDraftPublisher = false;
   try {
-    if (attachments.length === 0) {
+    if (attachments.length === 0 && (normalizedRequest.stagedItems?.length ?? 0) === 0) {
       return AgentSubmitTurnResultSchema.parse(
         await getHomeAgentService().submitTurn(normalizedRequest, draftContext)
       );
@@ -1443,14 +1447,15 @@ ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
       );
     }
     const attachmentService = getHomeAgentAttachmentService();
-    const preparedAttachments = await attachmentService.prepare(attachments);
+    const preparedAttachments = await attachmentService.prepare(attachments, normalizedRequest.stagedItems);
     if (preparedAttachments.entries.length === 0) {
-      return AgentSubmitTurnResultSchema.parse({
+      const failed = {
         requestId: normalizedRequest.clientTurnId ?? `turn_${randomUUID().replaceAll("-", "")}`,
         state: "failed",
         modelUsage: "none",
         sourceIds: [],
         rejectedFiles: preparedAttachments.rejectedFiles,
+        rejectedItems: preparedAttachments.rejectedItems,
         error: {
           code: "capture.file_rejected",
           domain: "capture",
@@ -1459,7 +1464,10 @@ ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
           severity: "warning",
           userAction: "retry"
         }
-      });
+      };
+      return normalizedRequest.stagedItems === undefined
+        ? AgentSubmitTurnResultSchema.parse(failed)
+        : AgentStagedSubmitTurnResultSchema.parse(failed);
     }
     const home = getHomeAgentService();
     const prepared = home.prepareSourceTurn(normalizedRequest, {
@@ -1480,7 +1488,7 @@ ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
         preserved.sourceIds.some((sourceId, index) => sourceId !== prepared.sourceIds[index])
       ) {
         home.failPreparedSourceTurn(prepared);
-        return AgentSubmitTurnResultSchema.parse({
+        const failed = {
           requestId: normalizedRequest.clientTurnId ?? `turn_${randomUUID().replaceAll("-", "")}`,
           jobId: prepared.jobId,
           conversationEventId: prepared.preservedTurn.event.id,
@@ -1493,6 +1501,10 @@ ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
             ...preparedAttachments.rejectedFiles,
             ...preserved.rejectedFiles
           ],
+          rejectedItems: [
+            ...preparedAttachments.rejectedItems,
+            ...(preserved.rejectedItems ?? [])
+          ],
           error: {
             code: "capture.file_rejected",
             domain: "capture",
@@ -1501,13 +1513,37 @@ ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
             severity: "warning",
             userAction: "retry"
           }
+        };
+        return normalizedRequest.stagedItems === undefined
+          ? AgentSubmitTurnResultSchema.parse(failed)
+          : AgentStagedSubmitTurnResultSchema.parse(failed);
+      }
+      if (normalizedRequest.stagedItems === undefined) {
+        const result = await home.submitPreparedSourceTurn(prepared, draftContext);
+        return AgentSubmitTurnResultSchema.parse({
+          ...result,
+          ...(preparedAttachments.rejectedFiles.length > 0
+            ? { rejectedFiles: preparedAttachments.rejectedFiles }
+            : {})
         });
       }
-      const result = await home.submitPreparedSourceTurn(prepared, draftContext);
-      return AgentSubmitTurnResultSchema.parse({
-        ...result,
+      const receipt = home.acceptPreparedSourceTurn(prepared);
+      backgroundOwnsDraftPublisher = true;
+      scheduleAcceptedAgentTurn(() =>
+        home.runAcceptedPreparedSourceTurn(prepared, draftContext).finally(() => draftPublisher.close())
+      );
+      return AgentStagedSubmitTurnResultSchema.parse({
+        ...receipt,
+        acceptedItems: preparedAttachments.entries.map((entry, index) => ({
+          ordinal: entry.ordinal,
+          kind: entry.kind,
+          sourceId: prepared.sourceIds[index]!
+        })),
         ...(preparedAttachments.rejectedFiles.length > 0
-          ? { rejectedFiles: preparedAttachments.rejectedFiles }
+          ? {
+              rejectedFiles: preparedAttachments.rejectedFiles,
+              rejectedItems: preparedAttachments.rejectedItems
+            }
           : {})
       });
     } catch (caught) {
@@ -1515,7 +1551,7 @@ ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
       throw caught;
     }
   } finally {
-    draftPublisher.close();
+    if (!backgroundOwnsDraftPublisher) draftPublisher.close();
   }
 });
 ipcMain.handle("jobs.list", (_event, request?: JobsListRequest) => getJobsService().list(request));

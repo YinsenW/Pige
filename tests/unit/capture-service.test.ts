@@ -68,6 +68,41 @@ afterEach(() => {
 });
 
 describe("Agent-turn source preservation", () => {
+  it("preserves exact pasted UTF-8 bytes once and adopts the same managed source on retry", () => {
+    const { vaultPath, vault } = makeVault();
+    const text = "  password=literal\napiKey: exact\n😀  ";
+    const inputChecksum = `sha256:${createHash("sha256").update(text, "utf8").digest("hex")}`;
+    const binding = {
+      jobId: "job_20260723_largepaste01",
+      sourceId: "src_20260723_largepaste01",
+      inputChecksum,
+      ordinal: 0,
+      attachmentSetHash: `sha256:${"a".repeat(64)}`
+    };
+    const service = makeService(vaultPath, vault);
+
+    const first = service.preserveTextForAgentTurn({ text, locale: "en" }, binding);
+    const retry = service.preserveTextForAgentTurn({ text, locale: "en" }, binding);
+    const record = readSourceRecord(vaultPath, binding.sourceId);
+
+    expect(retry).toEqual(first);
+    expect(record).toMatchObject({
+      id: binding.sourceId,
+      kind: "text",
+      storageStrategy: "copy_to_source_library",
+      semanticOrchestration: "agent_turn",
+      metadata: {
+        agentTurnJobId: binding.jobId,
+        agentTurnAttachmentOrdinal: 0,
+        agentTurnAttachmentSetHash: binding.attachmentSetHash,
+        unicodeCodePointCount: [...text].length,
+        utf8ByteSize: Buffer.byteLength(text)
+      }
+    });
+    expect(fs.readFileSync(path.join(vaultPath, record.managedCopy!.path), "utf8")).toBe(text);
+    expect(JSON.stringify(record)).not.toContain(text);
+  });
+
   it("adopts an exact ordered attachment set on retry without shadow durable records", async () => {
     const { vaultPath, vault } = makeVault();
     const inputRoot = path.dirname(vaultPath);

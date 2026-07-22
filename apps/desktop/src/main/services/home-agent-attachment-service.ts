@@ -3,12 +3,15 @@ import fs from "node:fs";
 import path from "node:path";
 import type {
   AgentAttachmentCandidate,
+  AgentStagedItem,
   AgentSubmitTurnRequest,
   CaptureFileRejection,
+  CaptureFileRejectionReason,
   CaptureFilesSubmitResult,
   SubmitFilesCaptureRequest
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
+import { AGENT_STAGED_ITEM_MAX_COUNT } from "@pige/schemas";
 import type { AgentSourceToolSession } from "./agent-ingest-service";
 import {
   createPigeTextToolResult,
@@ -17,7 +20,10 @@ import {
 import {
   safeAttachmentDisplayName,
   supportedFileSourceKind,
-  type AgentTurnFilePreservationBinding
+  type AgentTurnFilePreservationBinding,
+  type AgentTurnTextPreservationBinding,
+  type AgentTurnTextPreservationRequest,
+  type AgentTurnTextPreservationResult
 } from "./capture-service";
 
 export const HOME_AGENT_ATTACHMENT_POLICY = Object.freeze({
@@ -31,19 +37,43 @@ interface HomeAgentAttachmentCapturePort {
     request: SubmitFilesCaptureRequest,
     binding: AgentTurnFilePreservationBinding
   ): Promise<CaptureFilesSubmitResult>;
+  preserveTextForAgentTurn(
+    request: AgentTurnTextPreservationRequest,
+    binding: AgentTurnTextPreservationBinding
+  ): AgentTurnTextPreservationResult;
 }
 
-interface PreparedAttachmentInput {
+interface PreparedFileInput {
+  readonly kind: "file";
+  readonly ordinal: number;
   readonly filePath: string;
   readonly displayName: string;
   readonly inputChecksum: string;
   readonly size: number;
 }
 
+interface PreparedLargePasteInput {
+  readonly kind: "large_paste";
+  readonly ordinal: number;
+  readonly text: string;
+  readonly displayName: "Pasted text";
+  readonly inputChecksum: string;
+  readonly size: number;
+}
+
+type PreparedAttachmentInput = PreparedFileInput | PreparedLargePasteInput;
+
 export interface PreparedHomeAgentAttachments {
   readonly attachmentSetHash: string;
+  readonly usesStagedItems: boolean;
   readonly entries: readonly PreparedAttachmentInput[];
   readonly rejectedFiles: readonly CaptureFileRejection[];
+  readonly rejectedItems: readonly {
+    readonly ordinal: number;
+    readonly kind: "file";
+    readonly displayName: string;
+    readonly reason: CaptureFileRejectionReason;
+  }[];
 }
 
 export interface PreservedHomeAgentAttachments {
@@ -51,6 +81,7 @@ export interface PreservedHomeAgentAttachments {
   readonly attachmentSetHash: string;
   readonly sourceIds: readonly string[];
   readonly rejectedFiles: readonly CaptureFileRejection[];
+  readonly rejectedItems?: PreparedHomeAgentAttachments["rejectedItems"];
 }
 
 export interface HomeAgentAttachmentToolEntry {
@@ -78,34 +109,73 @@ export class HomeAgentAttachmentService {
     this.#capture = capture;
   }
 
-  async prepare(candidates: readonly AgentAttachmentCandidate[]): Promise<PreparedHomeAgentAttachments> {
+  async prepare(
+    candidates: readonly AgentAttachmentCandidate[],
+    stagedItems?: readonly AgentStagedItem[]
+  ): Promise<PreparedHomeAgentAttachments> {
     const entries: PreparedAttachmentInput[] = [];
     const rejectedFiles: CaptureFileRejection[] = [];
+    const rejectedItems: Array<{
+      ordinal: number;
+      kind: "file";
+      displayName: string;
+      reason: CaptureFileRejectionReason;
+    }> = [];
+    const reject = (ordinal: number, displayName: string, reason: CaptureFileRejectionReason): void => {
+      rejectedFiles.push({ displayName, reason });
+      if (stagedItems !== undefined) {
+        rejectedItems.push({ ordinal, kind: "file", displayName, reason });
+      }
+    };
     const hashEntries: unknown[] = [];
     const seen = new Set<string>();
     let acceptedBytes = 0;
 
-    for (const [index, candidate] of candidates.entries()) {
+    const orderedItems: readonly AgentStagedItem[] = stagedItems ?? candidates.map((candidate, index) => ({
+      kind: "file" as const,
+      ordinal: candidate.ordinal ?? index,
+      displayName: candidate.displayName
+    }));
+    const candidatesByOrdinal = new Map(candidates.map((candidate, index) => [candidate.ordinal ?? index, candidate]));
+    for (const [index, item] of orderedItems.entries()) {
+      if (item.kind === "large_paste") {
+        const inputChecksum = sha256(item.text);
+        entries.push({
+          kind: "large_paste",
+          ordinal: item.ordinal,
+          text: item.text,
+          displayName: "Pasted text",
+          inputChecksum,
+          size: item.utf8ByteSize
+        });
+        hashEntries.push({ index, kind: item.kind, size: item.utf8ByteSize, inputChecksum });
+        continue;
+      }
+      const candidate = candidatesByOrdinal.get(item.ordinal);
+      if (!candidate) {
+        reject(item.ordinal, item.displayName, "empty_path");
+        continue;
+      }
       const displayName = safeAttachmentDisplayName(candidate.displayName || candidate.internalPath);
       if (!candidate.internalPath.trim()) {
-        rejectedFiles.push({ displayName, reason: "empty_path" });
+        reject(item.ordinal, displayName, "empty_path");
         continue;
       }
       const normalizedPath = path.resolve(candidate.internalPath);
       if (seen.has(normalizedPath)) {
-        rejectedFiles.push({ displayName, reason: "duplicate" });
+        reject(item.ordinal, displayName, "duplicate");
         continue;
       }
       seen.add(normalizedPath);
 
-      if (entries.length >= HOME_AGENT_ATTACHMENT_POLICY.maxFiles) {
-        rejectedFiles.push({ displayName, reason: "too_many_files" });
+      if (entries.length >= AGENT_STAGED_ITEM_MAX_COUNT) {
+        reject(item.ordinal, displayName, "too_many_files");
         continue;
       }
 
       const sourceKind = supportedFileSourceKind(normalizedPath);
       if (!sourceKind) {
-        rejectedFiles.push({ displayName, reason: "unsupported_type" });
+        reject(item.ordinal, displayName, "unsupported_type");
         continue;
       }
 
@@ -113,19 +183,19 @@ export class HomeAgentAttachmentService {
       try {
         stat = fs.lstatSync(normalizedPath);
       } catch {
-        rejectedFiles.push({ displayName, reason: "missing" });
+        reject(item.ordinal, displayName, "missing");
         continue;
       }
       if (!stat.isFile()) {
-        rejectedFiles.push({ displayName, reason: "not_regular_file" });
+        reject(item.ordinal, displayName, "not_regular_file");
         continue;
       }
       if (stat.size > HOME_AGENT_ATTACHMENT_POLICY.maxFileBytes) {
-        rejectedFiles.push({ displayName, reason: "file_too_large" });
+        reject(item.ordinal, displayName, "file_too_large");
         continue;
       }
       if (acceptedBytes + stat.size > HOME_AGENT_ATTACHMENT_POLICY.maxTotalBytes) {
-        rejectedFiles.push({ displayName, reason: "total_size_exceeded" });
+        reject(item.ordinal, displayName, "total_size_exceeded");
         continue;
       }
       acceptedBytes += stat.size;
@@ -134,17 +204,26 @@ export class HomeAgentAttachmentService {
       try {
         inputChecksum = await checksumFile(normalizedPath);
       } catch {
-        rejectedFiles.push({ displayName, reason: "copy_failed" });
+        reject(item.ordinal, displayName, "copy_failed");
         continue;
       }
-      entries.push({ filePath: normalizedPath, displayName, inputChecksum, size: stat.size });
+      entries.push({
+        kind: "file",
+        ordinal: item.ordinal,
+        filePath: normalizedPath,
+        displayName,
+        inputChecksum,
+        size: stat.size
+      });
       hashEntries.push({ index, sourceKind, size: stat.size, inputChecksum });
     }
 
     return {
       attachmentSetHash: sha256(`pige.agent.attachment-set.v1\0${JSON.stringify(hashEntries)}`),
+      usesStagedItems: stagedItems !== undefined,
       entries,
-      rejectedFiles
+      rejectedFiles,
+      rejectedItems
     };
   }
 
@@ -172,6 +251,33 @@ export class HomeAgentAttachmentService {
       const sourceId = ordinal === 0
         ? request.firstSourceId
         : createAttachmentSourceId(request.jobId, ordinal);
+      if (entry.kind === "large_paste") {
+        try {
+          const preserved = this.#capture.preserveTextForAgentTurn({
+            text: entry.text,
+            locale: request.turn.locale
+          }, {
+            jobId: request.jobId,
+            sourceId,
+            inputChecksum: entry.inputChecksum,
+            ordinal,
+            attachmentSetHash: request.prepared.attachmentSetHash
+          });
+          if (preserved.sourceId !== sourceId || preserved.inputChecksum !== entry.inputChecksum) {
+            throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The pasted-text source binding changed.");
+          }
+          sourceIds.push(sourceId);
+          continue;
+        } catch {
+          return {
+            status: "failed",
+            attachmentSetHash: request.prepared.attachmentSetHash,
+            sourceIds,
+            rejectedFiles: [],
+            ...(request.prepared.usesStagedItems ? { rejectedItems: [] } : {})
+          };
+        }
+      }
       let preserved: CaptureFilesSubmitResult;
       try {
         preserved = await this.#capture.preserveFilesForAgentTurn({
@@ -187,11 +293,15 @@ export class HomeAgentAttachmentService {
           attachmentSetHash: request.prepared.attachmentSetHash
         });
       } catch {
+        const rejection = { displayName: entry.displayName, reason: "copy_failed" as const };
         return {
           status: "failed",
           attachmentSetHash: request.prepared.attachmentSetHash,
           sourceIds,
-          rejectedFiles: [{ displayName: entry.displayName, reason: "copy_failed" }]
+          rejectedFiles: [rejection],
+          ...(request.prepared.usesStagedItems
+            ? { rejectedItems: [{ ordinal: entry.ordinal, kind: "file" as const, ...rejection }] }
+            : {})
         };
       }
       if (
@@ -200,14 +310,18 @@ export class HomeAgentAttachmentService {
         preserved.sourceIds.length !== 1 ||
         preserved.sourceIds[0] !== sourceId
       ) {
+        const rejection = {
+          displayName: entry.displayName,
+          reason: preserved.rejectedFiles[0]?.reason ?? "copy_failed"
+        };
         return {
           status: "failed",
           attachmentSetHash: request.prepared.attachmentSetHash,
           sourceIds,
-          rejectedFiles: [{
-            displayName: entry.displayName,
-            reason: preserved.rejectedFiles[0]?.reason ?? "copy_failed"
-          }]
+          rejectedFiles: [rejection],
+          ...(request.prepared.usesStagedItems
+            ? { rejectedItems: [{ ordinal: entry.ordinal, kind: "file" as const, ...rejection }] }
+            : {})
         };
       }
       sourceIds.push(sourceId);
@@ -216,7 +330,8 @@ export class HomeAgentAttachmentService {
       status: "preserved",
       attachmentSetHash: request.prepared.attachmentSetHash,
       sourceIds,
-      rejectedFiles: []
+      rejectedFiles: [],
+      ...(request.prepared.usesStagedItems ? { rejectedItems: [] } : {})
     };
   }
 }

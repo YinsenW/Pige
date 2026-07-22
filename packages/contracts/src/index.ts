@@ -1,7 +1,15 @@
 import type { PigeClientCapabilityTier, PigeRuntimeKind } from "@pige/domain";
 import type {
   AgentAttachmentCandidate,
+  AgentStagedItem,
+  AgentStagedLargePasteItem,
+  AgentStagedItemRejectionReason,
+  AgentStagedItemAcceptedRef,
+  AgentStagedItemRejectedRef,
   AgentSubmitTurnIpcPayload,
+  AgentSubmitTurnAcceptedResult,
+  AgentStagedSubmitTurnResult,
+  AgentSubmitTurnIpcResult,
   AppearanceSettingsSummary,
   AppearanceThemeMutationResult,
   AppearanceThemePreference,
@@ -88,7 +96,15 @@ import type {
 
 export type {
   AgentAttachmentCandidate,
+  AgentStagedItem,
+  AgentStagedLargePasteItem,
+  AgentStagedItemRejectionReason,
+  AgentStagedItemAcceptedRef,
+  AgentStagedItemRejectedRef,
   AgentSubmitTurnIpcPayload,
+  AgentSubmitTurnAcceptedResult,
+  AgentStagedSubmitTurnResult,
+  AgentSubmitTurnIpcResult,
   AppearanceSettingsSummary,
   AppearanceThemeMutationResult,
   AppearanceThemePreference,
@@ -948,6 +964,7 @@ export interface AgentSubmitTurnRequest {
   readonly inputKind: AgentTurnInputKind;
   readonly scope?: AgentTurnScope;
   readonly locale: Locale;
+  readonly stagedItems?: readonly AgentStagedItem[];
   readonly clientTurnId?: string;
   readonly conversationId?: string;
   readonly expectedTailEventId?: string;
@@ -1220,10 +1237,16 @@ export interface PigeDesktopApi {
   };
   readonly agent: {
     readonly runtimeStatus: () => Promise<AgentRuntimeStatus>;
-    readonly submitTurn: (
-      request: AgentSubmitTurnRequest,
-      files?: readonly File[]
-    ) => Promise<AgentSubmitTurnResult>;
+    readonly submitTurn: {
+      (
+        request: AgentSubmitTurnRequest & { readonly stagedItems: readonly AgentStagedItem[] },
+        files?: readonly File[]
+      ): Promise<AgentStagedSubmitTurnResult>;
+      (
+        request: AgentSubmitTurnRequest & { readonly stagedItems?: undefined },
+        files?: readonly File[]
+      ): Promise<AgentSubmitTurnResult>;
+    };
     readonly conversation: (
       request?: AgentConversationRequest
     ) => Promise<AgentConversationTimeline | undefined>;
