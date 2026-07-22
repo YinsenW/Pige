@@ -3945,12 +3945,20 @@ dd {
 }
 
 .home.home-conversation-active > .conversation-timeline {
+  display: block;
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
-  align-content: end;
   padding-bottom: calc(18px + var(--home-processing-panel-height, 0px));
   scroll-padding-bottom: calc(18px + var(--home-processing-panel-height, 0px));
+}
+
+.conversation-timeline-content {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 18px;
 }
 
 .hero {
@@ -4474,7 +4482,6 @@ dd {
 .conversation-timeline {
   min-height: 0;
   display: grid;
-  gap: 18px;
   padding: 2px 4px 18px;
 }
 

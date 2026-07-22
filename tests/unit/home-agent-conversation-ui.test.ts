@@ -3275,7 +3275,10 @@ describe("Home durable Agent conversation UI", () => {
     expect(conversationStyles).toContain("overflow-wrap: anywhere;");
     expect(conversationStyles).toContain("white-space: pre-wrap;");
     expect(conversationStyles).toContain("max-height: min(36vh, 26rem);");
-    expect(styles).toMatch(/\.home\.home-conversation-active\s*>\s*\.conversation-timeline\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?max-height:\s*none;[\s\S]*?align-content:\s*end;/);
+    expect(appSource).toContain('className="conversation-timeline-content"');
+    expect(styles).toMatch(/\.home\.home-conversation-active\s*>\s*\.conversation-timeline\s*\{[\s\S]*?display:\s*block;[\s\S]*?flex:\s*1 1 auto;[\s\S]*?max-height:\s*none;/);
+    expect(styles).not.toMatch(/\.home\.home-conversation-active\s*>\s*\.conversation-timeline\s*\{[\s\S]*?align-content:\s*end;/);
+    expect(styles).toMatch(/\.conversation-timeline-content\s*\{[\s\S]*?min-height:\s*100%;[\s\S]*?flex-direction:\s*column;[\s\S]*?justify-content:\s*flex-end;[\s\S]*?gap:\s*18px;/);
     expect(styles).toContain("padding-bottom: calc(18px + var(--home-processing-panel-height, 0px));");
     expect(appSource).toContain('"--home-processing-panel-height"');
     expect(appSource).toContain("new window.ResizeObserver(updateHeight)");
