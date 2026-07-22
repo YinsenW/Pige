@@ -313,6 +313,14 @@ Tests must verify:
   durable conversation input, hash/identity, history, retry/restart and Provider payload.
   They separately prove text-only whitespace creates no turn while attachments plus
   whitespace-only text receive only the minimal organize intent.
+- Attachment-gesture tests prove whole-window drop release submits immediately, while
+  composer picker selection/removal causes zero Job/source/conversation/model/network
+  effects until Send. Send/valid Enter atomically binds exact text plus ordered staged
+  attachments to one parent Agent Job; attachment-only submit adds the minimal intent.
+- Race/IME/privacy tests cover Send-versus-Enter deduplication, composition-end fencing,
+  removal and drop while a composer draft exists, active-vault drift, shared type/count/
+  size limits, safe display names with no raw paths, failed-submit state preservation,
+  and exact idempotent retry without duplicate events, sources, Jobs, or Provider calls.
 
 ## 6.2 Agent Runtime Policy Context Gates
 

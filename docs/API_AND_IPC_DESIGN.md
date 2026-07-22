@@ -537,6 +537,22 @@ safe latest Job; Home asks for 24. Results exclude bodies, paths, prompts, crede
 endpoints and raw errors. Legacy handlers remain readable; save-answer/multi-attachment
 recovery stays open.
 
+The canonical submit schema must support one ordered bounded attachment collection owned
+by Development. Composer picker selection/removal changes renderer-local pending state
+only; any opaque selection handle and safe display metadata are ephemeral, reveal no raw
+path, and cannot create a Job, Source Record, conversation event, Provider call, upload,
+or network request. Send/valid Enter submits one immutable request containing the exact
+authored string, exact staged attachment identities, active vault binding and one
+client-turn idempotency identity. Main durably accepts one parent `agent_turn`/Job before
+the renderer clears the composer. A lost response or exact retry adopts that identity;
+rejection preserves the renderer snapshot and creates no duplicate durable work.
+
+A whole-window `file_drop` is the other presentation gesture: release immediately calls
+the same submit owner with only that bounded ordered drop and its own client-turn identity.
+It does not merge with, consume, or clear a staged composer draft. Attachment-only submit
+injects the minimal organize intent only when the request is accepted; picker time never
+creates synthetic text or durable state.
+
 `agent.turnDraft` is a sender-scoped presentation event for an active
 `agent.submitTurn`, not a durable result or raw runtime stream:
 

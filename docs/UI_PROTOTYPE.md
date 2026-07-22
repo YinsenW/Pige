@@ -211,6 +211,16 @@ Behavior:
 - `Enter` sends one non-empty Home turn. `Shift+Enter` inserts a newline; Enter during
   IME composition or its immediate completion race never submits. Repeat or in-flight
   input cannot create a duplicate turn, and the visible Send button remains available.
+- The composer `+` picker stages bounded attachment chips locally. Selection and removal
+  create no Job, Source Record, conversation event, model call, upload, or other network
+  work. Chips show safe display metadata, never a private path.
+- Send or valid Enter takes one immutable snapshot of the exact authored text and staged
+  attachment identities and submits one Agent turn/parent Job. Whitespace-only text with
+  attachments receives only the minimal organize intent at submit time. Text-only
+  whitespace remains invalid and creates no turn.
+- Clear text/chips only after the authoritative accepted receipt. Validation, IPC, vault-
+  identity, or submission failure preserves the exact composer state for idempotent retry.
+  A Send-button/Enter race shares one client turn identity and cannot duplicate work.
 - Menu and settings are present but visually quiet.
 - User can type a question, paste a URL, paste long text, attach a file, or drag files anywhere onto the window.
 - On supported macOS versions, the microphone button starts voice dictation into the same input.
@@ -250,7 +260,10 @@ Behavior:
 - Dragging files over any part of the window turns the entire window into a drop target.
 - The target should be visually obvious but calm.
 - Dropping files should not require aiming for a small attachment button.
-- Multi-file drops are grouped as one capture batch.
+- Release immediately submits the dropped files as one Agent turn with one parent Job;
+  it neither consumes nor clears text or staged chips already in the composer.
+- Multi-file drops are one bounded ordered submission. Preservation checkpoints or child
+  work exist only for reliability; Pi chooses all subsequent semantic tools.
 - Unsupported files are preserved when possible and reported with clear warnings.
 
 ### 4.3 Activity State
