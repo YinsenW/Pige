@@ -671,7 +671,6 @@ function createUndoOperation(
       runtimeKind: "desktop_local",
       clientCapabilityTier: "desktop_full"
     },
-    permissionDecisionIds: [],
     kind: "trash_page",
     targetRefs: [{ kind: "page", id: target.id, path: trashRelativePath }],
     sourceRefs: [
@@ -775,7 +774,6 @@ function isMatchingUndoOperation(operation: OperationRecord, candidate: Operatio
     candidate.id === createUndoOperationId(operation.id) &&
     candidate.jobId === operation.jobId &&
     candidate.actor.kind === "user" &&
-    candidate.permissionDecisionIds.length === 0 &&
     candidate.reversible === "best_effort" &&
     candidate.targetRefs.length === 1 &&
     candidateTarget?.kind === "page" &&

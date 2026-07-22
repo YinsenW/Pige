@@ -106,8 +106,9 @@ export interface LocalToolHealthResult {
   >[];
 }
 
-export interface LocalToolPermissionRequest {
-  readonly permissionDecisionId: string;
+export interface LocalToolAuthorityRequest {
+  readonly requestId: string;
+  readonly userOrigin: string;
   readonly actorType: "local_tool";
   readonly action: LocalToolLifecycleAction;
   readonly toolId: string;
@@ -118,8 +119,8 @@ export interface LocalToolPermissionRequest {
   readonly resourceScope: "current_action";
 }
 
-export interface LocalToolPermissionPort {
-  assertAuthorized(request: LocalToolPermissionRequest): void;
+export interface LocalToolAuthorityPort {
+  assertAuthorized(request: LocalToolAuthorityRequest): void;
 }
 
 export interface LocalToolLifecycleJobRecorder {
@@ -156,7 +157,6 @@ export interface LocalToolFaultInjector {
 export interface LocalToolMutationIdentity {
   readonly requestId: string;
   readonly userOrigin: string;
-  readonly permissionDecisionId: string;
   readonly toolId: string;
   readonly assetId?: string;
   readonly version?: string;
@@ -177,7 +177,6 @@ export type LocalToolTargetActionRequest = LocalToolMutationIdentity;
 export interface LocalToolRecoveryRequest {
   readonly requestId: string;
   readonly userOrigin: string;
-  readonly permissionDecisionId: string;
 }
 
 export interface LocalToolLifecycleResult {

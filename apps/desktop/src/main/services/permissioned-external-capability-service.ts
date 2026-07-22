@@ -11,7 +11,6 @@ import type {
 import {
   createPermissionActionBinding,
   PermissionBrokerService,
-  type PermissionActionSummary,
   type PermissionHighRiskIntent
 } from "./permission-broker-service";
 import type {
@@ -86,7 +85,6 @@ export interface PermissionedExternalCapabilityAdapter {
     readonly capability: PermissionCapability;
     readonly dataBoundary: PermissionDataBoundary;
     readonly resourceScope: PermissionResourceScope;
-    readonly resourceKind: PermissionActionSummary["resourceKind"];
     readonly reasonCode: string;
     readonly highRisk?: PermissionHighRiskIntent;
   };

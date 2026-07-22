@@ -944,7 +944,6 @@ describe("Agent-selected ingest retrieval tool", () => {
         runtimeKind: "desktop_local",
         clientCapabilityTier: "desktop_full"
       },
-      permissionDecisionIds: [],
       kind: "update_page",
       targetRefs: [{ kind: "page", id: UPDATE_PAGE_ID, path: UPDATE_PAGE_PATH }],
       sourceRefs: [{ kind: "job", id: prepared.parent.id }],

@@ -9,9 +9,6 @@ import type {
   JobsListRequest,
   JobsListResult,
   LocalDatabaseRebuildResult,
-  PermissionPendingRequest,
-  PermissionResolveRequest,
-  PermissionResolveResult,
   ProposalDecisionRequest,
   ProposalDecisionResult,
   VaultSummary
@@ -27,8 +24,6 @@ import {
   type JobRecord,
   type JobStage,
   type JobState,
-  type PermissionActionLifecycleRecord,
-  type PermissionCapability,
   type PigeErrorSummary,
   type SourceKind,
   type SourceRecord
@@ -80,7 +75,6 @@ import {
   isValidReaderSelectionJobScope,
   type ReaderSelectionJobScope
 } from "./reader-selection-job-binding";
-import { PermissionBrokerService } from "./permission-broker-service";
 
 type JobRecordFile = JobRecordSnapshot;
 
@@ -210,8 +204,6 @@ const MAX_JOB_LIST_LIMIT = 100;
 const CANCELABLE_STATES = new Set<JobState>([
   "queued",
   "waiting_dependency",
-  "waiting_permission",
-  "waiting_model_egress",
   "failed_retryable"
 ]);
 const RETRYABLE_STATES = new Set<JobState>(["failed_retryable", "waiting_dependency", "cancelled"]);
@@ -232,7 +224,6 @@ export class JobsService {
   readonly #documentParser: DocumentParserPort | undefined;
   readonly #ocr: OcrPort | undefined;
   readonly #datasets: DatasetMaterializerPort | undefined;
-  readonly #permissionBroker: PermissionBrokerService | undefined;
   readonly #jobRecordStores = new Map<string, JobRecordStore>();
   readonly #jobExecutionCoordinators = new Map<string, JobExecutionCoordinator>();
   readonly #activeExecutions = new Map<string, AbortController>();
@@ -244,8 +235,7 @@ export class JobsService {
     database?: LocalDatabaseService,
     documentParser?: DocumentParserPort,
     ocr?: OcrPort,
-    datasets?: DatasetMaterializerPort,
-    permissionBroker?: PermissionBrokerService
+    datasets?: DatasetMaterializerPort
   ) {
     this.#vaults = vaults;
     this.#sourcePages = new SourcePageService();
@@ -254,7 +244,6 @@ export class JobsService {
     this.#documentParser = documentParser;
     this.#ocr = ocr;
     this.#datasets = datasets;
-    this.#permissionBroker = permissionBroker;
   }
 
   list(request: JobsListRequest = {}): JobsListResult {
@@ -291,402 +280,6 @@ export class JobsService {
       throw new PigeDomainError("job.binding_changed", "The Job no longer belongs to the active vault.");
     }
     return toJobSummary(vaultPath, job);
-  }
-
-  resolvePermission(request: PermissionResolveRequest): PermissionResolveResult {
-    const broker = this.#requirePermissionBroker();
-    const activeVault = this.#vaults.current();
-    const vaultPath = this.#requireActiveVaultPath();
-    if (!activeVault) throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
-    const before = broker.read(vaultPath, request.requestId);
-    if (before.binding.vaultId !== activeVault.vaultId || before.binding.jobId !== request.jobId) {
-      throw new PigeDomainError("permission.request_stale", "The permission request belongs to another vault or Job.");
-    }
-    const snapshot = this.#readJobSnapshot(vaultPath, before.binding.jobId);
-    if (!snapshot) throw new PigeDomainError("permission.request_stale", "The permission request Job is unavailable.");
-    const sameCommittedDecision =
-      (request.decision === "allow_once" && (before.state === "approved" || before.state === "consumed")) ||
-      (request.decision === "deny" && before.state === "denied");
-    if (sameCommittedDecision && permissionDecisionApplied(snapshot.job, before)) {
-      return {
-        status: request.decision === "deny" ? "denied" : "approved",
-        requestId: before.id,
-        jobId: before.binding.jobId
-      };
-    }
-    if (!sameCommittedDecision) {
-      this.#assertPermissionResolutionCurrent(vaultPath, before.id, before.binding.bindingHash);
-    }
-    const resolved = broker.commitDecision(vaultPath, request);
-    const currentSnapshot = this.#readJobSnapshot(vaultPath, resolved.lifecycle.binding.jobId);
-    if (!currentSnapshot) throw new PigeDomainError("permission.request_stale", "The permission request Job is unavailable.");
-    if (!permissionDecisionApplied(currentSnapshot.job, resolved.lifecycle)) {
-      this.#reconcilePermissionRecord(vaultPath, resolved.lifecycle, currentSnapshot);
-    }
-    return {
-      status: resolved.lifecycle.state === "denied" ? "denied" : "approved",
-      requestId: resolved.lifecycle.id,
-      jobId: resolved.lifecycle.binding.jobId
-    };
-  }
-
-  pendingPermission(requestId: string): PermissionPendingRequest | undefined {
-    const broker = this.#requirePermissionBroker();
-    const activeVault = this.#vaults.current();
-    const vaultPath = this.#requireActiveVaultPath();
-    if (!activeVault) return undefined;
-    const record = broker.readOptional(vaultPath, requestId);
-    if (!record || record.binding.vaultId !== activeVault.vaultId) return undefined;
-    if (record.state === "approved" || record.state === "denied") {
-      const snapshot = this.#readJobSnapshot(vaultPath, record.binding.jobId);
-      if (snapshot && !permissionDecisionApplied(snapshot.job, record)) {
-        this.#reconcilePermissionRecord(vaultPath, record, snapshot);
-      }
-      return undefined;
-    }
-    const snapshot = this.#readJobSnapshot(vaultPath, record.binding.jobId);
-    if (
-      record.state !== "pending" ||
-      !snapshot ||
-      snapshot.job.state !== "waiting_permission" ||
-      snapshot.job.error?.permissionRequestId !== record.id ||
-      !jobHasPermissionBinding(snapshot.job, record.id, record.binding.bindingHash)
-    ) return undefined;
-    return {
-      requestId: record.id,
-      jobId: record.binding.jobId,
-      actorType: record.binding.actorType,
-      actorDisplayName: record.actorDisplayName,
-      actorVersion: record.binding.actorVersion,
-      capability: record.binding.capability,
-      dataBoundary: record.binding.dataBoundary,
-      actionLabelKey: record.actionLabelKey,
-      ...(record.resourceDisplayName ? { resourceDisplayName: record.resourceDisplayName } : {}),
-      resourceScope: record.binding.resourceScope,
-      resourceKind: record.resourceKind,
-      resourceCount: record.resourceCount,
-      reasonCode: record.reasonCode,
-      createdAt: record.createdAt
-    };
-  }
-
-  reconcilePermissionActions(): { readonly reconciled: number } {
-    const broker = this.#permissionBroker;
-    const activeVault = this.#vaults.current();
-    const vaultPath = this.#vaults.activeVaultPath();
-    if (!broker || !activeVault || !vaultPath) return { reconciled: 0 };
-    let reconciled = broker.reconcileCommittedDecisions(vaultPath);
-    for (const record of broker.listResolvable(vaultPath)) {
-      if (record.binding.vaultId !== activeVault.vaultId) continue;
-      const snapshot = this.#readJobSnapshot(vaultPath, record.binding.jobId);
-      if (!snapshot) continue;
-      if (record.state === "consumed") {
-        const marker = readPermissionCompletionMarker(snapshot.job, record.id, record.binding.bindingHash);
-        if (!record.completionMarkerHash && marker) {
-          broker.markCompleted(vaultPath, record.id, record.binding, marker);
-          reconciled += 1;
-          continue;
-        }
-        if (record.completionMarkerHash && marker === record.completionMarkerHash) continue;
-        if (this.#terminalizeUncertainPermissionAction(record, snapshot)) reconciled += 1;
-        continue;
-      }
-      if (new Set<JobState>([
-        "completed",
-        "completed_with_warnings",
-        "failed_final",
-        "cancelled",
-        "awaiting_review"
-      ]).has(snapshot.job.state)) {
-        if (record.state === "pending" || record.state === "approved") {
-          broker.cancel(vaultPath, record.id);
-          reconciled += 1;
-        }
-        continue;
-      }
-      if (record.state === "approved" || record.state === "denied") {
-        try {
-          if (this.#reconcilePermissionRecord(vaultPath, record, snapshot)) reconciled += 1;
-        } catch (caught) {
-          if (!(caught instanceof PigeDomainError) || caught.code !== "permission.request_stale") throw caught;
-        }
-        continue;
-      }
-    }
-    return { reconciled };
-  }
-
-  #terminalizeUncertainPermissionAction(
-    record: PermissionActionLifecycleRecord,
-    snapshot: JobRecordSnapshot
-  ): boolean {
-    if (!jobHasPermissionBinding(snapshot.job, record.id, record.binding.bindingHash)) {
-      throw new PigeDomainError("permission.request_stale", "The consumed permission action lost its Job binding.");
-    }
-    if (
-      snapshot.job.state === "failed_final" &&
-      snapshot.job.error?.code === "permission.completion_uncertain" &&
-      snapshot.job.error.permissionRequestId === record.id
-    ) return false;
-    this.#jobExecutionCoordinator(this.#requireActiveVaultPath()).terminalizeUncertainEffect(snapshot, {
-      checkpointId: permissionCheckpointId(record.id),
-      error: {
-        code: "permission.completion_uncertain",
-        domain: "permission",
-        messageKey: "errors.permission.completion_uncertain",
-        retryable: false,
-        severity: "error",
-        userAction: "none",
-        permissionRequestId: record.id
-      },
-      reason: "permission.completion_uncertain",
-      message: "The external action completion is uncertain; Pige will not replay it."
-    });
-    return true;
-  }
-
-  #terminalizeConsumedPermissionCancellation(
-    vaultPath: string,
-    snapshot: JobRecordSnapshot
-  ): string | undefined {
-    const requestId = uncompletedConsumedPermissionRequestId(snapshot.job);
-    if (!requestId) return undefined;
-    const broker = this.#permissionBroker;
-    if (!broker) {
-      throw new PigeDomainError("permission.store_invalid", "Permission Broker state is unavailable.");
-    }
-    const record = broker.read(vaultPath, requestId);
-    if (record.state !== "consumed" || record.completionMarkerHash) {
-      throw new PigeDomainError("permission.request_stale", "The consumed permission action changed.");
-    }
-    this.#terminalizeUncertainPermissionAction(record, snapshot);
-    return requestId;
-  }
-
-  #assertPermissionResolutionCurrent(
-    vaultPath: string,
-    requestId: string,
-    bindingHash: string
-  ): JobRecordSnapshot {
-    const record = this.#requirePermissionBroker().read(vaultPath, requestId);
-    const snapshot = this.#readJobSnapshot(vaultPath, record.binding.jobId);
-    if (
-      !snapshot ||
-      snapshot.job.activeVaultId !== record.binding.vaultId ||
-      (snapshot.job.class !== "agent_turn" && snapshot.job.class !== "agent_ingest") ||
-      snapshot.job.state !== "waiting_permission" ||
-      snapshot.job.error?.permissionRequestId !== requestId ||
-      !jobHasPermissionBinding(snapshot.job, requestId, bindingHash)
-    ) throw new PigeDomainError("permission.request_stale", "The Job no longer waits for this permission request.");
-    return snapshot;
-  }
-
-  #reconcilePermissionRecord(
-    vaultPath: string,
-    record: PermissionActionLifecycleRecord,
-    expectedSnapshot?: JobRecordSnapshot
-  ): boolean {
-    const snapshot = expectedSnapshot ?? this.#readJobSnapshot(vaultPath, record.binding.jobId);
-    if (!snapshot) throw new PigeDomainError("permission.request_stale", "The permission Job is unavailable.");
-    const current = snapshot.job;
-    if (
-      current.activeVaultId !== record.binding.vaultId ||
-      (current.class !== "agent_turn" && current.class !== "agent_ingest")
-    ) throw new PigeDomainError("permission.request_stale", "The permission Job binding changed.");
-    if (
-      new Set<JobState>(["completed", "completed_with_warnings", "failed_final", "cancelled", "awaiting_review"])
-        .has(current.state)
-    ) return false;
-    if (record.state === "approved" && current.state === "queued" && current.error?.permissionRequestId === undefined) {
-      return false;
-    }
-    if (record.state === "denied" && current.state === "failed_final") return false;
-    if (
-      current.state !== "waiting_permission" ||
-      current.error?.permissionRequestId !== record.id ||
-      !jobHasPermissionBinding(current, record.id, record.binding.bindingHash)
-    ) throw new PigeDomainError("permission.request_stale", "The Job no longer waits for this permission request.");
-    if (!record.decisionId) throw new PigeDomainError("permission.request_stale", "The permission decision is unavailable.");
-
-    const decisionRef = {
-      kind: "tool" as const,
-      id: record.decisionId,
-      role: "permission_action_decision"
-    };
-    const privacy = current.privacy ?? {
-      usedCloudModel: false,
-      usedNetwork: false,
-      usedShell: false,
-      accessedExternalFiles: false,
-      permissionDecisionIds: []
-    };
-    if (record.state === "denied") {
-      this.#jobExecutionCoordinator(vaultPath).settle(snapshot, {
-        kind: "failed",
-        error: {
-          code: "permission.denied",
-          domain: "permission",
-          messageKey: "errors.permission.denied",
-          retryable: false,
-          severity: "info",
-          userAction: "none",
-          permissionRequestId: record.id
-        },
-        facts: {
-          inputRefs: [decisionRef],
-          privacy: {
-            ...privacy,
-            permissionDecisionIds: [record.decisionId]
-          }
-        },
-        message: "The exact external action was denied; prior safe output remains available."
-      });
-      return true;
-    }
-    if (record.state !== "approved") return false;
-    throw new PigeDomainError(
-      "permission.request_stale",
-      "Legacy permission-wait Jobs cannot resume through the AR1 authority boundary."
-    );
-  }
-
-  bindPermissionRequest(input: {
-    readonly jobId: string;
-    readonly requestId: string;
-    readonly bindingHash: string; readonly waitForDecision?: boolean;
-  }): void {
-    const vaultPath = this.#requireActiveVaultPath();
-    const snapshot = this.#readJobSnapshot(vaultPath, input.jobId);
-    if (!snapshot || (snapshot.job.class !== "agent_turn" && snapshot.job.class !== "agent_ingest")) {
-      throw new PigeDomainError("permission.request_stale", "The permission request Job is unavailable.");
-    }
-    if (
-      snapshot.job.state === "waiting_permission" &&
-      snapshot.job.error?.permissionRequestId === input.requestId &&
-      jobHasPermissionBinding(snapshot.job, input.requestId, input.bindingHash)
-    ) return;
-    if (snapshot.job.state !== "running") {
-      throw new PigeDomainError("permission.request_stale", "The permission request Job is not running.");
-    }
-    const permissionRef = createPermissionBindingRef(input.requestId, input.bindingHash);
-    if (input.waitForDecision === false) {
-      const checkpoint = { id: permissionCheckpointId(input.requestId), step: "permission_authorization" as const, state: "not_started" as const, inputRefs: [permissionRef], outputRefs: [], resumeHint: "consume_revision_fenced_automatic_decision" };
-      this.#jobExecutionCoordinator(vaultPath).patch(snapshot, { inputRefs: [permissionRef], permissionRequestIds: [input.requestId], checkpoints: [checkpoint], message: "The automatic permission decision is bound before consumption." });
-      return;
-    }
-    throw new PigeDomainError(
-      "permission.request_stale",
-      "Legacy permission-wait Jobs cannot be created through the AR1 authority boundary."
-    );
-  }
-
-  commitPermissionConsumption(input: {
-    readonly jobId: string;
-    readonly requestId: string;
-    readonly bindingHash: string;
-    readonly decisionId: string;
-    readonly capability: PermissionCapability;
-  }): void {
-    const vaultPath = this.#requireActiveVaultPath();
-    const snapshot = this.#readJobSnapshot(vaultPath, input.jobId);
-    if (
-      !snapshot ||
-      (snapshot.job.class !== "agent_turn" && snapshot.job.class !== "agent_ingest") ||
-      snapshot.job.state !== "running" ||
-      !jobHasPermissionBinding(snapshot.job, input.requestId, input.bindingHash)
-    ) throw new PigeDomainError("permission.request_stale", "The permission action Job binding changed.");
-    const now = new Date().toISOString();
-    const permissionRef = createPermissionBindingRef(input.requestId, input.bindingHash);
-    const decisionRef = {
-      kind: "tool" as const,
-      id: input.decisionId,
-      role: "permission_action_decision"
-    };
-    const privacy = snapshot.job.privacy ?? {
-      usedCloudModel: false,
-      usedNetwork: false,
-      usedShell: false,
-      accessedExternalFiles: false,
-      permissionDecisionIds: []
-    };
-    this.#jobExecutionCoordinator(vaultPath).markDurableBoundary(snapshot, {
-      checkpointId: permissionCheckpointId(input.requestId),
-      facts: {
-        inputRefs: [permissionRef, decisionRef],
-        checkpoints: [{
-          id: permissionCheckpointId(input.requestId),
-          step: "permission_authorization",
-          state: "running",
-          startedAt: now,
-          inputRefs: [permissionRef, decisionRef],
-          outputRefs: [],
-          resumeHint: "do_not_replay_without_completion_marker"
-        }],
-        privacy: {
-          ...privacy,
-          usedNetwork: privacy.usedNetwork || permissionUsesNetwork(input.capability),
-          usedShell: privacy.usedShell || input.capability === "run_shell",
-          accessedExternalFiles: privacy.accessedExternalFiles || input.capability === "external_filesystem",
-          permissionDecisionIds: [input.decisionId]
-        }
-      },
-      message: "One-use permission was consumed before the external action."
-    });
-  }
-
-  completePermissionAction(input: {
-    readonly jobId: string;
-    readonly requestId: string;
-    readonly bindingHash: string;
-    readonly completionMarkerHash: string;
-  }): void {
-    const vaultPath = this.#requireActiveVaultPath();
-    const snapshot = this.#readJobSnapshot(vaultPath, input.jobId);
-    if (
-      !snapshot ||
-      snapshot.job.state !== "running" ||
-      !jobHasPermissionBinding(snapshot.job, input.requestId, input.bindingHash)
-    ) throw new PigeDomainError("permission.request_stale", "The permission action completion binding changed.");
-    const currentMarker = readPermissionCompletionMarker(snapshot.job, input.requestId, input.bindingHash);
-    if (currentMarker) {
-      if (currentMarker !== input.completionMarkerHash) {
-        throw new PigeDomainError("permission.completion_conflict", "The permission action completion changed.");
-      }
-      return;
-    }
-    const now = new Date().toISOString();
-    const permissionRef = createPermissionBindingRef(input.requestId, input.bindingHash);
-    const completionRef = {
-      kind: "tool" as const,
-      checksum: input.completionMarkerHash,
-      role: "permission_action_completion"
-    };
-    this.#jobExecutionCoordinator(vaultPath).patch(snapshot, {
-      outputRefs: [completionRef],
-      checkpoints: [{
-          id: permissionCheckpointId(input.requestId),
-          step: "permission_authorization",
-          state: "done",
-          startedAt: permissionCheckpoint(snapshot.job, input.requestId)?.startedAt ?? now,
-          finishedAt: now,
-          inputRefs: [permissionRef],
-          outputRefs: [completionRef],
-          checksumAfter: input.completionMarkerHash,
-          resumeHint: "adopt_completed_permission_action"
-        }],
-      message: "The permissioned external action completed with a durable body-free marker."
-    });
-  }
-
-  readPermissionCompletion(input: {
-    readonly jobId: string;
-    readonly requestId: string;
-    readonly bindingHash: string;
-  }): string | undefined {
-    const vaultPath = this.#requireActiveVaultPath();
-    const job = this.#readJobSnapshot(vaultPath, input.jobId)?.job;
-    if (!job || !jobHasPermissionBinding(job, input.requestId, input.bindingHash)) return undefined;
-    return readPermissionCompletionMarker(job, input.requestId, input.bindingHash);
   }
 
   async approveProposal(
@@ -842,21 +435,12 @@ export class JobsService {
       };
     }
 
-    const activePermissionRequests = this.#permissionBroker &&
-      (jobFile.job.class === "agent_turn" || jobFile.job.class === "agent_ingest")
-      ? this.#permissionBroker.listForJob(vaultPath, jobFile.job.id).filter(
-          (record) => record.state === "pending" || record.state === "approved"
-        )
-      : [];
     const committed = this.#jobExecutionCoordinator(vaultPath).cancelPending(snapshot, {
       requestedBy: "user",
       safeCheckpointId: "before_durable_write",
       message: "Job cancelled. Preserved source data remains in the vault."
     }).job;
     this.#activeExecutions.get(jobFile.job.id)?.abort();
-    for (const request of activePermissionRequests) {
-      this.#permissionBroker?.cancel(vaultPath, request.id);
-    }
     return {
       status: "cancelled",
       job: toJobSummary(vaultPath, committed)
@@ -936,8 +520,7 @@ export class JobsService {
         usedCloudModel: false,
         usedNetwork: false,
         usedShell: false,
-        accessedExternalFiles: false,
-        permissionDecisionIds: []
+        accessedExternalFiles: false
       },
       message: "Home Agent question accepted."
     });
@@ -1039,8 +622,7 @@ export class JobsService {
         usedCloudModel: false,
         usedNetwork: false,
         usedShell: false,
-        accessedExternalFiles: false,
-        permissionDecisionIds: []
+        accessedExternalFiles: false
       },
       message: request.sourceExpected
         ? "Agent turn accepted; waiting for its source preservation binding."
@@ -1100,16 +682,6 @@ export class JobsService {
     } catch (caught) {
       const cancellation = resolveCancellation(execution.control, caught);
       if (cancellation) {
-        const currentSnapshot = this.#readJobSnapshot(vaultPath, jobId);
-        const uncertainRequestId = currentSnapshot
-          ? this.#terminalizeConsumedPermissionCancellation(vaultPath, currentSnapshot)
-          : undefined;
-        if (uncertainRequestId) {
-          throw new PigeDomainError(
-            "permission.completion_uncertain",
-            "The external action may have completed and will not be replayed."
-          );
-        }
         this.#markJobCancellationOutcome(jobFile.path, execution.job, cancellation);
         throw new PigeDomainError("agent_runtime.turn_cancelled", "The Agent turn was cancelled at a safe checkpoint.");
       }
@@ -1438,8 +1010,7 @@ export class JobsService {
         usedCloudModel: jobFile.job.privacy?.usedCloudModel ?? false,
         usedNetwork: true,
         usedShell: false,
-        accessedExternalFiles: false,
-        permissionDecisionIds: jobFile.job.privacy?.permissionDecisionIds ?? []
+        accessedExternalFiles: false
         }
       },
       message: "Agent-selected URL evidence was fetched, preserved, and projected without a Host-selected semantic continuation."
@@ -1652,27 +1223,6 @@ export class JobsService {
     for (const jobFile of readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))) {
       if (jobFile.job.state !== "running" && jobFile.job.state !== "cancel_requested") continue;
       if (jobFile.job.class === "backup") continue;
-      const uncertainPermissionRequestId = uncompletedConsumedPermissionRequestId(jobFile.job);
-      if (uncertainPermissionRequestId) {
-        this.#jobExecutionCoordinator(vaultPath).terminalizeUncertainEffect(
-          this.#jobRecordStore(vaultPath).read(jobFile.path),
-          {
-            checkpointId: permissionCheckpointId(uncertainPermissionRequestId),
-          error: {
-            code: "permission.completion_uncertain",
-            domain: "permission",
-            messageKey: "errors.permission.completion_uncertain",
-            retryable: false,
-            severity: "error",
-            userAction: "none",
-            permissionRequestId: uncertainPermissionRequestId
-          },
-            reason: "permission.completion_uncertain",
-          message: "Pige restarted after one-use authority was consumed; the external action will not be replayed."
-          }
-        );
-        continue;
-      }
       const canResumeIdempotently = jobFile.job.state === "running" &&
         (jobFile.job.class === "capture" ||
           jobFile.job.class === "parse" ||
@@ -2606,12 +2156,7 @@ export class JobsService {
         }
         const cancellation = resolveCancellation(execution.control, caught);
         const durableState = execution.control.durableWriteState();
-        const currentSnapshot = cancellation
-          ? this.#readJobSnapshot(vaultPath, runningJob.id)
-          : undefined;
-        if (cancellation && currentSnapshot && this.#terminalizeConsumedPermissionCancellation(vaultPath, currentSnapshot)) {
-          // The external effect crossed its one-use boundary; preserve a non-retryable uncertain outcome.
-        } else if (cancellation) {
+        if (cancellation) {
           this.#markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
         } else if (isJobMutationContention(caught)) {
           // Another exact Job revision won; do not overwrite its authoritative state.
@@ -3566,16 +3111,6 @@ export class JobsService {
     return activeVault.vaultId;
   }
 
-  #requirePermissionBroker(): PermissionBrokerService {
-    if (!this.#permissionBroker) {
-      throw new PigeDomainError(
-        "permission.store_invalid",
-        "The Permission Broker service is unavailable."
-      );
-    }
-    return this.#permissionBroker;
-  }
-
   #beginCooperativeExecution(
     snapshot: JobRecordSnapshot,
     stage: JobStage,
@@ -4139,103 +3674,6 @@ function listJsonFiles(root: string): string[] {
 }
 
 type JobRef = NonNullable<JobRecord["inputRefs"]>[number];
-type JobCheckpoint = NonNullable<JobRecord["checkpoints"]>[number];
-
-function createPermissionBindingRef(requestId: string, bindingHash: string): JobRef {
-  return {
-    kind: "tool",
-    id: requestId,
-    checksum: bindingHash,
-    role: "permission_action_binding"
-  };
-}
-
-function permissionCheckpointId(requestId: string): string {
-  return `permission_action:${requestId}`;
-}
-
-function permissionCheckpoint(job: JobRecord, requestId: string): JobCheckpoint | undefined {
-  return job.checkpoints?.find((checkpoint) => checkpoint.id === permissionCheckpointId(requestId));
-}
-
-function uncompletedConsumedPermissionRequestId(job: JobRecord): string | undefined {
-  return job.permissionRequestIds?.find((requestId) => {
-    const checkpoint = permissionCheckpoint(job, requestId);
-    return checkpoint?.state === "running" &&
-      checkpoint.resumeHint === "do_not_replay_without_completion_marker";
-  });
-}
-
-function jobHasPermissionBinding(job: JobRecord, requestId: string, bindingHash: string): boolean {
-  return job.permissionRequestIds?.includes(requestId) === true &&
-    job.inputRefs?.some((reference) =>
-      reference.kind === "tool" &&
-      reference.id === requestId &&
-      reference.role === "permission_action_binding" &&
-      reference.checksum === bindingHash
-    ) === true;
-}
-
-function permissionDecisionApplied(
-  job: JobRecord,
-  record: PermissionActionLifecycleRecord
-): boolean {
-  if (!jobHasPermissionBinding(job, record.id, record.binding.bindingHash)) return false;
-  if (record.state === "denied") {
-    return job.state === "failed_final" && job.error?.permissionRequestId === record.id;
-  }
-  if (record.state === "approved") {
-    return (job.state === "queued" || job.state === "running") &&
-      job.error?.permissionRequestId === undefined;
-  }
-  return record.state === "consumed" && job.state === "running";
-}
-
-function readPermissionCompletionMarker(
-  job: JobRecord,
-  requestId: string,
-  bindingHash: string
-): string | undefined {
-  if (!jobHasPermissionBinding(job, requestId, bindingHash)) return undefined;
-  const checkpoint = permissionCheckpoint(job, requestId);
-  if (checkpoint?.state !== "done" || !checkpoint.checksumAfter) return undefined;
-  const outputMarker = checkpoint.outputRefs.find((reference) =>
-    reference.kind === "tool" &&
-    reference.role === "permission_action_completion" &&
-    reference.checksum === checkpoint.checksumAfter
-  );
-  return outputMarker?.checksum;
-}
-
-function mergeJobRefs(existing: readonly JobRef[], additions: readonly JobRef[]): JobRef[] {
-  const merged = new Map<string, JobRef>();
-  for (const reference of [...existing, ...additions]) {
-    const key = [
-      reference.kind,
-      reference.id ?? "",
-      reference.role ?? "",
-      reference.checksum ?? "",
-      reference.locator ?? ""
-    ].join(":");
-    merged.set(key, reference);
-  }
-  return [...merged.values()];
-}
-
-function upsertPermissionCheckpoint(
-  existing: readonly JobCheckpoint[],
-  next: JobCheckpoint
-): JobCheckpoint[] {
-  return [...existing.filter((checkpoint) => checkpoint.id !== next.id), next];
-}
-
-function permissionUsesNetwork(capability: PermissionCapability): boolean {
-  return capability === "external_network" ||
-    capability === "use_brokered_credential" ||
-    capability === "install_package" ||
-    capability === "install_local_tool";
-}
-
 function toJobSummary(vaultPath: string, job: JobRecord): JobSummary {
   const sourceRecord = job.sourceId ? readSourceRecord(vaultPath, job.sourceId) : undefined;
   const backupKind = job.class === "backup"
@@ -4254,12 +3692,6 @@ function toJobSummary(vaultPath: string, job: JobRecord): JobSummary {
     ...(job.sourceId ? { sourceId: job.sourceId } : {}),
     ...(job.captureId ? { captureId: job.captureId } : {}),
     ...(job.conversationEventId ? { conversationEventId: job.conversationEventId } : {}),
-    ...(job.error?.modelEgressApprovalRequestId
-      ? { modelEgressApprovalRequestId: job.error.modelEgressApprovalRequestId }
-      : {}),
-    ...(job.error?.permissionRequestId
-      ? { permissionRequestId: job.error.permissionRequestId }
-      : {}),
     ...(sourceRecord?.kind ? { sourceKind: sourceRecord.kind } : {}),
     ...(sourceRecord ? { sourceDisplayName: sourceRecord.original?.displayName ?? sourceRecord.kind } : {}),
     ...(backupKind ? { backupKind } : {}),
@@ -5433,7 +4865,6 @@ function writeAgentTurnUrlSourceOperation(
       runtimeKind: "desktop_local",
       clientCapabilityTier: "desktop_full"
     },
-    permissionDecisionIds: job.privacy?.permissionDecisionIds ?? [],
     policyAudit: {
       policyContextId: job.policyContextId,
       policyHash: job.policyHash,

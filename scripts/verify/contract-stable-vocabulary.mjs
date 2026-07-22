@@ -26,11 +26,11 @@ if (!schemas.includes("PIGE_REQUIREMENT_ID_PATTERN") || !schemas.includes("Requi
 requireAll("packages/schemas/src/index.ts", [
   "export const SourceIdSchema", "export const PageIdSchema", "export const ConversationEventIdSchema",
   "export const ArtifactIdSchema", "export const JobIdSchema", "export const OperationIdSchema",
-  "export const PermissionRequestIdSchema", "export const PermissionDecisionIdSchema"
+  "export const HighRiskConfirmationIdSchema"
 ]);
 requireAll("docs/DOMAIN_MODEL.md", [
   "| `page_` | Wiki or source page |", "| `art_` | Extracted artifact |", "| `evt_` | Conversation event |",
-  "| `permreq_` | Permission request |", "| `permdec_` | Permission decision |",
+  "| `confirm_` | High-risk confirmation |",
   "Retired aliases `pg_`, `artifact_`, and `event_`"
 ]);
 for (const [schemaName, document] of [

@@ -92,7 +92,6 @@ function createFilesystemListAdapter(
       capability: "external_filesystem",
       dataBoundary: "filesystem",
       resourceScope: "current_folder",
-      resourceKind: "folder",
       reasonCode: "external.filesystem.list"
     },
     normalizeInput: (args): ListInput => {
@@ -163,7 +162,6 @@ function createFilesystemReadTextAdapter(
       capability: "external_filesystem",
       dataBoundary: "filesystem",
       resourceScope: "current_file",
-      resourceKind: "file",
       reasonCode: "external.filesystem.read_text"
     },
     normalizeInput: (args): ReadTextInput => {
@@ -235,7 +233,6 @@ function createNetworkFetchTextAdapter(
       capability: "external_network",
       dataBoundary: "network",
       resourceScope: "current_url",
-      resourceKind: "url",
       reasonCode: "external.network.fetch_text"
     },
     normalizeInput: (args): FetchTextInput => {

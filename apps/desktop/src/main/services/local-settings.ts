@@ -3,11 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   MachineLocalSettingsSchema,
-  PermissionMachineSettingsSchema,
   UpdateMachineSettingsSchema,
   type Locale,
   type MachineLocalSettings,
-  type PermissionMachineSettings,
   type UpdateMachineSettings,
   type WindowPreferences
 } from "@pige/schemas";
@@ -20,11 +18,6 @@ type RecentVaultSettings = MachineLocalSettings["recentVaults"];
 export interface RecentVaultBinding {
   readonly vaultId: string;
   readonly vaultPath: string;
-}
-
-export interface PermissionSettingsMutation {
-  readonly status: "committed" | "stale";
-  readonly settings: PermissionMachineSettings;
 }
 
 export interface UpdateSettingsMutation {
@@ -67,10 +60,6 @@ export class LocalSettingsStore {
     return this.read().appLocale ?? fallback;
   }
 
-  getPermissionSettings(): PermissionMachineSettings {
-    return this.read().permissions ?? createDefaultPermissionSettings();
-  }
-
   getUpdateSettings(): UpdateMachineSettings {
     return this.read().updates ?? createDefaultUpdateSettings();
   }
@@ -97,43 +86,11 @@ export class LocalSettingsStore {
         activeVaultPath: current.activeVaultPath,
         appLocale: current.appLocale,
         window: current.window,
-        permissions: current.permissions,
         updates: nextUpdates,
         dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
         recentVaults: current.recentVaults
       }));
       return { status: "committed", settings: nextUpdates };
-    });
-  }
-
-  mutatePermissionSettings(
-    expectedRevision: number,
-    mutation: (settings: PermissionMachineSettings) => PermissionMachineSettings
-  ): PermissionSettingsMutation {
-    return this.#withWriterLease(() => {
-      const current = this.read();
-      const permissionSettings = current.permissions ?? createDefaultPermissionSettings();
-      if (permissionSettings.revision !== expectedRevision) {
-        return { status: "stale", settings: permissionSettings };
-      }
-      if (permissionSettings.revision === Number.MAX_SAFE_INTEGER) {
-        throw new PigeDomainError("permission.revision_exhausted", "Permission settings revision is exhausted.");
-      }
-      const candidate = PermissionMachineSettingsSchema.parse(mutation(permissionSettings));
-      const nextPermissions = PermissionMachineSettingsSchema.parse({
-        ...candidate,
-        revision: permissionSettings.revision + 1
-      });
-      this.#writeUnlocked(createMachineLocalSettings({
-        activeVaultPath: current.activeVaultPath,
-        appLocale: current.appLocale,
-        window: current.window,
-        permissions: nextPermissions,
-        updates: current.updates,
-        dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
-        recentVaults: current.recentVaults
-      }));
-      return { status: "committed", settings: nextPermissions };
     });
   }
 
@@ -147,7 +104,6 @@ export class LocalSettingsStore {
         activeVaultPath: settings.activeVaultPath,
         appLocale: settings.appLocale,
         window: settings.window,
-        permissions: settings.permissions,
         updates: settings.updates,
         dismissedFirstHomeVaultIds: [
           vaultId,
@@ -163,7 +119,6 @@ export class LocalSettingsStore {
       activeVaultPath: settings.activeVaultPath,
       appLocale,
       window: settings.window,
-      permissions: settings.permissions,
       updates: settings.updates,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults
@@ -175,7 +130,6 @@ export class LocalSettingsStore {
       activeVaultPath: settings.activeVaultPath,
       appLocale: settings.appLocale,
       window,
-      permissions: settings.permissions,
       updates: settings.updates,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults
@@ -208,7 +162,6 @@ export class LocalSettingsStore {
     return this.#mutate((settings) => createMachineLocalSettings({
       appLocale: settings.appLocale,
       window: settings.window,
-      permissions: settings.permissions,
       updates: settings.updates,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults
@@ -220,7 +173,6 @@ export class LocalSettingsStore {
       activeVaultPath: settings.activeVaultPath,
       appLocale: settings.appLocale,
       window: settings.window,
-      permissions: settings.permissions,
       updates: settings.updates,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults.filter((recent) => recent.vaultId !== vaultId)
@@ -355,7 +307,6 @@ function activateVault(
     activeVaultPath: resolvedVaultPath,
     appLocale: settings.appLocale,
     window: settings.window,
-    permissions: settings.permissions,
     updates: settings.updates,
     dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
     recentVaults: nextRecent
@@ -466,7 +417,6 @@ function createMachineLocalSettings(input: {
   readonly activeVaultPath?: string | undefined;
   readonly appLocale?: Locale | undefined;
   readonly window?: WindowPreferences | undefined;
-  readonly permissions?: PermissionMachineSettings | undefined;
   readonly updates?: UpdateMachineSettings | undefined;
   readonly dismissedFirstHomeVaultIds?: readonly string[] | undefined;
   readonly recentVaults: RecentVaultSettings;
@@ -488,10 +438,6 @@ function createMachineLocalSettings(input: {
     settings.window = input.window;
   }
 
-  if (input.permissions) {
-    settings.permissions = input.permissions;
-  }
-
   if (input.updates) {
     settings.updates = input.updates;
   }
@@ -501,15 +447,6 @@ function createMachineLocalSettings(input: {
   }
 
   return settings;
-}
-
-function createDefaultPermissionSettings(): PermissionMachineSettings {
-  return PermissionMachineSettingsSchema.parse({
-    revision: 0,
-    defaultMode: "ask_every_time",
-    yoloEnabled: false,
-    savedGrants: []
-  });
 }
 
 function createDefaultUpdateSettings(): UpdateMachineSettings {

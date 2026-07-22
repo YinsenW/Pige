@@ -663,7 +663,6 @@ describe("Knowledge Activity and Undo", () => {
         runtimeKind: "desktop_local",
         clientCapabilityTier: "desktop_full"
       },
-      permissionDecisionIds: [],
       kind: "trash_page",
       targetRefs: [{ kind: "page", id: "page_20260712_otherfixture", path: fixture.trashRelativePath }],
       sourceRefs: [{ kind: "operation", id: fixture.operation.id }],
@@ -749,7 +748,6 @@ function createFixture(options: { readonly includeAfterHash?: boolean } = {}): {
       clientCapabilityTier: "desktop_full"
     },
     modelProfileId: "model_activityfixture",
-    permissionDecisionIds: [],
     kind: "create_page",
     targetRefs: [{ kind: "page", id: pageId, path: pageRelativePath }],
     sourceRefs: [
@@ -863,7 +861,6 @@ Grounded additive change. [source:src_20260712_updateactivity#source]
       clientCapabilityTier: "desktop_full"
     },
     modelProfileId: "model_activityfixture",
-    permissionDecisionIds: [],
     kind: "update_page",
     targetRefs: [{ kind: "page", id: pageId, path: pageRelativePath }],
     sourceRefs: [

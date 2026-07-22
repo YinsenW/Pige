@@ -70,7 +70,6 @@ export function createFirstPartyCommandCapabilityAdapter(
       capability: "run_shell",
       dataBoundary: "local",
       resourceScope: "current_vault",
-      resourceKind: "shell",
       reasonCode: "command.run"
     },
     normalizeInput: (args) => commands.normalize(parseInput(args)),

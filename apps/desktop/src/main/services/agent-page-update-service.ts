@@ -629,7 +629,6 @@ export function isMatchingAgentPageUpdateUndo(
     candidate.kind === "update_page" &&
     candidate.jobId === operation.jobId &&
     candidate.actor.kind === "user" &&
-    candidate.permissionDecisionIds.length === 0 &&
     candidate.reversible === "best_effort" &&
     candidate.targetRefs.length === 1 &&
     target?.kind === "page" &&
@@ -708,7 +707,6 @@ export function finalizeAgentPageUpdateUndo(
       runtimeKind: "desktop_local",
       clientCapabilityTier: "desktop_full"
     },
-    permissionDecisionIds: [],
     kind: "update_page",
     targetRefs: [{ kind: "page", id: binding.pageId, path: binding.pagePath }],
     sourceRefs: [{ kind: "operation", id: operation.id }],
@@ -1369,7 +1367,6 @@ function createUpdateOperation(input: {
       clientCapabilityTier: "desktop_full"
     },
     modelProfileId: input.binding.modelProfileId,
-    permissionDecisionIds: [],
     policyAudit: {
       policyContextId: input.binding.policyContextId,
       policyHash: input.binding.policyHash,
@@ -1493,7 +1490,6 @@ function createReaderSelectionUpdateOperation(input: {
       runtimeKind: "desktop_local",
       clientCapabilityTier: "desktop_full"
     },
-    permissionDecisionIds: [],
     kind: "update_page",
     targetRefs: [{ kind: "page", id: input.pageId, path: input.pagePath }],
     sourceRefs: [

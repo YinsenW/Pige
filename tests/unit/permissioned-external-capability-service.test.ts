@@ -44,7 +44,6 @@ describe("PermissionedExternalCapabilityRegistry AR1 authority", () => {
 
     await expect(call(tool)).resolves.toEqual(RESULT);
     expect(fixture.execute).toHaveBeenCalledTimes(1);
-    expect(fixture.broker.listForJob(fixture.vaultPath, JOB_ID)).toEqual([]);
     expect(findJsonFiles(fixture.machineRoot)).toEqual([]);
   });
 
@@ -55,7 +54,6 @@ describe("PermissionedExternalCapabilityRegistry AR1 authority", () => {
     const execution = call(tool);
     await vi.waitFor(() => expect(fixture.confirmations.pending()).toMatchObject({ status: "pending" }));
     expect(fixture.execute).toHaveBeenCalledTimes(0);
-    expect(fixture.broker.listForJob(fixture.vaultPath, JOB_ID)).toEqual([]);
     const pending = fixture.confirmations.pending();
     expect(pending).toMatchObject({
       status: "pending",

@@ -18,25 +18,10 @@ import type {
   MarkdownPageStatus,
   MarkdownPageType,
   ModelListStrategy,
-  ModelEgressContentClass,
-  ModelEgressReasonCode,
   NoteRenderContextId,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
   PigeErrorSummary,
-  PermissionPendingRequest,
-  PermissionPendingRequestQuery,
-  PermissionResolveRequest,
-  PermissionResolveResult,
-  PermissionSettingsSummary,
-  PermissionSetDefaultModeRequest,
-  PermissionPrepareYoloEnableRequest,
-  PermissionPrepareYoloEnableResult,
-  PermissionEnableYoloRequest,
-  PermissionDisableYoloRequest,
-  PermissionRevokeSavedGrantRequest,
-  PermissionRevokeAllSavedGrantsRequest,
-  PermissionSettingsMutationResult,
   ProposalState,
   ProposalTrustLevel,
   ReaderSelectionActionRequest,
@@ -113,22 +98,6 @@ export type {
   RendererSafeSubjectLabel,
   VaultRevealResult,
   VaultRevealTarget,
-  PermissionActionBinding,
-  PermissionActionLifecycleRecord,
-  PermissionActionLifecycleState,
-  PermissionPendingRequest,
-  PermissionPendingRequestQuery,
-  PermissionResolveRequest,
-  PermissionResolveResult,
-  PermissionSettingsSummary,
-  PermissionSetDefaultModeRequest,
-  PermissionPrepareYoloEnableRequest,
-  PermissionPrepareYoloEnableResult,
-  PermissionEnableYoloRequest,
-  PermissionDisableYoloRequest,
-  PermissionRevokeSavedGrantRequest,
-  PermissionRevokeAllSavedGrantsRequest,
-  PermissionSettingsMutationResult,
   NoteInlineReferenceTarget,
   NoteInlineReferenceRequestId,
   NoteRenderContextId,
@@ -255,11 +224,6 @@ export interface AgentRuntimePolicyContext {
     readonly boundaryVerification: BoundaryVerification;
     readonly cloudSendPolicy: CloudSendPolicy;
     readonly modelRoutingMode: "default_model_only" | "pi_upstream_model_slots" | "pige_model_routing_service";
-  };
-  readonly permissions: {
-    readonly defaultMode: "ask_every_time" | "remember_scoped_grants" | "yolo_full_access";
-    readonly yoloEnabled: boolean;
-    readonly savedGrantSummaryRefs: readonly string[];
   };
   readonly language: {
     readonly appLocale: Locale;
@@ -636,8 +600,6 @@ export interface JobSummary {
   readonly sourceId?: string;
   readonly captureId?: string;
   readonly conversationEventId?: string;
-  readonly permissionRequestId?: string;
-  readonly modelEgressApprovalRequestId?: string;
   readonly sourceDisplayName?: string;
   readonly sourceKind?: SourceKind;
   readonly backupKind?: "user_backup" | "restore_rollback";
@@ -755,7 +717,6 @@ export interface StageProposalRequest {
   readonly diffRefs?: ConfirmationProposal["diffRefs"];
   readonly warnings?: readonly string[];
   readonly baseHashes?: Record<string, string>;
-  readonly requiredPermissionIds?: readonly string[];
 }
 
 export interface StageProposalResult {
@@ -993,32 +954,6 @@ export interface RetrievalAskResult extends RetrievalSearchResult {
 export interface HomeAgentAskRequest extends RetrievalAskRequest {}
 
 export type HomeAgentModelUsage = "none" | "local" | "cloud";
-
-export interface ModelEgressPendingRequest {
-  readonly requestId: string;
-  readonly jobId: string;
-  readonly providerProfileId: string;
-  readonly modelProfileId: string;
-  readonly reasonCode: ModelEgressReasonCode;
-  readonly contentClasses: readonly ModelEgressContentClass[];
-  readonly requestedAt: string;
-}
-
-export interface ModelEgressPendingRequestQuery {
-  readonly requestId: string;
-}
-
-export interface ModelEgressResolveRequest {
-  readonly requestId: string;
-  readonly jobId: string;
-  readonly decision: "allow_once" | "deny";
-}
-
-export interface ModelEgressResolveResult {
-  readonly status: "approved" | "denied";
-  readonly requestId: string;
-  readonly jobId: string;
-}
 
 export type HomeAgentAskResult =
   | {
@@ -1351,39 +1286,6 @@ export interface PigeDesktopApi {
     readonly onChanged: (
       listener: (event: HighRiskConfirmationChangedEvent) => void
     ) => () => void;
-  };
-  readonly modelEgress: {
-    readonly pending: (
-      request: ModelEgressPendingRequestQuery
-    ) => Promise<ModelEgressPendingRequest | undefined>;
-    readonly resolve: (request: ModelEgressResolveRequest) => Promise<ModelEgressResolveResult>;
-  };
-  readonly permissions: {
-    readonly pending: (
-      request: PermissionPendingRequestQuery
-    ) => Promise<PermissionPendingRequest | undefined>;
-    readonly resolve: (request: PermissionResolveRequest) => Promise<PermissionResolveResult>;
-    readonly settings: {
-      readonly current: () => Promise<PermissionSettingsSummary>;
-      readonly setDefaultMode: (
-        request: PermissionSetDefaultModeRequest
-      ) => Promise<PermissionSettingsMutationResult>;
-      readonly prepareYoloEnable: (
-        request: PermissionPrepareYoloEnableRequest
-      ) => Promise<PermissionPrepareYoloEnableResult>;
-      readonly enableYolo: (
-        request: PermissionEnableYoloRequest
-      ) => Promise<PermissionSettingsMutationResult>;
-      readonly disableYolo: (
-        request: PermissionDisableYoloRequest
-      ) => Promise<PermissionSettingsMutationResult>;
-      readonly revokeGrant: (
-        request: PermissionRevokeSavedGrantRequest
-      ) => Promise<PermissionSettingsMutationResult>;
-      readonly revokeAllGrants: (
-        request: PermissionRevokeAllSavedGrantsRequest
-      ) => Promise<PermissionSettingsMutationResult>;
-    };
   };
   readonly skills: {
     readonly summary: () => Promise<SkillRegistryQueryResult>;

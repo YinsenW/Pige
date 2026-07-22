@@ -67,10 +67,7 @@ import {
   type AgentIngestRespondToolInput,
   type AgentIngestUpdateToolInput
 } from "./agent-ingest-tool-registry";
-import {
-  buildAgentRuntimePolicyContext,
-  type AgentPermissionSettingsPort
-} from "./agent-policy-context";
+import { buildAgentRuntimePolicyContext } from "./agent-policy-context";
 import { createModelEgressDecision } from "./model-egress-policy";
 import { containsRestrictedModelContent } from "./model-egress-content";
 import {
@@ -446,7 +443,6 @@ export class AgentIngestService {
   readonly #toolAuthorization: AgentIngestToolAuthorizationPort;
   readonly #retrieval: AgentIngestRetrievalPort | undefined;
   readonly #proposals: AgentIngestProposalPort | undefined;
-  readonly #permissionSettings: AgentPermissionSettingsPort | undefined;
 
   constructor(
     models: AgentIngestModelConfigPort,
@@ -455,8 +451,7 @@ export class AgentIngestService {
     evidence: EvidenceAssemblyService = new EvidenceAssemblyService(),
     toolAuthorization: AgentIngestToolAuthorizationPort = allowCurrentAgentIngestTools,
     retrieval?: AgentIngestRetrievalPort,
-    proposals?: AgentIngestProposalPort,
-    permissionSettings?: AgentPermissionSettingsPort
+    proposals?: AgentIngestProposalPort
   ) {
     this.#models = models;
     this.#runtime = runtime;
@@ -465,7 +460,6 @@ export class AgentIngestService {
     this.#toolAuthorization = toolAuthorization;
     this.#retrieval = retrieval;
     this.#proposals = proposals;
-    this.#permissionSettings = permissionSettings;
   }
 
   hasDefaultModel(): boolean {
@@ -804,9 +798,6 @@ export class AgentIngestService {
       jobId: job.id,
       defaultModel,
       defaultProvider,
-      ...(this.#permissionSettings
-        ? { permissionSettings: this.#permissionSettings.policyProjection() }
-        : {}),
       ...capabilitySnapshot
     });
     hooks.onPolicyResolved?.({
@@ -1918,8 +1909,7 @@ export class AgentIngestService {
               proposedOperations: [prepared.proposedOperation],
               diffRefs: [],
               warnings: ["Generated knowledge requires review before publication."],
-              baseHashes: {},
-              requiredPermissionIds: []
+              baseHashes: {}
             }).proposal;
             if (!proposal) {
               throw new PigeDomainError(
@@ -3278,8 +3268,7 @@ function writeModelEgressDecisionOperation(input: {
       existing.policyAudit.policyHash !== input.policyHash ||
       existing.modelEgressAudit?.payloadHash !== input.payloadHash ||
       existing.modelEgressAudit.evidenceSummaryHash !== input.evidenceSummaryHash ||
-      existing.modelEgressAudit.decisionHash !== input.decisionHash ||
-      existing.modelEgressAudit.modelEgressApprovalRequestId !== input.decision.modelEgressApprovalRequestId
+      existing.modelEgressAudit.decisionHash !== input.decisionHash
     ) {
       throw new PigeDomainError(
         "model_egress.audit_conflict",
@@ -3299,7 +3288,6 @@ function writeModelEgressDecisionOperation(input: {
       clientCapabilityTier: "desktop_full"
     },
     modelProfileId: input.modelProfileId,
-    permissionDecisionIds: [],
     policyAudit: {
       policyContextId: input.policyContextId,
       policyHash: input.policyHash,
@@ -3314,10 +3302,7 @@ function writeModelEgressDecisionOperation(input: {
       normalPayloadCharacterLimit: input.decision.normalPayloadCharacterLimit,
       contentClasses: input.decision.contentClasses,
       outcome: input.decision.outcome,
-      reasonCode: input.decision.reasonCode,
-      ...(input.decision.modelEgressApprovalRequestId
-        ? { modelEgressApprovalRequestId: input.decision.modelEgressApprovalRequestId }
-        : {})
+      reasonCode: input.decision.reasonCode
     },
     kind: "model_egress_decision",
     targetRefs: [{ kind: "model", id: input.modelProfileId }],
@@ -3367,7 +3352,6 @@ function writeCreatePageOperation(input: {
       clientCapabilityTier: "desktop_full"
     },
     modelProfileId: input.runtimeConfig.model.id,
-    permissionDecisionIds: [],
     policyAudit: {
       policyContextId: input.policyContextId,
       policyHash: input.policyHash,
@@ -3607,12 +3591,6 @@ function createProposalCreatePageOperationRecord(
       "The approved proposal is missing its model or policy audit binding."
     );
   }
-  if (input.proposal.requiredPermissionIds.some((id) => !id.startsWith("permdec_"))) {
-    throw new PigeDomainError(
-      "proposal.permission_unresolved",
-      "The approved proposal still contains an unresolved permission request."
-    );
-  }
   const operationId = createProposalApplyOperationId(input.proposal.id);
   const createOperation = requireProposalCreateOperation(input.proposal);
   return OperationRecordSchema.parse({
@@ -3627,7 +3605,6 @@ function createProposalCreatePageOperationRecord(
       clientCapabilityTier: "desktop_full"
     },
     modelProfileId: input.modelProfileId,
-    permissionDecisionIds: input.proposal.requiredPermissionIds,
     policyAudit: {
       policyContextId: input.job.policyContextId,
       policyHash: input.job.policyHash,
@@ -3842,7 +3819,6 @@ function writeRecoveredCreatePageOperation(input: {
       clientCapabilityTier: "desktop_full"
     },
     ...(input.modelProfileId ? { modelProfileId: input.modelProfileId } : {}),
-    permissionDecisionIds: [],
     ...(input.policyContextId && input.policyHash ? {
       policyAudit: {
         policyContextId: input.policyContextId,
@@ -4516,9 +4492,7 @@ function createModelEgressDecisionHash(decision: ModelEgressDecision): string {
     payloadCharacters: decision.payloadCharacters,
     estimatedPayloadTokens: decision.estimatedPayloadTokens,
     normalPayloadCharacterLimit: decision.normalPayloadCharacterLimit,
-    policyHash: decision.policyHash,
-    modelEgressApprovalRequestId: decision.modelEgressApprovalRequestId ?? null,
-    permissionDecisionId: decision.permissionDecisionId ?? null
+    policyHash: decision.policyHash
   });
   return `sha256:${createHash("sha256").update(canonicalDecision, "utf8").digest("hex")}`;
 }

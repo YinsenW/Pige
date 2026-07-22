@@ -535,76 +535,6 @@ describe("desktop shell build contract", () => {
     );
   });
 
-  it("keeps legacy Model Egress IPC out of the canonical renderer owner", () => {
-    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
-    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
-    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
-    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
-    const pendingHandler = mainSource.slice(
-      mainSource.indexOf('ipcMain.handle("modelEgress.pending"'),
-      mainSource.indexOf('ipcMain.handle("modelEgress.resolve"')
-    );
-    const resolveHandler = mainSource.slice(
-      mainSource.indexOf('ipcMain.handle("modelEgress.resolve"'),
-      mainSource.indexOf('ipcMain.handle("activity.list"')
-    );
-
-    expect(contractsSource).toContain("readonly modelEgress:");
-    expect(contractsSource).toContain("export interface ModelEgressResolveRequest");
-    expect(pendingHandler).toContain("ModelEgressPendingRequestQuerySchema.safeParse(request)");
-    expect(pendingHandler).toContain("getJobsService().pendingModelEgress(parsed.data.requestId)");
-    expect(pendingHandler).toContain("ModelEgressPendingRequestSchema.safeParse(pending)");
-    expect(resolveHandler).toContain("ModelEgressResolveRequestSchema.safeParse(request)");
-    expect(resolveHandler).toContain("getJobsService().resolveModelEgress(parsed.data)");
-    expect(resolveHandler).toContain("ModelEgressResolveResultSchema.safeParse(result)");
-    expect(resolveHandler).toContain("scheduleAgentTurnProcessing()");
-    expect(mainSource).toContain('rootPath: app.getPath("userData")');
-    expect(mainSource).toContain("getVaultService().assertWriterLease(vaultPath)");
-    expect(preloadSource).toContain('ipcRenderer.invoke("modelEgress.pending", request)');
-    expect(preloadSource).toContain('ipcRenderer.invoke("modelEgress.resolve", request)');
-    expect(rendererSource).not.toContain("window.pige.modelEgress");
-    expect(rendererSource).not.toContain("decideModelEgress");
-    expect(resolveHandler).not.toContain("permissionDecisionId");
-  });
-
-  it("keeps legacy Permission Broker prompts out of the canonical renderer owner", () => {
-    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
-    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
-    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
-    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
-    const pendingHandler = mainSource.slice(
-      mainSource.indexOf('ipcMain.handle("permissions.pending"'),
-      mainSource.indexOf('ipcMain.handle("permissions.resolve"')
-    );
-    const resolveHandler = mainSource.slice(
-      mainSource.indexOf('ipcMain.handle("permissions.resolve"'),
-      mainSource.indexOf('ipcMain.handle("activity.list"')
-    );
-
-    expect(contractsSource).toContain("readonly permissions:");
-    expect(pendingHandler).toContain("PermissionPendingRequestQuerySchema.safeParse(request)");
-    expect(pendingHandler).toContain("getJobsService().pendingPermission(parsed.data.requestId)");
-    expect(pendingHandler).toContain("PermissionPendingRequestSchema.safeParse(pending)");
-    expect(resolveHandler).toContain("PermissionResolveRequestSchema.safeParse(request)");
-    expect(resolveHandler).toContain("getJobsService().resolvePermission(parsed.data)");
-    expect(resolveHandler).toContain("PermissionResolveResultSchema.safeParse(result)");
-    expect(resolveHandler).toContain("scheduleAgentIngestProcessing()");
-    expect(resolveHandler).toContain("scheduleAgentTurnProcessing()");
-    expect(preloadSource).toContain('ipcRenderer.invoke("permissions.pending", request)');
-    expect(preloadSource).toContain('ipcRenderer.invoke("permissions.resolve", request)');
-    expect(rendererSource).not.toContain("window.pige.permissions");
-    expect(rendererSource).not.toContain("decidePermission");
-    for (const unsafeField of ["actionInputHash", "resourceIdentityHash", "policyHash", "bindingHash", "actorDigest"]) {
-      expect(pendingHandler).not.toContain(unsafeField);
-      expect(resolveHandler).not.toContain(unsafeField);
-      expect(preloadSource.slice(preloadSource.indexOf("permissions: {"), preloadSource.indexOf("activity: {")))
-        .not.toContain(unsafeField);
-    }
-    expect(mainSource).toContain("createPermissionedExternalCapabilityRegistry(");
-    expect(mainSource.indexOf("reconcilePermissionActions()"))
-      .toBeLessThan(mainSource.indexOf("recoverInterruptedJobs()"));
-  });
-
   it("exposes one canonical high-risk confirmation with strict query, event, and resolve parsing", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
@@ -650,35 +580,6 @@ describe("desktop shell build contract", () => {
     }
     expect(preloadApi).not.toContain("Permission");
     expect(preloadApi).not.toContain("ModelEgress");
-  });
-
-  it("exposes machine-local permission settings through revision-fenced body-free IPC", () => {
-    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
-    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
-    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
-    const settingsHandlers = mainSource.slice(
-      mainSource.indexOf('ipcMain.handle("permissions.settings.current"'),
-      mainSource.indexOf('ipcMain.handle("activity.list"')
-    );
-    const settingsPreload = preloadSource.slice(
-      preloadSource.indexOf("settings: {", preloadSource.indexOf("permissions: {")),
-      preloadSource.indexOf("activity: {")
-    );
-
-    expect(contractsSource).toContain("readonly prepareYoloEnable:");
-    expect(contractsSource).toContain("readonly revokeAllGrants:");
-    expect(settingsHandlers).toContain("PermissionSetDefaultModeRequestSchema.parse(request)");
-    expect(settingsHandlers).toContain("PermissionPrepareYoloEnableRequestSchema.parse(request)");
-    expect(settingsHandlers).toContain("permissionYoloConfirmationRegistry.issue(event.sender.id");
-    expect(settingsHandlers).toContain("permissionYoloConfirmationRegistry.consume(");
-    expect(settingsHandlers).toContain("getPermissionSettingsService().revokeGrant(");
-    expect(settingsHandlers).toContain("getPermissionSettingsService().revokeAllGrants(");
-    expect(settingsPreload).toContain('ipcRenderer.invoke("permissions.settings.current")');
-    expect(settingsPreload).toContain('"permissions.settings.prepareYoloEnable"');
-    expect(settingsPreload).toContain('"permissions.settings.revokeAllGrants"');
-    for (const unsafeField of ["actorId", "actorDigest", "resourceIdentityHash", "path", "secret"]) {
-      expect(settingsPreload).not.toContain(unsafeField);
-    }
   });
 
   it("projects Activity open authority as a parsed stable page identity without paths", () => {

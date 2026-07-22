@@ -29,7 +29,7 @@
     "scope": "Independent review of the personal-Agent architecture reset: Pi semantic ownership, submitted-turn authority, closed high-risk effects, Provider Send, deletion inventory, risk-tiered verification, budgets, macOS-first sequencing, and unchanged product status.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 18,
-    "reviewedSha256": "9a4a2a661b4b6b047ed6002510396e9747caebf0ef92232a97e84ed64a5baf8f"
+    "reviewedSha256": "9b67998a39429c196ab8e77554a95fc7674b30e2d521ef5782ee54bcac5a2f53"
   },
   "reviewers": [{
     "reviewerId": "architecture-reset-planning-review",
@@ -66,7 +66,6 @@
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Current product code still contains the bounded legacy permission and model-egress mechanisms until AR1 lands.",
     "Current Host ingest/retrieval orchestration remains bounded deletion debt until AR2 lands.",
     "Windows and Linux qualification remains deferred and unclaimed during early macOS-first development."
   ]

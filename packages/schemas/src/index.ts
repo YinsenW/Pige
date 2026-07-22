@@ -431,9 +431,6 @@ export const KnowledgeActivityListResultSchema = z.object({
 export const ArtifactIdSchema = z.string().regex(/^art_[a-z0-9][a-z0-9_]{2,}$/);
 export const RootBindingIdSchema = z.string().regex(/^root_[a-z0-9][a-z0-9_]{5,}$/);
 export const BackupIdSchema = z.string().regex(/^backup_\d{8}_[a-z0-9]{8,}$/);
-export const PermissionRequestIdSchema = z.string().regex(/^permreq_\d{8}_[a-z0-9]{8,}$/);
-export const PermissionDecisionIdSchema = z.string().regex(/^permdec_\d{8}_[a-z0-9]{8,}$/);
-export const ModelEgressApprovalRequestIdSchema = z.string().regex(/^egressreq_\d{8}_[a-z0-9]{16,}$/);
 export const DatasetIdSchema = z.string().regex(/^dataset_\d{8}_[a-z0-9]{12,}$/);
 export const DatasetRevisionIdSchema = z.string().regex(/^dataset_rev_\d{8}_[a-z0-9]{12,}$/);
 export const TableIdSchema = z.string().regex(/^table_[a-z0-9]{12,}$/);
@@ -511,8 +508,6 @@ export const BoundaryVerificationSchema = z.enum([
 
 export const CloudSendPolicySchema = z.enum([
   "ordinary_allowed",
-  "confirm_private_or_large",
-  "confirm_all",
   "local_only"
 ]);
 
@@ -550,8 +545,6 @@ export const PigeErrorActionSchema = z.enum([
   "repair_tool",
   "download_model",
   "configure_model",
-  "confirm_model_egress",
-  "grant_permission",
   "review_proposal",
   "rebuild_index",
   "restore_backup",
@@ -598,12 +591,6 @@ function requireErrorDomainMatchesCode(
     });
   }
 }
-
-export const PermissionDefaultModeSchema = z.enum([
-  "ask_every_time",
-  "remember_scoped_grants",
-  "yolo_full_access"
-]);
 
 export const PermissionActorTypeSchema = z.enum([
   "agent",
@@ -786,14 +773,6 @@ export const PermissionResourceScopeSchema = z.enum([
   "all_declared"
 ]);
 
-export const PermissionDecisionScopeSchema = z.enum([
-  "once",
-  "actor_version",
-  "resource_scope",
-  "profile_default",
-  "never"
-]);
-
 export const PermissionDataBoundarySchema = z.enum([
   "local",
   "filesystem",
@@ -802,121 +781,6 @@ export const PermissionDataBoundarySchema = z.enum([
   "brokered_credential",
   "destructive"
 ]);
-
-export const PermissionRequestSchema = z.object({
-  id: PermissionRequestIdSchema,
-  schemaVersion: z.literal(1),
-  authorizationLayer: z.literal("permission_broker"),
-  actorType: PermissionActorTypeSchema,
-  actorId: z.string().min(1),
-  actorVersion: z.string().min(1).optional(),
-  capability: PermissionCapabilitySchema,
-  resourceScope: PermissionResourceScopeSchema,
-  dataBoundary: PermissionDataBoundarySchema,
-  duration: PermissionDecisionScopeSchema,
-  jobId: JobIdSchema.optional(),
-  runtimeKind: z.enum(["desktop_local", "remote_agent_backend"]),
-  clientCapabilityTier: z.enum(["desktop_full", "web_client", "mobile_lite"]),
-  requiresExplicitConfirmation: z.boolean(),
-  yoloEligible: z.boolean(),
-  reason: z.string().min(1),
-  commandPreview: z.string().min(1).optional(),
-  affectedPaths: z.array(z.string().min(1)).optional(),
-  createdAt: z.string().datetime({ offset: true }),
-  defaultModeAtRequest: PermissionDefaultModeSchema
-}).superRefine((request, context) => {
-  if (request.requiresExplicitConfirmation && request.yoloEligible) {
-    context.addIssue({
-      code: "custom",
-      message: "An always-confirmed action cannot be YOLO eligible.",
-      path: ["yoloEligible"]
-    });
-  }
-});
-
-export const PermissionSettingsRevisionSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-
-export const PermissionDecisionRecordSchema = z.object({
-  id: PermissionDecisionIdSchema,
-  schemaVersion: z.literal(1),
-  authorizationLayer: z.literal("permission_broker"),
-  permissionRequestId: PermissionRequestIdSchema,
-  decision: z.enum(["deny", "allow_once", "allow_scoped"]),
-  scope: PermissionDecisionScopeSchema,
-  resourceScope: PermissionResourceScopeSchema,
-  decidedBy: z.enum(["user", "system"]),
-  autoAllowedBy: z.enum(["none", "user_task", "saved_grant", "yolo_full_access"]),
-  permissionSettingsRevision: PermissionSettingsRevisionSchema.optional(),
-  decidedAt: z.string().datetime({ offset: true }),
-  reason: z.string().min(1).optional()
-}).superRefine((decision, context) => {
-  if (decision.decision === "deny" && decision.autoAllowedBy !== "none") {
-    context.addIssue({
-      code: "custom",
-      message: "A denial cannot be auto-allowed.",
-      path: ["autoAllowedBy"]
-    });
-  }
-  if (decision.decision === "deny" && decision.scope !== "never") {
-    context.addIssue({
-      code: "custom",
-      message: "A denial must use the never decision scope.",
-      path: ["scope"]
-    });
-  }
-  if (decision.decision === "allow_once" && decision.scope !== "once") {
-    context.addIssue({
-      code: "custom",
-      message: "An allow-once decision must use the once decision scope.",
-      path: ["scope"]
-    });
-  }
-  if (decision.decision === "allow_scoped" && (decision.scope === "once" || decision.scope === "never")) {
-    context.addIssue({
-      code: "custom",
-      message: "A scoped allow must use actor_version, resource_scope, or profile_default scope.",
-      path: ["scope"]
-    });
-  }
-  if (decision.decision === "allow_scoped" && decision.resourceScope === "current_action") {
-    context.addIssue({
-      code: "custom",
-      message: "A persistent scoped allow cannot target only the current action.",
-      path: ["resourceScope"]
-    });
-  }
-  if (decision.autoAllowedBy !== "none" && decision.decidedBy !== "system") {
-    context.addIssue({
-      code: "custom",
-      message: "A saved-grant or YOLO auto-allow must be recorded as a system decision.",
-      path: ["decidedBy"]
-    });
-  }
-  if (decision.autoAllowedBy !== "none" && decision.decision !== "allow_once") {
-    context.addIssue({
-      code: "custom",
-      message: "An automatic grant authorizes the current request; it must not create another persistent scoped grant.",
-      path: ["decision"]
-    });
-  }
-  if (decision.decidedBy === "system" && decision.decision !== "deny" && decision.autoAllowedBy === "none") {
-    context.addIssue({
-      code: "custom",
-      message: "A system allow must identify the user task, saved grant, or YOLO mode that authorized it.",
-      path: ["autoAllowedBy"]
-    });
-  }
-  if (
-    (decision.autoAllowedBy === "yolo_full_access") !==
-    (decision.permissionSettingsRevision !== undefined)
-  ) {
-    context.addIssue({
-      code: "custom",
-      message: "A YOLO auto-allow must bind exactly one machine-local permission settings revision.",
-      path: ["permissionSettingsRevision"]
-    });
-  }
-});
 
 const PermissionSha256HashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const PermissionStableIdSchema = z.string()
@@ -931,27 +795,6 @@ const PermissionPolicyContextIdSchema = z.string()
   .min(3)
   .max(160)
   .regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]+$/);
-const PermissionActorDisplayNameSchema = z.string().trim().min(1).max(120);
-const PermissionActionLabelKeySchema = z.string()
-  .min(1)
-  .max(160)
-  .regex(/^[A-Za-z][A-Za-z0-9_.-]+$/);
-export const PermissionResourceKindSchema = z.enum([
-  "file",
-  "folder",
-  "url",
-  "network",
-  "shell",
-  "credential",
-  "setting",
-  "package",
-  "other"
-]);
-const PermissionReasonCodeSchema = z.string()
-  .min(1)
-  .max(120)
-  .regex(/^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)*$/);
-
 export const PermissionActionBindingSchema = z.object({
   vaultId: VaultIdSchema,
   jobId: JobIdSchema,
@@ -973,326 +816,6 @@ export const PermissionActionBindingSchema = z.object({
   bindingHash: PermissionSha256HashSchema
 }).strict();
 
-export const PermissionActionLifecycleStateSchema = z.enum([
-  "pending",
-  "approved",
-  "consumed",
-  "denied",
-  "cancelled"
-]);
-
-export const PermissionActionLifecycleRecordSchema = z.object({
-  schemaVersion: z.literal(1),
-  id: PermissionRequestIdSchema,
-  authorizationLayer: z.literal("permission_broker"),
-  state: PermissionActionLifecycleStateSchema,
-  binding: PermissionActionBindingSchema,
-  actorDisplayName: PermissionActorDisplayNameSchema,
-  actionLabelKey: PermissionActionLabelKeySchema,
-  resourceDisplayName: z.string().trim().min(1).max(192).optional(),
-  resourceKind: PermissionResourceKindSchema,
-  resourceCount: z.number().int().positive().max(10_000),
-  reasonCode: PermissionReasonCodeSchema,
-  decision: z.enum(["allow_once", "deny"]).optional(),
-  decisionId: PermissionDecisionIdSchema.optional(),
-  completionMarkerHash: PermissionSha256HashSchema.optional(),
-  createdAt: z.string().datetime({ offset: true }),
-  updatedAt: z.string().datetime({ offset: true }),
-  decidedAt: z.string().datetime({ offset: true }).optional(),
-  consumedAt: z.string().datetime({ offset: true }).optional(),
-  cancelledAt: z.string().datetime({ offset: true }).optional(),
-  completedAt: z.string().datetime({ offset: true }).optional()
-}).strict().superRefine((record, context) => {
-  if ((record.completionMarkerHash === undefined) !== (record.completedAt === undefined)) {
-    context.addIssue({
-      code: "custom",
-      path: ["completionMarkerHash"],
-      message: "A permission completion marker hash and completion timestamp must be recorded together."
-    });
-  }
-
-  if (record.state !== "consumed" && (
-    record.completionMarkerHash !== undefined || record.completedAt !== undefined
-  )) {
-    context.addIssue({
-      code: "custom",
-      path: ["completionMarkerHash"],
-      message: "Only a consumed permission action may contain completion fields."
-    });
-  }
-
-  if (record.state === "pending" && (
-    record.decision !== undefined ||
-    record.decisionId !== undefined ||
-    record.decidedAt !== undefined ||
-    record.consumedAt !== undefined ||
-    record.cancelledAt !== undefined ||
-    record.completionMarkerHash !== undefined ||
-    record.completedAt !== undefined
-  )) {
-    context.addIssue({
-      code: "custom",
-      path: ["state"],
-      message: "A pending permission action cannot contain decision, completion, or terminal fields."
-    });
-  }
-
-  if (record.state === "approved" && (
-    record.decision !== "allow_once" ||
-    record.decisionId === undefined ||
-    record.decidedAt === undefined ||
-    record.consumedAt !== undefined ||
-    record.cancelledAt !== undefined ||
-    record.completionMarkerHash !== undefined ||
-    record.completedAt !== undefined
-  )) {
-    context.addIssue({
-      code: "custom",
-      path: ["state"],
-      message: "An approved permission action must contain one unconsumed allow-once decision."
-    });
-  }
-
-  if (record.state === "consumed" && (
-    record.decision !== "allow_once" ||
-    record.decisionId === undefined ||
-    record.decidedAt === undefined ||
-    record.consumedAt === undefined ||
-    record.cancelledAt !== undefined
-  )) {
-    context.addIssue({
-      code: "custom",
-      path: ["state"],
-      message: "A consumed permission action must contain its allow-once decision and consumption timestamps."
-    });
-  }
-
-  if (record.state === "denied" && (
-    record.decision !== "deny" ||
-    record.decisionId === undefined ||
-    record.decidedAt === undefined ||
-    record.consumedAt !== undefined ||
-    record.cancelledAt !== undefined ||
-    record.completionMarkerHash !== undefined ||
-    record.completedAt !== undefined
-  )) {
-    context.addIssue({
-      code: "custom",
-      path: ["state"],
-      message: "A denied permission action must contain one denial decision."
-    });
-  }
-
-  if (record.state === "cancelled" && (
-    record.decision !== undefined ||
-    record.decisionId !== undefined ||
-    record.decidedAt !== undefined ||
-    record.consumedAt !== undefined ||
-    record.cancelledAt === undefined ||
-    record.completionMarkerHash !== undefined ||
-    record.completedAt !== undefined
-  )) {
-    context.addIssue({
-      code: "custom",
-      path: ["state"],
-      message: "A cancelled permission action must contain only its cancellation timestamp."
-    });
-  }
-});
-
-export const PermissionPendingRequestQuerySchema = z.object({
-  requestId: PermissionRequestIdSchema
-}).strict();
-
-export const PermissionPendingRequestSchema = z.object({
-  requestId: PermissionRequestIdSchema,
-  jobId: JobIdSchema,
-  actorType: PermissionActorTypeSchema,
-  actorDisplayName: PermissionActorDisplayNameSchema,
-  actorVersion: PermissionVersionSchema,
-  capability: PermissionCapabilitySchema,
-  dataBoundary: PermissionDataBoundarySchema,
-  actionLabelKey: PermissionActionLabelKeySchema,
-  resourceDisplayName: z.string().trim().min(1).max(192).optional(),
-  resourceScope: PermissionResourceScopeSchema,
-  resourceKind: PermissionResourceKindSchema,
-  resourceCount: z.number().int().positive().max(10_000),
-  reasonCode: PermissionReasonCodeSchema,
-  createdAt: z.string().datetime({ offset: true })
-}).strict();
-
-export const PermissionResolveRequestSchema = z.object({
-  requestId: PermissionRequestIdSchema,
-  jobId: JobIdSchema,
-  decision: z.enum(["allow_once", "deny"])
-}).strict();
-
-export const PermissionResolveResultSchema = z.object({
-  status: z.enum(["approved", "denied"]),
-  requestId: PermissionRequestIdSchema,
-  jobId: JobIdSchema
-}).strict();
-
-export const PermissionSavedGrantIdSchema = z.string().regex(/^permgrant_\d{8}_[a-z0-9]{8,}$/);
-export const PermissionYoloConfirmationTokenSchema = z.string().regex(/^permyolo_\d{8}_[a-z0-9]{16,}$/);
-
-export const PermissionSavedGrantRecordSchema = z.object({
-  grantId: PermissionSavedGrantIdSchema,
-  actorType: PermissionActorTypeSchema,
-  actorId: PermissionStableIdSchema,
-  actorVersion: PermissionVersionSchema,
-  actorDigest: PermissionSha256HashSchema,
-  actorDisplayName: PermissionActorDisplayNameSchema,
-  capability: PermissionCapabilitySchema,
-  dataBoundary: PermissionDataBoundarySchema,
-  resourceScope: PermissionResourceScopeSchema,
-  resourceKind: PermissionResourceKindSchema,
-  resourceIdentityHash: PermissionSha256HashSchema,
-  decisionScope: z.enum(["actor_version", "resource_scope", "profile_default"]),
-  createdAt: z.string().datetime({ offset: true }),
-  lastUsedAt: z.string().datetime({ offset: true }).optional()
-}).strict().superRefine((grant, context) => {
-  if (grant.resourceScope === "current_action") {
-    context.addIssue({
-      code: "custom",
-      path: ["resourceScope"],
-      message: "A saved grant cannot target only the current action."
-    });
-  }
-  if (
-    grant.capability !== "external_filesystem" &&
-    grant.capability !== "external_network" &&
-    grant.capability !== "run_shell"
-  ) {
-    context.addIssue({
-      code: "custom",
-      path: ["capability"],
-      message: "A saved grant cannot cover destructive, credential, model-egress, installation, settings, or schema authority."
-    });
-  }
-  if (
-    grant.dataBoundary !== "local" &&
-    grant.dataBoundary !== "filesystem" &&
-    grant.dataBoundary !== "network"
-  ) {
-    context.addIssue({
-      code: "custom",
-      path: ["dataBoundary"],
-      message: "A saved grant cannot cover destructive, cloud, or brokered-credential boundaries."
-    });
-  }
-});
-
-export const PermissionMachineSettingsSchema = z.object({
-  revision: PermissionSettingsRevisionSchema,
-  defaultMode: PermissionDefaultModeSchema,
-  yoloEnabled: z.boolean(),
-  yoloFallbackMode: z.enum(["ask_every_time", "remember_scoped_grants"]).optional(),
-  savedGrants: z.array(PermissionSavedGrantRecordSchema).max(128)
-}).strict().superRefine((settings, context) => {
-  const yoloStateIsConsistent = settings.yoloEnabled
-    ? settings.defaultMode === "yolo_full_access" && settings.yoloFallbackMode !== undefined
-    : settings.defaultMode !== "yolo_full_access" && settings.yoloFallbackMode === undefined;
-  if (!yoloStateIsConsistent) {
-    context.addIssue({
-      code: "custom",
-      path: ["yoloEnabled"],
-      message: "YOLO status, effective mode, and fallback mode must change atomically."
-    });
-  }
-  if (new Set(settings.savedGrants.map((grant) => grant.grantId)).size !== settings.savedGrants.length) {
-    context.addIssue({
-      code: "custom",
-      path: ["savedGrants"],
-      message: "Saved grant identifiers must be unique."
-    });
-  }
-});
-
-export const PermissionSavedGrantSummarySchema = z.object({
-  grantId: PermissionSavedGrantIdSchema,
-  actorType: PermissionActorTypeSchema,
-  actorDisplayName: PermissionActorDisplayNameSchema,
-  capability: PermissionCapabilitySchema,
-  resourceScope: PermissionResourceScopeSchema,
-  resourceKind: PermissionResourceKindSchema,
-  decisionScope: z.enum(["actor_version", "resource_scope", "profile_default"]),
-  createdAt: z.string().datetime({ offset: true }),
-  lastUsedAt: z.string().datetime({ offset: true }).optional()
-}).strict();
-
-export const PermissionSettingsSummarySchema = z.object({
-  apiVersion: z.literal(1),
-  revision: PermissionSettingsRevisionSchema,
-  defaultMode: PermissionDefaultModeSchema,
-  yoloEnabled: z.boolean(),
-  savedGrants: z.array(PermissionSavedGrantSummarySchema).max(128)
-}).strict().superRefine((summary, context) => {
-  if (summary.yoloEnabled !== (summary.defaultMode === "yolo_full_access")) {
-    context.addIssue({
-      code: "custom",
-      path: ["yoloEnabled"],
-      message: "Renderer permission mode and YOLO status must describe the same committed state."
-    });
-  }
-});
-
-export const PermissionSetDefaultModeRequestSchema = z.object({
-  apiVersion: z.literal(1),
-  expectedRevision: PermissionSettingsRevisionSchema,
-  defaultMode: z.enum(["ask_every_time", "remember_scoped_grants"])
-}).strict();
-
-export const PermissionPrepareYoloEnableRequestSchema = z.object({
-  apiVersion: z.literal(1),
-  expectedRevision: PermissionSettingsRevisionSchema
-}).strict();
-
-export const PermissionPrepareYoloEnableResultSchema = z.discriminatedUnion("status", [
-  z.object({
-    status: z.literal("confirmation_ready"),
-    revision: PermissionSettingsRevisionSchema,
-    confirmationToken: PermissionYoloConfirmationTokenSchema,
-    expiresAt: z.string().datetime({ offset: true })
-  }).strict(),
-  z.object({
-    status: z.literal("cancelled"),
-    revision: PermissionSettingsRevisionSchema
-  }).strict(),
-  z.object({
-    status: z.literal("stale"),
-    revision: PermissionSettingsRevisionSchema
-  }).strict()
-]);
-
-export const PermissionEnableYoloRequestSchema = z.object({
-  apiVersion: z.literal(1),
-  expectedRevision: PermissionSettingsRevisionSchema,
-  confirmationToken: PermissionYoloConfirmationTokenSchema
-}).strict();
-
-export const PermissionDisableYoloRequestSchema = z.object({
-  apiVersion: z.literal(1),
-  expectedRevision: PermissionSettingsRevisionSchema
-}).strict();
-
-export const PermissionRevokeSavedGrantRequestSchema = z.object({
-  apiVersion: z.literal(1),
-  expectedRevision: PermissionSettingsRevisionSchema,
-  grantId: PermissionSavedGrantIdSchema
-}).strict();
-
-export const PermissionRevokeAllSavedGrantsRequestSchema = z.object({
-  apiVersion: z.literal(1),
-  expectedRevision: PermissionSettingsRevisionSchema
-}).strict();
-
-export const PermissionSettingsMutationResultSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("committed"), settings: PermissionSettingsSummarySchema }).strict(),
-  z.object({ status: z.literal("stale"), settings: PermissionSettingsSummarySchema }).strict(),
-  z.object({ status: z.literal("not_found"), settings: PermissionSettingsSummarySchema }).strict()
-]);
-
 export const ExternalMutationIntentIdSchema = z.string().regex(/^extmut_\d{8}_[a-z0-9]{12,}$/);
 export const ExternalMutationIntentSchema = z.object({
   id: ExternalMutationIntentIdSchema,
@@ -1310,8 +833,6 @@ export const ExternalMutationIntentSchema = z.object({
   vaultId: VaultIdSchema,
   jobId: JobIdSchema,
   toolCallId: z.string().min(1).max(256),
-  permissionRequestId: PermissionRequestIdSchema,
-  permissionDecisionId: PermissionDecisionIdSchema,
   bindingHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
   policyContextId: z.string().min(1),
   policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
@@ -1363,14 +884,11 @@ export const ModelEgressContentClassSchema = z.enum([
   "restricted"
 ]);
 
-export const ModelEgressOutcomeSchema = z.enum(["allow", "confirm", "block"]);
+export const ModelEgressOutcomeSchema = z.enum(["allow", "block"]);
 
 export const ModelEgressReasonCodeSchema = z.enum([
   "verified_local",
   "ordinary_external_allowed",
-  "private_or_large_confirmation",
-  "sensitive_confirmation",
-  "confirm_all",
   "unknown_boundary_confirmation",
   "local_only_block",
   "restricted_content_block"
@@ -1391,17 +909,8 @@ export const ModelEgressDecisionSchema = z.object({
   payloadCharacters: z.number().int().nonnegative(),
   estimatedPayloadTokens: z.number().int().nonnegative(),
   normalPayloadCharacterLimit: z.number().int().positive(),
-  policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-  modelEgressApprovalRequestId: ModelEgressApprovalRequestIdSchema.optional(),
-  permissionDecisionId: PermissionDecisionIdSchema.optional()
+  policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/)
 }).superRefine((decision, context) => {
-  if (decision.modelEgressApprovalRequestId && decision.outcome !== "confirm") {
-    context.addIssue({
-      code: "custom",
-      message: "Only a confirm outcome may bind a model egress approval request.",
-      path: ["modelEgressApprovalRequestId"]
-    });
-  }
   const classes = new Set(decision.contentClasses);
   if (classes.has("ordinary") && classes.size > 1) {
     context.addIssue({
@@ -1418,13 +927,10 @@ export const ModelEgressDecisionSchema = z.object({
     });
   }
   const verifiedLocal = decision.cloudBoundary === "local" && decision.boundaryVerification === "loopback_verified";
-  let expectedOutcome: "allow" | "confirm" | "block";
+  let expectedOutcome: "allow" | "block";
   let expectedReason:
     | "verified_local"
     | "ordinary_external_allowed"
-    | "private_or_large_confirmation"
-    | "sensitive_confirmation"
-    | "confirm_all"
     | "unknown_boundary_confirmation"
     | "local_only_block"
     | "restricted_content_block";
@@ -1461,133 +967,6 @@ export const ModelEgressDecisionSchema = z.object({
       code: "custom",
       message: `Model egress reason must be ${expectedReason} for this boundary and policy.`,
       path: ["reasonCode"]
-    });
-  }
-});
-
-export const ModelEgressApprovalStateSchema = z.enum([
-  "pending",
-  "approved",
-  "denied",
-  "consumed",
-  "invalidated"
-]);
-
-export const ModelEgressApprovalDecisionSchema = z.enum(["allow_once", "deny"]);
-
-export const ModelEgressPendingRequestQuerySchema = z.object({
-  requestId: ModelEgressApprovalRequestIdSchema
-}).strict();
-
-export const ModelEgressResolveRequestSchema = z.object({
-  requestId: ModelEgressApprovalRequestIdSchema,
-  jobId: JobIdSchema,
-  decision: ModelEgressApprovalDecisionSchema
-}).strict();
-
-export const ModelEgressPendingRequestSchema = z.object({
-  requestId: ModelEgressApprovalRequestIdSchema,
-  jobId: JobIdSchema,
-  providerProfileId: z.string().regex(/^provider_[a-z0-9_]+$/),
-  modelProfileId: z.string().regex(/^model_[a-z0-9_]+$/),
-  reasonCode: ModelEgressReasonCodeSchema,
-  contentClasses: z.array(ModelEgressContentClassSchema).min(1).refine(
-    (values) => new Set(values).size === values.length,
-    "Model egress pending content classes must be unique."
-  ),
-  requestedAt: z.string().datetime({ offset: true })
-}).strict();
-
-export const ModelEgressResolveResultSchema = z.object({
-  status: z.enum(["approved", "denied"]),
-  requestId: ModelEgressApprovalRequestIdSchema,
-  jobId: JobIdSchema
-}).strict();
-
-export const ModelEgressApprovalRequestRecordSchema = z.object({
-  schemaVersion: z.literal(1),
-  id: ModelEgressApprovalRequestIdSchema,
-  authorizationLayer: z.literal("model_egress"),
-  state: ModelEgressApprovalStateSchema,
-  jobId: JobIdSchema,
-  vaultId: VaultIdSchema,
-  providerProfileId: z.string().regex(/^provider_[a-z0-9_]+$/),
-  modelProfileId: z.string().regex(/^model_[a-z0-9_]+$/),
-  providerIdentityHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-  modelIdentityHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-  policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-  payloadHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-  evidenceSummaryHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-  baseDecisionHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-  decisionHash: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
-  operationId: OperationIdSchema.optional(),
-  reasonCode: ModelEgressReasonCodeSchema,
-  contentClasses: z.array(ModelEgressContentClassSchema).min(1).refine(
-    (values) => new Set(values).size === values.length,
-    "Model egress approval content classes must be unique."
-  ),
-  payloadCharacters: z.number().int().nonnegative(),
-  estimatedPayloadTokens: z.number().int().nonnegative(),
-  normalPayloadCharacterLimit: z.number().int().positive(),
-  decision: ModelEgressApprovalDecisionSchema.optional(),
-  createdAt: z.string().datetime({ offset: true }),
-  updatedAt: z.string().datetime({ offset: true }),
-  decidedAt: z.string().datetime({ offset: true }).optional(),
-  consumedAt: z.string().datetime({ offset: true }).optional(),
-  invalidatedAt: z.string().datetime({ offset: true }).optional(),
-  reconciledAt: z.string().datetime({ offset: true }).optional()
-}).strict().superRefine((request, context) => {
-  if (!new Set(["private_or_large_confirmation", "sensitive_confirmation", "confirm_all", "unknown_boundary_confirmation"]).has(request.reasonCode)) {
-    context.addIssue({
-      code: "custom",
-      path: ["reasonCode"],
-      message: "A model egress approval request must bind a confirmation reason."
-    });
-  }
-  if ((request.operationId === undefined) !== (request.decisionHash === undefined)) {
-    context.addIssue({
-      code: "custom",
-      path: ["operationId"],
-      message: "A model egress approval operation and decision hash must be bound together."
-    });
-  }
-  if (request.state === "pending" && (
-    request.decision || request.decidedAt || request.consumedAt || request.invalidatedAt || request.reconciledAt
-  )) {
-    context.addIssue({
-      code: "custom",
-      path: ["state"],
-      message: "A pending model egress approval cannot contain a decision or terminal timestamp."
-    });
-  }
-  if (request.state === "approved" && (
-    request.decision !== "allow_once" || !request.decidedAt || request.consumedAt || request.invalidatedAt || request.reconciledAt
-  )) {
-    context.addIssue({
-      code: "custom",
-      path: ["state"],
-      message: "An approved model egress request must contain one unconsumed allow-once decision."
-    });
-  }
-  if (request.state === "denied" && (request.decision !== "deny" || !request.decidedAt || request.consumedAt || request.invalidatedAt)) {
-    context.addIssue({
-      code: "custom",
-      path: ["state"],
-      message: "A denied model egress request must contain one user denial."
-    });
-  }
-  if (request.state === "consumed" && (request.decision !== "allow_once" || !request.decidedAt || !request.consumedAt || request.invalidatedAt)) {
-    context.addIssue({
-      code: "custom",
-      path: ["state"],
-      message: "A consumed model egress request must contain its one-use approval and consumption timestamps."
-    });
-  }
-  if (request.state === "invalidated" && (!request.invalidatedAt || request.consumedAt)) {
-    context.addIssue({
-      code: "custom",
-      path: ["state"],
-      message: "An invalidated model egress request must contain only its invalidation timestamp."
     });
   }
 });
@@ -1877,7 +1256,6 @@ export const MachineLocalSettingsSchema = z.object({
   activeVaultPath: z.string().min(1).optional(),
   appLocale: LocaleSchema.optional(),
   window: WindowPreferencesSchema.optional(),
-  permissions: PermissionMachineSettingsSchema.optional(),
   updates: UpdateMachineSettingsSchema.optional(),
   dismissedFirstHomeVaultIds: z.array(VaultIdSchema).max(32).optional(),
   recentVaults: z.array(
@@ -2494,7 +1872,6 @@ export const ConversationEventSchema = z.object({
     "operation_reference",
     "review_reference",
     "model_call_summary",
-    "permission_decision",
     "error"
   ]),
   createdAt: z.string().datetime({ offset: true }),
@@ -2518,7 +1895,6 @@ export const ConversationEventSchema = z.object({
   jobId: JobIdSchema.optional(),
   operationId: OperationIdSchema.optional(),
   proposalId: ProposalIdSchema.optional(),
-  permissionDecisionId: z.string().min(1).optional(),
   displayName: z.string().min(1).optional(),
   sourceKind: SourceKindSchema.optional(),
   text: z.string().optional(),
@@ -2605,8 +1981,6 @@ export const JobStateSchema = z.enum([
   "queued",
   "running",
   "waiting_dependency",
-  "waiting_permission",
-  "waiting_model_egress",
   "awaiting_review",
   "cancel_requested",
   "completed",
@@ -2697,8 +2071,6 @@ export const PigeWarningSchema = z.object({
 }).strict().superRefine(requireErrorDomainMatchesCode);
 
 export const PigeErrorSummarySchema = PigeErrorCoreSchema.extend({
-  permissionRequestId: PermissionRequestIdSchema.optional(),
-  modelEgressApprovalRequestId: ModelEgressApprovalRequestIdSchema.optional(),
   diagnosticErrorId: z.string().min(1).max(120).optional()
 }).strict().superRefine(requireErrorDomainMatchesCode);
 
@@ -3109,8 +2481,6 @@ export const SpeechSessionEventSchema = z.discriminatedUnion("kind", [
 
 export const PigeErrorSchema = PigeErrorCoreSchema.extend({
   jobId: JobIdSchema.optional(),
-  permissionRequestId: PermissionRequestIdSchema.optional(),
-  modelEgressApprovalRequestId: ModelEgressApprovalRequestIdSchema.optional(),
   diagnosticErrorId: z.string().min(1).max(120).optional()
 }).strict().superRefine(requireErrorDomainMatchesCode);
 
@@ -3166,7 +2536,6 @@ export const JobRecordSchema = z.object({
   policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
   inputRefs: z.array(JobRefSchema).optional(),
   outputRefs: z.array(JobRefSchema).optional(),
-  permissionRequestIds: z.array(PermissionRequestIdSchema).optional(),
   proposalIds: z.array(ProposalIdSchema).optional(),
   operationIds: z.array(OperationIdSchema).optional(),
   checkpoints: z.array(JobCheckpointSchema).optional(),
@@ -3199,8 +2568,7 @@ export const JobRecordSchema = z.object({
     usedCloudModel: z.boolean(),
     usedNetwork: z.boolean(),
     usedShell: z.boolean(),
-    accessedExternalFiles: z.boolean(),
-    permissionDecisionIds: z.array(PermissionDecisionIdSchema)
+    accessedExternalFiles: z.boolean()
   }).optional(),
   message: z.string().min(1)
 }).strict().superRefine((job, context) => {
@@ -3289,8 +2657,7 @@ export const ModelEgressAuditSchema = z.object({
     "Model egress audit content classes must be unique."
   ),
   outcome: ModelEgressOutcomeSchema,
-  reasonCode: ModelEgressReasonCodeSchema,
-  modelEgressApprovalRequestId: ModelEgressApprovalRequestIdSchema.optional()
+  reasonCode: ModelEgressReasonCodeSchema
 }).strict();
 
 export const ChangeOperationSchema = z.discriminatedUnion("kind", [
@@ -3346,7 +2713,6 @@ export const ConfirmationProposalSchema = z.object({
   diffRefs: z.array(OperationRefSchema),
   warnings: z.array(z.string().min(1)),
   baseHashes: z.record(z.string(), z.string().regex(/^sha256:[a-f0-9]{64}$/)),
-  requiredPermissionIds: z.array(z.union([PermissionRequestIdSchema, PermissionDecisionIdSchema])),
   decision: z.object({
     decidedAt: z.string().datetime({ offset: true }),
     decidedBy: z.enum(["user", "system"]),
@@ -3364,7 +2730,6 @@ export const OperationRecordSchema = z.object({
   modelProfileId: z.string().regex(/^model_[a-z0-9_]+$/).optional(),
   skillId: z.string().regex(/^skill_[a-z0-9_]+$/).optional(),
   packageId: z.string().regex(/^pkg_[a-z0-9_]+$/).optional(),
-  permissionDecisionIds: z.array(PermissionDecisionIdSchema),
   policyAudit: z.object({
     policyContextId: z.string().min(1),
     policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
@@ -3426,13 +2791,6 @@ export const OperationRecordSchema = z.object({
       message: "A model-egress decision operation requires a typed payload and evidence audit summary."
     });
   }
-  if (operation.kind === "model_egress_decision" && operation.permissionDecisionIds.length > 0) {
-    context.addIssue({
-      code: "custom",
-      path: ["permissionDecisionIds"],
-      message: "Model egress decisions cannot reuse Permission Broker decisions."
-    });
-  }
   if (operation.kind !== "model_egress_decision" && operation.modelEgressAudit) {
     context.addIssue({
       code: "custom",
@@ -3444,7 +2802,6 @@ export const OperationRecordSchema = z.object({
     const target = operation.targetRefs[0];
     if (
       !operation.jobId ||
-      operation.permissionDecisionIds.length !== 1 ||
       !operation.policyAudit ||
       operation.targetRefs.length !== 1 ||
       target?.kind !== "external_resource" ||
@@ -3922,13 +3279,6 @@ export type ReaderSelectionSegmentId = z.infer<typeof ReaderSelectionSegmentIdSc
 export type ReaderSelectionUtf8ByteSpan = z.infer<typeof ReaderSelectionUtf8ByteSpanSchema>;
 export type ModelListStrategy = z.infer<typeof ModelListStrategySchema>;
 export type ModelEgressContentClass = z.infer<typeof ModelEgressContentClassSchema>;
-export type ModelEgressApprovalDecision = z.infer<typeof ModelEgressApprovalDecisionSchema>;
-export type ModelEgressPendingRequest = z.infer<typeof ModelEgressPendingRequestSchema>;
-export type ModelEgressPendingRequestQuery = z.infer<typeof ModelEgressPendingRequestQuerySchema>;
-export type ModelEgressResolveRequest = z.infer<typeof ModelEgressResolveRequestSchema>;
-export type ModelEgressResolveResult = z.infer<typeof ModelEgressResolveResultSchema>;
-export type ModelEgressApprovalRequestRecord = z.infer<typeof ModelEgressApprovalRequestRecordSchema>;
-export type ModelEgressApprovalState = z.infer<typeof ModelEgressApprovalStateSchema>;
 export type ModelEgressDecision = z.infer<typeof ModelEgressDecisionSchema>;
 export type ModelEgressAudit = z.infer<typeof ModelEgressAuditSchema>;
 export type ModelEgressOutcome = z.infer<typeof ModelEgressOutcomeSchema>;
@@ -3947,8 +3297,6 @@ export type VaultRevealResult = z.infer<typeof VaultRevealResultSchema>;
 export type VaultRevealTarget = z.infer<typeof VaultRevealTargetSchema>;
 export type PigeWarning = z.infer<typeof PigeWarningSchema>;
 export type PermissionActionBinding = z.infer<typeof PermissionActionBindingSchema>;
-export type PermissionActionLifecycleRecord = z.infer<typeof PermissionActionLifecycleRecordSchema>;
-export type PermissionActionLifecycleState = z.infer<typeof PermissionActionLifecycleStateSchema>;
 export type PermissionActorType = z.infer<typeof PermissionActorTypeSchema>;
 export type PermissionCapability = z.infer<typeof PermissionCapabilitySchema>;
 export type SkillId = z.infer<typeof SkillIdSchema>;
@@ -3967,28 +3315,7 @@ export type SkillRegistryQueryResult = z.infer<typeof SkillRegistryQueryResultSc
 export type SkillDisableRequest = z.infer<typeof SkillDisableRequestSchema>;
 export type SkillRegistryMutationResult = z.infer<typeof SkillRegistryMutationResultSchema>;
 export type PermissionDataBoundary = z.infer<typeof PermissionDataBoundarySchema>;
-export type PermissionDecisionRecord = z.infer<typeof PermissionDecisionRecordSchema>;
-export type PermissionDefaultMode = z.infer<typeof PermissionDefaultModeSchema>;
-export type PermissionPendingRequest = z.infer<typeof PermissionPendingRequestSchema>;
-export type PermissionPendingRequestQuery = z.infer<typeof PermissionPendingRequestQuerySchema>;
-export type PermissionRequest = z.infer<typeof PermissionRequestSchema>;
 export type PermissionResourceScope = z.infer<typeof PermissionResourceScopeSchema>;
-export type PermissionResolveRequest = z.infer<typeof PermissionResolveRequestSchema>;
-export type PermissionResolveResult = z.infer<typeof PermissionResolveResultSchema>;
-export type PermissionResourceKind = z.infer<typeof PermissionResourceKindSchema>;
-export type PermissionMachineSettings = z.infer<typeof PermissionMachineSettingsSchema>;
-export type PermissionSavedGrantId = z.infer<typeof PermissionSavedGrantIdSchema>;
-export type PermissionSavedGrantRecord = z.infer<typeof PermissionSavedGrantRecordSchema>;
-export type PermissionSavedGrantSummary = z.infer<typeof PermissionSavedGrantSummarySchema>;
-export type PermissionSettingsSummary = z.infer<typeof PermissionSettingsSummarySchema>;
-export type PermissionSetDefaultModeRequest = z.infer<typeof PermissionSetDefaultModeRequestSchema>;
-export type PermissionPrepareYoloEnableRequest = z.infer<typeof PermissionPrepareYoloEnableRequestSchema>;
-export type PermissionPrepareYoloEnableResult = z.infer<typeof PermissionPrepareYoloEnableResultSchema>;
-export type PermissionEnableYoloRequest = z.infer<typeof PermissionEnableYoloRequestSchema>;
-export type PermissionDisableYoloRequest = z.infer<typeof PermissionDisableYoloRequestSchema>;
-export type PermissionRevokeSavedGrantRequest = z.infer<typeof PermissionRevokeSavedGrantRequestSchema>;
-export type PermissionRevokeAllSavedGrantsRequest = z.infer<typeof PermissionRevokeAllSavedGrantsRequestSchema>;
-export type PermissionSettingsMutationResult = z.infer<typeof PermissionSettingsMutationResultSchema>;
 export type ExternalMutationIntent = z.infer<typeof ExternalMutationIntentSchema>;
 export type ProposalState = z.infer<typeof ProposalStateSchema>;
 export type ProposalTrustLevel = z.infer<typeof ProposalTrustLevelSchema>;

@@ -79,7 +79,6 @@ describe("AR1 submitted-turn authority in Home", () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       registry
     );
 
@@ -91,13 +90,15 @@ describe("AR1 submitted-turn authority in Home", () => {
       clientTurnId: "turn_20260722_homeauthority"
     });
 
-    expect(result).toMatchObject({ state: "completed", answer: "The ordinary first-party action completed." });
+    expect(result, JSON.stringify(result)).toMatchObject({
+      state: "completed",
+      answer: { answer: "The ordinary first-party action completed." }
+    });
     expect(execute).toHaveBeenCalledTimes(1);
-    expect(broker.listForJob(fixture.vaultPath, result.jobId)).toEqual([]);
     expect(confirmations.pending()).toMatchObject({ status: "none" });
     expect(jobs.readAgentTurnJob(result.jobId)).toMatchObject({
       state: "completed",
-      privacy: { usedNetwork: true, permissionDecisionIds: [] }
+      privacy: { usedNetwork: true }
     });
   });
 
@@ -127,9 +128,7 @@ describe("AR1 submitted-turn authority in Home", () => {
     const signal = new AbortController().signal;
     const context = { toolCallId: "tool_call_highrisk", signal };
 
-    await expect(tool.execute({}, signal, context)).rejects.toMatchObject({
-      code: "permission.high_risk_confirmation_required"
-    });
+    const execution = tool.execute({}, signal, context);
     const pending = confirmations.pending();
     if (pending.status !== "pending") throw new Error("Expected confirmation.");
     await confirmations.resolve({
@@ -138,9 +137,8 @@ describe("AR1 submitted-turn authority in Home", () => {
       expectedRevision: pending.revision,
       decision: "deny"
     });
-    await expect(tool.execute({}, signal, context)).rejects.toMatchObject({ code: "permission.denied" });
+    await expect(execution).rejects.toMatchObject({ code: "permission.denied" });
     expect(execute).toHaveBeenCalledTimes(0);
-    expect(broker.listForJob(fixture.vaultPath, "job_20260722_highrisk01")).toEqual([]);
   });
 });
 
@@ -175,8 +173,19 @@ function baseAdapter(input: {
       name: input.actorType === "local_tool" ? "pige_read_release_channel" : "pige_external_shell",
       label: "Synthetic capability",
       description: "One bounded synthetic capability.",
-      parameters: { type: "object", additionalProperties: true },
-      outputSchema: { type: "object", additionalProperties: true },
+      parameters: input.actorType === "local_tool"
+        ? {
+            type: "object",
+            properties: { channel: { type: "string" } },
+            required: ["channel"],
+            additionalProperties: false
+          }
+        : { type: "object", properties: {}, additionalProperties: false },
+      outputSchema: {
+        type: "object",
+        properties: { status: { type: "string" } },
+        additionalProperties: false
+      },
       effect: "read_only",
       inputTrust: "model_generated",
       outputTrust: "host_validated",
@@ -198,7 +207,6 @@ function baseAdapter(input: {
       capability: input.actorType === "local_tool" ? "external_network" : "run_shell",
       dataBoundary: input.actorType === "local_tool" ? "network" : "local",
       resourceScope: "current_action",
-      resourceKind: input.actorType === "local_tool" ? "network" : "shell",
       reasonCode: "synthetic.execute",
       ...(input.highRisk ? { highRisk: input.highRisk } : {})
     },

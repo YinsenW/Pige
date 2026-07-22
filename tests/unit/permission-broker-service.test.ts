@@ -32,7 +32,6 @@ describe("PermissionBrokerService AR1 authority", () => {
 
     expect(fixture.broker.authorizeTurnAction({ vaultPath: fixture.vaultPath, binding: exact }))
       .toEqual({ status: "authorized", binding: exact });
-    expect(fixture.broker.listForJob(fixture.vaultPath, JOB_ID)).toEqual([]);
     expect(findJsonFiles(fixture.machineRoot)).toEqual([]);
   });
 

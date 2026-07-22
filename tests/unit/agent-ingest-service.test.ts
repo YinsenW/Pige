@@ -252,7 +252,6 @@ describe("agent ingest service", () => {
             runtimeKind: "desktop_local",
             clientCapabilityTier: "desktop_full"
           },
-          permissionDecisionIds: [],
           kind: "create_page",
           targetRefs: [{
             kind: "page",

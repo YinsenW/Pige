@@ -77,7 +77,6 @@ const FACT_KEYS = new Set([
   "stage",
   "inputRefs",
   "outputRefs",
-  "permissionRequestIds",
   "proposalIds",
   "operationIds",
   "childJobIds",
@@ -94,7 +93,6 @@ export interface JobExecutionFactsPatch {
   readonly stage?: JobStage;
   readonly inputRefs?: readonly JobRef[];
   readonly outputRefs?: readonly JobRef[];
-  readonly permissionRequestIds?: readonly string[];
   readonly proposalIds?: readonly string[];
   readonly operationIds?: readonly string[];
   readonly childJobIds?: readonly string[];
@@ -964,9 +962,6 @@ function applyFacts(job: JobRecord, facts?: JobExecutionFactsPatch): JobRecord {
     ...(facts.stage ? { stage: facts.stage } : {}),
     ...(facts.inputRefs ? { inputRefs: mergeValues(job.inputRefs, facts.inputRefs) } : {}),
     ...(facts.outputRefs ? { outputRefs: mergeValues(job.outputRefs, facts.outputRefs) } : {}),
-    ...(facts.permissionRequestIds
-      ? { permissionRequestIds: mergeStrings(job.permissionRequestIds, facts.permissionRequestIds) }
-      : {}),
     ...(facts.proposalIds ? { proposalIds: mergeStrings(job.proposalIds, facts.proposalIds) } : {}),
     ...(facts.operationIds ? { operationIds: mergeStrings(job.operationIds, facts.operationIds) } : {}),
     ...(facts.childJobIds ? { childJobIds: mergeStrings(job.childJobIds, facts.childJobIds) } : {}),
@@ -1130,8 +1125,7 @@ function mergePrivacy(current: JobRecord["privacy"], added: JobPrivacy): JobPriv
     usedCloudModel: current?.usedCloudModel === true || added.usedCloudModel,
     usedNetwork: current?.usedNetwork === true || added.usedNetwork,
     usedShell: current?.usedShell === true || added.usedShell,
-    accessedExternalFiles: current?.accessedExternalFiles === true || added.accessedExternalFiles,
-    permissionDecisionIds: mergeStrings(current?.permissionDecisionIds, added.permissionDecisionIds)
+    accessedExternalFiles: current?.accessedExternalFiles === true || added.accessedExternalFiles
   };
 }
 

@@ -56,7 +56,6 @@ interface NormalizedStageProposalRequest {
   readonly diffRefs: NonNullable<StageProposalRequest["diffRefs"]>;
   readonly warnings: readonly string[];
   readonly baseHashes: Readonly<Record<string, string>>;
-  readonly requiredPermissionIds: readonly string[];
 }
 
 const DEFAULT_PROPOSAL_LIST_LIMIT = 20;
@@ -66,7 +65,6 @@ const MAX_PROPOSAL_CONTENT_BYTES = 1024 * 1024;
 const MAX_PROPOSAL_OPERATIONS = 32;
 const MAX_PROPOSAL_REFS = 64;
 const MAX_PROPOSAL_WARNINGS = 16;
-const MAX_PROPOSAL_PERMISSION_REFS = 64;
 const MAX_PROPOSAL_SCAN_ENTRIES = 10_000;
 const DECIDABLE_STATES = new Set<ProposalState>(["ready"]);
 const RECOVERABLE_DECISION_STATES = new Set<ProposalState>([
@@ -158,8 +156,7 @@ export class ProposalService {
       proposedOperations: normalized.proposedOperations,
       diffRefs: normalized.diffRefs,
       warnings: normalized.warnings,
-      baseHashes: normalized.baseHashes,
-      requiredPermissionIds: normalized.requiredPermissionIds
+      baseHashes: normalized.baseHashes
     });
     const proposalPath = resolveProposalPath(vaultPath, proposal.id);
     const existing = readProposalRecordFile(vaultPath, proposal.id);
@@ -380,10 +377,6 @@ function normalizeStageRequest(request: StageProposalRequest): NormalizedStagePr
   if ((request.warnings?.length ?? 0) > MAX_PROPOSAL_WARNINGS) {
     throw new PigeDomainError("proposal.invalid_warnings", "A proposal contains too many warnings.");
   }
-  if ((request.requiredPermissionIds?.length ?? 0) > MAX_PROPOSAL_PERMISSION_REFS) {
-    throw new PigeDomainError("proposal.invalid_permissions", "A proposal contains too many permission references.");
-  }
-
   validateChangeOperations(request.proposedOperations);
   validateOperationRefs([...sourceRefs, ...targetRefs, ...diffRefs]);
   const baseHashes = normalizeBaseHashes(request.baseHashes ?? {});
@@ -400,8 +393,7 @@ function normalizeStageRequest(request: StageProposalRequest): NormalizedStagePr
     proposedOperations: request.proposedOperations,
     diffRefs,
     warnings,
-    baseHashes,
-    requiredPermissionIds: Array.from(new Set(request.requiredPermissionIds ?? [])).sort()
+    baseHashes
   };
 }
 
@@ -412,8 +404,7 @@ function validatePersistedProposalSafety(proposal: ConfirmationProposal): void {
     proposal.sourceRefs.length > MAX_PROPOSAL_REFS ||
     proposal.targetRefs.length > MAX_PROPOSAL_REFS ||
     proposal.diffRefs.length > MAX_PROPOSAL_REFS ||
-    proposal.warnings.length > MAX_PROPOSAL_WARNINGS ||
-    proposal.requiredPermissionIds.length > MAX_PROPOSAL_PERMISSION_REFS
+    proposal.warnings.length > MAX_PROPOSAL_WARNINGS
   ) {
     throw new PigeDomainError("proposal.invalid_record", "The durable proposal exceeds its bounded record shape.");
   }
@@ -556,8 +547,7 @@ function canonicalStageIntent(request: NormalizedStageProposalRequest): string {
     proposedOperations: request.proposedOperations,
     diffRefs: request.diffRefs,
     warnings: request.warnings,
-    baseHashes: request.baseHashes,
-    requiredPermissionIds: request.requiredPermissionIds
+    baseHashes: request.baseHashes
   });
 }
 
@@ -573,8 +563,7 @@ function canonicalProposalIntent(proposal: ConfirmationProposal): string {
     proposedOperations: proposal.proposedOperations,
     diffRefs: proposal.diffRefs,
     warnings: proposal.warnings,
-    baseHashes: proposal.baseHashes,
-    requiredPermissionIds: proposal.requiredPermissionIds
+    baseHashes: proposal.baseHashes
   });
 }
 

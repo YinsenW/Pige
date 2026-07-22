@@ -157,8 +157,7 @@ describe("JobExecutionCoordinator", () => {
         usedCloudModel: true,
         usedNetwork: true,
         usedShell: false,
-        accessedExternalFiles: false,
-        permissionDecisionIds: ["permdec_20260716_abcdef12"]
+        accessedExternalFiles: false
       },
       message: "Writing durable output."
     }).job;

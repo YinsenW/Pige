@@ -445,8 +445,7 @@ describe("backup restore service", () => {
         usedCloudModel: false,
         usedNetwork: false,
         usedShell: false,
-        accessedExternalFiles: true,
-        permissionDecisionIds: []
+        accessedExternalFiles: true
       },
       message: "Historical Backup Job."
     });

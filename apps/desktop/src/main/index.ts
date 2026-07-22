@@ -25,15 +25,6 @@ import type {
   KnowledgeActivityUndoRequest,
   LibraryListRequest,
   LibraryRelatedRequest,
-  PermissionPendingRequestQuery,
-  PermissionResolveRequest,
-  PermissionSetDefaultModeRequest,
-  PermissionPrepareYoloEnableRequest,
-  PermissionPrepareYoloEnableResult,
-  PermissionEnableYoloRequest,
-  PermissionDisableYoloRequest,
-  PermissionRevokeSavedGrantRequest,
-  PermissionRevokeAllSavedGrantsRequest,
   NoteGetRequest,
   NoteResolveInlineReferenceRequest,
   NoteRenderRequest,
@@ -81,19 +72,6 @@ import {
   RefreshProviderModelsRequestSchema,
   UpdateProviderCredentialRequestSchema,
   DeleteProviderRequestSchema,
-  PermissionPendingRequestQuerySchema,
-  PermissionPendingRequestSchema,
-  PermissionResolveRequestSchema,
-  PermissionResolveResultSchema,
-  PermissionSetDefaultModeRequestSchema,
-  PermissionPrepareYoloEnableRequestSchema,
-  PermissionPrepareYoloEnableResultSchema,
-  PermissionEnableYoloRequestSchema,
-  PermissionDisableYoloRequestSchema,
-  PermissionRevokeSavedGrantRequestSchema,
-  PermissionRevokeAllSavedGrantsRequestSchema,
-  PermissionSettingsMutationResultSchema,
-  PermissionSettingsSummarySchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
   ReaderSelectionActionRequestSchema,
@@ -169,8 +147,6 @@ import { listMarkdownTagCatalog } from "./services/markdown-page-index";
 import { LocalSettingsStore } from "./services/local-settings";
 import { ModelProviderRegistry } from "./services/model-provider-registry";
 import { PermissionBrokerService } from "./services/permission-broker-service";
-import { PermissionSettingsService } from "./services/permission-settings-service";
-import { PermissionYoloConfirmationRegistry } from "./services/permission-yolo-confirmation-registry";
 import {
   applyReaderSelectionPageUpdate,
   createAgentPageUpdateOperationId
@@ -218,9 +194,6 @@ let localDatabaseService: LocalDatabaseService | undefined;
 let modelProviderRegistry: ModelProviderRegistry | undefined;
 let highRiskConfirmationService: HighRiskConfirmationService | undefined;
 let permissionBrokerService: PermissionBrokerService | undefined;
-let permissionSettingsService: PermissionSettingsService | undefined;
-const permissionYoloConfirmationRegistry = new PermissionYoloConfirmationRegistry();
-const permissionYoloTrackedSenders = new Set<number>();
 let permissionedExternalCapabilityRegistry: PermissionedExternalCapabilityRegistry | undefined;
 let firstPartyReadonlyNodeOsCapabilitiesRegistered = false;
 let firstPartyCommandCapabilityRegistered = false;
@@ -331,64 +304,6 @@ async function confirmSettingAction(
       message: prompt.message
     });
     return result.response === 1;
-  });
-}
-
-const YOLO_CONFIRMATION_COPY = {
-  de: {
-    title: "Vollzugriff für Agent-Aktionen aktivieren?",
-    message: "Pige darf geeignete lokale Datei-, Netzwerk- und Shell-Aktionen ohne einzelne Freigabe ausführen. Eingeschränkte Inhalte, Betriebssystemrechte und destruktive oder gesondert bestätigungspflichtige Aktionen bleiben blockiert oder bestätigungspflichtig.",
-    confirm: "Vollzugriff aktivieren",
-    cancel: "Abbrechen"
-  },
-  en: {
-    title: "Enable full access for Agent actions?",
-    message: "Pige may run eligible local file, network, and shell actions without asking each time. Restricted content, operating-system permissions, and destructive or separately confirmed actions remain blocked or require confirmation.",
-    confirm: "Enable full access",
-    cancel: "Cancel"
-  },
-  fr: {
-    title: "Activer l'accès complet pour les actions de l'Agent ?",
-    message: "Pige pourra exécuter les actions locales éligibles sur les fichiers, le réseau et le shell sans confirmation individuelle. Le contenu restreint, les autorisations du système et les actions destructrices ou soumises à une confirmation distincte restent bloqués ou à confirmer.",
-    confirm: "Activer l'accès complet",
-    cancel: "Annuler"
-  },
-  ja: {
-    title: "Agent アクションのフルアクセスを有効にしますか？",
-    message: "Pige は対象となるローカルファイル、ネットワーク、シェルのアクションを毎回確認せずに実行できます。制限対象のコンテンツ、OS 権限、破壊的なアクション、個別の確認が必要なアクションの制約は変わりません。",
-    confirm: "フルアクセスを有効にする",
-    cancel: "キャンセル"
-  },
-  ko: {
-    title: "Agent 작업의 전체 접근 권한을 활성화할까요?",
-    message: "Pige가 허용 대상인 로컬 파일, 네트워크, 셸 작업을 매번 묻지 않고 실행할 수 있습니다. 제한된 콘텐츠, 운영체제 권한, 파괴적 작업과 별도 확인이 필요한 작업은 계속 차단되거나 확인을 요구합니다.",
-    confirm: "전체 접근 활성화",
-    cancel: "취소"
-  },
-  "zh-Hans": {
-    title: "启用 Agent 完整访问权限？",
-    message: "Pige 可不再逐次询问，直接执行符合条件的本地文件、网络和 Shell 动作。受限内容、操作系统权限、破坏性动作以及必须单独确认的动作仍会被阻止或要求确认。",
-    confirm: "启用完整访问",
-    cancel: "取消"
-  }
-} as const;
-
-function getYoloConfirmationCopy(): (typeof YOLO_CONFIRMATION_COPY)[keyof typeof YOLO_CONFIRMATION_COPY] {
-  const locale = app.getLocale().toLowerCase();
-  if (locale.startsWith("zh")) return YOLO_CONFIRMATION_COPY["zh-Hans"];
-  if (locale.startsWith("de")) return YOLO_CONFIRMATION_COPY.de;
-  if (locale.startsWith("fr")) return YOLO_CONFIRMATION_COPY.fr;
-  if (locale.startsWith("ja")) return YOLO_CONFIRMATION_COPY.ja;
-  if (locale.startsWith("ko")) return YOLO_CONFIRMATION_COPY.ko;
-  return YOLO_CONFIRMATION_COPY.en;
-}
-
-function trackPermissionYoloSender(sender: WebContents): void {
-  if (permissionYoloTrackedSenders.has(sender.id)) return;
-  permissionYoloTrackedSenders.add(sender.id);
-  sender.once("destroyed", () => {
-    permissionYoloConfirmationRegistry.clearSender(sender.id);
-    permissionYoloTrackedSenders.delete(sender.id);
   });
 }
 
@@ -601,13 +516,6 @@ const getLocalSettingsStore = (): LocalSettingsStore => {
   return localSettingsStore;
 };
 
-const getPermissionSettingsService = (): PermissionSettingsService => {
-  if (!permissionSettingsService) {
-    permissionSettingsService = new PermissionSettingsService(getLocalSettingsStore());
-  }
-  return permissionSettingsService;
-};
-
 const getHighRiskConfirmationService = (): HighRiskConfirmationService => {
   if (!highRiskConfirmationService) {
     highRiskConfirmationService = new HighRiskConfirmationService();
@@ -703,8 +611,7 @@ const getAgentRuntimeService = (): AgentRuntimeService => {
       getVaultService(),
       getModelProviderRegistry(),
       getLocalDatabaseService(),
-      { snapshot: getAgentCapabilitySnapshot },
-      getPermissionSettingsService()
+      { snapshot: getAgentCapabilitySnapshot }
     );
   }
   return agentRuntimeService;
@@ -875,7 +782,7 @@ const getAgentIngestService = (): AgentIngestService => {
   if (!agentIngestService) {
     agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
       snapshot: getAgentCapabilitySnapshot
-    }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort(), getPermissionSettingsService());
+    }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort());
   }
   return agentIngestService;
 };
@@ -952,7 +859,6 @@ const getHomeAgentService = (): HomeAgentService => {
       getHomeAgentUrlService(),
       getDatasetQueryService(),
       getPermissionedExternalCapabilityRegistry(),
-      getPermissionSettingsService(),
       {
         apply: ({ vaultPath, job, selection, replacement, action }) => {
           const proposalService = getReaderSelectionProposalService();
@@ -1319,14 +1225,6 @@ const resumeBackgroundJobs = (): void => {
           : "Preserved Agent source handoffs were reconciled after startup."
       });
     }
-    const permissionRecovery = getJobsService().reconcilePermissionActions();
-    if (permissionRecovery.reconciled > 0) {
-      getDiagnosticsService().recordEvent({
-        level: "info",
-        code: "permission.action_reconciled",
-        message: `Reconciled ${permissionRecovery.reconciled} body-free current-action permission decision(s).`
-      });
-    }
     const recovery = getJobsService().recoverInterruptedJobs();
     if (recovery.requeued > 0 || recovery.failedRetryable > 0) {
       getDiagnosticsService().recordEvent({
@@ -1609,117 +1507,6 @@ ipcMain.handle("confirmations.resolve", async (_event, request: HighRiskConfirma
   const parsed = HighRiskConfirmationResolveRequestSchema.parse(request);
   return HighRiskConfirmationResolveResultSchema.parse(
     await getHighRiskConfirmationService().resolve(parsed)
-  );
-});
-ipcMain.handle("permissions.pending", (_event, request: PermissionPendingRequestQuery) => {
-  const parsed = PermissionPendingRequestQuerySchema.safeParse(request);
-  if (!parsed.success) {
-    throw new PigeDomainError("permission.request_invalid", "The permission request query is invalid.");
-  }
-  const pending = getJobsService().pendingPermission(parsed.data.requestId);
-  if (pending === undefined) return undefined;
-  const projected = PermissionPendingRequestSchema.safeParse(pending);
-  if (!projected.success) {
-    throw new PigeDomainError("permission.store_invalid", "The pending permission state is unavailable.");
-  }
-  return projected.data;
-});
-ipcMain.handle("permissions.resolve", (_event, request: PermissionResolveRequest) => {
-  const parsed = PermissionResolveRequestSchema.safeParse(request);
-  if (!parsed.success) {
-    throw new PigeDomainError("permission.request_invalid", "The permission decision is invalid.");
-  }
-  const result = getJobsService().resolvePermission(parsed.data);
-  if (result.status === "approved") {
-    scheduleAgentIngestProcessing();
-    scheduleAgentTurnProcessing();
-  }
-  const projected = PermissionResolveResultSchema.safeParse(result);
-  if (!projected.success) {
-    throw new PigeDomainError("permission.store_invalid", "The permission decision result is unavailable.");
-  }
-  return projected.data;
-});
-ipcMain.handle("permissions.settings.current", () =>
-  PermissionSettingsSummarySchema.parse(getPermissionSettingsService().current())
-);
-ipcMain.handle("permissions.settings.setDefaultMode", (_event, request: PermissionSetDefaultModeRequest) => {
-  const parsed = PermissionSetDefaultModeRequestSchema.parse(request);
-  return PermissionSettingsMutationResultSchema.parse(
-    getPermissionSettingsService().setDefaultMode(parsed.expectedRevision, parsed.defaultMode)
-  );
-});
-ipcMain.handle(
-  "permissions.settings.prepareYoloEnable",
-  async (event, request: PermissionPrepareYoloEnableRequest): Promise<PermissionPrepareYoloEnableResult> => {
-    const parsed = PermissionPrepareYoloEnableRequestSchema.parse(request);
-    const current = getPermissionSettingsService().current();
-    if (current.revision !== parsed.expectedRevision) {
-      return PermissionPrepareYoloEnableResultSchema.parse({
-        status: "stale",
-        revision: current.revision
-      });
-    }
-    const parentWindow = BrowserWindow.fromWebContents(event.sender);
-    if (!parentWindow) throw new PigeDomainError("permission.settings_unavailable", "No active window owns permission settings.");
-    const copy = getYoloConfirmationCopy();
-    const response = await dialog.showMessageBox(parentWindow, {
-      type: "warning",
-      buttons: [copy.cancel, copy.confirm],
-      defaultId: 0,
-      cancelId: 0,
-      noLink: true,
-      title: copy.title,
-      message: copy.message
-    });
-    if (response.response !== 1) {
-      return PermissionPrepareYoloEnableResultSchema.parse({
-        status: "cancelled",
-        revision: getPermissionSettingsService().current().revision
-      });
-    }
-    const confirmed = getPermissionSettingsService().current();
-    if (confirmed.revision !== parsed.expectedRevision) {
-      return PermissionPrepareYoloEnableResultSchema.parse({
-        status: "stale",
-        revision: confirmed.revision
-      });
-    }
-    trackPermissionYoloSender(event.sender);
-    return PermissionPrepareYoloEnableResultSchema.parse({
-      status: "confirmation_ready",
-      revision: confirmed.revision,
-      ...permissionYoloConfirmationRegistry.issue(event.sender.id, confirmed.revision)
-    });
-  }
-);
-ipcMain.handle("permissions.settings.enableYolo", (event, request: PermissionEnableYoloRequest) => {
-  const parsed = PermissionEnableYoloRequestSchema.parse(request);
-  permissionYoloConfirmationRegistry.consume(
-    event.sender.id,
-    parsed.expectedRevision,
-    parsed.confirmationToken
-  );
-  return PermissionSettingsMutationResultSchema.parse(
-    getPermissionSettingsService().enableYolo(parsed.expectedRevision)
-  );
-});
-ipcMain.handle("permissions.settings.disableYolo", (_event, request: PermissionDisableYoloRequest) => {
-  const parsed = PermissionDisableYoloRequestSchema.parse(request);
-  return PermissionSettingsMutationResultSchema.parse(
-    getPermissionSettingsService().disableYolo(parsed.expectedRevision)
-  );
-});
-ipcMain.handle("permissions.settings.revokeGrant", (_event, request: PermissionRevokeSavedGrantRequest) => {
-  const parsed = PermissionRevokeSavedGrantRequestSchema.parse(request);
-  return PermissionSettingsMutationResultSchema.parse(
-    getPermissionSettingsService().revokeGrant(parsed.expectedRevision, parsed.grantId)
-  );
-});
-ipcMain.handle("permissions.settings.revokeAllGrants", (_event, request: PermissionRevokeAllSavedGrantsRequest) => {
-  const parsed = PermissionRevokeAllSavedGrantsRequestSchema.parse(request);
-  return PermissionSettingsMutationResultSchema.parse(
-    getPermissionSettingsService().revokeAllGrants(parsed.expectedRevision)
   );
 });
 ipcMain.handle("skills.summary", () =>
@@ -2302,7 +2089,6 @@ app.whenReady().then(async () => {
   }
 
   localSettingsStore = new LocalSettingsStore(app.getPath("userData"));
-  permissionSettingsService = new PermissionSettingsService(getLocalSettingsStore());
   skillRegistryService = new SkillRegistryService(app.getPath("userData"), {
     recoverOrphanedMutationLock: true
   });
@@ -2331,14 +2117,13 @@ app.whenReady().then(async () => {
     getVaultService(),
     getModelProviderRegistry(),
     getLocalDatabaseService(),
-    { snapshot: getAgentCapabilitySnapshot },
-    getPermissionSettingsService()
+    { snapshot: getAgentCapabilitySnapshot }
   );
   proposalService = new ProposalService(getVaultService());
   knowledgeActivityService = new KnowledgeActivityService(getVaultService());
   agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
     snapshot: getAgentCapabilitySnapshot
-  }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort(), getPermissionSettingsService());
+  }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort());
   documentParserService = new DocumentParserService();
   datasetService = new DatasetService(new DatasetIngestWorkerService());
   ocrService = new OcrService();

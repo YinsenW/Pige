@@ -31,9 +31,7 @@ import type {
   DatasetQueryToolRequest
 } from "../../apps/desktop/src/main/services/dataset-query-types";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
-import { LocalSettingsStore } from "../../apps/desktop/src/main/services/local-settings";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
-import { PermissionSettingsService } from "../../apps/desktop/src/main/services/permission-settings-service";
 import { PermissionedExternalCapabilityRegistry } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
 import { createFirstPartyCommandCapabilityAdapter } from "../../apps/desktop/src/main/services/command-capability-adapter";
 import { applyReaderSelectionPageUpdate } from "../../apps/desktop/src/main/services/agent-page-update-service";
@@ -994,7 +992,6 @@ describe("Home Pi Agent service", () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       {
         apply: ({ vaultPath, job, selection: durableSelection, replacement, action }) => ({
           status: "applied" as const,
@@ -1456,7 +1453,6 @@ describe("Home Pi Agent service", () => {
     const operations = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"));
     expect(operations.find((operation) => operation.kind === "model_egress_decision")).toMatchObject({
       kind: "model_egress_decision",
-      permissionDecisionIds: [],
       modelEgressAudit: {
         outcome: "block",
         reasonCode: "unknown_boundary_confirmation"
@@ -1724,17 +1720,13 @@ describe("Home Pi Agent service", () => {
     fs.mkdirSync(userDataCandidate, { mode: 0o700 });
     const userDataPath = fs.realpathSync.native(userDataCandidate);
     fs.writeFileSync(externalPath, "api_key=sk-never-send-this-secret", "utf8");
-    const permissionSettings = new PermissionSettingsService(new LocalSettingsStore(userDataPath));
-    expect(permissionSettings.enableYolo(0).status).toBe("committed");
     const jobs = new JobsService(fixture.vaults);
     const registry = new PermissionedExternalCapabilityRegistry(
       createFirstPartyReadonlyNodeOsCapabilityAdapters({ protectedRoots: [userDataPath] }),
       new PermissionBrokerService({
         rootPath: userDataPath,
-        permissionSettings,
         unsafeAllowUnfenced: true
-      }),
-      jobs
+      })
     );
     let modelTurns = 0;
     let blockedSecondTurn: unknown;
@@ -1770,8 +1762,7 @@ describe("Home Pi Agent service", () => {
       undefined,
       undefined,
       undefined,
-      registry,
-      permissionSettings
+      registry
     ).ask({ query: "Read the external file." });
 
     expect(modelTurns).toBe(1);
@@ -1838,7 +1829,6 @@ describe("Home Pi Agent service", () => {
 
     expect(outcome).toMatchObject({ state: "completed" });
     expect(jobs.readAgentTurnJob(outcome.requestId)?.privacy?.usedShell).toBe(true);
-    expect(jobs.list({ states: ["waiting_permission"] }).jobs).toEqual([]);
   });
 
   it("lets Pi decide how to answer after an optional empty search instead of substituting Host prose", async () => {
@@ -2397,7 +2387,6 @@ SYNTHETIC_DISTRACTOR_BODY
         checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u)
       })
     ]));
-    expect(job?.permissionDecisionIds ?? []).toEqual([]);
     expect(service.conversation({ scope: { kind: "current_note", pageId: HOME_PAGE_ID } })).toMatchObject({
       canFollowUp: true,
       messages: [
@@ -2526,7 +2515,6 @@ SYNTHETIC_DISTRACTOR_BODY
           });
         }
       },
-      undefined,
       undefined,
       undefined,
       undefined,

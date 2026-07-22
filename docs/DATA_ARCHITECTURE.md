@@ -451,7 +451,6 @@ Event types:
 - `operation_reference`.
 - `review_reference`.
 - `model_call_summary`.
-- `permission_decision`.
 - `error`.
 
 Rules:

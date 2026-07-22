@@ -76,42 +76,6 @@ describe("Reader selection action service", () => {
     expect(submitTurn).not.toHaveBeenCalled();
   });
 
-  it("projects waiting Agent state without answer or provider-body fields", async () => {
-    const fixture = makeFixture("Before. SELECTED_PRIVATE_PASSAGE. After.");
-    const submitTurn = vi.fn(async () => ({
-      requestId: "job_20260718_waiting123",
-      jobId: "job_20260718_waiting123",
-      conversationEventId: "evt_20260718_waiting123",
-      conversationId: "conv_20260718_waiting",
-      tailEventId: "evt_20260718_waiting123",
-      state: "waiting" as const,
-      modelUsage: "cloud" as const,
-      sourceIds: [],
-      error: {
-        code: "model_provider.egress_confirmation_required",
-        domain: "model_provider",
-        messageKey: "errors.model_provider.egress_confirmation_required",
-        retryable: false,
-        severity: "warning" as const,
-        userAction: "confirm_model_egress" as const,
-        modelEgressApprovalRequestId: "modegress_20260718_waiting123"
-      }
-    }));
-    const service = new ReaderSelectionActionService(fixture.vaults, { submitTurn });
-
-    const result = await service.submit(actionRequest(fixture.selection, "summarize"));
-
-    expect(result).toMatchObject({
-      status: "waiting",
-      error: {
-        code: "model_provider.egress_confirmation_required",
-        messageKey: "errors.model_provider.egress_confirmation_required"
-      }
-    });
-    expect(JSON.stringify(result)).not.toContain("SELECTED_PRIVATE_PASSAGE");
-    expect(JSON.stringify(result)).not.toContain("answer");
-  });
-
   it("keeps read-only Agent actions within the current-note model evidence budget", async () => {
     const fixture = makeFixture("small body");
     const submitTurn = vi.fn();

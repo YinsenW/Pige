@@ -61,7 +61,6 @@ describe("PiPackageManagerService", () => {
       package_name: `safe\u202epackage`,
       version: PACKAGE_VERSION
     }, context.signal, context)).rejects.toMatchObject({ code: "package.name_invalid" });
-    expect(fixture.broker.listForJob(fixture.vaultPath, JOB_ID)).toEqual([]);
     expect(fixture.fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -115,14 +114,6 @@ describe("PiPackageManagerService", () => {
       dependencyCount: 0,
       requiresEnable: true
     });
-    expect(fixture.broker.listForJob(fixture.vaultPath, JOB_ID)[0]).toMatchObject({
-      state: "consumed",
-      decision: "allow_once",
-      actionLabelKey: "permissions.actions.install_pi_package",
-      resourceDisplayName: `${PACKAGE_NAME}@${PACKAGE_VERSION}`
-    });
-    expect(fixture.jobs.consumptions).toHaveLength(1);
-    expect(fixture.jobs.completions).toHaveLength(1);
     const registryBody = fs.readFileSync(path.join(fixture.machineRoot, "pi-packages", "registry.json"), "utf8");
     expect(registryBody).toContain(PACKAGE_NAME);
     expect(registryBody).not.toContain("https://registry.npmjs.org");

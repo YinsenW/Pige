@@ -41,10 +41,7 @@ import {
   type PigeErrorSummary
 } from "@pige/schemas";
 import { z } from "zod";
-import {
-  buildAgentRuntimePolicyContext,
-  type AgentPermissionSettingsPort
-} from "./agent-policy-context";
+import { buildAgentRuntimePolicyContext } from "./agent-policy-context";
 import {
   AgentTurnConversationStore,
   type AgentTurnConversationBinding,
@@ -63,7 +60,6 @@ import {
 } from "./dataset-query-types";
 import { containsRestrictedModelContent } from "./model-egress-content";
 import { createModelEgressDecision } from "./model-egress-policy";
-import { PermissionConfirmationRequiredError } from "./permission-broker-service";
 import { PermissionedExternalCapabilityRegistry } from "./permissioned-external-capability-service";
 import type { ModelProviderRuntimeConfig } from "./model-provider-registry";
 import {
@@ -319,7 +315,6 @@ export class HomeAgentService {
   readonly #urls: HomeAgentUrlPort | undefined;
   readonly #datasets: HomeAgentDatasetQueryPort | undefined;
   readonly #externalCapabilities: PermissionedExternalCapabilityRegistry | undefined;
-  readonly #permissionSettings: AgentPermissionSettingsPort | undefined;
   readonly #readerSelectionMutations: HomeAgentReaderSelectionMutationPort | undefined;
 
   constructor(
@@ -333,7 +328,6 @@ export class HomeAgentService {
     urls?: HomeAgentUrlPort,
     datasets?: HomeAgentDatasetQueryPort,
     externalCapabilities?: PermissionedExternalCapabilityRegistry,
-    permissionSettings?: AgentPermissionSettingsPort,
     readerSelectionMutations?: HomeAgentReaderSelectionMutationPort
   ) {
     this.#vaults = vaults;
@@ -346,7 +340,6 @@ export class HomeAgentService {
     this.#urls = urls;
     this.#datasets = datasets;
     this.#externalCapabilities = externalCapabilities;
-    this.#permissionSettings = permissionSettings;
     this.#readerSelectionMutations = readerSelectionMutations;
   }
 
@@ -885,15 +878,8 @@ export class HomeAgentService {
           caught.code === "agent_runtime.turn_cancelled";
         const refreshed = this.#jobs.readAgentTurnJob(session.current.id);
         if (refreshed) session.current = refreshed;
-        const permissionHandled = failure.error.permissionRequestId !== undefined &&
-          session.current.state === "waiting_permission" &&
-          session.current.error?.permissionRequestId === failure.error.permissionRequestId;
-        const uncertainCompletionHandled = caught instanceof PigeDomainError &&
-          caught.code === "permission.completion_uncertain" &&
-          session.current.state === "failed_final" &&
-          session.current.error?.code === "permission.completion_uncertain";
         try {
-          if (!cancellationHandled && !permissionHandled && !uncertainCompletionHandled) {
+          if (!cancellationHandled) {
             this.#failJob(session, failure);
           }
         } catch {
@@ -1086,15 +1072,8 @@ export class HomeAgentService {
           caught.code === "agent_runtime.turn_cancelled";
         const refreshed = this.#jobs.readAgentTurnJob(session.current.id);
         if (refreshed) session.current = refreshed;
-        const permissionHandled = failure.error.permissionRequestId !== undefined &&
-          session.current.state === "waiting_permission" &&
-          session.current.error?.permissionRequestId === failure.error.permissionRequestId;
-        const uncertainCompletionHandled = caught instanceof PigeDomainError &&
-          caught.code === "permission.completion_uncertain" &&
-          session.current.state === "failed_final" &&
-          session.current.error?.code === "permission.completion_uncertain";
         try {
-          if (!cancellationHandled && !permissionHandled && !uncertainCompletionHandled) {
+          if (!cancellationHandled) {
             this.#failJob(session, failure);
           }
         } catch {
@@ -1121,9 +1100,6 @@ export class HomeAgentService {
       jobId: session.current.id,
       defaultModel: model,
       defaultProvider: provider,
-      ...(this.#permissionSettings
-        ? { permissionSettings: this.#permissionSettings.policyProjection() }
-        : {}),
       ...(this.#capabilities?.snapshot() ?? {})
     });
     const payloadCharacters = Array.from(query).length;
@@ -1193,9 +1169,6 @@ export class HomeAgentService {
       jobId,
       defaultModel,
       defaultProvider,
-      ...(this.#permissionSettings
-        ? { permissionSettings: this.#permissionSettings.policyProjection() }
-        : {}),
       ...(this.#capabilities?.snapshot() ?? {})
     });
     session.current = this.#jobs.patchAgentTurnJob(session.current, {
@@ -1271,9 +1244,6 @@ export class HomeAgentService {
         jobId,
         defaultModel: currentDefaultModel,
         defaultProvider: currentDefaultProvider,
-        ...(this.#permissionSettings
-          ? { permissionSettings: this.#permissionSettings.policyProjection() }
-          : {}),
         ...(this.#capabilities?.snapshot() ?? {})
       });
       if (
@@ -1404,8 +1374,7 @@ export class HomeAgentService {
           usedCloudModel: session.current.privacy?.usedCloudModel ?? false,
           usedNetwork: session.current.privacy?.usedNetwork ?? false,
           usedShell: false,
-          accessedExternalFiles: false,
-          permissionDecisionIds: session.current.privacy?.permissionDecisionIds ?? []
+          accessedExternalFiles: false
         }
       });
       if (evidenceBindingDrifted) {
@@ -1711,8 +1680,7 @@ export class HomeAgentService {
             usedCloudModel: false,
             usedNetwork: false,
             usedShell: false,
-            accessedExternalFiles: false,
-            permissionDecisionIds: []
+            accessedExternalFiles: false
           };
           session.current = this.#jobs.patchAgentTurnJob(session.current, {
             privacy: {
@@ -2031,17 +1999,6 @@ export class HomeAgentService {
     session: HomeAgentJobSession,
     failure: ReturnType<typeof toHomeAgentFailure>
   ): void {
-    if (failure.error.permissionRequestId) {
-      const durable = this.#jobs.readAgentTurnJob(session.current.id);
-      if (
-        durable?.state !== "waiting_permission" ||
-        durable.error?.permissionRequestId !== failure.error.permissionRequestId
-      ) {
-        throw new PigeDomainError("permission.request_stale", "The pending permission no longer matches this Agent turn.");
-      }
-      session.current = durable;
-      return;
-    }
     if (
       failure.error.code === "model_provider.default_model_missing" ||
       failure.error.code === "model_provider.binding_unusable"
@@ -2933,7 +2890,6 @@ function writeHomeModelEgressDecisionOperation(input: {
       clientCapabilityTier: "desktop_full"
     },
     modelProfileId: input.modelProfileId,
-    permissionDecisionIds: [],
     policyAudit: {
       policyContextId: input.policy.policyContextId,
       policyHash: input.policy.policyHash,
@@ -2948,10 +2904,7 @@ function writeHomeModelEgressDecisionOperation(input: {
       normalPayloadCharacterLimit: input.decision.normalPayloadCharacterLimit,
       contentClasses: input.decision.contentClasses,
       outcome: input.decision.outcome,
-      reasonCode: input.decision.reasonCode,
-      ...(input.decision.modelEgressApprovalRequestId
-        ? { modelEgressApprovalRequestId: input.decision.modelEgressApprovalRequestId }
-        : {})
+      reasonCode: input.decision.reasonCode
     },
     kind: "model_egress_decision",
     targetRefs: [{ kind: "model", id: input.modelProfileId }],
@@ -2980,9 +2933,7 @@ function createModelEgressDecisionHash(decision: ModelEgressDecision): string {
     payloadCharacters: decision.payloadCharacters,
     estimatedPayloadTokens: decision.estimatedPayloadTokens,
     normalPayloadCharacterLimit: decision.normalPayloadCharacterLimit,
-    policyHash: decision.policyHash,
-    modelEgressApprovalRequestId: decision.modelEgressApprovalRequestId ?? null,
-    permissionDecisionId: decision.permissionDecisionId ?? null
+    policyHash: decision.policyHash
   }));
 }
 
@@ -2993,8 +2944,7 @@ function modelInvocationPrivacy(session: HomeAgentJobSession): NonNullable<JobRe
     usedCloudModel: usesExternalProvider,
     usedNetwork: usesExternalProvider || session.current.privacy?.usedNetwork === true,
     usedShell: session.current.privacy?.usedShell === true,
-    accessedExternalFiles: session.current.privacy?.accessedExternalFiles === true,
-    permissionDecisionIds: session.current.privacy?.permissionDecisionIds ?? []
+    accessedExternalFiles: session.current.privacy?.accessedExternalFiles === true
   };
 }
 
@@ -3295,24 +3245,6 @@ function toHomeAgentFailure(caught: unknown): HomeAgentFailure {
     }
     if (caught.code === "model_provider.binding_changed") {
       return homeAgentFailure("waiting", caught.code, "errors.model_provider.binding_unusable", false, "configure_model", "warning");
-    }
-    if (caught.code === "permission.confirmation_required") {
-      const requestId = caught instanceof PermissionConfirmationRequiredError
-        ? caught.requestId
-        : undefined;
-      return {
-        state: "waiting",
-        error: PigeErrorSummarySchema.parse({
-          ...createErrorSummary(
-            "permission.confirmation_required",
-            "errors.permission.confirmation_required",
-            false,
-            "grant_permission",
-            "warning"
-          ),
-          ...(requestId ? { permissionRequestId: requestId } : {})
-        })
-      };
     }
     if (caught.code === "permission.denied") {
       return homeAgentFailure("failed", "permission.denied", "errors.permission.denied", false, "none", "info");

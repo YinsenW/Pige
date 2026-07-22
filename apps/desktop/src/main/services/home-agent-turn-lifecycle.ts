@@ -315,8 +315,6 @@ export function readDurableTurnResult(input: {
     "running",
     "cancel_requested",
     "waiting_dependency",
-    "waiting_permission",
-    "waiting_model_egress",
     "awaiting_review"
   ]).has(input.session.current.state)) {
     return {
@@ -578,7 +576,6 @@ function modelInvocationPrivacy(session: HomeAgentJobSession): NonNullable<JobRe
     usedCloudModel: usesExternalProvider,
     usedNetwork: usesExternalProvider || session.current.privacy?.usedNetwork === true,
     usedShell: false,
-    accessedExternalFiles: false,
-    permissionDecisionIds: session.current.privacy?.permissionDecisionIds ?? []
+    accessedExternalFiles: false
   };
 }

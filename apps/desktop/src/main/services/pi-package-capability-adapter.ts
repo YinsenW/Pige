@@ -70,7 +70,6 @@ export function createPiPackageInstallCapabilityAdapter(
       capability: "install_package",
       dataBoundary: "network",
       resourceScope: "current_action",
-      resourceKind: "package",
       reasonCode: "package.install.exact"
     },
     normalizeInput: normalizeInput,

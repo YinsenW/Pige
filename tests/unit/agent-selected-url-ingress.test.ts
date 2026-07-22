@@ -307,8 +307,7 @@ describe("Agent-selected URL ingress", () => {
         usedCloudModel: false,
         usedNetwork: false,
         usedShell: false,
-        accessedExternalFiles: false,
-        permissionDecisionIds: []
+        accessedExternalFiles: false
       },
       message: "Synthetic crash after durable URL Operation but before parent linkage."
     });

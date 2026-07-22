@@ -7,10 +7,7 @@ import type {
 import { PigeDomainError } from "@pige/domain";
 import {
   PermissionActionBindingSchema,
-  type PermissionActionBinding,
-  type PermissionActionLifecycleRecord,
-  type PermissionDecisionRecord,
-  type PermissionResolveRequest
+  type PermissionActionBinding
 } from "@pige/schemas";
 import {
   HighRiskConfirmationService,
@@ -23,15 +20,6 @@ const FIRST_PARTY_TURN_ACTORS = new Set([
   "pige.command-execution",
   "pige.pi-package-manager"
 ]);
-
-export interface PermissionActionSummary {
-  readonly actorDisplayName: string;
-  readonly actionLabelKey: string;
-  readonly resourceDisplayName?: string;
-  readonly resourceKind: "file" | "folder" | "url" | "network" | "shell" | "credential" | "setting" | "package" | "other";
-  readonly resourceCount: number;
-  readonly reasonCode: string;
-}
 
 type DistributedOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
@@ -49,8 +37,6 @@ export type PermissionAuthorityResult =
 interface PermissionBrokerServiceCommonOptions {
   readonly rootPath: string;
   readonly confirmations?: HighRiskConfirmationService;
-  /** Accepted only while main/Jobs legacy wiring is removed in the surrounding AR1 slices. */
-  readonly permissionSettings?: unknown;
   readonly testOnlyHooks?: unknown;
 }
 
@@ -58,17 +44,6 @@ export type PermissionBrokerServiceOptions = PermissionBrokerServiceCommonOption
   | { readonly assertWriterLease: (vaultPath: string) => void; readonly unsafeAllowUnfenced?: never }
   | { readonly assertWriterLease?: never; readonly unsafeAllowUnfenced: true }
 );
-
-export class PermissionConfirmationRequiredError extends PigeDomainError {
-  readonly requestId: string;
-  readonly bindingHash: string;
-
-  constructor(requestId: string, bindingHash: string) {
-    super("permission.confirmation_required", "The exact high-risk effect requires confirmation.");
-    this.requestId = requestId;
-    this.bindingHash = bindingHash;
-  }
-}
 
 /**
  * AR1 authority boundary. Ordinary registered first-party actions inherit the submitted
@@ -148,64 +123,6 @@ export class PermissionBrokerService {
     readonly owner: HighRiskConfirmationOwner;
   }): void {
     this.#confirmations?.withdraw(input);
-  }
-
-  // Temporary fail-closed compile surface for legacy Jobs callers. AR1 deletes these
-  // methods with the old waiting_permission lifecycle; none creates a permission record.
-  prepare(_vaultPath: string, _binding: PermissionActionBinding, _summary: PermissionActionSummary): PermissionActionLifecycleRecord {
-    throw legacyLifecycleRemoved();
-  }
-
-  read(_vaultPath: string, _requestId: string): PermissionActionLifecycleRecord {
-    throw legacyLifecycleRemoved();
-  }
-
-  readOptional(_vaultPath: string, _requestId: string): PermissionActionLifecycleRecord | undefined {
-    return undefined;
-  }
-
-  pending(_vaultPath: string, _requestId: string): PermissionActionLifecycleRecord | undefined {
-    return undefined;
-  }
-
-  listForJob(_vaultPath: string, _jobId: string): readonly PermissionActionLifecycleRecord[] {
-    return [];
-  }
-
-  listResolvable(_vaultPath: string): readonly PermissionActionLifecycleRecord[] {
-    return [];
-  }
-
-  reconcileCommittedDecisions(_vaultPath: string): number {
-    return 0;
-  }
-
-  commitDecision(
-    _vaultPath: string,
-    _request: PermissionResolveRequest
-  ): { readonly lifecycle: PermissionActionLifecycleRecord; readonly decision: PermissionDecisionRecord } {
-    throw legacyLifecycleRemoved();
-  }
-
-  consume(_vaultPath: string, _requestId: string, _binding: PermissionActionBinding): PermissionActionLifecycleRecord {
-    throw legacyLifecycleRemoved();
-  }
-
-  assertExecutionAuthority(_vaultPath: string, _requestId: string, _binding: PermissionActionBinding): void {
-    throw legacyLifecycleRemoved();
-  }
-
-  markCompleted(
-    _vaultPath: string,
-    _requestId: string,
-    _binding: PermissionActionBinding,
-    _completionMarkerHash: string
-  ): PermissionActionLifecycleRecord {
-    throw legacyLifecycleRemoved();
-  }
-
-  cancel(_vaultPath: string, _requestId: string): PermissionActionLifecycleRecord {
-    throw legacyLifecycleRemoved();
   }
 
   #assertCurrentVault(vaultPath: string): void {

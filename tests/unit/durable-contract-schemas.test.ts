@@ -251,7 +251,8 @@ describe("durable contract schemas", () => {
   it("keeps job class, state, and record fields on the shared executable contract", () => {
     expect(JobClassSchema.parse("capture_batch")).toBe("capture_batch");
     expect(JobStateSchema.parse("waiting_dependency")).toBe("waiting_dependency");
-    expect(JobStateSchema.parse("waiting_model_egress")).toBe("waiting_model_egress");
+    expect(() => JobStateSchema.parse("waiting_model_egress")).toThrow();
+    expect(() => JobStateSchema.parse("waiting_permission")).toThrow();
 
     const record = JobRecordSchema.parse({
       id: "job_20260710_abcdef12",
@@ -280,20 +281,6 @@ describe("durable contract schemas", () => {
     expect(() => JobRecordSchema.parse({ ...record, state: undefined, status: "queued" })).toThrow();
     expect(() => JobRecordSchema.parse({ ...record, status: "completed" })).toThrow("Unrecognized key");
     expect(() => JobRecordSchema.parse({ ...record, undocumentedLifecycleFlag: true })).toThrow("Unrecognized key");
-    expect(() => JobRecordSchema.parse({
-      ...record,
-      permissionRequestIds: ["perm_20260710_abcdef12"]
-    })).toThrow();
-    expect(() => JobRecordSchema.parse({
-      ...record,
-      privacy: {
-        usedCloudModel: false,
-        usedNetwork: false,
-        usedShell: false,
-        accessedExternalFiles: false,
-        permissionDecisionIds: ["perm_20260710_abcdef12"]
-      }
-    })).toThrow();
   });
 
   it("binds Dataset manifests, revisions, schemas, and payloads to stable durable identities", () => {
@@ -602,7 +589,6 @@ describe("durable contract schemas", () => {
         runtimeKind: "desktop_local",
         clientCapabilityTier: "desktop_full"
       },
-      permissionDecisionIds: ["permdec_20260710_abcdef12"],
       policyAudit: {
         policyContextId: "policy_20260710_abcdef12",
         policyHash: checksum,
@@ -618,10 +604,6 @@ describe("durable contract schemas", () => {
 
     expect(operation.kind).toBe("relink_source");
     expect(operation.policyAudit?.enforcementOwners).toContain("Permission Broker");
-    expect(() => OperationRecordSchema.parse({
-      ...operation,
-      permissionDecisionIds: ["perm_20260710_abcdef12"]
-    })).toThrow();
     expect(() => OperationRecordSchema.parse({
       ...operation,
       rawPrompt: "PRIVATE PROMPT"
@@ -651,7 +633,6 @@ describe("durable contract schemas", () => {
         clientCapabilityTier: "desktop_full" as const
       },
       modelProfileId: "model_example",
-      permissionDecisionIds: [],
       policyAudit: {
         policyContextId: "policy_20260710_abcdef12",
         policyHash: checksum,

@@ -407,7 +407,6 @@ describe("schemas", () => {
       baseHashes: {
         "wiki/note.md": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       },
-      requiredPermissionIds: [],
       futureRemoteAgentField: "preserved"
     });
 

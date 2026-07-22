@@ -532,7 +532,7 @@ Proposal states are `draft | ready | approved | rejected | superseded | conflict
 expired | applied`.
 
 Executable `ConfirmationProposalSchema` owns the durable record: identity/state/trust,
-Job/source/target/diff refs, operations, warnings, base hashes and permission refs.
+Job/source/target/diff refs, operations, warnings and base hashes.
 
 Proposals persist before display. Full records/decisions stay Main-only; apply rechecks base
 hash, changed targets conflict, rejection records recurrence context, and approval creates an
@@ -542,10 +542,8 @@ Reader transforms auto-apply through the reversible writer or stage a private ex
 proposal. Renderer gets only bounded preview; Main-owned revision-fenced approve/reject and
 interrupted resolving/applied/rejected recovery reconcile the same Job/identity/writer.
 
-`requiredPermissionIds` is a compatibility field for permission prerequisites and may
-contain canonical `permreq_` request IDs or `permdec_` decision IDs; a later schema may
-split, not reinterpret, it. Current supported operations, recovery evidence, and open
-mutation families live in acceptance.
+Current supported operations, recovery evidence, and open mutation families live in
+acceptance. High-risk decisions are exact current effects outside proposal and Job state.
 
 ## 12. Operation Record Lifecycle
 
@@ -622,7 +620,7 @@ Lifecycle coverage:
 | Markdown page | create/update/rename/archive/trash/restore page |
 | Memory | create/update/trash/restore memory through the memory lifecycle |
 | Skills/packages | install/disable/uninstall Skill or package |
-| Settings/policy/model egress | change a sensitive setting with policy/permission evidence; record a pre-call model-egress decision |
+| Settings/policy/provider send | change a sensitive setting with exact effect evidence; record body-free provider-send allow/block audit evidence |
 | Index/job maintenance | update index, compact job, repair record |
 | Backup/restore/migration | backup created, restore applied, migration applied |
 
@@ -684,8 +682,7 @@ Recovery decisions:
 | Target page changed after proposal | Mark proposal conflicted. |
 | Dataset revision or schema changed after query/write plan | Reject stale evidence or preserve a new revision; never replay against a different base. |
 | Dataset payload exists but manifest/revision/Operation is incomplete | Adopt only when every planned ID/hash matches; otherwise quarantine/preserve and fail closed. |
-| Permission prompt was open | Recreate pending permission UI or fail clearly if context expired. |
-| Model-egress prompt was open | Reconcile the exact machine-local request with the bound Job; approved may requeue conservatively, denied terminalizes, consumed needs a fresh decision, and unreadable or drifted state fails closed. |
+| High-risk confirmation owner disappears | Withdraw the exact confirmation by owner/revision; never convert it into a Job waiting state or replay the effect. |
 
 ## 14. Compaction And Retention
 
@@ -693,7 +690,7 @@ Successful job details can grow quickly. Pige should retain trust while controll
 
 Default v0.1 policy:
 
-- Unresolved, failed, waiting-dependency, waiting-permission, waiting-model-egress, and awaiting-review jobs are retained until resolved or explicitly cleared.
+- Unresolved, failed, waiting-dependency, and awaiting-review jobs are retained until resolved or explicitly cleared.
 - Successful jobs remain detailed for 90 days.
 - After 90 days, successful job records may compact to references, summaries, timings, warnings, and operation IDs.
 - Conversation events, operation records, source records, proposals, `log.md`, and generated Markdown are not removed by job compaction.
@@ -711,7 +708,7 @@ Compacted job record keeps:
 
 Home:
 
-- Shows active, failed, waiting-dependency, waiting-permission, waiting-model-egress, and awaiting-review jobs as compact status rows/cards; one active model-egress card suppresses its matching duplicate Job row.
+- Shows active, failed, waiting-dependency, and awaiting-review jobs as compact status rows/cards.
 - Does not expose "Inbox" or "Review" as mandatory top-level concepts.
 - Shows compact Activity/Undo; users retry, cancel, inspect, or resolve exceptions.
 
@@ -733,7 +730,7 @@ Rules:
 
 - Completed jobs should say what changed in the vault.
 - Failed jobs should say what was preserved and what can be retried.
-- Permission, current-action model-egress, and proposal states should survive window close and app restart.
+- Durable proposal and Job states survive window close and app restart. A high-risk confirmation is owned by one exact live effect and is withdrawn when that owner expires.
 
 ## 16. Backup, Restore, And Migration
 
