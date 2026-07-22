@@ -30,13 +30,13 @@ export function HighRiskConfirmationDialog(props: {
 
   useEffect(() => {
     const denyOnEscape = (event: KeyboardEvent): void => {
-      if (event.isComposing || event.key !== "Escape") return;
+      if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
-      if (!props.resolving) props.onResolve("deny");
+      if (!event.isComposing && !props.resolving) props.onResolve("deny");
     };
-    document.addEventListener("keydown", denyOnEscape);
-    return () => document.removeEventListener("keydown", denyOnEscape);
+    document.addEventListener("keydown", denyOnEscape, true);
+    return () => document.removeEventListener("keydown", denyOnEscape, true);
   }, [props.onResolve, props.resolving]);
 
   const subject = props.confirmation.presentation.subject;

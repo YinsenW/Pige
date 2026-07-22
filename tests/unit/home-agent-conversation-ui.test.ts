@@ -1580,24 +1580,33 @@ describe("Home durable Agent conversation UI", () => {
     ]) expect(dialog.textContent).not.toContain(unsafeCopy);
     await waitFor(dom, () => dom.window.document.activeElement === buttons(dialog, "Deny")[0]);
 
+    const composer = homeComposer(container);
+    let underlyingEscapeCount = 0;
+    composer.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") underlyingEscapeCount += 1;
+    });
+    composer.focus();
+
     await act(async () => {
-      dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
+      composer.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
         key: "Escape",
         bubbles: true,
         isComposing: true
       }));
       await settle(dom);
     });
+    expect(underlyingEscapeCount).toBe(0);
     expect(harness.confirmationResolveRequests).toHaveLength(0);
     expect(container.querySelector('[role="dialog"]')).not.toBeNull();
 
     await act(async () => {
-      dom.window.document.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
+      composer.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
         key: "Escape",
         bubbles: true
       }));
       await settle(dom);
     });
+    expect(underlyingEscapeCount).toBe(0);
     expect(harness.confirmationResolveRequests).toEqual([{
       apiVersion: 1,
       confirmationId: "confirm_20260722_abcdefghijklmnop",
