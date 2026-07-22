@@ -1708,7 +1708,171 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
-  it("gives a picker source Job sole status ownership before submission resolves", async () => {
+  it("stages one picker attachment locally, then submits the exact query and file once", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await attachFile(dom, container, "public-alpha.csv", "item,score\nAlpha,9\n");
+    expect(harness.submitRequests).toHaveLength(0);
+    expect(harness.submittedFileNames).toHaveLength(0);
+    expect(container.querySelector(".attachment-chip")?.textContent).toContain("public-alpha.csv");
+
+    await setTextareaValue(dom, container, "Compare this file with related notes.");
+    expect(harness.submitRequests).toHaveLength(0);
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    expect(harness.submitRequests[0]).toMatchObject({
+      inputKind: "file_picker",
+      text: "Compare this file with related notes."
+    });
+    expect(harness.submittedFileNames).toEqual([["public-alpha.csv"]]);
+    expect(textareaValue(container)).toBe("");
+    expect(container.querySelector(".attachment-chip")).toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("submits an attachment without renderer-authored text and remains available without a model", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.loadModelSummary = async () => emptyModelSummary();
+    harness.loadAgentRuntimeStatus = async () => null;
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      harness.jobs = [sourceWaitingForModelJob()];
+      return sourceWaitingForModelResult();
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await attachFile(dom, container, "offline-source.md", "# Offline source\n");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    expect(harness.submitRequests[0]).toMatchObject({ inputKind: "file_picker" });
+    expect(harness.submitRequests[0]?.text).toBeUndefined();
+    expect(harness.submittedFileNames).toEqual([["offline-source.md"]]);
+    expect(container.textContent).toContain("Organize these files");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("removes a staged picker attachment without any durable or network side effect", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await attachFile(dom, container, "remove-me.csv", "value\n1\n");
+    await clickButtonByAriaLabel(dom, container, "Remove attachment remove-me.csv");
+
+    expect(container.querySelector(".attachment-chip")).toBeNull();
+    expect(harness.submitRequests).toHaveLength(0);
+    expect(harness.submittedFileNames).toHaveLength(0);
+    expect(dom.window.document.activeElement).toBe(homeComposer(container));
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("restores an exact failed picker attempt and reuses its client turn ID until edited", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      const failed = failedResult();
+      if (failed.state !== "failed") throw new Error("Expected a failed fixture.");
+      return {
+        requestId: failed.requestId,
+        state: failed.state,
+        modelUsage: failed.modelUsage,
+        sourceIds: failed.sourceIds,
+        error: failed.error
+      };
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await attachFile(dom, container, "retry.csv", "value\n1\n");
+    await setTextareaValue(dom, container, "Analyze this exact file.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => container.querySelector(".conversation-status-message.state-failed") !== null);
+
+    expect(textareaValue(container)).toBe("Analyze this exact file.");
+    expect(container.querySelector(".attachment-chip")?.textContent).toContain("retry.csv");
+    expect(container.querySelector('[data-optimistic-user-message="true"]')).toBeNull();
+    const firstClientTurnId = harness.submitRequests[0]?.clientTurnId;
+
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 2);
+    expect(harness.submitRequests[1]?.clientTurnId).toBe(firstClientTurnId);
+
+    await setTextareaValue(dom, container, "Analyze this changed request.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 3);
+    expect(harness.submitRequests[2]?.clientTurnId).not.toBe(firstClientTurnId);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps an unsent composer draft local when a global drop submits immediately", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "Keep this draft for a later message.");
+    await dropFile(dom, container, "organize-now.md", "# Organize now\n");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    expect(harness.submitRequests[0]).toMatchObject({ inputKind: "file_drop" });
+    expect(harness.submitRequests[0]?.text).toBeUndefined();
+    expect(harness.submittedFileNames).toEqual([["organize-now.md"]]);
+    expect(textareaValue(container)).toBe("Keep this draft for a later message.");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("queues an immediate global drop behind the shared composer submission gate", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const pendingResults: Array<(result: AgentSubmitTurnResult) => void> = [];
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => pendingResults.push(resolve));
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "Finish this turn first.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    await dropFile(dom, container, "queued-drop.md", "# Queued drop\n");
+    expect(harness.submitRequests).toHaveLength(1);
+
+    await act(async () => {
+      pendingResults[0]?.(completedResult());
+      await settle(dom);
+    });
+    await waitFor(dom, () => harness.submitRequests.length === 2);
+
+    expect(harness.submitRequests.map((request) => request.inputKind)).toEqual([
+      "typed_text",
+      "file_drop"
+    ]);
+    expect(harness.submittedFileNames).toEqual([[], ["queued-drop.md"]]);
+
+    await act(async () => {
+      pendingResults[1]?.(sourceWaitingForModelResult());
+      await settle(dom);
+      root.unmount();
+    });
+    dom.window.close();
+  });
+
+  it("stages a picker source without side effects, then gives its Job sole status ownership after Send", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
     harness.onboarding = readyWithoutModelOnboarding(true);
@@ -1722,7 +1886,13 @@ describe("Home durable Agent conversation UI", () => {
     const expectedStatus = "Source saved. Connect a model for the Agent to continue.";
 
     await attachFile(dom, container, "public-alpha.csv", "item,score\nAlpha,9\n");
+    expect(harness.submitRequests).toHaveLength(0);
+    expect(harness.submittedFileNames).toHaveLength(0);
+    expect(container.querySelector(".attachment-chip")?.textContent).toContain("public-alpha.csv");
+    await clickButton(dom, container, "Send");
     await waitFor(dom, () => countText(container, expectedStatus) === 1);
+    expect(harness.submitRequests[0]).toMatchObject({ inputKind: "file_picker" });
+    expect(harness.submittedFileNames).toEqual([["public-alpha.csv"]]);
     expect(countText(container, expectedStatus)).toBe(1);
     expect(buttons(container, "Connect Model")).toHaveLength(1);
     expect(modelActionButtons(container)).toHaveLength(1);
@@ -2948,11 +3118,16 @@ describe("Home durable Agent conversation UI", () => {
     expect(submitFiles).toContain("text?.trim() ? { text } : {}");
     expect(submitFiles).not.toContain("text: text.trim()");
     expect(submitFiles).not.toContain("conversationId:");
-    expect(submitHomeInput).toContain("const turnText = text;");
-    expect(submitHomeInput).not.toContain("const turnText = text.trim()");
+    expect(submitHomeInput).toContain("const submittedText = text;");
+    expect(submitHomeInput).toContain('const turnText = hasText ? submittedText : props.t("home.organizeAttachedFilesIntent")');
+    expect(submitHomeInput).not.toContain("const submittedText = text.trim()");
+    expect(submitHomeInput).toContain('props.onFilesSelected(');
+    expect(submitHomeInput).toContain('"file_picker"');
+    expect(appSource).toContain('submitHomeFiles(request.files, "file_drop"');
+    expect(appSource).toContain("setStagedComposerFiles(files.slice(0, 1))");
     expect(retryLatestTurn).toContain("props.onRetryJob(retryableLatestTurn.jobId)");
     expect(retryLatestTurn).not.toContain("submitTurn");
-    expect(submitHomeInput.indexOf("const submission = window.pige.agent.submitTurn"))
+    expect(submitHomeInput.indexOf("window.pige.agent.submitTurn"))
       .toBeLessThan(submitHomeInput.indexOf("props.onHomeStateChanged()"));
     expect(submitHomeInput.indexOf("props.onHomeStateChanged()"))
       .toBeLessThan(submitHomeInput.indexOf("const outcome = await submission"));
@@ -2983,6 +3158,7 @@ interface ConversationHarness {
   readonly jobListRequests: JobsListRequest[];
   activities: KnowledgeActivitySummary[];
   readonly submitRequests: AgentSubmitTurnRequest[];
+  readonly submittedFileNames: string[][];
   readonly retryJobIds: string[];
   retryMode: "queued" | "immediate_refail";
   readonly cancelJobIds: string[];
@@ -3035,7 +3211,7 @@ interface ConversationHarness {
   startSpeech: (request: SpeechStartRequest) => Promise<SpeechStartResult>;
   installSpeechAsset: (request: SpeechAssetInstallRequest) => Promise<SpeechAssetInstallResult>;
   loadConversation: () => Promise<AgentConversationTimeline | undefined>;
-  submitTurn: (request: AgentSubmitTurnRequest) => Promise<AgentSubmitTurnResult>;
+  submitTurn: (request: AgentSubmitTurnRequest, files?: readonly File[]) => Promise<AgentSubmitTurnResult>;
   emitDraft: (event: AgentTurnDraftEvent) => void;
   emitSpeech: (event: SpeechSessionEvent) => void;
   emitSpeechAsset: (event: SpeechAssetInstallEvent) => void;
@@ -3050,6 +3226,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     jobListRequests: [],
     activities: [],
     submitRequests: [],
+    submittedFileNames: [],
     retryJobIds: [],
     retryMode: "queued",
     cancelJobIds: [],
@@ -3363,7 +3540,10 @@ function makePigeApi(harness: ConversationHarness): object {
     agent: {
       runtimeStatus: () => harness.loadAgentRuntimeStatus(),
       conversation: () => harness.loadConversation(),
-      submitTurn: (request: AgentSubmitTurnRequest) => harness.submitTurn(request),
+      submitTurn: (request: AgentSubmitTurnRequest, files: readonly File[] = []) => {
+        harness.submittedFileNames.push(files.map((file) => file.name));
+        return harness.submitTurn(request, files);
+      },
       onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void) => {
         harness.draftListeners.add(listener);
         return () => harness.draftListeners.delete(listener);

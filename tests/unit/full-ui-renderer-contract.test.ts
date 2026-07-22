@@ -131,6 +131,13 @@ describe("full production UI renderer contract", () => {
     expect(cssSource).toContain("min-height: 48px;");
     expect(appSource).toContain('onClick={() => fileInputRef.current?.click()}');
     expect(appSource).toContain('name="attach"');
+    expect(appSource).toContain('props.t("home.attachToMessage")');
+    expect(appSource).toContain('className="attachment-chip"');
+    expect(appSource).toContain('submitHomeFiles(request.files, "file_drop"');
+    expect(appSource).toContain('"file_picker"');
+    expect(appSource).toContain('className="drop-overlay" role="status" aria-live="polite" aria-atomic="true"');
+    expect(cssSource).toContain(".attachment-strip.visible");
+    expect(cssSource).toContain(".conversation-attachment-list");
     expect(appSource).toContain('? "loading" : "send"');
     expect(appSource).toContain("onKeyDown={handleComposerKeyDown}");
   });
