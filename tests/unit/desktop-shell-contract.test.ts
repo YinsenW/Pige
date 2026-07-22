@@ -577,7 +577,8 @@ describe("desktop shell build contract", () => {
     expect(rendererSource).toContain("window.pige.confirmations.pending()");
     expect(rendererSource).toContain("window.pige.confirmations.resolve({");
     expect(dialogSource).toContain('role="dialog"');
-    expect(dialogSource).toContain('if (event.key === "Escape")');
+    expect(dialogSource).toContain('event.key !== "Escape"');
+    expect(dialogSource).toContain('document.addEventListener("keydown", denyOnEscape)');
     expect(dialogSource).toContain('props.onResolve("deny")');
     const confirmationStyles = rendererStyles.slice(
       rendererStyles.indexOf(".confirmation-backdrop"),

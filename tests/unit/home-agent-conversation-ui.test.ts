@@ -1592,7 +1592,10 @@ describe("Home durable Agent conversation UI", () => {
     expect(container.querySelector('[role="dialog"]')).not.toBeNull();
 
     await act(async () => {
-      dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      dom.window.document.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true
+      }));
       await settle(dom);
     });
     expect(harness.confirmationResolveRequests).toEqual([{
