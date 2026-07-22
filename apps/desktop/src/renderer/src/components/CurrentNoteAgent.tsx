@@ -323,7 +323,7 @@ function timelineMessages(
           : [])
       } : {})
     };
-  });
+  }).filter((message) => message.body.trim().length > 0 || Boolean(message.citations?.length));
   if (liveDraft?.text) {
     messages.push({
       id: `draft:${liveDraft.jobId}`,

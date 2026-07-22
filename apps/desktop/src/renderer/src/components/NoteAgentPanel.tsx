@@ -308,7 +308,7 @@ export function NoteAgentPanel(props: {
                       ))}
                     </div>
                   ) : null}
-                  {message.role === "assistant" && !message.provisional ? (
+                  {message.role === "assistant" && !message.provisional && message.body.trim().length > 0 ? (
                     <div className="message-actions" aria-label={props.t("note.agentMessageActions")}>
                       <button
                         type="button"

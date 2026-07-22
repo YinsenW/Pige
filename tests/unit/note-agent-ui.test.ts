@@ -719,14 +719,23 @@ describe("Note Agent production UI", () => {
       conversationId: "conversation_reader_transform",
       tailEventId: "event_reader_transform_user",
       canFollowUp: false,
-      messages: [{
-        id: "event_reader_transform_user",
-        role: "user",
-        createdAt: "2026-07-18T15:20:00.000Z",
-        text: "INTERNAL HOST INSTRUCTION MUST NOT RENDER",
-        inputPresentation: { kind: "reader_selection_transform", action: "translate" },
-        jobId: "job_reader_transform"
-      }],
+      messages: [
+        {
+          id: "event_reader_transform_user",
+          role: "user",
+          createdAt: "2026-07-18T15:20:00.000Z",
+          text: "INTERNAL HOST INSTRUCTION MUST NOT RENDER",
+          inputPresentation: { kind: "reader_selection_transform", action: "translate" },
+          jobId: "job_reader_transform"
+        },
+        {
+          id: "event_reader_transform_empty_assistant",
+          role: "assistant",
+          createdAt: "2026-07-18T15:20:01.000Z",
+          text: "",
+          jobId: "job_reader_transform"
+        }
+      ],
       latestTurn: {
         jobId: "job_reader_transform",
         userEventId: "event_reader_transform_user",
@@ -758,6 +767,8 @@ describe("Note Agent production UI", () => {
 
     expect(container.textContent).toContain(t("note.proposal.action.translate"));
     expect(container.textContent).not.toContain("INTERNAL HOST INSTRUCTION");
+    expect(container.querySelectorAll(".agent-message-card")).toHaveLength(1);
+    expect(buttonAriaNamed(container, t("note.agentCopy"))).toBeUndefined();
 
     await unmount(dom, root);
   });

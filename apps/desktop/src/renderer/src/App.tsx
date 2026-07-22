@@ -4563,9 +4563,17 @@ function HomeComposer(props: {
     agentAnswer === null &&
     effectiveAgentRunState !== "idle" &&
     effectiveAgentRunState !== "completed";
-  const visibleConversationMessages = (conversationTimeline?.messages ?? []).filter((message) =>
-    !(agentAnswer && message.role === "assistant" && message.id === liveAnswerEventId)
-  );
+  const conversationMessageMarkdown = (
+    message: AgentConversationTimeline["messages"][number]
+  ): string => message.inputPresentation
+    ? props.t(message.inputPresentation.kind === "reader_selection_action"
+      ? `note.selection.${message.inputPresentation.action}`
+      : `note.proposal.action.${message.inputPresentation.action}`)
+    : message.text;
+  const visibleConversationMessages = (conversationTimeline?.messages ?? []).filter((message) => {
+    if (agentAnswer && message.role === "assistant" && message.id === liveAnswerEventId) return false;
+    return message.answer?.datasetResult !== undefined || conversationMessageMarkdown(message).trim().length > 0;
+  });
   const visibleOptimisticConversationTurns = optimisticConversationTurns.filter((turn) =>
     !(conversationTimeline?.messages.some((message) =>
       message.role === "user" && (
@@ -5293,31 +5301,35 @@ function HomeComposer(props: {
             followConversationRef.current = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight <= 48;
           }}
         >
-          {visibleConversationMessages.map((message) => (
-            <article
-              className={`conversation-message role-${message.role}`}
-              data-message-id={message.id}
-              key={message.id}
-            >
-              <span className="conversation-message-role visually-hidden">
-                {props.t(message.role === "user" ? "home.userMessage" : "home.assistantMessage")}
-              </span>
-              {message.answer?.datasetResult ? (
-                <DatasetAnswerResult answer={message.answer} modelUsage="none" t={props.t} />
-              ) : (
-                <>
-                  <ConversationMarkdown markdown={message.text} t={props.t} />
-                  <ConversationCitations
-                    answer={message.answer}
-                    noteLoadingPageId={noteLoadingPageId}
-                    onOpen={openResult}
-                    t={props.t}
-                  />
-                </>
-              )}
-              {message.role === "assistant" ? conversationCopyAction(message.id, message.text) : null}
-            </article>
-          ))}
+          {visibleConversationMessages.map((message) => {
+            const markdown = conversationMessageMarkdown(message);
+            return (
+              <article
+                className={`conversation-message role-${message.role}`}
+                data-message-id={message.id}
+                data-input-presentation={message.inputPresentation?.kind}
+                key={message.id}
+              >
+                <span className="conversation-message-role visually-hidden">
+                  {props.t(message.role === "user" ? "home.userMessage" : "home.assistantMessage")}
+                </span>
+                {message.answer?.datasetResult ? (
+                  <DatasetAnswerResult answer={message.answer} modelUsage="none" t={props.t} />
+                ) : (
+                  <>
+                    <ConversationMarkdown markdown={markdown} t={props.t} />
+                    <ConversationCitations
+                      answer={message.answer}
+                      noteLoadingPageId={noteLoadingPageId}
+                      onOpen={openResult}
+                      t={props.t}
+                    />
+                  </>
+                )}
+                {message.role === "assistant" ? conversationCopyAction(message.id, markdown) : null}
+              </article>
+            );
+          })}
           {visibleOptimisticConversationTurns.map((turn) => (
             <article
               className="conversation-message role-user optimistic"

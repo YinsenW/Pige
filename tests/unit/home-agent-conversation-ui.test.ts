@@ -1567,6 +1567,8 @@ describe("Home durable Agent conversation UI", () => {
     expect(dialog.textContent).toContain("git");
     expect(buttons(dialog, "Deny")).toHaveLength(1);
     expect(buttons(dialog, "Allow this effect")).toHaveLength(1);
+    expect(container.querySelector(".topbar")?.hasAttribute("inert")).toBe(true);
+    expect(container.querySelector(".main-layout")?.hasAttribute("inert")).toBe(true);
     expect(container.querySelector(".permission-prompt")).toBeNull();
     expect(container.querySelector(".model-egress-prompt")).toBeNull();
     for (const unsafeCopy of [
@@ -1579,6 +1581,17 @@ describe("Home durable Agent conversation UI", () => {
     await waitFor(dom, () => dom.window.document.activeElement === buttons(dialog, "Deny")[0]);
 
     await act(async () => {
+      dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        isComposing: true
+      }));
+      await settle(dom);
+    });
+    expect(harness.confirmationResolveRequests).toHaveLength(0);
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+
+    await act(async () => {
       dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       await settle(dom);
     });
@@ -1589,6 +1602,8 @@ describe("Home durable Agent conversation UI", () => {
       decision: "deny"
     }]);
     await waitFor(dom, () => container.querySelector('[role="dialog"]') === null);
+    expect(container.querySelector(".topbar")?.hasAttribute("inert")).toBe(false);
+    expect(container.querySelector(".main-layout")?.hasAttribute("inert")).toBe(false);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -1632,6 +1647,15 @@ describe("Home durable Agent conversation UI", () => {
       await settle(dom);
     });
     expect(dom.window.document.activeElement).toBe(deny);
+    await act(async () => {
+      deny.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
+        key: "Tab",
+        shiftKey: true,
+        bubbles: true
+      }));
+      await settle(dom);
+    });
+    expect(dom.window.document.activeElement).toBe(allow);
 
     const stale: HighRiskConfirmationChangedEvent = { apiVersion: 1, status: "none", revision: 6 };
     for (const listener of harness.confirmationListeners) listener(stale);
@@ -2227,6 +2251,61 @@ describe("Home durable Agent conversation UI", () => {
     expect(mount.container.querySelector(".retrieval-answer")).toBeNull();
 
     await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
+  it("renders safe Reader action presentation and omits unpresentable empty timeline rows", async () => {
+    const dom = createDom();
+    const timeline = completedTimeline();
+    const harness = createHarness({
+      ...timeline,
+      messages: [
+        ...timeline.messages,
+        {
+          id: "event_20260722_transform01",
+          role: "user",
+          createdAt: "2026-07-22T08:00:02.000Z",
+          text: "",
+          jobId: "job_20260722_transform01",
+          inputPresentation: {
+            kind: "reader_selection_transform",
+            action: "translate"
+          }
+        },
+        {
+          id: "event_20260722_action01",
+          role: "user",
+          createdAt: "2026-07-22T08:00:02.500Z",
+          text: "",
+          jobId: "job_20260722_action01",
+          inputPresentation: {
+            kind: "reader_selection_action",
+            action: "summarize"
+          }
+        },
+        {
+          id: "event_20260722_emptyassistant",
+          role: "assistant",
+          createdAt: "2026-07-22T08:00:03.000Z",
+          text: "",
+          jobId: "job_20260722_emptyassistant"
+        }
+      ]
+    });
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    const presentation = requireElement(container.querySelector<HTMLElement>(
+      '[data-input-presentation="reader_selection_transform"]'
+    ));
+    expect(presentation.textContent).toContain("Translate selected passage");
+    const readPresentation = requireElement(container.querySelector<HTMLElement>(
+      '[data-input-presentation="reader_selection_action"]'
+    ));
+    expect(readPresentation.textContent).toContain("Summarize");
+    expect(container.querySelector('[data-message-id="event_20260722_emptyassistant"]')).toBeNull();
+    expect(container.querySelectorAll('[data-conversation-action="copy"]')).toHaveLength(1);
+
+    await act(async () => root.unmount());
     dom.window.close();
   });
 
