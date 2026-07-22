@@ -9,24 +9,16 @@ import type {
   CaptureUserIntent,
   CaptureFileRejection,
   CaptureFilesSubmitResult,
-  CaptureSubmitResult,
   SubmitFilesCaptureRequest,
-  SubmitTextCaptureRequest,
-  SubmitUrlCaptureRequest,
   VaultSummary
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
-  ConversationEventSchema,
-  JobRecordSchema,
   CurrentSourceRecordSchema,
   SourceRecordSchema,
-  type ConversationEvent,
-  type JobRecord,
   type SourceKind,
   type SourceRecord
 } from "@pige/schemas";
-import { JobRecordStore } from "./job-record-store";
 import { redactSensitiveUrl, SourceFetchService, type SourceFetchSnapshot } from "./source-fetch-service";
 
 export interface CaptureVaultPort {
@@ -75,7 +67,6 @@ export interface AgentTurnUrlPreservationHooks {
   readonly onPublicationStart?: () => void;
 }
 
-const SHORT_CONVERSATION_TEXT_LIMIT = 500;
 const FILE_KIND_BY_EXTENSION = new Map<string, SourceKind>([
   [".md", "markdown_file"],
   [".markdown", "markdown_file"],
@@ -101,135 +92,10 @@ const FILE_KIND_BY_EXTENSION = new Map<string, SourceKind>([
 export class CaptureService {
   readonly #vaults: CaptureVaultPort;
   readonly #sourceFetch: SourceFetchPort;
-  readonly #jobRecordStores = new Map<string, JobRecordStore>();
 
   constructor(vaults: CaptureVaultPort, sourceFetch: SourceFetchPort = new SourceFetchService()) {
     this.#vaults = vaults;
     this.#sourceFetch = sourceFetch;
-  }
-
-  submitText(request: SubmitTextCaptureRequest): CaptureSubmitResult {
-    const vaultPath = this.#vaults.activeVaultPath();
-    if (!this.#vaults.current() || !vaultPath) {
-      throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
-    }
-
-    const text = request.text;
-    if (!text.trim()) {
-      throw new PigeDomainError("capture_empty", "Capture text cannot be empty.");
-    }
-
-    const now = new Date();
-    const timestamp = now.toISOString();
-    const dateKey = timestamp.slice(0, 10).replaceAll("-", "");
-    const monthKey = timestamp.slice(0, 7).replace("-", "/");
-    const captureId = createDatedId("cap", dateKey);
-    const sourceId = createDatedId("src", dateKey);
-    const jobId = createDatedId("job", dateKey);
-    const eventId = createDatedId("evt", dateKey);
-    const conversationId = `conv_${dateKey}`;
-    const textBuffer = Buffer.from(text, "utf8");
-    const checksum = `sha256:${createHash("sha256").update(textBuffer).digest("hex")}`;
-    const managedTextPath = vaultRelativePath("raw", "text", monthKey, `${sourceId}.txt`);
-    const sourceRecordPath = vaultRelativePath(".pige", "source-records", monthKey, `${sourceId}.json`);
-    const jobRecordPath = vaultRelativePath(".pige", "jobs", monthKey, `${jobId}.json`);
-    const conversationPath = vaultRelativePath(".pige", "conversations", monthKey, `${conversationId}.jsonl`);
-
-    writeFileAtomic(resolveVaultPath(vaultPath, managedTextPath), text);
-
-    const sourceRecord: SourceRecord = CurrentSourceRecordSchema.parse({
-      id: sourceId,
-      kind: "text",
-      storageStrategy: "copy_to_source_library",
-      semanticOrchestration: "capture_only",
-      managedCopy: {
-        path: managedTextPath,
-        checksum,
-        size: textBuffer.byteLength
-      },
-      artifacts: [],
-      metadata: {
-        inputKind: request.inputKind,
-        userIntent: request.userIntent,
-        locale: request.locale,
-        captureId
-      },
-      createdAt: timestamp,
-      updatedAt: timestamp
-    });
-    writeJsonAtomic(resolveVaultPath(vaultPath, sourceRecordPath), sourceRecord);
-
-    const conversationEvent: ConversationEvent = ConversationEventSchema.parse({
-      id: eventId,
-      conversationId,
-      type: "capture_reference",
-      createdAt: timestamp,
-      sourceId,
-      captureId,
-      ...(text.length <= SHORT_CONVERSATION_TEXT_LIMIT ? { text } : { textPreview: createTextPreview(text) })
-    });
-    appendConversationEvent(resolveVaultPath(vaultPath, conversationPath), conversationEvent);
-
-    const jobRecord: JobRecord = JobRecordSchema.parse({
-      id: jobId,
-      class: "capture",
-      state: "queued",
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      sourceId,
-      captureId,
-      conversationEventId: eventId,
-      message: "Text capture preserved and queued for later processing."
-    });
-    this.#jobRecordStore(vaultPath).createIfAbsent(
-      resolveVaultPath(vaultPath, jobRecordPath),
-      jobRecord
-    );
-
-    return {
-      status: "queued",
-      captureId,
-      sourceId,
-      jobId,
-      conversationEventId: eventId,
-      preservedAt: timestamp
-    };
-  }
-
-  async submitUrl(request: SubmitUrlCaptureRequest): Promise<CaptureSubmitResult> {
-    const vaultPath = this.#vaults.activeVaultPath();
-    if (!this.#vaults.current() || !vaultPath) {
-      throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
-    }
-
-    const snapshot = await this.#sourceFetch.fetchSnapshot(request.url);
-    assertUrlSnapshotMatchesRequest(request.url, snapshot.originalUrl);
-    const now = new Date();
-    const timestamp = now.toISOString();
-    const dateKey = timestamp.slice(0, 10).replaceAll("-", "");
-    const captureId = createDatedId("cap", dateKey);
-    const sourceId = createDatedId("src", dateKey);
-    const jobId = createDatedId("job", dateKey);
-    const eventId = createDatedId("evt", dateKey);
-    persistUrlSnapshot({
-      jobRecordStore: this.#jobRecordStore(vaultPath),
-      vaultPath,
-      request,
-      snapshot,
-      timestamp,
-      captureId,
-      sourceId,
-      legacyCapture: { jobId, eventId }
-    });
-
-    return {
-      status: "queued",
-      captureId,
-      sourceId,
-      jobId,
-      conversationEventId: eventId,
-      preservedAt: timestamp
-    };
   }
 
   async preserveUrlForAgentTurn(
@@ -280,29 +146,23 @@ export class CaptureService {
     return requireAgentTurnUrlSource(vaultPath, binding);
   }
 
-  async submitFiles(request: SubmitFilesCaptureRequest): Promise<CaptureFilesSubmitResult> {
-    return this.#preserveFiles(request, true);
-  }
-
   async preserveFilesForAgentTurn(
     request: SubmitFilesCaptureRequest,
-    binding?: AgentTurnFilePreservationBinding
+    binding: AgentTurnFilePreservationBinding
   ): Promise<CaptureFilesSubmitResult> {
     if (
-      binding &&
       (!/^job_\d{8}_[a-z0-9]{8,}$/u.test(binding.jobId) ||
         !/^src_\d{8}_[a-z0-9]{8,}$/u.test(binding.sourceId) ||
         request.filePaths.length !== 1)
     ) {
       throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The source preservation binding is invalid.");
     }
-    return this.#preserveFiles(request, false, binding);
+    return this.#preserveFiles(request, binding);
   }
 
   async #preserveFiles(
     request: SubmitFilesCaptureRequest,
-    createCaptureJobs: boolean,
-    agentTurnBinding?: AgentTurnFilePreservationBinding
+    agentTurnBinding: AgentTurnFilePreservationBinding
   ): Promise<CaptureFilesSubmitResult> {
     const vaultPath = this.#vaults.activeVaultPath();
     const vault = this.#vaults.current();
@@ -321,11 +181,7 @@ export class CaptureService {
     const dateKey = timestamp.slice(0, 10).replaceAll("-", "");
     const monthKey = timestamp.slice(0, 7).replace("-", "/");
     const captureId = createDatedId("cap", dateKey);
-    const conversationId = `conv_${dateKey}`;
-    const conversationPath = vaultRelativePath(".pige", "conversations", monthKey, `${conversationId}.jsonl`);
     const sourceIds: string[] = [];
-    const jobIds: string[] = [];
-    const conversationEventIds: string[] = [];
     const rejectedFiles: CaptureFileRejection[] = [];
 
     for (const filePath of uniqueFilePaths) {
@@ -349,12 +205,9 @@ export class CaptureService {
         continue;
       }
 
-      const sourceId = agentTurnBinding?.sourceId ?? createDatedId("src", dateKey);
-      const jobId = createDatedId("job", dateKey);
-      const eventId = createDatedId("evt", dateKey);
+      const sourceId = agentTurnBinding.sourceId;
       const managedCopyPath = vaultRelativePath("raw", "files", monthKey, `${sourceId}${extension}`);
       const sourceRecordPath = vaultRelativePath(".pige", "source-records", monthKey, `${sourceId}.json`);
-      const jobRecordPath = vaultRelativePath(".pige", "jobs", monthKey, `${jobId}.json`);
 
       try {
         const sourceStat = fs.statSync(filePath);
@@ -365,7 +218,7 @@ export class CaptureService {
           id: sourceId,
           kind: sourceKind,
           storageStrategy,
-          semanticOrchestration: agentTurnBinding ? "agent_turn" : "capture_only",
+          semanticOrchestration: "agent_turn",
           original: {
             uri: pathToFileURL(filePath).href,
             path: filePath,
@@ -387,7 +240,7 @@ export class CaptureService {
             userIntent: request.userIntent,
             locale: request.locale,
             captureId,
-            ...(agentTurnBinding ? { agentTurnJobId: agentTurnBinding.jobId } : {}),
+            agentTurnJobId: agentTurnBinding.jobId,
             originalExtension: extension,
             parserStatus: isTextLikeFileSource(sourceKind)
               ? "text_ready"
@@ -403,39 +256,7 @@ export class CaptureService {
         });
         writeJsonAtomic(resolveVaultPath(vaultPath, sourceRecordPath), sourceRecord);
 
-        const conversationEvent: ConversationEvent = ConversationEventSchema.parse({
-          id: eventId,
-          conversationId,
-          type: createCaptureJobs ? "capture_reference" : "attachment_reference",
-          createdAt: timestamp,
-          sourceId,
-          captureId,
-          displayName,
-          sourceKind
-        });
-        appendConversationEvent(resolveVaultPath(vaultPath, conversationPath), conversationEvent);
-
-        if (createCaptureJobs) {
-          const jobRecord: JobRecord = JobRecordSchema.parse({
-            id: jobId,
-            class: "capture",
-            state: "queued",
-            createdAt: timestamp,
-            updatedAt: timestamp,
-            sourceId,
-            captureId,
-            conversationEventId: eventId,
-            message: "File capture preserved and queued for later processing."
-          });
-          this.#jobRecordStore(vaultPath).createIfAbsent(
-            resolveVaultPath(vaultPath, jobRecordPath),
-            jobRecord
-          );
-        }
-
         sourceIds.push(sourceId);
-        if (createCaptureJobs) jobIds.push(jobId);
-        conversationEventIds.push(eventId);
       } catch {
         rejectedFiles.push({ displayName, reason: "copy_failed" });
       }
@@ -445,30 +266,16 @@ export class CaptureService {
       status: sourceIds.length === 0 ? "rejected" : rejectedFiles.length > 0 ? "partially_queued" : "queued",
       captureId,
       sourceIds,
-      jobIds,
-      conversationEventIds,
+      jobIds: [],
+      conversationEventIds: [],
       rejectedFiles,
       preservedAt: timestamp
     };
   }
 
-  #jobRecordStore(vaultPath: string): JobRecordStore {
-    const rootPath = path.join(vaultPath, ".pige", "jobs");
-    const existing = this.#jobRecordStores.get(rootPath);
-    if (existing) return existing;
-    const store = this.#vaults.assertWriterLease
-      ? new JobRecordStore({
-          rootPath,
-          assertWriterLease: () => this.#vaults.assertWriterLease?.(vaultPath)
-        })
-      : new JobRecordStore({ rootPath, unsafeAllowUnfenced: true });
-    this.#jobRecordStores.set(rootPath, store);
-    return store;
-  }
 }
 
 function persistUrlSnapshot(input: {
-  readonly jobRecordStore?: JobRecordStore;
   readonly vaultPath: string;
   readonly request: {
     readonly inputKind: AgentSubmitTurnRequest["inputKind"];
@@ -479,8 +286,7 @@ function persistUrlSnapshot(input: {
   readonly timestamp: string;
   readonly captureId: string;
   readonly sourceId: string;
-  readonly legacyCapture?: { readonly jobId: string; readonly eventId: string };
-  readonly agentTurn?: { readonly jobId: string; readonly inputHash: string };
+  readonly agentTurn: { readonly jobId: string; readonly inputHash: string };
   readonly onPublicationStart?: () => void;
 }): void {
   const dateKey = /^src_(\d{8})_/u.exec(input.sourceId)?.[1];
@@ -529,7 +335,7 @@ function persistUrlSnapshot(input: {
     id: input.sourceId,
     kind: "url",
     storageStrategy: "copy_to_source_library",
-    semanticOrchestration: input.agentTurn ? "agent_turn" : "capture_only",
+    semanticOrchestration: "agent_turn",
     original: {
       uri: safeOriginalUrl,
       displayName,
@@ -554,10 +360,8 @@ function persistUrlSnapshot(input: {
       userIntent: input.request.userIntent,
       locale: input.request.locale,
       captureId: input.captureId,
-      ...(input.agentTurn ? {
-        agentTurnJobId: input.agentTurn.jobId,
-        agentTurnUrlInputHash: input.agentTurn.inputHash
-      } : {}),
+      agentTurnJobId: input.agentTurn.jobId,
+      agentTurnUrlInputHash: input.agentTurn.inputHash,
       originalUrl: safeOriginalUrl,
       finalUrl: safeFinalUrl,
       ...(safeCanonicalUrl ? { canonicalUrl: safeCanonicalUrl } : {}),
@@ -595,47 +399,6 @@ function persistUrlSnapshot(input: {
     `${JSON.stringify(sourceRecord, null, 2)}\n`
   );
 
-  if (!input.legacyCapture) return;
-  if (!input.jobRecordStore) {
-    throw new PigeDomainError("job.writer_lease_required", "The capture Job writer is unavailable.");
-  }
-  const conversationId = `conv_${dateKey}`;
-  const conversationPath = vaultRelativePath(
-    ".pige",
-    "conversations",
-    monthKey,
-    `${conversationId}.jsonl`
-  );
-  const conversationEvent: ConversationEvent = ConversationEventSchema.parse({
-    id: input.legacyCapture.eventId,
-    conversationId,
-    type: "capture_reference",
-    createdAt: input.timestamp,
-    sourceId: input.sourceId,
-    captureId: input.captureId,
-    displayName,
-    sourceKind: "url"
-  });
-  appendConversationEvent(resolveVaultPath(input.vaultPath, conversationPath), conversationEvent);
-
-  const jobRecord: JobRecord = JobRecordSchema.parse({
-    id: input.legacyCapture.jobId,
-    class: "capture",
-    state: "queued",
-    createdAt: input.timestamp,
-    updatedAt: input.timestamp,
-    sourceId: input.sourceId,
-    captureId: input.captureId,
-    conversationEventId: input.legacyCapture.eventId,
-    message: "URL capture fetched, preserved, and queued for later processing."
-  });
-  input.jobRecordStore.createIfAbsent(
-    resolveVaultPath(
-      input.vaultPath,
-      vaultRelativePath(".pige", "jobs", monthKey, `${input.legacyCapture.jobId}.json`)
-    ),
-    jobRecord
-  );
 }
 
 function assertAgentTurnUrlBinding(binding: AgentTurnUrlPreservationBinding): void {
@@ -826,10 +589,6 @@ function createRejectedFileResult(rejectedFiles: readonly CaptureFileRejection[]
   };
 }
 
-function createTextPreview(text: string): string {
-  return `${text.slice(0, 240).trimEnd()}...`;
-}
-
 function createUrlDisplayName(snapshot: SourceFetchSnapshot): string {
   const title = normalizeCapturedMetadata(snapshot.title, 120);
   if (title) return title;
@@ -884,11 +643,6 @@ function inspectRegularFile(filePath: string): "ok" | "missing" | "not_regular_f
   }
 
   return "ok";
-}
-
-function appendConversationEvent(filePath: string, event: ConversationEvent): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.appendFileSync(filePath, `${JSON.stringify(ConversationEventSchema.parse(event))}\n`, "utf8");
 }
 
 function writeJsonAtomic(filePath: string, value: unknown): void {
