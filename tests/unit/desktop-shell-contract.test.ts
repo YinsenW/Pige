@@ -498,11 +498,11 @@ describe("desktop shell build contract", () => {
     expect(rendererSource).toContain("setHomeFileDropRequest({");
     expect(rendererSource).toContain('void submitFiles(files, "file_drop", undefined, clientTurnId, "shell")');
     expect(homeComposer).toContain("props.fileDropRequest");
-    expect(homeComposer).toContain("void submitHomeFiles(request.files, request.text, request.clientTurnId)");
+    expect(homeComposer).toContain('void submitHomeFiles(request.files, "file_drop", request.text, request.clientTurnId)');
     expect(homeComposer).toContain('data-agent-draft="true"');
     expect(homeComposer).toContain('aria-busy={agentDraft !== null || effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running"}');
     expect(homeComposer).toContain("event.sequence <= active.sequence");
-    expect(rendererSource).toContain('...(homeDraftText.trim() ? { text: homeDraftText } : {})');
+    expect(rendererSource).toContain('...(text?.trim() ? { text } : {})');
     expect(homeComposer).toContain("const text = props.draftText");
     expect(homeComposer).toContain("props.onDraftChange(event.target.value)");
     expect(homeComposer).toContain('job.class !== "retrieval_query"');
