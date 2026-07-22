@@ -30,4 +30,14 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(clearedSecret).toBeGreaterThan(readyBinding);
     expect(source).toContain('document.querySelector("#provider-key")?.value === ""');
   });
+
+  it("provides an isolated canonical high-risk denial route with zero command execution", () => {
+    expect(source).toContain('process.argv.includes("--high-risk-only")');
+    expect(source).toContain("runHighRiskDenyRenderer(browserWindow)");
+    expect(source).toContain('document.querySelector(\'.confirmation-dialog[role="dialog"][aria-modal="true"]\')');
+    expect(source).toContain("document.activeElement === denyButton");
+    expect(source).toContain('document.querySelector(".permission-prompt, .model-egress-prompt")');
+    expect(source).toContain("denied-command-must-not-exist.txt");
+    expect(source).toContain('request.body.includes("function_call_output")');
+  });
 });

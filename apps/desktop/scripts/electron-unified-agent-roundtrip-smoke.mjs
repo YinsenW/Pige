@@ -15,6 +15,7 @@ const PROVIDER_NAME = "Roundtrip Responses";
 const STREAMING_API_PROMPT = "Verify the selected model binding.";
 const DIRECT_PROMPT = "Reply directly with the roundtrip greeting.";
 const GROUNDING_PROMPT = "What is the roundtrip launch phrase in my local knowledge?";
+const HIGH_RISK_DENY_PROMPT = "Run the harmless synthetic command requested by this test.";
 const DIRECT_ANSWER = "The real Pi roundtrip is ready, and this longer answer arrives through several safe visible replacements before completion.";
 const GROUNDED_ANSWER = "The roundtrip launch phrase is heliotrope seven. [1]";
 const SOURCE_PROMPT = "Inspect this attachment and answer without creating a note.";
@@ -28,6 +29,7 @@ const DATASET_ANSWER = "Grace has the largest count in the attached Dataset. [D1
 const DATASET_CITATION_REF = "citation_9";
 const CHILD_RESULT_PREFIX = "PIGE_ROUNDTRIP_RESULT ";
 const MAX_CHILD_MS = 90_000;
+const highRiskOnly = process.argv.includes("--high-risk-only");
 
 if (process.versions.electron) {
   setTimeout(() => {
@@ -44,6 +46,7 @@ async function runOrchestrator() {
   const markdownAttachmentPath = path.join(rootPath, "unified-agent-source.md");
   const activityAttachmentPath = path.join(rootPath, "unified-agent-activity.txt");
   const datasetAttachmentPath = path.join(rootPath, "unified-agent-dataset.csv");
+  const deniedCommandSentinelPath = path.join(rootPath, "denied-command-must-not-exist.txt");
   fs.writeFileSync(attachmentPath, "Synthetic unified Agent attachment evidence.\n", "utf8");
   fs.writeFileSync(markdownAttachmentPath, "# Synthetic Markdown evidence\n\nThe Markdown source crosses the real file ingress.\n", "utf8");
   fs.writeFileSync(activityAttachmentPath, "Synthetic reversible knowledge for Activity and Undo.\n", "utf8");
@@ -51,7 +54,7 @@ async function runOrchestrator() {
   const syntheticToken = `synthetic-${crypto.randomBytes(24).toString("hex")}`;
   const requests = [];
   const streamTiming = {};
-  const server = await startProviderServer(requests, streamTiming);
+  const server = await startProviderServer(requests, streamTiming, deniedCommandSentinelPath);
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Loopback provider did not bind safely.");
   const baseUrl = `http://127.0.0.1:${address.port}/v1`;
@@ -65,7 +68,9 @@ async function runOrchestrator() {
       attachmentPath,
       markdownAttachmentPath,
       activityAttachmentPath,
-      datasetAttachmentPath
+      datasetAttachmentPath,
+      deniedCommandSentinelPath,
+      highRiskOnly
     });
     assert.equal(connect.bindingState, "ready");
     assert.equal(connect.sourceToolchainReady, true);
@@ -88,6 +93,17 @@ async function runOrchestrator() {
     assert.equal(connect.groundedVisible, true);
     assert.equal(connect.groundedCitationsDuringDraft, false);
     assert.equal(connect.citationVisible, true);
+    if (highRiskOnly) {
+      assert.equal(connect.highRiskDialogVisible, true);
+      assert.equal(connect.highRiskDenyDefaultFocused, true);
+      assert.equal(connect.highRiskLegacySurfacesAbsent, true);
+      assert.equal(connect.highRiskDenied, true);
+      assert.equal(fs.existsSync(deniedCommandSentinelPath), false);
+      assert.ok(requests.some((request) => request.body.includes('"name":"pige_run_command"')));
+      assert.equal(requests.some((request) => request.body.includes('"call_id":"call_high_risk_command"') && request.body.includes("function_call_output")), false);
+      console.log("Electron canonical high-risk denial OK: dialog visible, Deny focused, legacy prompts absent, zero command execution.");
+      return;
+    }
     assert.equal(connect.sourceVisible, true);
     assert.equal(connect.markdownVisible, true);
     assert.equal(connect.activityVisible, true);
@@ -142,7 +158,7 @@ async function runOrchestrator() {
 
 async function runChild(phase, values) {
   const electronPath = resolveElectronPath();
-  const child = spawn(electronPath, [scriptPath, `--phase=${phase}`], {
+  const child = spawn(electronPath, [scriptPath, `--phase=${phase}`, ...(values.highRiskOnly ? ["--high-risk-only"] : [])], {
     cwd: desktopRoot,
     env: safeChildEnvironment({
       PIGE_ROUNDTRIP_ROOT: values.rootPath,
@@ -153,6 +169,8 @@ async function runChild(phase, values) {
       PIGE_ROUNDTRIP_MARKDOWN_ATTACHMENT_PATH: values.markdownAttachmentPath,
       PIGE_ROUNDTRIP_ACTIVITY_ATTACHMENT_PATH: values.activityAttachmentPath,
       PIGE_ROUNDTRIP_DATASET_ATTACHMENT_PATH: values.datasetAttachmentPath,
+      PIGE_ROUNDTRIP_DENY_SENTINEL_PATH: values.deniedCommandSentinelPath,
+      PIGE_ROUNDTRIP_HIGH_RISK_ONLY: values.highRiskOnly ? "1" : "0",
       PIGE_ROUNDTRIP_STAGE_PATH: path.join(values.rootPath, `stage-${phase}.txt`)
     }),
     stdio: ["ignore", "pipe", "pipe"]
@@ -243,6 +261,8 @@ async function runElectronPhase() {
   const markdownAttachmentPath = requireEnv("PIGE_ROUNDTRIP_MARKDOWN_ATTACHMENT_PATH");
   const activityAttachmentPath = requireEnv("PIGE_ROUNDTRIP_ACTIVITY_ATTACHMENT_PATH");
   const datasetAttachmentPath = requireEnv("PIGE_ROUNDTRIP_DATASET_ATTACHMENT_PATH");
+  const deniedCommandSentinelPath = requireEnv("PIGE_ROUNDTRIP_DENY_SENTINEL_PATH");
+  const runHighRiskOnly = requireEnv("PIGE_ROUNDTRIP_HIGH_RISK_ONLY") === "1";
   const stagePath = requireEnv("PIGE_ROUNDTRIP_STAGE_PATH");
   const { app, BrowserWindow, dialog } = await import("electron");
   if (phase !== "connect") installSyntheticOpenAiRedirect(baseUrl);
@@ -287,7 +307,10 @@ async function runElectronPhase() {
     markStage(`renderer_${phase}`);
     let result;
     result = await runConnectRenderer(browserWindow, { baseUrl, syntheticToken });
-    if (phase === "connect") {
+    if (phase === "connect" && runHighRiskOnly) {
+      markStage("renderer_high_risk_deny");
+      result = { ...result, ...(await runHighRiskDenyRenderer(browserWindow)) };
+    } else if (phase === "connect") {
       markStage("renderer_source");
       await prepareSourceRenderer(browserWindow, SOURCE_PROMPT);
       await setRendererFileInput(browserWindow, attachmentPath);
@@ -308,7 +331,7 @@ async function runElectronPhase() {
     console.log(`${CHILD_RESULT_PREFIX}${JSON.stringify(result)}`);
     browserWindow.destroy();
     app.quit();
-  } catch {
+  } catch (caught) {
     let rendererStage = "";
     if (browserWindow && !browserWindow.isDestroyed()) {
       try {
@@ -321,7 +344,10 @@ async function runElectronPhase() {
       }
     }
     const safeRendererStage = /^[a-z0-9_]+$/u.test(rendererStage) ? rendererStage : "unknown";
-    console.error(`PIGE_ROUNDTRIP_ERROR phase=${phase ?? "unknown"} stage=${stage} renderer=${safeRendererStage}`);
+    const safeErrorName = caught && typeof caught === "object" && typeof caught.name === "string" && /^[A-Za-z]+Error$/u.test(caught.name)
+      ? caught.name
+      : "Error";
+    console.error(`PIGE_ROUNDTRIP_ERROR phase=${phase ?? "unknown"} stage=${stage} renderer=${safeRendererStage} error=${safeErrorName}`);
     app.exit(1);
   }
 }
@@ -683,6 +709,66 @@ async function runConnectRenderer(browserWindow, input) {
   `, true);
 }
 
+async function runHighRiskDenyRenderer(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      const mark = (stage) => {
+        globalThis.__pigeRoundtripStage = stage;
+        console.info("PIGE_ROUNDTRIP_STAGE " + stage);
+      };
+      const waitFor = async (predicate, label, timeoutMs = 45000) => {
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < timeoutMs) {
+          const value = await predicate();
+          if (value) return value;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        throw new Error("Timed out waiting for " + label);
+      };
+      mark("high_risk_composer");
+      const composer = await waitFor(
+        () => document.querySelector('textarea[aria-label="Capture or ask"]'),
+        "Home composer for high-risk denial"
+      );
+      const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(composer), "value");
+      descriptor.set.call(composer, ${JSON.stringify(HIGH_RISK_DENY_PROMPT)});
+      composer.dispatchEvent(new Event("input", { bubbles: true }));
+      composer.dispatchEvent(new Event("change", { bubbles: true }));
+      mark("high_risk_send");
+      const send = await waitFor(
+        () => document.querySelector('button[aria-label="Send"]:not(:disabled)'),
+        "Home send for high-risk denial"
+      );
+      send.click();
+      mark("high_risk_dialog");
+      const dialog = await waitFor(
+        () => document.querySelector('.confirmation-dialog[role="dialog"][aria-modal="true"]'),
+        "canonical high-risk confirmation dialog"
+      );
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const denyButton = dialog.querySelector(".confirmation-actions button.ghost:not(:disabled)");
+      const denyDefaultFocused = document.activeElement === denyButton;
+      const legacySurfacesAbsent = !document.querySelector(".permission-prompt, .model-egress-prompt");
+      if (!denyButton || !denyDefaultFocused || !legacySurfacesAbsent) {
+        throw new Error("Canonical high-risk confirmation presentation is invalid.");
+      }
+      mark("high_risk_deny");
+      denyButton.click();
+      await waitFor(
+        () => document.querySelector(".confirmation-dialog") ? undefined : true,
+        "resolved high-risk denial"
+      );
+      mark("high_risk_denied");
+      return {
+        highRiskDialogVisible: true,
+        highRiskDenyDefaultFocused: denyDefaultFocused,
+        highRiskLegacySurfacesAbsent: legacySurfacesAbsent,
+        highRiskDenied: true
+      };
+    })()
+  `, true);
+}
+
 function installSyntheticOpenAiRedirect(baseUrl) {
   const nativeFetch = globalThis.fetch.bind(globalThis);
   globalThis.fetch = (input, init) => {
@@ -892,7 +978,7 @@ async function waitForRenderer(browserWindow) {
   });
 }
 
-async function startProviderServer(requests, streamTiming) {
+async function startProviderServer(requests, streamTiming, deniedCommandSentinelPath) {
   const server = http.createServer(async (request, response) => {
     const body = await readBody(request);
     requests.push({
@@ -927,6 +1013,16 @@ async function startProviderServer(requests, streamTiming) {
     }
     if (serializedTools.includes("pige_provider_probe")) {
       writeToolCallResponse(response, "pige_provider_probe", "call_provider_probe", "provider-probe-1");
+      return;
+    }
+    if (latestUserText.includes(HIGH_RISK_DENY_PROMPT) && serializedTools.includes("pige_run_command")) {
+      writeToolCallResponse(response, "pige_run_command", "call_high_risk_command", "high-risk-command-1", {
+        executable: process.execPath,
+        args: [
+          "-e",
+          `require("node:fs").writeFileSync(${JSON.stringify(deniedCommandSentinelPath)}, "executed")`
+        ]
+      });
       return;
     }
     if (serializedInput.includes('"call_id":"call_dataset_query"') && serializedInput.includes("function_call_output")) {
