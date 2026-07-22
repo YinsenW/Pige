@@ -56,7 +56,7 @@ Use the smallest complete pack for the work. The table lists task-specific owner
 | Task | Read these documents |
 | --- | --- |
 | Project setup, scaffold, CI | `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`, `docs/REPOSITORY_STRUCTURE.md`, `docs/CODING_CONVENTIONS.md`, `docs/TECH_ARCHITECTURE.md`, `docs/QUALITY_AND_TEST_STRATEGY.md`, `docs/RELEASE_ENGINEERING.md`, `docs/SPEC_TRACEABILITY.md` |
-| First-run, onboarding, capture-only mode | `docs/ONBOARDING_AND_FIRST_RUN.md`, `docs/UI_PROTOTYPE.md`, `docs/DATA_ARCHITECTURE.md`, `docs/SETTINGS_AND_PREFERENCES.md`, `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md` |
+| First-run, onboarding, missing model or unavailable capability | `docs/ONBOARDING_AND_FIRST_RUN.md`, `docs/UI_PROTOTYPE.md`, `docs/DATA_ARCHITECTURE.md`, `docs/SETTINGS_AND_PREFERENCES.md`, `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md` |
 | Desktop shell, windows, preload, IPC | `docs/TECH_ARCHITECTURE.md`, `docs/UI_PROTOTYPE.md`, `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md` |
 | IPC/API contracts and renderer-preload-main boundaries | `docs/API_AND_IPC_DESIGN.md`, `docs/TECH_ARCHITECTURE.md`, `docs/SECURITY_THREAT_MODEL.md` |
 | Settings, preferences, provider profiles, settings storage | `docs/SETTINGS_AND_PREFERENCES.md`, `docs/UI_PROTOTYPE.md`, `docs/DATA_ARCHITECTURE.md`, `docs/TECH_ARCHITECTURE.md`, `docs/SECURITY_THREAT_MODEL.md` |
@@ -83,7 +83,7 @@ Use the smallest complete pack for the work. The table lists task-specific owner
 | Confirmation proposals and operations | `docs/PRD.md`, `docs/DOMAIN_MODEL.md`, `docs/DATA_ARCHITECTURE.md`, `docs/SECURITY_THREAT_MODEL.md` |
 | Agent memory | `docs/AGENT_MEMORY_DESIGN.md`, `docs/DATA_ARCHITECTURE.md`, `docs/SECURITY_THREAT_MODEL.md` |
 | Skills and Pi packages | `docs/SKILL_EXTENSION_DESIGN.md`, `docs/PI_PACKAGE_RESEARCH.md`, `docs/SECURITY_THREAT_MODEL.md`, `docs/DOMAIN_MODEL.md` |
-| Permissions and YOLO mode | `docs/SECURITY_THREAT_MODEL.md`, `docs/TECH_ARCHITECTURE.md`, `docs/UI_PROTOTYPE.md`, `docs/DECISION_LOG.md` |
+| Submitted-turn authority and high-risk confirmation | `docs/SECURITY_THREAT_MODEL.md`, `docs/TECH_ARCHITECTURE.md`, `SECURITY.md`, `PRIVACY.md`, `docs/DECISION_LOG.md` |
 | Security report, vulnerability handling, private disclosure | `SECURITY.md`, `docs/SECURITY_THREAT_MODEL.md`, `docs/RELEASE_ENGINEERING.md`, `docs/DIAGNOSTICS_AND_OBSERVABILITY.md`, `docs/QUALITY_AND_TEST_STRATEGY.md` |
 | Privacy, data use, telemetry, cloud-send policy | `PRIVACY.md`, `docs/PRD.md`, `docs/SECURITY_THREAT_MODEL.md`, `docs/DIAGNOSTICS_AND_OBSERVABILITY.md`, `docs/SETTINGS_AND_PREFERENCES.md`, `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md` |
 | Support, public issue triage, redacted reproductions | `SUPPORT.md`, `docs/CONTRIBUTING_GUIDE.md`, `docs/DIAGNOSTICS_AND_OBSERVABILITY.md`, `docs/QUALITY_AND_TEST_STRATEGY.md`, `SECURITY.md`, `PRIVACY.md` |

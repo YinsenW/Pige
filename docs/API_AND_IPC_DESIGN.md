@@ -16,6 +16,11 @@ v0.1 is a desktop app, not a public web API product. The important API surface i
 - Main process owns filesystem, secrets, settings, model calls, and orchestration.
 - Workers own expensive parsing, OCR, embedding, backup, and rebuild work.
 - IPC payloads are serializable DTOs, not service objects.
+- At each real trust boundary, define one canonical schema and infer/re-export its type;
+  do not maintain parallel handwritten type, schema, and projection vocabularies.
+- Validate at renderer/preload/main, filesystem, secret, provider, and durable-write
+  boundaries according to risk. Internal same-process plumbing does not need duplicate
+  field-by-field parsing merely because it crosses a function.
 - IPC never carries raw API keys.
 - Renderer never receives arbitrary filesystem capability.
 - Long-running work is represented by jobs and progress events.
@@ -95,8 +100,7 @@ type PigeErrorAction =
   | "repair_tool"
   | "download_model"
   | "configure_model"
-  | "confirm_model_egress"
-  | "grant_permission"
+  | "confirm_high_risk_effect"
   | "review_proposal"
   | "rebuild_index"
   | "restore_backup"
@@ -112,8 +116,7 @@ type PigeError = {
   severity: "info" | "warning" | "error" | "fatal";
   userAction: PigeErrorAction;
   jobId?: string;
-  permissionRequestId?: string;
-  modelEgressApprovalRequestId?: string;
+  confirmationId?: string;
   diagnosticErrorId?: string;
   redactedDetails?: Record<string, string | number | boolean>;
 };
@@ -170,7 +173,7 @@ tool result and cannot be converted into `repair_required`.
 type PigeEvent =
   | { type: "job.updated"; job: JobSummary }
   | { type: "capture.received"; sourceId: string; jobId: string }
-  | { type: "permission.requested"; request: PermissionRequestSummary }
+  | { type: "confirmation.required"; confirmation: HighRiskConfirmationSummary }
   | { type: "vault.changed"; vault: VaultSummary }
   | { type: "index.progress"; progress: IndexProgress }
   | { type: "backup.progress"; progress: BackupProgress };
@@ -259,7 +262,7 @@ type LocalDatabaseStatus = {
 Rules:
 
 - The renderer may display these paths, but it never receives direct filesystem capability.
-- First-run, capture-only mode, and onboarding state follow `docs/ONBOARDING_AND_FIRST_RUN.md`.
+- First-run, unavailable-model behavior, and onboarding state follow `docs/ONBOARDING_AND_FIRST_RUN.md`; there is no separate capture-only product mode.
 - `onboarding.dismissFirstHome` takes no renderer-supplied vault ID. Main resolves the
   active vault, records only its stable ID in bounded machine-local settings, and returns
   refreshed `OnboardingStatus`; the preference is idempotent, non-secret, and excluded
@@ -577,57 +580,21 @@ Rules:
 - Reconnect/restart does not replay drafts. It reads only the durable conversation/Job
   result and may resume the Job through the existing recovery contract.
 
-### 6.7 Permissions
+### 6.7 High-Risk Confirmation
 
-#### 6.7.1 Current-Action Model Egress
+Commands: `confirmations.resolve` only when a current effect is in the closed high-risk
+set. Queries: `confirmations.pending` for renderer recovery after uncertainty.
 
-Commands:
+The safe DTO contains a confirmation ID, effect class, bounded display label, and owning
+turn/Operation reference. It never includes path authority, command input, prompt/body,
+credential, provider payload, or raw error. Resolution is `allow | deny`; the effect's
+Job/Operation owner revalidates and owns commit/idempotency/recovery. No saved grant,
+YOLO, request/decision/consume/completion chain, or waiting Job state exists.
 
-- `modelEgress.resolve`
-
-Queries:
-
-- `modelEgress.pending`
-
-`modelEgress.pending({ requestId })` returns only the exact pending request's Job,
-Provider/Model profile IDs, reason, bounded content classes, and request time. It never
-returns the endpoint, prompt, selected evidence, response, credential, citation body, or
-Permission Broker record. `modelEgress.resolve({ requestId, jobId, decision })` accepts
-only `allow_once` or `deny`, commits the machine-local decision, then reconciles the
-exact `waiting_model_egress` Job. Renderer uncertainty is resolved by re-reading
-`modelEgress.pending`; unreadable or changed identity fails closed.
-
-This namespace authorizes only the bound current provider invocation. It cannot create
-or consume a saved Permission Broker grant, and YOLO cannot satisfy it. The active Home
-confirmation owns the single status/action surface; its matching Job is omitted from
-Recent Work until resolution, then ordinary Job status ownership returns.
-
-#### 6.7.2 Permission Broker
-
-Commands:
-
-- `permissions.resolve`
-- `permissions.settings.{setDefaultMode,prepareYoloEnable,enableYolo,disableYolo,revokeGrant,revokeAllGrants}`
-
-Queries:
-
-- `permissions.pending`, `permissions.settings.current`
-
-Current-action prompts accept `deny`/`allow_once`; grant creation is deferred. DTOs bind
-request/Job/action/resource/policy identity and may expose only a bounded
-`resourceDisplayName`, such as exact `package@version`, for informed approval. Bodies,
-paths, secrets and authority stay excluded; drift fails closed.
-
-Permission Settings projects revision, mode, YOLO and bounded grants. Mutations use CAS;
-YOLO consumes a one-use sender/revision token after the main warning.
-
-Main registers bounded folder list, UTF-8 read, permissioned network fetch,
-`pige_install_pi_package`, and `pige_run_command`. The general command tool accepts only
-an executable, argv, cwd and timeout, resolves and rechecks executable identity, spawns
-without implicit shell interpolation, strips ambient secret environment variables, bounds
-output/time, and terminates the process tree on cancel. The submitted user task authorizes
-ordinary first-party desktop calls once; the same Permission Broker record is the audit,
-not a second user prompt. Third-party and destructive/credential boundaries remain gated.
+Ordinary first-party reads, parse/OCR/retrieval, user-specified fetch, and bounded local
+tools have no renderer permission API. Provider calls have no model-egress approval API:
+Connect/select plus Send authorizes bounded context; main strips secrets, blocks
+`local_only`, and rejects provider identity drift.
 
 ### 6.8 Settings, Providers, Tools
 
@@ -715,8 +682,9 @@ Rules:
 - Setup never groups cloud/self-hosted/local; main retains boundary/egress enforcement.
 - `agent.runtimeStatus` reports embedded Pi readiness and non-secret policy IDs. It uses profile summaries and presence-only binding metadata, never credential resolution/decryption; production emits only `embedded_pi_sdk`.
 - v0.1 exposes one effective default Pi Agent model; Advanced/Fast model slots must not appear unless runtime routing support is real and tested.
-- External/new-capability settings use Permission Broker; irreversible/security/
-  destination/conflict settings use exceptional proposals. Ordinary reversible settings do not re-prompt.
+- Irreversible/security/destination/conflict settings use their explicit high-risk or
+  exceptional proposal owner. Ordinary reversible settings and registered first-party
+  Agent tools do not create permission records or repeat prompts.
 - Settings updates include expected versions where concurrent edits or external vault changes are possible.
 - Agent policy preview returns redacted, typed policy summaries for debugging/settings UI; it never returns raw secrets, full settings files, or permission-store internals.
 - `system.toolchainHealth` reports bundled toolchain readiness or repair-needed status from `resources/toolchain-manifest/toolchain.manifest.json`; it does not trigger downloads.

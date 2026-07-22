@@ -12,7 +12,7 @@ Prompt design is part of product architecture because Pige stores personal knowl
 ## 2. Prompt Hierarchy
 
 The authority order is owned by
-[`AGENT_RUNTIME_POLICY_CONTEXT.md`](AGENT_RUNTIME_POLICY_CONTEXT.md#3-authority-model).
+[`AGENT_RUNTIME_POLICY_CONTEXT.md`](AGENT_RUNTIME_POLICY_CONTEXT.md#2-authority-order).
 Prompt rendering preserves that typed order; extracted sources and prior model output
 remain data, never instruction authority.
 
@@ -134,9 +134,10 @@ Rules:
 - The same guard caps `high` confidence and adds a warning when OCR confidence is below
   `0.65` or extraction truncates; empty OCR never reaches the model.
 - Source/artifact checksum and size are verified before the cloud call when integrity metadata exists. Delimiter-like source text is escaped inside the untrusted block so source content cannot close the evidence wrapper.
-- Model Egress binds redacted evidence, frozen metadata, Provider endpoint/boundary, and
-  selected model ID. Before Pi invocation Pige validates credential-bearing config;
-  each turn rechecks non-secret binding, source/cancellation, and egress. Drift fails closed.
+- Provider Send binds redacted selected evidence, Provider endpoint/boundary and selected
+  model ID. Connect/select plus Send is authority for that turn. Before Pi invocation
+  Pige strips credentials, blocks `local_only`, validates non-secret binding and fails
+  closed on source/cancellation/provider drift; there is no approval hash state machine.
 - The model may cite only supplied evidence refs. Unknown refs fail before a durable
   write. Markdown citations and Dataset revision/row/range/query-result citations are
   rendered service-side; model-authored locator tokens are never trusted.

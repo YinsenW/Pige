@@ -208,7 +208,6 @@ Canonical states:
 - `queued`.
 - `running`.
 - `waiting_dependency`.
-- `waiting_permission`.
 - `awaiting_review`.
 - `cancel_requested`.
 - `completed`.
@@ -271,31 +270,18 @@ Rules:
 - Secret-scanned scoped memory grows autonomously; sensitive/authority changes intervene.
 - Vault-scoped memory is included in backup by default unless excluded.
 
-## 10. Permission Model
+## 10. Authority And High-risk Effects
 
-A `PermissionGrant` records a user decision over a versioned actor, capability, bounded
-resource/data scope, and duration. `docs/SECURITY_THREAT_MODEL.md` is the sole owner of
-eligible actors, required record dimensions, grant scopes, and enforcement semantics;
-domain code must consume that shared contract rather than introduce another permission
-vocabulary.
+A submitted Agent turn is the authority record for ordinary registered first-party
+capabilities. It is scoped to the turn, selected vault/resources and connected Provider;
+it is not expanded by model output, source text, Skills or package code. Pige has no
+saved-grant, Ask-Every-Time or YOLO domain object.
 
-Default permission modes:
-
-- Ask Every Time.
-- Remember Scoped Grants.
-- YOLO Full Access.
-
-Rules:
-
-- Security Threat Model owns brokered actors/capabilities and egress classes.
-  Active-vault knowledge-Markdown and exact selected-source actions use standing/gesture
-  authority; any Pige-owned or extension tool outside it needs an exact decision, grant,
-  or eligible YOLO result.
-- Grants must be scoped, revocable, and machine-local by default.
-- Denial must leave the app stable and explainable.
-- YOLO Full Access can only be enabled by the human user in Settings.
-- YOLO Full Access suppresses covered prompts but still produces permission and operation logs.
-- Source content, Skill instructions, package code, local tools, and model output cannot enable or expand permission modes.
+Only closed-list high-risk effects have a typed one-effect confirmation: irreversible
+delete, user-file overwrite, write outside an explicitly selected directory, arbitrary
+shell/unknown-package install, or credential display/export. A denial applies no effect.
+Third-party code has its own reviewed capability/isolation contract and does not inherit
+first-party submitted-turn authority.
 
 ## 11. Service Ownership
 
@@ -316,7 +302,7 @@ Rules:
 | SQLite and migrations | Local Database Service |
 | Retrieval chunks and indexes | Search and Retrieval Service |
 | Model provider calls | Model Provider Registry |
-| Permission prompts and grants | Permission Broker |
+| High-risk one-effect confirmation | High-risk Confirmation owner |
 | Skill metadata and selection | Skill Registry Service |
 | Package install/update records | Pi Package Registry Service |
 | Tool/model downloads | Local Tool Service |

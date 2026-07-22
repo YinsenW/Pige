@@ -117,7 +117,9 @@ packages/
 Package rules:
 
 - `domain` contains pure domain types, ID helpers, stable constants, and domain error codes.
-- `contracts` contains serializable DTOs and cross-runtime contracts for IPC, jobs, permission requests, Agent context packs, and diagnostics.
+- `contracts` contains serializable DTOs and cross-runtime contracts for IPC, Jobs,
+  high-risk effects, Agent context packs, and diagnostics; types derive from canonical
+  schemas at real trust boundaries.
 - `schemas` contains schema validators for persisted JSON/YAML/frontmatter records.
 - `markdown` contains pure Markdown/frontmatter/citation/link helpers, not renderer UI.
 - `knowledge` contains pure knowledge model helpers and graph aggregation logic.

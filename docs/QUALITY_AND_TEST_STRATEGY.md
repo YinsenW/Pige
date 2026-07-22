@@ -13,15 +13,30 @@ This document defines the test strategy future AI agents should follow while imp
 
 1. User-owned data loss is the highest-severity failure.
 2. Secret leakage is a release blocker.
-3. Permission bypass is a release blocker.
+3. High-risk authority bypass and third-party inheritance are release blockers; absence
+   of a prompt for ordinary first-party turn work is expected behavior.
 4. A capture must be preserved before expensive processing.
 5. SQLite/index corruption must be recoverable from durable files.
 6. Failed jobs must be visible, explainable, retryable when possible, and never silently disappear.
 7. Renderer responsiveness is part of correctness.
 8. Tests should protect service boundaries, not only UI snapshots.
 9. Fixtures should cover multilingual and malformed real-world inputs.
-10. Release gates should be automated where possible.
+10. Automate gates at the risk boundary; do not make every edit pay release cost.
 11. AI output quality is a product behavior, not a subjective afterthought; ingest, retrieval, linking, and summarization need regression fixtures and measurable gates.
+
+### 2.1 Risk-Tiered Validation Matrix
+
+| Node | Required checks | Not required by default |
+| --- | --- | --- |
+| Inner implementation loop | Affected tests; typecheck; build when renderer/runtime output changes | Full trace, independent snapshot, package/distribution |
+| Ordinary PR | Affected/changed-owner tests, typecheck, build, architecture reset guard, docs links/map when docs changed | Forty-document bind, semantic-lock refresh, five-dimension score, Windows/Linux |
+| P0/architecture/security/durable-data/migration/release PR | Full tests, full governance/trace, adversarial boundary tests, real macOS Electron if visible | Deferred platform qualification unless targeted |
+| Explicit merge candidate and `main` | Full `npm run verify`, macOS package and downloaded-distribution smoke | Windows/Linux unless an explicit platform batch |
+| Platform qualification batch | Target-platform package, filesystem/process/titlebar/installer/recovery evidence | Reopening unrelated macOS feature acceptance |
+
+An evidence-only or semantics-preserving test repair does not refresh trace, semantic
+lock, or independent review. Full gates remain available; they are scheduled at the node
+where their result is actionable.
 
 ## 3. Test Pyramid
 
@@ -36,7 +51,7 @@ Unit tests:
 - Owner-defined link resolution across title, alias, slug, and stable identity.
 - Relationship type validation from `docs/KNOWLEDGE_MODEL_AND_LINKING.md`.
 - Source checksum and deduplication logic.
-- Permission decision matching.
+- High-risk effect classification and third-party authority rejection.
 - Backup manifest include/exclude logic.
 - Migration planning.
 - Language detection wrappers and normalization helpers.
@@ -71,14 +86,14 @@ Renderer/component tests:
 - Home knowledge retrieval result list.
 - Note reader rendering.
 - Autonomous Activity/Undo and exceptional diff/preview.
-- Permission dialog.
+- Closed-list high-risk effect dialog.
 - Settings pages.
 - I18N string rendering in long-label locales.
 
 Smoke/end-to-end tests:
 
 - First-run vault creation.
-- First-run skip model enters capture-only mode and preserves captures.
+- First-run skip model preserves submissions and shows truthful model-unavailable Agent outcomes without a second product mode.
 - Vault & Note Storage page shows active vault path, note storage path, source asset root, recent vaults, and safe backup/restore entry points.
 - App restart with pending job.
 - Capture text, URL, PDF, image fixture.
@@ -288,16 +303,13 @@ Tests must verify:
   order, unregistered or incomplete tools, nested tool/model execution, final-text
   writes, policy/catalog/source drift, and renderer bypass.
 - No Advanced/Fast model assignment UI exists in v0.1 unless a real routing service is implemented and tested.
-- Pige-owned Pi tools cannot bypass service validation or Permission Broker when their
-  exact action falls outside standing Markdown/current-source authority; external
-  extensions cannot bypass Permission Broker.
+- Pige-owned Pi tools cannot bypass service validation or the closed high-risk boundary;
+  external extensions cannot inherit first-party submitted-turn authority.
 - Pige does not mutate the user's global `~/.pi/agent/models.json` during normal provider setup.
 - Cloud-send indicators appear when content is sent to a cloud-hosted provider.
-- Current-action model-egress tests keep ordinary allowed calls prompt-free, block
-  restricted/local-only cases, and prove exact body-free request binding, one-use CAS,
-  pre-credential revalidation, allow/deny/cancel, conservative restart reconciliation,
-  and no saved-grant/YOLO substitution. Home exposes one localized decision surface and
-  suppresses its matching Recent Work row until resolution.
+- Provider-send tests keep ordinary calls prompt-free, strip secrets, block `local_only`,
+  reject Provider identity drift, and prove bounded selected-context assembly without
+  approval hashes, renderer actions, or waiting Job states.
 
 ## 6.2 Agent Runtime Policy Context Gates
 
@@ -366,11 +378,11 @@ Tests must verify:
 - Portable-settings fixtures reject machine-local or secret fields from vault config.
 - Machine-local settings are excluded from default vault backups.
 - Settings export excludes secrets by default.
-- Irreversible/security/destination setting changes require intervention; external/new
-  capability scopes use Permission Broker, while ordinary reversible preferences do not re-prompt.
+- Irreversible/security/destination setting changes use their explicit high-risk or
+  exceptional owner, while ordinary reversible preferences do not re-prompt.
 - Setting updates that affect running jobs either apply to new jobs only or pause/flush/restart jobs according to the declared apply behavior.
 
-## 6.4 Onboarding And Capture-Only Gates
+## 6.4 Onboarding And Unavailable-Capability Gates
 
 Tests must verify:
 
@@ -396,34 +408,26 @@ Tests must verify:
   and sender cancel; packaged smoke loads the worker. Exclusions and
   retention remain in `docs/DIAGNOSTICS_AND_OBSERVABILITY.md`.
 
-## 7. Permission Gates
+## 7. Submitted-Turn And High-Risk Authority Gates
 
 Tests must verify:
 
-- Current-action records bind exact vault, Job, actor/action version and digest,
-  capability, resource identity/scope, policy/runtime and binding hash without bodies.
-- Deny executes nothing; Allow once resumes the same Job, revalidates and consumes once.
-  Pending/approved/denied restart safely; consumed-without-completion never replays.
-- Pending UI exposes one localized safe summary/status owner, disables while resolving,
-  rereads durable truth after IPC uncertainty, and fails closed for stale/unreadable state.
-- Production exposes three reviewed read-only adapters; create tests prove no write
-  authority. Package-install tests prove exact permission, deny-before-network, disabled
-  output, stable adoption, integrity/archive bounds, hook/dependency/native rejection,
-  cancellation, lock/residue recovery and no package-code execution.
-- Symlink/root/parent/successor races, fsync errors, cancellation and marker disagreement
-  fail closed without deleting a successor or creating Retry authority.
-- Mutation/shell admission needs platform race, recovery, and isolation evidence.
-- Grant-matching fixtures distinguish a non-reusable one-action decision from a
-  revocable saved grant bound to actor/version/capability/resource scope.
-- Deny blocks the action and leaves the app stable.
-- Permission decisions are recorded without secrets.
-- Saved grants can be revoked.
-- Destructive actions do not default to Allow.
-- Default permission modes are enforced: Ask Every Time, Remember Scoped Grants, and YOLO Full Access.
-- YOLO Full Access is off by default, requires explicit opt-in, remains visibly indicated, can be revoked immediately, and logs every covered auto-allowed action.
+- One submit lets registered first-party reads, parse/OCR/retrieval, user-specified fetch,
+  and bounded local tools proceed with zero permission request/decision records.
+- Scope, path, resource, time/byte, cancellation, idempotency, and safe-result checks still
+  fail closed.
+- Third-party code cannot inherit first-party turn authority or self-authorize.
+- Irreversible delete, original overwrite, out-of-root write, arbitrary shell/unknown
+  install, credential disclosure, risky edit, and equivalent escalation require one
+  concrete confirmation; denial executes nothing.
+- Connected Provider + Send permits bounded selected context; secrets are stripped,
+  `local_only` and identity drift block, and ordinary/private/bounded-large context does
+  not create approval UI or a waiting Job.
+- New Jobs cannot reach `waiting_permission` or `waiting_model_egress`.
 
-The final two grant/default bullets are future Phase 8 acceptance; the current-action
-foundation accepts only Deny/Allow once and never adopts saved-grant/system/YOLO authority.
+Delete tests that only preserve request/decision/consume/completion internals, YOLO,
+saved grants, or 12-hash egress approvals. Keep effect safety, irreversible data, secret
+absence, destination identity, and recovery tests.
 
 ## 8. Parser And OCR Gates
 
@@ -519,6 +523,12 @@ Required gates:
 
 ## 12. Documentation Control Gates
 
+Documentation control is staged. Ordinary PRs run links/map plus the changed Owner and
+architecture-reset guard. P0/architecture/security/data/migration/release candidates,
+explicit merge candidates, and main run full trace, decisions, semantic lock,
+independent review, leanness, and scorecard. A semantics-preserving code/test change does
+not refresh an independent snapshot or manufacture a governance commit.
+
 Documentation checks must verify:
 
 - `docs/START_HERE_FOR_AI_AGENTS.md` remains the compact task router; the full governed inventory and lifecycle metadata live in the machine-readable document-map manifest.
@@ -536,12 +546,15 @@ Documentation checks must verify:
   authority, Job lifecycle, asset roots, backup/restore, provider, permissions, secrets,
   and model egress.
 - Documentation leanness verification enforces an always-read attention budget, single-owner projections, normalized trace manifests, a bounded inventory, and material reduction from the audited baseline. Its copy/paste gate rejects every unapproved repeated short normative line, consecutive list or table-data window, mixed multiline block, external URL, same-name typed declaration, and exact or high-coverage long prose/fenced block; each run also executes mutation and false-positive controls.
-- The manifest-backed documentation scorecard reports at least `9.5/10` independently for all five dimensions.
+- The five-dimension scorecard reports at least `9.5/10` at full-governance nodes; it is
+  not an inner-loop or ordinary-PR acceptance ritual.
 - Fixture and release-evidence paths remain centralized in `docs/REPOSITORY_STRUCTURE.md`, not duplicated as conflicting ad hoc paths.
 
 ### 12.1 Documentation System Scorecard
 
-Documentation-system quality is measured as five independent scores on a 0-10 scale. The executable gate definitions live in `resources/documentation-quality/documentation-quality.manifest.json`; physical/context budgets are separately declared in `resources/documentation-quality/documentation-leanness.manifest.json`. The current independent review, reviewer scopes, coordination acknowledgement, and reviewed snapshot hash live in `resources/documentation-quality/independent-review.recipe.json`. `npm run verify:documentation-quality` validates both layers and writes generated reports under `artifacts/documentation-quality/`.
+At full-governance nodes, documentation-system quality is measured as five independent
+scores on a 0-10 scale. Executable definitions live in the documentation-quality
+manifests; ordinary implementation changes do not touch their recipe or snapshot.
 
 Each dimension must score at least `9.5`. The accepted score is the lower of its automated weighted-gate score and its current independent-review score. Passing lightweight formatting checks cannot compensate for an unresolved critical gate: any open security-report routing error, durable-data ambiguity, incompatible normative contract, false-positive traceability check, or unmapped v0.1 release requirement caps the affected dimension below `9.5`.
 

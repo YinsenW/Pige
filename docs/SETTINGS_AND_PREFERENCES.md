@@ -45,7 +45,6 @@ Every setting belongs to exactly one primary scope.
 | `machine_local` | Belongs to this app installation or device. | OS app data | Excluded |
 | `machine_vault_binding` | Machine-local preference keyed to a specific `vault_id`. | OS app data | Excluded, listed when relevant |
 | `secret` | API keys, tokens, future sync credentials. | OS keychain or encrypted secret store | Excluded |
-| `permission_grant` | Runtime authorization decisions. | Machine-local permission store | Excluded |
 | `derived_status` | Computed health, index, model, package, or tool status. | SQLite/cache/app data | Excluded or rebuildable |
 | `runtime_transient` | Temporary UI/runtime state. | Memory or temp files | Excluded |
 
@@ -57,7 +56,6 @@ Rules:
 - An in-vault managed-copy root is `vault_portable`.
 - An external managed-copy root is a `machine_vault_binding` with a stable `root_` ID and must appear in backup/restore manifests as an external dependency. The absolute path remains machine-local.
 - API keys are always `secret`, even when associated with a provider profile.
-- Permission mode and saved grants are machine-local unless future sync explicitly designs a portable permission profile.
 
 ## 4. Storage Locations
 
@@ -65,7 +63,7 @@ Recommended v0.1 storage:
 
 ```txt
 OS app data/
-  settings.json                  machine-local non-secret settings, permission mode/grants/YOLO
+  settings.json                  machine-local non-secret settings
   provider-profiles.json          provider metadata without secrets
   model-profiles.json             model IDs and selected default model
   local-capabilities.json         local tool/model/package status
@@ -130,15 +128,18 @@ Rules:
   Global Default; only Custom exposes protocol/Base URL.
 - Model/provider behavior must follow `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`; do not add Advanced/Fast model settings unless runtime routing support is real and tested.
 - Local embeddings, OCR, speech, parsers, and bundled tool health belong to Local Capabilities.
-- Non-default Agent/extension permission mode, cloud-send policy, API key storage mode,
-  and YOLO belong to Permissions & Privacy; standing active-vault knowledge-Markdown
-  autonomy is not YOLO.
+- Cloud-send policy, API key storage mode, and high-risk boundaries belong to
+  Permissions & Privacy; ordinary submitted-turn
+  authority has no user mode.
 - Vault & Note Storage separately shows note and source locations; each available root has one platform-neutral reveal action, while an unavailable external source binding is shown as not connected and cannot fall back to the vault root.
 - Trash/archive policy follows `docs/DATA_ARCHITECTURE.md`; no setting lets any actor permanently delete durable knowledge/source evidence automatically.
 
 ## 6. Setting Registry
 
-This table is the v0.1 baseline. Implementation can split storage files differently, but it must preserve every declared field. Permission values use the executable `SettingPermissionRequirementSchema`: `none`, `os_permission`, `permission_broker`, `explicit_confirmation`, `permission_and_confirmation`, or `explicit_warning`.
+This table is the v0.1 baseline. Implementation can split storage files differently, but
+it must preserve every declared field. Confirmation values use one canonical schema:
+`none`, `os_permission`, `high_risk_confirmation`, or `explicit_warning`. Legacy
+`permission_broker` variants are removed in AR1 rather than extended.
 
 | Setting or state | Page | Scope | Owner | Storage | Backup | Permission requirement | Apply behavior |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -166,7 +167,7 @@ This table is the v0.1 baseline. Implementation can split storage files differen
 | Provider model inventory: exact ID, source, enabled state, optional alias/capabilities | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `none` | Journaled Refresh; atomic manual/alias/enabled updates |
 | Provider discovery/generation health | Models | `runtime_transient` | Model Provider Registry, Renderer | None | No | `none` | Session-local; discovery and generation truth remain separate |
 | Global Default Pi Agent model | Models | `machine_local` | Model Provider Registry, Agent Orchestrator | OS app data | No by default | `none` | New calls; must reference an enabled model |
-| Cloud-send policy (`ordinary_allowed` default) | Permissions & Privacy | `machine_local` | Settings Service, Model Egress Policy | OS app data | No | `explicit_confirmation` | New model calls |
+| Cloud-send policy (`connected_provider` default / `local_only`) | Permissions & Privacy | `machine_local` | Settings Service, Model Provider Registry | OS app data | No | `explicit_confirmation` | Next model call |
 | Local embedding model status | Local Capabilities | `derived_status` plus machine asset | Local RAG Engine, Local Tool Service | OS app data | No | `permission_and_confirmation` | After download/remove job |
 | OCR engine preference | Local Capabilities | `machine_local` | OCR Service | OS app data | No | `none` | New OCR jobs |
 | OCR language hints | Local Capabilities | `machine_local` | OCR Service, I18N Service | OS app data | No | `none` | New OCR jobs |
@@ -177,15 +178,11 @@ This table is the v0.1 baseline. Implementation can split storage files differen
 | Memory enabled state | Agent & Memory | `vault_portable` for vault memory | Agent Memory Service | `.pige/config.json` | Yes | `none` | New memory reads/writes |
 | Memory backup inclusion | Agent & Memory/Backup flow | `vault_portable` | Backup Service | `.pige/config.json` | Yes | `none` | Next backup |
 | Exceptional intervention policy (`confirmation.*` compatibility) | Agent & Memory | `vault_portable` | Agent Orchestrator, Change Proposal Service | `.pige/config.json` | Yes | `explicit_confirmation` | New jobs; cannot turn uncertainty into routine prompts |
-| Default permission mode | Permissions & Privacy | `machine_local` | Permission Settings/Broker | `settings.json` | No | `none` | CAS |
-| Saved scoped grants | Permissions & Privacy | `permission_grant` | Permission Settings/Broker | `settings.json` | No | `none` | CAS |
-| YOLO Full Access | Permissions & Privacy | `permission_grant` | Permission Settings/Broker | `settings.json` | No | `explicit_confirmation` | CAS/revocable |
 | Secret storage mode | Permissions & Privacy | `machine_local` plus `secret` | Settings and Secrets Service | OS app data + secret store | No | `explicit_warning` | Requires explicit warning |
 | Secret redaction policy | Permissions & Privacy | `machine_local` | Diagnostics Service | OS app data | No | `explicit_confirmation` | Immediate |
 | Vault-scoped Skill enablement | Skills | `vault_portable` | Skill Registry Service | `.pige/skills/` metadata or `.pige/config.json` | Yes | `permission_broker` | New Agent runs |
 | Machine-local Skill enablement | Skills | `machine_local` | Skill Registry Service | OS app data | No | `permission_broker` | New Agent runs |
 | Pi package install records | Pi Packages | `machine_local` | Pi Package Registry Service | OS app data | No | `permission_and_confirmation` | After install/remove job |
-| Package permission grants | Pi Packages/Permissions | `permission_grant` | Permission Broker | Machine-local permission store | No | `explicit_confirmation` | Immediate |
 | Update check state | Updates & Diagnostics | `machine_local` | Update Service | `settings.json` | No | `none` | Serialized CAS; default zero-network |
 | Diagnostics export preferences | Updates & Diagnostics | `machine_local` | Diagnostics Service | OS app data | No | `explicit_confirmation` | Next export |
 
@@ -210,9 +207,6 @@ This compact index mirrors every entry currently returned by `settings.registry`
 | `models.providerApiKeys` | `explicit_warning` | Connect writes only after the disclosed gesture and probe; native confirmation remains for revision-fenced credential replacement |
 | `models.manualModelIds` | `none` | Validated as part of the confirmed provider workflow |
 | `models.defaultPiAgentModel` | `none` | Validated enabled-model selection |
-| `permissions.defaultMode` | `none` | CAS; Ask/Remember disables YOLO |
-| `permissions.yoloEnabled` | `explicit_confirmation` | Warning plus one-use sender/revision token |
-| `permissions.savedGrants` | `none` | Body-free revoke; creation deferred |
 | `maintenance.localDatabaseReset` | `explicit_confirmation` | `guardSettingAction` before rebuildable-state deletion |
 | `diagnostics.health` | `none` | Derived read-only status |
 | `diagnostics.supportBundleExport` | `explicit_confirmation` | Preview plus main-process native save dialog |
@@ -230,13 +224,10 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 | --- | --- | --- | --- | --- |
 | Default source storage strategy | `sourceStorage.defaultStrategy` | Yes | Source Storage Service | New file captures only; text and URL inputs remain managed snapshots |
 | In-vault managed-copy root | `sourceStorage.sourceAssetRootKind` compatibility field | Sometimes | Source Storage Service | New managed sources; existing sources unchanged |
-| External managed-copy root binding | `sourceStorage.sourceAssetRootKind` plus stable root binding availability | Sometimes | Source Storage Service, Permission Broker | New managed sources and source availability checks; existing sources resolve their recorded root ID |
+| External managed-copy root binding | `sourceStorage.sourceAssetRootKind` plus stable root binding availability | Sometimes | Source Storage Service | New managed sources and source availability checks; existing sources resolve their recorded root ID |
 | Default Pi Agent model | `model.defaultModelProfileId` | Yes | Model Provider Registry, Agent Orchestrator | New model calls |
 | Provider profile metadata | protocol-bound availability and internal `model.cloudBoundary` | Yes, redacted | Model Provider Registry | New model calls |
-| Cloud-send policy (`ordinary_allowed` default) | `model.cloudSendPolicy` | Yes | Model Egress Policy, Model Provider Registry | New model calls and queued model jobs |
-| Default permission mode | `permissions.defaultMode` | Yes | Permission Settings, Broker | Rebuild; next eligible action |
-| Saved scoped grants | `permissions.savedGrantSummaryRefs` | Opaque IDs only | Permission Settings, Broker | Rebuild; next eligible action |
-| YOLO Full Access | `permissions.yoloEnabled` | Status only | Permission Settings, Broker | Rebuild; next covered action |
+| Cloud-send policy (`connected_provider` / `local_only`) | `model.cloudSendPolicy` | Yes | Model Provider Registry, context assembly | Next model call |
 | App language | `language.appLocale` | Yes | I18N Service, Renderer | UI immediately; generated text only when policy says so |
 | OCR language hints | `language.ocrLanguageHints` | Maybe | OCR Service | New OCR jobs |
 | Agent behavior preferences | Workflow-specific policy fields | Yes | Agent Orchestrator | New Agent jobs |
@@ -246,8 +237,8 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 | Local embedding model status | `retrieval.vectorSearchAvailable` | Maybe | Local RAG Engine | New retrieval/index jobs |
 | Parser/toolchain health | `localCapabilities.parserToolchainReady` | Maybe | Local Tool Service, Parser Service | New parser jobs |
 | Speech input availability | `localCapabilities.speechInputAvailable` | No for Agent | Speech Service | Per session; defaults to app locale, persisted dictation language open |
-| Vault-scoped Skill enablement | Tool availability and capability scope | Yes, scoped | Skill Registry Service, Permission Broker | New Agent runs |
-| Pi package install records | Tool availability and capability scope | Yes, scoped | Pi Package Registry Service, Permission Broker | New Agent runs |
+| Vault-scoped Skill enablement | Tool availability and capability scope | Yes, scoped | Skill Registry Service | New Agent runs |
+| Pi package install records | Tool availability and capability scope | Yes, scoped | Pi Package Registry Service | New Agent runs |
 
 Rules:
 
@@ -262,7 +253,7 @@ Setting changes are one of these types:
 
 | Type | Examples | Behavior |
 | --- | --- | --- |
-| Immediate | theme, language when possible, permission grant revoke | Apply now and emit event |
+| Immediate | theme and language when possible | Apply now and emit event |
 | Next operation | default model, OCR preference, source storage strategy | Applies to new jobs only |
 | Requires job coordination | active vault switch, managed-copy root validation | Pause/flush/cancel/recover jobs safely |
 | Requires exceptional intervention | `PIGE.md`, destructive vault migration/cleanup | Validate, preview, confirm, recover |
@@ -291,8 +282,8 @@ Sensitive settings that always require explicit confirmation:
 
 - API key storage mode.
 - Cloud-send policy that sends more data to cloud providers.
-- YOLO Full Access.
-- Default permission mode.
+- No saved-grant or YOLO mode is a setting; ordinary first-party authority comes from
+  the submitted turn and exceptional effects use the high-risk confirmation owner.
 - Provider profile changes.
 - Vault path, external managed-copy root, or source storage policy changes.
 - `PIGE.md` edits.
@@ -315,7 +306,6 @@ Default vault backup excludes:
 - OS app data settings.
 - Provider profiles by default.
 - API keys and tokens.
-- Permission grants.
 - Local model/tool/package files.
 - Active vault path and recent vault list.
 - Raw bindings and referenced originals; reachable managed copies remain included.
@@ -331,7 +321,7 @@ Restore rules:
 - Provider profiles and secrets can be imported only through an explicit, redacted settings import/export flow.
 - `replace_existing` preserves vault ID, confirms irreversibility, verifies rollback,
   publishes fresh, then CAS-swaps the active binding; old folder remains unregistered.
-- `clone_as_new` mints vault/binding and omits grants, YOLO, secrets and external paths.
+- `clone_as_new` mints vault/binding and omits secrets and external paths.
 - Restore Jobs/claims remain backup-excluded OS app-data, never staging/restored-vault state.
 
 Settings export:
@@ -347,8 +337,9 @@ v0.1 does not implement sync, but settings must be sync-ready.
 Future sync rules:
 
 - `vault_portable` settings can sync with the vault.
-- `machine_local`, `permission_grant`, and `secret` settings do not sync by default.
-- Future cloud/mobile clients may support a settings profile, but that profile must not silently import desktop YOLO, shell, filesystem, or package permissions.
+- `machine_local` and `secret` settings do not sync by default.
+- Future cloud/mobile clients may support a settings profile, but it must not silently
+  import desktop shell, filesystem, package, or high-risk authority.
 - Mobile clients should read vault settings that affect rendering, language, memory visibility, and source metadata, but may ignore desktop-only local capability settings.
 - Remote Agent Backend must receive an explicit runtime capability profile, not infer desktop settings.
 
@@ -365,7 +356,6 @@ type SettingScope =
   | "machine_local"
   | "machine_vault_binding"
   | "secret"
-  | "permission_grant"
   | "derived_status"
   | "runtime_transient";
 
@@ -383,7 +373,7 @@ Rules:
 
 - Renderer receives display DTOs, not raw secret values or arbitrary filesystem capability.
 - Secret writes go through dedicated secret APIs.
-- Agent/extension actions outside standing authority route through Permission Broker; irreversible/security/
+- Only closed-list high-risk effects route through confirmation; irreversible/security/
   destination/conflict patches use exceptional intervention.
 - Settings reads should be grouped by page and redacted by default.
 - Settings changes should emit domain events so UI, jobs, and services can refresh safely.
@@ -411,8 +401,8 @@ Required tests:
 - Default binding reports not-configured/ready/configured-unusable without secret reads;
   changing it affects new Pi calls.
 - Changing source storage strategy affects new file captures only; typed/pasted text and fetched URL snapshots remain managed copies.
-- Revoking permission grants takes effect immediately.
-- YOLO can only be enabled through explicit Settings action and remains visible/revocable.
+- Ordinary Agent work exposes no permission-mode controls; high-risk decisions are
+  concrete actions, not stored settings.
 - Restore works without machine-local settings.
 - Settings page strings exist in all v0.1 locales.
 

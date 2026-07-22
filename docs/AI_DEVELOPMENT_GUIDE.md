@@ -2,7 +2,7 @@
 
 Status: Active implementation guide
 Baseline date: 2026-07-09
-Last revised: 2026-07-10
+Last revised: 2026-07-22
 
 ## 1. Purpose
 
@@ -16,7 +16,7 @@ The goal is not to make every task slow. The goal is to give each task the small
 - Adding a parser or tool without recording dependency, license, update, and backup behavior.
 - Treating a cache as user-owned truth.
 - Sending private data to a cloud model without the configured boundary.
-- Adding external Skill capability without Permission Broker enforcement.
+- Giving an unreviewed third-party capability first-party turn authority.
 - Writing a local feature that blocks future sync.
 
 ## 2. Agent Operating Loop
@@ -37,13 +37,15 @@ Every non-trivial implementation task should follow this loop:
 1. Clarify the target slice.
 2. Build a context pack from `docs/START_HERE_FOR_AI_AGENTS.md`.
 3. Identify the owning service, durable data owner, and user-visible workflow.
-4. Implement the smallest vertical slice that can be tested.
-5. Add or update tests and fixtures.
-6. Hand implementation facts, evidence, and gaps to Product Planning for required
-   design synchronization.
+4. Define or reuse one typed capability contract and canonical schema.
+5. Let UI and service implementation proceed in parallel against that contract; Pi owns
+   semantic tool choice and Host owns enforcement/reliability.
+6. Add risk-proportional tests and hand Product Planning only actual semantic deltas.
 7. Report what changed, what was verified, and what remains risky.
 
-Do not start with broad refactors. Pige should grow by vertical slices that preserve capture, data safety, and user trust.
+Architecture reset work may deliberately remove a cross-cutting obsolete mechanism. It
+still freezes one contract, deletes in bounded phases, and preserves data/safety evidence;
+ordinary feature work stays paused while an incompatible reset phase is active.
 
 ## 3. Bounded Design Iterations
 
@@ -73,6 +75,7 @@ This section is the single owner of the implementation context-pack fields. Befo
 Task:
 Agent role: Project Management | Product Planning | UI Design | Development
 Cross-role delegation: None | Delegated by role/task for exact scope
+Product Planning contract impact: None with reason | Owner update pending | Owner updated
 Product Planning design sync: Not required with reason | Pending task | Acknowledged task/snapshot
 Active phase or slice:
 Build IDs:
@@ -91,6 +94,7 @@ Future sync impact:
 Future mobile/cloud runtime impact:
 Tests/fixtures:
 Docs to update:
+Single owner to update, if semantic:
 Out of scope:
 Exit condition:
 ```
@@ -105,7 +109,9 @@ If any field is unclear, inspect the design docs first. Ask the user only when t
 - leaves semantic work to Pi;
 - keeps renderer, preload, main, worker, and adapter responsibilities separated;
 - places cross-runtime DTOs and schemas in their shared package owner; and
-- does not bypass Permission Broker or a runtime adapter.
+- uses the minimal exceptional-confirmation boundary only for a listed high-risk effect;
+- does not reproduce Pi's turn/tool lifecycle, correction, repair, or dispatch; and
+- keeps one canonical schema at each real trust boundary.
 
 ## 7. Storage Decision Checklist
 
@@ -126,37 +132,27 @@ Before storing anything, answer:
 
 If the answer is uncertain, use `docs/DATA_ARCHITECTURE.md` and `docs/DOMAIN_MODEL.md` before writing code.
 
-## 8. Permission Decision Checklist
+## 8. Authority And High-Risk Confirmation Checklist
 
-Do not route schema-valid recoverable knowledge-Markdown create/update/link/organize work
-inside the active Pige vault through a routine prompt; that is standing Agent authority.
-The exact source selected by drop/file picker likewise has current-action read/preserve
-authority. Tool ownership alone grants nothing beyond those defaults.
+One user submit is the authority envelope for registered first-party capabilities in that
+turn: bounded reads, preservation, parsing, OCR, retrieval, user-specified URL fetch, and
+reviewed local tools. Do not create request/decision/consume/completion records for each
+ordinary tool call, and do not add a mode whose purpose is bypassing those prompts.
 
-Route through Permission Broker when an action does any of these:
+Require a narrow confirmation only for an observed high-risk boundary:
 
-- Reads or writes vault data outside the current job scope.
-- Requests any arbitrary path/filesystem/command/commit effect outside standing authority.
-- Permanently deletes, bypasses trash/recovery, overwrites a user-owned original, or
-  changes protected policy/settings; apply the stronger confirmation layer where owned.
-- Reads external filesystem paths.
-- Uses external network access beyond ordinary user-initiated URL capture.
-- Runs shell commands, package-backed tools, or external/Web Skill code.
-- Installs or updates packages, local tools, models, or runtime assets.
-- Sends sensitive content, changes destination, or crosses a stricter cloud-send gate.
-- Accesses API keys, tokens, or secret storage.
-- Changes provider profiles, privacy settings, update settings, or `PIGE.md`.
-- Spawns another Agent or long-running background process.
+- irreversible deletion or bypass of trash/recovery;
+- overwrite of a user-owned original or write outside an already authorized root;
+- arbitrary shell execution or installation of an unknown/unreviewed package;
+- credential/secret export or display;
+- a risky Agent edit already covered by the proposal/Operation contract; or
+- a changed destination or equivalent authority/security escalation.
 
-Denied permission must leave the app stable and the job explainable.
-
-Permission defaults:
-
-- Ask Every Time and Remember Scoped Grants should both be supported.
-- Pige should not expose a chat-style "current session" permission mode; it is a sessionless product.
-- "Only this" grants should be modeled as resource scopes such as current URL, domain, source, note, file, folder, vault, Skill/package/tool version, or provider profile.
-- YOLO Full Access can suppress prompts only after explicit Settings opt-in.
-- YOLO Full Access must not remove logging, operation records, or source/prompt-injection defenses.
+Connected Provider identity plus Send authorizes that turn's bounded selected context.
+Strip explicit secrets, block `local_only`, and require a new Connect/Send gesture after
+provider identity drift; ordinary/private/bounded-large context does not pause. Denial or
+block leaves preserved input stable and explainable. Third-party code cannot acquire
+first-party authority through prompt text, naming, or a saved global mode.
 
 ## 9. Dependency Decision Checklist
 
@@ -209,13 +205,19 @@ naming/placement. Early delivery is macOS-first: proportional shared checks plus
 packaged macOS evidence close ordinary slices. Keep portable contracts and record other
 platform gaps; qualify them later before support claims unless the task targets them.
 
+Inner loops run affected tests plus typecheck and a build when output changes. Full
+tests, trace, independent review, package, and distribution belong to high-risk
+architecture/security/data work, explicit merge candidates, and main—not every local
+iteration or ordinary PR. Tests protect observable behavior and irreversible boundaries;
+delete tests whose only value is preserving an obsolete internal state-machine step.
+
 ## 12. Documentation Drift Control
 
-When code diverges from docs, Development fixes the code or hands exact implementation
-facts to Product Planning for same-candidate contract synchronization. `AGENTS.md` owns
-the triggers; `resources/documentation-quality/document-map.manifest.json` identifies the
-editing role. Only that role or an explicitly delegated task edits the owner, Decision Log,
-or trace projection.
+When code diverges from a semantic contract, Development fixes the code or hands the
+delta to Product Planning. `AGENTS.md` owns the triggers and the document map identifies
+the editing role. No-contract refactors, test repairs, evidence refreshes, and ordinary
+implementation details do not trigger broad Owner, trace, semantic-lock, or snapshot
+rewrites.
 
 ### 12.1 PRD Impact Classification
 
@@ -227,36 +229,37 @@ updates unless it explicitly delegates that scope.
 | --- | --- | --- |
 | `none` | Neither the PRD nor a product-facing promise changes. Typical examples are an internal refactor, dependency patch, or owner-detail correction with identical observable behavior. | Leave the PRD unchanged and state the concrete no-contract-impact reason. Update only the affected technical owners and verification. |
 | `editorial` | PRD wording, ordering, links, or structure changes without changing normative meaning, scope, defaults, degraded behavior, or acceptance. | Preserve stable IDs and semantic claims. Update a public summary only if it repeats the edited statement; do not churn technical owners or trace projections. State why semantics are unchanged. |
-| `behavior` | User workflow, visible state, default, failure/degraded path, forbidden behavior, trust boundary, or acceptance intent changes. This also applies when a specialized owner changes such a product-facing promise. | Update the PRD and all affected specialized owners, tests/fixtures, and trace/acceptance projections in the same change. Record a durable decision when applicable. |
-| `release_scope` | P0/P1/P2 assignment, supported platform, release gate, non-goal, or deferred capability changes. | Update the PRD, milestones, playbook, trace/acceptance projections, semantic lock, and decision record together; reconcile active development before implementation continues. |
+| `behavior` | User workflow, visible state, default, failure/degraded path, forbidden behavior, trust boundary, or acceptance intent changes. | Update the PRD when its promise changes and the single specialized Owner that defines the detail. Update trace only when mapping, status, or evidence meaning changes. |
+| `release_scope` | P0/P1/P2 assignment, supported platform, release gate, non-goal, or deferred capability changes. | Update the PRD, phase owner, minimal trace/acceptance projection, and one durable decision; reconcile active work. |
 
 `none` and `editorial` are not shortcuts around semantic review. If a user can observe the difference, a default or failure path changes, or release acceptance changes, classify it as `behavior` or `release_scope` even when the code patch is small.
 
-### 12.2 Bidirectional Propagation Matrix
+### 12.2 Bidirectional Ownership Matrix
 
 The PRD owns the product promise; the exact subject owner owns the detailed contract. Follow both directions: a PRD semantic change propagates to affected owners, and an owner change propagates back to the PRD whenever it changes the product promise.
 
-| Changed semantic area | Update in the same change | Update the PRD when |
+| Changed semantic area | Authoritative detail Owner | Update the PRD when |
 | --- | --- | --- |
-| User workflow, visible states, defaults, degraded paths, confirmation, or accessibility | UI, onboarding, settings, I18N, job/recovery, and relevant test owners | Always when observable behavior or acceptance intent changes. |
-| Release scope, platform support, phase gate, non-goal, or deferral | Milestones, implementation playbook, Spec Traceability, P0 coverage, acceptance and semantic-claim manifests, and Decision Log | Always. Use `release_scope`. |
-| Durable data, source storage, Markdown, IDs, migration, backup, restore, or conflict behavior | Data, source-storage, Markdown, domain, job/recovery, sync/migration, schema, fixture, and test owners as applicable | When ownership, portability, preservation, recovery, or another user-facing guarantee changes. |
-| Model/provider setup, cloud send, prompt/context, retrieval, memory, permission, or secret handling | Pi integration, runtime policy, context, prompt, settings, security/privacy, data, and test owners as applicable | When setup, disclosure, consent, output grounding, failure behavior, or another product promise changes. |
-| Capture, parser, OCR, Artifact, or source-processing behavior | Parser/ingest, source storage, job/recovery, performance/reliability, release, schema, fixture, and test owners as applicable | When accepted inputs, visible progress, degraded behavior, preservation, or output expectations change. |
-| Security, privacy, diagnostics, support, or public data-use behavior | Relevant specialist owner plus `SECURITY.md`, `PRIVACY.md`, or `SUPPORT.md` when its public contract changes | When the trust promise, user control, disclosure, or visible recovery/support behavior changes. |
-| Dependency, runtime, repository structure, internal DTO, or implementation choice | Technical Architecture, Repository Structure, Release Engineering, shared schema, dependency manifest, and tests as applicable | Only if the choice changes observable behavior, a product constraint, or release scope; otherwise use `none`. |
+| User workflow, visible states, defaults, degraded paths, confirmation, accessibility | UI/onboarding/settings owner selected by the router | When observable behavior or acceptance intent changes. |
+| Release scope, platform gate, non-goal, deferral | Implementation Playbook | Always; use `release_scope` and minimal trace. |
+| Durable data, storage, IDs, migration, backup, restore, conflict | Exact data/source/job/sync owner | When ownership, portability, preservation, or recovery promise changes. |
+| Model/provider, cloud send, retrieval, memory, authority, secrets | Pi, context, or security owner named by the router | When setup, disclosure, consent, grounding, or failure behavior changes. |
+| Capture, parser, OCR, Artifact | Parser/ingest or source-storage owner | When accepted inputs, preservation, degraded behavior, or output changes. |
+| Security, privacy, diagnostics, support | Exact specialist owner plus public policy only when public behavior changes | When trust, disclosure, or user control changes. |
+| Dependency, runtime, repository, internal DTO | Technical owner | Only when observable behavior, product constraint, or release scope changes. |
 
-This matrix names likely owners, not a license to update all of them mechanically. Use the document inventory and task router to select only owners whose semantics actually change.
+This matrix selects one detail Owner; it is not a checklist for copying the same fact.
 
 ### 12.3 Propagation Procedure
 
 1. State the semantic delta and choose the highest PRD impact class.
 2. Identify the product requirement IDs and the single owner for every affected fact.
-3. Use the matrix to select affected owners; keep full definitions in those owners and use references elsewhere.
-4. Product Planning applies PRD-to-owner and owner-to-PRD updates in the same candidate; other roles hand off the delta unless delegated.
-5. Product Planning updates trace/acceptance projections only when meaning, mapping, scope, or evidence changes; editorial restructuring preserves stable IDs and status.
-6. Record the affected owners and trace/acceptance impact. For `none` or `editorial`, record a specific no-contract-impact rationale instead of rewriting unrelated documents.
-7. Run the applicable documentation, traceability, contract, fixture, and behavioral gates before handoff.
+3. Select one detail Owner; other documents reference it instead of repeating it.
+4. Update the PRD only if its user-facing promise changes.
+5. Update trace/acceptance/semantic projections only for P0, architecture, security,
+   durable-data, migration, release-scope, mapping, status, or evidence-meaning change.
+6. For `none` or `editorial`, record one no-contract-impact rationale and stop.
+7. Run the risk-tiered gates from Quality Strategy.
 
 ## 13. Handoff Note Template
 
@@ -277,7 +280,9 @@ Tests/evidence:
 Visual baseline impact/evidence: Not affected | Captured <matrix subset> | Open <matrix subset and reason>
 Known gaps:
 Docs updated:
+Product Planning contract impact: None with reason | Owner update pending | Owner updated
 Product Planning design sync: Not required with reason | Pending task | Acknowledged task/snapshot
+Planning impact: None | Owner-only | Full-contract
 Planning cost: None | Low | Medium | High
 Compatibility or migration impact:
 Coordination action: No action | Active-phase follow-up | Future-phase follow-up

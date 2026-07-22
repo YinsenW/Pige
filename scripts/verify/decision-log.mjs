@@ -243,8 +243,7 @@ const requiredSemanticDecisionIds = new Set([
   "D-20260709-Durable-Jobs-Before-Work",
   "D-20260709-Error-Taxonomy-Is-Shared",
   "D-20260709-Phase-1-Provider-And-Settings-Registry",
-  "D-20260710-File-Capture-Storage-Strategy-Enforcement",
-  "D-20260710-Strict-Durable-Records-And-Egress-Identity"
+  "D-20260710-File-Capture-Storage-Strategy-Enforcement"
 ]);
 const semanticStart = "<!-- decision-contract-map:start -->";
 const semanticEnd = "<!-- decision-contract-map:end -->";

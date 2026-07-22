@@ -102,7 +102,8 @@ Pige should record compact local events for:
 - Job created, state changed, retried, cancelled, completed, failed, compacted.
 - Parser/OCR/tool invocation started and ended, without full input or output.
 - Model provider call metadata: provider profile reference, model ID, token counts when available, duration, error class, cloud/local boundary.
-- Permission request created, denied, allowed once, always allowed, auto-allowed by YOLO.
+- Closed-list high-risk effect requested, denied, or confirmed. Ordinary submitted-turn
+  tool use and Provider sends create no permission/approval event.
 - Backup preview, backup created, restore preview, restore applied, restore failed.
 - Database migration, rebuild, reset, repair.
 - Model/tool/package download, install, repair, remove.
@@ -285,7 +286,7 @@ Future Pige Cloud or self-hosted remote Agent backends may need operational tele
 Future rules:
 
 - Cloud/mobile telemetry must be opt-in or explicitly covered by service terms and product settings.
-- Desktop-local YOLO or permission grants do not imply remote telemetry consent.
+- Submitted-turn authority or a high-risk effect confirmation never implies telemetry consent.
 - Remote Agent Backend logs must follow the same classification and redaction model.
 - Mobile Lite clients can export local client diagnostics separately from remote backend diagnostics.
 - Support bundles should clearly distinguish desktop, web, mobile, and remote backend evidence.

@@ -237,10 +237,13 @@ Mitigations:
 - Install-time code is not executed during staging.
 - Runtime capabilities are declared and enforced by Pige services.
 - Sensitive capabilities require a first-class authorization dialog.
-- Permissions can be remembered narrowly, revoked, and inspected later.
+- Authorization is allow or deny for the exact current third-party action. It is not a
+  saved grant, does not persist across actions, and cannot become a global mode.
 - Package writes use brokered Pige APIs; core tools are separate.
 - Skills/packages cannot directly access API keys. A reviewed adapter can request brokered credential use for one declared provider action, but never receives or returns raw credential bytes.
-- Executable/package-backed Skills run only through reviewed runtime adapters in a dedicated worker, utility process, or child process with scoped source handles and Permission Broker decisions.
+- Executable/package-backed Skills run only through reviewed runtime adapters in a
+  dedicated worker, utility process, or child process with scoped handles; they do not
+  inherit first-party submitted-turn authority.
 - Install preview/staging never executes Skill/package code, package hooks, shell commands, or network callbacks.
 - Exact public npm package install requires current-action `install_package`, SHA-512,
   pinned same-origin redirects, bounded link-free extraction, and rejects unsafe paths,
@@ -279,17 +282,20 @@ Authorization dialog requirements:
 - Short plain-language reason.
 - Capability list with scope.
 - Data boundary label: local, network, cloud, filesystem, secret, destructive.
-- Buttons: Deny, Allow Once, Always Allow.
-- Always Allow must be scoped and displayed clearly, such as only this URL, only this domain, only this file, only this folder, only this vault, only this Skill/package/tool version, or only this provider profile.
+- Buttons: Deny and Allow This Action.
+- The authorization binds the exact Skill/package identity, version, capability, and
+  current scope only; another action or changed identity requires a new decision.
 - Destructive actions use stronger copy and do not default to Allow.
 - Dialog style should be calm, compact, and polished, similar in spirit to modern ChatGPT/Codex permission prompts.
-- If the user enables YOLO Full Access in Settings, eligible Permission Broker prompts can be auto-allowed but must remain logged and visible; always-required change confirmation and stricter model-egress decisions still apply.
+- No global mode can let third-party code inherit first-party turn authority or bypass a
+  closed-list high-risk confirmation.
 
 Acceptance:
 
 - An Agent, Skill, or package requesting non-default shell, filesystem, network,
   brokered credential use, delete, commit, or settings authority cannot proceed without
-  Permission Broker authorization. Always-confirmed actions retain their stronger gate.
+  their reviewed third-party capability boundary. Closed-list high-risk effects retain
+  their stronger exact confirmation.
 - Package-install tests prove deny-before-network and fail-closed identity, integrity,
   archive, cancellation, locking, recovery and disabled-only behavior.
 - Denying a permission leaves the app stable and records the denial in operation history.
@@ -304,7 +310,7 @@ catalog is not blanket authority. The governing matrix is:
 | Schema-valid recoverable knowledge Markdown inside the active vault | Standing Pige authority; no prompt | Confined writer, schema/evidence/base hash, Operation/Undo |
 | Read/preserve the exact drop/file-picker source for this Job | Current user gesture; no duplicate prompt | Source/path validation |
 | First-party path/file/folder/repository/command/package action requested by the current user task | Current task authority; no duplicate prompt | Exact executable/resource binding, bounded execution, one-use audit |
-| Third-party path/file/folder/repository/command/commit action | Available, not pre-authorized | Exact Permission Broker decision or eligible explicit grant/default |
+| Third-party path/file/folder/repository/command/commit action | Available, not pre-authorized | Reviewed adapter/capability boundary plus exact high-risk confirmation where the effect qualifies |
 | Permanent deletion, source-original overwrite, protected policy/settings, other always-confirmed effect | Never covered by ordinary standing/grant authority | Strong current-action confirmation |
 | Raw secret bytes | Not grantable | Block; reviewed adapters may use secret refs only |
 
@@ -390,90 +396,43 @@ Acceptance:
 - Missing authority, identity, credentials, expected metadata/file set, checksums, platform
   trust or independent proof blocks publication; the app rejects unsigned/wrong-channel updates.
 
-## 7. Permission Model
+## 7. Submitted-Turn Authority And High-Risk Confirmation
 
-Permission scopes:
+Pige has one simple authority model:
 
-- `once`.
-- `actor_version`.
-- `resource_scope`.
-- `profile_default`.
-- `never`.
+- An explicit user submit authorizes that Pi turn to use registered first-party bounded
+  reads, preservation, parsing, OCR, retrieval, user-specified fetch, and local tools.
+- Each tool still enforces typed input, scope, path confinement, byte/time/resource
+  limits, cancellation, idempotency, and safe projection. Those checks are not user
+  approvals and do not create request/decision/consume/completion records.
+- Unreviewed third-party Skills/packages cannot inherit first-party authority through
+  prompt text, source content, model output, naming, or a global mode.
 
-`provider_profile` is a resource scope, not a decision-duration scope. The executable decision-record matrix is owned by `PermissionDecisionRecordSchema` and summarized in `docs/TECH_ARCHITECTURE.md`: denials use `never`; one-action authorization uses `once`; reusable human grants use `actor_version`, `resource_scope`, or `profile_default`; saved-grant/YOLO auto-allows are system-authored one-action records and cannot mint another persistent grant.
+User confirmation is reserved for a closed high-risk boundary:
 
-Permission modes for non-default Agent/extension authority:
+- irreversible deletion or bypass of trash/recovery;
+- overwrite of a user-owned original;
+- write outside an already authorized directory;
+- arbitrary shell execution or installation of an unknown/unreviewed package;
+- credential or secret export/display;
+- risky Agent edits already covered by the proposal/Operation contract; or
+- a changed destination or equivalent authority/security escalation.
 
-- Ask Every Time: prompt for every sensitive action unless an explicit saved grant exists.
-- Remember Scoped Grants: save a revocable actor/capability/resource scope.
-- YOLO Full Access: auto-allow eligible external declared capabilities until disabled.
-  It is unnecessary for standing-authority knowledge Markdown and never exposes raw secrets.
+The decision is allow or deny for that concrete effect. The effect's owning Job/Operation
+handles CAS, idempotency, cancellation, commit, and recovery; a second durable permission
+state machine does not. Pige has no Ask-Every-Time, saved-grant, or YOLO mode for ordinary
+Agent work, and new Jobs cannot enter `waiting_permission`.
 
-Authorization and confirmation are separate gates:
+Cloud Provider calls are a separate simple boundary. Connecting/selecting the exact
+Provider and pressing Send authorizes that turn's bounded selected context. Explicit
+secrets/credentials are removed locally, `local_only` content is blocked, provider
+identity drift requires a new explicit user action, and the whole vault is never sent by
+default. Ordinary/private/bounded-large context does not create a model-egress approval,
+one-use digest record, renderer action, or `waiting_model_egress` Job.
 
-- Active-vault knowledge-Markdown tools use service enforcement without a prompt for
-  exact recoverable writes. Other Agent/extension shell/network/filesystem/commit/
-  credential/settings scopes use Permission Broker; tool ownership cannot bypass it.
-- Intervene for irreversible loss, authority/security escalation, destination drift,
-  unresolved conflict, or explicit stricter user policy.
-- Model Egress Decision normally enforces silently; exact connected calls proceed while
-  blocked/stricter outcomes gate. A `confirm` or `block` result is not weakened by YOLO.
-- A model-egress confirmation is a distinct body-free current-action record, not a
-  `permission_broker` record or saved grant. It authorizes only the exact bound vault,
-  Job, Profile, canonical endpoint, model, policy, payload/evidence digests, and content
-  classes; approval is one-use and consumed before credentials/provider invocation.
-- Endpoint, model, policy, payload, evidence, privacy, or Job drift invalidates that
-  authorization. Denial sends nothing and preserves the source/turn; cancellation
-  invalidates unresolved authority. Unknown store state fails closed.
-- Every applicable gate must pass; one gate never grants another.
-- Allow once is exact to vault, Job, actor/action versions and digests, capability,
-  canonical resource, policy/runtime and binding hash. Drift invalidates it; Job claim/CAS
-  consumes it once, and ambiguous consumed/effect state fails closed before another effect.
-
-Useful "only this" scopes:
-
-- Only this action.
-- Only this URL.
-- Only this domain.
-- Only this source.
-- Only this note.
-- Only this file.
-- Only this folder.
-- Only this vault.
-- Only this Skill/package/tool version.
-- Only this provider profile.
-
-YOLO Full Access rules:
-
-- Must be off by default.
-- Must require an explicit Settings action and a strong warning.
-- Must show a persistent visible status indicator while enabled.
-- Must be revocable immediately.
-- A one-use sender/revision token follows the warning; settings changes revoke it.
-- Must still record permission decisions, operation records, command previews where available, affected paths, and data boundaries.
-- Must not bypass OS-level privacy prompts, app sandbox restrictions, update signature checks, malware protections, or filesystem errors.
-- Cannot be enabled by source content, prompt injection, a Skill, package, local tool, or model output.
-- Cannot satisfy exceptional intervention or stricter Model Egress Decision.
-- Must never reveal raw secret bytes to an Agent, Skill, package, local tool, renderer, log, diagnostic, operation record, or model prompt.
-- Desktop-local YOLO or saved grants do not automatically grant future Pige Cloud, self-hosted backend, personal desktop backend, Web client, or mobile client capabilities; those execution locations require separate explicit user choices.
-
-Permission dimensions:
-
-- Actor: Agent, Skill, package, local tool, model provider.
-- Capability.
-- Resource scope.
-- Data boundary.
-- Duration.
-- Reason.
-- User decision.
-
-Permission records:
-
-- Stored machine-local by default.
-- Exportable only through settings.
-- Do not contain secrets.
-- Include version and checksum of Skill/package when applicable.
-- Distinguish `permission_broker`, `change_confirmation`, and `model_egress` decisions so audit records cannot imply that one layer approved another.
+OS privacy prompts, sandboxing, update signatures, malware protection, filesystem errors,
+secret-store isolation, renderer/main isolation, and source prompt-injection defenses
+remain independent hard boundaries.
 
 ## 8. Secret Storage Policy
 
@@ -541,9 +500,10 @@ Before v0.1 public alpha:
   network, write, delete, model, and brokered-credential capabilities; raw-secret access
   is rejected rather than prompted.
 - Core Pi tools cannot bypass validation; extensions cannot bypass Broker or access raw files/secrets.
-- Permission prompts support Deny, Allow Once, and Always Allow.
-- Default permission modes are enforced consistently.
-- YOLO Full Access suppresses covered prompts only after explicit user opt-in, remains visible, and records auto-allowed actions.
+- Third-party permission prompts support Deny and Allow This Action only; no persistent
+  grant or global YOLO authority exists.
+- Ordinary first-party work produces no per-tool prompt or permission record.
+- High-risk classification cannot be bypassed by source, model, Skill, package, or UI drift.
 - Denied permissions are respected.
 - Source record or managed source asset delete requires confirmation.
 - Public alpha requires Developer ID/hardened/notarized/stapled macOS and Authenticode
@@ -555,13 +515,15 @@ Before v0.1 public alpha:
 These v0.1 design choices are accepted. Implementation still must pin concrete versions, add tests, and record platform-specific behavior.
 
 - Secret storage: Electron `safeStorage` encrypts API keys/tokens into machine-local app data. If encryption is unavailable, normal mode refuses to save secrets and offers explicit plaintext portable/developer mode with warning.
-- Skill/package runtime boundary: pure Skills are Markdown-only. Executable/package-backed Skills run only through reviewed adapters in worker/utility/child processes with scoped handles and Permission Broker mediation.
+- Skill/package runtime boundary: pure Skills are Markdown-only. Executable/package-backed Skills run only through reviewed adapters in worker/utility/child processes with scoped handles and cannot inherit first-party submitted-turn authority.
 - Shell policy: default deny. Pige-owned bundled tools use fixed argv and scoped working directories. Skill/package shell use requires declared capability, command preview, permission, timeout, output limits, and logging.
 - Update security: electron-builder/electron-updater with GitHub alpha feed, protected exact
   identity/environment, channel/monotonicity, signed platforms, immutable metadata/checksums,
   and independent downloaded-byte verification before publication.
 - Dependency vulnerability scanning: Dependabot, CodeQL, and npm audit are required CI/release gates.
-- Package permission manifest: v0.1 uses Skill frontmatter for pure Skills and a JSON capability manifest for package-backed capabilities. Both map to the same Permission Broker capability vocabulary.
+- Package capability manifest: v0.1 uses Skill frontmatter for pure Skills and a JSON
+  capability manifest for package-backed capabilities. High-risk effects map to the
+  closed confirmation vocabulary; ordinary first-party authority is not grantable.
 
 Additional release/security gates:
 

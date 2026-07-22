@@ -301,7 +301,8 @@ Storage ownership rules:
 - Do not follow symlinks during archive extraction or backup without explicit policy.
 - Do not treat paths from source content as trusted.
 - Do not let renderer code access arbitrary original paths.
-- Access to files outside the knowledge root/managed-copy root goes through Permission Broker unless it is the user-selected source for the current capture.
+- Reading a user-selected source is covered by the submitted turn. Writing outside an
+  explicitly selected directory uses the closed high-risk confirmation boundary.
 - Destructive cleanup of managed copies requires confirmation.
 
 ## 10. Future Extensions

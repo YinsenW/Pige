@@ -44,9 +44,10 @@ function requireEnumDocumented(schemaSource, exportName, relativePath) {
   }
 }
 
-function requireEnumLiteralDocumented(schemaSource, exportName, relativePath) {
+function requireEnumLiteralDocumented(schemaSource, exportName, relativePath, ignoredValues = new Set()) {
   const document = read(relativePath);
   for (const value of enumValues(schemaSource, exportName)) {
+    if (ignoredValues.has(value)) continue;
     if (!document.includes(`\"${value}\"`) && !document.includes(`\`${value}\``)) {
       failures.push(`${relativePath} does not document ${exportName} value ${value}.`);
     }
@@ -93,16 +94,12 @@ requireText("packages/schemas/src/index.ts", [
   "export const OperationIdSchema",
   "export const ArtifactIdSchema",
   "export const RootBindingIdSchema",
-  "export const PermissionRequestIdSchema",
-  "export const PermissionDecisionIdSchema",
   "export const JobClassSchema",
   "export const JobStateSchema",
   "export const OperationRecordSchema",
   "export const BackupManifestSchema",
   "export const ProviderProfileSchema",
-  "export const PermissionRequestSchema",
   "export const SourceStorageStrategySchema",
-  "export const ModelEgressDecisionSchema",
   "export const PigeErrorDomainSchema",
   "export const PigeErrorActionSchema",
   "export const PigeErrorSchema",
@@ -117,14 +114,14 @@ requireEnumDocumented(schema, "SourceStorageStrategySchema", "docs/SOURCE_STORAG
 requireEnumDocumented(schema, "MarkdownPageTypeSchema", "docs/MARKDOWN_SCHEMA.md");
 requireEnumDocumented(schema, "MarkdownPageStatusSchema", "docs/MARKDOWN_SCHEMA.md");
 requireEnumLiteralDocumented(schema, "PigeErrorDomainSchema", "docs/API_AND_IPC_DESIGN.md");
-requireEnumLiteralDocumented(schema, "PigeErrorActionSchema", "docs/API_AND_IPC_DESIGN.md");
+requireEnumLiteralDocumented(schema, "PigeErrorActionSchema", "docs/API_AND_IPC_DESIGN.md", new Set([
+  "confirm_model_egress", "grant_permission"
+]));
 
 requireText("docs/DOMAIN_MODEL.md", [
   "| `page_` | Wiki or source page |",
   "| `art_` | Extracted artifact |",
   "| `evt_` | Conversation event |",
-  "| `permreq_` | Permission request |",
-  "| `permdec_` | Permission decision |",
   "Retired aliases `pg_`, `artifact_`, and `event_`"
 ]);
 requireText("docs/MARKDOWN_SCHEMA.md", [
@@ -213,21 +210,20 @@ requireText("docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md", [
   "Authentication, network, timeout, invalid payload, and official-provider list failures remain failures"
 ]);
 requireText("docs/SECURITY_THREAT_MODEL.md", [
-  "Authorization and confirmation are separate gates",
+  "Submitted-Turn Authority And High-Risk Confirmation",
   "raw-secret read is never an extension capability",
-  "Model Egress Decision",
-  "A `confirm` or `block` result is not weakened by YOLO"
+  "Provider and pressing Send authorizes"
 ]);
 requireText("docs/AGENT_RUNTIME_POLICY_CONTEXT.md", [
-  "type ModelEgressDecision",
-  "Decision matrix:",
-  "`unknown`, or `local` without loopback verification",
-  "It is always blocked and cannot be overridden by YOLO"
+  "type AgentRuntimePolicyContext",
+  "Provider Send Boundary",
+  "Submitted-Turn Authority",
+  "strips explicit secrets and credentials locally"
 ]);
 requireText("docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md", [
   "type UserTaskEnvelope",
   "Pasted or attached evidence",
-  "before prompt rendering or provider credential lookup"
+  "Connecting/selecting the exact Provider and pressing Send"
 ]);
 requireText("docs/TECH_ARCHITECTURE.md", [
   "only owner of implementation Phase numbers",
@@ -235,8 +231,8 @@ requireText("docs/TECH_ARCHITECTURE.md", [
   "sole human-readable owner of channel names",
   "storage-root model",
   "`SourceStorageStrategySchema`",
-  "Security Threat Model permission model",
-  "`PermissionRequestSchema`",
+  "Security Threat Model authority model",
+  "canonical shared schema owns the minimal confirmation DTO",
   "sole human-readable owner of provider/profile semantics",
   "internal routing extension point"
 ]);
@@ -260,19 +256,7 @@ requireText("packages/schemas/src/index.ts", [
   "export const ProviderBaseUrlSchema",
   "isBuiltInProviderKind",
   "isProviderLoopbackHostname",
-  "Only a canonical loopback provider URL may use local or loopback_verified boundary metadata.",
-  "A denial must use the never decision scope.",
-  "An allow-once decision must use the once decision scope.",
-  "A saved-grant or YOLO auto-allow must be recorded as a system decision."
-]);
-requireText("packages/schemas/src/index.ts", [
-  "permissionRequestIds: z.array(PermissionRequestIdSchema).optional()",
-  "permissionDecisionIds: z.array(PermissionDecisionIdSchema)",
-  "requiredPermissionIds: z.array(z.union([PermissionRequestIdSchema, PermissionDecisionIdSchema]))"
-]);
-requireText("docs/JOB_OPERATION_AND_RECOVERY.md", [
-  "`requiredPermissionIds` is a compatibility field",
-  "canonical `permreq_` request IDs or `permdec_` decision IDs"
+  "Only a canonical loopback provider URL may use local or loopback_verified boundary metadata."
 ]);
 requireText("apps/desktop/src/main/services/model-provider-connection.ts", ["normalizeProviderBaseUrl"]);
 requireText("apps/desktop/src/main/services/pi-agent-provider-binding.ts", ["normalizeProviderBaseUrl"]);
@@ -364,9 +348,12 @@ for (const field of diagnosticDeltaFields) {
 
 const apiDocument = read("docs/API_AND_IPC_DESIGN.md");
 const mainProcessSource = read("apps/desktop/src/main/index.ts");
+const resetLegacyChannels = new Set([
+  "modelEgress.pending", "modelEgress.resolve", "permissions.pending", "permissions.resolve"
+]);
 for (const match of mainProcessSource.matchAll(/ipcMain\.handle\("([a-z][A-Za-z0-9]*\.[A-Za-z][A-Za-z0-9]*)"/gu)) {
   const channel = match[1];
-  if (!apiDocument.includes(`\`${channel}\``)) {
+  if (!apiDocument.includes(`\`${channel}\``) && !resetLegacyChannels.has(channel)) {
     failures.push(`docs/API_AND_IPC_DESIGN.md does not own implemented IPC channel ${channel}.`);
   }
 }
@@ -486,5 +473,5 @@ console.log(
   `Owner-only negative fixtures OK: rejected ${ownerOnlyNegativeFixtures.length} duplicate-type, stale-channel, error-delta, and source-strategy mutations.`
 );
 console.log(
-  "Cross-document contracts OK: owner-only types, implemented IPC channels, shared error delta, source strategy, stable IDs, Job lifecycle, backup/restore, provider, permission, secret-use, and model-egress contracts are single-owned and compatibility-explicit."
+  "Cross-document contracts OK: owner-only types, current IPC plus bounded AR1 legacy channels, shared errors, source strategy, stable IDs, Job reliability, Provider send, high-risk authority, backup/restore and secret-use are single-owned."
 );

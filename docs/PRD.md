@@ -679,16 +679,20 @@ Navigation:
 - Note reader with source metadata and related pages.
 - Note Agent side panel.
 - Selection actions in note content.
-- Skill Manager for pure Skills and permission-scoped external/Web Skills.
+- Skill Manager for pure Skills and capability-declared external/Web Skills.
 - Curated Pi Package Manager for reviewed package install, disable, uninstall, and update flows.
-- Elegant permission dialogs for sensitive Agent, Skill, package, model, file, network, shell, and delete actions.
-- Permission Settings with Ask Every Time, Remember Scoped Grants, and YOLO Full Access modes.
+- Focused confirmation only for irreversible delete, original overwrite, out-of-root
+  write, arbitrary shell/unknown install, credential disclosure, risky Agent edits, or
+  equivalent authority escalation.
+- Ordinary submitted-turn tool work has no permission-mode, saved-grant, or approval UI.
 - Settings IA grouped as Basic, Knowledge Base, AI, Security, Extensions, and System.
 - Setting ownership, scope, storage, backup behavior, permission requirement, and apply behavior are governed by `docs/SETTINGS_AND_PREFERENCES.md`.
 - Knowledge Base settings must include a real Vault & Note Storage page for local note storage: current vault name, active vault path, knowledge root path, managed source-copy path (the v1 UI compatibility label is Source asset root), default source storage strategy, reveal in file manager, open existing vault folder, create new vault, recent vaults, backup, restore, trash policy, and safe index repair entry points.
 - Models settings contain BYOK provider details, model list status, and one default Pi Agent model. Advanced/Fast model assignment is not a v0.1 visible setting unless a real Pi-compatible routing layer exists.
 - Local Capabilities settings contain local RAG, embeddings/reranking downloads, OCR, speech input, document parsers, and bundled toolchain health.
-- Permissions & Privacy settings contain permission modes, saved grants, API key storage, cloud-send policy, secret redaction, and YOLO.
+- Permissions & Privacy settings contain API key storage, connected-provider/local-only
+  cloud-send behavior, secret redaction, and a clear high-risk boundary. It has no
+  permission-mode, saved-grant, or YOLO controls.
 - Skills and Pi Packages live under Extensions, not under Models.
 
 Internationalization:
@@ -773,8 +777,10 @@ Skills:
 - Chat can initiate Skill installation when the user explicitly asks.
 - Stage Skill installs for preview and confirmation.
 - Enable, disable, uninstall, export, and update Skills.
-- Execute sensitive Skill capabilities only through Pige permission prompts.
-- Show capability scope and allow/deny controls before file writes, shell, network, package, brokered credential use, model, settings, or destructive operations; raw-secret access is rejected rather than offered as a grant.
+- Registered ordinary first-party tools use submitted-turn authority. Third-party Skills
+  remain capability constrained and cannot inherit that authority.
+- Show allow/deny only for the closed high-risk effects; raw-secret access is rejected
+  rather than offered as a grant.
 
 Native platform capabilities:
 
@@ -1170,7 +1176,7 @@ capability, but only active-vault recoverable knowledge Markdown and exact drop/
 source admission are prompt-free; other scopes stay brokered, and stronger destructive,
 policy, source-original, and secret gates remain.
 
-Executable lifecycle, exceptional classes, permission modes, and policy are owned by
+Executable lifecycle, exceptional classes, submitted-turn authority, and policy are owned by
 `docs/JOB_OPERATION_AND_RECOVERY.md`, `docs/SECURITY_THREAT_MODEL.md`,
 `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`, and the shared schemas.
 
@@ -1341,16 +1347,16 @@ v0.1 Skill requirements:
 - Require user confirmation before enabling a new Skill.
 - Support enable, disable, uninstall, export, and update when the source supports it.
 - Log when a Skill materially changes Agent behavior or output.
-- Keep sensitive runtime actions paused for a current permission decision unless an
-  eligible action is covered by an explicit saved mode; raw-secret and always-confirmed
-  actions remain ineligible.
+- Keep a closed high-risk effect blocked until its concrete user decision; do not create
+  global saved modes or per-tool prompts for ordinary work.
 
 Skill precedence:
 
 - Current user instruction wins over Skill instructions.
 - Explicit settings and `PIGE.md` win over Skill instructions.
 - Privacy, package permissions, prompt-injection defenses, and confirmation gates cannot be weakened by a Skill.
-- User-denied capabilities stay denied until the user changes the permission in Settings.
+- A denied high-risk effect executes nothing. A future attempt is a new concrete action,
+  not a Settings grant mutation.
 
 Exact install formats, metadata fields, scopes, files, capability vocabulary, storage,
 backup, precedence, archive validation, executable escalation, and Permission Broker
@@ -1451,7 +1457,7 @@ Connecting and selecting a Provider Profile is the user's standing choice for or
 private, and larger bounded calls to that exact destination. Setup explains once that
 selected context may leave the device; routine calls then proceed without per-call
 confirmation and show calm non-blocking status. Users may choose a stricter policy.
-Sensitive, restricted, unknown, or changed boundaries follow the Model Egress contract.
+Secret/local-only/unknown/changed Provider boundaries follow the Provider send contract.
 
 Models shows Provider connection/sync health, its unified inventory, and Global Default.
 Cloud, self-hosted, and local remain internal endpoint/egress facts, not setup categories
@@ -1485,28 +1491,26 @@ Privacy promises:
 - Plaintext secret storage is allowed only as an explicit portable/developer mode with warning.
 - Connecting and selecting a BYOK Provider Profile authorizes ordinary, private, and
   larger bounded calls to that destination. Setup discloses the boundary once; routine
-  calls use non-blocking status instead of repeated prompts. Stricter policy remains
-  available; the default policy sends non-restricted context already owned by the user
-  task without duplicate confirmation, stricter user-selected policies may confirm, and
-  restricted content is blocked.
+  calls use non-blocking status instead of repeated prompts. Explicit secrets and
+  credentials are stripped locally, `local_only` is blocked, provider drift requires a
+  new explicit action, and the whole vault is never sent by default.
 - Agent memory is inspectable, reversible, and can be disabled or reset.
 - Memory candidates are scanned for secrets before persistence.
-- Skill content is untrusted until installed and still cannot weaken permissions, privacy settings, prompt-injection defenses, or confirmation gates.
+- Skill content is untrusted until installed and still cannot weaken authority, privacy settings, prompt-injection defenses, or confirmation gates.
 - Skill install previews must not execute scripts, package hooks, or embedded code.
-- External/Web Skills can run permission-scoped capabilities only after user approval for sensitive actions, unless an eligible capability is covered by an explicit broader permission mode such as YOLO Full Access. Raw-secret access and always-confirmed destructive/settings/data-egress actions are never made eligible merely by that mode.
+- External/Web Skills use declared capabilities and cannot inherit first-party turn
+  authority. High-risk effects require the concrete confirmation; raw-secret access is
+  never a capability.
 
 Security product requirements:
 
 - All ingested content remains untrusted data and cannot change user intent, tools,
   policy, models, paths, `PIGE.md`, permissions, or dependency state.
-- Pi may request arbitrary path/filesystem/command/commit capabilities. Active-vault
-  recoverable knowledge Markdown and exact selected-source admission are prompt-free;
-  every other effect requires exact authority before execution.
-- Sensitive actions show a scoped Deny / Allow Once / Always Allow decision when the
-  capability is eligible for saved grants.
-- Ask Every Time, Remember Scoped Grants, and YOLO Full Access are explicit user modes.
-  YOLO is off by default, visibly indicated, revocable, and logged; it never enables raw
-  secrets or bypasses always-confirmed actions.
+- One user submit authorizes registered first-party reads, parse/OCR/retrieval,
+  user-specified fetch, and bounded local tools. Host validates scope/resources without
+  asking after each call.
+- Only the closed high-risk effects show Deny / Allow for that exact action. Pige has no
+  Ask-Every-Time, saved-grant, or YOLO mode for ordinary Agent work.
 - Optional tools and model assets require explicit download consent and verified
   admission before execution.
 - External/Web Skills and packages cannot receive unmediated vault, filesystem,
@@ -1514,8 +1518,8 @@ Security product requirements:
 - Suspicious source instructions are ignored and may be reported without turning normal
   capture into an alarming security console.
 
-Secret storage, SSRF, path validation, renderer isolation, egress policy, prompt
-packaging, least privilege, capability scopes, permission vocabulary, tool verification,
+Secret storage, SSRF, path validation, renderer isolation, Provider send boundary, prompt
+packaging, least privilege, capability scopes, high-risk vocabulary, tool verification,
 and security tests are owned by `PRIVACY.md`, `docs/SECURITY_THREAT_MODEL.md`,
 `docs/PROMPT_DESIGN.md`, `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`, and the shared schemas.
 

@@ -17,6 +17,23 @@ and back up/restore safely.
 
 ## 3. Implementation Strategy
 
+### 3.0 Foreground Architecture Reset
+
+Ordinary feature work pauses while the incompatible personal-project contract reset is
+active. Statuses do not rise during the reset. `resources/architecture-reset.manifest.json`
+is the executable deletion/budget inventory; legacy counts may fall, never grow.
+
+| Phase | Development outcome | Required proof |
+| --- | --- | --- |
+| AR1 authority simplification | Delete YOLO/saved grants, routine per-tool Permission lifecycle, model-egress approval/digest/wait UI, and new `waiting_permission` / `waiting_model_egress`; retain closed-list high-risk confirmation plus Provider Connect/Send boundary | Ordinary tool turn has zero permission records; high-risk deny executes nothing; secret/local-only/provider-drift tests |
+| AR2 Pi semantic ownership | Remove Host parse→OCR→retrieve→organize chains, correction prompts, terminal repair/dispatch, and fixed child-Job routing; expose atomic typed tools to Pi | Distinct Pi-selected traces, zero Host answer synthesis, no shadow loop; source preservation still precedes use |
+| AR3 reliability/schema convergence | One Job coordinator for claim/CAS/cancel/retry/checkpoint/terminal; domain executors return outcomes; one canonical schema/type at real trust boundaries; remove obsolete unpublished state compatibility | Crash/cancel/idempotency/data-safety tests; IPC/security boundaries remain strict |
+| AR4 UI/test decomposition | Remove legacy approval UI/actions/tests/docs; split `App.tsx` by page/state owner and mixed services by responsibility without restyling or moving orchestration intact | Real macOS Electron happy paths, affected UI tests, architecture budget reduced or explicitly justified |
+
+AR1 → AR2 → AR3 → AR4 is the default serialization where files/contracts overlap.
+Independent UI work may continue only if it does not consume or preserve a legacy
+authority/API. Project Management coordinates delivery and does not implement the reset.
+
 Build vertical slices. Do not pull isolated breadth ahead of the Provider-to-Pi-to-Home
 turn and Agent-selected capture-to-Markdown path merely because its design is nearby.
 
@@ -47,7 +64,7 @@ Current implementation state, last reconciled 2026-07-13:
 | P5 | in progress | Web/document/OCR Artifact and recovery slices have evidence; completion remains open. |
 | P6 | in progress | Retrieval, cited Home, Reader, and relationship foundations have evidence; completion remains open. |
 | P7 | planned | Autonomous knowledge, memory, and conversation acceptance remains below. |
-| P8 | planned | Skill, package, and Permission Broker acceptance remains below. |
+| P8 | planned | Skill, package, third-party isolation, and high-risk confirmation acceptance remains below. |
 | P9 | planned | Backup, restore, health, localization, accessibility, and release acceptance remains below. |
 
 Acceptance owns per-Requirement/Exit evidence and open work; no row above claims phase
@@ -147,7 +164,7 @@ Build:
 
 - [B1.01 -> E1.10] Main, preload, and renderer split.
 - [B1.02 -> E1.01] First-run vault creation.
-- [B1.03 -> E1.02] Optional model setup with capture-only mode when skipped or unavailable.
+- [B1.03 -> E1.02] Optional model setup with truthful model-unavailable Agent outcomes when skipped or unavailable; no separate capture-only mode.
 - [B1.04 -> E1.04] Settings > Knowledge Base > Vault & Note Storage with vault identity, active paths, storage strategy, reveal, open/create, recent vaults, and backup/restore entry points.
 - [B1.05 -> E1.03] Default vault layout.
 - [B1.06 -> E1.03] `PIGE.md`, `index.md`, `log.md`, and manifest creation.
@@ -168,7 +185,7 @@ Build:
 - [B1.21 -> E1.17] Stable path-independent ID and sync-conflict metadata foundation for durable records.
 - [B1.22 -> E1.18] Runtime capability contracts for Agent, tool, parser, OCR, and RAG adapters with explicit unavailable/degraded states.
 - [B1.23 -> E1.19] No-telemetry/no-auto-upload baseline plus bounded local diagnostic log rotation, retention, and content redaction.
-- [B1.24 -> E1.20] Main-process sensitive-setting mutation guard with explicit confirmation or Permission Broker authorization.
+- [B1.24 -> E1.20] Main-process closed-list high-risk setting/effect guard; ordinary reversible settings do not re-prompt.
 - [B1.25 -> E1.21] Atomic checksum-aware Markdown write and external-change conflict foundation.
 - [B1.26 -> E1.22] Executable conversation-event and operation-kind vocabulary parity with the job/operation owner document.
 
@@ -182,7 +199,7 @@ Deferred from this phase:
 Exit criteria:
 
 - [E1.01] User can create and open a vault through validated paths.
-- [E1.02] User can skip model setup and enter capture-only mode without losing captures.
+- [E1.02] User can skip model setup without losing submitted sources; unavailable Agent work remains explicit without a second product mode.
 - [E1.03] Default vault files are visible, human-readable, schema-valid, and free of machine-local active paths.
 - [E1.04] User can find and reveal note/source storage, switch or create vaults, and reach backup/restore without entering diagnostics or maintenance surfaces.
 - [E1.05] Every exposed setting is registered; machine-local values and secrets are absent from the vault manifest and default backup inputs.
@@ -200,7 +217,7 @@ Exit criteria:
 - [E1.17] Stable IDs remain valid across rename/path changes and durable contracts expose explicit sync-conflict metadata without using a path as identity.
 - [E1.18] Agent, tool, parser, OCR, and RAG work resolves through typed runtime-capability adapters; unavailable capabilities fail visibly without renderer or domain-layer runtime assumptions.
 - [E1.19] No product analytics or automatic diagnostic/crash upload is configured, and local logs rotate within bounded retention while rejecting secrets and large private bodies.
-- [E1.20] Sensitive setting mutations fail closed unless an explicit user confirmation or valid Permission Broker decision reaches the main-process owner.
+- [E1.20] Closed-list high-risk settings/effects fail closed unless the exact explicit confirmation reaches the main-process owner.
 - [E1.21] Interrupted Markdown writes recover atomically, and a changed target checksum produces a visible conflict instead of silent overwrite.
 - [E1.22] Every executable conversation-event type and operation kind is documented by the owner contract; adding or removing a value breaks traceability until parity is restored.
 
@@ -264,7 +281,8 @@ Build:
 - [B3.02 -> E3.02] Encrypted-by-default API-key storage.
 - [B3.03 -> E3.01] Non-durable discovery plus one real Pi bootstrap generation/tool probe and all-or-restore readback before persistence.
 - [B3.04 -> E3.01] Unified Provider model inventory with auto-sync/Refresh, merged manual fallback, enable/alias controls, and provider-grouped Global Default.
-- [B3.05 -> E3.03] Typed pre-prompt/pre-credential egress decision with `ordinary_allowed` default, non-blocking cloud status, and user-selected stricter behavior.
+- [B3.05 -> E3.03] Simple Provider send boundary: Connect/select plus Send authorizes
+  bounded selected context; strip secrets, block `local_only`, and fail on identity drift.
 - [B3.06 -> E3.04] Basic ingest prompt path with untrusted-source boundaries.
 - [B3.07 -> E3.05] Structured validation feedback plus autonomous correction,
   replan/narrow/abstain/exception routing inside the same Agent Job.
@@ -604,20 +622,22 @@ Exit criteria:
   revisions, and operation history; eligible local changes auto-apply with Undo, while
   destructive loss, external database writes, new authority, or unresolved conflict pause.
 
-## 13. Phase 8: Skills, Packages, And Permission Broker
+## 13. Phase 8: Skills, Packages, And High-Risk Authority
 
 Context pack: `docs/SKILL_EXTENSION_DESIGN.md`; `docs/PI_PACKAGE_RESEARCH.md`; `docs/SECURITY_THREAT_MODEL.md`; `docs/DOMAIN_MODEL.md`.
 
 Build:
 
-- [B8.01 -> E8.02] Permission Broker service.
+- [B8.01 -> E8.02] Closed-list high-risk confirmation service.
 - [B8.02 -> E8.02] Permission-dialog UI with safe summaries.
-- [B8.03 -> E8.03] Ask Every Time, Remember Scoped Grants, and YOLO Full Access defaults.
-- [B8.04 -> E8.03] Machine-local, scoped, revocable permission records with provenance.
+- [B8.03 -> E8.03] Closed-list high-risk confirmation with no saved-grant/YOLO mode.
+- [B8.04 -> E8.03] Third-party authority isolation and concrete effect decisions.
 - [B8.05 -> E8.01] Skill Registry Service (inventory/disable foundation only).
 - [B8.06 -> E8.01] Pure Skill staging/install from URL, Markdown, and ZIP plus explicit chat-initiated staging, enable, disable, uninstall, export, and source-aware update.
 - [B8.07 -> E8.01] External/Web Skill staging with capability disclosure.
-- [B8.08 -> E8.02] Runtime permission prompts for non-default Agent, Skill, package, and local-tool capabilities.
+- [B8.08 -> E8.02] High-risk prompts only for irreversible delete, original overwrite,
+  out-of-root write, arbitrary shell/unknown install, credential disclosure, risky edit,
+  or equivalent escalation.
 - [B8.09 -> E8.04] Curated Pi package catalog and manager with reviewed recommendations and explicit search/inspection.
 - [B8.10 -> E8.04] Pi package install, enable/disable, update, uninstall, version pinning, rollback, rollback-safe records, and trust/capability/data-boundary disclosure.
 
@@ -630,16 +650,21 @@ Deferred from this phase:
 Exit criteria:
 
 - [E8.01] User can explicitly initiate Skill staging from Settings or chat, then inspect, install, enable, disable, update, uninstall, and export each supported Skill class with ZIP/path safety and declared capabilities.
-- [E8.02] Non-default Agent/Skill/package/local-tool actions pause in `waiting_permission`;
+- [E8.02] Ordinary registered first-party actions proceed under submitted-turn authority;
+  third-party authority and high-risk effects fail closed without a waiting Job state;
   standing-authority knowledge Markdown and exact selected-source admission do not.
-  Deny/allow-once stay redacted, one-use, drift-safe, and restart-safe.
-- [E8.03] External-capability grants and YOLO honor scope, provenance, visibility, revocation, and Operations; no source/model/package input can enable them or expand core authority.
+  A concrete high-risk decision is redacted and revalidated by the effect owner; denial
+  executes nothing and uncertain commit follows that Operation's recovery path.
+- [E8.03] No source/model/package input can expand authority; the concrete high-risk
+  effect is denied or confirmed, and no global mode can bypass it.
 - [E8.04] Curated Pi packages can be searched, inspected, explicitly installed, enabled/disabled, updated, version-pinned, rolled back, and uninstalled; ordinary Agent jobs never install them implicitly.
 
-Current evidence has Broker/restart, permission settings, three read-only adapters, an
-unregistered create foundation, and exact permissioned public-package acquisition into
-immutable `installed_disabled` storage. Catalog/UI, dependencies, runtime and remaining
-lifecycle/recovery/platform proof stay open; Exit and Phase statuses do not change.
+Current legacy evidence has Broker/restart, permission settings, and approval stores;
+AR1 deletes those internal mechanisms before new Phase 8 acceptance is claimed. Existing
+read-only adapters and public-package acquisition are re-evaluated under submitted-turn
+and high-risk authority rather than preserved for compatibility.
+Catalog/UI, dependencies, runtime and remaining lifecycle/recovery/platform proof stay
+open; Exit and Phase statuses do not change.
 
 ## 14. Phase 9: Backup, Restore, Knowledge Health, Migration, And Release Hardening
 

@@ -52,14 +52,15 @@ follow-up queues, compatible context/compaction helpers, and provider streaming,
 usage, retry, overflow, and normalized errors. Pige must not rebuild these in
 parallel when a reviewed public Pi surface covers them.
 
-Pige owns UI; profiles/secrets; evidence, prompts, citations and validation; egress,
-permissions and tools; and all durable product records.
+Pige owns UI; profiles/secrets; evidence, prompts, citations and validation; typed tools,
+high-risk authority boundaries; and durable product records. It does not own a second
+semantic loop or a second approval workflow for ordinary turn activity.
 
 Every Home or note submission immediately creates one durable Pi-owned Agent Job through
 the same embedded entry. Source preservation is the first checkpoint of a source-bearing
 Job, not a Host semantic pipeline; pure questions enter Pi directly. Pi may answer
 without tools or select, repeat, and replan scoped tools. Pige owns evidence integrity,
-policy, permissions, egress, provenance, validation, and commits—not the semantic route
+policy, provider/secret boundary, provenance, validation, and commits—not the semantic route
 or the number of corrective model turns needed to reach a valid result.
 
 “Complete Pi integration” means the relevant generic `pi-agent-core` and `pi-ai`
@@ -80,8 +81,9 @@ Rules:
 - Renderer never talks to Pi directly.
 - One main-process or worker-owned anti-corruption adapter is the only Pige module
   allowed to import Pi; Agent Orchestrator owns its lifecycle.
-- Pi may request registered arbitrary-path/filesystem/shell/commit tools, but receives no
-  ambient Node, filesystem, shell, or credential handle; Pige authorizes each effect.
+- Pi receives no ambient Node, filesystem, shell, or credential handle. Registered
+  first-party ordinary tools inherit the submitted turn; exceptional high-risk effects
+  use the narrow confirmation boundary.
 - Every Agent receives an explicit receiver-safe wrapper around its isolated
   `Models.streamSimple`; Pige code never calls `/compat`, `providers/all`, global
   registries/config, or the default compat dispatcher.
@@ -261,24 +263,25 @@ Rules:
 - Internal routing must fall back to the default model.
 - User-visible model slots stay hidden until the gate in section 9 is satisfied.
 
-## 11. Tool And Permission Boundary
+## 11. Tool And Authority Boundary
 
-Pi does not enforce Pige's product permissions. Pige must.
+Pi does not enforce Pige's trust boundaries. Pige must, without turning every tool call
+into an approval protocol.
 
 Rules:
 
 - Disable or avoid Pi built-in tools unless Pige wraps them with scoped adapters.
 - Register Pige-owned tools only through Agent Orchestrator.
-- Pige-owned tools use service authorization. Active-vault recoverable knowledge Markdown
-  and exact selected-source admission are prompt-free; other effects use Permission Broker.
-- `beforeToolCall` freezes and authorizes scoped input; handlers revalidate canonical
-  input and effect guards. Brokered tools reauthorize scope before effects.
+- One user submit authorizes registered first-party reads, parsing, OCR, retrieval,
+  user-specified fetch, and bounded local tools for that turn. `beforeToolCall` freezes
+  scoped input; handlers revalidate canonical input, path, resource, byte/time, and effect
+  guards without writing a parallel permission lifecycle.
 - Side-effecting tools run sequentially; parallel tools require an explicit
   read-only/idempotent contract plus ordering, cancellation, and audit tests.
-- Arbitrary path/filesystem/commit, external network/package/credential/settings/delete
-  capability may be registered for Pi, but availability is not authority. Main executes
-  only an exact standing, gesture-authorized or Broker-approved action; raw key bytes are
-  never a capability. Renderer and extensions receive no ambient file handle.
+- Irreversible delete, original-file overwrite, out-of-root write, arbitrary shell,
+  unknown-package install, credential export/display, and equivalent escalation require
+  explicit confirmation. Raw key bytes are never a capability. Renderer and extensions
+  receive no ambient file handle.
 - Pi extensions or tools cannot access raw API keys. A reviewed Pige adapter may request brokered credential use for a specific provider call; it receives the call result, never the credential bytes.
 - Pi tool output is treated as untrusted tool output and sanitized before display, logging, or model reuse.
 - A tool implements one bounded deterministic capability. It cannot call a model,
@@ -299,14 +302,13 @@ Rules:
   may add/validate stable IDs, timestamps, provenance and commit metadata, but cannot
   replace Pi with a hidden content/organization workflow. Deterministic source
   preservation and mechanical projections remain Host-owned parts of the same Job.
-- A relevant filesystem/commit tool is not hidden merely because its exact scope is not
-  pre-authorized. Pi may request it; the tool returns a durable permission pause and
-  resumes after allow, or a typed denial so Pi can replan. Only capability absence or a
-  hard security prohibition removes the action entirely.
+- A tool returns a typed blocked/high-risk result when its effect crosses the closed
+  confirmation boundary. New Jobs do not enter `waiting_permission`; Pi may choose
+  another available capability after the user decision or denial.
 
 The Pige Tool Registry is Pi's only product-capability surface. Each entry declares
 stable ID/version/description/capability; strict input/output schemas and trust; effect,
-required capabilities, resource scope, permission, data boundary, execution order,
+required capabilities, resource scope, authority class, data boundary, execution order,
 idempotency, limits, owner service, and handler.
 
 Production exposes read-only folder/text/fetch, `pige_install_pi_package` for managed Pi
@@ -315,7 +317,8 @@ an executable plus argv/cwd/timeout rather than an interpolated command string; 
 may explicitly invoke a shell, npm, npx, a CLI, or another system utility when the user
 task needs it. Ordinary first-party desktop calls inherit the submitted user task as
 one-use authority and emit one audit record without a duplicate prompt. Third-party
-actors, credentials, destructive effects, and boundary changes retain their own gates.
+actors cannot inherit first-party authority; credentials, destructive effects, and
+boundary changes retain their own gates.
 
 Pi-selected Dataset tools bind the exact source or Dataset revision. A deterministic
 `dataset_import` child may materialize one validated Bundle/Operation; read-only Home
@@ -348,7 +351,7 @@ at a terminal tool.
   body, prompt, output, path, credential, endpoint, policy secret, or private diagnostic.
 - Pi may repair, gather evidence, choose another tool, narrow, or abstain; Pige imposes no
   fixed prompt loop, Host fallback, or one-repair limit.
-- Denied authority, restricted egress, cancellation, unavailable required runtime, and
+- Denied high-risk authority, `local_only`/secret blocking, cancellation, unavailable required runtime, and
   irreconcilable conflict or evidence drift remain hard Host boundaries. Pi may choose a
   different already-authorized route, but it cannot reinterpret or override the denial.
 - Resource controls cap time/work/bytes/repeated failure; safe limits checkpoint/resume.
@@ -421,13 +424,15 @@ Rules:
 
 - Prompt templates follow `docs/PROMPT_DESIGN.md`.
 - Source content is wrapped as untrusted data.
-- `PIGE.md`, user instruction, permission policy, and security rules outrank source text and Skills.
-- Pi system prompt customization must not remove Pige's safety, citation, storage, or permission instructions.
-- Context compaction must not discard unresolved jobs, citations, source IDs, or permission-relevant state.
+- `PIGE.md`, user instruction, authority policy, and security rules outrank source text and Skills.
+- Pi system prompt customization must not remove Pige's safety, citation, storage, or authority instructions.
+- Context compaction must not discard unresolved jobs, citations, source IDs, or high-risk decisions.
 - Initial context may contain only the user instruction, policy, and scoped tool
   descriptors. Parsed or retrieved evidence enters only after its Pi-selected result.
-- Host rechecks current event/history/tail and bindings before model/tool boundaries;
-  source/privacy/egress drift stops the next call/effect.
+- Connected/selected Provider identity plus user Send authorizes the bounded selected
+  context for that turn. Host strips explicit secrets, blocks `local_only`, and rechecks
+  provider/source identity; ordinary/private/bounded-large content does not create a
+  separate egress approval or waiting Job state.
 
 ## 14. API And IPC
 
@@ -438,9 +443,11 @@ This integration contract defines behavior, not a second IPC vocabulary.
 
 `agent.submitTurn` is the sole production semantic ingress. Main no longer registers
 `capture.submitText`, `capture.submitFiles`, or `capture.submitUrl`; preservation invoked
-inside an Agent turn is checkpoint work, while explicit non-Agent preservation is marked
-`capture_only`. Legacy missing-field records normalize to `legacy_agent_ingest`; current
-records accept only `capture_only | agent_turn`, and unknown values fail validation.
+inside an Agent turn is checkpoint work. At this contract freeze, legacy code still
+accepts `capture_only` and normalizes missing-field records to `legacy_agent_ingest`
+solely for the bounded AR2 deletion window; neither may be created for new work. AR2
+removes current `capture_only` creation/acceptance so `agent_turn` is the only current
+record mode. Unknown values fail validation throughout.
 
 Durable proposal list/get/decision remains Main-internal for recovery/tests. Renderer
 list/get/approve/reject all fail closed pending a projection that excludes model-generated

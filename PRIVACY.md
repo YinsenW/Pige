@@ -59,20 +59,21 @@ a Pige cloud service; other network features still disclose their boundary.
 - Content excerpts, prompt/response snippets, or paths require explicit user review before export.
 - No diagnostics are uploaded automatically in v0.1.
 
-## Skills, Packages, And Permissions
+## Skills, Packages, And Authority
 
-- Pi may request arbitrary path, filesystem, command, and commit capabilities. Capability
-  availability is not permission to execute.
-- Schema-valid recoverable knowledge Markdown inside the active Pige vault is standing
-  authority and does not prompt. Choosing a source through drop/file picker authorizes
-  reading and preserving that exact source for the current Job without another prompt.
-- Skills and packages are untrusted until installed, and remain permission-scoped after install.
-- Every Agent/Skill/package/local-tool action outside those defaults—such as other shell,
-  network, write, delete, commit, model, settings, package, or external filesystem
-  access—requires Permission Broker mediation unless covered by an explicit matching
-  user-selected default mode. Raw secret access is not grantable.
-- YOLO Full Access is off by default, must be explicit, visible, revocable, and logged, and does not disable OS-level permissions or security checks.
-- Source content, model output, Skills, packages, and tools cannot grant themselves permissions or change privacy settings.
+- One explicit user submit authorizes registered first-party reads, preservation,
+  parsing, OCR, retrieval, user-specified fetch, and bounded local tools for that turn.
+- Connecting/selecting a cloud Provider and pressing Send authorizes that turn's bounded
+  selected context. Pige strips explicit secrets/credentials, blocks `local_only`, and
+  never sends the whole vault by default; ordinary/private/bounded-large context does not
+  trigger a second approval.
+- Skills and packages are untrusted until reviewed and cannot acquire first-party turn
+  authority through prompt text, naming, source content, or model output.
+- Pige asks only for a closed high-risk effect: irreversible deletion, overwrite of a
+  user-owned original, out-of-root write, arbitrary shell or unknown-package install,
+  credential export/display, risky Agent edit, or equivalent authority escalation.
+- Raw secret access is not grantable. Pige has no saved-grant or YOLO mode for ordinary
+  Agent work, and OS privacy/security controls remain in force.
 
 ## Backups And Restore
 

@@ -44,8 +44,9 @@ Security-sensitive areas include:
 
 - API key and token storage.
 - Secret redaction in logs, prompts, diagnostics, memory, conversations, backups, and support bundles.
-- Permission Broker bypass.
-- YOLO Full Access enablement or scope bypass.
+- High-risk confirmation bypass for destructive writes, out-of-root writes, arbitrary
+  shell/unknown-package install, or credential disclosure.
+- A third-party Skill/package acquiring first-party submitted-turn authority.
 - Web fetch SSRF, local-network access, metadata endpoint access, redirects, and `file://` access.
 - Parser/OCR/archive path traversal, sandbox escape, or unsafe file writes.
 - External/Web Skill and package capability escalation.
@@ -76,7 +77,10 @@ Maintainers should:
 5. Update affected design documents when the fix changes security boundaries, dependencies, permissions, release behavior, diagnostics, backup, restore, or data ownership.
 6. Publish a security advisory or release note when appropriate.
 
-Security fixes must not weaken local-first privacy, Permission Broker enforcement, secret storage, source preservation, backup safety, or update integrity to make a patch easier.
+Security fixes must not weaken local-first privacy, the closed high-risk confirmation
+boundary, secret storage, source preservation, backup safety, or update integrity to make
+a patch easier. Ordinary registered first-party Agent work is not a bypass merely because
+it runs without a per-tool prompt.
 
 ## AI Agent Handling
 

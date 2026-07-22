@@ -166,8 +166,8 @@ Examples:
   destination vault and remain machine-local after commit.
 - Machine-local package install records.
 - Machine-local provider profile metadata.
-- Body-free current-action model-egress approval records, scoped by vault and excluded
-  from Permission Broker grants.
+- Body-free Provider-send failures and high-risk confirmation audit events. Ordinary
+  sends and first-party tool use create no approval/grant record.
 - Unregistered external-create intent revisions/paths, excluded from backup/export.
 - Machine-local diagnostics, error summaries, local metrics, crash recovery summaries, and support bundle export metadata.
 - Global user/device memory if introduced later.
@@ -703,7 +703,7 @@ Restore modes are explicit:
   closes the old vault, publishes to a fresh destination, and CAS-replaces the
   machine-local path binding only after validation and explicit confirmation. The old
   physical folder remains intact but unregistered; this flow never overwrites it in place.
-- `clone_as_new`: independent duplicate. It assigns a new `vault_id`, records `origin_vault_id` and `restored_from_backup_id`, and may preserve source/page/object IDs because vault identity namespaces them. It never inherits external root bindings, provider secrets, permission grants, or YOLO state.
+- `clone_as_new`: independent duplicate. It assigns a new `vault_id`, records `origin_vault_id` and `restored_from_backup_id`, and may preserve source/page/object IDs because vault identity namespaces them. It never inherits external root bindings, Provider secrets, or high-risk confirmations.
 
 Selecting a new destination folder does not by itself select a mode. Two simultaneously registered paths must never share one `vault_id`.
 

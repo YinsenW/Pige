@@ -5,7 +5,7 @@ Date: 2026-07-09
 
 ## 1. Purpose
 
-This document defines Pige's first-run flow, setup states, and capture-only behavior.
+This document defines Pige's first-run flow, setup states, and truthful unavailable-model behavior. Pige exposes one Agent workflow, not a separate capture-only mode.
 
 First run is a trust moment. It must prove three things quickly:
 
@@ -45,15 +45,14 @@ After first run, Pige must be in exactly one of these states.
 
 | State | Meaning | User can enter Home? |
 | --- | --- | --- |
-| `ready` | Vault exists and at least one default Pi Agent model is configured. | Yes |
-| `capture_only` | Vault exists, but no usable generation model is configured. | Yes |
+| `ready` | Vault exists. Agent/model readiness is a capability fact, not another product mode. | Yes |
 | `blocked_no_vault` | No valid local vault exists or is selected. | No |
 
 Rules:
 
 - `blocked_no_vault` must show create/open vault and restore actions.
-- `capture_only` must be honest but not alarming.
-- `ready` should not show setup noise after landing in Home.
+- `ready` shows a quiet model-unavailable outcome when no usable model exists; it does
+  not branch into another capture workflow.
 
 ## 4. Vault Choice
 
@@ -106,14 +105,14 @@ Default path:
 Skip path:
 
 - The user can choose `Skip for now`.
-- Pige enters `capture_only`.
-- Pige must clearly state that captures are saved locally and Agent organization will resume after a model is configured.
+- Pige enters the same Home Agent workflow. A source is preserved as the first checkpoint;
+  model-dependent semantic work reports a truthful unavailable/waiting-dependency result.
 
 First Home after create/open:
 
-- In `capture_only`, show one compact inline guide above the composer: content can be
+- When the model is unavailable, show one compact inline guide above the composer: content can be
   saved now; connecting a model enables Pi Agent conversation and continuation.
-- Offer exactly `Connect Model` and quiet `Continue capture-only`; neither action adds a
+- Offer exactly `Connect Model` and quiet `Continue without model`; neither action adds a
   screen or blocks capture.
 - Either explicit choice dismisses the guide for that vault on this machine. The bounded
   vault-ID preference is machine-local, excluded from backup, and absent from the vault.
@@ -148,35 +147,14 @@ No-model status copy:
 Saved locally. Connect a model when you want Pige to organize and answer from it.
 ```
 
-## 7. Capture-Only Mode
+## 7. Missing-Model Behavior
 
-Capture-only mode exists so the user can start trusting Pige before finishing model setup.
-
-Allowed in `capture_only`:
-
-- Text capture.
-- File capture.
-- URL capture, subject to web-fetch security.
-- Voice transcript capture when supported.
-- Source record creation.
-- Managed source copy or external reference creation.
-- Metadata-only source projection and direct bounded text projection when neither
-  requires parser/OCR, model inference, or semantic organization.
-- Conversation event creation with references, not duplicated source bodies.
-- Library browsing of created source pages.
-- Backup and restore.
-- Settings access.
-- Model setup.
-
-Queued or waiting in `capture_only`:
-
-- Agent selection of parser, OCR, retrieval, and knowledge-write tools for new sources,
-  even when a local parser/OCR capability is installed.
-- Agent ingest that requires a generation model.
-- Title/summarization/tagging/linking that requires a generation model.
-- Home knowledge answers that require synthesis.
-- Note Agent answers.
-- Selection actions such as translate, polish, expand, summarize, or explain.
+Pige has one Agent workflow. Submitting text, URL or files creates one turn; source
+preservation may complete before model readiness, but Host code does not redirect the
+request into a separate semantic pipeline. If the turn needs a model, it becomes a
+truthful unavailable or `waiting_dependency` outcome and can resume after configuration.
+Library, settings, backup and restore remain available because they are product
+capabilities, not a second mode.
 
 Available without model:
 
@@ -265,7 +243,7 @@ Do not include these in v0.1 first run:
 - Provider marketplace.
 - Advanced model routing.
 - Permission mode chooser.
-- YOLO prompt.
+- High-risk effect confirmation unrelated to onboarding.
 - Local RAG model download prompt.
 - PaddleOCR model download prompt.
 - Skill/package installation.
@@ -363,10 +341,10 @@ Required tests:
 - Model setup stores API key only in the secret store.
 - Setup auto-syncs one inventory, probes one model, and chooses an enabled default.
 - Incomplete discovery offers typed Retry/manual fallback, never empty-success/raw error.
-- Skip model enters `capture_only`.
-- First capture-only Home offers one Connect/continue choice and keeps that explicit
+- Skip model enters normal Home with truthful model-unavailable Agent state.
+- First model-unavailable Home offers one Connect/continue choice and keeps that explicit
   per-vault choice dismissed after restart.
-- Capture-only text/file capture creates source record and durable conversation reference.
+- Model-unavailable text/file submission preserves the source and durable turn reference without Host semantic routing.
 - Model-dependent jobs become `waiting_dependency`, not silent failures.
 - Active text repair and preserved-source model waits keep one localized status owner and
   one relevant model action, including picker/drop intermediate refresh states.

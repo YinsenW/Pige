@@ -181,8 +181,6 @@ Required canonical states:
 queued
 running
 waiting_dependency
-waiting_permission
-waiting_model_egress
 awaiting_review
 cancel_requested
 completed
@@ -220,10 +218,6 @@ Rules:
 - `queued` means no execution is active. A fresh Job has only its durable record; a
   retried Job may retain verified outputs and a true action-safety guard.
 - `running` means a worker, model call, tool, or write step is active.
-- `waiting_permission` pauses one exact brokered action; built-in Pige tools remain under
-  their owning-service authority and do not prompt merely because they are core tools.
-- `waiting_model_egress` pauses one exact provider invocation for a stricter
-  model-egress decision; it is not a Permission Broker wait or reusable grant.
 - `waiting_dependency` pauses for a missing model, tool, capability, binding, or source;
   Backup resumes the same Job after root repair.
 - `awaiting_review` holds an irreversible/security/destination/conflict or stricter-policy
@@ -237,9 +231,6 @@ Rules:
 Invalid shortcuts:
 
 - Do not move from `queued` directly to `completed` unless the job is a no-op with an operation summary.
-- Do not move from `waiting_permission` to `running` without recording the permission decision.
-- Do not move from `waiting_model_egress` to `running` without a durable one-use
-  model-egress decision, exact Job CAS, and current binding revalidation.
 - Migrated Jobs/Home waits resume only through exact typed proof.
 - Do not move from `awaiting_review` to `completed` without an approved proposal or explicit rejection result.
 - `JobExecutionCoordinator` projects late cancellation from durable-effect proof;
@@ -252,7 +243,10 @@ Invalid shortcuts:
 
 `JobRecordSchema` and `OperationRecordSchema` reject undeclared root fields. Readers do not preserve or silently strip a legacy `status`, raw prompt, secret, provider response, source body, or other unversioned extension into an accepted schema-v1 record. A genuinely new durable field requires an explicit schema/version and migration decision.
 
-Schema-v1 accepts the already-implemented core fields and the optional orchestration fields below. New long-running, permissioned, backup, restore, and migration writers populate the orchestration fields they need. Existing minimal records remain readable and gain `schemaVersion: 1` on their next safe write; no bulk rewrite is required.
+Schema-v1 accepts the already-implemented core fields and the optional reliability fields
+below. New long-running, backup, restore, and migration writers populate only what their
+recovery owner needs. Existing minimal records remain readable and gain `schemaVersion:
+1` on their next safe write; no bulk rewrite is required.
 
 Within `CancellationState`, paired `requestedAt`/`requestedBy` prove a cancel request;
 either both exist or neither does. `cancel_requested` requires the pair; legacy
@@ -515,55 +509,18 @@ Rules:
 
 UI copy should say "Stop" or "Cancel processing" for ongoing work and avoid implying already-preserved files will be deleted.
 
-## 10. Permission Pause
+## 10. High-Risk Decisions Are Not Job States
 
-The current-action Broker pauses one exact registered external-capability action. It is a
-foundation for broader Agent/Skill/package authority, not a saved grant or YOLO path.
+New Jobs never enter `waiting_permission` or `waiting_model_egress`. Ordinary registered
+first-party tools inherit the submitted turn; connected Provider identity plus Send owns
+ordinary cloud authorization. A high-risk effect returns a typed decision requirement to
+the current turn or Operation, and denial executes nothing.
 
-When permission is required:
-
-1. Job writes a checkpoint.
-2. Job `state` becomes `waiting_permission`.
-3. A body-free request binds vault, Job, actor/action versions and digests, capability,
-   canonical resource identity/scope, policy/runtime context, and exact binding hash.
-4. UI shows one safe Deny/Allow once prompt and suppresses the matching Job row.
-5. Decision is durably written; allow resumes the same Job through claim/CAS and is
-   consumed once only after revalidation. Deny executes nothing and terminalizes safely.
-6. Completion writes an exact marker. Restart adopts pending/approved/denied truth;
-   consumed authority without matching completion fails final and never replays an effect.
-
-Exact package adoption uses its request-bound revision, so later Registry changes cannot
-alter its completion hash or authorize another download.
-
-Rules:
-
-- A permission prompt must not hold important state only in renderer memory.
-- Denial leaves source preservation and prior safe outputs intact.
-- Cancellation invalidates unresolved authority. Post-consumption cancellation or
-  persistence ambiguity cannot mint a successor request or make the action retryable.
-- Saved-grant/system/YOLO authority cannot satisfy this current-action-only layer.
-- Production exposes only three read-only external adapters; the create foundation is
-  unregistered recovery infrastructure, not an effect or exit proof.
-
-### 10.1 Current-Action Model Egress Pause
-
-When the typed egress decision returns `confirm`:
-
-1. Persist one body-free machine-local request bound to the exact vault, Job,
-   Provider/Model identity, policy, payload/evidence hashes, and content classes.
-2. Bind its ID into the `model_egress_decision` Operation and set the Job to
-   `waiting_model_egress` with `confirm_model_egress`.
-3. Home shows one Allow once/Don't send surface; the matching Job row does not present a
-   second status or action.
-4. Approval resumes the same Job only after durable Job CAS, consumes the request before
-   credential resolution/provider invocation, and revalidates every bound fact.
-5. Denial preserves the source/turn and ends the Job nonretryably with no provider call;
-   cancellation invalidates an unresolved request.
-
-Approved restart recovery is conservative: earlier read-only/model steps may replay,
-deterministic tool effects remain idempotent, and a consumed-but-unreconciled request
-requires a fresh decision. Durable no-duplicate continuation of an in-flight Pi
-model/tool transcript remains open. Saved grants and YOLO cannot satisfy this layer.
+The effect owner—not a parallel approval store—owns deterministic effect identity,
+checkpoint, CAS/idempotency, cancellation, commit, and recovery. If the app cannot prove
+whether an irreversible effect committed, it fails closed and exposes repair; it does
+not mint new authority or replay the effect. Unpublished legacy waiting records may be
+cleared or rejected in AR1 rather than receiving a long-lived migration protocol.
 
 ## 11. Confirmation Proposal Lifecycle
 
@@ -698,7 +655,8 @@ Startup recovery flow:
 3. Scan `.pige/jobs/`, `.pige/proposals/`, `.pige/operations/`, `.pige/source-records/`, conversations, and `log.md`.
 4. Rebuild SQLite job/proposal/operation indexes if missing or dirty.
 5. Detect jobs in `running`, `cancel_requested`, `waiting_dependency`,
-   `waiting_permission`, `waiting_model_egress`, or partial stage states.
+   legacy waiting or partial stage states; AR1 may reject/clear unpublished approval
+   states rather than migrate them into the new vocabulary.
 6. Reconcile checkpoint output refs with actual files and hashes.
 7. Mark safe jobs resumable, retryable, or completed with warnings.
 8. Mark uncertain jobs `failed_retryable` with a recovery explanation or create a repair proposal.
@@ -874,7 +832,7 @@ Fixture scenarios:
 - URL capture timeout before and after snapshot preservation.
 - OCR job canceled mid-document.
 - Model call succeeds but Markdown write fails.
-- App restart with `running`, `waiting_permission`, and `awaiting_review` jobs.
+- App restart with `running`, `waiting_dependency`, and `awaiting_review` jobs.
 - External edit between proposal creation and approval.
 
 ## 19. Implementation Checklist
