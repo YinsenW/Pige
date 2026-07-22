@@ -6,7 +6,7 @@ import type {
   AgentConversationRequest,
   AgentConversationTimeline,
   AgentSubmitTurnRequest,
-  AgentSubmitTurnResult,
+  AgentSubmitTurnIpcResult,
   AgentTurnDraftEvent,
   AgentRuntimeStatus,
   AppHealth,
@@ -121,7 +121,7 @@ import type {
 } from "@pige/contracts";
 import {
   AgentSubmitTurnIpcPayloadSchema,
-  AgentSubmitTurnResultSchema,
+  AgentSubmitTurnIpcResultSchema,
   AppearanceSettingsSummarySchema,
   AppearanceThemeMutationResultSchema,
   KnowledgeActivityListRequestSchema,
@@ -408,18 +408,24 @@ const api: PigeDesktopApi = {
         : request;
       return ipcRenderer.invoke("agent.conversation", normalizedRequest) as Promise<AgentConversationTimeline | undefined>;
     },
-    submitTurn: async (
+    submitTurn: (async (
       request: AgentSubmitTurnRequest,
       files: readonly File[] = []
-    ): Promise<AgentSubmitTurnResult> => {
-      const attachments = files.map((file) => ({
-        displayName: file.name,
+    ): Promise<AgentSubmitTurnIpcResult> => {
+      const stagedFileItems = request.stagedItems?.filter((item) => item.kind === "file");
+      if (stagedFileItems && stagedFileItems.length !== files.length) {
+        throw new Error("The staged file identities do not match the selected files.");
+      }
+      const attachments = files.map((file, index) => ({
+        ...(stagedFileItems === undefined ? {} : { ordinal: stagedFileItems[index]!.ordinal }),
+        displayName: stagedFileItems?.[index]?.displayName ?? file.name,
         internalPath: webUtils.getPathForFile(file)
       }));
       const canonicalRequest = {
         schemaVersion: 1 as const,
         inputKind: request.inputKind,
         locale: request.locale,
+        ...(request.stagedItems === undefined ? {} : { stagedItems: request.stagedItems }),
         ...(request.text === undefined ? {} : { text: request.text }),
         ...(request.scope ? { scope: { kind: "current_note" as const, pageId: request.scope.pageId } } : {}),
         ...(request.clientTurnId === undefined ? {} : { clientTurnId: request.clientTurnId }),
@@ -430,10 +436,10 @@ const api: PigeDesktopApi = {
         request: canonicalRequest,
         attachments
       });
-      return AgentSubmitTurnResultSchema.parse(
+      return AgentSubmitTurnIpcResultSchema.parse(
         await ipcRenderer.invoke("agent.submitTurn", payload)
-      ) as AgentSubmitTurnResult;
-    },
+      ) as AgentSubmitTurnIpcResult;
+    }) as PigeDesktopApi["agent"]["submitTurn"],
     onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void): (() => void) => {
       const handleDraft = (_event: IpcRendererEvent, draft: AgentTurnDraftEvent): void => listener(draft);
       ipcRenderer.on("agent.turnDraft", handleDraft);

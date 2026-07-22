@@ -3132,6 +3132,45 @@ References:
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 - `resources/architecture-reset.manifest.json`
 
+### D-20260723-Large-Paste-Agent-Turn-Boundary
+
+Status: Accepted
+Date: 2026-07-23
+
+Decision:
+
+Ordinary composer text is bounded at 8,000 Unicode code points. A paste that would exceed
+that boundary is staged whole, without normalization or trim, in the same ordered list as
+files. Staging is side-effect free. Explicit Send binds exact authored text and staged
+items to one client turn and one parent Job; each accepted paste is preserved exactly once
+as a managed source and conversation history stores references only. The canonical
+limits and safe pending projection are owned by
+`resources/large-paste-boundary.manifest.json`.
+
+Rationale:
+
+Textarea-only handling rejects valid large inputs at the IPC limit, while preserving at
+picker time creates durable work before the user's intent is complete. One staged-item
+contract preserves exact user input without reviving a Host capture pipeline.
+
+Consequences:
+
+- Files and large pastes share an eight-item ordered submission boundary; large pastes are
+  bounded at 4 MiB each and 8 MiB aggregate UTF-8 per turn.
+- Validation or preservation failure retains exact text, items, order and client-turn ID;
+  retry adopts without duplicating source bytes, events or Jobs.
+- Whole-window file drop remains an immediate separate turn and never consumes composer
+  state. Pi decides all semantic work after preservation.
+- `PIGE-CAP-002`, `E2.02`, and every Requirement/Exit/Phase status remain unchanged until
+  executable integration evidence exists.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/DATA_ARCHITECTURE.md`
+- `docs/UI_PROTOTYPE.md`
+- `resources/large-paste-boundary.manifest.json`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

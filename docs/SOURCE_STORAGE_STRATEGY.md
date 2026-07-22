@@ -86,6 +86,11 @@ type SourceStorageStrategy =
 
 The user-selectable default applies when a capture has a durable original file path. Typed/pasted text and fetched URL snapshots have no independently owned local original to reference, so Capture Service necessarily records those inputs as `copy_to_source_library`. This is an input-kind rule, not an ignored preference.
 
+A submitted `large_paste` preserves the accepted clipboard payload as exact UTF-8 bytes,
+without trim or normalization, under `copy_to_source_library`. The per-item and per-turn
+preservation bounds come only from `resources/large-paste-boundary.manifest.json`; they do
+not authorize duplicating the body into conversation, Job, index or Provider records.
+
 ### 4.1 Copy To Source Library
 
 Pige copies the source into the configured managed-copy root.

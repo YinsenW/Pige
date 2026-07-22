@@ -456,7 +456,11 @@ Event types:
 Rules:
 
 - Normal short user and assistant messages are stored directly.
-- Large pasted content is stored once as a managed text source and referenced from the conversation event.
+- Large pasted content is stored exactly once as a managed text source; conversation and
+  Job records keep references only, never a duplicate body. One Agent-turn snapshot may
+  bind multiple ordered file/paste refs. Preservation and aggregate bounds are owned by
+  `resources/large-paste-boundary.manifest.json`; an exact idempotent retry adopts the same
+  source IDs rather than rewriting bytes.
 - Files are referenced by source ID and display name in conversation events; path and checksum metadata belong in the source record.
 - Phase 2 file capture conversation events store source ID, display name, and source kind. File bodies are never duplicated in conversation JSONL, and renderer-visible results do not include absolute source paths.
 - Assistant answers that become wiki pages are stored once as the page content and referenced from the conversation.

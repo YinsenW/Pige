@@ -36,7 +36,10 @@ describe("HomeAgentAttachmentService", () => {
       rejectedFiles: [],
       preservedAt: "2026-07-22T00:00:00.000Z"
     }));
-    const service = new HomeAgentAttachmentService({ preserveFilesForAgentTurn: preserve });
+    const service = new HomeAgentAttachmentService({
+      preserveFilesForAgentTurn: preserve,
+      preserveTextForAgentTurn: vi.fn()
+    });
     const prepared = await service.prepare(files.map((internalPath) => ({
       displayName: path.basename(internalPath),
       internalPath
@@ -91,7 +94,10 @@ describe("HomeAgentAttachmentService", () => {
         preservedAt: "2026-07-22T00:00:00.000Z"
       };
     });
-    const service = new HomeAgentAttachmentService({ preserveFilesForAgentTurn: preserve });
+    const service = new HomeAgentAttachmentService({
+      preserveFilesForAgentTurn: preserve,
+      preserveTextForAgentTurn: vi.fn()
+    });
     const prepared = await service.prepare(files);
     const request = {
       prepared,
@@ -123,7 +129,10 @@ describe("HomeAgentAttachmentService", () => {
     const valid = path.join(root, "valid.md");
     fs.writeFileSync(valid, "valid");
     const preserve = vi.fn();
-    const service = new HomeAgentAttachmentService({ preserveFilesForAgentTurn: preserve });
+    const service = new HomeAgentAttachmentService({
+      preserveFilesForAgentTurn: preserve,
+      preserveTextForAgentTurn: vi.fn()
+    });
 
     const extra = Array.from({ length: 8 }, (_, index) => {
       const internalPath = path.join(root, `extra-${index}.md`);
@@ -143,7 +152,115 @@ describe("HomeAgentAttachmentService", () => {
       { displayName: "missing.md", reason: "missing" },
       { displayName: "extra-7.md", reason: "too_many_files" }
     ]);
+    expect(prepared.rejectedItems).toEqual([]);
     expect(preserve).not.toHaveBeenCalled();
+  });
+
+  it("preserves an exact mixed file and pasted-text order under one source-set identity", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-mixed-source-owner-"));
+    roots.push(root);
+    const filePath = path.join(root, "first.md");
+    fs.writeFileSync(filePath, "# First\n", "utf8");
+    const preserveFile = vi.fn(async (_request, binding: { readonly sourceId: string }) => ({
+      status: "queued" as const,
+      captureId: "cap_20260723_mixedowner01",
+      sourceIds: [binding.sourceId],
+      jobIds: [],
+      conversationEventIds: [],
+      rejectedFiles: [],
+      preservedAt: "2026-07-23T00:00:00.000Z"
+    }));
+    const preserveText = vi.fn((_request, binding: { readonly sourceId: string; readonly inputChecksum: string }) => ({
+      sourceId: binding.sourceId,
+      captureId: "cap_20260723_mixedowner02",
+      inputChecksum: binding.inputChecksum
+    }));
+    const service = new HomeAgentAttachmentService({
+      preserveFilesForAgentTurn: preserveFile,
+      preserveTextForAgentTurn: preserveText
+    });
+    const pastedText = "  password=literal\n😀  ";
+    const stagedItems = [
+      { kind: "file" as const, ordinal: 0, displayName: "first.md" },
+      {
+        kind: "large_paste" as const,
+        ordinal: 1,
+        text: pastedText,
+        unicodeCodePointCount: [...pastedText].length,
+        utf8ByteSize: Buffer.byteLength(pastedText)
+      },
+      { kind: "file" as const, ordinal: 2, displayName: "blocked.exe" }
+    ];
+    const prepared = await service.prepare(
+      [
+        { ordinal: 0, displayName: "first.md", internalPath: filePath },
+        { ordinal: 2, displayName: "blocked.exe", internalPath: path.join(root, "blocked.exe") }
+      ],
+      stagedItems
+    );
+    const result = await service.preserve({
+      prepared,
+      turn: { schemaVersion: 1, inputKind: "file_picker", locale: "en", stagedItems },
+      jobId: "job_20260723_mixedowner01",
+      firstSourceId: "src_20260723_mixedowner01"
+    });
+
+    expect(result).toMatchObject({
+      status: "preserved",
+      sourceIds: ["src_20260723_mixedowner01", createAttachmentSourceId("job_20260723_mixedowner01", 1)]
+    });
+    expect(prepared.rejectedItems).toEqual([
+      { ordinal: 2, kind: "file", displayName: "blocked.exe", reason: "unsupported_type" }
+    ]);
+    expect(preserveText).toHaveBeenCalledWith(
+      { text: pastedText, locale: "en" },
+      expect.objectContaining({ ordinal: 1, attachmentSetHash: prepared.attachmentSetHash })
+    );
+  });
+
+  it("retains the exact staged ordinal when file preservation fails after an accepted paste", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-mixed-source-failure-"));
+    roots.push(root);
+    const filePath = path.join(root, "second.md");
+    fs.writeFileSync(filePath, "# Second\n", "utf8");
+    const pastedText = "first pasted source";
+    const stagedItems = [
+      {
+        kind: "large_paste" as const,
+        ordinal: 0,
+        text: pastedText,
+        unicodeCodePointCount: pastedText.length,
+        utf8ByteSize: Buffer.byteLength(pastedText)
+      },
+      { kind: "file" as const, ordinal: 1, displayName: "second.md" }
+    ];
+    const service = new HomeAgentAttachmentService({
+      preserveTextForAgentTurn: (_request, binding) => ({
+        sourceId: binding.sourceId,
+        captureId: "cap_20260723_mixedfail01",
+        inputChecksum: binding.inputChecksum
+      }),
+      preserveFilesForAgentTurn: async () => {
+        throw new Error("synthetic copy failure");
+      }
+    });
+    const prepared = await service.prepare(
+      [{ ordinal: 1, displayName: "second.md", internalPath: filePath }],
+      stagedItems
+    );
+    const result = await service.preserve({
+      prepared,
+      turn: { schemaVersion: 1, inputKind: "file_picker", locale: "en", stagedItems },
+      jobId: "job_20260723_mixedfail01",
+      firstSourceId: "src_20260723_mixedfail01"
+    });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      sourceIds: ["src_20260723_mixedfail01"],
+      rejectedFiles: [{ displayName: "second.md", reason: "copy_failed" }],
+      rejectedItems: [{ ordinal: 1, kind: "file", displayName: "second.md", reason: "copy_failed" }]
+    });
   });
 
   it("routes shared source tools through the exact selected opaque attachment", async () => {

@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "contractVersion": "2026-07-23",
+  "status": "implementation_bound_product_status_unchanged",
+  "canonicalSchemaOwner": "packages/schemas/src/index.ts",
+  "implementationExports": {
+    "module": "@pige/schemas",
+    "constants": [
+      "AGENT_AUTHORED_TEXT_MAX_CODE_POINTS",
+      "AGENT_STAGED_ITEM_MAX_COUNT",
+      "AGENT_LARGE_PASTE_ITEM_MAX_UTF8_BYTES",
+      "AGENT_LARGE_PASTE_AGGREGATE_MAX_UTF8_BYTES"
+    ],
+    "types": [
+      "AgentStagedItem",
+      "AgentStagedLargePasteItem",
+      "AgentStagedItemRejectionReason"
+    ],
+    "consumersImportWithoutHardcoding": true
+  },
+  "limits": {
+    "ordinaryTextMaxCodePoints": 8000,
+    "stagedItemMaxCount": 8,
+    "largePasteItemMaxUtf8Bytes": 4194304,
+    "largePasteAggregateMaxUtf8Bytes": 8388608
+  },
+  "measurement": {
+    "authoredText": "unicode_code_points",
+    "preservedPaste": "utf8_bytes",
+    "normalization": "none",
+    "trimming": "none"
+  },
+  "stagedItemKinds": [
+    "file",
+    "large_paste"
+  ],
+  "rejectionReasons": [
+    "item_limit",
+    "item_too_large",
+    "aggregate_too_large"
+  ],
+  "ordinaryPasteRule": "Insert the exact clipboard payload as authored text only when the resulting composer text is at most ordinaryTextMaxCodePoints.",
+  "largePasteRule": "Otherwise stage the entire exact clipboard payload as one removable large_paste item and leave the existing composer text unchanged.",
+  "safePendingProjection": [
+    "localizedLabel",
+    "ordinal",
+    "unicodeCodePointCount",
+    "utf8ByteSize"
+  ],
+  "submission": {
+    "gesture": "explicit_send_or_valid_enter",
+    "oneClientTurnId": true,
+    "oneParentJob": true,
+    "orderedMixedItems": true,
+    "preserveEachLargePasteExactlyOnce": true,
+    "conversationStoresReferencesOnly": true,
+    "pasteOnlyMinimalIntent": "Organize these files."
+  },
+  "preSubmitSideEffects": [],
+  "failure": {
+    "preserveExactComposerText": true,
+    "preserveItemsAndOrder": true,
+    "preserveClientTurnId": true,
+    "retryAdoptsWithoutDuplicate": true,
+    "partialAcceptanceNeverClearsRejectedItems": true,
+    "rejectedItemRemainsLocalAndBlocksSend": true
+  },
+  "globalFileDrop": "Immediate separate Agent turn; never consumes the composer draft or staged items.",
+  "implementationBinding": "bound",
+  "implementationEvidence": {
+    "strictRequestSchema": "AgentSubmitTurnRequestSchema",
+    "strictStagedResultSchema": "AgentStagedSubmitTurnResultSchema",
+    "earlyDurableReceiptSchema": "AgentSubmitTurnAcceptedResultSchema",
+    "mainReceiptBeforeScheduling": true,
+    "preloadResultValidation": "AgentSubmitTurnIpcResultSchema",
+    "productStatusPromotion": false
+  }
+}

@@ -317,10 +317,18 @@ Tests must verify:
   composer picker selection/removal causes zero Job/source/conversation/model/network
   effects until Send. Send/valid Enter atomically binds exact text plus ordered staged
   attachments to one parent Agent Job; attachment-only submit adds the minimal intent.
+- Large-paste contract tests load `resources/large-paste-boundary.manifest.json` and cover
+  exact Unicode code-point edges (including surrogate pairs), no trim/normalization,
+  ordinary insertion versus whole-payload staging, the eight-item mixed order, multiple
+  pastes, 4 MiB item and 8 MiB aggregate UTF-8 edges, safe chip identity with no body/path,
+  and zero pre-Send side effects. The exact three-reason rejection enum is covered;
+  partial acceptance preserves every rejected item and blocks Send until resolution.
 - Race/IME/privacy tests cover Send-versus-Enter deduplication, composition-end fencing,
   removal and drop while a composer draft exists, active-vault drift, shared type/count/
   size limits, safe display names with no raw paths, failed-submit state preservation,
-  and exact idempotent retry without duplicate events, sources, Jobs, or Provider calls.
+  and exact idempotent retry without duplicate events, bodies, sources, Jobs, or Provider
+  calls. A validation/IPC/vault/preservation failure retains exact text, staged order and
+  client-turn identity.
 
 ## 6.2 Agent Runtime Policy Context Gates
 

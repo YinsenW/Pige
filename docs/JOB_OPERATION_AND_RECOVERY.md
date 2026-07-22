@@ -123,9 +123,14 @@ exact values. Aliases such as `capture_preserve`, `parse_source`, `backup_create
 `restore_validate` are forbidden.
 
 `agent_turn` atomically binds the exact authored user event, one parent Job and ordered
-source/current-note refs. Picker staging is not Job state. Main acknowledges durable
-acceptance before renderer clearing; rejection leaves the composer unchanged. Exact
-client-turn retry adopts the parent/event/source refs and cannot duplicate preservation.
+source/current-note refs. Its ordered mixed staged items may preserve files and large
+pastes, with every accepted paste committed exactly once to a managed source. Picker or
+paste staging is not Job state; `resources/large-paste-boundary.manifest.json` owns the
+shared limits. Main acknowledges durable acceptance before renderer clearing; rejection
+leaves the composer unchanged. Exact client-turn retry adopts the parent/event/source refs
+and cannot duplicate preservation; validation, IPC, vault or preservation failure keeps
+exact text, items, order and client-turn identity. Rejected items are never silently
+cleared by partial acceptance.
 Short chat creates no Source Record. Multi-attachment preservation checkpoints or child
 executors are reliability ownership only and never a Host-selected semantic ingest chain.
 

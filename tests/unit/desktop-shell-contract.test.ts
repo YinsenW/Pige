@@ -483,10 +483,11 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("draftPublisher.close()");
     expect(preloadSource).toContain('scope: { kind: "current_note" as const, pageId: request.scope.pageId }');
     expect(preloadSource).toContain("AgentSubmitTurnIpcPayloadSchema.parse({");
-    expect(preloadSource).toContain("displayName: file.name");
+    expect(preloadSource).toContain("displayName: stagedFileItems?.[index]?.displayName ?? file.name");
+    expect(preloadSource).toContain("request.stagedItems");
     expect(preloadSource).toContain("internalPath: webUtils.getPathForFile(file)");
     expect(preloadSource).toContain('ipcRenderer.invoke("agent.submitTurn", payload)');
-    expect(preloadSource).toContain("AgentSubmitTurnResultSchema.parse(");
+    expect(preloadSource).toContain("AgentSubmitTurnIpcResultSchema.parse(");
     expect(preloadSource).toContain("request: canonicalRequest");
     expect(preloadSource).toContain("inputKind: request.inputKind");
     expect(preloadSource).not.toContain("objective: request.objective");

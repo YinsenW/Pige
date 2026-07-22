@@ -4105,6 +4105,41 @@ dd {
   white-space: nowrap;
 }
 
+.attachment-chip-copy {
+  display: grid;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.attachment-chip-copy strong,
+.attachment-chip-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-chip-copy strong {
+  color: var(--text-primary);
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.attachment-chip-copy small {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.pasted-text-chip { max-width: 280px; }
+
+.rejected-pasted-text-chip {
+  border-color: color-mix(in srgb, var(--warning) 38%, var(--border-subtle));
+}
+
+.attachment-chip-copy .attachment-chip-rejection {
+  color: var(--warning);
+  white-space: normal;
+}
+
 .chip-remove {
   display: grid;
   width: 20px;

@@ -214,13 +214,23 @@ Behavior:
 - The composer `+` picker stages bounded attachment chips locally. Selection and removal
   create no Job, Source Record, conversation event, model call, upload, or other network
   work. Chips show safe display metadata, never a private path.
+- An exact paste is inserted normally only while the resulting composer stays within the
+  ordinary-text boundary. Otherwise the entire payload becomes a removable `Pasted text`
+  chip and the existing composer text remains unchanged. File and paste chips retain user
+  staging order. Before preservation, a paste chip may show only localized label, ordinal,
+  Unicode character count and bounded byte size—never body preview, path or internal ID.
 - Send or valid Enter takes one immutable snapshot of the exact authored text and staged
-  attachment identities and submits one Agent turn/parent Job. Whitespace-only text with
-  attachments receives only the minimal organize intent at submit time. Text-only
+  file/paste identities and submits one Agent turn/parent Job. Whitespace-only text with
+  staged items receives only the minimal organize intent at submit time. Text-only
   whitespace remains invalid and creates no turn.
 - Clear text/chips only after the authoritative accepted receipt. Validation, IPC, vault-
   identity, or submission failure preserves the exact composer state for idempotent retry.
   A Send-button/Enter race shares one client turn identity and cannot duplicate work.
+- The exact staged-paste limits and measurement rules are owned by
+  `resources/large-paste-boundary.manifest.json`; an individually rejected item remains
+  visible with a safe reason and never silently clears other accepted or rejected items.
+  The shared rejection reasons are `item_limit`, `item_too_large`, and
+  `aggregate_too_large`; rejected items stay removable and block Send without side effects.
 - Menu and settings are present but visually quiet.
 - User can type a question, paste a URL, paste long text, attach a file, or drag files anywhere onto the window.
 - On supported macOS versions, the microphone button starts voice dictation into the same input.

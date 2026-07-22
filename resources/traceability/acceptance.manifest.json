@@ -441,7 +441,7 @@
     },
     "PIGE-CAP-002": {
       "status": "planned",
-      "plannedTarget": "Restore large pasted-text preservation through the single Agent-turn source owner without reviving capture-only submission."
+      "plannedTarget": "Implement the canonical large-paste manifest: exact over-limit clipboard payloads stage with files, remain side-effect free until atomic Send, preserve once as managed sources, and retry by reference without reviving capture-only submission."
     },
     "PIGE-CAP-003": {
       "status": "planned",
@@ -843,7 +843,7 @@
     "E2.01":{"status":"partial","evidence":["EV-JOB-RECOVERY","EV-HOME-JOB-RECOVERY","EV-HOME-AGENT","EV-NOTE-AGENT-JOB","EV-NOTE-AGENT-RECOVERY","EV-CAPTURE-PUBLICATION-GUARD","EV-PARSE-FOLLOWUP-DURABILITY","EV-OCR-FOLLOWUP-DURABILITY","EV-DATASET-CONTINUATION","EV-DATASET-CONTINUATION-RESTART","EV-BACKUP-JOB-LIFECYCLE","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-STARTUP-ADOPTION"],"open":{"id":"OPEN-EXIT-E2.01","description":"Kill/reopen and resumable drainer proof across remaining Job classes stays open.","targetBuilds":["B2.08"],"targetExits":["E2.01"]}},
     "E2.02": {
       "status": "planned",
-      "plannedTarget": "Large pasted content still needs a single Agent-turn source-preservation path and reference-only conversation proof."
+      "plannedTarget": "Large paste still needs end-to-end manifest enforcement for Unicode/UTF-8 limits, ordered mixed staging, exact-once Agent-turn preservation, reference-only history, preserved failure state and duplicate-free retry."
     },
     "E2.03": {
       "status": "partial",

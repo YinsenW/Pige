@@ -227,7 +227,8 @@ Context pack: `docs/PRD.md` input requirements; `docs/PARSER_INGEST_SPEC.md`; `d
 
 Build:
 
-- [B2.01 -> E2.02] Text capture.
+- [B2.01 -> E2.02] Text capture plus the manifest-owned large-paste staging and
+  exact-once managed-source boundary.
 - [B2.02 -> E2.04] Local macOS voice dictation when supported, with explicit unavailable states elsewhere.
 - [B2.03 -> E2.05] Markdown and TXT file capture.
 - [B2.04 -> E2.06] PDF, DOCX, PPTX, and common-image preservation with metadata-only
@@ -253,7 +254,10 @@ Deferred from this phase:
 Exit criteria:
 
 - [E2.01] Killing and reopening the app does not lose queued or partially processed captures; durable jobs reconcile to retryable states.
-- [E2.02] Large pasted content is stored once as a managed source and referenced from conversation history without duplicated large bodies.
+- [E2.02] `resources/large-paste-boundary.manifest.json` is implemented end to end:
+  ordinary text stays within its Unicode code-point bound; larger exact pastes share one
+  ordered staged list with files, remain side-effect free until Send, and are stored once
+  as managed sources with reference-only conversation history and duplicate-free retry.
 - [E2.03] Capture events are durable and reference sources/jobs; only bounded short chat text may remain inline.
 - [E2.04] Supported macOS dictation inserts local transcript text after on-demand microphone permission; unsupported platforms show a clear state and no dictation audio is sent to model providers.
 - [E2.05] Markdown and TXT capture preserves the original source, creates one source record, and does not duplicate large bodies into conversation events.

@@ -5,6 +5,7 @@ import type {
   AgentConversationRequest,
   AgentConversationTimeline,
   AgentSubmitTurnRequest,
+  AgentSubmitTurnAcceptedResult,
   AgentSubmitTurnResult,
   AgentTurnAnswer,
   AgentTurnCurrentNoteScope,
@@ -228,6 +229,12 @@ export interface PreparedSourceAgentTurn {
   readonly activeVaultId: string;
 }
 
+export function scheduleAcceptedAgentTurn(execute: () => Promise<unknown>): void {
+  setImmediate(() => {
+    void execute().catch(() => undefined);
+  });
+}
+
 const HOME_SEARCH_TOOL_NAME = "pige_search_knowledge";
 const HOME_READ_CURRENT_NOTE_TOOL_NAME = "pige_read_current_note";
 const HOME_QUERY_DATASET_TOOL_NAME = "pige_query_dataset";
@@ -396,11 +403,32 @@ export class HomeAgentService {
     prepared: PreparedSourceAgentTurn,
     context: { readonly onDraft?: (snapshot: HomeAgentDraftSnapshot) => void } = {}
   ): Promise<AgentSubmitTurnResult> {
+    this.acceptPreparedSourceTurn(prepared);
+    return this.runAcceptedPreparedSourceTurn(prepared, context);
+  }
+
+  acceptPreparedSourceTurn(prepared: PreparedSourceAgentTurn): AgentSubmitTurnAcceptedResult {
     if (prepared.attachmentSetHash) {
       this.#jobs.attachAgentTurnSources(prepared.jobId, prepared.sourceIds, prepared.attachmentSetHash);
     } else {
       this.#jobs.attachAgentTurnSource(prepared.jobId, prepared.sourceId);
     }
+    return {
+      requestId: prepared.request.clientTurnId ?? prepared.jobId,
+      jobId: prepared.jobId,
+      conversationEventId: prepared.preservedTurn.event.id,
+      conversationId: prepared.preservedTurn.event.conversationId,
+      tailEventId: prepared.preservedTurn.event.id,
+      state: "accepted",
+      modelUsage: "none",
+      sourceIds: prepared.sourceIds
+    };
+  }
+
+  runAcceptedPreparedSourceTurn(
+    prepared: PreparedSourceAgentTurn,
+    context: { readonly onDraft?: (snapshot: HomeAgentDraftSnapshot) => void } = {}
+  ): Promise<AgentSubmitTurnResult> {
     return this.submitTurn(prepared.request, {
       sourceIds: prepared.sourceIds,
       prepared,
