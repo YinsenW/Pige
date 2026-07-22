@@ -12,7 +12,10 @@ import {
 import type { VaultSummary } from "@pige/contracts";
 import { LibraryService } from "../../apps/desktop/src/main/services/library-service";
 import { LocalDatabaseService } from "../../apps/desktop/src/main/services/local-database-service";
-import { RetrievalService } from "../../apps/desktop/src/main/services/retrieval-service";
+import {
+  buildHomeQueryContextPack,
+  RetrievalService
+} from "../../apps/desktop/src/main/services/retrieval-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 
 const roots: string[] = [];
@@ -130,16 +133,26 @@ function runFixture(input: RetrievalGoldenFixture): {
   const library = new LibraryService(vaultPort, database);
 
   const queries = input.queries.map((query): RetrievalQueryObservation => {
-    const result = retrieval.ask({ query: query.query, locale: query.locale, limit: query.limit });
+    const result = retrieval.search({
+      scope: { kind: "active_vault", vaultId: vault.vaultId },
+      query: query.query,
+      limit: query.limit
+    });
+    const context = buildHomeQueryContextPack(result);
+    const evidence = context.selectedEvidence.slice(0, 3);
     expect(result.mode, query.id).toBe("lexical_sqlite_fts");
     expect(result.degraded, query.id).toBe(false);
     return {
       queryId: query.id,
       ...(result.results[0]?.summary.pageId ? { topPageId: result.results[0].summary.pageId } : {}),
       resultPageIds: result.results.map((item) => item.summary.pageId),
-      citationPageIds: result.citations.map((citation) => citation.pageId),
-      confidence: result.confidence,
-      warnings: result.warnings
+      citationPageIds: evidence.map((item) => item.citation.pageId),
+      confidence: evidence.length === 0
+        ? "insufficient"
+        : evidence.length === 1
+          ? "limited"
+          : "grounded",
+      warnings: context.pack.warnings
     };
   });
   const related = input.relatedCases.map((relatedCase): RetrievalRelatedObservation => {

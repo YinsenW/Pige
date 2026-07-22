@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { AgentTurnAnswer } from "@pige/contracts";
 import type { ConversationEvent } from "@pige/schemas";
 import { AgentTurnConversationStore } from "../../apps/desktop/src/main/services/agent-turn-conversation-store";
+import { readDurableAgentTurnAnswer } from "../../apps/desktop/src/main/services/durable-agent-turn-answer";
 
 const tempRoots: string[] = [];
 
@@ -247,12 +248,12 @@ describe("Agent turn conversation store", () => {
       datasetAnswer
     );
 
-    expect(service.readAssistantAnswer(plainEvent)).toEqual({
+    expect(readDurableAgentTurnAnswer(plainEvent)).toEqual({
       answer: "Synthetic durable plain answer.",
       grounding: "general",
       citations: []
     });
-    expect(service.readAssistantAnswer(datasetEvent)).toEqual(datasetAnswer);
+    expect(readDurableAgentTurnAnswer(datasetEvent)).toEqual(datasetAnswer);
   });
 
   it("fails closed for invalid or changed durable assistant events", () => {
@@ -266,18 +267,18 @@ describe("Agent turn conversation store", () => {
       makeDatasetAnswer()
     );
 
-    expect(captureError(() => service.readAssistantAnswer(userTurn.event))).toMatchObject({
+    expect(captureError(() => readDurableAgentTurnAnswer(userTurn.event))).toMatchObject({
       code: "agent_runtime.turn_conflict"
     });
-    expect(captureError(() => service.readAssistantAnswer({
+    expect(captureError(() => readDurableAgentTurnAnswer({
       ...assistant,
       text: undefined
     } as unknown as ConversationEvent))).toMatchObject({ code: "agent_runtime.turn_conflict" });
-    expect(captureError(() => service.readAssistantAnswer({
+    expect(captureError(() => readDurableAgentTurnAnswer({
       ...assistant,
       answerGrounding: undefined
     } as ConversationEvent))).toMatchObject({ code: "agent_runtime.turn_conflict" });
-    expect(captureError(() => service.readAssistantAnswer({
+    expect(captureError(() => readDurableAgentTurnAnswer({
       ...assistant,
       answerCitations: []
     }))).toMatchObject({ code: "agent_runtime.turn_changed" });

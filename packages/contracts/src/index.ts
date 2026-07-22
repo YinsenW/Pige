@@ -836,13 +836,6 @@ export interface NoteRenderResult {
   readonly renderContextId?: NoteRenderContextId;
 }
 
-export interface RetrievalAskRequest {
-  readonly query: string;
-  readonly limit?: number;
-  readonly pageTypes?: readonly MarkdownPageType[];
-  readonly locale?: Locale;
-}
-
 export type RetrievalAnswerWarning =
   | "insufficient_evidence"
   | "limited_evidence"
@@ -925,23 +918,7 @@ export interface RetrievalAskResult extends RetrievalSearchResult {
   readonly warnings: readonly RetrievalAnswerWarning[];
 }
 
-export interface HomeAgentAskRequest extends RetrievalAskRequest {}
-
 export type HomeAgentModelUsage = "none" | "local" | "cloud";
-
-export type HomeAgentAskResult =
-  | {
-      readonly requestId: string;
-      readonly state: "completed";
-      readonly modelUsage: HomeAgentModelUsage;
-      readonly result: RetrievalAskResult;
-    }
-  | {
-      readonly requestId: string;
-      readonly state: "waiting" | "failed";
-      readonly modelUsage: HomeAgentModelUsage;
-      readonly error: PigeErrorSummary;
-    };
 
 export type AgentTurnInputKind =
   | "typed_text"
@@ -1237,7 +1214,6 @@ export interface PigeDesktopApi {
   };
   readonly agent: {
     readonly runtimeStatus: () => Promise<AgentRuntimeStatus>;
-    readonly ask: (request: HomeAgentAskRequest) => Promise<HomeAgentAskResult>;
     readonly submitTurn: (
       request: AgentSubmitTurnRequest,
       files?: readonly File[]

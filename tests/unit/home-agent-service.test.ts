@@ -7,10 +7,11 @@ import { PigeDomainError } from "@pige/domain";
 import type {
   DatasetAnswerCitation,
   DatasetQueryPreview,
-  HomeAgentAskRequest,
+  AgentSubmitTurnResult,
+  Locale,
   ModelProfileSummary,
   ProviderProfileSummary,
-  RetrievalAskResult,
+  RetrievalSearchRequest,
   RetrievalSearchResult,
   VaultSummary
 } from "@pige/contracts";
@@ -50,7 +51,6 @@ import {
   type PiAgentRunResult,
   type PigeAgentToolResult
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
-import { buildLocalExtractiveAskResult } from "../../apps/desktop/src/main/services/retrieval-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import {
   DatasetAnswerCitationSchema,
@@ -64,6 +64,22 @@ import {
 const tempRoots: string[] = [];
 const HOME_PAGE_ID = "page_20260711_launchabc";
 
+class TestHomeAgentService extends HomeAgentService {
+  submitQuery(request: {
+    readonly query: string;
+    readonly locale?: Locale;
+    readonly limit?: number;
+  }): Promise<AgentSubmitTurnResult> {
+    return this.submitTurn({
+      schemaVersion: 1,
+      text: request.query,
+      inputKind: "typed_text",
+      objective: "vault_only",
+      locale: request.locale ?? "en"
+    });
+  }
+}
+
 afterEach(() => {
   for (const root of tempRoots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
@@ -73,7 +89,7 @@ describe("Home Pi Agent service", () => {
     const fixture = makeFixture();
     let runtimeConfigReads = 0;
     let searchCalls = 0;
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(() => {
         runtimeConfigReads += 1;
@@ -101,16 +117,14 @@ describe("Home Pi Agent service", () => {
       })
     );
 
-    const outcome = await service.ask({ query: "When is the launch?", limit: 8, locale: "en" });
+    const outcome = await service.submitQuery({ query: "When is the launch?", limit: 8, locale: "en" });
     expect(outcome.state).toBe("completed");
     if (outcome.state !== "completed") throw new Error("Expected completed Home answer.");
     expect(outcome.modelUsage).toBe("cloud");
-    expect(outcome.result.answerMode).toBe("model_grounded");
-    expect(outcome.result.answer).toBe("The launch date is July 18. [1]");
-    expect(outcome.result.citations).toEqual([
+    expect(outcome.answer.answer).toBe("The launch date is July 18. [1]");
+    expect(outcome.answer.citations).toEqual([
       expect.objectContaining({ refId: "citation_1", pageId: HOME_PAGE_ID })
     ]);
-    expect(outcome.result.warnings).not.toContain("local_extractive_only");
     expect(searchCalls).toBe(1);
     expect(runtimeConfigReads).toBe(1);
     expect(JSON.stringify(outcome)).not.toContain("synthetic-home-secret");
@@ -141,7 +155,7 @@ describe("Home Pi Agent service", () => {
   it("bounds the Host-authored Home retrieval query to 320 characters", async () => {
     const fixture = makeFixture();
     let retrievalQuery = "";
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId, {
@@ -160,7 +174,7 @@ describe("Home Pi Agent service", () => {
       })
     );
 
-    const outcome = await service.ask({ query: "a".repeat(400), limit: 8, locale: "en" });
+    const outcome = await service.submitQuery({ query: "a".repeat(400), limit: 8, locale: "en" });
     expect(outcome.state).toBe("completed");
     expect(retrievalQuery).toBe("a".repeat(320));
   });
@@ -176,7 +190,7 @@ describe("Home Pi Agent service", () => {
       readonly text: string;
     }> = [];
     const answer = "This provisional answer stays bound to one exact durable Home turn.";
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -226,7 +240,7 @@ describe("Home Pi Agent service", () => {
       readonly text: string;
     }> = [];
     const answer = "This native assistant answer streams before the durable Home result is committed.";
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -264,10 +278,9 @@ describe("Home Pi Agent service", () => {
   it("preserves one Agent turn and waits without retrieval when no runtime binding exists", async () => {
     const fixture = makeFixture();
     let runtimeConfigReads = 0;
-    let localAskCalls = 0;
     let runtimeCalls = 0;
     const models = makeModels(() => { runtimeConfigReads += 1; });
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       {
         ...models,
@@ -281,11 +294,7 @@ describe("Home Pi Agent service", () => {
         hasDefaultRuntimeBinding: () => false
       },
       {
-        search: () => { throw new Error("The model path must not search separately."); },
-        ask: (request) => {
-          localAskCalls += 1;
-          return makeRetrievalPort(fixture.vault.vaultId).ask(request);
-        }
+        search: () => { throw new Error("The model path must not search separately."); }
       },
       new JobsService(fixture.vaults),
       { run: async () => { runtimeCalls += 1; throw new Error("Runtime must not run."); } }
@@ -305,7 +314,6 @@ describe("Home Pi Agent service", () => {
       code: "model_provider.default_model_missing",
       userAction: "configure_model"
     });
-    expect(localAskCalls).toBe(0);
     expect(runtimeConfigReads).toBe(0);
     expect(runtimeCalls).toBe(0);
     expect(readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"))).toEqual([
@@ -322,7 +330,7 @@ describe("Home Pi Agent service", () => {
   it("lets Pi choose direct chat or bounded local retrieval for the same typed-text ingress", async () => {
     const directFixture = makeFixture();
     let directSearchCalls = 0;
-    const direct = await new HomeAgentService(
+    const direct = await new TestHomeAgentService(
       directFixture.vaults,
       makeModels(),
       makeRetrievalPort(directFixture.vault.vaultId, { onSearch: () => { directSearchCalls += 1; } }),
@@ -337,7 +345,7 @@ describe("Home Pi Agent service", () => {
 
     const retrievalFixture = makeFixture();
     let retrievalSearchCalls = 0;
-    const grounded = await new HomeAgentService(
+    const grounded = await new TestHomeAgentService(
       retrievalFixture.vaults,
       makeModels(),
       makeRetrievalPort(retrievalFixture.vault.vaultId, { onSearch: () => { retrievalSearchCalls += 1; } }),
@@ -384,7 +392,7 @@ describe("Home Pi Agent service", () => {
 
   it("keeps evidence-backed prose behind the structured Home completion boundary", async () => {
     const fixture = makeFixture();
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -418,7 +426,7 @@ describe("Home Pi Agent service", () => {
       ...makeModels(),
       recordGenerationOutcome: (_providerProfileId, outcome) => outcomes.push(outcome)
     };
-    const success = await new HomeAgentService(
+    const success = await new TestHomeAgentService(
       successFixture.vaults,
       models,
       makeRetrievalPort(successFixture.vault.vaultId),
@@ -427,7 +435,7 @@ describe("Home Pi Agent service", () => {
     ).submitTurn({ text: "Hello", inputKind: "typed_text", objective: "auto", locale: "en" });
 
     const failureFixture = makeFixture();
-    const failure = await new HomeAgentService(
+    const failure = await new TestHomeAgentService(
       failureFixture.vaults,
       models,
       makeRetrievalPort(failureFixture.vault.vaultId),
@@ -440,7 +448,7 @@ describe("Home Pi Agent service", () => {
     ).submitTurn({ text: "Hello again", inputKind: "typed_text", objective: "auto", locale: "en" });
 
     const hostFailureFixture = makeFixture();
-    const hostFailure = await new HomeAgentService(
+    const hostFailure = await new TestHomeAgentService(
       hostFailureFixture.vaults,
       models,
       makeRetrievalPort(hostFailureFixture.vault.vaultId),
@@ -466,7 +474,7 @@ describe("Home Pi Agent service", () => {
 
   it("normalizes an internal Reader transform domain before shared error projection", async () => {
     const fixture = makeFixture();
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -506,7 +514,7 @@ describe("Home Pi Agent service", () => {
     DatasetQueryPreviewSchema.parse(DATASET_PREVIEW);
     const datasets = new StaticDatasetQueryPort();
     let searchCalls = 0;
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId, { onSearch: () => { searchCalls += 1; } }),
@@ -634,7 +642,7 @@ describe("Home Pi Agent service", () => {
     const fixture = makeFixture();
     const observed: string[] = [];
     const datasets = new StaticDatasetQueryPort(false, (call) => observed.push(call));
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId, { onSearch: () => observed.push("search") }),
@@ -680,7 +688,7 @@ describe("Home Pi Agent service", () => {
     const fixture = makeFixture();
     const datasets = new StaticDatasetQueryPort(true);
     let runtimeConfigReads = 0;
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(() => { runtimeConfigReads += 1; }),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -736,7 +744,7 @@ describe("Home Pi Agent service", () => {
 
   it("fails closed when a vault-only turn ignores selected evidence instead of citing it", async () => {
     const fixture = makeFixture();
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -770,7 +778,7 @@ describe("Home Pi Agent service", () => {
 
   it("repairs invalid citations in the same durable turn before publishing one assistant result", async () => {
     const fixture = makeFixture();
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -822,7 +830,7 @@ describe("Home Pi Agent service", () => {
     let runtimeConfigReads = 0;
     let runtimeCalls = 0;
     const models = makeModels(() => { runtimeConfigReads += 1; });
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       {
         ...models,
@@ -868,7 +876,7 @@ describe("Home Pi Agent service", () => {
     let runtimeCalls = 0;
     let searchCalls = 0;
     const jobs = new JobsService(fixture.vaults);
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       models,
       makeRetrievalPort(fixture.vault.vaultId, { onSearch: () => { searchCalls += 1; } }),
@@ -914,7 +922,7 @@ describe("Home Pi Agent service", () => {
     const jobs = new JobsService(fixture.vaults);
     let runtimeCalls = 0;
     const conversations = new AgentTurnConversationStore();
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       models,
       makeRetrievalPort(fixture.vault.vaultId),
@@ -982,7 +990,7 @@ describe("Home Pi Agent service", () => {
     const jobs = new JobsService(fixture.vaults);
     const conversations = new AgentTurnConversationStore();
     let runtimeCalls = 0;
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       models,
       makeRetrievalPort(fixture.vault.vaultId),
@@ -1077,7 +1085,7 @@ describe("Home Pi Agent service", () => {
     let runtimeConfigReads = 0;
     let searchCalls = 0;
     let runtimeCalls = 0;
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(() => { runtimeConfigReads += 1; }),
       makeRetrievalPort(fixture.vault.vaultId, { onSearch: () => { searchCalls += 1; } }),
@@ -1085,7 +1093,7 @@ describe("Home Pi Agent service", () => {
       { run: async () => { runtimeCalls += 1; throw new Error("blocked"); } }
     );
 
-    const outcome = await service.ask({ query: "password=opaque-secret-value should this be in my notes?" });
+    const outcome = await service.submitQuery({ query: "password=opaque-secret-value should this be in my notes?" });
 
     expect(outcome).toMatchObject({
       state: "failed",
@@ -1116,7 +1124,7 @@ describe("Home Pi Agent service", () => {
     for (const title of ["password=opaque-title-secret", "/Users/private/Documents/launch.md"]) {
       const fixture = makeFixture();
       const result = makeSearchResult(fixture.vault.vaultId, { title });
-      const outcome = await new HomeAgentService(
+      const outcome = await new TestHomeAgentService(
         fixture.vaults,
         makeModels(),
         makeRetrievalPort(fixture.vault.vaultId, { result }),
@@ -1131,7 +1139,7 @@ describe("Home Pi Agent service", () => {
             })
           ]
         })
-      ).ask({ query: result.query });
+      ).submitQuery({ query: result.query });
 
       expect(outcome).toMatchObject({
         state: "failed",
@@ -1166,7 +1174,7 @@ describe("Home Pi Agent service", () => {
         let runtimeConfigReads = 0;
         let searchCalls = 0;
         let runtimeCalls = 0;
-        const outcome = await new HomeAgentService(
+        const outcome = await new TestHomeAgentService(
           fixture.vaults,
           makeModels(() => { runtimeConfigReads += 1; }),
           makeRetrievalPort(fixture.vault.vaultId, {
@@ -1180,7 +1188,7 @@ describe("Home Pi Agent service", () => {
               return runUntilSecondModelTurn(request, `pi_tool_restricted_${surface}`);
             }
           }
-        ).ask({ query });
+        ).submitQuery({ query });
 
         expect(outcome, `${surface}: ${restrictedValue}`).toMatchObject({
           state: "failed",
@@ -1202,45 +1210,41 @@ describe("Home Pi Agent service", () => {
     }
   }, 15_000);
 
-  it("fails closed when Pi skips local search or returns unvalidated citations", async () => {
+  it("allows a general Pi answer without local search and rejects unvalidated citations", async () => {
     const fixture = makeFixture();
-    const cases = [
-      {
-        runtime: new PiAgentRuntimeAdapter({
-        fauxResponses: [finishHome({ answer: "Ungrounded", citationRefs: [], grounding: "general" })]
-        }),
-        code: "model_provider.output_invalid",
-        messageKey: "errors.model_provider.output_invalid"
-      },
-      {
-        runtime: new PiAgentRuntimeAdapter({
+    const general = await new TestHomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      new PiAgentRuntimeAdapter({
+        fauxResponses: [finishHome({ answer: "General answer", citationRefs: [], grounding: "general" })]
+      })
+    ).submitQuery({ query: "When is the launch?" });
+    expect(general).toMatchObject({
+      state: "completed",
+      answer: { answer: "General answer", grounding: "general", citations: [] }
+    });
+
+    const invalidCitation = await new TestHomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      new PiAgentRuntimeAdapter({
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
           finishHome({ answer: "Invented", citationRefs: ["citation_99"], grounding: "local_knowledge" })
         ]
-        }),
+      })
+    ).submitQuery({ query: "When is the launch?" });
+    expect(invalidCitation).toMatchObject({
+      state: "failed",
+      error: {
         code: "model_provider.tool_protocol_incompatible",
         messageKey: "errors.model_provider.binding_unusable"
       }
-    ];
-
-    for (const { runtime, code, messageKey } of cases) {
-      const outcome = await new HomeAgentService(
-        fixture.vaults,
-        makeModels(),
-        makeRetrievalPort(fixture.vault.vaultId),
-        new JobsService(fixture.vaults),
-        runtime
-      ).ask({ query: "When is the launch?" });
-
-      expect(outcome).toMatchObject({
-        state: "failed",
-        error: {
-          code,
-          messageKey
-        }
-      });
-    }
+    });
   });
 
   it("revalidates the selected model binding after the retrieval tool before the final model turn", async () => {
@@ -1251,7 +1255,7 @@ describe("Home Pi Agent service", () => {
       ...models,
       getDefaultModel: () => drifted ? { ...DEFAULT_MODEL, modelId: "changed-model" } : DEFAULT_MODEL
     };
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       driftingModels,
       makeRetrievalPort(fixture.vault.vaultId, { onSearch: () => { drifted = true; } }),
@@ -1264,7 +1268,7 @@ describe("Home Pi Agent service", () => {
       })
     );
 
-    const outcome = await service.ask({ query: "When is the launch?" });
+    const outcome = await service.submitQuery({ query: "When is the launch?" });
 
     expect(outcome).toMatchObject({
       state: "failed",
@@ -1278,7 +1282,7 @@ describe("Home Pi Agent service", () => {
 
   it("reports a cloud attempt on provider failure only after the per-turn boundary passes", async () => {
     const fixture = makeFixture();
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -1289,7 +1293,7 @@ describe("Home Pi Agent service", () => {
           throw new Error("Synthetic provider failure after approved invocation.");
         }
       }
-    ).ask({ query: "When is the launch?" });
+    ).submitQuery({ query: "When is the launch?" });
 
     expect(outcome).toMatchObject({
       state: "failed",
@@ -1323,7 +1327,7 @@ describe("Home Pi Agent service", () => {
         })
       ]
     });
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(() => { runtimeConfigReads += 1; }),
       makeRetrievalPort(fixture.vault.vaultId, { result }),
@@ -1332,12 +1336,11 @@ describe("Home Pi Agent service", () => {
         runtimeCalls += 1;
         return adapter.run(request);
       } }
-    ).ask({ query: result.query });
+    ).submitQuery({ query: result.query });
 
     expect(outcome).toMatchObject({
       state: "completed",
-      modelUsage: "cloud",
-      result: { answerMode: "model_grounded" }
+      modelUsage: "cloud"
     });
     expect(runtimeConfigReads).toBe(1);
     expect(runtimeCalls).toBe(1);
@@ -1377,7 +1380,7 @@ describe("Home Pi Agent service", () => {
         })
       ]
     });
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(() => { runtimeConfigReads += 1; }),
       makeRetrievalPort(fixture.vault.vaultId, { result }),
@@ -1388,7 +1391,7 @@ describe("Home Pi Agent service", () => {
           return adapter.run(request);
         }
       }
-    ).ask({ query: result.query });
+    ).submitQuery({ query: result.query });
 
     expect(outcome).toMatchObject({
       state: "completed",
@@ -1416,7 +1419,7 @@ describe("Home Pi Agent service", () => {
     const jobs = new JobsService(fixture.vaults);
     let runtimeConfigReads = 0;
     let runtimeCalls = 0;
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeUnverifiedModels(() => { runtimeConfigReads += 1; }),
       makeRetrievalPort(fixture.vault.vaultId, { result }),
@@ -1469,7 +1472,7 @@ describe("Home Pi Agent service", () => {
     let runtimeConfigReads = 0;
     let runtimeCalls = 0;
     const staleResult = makeSearchResult(fixture.vault.vaultId, { sourceIds: [] });
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(() => { runtimeConfigReads += 1; }),
       makeRetrievalPort(fixture.vault.vaultId, { result: staleResult }),
@@ -1480,7 +1483,7 @@ describe("Home Pi Agent service", () => {
           return runUntilSecondModelTurn(request, "pi_tool_stale_evidence");
         }
       }
-    ).ask({ query: staleResult.query });
+    ).submitQuery({ query: staleResult.query });
 
     expect(outcome).toMatchObject({ state: "failed", error: { code: "model_provider.output_invalid" } });
     expect(runtimeConfigReads).toBe(1);
@@ -1504,7 +1507,7 @@ describe("Home Pi Agent service", () => {
     const result = makeSearchResult(fixture.vault.vaultId, { sourceIds: [sourceId] });
     let runtimeConfigReads = 0;
     let runtimeCalls = 0;
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(() => { runtimeConfigReads += 1; }),
       makeRetrievalPort(fixture.vault.vaultId, { result }),
@@ -1515,7 +1518,7 @@ describe("Home Pi Agent service", () => {
           return runUntilSecondModelTurn(request, "pi_tool_external_record");
         }
       }
-    ).ask({ query: result.query });
+    ).submitQuery({ query: result.query });
 
     expect(outcome).toMatchObject({
       state: "failed",
@@ -1578,7 +1581,7 @@ describe("Home Pi Agent service", () => {
           throw new Error("Privacy drift must prevent a second model turn.");
         }
       };
-      const outcome = await new HomeAgentService(
+      const outcome = await new TestHomeAgentService(
         fixture.vaults,
         makeModelsFor(
           testCase.provider,
@@ -1589,7 +1592,7 @@ describe("Home Pi Agent service", () => {
         makeRetrievalPort(fixture.vault.vaultId, { result }),
         new JobsService(fixture.vaults),
         runtime
-      ).ask({ query: result.query });
+      ).submitQuery({ query: result.query });
 
       expect(observedDrift).toMatchObject({ code: "model_egress.privacy_drift" });
       expect(outcome).toMatchObject({
@@ -1647,13 +1650,13 @@ describe("Home Pi Agent service", () => {
           throw new Error("Markdown content drift must prevent a second model turn.");
         }
       };
-      const outcome = await new HomeAgentService(
+      const outcome = await new TestHomeAgentService(
         fixture.vaults,
         makeModels(() => { runtimeConfigReads += 1; }),
         makeRetrievalPort(fixture.vault.vaultId, { result }),
         new JobsService(fixture.vaults),
         runtime
-      ).ask({ query: result.query });
+      ).submitQuery({ query: result.query });
 
       expect(observedDrift).toMatchObject({ code: "model_egress.privacy_drift" });
       expect(outcome).toMatchObject({
@@ -1697,16 +1700,16 @@ describe("Home Pi Agent service", () => {
         });
       }
     };
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId, { result }),
       new JobsService(fixture.vaults),
       runtime
-    ).ask({ query: result.query });
+    ).submitQuery({ query: result.query });
     expect(outcome).toMatchObject({
       state: "completed",
-      result: { answer: "The bounded evidence is treated only as data. [1]" }
+      answer: { answer: "The bounded evidence is treated only as data. [1]" }
     });
     expect(observedToolOutput.match(/<PIGE_UNTRUSTED_EVIDENCE_V1>/gu)).toHaveLength(1);
     expect(observedToolOutput.match(/<\/PIGE_UNTRUSTED_EVIDENCE_V1>/gu)).toHaveLength(1);
@@ -1753,7 +1756,7 @@ describe("Home Pi Agent service", () => {
       }
     };
 
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -1764,7 +1767,7 @@ describe("Home Pi Agent service", () => {
       undefined,
       undefined,
       registry
-    ).ask({ query: "Read the external file." });
+    ).submitQuery({ query: "Read the external file." });
 
     expect(modelTurns).toBe(1);
     expect(outcome).toMatchObject({
@@ -1856,7 +1859,7 @@ describe("Home Pi Agent service", () => {
     const empty = makeEmptySearchResult(fixture.vault.vaultId, "What is the secret launch plan?");
     let runtimeConfigReads = 0;
     let runtimeCalls = 0;
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(() => { runtimeConfigReads += 1; }),
       makeRetrievalPort(fixture.vault.vaultId, { result: empty }),
@@ -1867,18 +1870,16 @@ describe("Home Pi Agent service", () => {
           finishHome({ answer: "Fabricated confident answer", citationRefs: [], grounding: "general" })
         ]
       })
-    ).ask({ query: empty.query, locale: "en" });
+    ).submitQuery({ query: empty.query, locale: "en" });
 
     expect(outcome.state).toBe("completed");
     if (outcome.state !== "completed") throw new Error("Expected Pi-owned completion.");
     expect(outcome.modelUsage).toBe("cloud");
-    expect(outcome.result).toMatchObject({
-      answerMode: "model_grounded",
-      confidence: "limited",
+    expect(outcome.answer).toMatchObject({
+      grounding: "general",
       citations: [],
-      warnings: []
     });
-    expect(outcome.result.answer).toBe("Fabricated confident answer");
+    expect(outcome.answer.answer).toBe("Fabricated confident answer");
     expect(runtimeConfigReads).toBe(1);
     expect(runtimeCalls).toBe(0);
     expect(readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"))).toEqual([
@@ -1892,7 +1893,7 @@ describe("Home Pi Agent service", () => {
   it("keeps an Agent-selected empty search optional for an ordinary turn", async () => {
     const fixture = makeFixture();
     const empty = makeEmptySearchResult(fixture.vault.vaultId, "Can you still help without vault evidence?");
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId, { result: empty }),
@@ -1939,7 +1940,7 @@ describe("Home Pi Agent service", () => {
         });
       }
     };
-    const first = await new HomeAgentService(
+    const first = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -1956,7 +1957,7 @@ describe("Home Pi Agent service", () => {
     expect(first.state).toBe("completed");
     if (first.state !== "completed") throw new Error("Expected the first durable turn to complete.");
 
-    const restarted = new HomeAgentService(
+    const restarted = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -2031,7 +2032,7 @@ describe("Home Pi Agent service", () => {
       inputHash: preserved.inputHash
     });
     let runtimeCalls = 0;
-    const resumed = await new HomeAgentService(
+    const resumed = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -2064,7 +2065,7 @@ describe("Home Pi Agent service", () => {
   it("rejects a stale follow-up tail before creating a Job or invoking Pi", async () => {
     const fixture = makeFixture();
     let runtimeCalls = 0;
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -2111,7 +2112,7 @@ describe("Home Pi Agent service", () => {
 
   it("fails closed before a later model turn when the durable conversation tail drifts", async () => {
     const fixture = makeFixture();
-    const first = await new HomeAgentService(
+    const first = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -2134,7 +2135,7 @@ describe("Home Pi Agent service", () => {
     expect(first.state).toBe("completed");
     if (first.state !== "completed") throw new Error("Expected the base turn to complete.");
     let laterModelTurns = 0;
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -2185,7 +2186,7 @@ describe("Home Pi Agent service", () => {
     let signalSeen: AbortSignal | undefined;
     let releaseStarted!: () => void;
     const started = new Promise<void>((resolve) => { releaseStarted = resolve; });
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -2240,7 +2241,7 @@ describe("Home Pi Agent service", () => {
     const jobs = new JobsService(fixture.vaults);
     let releaseRead!: () => void;
     const readComplete = new Promise<void>((resolve) => { releaseRead = resolve; });
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -2291,7 +2292,7 @@ describe("Home Pi Agent service", () => {
 
   it("reports a verified local Pi binding as local rather than cloud usage", async () => {
     const fixture = makeFixture();
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModelsFor(LOCAL_PROVIDER, LOCAL_MODEL, LOCAL_RUNTIME_CONFIG),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -2306,7 +2307,7 @@ describe("Home Pi Agent service", () => {
           })
         ]
       })
-    ).ask({ query: "When is the launch?" });
+    ).submitQuery({ query: "When is the launch?" });
 
     expect(outcome).toMatchObject({ state: "completed", modelUsage: "local" });
     expect(readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"))).toEqual([
@@ -2334,7 +2335,7 @@ source_ids: []
 
 SYNTHETIC_DISTRACTOR_BODY
 `, "utf8");
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId, {
@@ -2434,7 +2435,7 @@ SYNTHETIC_DISTRACTOR_BODY
       selectedContentHash: `sha256:${createHash("sha256").update(selectedBytes).digest("hex")}`
     };
     let observedModelText = "";
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -2514,7 +2515,7 @@ SYNTHETIC_DISTRACTOR_BODY
       status: "review_required" as const,
       proposalId: "proposal_20260718_abcdefgh12345678"
     }));
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -2584,7 +2585,7 @@ SYNTHETIC_DISTRACTOR_BODY
   it("requires insufficient evidence for an empty current-note body", async () => {
     const fixture = makeFixture();
     writeKnowledgePage(fixture.vaultPath, [], "");
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -2634,7 +2635,7 @@ SYNTHETIC_DISTRACTOR_BODY
       `Visible bounded prefix. ${"x".repeat(9_000)} ${hiddenTail}`
     );
     let rejectedOutOfRangeQuote = false;
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -2690,7 +2691,7 @@ SYNTHETIC_DISTRACTOR_BODY
   it("truncates multibyte current-note evidence only at a valid UTF-8 code-point boundary", async () => {
     const fixture = makeFixture();
     writeKnowledgePage(fixture.vaultPath, [], "界".repeat(3_000));
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -2748,7 +2749,7 @@ SYNTHETIC_DISTRACTOR_BODY
     fs.writeFileSync(pagePath, Buffer.concat([valid, Buffer.from([0xc3, 0x28])]));
     let runtimeCalls = 0;
     const jobs = new JobsService(fixture.vaults);
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -2862,7 +2863,7 @@ SYNTHETIC_DISTRACTOR_BODY
     writeKnowledgePage(fixture.vaultPath, [sourceId]);
     let runtimeCalls = 0;
     let readAttempted = false;
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -2910,7 +2911,7 @@ SYNTHETIC_DISTRACTOR_BODY
 
   it("treats current-note vault-only as the exact scoped read rather than requiring a vault search", async () => {
     const fixture = makeFixture();
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId, {
@@ -2972,7 +2973,7 @@ SYNTHETIC_DISTRACTOR_BODY
     writeKnowledgePage(fixture.vaultPath, []);
     const jobs = new JobsService(fixture.vaults);
     let runtimeCalls = 0;
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -3025,7 +3026,7 @@ SYNTHETIC_DISTRACTOR_BODY
       "utf8"
     );
     let runtimeCalls = 0;
-    const outcome = await new HomeAgentService(
+    const outcome = await new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -3048,7 +3049,7 @@ SYNTHETIC_DISTRACTOR_BODY
     const models = makeMutableHomeModels(false);
     const jobs = new JobsService(fixture.vaults);
     let runtimeCalls = 0;
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       models,
       makeRetrievalPort(fixture.vault.vaultId),
@@ -3075,7 +3076,7 @@ SYNTHETIC_DISTRACTOR_BODY
       "The launch date changed while the model was unavailable."
     ), "utf8");
     models.setReady(true);
-    const restarted = new HomeAgentService(
+    const restarted = new TestHomeAgentService(
       fixture.vaults,
       models,
       makeRetrievalPort(fixture.vault.vaultId),
@@ -3129,7 +3130,7 @@ SYNTHETIC_DISTRACTOR_BODY
     writeKnowledgePage(fixture.vaultPath, [], "The note changed after assistant publication.");
     let runtimeCalls = 0;
     const restartedJobs = new JobsService(fixture.vaults);
-    const restarted = new HomeAgentService(
+    const restarted = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -3172,7 +3173,7 @@ SYNTHETIC_DISTRACTOR_BODY
     });
     let runtimeCalls = 0;
     const restartedJobs = new JobsService(fixture.vaults);
-    const restarted = new HomeAgentService(
+    const restarted = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -3202,7 +3203,7 @@ SYNTHETIC_DISTRACTOR_BODY
     writeKnowledgePage(fixture.vaultPath, [sourceId]);
     writeSourceRecord(fixture.vaultPath, sourceId, { private: false, sensitive: false });
     const jobs = new JobsService(fixture.vaults);
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -3263,7 +3264,7 @@ SYNTHETIC_DISTRACTOR_BODY
   it("stops before a later provider turn when the bound current-note body changes", async () => {
     const fixture = makeFixture();
     let reachedChangedProviderTurn = false;
-    const service = new HomeAgentService(
+    const service = new TestHomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -3583,18 +3584,15 @@ function makeRetrievalPort(
   vaultId: string,
   options: {
     readonly result?: RetrievalSearchResult;
-    readonly onSearch?: (request: HomeAgentAskRequest) => void;
+    readonly onSearch?: (request: RetrievalSearchRequest) => void;
   } = {}
 ): HomeAgentRetrievalPort {
-  const search = (request: HomeAgentAskRequest): RetrievalSearchResult => {
+  const search = (request: RetrievalSearchRequest): RetrievalSearchResult => {
     options.onSearch?.(request);
     const result = options.result ?? makeSearchResult(vaultId);
     return result.query === request.query ? result : { ...result, query: request.query };
   };
-  return {
-    search,
-    ask: (request): RetrievalAskResult => buildLocalExtractiveAskResult(request, search(request))
-  };
+  return { search };
 }
 
 async function makeRuntimeResult(

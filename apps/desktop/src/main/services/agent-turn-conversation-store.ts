@@ -18,6 +18,10 @@ import {
   type Locale,
   type ModelEgressContentClass
 } from "@pige/schemas";
+import {
+  assertDurableAssistantIntegrity,
+  normalizeDurableAssistantEvent
+} from "./durable-agent-turn-answer";
 
 const MAX_TURN_TEXT_BYTES = 64 * 1024;
 const MAX_CONVERSATION_FILE_BYTES = 8 * 1024 * 1024;
@@ -145,7 +149,7 @@ export class AgentTurnConversationStore {
       ...(candidateAnswer.citations === undefined ? {} : { answerCitations: candidateAnswer.citations }),
       ...(candidateAnswer.datasetResult === undefined ? {} : { answerDatasetResult: candidateAnswer.datasetResult })
     });
-    const normalized = normalizeStoredAssistant(eventWithoutHash);
+    const normalized = normalizeDurableAssistantEvent(eventWithoutHash);
     const event = ConversationEventSchema.parse({
       ...eventWithoutHash,
       contentHash: createAssistantContentHash(jobId, durableUser.event.id, normalized)
@@ -217,19 +221,8 @@ export class AgentTurnConversationStore {
       throw new PigeDomainError("agent_runtime.turn_conflict", "Multiple assistant results claim one Agent turn.");
     }
     const match = matches[0];
-    if (match) assertStoredAssistantIntegrity(match);
+    if (match) assertDurableAssistantIntegrity(match);
     return match;
-  }
-
-  readAssistantAnswer(event: ConversationEvent): AgentTurnAnswer {
-    const normalized = normalizeStoredAssistant(event);
-    assertStoredAssistantIntegrity(event);
-    return {
-      answer: normalized.text,
-      grounding: normalized.grounding ?? "general",
-      citations: normalized.citations ?? [],
-      ...(normalized.datasetResult === undefined ? {} : { datasetResult: normalized.datasetResult })
-    };
   }
 
   readContextBeforeUserTurn(
@@ -487,44 +480,6 @@ function normalizeAssistantAnswer(answer: string | AgentTurnAnswer): {
   };
 }
 
-function normalizeStoredAssistant(event: ConversationEvent): ReturnType<typeof normalizeAssistantAnswer> {
-  if (event.type !== "assistant_message" || typeof event.text !== "string") {
-    throw new PigeDomainError("agent_runtime.turn_conflict", "The durable assistant result is invalid.");
-  }
-  if (
-    event.answerGrounding === undefined &&
-    event.answerCitations === undefined &&
-    event.answerDatasetResult === undefined
-  ) {
-    return { text: validateTurnText(event.text), structured: false };
-  }
-  if (event.answerGrounding === undefined) {
-    throw new PigeDomainError("agent_runtime.turn_conflict", "The durable assistant result metadata is incomplete.");
-  }
-  return {
-    text: validateTurnText(event.text),
-    structured: true,
-    grounding: event.answerGrounding,
-    citations: event.answerCitations ?? [],
-    ...(event.answerDatasetResult === undefined ? {} : { datasetResult: event.answerDatasetResult })
-  };
-}
-
-function assertStoredAssistantIntegrity(event: ConversationEvent): void {
-  if (event.type !== "assistant_message" || !event.contentHash) return;
-  if (
-    !event.jobId ||
-    !event.parentEventId ||
-    event.contentHash !== createAssistantContentHash(
-      event.jobId,
-      event.parentEventId,
-      normalizeStoredAssistant(event)
-    )
-  ) {
-    throw new PigeDomainError("agent_runtime.turn_changed", "The durable assistant result changed after completion.");
-  }
-}
-
 function createAssistantContentHash(
   jobId: string,
   parentEventId: string,
@@ -635,7 +590,7 @@ function parseConversationText(text: string): ConversationEvent[] {
       throw new PigeDomainError("agent_runtime.turn_conflict", "The Agent conversation contains duplicate event identities.");
     }
     assertStoredUserIntegrity(event);
-    assertStoredAssistantIntegrity(event);
+    assertDurableAssistantIntegrity(event);
     ids.add(event.id);
     events.push(event);
   }

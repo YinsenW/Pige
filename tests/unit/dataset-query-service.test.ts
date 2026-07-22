@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import type {
   ModelProfileSummary,
   ProviderProfileSummary,
-  RetrievalAskResult,
   RetrievalSearchResult
 } from "@pige/contracts";
 import {
@@ -280,18 +279,7 @@ describe("Dataset Query Service", () => {
       search: (request): RetrievalSearchResult => {
         retrievalCalls += 1;
         return emptySearchResult(vault.vaultId, request.query);
-      },
-      ask: (request): RetrievalAskResult => ({
-        requestId: "request_dataset_query_not_used",
-        query: request.query,
-        activeVaultId: vault.vaultId,
-        answer: "No local page evidence was selected.",
-        answerMode: "insufficient_evidence",
-        confidence: "insufficient",
-        citations: [],
-        warnings: ["insufficient_evidence"],
-        search: emptySearchResult(vault.vaultId, request.query)
-      })
+      }
     };
     const service = new HomeAgentService(
       { current: () => vault, activeVaultPath: () => fixture.vaultPath },
@@ -412,18 +400,7 @@ describe("Dataset Query Service", () => {
       { current: () => vault, activeVaultPath: () => fixture.vaultPath },
       datasetHomeModels(() => { runtimeConfigReads += 1; }),
       {
-        search: (request) => emptySearchResult(vault.vaultId, request.query),
-        ask: (request) => ({
-          requestId: "request_dataset_privacy_drift_not_used",
-          query: request.query,
-          activeVaultId: vault.vaultId,
-          answer: "No local page evidence was selected.",
-          answerMode: "insufficient_evidence",
-          confidence: "insufficient",
-          citations: [],
-          warnings: ["insufficient_evidence"],
-          search: emptySearchResult(vault.vaultId, request.query)
-        })
+        search: (request) => emptySearchResult(vault.vaultId, request.query)
       },
       new JobsService({ current: () => vault, activeVaultPath: () => fixture.vaultPath }),
       {

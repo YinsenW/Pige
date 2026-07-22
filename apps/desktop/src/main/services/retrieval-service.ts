@@ -3,7 +3,6 @@ import type {
   LibraryPageSummary,
   RetrievalAnswerCitation,
   RetrievalAnswerWarning,
-  RetrievalAskRequest,
   RetrievalAskResult,
   RetrievalSearchRequest,
   RetrievalSearchResult,
@@ -50,7 +49,6 @@ const MAX_SEARCH_LIMIT = 20;
 const MAX_BODY_CHARS_FOR_SCAN = 120_000;
 const MAX_BODY_BYTES_FOR_SCAN = MARKDOWN_FRONTMATTER_READ_LIMIT_BYTES + (MAX_BODY_CHARS_FOR_SCAN * 4);
 const MAX_HOME_EVIDENCE = 8;
-const MAX_ANSWER_EVIDENCE = 3;
 
 export interface HomeQueryEvidenceRef {
   readonly refId: string;
@@ -171,20 +169,6 @@ export class RetrievalService {
     return result;
   }
 
-  ask(request: RetrievalAskRequest): RetrievalAskResult {
-    const activeVault = this.#vaults.current();
-    if (!activeVault) {
-      throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
-    }
-    const searchResult = this.search({
-      query: request.query,
-      ...(request.limit === undefined ? {} : { limit: request.limit }),
-      ...(request.pageTypes === undefined ? {} : { pageTypes: [...request.pageTypes] }),
-      scope: { kind: "active_vault", vaultId: activeVault.vaultId }
-    });
-    return buildLocalExtractiveAskResult(request, searchResult);
-  }
-
   #captureActiveVaultBinding(scope: RetrievalSearchScope): ActiveVaultBinding {
     const activeVault = this.#vaults.current();
     const vaultPath = this.#vaults.activeVaultPath();
@@ -225,26 +209,6 @@ function projectSearchItems(items: readonly RetrievalSearchResultItem[]): {
     else invalidCount += 1;
   }
   return { items: projected, invalidCount };
-}
-
-export function buildLocalExtractiveAskResult(
-  request: RetrievalAskRequest,
-  searchResult: RetrievalSearchResult
-): RetrievalAskResult {
-  const context = buildHomeQueryContextPack(searchResult);
-  const answerEvidence = context.selectedEvidence.slice(0, MAX_ANSWER_EVIDENCE);
-  const confidence = answerEvidence.length === 0 ? "insufficient" : answerEvidence.length === 1 ? "limited" : "grounded";
-  const warnings = createAnswerWarnings(searchResult, confidence);
-
-  return {
-    ...searchResult,
-    answeredAt: new Date().toISOString(),
-    answer: createExtractiveAnswer(request.query, request.locale, answerEvidence),
-    answerMode: "local_extractive",
-    confidence,
-    citations: answerEvidence.map((evidence) => evidence.citation),
-    warnings
-  };
 }
 
 export function buildHomeQueryContextPack(result: RetrievalSearchResult): BuiltHomeQueryContext {
@@ -366,53 +330,6 @@ function createAnswerWarnings(
   if (confidence === "limited") warnings.add("limited_evidence");
   if (result.degraded) warnings.add("search_degraded");
   return Array.from(warnings);
-}
-
-function createExtractiveAnswer(
-  query: string,
-  locale: RetrievalAskRequest["locale"],
-  evidence: readonly SelectedHomeEvidence[]
-): string {
-  const language = detectAnswerLanguage(query, locale);
-  if (evidence.length === 0) return answerCopy[language].insufficient;
-  const lines = evidence.map(({ item, citation }) => `${item.snippets[0] ?? item.summary.title} ${citation.label}`);
-  return `${answerCopy[language].intro}\n\n${lines.join("\n")}`;
-}
-
-type AnswerLanguage = "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de";
-
-const answerCopy: Record<AnswerLanguage, { readonly intro: string; readonly insufficient: string }> = {
-  "zh-Hans": {
-    intro: "本地笔记中最相关的内容主要是：",
-    insufficient: "目前的本地笔记里没有足够证据回答这个问题。可以换一种问法，或先补充相关资料。"
-  },
-  en: {
-    intro: "The most relevant local notes point to:",
-    insufficient: "There is not enough evidence in the local notes to answer this yet. Try another phrasing or add relevant material first."
-  },
-  ja: {
-    intro: "ローカルノートで最も関連する内容は次のとおりです：",
-    insufficient: "この質問に答えるための十分な根拠がローカルノートにありません。言い換えるか、関連資料を追加してください。"
-  },
-  ko: {
-    intro: "로컬 노트에서 가장 관련성 높은 내용은 다음과 같습니다:",
-    insufficient: "이 질문에 답할 충분한 근거가 로컬 노트에 없습니다. 질문을 바꾸거나 관련 자료를 먼저 추가해 주세요."
-  },
-  fr: {
-    intro: "Les notes locales les plus pertinentes indiquent :",
-    insufficient: "Les notes locales ne contiennent pas encore assez d'éléments pour répondre. Reformulez la question ou ajoutez d'abord des sources pertinentes."
-  },
-  de: {
-    intro: "Die relevantesten lokalen Notizen weisen auf Folgendes hin:",
-    insufficient: "Die lokalen Notizen enthalten noch nicht genug Belege für eine Antwort. Formuliere die Frage anders oder füge zuerst passende Quellen hinzu."
-  }
-};
-
-function detectAnswerLanguage(query: string, fallback: RetrievalAskRequest["locale"]): AnswerLanguage {
-  if (/\p{Script=Han}/u.test(query)) return "zh-Hans";
-  if (/\p{Script=Hiragana}|\p{Script=Katakana}/u.test(query)) return "ja";
-  if (/\p{Script=Hangul}/u.test(query)) return "ko";
-  return fallback ?? "en";
 }
 
 function estimateSnippetTokens(snippet: string): number {

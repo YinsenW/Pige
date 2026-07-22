@@ -4,9 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
-  HomeAgentAskRequest,
   ModelProviderSettingsSummary,
-  RetrievalAskResult,
+  RetrievalSearchRequest,
   RetrievalSearchResult,
   VaultSummary
 } from "@pige/contracts";
@@ -666,10 +665,7 @@ function createMutableModels(initiallyReady: boolean): MutableModels {
 }
 
 const neverRetrieval: HomeAgentRetrievalPort = {
-  search: (_request: HomeAgentAskRequest): RetrievalSearchResult => {
-    throw new Error("Source-only unified ingress must not use the Home retrieval port.");
-  },
-  ask: (_request: HomeAgentAskRequest): RetrievalAskResult => {
+  search: (_request: RetrievalSearchRequest): RetrievalSearchResult => {
     throw new Error("Source-only unified ingress must not use the Home retrieval port.");
   }
 };

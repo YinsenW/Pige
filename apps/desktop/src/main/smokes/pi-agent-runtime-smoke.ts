@@ -10,7 +10,6 @@ import {
   PiAgentRuntimeAdapter,
   type PigeAgentToolDescriptor
 } from "../services/pi-agent-runtime-adapter";
-import { buildLocalExtractiveAskResult } from "../services/retrieval-service";
 import { createVaultOnDisk, loadVaultSummary } from "../services/vault-layout";
 
 export async function runPiAgentRuntimeSmoke(): Promise<{
@@ -111,8 +110,7 @@ export async function runHomeAgentRuntimeSmoke(): Promise<{
         getDefaultRuntimeConfig: () => runtimeConfig
       },
       {
-        search: () => createSmokeSearchResult(vault.vaultId),
-        ask: (request) => buildLocalExtractiveAskResult(request, createSmokeSearchResult(vault.vaultId))
+        search: () => createSmokeSearchResult(vault.vaultId)
       },
       new JobsService(vaults),
       new PiAgentRuntimeAdapter({
@@ -130,9 +128,15 @@ export async function runHomeAgentRuntimeSmoke(): Promise<{
         ]
       })
     );
-    const result = await service.ask({ query: "What does the smoke evidence say?", locale: "en" });
+    const result = await service.submitTurn({
+      schemaVersion: 1,
+      text: "What does the smoke evidence say?",
+      inputKind: "typed_text",
+      objective: "vault_only",
+      locale: "en"
+    });
     return result.state === "completed"
-      ? { state: result.state, answerMode: result.result.answerMode, citationCount: result.result.citations.length }
+      ? { state: result.state, answerMode: "model_grounded", citationCount: result.answer.citations.length }
       : { state: result.state, citationCount: 0 };
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

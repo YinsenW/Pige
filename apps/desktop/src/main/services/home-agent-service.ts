@@ -10,14 +10,11 @@ import type {
   AgentTurnCurrentNoteScope,
   AgentRuntimePolicyContext,
   DefaultModelBindingSummary,
-  HomeAgentAskRequest,
-  HomeAgentAskResult,
   HomeAgentModelUsage,
   ModelProviderSettingsSummary,
   ModelProfileSummary,
   ProviderProfileSummary,
   RetrievalAnswerCitation,
-  RetrievalAskResult,
   RetrievalSearchRequest,
   RetrievalSearchResult,
   VaultSummary
@@ -141,7 +138,6 @@ export interface HomeAgentModelPort {
 
 export interface HomeAgentRetrievalPort {
   search(request: RetrievalSearchRequest): RetrievalSearchResult;
-  ask(request: HomeAgentAskRequest): RetrievalAskResult;
 }
 
 export interface HomeAgentRuntimePort {
@@ -254,13 +250,6 @@ const HomeAgentOutputSchema = z.object({
 
 type HomeAgentOutput = z.infer<typeof HomeAgentOutputSchema>;
 
-export const HomeAgentAskRequestSchema = z.object({
-  query: z.string().trim().min(1).max(MAX_QUERY_CHARACTERS),
-  limit: z.number().int().min(1).max(20).optional(),
-  pageTypes: z.array(MarkdownPageTypeSchema).max(7).optional(),
-  locale: LocaleSchema.optional()
-}).strict();
-
 export const AgentSubmitTurnRequestSchema = z.object({
   schemaVersion: z.literal(1).optional().default(1),
   text: z.string().trim().min(1).max(MAX_QUERY_CHARACTERS).optional(),
@@ -343,43 +332,6 @@ export class HomeAgentService {
     this.#datasets = datasets;
     this.#externalCapabilities = externalCapabilities;
     this.#readerSelectionMutations = readerSelectionMutations;
-  }
-
-  async ask(request: HomeAgentAskRequest): Promise<HomeAgentAskResult> {
-    const turn = await this.submitTurn({
-      text: request.query,
-      inputKind: "typed_text",
-      objective: "vault_only",
-      locale: request.locale ?? "en"
-    });
-    if (turn.state !== "completed") {
-      return {
-        requestId: turn.requestId,
-        state: turn.state,
-        modelUsage: turn.modelUsage,
-        error: turn.error
-      };
-    }
-    if (!turn.answer.retrieval) {
-      return {
-        requestId: turn.requestId,
-        state: "failed",
-        modelUsage: turn.modelUsage,
-        error: createErrorSummary(
-          "model_provider.output_invalid",
-          "errors.model_provider.output_invalid",
-          true,
-          "retry",
-          "error"
-        )
-      };
-    }
-    return {
-      requestId: turn.requestId,
-      state: "completed",
-      modelUsage: turn.modelUsage,
-      result: toLegacyRetrievalAskResult(request, turn.answer, turn.answer.retrieval)
-    };
   }
 
   conversation(request: AgentConversationRequest = {}): AgentConversationTimeline | undefined {
@@ -3021,33 +2973,6 @@ function createUnavailableRuntimeError(binding: DefaultModelBindingSummary): Pig
         "The configured default Provider binding needs repair before Pi can run."
       )
     : new PigeDomainError("model_provider.default_model_missing", "No default model is configured.");
-}
-
-function toLegacyRetrievalAskResult(
-  request: HomeAgentAskRequest,
-  answer: AgentTurnAnswer,
-  retrieval: RetrievalSearchResult
-): RetrievalAskResult {
-  const citations = answer.citations.filter(isRetrievalAnswerCitation);
-  return {
-    ...retrieval,
-    answeredAt: new Date().toISOString(),
-    answer: answer.answer,
-    answerMode: "model_grounded",
-    confidence: answer.grounding === "insufficient_evidence"
-      ? "insufficient"
-      : citations.length > 1
-        ? "grounded"
-        : "limited",
-    citations,
-    warnings: answer.grounding === "insufficient_evidence"
-      ? ["insufficient_evidence"]
-      : [
-          ...(citations.length === 1 ? ["limited_evidence" as const] : []),
-          ...(retrieval.degraded ? ["search_degraded" as const] : [])
-        ],
-    query: request.query.trim()
-  };
 }
 
 function isRetrievalAnswerCitation(

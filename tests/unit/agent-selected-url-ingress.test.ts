@@ -5,10 +5,9 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
   AgentSubmitTurnRequest,
-  HomeAgentAskRequest,
   ModelProfileSummary,
   ProviderProfileSummary,
-  RetrievalAskResult,
+  RetrievalSearchRequest,
   RetrievalSearchResult,
   VaultSummary
 } from "@pige/contracts";
@@ -962,11 +961,8 @@ function makeModels(onRuntimeConfigRead: () => void = () => undefined): HomeAgen
 
 function noRetrieval(): HomeAgentRetrievalPort {
   return {
-    search: (_request: HomeAgentAskRequest): RetrievalSearchResult => {
+    search: (_request: RetrievalSearchRequest): RetrievalSearchResult => {
       throw new Error("URL-only tests must not search the vault.");
-    },
-    ask: (_request: HomeAgentAskRequest): RetrievalAskResult => {
-      throw new Error("URL-only tests must not use the legacy ask path.");
     }
   };
 }
