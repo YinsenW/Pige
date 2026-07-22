@@ -597,8 +597,7 @@ Executable operation-kind vocabulary (machine checked):
 - `create_memory`, `update_memory`, `trash_memory`, `restore_memory`.
 - `install_skill`, `disable_skill`, `uninstall_skill`.
 - `install_package`, `disable_package`, `uninstall_package`.
-- `change_setting`; legacy `model_egress_decision` remains executable vocabulary only
-  until PT1 deletion and must not be created for new work.
+- `change_setting`.
 - `compact_job`, `repair_record`.
 - `create_external_file` (reserved for the unregistered external create-only foundation).
 - `backup_created`, `restore_applied`, `migration_applied`.
@@ -614,7 +613,6 @@ Lifecycle coverage:
 | Memory | create/update/trash/restore memory through the memory lifecycle |
 | Skills/packages | install/disable/uninstall Skill or package |
 | Settings/policy | change a sensitive setting with exact effect evidence |
-| Legacy Provider-send audit | `model_egress_decision` is read-only cleanup residue; no new record |
 | Index/job maintenance | update index, compact job, repair record |
 | Backup/restore/migration | backup created, restore applied, migration applied |
 
@@ -628,8 +626,8 @@ Rules:
   a machine-local journal binding parent/leaf and rejecting v1. Receipts prove no effect;
   other effects are `failed_uncertain`; completion prevents replay.
 - An operation affected by Agent Runtime Policy Context records `policyAudit` with the context ID/hash and enforcing service names. Permissioned operations also retain permission decision IDs. Neither field contains full settings, grant bodies, paths, prompts, or secrets.
-- Provider sends do not create a content-class, allow/block, payload-digest, or
-  `model_egress_decision` Operation. Durable Agent work may retain Provider/model and
+- Provider sends do not create a content-class, allow/block, payload-digest, or approval
+  Operation. Durable Agent work may retain Provider/model and
   selected-evidence identity needed for recovery, but never stored credentials or raw
   payload bodies.
 - Source relink/root change, settings change, trash/restore, backup/restore, migration, Skill/package lifecycle, and memory trash/restore must not fall through to a generic page-update record.
