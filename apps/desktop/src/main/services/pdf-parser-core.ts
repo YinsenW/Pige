@@ -71,7 +71,7 @@ export async function extractPdfText(request: PdfParserRequest): Promise<PdfExtr
           text: "",
           characterCount: 0,
           needsOcr: true,
-          warnings: ["Embedded text extraction failed for this page; OCR is required."]
+          warnings: ["Embedded text extraction failed for this page; OCR may provide readable text."]
         });
       }
     }
@@ -97,11 +97,11 @@ export async function extractPdfText(request: PdfParserRequest): Promise<PdfExtr
       }
     }
     if (textCoverage === "none") {
-      warnings.push("No embedded text was found; OCR is required before Agent ingest.");
+      warnings.push("No embedded text was found; OCR may provide readable text.");
     } else if (textCoverage === "low") {
-      warnings.push("Embedded text coverage is low; OCR is required before Agent ingest.");
+      warnings.push("Embedded text coverage is low; OCR may provide additional evidence.");
     } else if (ocrCandidatePages.length > 0) {
-      warnings.push("Some pages have sparse embedded text and were handed off for OCR enrichment.");
+      warnings.push("Some pages have sparse embedded text; OCR may provide additional evidence.");
     }
 
     const result: PdfExtractionResult = {

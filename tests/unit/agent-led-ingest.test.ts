@@ -13,7 +13,10 @@ import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { PiAgentRuntimeAdapter } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
-import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
+import {
+  markSourceAsLegacyAgentIngestFixture,
+  seedHistoricalAgentIngestJobFixture
+} from "../helpers/legacy-agent-ingest-fixture";
 
 const roots: string[] = [];
 
@@ -58,12 +61,13 @@ describe("Agent-led knowledge spine", () => {
   it("runs preserved text through the real Pi tool loop into validated durable knowledge", async () => {
     const fixture = makeVault();
     const network = installNetworkTripwire();
+    const assistantFinalCanary = "UPSTREAM_FINAL_EFFECT_RECEIPT_CANARY_42";
     try {
       const adapter = new PiAgentRuntimeAdapter({
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
           { kind: "tool_call", toolName: "pige_create_knowledge_note", args: groundedOutput("Agent-led knowledge") },
-          { kind: "text", text: "The preserved source was organized into knowledge." }
+          { kind: "text", text: assistantFinalCanary }
         ]
       });
       const jobs = new JobsService(
@@ -83,6 +87,7 @@ describe("Agent-led knowledge spine", () => {
         completed: 1,
         failed: 0
       });
+      seedHistoricalAgentIngestJobFixture(fixture.vaultPath, capture.sourceId);
       const agentJob = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]);
       expect(await jobs.processQueuedAgentIngest({ jobIds: [agentJob.id] })).toEqual({
         processed: 1,
@@ -102,6 +107,12 @@ describe("Agent-led knowledge spine", () => {
       expect(fs.readFileSync(path.join(fixture.vaultPath, "log.md"), "utf8")).toContain(capture.sourceId);
       expect(operations.map((operation) => operation.kind)).toEqual(["create_page"]);
       expect(operations.find((operation) => operation.kind === "create_page")?.jobId).toBe(completed.id);
+      const historicalDurableBytes = [
+        ...listFiles(path.join(fixture.vaultPath, ".pige", "jobs"), ".json"),
+        ...listFiles(path.join(fixture.vaultPath, ".pige", "conversations"), ".json")
+      ].map((filePath) => fs.readFileSync(filePath, "utf8")).join("\n");
+      expect(historicalDurableBytes).not.toContain(assistantFinalCanary);
+      expect(JSON.stringify(operations)).not.toContain(assistantFinalCanary);
       expect(network.calls).toBe(0);
     } finally {
       network.restore();
@@ -131,6 +142,7 @@ describe("Agent-led knowledge spine", () => {
     const result = await service.ingestSource(fixture.vaultPath, source, job);
 
     expect(result.title).toBe("Replanned safely");
+    expect(result.assistantText).toBe("The source was handled with registered tools only.");
     expect(fs.existsSync(path.join(fixture.vaultPath, result.pagePath))).toBe(true);
   });
 

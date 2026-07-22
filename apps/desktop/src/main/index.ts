@@ -1140,11 +1140,6 @@ const initializeActiveDatabase = (): void => {
 const scheduleCaptureProcessing = (): void => {
   captureDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getJobsService().processQueuedCaptures({ limit: 20 }),
-    onBatch: () => {
-      scheduleParseProcessing();
-      scheduleOcrProcessing();
-      scheduleAgentIngestProcessing();
-    },
     onError: () => recordBackgroundFailure(
       "capture.background_failed",
       "Background capture processing failed."
@@ -1156,10 +1151,6 @@ const scheduleCaptureProcessing = (): void => {
 const scheduleParseProcessing = (): void => {
   parseDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getJobsService().processQueuedParses({ limit: 20 }),
-    onBatch: (result) => {
-      if (result.agentReadySourceIds.length > 0) scheduleAgentIngestProcessing();
-      if (result.ocrWaitingSourceIds.length > 0) scheduleOcrProcessing();
-    },
     onError: () => recordBackgroundFailure(
       "parser.document.background_failed",
       "Background document parsing failed."
@@ -1171,9 +1162,6 @@ const scheduleParseProcessing = (): void => {
 const scheduleOcrProcessing = (): void => {
   ocrDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getJobsService().processQueuedOcr({ limit: 20 }),
-    onBatch: (result) => {
-      if (result.agentReadySourceIds.length > 0) scheduleAgentIngestProcessing();
-    },
     onError: () => recordBackgroundFailure(
       "ocr.image.background_failed",
       "Background image OCR failed."

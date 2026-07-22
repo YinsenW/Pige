@@ -30,6 +30,7 @@ import {
 } from "@pige/schemas";
 import {
   AgentIngestService,
+  AgentToolDependencyWaitingError,
   createProposalApplyOperationId,
   type AgentIngestDatasetToolExecution,
   type AgentIngestDatasetToolRequest,
@@ -80,6 +81,7 @@ import {
   type ReaderSelectionJobScope
 } from "./reader-selection-job-binding";
 import type { AgentSourceToolExecutionPort } from "./agent-source-tool-execution";
+import { tryVerifyReadableSourceFile } from "./source-file-access";
 
 type JobRecordFile = JobRecordSnapshot;
 
@@ -115,10 +117,7 @@ export interface ProcessQueuedParsesRequest {
   readonly abortSignal?: AbortSignal;
 }
 
-export interface ProcessQueuedParsesResult extends ProcessQueuedCapturesResult {
-  readonly agentReadySourceIds: readonly string[];
-  readonly ocrWaitingSourceIds: readonly string[];
-}
+export type ProcessQueuedParsesResult = ProcessQueuedCapturesResult;
 
 export type ProcessQueuedDatasetImportsRequest = ProcessQueuedParsesRequest;
 export type ProcessQueuedDatasetImportsResult = ProcessQueuedCapturesResult;
@@ -205,9 +204,7 @@ export interface ProcessQueuedOcrRequest {
   readonly abortSignal?: AbortSignal;
 }
 
-export interface ProcessQueuedOcrResult extends ProcessQueuedCapturesResult {
-  readonly agentReadySourceIds: readonly string[];
-}
+export type ProcessQueuedOcrResult = ProcessQueuedCapturesResult;
 
 const DEFAULT_JOB_LIST_LIMIT = 20;
 const MAX_JOB_LIST_LIMIT = 100;
@@ -1466,44 +1463,27 @@ export class JobsService {
 
   requeueWaitingAgentIngest(): RequeueWaitingAgentIngestResult {
     const vaultPath = this.#requireActiveVaultPath();
-    const store = this.#jobRecordStore(vaultPath);
     if (!canRunAgentIngest(this.#agentIngest)) {
       return { requeued: 0 };
     }
 
     let requeued = 0;
-    for (const jobFile of readJobRecordFiles(store, path.join(vaultPath, ".pige", "jobs"))) {
+    for (const jobFile of readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))) {
       if (jobFile.job.class !== "agent_ingest" || jobFile.job.state !== "waiting_dependency") continue;
-      const sourceRecord = jobFile.job.sourceId ? readSourceRecord(vaultPath, jobFile.job.sourceId) : undefined;
-      const agentSelectedOcr = Boolean(sourceRecord && supportsAgentSelectedOcr(sourceRecord.kind));
-      const waitingAgentOcr = agentSelectedOcr &&
-        hasWaitingAgentOcrChild(store, vaultPath, jobFile.job);
-      const completedEmptyAgentOcr = Boolean(
-        sourceRecord &&
-        sourceRecord.metadata.agentTextReady !== true &&
-        sourceRecord.metadata.ocrStatus === "completed_empty" &&
-        hasCompletedEmptyAgentOcrChild(store, vaultPath, jobFile.job, sourceRecord)
-      );
-      if (completedEmptyAgentOcr) continue;
-      const agentOcrRequiredBeforePublication = agentSelectedOcr &&
-        sourceRecord?.metadata.agentTextReady !== true &&
-        (sourceRecord?.kind === "image_file" || sourceRecord?.metadata.needsOcr === true);
-      if (waitingAgentOcr || agentOcrRequiredBeforePublication) {
-        if (!sourceRecord || !inspectOcrSource(this.#ocr, sourceRecord).ready) continue;
-      } else if (!agentSelectedOcr && sourceRecord && shouldWaitForRunnableOcr(this.#ocr, sourceRecord)) {
-        continue;
-      }
+      const dependencyKind = jobFile.job.waitingDependency?.dependencyKind;
+      if (dependencyKind === "local_tool" && !hasReadyWaitingAgentToolDependency(
+        this.#jobRecordStore(vaultPath),
+        vaultPath,
+        jobFile.job,
+        this.#documentParser,
+        this.#ocr,
+        this.#datasets
+      )) continue;
+      if (dependencyKind === "external_source" && !hasReadyExternalSource(vaultPath, jobFile.job)) continue;
       if (
-        sourceRecord &&
-        supportsAgentSelectedParser(sourceRecord.kind) &&
-        hasWaitingAgentParseChild(store, vaultPath, jobFile.job) &&
-        !this.#documentParser?.canParse(sourceRecord.kind)
-      ) continue;
-      if (
-        sourceRecord &&
-        supportsAgentSelectedDataset(sourceRecord.kind) &&
-        hasWaitingAgentDatasetChild(store, vaultPath, jobFile.job) &&
-        !this.#datasets?.canMaterialize(sourceRecord.kind)
+        dependencyKind !== "model_provider" &&
+        dependencyKind !== "local_tool" &&
+        dependencyKind !== "external_source"
       ) continue;
       const snapshot = this.#jobRecordStore(vaultPath).read(jobFile.path);
       const proof = dependencyRepairProof(snapshot.job);
@@ -1511,7 +1491,11 @@ export class JobsService {
       this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
         reason: "dependency_repaired",
         proof,
-        message: "Default model is ready; Agent ingest requeued."
+        message: dependencyKind === "model_provider"
+          ? "Default model is ready; historical Agent ingest requeued."
+          : dependencyKind === "external_source"
+            ? "The referenced source is verified again; historical Agent ingest requeued."
+            : "The exact registered local capability is ready; historical Agent ingest requeued."
       });
       requeued += 1;
     }
@@ -1611,16 +1595,6 @@ export class JobsService {
             )
           }
         );
-        if (isLegacyAgentIngestSource(sourceRecordFile.sourceRecord)) {
-          ensureAgentIngestJob(
-            this.#jobRecordStore(vaultPath),
-            vaultPath,
-            captureExecution.job,
-            sourceRecordFile.sourceRecord.id,
-            canRunAgentIngest(this.#agentIngest),
-            this.#requireActiveVaultId(vaultPath)
-          );
-        }
         appendLog(
           vaultPath,
           `${new Date().toISOString()} Created source page [${page.title}](${page.pagePath}) for source \`${jobFile.job.sourceId}\`.`
@@ -1666,8 +1640,6 @@ export class JobsService {
   async processQueuedParses(request: ProcessQueuedParsesRequest = {}): Promise<ProcessQueuedParsesResult> {
     const vaultPath = this.#requireActiveVaultPath();
     const jobFiles = findQueuedParseJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
-    const agentReadySourceIds: string[] = [];
-    const ocrWaitingSourceIds: string[] = [];
     let completed = 0;
     let failed = 0;
 
@@ -1710,40 +1682,10 @@ export class JobsService {
           execution.control
         );
         const refreshedSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id) ?? sourceRecordFile.sourceRecord;
-        let ocrCapability: OcrSourceCapability | undefined;
-        const legacyAgentIngestSource = isLegacyAgentIngestSource(refreshedSource);
-        if (!agentSelected && legacyAgentIngestSource && result.needsOcr) {
-          ocrCapability = inspectOcrSource(this.#ocr, refreshedSource);
-          ensureOcrWaitingJob(
-            this.#jobRecordStore(vaultPath),
-            vaultPath,
-            runningJob,
-            refreshedSource,
-            ocrCapability
-          );
-          ocrWaitingSourceIds.push(refreshedSource.id);
-        }
-        if (
-          !agentSelected &&
-          legacyAgentIngestSource &&
-          result.extractedTextArtifactPath &&
-          result.agentTextReady &&
-          (!result.needsOcr || ocrCapability?.ready !== true)
-        ) {
-          ensureAgentIngestJob(
-            this.#jobRecordStore(vaultPath),
-            vaultPath,
-            runningJob,
-            refreshedSource.id,
-            canRunAgentIngest(this.#agentIngest),
-            this.#requireActiveVaultId(vaultPath)
-          );
-          agentReadySourceIds.push(refreshedSource.id);
-        }
         const hasWarnings = result.needsOcr || result.sourcePageConflict || result.warnings.length > 0;
         appendLog(
           vaultPath,
-          `${new Date().toISOString()} Parsed ${documentLabel(refreshedSource.kind)} source \`${refreshedSource.id}\`: ${result.textCharacterCount} text characters, coverage ${result.textCoverage}.${result.needsOcr ? " OCR enrichment is waiting." : ""}`
+          `${new Date().toISOString()} Parsed ${documentLabel(refreshedSource.kind)} source \`${refreshedSource.id}\`: ${result.textCharacterCount} text characters, coverage ${result.textCoverage}.${result.needsOcr ? " Additional OCR evidence remains available through the registered tool." : ""}`
         );
         this.#completeCooperativeExecution(
           jobFile.path,
@@ -1777,13 +1719,7 @@ export class JobsService {
       }
     }
 
-    return {
-      processed: jobFiles.length,
-      completed,
-      failed,
-      agentReadySourceIds,
-      ocrWaitingSourceIds
-    };
+    return { processed: jobFiles.length, completed, failed };
   }
 
   async processQueuedDatasetImports(
@@ -1901,7 +1837,6 @@ export class JobsService {
   async processQueuedOcr(request: ProcessQueuedOcrRequest = {}): Promise<ProcessQueuedOcrResult> {
     const vaultPath = this.#requireActiveVaultPath();
     const jobFiles = findQueuedOcrJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
-    const agentReadySourceIds: string[] = [];
     let completed = 0;
     let failed = 0;
 
@@ -1912,22 +1847,9 @@ export class JobsService {
         failed += 1;
         continue;
       }
-      const agentSelected = isAgentSelectedOcrJob(jobFile.job);
-      const legacyAgentIngestSource = isLegacyAgentIngestSource(sourceRecordFile.sourceRecord);
       const ocr = this.#ocr;
       const capability = inspectOcrSource(ocr, sourceRecordFile.sourceRecord);
       if (!ocr || !capability.ready) {
-        if (!agentSelected && legacyAgentIngestSource && sourceRecordFile.sourceRecord.metadata.agentTextReady === true) {
-          ensureAgentIngestJob(
-            this.#jobRecordStore(vaultPath),
-            vaultPath,
-            jobFile.job,
-            sourceRecordFile.sourceRecord.id,
-            canRunAgentIngest(this.#agentIngest),
-            this.#requireActiveVaultId(vaultPath)
-          );
-          agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
-        }
         this.#markJobWaitingDependency(jobFile.path, jobFile.job, capability.message);
         failed += 1;
         continue;
@@ -1959,17 +1881,6 @@ export class JobsService {
           runningJob,
           execution.control
         );
-        if (!agentSelected && legacyAgentIngestSource && result.agentTextReady) {
-          ensureAgentIngestJob(
-            this.#jobRecordStore(vaultPath),
-            vaultPath,
-            runningJob,
-            sourceRecordFile.sourceRecord.id,
-            canRunAgentIngest(this.#agentIngest),
-            this.#requireActiveVaultId(vaultPath)
-          );
-          agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
-        }
         const hasWarnings = !result.agentTextReady || result.sourcePageConflict || result.warnings.length > 0;
         appendLog(
           vaultPath,
@@ -1997,24 +1908,6 @@ export class JobsService {
         } else {
           const failure = ocrFailure(caught, sourceRecordFile.sourceRecord.kind);
           if (failure.waiting) {
-            if (
-              !agentSelected &&
-              legacyAgentIngestSource &&
-              sourceRecordFile.sourceRecord.metadata.agentTextReady === true &&
-              isOcrCapabilityUnavailableError(caught)
-            ) {
-              ensureAgentIngestJob(
-                this.#jobRecordStore(vaultPath),
-                vaultPath,
-                runningJob,
-                sourceRecordFile.sourceRecord.id,
-                canRunAgentIngest(this.#agentIngest),
-                this.#requireActiveVaultId(vaultPath)
-              );
-              if (!agentReadySourceIds.includes(sourceRecordFile.sourceRecord.id)) {
-                agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
-              }
-            }
             this.#markJobWaitingDependency(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
           } else if (failure.final) {
             this.#markJobFailedFinal(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
@@ -2029,7 +1922,7 @@ export class JobsService {
       }
     }
 
-    return { processed: jobFiles.length, completed, failed, agentReadySourceIds };
+    return { processed: jobFiles.length, completed, failed };
   }
 
   async processQueuedAgentIngest(request: ProcessQueuedAgentIngestRequest = {}): Promise<ProcessQueuedAgentIngestResult> {
@@ -2039,27 +1932,29 @@ export class JobsService {
     let failed = 0;
 
     for (const jobFile of jobFiles) {
-      const agentIngest = this.#agentIngest;
-      if (!agentIngest) {
-        this.#markJobWaitingDependency(jobFile.path, jobFile.job, "Waiting for a tested default model before Agent ingest.");
-        failed += 1;
-        continue;
-      }
-
       const sourceRecordFile = jobFile.job.sourceId ? readSourceRecordFile(vaultPath, jobFile.job.sourceId) : undefined;
       if (!sourceRecordFile) {
         this.#markJobFailedRetryable(jobFile.path, jobFile.job, "Source record is missing. Agent ingest remains retryable.");
         failed += 1;
         continue;
       }
-      if (
-        !supportsAgentSelectedOcr(sourceRecordFile.sourceRecord.kind) &&
-        shouldWaitForRunnableOcr(this.#ocr, sourceRecordFile.sourceRecord)
-      ) {
+      if (!isLegacyAgentIngestSource(sourceRecordFile.sourceRecord)) {
+        this.#markJobFailedFinal(
+          jobFile.path,
+          jobFile.job,
+          "This obsolete Agent ingest record is not bound to a normalized historical source."
+        );
+        failed += 1;
+        continue;
+      }
+      const agentIngest = this.#agentIngest;
+      if (!agentIngest) {
         this.#markJobWaitingDependency(
           jobFile.path,
           jobFile.job,
-          createAgentOcrWaitMessage(sourceRecordFile.sourceRecord)
+          "Waiting for a tested default model before Agent ingest.",
+          undefined,
+          modelProviderWaitingDependency()
         );
         failed += 1;
         continue;
@@ -2086,12 +1981,7 @@ export class JobsService {
             const currentSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id);
             if (
               !currentSource ||
-              sourceRecordRevision(currentSource) !== sourceRecordRevision(expectedSource) ||
-              (
-                !supportsAgentSelectedParser(currentSource.kind) &&
-                !supportsAgentSelectedOcr(currentSource.kind) &&
-                shouldWaitForRunnableOcr(this.#ocr, currentSource)
-              )
+              sourceRecordRevision(currentSource) !== sourceRecordRevision(expectedSource)
             ) {
               throw new PigeDomainError(
                 "agent_ingest.source_changed",
@@ -2253,38 +2143,48 @@ export class JobsService {
         } else if (isJobMutationContention(caught)) {
           // Another exact Job revision won; do not overwrite its authoritative state.
         } else if (caught instanceof PigeDomainError && caught.code === "model_provider.default_model_missing") {
-          this.#markJobWaitingDependency(jobFile.path, runningJob, "Waiting for a tested default model before Agent ingest.", durableState);
-        } else if (caught instanceof PigeDomainError && caught.code === "agent_runtime.tool_dependency_waiting") {
+          this.#markJobWaitingDependency(
+            jobFile.path,
+            runningJob,
+            "Waiting for a tested default model before Agent ingest.",
+            durableState,
+            modelProviderWaitingDependency()
+          );
+        } else if (caught instanceof AgentToolDependencyWaitingError) {
           this.#markJobWaitingDependency(
             jobFile.path,
             runningJob,
             "Agent-selected source processing is waiting for a registered local capability.",
-            durableState
+            durableState,
+            blockingAgentToolWaitingDependency(
+              requireExactWaitingAgentToolChild(
+                this.#jobRecordStore(vaultPath),
+                vaultPath,
+                runningJob.id,
+                caught.childJobId
+              )
+            )
           );
         } else if (caught instanceof PigeDomainError && caught.code === "source.external_unavailable") {
-          this.#markJobWaitingDependency(jobFile.path, runningJob, "Waiting for the referenced original source to be reconnected before Agent ingest can continue.", durableState);
+          this.#markJobWaitingDependency(
+            jobFile.path,
+            runningJob,
+            "Waiting for the referenced original source to be reconnected before Agent ingest can continue.",
+            durableState,
+            externalSourceWaitingDependency(sourceRecordFile.sourceRecord.id)
+          );
         } else if (caught instanceof PigeDomainError && /^source\.(?:checksum_mismatch|managed_unavailable|path_outside_vault|reference_invalid)$/u.test(caught.code)) {
           this.#markJobFailedFinal(jobFile.path, runningJob, "The source cannot be verified safely. Re-import it to create a new source version before Agent ingest.", durableState);
         } else if (caught instanceof PigeDomainError && caught.code === "agent_ingest.source_changed") {
-          const currentSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id);
-          if (currentSource && shouldWaitForRunnableOcr(this.#ocr, currentSource)) {
-            this.#markJobWaitingDependency(
-              jobFile.path,
-              runningJob,
-              `Source evidence changed while Agent ingest was running; waiting for ${documentLabel(currentSource.kind)} OCR enrichment before retry.`,
-              durableState
-            );
-          } else {
-            const sourceChangedSnapshot = this.#alignDurableExecutionState(
-              this.#jobExecutionCoordinator(vaultPath),
-              this.#requireExecutionSnapshot(jobFile.path, runningJob),
-              durableState
-            );
-            this.#jobExecutionCoordinator(vaultPath).queue(sourceChangedSnapshot, {
-              reason: "source_changed",
-              message: "Source evidence changed while Agent ingest was running; ingest requeued with the latest evidence."
-            });
-          }
+          const sourceChangedSnapshot = this.#alignDurableExecutionState(
+            this.#jobExecutionCoordinator(vaultPath),
+            this.#requireExecutionSnapshot(jobFile.path, runningJob),
+            durableState
+          );
+          this.#jobExecutionCoordinator(vaultPath).queue(sourceChangedSnapshot, {
+            reason: "source_changed",
+            message: "Source evidence changed while the historical Agent turn was running; the same turn requeued with the latest evidence."
+          });
         } else {
           this.#markJobFailedRetryable(
             jobFile.path,
@@ -3128,7 +3028,8 @@ export class JobsService {
     filePath: string,
     fallback: JobRecord,
     message: string,
-    durableState?: JobDurableWriteState
+    durableState?: JobDurableWriteState,
+    dependency?: NonNullable<JobRecord["waitingDependency"]>
   ): JobRecord {
     const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
     const snapshot = this.#alignDurableExecutionState(
@@ -3139,7 +3040,7 @@ export class JobsService {
     return coordinator.settle(snapshot, {
       kind: "waiting",
       reason: "dependency",
-      dependency: snapshot.job.waitingDependency ?? {
+      dependency: dependency ?? snapshot.job.waitingDependency ?? {
         dependencyKind: "local_tool",
         requiredAction: "repair_tool",
         messageKey: "errors.agent_runtime.tool_dependency_waiting"
@@ -5396,39 +5297,63 @@ function isAgentSelectedDatasetJob(job: JobRecord): boolean {
     job.inputRefs?.some((ref) => ref.kind === "tool" && ref.role === AGENT_TOOL_INPUT_ROLE) === true;
 }
 
-function hasWaitingAgentParseChild(store: JobRecordStore, vaultPath: string, parent: JobRecord): boolean {
-  return (parent.childJobIds ?? []).some((childId) => {
-    const child = readJobRecordFile(store, vaultPath, childId)?.job;
-    return child?.state === "waiting_dependency" && isAgentSelectedParseJob(child);
-  });
+function requireExactWaitingAgentToolChild(
+  store: JobRecordStore,
+  vaultPath: string,
+  parentJobId: string,
+  childJobId: string
+): JobRecord {
+  const child = readJobRecordFile(store, vaultPath, childJobId)?.job;
+  if (
+    child?.parentJobId !== parentJobId ||
+    child.state !== "waiting_dependency" ||
+    (!isAgentSelectedParseJob(child) && !isAgentSelectedOcrJob(child) && !isAgentSelectedDatasetJob(child))
+  ) {
+    throw new PigeDomainError(
+      "agent_runtime.tool_binding_invalid",
+      "The exact Agent-selected waiting child Job binding is unavailable."
+    );
+  }
+  return child;
 }
 
-function hasWaitingAgentOcrChild(store: JobRecordStore, vaultPath: string, parent: JobRecord): boolean {
-  return (parent.childJobIds ?? []).some((childId) => {
-    const child = readJobRecordFile(store, vaultPath, childId)?.job;
-    return child?.state === "waiting_dependency" && isAgentSelectedOcrJob(child);
-  });
-}
-
-function hasWaitingAgentDatasetChild(store: JobRecordStore, vaultPath: string, parent: JobRecord): boolean {
-  return (parent.childJobIds ?? []).some((childId) => {
-    const child = readJobRecordFile(store, vaultPath, childId)?.job;
-    return child?.state === "waiting_dependency" && isAgentSelectedDatasetJob(child);
-  });
-}
-
-function hasCompletedEmptyAgentOcrChild(
+function hasReadyWaitingAgentToolDependency(
   store: JobRecordStore,
   vaultPath: string,
   parent: JobRecord,
-  sourceRecord: SourceRecord
+  parser: DocumentParserPort | undefined,
+  ocr: OcrPort | undefined,
+  datasets: DatasetMaterializerPort | undefined
 ): boolean {
-  return (parent.childJobIds ?? []).some((childId) => {
+  const dependency = parent.waitingDependency;
+  if (dependency?.dependencyKind !== "local_tool") return false;
+  const childIds = parent.childJobIds ?? [];
+  const exactChildId = childIds.includes(dependency.dependencyId ?? "")
+    ? dependency.dependencyId
+    : undefined;
+  for (const childId of exactChildId ? [exactChildId] : childIds) {
     const child = readJobRecordFile(store, vaultPath, childId)?.job;
-    return child?.state === "completed_with_warnings" &&
-      isAgentSelectedOcrJob(child) &&
-      sourceRecord.metadata.ocrJobId === child.id;
-  });
+    const compatibilityMatch = exactChildId === undefined && isDeepStrictEqual(child?.waitingDependency, dependency);
+    if (child?.state !== "waiting_dependency" || !child.sourceId || (!exactChildId && !compatibilityMatch)) continue;
+    if (!isAgentSelectedParseJob(child) && !isAgentSelectedOcrJob(child) && !isAgentSelectedDatasetJob(child)) continue;
+    const sourceRecord = readSourceRecord(vaultPath, child.sourceId);
+    if (!sourceRecord) continue;
+    if (isAgentSelectedParseJob(child) && parser?.canParse(sourceRecord.kind)) return true;
+    if (isAgentSelectedOcrJob(child) && inspectOcrSource(ocr, sourceRecord).ready) return true;
+    if (isAgentSelectedDatasetJob(child) && datasets?.canMaterialize(sourceRecord.kind)) return true;
+  }
+  return false;
+}
+
+function hasReadyExternalSource(vaultPath: string, parent: JobRecord): boolean {
+  const dependency = parent.waitingDependency;
+  if (dependency?.dependencyKind !== "external_source") return false;
+  const sourceId = dependency.dependencyId ?? parent.sourceId;
+  if (!sourceId || (parent.sourceId && sourceId !== parent.sourceId)) return false;
+  const sourceRecord = readSourceRecord(vaultPath, sourceId);
+  return sourceRecord !== undefined &&
+    sourceRecord.storageStrategy === "reference_original" &&
+    tryVerifyReadableSourceFile(vaultPath, sourceRecord)?.location === "referenced_original";
 }
 
 function bridgeParentAbortToChild(
@@ -5608,52 +5533,6 @@ function ocrNoReadableEvidenceCode(sourceKind: SourceKind): string {
   return sourceKind === "pptx_file" ? "pptx_ocr_no_readable_evidence" : "pdf_ocr_no_readable_evidence";
 }
 
-function ensureOcrWaitingJob(
-  store: JobRecordStore,
-  vaultPath: string,
-  parseJob: JobRecord,
-  sourceRecord: SourceRecord,
-  capability: OcrSourceCapability
-): void {
-  ensureParserOrOcrFollowUpJob(
-    store,
-    vaultPath,
-    parseJob,
-    sourceRecord,
-    "ocr",
-    capability.ready ? "queued" : "waiting_dependency",
-    capability.message
-  );
-}
-
-function ensureParserOrOcrFollowUpJob(
-  store: JobRecordStore,
-  vaultPath: string,
-  parentJob: JobRecord,
-  sourceRecord: SourceRecord,
-  jobClass: "parse" | "ocr",
-  state: JobState,
-  message: string
-): void {
-  const jobId = createParserOrOcrJobId(sourceRecord.id, jobClass);
-  const now = new Date().toISOString();
-  ensureRequiredChildJob(store, vaultPath, parentJob, JobRecordSchema.parse({
-    id: jobId,
-    class: jobClass,
-    state,
-    parentJobId: parentJob.id,
-    createdAt: now,
-    updatedAt: now,
-    sourceId: sourceRecord.id,
-    ...(state === "waiting_dependency"
-      ? { waitingDependency: localToolWaitingDependency(`${jobClass}:${sourceRecord.kind}`) }
-      : {}),
-    ...(parentJob.captureId ? { captureId: parentJob.captureId } : {}),
-    ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
-    message
-  }));
-}
-
 function createParseCompletionMessage(result: {
   readonly textCharacterCount: number;
   readonly textCoverage: string;
@@ -5666,10 +5545,10 @@ function createParseCompletionMessage(result: {
     return `${label} text extracted; the edited source page was preserved and requires review before refresh.`;
   }
   if (!result.agentTextReady) {
-    return `${label} parser found insufficient embedded text; waiting for OCR before Agent ingest.`;
+    return `${label} parser found insufficient embedded text; the preserved source remains available for Pi-selected OCR.`;
   }
   if (result.needsOcr) {
-    return `${label} text extracted (${result.textCharacterCount} characters, ${result.textCoverage} coverage); image-heavy or text-sparse content is waiting for OCR enrichment.`;
+    return `${label} text extracted (${result.textCharacterCount} characters, ${result.textCoverage} coverage); Pi may select OCR for additional image evidence.`;
   }
   return `${label} text extracted (${result.textCharacterCount} characters, ${result.textCoverage} coverage).`;
 }
@@ -5692,7 +5571,7 @@ function createOcrCompletionMessage(result: {
     return `${label} completed without readable text. The preserved source remains available.`;
   }
   if (sourceKind === "pdf_file" && result.textCharacterCount === 0) {
-    return "PDF page OCR enrichment completed without additional text; verified native PDF text remains ready for Agent ingest.";
+    return "PDF page OCR completed without additional text; verified native PDF text remains available.";
   }
   return `${label} extracted ${result.textCharacterCount} characters${result.confidence !== undefined ? ` at confidence ${result.confidence.toFixed(3)}` : ""}.`;
 }
@@ -5708,19 +5587,6 @@ function inspectOcrSource(ocr: OcrPort | undefined, sourceRecord: SourceRecord):
   return ocr.canOcr(sourceRecord.kind)
     ? { ready: true, message: `${documentLabel(sourceRecord.kind)} local OCR job queued.` }
     : { ready: false, message: createOcrDependencyMessage(sourceRecord.kind) };
-}
-
-function shouldWaitForRunnableOcr(ocr: OcrPort | undefined, sourceRecord: SourceRecord): boolean {
-  if (sourceRecord.metadata.needsOcr !== true) return false;
-  if (sourceRecord.metadata.agentTextReady !== true) return true;
-  return inspectOcrSource(ocr, sourceRecord).ready;
-}
-
-function createAgentOcrWaitMessage(sourceRecord: SourceRecord): string {
-  const label = documentLabel(sourceRecord.kind);
-  return sourceRecord.metadata.agentTextReady === true
-    ? `Waiting for selected ${label} OCR enrichment before Agent ingest.`
-    : `Waiting for readable ${label} OCR evidence before Agent ingest.`;
 }
 
 function sourceRecordRevision(sourceRecord: SourceRecord): string {
@@ -5767,14 +5633,6 @@ function ocrFailure(caught: unknown, sourceKind: SourceKind): { readonly final: 
     }
   }
   return { final: false, waiting: false, message: `Local OCR failed for this ${label}. The preserved source and validated artifacts remain retryable.` };
-}
-
-function isOcrCapabilityUnavailableError(caught: unknown): boolean {
-  return caught instanceof PigeDomainError && (
-    /^ocr\.(?:adapter_unavailable|helper_unavailable|platform_unsupported)$/u.test(caught.code) ||
-    caught.code === "parser.pdf_page_renderer.unavailable" ||
-    caught.code === "ocr.pptx.target_not_ready"
-  );
 }
 
 function parseFailure(caught: unknown, sourceKind: SourceKind): { readonly final: boolean; readonly waiting: boolean; readonly message: string } {
@@ -5846,56 +5704,6 @@ function documentLabel(sourceKind: SourceKind): string {
   return "PDF";
 }
 
-function ensureAgentIngestJob(
-  store: JobRecordStore,
-  vaultPath: string,
-  parentJob: JobRecord,
-  sourceId: string,
-  canRun: boolean,
-  activeVaultId: string
-): void {
-  const jobId = createAgentIngestJobId(sourceId);
-  const nextState: JobState = canRun ? "queued" : "waiting_dependency";
-  const nextMessage = canRun
-    ? "Source page ready; Agent ingest queued."
-    : "Source page ready; waiting for a tested default model before Agent ingest.";
-  const now = new Date().toISOString();
-  const jobRecord = JobRecordSchema.parse({
-    id: jobId,
-    class: "agent_ingest",
-    state: nextState,
-    parentJobId: parentJob.id,
-    createdAt: now,
-    updatedAt: now,
-    sourceId,
-    activeVaultId,
-    ...(nextState === "waiting_dependency"
-      ? { waitingDependency: modelProviderWaitingDependency() }
-      : {}),
-    ...(parentJob.captureId ? { captureId: parentJob.captureId } : {}),
-    ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
-    message: nextMessage
-  });
-  ensureRequiredChildJob(
-    store,
-    vaultPath,
-    parentJob,
-    jobRecord,
-    (existing) => existing.state === "waiting_dependency" && canRun
-      ? JobRecordSchema.parse({
-          ...existing,
-          state: nextState,
-          updatedAt: new Date().toISOString(),
-          message: nextMessage
-        })
-      : existing
-  );
-}
-
-function isLegacyAgentIngestSource(sourceRecord: SourceRecord): boolean {
-  return sourceRecord.semanticOrchestration === "legacy_agent_ingest";
-}
-
 function dependencyRepairProof(
   job: JobRecord
 ): Extract<JobExecutionResumeProof, { kind: "dependency_repaired" }> | undefined {
@@ -5917,12 +5725,38 @@ function localToolWaitingDependency(
   };
 }
 
+function blockingAgentToolWaitingDependency(
+  child: JobRecord
+): NonNullable<JobRecord["waitingDependency"]> {
+  return {
+    dependencyKind: "local_tool",
+    dependencyId: child.id,
+    requiredAction: "repair_tool",
+    messageKey: "errors.agent_runtime.tool_dependency_waiting"
+  };
+}
+
 function modelProviderWaitingDependency(): NonNullable<JobRecord["waitingDependency"]> {
   return {
     dependencyKind: "model_provider",
     requiredAction: "configure_model",
     messageKey: "errors.model_provider.default_model_missing"
   };
+}
+
+function externalSourceWaitingDependency(
+  sourceId: string
+): NonNullable<JobRecord["waitingDependency"]> {
+  return {
+    dependencyKind: "external_source",
+    dependencyId: sourceId,
+    requiredAction: "reconnect_path",
+    messageKey: "errors.agent_runtime.source_turn_failed"
+  };
+}
+
+function isLegacyAgentIngestSource(sourceRecord: SourceRecord): boolean {
+  return sourceRecord.semanticOrchestration === "legacy_agent_ingest";
 }
 
 function ensureRequiredChildJob(
@@ -6003,12 +5837,6 @@ function createParserOrOcrJobId(
     new Date().toISOString().slice(0, 10).replaceAll("-", "");
   const suffix = semanticDigest ?? datedIdentityId.replace(/^(?:src|job)_\d{8}_/u, "");
   return `job_${dateKey}_${suffix.slice(0, 10)}${jobClass === "parse" ? "pa" : "oc"}`;
-}
-
-function createAgentIngestJobId(sourceId: string): string {
-  const dateKey = /^src_(\d{8})_/.exec(sourceId)?.[1] ?? new Date().toISOString().slice(0, 10).replaceAll("-", "");
-  const suffix = sourceId.replace(/^src_\d{8}_/u, "");
-  return `job_${dateKey}_${suffix.slice(0, 10)}ag`;
 }
 
 function createIndexRebuildJob(store: JobRecordStore, vaultPath: string): JobRecord {

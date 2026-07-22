@@ -26,7 +26,7 @@ import {
   type PiFauxResponse
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
-import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
+import { markSourceAsLegacyAgentIngestFixture, seedHistoricalAgentIngestJobFixture } from "../helpers/legacy-agent-ingest-fixture";
 
 const roots: string[] = [];
 
@@ -285,7 +285,7 @@ describe("Agent-led image OCR tool", () => {
 
   it("preserves an image without OCR when no model runtime is ready", async () => {
     const fixture = makeVault();
-    const captured = await preserveImage(fixture, "no-model.png");
+    const captured = await preserveImage(fixture, "no-model.png", false);
     const adapter = new StaticNativeOcrAdapter(validNativeOcrResult("Must remain unused."));
     const jobs = new JobsService(fixture.vaultPort, undefined, undefined, undefined, new OcrService(adapter));
 
@@ -294,7 +294,7 @@ describe("Agent-led image OCR tool", () => {
       completed: 1,
       failed: 0
     });
-    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs).toHaveLength(1);
+    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toEqual([]);
     expect(readJobs(fixture.vaultPath).filter((job) => job.class === "ocr")).toEqual([]);
     expect(adapter.callCount).toBe(0);
     expect(fs.readFileSync(captured.managedPath)).toEqual(captured.bytes);
@@ -452,7 +452,8 @@ function validNativeOcrResult(text: string, overrides: Partial<NativeOcrResult> 
 
 async function preserveImage(
   fixture: ReturnType<typeof makeVault>,
-  fileName: string
+  fileName: string,
+  seedHistoricalAgent = true
 ): Promise<{
   readonly sourceId: string;
   readonly captureJobId: string;
@@ -470,6 +471,7 @@ async function preserveImage(
   });
   const sourceId = requireValue(captured.sourceIds[0]);
   markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, sourceId);
+  if (seedHistoricalAgent) seedHistoricalAgentIngestJobFixture(fixture.vaultPath, sourceId);
   const source = readSource(fixture.vaultPath, sourceId);
   return {
     sourceId,

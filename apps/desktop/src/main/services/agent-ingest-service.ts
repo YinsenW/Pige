@@ -110,6 +110,18 @@ export interface AgentIngestRuntimePort {
   run(request: PiAgentRunRequest): Promise<PiAgentRunResult>;
 }
 
+export class AgentToolDependencyWaitingError extends PigeDomainError {
+  readonly childJobId: string;
+
+  constructor(childJobId: string) {
+    super(
+      "agent_runtime.tool_dependency_waiting",
+      "The exact Agent-selected child Job is waiting for its registered local capability."
+    );
+    this.childJobId = childJobId;
+  }
+}
+
 export interface AgentIngestRetrievalPort {
   search(vaultPath: string, request: RetrievalSearchRequest): RetrievalSearchResult;
   listTags?(vaultPath: string): readonly string[];
@@ -308,11 +320,15 @@ export interface AgentIngestDatasetResult {
   readonly operationIds: readonly string[];
 }
 
-export type AgentIngestResult =
+type AgentIngestEffectResult =
   | AgentIngestPublishedResult
   | AgentIngestProposalResult
-  | AgentIngestResponseResult
   | AgentIngestDatasetResult;
+
+export type AgentIngestResult = (AgentIngestEffectResult | AgentIngestResponseResult) & {
+  /** The upstream Pi final remains authoritative when a legacy run also applied an effect. */
+  readonly assistantText?: string;
+};
 
 /**
  * Source-bound tools prepared for the single Home-owned Pi turn. The session
@@ -894,7 +910,11 @@ export class AgentIngestService {
     const runtimeConfig = this.#models.getDefaultRuntimeConfig();
     assertApprovedRuntimeBinding(runtimeConfig, approvedBinding);
     let inspectedEvidenceBinding: string | undefined;
-    let dependencyWait: { readonly status: string; readonly dependencyCode?: string } | undefined;
+    let dependencyWait: {
+      readonly status: string;
+      readonly childJobId?: string;
+      readonly dependencyCode?: string;
+    } | undefined;
     let toolCatalogHash = "";
     let compatibleToolCatalogHashes: readonly string[] = [];
 
@@ -2024,7 +2044,9 @@ export class AgentIngestService {
       beforeModelTurn: authorizeCurrentModelTurn,
       result,
       runLegacy: async () => {
-        const runtimeResult = await this.#runtime.run({
+        let runtimeResult: PiAgentRunResult;
+        try {
+          runtimeResult = await this.#runtime.run({
             runtimeConfig,
             jobId: job.id,
             systemPrompt,
@@ -2039,9 +2061,24 @@ export class AgentIngestService {
             },
             ...(hooks.signal ? { signal: hooks.signal } : {})
           });
-        return result() ?? {
+        } catch (caught) {
+          if (
+            caught instanceof PigeDomainError &&
+            caught.code === "agent_runtime.tool_dependency_waiting" &&
+            dependencyWait?.childJobId
+          ) {
+            throw new AgentToolDependencyWaitingError(dependencyWait.childJobId);
+          }
+          throw caught;
+        }
+        const effect = result();
+        return effect ? {
+          ...effect,
+          assistantText: runtimeResult.assistantText
+        } : {
           outcome: "responded",
           answer: runtimeResult.assistantText,
+          assistantText: runtimeResult.assistantText,
           evidenceRefs: [],
           operationIds: []
         };

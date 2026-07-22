@@ -53,7 +53,8 @@ describe("PDF parser core", () => {
     expect(result.textCoverage).toBe("none");
     expect(result.ocrCandidatePages).toEqual([1]);
     expect(result.agentTextReady).toBe(false);
-    expect(result.warnings.join(" ")).toContain("OCR is required");
+    expect(result.warnings.join(" ")).toContain("OCR may provide readable text");
+    expect(result.warnings.join(" ")).not.toMatch(/required|handed off|Agent ingest/u);
   });
 
   it("maps malformed PDFs to a stable parser error without exposing parser internals", async () => {

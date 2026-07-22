@@ -61,7 +61,7 @@ import {
   type PiFauxResponse
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
-import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
+import { markSourceAsLegacyAgentIngestFixture, seedHistoricalAgentIngestJobFixture } from "../helpers/legacy-agent-ingest-fixture";
 import { createTestPdf } from "./helpers/pdf-fixture";
 
 const roots: string[] = [];
@@ -3303,6 +3303,7 @@ function submitText(
     locale: "en"
   });
   markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, result.sourceId);
+  seedHistoricalAgentIngestJobFixture(fixture.vaultPath, result.sourceId);
   return result;
 }
 
@@ -3321,6 +3322,7 @@ async function preservePdf(
   });
   for (const sourceId of submitted.sourceIds) {
     markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, sourceId);
+    seedHistoricalAgentIngestJobFixture(fixture.vaultPath, sourceId);
   }
   return {
     sourceId: requireValue(submitted.sourceIds[0]),

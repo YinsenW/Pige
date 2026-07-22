@@ -76,7 +76,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
       status: "cancel_requested",
       job: { state: "cancel_requested", updatedAt: action.job?.updatedAt }
     });
-    expect(await processing).toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
+    expect(await processing).toEqual({ processed: 1, completed: 0, failed: 1 });
 
     const cancelled = requireValue(jobs.list({ classes: ["ocr"], states: ["cancelled"] }).jobs[0]);
     const cancelledRecord = readJobRecord(fixture.vaultPath, cancelled.id);
@@ -162,7 +162,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     const requested = jobs.cancel({ jobId: running.id });
     expect(requested).toMatchObject({ status: "cancel_requested" });
     release.resolve();
-    expect(await processing).toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
+    expect(await processing).toEqual({ processed: 1, completed: 0, failed: 1 });
 
     const cancelled = readJobRecord(fixture.vaultPath, running.id);
     expect(cancelled.state).toBe("cancelled");
@@ -200,6 +200,8 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
     await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    const parseJob = requireValue(jobs.list({ classes: ["parse"] }).jobs[0]);
+    seedExplicitPdfOcrJob(fixture.vaultPath, parseJob.id, sourceId);
 
     const processing = jobs.processQueuedOcr({ sourceIds: [sourceId] });
     await adapter.secondCallStarted.promise;
@@ -209,7 +211,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     expect(stagedSource.artifacts.filter((artifact) => artifact.kind === "rendered_page")).toHaveLength(2);
 
     expect(jobs.cancel({ jobId: running.id }).status).toBe("cancel_requested");
-    expect(await processing).toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
+    expect(await processing).toEqual({ processed: 1, completed: 0, failed: 1 });
     const retryable = requireValue(jobs.list({ classes: ["ocr"], states: ["failed_retryable"] }).jobs[0]);
     const retryableRecord = readJobRecord(fixture.vaultPath, retryable.id);
     expect(retryable.message).toBe(
@@ -237,7 +239,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     const failedSetup = await prepareParsedPdfOcr(failedFixture, failedAdapter, "generic-failure");
 
     expect(await failedSetup.jobs.processQueuedOcr({ sourceIds: [failedSetup.sourceId] }))
-      .toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
+      .toEqual({ processed: 1, completed: 0, failed: 1 });
     const failed = requireValue(failedSetup.jobs.list({ classes: ["ocr"], states: ["failed_retryable"] }).jobs[0]);
     const failedJobBeforeCancel = readJobRecord(failedFixture.vaultPath, failed.id);
     const failedSourceBeforeCancel = readSourceRecord(failedFixture.vaultPath, failedSetup.sourceId);
@@ -259,7 +261,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     const waitingAdapter = new SecondCallUnavailableNativeOcrAdapter();
     const waitingSetup = await prepareParsedPdfOcr(waitingFixture, waitingAdapter, "dependency-wait");
     expect(await waitingSetup.jobs.processQueuedOcr({ sourceIds: [waitingSetup.sourceId] }))
-      .toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
+      .toEqual({ processed: 1, completed: 0, failed: 1 });
     const waiting = requireValue(waitingSetup.jobs.list({ classes: ["ocr"], states: ["waiting_dependency"] }).jobs[0]);
     const waitingJobBeforeCancel = readJobRecord(waitingFixture.vaultPath, waiting.id);
     const waitingSourceBeforeCancel = readSourceRecord(waitingFixture.vaultPath, waitingSetup.sourceId);
@@ -292,7 +294,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     const retryProcessing = retryServices.jobs.processQueuedOcr({ sourceIds: [waitingSetup.sourceId] });
     await retryStarted.promise;
     expect(retryServices.jobs.cancel({ jobId: waiting.id }).status).toBe("cancel_requested");
-    expect(await retryProcessing).toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
+    expect(await retryProcessing).toEqual({ processed: 1, completed: 0, failed: 1 });
     const retryCancelled = readJobRecord(waitingFixture.vaultPath, waiting.id);
     expect(retryCancelled.state).toBe("failed_retryable");
     expect(retryCancelled.cancellation?.durableWritesApplied).toBe(true);
@@ -494,8 +496,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     expect(await reuseServices.jobs.processQueuedOcr({ jobIds: [reuseJob.id] })).toEqual({
       processed: 1,
       completed: 0,
-      failed: 1,
-      agentReadySourceIds: []
+      failed: 1
     });
     const failedReuse = readJobRecord(fixture.vaultPath, reuseJob.id);
     expect(failedReuse.state).toBe("failed_retryable");
@@ -589,7 +590,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     const completed = requireValue(jobs.list({ classes: ["ocr"], states: ["completed_with_warnings"] }).jobs[0]);
     const completedRecord = readJobRecord(fixture.vaultPath, completed.id);
     expect(cancellationStatus).toBe("cancel_requested");
-    expect(result).toEqual({ processed: 1, completed: 1, failed: 0, agentReadySourceIds: [] });
+    expect(result).toEqual({ processed: 1, completed: 1, failed: 0 });
     expect(completed.message).toContain("Durable output committed");
     expect(completed.progress).toEqual({ completedUnits: 1, totalUnits: 1, unit: "image" });
     expect(completedRecord.cancellation?.safeCheckpointId).toBe("fixture_output_committed");
@@ -772,6 +773,8 @@ async function prepareParsedPdfOcr(
   services.jobs.processQueuedCaptures({ jobIds: captured.jobIds });
   seedExplicitPdfParseJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
   await services.jobs.processQueuedParses({ sourceIds: [sourceId] });
+  const parseJob = requireValue(services.jobs.list({ classes: ["parse"] }).jobs[0]);
+  seedExplicitPdfOcrJob(fixture.vaultPath, parseJob.id, sourceId);
   return { jobs: services.jobs, sourceId };
 }
 
@@ -872,6 +875,28 @@ function seedExplicitImageOcrJob(
     message: state === "waiting_dependency"
       ? "Persisted image OCR fixture is waiting for local OCR capability."
       : "Persisted image OCR fixture queued."
+  });
+  writeJobRecord(vaultPath, child);
+  writeJobRecord(vaultPath, JobRecordSchema.parse({
+    ...parent,
+    childJobIds: [...(parent.childJobIds ?? []), child.id]
+  }));
+}
+
+function seedExplicitPdfOcrJob(vaultPath: string, parentJobId: string, sourceId: string): void {
+  const parent = JobRecordSchema.parse(readJobRecord(vaultPath, parentJobId));
+  const dateKey = requireValue(/^src_(\d{8})_/u.exec(sourceId)?.[1]);
+  const suffix = sourceId.replace(/^src_\d{8}_/u, "").slice(0, 10);
+  const child = JobRecordSchema.parse({
+    id: `job_${dateKey}_${suffix}ob`,
+    class: "ocr",
+    state: "queued",
+    parentJobId,
+    createdAt: "2026-07-10T12:00:00.000Z",
+    updatedAt: "2026-07-10T12:00:00.000Z",
+    sourceId,
+    ...(parent.captureId ? { captureId: parent.captureId } : {}),
+    message: "Explicit PDF OCR substrate fixture queued."
   });
   writeJobRecord(vaultPath, child);
   writeJobRecord(vaultPath, JobRecordSchema.parse({

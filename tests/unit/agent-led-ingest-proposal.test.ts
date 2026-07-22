@@ -32,7 +32,7 @@ import {
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { ProposalService } from "../../apps/desktop/src/main/services/proposal-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
-import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
+import { markSourceAsLegacyAgentIngestFixture, seedHistoricalAgentIngestJobFixture } from "../helpers/legacy-agent-ingest-fixture";
 
 const roots: string[] = [];
 
@@ -944,6 +944,7 @@ function submitText(
     locale: "en"
   });
   markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, result.sourceId);
+  seedHistoricalAgentIngestJobFixture(fixture.vaultPath, result.sourceId);
   return result;
 }
 

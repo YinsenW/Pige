@@ -24,7 +24,7 @@ import {
   type PiFauxResponse
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
-import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
+import { markSourceAsLegacyAgentIngestFixture, seedHistoricalAgentIngestJobFixture } from "../helpers/legacy-agent-ingest-fixture";
 
 const roots: string[] = [];
 
@@ -245,7 +245,7 @@ describe("Agent-selected Dataset ingest tool", () => {
 
   it("preserves a structured source without creating a Dataset child when no model is ready", async () => {
     const fixture = makeVault();
-    const captured = await preserveCsv(fixture);
+    const captured = await preserveCsv(fixture, false);
     const planner = new StaticPlanner(csvPlan(captured.bytes));
     const jobs = new JobsService(
       fixture.vaultPort,
@@ -256,7 +256,7 @@ describe("Agent-selected Dataset ingest tool", () => {
       new DatasetService(planner)
     );
     expect(jobs.processQueuedCaptures({ jobIds: [captured.captureJobId] })).toMatchObject({ completed: 1, failed: 0 });
-    expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs).toHaveLength(1);
+    expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toEqual([]);
     expect(readJobs(fixture.vaultPath).filter((job) => job.class === "dataset_import")).toEqual([]);
     expect(fs.readFileSync(captured.managedPath)).toEqual(captured.bytes);
     expect(planner.callCount).toBe(0);
@@ -417,7 +417,10 @@ function knowledgeOutput(title: string) {
   };
 }
 
-async function preserveCsv(fixture: ReturnType<typeof makeVault>) {
+async function preserveCsv(
+  fixture: ReturnType<typeof makeVault>,
+  seedHistoricalAgent = true
+) {
   const bytes = Buffer.from("name,count\nAda,3\nGrace,5\n", "utf8");
   const sourcePath = path.join(path.dirname(fixture.vaultPath), "records.csv");
   fs.writeFileSync(sourcePath, bytes);
@@ -429,6 +432,7 @@ async function preserveCsv(fixture: ReturnType<typeof makeVault>) {
   });
   const sourceId = requireValue(captured.sourceIds[0]);
   markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, sourceId);
+  if (seedHistoricalAgent) seedHistoricalAgentIngestJobFixture(fixture.vaultPath, sourceId);
   const source = readSource(fixture.vaultPath, sourceId);
   return {
     sourceId,
