@@ -236,6 +236,14 @@ conversation, tasks, knowledge requests, and source-bearing inputs:
 - Multi-file drops as later v0.1 phase work; P0 requires the whole window to accept a
   file drop, while batch size and scheduling are owned by the phase plan.
 
+File gestures have one visible distinction. Releasing a whole-window drop immediately
+submits those files as one Agent turn. Choosing files from the composer attachment picker
+only stages removable local chips; it creates no Job, source, conversation event, model
+call, or network work until Send or a valid Enter. Submit atomically binds the exact
+authored query and staged attachments to one Agent turn and one parent Job. Attachment-
+only submit adds only the minimal organize intent. A rejected submit preserves the exact
+query and chips; idempotent retry cannot duplicate the turn or source preservation.
+
 The home timeline should show recent captures, retrieved answers, job progress, and Agent summaries. Durable knowledge belongs in Markdown pages, source pages, `index.md`, and `log.md`.
 
 Default home requirements:
@@ -602,7 +610,8 @@ Home and capture:
 - Home supports ordinary Agent conversation, source capture, and knowledge-enhanced
   requests, including turns with no relevant local evidence.
 - Home exposes no mode chips; Pi handles intent and clarification.
-- Whole-window drag-and-drop hot zone.
+- Whole-window drag-and-drop hot zone whose release immediately submits one Agent turn;
+  composer-picked files remain local staged attachments until explicit Send.
 - On-device voice input on supported macOS 26-or-later systems.
 - Plain text capture.
 - Markdown and plain text file ingest.

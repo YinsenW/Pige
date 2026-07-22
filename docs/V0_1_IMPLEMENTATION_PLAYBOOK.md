@@ -233,7 +233,7 @@ Build:
 - [B2.04 -> E2.06] PDF, DOCX, PPTX, and common-image preservation with metadata-only
   source projections and one visible Agent dependency job; parser/OCR child Jobs begin
   only from later Agent tool calls.
-- [B2.05 -> E2.07] Whole-window drop hot zone.
+- [B2.05 -> E2.07] Immediate whole-window drop plus staged composer attachments.
 - [B2.06 -> E2.08] Stable source ID generation.
 - [B2.07 -> E2.08] Source-record creation and policy-driven source-asset preservation.
 - [B2.08 -> E2.01] Persistent job queue.
@@ -259,7 +259,9 @@ Exit criteria:
 - [E2.05] Markdown and TXT capture preserves the original source, creates one source record, and does not duplicate large bodies into conversation events.
 - [E2.06] PDF, DOCX, PPTX, and image capture preserves evidence before processing and
   creates a visible retryable Agent dependency job without starting parser/OCR work.
-- [E2.07] Whole-window drop validates files, preserves accepted items, and reports rejected display names without exposing private paths.
+- [E2.07] Drop release immediately submits one bounded Agent turn; composer picker stays
+  side-effect-free until Send atomically creates one parent Job, and failed submit keeps
+  exact text/chips without exposing paths or duplicating retry.
 - [E2.08] Source IDs remain stable across retry, and the selected copy/reference strategy affects new captures through the Source Storage Service.
 - [E2.09] Home and timeline show durable, localized, redacted job state and progress without claiming completion early.
 - [E2.10] Retry is idempotent; cancellation preserves sources and leaves no half-enabled UI or ambiguous durable state.

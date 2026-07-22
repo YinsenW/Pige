@@ -42,6 +42,10 @@ import {
   type AgentIngestProposalBinding,
   type AgentSourceToolSession
 } from "./agent-ingest-service";
+import {
+  createAttachmentSetToolSession,
+  createAttachmentSourceId
+} from "./home-agent-attachment-service";
 import type { DocumentParserPort } from "./document-parser-service";
 import type { DatasetMaterializerPort } from "./dataset-service";
 import { SourcePageService } from "./source-page-service";
@@ -148,6 +152,9 @@ export interface CreateAgentTurnJobRequest {
   readonly inputHash: string;
   readonly sourceIds?: readonly string[];
   readonly sourceExpected?: boolean;
+  readonly attachmentCount?: number;
+  readonly attachmentSetHash?: string;
+  readonly sourceChecksums?: readonly string[];
   readonly currentNoteScope?: ReaderSelectionJobScope;
 }
 
@@ -540,17 +547,26 @@ export class JobsService {
       throw new PigeDomainError("agent_runtime.turn_conflict", "Multiple Agent Jobs claim one preserved turn.");
     }
     const jobId = matchingJobs[0]?.job.id ?? createAgentTurnJobId(request.conversationEventId);
-    const sourceIds = Array.from(new Set(
-      request.sourceIds ?? (request.sourceExpected ? [createAgentTurnSourceId(jobId)] : [])
-    ));
+    const attachmentCount = request.attachmentCount ?? (request.sourceExpected ? 1 : 0);
+    const sourceIds = request.sourceIds ?? (attachmentCount > 0
+      ? Array.from({ length: attachmentCount }, (_, ordinal) => ordinal === 0
+        ? createAgentTurnSourceId(jobId)
+        : createAttachmentSourceId(jobId, ordinal))
+      : []);
     const currentNoteScope = request.currentNoteScope;
     if (
       !activeVault ||
       !/^evt_\d{8}_[a-z0-9]{8,}$/u.test(request.conversationEventId) ||
       !/^sha256:[a-f0-9]{64}$/u.test(request.inputHash) ||
       !isConfinedConversationLocator(request.conversationLocator) ||
-      sourceIds.length > 1 ||
-      (request.sourceExpected === true && sourceIds.length !== 1) ||
+      sourceIds.length > 8 ||
+      new Set(sourceIds).size !== sourceIds.length ||
+      (attachmentCount > 0 && sourceIds.length !== attachmentCount) ||
+      (request.attachmentSetHash !== undefined && !/^sha256:[a-f0-9]{64}$/u.test(request.attachmentSetHash)) ||
+      (request.sourceChecksums !== undefined && (
+        request.sourceChecksums.length !== sourceIds.length ||
+        request.sourceChecksums.some((checksum) => !/^sha256:[a-f0-9]{64}$/u.test(checksum))
+      )) ||
       (currentNoteScope !== undefined && !isValidReaderSelectionJobScope(
         currentNoteScope,
         sourceIds.length > 0
@@ -577,7 +593,10 @@ export class JobsService {
         conversationRef.locator !== request.conversationLocator ||
         conversationRef.checksum !== request.inputHash ||
         existingSourceIds.length !== sourceIds.length ||
-        existingSourceIds.some((sourceId, index) => sourceId !== sourceIds[index])
+        existingSourceIds.some((sourceId, index) => sourceId !== sourceIds[index]) ||
+        expectedSourceChecksumConflict(existing.job, request.sourceChecksums) ||
+        existing.job.inputRefs?.find((ref) => ref.role === "agent_turn_attachment_set")?.checksum !==
+          request.attachmentSetHash
       ) {
         throw new PigeDomainError("agent_runtime.turn_conflict", "The existing Agent Job binding does not match the preserved turn.");
       }
@@ -587,8 +606,8 @@ export class JobsService {
     const job = JobRecordSchema.parse({
       id: jobId,
       class: "agent_turn",
-      state: request.sourceExpected ? "waiting_dependency" : "queued",
-      ...(request.sourceExpected ? { stage: "capturing_source" } : {}),
+      state: attachmentCount > 0 ? "waiting_dependency" : "queued",
+      ...(attachmentCount > 0 ? { stage: "capturing_source" } : {}),
       priority: "interactive",
       scope: "vault",
       createdAt: timestamp,
@@ -609,11 +628,19 @@ export class JobsService {
           checksum: request.inputHash,
           role: "agent_turn_user_event"
         },
-        ...sourceIds.map((sourceId) => ({
+        ...sourceIds.map((sourceId, ordinal) => ({
           kind: "source" as const,
           id: sourceId,
+          locator: `attachment_${ordinal + 1}`,
+          ...(request.sourceChecksums?.[ordinal] ? { checksum: request.sourceChecksums[ordinal] } : {}),
           role: "agent_turn_source"
         })),
+        ...(request.attachmentSetHash ? [{
+          kind: "tool" as const,
+          id: "pige_agent_attachment_set",
+          checksum: request.attachmentSetHash,
+          role: "agent_turn_attachment_set"
+        }] : []),
         ...(currentNoteScope ? createReaderSelectionJobRefs(currentNoteScope) : [])
       ],
       retry: {
@@ -627,7 +654,7 @@ export class JobsService {
         usedShell: false,
         accessedExternalFiles: false
       },
-      message: request.sourceExpected
+      message: attachmentCount > 0
         ? "Agent turn accepted; waiting for its source preservation binding."
         : currentNoteScope
           ? "Agent turn accepted with an exact current-note evidence binding."
@@ -673,7 +700,8 @@ export class JobsService {
       "Pi Agent is interpreting the preserved Home turn."
     );
     try {
-      const sourceTools: AgentSourceToolExecutionPort | undefined = execution.job.sourceId
+      const boundSourceIds = collectAgentTurnSourceIds(execution.job);
+      const sourceTools: AgentSourceToolExecutionPort | undefined = boundSourceIds.length > 0
         ? {
             parse: (request) => this.#runAgentSelectedParseTool(
               vaultPath,
@@ -735,19 +763,24 @@ export class JobsService {
     control: JobExecutionControl,
     sourceTools: AgentSourceToolExecutionPort
   ): Promise<AgentSourceToolSession> {
-    const sourceId = job.sourceId;
-    const sourceFile = sourceId ? readSourceRecordFile(vaultPath, sourceId) : undefined;
+    const sourceIds = collectAgentTurnSourceIds(job);
+    const sourceFiles = sourceIds.map((sourceId) => readSourceRecordFile(vaultPath, sourceId));
     if (
       !this.#agentIngest ||
-      !sourceFile ||
-      sourceFile.sourceRecord.metadata.agentTurnJobId !== job.id
+      sourceFiles.length < 1 ||
+      sourceFiles.some((sourceFile) =>
+        !sourceFile || sourceFile.sourceRecord.metadata.agentTurnJobId !== job.id)
     ) {
       throw new PigeDomainError(
         "agent_runtime.turn_binding_invalid",
         "The source-bearing Agent turn is missing its exact preserved source binding."
       );
     }
-    return this.#agentIngest.prepareSourceToolSession(vaultPath, sourceFile.sourceRecord, job, {
+    const prepare = async (sourceFile: NonNullable<(typeof sourceFiles)[number]>): Promise<AgentSourceToolSession> =>
+      this.#agentIngest!.prepareSourceToolSession(vaultPath, sourceFile.sourceRecord, {
+        ...job,
+        sourceId: sourceFile.sourceRecord.id
+      }, {
       onPolicyResolved: (snapshot) => {
         this.#jobExecutionCoordinator(vaultPath).patch(
           this.#jobRecordStore(vaultPath).read(jobPath),
@@ -825,20 +858,40 @@ export class JobsService {
       },
       signal: control.signal
     });
+    const sessions = await Promise.all(sourceFiles.map((sourceFile) => prepare(sourceFile!)));
+    if (sessions.length === 1) return sessions[0]!;
+    return createAttachmentSetToolSession(sourceFiles.map((sourceFile, ordinal) => ({
+      ref: `attachment_${ordinal + 1}`,
+      displayName: typeof sourceFile!.sourceRecord.original?.displayName === "string"
+        ? sourceFile!.sourceRecord.original!.displayName!
+        : `Attachment ${ordinal + 1}`,
+      kind: sourceFile!.sourceRecord.kind,
+      session: sessions[ordinal]!
+    })));
   }
 
-  attachAgentTurnSource(jobId: string, sourceId: string): JobRecord {
+  attachAgentTurnSources(jobId: string, sourceIds: readonly string[], attachmentSetHash: string): JobRecord {
     const vaultPath = this.#requireActiveVaultPath();
     const snapshot = this.#readJobSnapshot(vaultPath, jobId);
     const jobFile = snapshot ? { path: snapshot.path, job: snapshot.job } : undefined;
-    const sourceRecordFile = readSourceRecordFile(vaultPath, sourceId);
+    const expectedRefs = jobFile?.job.inputRefs?.filter((ref) => ref.role === "agent_turn_source") ?? [];
+    const setRef = jobFile?.job.inputRefs?.find((ref) => ref.role === "agent_turn_attachment_set");
+    const sourceRecords = sourceIds.map((sourceId) => readSourceRecordFile(vaultPath, sourceId));
     if (
       !jobFile ||
       jobFile.job.class !== "agent_turn" ||
-      jobFile.job.sourceId !== sourceId ||
+      jobFile.job.sourceId !== sourceIds[0] ||
       !jobFile.job.conversationEventId ||
-      !sourceRecordFile ||
-      sourceRecordFile.sourceRecord.metadata.agentTurnJobId !== jobId
+      sourceIds.length < 1 ||
+      sourceIds.length !== expectedRefs.length ||
+      sourceIds.some((sourceId, ordinal) => expectedRefs[ordinal]?.id !== sourceId) ||
+      setRef?.checksum !== attachmentSetHash ||
+      sourceRecords.some((sourceRecordFile, ordinal) =>
+        !sourceRecordFile ||
+        sourceRecordFile.sourceRecord.metadata.agentTurnJobId !== jobId ||
+        sourceRecordFile.sourceRecord.metadata.agentTurnAttachmentOrdinal !== ordinal ||
+        sourceRecordFile.sourceRecord.metadata.agentTurnAttachmentSetHash !== attachmentSetHash ||
+        sourceRecordFile.sourceRecord.original?.checksum !== expectedRefs[ordinal]?.checksum)
     ) {
       throw new PigeDomainError(
         "agent_runtime.turn_binding_invalid",
@@ -850,6 +903,14 @@ export class JobsService {
       jobFile.job.stage !== "capturing_source"
     ) {
       if (jobFile.job.state === "queued") return jobFile.job;
+      if (
+        jobFile.job.state === "failed_retryable" &&
+        jobFile.job.retry?.lastRetryReason === "agent_turn.source_preservation_failed"
+      ) {
+        return this.#jobExecutionCoordinator(vaultPath).prepareRetry(snapshot!, {
+          message: "Agent turn source preservation completed on explicit retry; semantic processing is queued."
+        }).job;
+      }
       throw new PigeDomainError(
         "agent_runtime.turn_binding_invalid",
         "The unified Agent turn is not waiting for source preservation."
@@ -859,9 +920,38 @@ export class JobsService {
       reason: "source_preserved",
       proof: {
         kind: "source_preserved",
-        sourceId,
+        sourceId: sourceIds[0]!,
         conversationEventId: jobFile.job.conversationEventId
       },
+      clearStage: true,
+      message: "Agent turn source preservation completed; semantic processing is queued."
+    }).job;
+  }
+
+  attachAgentTurnSource(jobId: string, sourceId: string): JobRecord {
+    const job = this.readAgentTurnJob(jobId);
+    const attachmentSetHash = job?.inputRefs?.find((ref) => ref.role === "agent_turn_attachment_set")?.checksum;
+    if (attachmentSetHash) return this.attachAgentTurnSources(jobId, [sourceId], attachmentSetHash);
+    const vaultPath = this.#requireActiveVaultPath();
+    const snapshot = this.#readJobSnapshot(vaultPath, jobId);
+    const sourceRecordFile = readSourceRecordFile(vaultPath, sourceId);
+    if (
+      !snapshot ||
+      snapshot.job.class !== "agent_turn" ||
+      snapshot.job.sourceId !== sourceId ||
+      !snapshot.job.conversationEventId ||
+      !sourceRecordFile ||
+      sourceRecordFile.sourceRecord.metadata.agentTurnJobId !== jobId
+    ) {
+      throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The preserved source does not match its Agent turn.");
+    }
+    if (snapshot.job.state === "queued") return snapshot.job;
+    if (snapshot.job.state !== "waiting_dependency" || snapshot.job.stage !== "capturing_source") {
+      throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The Agent turn is not waiting for source preservation.");
+    }
+    return this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
+      reason: "source_preserved",
+      proof: { kind: "source_preserved", sourceId, conversationEventId: snapshot.job.conversationEventId },
       clearStage: true,
       message: "Agent turn source preservation completed; semantic processing is queued."
     }).job;
@@ -4902,7 +4992,7 @@ const AGENT_PROPOSAL_STAGED_CHECKPOINT = "agent_knowledge_proposal_staged";
 
 function assertAgentParseToolRequest(parentJob: JobRecord, request: AgentIngestParseToolRequest): void {
   if (
-    request.sourceRecord.id !== parentJob.sourceId ||
+    !isBoundAgentTurnSource(parentJob, request.sourceRecord.id) ||
     !/^[a-z][a-z0-9_]{2,63}$/u.test(request.toolId) ||
     !/^[a-z0-9][a-z0-9._-]{0,31}$/u.test(request.toolVersion) ||
     !isSha256(request.canonicalInputHash) ||
@@ -4916,7 +5006,7 @@ function assertAgentParseToolRequest(parentJob: JobRecord, request: AgentIngestP
 
 function assertAgentDatasetToolRequest(parentJob: JobRecord, request: AgentIngestDatasetToolRequest): void {
   if (
-    request.sourceRecord.id !== parentJob.sourceId ||
+    !isBoundAgentTurnSource(parentJob, request.sourceRecord.id) ||
     !isBoundedOpaqueToolCallId(request.toolCallId) ||
     !/^[a-z][a-z0-9_]{2,63}$/u.test(request.toolId) ||
     !/^[a-z0-9][a-z0-9._-]{0,31}$/u.test(request.toolVersion) ||
@@ -4931,7 +5021,7 @@ function assertAgentDatasetToolRequest(parentJob: JobRecord, request: AgentInges
 
 function assertAgentOcrToolRequest(parentJob: JobRecord, request: AgentIngestOcrToolRequest): void {
   if (
-    request.sourceRecord.id !== parentJob.sourceId ||
+    !isBoundAgentTurnSource(parentJob, request.sourceRecord.id) ||
     !/^[a-z][a-z0-9_]{2,63}$/u.test(request.toolId) ||
     !/^[a-z0-9][a-z0-9._-]{0,31}$/u.test(request.toolVersion) ||
     !isSha256(request.canonicalInputHash) ||
@@ -4941,6 +5031,28 @@ function assertAgentOcrToolRequest(parentJob: JobRecord, request: AgentIngestOcr
   ) {
     throw new PigeDomainError("agent_runtime.tool_binding_invalid", "The Agent OCR tool binding is invalid.");
   }
+}
+
+function collectAgentTurnSourceIds(job: JobRecord): readonly string[] {
+  const refs = (job.inputRefs ?? [])
+    .filter((ref) => ref.kind === "source" && ref.role === "agent_turn_source" && ref.id)
+    .map((ref) => ref.id!);
+  return refs.length > 0 ? refs : (job.sourceId ? [job.sourceId] : []);
+}
+
+function expectedSourceChecksumConflict(
+  job: JobRecord,
+  checksums: readonly string[] | undefined
+): boolean {
+  if (!checksums) return false;
+  const refs = (job.inputRefs ?? []).filter(
+    (ref) => ref.kind === "source" && ref.role === "agent_turn_source"
+  );
+  return refs.length !== checksums.length || refs.some((ref, index) => ref.checksum !== checksums[index]);
+}
+
+function isBoundAgentTurnSource(job: JobRecord, sourceId: string): boolean {
+  return collectAgentTurnSourceIds(job).includes(sourceId);
 }
 
 function ensureAgentParseToolJob(

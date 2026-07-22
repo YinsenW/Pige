@@ -17,6 +17,7 @@ import {
 import { verifyReadableSourceFile } from "../../apps/desktop/src/main/services/source-file-access";
 import type { SourceRecord } from "@pige/schemas";
 import type { VaultSummary } from "@pige/contracts";
+import { HomeAgentAttachmentService } from "../../apps/desktop/src/main/services/home-agent-attachment-service";
 
 const tempRoots: string[] = [];
 let bindingSequence = 0;
@@ -67,6 +68,45 @@ afterEach(() => {
 });
 
 describe("Agent-turn source preservation", () => {
+  it("adopts an exact ordered attachment set on retry without shadow durable records", async () => {
+    const { vaultPath, vault } = makeVault();
+    const inputRoot = path.dirname(vaultPath);
+    const filePaths = ["one.md", "two.txt", "three.pdf"].map((name, index) => {
+      const filePath = path.join(inputRoot, name);
+      fs.writeFileSync(filePath, `attachment-${index}`, "utf8");
+      return filePath;
+    });
+    const service = new HomeAgentAttachmentService(makeService(vaultPath, vault));
+    const prepared = await service.prepare(filePaths.map((internalPath) => ({
+      displayName: path.basename(internalPath),
+      internalPath
+    })));
+    const request = {
+      prepared,
+      turn: { schemaVersion: 1 as const, inputKind: "file_picker" as const, locale: "en" as const },
+      jobId: "job_20260722_multifile001",
+      firstSourceId: "src_20260722_multifile001"
+    };
+
+    const first = await service.preserve(request);
+    const retry = await service.preserve(request);
+
+    expect(retry).toEqual(first);
+    expect(first.sourceIds).toHaveLength(3);
+    expect(first.sourceIds.map((sourceId) => readSourceRecord(vaultPath, sourceId))).toEqual(
+      first.sourceIds.map((sourceId, ordinal) => expect.objectContaining({
+        id: sourceId,
+        metadata: expect.objectContaining({
+          agentTurnJobId: request.jobId,
+          agentTurnAttachmentOrdinal: ordinal,
+          agentTurnAttachmentSetHash: prepared.attachmentSetHash
+        })
+      }))
+    );
+    expect(findFileOptional(path.join(vaultPath, ".pige/jobs"), ".json")).toBeUndefined();
+    expect(findFileOptional(path.join(vaultPath, ".pige/conversations"), ".jsonl")).toBeUndefined();
+  });
+
   it("preserves a bound Markdown source without creating a shadow Job or conversation event", async () => {
     const { vaultPath, vault } = makeVault();
     const sourcePath = path.join(path.dirname(vaultPath), "research-note.md");

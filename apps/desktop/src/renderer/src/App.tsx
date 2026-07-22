@@ -33,6 +33,8 @@ import type {
   AgentTurnDraftEvent,
   AgentSubmitTurnResult,
   AgentRuntimeStatus,
+  CaptureFileRejection,
+  CaptureFileRejectionReason,
   AppHealth,
   BackupRestoreStatus,
   DiagnosticsHealth,
@@ -158,6 +160,7 @@ type ActiveAgentDraftBinding = {
 type OptimisticConversationTurn = {
   readonly clientTurnId: string;
   readonly text: string;
+  readonly attachmentNames: readonly string[];
   readonly conversationEventId?: string;
   readonly jobId?: string;
 };
@@ -942,10 +945,6 @@ export function App(): React.JSX.Element {
     statusOwner: "home" | "shell" = "shell"
   ): Promise<AgentSubmitTurnResult | undefined> => {
     if (files.length === 0) return undefined;
-    if (files.length > 1) {
-      if (statusOwner === "shell") setCaptureToast({ kind: "error", message: t("home.oneFilePerTurn") });
-      return undefined;
-    }
     if (!onboarding?.activeVault) {
       if (statusOwner === "shell") setCaptureToast({ kind: "error", message: t("home.createVaultBeforeDrop") });
       return undefined;
@@ -1101,11 +1100,7 @@ export function App(): React.JSX.Element {
     const files = Array.from(event.dataTransfer.files);
     const clientTurnId = createAgentClientTurnId();
     if (view === "home") {
-      setHomeFileDropRequest({
-        clientTurnId,
-        files,
-        ...(homeDraftText.trim() ? { text: homeDraftText } : {})
-      });
+      setHomeFileDropRequest({ clientTurnId, files });
       return;
     }
     void submitFiles(files, "file_drop", undefined, clientTurnId, "shell");
@@ -1618,8 +1613,8 @@ export function App(): React.JSX.Element {
             onFileDropRequestConsumed={(clientTurnId) => {
               setHomeFileDropRequest((current) => current?.clientTurnId === clientTurnId ? null : current);
             }}
-            onFilesSelected={(files, text, clientTurnId) =>
-              submitFiles(files, "file_picker", text, clientTurnId, "home")}
+            onFilesSelected={(files, inputKind, text, clientTurnId) =>
+              submitFiles(files, inputKind, text, clientTurnId, "home")}
             onCancelJob={cancelJob}
             onRetryJob={retryJob}
             onHomeStateChanged={refreshVaultState}
@@ -1806,7 +1801,11 @@ export function App(): React.JSX.Element {
           )}
         </SettingsSurface>
       ) : null}
-      {dropActive ? <div className="drop-overlay">{t("home.dropToCapture")}</div> : null}
+      {dropActive ? (
+        <div className="drop-overlay" role="status" aria-live="polite" aria-atomic="true">
+          {t("home.dropToCapture")}
+        </div>
+      ) : null}
       {captureToast ? (
         <div
           className={`capture-toast ${captureToast.kind}`}
@@ -4027,6 +4026,20 @@ function FirstRunPanel(props: FirstRunPanelProps): React.JSX.Element {
   );
 }
 
+function attachmentRejectionMessageKey(reason: CaptureFileRejectionReason): string {
+  switch (reason) {
+    case "empty_path": return "home.attachmentRejection.emptyPath";
+    case "missing": return "home.attachmentRejection.missing";
+    case "not_regular_file": return "home.attachmentRejection.notRegularFile";
+    case "unsupported_type": return "home.attachmentRejection.unsupportedType";
+    case "duplicate": return "home.attachmentRejection.duplicate";
+    case "too_many_files": return "home.attachmentRejection.tooManyFiles";
+    case "file_too_large": return "home.attachmentRejection.fileTooLarge";
+    case "total_size_exceeded": return "home.attachmentRejection.totalSizeExceeded";
+    case "copy_failed": return "home.attachmentRejection.copyFailed";
+  }
+}
+
 function HomeComposer(props: {
   readonly activeVault: VaultSummary | undefined;
   readonly agentRuntimeStatus: AgentRuntimeStatus | null;
@@ -4041,6 +4054,7 @@ function HomeComposer(props: {
   readonly onFileDropRequestConsumed: (clientTurnId: string) => void;
   readonly onFilesSelected: (
     files: readonly File[],
+    inputKind: "file_drop" | "file_picker",
     text: string | undefined,
     clientTurnId: string
   ) => Promise<AgentSubmitTurnResult | undefined>;
@@ -4077,6 +4091,12 @@ function HomeComposer(props: {
   const [voiceLevels, setVoiceLevels] = useState<readonly number[]>([]);
   const [voiceCanOpenSystemSettings, setVoiceCanOpenSystemSettings] = useState(false);
   const [voiceAssetInstallProgress, setVoiceAssetInstallProgress] = useState<number | undefined>(undefined);
+  const [stagedComposerFiles, setStagedComposerFiles] = useState<readonly File[]>([]);
+  const [attachmentSubmissionNotice, setAttachmentSubmissionNotice] = useState<{
+    readonly acceptedCount: number;
+    readonly rejectedFiles: readonly CaptureFileRejection[];
+  } | null>(null);
+  const [composerSubmitActive, setComposerSubmitActive] = useState(false);
   const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
@@ -4093,6 +4113,11 @@ function HomeComposer(props: {
   const composerCompositionRaceRef = useRef(false);
   const composerCompositionTimerRef = useRef<number | undefined>(undefined);
   const draftRevisionRef = useRef(0);
+  const stagedAttachmentRevisionRef = useRef(0);
+  const stagedComposerAttemptRef = useRef<{
+    readonly key: string;
+    readonly clientTurnId: string;
+  } | null>(null);
   const noteOpenSequence = useRef(0);
   const inlineReferenceSequence = useRef(0);
   const selectedNoteRef = useRef<NoteRenderResult | null>(selectedNote);
@@ -4766,6 +4791,9 @@ function HomeComposer(props: {
     setConversationTimeline(undefined);
     locallyCompletedConversationTailRef.current = null;
     setOptimisticConversationTurns([]);
+    stagedAttachmentRevisionRef.current += 1;
+    stagedComposerAttemptRef.current = null;
+    setStagedComposerFiles([]);
     setLiveAnswerEventId(null);
     setAgentAnswer(null);
     clearAgentDraft();
@@ -4813,10 +4841,19 @@ function HomeComposer(props: {
   }, [props.activeVault?.vaultId, latestTurn?.jobId, latestTurn?.state]);
 
   const submitHomeInput = async (): Promise<void> => {
-    if (!text.trim() || !homeModelSendAvailable || modelSwitching || composerSubmitInFlightRef.current) return;
+    const hasText = text.trim().length > 0;
+    const hasAttachments = stagedComposerFiles.length > 0;
+    if (
+      (!hasText && !hasAttachments) ||
+      (!homeModelSendAvailable && !hasAttachments) ||
+      modelSwitching ||
+      composerSubmitInFlightRef.current
+    ) return;
     followConversationRef.current = true;
     composerSubmitInFlightRef.current = true;
+    setComposerSubmitActive(true);
     setCaptureError(null);
+    setAttachmentSubmissionNotice(null);
     setAgentError(null);
     setAgentRunState("idle");
     setAgentModelUsage("none");
@@ -4825,14 +4862,31 @@ function HomeComposer(props: {
     inlineReferenceSequence.current += 1;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
-    const turnText = text;
+    const submittedFiles = stagedComposerFiles;
+    const submittedText = text;
+    const turnText = hasText ? submittedText : props.t("home.organizeAttachedFilesIntent");
+    const sourceDisplayName = submittedFiles[0]?.name ?? null;
     const submittedVaultId = activeVaultIdRef.current;
     const submittedDraftRevision = draftRevisionRef.current;
     const clearedDraftRevision = submittedDraftRevision + 1;
-    const clientTurnId = createAgentClientTurnId();
+    const submittedAttachmentRevision = stagedAttachmentRevisionRef.current;
+    const clearedAttachmentRevision = submittedAttachmentRevision + 1;
+    const attemptKey = composerAttemptKey(submittedText, submittedFiles);
+    const clientTurnId = stagedComposerAttemptRef.current?.key === attemptKey
+      ? stagedComposerAttemptRef.current.clientTurnId
+      : createAgentClientTurnId();
+    stagedComposerAttemptRef.current = { key: attemptKey, clientTurnId };
+    if (submittedFiles.length > 0) {
+      setActiveSourceTurn({ clientTurnId, jobId: null, pending: true, sourceDisplayName });
+    }
     draftRevisionRef.current = clearedDraftRevision;
+    stagedAttachmentRevisionRef.current = clearedAttachmentRevision;
     props.onDraftChange("");
-    setOptimisticConversationTurns((current) => [...current, { clientTurnId, text: turnText }]);
+    setStagedComposerFiles([]);
+    setOptimisticConversationTurns((current) => [
+      ...current,
+      { clientTurnId, text: turnText, attachmentNames: submittedFiles.map((file) => file.name) }
+    ]);
     setAgentError(null);
     setAgentAnswer(null);
     setLiveAnswerEventId(null);
@@ -4845,24 +4899,49 @@ function HomeComposer(props: {
       : undefined;
     beginAgentDraft(clientTurnId);
     try {
-      const submission = window.pige.agent.submitTurn({
-        schemaVersion: 1,
-        text: turnText,
-        inputKind: followUpConversation ? "follow_up" : classifyTextTransportKind(turnText),
-        objective: "auto",
-        locale: props.locale,
-        clientTurnId,
-        ...(followUpConversation ? {
-          conversationId: followUpConversation.conversationId,
-          expectedTailEventId: followUpConversation.tailEventId
-        } : {})
-      });
+      const submission = submittedFiles.length > 0
+        ? props.onFilesSelected(
+            submittedFiles,
+            "file_picker",
+            hasText ? submittedText : undefined,
+            clientTurnId
+          )
+        : window.pige.agent.submitTurn({
+            schemaVersion: 1,
+            text: turnText,
+            inputKind: followUpConversation ? "follow_up" : classifyTextTransportKind(turnText),
+            objective: "auto",
+            locale: props.locale,
+            clientTurnId,
+            ...(followUpConversation ? {
+              conversationId: followUpConversation.conversationId,
+              expectedTailEventId: followUpConversation.tailEventId
+            } : {})
+          });
       void submission.catch(() => undefined);
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-      await props.onHomeStateChanged().catch(() => undefined);
+      if (submittedFiles.length === 0) {
+        await props.onHomeStateChanged().catch(() => undefined);
+      }
       const outcome = await submission;
+      if (!outcome) throw new Error("Attachment submission did not start.");
+      if (outcome.rejectedFiles?.length) {
+        setAttachmentSubmissionNotice({
+          acceptedCount: outcome.sourceIds.length,
+          rejectedFiles: outcome.rejectedFiles
+        });
+      }
       const durableUserTurnExists = outcome.state !== "failed" || Boolean(outcome.conversationEventId);
       if (durableUserTurnExists) {
+        stagedComposerAttemptRef.current = null;
+        if (submittedFiles.length > 0) {
+          setActiveSourceTurn({
+            clientTurnId,
+            jobId: outcome.jobId ?? null,
+            pending: false,
+            sourceDisplayName
+          });
+        }
         setOptimisticConversationTurns((current) => current.map((turn) =>
           turn.clientTurnId === clientTurnId
             ? {
@@ -4873,11 +4952,16 @@ function HomeComposer(props: {
             : turn
         ));
       } else {
+        if (submittedFiles.length > 0) setActiveSourceTurn(null);
         setOptimisticConversationTurns((current) => current.filter((turn) => turn.clientTurnId !== clientTurnId));
       }
       if (!durableUserTurnExists && draftRevisionRef.current === clearedDraftRevision) {
         draftRevisionRef.current += 1;
-        props.onDraftChange(turnText);
+        props.onDraftChange(submittedText);
+      }
+      if (!durableUserTurnExists && stagedAttachmentRevisionRef.current === clearedAttachmentRevision) {
+        stagedAttachmentRevisionRef.current += 1;
+        setStagedComposerFiles(submittedFiles);
       }
       if (outcome.state === "completed") {
         const completedAt = new Date().toISOString();
@@ -4948,6 +5032,15 @@ function HomeComposer(props: {
       const durableUserTurnExists = durableConversationEventId !== undefined;
       clearAgentDraft();
       if (durableUserTurnExists) {
+        stagedComposerAttemptRef.current = null;
+        if (submittedFiles.length > 0) {
+          setActiveSourceTurn({
+            clientTurnId,
+            jobId: durableJobId ?? null,
+            pending: durableJobId === undefined,
+            sourceDisplayName
+          });
+        }
         setOptimisticConversationTurns((current) => current.map((turn) =>
           turn.clientTurnId === clientTurnId
             ? {
@@ -4958,10 +5051,15 @@ function HomeComposer(props: {
             : turn
         ));
       } else {
+        if (submittedFiles.length > 0) setActiveSourceTurn(null);
         setOptimisticConversationTurns((current) => current.filter((turn) => turn.clientTurnId !== clientTurnId));
         if (draftRevisionRef.current === clearedDraftRevision) {
           draftRevisionRef.current += 1;
-          props.onDraftChange(turnText);
+          props.onDraftChange(submittedText);
+        }
+        if (stagedAttachmentRevisionRef.current === clearedAttachmentRevision) {
+          stagedAttachmentRevisionRef.current += 1;
+          setStagedComposerFiles(submittedFiles);
         }
       }
       setAgentError({
@@ -4976,6 +5074,7 @@ function HomeComposer(props: {
       void refreshConversation();
     } finally {
       composerSubmitInFlightRef.current = false;
+      setComposerSubmitActive(false);
     }
   };
 
@@ -4995,11 +5094,11 @@ function HomeComposer(props: {
     if (
       event.repeat ||
       composerSubmitInFlightRef.current ||
-      !homeModelSendAvailable ||
+      (!homeModelSendAvailable && stagedComposerFiles.length === 0) ||
       modelSwitching ||
       agentRunState === "accepted" ||
       agentRunState === "running" ||
-      !text.trim()
+      (!text.trim() && stagedComposerFiles.length === 0)
     ) {
       return;
     }
@@ -5008,11 +5107,13 @@ function HomeComposer(props: {
 
   const submitHomeFiles = async (
     files: readonly File[],
+    inputKind: "file_drop" | "file_picker",
     submittedText: string | undefined,
     clientTurnId: string
   ): Promise<void> => {
     const sourceDisplayName = files[0]?.name ?? null;
     setCaptureError(null);
+    setAttachmentSubmissionNotice(null);
     setAgentAnswer(null);
     setLiveAnswerEventId(null);
     setAgentError(null);
@@ -5021,12 +5122,18 @@ function HomeComposer(props: {
     setActiveSourceTurn({ clientTurnId, jobId: null, pending: true, sourceDisplayName });
     beginAgentDraft(clientTurnId);
     try {
-      const result = await props.onFilesSelected(files, submittedText, clientTurnId);
+      const result = await props.onFilesSelected(files, inputKind, submittedText, clientTurnId);
       clearAgentDraft();
       if (!result) {
         setActiveSourceTurn(null);
         setAgentRunState("failed");
         return;
+      }
+      if (result.rejectedFiles?.length) {
+        setAttachmentSubmissionNotice({
+          acceptedCount: result.sourceIds.length,
+          rejectedFiles: result.rejectedFiles
+        });
       }
       setActiveSourceTurn({
         clientTurnId,
@@ -5040,7 +5147,6 @@ function HomeComposer(props: {
         setAgentAnswer(result.answer);
         setLiveAnswerEventId(result.tailEventId);
         setAgentError(null);
-        props.onDraftChange("");
       } else {
         setAgentAnswer(null);
         setAgentError(result.error);
@@ -5055,11 +5161,21 @@ function HomeComposer(props: {
 
   useEffect(() => {
     const request = props.fileDropRequest;
-    if (!request || handledFileDropClientTurnIdRef.current === request.clientTurnId) return;
+    if (
+      !request ||
+      composerSubmitInFlightRef.current ||
+      handledFileDropClientTurnIdRef.current === request.clientTurnId
+    ) return;
     handledFileDropClientTurnIdRef.current = request.clientTurnId;
+    composerSubmitInFlightRef.current = true;
+    setComposerSubmitActive(true);
     props.onFileDropRequestConsumed(request.clientTurnId);
-    void submitHomeFiles(request.files, request.text, request.clientTurnId);
-  }, [props.fileDropRequest?.clientTurnId]);
+    void submitHomeFiles(request.files, "file_drop", request.text, request.clientTurnId)
+      .finally(() => {
+        composerSubmitInFlightRef.current = false;
+        setComposerSubmitActive(false);
+      });
+  }, [props.fileDropRequest?.clientTurnId, composerSubmitActive]);
 
   const retryLatestConversationTurn = async (): Promise<void> => {
     if (!retryableLatestTurn) return;
@@ -5372,6 +5488,13 @@ function HomeComposer(props: {
               key={turn.clientTurnId}
             >
               <span className="conversation-message-role visually-hidden">{props.t("home.userMessage")}</span>
+              {turn.attachmentNames.length > 0 ? (
+                <div className="conversation-attachment-list" aria-label={props.t("home.attachedFiles")}>
+                  {turn.attachmentNames.map((name, index) => (
+                    <span className="conversation-attachment" key={`${name}-${index}`}>{name}</span>
+                  ))}
+                </div>
+              ) : null}
               <ConversationMarkdown markdown={turn.text} t={props.t} />
             </article>
           ))}
@@ -5531,6 +5654,51 @@ function HomeComposer(props: {
           />
         ) : (
           <>
+        {stagedComposerFiles.length > 0 ? (
+          <div className="attachment-strip visible" aria-label={props.t("home.attachedFiles")}>
+            <div className="attachment-list">
+              {stagedComposerFiles.map((file, index) => (
+                <div className="attachment-chip" key={`${file.name}-${file.size}-${file.lastModified}-${index}`}>
+                  <span>{file.name}</span>
+                  <button
+                    className="chip-remove"
+                    type="button"
+                    aria-label={`${props.t("home.removeAttachment")} ${file.name}`}
+                    onClick={() => {
+                      stagedAttachmentRevisionRef.current += 1;
+                      stagedComposerAttemptRef.current = null;
+                      setAttachmentSubmissionNotice(null);
+                      setStagedComposerFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
+                      window.requestAnimationFrame(() => composerInputRef.current?.focus({ preventScroll: true }));
+                    }}
+                  >
+                    <PigeIcon name="close" size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {attachmentSubmissionNotice ? (
+          <section
+            className="attachment-submission-notice"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <strong>{props.t(attachmentSubmissionNotice.acceptedCount > 0
+              ? "home.attachmentsPartiallyAccepted"
+              : "home.attachmentsRejected")}</strong>
+            <ul>
+              {attachmentSubmissionNotice.rejectedFiles.map((rejection, index) => (
+                <li key={`${rejection.displayName}-${rejection.reason}-${index}`}>
+                  <span>{rejection.displayName}</span>
+                  <small>{props.t(attachmentRejectionMessageKey(rejection.reason))}</small>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
         <textarea
           ref={composerInputRef}
           data-home-composer="true"
@@ -5540,6 +5708,8 @@ function HomeComposer(props: {
           value={text}
           onChange={(event) => {
             draftRevisionRef.current += 1;
+            stagedComposerAttemptRef.current = null;
+            setAttachmentSubmissionNotice(null);
             props.onDraftChange(event.target.value);
           }}
           onCompositionStart={() => {
@@ -5658,12 +5828,18 @@ function HomeComposer(props: {
             ref={fileInputRef}
             className="visually-hidden"
             type="file"
+            multiple
             accept=".md,.markdown,.txt,.pdf,.docx,.pptx,.csv,.xlsx,.sqlite,.sqlite3,.db,.png,.jpg,.jpeg,.webp,.gif,.tif,.tiff,.bmp,text/plain,text/markdown,image/*"
             onChange={(event) => {
               const files = Array.from(event.currentTarget.files ?? []);
               event.currentTarget.value = "";
-              const clientTurnId = createAgentClientTurnId();
-              void submitHomeFiles(files, text, clientTurnId);
+              if (files.length === 0) return;
+              stagedAttachmentRevisionRef.current += 1;
+              stagedComposerAttemptRef.current = null;
+              setAttachmentSubmissionNotice(null);
+              setStagedComposerFiles((current) => [...current, ...files]);
+              setCaptureError(null);
+              window.requestAnimationFrame(() => composerInputRef.current?.focus({ preventScroll: true }));
             }}
           />
           <button
@@ -5679,8 +5855,8 @@ function HomeComposer(props: {
           <button
             className="round-button"
             type="button"
-            title={props.t("home.attachFile")}
-            aria-label={props.t("home.attachFile")}
+            title={props.t("home.attachToMessage")}
+            aria-label={props.t("home.attachToMessage")}
             onClick={() => fileInputRef.current?.click()}
           >
             <PigeIcon name="attach" size={17} />
@@ -5689,8 +5865,14 @@ function HomeComposer(props: {
             type="button"
             className="composer-send"
             aria-label={props.t("home.send")}
-            title={!homeModelSendAvailable ? props.t("home.modelUnavailable") : undefined}
-            disabled={!text.trim() || !homeModelSendAvailable || modelSwitching || effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running"}
+            title={!homeModelSendAvailable && stagedComposerFiles.length === 0 ? props.t("home.modelUnavailable") : undefined}
+            disabled={
+              (!text.trim() && stagedComposerFiles.length === 0) ||
+              (!homeModelSendAvailable && stagedComposerFiles.length === 0) ||
+              modelSwitching ||
+              effectiveAgentRunState === "accepted" ||
+              effectiveAgentRunState === "running"
+            }
             onClick={() => void submitHomeInput()}
           >
             <PigeIcon
@@ -5793,6 +5975,13 @@ function createAgentClientTurnId(now = new Date()): string {
   ].join("");
   const opaqueId = window.crypto.randomUUID().replaceAll("-", "").toLowerCase();
   return `turn_${date}_${opaqueId}`;
+}
+
+function composerAttemptKey(text: string, files: readonly File[]): string {
+  return JSON.stringify([
+    text,
+    files.map((file) => [file.name, file.size, file.type, file.lastModified])
+  ]);
 }
 
 function createNoteReferenceRequestId(): string {

@@ -402,6 +402,117 @@ describe("jobs service", () => {
     expect(jobs.readAgentTurnJob(created.id)?.operationIds).toEqual(["op_20260714_staleturn1"]);
   });
 
+  it("seals one ordered attachment manifest into the parent Agent Job identity", () => {
+    const { vaultPath, vault } = makeVault();
+    const jobs = new JobsService({ current: () => vault, activeVaultPath: () => vaultPath });
+    const attachmentSetHash = `sha256:${"a".repeat(64)}`;
+    const sourceChecksums = ["b", "c", "d"].map((value) => `sha256:${value.repeat(64)}`);
+    const request = {
+      conversationEventId: "evt_20260722_multifile001",
+      conversationLocator: ".pige/conversations/2026/07/conv_20260722.jsonl",
+      inputHash: `sha256:${"e".repeat(64)}`,
+      sourceExpected: true,
+      attachmentCount: 3,
+      attachmentSetHash,
+      sourceChecksums
+    };
+
+    const created = jobs.createAgentTurnJob(request);
+    const sourceRefs = created.inputRefs?.filter((ref) => ref.role === "agent_turn_source") ?? [];
+
+    expect(created).toMatchObject({
+      state: "waiting_dependency",
+      stage: "capturing_source",
+      sourceId: sourceRefs[0]?.id
+    });
+    expect(sourceRefs.map((ref) => ({ id: ref.id, locator: ref.locator, checksum: ref.checksum }))).toEqual([
+      { id: expect.stringMatching(/^src_20260722_/u), locator: "attachment_1", checksum: sourceChecksums[0] },
+      { id: expect.stringMatching(/^src_20260722_/u), locator: "attachment_2", checksum: sourceChecksums[1] },
+      { id: expect.stringMatching(/^src_20260722_/u), locator: "attachment_3", checksum: sourceChecksums[2] }
+    ]);
+    expect(created.inputRefs).toEqual(expect.arrayContaining([{
+      kind: "tool",
+      id: "pige_agent_attachment_set",
+      checksum: attachmentSetHash,
+      role: "agent_turn_attachment_set"
+    }]));
+    expect(jobs.createAgentTurnJob(request)).toEqual(created);
+    expect(() => jobs.createAgentTurnJob({
+      ...request,
+      sourceChecksums: [sourceChecksums[0]!, sourceChecksums[1]!, `sha256:${"f".repeat(64)}`]
+    })).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_conflict" }));
+  });
+
+  it("converges a partial preservation failure and adopts the same parent on explicit retry", async () => {
+    const { vaultPath, vault } = makeVault();
+    const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
+    const jobs = new JobsService(vaults);
+    const capture = new CaptureService(vaults);
+    const inputRoot = path.dirname(vaultPath);
+    const filePaths = ["first.md", "second.txt"].map((name) => {
+      const filePath = path.join(inputRoot, name);
+      fs.writeFileSync(filePath, name);
+      return filePath;
+    });
+    const sourceChecksums = filePaths.map((filePath) =>
+      `sha256:${createHash("sha256").update(fs.readFileSync(filePath)).digest("hex")}`
+    );
+    const attachmentSetHash = `sha256:${"a".repeat(64)}`;
+    const request = {
+      conversationEventId: "evt_20260722_partialcopy1",
+      conversationLocator: ".pige/conversations/2026/07/conv_20260722.jsonl",
+      inputHash: `sha256:${"b".repeat(64)}`,
+      sourceExpected: true,
+      attachmentCount: 2,
+      attachmentSetHash,
+      sourceChecksums
+    };
+    const created = jobs.createAgentTurnJob(request);
+    const sourceIds = (created.inputRefs ?? [])
+      .filter((ref) => ref.kind === "source" && ref.role === "agent_turn_source")
+      .map((ref) => requireValue(ref.id));
+
+    await capture.preserveFilesForAgentTurn({
+      filePaths: [filePaths[0]!],
+      inputKind: "file_picker",
+      userIntent: "unknown",
+      locale: "en"
+    }, {
+      jobId: created.id,
+      sourceId: sourceIds[0]!,
+      inputChecksum: sourceChecksums[0],
+      ordinal: 0,
+      attachmentSetHash
+    });
+    expect(jobs.failAgentTurnSourcePreservation(created.id)).toMatchObject({
+      id: created.id,
+      state: "failed_retryable",
+      retry: { lastRetryReason: "agent_turn.source_preservation_failed", requiresUserAction: true }
+    });
+    expect(jobs.createAgentTurnJob(request).id).toBe(created.id);
+
+    for (const [ordinal, filePath] of filePaths.entries()) {
+      await capture.preserveFilesForAgentTurn({
+        filePaths: [filePath],
+        inputKind: "file_picker",
+        userIntent: "unknown",
+        locale: "en"
+      }, {
+        jobId: created.id,
+        sourceId: sourceIds[ordinal]!,
+        inputChecksum: sourceChecksums[ordinal],
+        ordinal,
+        attachmentSetHash
+      });
+    }
+    expect(jobs.attachAgentTurnSources(created.id, sourceIds, attachmentSetHash)).toMatchObject({
+      id: created.id,
+      state: "queued"
+    });
+    expect(listFiles(path.join(vaultPath, ".pige", "source-records")))
+      .toHaveLength(2);
+  });
+
   it("creates current-note Jobs with an atomic scope ref and never adopts a missing legacy binding", () => {
     const { vaultPath, vault } = makeVault();
     const vaults = { current: () => vault, activeVaultPath: () => vaultPath };

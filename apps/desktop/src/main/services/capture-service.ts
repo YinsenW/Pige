@@ -34,6 +34,9 @@ export interface SourceFetchPort {
 export interface AgentTurnFilePreservationBinding {
   readonly jobId: string;
   readonly sourceId: string;
+  readonly inputChecksum?: string;
+  readonly ordinal?: number;
+  readonly attachmentSetHash?: string;
 }
 
 export interface AgentTurnUrlPreservationBinding {
@@ -88,6 +91,19 @@ const FILE_KIND_BY_EXTENSION = new Map<string, SourceKind>([
   [".tiff", "image_file"],
   [".bmp", "image_file"]
 ]);
+
+export function supportedFileSourceKind(filePath: string): SourceKind | undefined {
+  return FILE_KIND_BY_EXTENSION.get(path.extname(filePath).toLowerCase());
+}
+
+export function safeAttachmentDisplayName(filePath: string): string {
+  const sanitized = Array.from(path.basename(filePath).normalize("NFKC"))
+    .filter((character) => !/[\\/\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(character))
+    .join("")
+    .trim()
+    .slice(0, 160);
+  return sanitized || "Unknown file";
+}
 
 export class CaptureService {
   readonly #vaults: CaptureVaultPort;
@@ -153,6 +169,9 @@ export class CaptureService {
     if (
       (!/^job_\d{8}_[a-z0-9]{8,}$/u.test(binding.jobId) ||
         !/^src_\d{8}_[a-z0-9]{8,}$/u.test(binding.sourceId) ||
+        (binding.inputChecksum !== undefined && !/^sha256:[a-f0-9]{64}$/u.test(binding.inputChecksum)) ||
+        (binding.ordinal !== undefined && (!Number.isInteger(binding.ordinal) || binding.ordinal < 0 || binding.ordinal > 7)) ||
+        (binding.attachmentSetHash !== undefined && !/^sha256:[a-f0-9]{64}$/u.test(binding.attachmentSetHash)) ||
         request.filePaths.length !== 1)
     ) {
       throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The source preservation binding is invalid.");
@@ -185,9 +204,9 @@ export class CaptureService {
     const rejectedFiles: CaptureFileRejection[] = [];
 
     for (const filePath of uniqueFilePaths) {
-      const displayName = path.basename(filePath) || "Unknown file";
+      const displayName = safeAttachmentDisplayName(filePath);
       const extension = path.extname(displayName).toLowerCase();
-      const sourceKind = FILE_KIND_BY_EXTENSION.get(extension);
+      const sourceKind = supportedFileSourceKind(displayName);
       if (!sourceKind) {
         rejectedFiles.push({ displayName, reason: "unsupported_type" });
         continue;
@@ -210,10 +229,20 @@ export class CaptureService {
       const sourceRecordPath = vaultRelativePath(".pige", "source-records", monthKey, `${sourceId}.json`);
 
       try {
+        if (adoptExistingAgentTurnFileSource(vaultPath, filePath, displayName, sourceKind, agentTurnBinding)) {
+          sourceIds.push(sourceId);
+          continue;
+        }
         const sourceStat = fs.statSync(filePath);
         const preserved = storageStrategy === "copy_to_source_library"
           ? await copyFileAtomicWithChecksum(filePath, resolveVaultPath(vaultPath, managedCopyPath))
           : await checksumFileWithSize(filePath);
+        if (agentTurnBinding.inputChecksum && preserved.checksum !== agentTurnBinding.inputChecksum) {
+          throw new PigeDomainError(
+            "agent_runtime.turn_binding_invalid",
+            "The selected attachment changed during source preservation."
+          );
+        }
         const sourceRecord: SourceRecord = CurrentSourceRecordSchema.parse({
           id: sourceId,
           kind: sourceKind,
@@ -241,6 +270,10 @@ export class CaptureService {
             locale: request.locale,
             captureId,
             agentTurnJobId: agentTurnBinding.jobId,
+            ...(agentTurnBinding.ordinal === undefined ? {} : { agentTurnAttachmentOrdinal: agentTurnBinding.ordinal }),
+            ...(agentTurnBinding.attachmentSetHash === undefined ? {} : {
+              agentTurnAttachmentSetHash: agentTurnBinding.attachmentSetHash
+            }),
             originalExtension: extension,
             parserStatus: isTextLikeFileSource(sourceKind)
               ? "text_ready"
@@ -273,6 +306,56 @@ export class CaptureService {
     };
   }
 
+}
+
+function adoptExistingAgentTurnFileSource(
+  vaultPath: string,
+  filePath: string,
+  displayName: string,
+  sourceKind: SourceKind,
+  binding: AgentTurnFilePreservationBinding
+): boolean {
+  const dateKey = binding.sourceId.slice(4, 12);
+  const sourceRecordPath = resolveVaultPath(
+    vaultPath,
+    vaultRelativePath(
+      ".pige",
+      "source-records",
+      `${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}`,
+      `${binding.sourceId}.json`
+    )
+  );
+  if (!fs.existsSync(sourceRecordPath)) return false;
+  const parsed = SourceRecordSchema.safeParse(JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")));
+  const existing = parsed.success ? parsed.data : undefined;
+  if (
+    !existing ||
+    existing.id !== binding.sourceId ||
+    existing.kind !== sourceKind ||
+    existing.semanticOrchestration !== "agent_turn" ||
+    existing.metadata.agentTurnJobId !== binding.jobId ||
+    existing.metadata.agentTurnAttachmentOrdinal !== binding.ordinal ||
+    existing.metadata.agentTurnAttachmentSetHash !== binding.attachmentSetHash ||
+    !existing.original ||
+    existing.original.path !== filePath ||
+    existing.original.displayName !== displayName ||
+    (binding.inputChecksum !== undefined && existing.original.checksum !== binding.inputChecksum)
+  ) {
+    throw new PigeDomainError(
+      "agent_runtime.turn_binding_invalid",
+      "An existing Agent attachment source does not match the submitted turn."
+    );
+  }
+  if (existing.managedCopy) {
+    const managedCopyPath = resolveVaultPath(vaultPath, existing.managedCopy.path);
+    if (!fs.existsSync(managedCopyPath)) {
+      throw new PigeDomainError(
+        "agent_runtime.turn_binding_invalid",
+        "The existing managed attachment copy is unavailable."
+      );
+    }
+  }
+  return true;
 }
 
 function persistUrlSnapshot(input: {

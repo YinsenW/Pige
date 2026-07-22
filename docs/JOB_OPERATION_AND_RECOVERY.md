@@ -108,7 +108,7 @@ Required v0.1 job classes:
 | `ocr` | screenshot or rendered PDF page OCR | OCR artifact, confidence metadata | Yes where tool supports | Yes |
 | `dataset_import` | Pi-selected CSV/XLSX/SQLite materialization | Dataset manifest/schema/revision/payload and operation | Yes before bundle commit | Yes |
 | `agent_ingest` | typed `legacy_agent_ingest` compatibility/recovery only | source page, wiki pages, proposal/operation | During model/tool stages | Yes |
-| `agent_turn` | unified Home text or one preserved attachment | conversation events, answer/source/proposal refs | During model/tool stages | Yes |
+| `agent_turn` | unified Home text and bounded preserved attachments | conversation events, answer/source/proposal refs | During model/tool stages | Yes |
 | `retrieval_query` | legacy Home grounded-answer record | conversation event, optional saved page | Yes | Usually yes |
 | `index_rebuild` | FTS/vector/graph rebuild | SQLite/index files | Yes | Yes |
 | `backup` | create backup zip | backup archive and manifest | Yes before finalization | Yes |
@@ -122,10 +122,12 @@ Required v0.1 job classes:
 exact values. Aliases such as `capture_preserve`, `parse_source`, `backup_create`, or
 `restore_validate` are forbidden.
 
-`agent_turn` atomically binds bounded user event, Job and source/current-note refs. Exact-tail
-follow-up/adoption reject missing, duplicate or drifted refs and adopt valid output without
-another model call. Short chat creates no Source Record; one attachment reconciles preserve
-crashes; legacy reads remain while multi-source/cross-process recovery stays open.
+`agent_turn` atomically binds the exact authored user event, one parent Job and ordered
+source/current-note refs. Picker staging is not Job state. Main acknowledges durable
+acceptance before renderer clearing; rejection leaves the composer unchanged. Exact
+client-turn retry adopts the parent/event/source refs and cannot duplicate preservation.
+Short chat creates no Source Record. Multi-attachment preservation checkpoints or child
+executors are reliability ownership only and never a Host-selected semantic ingest chain.
 
 Reader selection resolves render endpoints to checksummed page/UTF-8-span/content/action refs;
 body is reread, never copied into Job/instruction. Recovery rejects drift and adopts existing

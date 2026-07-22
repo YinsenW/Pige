@@ -6,6 +6,9 @@ const rendererRoot = path.resolve("apps/desktop/src/renderer/src");
 const appSource = fs.readFileSync(path.join(rendererRoot, "App.tsx"), "utf8");
 const cssSource = fs.readFileSync(path.join(rendererRoot, "styles/app.css"), "utf8");
 const iconSource = fs.readFileSync(path.join(rendererRoot, "components/PigeIcon.tsx"), "utf8");
+const enMessages = JSON.parse(
+  fs.readFileSync(path.join(rendererRoot, "locales/en/messages.json"), "utf8")
+) as Record<string, string>;
 
 describe("full production UI renderer contract", () => {
   it("uses the reviewed pane dimensions and corrected resident/overlay breakpoints", () => {
@@ -131,6 +134,19 @@ describe("full production UI renderer contract", () => {
     expect(cssSource).toContain("min-height: 48px;");
     expect(appSource).toContain('onClick={() => fileInputRef.current?.click()}');
     expect(appSource).toContain('name="attach"');
+    expect(appSource).toContain('props.t("home.attachToMessage")');
+    expect(appSource).toContain('className="attachment-chip"');
+    expect(appSource).toContain("multiple");
+    expect(appSource).toContain('className="attachment-submission-notice"');
+    expect(appSource).toContain("attachmentRejectionMessageKey(rejection.reason)");
+    expect(appSource).not.toContain('props.t("home.oneFilePerTurn")');
+    expect(appSource).toContain('submitHomeFiles(request.files, "file_drop"');
+    expect(appSource).toContain('"file_picker"');
+    expect(appSource).toContain('className="drop-overlay" role="status" aria-live="polite" aria-atomic="true"');
+    expect(enMessages["home.dropToCapture"]).toBe("Release to send these files now");
+    expect(enMessages["home.attachToMessage"]).toBe("Attach to this message");
+    expect(cssSource).toContain(".attachment-strip.visible");
+    expect(cssSource).toContain(".conversation-attachment-list");
     expect(appSource).toContain('? "loading" : "send"');
     expect(appSource).toContain("onKeyDown={handleComposerKeyDown}");
   });

@@ -68,6 +68,9 @@ import {
   AddPresetProviderRequestSchema,
   AddManualModelRequestSchema,
   RefreshProviderModelsRequestSchema,
+  AgentSubmitTurnIpcPayloadSchema,
+  AgentSubmitTurnRequestSchema,
+  AgentSubmitTurnResultSchema,
   UpdateProviderCredentialRequestSchema,
   DeleteProviderRequestSchema,
   NoteResolveInlineReferenceRequestSchema,
@@ -118,6 +121,7 @@ import { BackupCoordinatorService } from "./services/backup-coordinator-service"
 import { BackupRestoreService } from "./services/backup-service";
 import { CoalescedBatchDrainer } from "./services/background-job-drainer";
 import { CaptureService } from "./services/capture-service";
+import { HomeAgentAttachmentService } from "./services/home-agent-attachment-service";
 import { DiagnosticsService } from "./services/diagnostics-service";
 import { DatasetIngestWorkerService } from "./services/dataset-ingest-worker-service";
 import { DatasetQueryService } from "./services/dataset-query-service";
@@ -133,7 +137,6 @@ import {
 import { LibraryService } from "./services/library-service";
 import { KnowledgeActivityService } from "./services/knowledge-activity-service";
 import {
-  AgentSubmitTurnRequestSchema,
   HomeAgentService,
   type HomeAgentDraftSnapshot
 } from "./services/home-agent-service";
@@ -208,6 +211,7 @@ let homeAgentUrlService: HomeAgentUrlService | undefined;
 let appearanceService: AppearanceService | undefined;
 let toolchainService: ToolchainService | undefined;
 let captureService: CaptureService | undefined;
+let homeAgentAttachmentService: HomeAgentAttachmentService | undefined;
 let jobsService: JobsService | undefined;
 let knowledgeActivityService: KnowledgeActivityService | undefined;
 let libraryService: LibraryService | undefined;
@@ -676,6 +680,13 @@ const getCaptureService = (): CaptureService => {
     captureService = new CaptureService(getVaultService());
   }
   return captureService;
+};
+
+const getHomeAgentAttachmentService = (): HomeAgentAttachmentService => {
+  if (!homeAgentAttachmentService) {
+    homeAgentAttachmentService = new HomeAgentAttachmentService(getCaptureService());
+  }
+  return homeAgentAttachmentService;
 };
 
 const getPermissionBrokerService = (): PermissionBrokerService => {
@@ -1383,24 +1394,15 @@ ipcMain.handle("agent.runtimeStatus", () => getAgentRuntimeService().runtimeStat
 ipcMain.handle("agent.conversation", (_event, request?: AgentConversationRequest) =>
   getHomeAgentService().conversation(request)
 );
-ipcMain.handle("agent.submitTurn", async (event, payload: {
-  readonly request: AgentSubmitTurnRequest;
-  readonly filePaths?: readonly string[];
-}) => {
-  const filePaths = payload.filePaths ?? [];
-  if (filePaths.length > 1) {
-    throw new PigeDomainError(
-      "agent_runtime.multiple_sources_not_ready",
-      "Submit one attachment per Agent turn in this runtime build."
-    );
-  }
-  const request = AgentSubmitTurnRequestSchema.parse(payload.request);
+ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
+  const parsedPayload = AgentSubmitTurnIpcPayloadSchema.parse(payload);
+  const attachments = parsedPayload.attachments;
+  const request = AgentSubmitTurnRequestSchema.parse(parsedPayload.request);
   const normalizedRequest: AgentSubmitTurnRequest = {
     schemaVersion: 1,
     inputKind: request.inputKind,
     locale: request.locale,
     ...(request.text === undefined ? {} : { text: request.text }),
-    ...(request.objective === undefined ? {} : { objective: request.objective }),
     ...(request.scope === undefined ? {} : { scope: request.scope }),
     ...(request.clientTurnId === undefined ? {} : { clientTurnId: request.clientTurnId }),
     ...(request.conversationId === undefined ? {} : { conversationId: request.conversationId }),
@@ -1414,8 +1416,10 @@ ipcMain.handle("agent.submitTurn", async (event, payload: {
   });
   const draftContext = { onDraft: (draft: HomeAgentDraftSnapshot) => draftPublisher.publish(draft) };
   try {
-    if (filePaths.length === 0) {
-      return await getHomeAgentService().submitTurn(normalizedRequest, draftContext);
+    if (attachments.length === 0) {
+      return AgentSubmitTurnResultSchema.parse(
+        await getHomeAgentService().submitTurn(normalizedRequest, draftContext)
+      );
     }
     if (request.inputKind !== "file_drop" && request.inputKind !== "file_picker") {
       throw new PigeDomainError(
@@ -1423,27 +1427,74 @@ ipcMain.handle("agent.submitTurn", async (event, payload: {
         "An attached source requires a file-drop or file-picker Agent input kind."
       );
     }
+    const attachmentService = getHomeAgentAttachmentService();
+    const preparedAttachments = await attachmentService.prepare(attachments);
+    if (preparedAttachments.entries.length === 0) {
+      return AgentSubmitTurnResultSchema.parse({
+        requestId: normalizedRequest.clientTurnId ?? `turn_${randomUUID().replaceAll("-", "")}`,
+        state: "failed",
+        modelUsage: "none",
+        sourceIds: [],
+        rejectedFiles: preparedAttachments.rejectedFiles,
+        error: {
+          code: "capture.file_rejected",
+          domain: "capture",
+          messageKey: "errors.agent_runtime.source_turn_failed",
+          retryable: true,
+          severity: "warning",
+          userAction: "retry"
+        }
+      });
+    }
     const home = getHomeAgentService();
-    const prepared = home.prepareSourceTurn(normalizedRequest);
+    const prepared = home.prepareSourceTurn(normalizedRequest, {
+      count: preparedAttachments.entries.length,
+      attachmentSetHash: preparedAttachments.attachmentSetHash,
+      inputChecksums: preparedAttachments.entries.map((entry) => entry.inputChecksum)
+    });
     try {
-      const preserved = await getCaptureService().preserveFilesForAgentTurn({
-        filePaths,
-        inputKind: request.inputKind === "file_drop" ? "file_drop" : "file_picker",
-        userIntent: request.objective === "capture" ? "capture" : "unknown",
-        locale: request.locale
-      }, {
+      const preserved = await attachmentService.preserve({
+        prepared: preparedAttachments,
+        turn: normalizedRequest,
         jobId: prepared.jobId,
-        sourceId: prepared.sourceId
+        firstSourceId: prepared.sourceIds[0]!
       });
       if (
-        preserved.status === "rejected" ||
-        preserved.sourceIds.length !== 1 ||
-        preserved.sourceIds[0] !== prepared.sourceId
+        preserved.status !== "preserved" ||
+        preserved.sourceIds.length !== prepared.sourceIds.length ||
+        preserved.sourceIds.some((sourceId, index) => sourceId !== prepared.sourceIds[index])
       ) {
         home.failPreparedSourceTurn(prepared);
-        throw new PigeDomainError("capture.file_rejected", "The selected attachment could not be preserved safely.");
+        return AgentSubmitTurnResultSchema.parse({
+          requestId: normalizedRequest.clientTurnId ?? `turn_${randomUUID().replaceAll("-", "")}`,
+          jobId: prepared.jobId,
+          conversationEventId: prepared.preservedTurn.event.id,
+          conversationId: prepared.preservedTurn.event.conversationId,
+          tailEventId: prepared.preservedTurn.event.id,
+          state: "failed",
+          modelUsage: "none",
+          sourceIds: preserved.sourceIds,
+          rejectedFiles: [
+            ...preparedAttachments.rejectedFiles,
+            ...preserved.rejectedFiles
+          ],
+          error: {
+            code: "capture.file_rejected",
+            domain: "capture",
+            messageKey: "errors.agent_runtime.source_turn_failed",
+            retryable: true,
+            severity: "warning",
+            userAction: "retry"
+          }
+        });
       }
-      return await home.submitPreparedSourceTurn(prepared, draftContext);
+      const result = await home.submitPreparedSourceTurn(prepared, draftContext);
+      return AgentSubmitTurnResultSchema.parse({
+        ...result,
+        ...(preparedAttachments.rejectedFiles.length > 0
+          ? { rejectedFiles: preparedAttachments.rejectedFiles }
+          : {})
+      });
     } catch (caught) {
       home.failPreparedSourceTurn(prepared);
       throw caught;
@@ -2125,6 +2176,7 @@ app.whenReady().then(async () => {
   ocrService = new OcrService();
   toolchainService = new ToolchainService(resolveToolchainManifestPath());
   captureService = new CaptureService(getVaultService());
+  homeAgentAttachmentService = new HomeAgentAttachmentService(captureService);
   jobsService = new JobsService(
     getVaultService(),
     getAgentIngestService(),

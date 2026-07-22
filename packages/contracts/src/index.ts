@@ -1,6 +1,10 @@
 import type { PigeClientCapabilityTier, PigeRuntimeKind } from "@pige/domain";
 import type {
+  AgentAttachmentCandidate,
+  AgentSubmitTurnIpcPayload,
   BoundaryVerification,
+  CaptureFileRejection,
+  CaptureFileRejectionReason,
   CloudBoundary,
   CloudSendPolicy,
   ChangeOperation,
@@ -77,6 +81,10 @@ import type {
 } from "@pige/schemas";
 
 export type {
+  AgentAttachmentCandidate,
+  AgentSubmitTurnIpcPayload,
+  CaptureFileRejection,
+  CaptureFileRejectionReason,
   DiagnosticError,
   PigeError,
   PigeErrorAction,
@@ -544,11 +552,6 @@ export interface SubmitFilesCaptureRequest {
   readonly locale: Locale;
 }
 
-export interface CaptureFileRejection {
-  readonly displayName: string;
-  readonly reason: "empty_path" | "missing" | "not_regular_file" | "unsupported_type" | "copy_failed";
-}
-
 export interface CaptureFilesSubmitResult {
   readonly status: "queued" | "partially_queued" | "rejected";
   readonly captureId: string;
@@ -968,6 +971,7 @@ export type AgentSubmitTurnResult =
       readonly state: "completed";
       readonly modelUsage: HomeAgentModelUsage;
       readonly sourceIds: readonly string[];
+      readonly rejectedFiles?: readonly CaptureFileRejection[];
       readonly answer: AgentTurnAnswer;
     }
   | {
@@ -979,6 +983,7 @@ export type AgentSubmitTurnResult =
       readonly state: "waiting";
       readonly modelUsage: HomeAgentModelUsage;
       readonly sourceIds: readonly string[];
+      readonly rejectedFiles?: readonly CaptureFileRejection[];
       readonly error: PigeErrorSummary;
     }
   | {
@@ -990,6 +995,7 @@ export type AgentSubmitTurnResult =
       readonly state: "failed";
       readonly modelUsage: HomeAgentModelUsage;
       readonly sourceIds: readonly string[];
+      readonly rejectedFiles?: readonly CaptureFileRejection[];
       readonly error: PigeErrorSummary;
     };
 

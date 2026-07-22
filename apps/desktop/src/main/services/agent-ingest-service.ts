@@ -687,35 +687,41 @@ export class AgentIngestService {
     hooks: AgentIngestHooks,
     datasetTerminal: boolean
   ): Promise<LegacyAgentSourceToolSession> {
+    const boundCatalogHash = readJobInputChecksum(
+      job,
+      "agent_tool_catalog",
+      "tool",
+      "pige_agent_tool_catalog"
+    );
     const recoveredUpdate = recoverAgentPageUpdate({
       vaultPath,
       job,
       sourceRecord,
       allowedCatalogHashes: {
-        update: createAgentIngestRecoveryCatalogHashes({
+        update: includeBoundAgentCatalogHash(createAgentIngestRecoveryCatalogHashes({
           jobId: job.id,
           sourceId: sourceRecord.id,
           authorization: this.#toolAuthorization,
           retrievalAvailable: this.#retrieval !== undefined,
           proposalAvailable: this.#proposals !== undefined,
           requiredToolName: UPDATE_KNOWLEDGE_NOTE_TOOL_NAME
-        }),
-        relationship: createAgentIngestRecoveryCatalogHashes({
+        }), boundCatalogHash),
+        relationship: includeBoundAgentCatalogHash(createAgentIngestRecoveryCatalogHashes({
           jobId: job.id,
           sourceId: sourceRecord.id,
           authorization: this.#toolAuthorization,
           retrievalAvailable: this.#retrieval !== undefined,
           proposalAvailable: this.#proposals !== undefined,
           requiredToolName: LINK_KNOWLEDGE_NOTES_TOOL_NAME
-        }),
-        tags: createAgentIngestRecoveryCatalogHashes({
+        }), boundCatalogHash),
+        tags: includeBoundAgentCatalogHash(createAgentIngestRecoveryCatalogHashes({
           jobId: job.id,
           sourceId: sourceRecord.id,
           authorization: this.#toolAuthorization,
           retrievalAvailable: this.#retrieval !== undefined,
           proposalAvailable: this.#proposals !== undefined,
           requiredToolName: ADD_KNOWLEDGE_TAGS_TOOL_NAME
-        })
+        }), boundCatalogHash)
       },
       ...(hooks.assertSourceCurrent ? {
         assertSourceCurrent: () => hooks.assertSourceCurrent?.(sourceRecord)
@@ -770,13 +776,13 @@ export class AgentIngestService {
         evidencePack,
         pageId,
         pagePath,
-        allowedCatalogHashes: createAgentIngestRecoveryCatalogHashes({
+        allowedCatalogHashes: includeBoundAgentCatalogHash(createAgentIngestRecoveryCatalogHashes({
           jobId: job.id,
           sourceId: currentSourceRecord.id,
           authorization: this.#toolAuthorization,
           retrievalAvailable: this.#retrieval !== undefined,
           proposalAvailable: this.#proposals !== undefined
-        }),
+        }), boundCatalogHash),
         ...(job.policyHash ? { expectedPolicyHash: job.policyHash } : {}),
         hooks
       });
@@ -2036,6 +2042,15 @@ function createAgentIngestRecoveryCatalogHashes(input: {
     }
   });
   return createCompatibleAgentIngestCatalogHashes(tools, input.requiredToolName);
+}
+
+function includeBoundAgentCatalogHash(
+  compatibleHashes: readonly string[],
+  boundCatalogHash: string | undefined
+): readonly string[] {
+  return boundCatalogHash
+    ? Array.from(new Set([...compatibleHashes, boundCatalogHash]))
+    : compatibleHashes;
 }
 
 function createCompatibleAgentIngestCatalogHashes(

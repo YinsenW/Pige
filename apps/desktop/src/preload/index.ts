@@ -118,6 +118,8 @@ import type {
   VaultSummary
 } from "@pige/contracts";
 import {
+  AgentSubmitTurnIpcPayloadSchema,
+  AgentSubmitTurnResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   HighRiskConfirmationChangedEventSchema,
@@ -404,16 +406,27 @@ const api: PigeDesktopApi = {
       request: AgentSubmitTurnRequest,
       files: readonly File[] = []
     ): Promise<AgentSubmitTurnResult> => {
-      const filePaths = files
-        .map((file) => webUtils.getPathForFile(file))
-        .filter((filePath): filePath is string => filePath.length > 0);
-      const normalizedRequest = request.scope
-        ? { ...request, scope: { kind: "current_note" as const, pageId: request.scope.pageId } }
-        : request;
-      return ipcRenderer.invoke("agent.submitTurn", {
-        request: normalizedRequest,
-        filePaths
-      }) as Promise<AgentSubmitTurnResult>;
+      const attachments = files.map((file) => ({
+        displayName: file.name,
+        internalPath: webUtils.getPathForFile(file)
+      }));
+      const canonicalRequest = {
+        schemaVersion: 1 as const,
+        inputKind: request.inputKind,
+        locale: request.locale,
+        ...(request.text === undefined ? {} : { text: request.text }),
+        ...(request.scope ? { scope: { kind: "current_note" as const, pageId: request.scope.pageId } } : {}),
+        ...(request.clientTurnId === undefined ? {} : { clientTurnId: request.clientTurnId }),
+        ...(request.conversationId === undefined ? {} : { conversationId: request.conversationId }),
+        ...(request.expectedTailEventId === undefined ? {} : { expectedTailEventId: request.expectedTailEventId })
+      };
+      const payload = AgentSubmitTurnIpcPayloadSchema.parse({
+        request: canonicalRequest,
+        attachments
+      });
+      return AgentSubmitTurnResultSchema.parse(
+        await ipcRenderer.invoke("agent.submitTurn", payload)
+      ) as AgentSubmitTurnResult;
     },
     onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void): (() => void) => {
       const handleDraft = (_event: IpcRendererEvent, draft: AgentTurnDraftEvent): void => listener(draft);

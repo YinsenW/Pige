@@ -161,6 +161,92 @@ export const AgentTurnCurrentNoteScopeSchema = z.object({
   kind: z.literal("current_note"),
   pageId: PageIdSchema
 }).strict();
+export const AgentSubmitTurnRequestSchema = z.object({
+  schemaVersion: z.literal(1).optional().default(1),
+  text: z.string().max(8_000).optional(),
+  inputKind: z.enum([
+    "typed_text",
+    "pasted_text",
+    "typed_url",
+    "pasted_url",
+    "file_drop",
+    "file_picker",
+    "follow_up"
+  ]),
+  scope: AgentTurnCurrentNoteScopeSchema.optional(),
+  locale: LocaleSchema,
+  clientTurnId: AgentClientTurnIdSchema.optional(),
+  conversationId: ConversationIdSchema.optional(),
+  expectedTailEventId: ConversationEventIdSchema.optional()
+}).strict().superRefine((request, context) => {
+  const fileInput = request.inputKind === "file_drop" || request.inputKind === "file_picker";
+  const hasAuthoredText = request.text !== undefined && request.text.trim().length > 0;
+  if (!fileInput && !hasAuthoredText) {
+    context.addIssue({
+      code: "custom",
+      path: ["text"],
+      message: "A text Agent turn requires bounded non-empty text."
+    });
+  }
+  const hasConversation = request.conversationId !== undefined;
+  const hasExpectedTail = request.expectedTailEventId !== undefined;
+  if (request.inputKind === "follow_up") {
+    if (!request.clientTurnId) {
+      context.addIssue({
+        code: "custom",
+        path: ["clientTurnId"],
+        message: "A follow-up requires a stable client turn identity."
+      });
+    }
+    if (!hasConversation || !hasExpectedTail) {
+      context.addIssue({
+        code: "custom",
+        path: ["conversationId"],
+        message: "A follow-up requires an exact conversation tail binding."
+      });
+    }
+  } else if (hasConversation || hasExpectedTail) {
+    context.addIssue({
+      code: "custom",
+      path: ["conversationId"],
+      message: "Only a follow-up may continue an existing conversation."
+    });
+  }
+  if (request.scope && fileInput) {
+    context.addIssue({
+      code: "custom",
+      path: ["scope"],
+      message: "A current-note turn cannot attach another source."
+    });
+  }
+});
+const AgentAttachmentInternalPathSchema = z.string()
+  .max(4_096)
+  .refine((value) => !value.includes("\0"), "Attachment paths must not contain null bytes.");
+export const AgentAttachmentCandidateSchema = z.object({
+  displayName: z.string().max(512),
+  internalPath: AgentAttachmentInternalPathSchema
+}).strict();
+export const AgentSubmitTurnIpcPayloadSchema = z.object({
+  request: AgentSubmitTurnRequestSchema,
+  attachments: z.array(AgentAttachmentCandidateSchema).max(64).readonly()
+}).strict().superRefine((payload, context) => {
+  const fileInput = payload.request.inputKind === "file_drop" || payload.request.inputKind === "file_picker";
+  if (fileInput && payload.attachments.length === 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["attachments"],
+      message: "A file Agent turn requires at least one attachment candidate."
+    });
+  }
+  if (!fileInput && payload.attachments.length > 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["attachments"],
+      message: "Only file-drop and file-picker Agent turns may carry attachment candidates."
+    });
+  }
+});
 export const JobIdSchema = z.string().regex(/^job_\d{8}_[a-z0-9]{8,}$/);
 export const ProposalIdSchema = z.string().regex(/^proposal_\d{8}_[a-z0-9]{8,}$/);
 export const OperationIdSchema = z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/);
@@ -1986,6 +2072,73 @@ export const PigeErrorSummarySchema = PigeErrorCoreSchema.extend({
   diagnosticErrorId: z.string().min(1).max(120).optional()
 }).strict().superRefine(requireErrorDomainMatchesCode);
 
+const SafeAttachmentDisplayNameSchema = z.string()
+  .min(1)
+  .max(160)
+  .refine((value) => value.trim().length > 0, "Attachment display names must not be empty.")
+  .refine(
+    (value) => !/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(value),
+    "Attachment display names must not contain control or bidirectional override characters."
+  )
+  .refine(
+    (value) => !/[\\/]/u.test(value),
+    "Attachment display names must not contain path separators."
+  );
+export const CaptureFileRejectionReasonSchema = z.enum([
+  "empty_path",
+  "missing",
+  "not_regular_file",
+  "unsupported_type",
+  "duplicate",
+  "too_many_files",
+  "file_too_large",
+  "total_size_exceeded",
+  "copy_failed"
+]);
+export const CaptureFileRejectionSchema = z.object({
+  displayName: SafeAttachmentDisplayNameSchema,
+  reason: CaptureFileRejectionReasonSchema
+}).strict();
+const AgentTurnAnswerSchema = z.object({
+  answer: z.string().max(8_000),
+  grounding: z.enum(["general", "local_knowledge", "source", "insufficient_evidence"]),
+  citations: AgentAnswerCitationsSchema,
+  retrieval: RetrievalSearchResultSchema.optional(),
+  datasetResult: DatasetQueryPreviewSchema.optional()
+}).strict();
+const AgentSubmitTurnResultBaseSchema = z.object({
+  requestId: z.string().min(1).max(120),
+  modelUsage: z.enum(["none", "local", "cloud"]),
+  sourceIds: z.array(SourceIdSchema).max(8).readonly(),
+  rejectedFiles: z.array(CaptureFileRejectionSchema).max(64).readonly().optional()
+});
+export const AgentSubmitTurnResultSchema = z.discriminatedUnion("state", [
+  AgentSubmitTurnResultBaseSchema.extend({
+    jobId: JobIdSchema,
+    conversationEventId: ConversationEventIdSchema,
+    conversationId: ConversationIdSchema,
+    tailEventId: ConversationEventIdSchema,
+    state: z.literal("completed"),
+    answer: AgentTurnAnswerSchema
+  }).strict(),
+  AgentSubmitTurnResultBaseSchema.extend({
+    jobId: JobIdSchema,
+    conversationEventId: ConversationEventIdSchema,
+    conversationId: ConversationIdSchema,
+    tailEventId: ConversationEventIdSchema,
+    state: z.literal("waiting"),
+    error: PigeErrorSummarySchema
+  }).strict(),
+  AgentSubmitTurnResultBaseSchema.extend({
+    jobId: JobIdSchema.optional(),
+    conversationEventId: ConversationEventIdSchema.optional(),
+    conversationId: ConversationIdSchema.optional(),
+    tailEventId: ConversationEventIdSchema.optional(),
+    state: z.literal("failed"),
+    error: PigeErrorSummarySchema
+  }).strict()
+]);
+
 export const ReaderSelectionActionRequestIdSchema = z.string()
   .regex(/^readerselaction_[a-z0-9]{8,64}$/);
 export const ReaderSelectionReadActionSchema = z.enum(["explain", "summarize"]);
@@ -3085,6 +3238,12 @@ export type CloudBoundary = z.infer<typeof CloudBoundarySchema>;
 export type CloudSendPolicy = z.infer<typeof CloudSendPolicySchema>;
 export type ConfirmationProposal = z.infer<typeof ConfirmationProposalSchema>;
 export type ConversationEvent = z.infer<typeof ConversationEventSchema>;
+export type AgentSubmitTurnRequest = z.input<typeof AgentSubmitTurnRequestSchema>;
+export type AgentAttachmentCandidate = z.output<typeof AgentAttachmentCandidateSchema>;
+export type AgentSubmitTurnIpcPayload = z.output<typeof AgentSubmitTurnIpcPayloadSchema>;
+export type AgentSubmitTurnResult = z.output<typeof AgentSubmitTurnResultSchema>;
+export type CaptureFileRejection = z.output<typeof CaptureFileRejectionSchema>;
+export type CaptureFileRejectionReason = z.output<typeof CaptureFileRejectionReasonSchema>;
 export type AgentAnswerCitation = z.infer<typeof AgentAnswerCitationSchema>;
 export type DatasetAnswerCitation = z.infer<typeof DatasetAnswerCitationSchema>;
 export type DatasetColumn = z.infer<typeof DatasetColumnSchema>;
