@@ -5502,7 +5502,8 @@ function HomeComposer(props: {
             followConversationRef.current = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight <= 48;
           }}
         >
-          {visibleConversationMessages.map((message) => {
+          <div className="conversation-timeline-content">
+            {visibleConversationMessages.map((message) => {
             const markdown = conversationMessageMarkdown(message);
             return (
               <article
@@ -5626,7 +5627,8 @@ function HomeComposer(props: {
                 liveConversationAnswer.answer
               )}
             </article>
-          ) : null}
+            ) : null}
+          </div>
         </section>
       ) : null}
       {selectedNote ? (
