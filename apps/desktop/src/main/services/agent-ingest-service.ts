@@ -337,6 +337,7 @@ export type AgentIngestResult =
 export interface AgentSourceToolSession {
   readonly tools: readonly PigeAgentToolDefinition[];
   readonly terminalToolNames: readonly string[];
+  bindCatalog(catalogHash: string): void;
   beforeModelTurn(): Promise<void>;
   settle(): AgentIngestResult;
   result(): AgentIngestResult | undefined;
@@ -2105,6 +2106,15 @@ export class AgentIngestService {
     return {
       tools,
       terminalToolNames,
+      bindCatalog: (catalogHash) => {
+        if (!/^sha256:[a-f0-9]{64}$/u.test(catalogHash)) {
+          throw new PigeDomainError(
+            "agent_runtime.tool_binding_invalid",
+            "The merged Agent tool catalog binding is invalid."
+          );
+        }
+        toolCatalogHash = catalogHash;
+      },
       beforeModelTurn: authorizeCurrentModelTurn,
       result,
       settle,
@@ -2141,6 +2151,7 @@ function createSettledAgentSourceToolSession(result: AgentIngestResult): LegacyA
   return {
     tools: [],
     terminalToolNames: [],
+    bindCatalog: () => undefined,
     beforeModelTurn: async () => undefined,
     settle: () => result,
     result: () => result,

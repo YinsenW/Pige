@@ -33,6 +33,8 @@ import type {
 } from "../../apps/desktop/src/main/services/dataset-query-types";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
+import { AgentIngestService } from "../../apps/desktop/src/main/services/agent-ingest-service";
+import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
 import { PermissionedExternalCapabilityRegistry } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
 import { createFirstPartyCommandCapabilityAdapter } from "../../apps/desktop/src/main/services/command-capability-adapter";
@@ -83,6 +85,70 @@ afterEach(() => {
 });
 
 describe("Home Pi Agent service", () => {
+  it("runs a source-bearing turn through one Home-owned Pi loop", async () => {
+    const fixture = makeFixture();
+    const models = makeModels();
+    let runtimeCalls = 0;
+    const runtime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        runtimeCalls += 1;
+        return new PiAgentRuntimeAdapter({
+          fauxResponses: [
+            { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+            {
+              kind: "tool_call",
+              toolName: "pige_respond_to_user",
+              args: {
+                answer: "The attached source describes one unified Pi tool loop.",
+                evidenceRefs: ["ev_01"]
+              }
+            }
+          ]
+        }).run(request);
+      }
+    };
+    const ingest = new AgentIngestService(models, runtime);
+    const jobs = new JobsService(fixture.vaults, ingest);
+    const service = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      runtime
+    );
+    const sourcePath = path.join(path.dirname(fixture.vaultPath), "single-loop.md");
+    fs.writeFileSync(sourcePath, "# Single loop\n\nPi chooses the registered source tools.\n", "utf8");
+    const prepared = service.prepareSourceTurn({
+      text: "Analyze this attachment.",
+      inputKind: "file_picker",
+      objective: "auto",
+      locale: "en",
+      clientTurnId: "turn_20260722_sourceloop001"
+    });
+    await new CaptureService(fixture.vaults).preserveFilesForAgentTurn({
+      filePaths: [sourcePath],
+      inputKind: "file_picker",
+      userIntent: "unknown",
+      locale: "en"
+    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+
+    const outcome = await service.submitPreparedSourceTurn(prepared);
+    expect(outcome).toMatchObject({
+      state: "completed",
+      jobId: prepared.jobId,
+      sourceIds: [prepared.sourceId],
+      answer: {
+        answer: "The attached source describes one unified Pi tool loop.",
+        grounding: "source"
+      }
+    });
+    expect(runtimeCalls).toBe(1);
+    expect(jobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
+      class: "agent_turn",
+      state: "completed"
+    });
+  });
+
   it("runs a real Pi tool turn against bounded local evidence and returns a validated grounded answer", async () => {
     const fixture = makeFixture();
     let runtimeConfigReads = 0;

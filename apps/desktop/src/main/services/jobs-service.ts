@@ -705,8 +705,9 @@ export class JobsService {
           sourceTools
         )
         : undefined;
+      const currentExecutionJob = this.#readJobSnapshot(vaultPath, jobId)?.job ?? execution.job;
       return await execute({
-        job: execution.job,
+        job: currentExecutionJob,
         signal: execution.control.signal,
         ...(sourceTools ? { sourceTools } : {}),
         ...(sourceSession ? { sourceSession } : {}),
