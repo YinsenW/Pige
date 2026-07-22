@@ -629,6 +629,7 @@ Commands:
 - `settings.update`
 - `settings.getPage`
 - `settings.setLocale`
+- `settings.setTheme`
 - `agentPolicy.preview`
 - `agent.runtimeStatus`
 - `models.addPresetProvider`
@@ -650,6 +651,10 @@ Queries:
 - `models.summary`
 - `skills.summary`
 - `system.toolchainHealth`
+
+Events:
+
+- `settings.appearanceChanged`
 
 `skills.summary`, owner-token/CAS `skills.disable({apiVersion:1,skillId,expectedRevision})`, and
 `skills.changed` are schema-validated. Summary is `ready {registry}` or body-free `failed {error}`.
@@ -691,7 +696,15 @@ Secrets are passed only to the Settings and Secrets Service and are never echoed
 Rules:
 
 - Settings APIs return redacted page DTOs, not raw storage files.
-- `settings.appearance` returns the current app locale and supported locale list. `settings.setLocale` stores the user override in machine-local settings and applies it without writing to the vault.
+- Appearance IPC has one canonical schema owner. `settings.appearance` returns strict
+  `{apiVersion:1,locale,availableLocales,themePreference,effectiveTheme,revision}`;
+  `settings.setLocale({locale})` stores the machine-local locale override and returns that
+  summary; `settings.setTheme({themePreference,expectedRevision})` returns
+  `committed | stale | failed` plus the authoritative summary. Theme preference is
+  `system | light | dark`, effective theme is `light | dark`, and no appearance value is
+  written to the vault. `settings.appearanceChanged` emits the same strict summary after
+  an applied theme-preference or effective system-theme change; preload validates the
+  event and drops malformed payloads.
 - Secret writes use dedicated secret handling and return secret references only.
 - Provider create is write-only, authorized by the disclosed Settings Connect/Save
   gesture, probed before commit, secret-store-only, and returns redacted summaries.
