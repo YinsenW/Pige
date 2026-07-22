@@ -183,7 +183,7 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
           }
         ]
       });
-      const agentIngest = new AgentIngestService(modelPort, runtime, {
+      const capabilities = {
         snapshot: () => ({
           localDatabaseStatus: "not_initialized",
           parserToolchainReady: false,
@@ -194,7 +194,8 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
           vectorSearchAvailable: false,
           rerankerAvailable: false
         })
-      });
+      };
+      const agentIngest = new AgentIngestService(modelPort, runtime, capabilities);
       const jobs = new JobsService(
         vaultPort,
         agentIngest,
@@ -202,7 +203,7 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
         undefined,
         new OcrService(new MacOSVisionOcrAdapter())
       );
-      const home = new HomeAgentService(vaultPort, modelPort, noRetrieval, jobs);
+      const home = new HomeAgentService(vaultPort, modelPort, noRetrieval, jobs, runtime, capabilities);
       const prepared = home.prepareSourceTurn({
         text: "Recognize this image and save the useful result.",
         inputKind: "file_drop",
@@ -221,6 +222,15 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
       expect(jobs.list({ classes: ["ocr"] }).jobs).toEqual([]);
 
       const result = await home.submitPreparedSourceTurn(prepared);
+      expect(result).toMatchObject({ state: "completed", jobId: prepared.jobId });
+      const agentTurnJobs = jobs.list({ classes: ["agent_turn"] }).jobs;
+      const ocrJobs = jobs.list({ classes: ["ocr"] }).jobs;
+      expect(agentTurnJobs).toHaveLength(1);
+      expect(agentTurnJobs[0]?.id).toBe(prepared.jobId);
+      expect(["completed", "completed_with_warnings"]).toContain(agentTurnJobs[0]?.state);
+      expect(jobs.list({ classes: ["capture", "agent_ingest"] }).jobs).toEqual([]);
+      expect(ocrJobs).toHaveLength(1);
+      expect(["completed", "completed_with_warnings"]).toContain(ocrJobs[0]?.state);
       const sourceRecordPath = findFile(path.join(vaultPath, ".pige", "source-records"), `${sourceId}.json`);
       const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
         artifacts: Array<{ kind: string; path: string }>;
@@ -230,16 +240,6 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
       const text = fs.readFileSync(path.join(vaultPath, textArtifact!.path), "utf8")
         .replace(/\s+/gu, " ")
         .toLocaleUpperCase();
-      const ocrJobs = jobs.list({ classes: ["ocr"] }).jobs;
-
-      expect(result).toMatchObject({ state: "completed", jobId: prepared.jobId });
-      const agentTurnJobs = jobs.list({ classes: ["agent_turn"] }).jobs;
-      expect(agentTurnJobs).toHaveLength(1);
-      expect(agentTurnJobs[0]?.id).toBe(prepared.jobId);
-      expect(["completed", "completed_with_warnings"]).toContain(agentTurnJobs[0]?.state);
-      expect(jobs.list({ classes: ["capture", "agent_ingest"] }).jobs).toEqual([]);
-      expect(ocrJobs).toHaveLength(1);
-      expect(["completed", "completed_with_warnings"]).toContain(ocrJobs[0]?.state);
       expect(text).toContain("PIGE");
       expect(text).toContain("OCR");
     } finally {
@@ -311,7 +311,7 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
           }
         ]
       });
-      const agentIngest = new AgentIngestService(modelPort, runtime, {
+      const capabilities = {
         snapshot: () => ({
           localDatabaseStatus: "not_initialized",
           parserToolchainReady: true,
@@ -322,9 +322,10 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
           vectorSearchAvailable: false,
           rerankerAvailable: false
         })
-      });
+      };
+      const agentIngest = new AgentIngestService(modelPort, runtime, capabilities);
       const jobs = new JobsService(vaultPort, agentIngest, undefined, parser, ocr);
-      const home = new HomeAgentService(vaultPort, modelPort, noRetrieval, jobs);
+      const home = new HomeAgentService(vaultPort, modelPort, noRetrieval, jobs, runtime, capabilities);
       const prepared = home.prepareSourceTurn({
         text: "Recognize the embedded presentation media and save the result.",
         inputKind: "file_drop",

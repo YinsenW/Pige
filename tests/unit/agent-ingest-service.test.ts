@@ -16,6 +16,7 @@ import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/ser
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import { OperationRecordSchema, type JobRecord, type OperationRecord, type SourceRecord } from "@pige/schemas";
 import type { VaultSummary } from "@pige/contracts";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { ScriptedAgentIngestRuntime } from "../helpers/scripted-agent-ingest-runtime";
 
 const tempRoots: string[] = [];
@@ -89,11 +90,11 @@ function makeVault(): { vaultPath: string; vault: VaultSummary } {
   return { vaultPath, vault: loadVaultSummary(vaultPath) };
 }
 
-function makeCapture(vaultPath: string, vault: VaultSummary, sourceFetch?: SourceFetchPort): CaptureService {
-  return new CaptureService({
+function makeCapture(vaultPath: string, vault: VaultSummary, sourceFetch?: SourceFetchPort): LegacyCaptureFixture {
+  return new LegacyCaptureFixture({
     current: () => vault,
     activeVaultPath: () => vaultPath
-  }, sourceFetch);
+  }, vaultPath, sourceFetch);
 }
 
 afterEach(() => {
@@ -137,7 +138,7 @@ describe("agent ingest service", () => {
     if (!job.sourceId) throw new Error("Expected a source-bound Agent turn.");
     const sourcePath = path.join(path.dirname(vaultPath), "source.md");
     fs.writeFileSync(sourcePath, "# Source\n\nPrepare this source for Agent-selected knowledge work.\n", "utf8");
-    await makeCapture(vaultPath, vault).preserveFilesForAgentTurn({
+    await new CaptureService(vaults).preserveFilesForAgentTurn({
       filePaths: [sourcePath],
       inputKind: "file_picker",
       userIntent: "unknown",

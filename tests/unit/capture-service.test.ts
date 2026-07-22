@@ -113,7 +113,7 @@ describe("Agent-turn source preservation", () => {
     }, nextFileBinding())).rejects.toMatchObject({ code: "agent_runtime.turn_binding_invalid" });
   });
 
-  it("honors reference-original storage without making a managed copy", async () => {
+  it("honors reference-original storage for new file captures without creating a managed copy", async () => {
     const { vaultPath } = makeVault();
     const vault = updateVaultSourceStorageStrategy(vaultPath, "reference_original");
     const sourcePath = path.join(path.dirname(vaultPath), "referenced-note.md");

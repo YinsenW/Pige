@@ -6,7 +6,6 @@ import {
   AgentIngestService,
   type AgentIngestModelConfigPort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
 import { DocumentParserService } from "../../apps/desktop/src/main/services/document-parser-service";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { OcrService, type NativeImageOcrAdapterPort } from "../../apps/desktop/src/main/services/ocr-service";
@@ -20,7 +19,7 @@ import {
 import { PdfParserService } from "../../apps/desktop/src/main/services/pdf-parser-service";
 import { PiAgentRuntimeAdapter } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { ScriptedAgentIngestRuntime } from "../helpers/scripted-agent-ingest-runtime";
-import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import {
   PDF_PARSER_ENGINE,
   PDF_PARSER_ID,
@@ -48,11 +47,10 @@ describe("referenced-original source pipeline", () => {
     const fixture = makeFixture();
     const originalPath = path.join(path.dirname(fixture.vaultPath), "referenced.pdf");
     fs.writeFileSync(originalPath, "%PDF referenced fixture", "utf8");
-    const capture = new CaptureService(fixture.vaultPort);
+    const capture = new LegacyCaptureFixture(fixture.vaultPort, fixture.vaultPath);
     const captured = await capture.submitFiles({
       filePaths: [originalPath], inputKind: "file_picker", userIntent: "capture", locale: "en"
     });
-    markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, requireValue(captured.sourceIds[0]));
     let parserInputPath: string | undefined;
     const parser = new DocumentParserService([new PdfParserService({
       extract: async (filePath) => {
@@ -101,11 +99,10 @@ describe("referenced-original source pipeline", () => {
     const fixture = makeFixture();
     const originalPath = path.join(path.dirname(fixture.vaultPath), "referenced.png");
     fs.writeFileSync(originalPath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01]));
-    const capture = new CaptureService(fixture.vaultPort);
+    const capture = new LegacyCaptureFixture(fixture.vaultPort, fixture.vaultPath);
     const captured = await capture.submitFiles({
       filePaths: [originalPath], inputKind: "file_drop", userIntent: "capture", locale: "en"
     });
-    markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, requireValue(captured.sourceIds[0]));
     const runtime = new PiAgentRuntimeAdapter({
       fauxResponses: [
         { kind: "tool_call", toolName: "pige_inspect_source", args: {}, toolCallId: "pi_ref_image_inspect_before" },
@@ -144,10 +141,9 @@ describe("referenced-original source pipeline", () => {
     const fixture = makeFixture();
     const originalPath = path.join(path.dirname(fixture.vaultPath), "referenced.docx");
     fs.writeFileSync(originalPath, Buffer.from("PK referenced DOCX fixture"));
-    const captured = await new CaptureService(fixture.vaultPort).submitFiles({
+    const captured = await new LegacyCaptureFixture(fixture.vaultPort, fixture.vaultPath).submitFiles({
       filePaths: [originalPath], inputKind: "file_picker", userIntent: "capture", locale: "en"
     });
-    markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, requireValue(captured.sourceIds[0]));
     const model = new CapturingModelClient();
     const parser = new DocumentParserService([new OfficeParserService({ extract: async () => officeExtraction })]);
     const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(modelPort, model), undefined, parser);
@@ -184,10 +180,9 @@ describe("referenced-original source pipeline", () => {
     const fixture = makeFixture();
     const originalPath = path.join(path.dirname(fixture.vaultPath), "referenced.md");
     fs.writeFileSync(originalPath, "# Referenced knowledge", "utf8");
-    const captured = await new CaptureService(fixture.vaultPort).submitFiles({
+    const captured = await new LegacyCaptureFixture(fixture.vaultPort, fixture.vaultPath).submitFiles({
       filePaths: [originalPath], inputKind: "file_drop", userIntent: "capture", locale: "en"
     });
-    markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, requireValue(captured.sourceIds[0]));
     const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(modelPort, new CapturingModelClient()));
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     fs.rmSync(originalPath);

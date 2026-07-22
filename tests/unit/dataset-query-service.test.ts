@@ -14,7 +14,7 @@ import {
   SourceRecordSchema,
   type OperationRecord
 } from "@pige/schemas";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { executeDatasetQuery } from "../../apps/desktop/src/main/services/dataset-query-core";
 import { DatasetQueryService } from "../../apps/desktop/src/main/services/dataset-query-service";
 import {
@@ -545,10 +545,10 @@ async function createManagedFixture(options: { readonly privateEvidence?: boolea
   const sourcePath = path.join(root, "records.csv");
   fs.writeFileSync(sourcePath, sourceBytes);
   const vault = loadVaultSummary(vaultPath);
-  const capture = await new CaptureService({
+  const capture = await new LegacyCaptureFixture({
     current: () => vault,
     activeVaultPath: () => vaultPath
-  }).submitFiles({
+  }, vaultPath).submitFiles({
     filePaths: [sourcePath],
     inputKind: "file_drop",
     userIntent: "capture",
@@ -617,10 +617,10 @@ async function materializeAdditionalDataset(
   const sourcePath = path.join(fixture.root, fileName);
   fs.writeFileSync(sourcePath, sourceBytes);
   const vault = loadVaultSummary(fixture.vaultPath);
-  const capture = await new CaptureService({
+  const capture = await new LegacyCaptureFixture({
     current: () => vault,
     activeVaultPath: () => fixture.vaultPath
-  }).submitFiles({
+  }, fixture.vaultPath).submitFiles({
     filePaths: [sourcePath],
     inputKind: "file_drop",
     userIntent: "capture",

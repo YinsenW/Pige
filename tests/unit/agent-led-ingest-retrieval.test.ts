@@ -38,7 +38,7 @@ import {
   recoverAgentPageUpdate,
   type AgentPageUpdatePublicationBinding
 } from "../../apps/desktop/src/main/services/agent-page-update-service";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import {
   allowCurrentAgentIngestTools,
   createAgentIngestToolRegistry
@@ -2301,7 +2301,7 @@ describe("Agent-selected ingest retrieval tool", () => {
     expect(generatedNotes(fixture.vaultPath)).toEqual([]);
   });
 
-  it("recovers a post-publication failure idempotently with one note, one Operation, and unchanged related IDs", async () => {
+  it("keeps a durable terminal publication completed when the runtime fails afterward", async () => {
     const fixture = makeVault();
     const retrieval = new RecordingRetrievalPort(fixture, (request) => makeSearchResult(fixture, request.query));
     let firstRuntimeCalls = 0;
@@ -2328,51 +2328,19 @@ describe("Agent-selected ingest retrieval tool", () => {
 
     expect(await firstJobs.processQueuedAgentIngest({ jobIds: [parentId] })).toEqual({
       processed: 1,
-      completed: 0,
-      failed: 1
-    });
-    expect(readJob(fixture.vaultPath, parentId).state).toBe("failed_retryable");
-    const notePath = requireValue(generatedNotes(fixture.vaultPath)[0]);
-    const noteBeforeRestart = fs.readFileSync(notePath, "utf8");
-    expect(noteBeforeRestart).toContain(`related_page_ids: ["${RELATED_PAGE_ID}"]`);
-    const committedCreateOperation = requireValue(readOperations(fixture.vaultPath).find((operation) =>
-      operation.kind === "create_page"
-    ));
-    const committedOperationPath = requireValue(listFiles(
-      path.join(fixture.vaultPath, ".pige", "operations"),
-      `${committedCreateOperation.id}.json`
-    )[0]);
-    fs.rmSync(committedOperationPath);
-
-    let restartedRuntimeCalls = 0;
-    const restarted = new JobsService(
-      fixture.vaultPort,
-      new AgentIngestService(
-        modelPort(),
-        new FunctionalRuntime(async (request) => {
-          restartedRuntimeCalls += 1;
-          return runtimeResult(request, []);
-        }),
-        undefined,
-        undefined,
-        undefined,
-        retrieval
-      )
-    );
-    expect(restarted.retry({ jobId: parentId })).toMatchObject({ status: "requeued" });
-    expect(await restarted.processQueuedAgentIngest({ jobIds: [parentId] })).toEqual({
-      processed: 1,
       completed: 1,
       failed: 0
     });
-
-    const noteAfterRestart = fs.readFileSync(notePath, "utf8");
-    const createOperations = readOperations(fixture.vaultPath).filter((operation) => operation.kind === "create_page");
+    expect(readJob(fixture.vaultPath, parentId).state).toBe("completed");
+    const notePath = requireValue(generatedNotes(fixture.vaultPath)[0]);
+    const note = fs.readFileSync(notePath, "utf8");
+    expect(note).toContain(`related_page_ids: ["${RELATED_PAGE_ID}"]`);
+    const createOperations = readOperations(fixture.vaultPath).filter((operation) =>
+      operation.kind === "create_page"
+    );
     expect(firstRuntimeCalls).toBe(1);
-    expect(restartedRuntimeCalls).toBe(0);
     expect(retrieval.calls).toHaveLength(1);
     expect(generatedNotes(fixture.vaultPath)).toEqual([notePath]);
-    expect(noteAfterRestart).toBe(noteBeforeRestart);
     expect(createOperations).toHaveLength(1);
     expect(createOperations[0]?.sourceRefs).toContainEqual({ kind: "page", id: RELATED_PAGE_ID });
     expect(readJob(fixture.vaultPath, parentId)).toMatchObject({
@@ -2972,7 +2940,7 @@ function submitText(
   fixture: ReturnType<typeof makeVault>,
   text: string
 ): { readonly sourceId: string; readonly jobId: string } {
-  const result = new CaptureService(fixture.vaultPort).submitText({
+  const result = new LegacyCaptureFixture(fixture.vaultPort, fixture.vaultPath).submitText({
     text,
     inputKind: "typed_text",
     userIntent: "capture",
@@ -2989,7 +2957,7 @@ async function preservePdf(
 ): Promise<{ readonly sourceId: string; readonly jobId: string }> {
   const inputPath = path.join(path.dirname(fixture.vaultPath), fileName);
   fs.writeFileSync(inputPath, createTestPdf([body], fileName));
-  const submitted = await new CaptureService(fixture.vaultPort).submitFiles({
+  const submitted = await new LegacyCaptureFixture(fixture.vaultPort, fixture.vaultPath).submitFiles({
     filePaths: [inputPath],
     inputKind: "file_drop",
     userIntent: "capture",

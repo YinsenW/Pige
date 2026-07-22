@@ -12,7 +12,7 @@ import {
   type AgentIngestProposalPort,
   type AgentIngestRuntimePort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { createGeneratedNoteExclusive } from "../../apps/desktop/src/main/services/generated-note-file";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
@@ -761,7 +761,7 @@ async function stageReviewProposal(
     bindProposalPort(proposals, fixture.vaultPath)
   );
   const jobs = new JobsService(fixture.vaultPort, agentIngest);
-  const capture = new CaptureService(fixture.vaultPort).submitText({
+  const capture = new LegacyCaptureFixture(fixture.vaultPort, fixture.vaultPath).submitText({
     text: `${SOURCE_BODY_CANARY}: preserved evidence for ${title}.`,
     inputKind: "typed_text",
     userIntent: "capture",

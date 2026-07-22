@@ -120,7 +120,7 @@ function makeServices(
   sourceFetch?: SourceFetchPort,
   documentParser?: DocumentParserPort,
   ocr?: OcrPort
-): { capture: CaptureService; jobs: JobsService } {
+): { capture: LegacyCaptureFixture; jobs: JobsService } {
   const vaultPort = {
     current: () => vault,
     activeVaultPath: () => vaultPath

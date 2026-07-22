@@ -135,7 +135,7 @@ const cases = [
     name: "rejects forged README evidence",
     check: "TRC-005",
     mutate(model) {
-      model.acceptance.evidenceCatalog["EV-LARGE-PASTE"] = {
+      model.acceptance.evidenceCatalog["EV-CAPTURE"] = {
         kind: "test",
         path: "README.md",
         selector: "# Pige"
@@ -254,7 +254,7 @@ fs.writeFileSync(failingEvidenceAbsolute, [
 ].join("\n"), "utf8");
 try {
   const result = runTraceability(root, ["TRC-005"], (model) => {
-    model.acceptance.evidenceCatalog["EV-LARGE-PASTE"] = {
+    model.acceptance.evidenceCatalog["EV-CJK"] = {
       kind: "test",
       path: failingEvidencePath,
       selector: "traceability executable evidence self-test"

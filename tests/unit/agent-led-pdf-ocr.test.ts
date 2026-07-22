@@ -11,7 +11,7 @@ import {
   type AgentIngestModelConfigPort,
   type AgentIngestRuntimePort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { JobCancellationError } from "../../apps/desktop/src/main/services/job-execution-control";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
@@ -627,7 +627,7 @@ async function preservePdf(
 }> {
   const inputPath = path.join(path.dirname(fixture.vaultPath), fileName);
   fs.writeFileSync(inputPath, bytes);
-  const result = await new CaptureService(fixture.vaultPort).submitFiles({
+  const result = await new LegacyCaptureFixture(fixture.vaultPort, fixture.vaultPath).submitFiles({
     filePaths: [inputPath],
     inputKind: "file_drop",
     userIntent: "capture",

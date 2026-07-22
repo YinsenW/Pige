@@ -40,4 +40,17 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain("denied-command-must-not-exist.txt");
     expect(source).toContain('request.body.includes("function_call_output")');
   });
+
+  it("proves unified durable conversation, citation navigation, and source results", () => {
+    expect(source).toContain('document.querySelectorAll(".conversation-message.role-assistant:not(.provisional)")');
+    expect(source).toContain('document.querySelector(".retrieval-citations button:not(:disabled)")');
+    expect(source).toContain('await waitFor(() => document.querySelector(".note-reader"), "citation Reader")');
+    expect(source).toContain('document.querySelector(".home-reader .back-button")');
+    expect(source).toContain("directStillVisibleAfterGrounded");
+    expect(source).toContain("groundedRetrievalVisible");
+    expect(source).toContain("noProvisionalAnswerDuplicates");
+    expect(source).toContain('textContent?.includes("Activity History")');
+    expect(source).toContain('section.settings-page.settings-history-page[aria-labelledby="settings-history-title"]');
+    expect(source).toContain('\'"call_id":"call_dataset_materialize"\'');
+  });
 });

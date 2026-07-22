@@ -13,10 +13,10 @@ import {
   AgentIngestService,
   type AgentIngestModelConfigPort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import { ScriptedAgentIngestRuntime } from "../helpers/scripted-agent-ingest-runtime";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 
 const roots: string[] = [];
 const golden = JSON.parse(fs.readFileSync(
@@ -150,7 +150,7 @@ async function createFixtureSource(
   fixture: AgentIngestGoldenFixture
 ): Promise<{ readonly sourceRecord: SourceRecord; readonly job: JobRecord }> {
   const vaultPort = { current: () => vault, activeVaultPath: () => vaultPath };
-  const capture = new CaptureService(vaultPort);
+  const capture = new LegacyCaptureFixture(vaultPort, vaultPath);
   if (fixture.input.kind === "text") {
     const captured = capture.submitText({
       text: fixture.input.text,
@@ -165,7 +165,7 @@ async function createFixtureSource(
   }
 
   if (fixture.input.kind === "url") {
-    const urlCapture = new CaptureService(vaultPort, {
+    const urlCapture = new LegacyCaptureFixture(vaultPort, vaultPath, {
       fetchSnapshot: async () => ({
         originalUrl: "https://example.com/multilingual-golden",
         finalUrl: "https://example.com/multilingual-golden",
