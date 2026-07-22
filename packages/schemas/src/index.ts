@@ -1442,23 +1442,8 @@ export const ModelEgressDecisionSchema = z.object({
     decision.cloudBoundary === "local" ||
     (decision.cloudBoundary === "unknown" && decision.boundaryVerification !== "user_asserted")
   ) {
-    expectedOutcome = "confirm";
+    expectedOutcome = "block";
     expectedReason = "unknown_boundary_confirmation";
-  } else if (decision.cloudSendPolicy === "confirm_all") {
-    expectedOutcome = "confirm";
-    expectedReason = "confirm_all";
-  } else if (
-    classes.has("sensitive") &&
-    decision.cloudSendPolicy !== "ordinary_allowed"
-  ) {
-    expectedOutcome = "confirm";
-    expectedReason = "sensitive_confirmation";
-  } else if (
-    decision.cloudSendPolicy === "confirm_private_or_large" &&
-    (classes.has("private") || classes.has("large"))
-  ) {
-    expectedOutcome = "confirm";
-    expectedReason = "private_or_large_confirmation";
   } else {
     expectedOutcome = "allow";
     expectedReason = "ordinary_external_allowed";

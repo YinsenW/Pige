@@ -65,8 +65,7 @@ import { containsRestrictedModelContent } from "./model-egress-content";
 import { createModelEgressDecision } from "./model-egress-policy";
 import {
   ModelEgressApprovalService,
-  ModelEgressConfirmationRequiredError,
-  type ModelEgressApprovalBinding
+  ModelEgressConfirmationRequiredError
 } from "./model-egress-approval-service";
 import { PermissionConfirmationRequiredError } from "./permission-broker-service";
 import { PermissionedExternalCapabilityRegistry } from "./permissioned-external-capability-service";
@@ -1312,8 +1311,7 @@ export class HomeAgentService {
       }
     };
 
-    const consumedModelEgressApprovalRequestIds = new Set<string>();
-    const authorizeCurrentModelTurn = async (consumeApproval = false): Promise<void> => {
+    const authorizeCurrentModelTurn = async (): Promise<void> => {
       assertCurrentBindingAndVault();
       const currentNoteBinding = currentNoteScope && currentNoteToolUsed
         ? readBoundCurrentNoteEvidence(vaultPath, currentNoteScope.pageId, session.current)
@@ -1410,36 +1408,9 @@ export class HomeAgentService {
         normalizeContentClasses(historyContentClasses),
         externalToolEvidence
       );
-      const baseDecisionHash = createModelEgressDecisionHash(decision);
       const evidenceBindingDrifted =
         currentNoteEvidenceDrifted || evidenceDrifted || urlEvidenceDrifted || datasetEvidenceDrifted;
-      const approvalBinding: ModelEgressApprovalBinding | undefined =
-        decision.outcome === "confirm" && !evidenceBindingDrifted && this.#modelEgressApprovals
-          ? {
-              jobId,
-              vaultId: activeVault.vaultId,
-              providerProfileId: defaultProvider.id,
-              modelProfileId: defaultModel.id,
-              providerIdentityHash: approvedBinding.providerIdentityHash,
-              modelIdentityHash: approvedBinding.modelIdentityHash,
-              policyHash: policy.policyHash,
-              payloadHash,
-              evidenceSummaryHash,
-              baseDecisionHash,
-              reasonCode: decision.reasonCode,
-              contentClasses: decision.contentClasses,
-              payloadCharacters: decision.payloadCharacters,
-              estimatedPayloadTokens: decision.estimatedPayloadTokens,
-              normalPayloadCharacterLimit: decision.normalPayloadCharacterLimit
-            }
-          : undefined;
-      const approvalRequest = approvalBinding
-        ? this.#modelEgressApprovals?.prepare(vaultPath, approvalBinding)
-        : undefined;
-      const auditedDecision: ModelEgressDecision = approvalRequest
-        ? { ...decision, modelEgressApprovalRequestId: approvalRequest.id }
-        : decision;
-      const decisionHash = createModelEgressDecisionHash(auditedDecision);
+      const decisionHash = createModelEgressDecisionHash(decision);
       const operation = writeHomeModelEgressDecisionOperation({
         vaultPath,
         job: session.current,
@@ -1449,17 +1420,8 @@ export class HomeAgentService {
         payloadHash,
         evidenceSummaryHash,
         decisionHash,
-        decision: auditedDecision
+        decision
       });
-      if (approvalRequest && approvalBinding) {
-        this.#modelEgressApprovals?.bindAudit(
-          vaultPath,
-          approvalRequest.id,
-          approvalBinding,
-          operation.id,
-          decisionHash
-        );
-      }
       session.current = this.#jobs.patchAgentTurnJob(session.current, {
         operationIds: [operation.id],
         privacy: {
@@ -1476,55 +1438,8 @@ export class HomeAgentService {
           "The selected evidence binding changed during the Home Agent turn."
         );
       }
-      if (auditedDecision.outcome === "block") {
+      if (decision.outcome === "block") {
         throw new PigeDomainError("model_egress.blocked", "The Home question is blocked by model egress policy.");
-      }
-      if (auditedDecision.outcome === "confirm") {
-        if (approvalRequest && approvalBinding && this.#modelEgressApprovals) {
-          if (approvalRequest.state === "pending") {
-            const egressError = PigeErrorSummarySchema.parse({
-              ...createErrorSummary(
-                "model_provider.egress_confirmation_required",
-                "errors.model_provider.egress_confirmation_required",
-                false,
-                "confirm_model_egress",
-                "warning"
-              ),
-              modelEgressApprovalRequestId: approvalRequest.id
-            });
-            session.current = this.#jobs.settleAgentTurnJob(session.current, {
-              kind: "waiting",
-              reason: "model_egress",
-              approvalRequestId: approvalRequest.id,
-              error: egressError,
-              message: "Agent turn is waiting for one exact model egress decision.",
-              facts: {
-                stage: "waiting_for_model"
-              }
-            });
-            try {
-              await this.#modelEgressApprovals.waitForDecision(
-                vaultPath,
-                approvalRequest.id,
-                approvalBinding,
-                signal
-              );
-            } finally {
-              session.current = this.#jobs.readAgentTurnJob(session.current.id) ?? session.current;
-            }
-          }
-          if (consumeApproval) {
-            const consumed = this.#modelEgressApprovals.consume(vaultPath, approvalRequest.id, approvalBinding);
-            consumedModelEgressApprovalRequestIds.add(consumed.id);
-          } else {
-            this.#modelEgressApprovals.assertApproved(vaultPath, approvalRequest.id, approvalBinding);
-          }
-          return;
-        }
-        throw new PigeDomainError(
-          "model_egress.confirmation_required",
-          "The Home question requires model egress confirmation."
-        );
       }
     };
     const assertCurrentNotePublicationCurrent = async (): Promise<void> => {
@@ -2029,7 +1944,7 @@ export class HomeAgentService {
           // Pi may prepare once after a terminating tool even though no provider call follows.
           if (finalExecution) return;
           modelTurnSequence += 1;
-          await authorizeCurrentModelTurn(true);
+          await authorizeCurrentModelTurn();
           session.modelInvocationStarted = true;
         },
         completionPolicy: {
@@ -2058,10 +1973,6 @@ export class HomeAgentService {
       }
       if (urlDependencyFailure) throw urlDependencyFailure;
       throw caught;
-    } finally {
-      for (const requestId of consumedModelEgressApprovalRequestIds) {
-        this.#modelEgressApprovals?.markReconciled(vaultPath, requestId);
-      }
     }
     session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;
     assertCurrentBindingAndVault();

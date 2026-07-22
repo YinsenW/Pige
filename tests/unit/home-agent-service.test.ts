@@ -1411,7 +1411,7 @@ describe("Home Pi Agent service", () => {
     });
   });
 
-  it("keeps the exact approval path for an unverified provider boundary", async () => {
+  it("blocks an unverified provider boundary without creating an approval or waiting Job", async () => {
     const fixture = makeFixture();
     const sourceId = "src_20260711_sensitive2";
     writeSourceRecord(fixture.vaultPath, sourceId, { sensitive: true });
@@ -1423,24 +1423,15 @@ describe("Home Pi Agent service", () => {
     const jobs = new JobsService(fixture.vaults, undefined, undefined, undefined, undefined, undefined, approvals);
     let runtimeConfigReads = 0;
     let runtimeCalls = 0;
-    const completedAdapter = new PiAgentRuntimeAdapter({
-      fauxResponses: [
-        finishHome({
-          answer: "The connected provider answered.",
-          citationRefs: [],
-          grounding: "general"
-        })
-      ]
-    });
     const service = new HomeAgentService(
       fixture.vaults,
       makeUnverifiedModels(() => { runtimeConfigReads += 1; }),
       makeRetrievalPort(fixture.vault.vaultId, { result }),
       jobs,
       {
-        run: async (runtimeRequest) => {
+        run: async () => {
           runtimeCalls += 1;
-          return completedAdapter.run(runtimeRequest);
+          throw new Error("The runtime must not be called for an unverified provider boundary.");
         }
       },
       undefined,
@@ -1458,49 +1449,25 @@ describe("Home Pi Agent service", () => {
       clientTurnId: "turn_20260714_sensitive001"
     };
 
-    const outcomePromise = service.submitTurn(request);
-    const waitingJob = await waitForValue(() => jobs.list({ states: ["waiting_model_egress"] }).jobs[0]);
-    const requestId = waitingJob.modelEgressApprovalRequestId;
-    expect(requestId).toMatch(/^egressreq_/u);
+    const outcome = await service.submitTurn(request);
+    const job = jobs.list().jobs[0];
+
+    expect(outcome).toMatchObject({
+      state: "failed",
+      error: { code: "model_provider.egress_blocked" }
+    });
     expect(runtimeConfigReads).toBe(0);
     expect(runtimeCalls).toBe(0);
-    expect(jobs.readAgentTurnJob(waitingJob.id)?.state).toBe("waiting_model_egress");
-    expect(jobs.pendingModelEgress(requestId ?? "")).toMatchObject({
-      requestId,
-      jobId: waitingJob.id,
-      reasonCode: "unknown_boundary_confirmation",
-      contentClasses: ["ordinary"]
-    });
-
-    const decision = jobs.resolveModelEgress({
-      requestId: requestId ?? "",
-      jobId: waitingJob.id,
-      decision: "allow_once"
-    });
-    expect(decision.status).toBe("approved");
-    expect(jobs.readAgentTurnJob(waitingJob.id)?.state).toBe("running");
-
-    const completed = await outcomePromise;
-    expect(completed).toMatchObject({ state: "completed", modelUsage: "cloud" });
-    expect(jobs.readAgentTurnJob(waitingJob.id)?.state).toBe("completed");
-    expect(service.conversation().messages.at(-1)).toMatchObject({
-      role: "assistant",
-      text: "The connected provider answered."
-    });
-    expect(runtimeConfigReads).toBe(1);
-    expect(runtimeCalls).toBe(1);
-    expect(approvals.read(fixture.vaultPath, requestId ?? "").state).toBe("consumed");
+    expect(job?.state).toBe("failed_final");
+    expect(jobs.list({ states: ["waiting_model_egress"] }).jobs).toEqual([]);
+    expect(approvals.listForJob(fixture.vaultPath, job?.id ?? "job_missing")).toEqual([]);
     const operations = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"));
-    const confirmationAudit = operations.find((operation) =>
-      operation.modelEgressAudit?.modelEgressApprovalRequestId === requestId
-    );
-    expect(confirmationAudit).toMatchObject({
+    expect(operations.find((operation) => operation.kind === "model_egress_decision")).toMatchObject({
       kind: "model_egress_decision",
       permissionDecisionIds: [],
       modelEgressAudit: {
-        outcome: "confirm",
-        reasonCode: "unknown_boundary_confirmation",
-        modelEgressApprovalRequestId: requestId
+        outcome: "block",
+        reasonCode: "unknown_boundary_confirmation"
       }
     });
   });
