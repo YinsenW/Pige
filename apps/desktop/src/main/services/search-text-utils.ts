@@ -104,7 +104,7 @@ function redactLikelySecrets(value: string): string {
     .replace(/\b(?:ghp|github_pat)_[A-Za-z0-9_]{20,}\b/gu, "[redacted-secret]")
     .replace(/\bxox[baprs]-[A-Za-z0-9-]{10,}\b/gu, "[redacted-secret]")
     .replace(
-      /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|secret|password)\s*[:=]\s*["']?[^"'\s]{8,}/giu,
+      /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password)\s*[:=]\s*["']?[^"'\s]{8,}/giu,
       "$1=[redacted-secret]"
     );
 }

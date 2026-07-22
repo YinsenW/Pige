@@ -29,7 +29,7 @@
     "scope": "Independent review of the Pi pass-through reset: exact Provider payload, upstream final authority, strict tool/effect boundaries, removal inventory/no-growth guards, static Privacy UI truth, staged implementation, and unchanged product status.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 18,
-    "reviewedSha256": "bfa03c56ba9e18aae114af0db3279ed08aa1726c90046a48d82b6e3a4df02884"
+    "reviewedSha256": "ba8d44838b75766d34e7929f952ee07790a1b33366db3c5616cb80988ea0ea38"
   },
   "reviewers": [{
     "reviewerId": "architecture-reset-planning-review",

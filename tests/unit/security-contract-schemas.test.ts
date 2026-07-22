@@ -7,7 +7,6 @@ import {
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
   HighRiskConfirmationSummarySchema,
-  ModelEgressDecisionSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
   PermissionActionBindingSchema,
@@ -501,33 +500,6 @@ describe("security-sensitive shared contracts", () => {
       ...binding,
       command: "curl https://private.example"
     })).toThrow();
-  });
-
-  it("rejects contradictory or understated model-egress classifications", () => {
-    const common = {
-      schemaVersion: 1 as const,
-      outcome: "allow" as const,
-      reasonCode: "ordinary_external_allowed" as const,
-      providerProfileId: "provider_example",
-      cloudBoundary: "cloud" as const,
-      boundaryVerification: "builtin_verified" as const,
-      cloudSendPolicy: "ordinary_allowed" as const,
-      estimatedPayloadTokens: 25,
-      normalPayloadCharacterLimit: 1000,
-      policyHash
-    };
-
-    expect(() => ModelEgressDecisionSchema.parse({
-      ...common,
-      contentClasses: ["ordinary", "private"],
-      payloadCharacters: 100
-    })).toThrow("ordinary is mutually exclusive");
-
-    expect(() => ModelEgressDecisionSchema.parse({
-      ...common,
-      contentClasses: ["ordinary"],
-      payloadCharacters: 1001
-    })).toThrow("must be classified as large");
   });
 
   it("strips arbitrary provider headers from persisted provider metadata", () => {

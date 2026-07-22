@@ -138,8 +138,8 @@ export class ReaderSelectionActionService {
         currentNoteTransformAction: request.action,
         ...(context.onDraft ? { onDraft: context.onDraft } : {})
       });
-    } catch {
-      return transformFailure(request.requestId);
+    } catch (caught) {
+      return transformFailure(request.requestId, caught);
     }
     if (turn.state === "waiting") {
       const job = turn.jobId ? this.#mutations.readJob(turn.jobId) : undefined;
@@ -254,15 +254,33 @@ function transformInvalid(
   return { apiVersion: 1, requestId, status: "invalid", reason };
 }
 
-function transformFailure(requestId: string): ReaderSelectionTransformResult {
+function transformFailure(requestId: string, caught: unknown): ReaderSelectionTransformResult {
+  if (caught instanceof PigeDomainError) {
+    const ownerFailure = PigeErrorSummarySchema.safeParse({
+      code: caught.code,
+      domain: caught.code.split(".", 1)[0],
+      messageKey: "errors.agent_runtime.source_turn_failed",
+      retryable: false,
+      severity: "error",
+      userAction: "none"
+    });
+    if (ownerFailure.success) {
+      return {
+        apiVersion: 1,
+        requestId,
+        status: "failed",
+        error: ownerFailure.data
+      };
+    }
+  }
   return {
     apiVersion: 1,
     requestId,
     status: "failed",
     error: PigeErrorSummarySchema.parse({
-      code: "agent_runtime.completion_invalid",
-      domain: "agent_runtime",
-      messageKey: "errors.agent_runtime.completion_invalid",
+      code: "model_provider.call_failed",
+      domain: "model_provider",
+      messageKey: "errors.model_provider.call_failed",
       retryable: true,
       severity: "error",
       userAction: "retry"

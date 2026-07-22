@@ -26,6 +26,11 @@ import {
   sanitizeSearchBody,
   type QueryTerms
 } from "./search-text-utils";
+import {
+  bindRetrievalEvidenceToCurrentMarkdown,
+  createCurrentRetrievalContentBindingHash,
+  type CurrentRetrievalEvidenceBinding
+} from "./retrieval-evidence-boundary";
 
 export interface RetrievalVaultPort {
   current(): VaultSummary | undefined;
@@ -91,6 +96,7 @@ export interface BuiltHomeQueryContext {
 export class RetrievalService {
   readonly #vaults: RetrievalVaultPort;
   readonly #database: LocalDatabaseService | undefined;
+  readonly #exactEvidenceBindings = new WeakMap<RetrievalSearchResult, string>();
 
   constructor(vaults: RetrievalVaultPort, database?: LocalDatabaseService) {
     this.#vaults = vaults;
@@ -125,6 +131,7 @@ export class RetrievalService {
         results: projected.items
       };
       this.#assertActiveVaultBinding(request.scope, binding);
+      this.#bindExactEvidenceIdentity(binding.vaultPath, result);
       return result;
     }
 
@@ -166,7 +173,39 @@ export class RetrievalService {
       results: matches.slice(0, limit)
     };
     this.#assertActiveVaultBinding(request.scope, binding);
+    this.#bindExactEvidenceIdentity(binding.vaultPath, result);
     return result;
+  }
+
+  readExactSelectedEvidence(searchResult: RetrievalSearchResult): CurrentRetrievalEvidenceBinding {
+    const binding = this.#captureActiveVaultBinding({
+      kind: "active_vault",
+      vaultId: searchResult.activeVaultId
+    });
+    const selectedItems = buildHomeQueryContextPack(searchResult).selectedEvidence.map(({ item }) => item);
+    const exact = bindRetrievalEvidenceToCurrentMarkdown(
+      binding.vaultPath,
+      selectedItems,
+      searchResult.query
+    );
+    const expectedBinding = this.#exactEvidenceBindings.get(searchResult);
+    const currentBinding = createCurrentRetrievalContentBindingHash(binding.vaultPath, selectedItems);
+    if (!expectedBinding || expectedBinding !== currentBinding) {
+      throw new PigeDomainError(
+        "rag.search_binding_invalid",
+        "The selected local retrieval evidence changed before provider projection."
+      );
+    }
+    this.#assertActiveVaultBinding({ kind: "active_vault", vaultId: searchResult.activeVaultId }, binding);
+    return exact;
+  }
+
+  #bindExactEvidenceIdentity(vaultPath: string, result: RetrievalSearchResult): void {
+    const selectedItems = buildHomeQueryContextPack(result).selectedEvidence.map(({ item }) => item);
+    this.#exactEvidenceBindings.set(
+      result,
+      createCurrentRetrievalContentBindingHash(vaultPath, selectedItems)
+    );
   }
 
   #captureActiveVaultBinding(scope: RetrievalSearchScope): ActiveVaultBinding {

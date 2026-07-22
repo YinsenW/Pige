@@ -368,6 +368,9 @@ const noRetrieval: HomeAgentRetrievalPort = {
   search: () => {
     throw new Error("Source-backed Vision smoke must not use Home retrieval.");
   },
+  readExactSelectedEvidence: () => {
+    throw new Error("Source-backed Vision smoke must not bind vault evidence.");
+  },
   ask: () => {
     throw new Error("Source-backed Vision smoke must not use legacy retrieval ask.");
   }

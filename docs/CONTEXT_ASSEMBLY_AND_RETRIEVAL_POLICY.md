@@ -353,6 +353,20 @@ used only for authentication and never injected into the payload. An unknown or 
 destination requires a new explicit user action. No egress decision/audit, digest store,
 one-use approval, renderer action, or waiting Job is part of context assembly.
 
+This exact-content rule covers the user-authored message and the body of explicitly
+selected bounded evidence. Provider credentials remain secret-store/auth-header data.
+URL credentials and query transport metadata may be stripped before a URL is preserved
+or projected because they are not selected message/evidence body. Diagnostics/support
+export may redact its separately exported artifact; it never mutates Provider payload.
+
+Retrieval persistence remains a separate boundary. SQLite, RAG/index caches, search
+display, logs and diagnostics must not persist credentials or secret-like material
+contrary to their storage invariants. Their persistence-safe projections are never
+Provider-payload authority: model context re-reads the selected evidence from source
+truth, verifies its exact revision/identity, applies only character/token selection
+bounds, and sends that selected body exact and ephemeral without classification,
+trimming, redaction or rewriting.
+
 For parser/OCR-backed Agent ingest, the call-scoped Evidence Pack is guarded by the
 complete Source Record revision. The current bridge rechecks before/after the model and
 requeues on drift. Under B3.13, a stale tool result is returned to Pi Agent for replan or
@@ -426,7 +440,8 @@ Tests must verify:
 
 Current Phase 5 ingest bridge:
 
-- Parser-backed Agent ingest reads at most 96 KiB from the verified selected text/OCR artifact and sends at most 18,000 redacted characters.
+- Parser-backed Agent ingest reads at most 96 KiB from the verified selected text/OCR
+  artifact and sends at most 18,000 bounded exact selected characters.
 - The untrusted evidence block includes source ID, artifact ID, and up to 24 available page/block/slide locators. It does not include arbitrary filesystem paths, sidecar bodies, or source archives.
 - Artifact checksum/size is verified before model handoff when recorded; delimiter-like source text is escaped inside the untrusted evidence wrapper.
 - The bridge hashes the complete selected Source Record as an ephemeral evidence-revision guard, checks it before prompt rendering/model invocation and after the provider response, and does not persist or send the Source Record body as part of that guard.
@@ -438,13 +453,13 @@ Current unified Home foundation:
 - `agent.submitTurn` lets Pi answer directly or call one current-vault search tool with
   at most eight evidence items. Tool output is escaped inside
   `PIGE_UNTRUSTED_EVIDENCE_V1`; it cannot change tools, providers, settings, output
-  shape, permissions, or authority. Final JSON and citation refs are host-validated.
+  shape, permissions, or authority. Pi's final assistant text is answer authority; only
+  Host-known citation metadata is projected.
 - Before each model turn, Pige re-reads bounded confined Markdown bytes and complete
   Source Record privacy facts, binds their hashes into the body-free evidence summary,
   records the current Provider/model and evidence identity, and rejects revision drift.
 - With no usable runtime, the durable `agent_turn` waits and later resumes the same
-  identity. Empty/irrelevant evidence does not block ordinary chat; `vault_only` must
-  cite selected evidence or fail closed.
+  identity. Empty/irrelevant evidence does not block ordinary chat or require citations.
 - Renderer results contain only the answer, bounded snippets, ranked page summaries,
   citations, warnings, degraded state, and `none|local|cloud`; no prompt, Context Pack,
   private path, credential, provider error, or evidence body is exposed.
@@ -455,7 +470,8 @@ Current unified Home foundation:
 - Memory injection is scoped, ranked, secret-scanned, and lower authority than explicit user instruction.
 - Current follow-up uses at most 16 integrity-checked prior user/assistant messages and
   64 KiB UTF-8; older-turn compaction/indexing remains B7.09.
-- Prompt snapshots redact secrets and include expected policy/context sections.
+- Diagnostic prompt-snapshot artifacts exclude Provider credentials and raw bodies; this
+  export hygiene does not alter the Provider payload.
 - Context pack serialization works for future remote Agent backend and Mobile Lite clients without desktop-only objects.
 
 ## 16. Traceability

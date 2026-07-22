@@ -206,15 +206,14 @@ describe("Reader selection action service", () => {
       requestId: "readerselaction_abcdefgh",
       status: "failed",
       error: {
-        code: "agent_runtime.completion_invalid",
-        domain: "agent_runtime",
-        messageKey: "errors.agent_runtime.completion_invalid",
-        retryable: true,
+        code: "agent_ingest.update_content_restricted",
+        domain: "agent_ingest",
+        messageKey: "errors.agent_runtime.source_turn_failed",
+        retryable: false,
         severity: "error",
-        userAction: "retry"
+        userAction: "none"
       }
     });
-    expect(JSON.stringify(result)).not.toContain("agent_ingest");
     expect(JSON.stringify(result)).not.toContain("PRIVATE_PROVIDER_OR_REPLACEMENT_BODY");
     expect(JSON.stringify(result)).not.toContain("SELECTED_PRIVATE_PASSAGE");
   });

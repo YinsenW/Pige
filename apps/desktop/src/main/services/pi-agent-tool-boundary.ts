@@ -7,11 +7,6 @@ import {
 } from "@earendil-works/pi-agent-core";
 import { type TSchema, validateToolArguments } from "@earendil-works/pi-ai";
 import { PigeDomainError } from "@pige/domain";
-import {
-  AgentRepairRequiredError,
-  createAgentRepairFeedback,
-  type AgentRepairFeedback
-} from "./pi-agent-completion-policy";
 
 export type PigeAgentToolResult = AgentToolResult<Readonly<Record<string, unknown>>>;
 
@@ -91,10 +86,6 @@ export interface PigeAgentToolDescriptor extends PigeAgentToolDefinition {
 }
 
 export interface PiToolExecutionHooks {
-  readonly onRepair: (
-    tool: PigeAgentToolDescriptor,
-    feedback: AgentRepairFeedback
-  ) => void;
   readonly afterExecute: (
     tool: PigeAgentToolDescriptor,
     args: unknown,
@@ -217,39 +208,34 @@ export function toPiTool(
           arguments: args as Record<string, unknown>
         });
       } catch {
-        const feedback = createAgentRepairFeedback({
-          category: "tool_input_invalid",
-          fieldRefs: [`tool.${tool.name}.input`],
-          repairHintKey: "repair.tool_input.use_registered_schema",
-          progressFingerprint: args
-        });
-        hooks?.onRepair(tool, feedback);
-        throw new AgentRepairRequiredError(feedback);
+        throw new PigeDomainError(
+          "agent_runtime.tool_input_invalid",
+          `The ${tool.name} tool arguments do not match its registered schema.`
+        );
       }
     },
     execute: async (toolCallId, args, signal, onUpdate) => {
       try {
+        const prepareArguments = piTool.prepareArguments;
+        if (!prepareArguments) throw invalidToolRegistryError();
+        const preparedArgs = prepareArguments(args);
         const effectiveSignal = signal ?? new AbortController().signal;
         const context = createPigeAgentToolCallContext(toolCallId, effectiveSignal);
         if (!context) throw invalidToolCallError();
-        assertToolInputWithinLimit(args, tool.limits.maxInputBytes);
+        assertToolInputWithinLimit(preparedArgs, tool.limits.maxInputBytes);
         let result: PigeAgentToolResult;
         try {
-          result = await tool.execute(args, effectiveSignal, context, (partialResult) => {
+          result = await tool.execute(preparedArgs, effectiveSignal, context, (partialResult) => {
             assertPigeAgentToolResult(partialResult, tool.limits.maxOutputBytes);
             assertAddedToolNames(partialResult, catalog);
             onUpdate?.(partialResult);
           });
         } catch (caught) {
-          if (caught instanceof AgentRepairRequiredError) {
-            hooks?.onRepair(tool, caught.feedback);
-            throw new AgentRepairRequiredError(caught.feedback);
-          }
           throw caught;
         }
         assertPigeAgentToolResult(result, tool.limits.maxOutputBytes);
         assertAddedToolNames(result, catalog);
-        const presentedResult = hooks ? await hooks.afterExecute(tool, args, result) : result;
+        const presentedResult = hooks ? await hooks.afterExecute(tool, preparedArgs, result) : result;
         assertPigeAgentToolResult(presentedResult, tool.limits.maxOutputBytes);
         assertAddedToolNames(presentedResult, catalog);
         return presentedResult;

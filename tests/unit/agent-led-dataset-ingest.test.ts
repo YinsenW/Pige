@@ -88,7 +88,8 @@ describe("Agent-selected Dataset ingest tool", () => {
     const runtime = new RecordingRuntime(new PiAgentRuntimeAdapter({
       fauxResponses: [
         toolCall("pige_inspect_source", "dataset_inspect_1"),
-        toolCall("pige_inspect_dataset", "dataset_materialize_1")
+        toolCall("pige_inspect_dataset", "dataset_materialize_1"),
+        { kind: "text", text: "The Dataset was materialized from the preserved source." }
       ]
     }));
     const jobs = makeJobs(fixture, runtime, planner);
@@ -130,7 +131,8 @@ describe("Agent-selected Dataset ingest tool", () => {
     const firstJobs = makeJobs(fixture, new RecordingRuntime(new PiAgentRuntimeAdapter({
       fauxResponses: [
         toolCall("pige_inspect_source", "dataset_retry_inspect_1"),
-        toolCall("pige_inspect_dataset", "dataset_retry_materialize_1")
+        toolCall("pige_inspect_dataset", "dataset_retry_materialize_1"),
+        { kind: "text", text: "The Dataset materialization completed." }
       ]
     })), planner);
     firstJobs.processQueuedCaptures({ jobIds: [captured.captureJobId] });
@@ -153,7 +155,8 @@ describe("Agent-selected Dataset ingest tool", () => {
     const resumedJobs = makeJobs(fixture, new RecordingRuntime(new PiAgentRuntimeAdapter({
       fauxResponses: [
         toolCall("pige_inspect_source", "dataset_retry_inspect_2"),
-        toolCall("pige_inspect_dataset", "dataset_retry_materialize_2")
+        toolCall("pige_inspect_dataset", "dataset_retry_materialize_2"),
+        { kind: "text", text: "The existing Dataset materialization was recovered." }
       ]
     })), planner);
     expect(resumedJobs.retry({ jobId: parentId })).toMatchObject({ status: "requeued" });
@@ -189,14 +192,15 @@ describe("Agent-selected Dataset ingest tool", () => {
     expect(planner.callCount).toBe(0);
   });
 
-  it("requeues a waiting Agent parent when Dataset capability becomes ready and reuses its child", async () => {
+  it("lets Pi finish while an unavailable Dataset capability remains a typed child result", async () => {
     const fixture = makeVault();
     const captured = await preserveCsv(fixture);
     const planner = new StaticPlanner(csvPlan(captured.bytes), false);
     const waitingJobs = makeJobs(fixture, new RecordingRuntime(new PiAgentRuntimeAdapter({
       fauxResponses: [
         toolCall("pige_inspect_source", "dataset_wait_inspect"),
-        toolCall("pige_inspect_dataset", "dataset_wait_materialize")
+        toolCall("pige_inspect_dataset", "dataset_wait_materialize"),
+        { kind: "text", text: "Dataset capability is still unavailable." }
       ]
     })), planner);
     waitingJobs.processQueuedCaptures({ jobIds: [captured.captureJobId] });
@@ -204,27 +208,18 @@ describe("Agent-selected Dataset ingest tool", () => {
 
     expect(await waitingJobs.processQueuedAgentIngest({ jobIds: [parentId] })).toEqual({
       processed: 1,
-      completed: 0,
-      failed: 1
+      completed: 1,
+      failed: 0
     });
     const waitingChild = requireValue(readJobs(fixture.vaultPath).find((job) => job.class === "dataset_import"));
     expect(waitingChild.state).toBe("waiting_dependency");
-    expect(readJob(fixture.vaultPath, parentId).state).toBe("waiting_dependency");
+    expect(readJob(fixture.vaultPath, parentId).state).toBe("completed");
     expect(waitingJobs.requeueWaitingAgentIngest()).toEqual({ requeued: 0 });
 
-    planner.available = true;
-    const resumedJobs = makeJobs(fixture, new RecordingRuntime(new PiAgentRuntimeAdapter({
-      fauxResponses: [
-        toolCall("pige_inspect_source", "dataset_resume_inspect"),
-        toolCall("pige_inspect_dataset", "dataset_resume_materialize")
-      ]
-    })), planner);
-    expect(resumedJobs.requeueWaitingAgentIngest()).toEqual({ requeued: 1 });
-    expect(await resumedJobs.processQueuedAgentIngest({ jobIds: [parentId] })).toMatchObject({ completed: 1, failed: 0 });
     const children = readJobs(fixture.vaultPath).filter((job) => job.class === "dataset_import");
     expect(children).toHaveLength(1);
     expect(children[0]?.id).toBe(waitingChild.id);
-    expect(planner.callCount).toBe(1);
+    expect(planner.callCount).toBe(0);
   });
 
   it("propagates parent cancellation into the active Dataset child before bundle commit", async () => {

@@ -134,10 +134,10 @@ localizes the enum instead of prompt matching.
 
 An in-progress Home `draft_replace` is sender/turn/Job-bound temporary UI state, never a
 conversation event, checkpoint, recovery input or assistant truth. Only validated
-assistant/terminal Job results survive restart; cancellation/failure stops delivery and
+tool/effect results and the durable upstream Pi final survive restart; cancellation/failure stops delivery and
 cannot promote the last draft.
 
-A validated Home Dataset answer stores one bounded preview and exact citation in its
+A durable upstream Pi Dataset final stores one bounded preview and exact citation in its
 checksum-bound assistant event. `agent_turn` refs bind source, Dataset, revision, table
 and assistant checksum; restart adopts it without another query/model turn. Preview or
 citation tampering fails recovery. Whole payloads, SQL, paths, handles and raw provider

@@ -1370,7 +1370,7 @@ function createUpdateOperation(input: {
     policyAudit: {
       policyContextId: input.binding.policyContextId,
       policyHash: input.binding.policyHash,
-      enforcementOwners: ["Agent Orchestrator", "Knowledge Compiler", "Model Egress Policy"]
+      enforcementOwners: ["Agent Orchestrator", "Knowledge Compiler"]
     },
     kind: "update_page",
     targetRefs: [{ kind: "page", id: input.binding.pageId, path: input.binding.pagePath }],

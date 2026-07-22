@@ -4,6 +4,10 @@
   "baselineCommit": "6812dd53917171963378e98bdfe5716888708e82",
   "status": "contract_frozen_implementation_pending",
   "statusPolicy": "Requirement, Exit, and Phase status may stay equal or move down while legacy evidence is removed; this contract never promotes status.",
+  "verificationModes": {
+    "staged": "node scripts/verify/architecture-reset.mjs",
+    "postCombined": "node scripts/verify/architecture-reset.mjs --post-combined"
+  },
   "principle": "Host provides capabilities, authority boundaries, data reliability, and recovery; Pi Agent chooses semantic work.",
   "phases": [
     {
@@ -68,19 +72,21 @@
     ["apps/desktop/src/renderer/src/locales/zh-Hans/messages.json","REWRITE","PT4","Mechanical locale parity for the same deletion/copy."]
   ],
   "passThroughNoGrowth": [
-    {"id":"terminal.finish_tool","token":"pige_finish_home_turn","maximumMatches":3,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/pi-agent-safe-projection.ts","apps/desktop/src/main/smokes/pi-agent-runtime-smoke.ts"]},
+    {"id":"terminal.finish_tool","token":"pige_finish_home_turn","maximumMatches":3,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/pi-agent-safe-projection.ts","apps/desktop/src/main/smokes/pi-agent-runtime-smoke.ts"],"postCombinedMaximumMatches":0,"postCombinedAllowedPaths":[]},
     {"id":"completion.policy","token":"PiCompletionPolicy","maximumMatches":3,"allowedPaths":["apps/desktop/src/main/services/pi-agent-completion-policy.ts","apps/desktop/src/main/services/pi-agent-runtime-adapter.ts"]},
     {"id":"semantic.repair","token":"AgentRepairRequiredError","maximumMatches":13,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/pi-agent-completion-policy.ts","apps/desktop/src/main/services/pi-agent-runtime-adapter.ts","apps/desktop/src/main/services/pi-agent-tool-boundary.ts"]},
     {"id":"completion.missing","token":"knowledge_action_missing","maximumMatches":4,"allowedPaths":["apps/desktop/src/main/services/agent-ingest-service.ts","apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/jobs-service.ts","apps/desktop/src/main/services/pi-agent-completion-policy.ts"]},
-    {"id":"answer.output_invalid","token":"model_provider.output_invalid","maximumMatches":12,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/reader-selection-proposal-service.ts","apps/desktop/src/renderer/src/locales/de/messages.json","apps/desktop/src/renderer/src/locales/en/messages.json","apps/desktop/src/renderer/src/locales/fr/messages.json","apps/desktop/src/renderer/src/locales/ja/messages.json","apps/desktop/src/renderer/src/locales/ko/messages.json","apps/desktop/src/renderer/src/locales/zh-Hans/messages.json"]},
-    {"id":"answer.completion_invalid","token":"agent_runtime.completion_invalid","maximumMatches":12,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/reader-selection-action-service.ts","apps/desktop/src/renderer/src/locales/de/messages.json","apps/desktop/src/renderer/src/locales/en/messages.json","apps/desktop/src/renderer/src/locales/fr/messages.json","apps/desktop/src/renderer/src/locales/ja/messages.json","apps/desktop/src/renderer/src/locales/ko/messages.json","apps/desktop/src/renderer/src/locales/zh-Hans/messages.json"]},
-    {"id":"answer.schema","token":"HomeAgentOutputSchema","maximumMatches":5,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts"]},
+    {"id":"answer.output_invalid","token":"model_provider.output_invalid","maximumMatches":12,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/reader-selection-proposal-service.ts","apps/desktop/src/renderer/src/locales/de/messages.json","apps/desktop/src/renderer/src/locales/en/messages.json","apps/desktop/src/renderer/src/locales/fr/messages.json","apps/desktop/src/renderer/src/locales/ja/messages.json","apps/desktop/src/renderer/src/locales/ko/messages.json","apps/desktop/src/renderer/src/locales/zh-Hans/messages.json"],"postCombinedMaximumMatches":0,"postCombinedAllowedPaths":[]},
+    {"id":"answer.completion_invalid","token":"agent_runtime.completion_invalid","maximumMatches":12,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/reader-selection-action-service.ts","apps/desktop/src/renderer/src/locales/de/messages.json","apps/desktop/src/renderer/src/locales/en/messages.json","apps/desktop/src/renderer/src/locales/fr/messages.json","apps/desktop/src/renderer/src/locales/ja/messages.json","apps/desktop/src/renderer/src/locales/ko/messages.json","apps/desktop/src/renderer/src/locales/zh-Hans/messages.json"],"postCombinedMaximumMatches":0,"postCombinedAllowedPaths":[]},
+    {"id":"answer.schema","token":"HomeAgentOutputSchema","maximumMatches":5,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts"],"postCombinedMaximumMatches":0,"postCombinedAllowedPaths":[]},
     {"id":"answer.evidence_quotes","token":"evidenceQuotes","maximumMatches":12,"allowedPaths":["apps/desktop/src/main/services/home-agent-service.ts"]},
     {"id":"turn.objective","token":"objective","maximumMatches":60,"allowedPaths":["apps/desktop/src/main/index.ts","apps/desktop/src/main/services/agent-ingest-service.ts","apps/desktop/src/main/services/agent-turn-conversation-store.ts","apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/home-agent-url-service.ts","apps/desktop/src/main/smokes/pi-agent-runtime-smoke.ts","apps/desktop/src/renderer/src/App.tsx","apps/desktop/src/renderer/src/components/CurrentNoteAgent.tsx","packages/contracts/src/index.ts"]},
     {"id":"legacy.agent_ingest","token":"agent_ingest","maximumMatches":100,"allowedPaths":["apps/desktop/src/main/index.ts","apps/desktop/src/main/services/agent-ingest-service.ts","apps/desktop/src/main/services/agent-page-update-service.ts","apps/desktop/src/main/services/agent-turn-publication.ts","apps/desktop/src/main/services/diagnostics-service.ts","apps/desktop/src/main/services/evidence-assembly-service.ts","apps/desktop/src/main/services/generated-note-file.ts","apps/desktop/src/main/services/jobs-service.ts","apps/desktop/src/main/services/reader-selection-proposal-service.ts","apps/desktop/src/renderer/src/App.tsx","packages/schemas/src/index.ts"]},
     {"id":"legacy.retrieval_query","token":"retrieval_query","maximumMatches":8,"allowedPaths":["apps/desktop/src/main/services/jobs-service.ts","apps/desktop/src/main/services/retrieval-service.ts","apps/desktop/src/renderer/src/App.tsx","packages/schemas/src/index.ts"]},
-    {"id":"egress.content_classes","token":"contentClasses","maximumMatches":17,"allowedPaths":["apps/desktop/src/main/services/agent-ingest-service.ts","apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/model-egress-policy.ts","packages/schemas/src/index.ts"]},
-    {"id":"ui.egress_confirmation","token":"errors.model_provider.egress_confirmation_required","maximumMatches":6,"allowedPaths":["apps/desktop/src/renderer/src/locales/de/messages.json","apps/desktop/src/renderer/src/locales/en/messages.json","apps/desktop/src/renderer/src/locales/fr/messages.json","apps/desktop/src/renderer/src/locales/ja/messages.json","apps/desktop/src/renderer/src/locales/ko/messages.json","apps/desktop/src/renderer/src/locales/zh-Hans/messages.json"]}
+    {"id":"egress.content_classes","token":"contentClasses","maximumMatches":17,"allowedPaths":["apps/desktop/src/main/services/agent-ingest-service.ts","apps/desktop/src/main/services/home-agent-service.ts","apps/desktop/src/main/services/model-egress-policy.ts","packages/schemas/src/index.ts"],"postCombinedMaximumMatches":0,"postCombinedAllowedPaths":[]},
+    {"id":"egress.audit","token":"modelEgressAudit","maximumMatches":14,"allowedPaths":["apps/desktop/src/main/services/agent-ingest-service.ts","apps/desktop/src/main/services/home-agent-service.ts","packages/schemas/src/index.ts"],"postCombinedMaximumMatches":0,"postCombinedAllowedPaths":[]},
+    {"id":"egress.decision","token":"model_egress_decision","maximumMatches":5,"allowedPaths":["apps/desktop/src/main/services/agent-ingest-service.ts","apps/desktop/src/main/services/home-agent-service.ts","packages/schemas/src/index.ts"],"postCombinedMaximumMatches":0,"postCombinedAllowedPaths":[]},
+    {"id":"ui.egress_confirmation","token":"errors.model_provider.egress_confirmation_required","maximumMatches":6,"allowedPaths":["apps/desktop/src/renderer/src/locales/de/messages.json","apps/desktop/src/renderer/src/locales/en/messages.json","apps/desktop/src/renderer/src/locales/fr/messages.json","apps/desktop/src/renderer/src/locales/ja/messages.json","apps/desktop/src/renderer/src/locales/ko/messages.json","apps/desktop/src/renderer/src/locales/zh-Hans/messages.json"],"postCombinedMaximumMatches":0,"postCombinedAllowedPaths":[]}
   ],
   "legacyMarkers": [
     {
@@ -147,6 +153,8 @@
       "targetPhase": "AR1",
       "token": "ModelEgress",
       "maximumMatches": 102,
+      "postCombinedMaximumMatches": 0,
+      "postCombinedAllowedPaths": [],
       "allowedPaths": [
         "apps/desktop/src/main/index.ts",
         "apps/desktop/src/main/services/agent-ingest-service.ts",
@@ -189,10 +197,11 @@
       ["tests/unit/permission-yolo-confirmation-registry.test.ts", "AR1", "Development", "Tests removed YOLO mode."],
       ["tests/unit/permission-broker-job-recovery.test.ts", "AR1", "Development", "Ordinary permission waiting/recovery is removed."],
       ["apps/desktop/src/main/services/home-agent-turn-lifecycle.ts", "AR2", "Development", "Host turn/repair shadow lifecycle is replaced by upstream Pi events and one durable projection owner."]
+      ,["apps/desktop/src/main/services/model-egress-policy.ts", "AR1", "Development", "Provider payload classification, redaction, and blocking are deleted."],
+      ["tests/unit/model-egress-policy.test.ts", "AR1", "Development", "Tests for the deleted Provider payload policy are removed."]
     ],
     "REWRITE": [
       ["apps/desktop/src/main/services/permission-broker-service.ts", "AR1", "Development", "Shrink to the closed high-risk effect boundary."],
-      ["apps/desktop/src/main/services/model-egress-policy.ts", "AR1", "Development", "Delete content classification/redaction/blocking; move only Provider/model identity, context bounds and stored-credential isolation to their technical owners."],
       ["packages/schemas/src/index.ts", "AR1", "Development", "Remove permission/egress approval DTOs and unreachable Job states; keep canonical boundary schemas."],
       ["packages/contracts/src/index.ts", "AR1", "Development", "Derive public types from canonical schemas and remove duplicate approval contracts."],
       ["apps/desktop/src/main/index.ts", "AR1", "Development", "Remove approval IPC/actions while preserving renderer/main isolation."],
@@ -206,7 +215,6 @@
       ["apps/desktop/src/main/services/job-execution-coordinator.ts", "AR3", "Development", "Own reliability transitions only, never semantic dispatch."],
       ["tests/unit/permission-broker-service.test.ts", "AR1", "Development", "Replace lifecycle internals with closed-list allow/deny/effect tests."],
       ["tests/unit/permission-broker-home-agent.test.ts", "AR1", "Development", "Prove ordinary tools create zero permission records and high-risk denial has no effect."],
-      ["tests/unit/model-egress-policy.test.ts", "AR1", "Development", "Replace content-policy assertions with exact-payload, Provider/model identity, context-bound and credential-isolation tests."],
       ["tests/unit/agent-ingest-service.test.ts", "AR1/AR2", "Development", "Remove egress approval and fixed pipeline assertions; test Pi-selected tools and retained boundaries."],
       ["tests/unit/home-agent-service.test.ts", "AR1/AR2", "Development", "Remove waiting states/Host routing internals; retain user-visible turn, persistence and failure behavior."],
       ["tests/unit/job-execution-coordinator.test.ts", "AR3", "Development", "Test CAS/cancel/retry/checkpoint/terminal only."],
@@ -214,7 +222,7 @@
     ],
     "KEEP": [
       ["apps/desktop/src/main/services/agent-ingest-tool-registry.ts", "AR2", "Development", "Typed capability catalog; it must not choose semantic order."],
-      ["apps/desktop/src/main/services/retrieval-evidence-boundary.ts", "AR2", "Development", "Scope, budget, redaction and citation validation remain Host-owned."],
+      ["apps/desktop/src/main/services/retrieval-evidence-boundary.ts", "AR2", "Development", "Host owns scope, character/token budget, revision/exact evidence identity, persistence-safe index/cache/search-display projection and citation metadata. Provider-bound selected evidence is re-read from source truth and sent exact/ephemeral without classification, trimming, redaction or rewriting; persistence projections never replace it as model context."],
       ["apps/desktop/src/main/services/job-record-store.ts", "AR3", "Development", "Durable Job identity and storage remain Host-owned."],
       ["apps/desktop/src/main/services/secret-store.ts", "AR1", "Development", "Credentials remain main-owned and non-exportable by default."],
       ["apps/desktop/src/main/services/backup-service.ts", "AR3", "Development", "Backup/Restore is deterministic reliability work, not Agent semantic orchestration."],

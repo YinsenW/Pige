@@ -139,7 +139,6 @@ describe("Agent-selected URL ingress", () => {
       expect(sources[0]?.metadata).not.toHaveProperty("rawToolCallId");
       expect(findFiles(path.join(fixture.vaultPath, "sources"), ".md")).toHaveLength(1);
       const operations = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"));
-      expect(operations.filter((operation) => operation.kind === "model_egress_decision")).toHaveLength(3);
       expect(operations.filter((operation) => operation.kind === "create_source_record")).toEqual([
         expect.objectContaining({
           jobId: jobs[0]?.id,
@@ -433,9 +432,8 @@ describe("Agent-selected URL ingress", () => {
       .filter((operation) => operation.kind === "create_source_record")).toHaveLength(1);
   });
 
-  it("rejects a same-response finish until a later model turn has consumed fetched evidence", async () => {
+  it("accepts Pi assistant prose without a Host finish tool after a selected URL fetch", async () => {
     const fixture = makeFixture();
-    let finishExecutions = 0;
     const runtime: HomeAgentRuntimePort = {
       run: async (request) => {
         await request.beforeModelTurn?.();
@@ -443,13 +441,7 @@ describe("Agent-selected URL ingress", () => {
         const fetchContext = toolContext("same_response_fetch");
         expect(await fetchTool.authorize?.({ candidateIndex: 1 }, fetchContext)).not.toBe(false);
         await fetchTool.execute({ candidateIndex: 1 }, fetchContext.signal, fetchContext);
-        const finishTool = requireTool(request, "pige_finish_home_turn");
-        const finishContext = toolContext("same_response_finish");
-        const output = { answer: "Too early", citationRefs: [], grounding: "source" };
-        await finishTool.authorize?.(output, finishContext);
-        finishExecutions += 1;
-        await finishTool.execute(output, finishContext.signal, finishContext);
-        return runtimeResult(request, [fetchTool.name, finishTool.name]);
+        return runtimeResult(request, [fetchTool.name], "The URL was fetched for this turn.");
       }
     };
     const { home } = makeHome(fixture, { fetchSnapshot: async () => makeSnapshot() }, runtime);
@@ -461,8 +453,11 @@ describe("Agent-selected URL ingress", () => {
       locale: "en"
     });
 
-    expect(outcome).toMatchObject({ state: "failed", sourceIds: [expect.stringMatching(/^src_/u)] });
-    expect(finishExecutions).toBe(0);
+    expect(outcome).toMatchObject({
+      state: "completed",
+      sourceIds: [],
+      answer: { answer: "The URL was fetched for this turn." }
+    });
   });
 
   it("rejects same-response URL inspection until Pi consumes the fetch receipt on a later turn", async () => {
@@ -515,12 +510,11 @@ describe("Agent-selected URL ingress", () => {
         inspectedOutput = readPiToolText(await inspectTool.execute({}, inspectContext.signal, inspectContext));
 
         await request.beforeModelTurn?.();
-        const finishTool = requireTool(request, "pige_finish_home_turn");
-        const finishContext = toolContext("hostile_finish");
-        const output = { answer: "The source was inspected under host policy.", citationRefs: [], grounding: "source" };
-        expect(await finishTool.authorize?.(output, finishContext)).not.toBe(false);
-        await finishTool.execute(output, finishContext.signal, finishContext);
-        return runtimeResult(request, [fetchTool.name, inspectTool.name, finishTool.name]);
+        return runtimeResult(
+          request,
+          [fetchTool.name, inspectTool.name],
+          "The source was inspected under host policy."
+        );
       }
     };
     const { home } = makeHome(fixture, {
@@ -596,7 +590,7 @@ describe("Agent-selected URL ingress", () => {
       fauxResponses: [
         fetchUrl("mismatched_snapshot_fetch"),
         inspectUrl("mismatched_snapshot_inspect"),
-        finishHome("Must not complete.", "source")
+        finishHome("The submitted URL could not be accepted by the fetch adapter.", "source")
       ]
     }));
 
@@ -608,16 +602,16 @@ describe("Agent-selected URL ingress", () => {
     });
 
     expect(outcome).toMatchObject({
-      state: "failed",
+      state: "completed",
       sourceIds: [],
-      error: { code: "capture.url_fetch_failed", messageKey: "errors.url_fetch.failed" }
+      answer: { answer: "The submitted URL could not be accepted by the fetch adapter." }
     });
     expect(fetchCalls).toBe(1);
     expect(readRecords<SourceRecord>(path.join(fixture.vaultPath, ".pige", "source-records"))).toEqual([]);
     expect(findFiles(path.join(fixture.vaultPath, "raw", "web"), ".html")).toEqual([]);
   });
 
-  it("blocks restricted fetched body content before a later model turn and keeps audits body-free", async () => {
+  it("passes path-like fetched body content to the later model turn without durable body storage", async () => {
     const fixture = makeFixture();
     const restrictedText = "Synthetic private path /Users/example/vault/private-note.md must stay local.";
     let modelTurns = 0;
@@ -663,7 +657,7 @@ describe("Agent-selected URL ingress", () => {
     expect(outcome).toMatchObject({
       state: "failed",
       sourceIds: [expect.stringMatching(/^src_/u)],
-      error: { code: "model_provider.egress_blocked" }
+      error: { code: "model_provider.call_failed" }
     });
     expect(modelTurns).toBe(2);
     expect(runtimeConfigReads).toBe(1);
@@ -675,7 +669,7 @@ describe("Agent-selected URL ingress", () => {
     expect(durableAuditText).not.toContain("private-note.md");
   });
 
-  it("writes a replacement body-free egress audit and blocks a readable URL privacy drift before another model turn", async () => {
+  it("blocks readable URL revision drift before another model turn", async () => {
     const fixture = makeFixture();
     let runtimeConfigReads = 0;
     let providerTurns = 0;
@@ -716,21 +710,12 @@ describe("Agent-selected URL ingress", () => {
     expect(outcome).toMatchObject({
       state: "failed",
       modelUsage: "cloud",
-      error: { code: "model_provider.egress_blocked" }
+      error: { code: "agent_runtime.turn_conflict" }
     });
     expect(providerTurns).toBe(1);
     expect(runtimeConfigReads).toBe(1);
     const operations = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"));
-    expect(operations.filter((operation) => operation.kind === "model_egress_decision")).toHaveLength(3);
     expect(operations.filter((operation) => operation.kind === "create_source_record")).toHaveLength(1);
-    expect(operations).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        kind: "model_egress_decision",
-        modelEgressAudit: expect.objectContaining({
-          contentClasses: expect.arrayContaining(["private"])
-        })
-      })
-    ]));
     expect(JSON.stringify(operations)).not.toContain("heliotrope seven");
   });
 
@@ -745,7 +730,7 @@ describe("Agent-selected URL ingress", () => {
       "https://example.com/?callback=https%3A%2F%2Fcallback.example%2Fdone%3Ftoken%3Dopaque-nested-token-123456",
       "opaque-nested-token-123456"
     ]
-  ])("blocks sensitive URL material in %s before persistence, credential resolution, fetch, or Pi", async (url, secretValue) => {
+  ])("does not content-block authored URL-like text in %s", async (url, secretValue) => {
     const fixture = makeFixture();
     let runtimeConfigReads = 0;
     let fetchCalls = 0;
@@ -767,13 +752,14 @@ describe("Agent-selected URL ingress", () => {
     expect(outcome).toMatchObject({
       state: "failed",
       modelUsage: "none",
-      error: { code: "model_provider.egress_blocked" }
+      error: { code: "model_provider.call_failed" }
     });
-    expect(runtimeConfigReads).toBe(0);
+    expect(runtimeConfigReads).toBe(1);
     expect(fetchCalls).toBe(0);
-    expect(runtimeCalls).toBe(0);
+    expect(runtimeCalls).toBe(1);
     expect(readRecords<SourceRecord>(path.join(fixture.vaultPath, ".pige", "source-records"))).toEqual([]);
-    expect(readAllText(path.join(fixture.vaultPath, ".pige"))).not.toContain(secretValue);
+    expect(readAllText(path.join(fixture.vaultPath, ".pige", "conversations"))).toContain(JSON.stringify(url));
+    expect(readAllText(path.join(fixture.vaultPath, ".pige", "jobs"))).not.toContain(secretValue);
   });
 
   it.each([
@@ -794,7 +780,7 @@ describe("Agent-selected URL ingress", () => {
       fauxResponses: [
         fetchUrl(`symlink_${relativeRoot.replaceAll("/", "_")}`),
         inspectUrl("symlink_inspect"),
-        finishHome("Must not complete.", "source")
+        finishHome("The URL source could not be preserved safely.", "source")
       ]
     }));
 
@@ -806,13 +792,13 @@ describe("Agent-selected URL ingress", () => {
     });
 
     expect(outcome).toMatchObject({
-      state: "failed",
+      state: "completed",
       sourceIds: [],
-      error: { code: "capture.url_fetch_failed" }
+      answer: { answer: "The URL source could not be preserved safely." }
     });
     expect(fs.readdirSync(externalRoot)).toEqual([]);
     expect(readRecords<SourceRecord>(path.join(fixture.vaultPath, ".pige", "source-records"))).toEqual([]);
-    expect(jobs.readAgentTurnJob(outcome.jobId ?? "")?.cancellation?.durableWritesApplied).not.toBe(true);
+    expect(jobs.readAgentTurnJob(outcome.jobId ?? "")?.cancellation?.durableWritesApplied).toBe(true);
   });
 
   it("keeps private-network URL rejection typed and performs zero transport calls", async () => {
@@ -829,7 +815,7 @@ describe("Agent-selected URL ingress", () => {
       fauxResponses: [
         fetchUrl("private_network_fetch"),
         inspectUrl("private_network_inspect"),
-        finishHome("Must not complete.", "source")
+        finishHome("The private-network URL was not fetched.", "source")
       ]
     }));
 
@@ -841,13 +827,13 @@ describe("Agent-selected URL ingress", () => {
     });
 
     expect(outcome).toMatchObject({
-      state: "failed",
-      error: { code: "capture.url_fetch_blocked", messageKey: "errors.url_fetch.blocked" }
+      state: "completed",
+      answer: { answer: "The private-network URL was not fetched." }
     });
     expect(transportCalls).toBe(0);
     expect(readRecords<SourceRecord>(path.join(fixture.vaultPath, ".pige", "source-records"))).toEqual([]);
     expect(jobs.readAgentTurnJob(outcome.jobId ?? "")).toMatchObject({
-      state: "failed_final",
+      state: "completed",
       inputRefs: expect.arrayContaining([
         expect.objectContaining({ kind: "tool", id: "pige_fetch_url@1", role: "agent_tool_canonical_input" }),
         expect.objectContaining({ kind: "tool", id: "pige_fetch_url", role: "agent_tool_call_provenance" })
@@ -963,6 +949,9 @@ function noRetrieval(): HomeAgentRetrievalPort {
   return {
     search: (_request: RetrievalSearchRequest): RetrievalSearchResult => {
       throw new Error("URL-only tests must not search the vault.");
+    },
+    readExactSelectedEvidence: () => {
+      throw new Error("URL-only tests must not bind vault evidence.");
     }
   };
 }
@@ -1009,11 +998,8 @@ function inspectUrl(toolCallId: string): PiFauxResponse {
 }
 
 function finishHome(answer: string, grounding: "general" | "source"): PiFauxResponse {
-  return {
-    kind: "tool_call",
-    toolName: "pige_finish_home_turn",
-    args: { answer, citationRefs: [], grounding }
-  };
+  void grounding;
+  return { kind: "text", text: answer };
 }
 
 function runtimeThatFetchesThenFails(): HomeAgentRuntimePort {
@@ -1041,7 +1027,11 @@ function toolContext(toolCallId: string) {
   return { toolCallId, signal };
 }
 
-function runtimeResult(request: PiAgentRunRequest, invokedTools: readonly string[]): PiAgentRunResult {
+function runtimeResult(
+  request: PiAgentRunRequest,
+  invokedTools: readonly string[],
+  assistantText = ""
+): PiAgentRunResult {
   return {
     adapterMode: "embedded_pi_sdk",
     providerProfileId: request.runtimeConfig.provider.id,
@@ -1051,7 +1041,7 @@ function runtimeResult(request: PiAgentRunRequest, invokedTools: readonly string
       { type: "tool_execution_start" as const, toolName },
       { type: "tool_execution_end" as const, toolName, isError: false }
     ]),
-    assistantText: "",
+    assistantText,
     invokedTools
   };
 }

@@ -361,7 +361,7 @@ Exit criteria:
 - [E3.09] One real DeepSeek-first app path persists the user turn and `agent_turn`, keeps
   Global Default across restart, uses the selected probed binding with truthful status,
   waits/resumes without a model, answers ordinary empty-vault chat, retrieves cited
-  knowledge when Pi chooses, repairs rejected candidates and tool inputs without a manual
+  knowledge when Pi chooses, replans after rejected tool inputs without a manual
   retry, safely replaces a provisional draft with the durable final, and uses file/URL
   tools without heuristic, fixed correction count, presentation-only provider call, or
   silent fallback.

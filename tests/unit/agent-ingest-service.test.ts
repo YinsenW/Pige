@@ -156,11 +156,9 @@ describe("agent ingest service", () => {
 
     expect(runtime.run).not.toHaveBeenCalled();
     expect(session.tools.map((tool) => tool.name)).toContain("pige_inspect_source");
-    expect(session.terminalToolNames).toContain("pige_respond_to_user");
-    expect(session.terminalToolNames).not.toContain("pige_inspect_dataset");
+    expect(session.tools.map((tool) => tool.name)).not.toContain("pige_respond_to_user");
     await expect(session.beforeModelTurn()).resolves.toBeUndefined();
     expect(session.result()).toBeUndefined();
-    expect(() => session.settle()).toThrow("knowledge action");
   });
 
   it("turns a preserved source into a wiki note, index entry, and operation record without storing prompts or secrets", async () => {
@@ -195,7 +193,6 @@ describe("agent ingest service", () => {
     const index = fs.readFileSync(path.join(vaultPath, "index.md"), "utf8");
     const operations = readOperationFiles(vaultPath);
     const operation = requireOperation(operations, '"kind": "create_page"').text;
-    const egressOperation = requireOperation(operations, '"kind": "model_egress_decision"').text;
 
     expect(result.created).toBe(true);
     expect(result.reviewRequired).toBe(false);
@@ -219,21 +216,9 @@ describe("agent ingest service", () => {
     });
     expect(operation).not.toContain("sk-test-source-secret");
     expect(operation).not.toContain("API_KEY");
-    expect(egressOperation).toContain("Model egress allow");
-    const egressAudit = (JSON.parse(egressOperation) as {
-      readonly modelEgressAudit?: {
-        readonly payloadHash?: string;
-        readonly evidenceSummaryHash?: string;
-        readonly decisionHash?: string;
-      };
-    }).modelEgressAudit;
-    expect(egressAudit?.payloadHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
-    expect(egressAudit?.evidenceSummaryHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
-    expect(egressAudit?.decisionHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
-    expect(egressAudit?.evidenceSummaryHash).not.toBe(egressAudit?.payloadHash);
-    expect(result.operationIds).toHaveLength(2);
-    expect(modelClient.lastUserPrompt).not.toContain("sk-test-source-secret");
-    expect(modelClient.lastUserPrompt).toContain("[redacted-secret]");
+    expect(result.operationIds).toHaveLength(1);
+    expect(modelClient.lastUserPrompt).toContain("API_KEY=sk-test-source-secret-12345");
+    expect(modelClient.lastUserPrompt).not.toContain("[redacted-secret]");
 
     const activity = new KnowledgeActivityService({
       current: () => vault,
@@ -324,7 +309,7 @@ describe("agent ingest service", () => {
     expect(fs.readFileSync(occupiedPath as string, "utf8")).toBe(occupiedBytes);
   });
 
-  it("blocks an unverified provider boundary before credential lookup or model invocation", async () => {
+  it("sends a preserved source through the exact connected provider without a model-egress decision", async () => {
     const { vaultPath, vault } = makeVault();
     const captured = makeCapture(vaultPath, vault).submitText({
       text: "Ordinary source text for an endpoint whose data boundary is unknown.",
@@ -336,7 +321,7 @@ describe("agent ingest service", () => {
     const job = readJson<JobRecord>(findFile(path.join(vaultPath, ".pige/jobs"), `${captured.jobId}.json`));
     const provider = { ...runtimeConfig.provider, cloudBoundary: "unknown" as const, boundaryVerification: "unknown" as const };
     let credentialLookups = 0;
-    const modelClient = new CapturingModelClient({});
+    const modelClient = new CapturingModelClient(standardAgentOutput("Unknown-boundary source"));
     const service = new AgentIngestService({
       getDefaultModel: () => ({ ...runtimeConfig.model, isDefault: true }),
       getDefaultProvider: () => provider,
@@ -347,73 +332,13 @@ describe("agent ingest service", () => {
       }
     }, modelClient);
 
-    await expect(service.ingestSource(vaultPath, sourceRecord, job)).rejects.toMatchObject({
-      code: "model_egress.blocked"
-    });
-    expect(credentialLookups).toBe(0);
-    expect(modelClient.lastUserPrompt).toBe("");
-    expect(requireOperation(readOperationFiles(vaultPath), '"kind": "model_egress_decision"').text)
-      .toContain("Model egress block");
-
-    await expect(service.ingestSource(vaultPath, sourceRecord, job)).rejects.toMatchObject({
-      code: "model_egress.blocked"
-    });
-    expect(readOperationFiles(vaultPath)
-      .filter((operation) => operation.text.includes('"kind": "model_egress_decision"'))).toHaveLength(1);
-
-    const privateSource: SourceRecord = {
-      ...sourceRecord,
-      metadata: { ...sourceRecord.metadata, private: true }
-    };
-    await expect(service.ingestSource(vaultPath, privateSource, job)).rejects.toMatchObject({
-      code: "model_egress.blocked"
-    });
-    const classificationOperations = readOperationFiles(vaultPath)
-      .filter((operation) => operation.text.includes('"kind": "model_egress_decision"'))
-      .map((operation) => readJson<{
-        readonly id: string;
-        readonly modelEgressAudit: {
-          readonly payloadHash: string;
-          readonly evidenceSummaryHash: string;
-          readonly decisionHash: string;
-        };
-      }>(operation.path));
-    expect(classificationOperations).toHaveLength(2);
-    expect(new Set(classificationOperations.map((operation) => operation.id)).size).toBe(2);
-    expect(new Set(classificationOperations.map((operation) => operation.modelEgressAudit.payloadHash)).size).toBe(1);
-    expect(new Set(classificationOperations.map((operation) => operation.modelEgressAudit.evidenceSummaryHash)).size).toBe(1);
-    expect(new Set(classificationOperations.map((operation) => operation.modelEgressAudit.decisionHash)).size).toBe(2);
-
-    const managedCopy = sourceRecord.managedCopy;
-    if (!managedCopy) throw new Error("Expected the text capture to have a managed copy.");
-    const changedText = "Different ordinary evidence under the same Job and policy snapshot.";
-    fs.writeFileSync(path.join(vaultPath, managedCopy.path), changedText, "utf8");
-    const changedSource: SourceRecord = {
-      ...sourceRecord,
-      managedCopy: {
-        ...managedCopy,
-        checksum: checksumText(changedText),
-        size: Buffer.byteLength(changedText)
-      }
-    };
-    await expect(service.ingestSource(vaultPath, changedSource, job)).rejects.toMatchObject({
-      code: "model_egress.blocked"
-    });
-    const egressOperations = readOperationFiles(vaultPath)
-      .filter((operation) => operation.text.includes('"kind": "model_egress_decision"'))
-      .map((operation) => readJson<{
-        readonly id: string;
-        readonly modelEgressAudit: {
-          readonly payloadHash: string;
-          readonly evidenceSummaryHash: string;
-          readonly decisionHash: string;
-        };
-      }>(operation.path));
-    expect(egressOperations).toHaveLength(3);
-    expect(new Set(egressOperations.map((operation) => operation.id)).size).toBe(3);
-    expect(new Set(egressOperations.map((operation) => operation.modelEgressAudit.payloadHash)).size).toBe(2);
-    expect(new Set(egressOperations.map((operation) => operation.modelEgressAudit.evidenceSummaryHash)).size).toBe(2);
-    expect(credentialLookups).toBe(0);
+    await expect(service.ingestSource(vaultPath, sourceRecord, job))
+      .resolves.toMatchObject({ created: true });
+    expect(credentialLookups).toBe(1);
+    expect(modelClient.callCount).toBe(1);
+    expect(modelClient.lastUserPrompt).toContain("Ordinary source text for an endpoint whose data boundary is unknown.");
+    expect(modelClient.lastUserPrompt).not.toContain("cloud_boundary");
+    expect(modelClient.lastUserPrompt).not.toContain("boundary_verification");
   });
 
   it("rejects a same-ID provider endpoint change before prompt rendering or credential lookup", async () => {
@@ -453,8 +378,7 @@ describe("agent ingest service", () => {
     expect(credentialLookups).toBe(0);
     expect(modelClient.callCount).toBe(0);
     expect(modelClient.lastUserPrompt).toBe("");
-    expect(requireOperation(readOperationFiles(vaultPath), '"kind": "model_egress_decision"').text)
-      .toContain("Model egress allow");
+    expect(readOperationFiles(vaultPath)).toEqual([]);
 
     const changedRuntime = { ...verifiedLocalCompatibleRuntimeConfig, provider: changedProvider };
     const retryClient = new CapturingModelClient({
@@ -469,14 +393,7 @@ describe("agent ingest service", () => {
     });
     await new AgentIngestService(makeModelPort(() => changedRuntime), retryClient)
       .ingestSource(vaultPath, sourceRecord, job);
-    const egressAudits = readOperationFiles(vaultPath)
-      .filter((operation) => operation.text.includes('"kind": "model_egress_decision"'))
-      .map((operation) => readJson<{
-        readonly modelEgressAudit: { readonly payloadHash: string; readonly evidenceSummaryHash: string };
-      }>(operation.path).modelEgressAudit);
-    expect(egressAudits).toHaveLength(2);
-    expect(new Set(egressAudits.map((audit) => audit.payloadHash)).size).toBe(1);
-    expect(new Set(egressAudits.map((audit) => audit.evidenceSummaryHash)).size).toBe(2);
+    expect(retryClient.lastUserPrompt).toContain("Evidence approved only for the planned loopback provider endpoint.");
   });
 
   it("rejects a same-ID runtime endpoint or model change before model invocation", async () => {
@@ -521,7 +438,7 @@ describe("agent ingest service", () => {
     expect(modelClient.lastUserPrompt).toBe("");
   });
 
-  it("redacts bounded prompt metadata before egress classification and prompt rendering", async () => {
+  it("omits unsafe Host metadata tokens without rewriting selected source evidence", async () => {
     const { vaultPath, vault } = makeVault();
     const captured = makeCapture(vaultPath, vault).submitText({
       text: "Ordinary evidence with a parser diagnostic that must be sanitized separately.",
@@ -552,21 +469,14 @@ describe("agent ingest service", () => {
     await new AgentIngestService(makeModelPort(() => verifiedLocalCompatibleRuntimeConfig), modelClient)
       .ingestSource(vaultPath, sourceRecord, job);
 
-    const egressOperation = requireOperation(readOperationFiles(vaultPath), '"kind": "model_egress_decision"').text;
-    const egressAudit = readJson<{
-      readonly modelEgressAudit: { readonly contentClasses: readonly string[] };
-    }>(requireOperation(readOperationFiles(vaultPath), '"kind": "model_egress_decision"').path).modelEgressAudit;
     expect(modelClient.lastUserPrompt).toContain("policy_context_id: policy_");
     expect(modelClient.lastUserPrompt).toMatch(/policy_hash: sha256:[a-f0-9]{64}/u);
-    expect(modelClient.lastUserPrompt).toContain("cloud_boundary: local");
-    expect(modelClient.lastUserPrompt).toContain("[redacted-secret]");
     expect(modelClient.lastUserPrompt).toContain("stable_parser_warning");
     expect(modelClient.lastUserPrompt).not.toContain("sk-metadata-secret");
-    expect(egressAudit.contentClasses).toContain("sensitive");
-    expect(egressOperation).not.toContain("sk-metadata-secret");
+    expect(modelClient.lastUserPrompt).not.toContain("[redacted-secret]");
   });
 
-  it("blocks restricted dynamic prompt metadata before provider credential lookup", async () => {
+  it("omits non-token parser diagnostics and still runs the selected provider", async () => {
     const { vaultPath, vault } = makeVault();
     const captured = makeCapture(vaultPath, vault).submitText({
       text: "Ordinary evidence whose parser diagnostic contains forbidden credential material.",
@@ -584,7 +494,7 @@ describe("agent ingest service", () => {
     };
     const job = readJson<JobRecord>(findFile(path.join(vaultPath, ".pige/jobs"), `${captured.jobId}.json`));
     let credentialLookups = 0;
-    const modelClient = new CapturingModelClient({});
+    const modelClient = new CapturingModelClient(standardAgentOutput("Safe metadata projection"));
     const service = new AgentIngestService({
       getDefaultModel: () => ({ ...verifiedLocalCompatibleRuntimeConfig.model, isDefault: true }),
       getDefaultProvider: () => verifiedLocalCompatibleRuntimeConfig.provider,
@@ -595,16 +505,13 @@ describe("agent ingest service", () => {
       }
     }, modelClient);
 
-    await expect(service.ingestSource(vaultPath, sourceRecord, job)).rejects.toMatchObject({
-      code: "model_egress.blocked"
-    });
-    expect(credentialLookups).toBe(0);
-    expect(modelClient.callCount).toBe(0);
-    expect(requireOperation(readOperationFiles(vaultPath), '"kind": "model_egress_decision"').text)
-      .toContain("restricted_content_block");
+    await expect(service.ingestSource(vaultPath, sourceRecord, job)).resolves.toMatchObject({ created: true });
+    expect(credentialLookups).toBe(1);
+    expect(modelClient.callCount).toBe(1);
+    expect(modelClient.lastUserPrompt).not.toContain("PRIVATE KEY");
   });
 
-  it("blocks unredacted restricted material and records the decision before provider access", async () => {
+  it("sends accepted secret-like source text unchanged without a model-egress Operation", async () => {
     const { vaultPath, vault } = makeVault();
     const captured = makeCapture(vaultPath, vault).submitText({
       text: "-----BEGIN PRIVATE KEY-----\nnot-safe-to-send\n-----END PRIVATE KEY-----",
@@ -615,6 +522,7 @@ describe("agent ingest service", () => {
     const sourceRecord = readJson<SourceRecord>(findFile(path.join(vaultPath, ".pige/source-records"), `${captured.sourceId}.json`));
     const job = readJson<JobRecord>(findFile(path.join(vaultPath, ".pige/jobs"), `${captured.jobId}.json`));
     let credentialLookups = 0;
+    const modelClient = new CapturingModelClient(standardAgentOutput("Exact source pass-through"));
     const service = new AgentIngestService({
       getDefaultModel: () => ({ ...runtimeConfig.model, isDefault: true }),
       getDefaultProvider: () => runtimeConfig.provider,
@@ -623,13 +531,11 @@ describe("agent ingest service", () => {
         credentialLookups += 1;
         return runtimeConfig;
       }
-    }, new CapturingModelClient({}));
+    }, modelClient);
 
-    await expect(service.ingestSource(vaultPath, sourceRecord, job)).rejects.toMatchObject({ code: "model_egress.blocked" });
-    expect(credentialLookups).toBe(0);
-    const operation = requireOperation(readOperationFiles(vaultPath), '"kind": "model_egress_decision"').text;
-    expect(operation).toContain("restricted_content_block");
-    expect(operation).not.toContain("PRIVATE KEY");
+    await expect(service.ingestSource(vaultPath, sourceRecord, job)).resolves.toMatchObject({ created: true });
+    expect(credentialLookups).toBe(1);
+    expect(modelClient.lastUserPrompt).toContain("-----BEGIN PRIVATE KEY-----\nnot-safe-to-send\n-----END PRIVATE KEY-----");
   });
 
   it("marks low-confidence or warning-bearing generated notes as needing review", async () => {
@@ -799,7 +705,7 @@ describe("agent ingest service", () => {
     expect(operation.policyAudit).toEqual({
       policyContextId: publicationBinding.policyContextId,
       policyHash: publicationBinding.policyHash,
-      enforcementOwners: ["Agent Orchestrator", "Model Egress Policy", "Model Provider Registry"]
+      enforcementOwners: ["Agent Orchestrator", "Model Provider Registry"]
     });
     expect(operation.summary).toContain(publicationBinding.sourceRevisionHash);
     expect(activity.list().activities.find((item) => item.operationId === operation.id))
@@ -1071,7 +977,7 @@ describe("agent ingest service", () => {
 
     expect(result.created).toBe(false);
     expect(result.title).toBe("Concurrent winner");
-    expect(result.operationIds).toHaveLength(2);
+    expect(result.operationIds).toHaveLength(1);
     expect(modelClient.callCount).toBe(1);
     expect(fs.readFileSync(notePath, "utf8")).toBe(concurrentNote);
     expect(fs.readFileSync(path.join(vaultPath, "index.md"), "utf8"))
@@ -1620,7 +1526,7 @@ describe("agent ingest service", () => {
     expect(note).toContain("OCR enrichment");
     expect(modelClient.lastUserPrompt).toContain("parser_truncated: true");
     expect(modelClient.lastUserPrompt).toContain("ocr_enrichment_pending: true");
-    expect(modelClient.lastUserPrompt).toContain("Only the configured leading page range was processed.");
+    expect(modelClient.lastUserPrompt).not.toContain("Only the configured leading page range was processed.");
   });
 
   it("forces review when web extraction is truncated or reduced to the basic fallback", async () => {
@@ -1673,7 +1579,7 @@ describe("agent ingest service", () => {
     expect(modelClient.lastUserPrompt).toContain("web_extraction_truncated: true");
   });
 
-  it("rejects an unknown evidence ref before writing a generated page", async () => {
+  it("omits an unknown evidence ref without failing the durable knowledge action", async () => {
     const { vaultPath, vault } = makeVault();
     const captured = makeCapture(vaultPath, vault).submitText({
       text: "Only this local statement is available as evidence.",
@@ -1695,13 +1601,15 @@ describe("agent ingest service", () => {
     });
     const service = new AgentIngestService(makeModelPort(), modelClient);
 
-    await expect(service.ingestSource(vaultPath, sourceRecord, job)).rejects.toMatchObject({
-      code: "agent_ingest.unknown_evidence_ref"
-    });
+    const result = await service.ingestSource(vaultPath, sourceRecord, job);
 
     expect(modelClient.callCount).toBe(1);
-    expect(readOperationFiles(vaultPath).some((operation) => operation.text.includes('"kind": "create_page"'))).toBe(false);
-    expect(listFiles(path.join(vaultPath, "wiki", "generated"), ".md")).toEqual([]);
+    expect(result.reviewRequired).toBe(true);
+    expect(result.warnings).toEqual([
+      expect.stringMatching(/^One or more generated claims have no verified evidence citation/u)
+    ]);
+    const note = fs.readFileSync(path.join(vaultPath, result.pagePath), "utf8");
+    expect(note).not.toContain("ev_99");
   });
 
   it("forces review for uncited statements without inventing a fallback citation", async () => {
@@ -1800,6 +1708,19 @@ function requireOperation(
   const operation = operations.find((candidate) => candidate.text.includes(marker));
   if (!operation) throw new Error(`Missing operation containing ${marker}`);
   return operation;
+}
+
+function standardAgentOutput(title: string): unknown {
+  return {
+    title,
+    summary: { text: "Grounded Agent output for a pass-through test.", evidenceRefs: ["ev_01"] },
+    keyPoints: [],
+    tags: [],
+    topics: [],
+    entities: [],
+    warnings: [],
+    confidence: "high"
+  };
 }
 
 function listFiles(root: string, suffix: string): string[] {

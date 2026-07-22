@@ -198,6 +198,54 @@ Useful public idea about retrieval.
     expect(resultJson).not.toContain(".pige/source-records");
   });
 
+  it("redacts secret-like text from persisted and renderer-facing retrieval evidence", () => {
+    const { vaultPath, vault } = makeVault();
+    const retrieval = makeRetrieval(vaultPath, vault);
+    const exactEvidence = "password=hunterExample apiKey=skSynthetic123456789 token=tokenValue secret=secretValue /Users/example/note.txt";
+    writePage(vaultPath, "wiki/pass-through.md", {
+      id: "page_20260722_passthrough",
+      title: "Pass through evidence",
+      body: exactEvidence
+    });
+
+    const result = retrieval.search({
+      scope: { kind: "active_vault", vaultId: vault.vaultId },
+      query: "hunterExample",
+      limit: 5
+    });
+
+    expect(result.results[0]?.snippets[0]).not.toContain("skSynthetic123456789");
+    expect(result.results[0]?.snippets[0]).not.toContain("tokenValue");
+
+    const exact = retrieval.readExactSelectedEvidence(result);
+    expect(exact.items[0]?.snippets[0]).toBe(exactEvidence);
+    expect(exact.items[0]?.snippets[0]).not.toContain("[redacted-secret]");
+  });
+
+  it("rejects exact provider evidence when the selected Markdown changes after search", () => {
+    const { vaultPath, vault } = makeVault();
+    const retrieval = makeRetrieval(vaultPath, vault);
+    writePage(vaultPath, "wiki/stale-provider-evidence.md", {
+      id: "page_20260722_staleevidence",
+      title: "Stale provider evidence",
+      body: "password=originalValue queryNeedle"
+    });
+    const result = retrieval.search({
+      scope: { kind: "active_vault", vaultId: vault.vaultId },
+      query: "queryNeedle",
+      limit: 5
+    });
+    writePage(vaultPath, "wiki/stale-provider-evidence.md", {
+      id: "page_20260722_staleevidence",
+      title: "Stale provider evidence",
+      body: "password=replacementValue queryNeedle"
+    });
+
+    expect(() => retrieval.readExactSelectedEvidence(result)).toThrowError(
+      expect.objectContaining({ code: "rag.search_binding_invalid" })
+    );
+  });
+
   it("rejects a scanned page replaced by an external symlink before body read", () => {
     const { vaultPath } = makeVault();
     writePage(vaultPath, "wiki/replaced.md", {

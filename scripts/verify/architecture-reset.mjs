@@ -6,9 +6,18 @@ const root = process.cwd();
 const manifestPath = path.join(root, "resources/architecture-reset.manifest.json");
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 const failures = [];
+const knownArguments = new Set(["--post-combined"]);
+const unknownArguments = process.argv.slice(2).filter((argument) => !knownArguments.has(argument));
+const verificationMode = process.argv.includes("--post-combined") ? "post-combined" : "staged";
+
+if (unknownArguments.length > 0) failures.push(`unknown architecture-reset arguments: ${unknownArguments.join(", ")}`);
 
 if (manifest.schemaVersion !== 1) failures.push("architecture reset manifest must use schemaVersion 1");
 if (manifest.status !== "contract_frozen_implementation_pending") failures.push("architecture reset status changed without a reviewed contract transition");
+if (manifest.verificationModes?.staged !== "node scripts/verify/architecture-reset.mjs" ||
+  manifest.verificationModes?.postCombined !== "node scripts/verify/architecture-reset.mjs --post-combined") {
+  failures.push("architecture reset must expose exact staged and post-combined invocations");
+}
 if (!Array.isArray(manifest.phases) || manifest.phases.map((phase) => phase.id).join(",") !== "AR1,AR2,AR3,AR4") {
   failures.push("architecture reset must retain the reviewed AR1-AR4 sequence");
 }
@@ -21,8 +30,9 @@ const ignoredSourceDirectories = new Set([
   ".git", "artifacts", "build", "coverage", "dist", "node_modules", "out", "vendor"
 ]);
 const sourceFiles = collectAuthoritativeSourceFiles(root);
-failures.push(...auditLegacyMarkers(root, sourceFiles, manifest.legacyMarkers));
-failures.push(...auditNoGrowthMarkers(root, sourceFiles, manifest.passThroughNoGrowth));
+failures.push(...auditLegacyMarkers(root, sourceFiles, manifest.legacyMarkers, verificationMode));
+failures.push(...auditNoGrowthMarkers(root, sourceFiles, manifest.passThroughNoGrowth, verificationMode));
+failures.push(...auditPostCombinedZeroBudgets(manifest));
 failures.push(...verifySourceScopeGuard());
 
 if (!Array.isArray(manifest.agentPassThroughInventory) || manifest.agentPassThroughInventory.length < 30) {
@@ -97,7 +107,7 @@ if (failures.length > 0) {
 }
 
 const inventoryCount = Object.values(manifest.implementationInventory).reduce((total, entries) => total + entries.length, 0);
-console.log(`Architecture reset contract OK: ${manifest.legacyMarkers.length} legacy guards, ${manifest.passThroughNoGrowth.length} pass-through no-growth guards, ${manifest.agentPassThroughInventory.length} production call sites, ${inventoryCount} DELETE/REWRITE/KEEP entries, ${oversized.size} oversized owners, authoritative-source scope regression passed, AR1-AR4/PT1-PT4 frozen without status promotion.`);
+console.log(`Architecture reset contract OK (${verificationMode}): ${manifest.legacyMarkers.length} legacy guards, ${manifest.passThroughNoGrowth.length} pass-through no-growth guards, ${manifest.agentPassThroughInventory.length} production call sites, ${inventoryCount} DELETE/REWRITE/KEEP entries, ${oversized.size} oversized owners, authoritative-source/post-combined regressions passed, AR1-AR4/PT1-PT4 frozen without status promotion.`);
 
 function collectAuthoritativeSourceFiles(baseRoot) {
   return sourceRoots.flatMap((relativeRoot) => walk(path.join(baseRoot, relativeRoot)))
@@ -105,10 +115,11 @@ function collectAuthoritativeSourceFiles(baseRoot) {
     .map((file) => relative(baseRoot, file));
 }
 
-function auditLegacyMarkers(baseRoot, relativePaths, markers) {
+function auditLegacyMarkers(baseRoot, relativePaths, markers, mode = "staged") {
   const diagnostics = [];
   for (const marker of markers) {
-    const allowed = new Set(marker.allowedPaths);
+    const budget = markerBudget(marker, mode);
+    const allowed = new Set(budget.allowedPaths);
     let matches = 0;
     for (const relativePath of relativePaths) {
       const source = fs.readFileSync(path.join(baseRoot, relativePath), "utf8");
@@ -117,17 +128,18 @@ function auditLegacyMarkers(baseRoot, relativePaths, markers) {
       matches += count;
       if (!allowed.has(relativePath)) diagnostics.push(`${marker.id} appeared in new path ${relativePath}`);
     }
-    if (matches > marker.maximumMatches) diagnostics.push(`${marker.id} grew from ${marker.maximumMatches} to ${matches} matches`);
+    if (matches > budget.maximumMatches) diagnostics.push(`${marker.id} exceeded ${mode} budget ${budget.maximumMatches} with ${matches} matches`);
     if (!["DELETE", "REWRITE"].includes(marker.disposition)) diagnostics.push(`${marker.id} must be DELETE or REWRITE during reset`);
   }
   return diagnostics;
 }
 
-function auditNoGrowthMarkers(baseRoot, relativePaths, markers) {
+function auditNoGrowthMarkers(baseRoot, relativePaths, markers, mode = "staged") {
   const diagnostics = [];
   if (!Array.isArray(markers) || markers.length === 0) return ["pass-through no-growth markers are missing"];
   for (const marker of markers) {
-    const allowed = new Set(marker.allowedPaths);
+    const budget = markerBudget(marker, mode);
+    const allowed = new Set(budget.allowedPaths);
     let matches = 0;
     for (const relativePath of relativePaths) {
       const source = fs.readFileSync(path.join(baseRoot, relativePath), "utf8");
@@ -136,7 +148,38 @@ function auditNoGrowthMarkers(baseRoot, relativePaths, markers) {
       matches += count;
       if (!allowed.has(relativePath)) diagnostics.push(`${marker.id} appeared in new path ${relativePath}`);
     }
-    if (matches > marker.maximumMatches) diagnostics.push(`${marker.id} grew from ${marker.maximumMatches} to ${matches} matches`);
+    if (matches > budget.maximumMatches) diagnostics.push(`${marker.id} exceeded ${mode} budget ${budget.maximumMatches} with ${matches} matches`);
+  }
+  return diagnostics;
+}
+
+function markerBudget(marker, mode) {
+  if (mode === "post-combined" && Object.hasOwn(marker, "postCombinedMaximumMatches")) {
+    return {
+      allowedPaths: marker.postCombinedAllowedPaths ?? [],
+      maximumMatches: marker.postCombinedMaximumMatches
+    };
+  }
+  return { allowedPaths: marker.allowedPaths ?? [], maximumMatches: marker.maximumMatches };
+}
+
+function auditPostCombinedZeroBudgets(contract) {
+  const diagnostics = [];
+  const requiredNoGrowthIds = new Set([
+    "terminal.finish_tool", "answer.schema", "answer.output_invalid",
+    "answer.completion_invalid", "egress.content_classes", "egress.audit",
+    "egress.decision", "ui.egress_confirmation"
+  ]);
+  const markers = new Map((contract.passThroughNoGrowth ?? []).map((marker) => [marker.id, marker]));
+  for (const id of requiredNoGrowthIds) {
+    const marker = markers.get(id);
+    if (!marker || marker.postCombinedMaximumMatches !== 0 || marker.postCombinedAllowedPaths?.length !== 0) {
+      diagnostics.push(`${id} must have an exact zero-match/no-path post-combined budget`);
+    }
+  }
+  const modelEgress = contract.legacyMarkers?.find((marker) => marker.id === "model.egress_approval");
+  if (!modelEgress || modelEgress.postCombinedMaximumMatches !== 0 || modelEgress.postCombinedAllowedPaths?.length !== 0) {
+    diagnostics.push("model.egress_approval must have an exact zero-match/no-path post-combined budget");
   }
   return diagnostics;
 }
@@ -156,10 +199,12 @@ function verifySourceScopeGuard() {
     "packages/contracts/vendor/index.ts"
   ];
   const sourceMutationPath = "apps/desktop/src/main/services/architecture-reset-source-mutation.ts";
+  const historicalPath = "docs/DECISION_LOG.md";
 
   try {
     writeFixture(fixtureRoot, "packages/contracts/src/index.ts", "export const clean = true;\n");
     for (const generatedPath of generatedPaths) writeFixture(fixtureRoot, generatedPath, generatedTokenBody);
+    writeFixture(fixtureRoot, historicalPath, generatedTokenBody);
     writeFixture(fixtureRoot, sourceMutationPath, "export const forbidden = 'capture_only';\n");
 
     const fixtureSources = collectAuthoritativeSourceFiles(fixtureRoot);
@@ -167,6 +212,7 @@ function verifySourceScopeGuard() {
       if (fixtureSources.includes(generatedPath)) diagnostics.push(`generated directory was scanned as source: ${generatedPath}`);
     }
     if (!fixtureSources.includes(sourceMutationPath)) diagnostics.push("authoritative source mutation was not scanned");
+    if (fixtureSources.includes(historicalPath)) diagnostics.push("historical Decision Log was scanned as production source");
 
     const captureOnly = manifest.legacyMarkers.find((marker) => marker.id === "onboarding.capture_only");
     const mutationDiagnostics = captureOnly
@@ -182,6 +228,30 @@ function verifySourceScopeGuard() {
       : ["terminal finish-tool no-growth marker is missing"];
     if (!passThroughMutationDiagnostics.some((failure) => failure.includes(`appeared in new path ${sourceMutationPath}`))) {
       diagnostics.push("pass-through authoritative source mutation was not rejected");
+    }
+
+    const postCombinedMarkers = [
+      ...manifest.passThroughNoGrowth.filter((marker) => marker.postCombinedMaximumMatches === 0),
+      ...manifest.legacyMarkers.filter((marker) => marker.postCombinedMaximumMatches === 0)
+    ];
+    writeFixture(fixtureRoot, sourceMutationPath, "export const cleanAgain = true;\n");
+    const cleanPostCombinedSources = collectAuthoritativeSourceFiles(fixtureRoot);
+    const cleanPostCombinedDiagnostics = [
+      ...auditNoGrowthMarkers(fixtureRoot, cleanPostCombinedSources, postCombinedMarkers.filter((marker) => !marker.disposition), "post-combined"),
+      ...auditLegacyMarkers(fixtureRoot, cleanPostCombinedSources, postCombinedMarkers.filter((marker) => marker.disposition), "post-combined")
+    ];
+    if (cleanPostCombinedDiagnostics.length > 0) {
+      diagnostics.push("excluded generated/historical post-combined fixtures affected zero counts");
+    }
+    for (const marker of postCombinedMarkers) {
+      writeFixture(fixtureRoot, sourceMutationPath, `export const forbidden = ${JSON.stringify(marker.token)};\n`);
+      const mutatedSources = collectAuthoritativeSourceFiles(fixtureRoot);
+      const markerDiagnostics = marker.disposition
+        ? auditLegacyMarkers(fixtureRoot, mutatedSources, [marker], "post-combined")
+        : auditNoGrowthMarkers(fixtureRoot, mutatedSources, [marker], "post-combined");
+      if (!markerDiagnostics.some((failure) => failure.includes(marker.id))) {
+        diagnostics.push(`post-combined zero guard did not reject authoritative source token for ${marker.id}`);
+      }
     }
   } finally {
     fs.rmSync(fixtureRoot, { recursive: true, force: true });

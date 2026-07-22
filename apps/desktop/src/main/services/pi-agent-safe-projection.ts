@@ -2,13 +2,9 @@ import { Buffer } from "node:buffer";
 import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { PigeDomainError } from "@pige/domain";
-import { containsRestrictedModelContent } from "./model-egress-content";
-import type { PigeAgentToolDescriptor, PigeAgentToolResult } from "./pi-agent-tool-boundary";
 
-export interface PiAgentTerminalDraftBoundary {
-  readonly toolName: "pige_finish_home_turn";
-  readonly argumentName: "answer";
-  readonly maxCharacters: 8_000;
+export interface PiAgentDraftBoundary {
+  readonly maxCharacters: number;
   readonly onSnapshot: (text: string) => void;
 }
 
@@ -38,11 +34,11 @@ export function createPiHistoryMessages(
   }
   let bytes = 0;
   return history.map((message) => {
-    const text = message.text.trim();
+    const text = message.text;
     const timestamp = Date.parse(message.createdAt);
     bytes += Buffer.byteLength(text, "utf8");
     if (
-      !text ||
+      text.trim().length === 0 ||
       !Number.isFinite(timestamp) ||
       bytes > MAX_HISTORY_UTF8_BYTES ||
       (message.role !== "user" && message.role !== "assistant")
@@ -102,66 +98,23 @@ export function appendEventRecord(
   return true;
 }
 
-export class SafeTerminalDraftController {
-  readonly #boundary: PiAgentTerminalDraftBoundary | undefined;
-  readonly #allowNativeAssistantDraft: boolean;
-  #lastToolSnapshot: string | undefined;
-  #lastNativeSnapshot: string | undefined;
+export class SafeAssistantDraftController {
+  readonly #boundary: PiAgentDraftBoundary | undefined;
+  #lastSnapshot: string | undefined;
   #lastPresentedText: string | undefined;
-  #toolCallObserved = false;
   #presentationEmitted = false;
   #presentationNeedsSettle = false;
 
-  constructor(
-    boundary: PiAgentTerminalDraftBoundary | undefined,
-    allowNativeAssistantDraft = false
-  ) {
+  constructor(boundary: PiAgentDraftBoundary | undefined) {
     this.#boundary = boundary;
-    this.#allowNativeAssistantDraft = allowNativeAssistantDraft;
   }
 
   observe(event: AgentEvent): void {
     if (!this.#boundary || event.type !== "message_update") return;
-    const updateType = event.assistantMessageEvent.type;
-    if (
-      updateType === "toolcall_start" ||
-      updateType === "toolcall_delta" ||
-      updateType === "toolcall_end"
-    ) {
-      this.#toolCallObserved = true;
-    }
-    const terminalSnapshot = readSafeTerminalDraft(event, this.#boundary);
-    if (terminalSnapshot && terminalSnapshot !== this.#lastToolSnapshot) {
-      this.#lastToolSnapshot = terminalSnapshot;
-      this.#emit(terminalSnapshot);
-      return;
-    }
-    if (!this.#allowNativeAssistantDraft || this.#toolCallObserved) return;
-    const nativeSnapshot = readSafeNativeAssistantDraft(event, this.#boundary);
-    if (!nativeSnapshot || nativeSnapshot === this.#lastNativeSnapshot) return;
-    this.#lastNativeSnapshot = nativeSnapshot;
-    this.#emit(nativeSnapshot);
-  }
-
-  rejectAttempt(toolName: string): void {
-    if (toolName !== this.#boundary?.toolName) return;
-    this.#lastToolSnapshot = undefined;
-  }
-
-  async afterToolExecute(
-    tool: PigeAgentToolDescriptor,
-    args: unknown,
-    result: PigeAgentToolResult
-  ): Promise<PigeAgentToolResult> {
-    if (!this.#boundary || tool.name !== this.#boundary.toolName || result.terminate !== true) {
-      return result;
-    }
-    if (isRecord(args)) {
-      const answer = readSafeTerminalAnswer(args[this.#boundary.argumentName], this.#boundary);
-      if (answer) this.#emit(answer);
-    }
-    await this.#settlePresentation();
-    return result;
+    const snapshot = readSafeAssistantDraft(event, this.#boundary);
+    if (!snapshot || snapshot === this.#lastSnapshot) return;
+    this.#lastSnapshot = snapshot;
+    this.#emit(snapshot);
   }
 
   async assertCompleteAndSettle(): Promise<void> {
@@ -188,46 +141,22 @@ export class SafeTerminalDraftController {
 }
 
 export function collectAssistantText(messages: readonly unknown[]): string {
+  const finalAssistant = [...messages].reverse().find(
+    (message) => isRecord(message) && message.role === "assistant" && Array.isArray(message.content)
+  );
+  if (!isRecord(finalAssistant) || !Array.isArray(finalAssistant.content)) return "";
   const values: string[] = [];
-  for (const message of messages) {
-    if (!isRecord(message) || message.role !== "assistant" || !Array.isArray(message.content)) continue;
-    for (const content of message.content) {
-      if (isRecord(content) && content.type === "text" && typeof content.text === "string") {
-        values.push(content.text);
-      }
+  for (const content of finalAssistant.content) {
+    if (isRecord(content) && content.type === "text" && typeof content.text === "string") {
+      values.push(content.text);
     }
   }
-  return values.join("\n").trim();
+  return values.join("");
 }
 
-function readSafeTerminalDraft(
+function readSafeAssistantDraft(
   event: AgentEvent,
-  boundary: PiAgentTerminalDraftBoundary | undefined
-): string | undefined {
-  if (!boundary || event.type !== "message_update") return undefined;
-  const update = event.assistantMessageEvent;
-  if (
-    update.type !== "toolcall_start" &&
-    update.type !== "toolcall_delta" &&
-    update.type !== "toolcall_end"
-  ) {
-    return undefined;
-  }
-  const content = update.partial.content[update.contentIndex];
-  if (
-    !content ||
-    content.type !== "toolCall" ||
-    content.name !== boundary.toolName ||
-    !isRecord(content.arguments)
-  ) {
-    return undefined;
-  }
-  return readSafeTerminalAnswer(content.arguments[boundary.argumentName], boundary);
-}
-
-function readSafeNativeAssistantDraft(
-  event: AgentEvent,
-  boundary: PiAgentTerminalDraftBoundary
+  boundary: PiAgentDraftBoundary
 ): string | undefined {
   if (event.type !== "message_update") return undefined;
   const update = event.assistantMessageEvent;
@@ -241,26 +170,24 @@ function readSafeNativeAssistantDraft(
   const text = update.partial.content
     .filter((content) => content.type === "text")
     .map((content) => content.text)
-    .join("\n");
-  return readSafeTerminalAnswer(text, boundary);
+    .join("");
+  return readSafeAssistantText(text, boundary);
 }
 
-function readSafeTerminalAnswer(
+function readSafeAssistantText(
   candidate: unknown,
-  boundary: PiAgentTerminalDraftBoundary
+  boundary: PiAgentDraftBoundary
 ): string | undefined {
   if (typeof candidate !== "string") return undefined;
-  const text = candidate.trim();
-  const characterCount = Array.from(text).length;
+  const characterCount = Array.from(candidate).length;
   if (
-    characterCount === 0 ||
+    candidate.trim().length === 0 ||
     characterCount > boundary.maxCharacters ||
-    containsUnsafeDraftControlCharacter(text) ||
-    containsRestrictedModelContent(text)
+    containsUnsafeDraftControlCharacter(candidate)
   ) {
     return undefined;
   }
-  return text;
+  return candidate;
 }
 
 function containsUnsafeDraftControlCharacter(value: string): boolean {

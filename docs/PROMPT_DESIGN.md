@@ -190,11 +190,11 @@ citations when evidence was used, but it must not require a Pige terminal tool, 
 label, citation count/shape, or Host repair follow-up. Tool inputs and durable mutations
 remain validated at their owning boundaries.
 
-Safe `answer` replacement snapshots may update while Pi works, including after validation
-feedback. They are presentation-only and never grant authority. Pige does not request a
+Safe `answer` replacement snapshots may update while Pi works, including after tool
+results. They are presentation-only and never grant authority. Pige does not request a
 second provider turn merely to reproduce the final answer for streaming; the adapter uses
-a reviewed Pi-owned answer channel, validates control framing, and lets the
-accepted durable result replace the draft. Runtime enforcement, not prompt wording,
+a reviewed Pi-owned answer channel, validates structural event framing, and lets the
+durable upstream Pi final replace the draft. Runtime enforcement, not prompt wording,
 remains the security boundary.
 
 ### 5.3 Note Agent

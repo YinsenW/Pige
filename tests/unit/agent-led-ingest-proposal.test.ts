@@ -30,7 +30,6 @@ import {
   type PiAgentRunResult,
   type PiFauxResponse
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
-import { RESPOND_TO_USER_TOOL_NAME } from "../../apps/desktop/src/main/services/agent-ingest-tool-registry";
 import { ProposalService } from "../../apps/desktop/src/main/services/proposal-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
@@ -79,12 +78,13 @@ describe("Agent-selected ingest proposal tool", () => {
     });
     const runtime = new FunctionalRuntime(async (request) => {
       expect(request.tools.map((tool) => tool.name)).not.toContain("pige_stage_knowledge_note_proposal");
+      expect(request.tools.map((tool) => tool.name)).not.toContain("pige_respond_to_user");
       await invokeTool(request, "pige_inspect_source", {}, "inspect_current_turn");
-      await invokeTool(request, RESPOND_TO_USER_TOOL_NAME, {
-        answer: "The current source is available without exposing a raw proposal.",
-        evidenceRefs: ["ev_01"]
-      }, "respond_current_turn");
-      return runtimeResult(request, ["pige_inspect_source", RESPOND_TO_USER_TOOL_NAME]);
+      return runtimeResult(
+        request,
+        ["pige_inspect_source"],
+        "The current source is available without exposing a raw proposal."
+      );
     });
     const service = new AgentIngestService(
       modelPort(),
@@ -179,7 +179,6 @@ describe("Agent-selected ingest proposal tool", () => {
     });
     expect(generatedNotes(fixture.vaultPath)).toEqual([]);
     expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "create_page")).toEqual([]);
-    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "model_egress_decision")).toHaveLength(1);
     expect(durable).not.toContain("opaque_proposal_call");
     expect(durable).not.toContain(runtimeConfig.apiKey);
     expect(durable).not.toContain(fixture.vaultPath);
@@ -329,9 +328,7 @@ describe("Agent-selected ingest proposal tool", () => {
     let legacyCatalogHash = "";
     const firstRuntime = new FunctionalRuntime(async (request) => {
       firstRuntimeCalls += 1;
-      legacyCatalogHash = createPigeAgentToolCatalogHash(
-        request.tools.filter((tool) => tool.name !== RESPOND_TO_USER_TOOL_NAME)
-      );
+      legacyCatalogHash = createPigeAgentToolCatalogHash(request.tools);
       await invokeTool(request, "pige_inspect_source", {}, "inspect_before_crash");
       await invokeTool(
         request,
@@ -388,14 +385,6 @@ describe("Agent-selected ingest proposal tool", () => {
             policyContextId: snapshot.policyContextId,
             policyHash: snapshot.policyHash,
             updatedAt: "2026-07-12T00:01:01.000Z"
-          });
-          fs.writeFileSync(parentPath, `${JSON.stringify(durableParent, null, 2)}\n`, "utf8");
-        },
-        onEgressRecorded: (operationId) => {
-          durableParent = JobRecordSchema.parse({
-            ...durableParent,
-            operationIds: Array.from(new Set([...(durableParent.operationIds ?? []), operationId])),
-            updatedAt: "2026-07-12T00:01:02.000Z"
           });
           fs.writeFileSync(parentPath, `${JSON.stringify(durableParent, null, 2)}\n`, "utf8");
         }
@@ -814,14 +803,18 @@ function readPiToolText(result: PigeAgentToolResult | undefined): string {
     .join("") ?? "";
 }
 
-function runtimeResult(request: PiAgentRunRequest, invokedTools: readonly string[]): PiAgentRunResult {
+function runtimeResult(
+  request: PiAgentRunRequest,
+  invokedTools: readonly string[],
+  assistantText = ""
+): PiAgentRunResult {
   return {
     adapterMode: "embedded_pi_sdk",
     providerProfileId: request.runtimeConfig.provider.id,
     modelProfileId: request.runtimeConfig.model.id,
     modelId: request.runtimeConfig.model.modelId,
     events: [],
-    assistantText: "",
+    assistantText,
     invokedTools
   };
 }

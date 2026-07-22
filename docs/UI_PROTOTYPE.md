@@ -456,7 +456,7 @@ shrink or revise; it is not a saved message. Do not announce every replacement t
 live region—keep the turn `aria-busy`, expose a bounded status, and announce the final or
 failure once.
 
-The validated durable answer replaces the draft without duplicating a bubble. On
+The durable upstream Pi final replaces the draft without duplicating a bubble. On
 failure/cancellation, remove the provisional text or mark the pending bubble with the
 existing localized recovery state; never leave it looking like a completed answer.
 Reopen/restart shows only durable messages. Verified citations and evidence rows appear

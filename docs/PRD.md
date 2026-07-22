@@ -253,7 +253,7 @@ Default home requirements:
 - If local knowledge is relevant, Pi prefers bounded local retrieval and cites what it
   uses. Otherwise it answers normally without fabricated local citations.
 - Model-backed answers replace a safe provisional draft in place while Pi works; the
-  final Host-validated durable answer is authoritative, and citations appear only then.
+  durable upstream Pi final is authoritative. Known citation metadata appears only then.
 - Voice input should be available from the composer toolbar as a low-friction alternative to typing.
 
 #### 6.1.1 Window And Layout Modes
@@ -690,9 +690,9 @@ Navigation:
 - Knowledge Base settings must include a real Vault & Note Storage page for local note storage: current vault name, active vault path, knowledge root path, managed source-copy path (the v1 UI compatibility label is Source asset root), default source storage strategy, reveal in file manager, open existing vault folder, create new vault, recent vaults, backup, restore, trash policy, and safe index repair entry points.
 - Models settings contain BYOK provider details, model list status, and one default Pi Agent model. Advanced/Fast model assignment is not a v0.1 visible setting unless a real Pi-compatible routing layer exists.
 - Local Capabilities settings contain local RAG, embeddings/reranking downloads, OCR, speech input, document parsers, and bundled toolchain health.
-- Permissions & Privacy settings contain API key storage, connected-provider/local-only
-  cloud-send behavior, secret redaction, and a clear high-risk boundary. It has no
-  permission-mode, saved-grant, or YOLO controls.
+- Permissions & Privacy settings contain API key storage, exact connected-Provider send
+  disclosure, and a clear high-risk boundary. It has no content-redaction setting,
+  permission mode, saved grant, or YOLO control.
 - Skills and Pi Packages live under Extensions, not under Models.
 
 Internationalization:
@@ -721,7 +721,8 @@ Models:
 - Models support Refresh, enable/disable, and optional display aliases.
 - No user-facing per-workflow model selection in v0.1; Advanced/Fast routing stays hidden.
 - No required user-facing embedding or reranker provider setup. Local RAG uses Pige-managed local models.
-- After BYOK setup, bounded selected context uses the configured provider with visible status; stricter confirmation remains configurable.
+- After BYOK setup, explicit Send transmits bounded selected context to the configured
+  Provider with visible destination status and no second content-policy confirmation.
 - API keys are stored encrypted by default through OS keychain or encrypted local storage; plaintext portable/developer mode is explicit and warned.
 
 Local RAG:
@@ -1078,9 +1079,9 @@ Example result:
 ### 11.2 Home Query
 
 Every Home submission is one durable Pi-owned Agent Job. Pi may answer directly, retrieve
-local knowledge, call and revisit authorized tools, repair a rejected answer, or ask for
-clarification. Source-bearing payloads are preserved first; Host services do not select
-the semantic branch or turn the first invalid attempt into a user retry.
+local knowledge, call and revisit authorized tools, or ask for clarification.
+Source-bearing payloads are preserved first; Host services do not select the semantic
+branch, reject candidate assistant answers, or issue a semantic repair turn.
 
 Required outcomes:
 
@@ -1092,14 +1093,12 @@ Required outcomes:
 4. Valuable answers become Markdown through a validated autonomous write tool; only an
    exceptional boundary uses a proposal.
 5. Home does not wait behind a spinner when safe answer text is available. It renders a
-   bounded non-durable replacement draft, then atomically replaces it with the validated
-   final answer or clears it on cancellation or a true external block; restart restores
-   durable state only. Draft incompleteness or a rejected candidate answer does not fail
-   the Job: Pi revises the same provisional surface until the accepted result replaces it.
-6. Recoverable model-output validation is internal Agent progress. Home does not show
-   “output invalid, retry” while Pi can correct it. If the selected provider cannot support
-   the required Agent/tool protocol after autonomous recovery, Pige reports a typed model
-   compatibility action instead of asking the user to resubmit the same prompt.
+   bounded non-durable Pi draft, then atomically replaces it with Pi's authoritative final
+   assistant message or clears it on cancellation or a true external block; restart
+   restores durable state only.
+6. Host does not validate assistant-answer semantics. Malformed Provider transport uses
+   the existing call/protocol error, invalid registered-tool input stays at that tool
+   boundary, and durable effect failure keeps its exact owning-service code.
 
 Without a model, source-bearing inputs remain safe and wait for setup/resume. Any
 deterministic local search fallback is explicit and never presented as Agent synthesis.

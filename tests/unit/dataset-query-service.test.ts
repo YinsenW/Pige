@@ -279,7 +279,8 @@ describe("Dataset Query Service", () => {
       search: (request): RetrievalSearchResult => {
         retrievalCalls += 1;
         return emptySearchResult(vault.vaultId, request.query);
-      }
+      },
+      readExactSelectedEvidence: (result) => ({ items: result.results })
     };
     const service = new HomeAgentService(
       { current: () => vault, activeVaultPath: () => fixture.vaultPath },
@@ -301,15 +302,7 @@ describe("Dataset Query Service", () => {
               limit: 2
             }
           },
-          {
-            kind: "tool_call",
-            toolName: "pige_finish_home_turn",
-            args: {
-              answer: "The bounded Dataset contains two rows; the largest amount is 7. [D1]",
-              citationRefs: ["citation_9"],
-              grounding: "local_knowledge"
-            }
-          }
+          { kind: "text", text: "The bounded Dataset contains two rows; the largest amount is 7. [D1]" }
         ]
       }),
       undefined,
@@ -385,22 +378,15 @@ describe("Dataset Query Service", () => {
             limit: 2
           }
         },
-        {
-          kind: "tool_call",
-          toolName: "pige_finish_home_turn",
-          args: {
-            answer: "This response must not be reached after Dataset privacy drift. [D1]",
-            citationRefs: ["citation_1"],
-            grounding: "local_knowledge"
-          }
-        }
+        { kind: "text", text: "This response must not be reached after Dataset privacy drift. [D1]" }
       ]
     });
     const outcome = await new HomeAgentService(
       { current: () => vault, activeVaultPath: () => fixture.vaultPath },
       datasetHomeModels(() => { runtimeConfigReads += 1; }),
       {
-        search: (request) => emptySearchResult(vault.vaultId, request.query)
+        search: (request) => emptySearchResult(vault.vaultId, request.query),
+        readExactSelectedEvidence: (result) => ({ items: result.results })
       },
       new JobsService({ current: () => vault, activeVaultPath: () => fixture.vaultPath }),
       {
@@ -426,23 +412,12 @@ describe("Dataset Query Service", () => {
     expect(outcome).toMatchObject({
       state: "failed",
       modelUsage: "cloud",
-      error: { code: "model_provider.egress_blocked" }
+      error: { code: "agent_runtime.turn_conflict" }
     });
     expect(resultRevalidations).toBe(2);
     expect(runtimeConfigReads).toBe(1);
     expect(authorizedModelTurns).toBe(2);
-    const audits = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"))
-      .filter((operation) => operation.kind === "model_egress_decision");
-    const replacement = audits.find((operation) => operation.modelEgressAudit?.contentClasses.includes("private"));
-    expect(replacement).toMatchObject({
-      modelEgressAudit: {
-        contentClasses: ["private"],
-        outcome: "allow"
-      }
-    });
-    expect(new Set(audits.map((operation) => operation.modelEgressAudit?.evidenceSummaryHash)).size)
-      .toBe(audits.length);
-    const durable = JSON.stringify(audits);
+    const durable = JSON.stringify(readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations")));
     expect(durable).not.toContain(fixture.vaultPath);
     expect(durable).not.toContain("This response must not be reached");
     expect(durable).not.toContain("synthetic-dataset-home-secret");

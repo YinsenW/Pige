@@ -623,8 +623,8 @@ describe("Agent turn conversation store", () => {
       expectedTailEventId: assistant.id
     });
     expect(restarted.readContextBeforeUserTurn(vaultPath, sameScopeFollowUp)).toEqual([
-      expect.objectContaining({ role: "user", historyContentClasses: ["sensitive"] }),
-      expect.objectContaining({ role: "assistant", historyContentClasses: ["sensitive"] })
+      expect.objectContaining({ role: "user" }),
+      expect.objectContaining({ role: "assistant" })
     ]);
 
     expect(captureError(() => restarted.appendUserTurn(vaultPath, "Cross-note follow-up.", {

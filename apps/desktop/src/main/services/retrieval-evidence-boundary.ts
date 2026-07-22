@@ -111,6 +111,14 @@ export function bindRetrievalEvidenceToCurrentMarkdown(
   };
 }
 
+export function createCurrentRetrievalContentBindingHash(
+  vaultPath: string,
+  selectedItems: readonly RetrievalSearchResultItem[]
+): string {
+  const pages = selectedItems.map((item) => readCurrentRetrievalPageBinding(vaultPath, item).page);
+  return hashValue(JSON.stringify(pages));
+}
+
 export function readCurrentRetrievalPageForMutation(
   vaultPath: string,
   indexedItem: RetrievalSearchResultItem
@@ -145,8 +153,7 @@ export function readCurrentNoteEvidenceBinding(
       "utf8"
     );
     const durableBodyEnd = durableBodyStart + Buffer.byteLength(durableBodyText, "utf8");
-    const body = sanitizeSearchBody(durableBodyText.trimStart());
-    const boundedBody = truncateUtf8(body, MAX_CURRENT_NOTE_MODEL_BYTES);
+    const boundedBody = truncateUtf8(durableBodyText, MAX_CURRENT_NOTE_MODEL_BYTES);
     const snapshot = createPrivacySnapshot(vaultPath, [binding.page]);
     return {
       page: {
@@ -235,7 +242,7 @@ export function readCurrentNoteSelectionEvidenceBinding(
     throw evidencePrivacyUnavailableError();
   }
   const selectedText = new TextDecoder("utf-8", { fatal: true }).decode(selectedBytes);
-  const modelText = sanitizeSearchBody(selectedText);
+  const modelText = selectedText;
   const suppliedBytes = Buffer.byteLength(modelText, "utf8");
   const selectionBindingHash = hashValue(JSON.stringify({
     schemaVersion: 1,
@@ -383,7 +390,7 @@ function readCurrentRetrievalPageBinding(
       ...indexedItem,
       summary: { ...currentPage.summary, title },
       ...(queryTerms
-        ? { snippets: [createSnippet(sanitizeSearchBody(body), queryTerms)] }
+        ? { snippets: [createExactProviderEvidenceSnippet(body, queryTerms)] }
         : {})
     },
     page: {
@@ -395,6 +402,36 @@ function readCurrentRetrievalPageBinding(
     markdown: boundedPage.markdown,
     absolutePath: currentPage.absolutePath
   };
+}
+
+function createExactProviderEvidenceSnippet(
+  body: string,
+  query: ReturnType<typeof createQueryTerms>
+): string {
+  const lines = body.split(/\r?\n/u).filter(
+    (line) =>
+      line.length > 0 &&
+      !/\b(managed[_ ]copy|source[_ ]record|original[_ ]uri)\b|\.pige\/source-records|raw\/(?:files|text)\//iu.test(line)
+  );
+  const matched = lines.find((line) => {
+    const normalized = line.normalize("NFKC").toLocaleLowerCase();
+    return [query.normalizedQuery, ...query.terms].some((term) => term && normalized.includes(term));
+  });
+  const selected = matched ?? lines[0] ?? "";
+  if (selected.length <= 260) return selected;
+  const normalized = selected.normalize("NFKC").toLocaleLowerCase();
+  const needle = [query.normalizedQuery, ...query.terms].find(
+    (term) => term && normalized.includes(term)
+  );
+  const matchIndex = needle ? normalized.indexOf(needle) : 0;
+  const start = Math.max(0, Math.min(matchIndex - 80, selected.length - 260));
+  let end = start + 260;
+  if (/^[\uDC00-\uDFFF]$/u.test(selected[start] ?? "")) {
+    end -= 1;
+  }
+  const safeStart = /^[\uDC00-\uDFFF]$/u.test(selected[start] ?? "") ? start + 1 : start;
+  if (/[\uD800-\uDBFF]$/u.test(selected.slice(safeStart, end))) end -= 1;
+  return selected.slice(safeStart, end);
 }
 
 function readBoundedMarkdownPage(

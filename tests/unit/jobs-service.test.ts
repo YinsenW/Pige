@@ -2018,12 +2018,62 @@ describe("jobs service", () => {
     )) as { policyContextId?: string; policyHash?: string; operationIds?: string[] };
     expect(completedRecord.policyContextId).toMatch(/^policy_[a-f0-9]{16}$/u);
     expect(completedRecord.policyHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
-    expect(completedRecord.operationIds).toHaveLength(2);
+    expect(completedRecord.operationIds).toHaveLength(1);
     expect(note).toContain('type: "note"');
     expect(note).toContain("Generated knowledge note");
     expect(operation).toContain('"kind": "create_page"');
     expect(index).toContain("Generated knowledge note");
     expect(log).toContain("Created wiki note");
+  });
+
+  it("completes a historical Agent ingest with a zero-tool Pi final without fabricating durable output", async () => {
+    const { vaultPath, vault } = makeVault();
+    const assistantText = "Historical assistant text must not be copied into a Job or conversation.";
+    const run = vi.fn(async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+      await request.beforeModelTurn?.();
+      return {
+        adapterMode: "embedded_pi_sdk",
+        providerProfileId: request.runtimeConfig.provider.id,
+        modelProfileId: request.runtimeConfig.model.id,
+        modelId: request.runtimeConfig.model.modelId,
+        events: [],
+        assistantText,
+        invokedTools: []
+      };
+    });
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      new AgentIngestService(makeModelPort(), { run })
+    );
+    const captured = capture.submitText({
+      text: "A preserved historical source may finish without a knowledge mutation.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    jobs.processQueuedCaptures({ jobIds: [captured.jobId] });
+    const queued = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]);
+    const conversationFilesBefore = listFiles(path.join(vaultPath, ".pige", "conversations"));
+    const conversationBytesBefore = conversationFilesBefore.map((filePath) => fs.readFileSync(filePath, "utf8"));
+
+    await expect(jobs.processQueuedAgentIngest({ jobIds: [queued.id] }))
+      .resolves.toEqual({ processed: 1, completed: 1, failed: 0 });
+
+    const completed = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["completed"] }).jobs[0]);
+    const completedBytes = fs.readFileSync(
+      findFile(path.join(vaultPath, ".pige", "jobs"), `${completed.id}.json`),
+      "utf8"
+    );
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(completed.operationIds ?? []).toEqual([]);
+    expect(completed.message).toBe("Historical Agent ingest completed without a durable knowledge effect.");
+    expect(readOperationBodies(vaultPath)).toEqual([]);
+    expect(listFiles(path.join(vaultPath, ".pige", "conversations"))).toEqual(conversationFilesBefore);
+    expect(conversationFilesBefore.map((filePath) => fs.readFileSync(filePath, "utf8")))
+      .toEqual(conversationBytesBefore);
+    expect(conversationBytesBefore.join("\n")).not.toContain(assistantText);
+    expect(completedBytes).not.toContain(assistantText);
   });
 
   it("cancels Agent ingest cleanly when the request wins before the publication guard", async () => {
@@ -2059,8 +2109,6 @@ describe("jobs service", () => {
     });
     expect(listFiles(path.join(vaultPath, "wiki", "generated")).filter((filePath) => filePath.endsWith(".md")))
       .toEqual([]);
-    expect(readOperationBodies(vaultPath).some((body) => body.includes('"kind": "model_egress_decision"')))
-      .toBe(true);
   });
 
   it("keeps Agent ingest retryable when note publication fails after the durable guard but before link", async () => {
@@ -2347,7 +2395,6 @@ describe("jobs service", () => {
     expect(requeued ? readJobCancellation(vaultPath, requeued.id) : undefined).toBeUndefined();
     expect(listFiles(path.join(vaultPath, "wiki", "generated")).filter((filePath) => filePath.endsWith(".md")))
       .toEqual([]);
-    expect(operationBodies.some((body) => body.includes('"kind": "model_egress_decision"'))).toBe(true);
     expect(operationBodies.some((body) => body.includes('"kind": "create_page"'))).toBe(false);
   });
 
