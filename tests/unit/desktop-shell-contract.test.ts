@@ -495,6 +495,8 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("export interface AgentTurnDraftEvent");
     expect(contractsSource).toContain("export interface AgentTurnCurrentNoteScope");
     expect(contractsSource).toContain("readonly scope?: AgentTurnScope");
+    expect(contractsSource).not.toContain("AgentTurnObjective");
+    expect(contractsSource).not.toContain("readonly objective?:");
     expect(contractsSource).toContain("readonly onTurnDraft:");
     expect(runtimeSource).toContain("drafts.observe(event)");
     expect(preloadSource).not.toContain('ipcRenderer.invoke("capture.submit');

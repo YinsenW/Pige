@@ -208,7 +208,6 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
       const prepared = home.prepareSourceTurn({
         text: "Recognize this image and save the useful result.",
         inputKind: "file_drop",
-        objective: "auto",
         locale: "en"
       });
       const preserved = await new CaptureService(vaultPort).preserveFilesForAgentTurn({
@@ -331,7 +330,6 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
       const prepared = home.prepareSourceTurn({
         text: "Recognize the embedded presentation media and save the result.",
         inputKind: "file_drop",
-        objective: "auto",
         locale: "en"
       });
       const preserved = await capture.preserveFilesForAgentTurn({

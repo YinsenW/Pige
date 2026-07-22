@@ -49,6 +49,10 @@ describe("Agent submit-turn attachment boundary", () => {
       request: { inputKind: "file_picker", locale: "en", text: " \n\t " },
       attachments: [{ displayName: "source.txt", internalPath: "/private/tmp/source.txt" }]
     }).request.text).toBe(" \n\t ");
+    expect(AgentSubmitTurnIpcPayloadSchema.safeParse({
+      request: { inputKind: "typed_text", locale: "en", text, objective: "auto" },
+      attachments: []
+    }).success).toBe(false);
   });
 
   it("carries up to 64 candidates, including unresolved paths, for main-owned classification", () => {

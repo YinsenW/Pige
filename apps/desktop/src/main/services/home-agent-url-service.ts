@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AgentSubmitTurnRequest, CaptureUserIntent } from "@pige/contracts";
+import type { AgentSubmitTurnRequest } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
   CaptureService,
@@ -30,7 +30,6 @@ export interface FetchHomeAgentUrlRequest {
   readonly jobId: string;
   readonly url: string;
   readonly inputKind: AgentSubmitTurnRequest["inputKind"];
-  readonly objective: AgentSubmitTurnRequest["objective"];
   readonly locale: AgentSubmitTurnRequest["locale"];
   readonly policyHash: string;
   readonly catalogHash: string;
@@ -68,7 +67,7 @@ export class HomeAgentUrlService {
     await this.#capture.preserveUrlForAgentTurn({
       url: normalizedUrl.fetchUrl,
       inputKind: request.inputKind,
-      userIntent: toCaptureUserIntent(request.objective),
+      userIntent: "unknown",
       locale: request.locale
     }, {
       jobId: request.jobId,
@@ -110,10 +109,6 @@ function normalizeSubmittedUrl(value: string): { readonly fetchUrl: string; read
   parsed.hash = "";
   const fetchUrl = parsed.toString();
   return { fetchUrl, safeUrl: redactSensitiveUrl(fetchUrl) };
-}
-
-function toCaptureUserIntent(objective: AgentSubmitTurnRequest["objective"]): CaptureUserIntent {
-  return objective === "capture" ? "capture" : objective === "vault_only" ? "ask" : "unknown";
 }
 
 function toHomeAgentUrlEvidence(

@@ -126,7 +126,6 @@ export async function runHomeAgentRuntimeSmoke(): Promise<{
       schemaVersion: 1,
       text: "What does the smoke evidence say?",
       inputKind: "typed_text",
-      objective: "vault_only",
       locale: "en"
     });
     return result.state === "completed"

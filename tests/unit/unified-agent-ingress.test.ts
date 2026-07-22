@@ -86,7 +86,7 @@ describe("Unified Agent ingress", () => {
       new JobsService(fixture.vaultPort)
     );
 
-    home.prepareSourceTurn({ inputKind: "file_picker", objective: "auto", locale });
+    home.prepareSourceTurn({ inputKind: "file_picker", locale });
 
     expect(home.conversation()?.messages).toEqual([
       expect.objectContaining({ role: "user", text: expectedText })
@@ -103,7 +103,7 @@ describe("Unified Agent ingress", () => {
     );
     const text = "  Compare these files.\nKeep this spacing.  ";
 
-    home.prepareSourceTurn({ text, inputKind: "file_picker", objective: "auto", locale: "en" });
+    home.prepareSourceTurn({ text, inputKind: "file_picker", locale: "en" });
 
     expect(home.conversation()?.messages).toEqual([
       expect.objectContaining({ role: "user", text })
@@ -173,7 +173,6 @@ describe("Unified Agent ingress", () => {
     const prepared = home.prepareSourceTurn({
       text: "Which person has the largest count?",
       inputKind: "file_picker",
-      objective: "auto",
       locale: "en"
     });
     const preserved = await new CaptureService(fixture.vaultPort).preserveFilesForAgentTurn({
@@ -268,7 +267,6 @@ describe("Unified Agent ingress", () => {
     const prepared = firstHome.prepareSourceTurn({
       text: "Which person has the largest count after restart?",
       inputKind: "file_drop",
-      objective: "auto",
       locale: "en"
     });
     await new CaptureService(fixture.vaultPort).preserveFilesForAgentTurn({
@@ -386,7 +384,6 @@ describe("Unified Agent ingress", () => {
     const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs, adapter);
     const prepared = home.prepareSourceTurn({
       inputKind: "file_drop",
-      objective: "auto",
       locale: "en"
     });
     const preserved = await new CaptureService(fixture.vaultPort).preserveFilesForAgentTurn({
@@ -436,7 +433,6 @@ describe("Unified Agent ingress", () => {
     const prepared = home.prepareSourceTurn({
       text: "Summarize this without saving a note.",
       inputKind: "file_drop",
-      objective: "auto",
       locale: "en"
     });
     const preserved = await new CaptureService(fixture.vaultPort).preserveFilesForAgentTurn({
@@ -480,7 +476,6 @@ describe("Unified Agent ingress", () => {
     const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs, adapter);
     const prepared = home.prepareSourceTurn({
       inputKind: "file_picker",
-      objective: "auto",
       locale: "en"
     });
     await new CaptureService(fixture.vaultPort).preserveFilesForAgentTurn({
@@ -517,7 +512,6 @@ describe("Unified Agent ingress", () => {
     const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs, adapter);
     const prepared = home.prepareSourceTurn({
       inputKind: "file_drop",
-      objective: "auto",
       locale: "en"
     });
     await new CaptureService(fixture.vaultPort).preserveFilesForAgentTurn({
@@ -554,7 +548,6 @@ describe("Unified Agent ingress", () => {
     const prepared = home.prepareSourceTurn({
       text: "Read this after restart.",
       inputKind: "file_picker",
-      objective: "auto",
       locale: "en"
     });
     await new CaptureService(fixture.vaultPort).preserveFilesForAgentTurn({
@@ -614,7 +607,6 @@ describe("Unified Agent ingress", () => {
     const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs, adapter);
     const prepared = home.prepareSourceTurn({
       inputKind: "file_picker",
-      objective: "auto",
       locale: "en"
     });
     await new CaptureService(fixture.vaultPort).preserveFilesForAgentTurn({

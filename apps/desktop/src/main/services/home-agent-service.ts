@@ -118,9 +118,7 @@ import type {
   ResumeJobInput
 } from "./job-execution-coordinator";
 
-export const AgentSubmitTurnRequestSchema = CanonicalAgentSubmitTurnRequestSchema.safeExtend({
-  objective: z.enum(["auto", "capture", "vault_only"]).optional()
-});
+export const AgentSubmitTurnRequestSchema = CanonicalAgentSubmitTurnRequestSchema;
 
 export interface HomeAgentVaultPort {
   current(): VaultSummary | undefined;
@@ -340,14 +338,12 @@ export class HomeAgentService {
     if (validatedRequest.scope) {
       throw new PigeDomainError("agent_runtime.turn_binding_invalid", "A prepared source turn cannot use current-note scope.");
     }
-    const objective = validatedRequest.objective ?? "auto";
     const authoredText = validatedRequest.text?.trim() ? validatedRequest.text : undefined;
     const normalizedRequest: AgentSubmitTurnRequest = {
       schemaVersion: 1,
       inputKind: validatedRequest.inputKind,
       locale: validatedRequest.locale,
       ...(authoredText === undefined ? {} : { text: authoredText }),
-      ...(validatedRequest.objective === undefined ? {} : { objective: validatedRequest.objective }),
       ...(validatedRequest.clientTurnId === undefined ? {} : { clientTurnId: validatedRequest.clientTurnId })
     };
     const query = authoredText ?? defaultAttachmentUserIntent(validatedRequest.locale);
@@ -368,7 +364,6 @@ export class HomeAgentService {
     }
     const preservedTurn = this.#conversations.appendUserTurn(vaultPath, query, {
       inputKind: validatedRequest.inputKind,
-      objective,
       locale: validatedRequest.locale
     }, createConversationBinding(validatedRequest));
     const job = this.#jobs.createAgentTurnJob({
@@ -439,7 +434,6 @@ export class HomeAgentService {
       if (sourceTurn !== (validatedRequest.inputKind === "file_drop" || validatedRequest.inputKind === "file_picker")) {
         throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The Agent input kind does not match its preserved source binding.");
       }
-      const objective = validatedRequest.objective ?? "auto";
       const inputPresentation = readerSelectionInputPresentation(context);
       validateReaderSelectionTurnContext({
         ...(validatedRequest.scope ? { scopePageId: validatedRequest.scope.pageId } : {}),
@@ -462,7 +456,6 @@ export class HomeAgentService {
           context.prepared.request.inputKind !== validatedRequest.inputKind ||
           context.prepared.request.locale !== validatedRequest.locale ||
           context.prepared.request.text !== validatedRequest.text ||
-          context.prepared.request.objective !== validatedRequest.objective ||
           context.prepared.activeVaultId !== activeVault.vaultId ||
           sourceIds.length !== context.prepared.sourceIds.length ||
           sourceIds.some((sourceId, index) => sourceId !== context.prepared!.sourceIds[index]) ||
@@ -484,7 +477,6 @@ export class HomeAgentService {
       } else {
         preservedTurn = this.#conversations.appendUserTurn(vaultPath, query, {
           inputKind: validatedRequest.inputKind,
-          objective,
           locale: validatedRequest.locale,
           ...(validatedRequest.scope ? { scope: validatedRequest.scope } : {}),
           ...(inputPresentation ? { inputPresentation } : {})
@@ -612,7 +604,6 @@ export class HomeAgentService {
             {
               text: query,
               inputKind: validatedRequest.inputKind,
-              objective,
               locale: validatedRequest.locale,
               clientTurnId: requirePreservedClientTurnId(activeTurn),
               ...(validatedRequest.scope ? { scope: validatedRequest.scope } : {})
@@ -825,7 +816,6 @@ export class HomeAgentService {
             {
               text: preservedText,
               inputKind: preservedMetadata.inputKind,
-              objective: preservedMetadata.objective,
               locale: preservedMetadata.locale,
               clientTurnId: requirePreservedClientTurnId(preserved),
               ...(preservedMetadata.scope ? { scope: preservedMetadata.scope } : {})
@@ -1156,7 +1146,6 @@ export class HomeAgentService {
               jobId,
               url: candidate,
               inputKind: request.inputKind,
-              objective: request.objective,
               locale: request.locale,
               policyHash: policy.policyHash,
               catalogHash: toolCatalogHash,
@@ -1325,7 +1314,6 @@ export class HomeAgentService {
         runtimeConfig,
         jobId,
         systemPrompt: createHomeSystemPrompt(
-          request.objective ?? "auto",
           urlCandidates.length,
           !currentNoteScope && this.#datasets !== undefined,
           currentNoteScope !== undefined,
@@ -1854,7 +1842,6 @@ function createDatasetQueryTool(options: {
 }
 
 function createHomeSystemPrompt(
-  objective: AgentSubmitTurnRequest["objective"],
   urlCandidateCount: number,
   datasetQueryAvailable: boolean,
   currentNoteScoped = false,
@@ -1864,8 +1851,6 @@ function createHomeSystemPrompt(
     "You are Pige, a general-purpose personal Agent with optional local-knowledge augmentation.",
     currentNoteScoped
       ? `This is a current-note request. Call ${HOME_READ_CURRENT_NOTE_TOOL_NAME} and answer from only its exact supplied UTF-8 byte range. If that evidence is empty or insufficient, explain the limitation in ordinary assistant prose.`
-      : objective === "vault_only"
-      ? "This is an explicit vault-only request. Use only registered current-vault evidence tools and explain in ordinary assistant prose when selected evidence does not support an answer."
       : "Choose registered evidence tools only when they materially help the request. Use a registered external mutation tool only for the user's explicit current-turn action intent; the Host remains the sole permission and execution authority.",
     currentNoteScoped
       ? "Do not search other notes, query Datasets, fetch URLs, or invoke external capabilities in this scoped turn."

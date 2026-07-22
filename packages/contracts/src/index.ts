@@ -935,8 +935,6 @@ export type AgentTurnInputKind =
   | "file_picker"
   | "follow_up";
 
-export type AgentTurnObjective = "auto" | "capture" | "vault_only";
-
 export interface AgentTurnCurrentNoteScope {
   readonly kind: "current_note";
   readonly pageId: string;
@@ -948,7 +946,6 @@ export interface AgentSubmitTurnRequest {
   readonly schemaVersion?: 1;
   readonly text?: string;
   readonly inputKind: AgentTurnInputKind;
-  readonly objective?: AgentTurnObjective;
   readonly scope?: AgentTurnScope;
   readonly locale: Locale;
   readonly clientTurnId?: string;
