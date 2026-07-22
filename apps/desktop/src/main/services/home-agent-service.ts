@@ -32,6 +32,7 @@ import {
   PigeErrorSummarySchema,
   type JobRecord,
   type OperationRecord,
+  type ConversationEvent,
   type PigeErrorSummary
 } from "@pige/schemas";
 import { z } from "zod";
@@ -86,6 +87,7 @@ import {
 } from "./retrieval-evidence-boundary";
 import { buildNoteAgentContextPack } from "./note-agent-context";
 import { buildHomeQueryContextPack } from "./retrieval-service";
+import { readDurableAgentTurnAnswer } from "./durable-agent-turn-answer";
 import type {
   FetchHomeAgentUrlRequest,
   HomeAgentUrlEvidence,
@@ -95,11 +97,18 @@ import { HomeAgentEvidenceLedger } from "./home-agent-evidence-ledger";
 import {
   actualHomeModelUsage,
   collectAgentTurnSourceIds,
+  discardReaderSelectionPublicationIntent,
   isDatasetAnswerCitation,
+  isNonRetryableReaderPublicationErrorCode,
   readDurableTurnResult,
+  readReaderSelectionPublicationIntent,
+  requireReaderSelectionMutationPort,
+  readReaderSelectionTransformPublication,
   recoverDurableAssistantPublication,
+  stageReaderSelectionPublicationIntent,
   settleJobAfterAssistant,
   type HomeAgentJobSession,
+  type HomeAgentReaderSelectionPublication,
   type HomeAgentReaderSelectionMutationPort
 } from "./agent-turn-publication";
 import {
@@ -107,6 +116,7 @@ import {
   readBoundReaderSelectionEvidence,
   readInitialReaderSelectionEvidence,
   readerSelectionInputPresentation,
+  readReaderSelectionTransformBinding,
   validateReaderSelectionTurnContext,
   type ReaderSelectionJobScope,
   type ReaderSelectionTurnContext
@@ -237,6 +247,7 @@ export function scheduleAcceptedAgentTurn(execute: () => Promise<unknown>): void
 
 const HOME_SEARCH_TOOL_NAME = "pige_search_knowledge";
 const HOME_READ_CURRENT_NOTE_TOOL_NAME = "pige_read_current_note";
+const HOME_REPLACE_READER_SELECTION_TOOL_NAME = "pige_replace_reader_selection";
 const HOME_QUERY_DATASET_TOOL_NAME = "pige_query_dataset";
 const HOME_FETCH_URL_TOOL_NAME = "pige_fetch_url";
 const HOME_INSPECT_URL_TOOL_NAME = "pige_inspect_url_source";
@@ -452,6 +463,7 @@ export class HomeAgentService {
     let session: HomeAgentJobSession | undefined;
     let preservedTurn: PreservedAgentTurn | undefined;
     let tailEventId: string | undefined;
+    let turnVaultPath: string | undefined;
     try {
       const validatedRequest = AgentSubmitTurnRequestSchema.parse(request);
       const sourceIds = Array.from(new Set(context.sourceIds ?? []));
@@ -477,6 +489,7 @@ export class HomeAgentService {
       if (!activeVault || !vaultPath) {
         throw new PigeDomainError("vault.not_selected", "No active Pige vault is selected.");
       }
+      turnVaultPath = vaultPath;
       let currentNoteBinding: CurrentNoteEvidenceBinding | undefined;
       if (context.prepared) {
         const current = this.#jobs.readAgentTurnJob(context.prepared.jobId);
@@ -550,6 +563,12 @@ export class HomeAgentService {
       }
       requestId = session.current.id;
       if (!context.prepared) {
+        const durableAssistant = this.#conversations.findAssistantTurn(
+          vaultPath,
+          preservedTurn.locator,
+          session.current.id
+        );
+        if (durableAssistant) this.#publishReaderSelectionIntent(session, vaultPath);
         const durableResult = readDurableTurnResult({
           vaultPath,
           session,
@@ -560,7 +579,11 @@ export class HomeAgentService {
           jobs: this.#jobs,
           mutations: this.#readerSelectionMutations
         });
-        if (durableResult) return durableResult;
+        if (durableResult) {
+          discardReaderSelectionPublicationIntent(vaultPath, session.current);
+          return durableResult;
+        }
+        discardReaderSelectionPublicationIntent(vaultPath, session.current);
       }
       if (validatedRequest.scope) {
         const currentNote = currentNoteBinding ?? readBoundReaderSelectionEvidence(
@@ -656,6 +679,7 @@ export class HomeAgentService {
             activeSession.current.id,
             execution.answer
           );
+          this.#publishReaderSelectionIntent(activeSession, vaultPath);
           const completedSourceIds = Array.from(new Set([...sourceIds, ...execution.sourceIds]));
           const reviewRequired = settleJobAfterAssistant({
             session: activeSession,
@@ -667,6 +691,7 @@ export class HomeAgentService {
             sourceIds: completedSourceIds,
             ...(assistantEvent.contentHash ? { assistantContentHash: assistantEvent.contentHash } : {})
           });
+          discardReaderSelectionPublicationIntent(vaultPath, activeSession.current);
           return { execution, assistantEvent, completedSourceIds, reviewRequired };
         }
       );
@@ -703,20 +728,77 @@ export class HomeAgentService {
       };
     } catch (caught) {
       const failure = toHomeAgentFailure(caught);
+      let readerReviewRequired = false;
+      let durableReaderEffect = false;
+      let recoveredReaderPublication: {
+        readonly state: "completed" | "waiting";
+        readonly assistant: ConversationEvent;
+        readonly answer: AgentTurnAnswer;
+      } | undefined;
       if (session) {
         const cancellationHandled = caught instanceof PigeDomainError &&
           caught.code === "agent_runtime.turn_cancelled";
         const refreshed = this.#jobs.readAgentTurnJob(session.current.id);
         if (refreshed) session.current = refreshed;
+        const failureVaultPath = turnVaultPath;
         try {
-          if (!cancellationHandled) {
-            this.#failJob(session, failure);
+          if (cancellationHandled) {
+            if (failureVaultPath) discardReaderSelectionPublicationIntent(failureVaultPath, session.current);
+          } else {
+            recoveredReaderPublication = failureVaultPath && preservedTurn
+              ? this.#recoverReaderSelectionPublicationAfterFailure(
+                  session,
+                  failureVaultPath,
+                  preservedTurn,
+                  collectAgentTurnSourceIds(session.current, context.sourceIds)
+                )
+              : undefined;
+            if (!recoveredReaderPublication) {
+              const publication = failureVaultPath
+                ? this.#readReaderSelectionPublicationAfterFailure(session, failureVaultPath)
+                : undefined;
+              durableReaderEffect = publication?.status === "applied";
+              readerReviewRequired = publication?.status === "review_required"
+                ? this.#settleReaderReviewAfterFailure(session, publication)
+                : false;
+              if (!readerReviewRequired) this.#failJob(session, failure, durableReaderEffect);
+            }
           }
         } catch {
           // A retained running record is recovered as failed_retryable on restart.
         }
       }
-      if (failure.state === "waiting" && session && preservedTurn) {
+      if (recoveredReaderPublication && session && preservedTurn) {
+        const durableSourceIds = collectAgentTurnSourceIds(session.current, context.sourceIds);
+        return recoveredReaderPublication.state === "waiting" ? {
+          requestId,
+          jobId: session.current.id,
+          conversationEventId: preservedTurn.event.id,
+          conversationId: preservedTurn.event.conversationId,
+          tailEventId: recoveredReaderPublication.assistant.id,
+          state: "waiting",
+          modelUsage: actualHomeModelUsage(session),
+          sourceIds: durableSourceIds,
+          error: createErrorSummary(
+            "agent_runtime.review_required",
+            "errors.agent_runtime.review_required",
+            false,
+            "review_proposal",
+            "info"
+          )
+        } : {
+          requestId,
+          jobId: session.current.id,
+          conversationEventId: preservedTurn.event.id,
+          conversationId: preservedTurn.event.conversationId,
+          tailEventId: recoveredReaderPublication.assistant.id,
+          state: "completed",
+          modelUsage: actualHomeModelUsage(session),
+          sourceIds: durableSourceIds,
+          answer: recoveredReaderPublication.answer
+        };
+      }
+      if ((failure.state === "waiting" || readerReviewRequired) && session && preservedTurn) {
         const durableSourceIds = collectAgentTurnSourceIds(session.current, context.sourceIds);
         return {
           requestId,
@@ -727,7 +809,15 @@ export class HomeAgentService {
           state: "waiting",
           modelUsage: actualHomeModelUsage(session),
           sourceIds: durableSourceIds,
-          error: failure.error
+          error: readerReviewRequired
+            ? createErrorSummary(
+                "agent_runtime.review_required",
+                "errors.agent_runtime.review_required",
+                false,
+                "review_proposal",
+                "info"
+              )
+            : failure.error
         };
       }
       return {
@@ -771,6 +861,7 @@ export class HomeAgentService {
         modelInvocationStarted: false,
         modelUsage: toHomeModelUsage(runtimeBinding.provider)
       };
+      let preserved: PreservedAgentTurn | undefined;
       try {
         const inputRef = job.inputRefs?.find(
           (ref) => ref.kind === "conversation" && ref.role === "agent_turn_user_event"
@@ -784,20 +875,23 @@ export class HomeAgentService {
         ) {
           throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The preserved Agent turn reference is invalid.");
         }
-        const preserved = this.#conversations.readUserTurn(
+        preserved = this.#conversations.readUserTurn(
           vaultPath,
           inputRef.locator,
           inputRef.id,
           inputRef.checksum
         );
+        const preservedMetadata = preserved.metadata;
+        const preservedEvent = preserved.event;
         if (
-          !preserved.metadata ||
-          preserved.event.type !== "user_message" ||
-          typeof preserved.event.text !== "string"
+          !preservedMetadata ||
+          preservedEvent.type !== "user_message" ||
+          typeof preservedEvent.text !== "string"
         ) {
           throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The preserved Agent turn metadata is invalid.");
         }
-        if (preserved.metadata.scope) {
+        const currentPreserved = preserved;
+        if (preservedMetadata.scope) {
           const scopeRefs = (job.inputRefs ?? []).filter(
             (ref) => ref.role === "agent_turn_current_note_scope"
           );
@@ -805,7 +899,7 @@ export class HomeAgentService {
           if (
             scopeRefs.length !== 1 ||
             scopeRef?.kind !== "page" ||
-            scopeRef.id !== preserved.metadata.scope.pageId ||
+            scopeRef.id !== preservedMetadata.scope.pageId ||
             !scopeRef.checksum
           ) {
             throw new PigeDomainError(
@@ -814,28 +908,34 @@ export class HomeAgentService {
             );
           }
         }
-        const durableAssistant = this.#conversations.findAssistantTurn(vaultPath, preserved.locator, job.id);
+        const durableAssistant = this.#conversations.findAssistantTurn(vaultPath, currentPreserved.locator, job.id);
         if (durableAssistant) {
-          recoverDurableAssistantPublication({
+          this.#publishReaderSelectionIntent(session, vaultPath);
+          const recoveryState = recoverDurableAssistantPublication({
             session,
             assistant: durableAssistant,
-            jobs: this.#jobs
+            jobs: this.#jobs,
+            mutations: this.#readerSelectionMutations,
+            vaultPath,
+            sourceIds: collectAgentTurnSourceIds(job, job.sourceId ? [job.sourceId] : [])
           });
-          completed += 1;
+          if (recoveryState === "waiting") waiting += 1;
+          else completed += 1;
+          discardReaderSelectionPublicationIntent(vaultPath, session.current);
           continue;
         }
+        discardReaderSelectionPublicationIntent(vaultPath, session.current);
         const currentBinding = resolveReadyHomeRuntimeBinding(this.#models);
         if (!currentBinding) throw createUnavailableRuntimeError(this.#models.summary().defaultBinding);
-        const preservedText = preserved.event.text;
-        const preservedMetadata = preserved.metadata;
+        const preservedText = preservedEvent.text;
         session.modelInvocationStarted = false;
-        const conversationContext = this.#conversations.readContextBeforeUserTurn(vaultPath, preserved);
+        const conversationContext = this.#conversations.readContextBeforeUserTurn(vaultPath, currentPreserved);
         const history = toPiAgentHistory(conversationContext);
-        const conversationContextHash = createConversationContextHash(preserved, conversationContext);
+        const conversationContextHash = createConversationContextHash(currentPreserved, conversationContext);
         const assertConversationCurrent = (): void => assertConversationContextCurrent(
           this.#conversations,
           vaultPath,
-          preserved,
+          currentPreserved,
           conversationContextHash
         );
         await this.#jobs.runTextAgentTurn(job.id, async (jobExecution) => {
@@ -845,7 +945,7 @@ export class HomeAgentService {
               text: preservedText,
               inputKind: preservedMetadata.inputKind,
               locale: preservedMetadata.locale,
-              clientTurnId: requirePreservedClientTurnId(preserved),
+              clientTurnId: requirePreservedClientTurnId(currentPreserved),
               ...(preservedMetadata.scope ? { scope: preservedMetadata.scope } : {})
             },
             activeVault,
@@ -864,10 +964,11 @@ export class HomeAgentService {
           await execution.assertPublicationCurrent?.();
           const assistantEvent = this.#conversations.appendAssistantTurn(
             vaultPath,
-            preserved,
+            currentPreserved,
             job.id,
             execution.answer
           );
+          this.#publishReaderSelectionIntent(session, vaultPath);
           const completedSourceIds = Array.from(new Set([
             ...(job.sourceId ? [job.sourceId] : []),
             ...execution.sourceIds
@@ -882,23 +983,46 @@ export class HomeAgentService {
             sourceIds: completedSourceIds,
             ...(assistantEvent.contentHash ? { assistantContentHash: assistantEvent.contentHash } : {})
           });
+          discardReaderSelectionPublicationIntent(vaultPath, session.current);
         });
         if (session.current.state === "awaiting_review") waiting += 1;
         else completed += 1;
       } catch (caught) {
         const failure = toHomeAgentFailure(caught);
+        let readerReviewRequired = false;
+        let durableReaderEffect = false;
         const cancellationHandled = caught instanceof PigeDomainError &&
           caught.code === "agent_runtime.turn_cancelled";
         const refreshed = this.#jobs.readAgentTurnJob(session.current.id);
         if (refreshed) session.current = refreshed;
         try {
-          if (!cancellationHandled) {
-            this.#failJob(session, failure);
+          if (cancellationHandled) {
+            discardReaderSelectionPublicationIntent(vaultPath, session.current);
+          } else {
+            const recovered = preserved
+              ? this.#recoverReaderSelectionPublicationAfterFailure(
+                  session,
+                  vaultPath,
+                  preserved,
+                  collectAgentTurnSourceIds(session.current, job.sourceId ? [job.sourceId] : [])
+                )
+              : undefined;
+            if (recovered) {
+              if (recovered.state === "waiting") waiting += 1;
+              else completed += 1;
+              continue;
+            }
+            const publication = this.#readReaderSelectionPublicationAfterFailure(session, vaultPath);
+            durableReaderEffect = publication?.status === "applied";
+            readerReviewRequired = publication?.status === "review_required"
+              ? this.#settleReaderReviewAfterFailure(session, publication)
+              : false;
+            if (!readerReviewRequired) this.#failJob(session, failure, durableReaderEffect);
           }
         } catch {
           // Startup recovery will retry a retained running Agent turn.
         }
-        if (failure.state === "waiting") waiting += 1;
+        if (failure.state === "waiting" || readerReviewRequired) waiting += 1;
         else failed += 1;
       }
     }
@@ -946,6 +1070,8 @@ export class HomeAgentService {
         (ref) => ref.kind === "page" && ref.role === "agent_turn_current_note_scope"
       )
       : undefined;
+    const readerSelectionTransform = readReaderSelectionTransformBinding(session.current);
+    const readerSelectionMutations = this.#readerSelectionMutations;
     if (currentNoteScope) {
       const initialCurrentNote = readBoundReaderSelectionEvidence(
         vaultPath,
@@ -966,6 +1092,7 @@ export class HomeAgentService {
     let searchResult: RetrievalSearchResult | undefined;
     let currentNoteEvidence: CurrentNoteEvidenceBinding | undefined;
     let currentNoteToolUsed = false;
+    let readerSelectionReplacement: string | undefined;
     let approvedEvidencePrivacyHash: string | undefined;
     let urlEvidence: HomeAgentUrlEvidence | undefined;
     let urlEvidenceInspected = false;
@@ -1309,7 +1436,18 @@ export class HomeAgentService {
           await authorizeCurrentModelTurn();
           return current;
         }
-      })] : sourceSession ? [] : [createSearchTool({
+      }), ...(readerSelectionTransform && readerSelectionMutations ? [createReaderSelectionMutationTool({
+        authorize: assertCurrentBindingAndVault,
+        stage: (replacement) => {
+          if (readerSelectionReplacement !== undefined && readerSelectionReplacement !== replacement) {
+            throw new PigeDomainError(
+              "agent_runtime.tool_input_invalid",
+              "One Reader transform turn cannot stage two different replacements."
+            );
+          }
+          readerSelectionReplacement = replacement;
+        }
+      })] : [])] : sourceSession ? [] : [createSearchTool({
         authorize: assertCurrentBindingAndVault,
         search: async () => {
           searchToolUsed = true;
@@ -1379,6 +1517,11 @@ export class HomeAgentService {
       }
       throw caught;
     }
+    if (readerSelectionReplacement !== undefined && readerSelectionTransform && readerSelectionMutations) {
+      signal?.throwIfAborted();
+      assertCurrentBindingAndVault();
+      stageReaderSelectionPublicationIntent(vaultPath, session.current, readerSelectionReplacement);
+    }
     session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;
     assertCurrentBindingAndVault();
 
@@ -1388,6 +1531,7 @@ export class HomeAgentService {
         toolName !== HOME_INSPECT_URL_TOOL_NAME &&
         toolName !== HOME_QUERY_DATASET_TOOL_NAME &&
         toolName !== HOME_READ_CURRENT_NOTE_TOOL_NAME &&
+        toolName !== HOME_REPLACE_READER_SELECTION_TOOL_NAME &&
         toolName !== HOME_SEARCH_TOOL_NAME &&
         !sourceToolNames.has(toolName) &&
         !externalToolNames.has(toolName)
@@ -1426,7 +1570,8 @@ export class HomeAgentService {
 
   #failJob(
     session: HomeAgentJobSession,
-    failure: ReturnType<typeof toHomeAgentFailure>
+    failure: ReturnType<typeof toHomeAgentFailure>,
+    durableReaderEffect = false
   ): void {
     if (
       failure.error.code === "model_provider.default_model_missing" ||
@@ -1450,6 +1595,10 @@ export class HomeAgentService {
       return;
     }
 
+    const hasDurableEffect = durableReaderEffect || (session.current.operationIds?.length ?? 0) > 0;
+    const failureMessage = hasDurableEffect
+      ? "Agent turn failed before a final assistant message was published; its durable effect remains recorded."
+      : "Agent turn failed before a final assistant message was published; the preserved turn remains unchanged.";
     const retryable = failure.error.retryable || failure.state === "waiting";
     session.current = this.#jobs.settleAgentTurnJob(session.current, retryable ? {
       kind: "requeue",
@@ -1459,15 +1608,140 @@ export class HomeAgentService {
       requiresUserAction: true,
       message: failure.state === "waiting"
         ? "Agent turn requires an explicit user action before a new attempt."
-        : "Agent turn failed before a final assistant message was published; the preserved turn remains unchanged.",
+        : failureMessage,
       facts: { privacy: modelInvocationPrivacy(session) }
     } : {
       kind: "failed",
       error: failure.error,
-      message: "Agent turn failed before a final assistant message was published; the preserved turn remains unchanged.",
+      message: failureMessage,
       facts: { privacy: modelInvocationPrivacy(session) }
     });
   }
+
+  #publishReaderSelectionIntent(
+    session: HomeAgentJobSession,
+    vaultPath: string
+  ): void {
+    const intent = readReaderSelectionPublicationIntent(vaultPath, session.current);
+    if (!intent) return;
+    const mutations = requireReaderSelectionMutationPort(this.#readerSelectionMutations);
+    const existing = mutations.readPublication({
+      vaultPath,
+      job: session.current,
+      selection: intent.selection,
+      replacement: intent.replacement,
+      action: intent.action
+    });
+    const publication = existing ?? mutations.publish({
+      vaultPath,
+      job: session.current,
+      selection: intent.selection,
+      replacement: intent.replacement,
+      action: intent.action
+    });
+    const refreshed = this.#jobs.readAgentTurnJob(session.current.id);
+    if (refreshed) session.current = refreshed;
+    if (hasReaderSelectionPublicationRef(session.current, publication)) return;
+    if (publication.status === "resolved") {
+      throw new PigeDomainError(
+        "agent_runtime.turn_binding_invalid",
+        "The resolved Reader proposal is missing from its durable Job."
+      );
+    }
+    try {
+      session.current = this.#jobs.patchAgentTurnJob(
+        session.current,
+        readerSelectionPublicationFacts(session.current, publication)
+      );
+    } catch (caught) {
+      const retried = this.#jobs.readAgentTurnJob(session.current.id);
+      if (retried) session.current = retried;
+      if (hasReaderSelectionPublicationRef(session.current, publication)) return;
+      session.current = this.#jobs.patchAgentTurnJob(
+        session.current,
+        readerSelectionPublicationFacts(session.current, publication)
+      );
+    }
+  }
+
+  #readReaderSelectionPublicationAfterFailure(
+    session: HomeAgentJobSession,
+    vaultPath: string
+  ): HomeAgentReaderSelectionPublication | undefined {
+    if (!readReaderSelectionPublicationIntent(vaultPath, session.current)) return undefined;
+    return readReaderSelectionTransformPublication(
+      this.#readerSelectionMutations,
+      vaultPath,
+      session.current
+    );
+  }
+
+  #recoverReaderSelectionPublicationAfterFailure(
+    session: HomeAgentJobSession,
+    vaultPath: string,
+    preservedTurn: PreservedAgentTurn,
+    sourceIds: readonly string[]
+  ): {
+    readonly state: "completed" | "waiting";
+    readonly assistant: ConversationEvent;
+    readonly answer: AgentTurnAnswer;
+  } | undefined {
+    if (!this.#readReaderSelectionPublicationAfterFailure(session, vaultPath)) return undefined;
+    const assistant = this.#conversations.findAssistantTurn(
+      vaultPath,
+      preservedTurn.locator,
+      session.current.id
+    );
+    if (!assistant) return undefined;
+    const state = recoverDurableAssistantPublication({
+      session,
+      assistant,
+      jobs: this.#jobs,
+      mutations: this.#readerSelectionMutations,
+      vaultPath,
+      sourceIds
+    });
+    discardReaderSelectionPublicationIntent(vaultPath, session.current);
+    return { state, assistant, answer: readDurableAgentTurnAnswer(assistant) };
+  }
+
+  #settleReaderReviewAfterFailure(
+    session: HomeAgentJobSession,
+    publication: Extract<HomeAgentReaderSelectionPublication, { readonly status: "review_required" }>
+  ): boolean {
+    session.current = this.#jobs.settleAgentTurnJob(session.current, {
+      kind: "waiting",
+      reason: "review",
+      proposalId: publication.proposalId,
+      message: "The durable Reader transform proposal is ready for bounded review.",
+      facts: {
+        stage: "planning",
+        outputRefs: [{ kind: "proposal", id: publication.proposalId, role: "awaiting_review" }],
+        privacy: modelInvocationPrivacy(session)
+      }
+    });
+    return true;
+  }
+}
+
+function hasReaderSelectionPublicationRef(
+  job: JobRecord,
+  publication: HomeAgentReaderSelectionPublication
+): boolean {
+  return publication.status === "applied"
+    ? job.operationIds?.includes(publication.operationId) === true
+    : job.proposalIds?.includes(publication.proposalId) === true;
+}
+
+function readerSelectionPublicationFacts(
+  job: JobRecord,
+  publication: HomeAgentReaderSelectionPublication
+): JobExecutionFactsPatch {
+  return publication.status === "applied" ? {
+    operationIds: Array.from(new Set([...(job.operationIds ?? []), publication.operationId]))
+  } : {
+    proposalIds: Array.from(new Set([...(job.proposalIds ?? []), publication.proposalId]))
+  };
 }
 
 function createFetchUrlTool(options: {
@@ -1708,6 +1982,68 @@ function createCurrentNoteTool(options: {
           totalBytes: context.modelSuppliedRange.total,
           truncated: context.modelSuppliedRange.truncated
         });
+    }
+  };
+}
+
+function createReaderSelectionMutationTool(options: {
+  readonly authorize: () => void;
+  readonly stage: (replacement: string) => void;
+}): PigeAgentToolDefinition {
+  const InputSchema = z.object({
+    replacement: z.string().min(1).max(16 * 1024)
+  }).strict();
+  return {
+    name: HOME_REPLACE_READER_SELECTION_TOOL_NAME,
+    label: "Replace Reader selection",
+    description: "Apply the exact replacement text to the Host-bound Reader selection, or stage it for bounded review. Call only for the requested Reader transform.",
+    version: "1",
+    capability: "write_vault_knowledge",
+    parameters: {
+      type: "object",
+      properties: { replacement: { type: "string", minLength: 1, maxLength: 16 * 1024 } },
+      required: ["replacement"],
+      additionalProperties: false
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["accepted"] }
+      },
+      required: ["status"],
+      additionalProperties: false
+    },
+    effect: "idempotent_write",
+    inputTrust: "model_generated",
+    outputTrust: "host_validated",
+    dataBoundary: {
+      resourceScope: "current_note",
+      pathAuthority: "host_only",
+      sourceIdAuthority: "host_only",
+      modelAuthority: "none"
+    },
+    execution: "sequential",
+    idempotency: { mode: "idempotent", scope: "current_note" },
+    limits: { maxInputBytes: 20 * 1024, maxOutputBytes: 1_024, timeoutMs: 30_000 },
+    ownerService: "ReaderSelectionActionService",
+    authorize: (args) => {
+      options.authorize();
+      if (!InputSchema.safeParse(args).success) {
+        throw new PigeDomainError("agent_runtime.tool_input_invalid", "The Reader replacement tool input is invalid.");
+      }
+      return true;
+    },
+    execute: async (args) => {
+      options.authorize();
+      const parsed = InputSchema.safeParse(args);
+      if (!parsed.success) {
+        throw new PigeDomainError("agent_runtime.tool_input_invalid", "The Reader replacement tool input is invalid.");
+      }
+      options.stage(parsed.data.replacement);
+      return createPigeTextToolResult(
+        "The Reader selection replacement was accepted for durable publication.",
+        { status: "accepted" }
+      );
     }
   };
 }
@@ -2288,6 +2624,16 @@ function toHomeAgentFailure(caught: unknown): HomeAgentFailure {
     }
     if (caught.code === "capture.url_binding_invalid" || caught.code === "capture.url_target_unsafe") {
       return homeAgentFailure("failed", "capture.url_fetch_failed", "errors.url_fetch.failed", true, "retry", "error");
+    }
+    if (isNonRetryableReaderPublicationErrorCode(caught.code)) {
+      return homeAgentFailure(
+        "failed",
+        caught.code,
+        "errors.agent_runtime.source_turn_failed",
+        false,
+        "none",
+        "warning"
+      );
     }
     if (caught.code === "model_provider.call_failed") {
       return homeAgentFailure("failed", caught.code, "errors.model_provider.call_failed", true, "retry", "error");

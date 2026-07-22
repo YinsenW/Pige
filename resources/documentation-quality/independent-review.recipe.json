@@ -37,7 +37,7 @@
     "scope": "Independent review of the large-paste Agent-turn boundary: canonical Unicode and UTF-8 limits, side-effect-free ordered staging, atomic exact submission, exact-once managed-source preservation, reference-only history, safe UI projection, retry identity, and unchanged status.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 26,
-    "reviewedSha256": "15a2f999b78cdc6b8b8fe7947ff3b52814c77343c504ba9ef88f3ec665b79369"
+    "reviewedSha256": "8d7cf6f269c3546185f2e7ef0ca864d1e15a903d13671ed481426921348b3d08"
   },
   "reviewers": [{
     "reviewerId": "architecture-reset-planning-review",

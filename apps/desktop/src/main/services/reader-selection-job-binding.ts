@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type {
   AgentConversationInputPresentation,
@@ -36,6 +37,30 @@ type JobRef = NonNullable<JobRecord["inputRefs"]>[number];
 const SCOPE_ROLE = "agent_turn_current_note_scope";
 const SELECTION_ROLE = "agent_turn_reader_selection";
 const TRANSFORM_ROLE = "agent_turn_reader_transform";
+
+export function createReaderSelectionPublicationIntentHash(
+  jobId: string,
+  action: ReaderSelectionTransformAction,
+  selection: ReaderSelectionIdentity,
+  replacement: string
+): string {
+  return `sha256:${createHash("sha256")
+    .update(JSON.stringify({ jobId, action, selection, replacement }), "utf8")
+    .digest("hex")}`;
+}
+
+export function createReaderSelectionPublicationArtifact(
+  jobId: string,
+  action: ReaderSelectionTransformAction,
+  selection: ReaderSelectionIdentity,
+  replacement: string
+): { readonly id: string; readonly checksum: string } {
+  const checksum = createReaderSelectionPublicationIntentHash(jobId, action, selection, replacement);
+  return {
+    id: `art_reader_selection_${checksum.slice("sha256:".length, "sha256:".length + 16)}`,
+    checksum
+  };
+}
 
 export function validateReaderSelectionTurnContext(input: {
   readonly scopePageId?: string;

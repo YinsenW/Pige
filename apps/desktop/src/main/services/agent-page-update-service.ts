@@ -29,6 +29,7 @@ import {
   replaceGeneratedNoteExact
 } from "./generated-note-file";
 import { containsRestrictedModelContent } from "./model-egress-content";
+import { createReaderSelectionPublicationArtifact } from "./reader-selection-job-binding";
 import type { CurrentRetrievalPageMutationBinding } from "./retrieval-evidence-boundary";
 
 export const AGENT_PAGE_UPDATE_CHECKPOINT_ID = "agent_existing_note_update_started";
@@ -346,7 +347,8 @@ export function applyReaderSelectionPageUpdate(input: {
     beforePath,
     afterHash,
     selection: input.selection,
-    action: input.action
+    action: input.action,
+    replacement: input.replacement
   });
   preflightUpdateOperation(input.vaultPath, operation);
   const existingOperation = readCommittedOperation(input.vaultPath, operation);
@@ -380,7 +382,11 @@ export function applyReaderSelectionPageUpdate(input: {
   );
   return { pageId: target.pageId, operation: committed, recovered: liveHash === afterHash };
 }
-
+export function createReaderSelectionReplacementContentHash(before: string, jobCreatedAt: string, selection: ReaderSelectionIdentity, replacement: string): string {
+  const metadata = parsePigeFrontmatter(before);
+  if (!metadata || typeof metadata.frontmatter.updated_at !== "string") throw pageConflict("The Reader transform before-image metadata is invalid.");
+  return hashText(createReaderSelectionReplacement(before, selection, replacement, createMonotonicUpdatedAt(metadata.frontmatter.updated_at, jobCreatedAt)));
+}
 export function recoverAgentPageUpdate(input: {
   readonly vaultPath: string;
   readonly job: JobRecord;
@@ -1475,11 +1481,9 @@ function createReaderSelectionUpdateOperation(input: {
   readonly afterHash: string;
   readonly selection: ReaderSelectionIdentity;
   readonly action: "translate" | "polish" | "expand";
+  readonly replacement: string;
 }): OperationRecord {
-  const artifactId = `art_reader_selection_${createHash("sha256")
-    .update(`${input.job.id}:${input.action}:${input.selection.selectedContentHash}`, "utf8")
-    .digest("hex")
-    .slice(0, 16)}`;
+  const artifact = createReaderSelectionPublicationArtifact(input.job.id, input.action, input.selection, input.replacement);
   return OperationRecordSchema.parse({
     id: input.operationId,
     schemaVersion: 1,
@@ -1496,8 +1500,8 @@ function createReaderSelectionUpdateOperation(input: {
       { kind: "job", id: input.job.id },
       {
         kind: "artifact",
-        id: artifactId,
-        checksum: input.selection.selectedContentHash
+        id: artifact.id,
+        checksum: artifact.checksum
       }
     ],
     before: { kind: "page", id: input.beforeHash, path: input.beforePath },
