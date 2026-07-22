@@ -4,6 +4,9 @@ import { defineConfig } from "vitest/config";
 const alias = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 
 export default defineConfig({
+  ssr: {
+    noExternal: ["fast-xml-parser", "is-unsafe", "@nodable/entities"]
+  },
   resolve: {
     alias: {
       "@pige/domain": alias("./packages/domain/src/index.ts"),
