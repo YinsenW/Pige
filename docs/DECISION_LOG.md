@@ -3171,6 +3171,29 @@ References:
 - `docs/UI_PROTOTYPE.md`
 - `resources/large-paste-boundary.manifest.json`
 
+### D-20260723-Reader-Assistant-First-Publication
+
+Status: Accepted
+Date: 2026-07-23
+
+Decision:
+
+Reader replacement tool state publishes only after durable final assistant; recovery
+adopts exact identity without replay or fails closed.
+
+Rationale:
+
+It survives the crash window without Job/conversation bodies or prose writes.
+
+Consequences:
+
+- Requirement/Exit/Phase status is unchanged.
+
+References:
+
+- `docs/DATA_ARCHITECTURE.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

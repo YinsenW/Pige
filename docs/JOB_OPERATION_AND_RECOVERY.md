@@ -134,15 +134,16 @@ cleared by partial acceptance.
 Short chat creates no Source Record. Multi-attachment preservation checkpoints or child
 executors are reliability ownership only and never a Host-selected semantic ingest chain.
 
-Reader selection resolves render endpoints to checksummed page/UTF-8-span/content/action refs;
-body is reread, never copied into Job/instruction. Recovery rejects drift and adopts existing
-Operation/proposal. Input hash binds Host instruction plus strict presentation enum; UI
-localizes the enum instead of prompt matching.
+Reader selection binds checksummed page/span/content/action refs; Job/instruction omit body
+and UI localizes presentation. Only Pi's explicit typed replacement call may persist the
+exact private Job/action/selection/replacement checkpoint; it creates no page change/proposal.
+Host publishes only after checksum-bound final assistant. Recovery adopts matching
+checkpoint/Operation/proposal, reconciles terminal proposal to the same Job, and never
+replays model/effect work. Missing/corrupt/drifted/mismatched evidence fails closed with the
+owner's body-free error; assistant prose never supplies replacement bytes.
 
-An in-progress Home `draft_replace` is sender/turn/Job-bound temporary UI state, never a
-conversation event, checkpoint, recovery input or assistant truth. Only validated
-tool/effect results and the durable upstream Pi final survive restart; cancellation/failure stops delivery and
-cannot promote the last draft.
+Home `draft_replace` remains temporary UI state, never recovery or assistant truth;
+cancellation/failure cannot promote it.
 
 A durable upstream Pi Dataset final stores one bounded preview and exact citation in its
 checksum-bound assistant event. `agent_turn` refs bind source, Dataset, revision, table
@@ -544,16 +545,11 @@ expired | applied`.
 Executable `ConfirmationProposalSchema` owns the durable record: identity/state/trust,
 Job/source/target/diff refs, operations, warnings and base hashes.
 
-Proposals persist before display. Full records/decisions stay Main-only; apply rechecks base
-hash, changed targets conflict, rejection records recurrence context, and approval creates an
-Operation before `applied`. Historical ingest can recover; new turns use only a bounded owner.
-
-Reader transforms auto-apply through the reversible writer or stage a private exceptional
-proposal. Renderer gets only bounded preview; Main-owned revision-fenced approve/reject and
-interrupted resolving/applied/rejected recovery reconcile the same Job/identity/writer.
-
-Current supported operations, recovery evidence, and open mutation families live in
-acceptance. High-risk decisions are exact current effects outside proposal and Job state.
+Proposals persist before bounded display; records/decisions stay Main-only. Apply rechecks
+base hash, records an Operation before `applied`, and conflicts on changed targets. Rejection
+records recurrence; historical ingest may recover, while new turns use a bounded owner.
+Reader terminal states reconcile the same Job/effect; acceptance owns supported/open
+operations. High-risk decisions remain exact current effects outside Job/proposal state.
 
 ## 12. Operation Record Lifecycle
 
@@ -714,12 +710,8 @@ Home:
 - Does not expose "Inbox" or "Review" as mandatory top-level concepts.
 - Shows compact Activity/Undo; users retry, cancel, inspect, or resolve exceptions.
 
-Reader:
-
-- Shows exact selection read/transform turns; exceptional Reader transforms expose only
-  bounded preview and Main-owned decisions, never legacy raw proposal records.
-- Shows recent safe operation summaries when relevant.
-- Note Agent can explain what changed using operation records.
+Reader shows exact turns, bounded preview, Main decisions, and Operation summaries, never
+raw proposal records.
 
 Settings:
 

@@ -263,6 +263,8 @@ Pige Vault/
     jobs/
     proposals/
     operations/
+    private/
+      reader-selection-publications/
     memory/
     skills/
     trash/
@@ -283,6 +285,10 @@ Rules:
 - `.pige/db/`, `.pige/indexes/`, `.pige/cache/`, and `.pige/runtime/` are rebuildable;
   runtime owns only temporary leases/claims and is never restored as ownership truth.
 - `.pige/source-records/`, `.pige/conversations/`, `.pige/jobs/`, `.pige/proposals/`, `.pige/operations/`, `.pige/memory/`, and `.pige/skills/` are durable vault data unless explicitly excluded by the user.
+- `.pige/private/reader-selection-publications/` is a Main-only short-lived exact
+  Job/action/selection/replacement checkpoint from tool call through reconciliation, not
+  durable/sync truth. Backup/restore/sync/renderer/diagnostics/support export exclude it;
+  cancel, no-final retry, or convergence removes it.
 
 Storage roots:
 
