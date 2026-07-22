@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-22T12:00:00Z",
+  "reviewedAt": "2026-07-22T22:47:27Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -34,14 +34,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent review of the large-paste Agent-turn boundary: canonical Unicode and UTF-8 limits, side-effect-free ordered staging, atomic exact submission, exact-once managed-source preservation, reference-only history, safe UI projection, retry identity, and unchanged status.",
+    "scope": "Independent Product Planning review of PT3 post-effect continuation: Pi may continue model and inspect/search/parse/OCR work after a durable effect, exact effect owners retain incompatible/concurrent mutation rejection, multi-effect aggregation stays AR3, and statuses remain unchanged.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 26,
-    "reviewedSha256": "8d7cf6f269c3546185f2e7ef0ca864d1e15a903d13671ed481426921348b3d08"
+    "reviewedSha256": "8e0517869d9b81aab580d15b459310acdd943fc6b13571fd3dd486b275690a05"
   },
   "reviewers": [{
     "reviewerId": "architecture-reset-planning-review",
-    "task": "Large pasted content boundary contract review",
+    "task": "PT3 post-effect continuation contract review",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -52,29 +52,29 @@
     "independence": "Product Planning reviews only contracts and executable governance; Development still owns every implementation deletion, rewrite, security test, package and runtime artifact."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"One composer boundary distinguishes ordinary paste, staged large paste and independent immediate file drop without introducing another product mode."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"UI, IPC, source, data and Job owners share one manifest for exact text, ordered staging, preservation and retry semantics."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"PIGE-CAP-002 and E2.02 remain planned while acceptance names the exact executable evidence still required."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"The manifest and mutation gate give UI, preload and service owners one constants source and fail deterministic drift."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Numeric limits are defined once in a compact manifest and prose owners project only their own observable or durability boundary."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"The Agent turn remains one Pi-owned run; a durable effect no longer creates a hidden completion mode."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Pi owner, Playbook, Decision Log, acceptance, and no-growth budgets agree on continuation, exact-owner conflicts, and AR3 deferral."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"PIGE-PI-001 and E3.08/E3.09 retain their statuses while open work and deletion budgets become exact."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Seven zero-target residue markers and one retained mutation-serialization marker define the next reviewable Development slice."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"The Pi owner defines semantics once; Playbook and trace project only delivery and open-work facts within the byte budget."}
   ],
   "verification": [
-    {"command":"npm run verify:large-paste-boundary","status":"passed","evidence":"Canonical values, exported schemas/types, strict request/result binding, early durable receipt, planned statuses and mutations pass."},
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Canonical Job reliability plus submitted-turn, high-risk and Provider-send contracts remain single-owned and fail safe."},
-    {"command":"npm run verify","status":"passed","evidence":"The full merge-candidate governance suite passes after trace, semantic and reviewed-snapshot regeneration."}
+    {"command":"npm run verify:architecture-reset","status":"passed","evidence":"Current residue stays within exact source/path budgets; post-combined targets require its removal without status promotion."},
+    {"command":"npm run verify:docs && npm run verify:decisions && npm run verify:documentation-leanness","status":"passed","evidence":"Owner links, PRD/Playbook claims, durable decision structure, and governed byte limits pass."},
+    {"command":"npm run verify:traceability","status":"passed","evidence":"Requirement/Exit status stays unchanged and semantic claims match the reviewed contract."}
   ],
   "coordination": {
-    "taskId": "large-paste-boundary-20260723",
-    "taskTitle": "Large pasted content Agent-turn boundary",
+    "taskId": "pt3-post-effect-continuation-20260723",
+    "taskTitle": "PT3 post-effect continuation contract",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The typed large-paste request/result boundary is bound while legacy non-staged file submission remains compatible; no capture-only route is restored.",
-    "acknowledgement": "Product Planning binds the exact Development schema and receipt evidence; UI integration remains separate without Requirement, Exit or Phase promotion."
+    "compatibility": "Exact effect-owner conflict, CAS, idempotency, and commit validation remain; this contract neither enables nor aggregates multiple durable effects.",
+    "acknowledgement": "Product Planning binds the next Development deletion slice; implementation, renderer, executable evidence, and status promotion remain outside this candidate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Typed runtime binding is complete, while UI integration and final assembled evidence remain separate.",
-    "Windows and Linux qualification remains deferred and unclaimed during early macOS-first development."
+    "Development must replace the existing no-op test with post-effect continuation and exact-owner conflict acceptance before evidence may be attached.",
+    "AR3 must define ordered multi-effect recovery before more than one durable effect is claimed for a turn."
   ]
 }

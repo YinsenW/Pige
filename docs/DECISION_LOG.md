@@ -3102,26 +3102,17 @@ explicitly selected bounded context unchanged. Pige does not regex-classify, red
 rewrite, or block the payload. Stored Provider credentials remain isolated in the secret
 store/authentication layer and are never injected into content.
 
-Host owns only atomic turn submission, Provider/model/credential transport, registered
-tool schemas and resource limits, narrow high-risk effects, durable identity/recovery,
-typed capability execution, mutation commit, and safe renderer projection. Tool/effect
-owners still validate inputs, authority, revisions and commits. Unknown/stale citation
-refs are omitted or marked unavailable without rejecting answer text.
+Host owns turn/transport, typed tools, high-risk authority, durable recovery, mutation
+commit, and safe projection. Exact owners validate effects; bad citation refs do not reject prose.
 
 Rationale:
 
-Mandatory finish tools, output schemas, grounding/citation verdicts, content policy and
-repair follow-ups make the Host a shadow Agent and discard valid model answers. They also
-duplicate upstream Pi's lifecycle and make ordinary personal use brittle.
+Host finish/schema/repair verdicts duplicate Pi and discard valid answers.
 
 Consequences:
 
-- PT1-PT4 remove completion policy, all Host terminal tools, semantic output errors,
-  objective/mode dispatch, fixed ingest/source pipelines, egress content policy, legacy
-  capture/retrieval routes, and dead UI copy in small reviewable PRs.
-- Jobs may recover the same Pi turn and effects but cannot choose semantic work.
-- Transport/protocol failures remain typed; tool and durable mutation boundaries remain
-  strict. Safe DOM projection limits structure and size without judging answer semantics.
+- PT1-PT4 remove Host terminal/repair/routing/egress policy and legacy routes/UI.
+- Jobs recover without choosing semantics; transport, mutation, and projection bounds remain.
 - Requirement, Exit, and Phase status is not promoted by this decision.
 
 References:
@@ -3130,6 +3121,29 @@ References:
 - `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
 - `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `resources/architecture-reset.manifest.json`
+
+### D-20260723-Pi-Post-Effect-Continuation
+
+Status: Accepted
+Date: 2026-07-23
+
+Decision:
+
+A durable effect is not turn completion: Pi may continue model/inspect/search/parse/OCR;
+exact owners reject incompatible/concurrent mutations, and aggregation remains AR3.
+
+Rationale:
+
+First-effect completion overrides Pi's tool order, not mutation risk.
+
+Consequences:
+
+- PT3 removes post-effect short circuits without status promotion; exact-owner fences remain.
+
+References:
+
+- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
 - `resources/architecture-reset.manifest.json`
 
 ### D-20260723-Large-Paste-Agent-Turn-Boundary

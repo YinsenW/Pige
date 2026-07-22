@@ -363,9 +363,9 @@ ordinary Agent completion, whether or not tools ran.
   their safe code. `knowledge_action_missing`, semantic `output_invalid` and
   `completion_invalid` are retired from new ordinary Agent turns.
 
-This is upstream Pi continuation, not a Pige-authored parallel Agent loop. Pige supplies
-typed feedback and durable Job/checkpoint ownership through the sole adapter; Pi retains
-tool selection, replanning, follow-up, and completion control.
+Upstream Pi continuation includes post-effect model/inspect/search/parse/OCR without Host
+`already_*`/terminal substitution. Exact owners reject conflicting mutations; AR3 owns
+aggregation. Pige supplies typed feedback/Job checkpoints; Pi retains semantic control.
 
 ## 12. Sessions, Memory, And Durable State
 

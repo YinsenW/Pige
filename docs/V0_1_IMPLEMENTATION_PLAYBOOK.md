@@ -302,7 +302,7 @@ Build:
 - [B3.13 -> E3.08] Embedded Pi plus a schema-complete Pige Tool Registry; submission
   creates the Agent Job, source preservation is its first checkpoint, and Pi alone
   selects, revisits, and replans semantic tools, Pi-authored Markdown writes, and rejected
-  output, with no host-fixed/parallel path or one-correction script.
+  output, with no host-fixed/parallel path, effect-as-terminal shortcut, or one-correction script.
 - [B3.14 -> E3.09] Versioned unified `agent_turn` ingress: probed explicit-protocol Provider binding,
   ordinary/no-evidence conversation, optional local retrieval, source tools, durable
   waiting/resume, Agent-owned completion/repair, safe replacement-draft streaming, and no
@@ -361,7 +361,8 @@ Exit criteria:
   Host/catalog proves distinct Agent-chosen traces and replan;
   parser/OCR stays idle before its event, no-model preserves only, writes are tool-caused
   and retry-safe, typed validation rejection remains inside Pi until accepted/abstained,
-  and mutation gates reject direct/fixed/bypass paths. Active-vault eligible knowledge-
+  effects do not block model/inspect/search/parse/OCR continuation; exact owners reject
+  conflicting mutations and multi-effect recovery remains AR3. Active-vault eligible knowledge-
   Markdown writes need no Permission prompt; Pi-requested Pige-owned or extension scopes
   outside standing authority remain Phase 8 Broker acceptance.
 - [E3.09] One real DeepSeek-first app path persists the user turn and `agent_turn`, keeps
