@@ -97,6 +97,17 @@ async function runOrchestrator() {
     assert.equal(connect.groundedCitationsDuringDraft, false);
     assert.equal(connect.citationVisible, true);
     assert.equal(connect.citationOpenedReader, true);
+    assert.equal(connect.sourceSelectionsHadZeroDurableSideEffects, true);
+    assert.equal(connect.sourceStagingWindows.length, 4);
+    assert.ok(connect.sourceStagingWindows.every(({ stagedAt, submittedAt }) =>
+      Number.isFinite(stagedAt) && Number.isFinite(submittedAt) && submittedAt >= stagedAt
+    ));
+    assert.ok(connect.sourceStagingWindows.every(({ stagedAt, submittedAt }) =>
+      requests.every((request) =>
+        request.method !== "POST" || request.path !== "/v1/responses" ||
+        request.receivedAt < stagedAt || request.receivedAt >= submittedAt
+      )
+    ));
     if (highRiskOnly) {
       assert.equal(connect.highRiskDialogVisible, true);
       assert.equal(connect.highRiskDenyDefaultFocused, true);
@@ -314,22 +325,30 @@ async function runElectronPhase() {
       markStage("renderer_high_risk_deny");
       result = { ...result, ...(await runHighRiskDenyRenderer(browserWindow)) };
     } else if (phase === "connect") {
+      const sourceStagingWindows = [];
       markStage("renderer_source");
       await prepareSourceRenderer(browserWindow, SOURCE_PROMPT);
-      await setRendererFileInput(browserWindow, attachmentPath);
+      markStage("renderer_source_staging");
+      sourceStagingWindows.push(await stageAndSubmitSourceRenderer(browserWindow, attachmentPath, markStage, "renderer_source"));
+      markStage("renderer_source_submitted");
       result = { ...result, ...(await readSourceRendererResult(browserWindow, SOURCE_ANSWER, "sourceVisible")) };
       markStage("renderer_markdown");
       await prepareSourceRenderer(browserWindow, MARKDOWN_PROMPT);
-      await setRendererFileInput(browserWindow, markdownAttachmentPath);
+      sourceStagingWindows.push(await stageAndSubmitSourceRenderer(browserWindow, markdownAttachmentPath, markStage, "renderer_markdown"));
       result = { ...result, ...(await readSourceRendererResult(browserWindow, MARKDOWN_ANSWER, "markdownVisible")) };
       markStage("renderer_activity");
       await prepareSourceRenderer(browserWindow, ACTIVITY_PROMPT);
-      await setRendererFileInput(browserWindow, activityAttachmentPath);
+      sourceStagingWindows.push(await stageAndSubmitSourceRenderer(browserWindow, activityAttachmentPath, markStage, "renderer_activity"));
       result = { ...result, ...(await readActivityRendererResult(browserWindow)) };
       markStage("renderer_dataset");
       await prepareSourceRenderer(browserWindow, DATASET_PROMPT);
-      await setRendererFileInput(browserWindow, datasetAttachmentPath);
+      sourceStagingWindows.push(await stageAndSubmitSourceRenderer(browserWindow, datasetAttachmentPath, markStage, "renderer_dataset"));
       result = { ...result, ...(await readDatasetRendererResult(browserWindow)) };
+      result = {
+        ...result,
+        sourceSelectionsHadZeroDurableSideEffects: true,
+        sourceStagingWindows
+      };
     }
     console.log(`${CHILD_RESULT_PREFIX}${JSON.stringify(result)}`);
     browserWindow.destroy();
@@ -855,6 +874,76 @@ async function setRendererFileInput(browserWindow, attachmentPath) {
   } finally {
     debuggerApi.detach();
   }
+}
+
+async function stageAndSubmitSourceRenderer(browserWindow, attachmentPath, markStage, stagePrefix) {
+  markStage(`${stagePrefix}_baseline`);
+  const baseline = await readSourceSubmissionState(browserWindow);
+  const stagedAt = Date.now();
+  markStage(`${stagePrefix}_file_input`);
+  await setRendererFileInput(browserWindow, attachmentPath);
+  markStage(`${stagePrefix}_side_effect_check`);
+  const staged = await browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'source_stage_chip_wait';
+      const waitFor = async (predicate, label, timeoutMs = 10000) => {
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < timeoutMs) {
+          const value = await predicate();
+          if (value) return value;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        throw new Error("Timed out waiting for " + label);
+      };
+      await waitFor(() => document.querySelector('.attachment-chip'), 'staged attachment chip');
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      globalThis.__pigeRoundtripStage = 'source_stage_snapshot';
+      const jobs = await window.pige.jobs.list({ limit: 100 });
+      const timeline = await window.pige.agent.conversation({ limit: 24 });
+      globalThis.__pigeRoundtripStage = 'source_stage_send_ready';
+      await waitFor(
+        () => document.querySelector('button.composer-send:not(:disabled)'),
+        'enabled Home Send for staged source turn'
+      );
+      return {
+        agentTurnCount: jobs.jobs.filter((job) => job.class === 'agent_turn').length,
+        conversationTailEventId: timeline?.tailEventId ?? '',
+        conversationMessageCount: timeline?.messages.length ?? 0
+      };
+    })()
+  `, true);
+  if (
+    staged.agentTurnCount !== baseline.agentTurnCount ||
+    staged.conversationTailEventId !== baseline.conversationTailEventId ||
+    staged.conversationMessageCount !== baseline.conversationMessageCount
+  ) {
+    throw new Error("Picker staging created a durable Agent side effect before Send.");
+  }
+  const submittedAt = Date.now();
+  markStage(`${stagePrefix}_send`);
+  await browserWindow.webContents.executeJavaScript(`
+    (() => {
+      const send = document.querySelector('button.composer-send:not(:disabled)');
+      if (!send) throw new Error('Home Send is unavailable for the staged source turn.');
+      send.click();
+      return true;
+    })()
+  `, true);
+  return { stagedAt, submittedAt };
+}
+
+async function readSourceSubmissionState(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      const jobs = await window.pige.jobs.list({ limit: 100 });
+      const timeline = await window.pige.agent.conversation({ limit: 24 });
+      return {
+        agentTurnCount: jobs.jobs.filter((job) => job.class === 'agent_turn').length,
+        conversationTailEventId: timeline?.tailEventId ?? '',
+        conversationMessageCount: timeline?.messages.length ?? 0
+      };
+    })()
+  `, true);
 }
 
 async function readSourceRendererResult(browserWindow, expectedAnswer, resultKey) {

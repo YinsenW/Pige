@@ -58,4 +58,20 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain('section.settings-page.settings-history-page[aria-labelledby="settings-history-title"]');
     expect(source).toContain('\'"call_id":"call_dataset_materialize"\'');
   });
+
+  it("stages picker files without side effects and submits them through the real composer", () => {
+    const stageHelper = source.indexOf("async function stageAndSubmitSourceRenderer");
+    const fileInjection = source.indexOf("await setRendererFileInput(browserWindow, attachmentPath);", stageHelper);
+    const durableCheck = source.indexOf("Picker staging created a durable Agent side effect before Send.", fileInjection);
+    const sendClick = source.indexOf("send.click();", durableCheck);
+
+    expect(stageHelper).toBeGreaterThan(-1);
+    expect(fileInjection).toBeGreaterThan(stageHelper);
+    expect(durableCheck).toBeGreaterThan(fileInjection);
+    expect(sendClick).toBeGreaterThan(durableCheck);
+    expect(source).toContain("sourceSelectionsHadZeroDurableSideEffects: true");
+    expect(source).toContain("requests.every((request) =>");
+    expect(source).toContain('request.path !== "/v1/responses"');
+    expect(source).not.toContain("await setRendererFileInput(browserWindow, attachmentPath);\n      result =");
+  });
 });
