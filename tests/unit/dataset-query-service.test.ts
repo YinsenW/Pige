@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import type {
   ModelProfileSummary,
   ProviderProfileSummary,
-  RetrievalAskResult,
   RetrievalSearchResult
 } from "@pige/contracts";
 import {
@@ -15,7 +14,7 @@ import {
   SourceRecordSchema,
   type OperationRecord
 } from "@pige/schemas";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { executeDatasetQuery } from "../../apps/desktop/src/main/services/dataset-query-core";
 import { DatasetQueryService } from "../../apps/desktop/src/main/services/dataset-query-service";
 import {
@@ -280,18 +279,7 @@ describe("Dataset Query Service", () => {
       search: (request): RetrievalSearchResult => {
         retrievalCalls += 1;
         return emptySearchResult(vault.vaultId, request.query);
-      },
-      ask: (request): RetrievalAskResult => ({
-        requestId: "request_dataset_query_not_used",
-        query: request.query,
-        activeVaultId: vault.vaultId,
-        answer: "No local page evidence was selected.",
-        answerMode: "insufficient_evidence",
-        confidence: "insufficient",
-        citations: [],
-        warnings: ["insufficient_evidence"],
-        search: emptySearchResult(vault.vaultId, request.query)
-      })
+      }
     };
     const service = new HomeAgentService(
       { current: () => vault, activeVaultPath: () => fixture.vaultPath },
@@ -412,18 +400,7 @@ describe("Dataset Query Service", () => {
       { current: () => vault, activeVaultPath: () => fixture.vaultPath },
       datasetHomeModels(() => { runtimeConfigReads += 1; }),
       {
-        search: (request) => emptySearchResult(vault.vaultId, request.query),
-        ask: (request) => ({
-          requestId: "request_dataset_privacy_drift_not_used",
-          query: request.query,
-          activeVaultId: vault.vaultId,
-          answer: "No local page evidence was selected.",
-          answerMode: "insufficient_evidence",
-          confidence: "insufficient",
-          citations: [],
-          warnings: ["insufficient_evidence"],
-          search: emptySearchResult(vault.vaultId, request.query)
-        })
+        search: (request) => emptySearchResult(vault.vaultId, request.query)
       },
       new JobsService({ current: () => vault, activeVaultPath: () => fixture.vaultPath }),
       {
@@ -568,10 +545,10 @@ async function createManagedFixture(options: { readonly privateEvidence?: boolea
   const sourcePath = path.join(root, "records.csv");
   fs.writeFileSync(sourcePath, sourceBytes);
   const vault = loadVaultSummary(vaultPath);
-  const capture = await new CaptureService({
+  const capture = await new LegacyCaptureFixture({
     current: () => vault,
     activeVaultPath: () => vaultPath
-  }).submitFiles({
+  }, vaultPath).submitFiles({
     filePaths: [sourcePath],
     inputKind: "file_drop",
     userIntent: "capture",
@@ -640,10 +617,10 @@ async function materializeAdditionalDataset(
   const sourcePath = path.join(fixture.root, fileName);
   fs.writeFileSync(sourcePath, sourceBytes);
   const vault = loadVaultSummary(fixture.vaultPath);
-  const capture = await new CaptureService({
+  const capture = await new LegacyCaptureFixture({
     current: () => vault,
     activeVaultPath: () => fixture.vaultPath
-  }).submitFiles({
+  }, fixture.vaultPath).submitFiles({
     filePaths: [sourcePath],
     inputKind: "file_drop",
     userIntent: "capture",

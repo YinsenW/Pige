@@ -8,7 +8,7 @@ import {
   AgentIngestService,
   type AgentIngestModelConfigPort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { PiAgentRuntimeAdapter } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
@@ -69,7 +69,7 @@ describe("Agent-led knowledge spine", () => {
         fixture.vaultPort,
         new AgentIngestService(modelPort, adapter)
       );
-      const capture = new CaptureService(fixture.vaultPort).submitText({
+      const capture = new LegacyCaptureFixture(fixture.vaultPort, fixture.vaultPath).submitText({
         text: "Pige preserves evidence before its Agent decides how to organize knowledge.",
         inputKind: "typed_text",
         userIntent: "capture",
@@ -112,7 +112,7 @@ describe("Agent-led knowledge spine", () => {
 
   it("lets the real Pi loop replan after an unavailable tool without exposing a built-in capability", async () => {
     const fixture = makeVault();
-    const capture = new CaptureService(fixture.vaultPort).submitText({
+    const capture = new LegacyCaptureFixture(fixture.vaultPort, fixture.vaultPath).submitText({
       text: "A missing optional parser should become a typed result, not shell access.",
       inputKind: "typed_text",
       userIntent: "capture",
@@ -137,7 +137,7 @@ describe("Agent-led knowledge spine", () => {
 
   it("denies the durable knowledge tool before publication and preserves the source", async () => {
     const fixture = makeVault();
-    const capture = new CaptureService(fixture.vaultPort).submitText({
+    const capture = new LegacyCaptureFixture(fixture.vaultPort, fixture.vaultPath).submitText({
       text: "Denied knowledge publication must leave preserved evidence intact.",
       inputKind: "typed_text",
       userIntent: "capture",

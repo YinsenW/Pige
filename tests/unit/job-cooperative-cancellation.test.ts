@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { VaultSummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import { JobRecordSchema, type JobRecord, type SourceKind, type SourceRecord } from "@pige/schemas";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { JobCancellationError, type JobExecutionControl } from "../../apps/desktop/src/main/services/job-execution-control";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import {
@@ -622,13 +622,13 @@ function makeServices(
   fixture: Fixture,
   parser?: PdfParserService,
   ocr?: OcrPort
-): { readonly capture: CaptureService; readonly jobs: JobsService } {
+): { readonly capture: LegacyCaptureFixture; readonly jobs: JobsService } {
   const vaults = {
     current: () => fixture.vault,
     activeVaultPath: () => fixture.vaultPath
   };
   return {
-    capture: new CaptureService(vaults),
+    capture: new LegacyCaptureFixture(vaults, fixture.vaultPath),
     jobs: new JobsService(vaults, undefined, undefined, parser, ocr)
   };
 }

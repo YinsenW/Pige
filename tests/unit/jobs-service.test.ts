@@ -49,7 +49,7 @@ import {
 import type { NativeOcrResult } from "../../apps/desktop/src/main/services/ocr-types";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import type { PiAgentRunRequest, PiAgentRunResult } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
-import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { ScriptedAgentIngestRuntime } from "../helpers/scripted-agent-ingest-runtime";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import type { VaultSummary } from "@pige/contracts";
@@ -120,7 +120,7 @@ function makeServices(
   sourceFetch?: SourceFetchPort,
   documentParser?: DocumentParserPort,
   ocr?: OcrPort
-): { capture: CaptureService; jobs: JobsService } {
+): { capture: LegacyCaptureFixture; jobs: JobsService } {
   const vaultPort = {
     current: () => vault,
     activeVaultPath: () => vaultPath
@@ -129,34 +129,6 @@ function makeServices(
     capture: new LegacyCaptureFixture(vaultPort, vaultPath, sourceFetch),
     jobs: new JobsService(vaultPort, agentIngest, database, documentParser, ocr)
   };
-}
-
-class LegacyCaptureFixture extends CaptureService {
-  constructor(
-    vaults: ConstructorParameters<typeof CaptureService>[0],
-    readonly fixtureVaultPath: string,
-    sourceFetch?: SourceFetchPort
-  ) {
-    super(vaults, sourceFetch);
-  }
-
-  override submitText(request: Parameters<CaptureService["submitText"]>[0]): ReturnType<CaptureService["submitText"]> {
-    const result = super.submitText(request);
-    markSourceAsLegacyAgentIngestFixture(this.fixtureVaultPath, result.sourceId);
-    return result;
-  }
-
-  override async submitUrl(request: Parameters<CaptureService["submitUrl"]>[0]): ReturnType<CaptureService["submitUrl"]> {
-    const result = await super.submitUrl(request);
-    markSourceAsLegacyAgentIngestFixture(this.fixtureVaultPath, result.sourceId);
-    return result;
-  }
-
-  override async submitFiles(request: Parameters<CaptureService["submitFiles"]>[0]): ReturnType<CaptureService["submitFiles"]> {
-    const result = await super.submitFiles(request);
-    for (const sourceId of result.sourceIds) markSourceAsLegacyAgentIngestFixture(this.fixtureVaultPath, sourceId);
-    return result;
-  }
 }
 
 afterEach(() => {
@@ -213,26 +185,29 @@ describe("jobs service", () => {
     const jobs = new JobsService(vaultPort);
     const filePath = path.join(path.dirname(vaultPath), "current.md");
     fs.writeFileSync(filePath, "# Current file\n", "utf8");
-    capture.submitText({
-      text: "Preserve this without starting a second semantic Agent workflow.",
-      inputKind: "typed_text",
-      userIntent: "capture",
-      locale: "en"
-    });
-    await capture.submitUrl({
+    const url = "https://example.com/current";
+    await capture.preserveUrlForAgentTurn({
       url: "https://example.com/current",
       inputKind: "pasted_url",
       userIntent: "capture",
       locale: "en"
+    }, {
+      jobId: "job_20260722_currenturl01",
+      sourceId: "src_20260722_currenturl01",
+      inputHash: `sha256:${createHash("sha256").update(url, "utf8").digest("hex")}`
     });
-    await capture.submitFiles({
+    await capture.preserveFilesForAgentTurn({
       filePaths: [filePath],
       inputKind: "file_drop",
       userIntent: "capture",
       locale: "en"
+    }, {
+      jobId: "job_20260722_currentfile01",
+      sourceId: "src_20260722_currentfile01"
     });
 
-    expect(jobs.processQueuedCaptures()).toMatchObject({ processed: 3, completed: 3, failed: 0 });
+    expect(jobs.processQueuedCaptures()).toMatchObject({ processed: 0, completed: 0, failed: 0 });
+    expect(jobs.list({ classes: ["capture"] }).jobs).toEqual([]);
     expect(jobs.list({ classes: ["agent_ingest"] }).jobs).toEqual([]);
     const restartedJobs = new JobsService(vaultPort);
     expect(restartedJobs.processQueuedCaptures()).toMatchObject({ processed: 0, completed: 0, failed: 0 });

@@ -10,11 +10,13 @@ import {
   type AgentIngestPublicationBinding
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
 import { CaptureService, type SourceFetchPort } from "../../apps/desktop/src/main/services/capture-service";
+import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { KnowledgeActivityService } from "../../apps/desktop/src/main/services/knowledge-activity-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import { OperationRecordSchema, type JobRecord, type OperationRecord, type SourceRecord } from "@pige/schemas";
 import type { VaultSummary } from "@pige/contracts";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { ScriptedAgentIngestRuntime } from "../helpers/scripted-agent-ingest-runtime";
 
 const tempRoots: string[] = [];
@@ -88,11 +90,11 @@ function makeVault(): { vaultPath: string; vault: VaultSummary } {
   return { vaultPath, vault: loadVaultSummary(vaultPath) };
 }
 
-function makeCapture(vaultPath: string, vault: VaultSummary, sourceFetch?: SourceFetchPort): CaptureService {
-  return new CaptureService({
+function makeCapture(vaultPath: string, vault: VaultSummary, sourceFetch?: SourceFetchPort): LegacyCaptureFixture {
+  return new LegacyCaptureFixture({
     current: () => vault,
     activeVaultPath: () => vaultPath
-  }, sourceFetch);
+  }, vaultPath, sourceFetch);
 }
 
 afterEach(() => {
@@ -121,6 +123,44 @@ describe("agent ingest service", () => {
       hasDefaultRuntimeBinding: () => false,
       getDefaultRuntimeConfig: () => undefined
     }).hasDefaultModel()).toBe(false);
+  });
+
+  it("prepares source tools for a Home-owned Pi turn without starting the legacy runtime", async () => {
+    const { vaultPath, vault } = makeVault();
+    const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
+    const jobs = new JobsService(vaults);
+    const job = jobs.createAgentTurnJob({
+      conversationEventId: "evt_20260722_sourcesession",
+      conversationLocator: ".pige/conversations/2026/07/conv_20260722.jsonl",
+      inputHash: `sha256:${"a".repeat(64)}`,
+      sourceExpected: true
+    });
+    if (!job.sourceId) throw new Error("Expected a source-bound Agent turn.");
+    const sourcePath = path.join(path.dirname(vaultPath), "source.md");
+    fs.writeFileSync(sourcePath, "# Source\n\nPrepare this source for Agent-selected knowledge work.\n", "utf8");
+    await new CaptureService(vaults).preserveFilesForAgentTurn({
+      filePaths: [sourcePath],
+      inputKind: "file_picker",
+      userIntent: "unknown",
+      locale: "en"
+    }, { jobId: job.id, sourceId: job.sourceId });
+    jobs.attachAgentTurnSource(job.id, job.sourceId);
+    const sourceRecord = readJson<SourceRecord>(findFile(
+      path.join(vaultPath, ".pige/source-records"),
+      `${job.sourceId}.json`
+    ));
+    const runtime = { run: vi.fn() };
+    const service = new AgentIngestService(makeModelPort(), runtime);
+
+    const session = await service.prepareSourceToolSession(vaultPath, sourceRecord, job);
+
+    expect(runtime.run).not.toHaveBeenCalled();
+    expect(session.tools.map((tool) => tool.name)).toContain("pige_inspect_source");
+    expect(session.terminalToolNames).toContain("pige_respond_to_user");
+    expect(session.terminalToolNames).not.toContain("pige_inspect_dataset");
+    await expect(session.beforeModelTurn()).resolves.toBeUndefined();
+    expect(session.result()).toBeUndefined();
+    expect(() => session.settle()).toThrow("knowledge action");
   });
 
   it("turns a preserved source into a wiki note, index entry, and operation record without storing prompts or secrets", async () => {

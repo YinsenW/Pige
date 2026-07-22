@@ -5,7 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DatasetManifestSchema, DatasetRevisionSchema, DatasetSchemaRecordSchema, JobRecordSchema, SourceRecordSchema } from "@pige/schemas";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { planDatasetIngest } from "../../apps/desktop/src/main/services/dataset-ingest-core";
 import { DatasetService, type DatasetImportPlanner } from "../../apps/desktop/src/main/services/dataset-service";
 import {
@@ -334,10 +334,10 @@ async function makeCsvFixture() {
   const sourceBytes = Buffer.from("name,count\nAda,3\nGrace,5\n", "utf8");
   const sourcePath = path.join(root, "records.csv");
   fs.writeFileSync(sourcePath, sourceBytes);
-  const capture = await new CaptureService({
+  const capture = await new LegacyCaptureFixture({
     current: () => vault,
     activeVaultPath: () => vaultPath
-  }).submitFiles({
+  }, vaultPath).submitFiles({
     filePaths: [sourcePath],
     inputKind: "file_drop",
     userIntent: "capture",

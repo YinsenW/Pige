@@ -19,8 +19,6 @@ import type {
   ExportSupportBundleRequest,
   CancelSupportBundleExportRequest,
   CancelSupportBundleExportResult,
-  HomeAgentAskRequest,
-  HomeAgentAskResult,
   HighRiskConfirmationChangedEvent,
   HighRiskConfirmationPendingResult,
   HighRiskConfirmationResolveRequest,
@@ -394,8 +392,6 @@ const api: PigeDesktopApi = {
   agent: {
     runtimeStatus: async (): Promise<AgentRuntimeStatus> =>
       ipcRenderer.invoke("agent.runtimeStatus") as Promise<AgentRuntimeStatus>,
-    ask: async (request: HomeAgentAskRequest): Promise<HomeAgentAskResult> =>
-      ipcRenderer.invoke("agent.ask", request) as Promise<HomeAgentAskResult>,
     conversation: async (
       request?: AgentConversationRequest
     ): Promise<AgentConversationTimeline | undefined> => {

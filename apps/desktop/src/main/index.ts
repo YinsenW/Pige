@@ -16,7 +16,6 @@ import type {
   CancelSupportBundleExportRequest,
   CancelSupportBundleExportResult,
   ExportSupportBundleRequest,
-  HomeAgentAskRequest,
   HighRiskConfirmationResolveRequest,
   JobActionRequest,
   JobActionResult,
@@ -35,7 +34,6 @@ import type {
   ReaderSelectionResolveRequest,
   OpenRecentVaultRequest,
   ProviderConnectResult,
-  RetrievalAskRequest,
   RestoreApplyRequest,
   RestoreApplyResult,
   RestorePreviewResult,
@@ -1382,7 +1380,6 @@ ipcMain.handle("speech.cancel", (event, request: SpeechCancelRequest) =>
 );
 ipcMain.handle("speech.openSystemSettings", () => getSpeechService().openSystemSettings());
 ipcMain.handle("agent.runtimeStatus", () => getAgentRuntimeService().runtimeStatus());
-ipcMain.handle("agent.ask", (_event, request: HomeAgentAskRequest) => getHomeAgentService().ask(request));
 ipcMain.handle("agent.conversation", (_event, request?: AgentConversationRequest) =>
   getHomeAgentService().conversation(request)
 );
@@ -1653,7 +1650,6 @@ ipcMain.handle("proposals.reject", proposalRendererBoundaryUnavailable);
 ipcMain.handle("retrieval.search", (_event, request: unknown) =>
   handleRetrievalSearchIpc(request, getRetrievalService())
 );
-ipcMain.handle("retrieval.ask", (_event, request: RetrievalAskRequest) => getRetrievalService().ask(request));
 ipcMain.handle("vault.current", () => getVaultService().current());
 ipcMain.handle("vault.recent", () => getVaultService().recent());
 ipcMain.handle("onboarding.status", () => getVaultService().onboardingStatus());

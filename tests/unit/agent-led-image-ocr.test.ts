@@ -10,7 +10,7 @@ import {
   type AgentIngestModelConfigPort,
   type AgentIngestRuntimePort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { JobCancellationError } from "../../apps/desktop/src/main/services/job-execution-control";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
@@ -487,7 +487,7 @@ async function preserveImage(
   const bytes = Buffer.from(`synthetic preserved image: ${fileName}`);
   const sourcePath = path.join(path.dirname(fixture.vaultPath), fileName);
   fs.writeFileSync(sourcePath, bytes);
-  const captured = await new CaptureService(fixture.vaultPort).submitFiles({
+  const captured = await new LegacyCaptureFixture(fixture.vaultPort, fixture.vaultPath).submitFiles({
     filePaths: [sourcePath],
     inputKind: "file_drop",
     userIntent: "capture",

@@ -320,7 +320,7 @@ Useful public idea about retrieval.
     expect(result.results[0]?.snippets[0]?.length).toBeLessThanOrEqual(260);
   });
 
-  it("answers from bounded local evidence with citations and ranked pages", () => {
+  it("builds bounded context evidence with citations and ranked pages", () => {
     const { vaultPath, vault } = makeVault();
     const retrieval = makeRetrieval(vaultPath, vault);
     writePage(vaultPath, "wiki/rag-pipeline.md", {
@@ -336,51 +336,22 @@ ${"Supporting context stays inside the bounded preview. ".repeat(12)}FULL_BODY_S
       body: "Local retrieval keeps the whole vault out of cloud model requests."
     });
 
-    const result = retrieval.ask({ query: "How does local retrieval work?", locale: "en", limit: 8 });
+    const result = retrieval.search({
+      scope: { kind: "active_vault", vaultId: vault.vaultId },
+      query: "How does local retrieval work?",
+      limit: 8
+    });
+    const context = buildHomeQueryContextPack(result);
 
-    expect(result.answerMode).toBe("local_extractive");
-    expect(result.confidence).toBe("grounded");
-    expect(result.answer).toContain("The most relevant local notes");
-    expect(result.answer).toContain("[1]");
-    expect(result.citations).toHaveLength(2);
-    expect(result.citations[0]).toMatchObject({
+    expect(context.selectedEvidence).toHaveLength(2);
+    expect(context.selectedEvidence[0]?.citation).toMatchObject({
       refId: "citation_1",
       label: "[1]",
       pageId: "page_20260709_answer01",
       locator: "snippet:1"
     });
     expect(result.results[0]?.summary.title).toBe("RAG Pipeline");
-    expect(JSON.stringify(result)).not.toContain("FULL_BODY_SENTINEL_MUST_NOT_LEAK");
-  });
-
-  it("returns an explicit insufficient-evidence answer without citations", () => {
-    const { vaultPath, vault } = makeVault();
-    const retrieval = makeRetrieval(vaultPath, vault);
-
-    const result = retrieval.ask({ query: "What did we decide about lunar orchards?", locale: "en" });
-
-    expect(result.confidence).toBe("insufficient");
-    expect(result.citations).toEqual([]);
-    expect(result.results).toEqual([]);
-    expect(result.warnings).toContain("insufficient_evidence");
-    expect(result.answer).toContain("not enough evidence");
-  });
-
-  it("keeps CJK answers usable before semantic retrieval is installed", () => {
-    const { vaultPath, vault } = makeVault();
-    const retrieval = makeRetrieval(vaultPath, vault);
-    writePage(vaultPath, "wiki/local-ocr.md", {
-      id: "page_20260709_answerzh",
-      title: "本地 OCR",
-      body: "图片和扫描文档需要先在本地完成文字识别，再进入检索索引。",
-      language: "zh-Hans"
-    });
-
-    const result = retrieval.ask({ query: "本地文字识别怎么处理？", locale: "en" });
-
-    expect(result.answer).toContain("本地笔记中最相关的内容");
-    expect(result.answer).toContain("文字识别");
-    expect(result.citations[0]?.pageId).toBe("page_20260709_answerzh");
+    expect(JSON.stringify(context)).not.toContain("FULL_BODY_SENTINEL_MUST_NOT_LEAK");
   });
 
   it("serializes context-pack refs and budgets without selected snippet bodies", () => {

@@ -18,7 +18,7 @@ import {
   type AgentIngestProposalPort,
   type AgentIngestRuntimePort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { EvidenceAssemblyService } from "../../apps/desktop/src/main/services/evidence-assembly-service";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
@@ -929,7 +929,7 @@ function submitText(
   fixture: ReturnType<typeof makeVault>,
   text: string
 ): { readonly sourceId: string; readonly jobId: string } {
-  const result = new CaptureService(fixture.vaultPort).submitText({
+  const result = new LegacyCaptureFixture(fixture.vaultPort, fixture.vaultPath).submitText({
     text,
     inputKind: "typed_text",
     userIntent: "capture",

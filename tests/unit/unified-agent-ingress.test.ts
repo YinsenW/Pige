@@ -4,9 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
-  HomeAgentAskRequest,
   ModelProviderSettingsSummary,
-  RetrievalAskResult,
+  RetrievalSearchRequest,
   RetrievalSearchResult,
   VaultSummary
 } from "@pige/contracts";
@@ -78,14 +77,10 @@ describe("Unified Agent ingress", () => {
     fs.writeFileSync(sourceFile, sourceBytes);
     const models = createMutableModels(true);
     const datasetService = new DatasetService(new StaticDatasetPlanner(csvPlan(sourceBytes)));
-    const ingestRuntime = new PiAgentRuntimeAdapter({
+    const runtime = new PiAgentRuntimeAdapter({
       fauxResponses: [
         { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
-        { kind: "tool_call", toolName: "pige_inspect_dataset", args: {} }
-      ]
-    });
-    const homeRuntime = new PiAgentRuntimeAdapter({
-      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_inspect_dataset", args: {} },
         { kind: "tool_call", toolName: "pige_query_dataset", args: { action: "catalog" } },
         {
           kind: "tool_call",
@@ -126,7 +121,7 @@ describe("Unified Agent ingress", () => {
     };
     const jobs = new JobsService(
       fixture.vaultPort,
-      new AgentIngestService(models, ingestRuntime, datasetCapabilities),
+      new AgentIngestService(models, runtime, datasetCapabilities),
       undefined,
       undefined,
       undefined,
@@ -137,7 +132,7 @@ describe("Unified Agent ingress", () => {
       models,
       neverRetrieval,
       jobs,
-      homeRuntime,
+      runtime,
       datasetCapabilities,
       undefined,
       undefined,
@@ -215,7 +210,8 @@ describe("Unified Agent ingress", () => {
     const firstSourceRuntime = new PiAgentRuntimeAdapter({
       fauxResponses: [
         { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
-        { kind: "tool_call", toolName: "pige_inspect_dataset", args: {} }
+        { kind: "tool_call", toolName: "pige_inspect_dataset", args: {} },
+        { kind: "text", text: "The provider stopped before the terminal answer." }
       ]
     });
     const firstJobs = new JobsService(
@@ -226,7 +222,17 @@ describe("Unified Agent ingress", () => {
       undefined,
       datasetService
     );
-    const firstHome = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, firstJobs);
+    const firstHome = new HomeAgentService(
+      fixture.vaultPort,
+      models,
+      neverRetrieval,
+      firstJobs,
+      firstSourceRuntime,
+      datasetCapabilities,
+      undefined,
+      undefined,
+      new DatasetQueryService(directDatasetExecutor)
+    );
     const prepared = firstHome.prepareSourceTurn({
       text: "Which person has the largest count after restart?",
       inputKind: "file_drop",
@@ -239,15 +245,12 @@ describe("Unified Agent ingress", () => {
       userIntent: "unknown",
       locale: "en"
     }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
-    firstJobs.attachAgentTurnSource(prepared.jobId, prepared.sourceId);
-
-    expect(await firstJobs.processQueuedAgentIngest({ jobIds: [prepared.jobId] })).toEqual({
-      processed: 1,
-      completed: 1,
-      failed: 0
+    expect(await firstHome.submitPreparedSourceTurn(prepared)).toMatchObject({
+      state: "failed",
+      error: { code: "agent_runtime.knowledge_action_missing" }
     });
     expect(firstJobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
-      state: "queued",
+      state: "failed_retryable",
       stage: "planning",
       outputRefs: expect.arrayContaining([
         expect.objectContaining({ kind: "dataset", role: "agent_dataset" }),
@@ -257,6 +260,7 @@ describe("Unified Agent ingress", () => {
     expect(planner.callCount).toBe(1);
     expect(firstHome.conversation())
       .toMatchObject({ canFollowUp: false, messages: [{ role: "user" }] });
+    expect(firstJobs.retry({ jobId: prepared.jobId })).toMatchObject({ status: "requeued" });
 
     let sourceRuntimeCalls = 0;
     const restartedJobs = new JobsService(
@@ -279,6 +283,8 @@ describe("Unified Agent ingress", () => {
       restartedJobs,
       new PiAgentRuntimeAdapter({
         fauxResponses: [
+          { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+          { kind: "tool_call", toolName: "pige_inspect_dataset", args: {} },
           { kind: "tool_call", toolName: "pige_query_dataset", args: { action: "catalog" } },
           {
             kind: "tool_call",
@@ -352,7 +358,7 @@ describe("Unified Agent ingress", () => {
       ]
     });
     const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, adapter));
-    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs);
+    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs, adapter);
     const prepared = home.prepareSourceTurn({
       inputKind: "file_drop",
       objective: "auto",
@@ -394,7 +400,7 @@ describe("Unified Agent ingress", () => {
     const sourceFile = path.join(path.dirname(fixture.vaultPath), "answer-only-source.txt");
     fs.writeFileSync(sourceFile, "The source can support a direct answer without becoming a note.\n", "utf8");
     const models = createMutableModels(true);
-    const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, new PiAgentRuntimeAdapter({
+    const adapter = new PiAgentRuntimeAdapter({
       fauxResponses: [
         { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
         {
@@ -403,8 +409,9 @@ describe("Unified Agent ingress", () => {
           args: { answer: "The preserved source supports a direct answer.", evidenceRefs: ["ev_01"] }
         }
       ]
-    })));
-    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs);
+    });
+    const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, adapter));
+    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs, adapter);
     const prepared = home.prepareSourceTurn({
       text: "Summarize this without saving a note.",
       inputKind: "file_drop",
@@ -441,7 +448,7 @@ describe("Unified Agent ingress", () => {
     const sourceFile = path.join(path.dirname(fixture.vaultPath), "terminal-recovery-source.md");
     fs.writeFileSync(sourceFile, "# Recovery\n\nThe source remains bounded evidence.\n", "utf8");
     const models = createMutableModels(true);
-    const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, new PiAgentRuntimeAdapter({
+    const adapter = new PiAgentRuntimeAdapter({
       fauxResponses: [
         { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
         { kind: "text", text: "I inspected the source but stopped too early." },
@@ -451,8 +458,9 @@ describe("Unified Agent ingress", () => {
           args: { answer: "This Host-forced terminal turn must never run.", evidenceRefs: ["ev_01"] }
         }
       ]
-    })));
-    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs);
+    });
+    const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, adapter));
+    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs, adapter);
     const prepared = home.prepareSourceTurn({
       inputKind: "file_picker",
       objective: "auto",
@@ -472,7 +480,7 @@ describe("Unified Agent ingress", () => {
       jobId: prepared.jobId,
       error: {
         code: "agent_runtime.knowledge_action_missing",
-        messageKey: "errors.agent_runtime.source_turn_failed"
+        messageKey: "errors.agent_runtime.completion_invalid"
       }
     });
     expect(jobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
@@ -486,13 +494,14 @@ describe("Unified Agent ingress", () => {
     const sourceFile = path.join(path.dirname(fixture.vaultPath), "terminal-missing-source.txt");
     fs.writeFileSync(sourceFile, "The source remains retryable when no terminal tool succeeds.\n", "utf8");
     const models = createMutableModels(true);
-    const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, new PiAgentRuntimeAdapter({
+    const adapter = new PiAgentRuntimeAdapter({
       fauxResponses: [
         { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
         { kind: "text", text: "Incomplete response without a terminal action." }
       ]
-    })));
-    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs);
+    });
+    const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, adapter));
+    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs, adapter);
     const prepared = home.prepareSourceTurn({
       inputKind: "file_drop",
       objective: "auto",
@@ -511,7 +520,7 @@ describe("Unified Agent ingress", () => {
       state: "failed",
       error: {
         code: "agent_runtime.knowledge_action_missing",
-        messageKey: "errors.agent_runtime.source_turn_failed",
+        messageKey: "errors.agent_runtime.completion_invalid",
         retryable: true,
         userAction: "retry"
       }
@@ -520,7 +529,7 @@ describe("Unified Agent ingress", () => {
       state: "failed_retryable",
       error: {
         code: "agent_runtime.knowledge_action_missing",
-        messageKey: "errors.agent_runtime.source_turn_failed"
+        messageKey: "errors.agent_runtime.completion_invalid"
       }
     });
   });
@@ -541,7 +550,7 @@ describe("Unified Agent ingress", () => {
       ]
     });
     const firstJobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, adapter));
-    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, firstJobs);
+    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, firstJobs, adapter);
     const prepared = home.prepareSourceTurn({
       text: "Read this after restart.",
       inputKind: "file_picker",
@@ -566,9 +575,18 @@ describe("Unified Agent ingress", () => {
       state: "queued",
       sourceId: prepared.sourceId
     });
-    expect(await restarted.processQueuedAgentIngest({ jobIds: [prepared.jobId] })).toEqual({
+    const restartedHome = new HomeAgentService(
+      fixture.vaultPort,
+      models,
+      neverRetrieval,
+      restarted,
+      adapter
+    );
+    expect(await restartedHome.resumeWaitingTurns(20)).toEqual({
+      requeued: 0,
       processed: 1,
       completed: 1,
+      waiting: 0,
       failed: 0
     });
     expect(restarted.readAgentTurnJob(prepared.jobId)).toMatchObject({ state: "completed" });
@@ -592,17 +610,19 @@ describe("Unified Agent ingress", () => {
       ]
     });
     const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, adapter));
-    const preserved = await new CaptureService(fixture.vaultPort).preserveFilesForAgentTurn({
+    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs, adapter);
+    const prepared = home.prepareSourceTurn({
+      inputKind: "file_picker",
+      objective: "auto",
+      locale: "en"
+    });
+    await new CaptureService(fixture.vaultPort).preserveFilesForAgentTurn({
       filePaths: [sourceFile],
       inputKind: "file_picker",
       userIntent: "unknown",
       locale: "en"
-    });
-    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs);
-    const waiting = await home.submitTurn(
-      { inputKind: "file_picker", objective: "auto", locale: "en" },
-      { sourceIds: preserved.sourceIds }
-    );
+    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+    const waiting = await home.submitPreparedSourceTurn(prepared);
 
     expect(waiting).toMatchObject({
       state: "waiting",
@@ -614,10 +634,12 @@ describe("Unified Agent ingress", () => {
     ]);
 
     models.setReady(true);
-    expect(jobs.requeueWaitingAgentIngest()).toEqual({ requeued: 1 });
-    expect(await jobs.processQueuedAgentIngest({ jobIds: [waiting.jobId] })).toEqual({
+    expect(jobs.requeueWaitingTextAgentTurns()).toEqual({ requeued: 1 });
+    expect(await home.resumeWaitingTurns(20)).toEqual({
+      requeued: 0,
       processed: 1,
       completed: 1,
+      waiting: 0,
       failed: 0
     });
     expect(jobs.list({ classes: ["agent_turn"] }).jobs).toEqual([
@@ -666,10 +688,7 @@ function createMutableModels(initiallyReady: boolean): MutableModels {
 }
 
 const neverRetrieval: HomeAgentRetrievalPort = {
-  search: (_request: HomeAgentAskRequest): RetrievalSearchResult => {
-    throw new Error("Source-only unified ingress must not use the Home retrieval port.");
-  },
-  ask: (_request: HomeAgentAskRequest): RetrievalAskResult => {
+  search: (_request: RetrievalSearchRequest): RetrievalSearchResult => {
     throw new Error("Source-only unified ingress must not use the Home retrieval port.");
   }
 };

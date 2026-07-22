@@ -5,7 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentTurnAnswer } from "@pige/contracts";
+import type { ConversationEvent } from "@pige/schemas";
 import { AgentTurnConversationStore } from "../../apps/desktop/src/main/services/agent-turn-conversation-store";
+import { readDurableAgentTurnAnswer } from "../../apps/desktop/src/main/services/durable-agent-turn-answer";
 
 const tempRoots: string[] = [];
 
@@ -225,6 +227,61 @@ describe("Agent turn conversation store", () => {
       jobId,
       changedAnswer
     ))).toMatchObject({ code: "agent_runtime.turn_conflict" });
+  });
+
+  it("projects durable plain and structured assistant events as exact Agent answers", () => {
+    const vaultPath = makeVault();
+    const service = new AgentTurnConversationStore();
+    const plainTurn = service.appendUserTurn(vaultPath, "Synthetic plain answer request.");
+    const plainEvent = service.appendAssistantTurn(
+      vaultPath,
+      plainTurn,
+      "job_20260722_plainanswer1",
+      "Synthetic durable plain answer."
+    );
+    const datasetTurn = service.appendUserTurn(vaultPath, "Synthetic Dataset answer request.");
+    const datasetAnswer = makeDatasetAnswer();
+    const datasetEvent = service.appendAssistantTurn(
+      vaultPath,
+      datasetTurn,
+      "job_20260722_datasetanswer1",
+      datasetAnswer
+    );
+
+    expect(readDurableAgentTurnAnswer(plainEvent)).toEqual({
+      answer: "Synthetic durable plain answer.",
+      grounding: "general",
+      citations: []
+    });
+    expect(readDurableAgentTurnAnswer(datasetEvent)).toEqual(datasetAnswer);
+  });
+
+  it("fails closed for invalid or changed durable assistant events", () => {
+    const vaultPath = makeVault();
+    const service = new AgentTurnConversationStore();
+    const userTurn = service.appendUserTurn(vaultPath, "Synthetic adversarial answer request.");
+    const assistant = service.appendAssistantTurn(
+      vaultPath,
+      userTurn,
+      "job_20260722_adversarial1",
+      makeDatasetAnswer()
+    );
+
+    expect(captureError(() => readDurableAgentTurnAnswer(userTurn.event))).toMatchObject({
+      code: "agent_runtime.turn_conflict"
+    });
+    expect(captureError(() => readDurableAgentTurnAnswer({
+      ...assistant,
+      text: undefined
+    } as unknown as ConversationEvent))).toMatchObject({ code: "agent_runtime.turn_conflict" });
+    expect(captureError(() => readDurableAgentTurnAnswer({
+      ...assistant,
+      answerGrounding: undefined
+    } as ConversationEvent))).toMatchObject({ code: "agent_runtime.turn_conflict" });
+    expect(captureError(() => readDurableAgentTurnAnswer({
+      ...assistant,
+      answerCitations: []
+    }))).toMatchObject({ code: "agent_runtime.turn_changed" });
   });
 
   it("reads a pre-Dataset checksum-bound structured page assistant event", () => {

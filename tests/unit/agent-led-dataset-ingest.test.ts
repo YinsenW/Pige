@@ -11,7 +11,7 @@ import {
   type AgentIngestModelConfigPort,
   type AgentIngestRuntimePort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { DatasetService, type DatasetImportPlanner } from "../../apps/desktop/src/main/services/dataset-service";
 import type { DatasetIngestPlan } from "../../apps/desktop/src/main/services/dataset-ingest-types";
 import { JobCancellationError } from "../../apps/desktop/src/main/services/job-execution-control";
@@ -329,7 +329,7 @@ async function preserveCsv(fixture: ReturnType<typeof makeVault>) {
   const bytes = Buffer.from("name,count\nAda,3\nGrace,5\n", "utf8");
   const sourcePath = path.join(path.dirname(fixture.vaultPath), "records.csv");
   fs.writeFileSync(sourcePath, bytes);
-  const captured = await new CaptureService(fixture.vaultPort).submitFiles({
+  const captured = await new LegacyCaptureFixture(fixture.vaultPort, fixture.vaultPath).submitFiles({
     filePaths: [sourcePath],
     inputKind: "file_drop",
     userIntent: "capture",

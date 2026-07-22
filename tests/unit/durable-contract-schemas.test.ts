@@ -103,6 +103,10 @@ describe("durable contract schemas", () => {
       ...common,
       semanticOrchestration: "legacy_agent_ingest"
     })).toThrow();
+    expect(() => CurrentSourceRecordSchema.parse({
+      ...common,
+      semanticOrchestration: "capture_only"
+    })).toThrow();
     expect(() => SourceRecordSchema.parse({
       ...common,
       semanticOrchestration: "unknown"

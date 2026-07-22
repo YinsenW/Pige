@@ -1310,7 +1310,7 @@ const WaitingDependencyCountsProjectionSchema = z.object({
 }).strict();
 
 export const OnboardingStatusProjectionSchema = z.object({
-  state: z.enum(["blocked_no_vault", "capture_only", "ready"]),
+  state: z.enum(["blocked_no_vault", "ready"]),
   activeVault: VaultSummaryProjectionSchema.optional(),
   hasDefaultModel: z.boolean(),
   showFirstHomeGuide: z.boolean(),
@@ -1397,11 +1397,10 @@ export const ToolchainManifestSchema = z.object({
 
 export const SourceSemanticOrchestrationSchema = z.enum([
   "legacy_agent_ingest",
-  "capture_only",
   "agent_turn"
 ]);
 
-const CurrentSourceSemanticOrchestrationSchema = z.enum(["capture_only", "agent_turn"]);
+const CurrentSourceSemanticOrchestrationSchema = z.literal("agent_turn");
 
 const SourceRecordObjectSchema = z.object({
   schemaVersion: z.literal(1).default(1),

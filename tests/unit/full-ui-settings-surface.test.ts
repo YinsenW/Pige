@@ -875,6 +875,8 @@ describe("full UI Settings surface", () => {
     const container = dom.window.document.querySelector("#root")!;
     expect(container.querySelector("h1")?.textContent).toBe("Permissions & Privacy");
     expect(container.textContent).toContain("Connected model services");
+    expect(container.querySelector(".settings-status")?.textContent).toBe("Default policy");
+    expect(container.textContent).toContain("Connected services use this policy");
     expect(container.textContent).toContain("without a second confirmation dialog");
     expect(container.textContent).toContain("Exact high-risk effects");
     expect(container.textContent).toContain("Confirm each effect");

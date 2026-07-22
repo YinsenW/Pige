@@ -28,6 +28,17 @@ export function HighRiskConfirmationDialog(props: {
     };
   }, [props.confirmation.confirmationId]);
 
+  useEffect(() => {
+    const denyOnEscape = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.isComposing && !props.resolving) props.onResolve("deny");
+    };
+    document.addEventListener("keydown", denyOnEscape, true);
+    return () => document.removeEventListener("keydown", denyOnEscape, true);
+  }, [props.onResolve, props.resolving]);
+
   const subject = props.confirmation.presentation.subject;
   const subjectText = subject.kind === "item_count"
     ? `${subject.count} ${props.t(subject.count === 1 ? "confirmation.item" : "confirmation.items")}`
@@ -44,13 +55,6 @@ export function HighRiskConfirmationDialog(props: {
         aria-describedby="high-risk-confirmation-description"
         aria-busy={props.resolving}
         onKeyDown={(event) => {
-          if (event.nativeEvent.isComposing) return;
-          if (event.key === "Escape") {
-            event.preventDefault();
-            event.stopPropagation();
-            if (!props.resolving) props.onResolve("deny");
-            return;
-          }
           if (event.key !== "Tab") return;
           const focusable = Array.from(
             dialogRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled)") ?? []

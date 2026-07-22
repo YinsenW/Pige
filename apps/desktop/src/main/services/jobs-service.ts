@@ -39,7 +39,8 @@ import {
   type AgentIngestParseToolRequest,
   type AgentIngestPublicationBinding,
   type AgentIngestPublishedResult,
-  type AgentIngestProposalBinding
+  type AgentIngestProposalBinding,
+  type AgentSourceToolSession
 } from "./agent-ingest-service";
 import type { DocumentParserPort } from "./document-parser-service";
 import type { DatasetMaterializerPort } from "./dataset-service";
@@ -54,7 +55,6 @@ import {
   type JobProgressUpdate
 } from "./job-execution-control";
 import { ProposalService } from "./proposal-service";
-import { AgentTurnConversationStore, type PreservedAgentTurn } from "./agent-turn-conversation-store";
 import {
   JobRecordStore,
   type JobRecordSnapshot
@@ -75,6 +75,7 @@ import {
   isValidReaderSelectionJobScope,
   type ReaderSelectionJobScope
 } from "./reader-selection-job-binding";
+import type { AgentSourceToolExecutionPort } from "./agent-source-tool-execution";
 
 type JobRecordFile = JobRecordSnapshot;
 
@@ -153,6 +154,8 @@ export interface CreateAgentTurnJobRequest {
 export interface TextAgentTurnExecution {
   readonly job: JobRecord;
   readonly signal: AbortSignal;
+  readonly sourceTools?: AgentSourceToolExecutionPort;
+  readonly sourceSession?: AgentSourceToolSession;
   readonly markDurableCheckpoint: (checkpointId: string) => void;
 }
 
@@ -670,9 +673,43 @@ export class JobsService {
       "Pi Agent is interpreting the preserved Home turn."
     );
     try {
+      const sourceTools: AgentSourceToolExecutionPort | undefined = execution.job.sourceId
+        ? {
+            parse: (request) => this.#runAgentSelectedParseTool(
+              vaultPath,
+              execution.job,
+              { ...request, signal: execution.control.signal },
+              execution.control
+            ),
+            ocr: (request) => this.#runAgentSelectedOcrTool(
+              vaultPath,
+              execution.job,
+              { ...request, signal: execution.control.signal },
+              execution.control
+            ),
+            materializeDataset: (request) => this.#runAgentSelectedDatasetTool(
+              vaultPath,
+              execution.job,
+              { ...request, signal: execution.control.signal },
+              execution.control
+            )
+          }
+        : undefined;
+      const sourceSession = sourceTools && this.#agentIngest
+        ? await this.#prepareAgentSourceToolSession(
+          vaultPath,
+          jobFile.path,
+          execution.job,
+          execution.control,
+          sourceTools
+        )
+        : undefined;
+      const currentExecutionJob = this.#readJobSnapshot(vaultPath, jobId)?.job ?? execution.job;
       return await execute({
-        job: execution.job,
+        job: currentExecutionJob,
         signal: execution.control.signal,
+        ...(sourceTools ? { sourceTools } : {}),
+        ...(sourceSession ? { sourceSession } : {}),
         markDurableCheckpoint: (checkpointId) => {
           const current = this.#readJobSnapshot(vaultPath, jobId)?.job;
           if (current?.cancellation?.durableWritesApplied === true) return;
@@ -689,6 +726,111 @@ export class JobsService {
     } finally {
       this.#finishCooperativeExecution(jobId, execution.controller);
     }
+  }
+
+  async #prepareAgentSourceToolSession(
+    vaultPath: string,
+    jobPath: string,
+    job: JobRecord,
+    control: JobExecutionControl,
+    sourceTools: AgentSourceToolExecutionPort
+  ): Promise<AgentSourceToolSession> {
+    const sourceId = job.sourceId;
+    const sourceFile = sourceId ? readSourceRecordFile(vaultPath, sourceId) : undefined;
+    if (
+      !this.#agentIngest ||
+      !sourceFile ||
+      sourceFile.sourceRecord.metadata.agentTurnJobId !== job.id
+    ) {
+      throw new PigeDomainError(
+        "agent_runtime.turn_binding_invalid",
+        "The source-bearing Agent turn is missing its exact preserved source binding."
+      );
+    }
+    return this.#agentIngest.prepareSourceToolSession(vaultPath, sourceFile.sourceRecord, job, {
+      onPolicyResolved: (snapshot) => {
+        this.#jobExecutionCoordinator(vaultPath).patch(
+          this.#jobRecordStore(vaultPath).read(jobPath),
+          {
+            policyContextId: snapshot.policyContextId,
+            policyHash: snapshot.policyHash,
+            message: "Pi Agent source tools are bound to the current policy and source revision."
+          }
+        );
+      },
+      onEgressRecorded: (operationId) => {
+        this.#jobExecutionCoordinator(vaultPath).patch(
+          this.#jobRecordStore(vaultPath).read(jobPath),
+          { operationIds: [operationId] }
+        );
+      },
+      assertSourceCurrent: (expectedSource) => {
+        const currentSource = readSourceRecord(vaultPath, sourceFile.sourceRecord.id);
+        if (
+          !currentSource ||
+          sourceRecordRevision(currentSource) !== sourceRecordRevision(expectedSource)
+        ) {
+          throw new PigeDomainError(
+            "agent_ingest.source_changed",
+            "The selected source evidence changed while the Agent turn was running."
+          );
+        }
+      },
+      parseCurrentSource: sourceTools.parse,
+      materializeCurrentDataset: async (request) => {
+        const result = await sourceTools.materializeDataset(request);
+        if (
+          (result.status === "materialized" || result.status === "reused") &&
+          result.datasetId &&
+          result.revisionId
+        ) {
+          this.#jobExecutionCoordinator(vaultPath).patch(
+            this.#jobRecordStore(vaultPath).read(jobPath),
+            {
+              outputRefs: [{
+                kind: "dataset",
+                id: result.datasetId,
+                role: "agent_dataset"
+              }, {
+                kind: "dataset_revision",
+                id: result.revisionId,
+                role: "agent_dataset_revision"
+              }],
+              operationIds: result.operationIds
+            }
+          );
+        }
+        return result;
+      },
+      ocrCurrentSource: sourceTools.ocr,
+      throwIfCancellationRequested: () => control.throwIfCancellationRequested(),
+      onPublicationStart: (checkpointId, publicationBinding) => {
+        if (publicationBinding) {
+          recordAgentNotePublicationCheckpoint(
+            this.#jobRecordStore(vaultPath),
+            this.#jobExecutionCoordinator(vaultPath),
+            vaultPath,
+            jobPath,
+            checkpointId,
+            publicationBinding
+          );
+        }
+        control.markDurableCheckpoint(checkpointId);
+      },
+      onProposalStaged: (proposalResult) => {
+        markAgentProposalAwaitingReview(
+          this.#jobRecordStore(vaultPath),
+          this.#jobExecutionCoordinator(vaultPath),
+          jobPath,
+          proposalResult.proposalId,
+          proposalResult.proposalBinding,
+          proposalResult.operationIds,
+          proposalResult.pageId,
+          proposalResult.pagePath
+        );
+      },
+      signal: control.signal
+    });
   }
 
   attachAgentTurnSource(jobId: string, sourceId: string): JobRecord {
@@ -1161,23 +1303,13 @@ export class JobsService {
 
   readAgentTurnJob(jobId: string): JobRecord | undefined {
     const vaultPath = this.#requireActiveVaultPath();
-    const snapshot = this.#readJobSnapshot(vaultPath, jobId);
-    return snapshot?.job.class === "agent_turn" ? snapshot.job : undefined;
-  }
-
-  async processAgentTurnSource(jobId: string): Promise<JobRecord> {
-    const before = this.readAgentTurnJob(jobId);
-    if (!before?.sourceId) {
-      throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The source-bearing Agent turn is invalid.");
+    try {
+      const snapshot = this.#readJobSnapshot(vaultPath, jobId);
+      return snapshot?.job.class === "agent_turn" ? snapshot.job : undefined;
+    } catch (caught) {
+      if (caught instanceof PigeDomainError && caught.code === "job.record_invalid") return undefined;
+      throw caught;
     }
-    if (before.state === "queued" && !isDatasetQueryContinuationTurn(before)) {
-      await this.processQueuedAgentIngest({ jobIds: [jobId], sourceIds: [before.sourceId], limit: 1 });
-    }
-    const after = this.readAgentTurnJob(jobId);
-    if (!after) {
-      throw new PigeDomainError("agent_runtime.turn_unavailable", "The source-bearing Agent turn is unavailable.");
-    }
-    return after;
   }
 
   requeueWaitingTextAgentTurns(): { readonly requeued: number } {
@@ -1187,8 +1319,7 @@ export class JobsService {
       if (
         jobFile.job.class !== "agent_turn" ||
         jobFile.job.state !== "waiting_dependency" ||
-        jobFile.job.stage !== "waiting_for_model" ||
-        (jobFile.job.sourceId !== undefined && !hasDatasetQueryContinuationRefs(jobFile.job))
+        jobFile.job.stage !== "waiting_for_model"
       ) {
         continue;
       }
@@ -1198,8 +1329,7 @@ export class JobsService {
       this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
         reason: "dependency_repaired",
         proof,
-        ...(jobFile.job.sourceId === undefined ? {} : { stage: "planning" as const }),
-        ...(jobFile.job.sourceId === undefined ? { clearStage: true } : {}),
+        clearStage: true,
         message: "The preserved Agent turn is queued after model setup became ready."
       });
       requeued += 1;
@@ -1257,8 +1387,7 @@ export class JobsService {
 
     let requeued = 0;
     for (const jobFile of readJobRecordFiles(store, path.join(vaultPath, ".pige", "jobs"))) {
-      if (!isAgentKnowledgeTurn(jobFile.job) || jobFile.job.state !== "waiting_dependency") continue;
-      if (hasDatasetQueryContinuationRefs(jobFile.job)) continue;
+      if (jobFile.job.class !== "agent_ingest" || jobFile.job.state !== "waiting_dependency") continue;
       const sourceRecord = jobFile.job.sourceId ? readSourceRecord(vaultPath, jobFile.job.sourceId) : undefined;
       const agentSelectedOcr = Boolean(sourceRecord && supportsAgentSelectedOcr(sourceRecord.kind));
       const waitingAgentOcr = agentSelectedOcr &&
@@ -1825,42 +1954,6 @@ export class JobsService {
 
     for (const jobFile of jobFiles) {
       const agentIngest = this.#agentIngest;
-      let preservedAgentTurn: PreservedAgentTurn | undefined;
-      if (jobFile.job.class === "agent_turn") {
-        try {
-          preservedAgentTurn = readPreservedAgentTurn(vaultPath, jobFile.job);
-          const existingAssistant = new AgentTurnConversationStore().findAssistantTurn(
-            vaultPath,
-            preservedAgentTurn.locator,
-            jobFile.job.id
-          );
-          if (existingAssistant) {
-            this.#jobExecutionCoordinator(vaultPath).adoptDurableCompletion(
-              this.#jobRecordStore(vaultPath).read(jobFile.path),
-              {
-                checkpointId: "agent_turn_assistant_event_persisted",
-                facts: { outputRefs: [{
-                  kind: "conversation" as const,
-                  id: existingAssistant.id,
-                  role: "agent_turn_assistant_event",
-                  ...(existingAssistant.contentHash ? { checksum: existingAssistant.contentHash } : {})
-                }] },
-                message: "Recovered the durable assistant result for this source Agent turn."
-              }
-            );
-            completed += 1;
-            continue;
-          }
-        } catch {
-          this.#markJobFailedRetryable(
-            jobFile.path,
-            jobFile.job,
-            "The preserved Agent turn binding is unavailable. The source remains preserved."
-          );
-          failed += 1;
-          continue;
-        }
-      }
       if (!agentIngest) {
         this.#markJobWaitingDependency(jobFile.path, jobFile.job, "Waiting for a tested default model before Agent ingest.");
         failed += 1;
@@ -1891,24 +1984,23 @@ export class JobsService {
         "Agent ingest is preparing grounded evidence for the configured model."
       );
       const runningJob = execution.job;
-      let activeJob = runningJob;
       try {
         const result = await agentIngest.ingestSource(vaultPath, sourceRecordFile.sourceRecord, runningJob, {
           onPolicyResolved: (snapshot) => {
-            activeJob = this.#jobExecutionCoordinator(vaultPath).patch(
+            this.#jobExecutionCoordinator(vaultPath).patch(
               this.#jobRecordStore(vaultPath).read(jobFile.path),
               {
               policyContextId: snapshot.policyContextId,
               policyHash: snapshot.policyHash,
               message: "Agent ingest policy and model-egress gates resolved before provider access."
               }
-            ).job;
+            );
           },
           onEgressRecorded: (operationId) => {
-            activeJob = this.#jobExecutionCoordinator(vaultPath).patch(
+            this.#jobExecutionCoordinator(vaultPath).patch(
               this.#jobRecordStore(vaultPath).read(jobFile.path),
               { operationIds: [operationId] }
-            ).job;
+            );
           },
           assertSourceCurrent: (expectedSource) => {
             const currentSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id);
@@ -1971,57 +2063,17 @@ export class JobsService {
               proposalResult.pagePath
             );
           },
-          ...(preservedAgentTurn?.metadata ? {
-            userTurn: {
-              text: preservedAgentTurn.event.text ?? "Inspect the attached preserved source.",
-              objective: preservedAgentTurn.metadata.objective
-            }
-          } : {}),
           signal: execution.control.signal
         });
         if (result.outcome === "responded") {
-          if (!preservedAgentTurn) {
-            throw new PigeDomainError(
-              "agent_runtime.turn_binding_invalid",
-              "A source response requires a preserved Agent user turn."
-            );
-          }
-          const conversations = new AgentTurnConversationStore();
-          const assistantEvent = conversations.findAssistantTurn(
-            vaultPath,
-            preservedAgentTurn.locator,
-            runningJob.id
-          ) ?? conversations.appendAssistantTurn(
-            vaultPath,
-            preservedAgentTurn,
-            runningJob.id,
-            result.answer
+          throw new PigeDomainError(
+            "agent_runtime.turn_binding_invalid",
+            "Historical Agent ingest cannot publish a current conversation response."
           );
-          activeJob = this.#jobExecutionCoordinator(vaultPath).patch(
-            this.#jobRecordStore(vaultPath).read(jobFile.path),
-            { outputRefs: [{
-                kind: "conversation" as const,
-                id: assistantEvent.id,
-                role: "agent_turn_assistant_event",
-                ...(assistantEvent.contentHash ? { checksum: assistantEvent.contentHash } : {})
-              }] }
-          ).job;
-          const completedJob = this.#completeCooperativeExecution(
-            jobFile.path,
-            runningJob,
-            "completed",
-            "Pi Agent answered from the inspected preserved source without publishing a note.",
-            "source",
-            execution.control.durableWriteState(),
-            result.operationIds
-          );
-          if (completedJob.state === "cancelled") failed += 1;
-          else completed += 1;
-          continue;
         }
         if (result.outcome === "dataset_materialized") {
           const datasetSnapshot = this.#requireExecutionSnapshot(jobFile.path, runningJob);
-          const patchedDataset = this.#jobExecutionCoordinator(vaultPath).patch(datasetSnapshot, {
+          this.#jobExecutionCoordinator(vaultPath).patch(datasetSnapshot, {
             outputRefs: [{
                 kind: "dataset" as const,
                 id: result.datasetId,
@@ -2033,36 +2085,6 @@ export class JobsService {
               }],
             operationIds: result.operationIds
           });
-          activeJob = patchedDataset.job;
-          if (preservedAgentTurn) {
-            const latest = activeJob;
-            if (latest.state === "cancel_requested") {
-              const completedJob = this.#completeCooperativeExecution(
-                jobFile.path,
-                runningJob,
-                result.warnings.length > 0 ? "completed_with_warnings" : "completed",
-                `Pi Agent materialized a validated Dataset revision with ${result.tableCount} table${result.tableCount === 1 ? "" : "s"} before cancellation.`,
-                "dataset",
-                execution.control.durableWriteState(),
-                result.operationIds
-              );
-              if (completedJob.state === "cancelled") failed += 1;
-              else completed += 1;
-              continue;
-            }
-            const durableSnapshot = this.#alignDurableExecutionState(
-              this.#jobExecutionCoordinator(vaultPath),
-              this.#jobRecordStore(vaultPath).read(jobFile.path),
-              execution.control.durableWriteState()
-            );
-            activeJob = this.#jobExecutionCoordinator(vaultPath).queue(durableSnapshot, {
-              reason: "agent_continuation",
-              stage: "planning",
-              message: "Pi Agent materialized the selected Dataset and queued the same Home turn for its answer."
-            }).job;
-            completed += 1;
-            continue;
-          }
           const completedJob = this.#completeCooperativeExecution(
             jobFile.path,
             runningJob,
@@ -2096,30 +2118,6 @@ export class JobsService {
           jobFile.path,
           result
         );
-        if (preservedAgentTurn) {
-          const conversations = new AgentTurnConversationStore();
-          const assistantEvent = conversations.findAssistantTurn(
-            vaultPath,
-            preservedAgentTurn.locator,
-            runningJob.id
-          ) ?? conversations.appendAssistantTurn(
-            vaultPath,
-            preservedAgentTurn,
-            runningJob.id,
-            result.reviewRequired
-              ? "Pi Agent completed the selected knowledge action, and the saved note needs review."
-              : "Pi Agent completed the selected knowledge action and saved the result to the knowledge base."
-          );
-          activeJob = this.#jobExecutionCoordinator(vaultPath).patch(
-            this.#jobRecordStore(vaultPath).read(jobFile.path),
-            { outputRefs: [{
-                kind: "conversation" as const,
-                id: assistantEvent.id,
-                role: "agent_turn_assistant_event",
-                ...(assistantEvent.contentHash ? { checksum: assistantEvent.contentHash } : {})
-              }] }
-          ).job;
-        }
         const warningSuffix = result.reviewRequired ? " Review is needed before treating it as clean knowledge." : "";
         appendLog(
           vaultPath,
@@ -3386,25 +3384,8 @@ function isAgentKnowledgeTurn(job: JobRecord): boolean {
   return job.class === "agent_ingest" || job.class === "agent_turn";
 }
 
-function hasDatasetQueryContinuationRefs(job: JobRecord): boolean {
-  if (job.class !== "agent_turn" || !job.sourceId) return false;
-  const datasetRefs = (job.outputRefs ?? []).filter(
-    (ref) => ref.kind === "dataset" && ref.role === "agent_dataset" && Boolean(ref.id)
-  );
-  const revisionRefs = (job.outputRefs ?? []).filter(
-    (ref) => ref.kind === "dataset_revision" && ref.role === "agent_dataset_revision" && Boolean(ref.id)
-  );
-  return datasetRefs.length === 1 && revisionRefs.length === 1;
-}
-
-function isDatasetQueryContinuationTurn(job: JobRecord): boolean {
-  return hasDatasetQueryContinuationRefs(job) && job.stage === "planning";
-}
-
 function isQueuedHomeAgentTurn(job: JobRecord): boolean {
-  return job.class === "agent_turn" &&
-    job.state === "queued" &&
-    (job.sourceId === undefined || isDatasetQueryContinuationTurn(job));
+  return job.class === "agent_turn" && job.state === "queued";
 }
 
 function findQueuedCaptureJobFiles(
@@ -3439,10 +3420,9 @@ function findQueuedAgentIngestJobFiles(
       .map((jobId) => readJobRecordFile(store, vaultPath, jobId))
       .filter((jobFile): jobFile is JobRecordFile => Boolean(jobFile))
       .filter((jobFile) =>
-        isAgentKnowledgeTurn(jobFile.job) &&
+        jobFile.job.class === "agent_ingest" &&
         jobFile.job.state === "queued" &&
-        Boolean(jobFile.job.sourceId) &&
-        !isDatasetQueryContinuationTurn(jobFile.job)
+        Boolean(jobFile.job.sourceId)
       )
       .filter((jobFile) => sourceIds.size === 0 || (jobFile.job.sourceId ? sourceIds.has(jobFile.job.sourceId) : false))
       .slice(0, limit);
@@ -3450,10 +3430,9 @@ function findQueuedAgentIngestJobFiles(
 
   return readJobRecordFiles(store, path.join(vaultPath, ".pige", "jobs"))
     .filter((jobFile) =>
-      isAgentKnowledgeTurn(jobFile.job) &&
+      jobFile.job.class === "agent_ingest" &&
       jobFile.job.state === "queued" &&
-      Boolean(jobFile.job.sourceId) &&
-      !isDatasetQueryContinuationTurn(jobFile.job)
+      Boolean(jobFile.job.sourceId)
     )
     .filter((jobFile) => sourceIds.size === 0 || (jobFile.job.sourceId ? sourceIds.has(jobFile.job.sourceId) : false))
     .sort((left, right) => left.job.createdAt.localeCompare(right.job.createdAt))
@@ -3700,23 +3679,6 @@ function toJobSummary(vaultPath: string, job: JobRecord): JobSummary {
     createdAt: job.createdAt,
     updatedAt: job.updatedAt
   };
-}
-
-function readPreservedAgentTurn(vaultPath: string, job: JobRecord): PreservedAgentTurn {
-  const reference = job.inputRefs?.find(
-    (candidate) => candidate.kind === "conversation" &&
-      candidate.role === "agent_turn_user_event" &&
-      candidate.id === job.conversationEventId
-  );
-  if (!job.conversationEventId || !reference?.locator || !reference.checksum) {
-    throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The source Agent turn lacks its durable user-event binding.");
-  }
-  return new AgentTurnConversationStore().readUserTurn(
-    vaultPath,
-    reference.locator,
-    job.conversationEventId,
-    reference.checksum
-  );
 }
 
 function readSourceRecord(vaultPath: string, sourceId: string): SourceRecord | undefined {

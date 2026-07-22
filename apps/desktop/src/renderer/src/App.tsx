@@ -262,6 +262,7 @@ export function App(): React.JSX.Element {
   const [highRiskConfirmation, setHighRiskConfirmation] = useState<HighRiskConfirmationPendingResult | null>(null);
   const [highRiskConfirmationDecision, setHighRiskConfirmationDecision] = useState<"allow" | "deny" | null>(null);
   const [highRiskConfirmationFailed, setHighRiskConfirmationFailed] = useState(false);
+  const [highRiskConfirmationReading, setHighRiskConfirmationReading] = useState(false);
   const [recentJobs, setRecentJobs] = useState<readonly JobSummary[]>([]);
   const [activityList, setActivityList] = useState<KnowledgeActivityListResult | null>(null);
   const [activityUndoingId, setActivityUndoingId] = useState<string | null>(null);
@@ -294,6 +295,7 @@ export function App(): React.JSX.Element {
   const noteAgentToggleRef = useRef<HTMLButtonElement | null>(null);
   const windowLayoutRevisionRef = useRef(-1);
   const highRiskConfirmationRevisionRef = useRef(-1);
+  const highRiskConfirmationReadSequence = useRef(0);
   const knowledgeTreeReturnFocusKey = useRef<string | null>(null);
   const modelRefreshSequence = useRef(0);
   const agentRuntimeRefreshSequence = useRef(0);
@@ -451,18 +453,32 @@ export function App(): React.JSX.Element {
     setHighRiskConfirmationFailed(false);
   };
 
+  const refreshHighRiskConfirmation = async (): Promise<void> => {
+    const sequence = highRiskConfirmationReadSequence.current + 1;
+    highRiskConfirmationReadSequence.current = sequence;
+    setHighRiskConfirmationReading(true);
+    try {
+      const next = await window.pige.confirmations.pending();
+      if (sequence === highRiskConfirmationReadSequence.current) applyHighRiskConfirmation(next);
+    } catch {
+      if (sequence === highRiskConfirmationReadSequence.current) setHighRiskConfirmationFailed(true);
+    } finally {
+      if (sequence === highRiskConfirmationReadSequence.current) setHighRiskConfirmationReading(false);
+    }
+  };
+
   useEffect(() => {
     let active = true;
     const unsubscribe = window.pige.confirmations.onChanged((next) => {
-      if (active) applyHighRiskConfirmation(next);
+      if (!active) return;
+      highRiskConfirmationReadSequence.current += 1;
+      setHighRiskConfirmationReading(false);
+      applyHighRiskConfirmation(next);
     });
-    void window.pige.confirmations.pending().then((next) => {
-      if (active) applyHighRiskConfirmation(next);
-    }).catch(() => {
-      if (active) setHighRiskConfirmationFailed(true);
-    });
+    void refreshHighRiskConfirmation();
     return () => {
       active = false;
+      highRiskConfirmationReadSequence.current += 1;
       unsubscribe();
     };
   }, []);
@@ -1811,6 +1827,25 @@ export function App(): React.JSX.Element {
           onResolve={(decision) => void resolveHighRiskConfirmation(decision)}
           t={t}
         />
+      ) : null}
+      {highRiskConfirmationFailed && highRiskConfirmation?.status !== "pending" ? (
+        <div
+          className="confirmation-recovery-notice"
+          role="alert"
+          aria-busy={highRiskConfirmationReading}
+        >
+          <span>{t("confirmation.statusUnavailable")}</span>
+          <button
+            type="button"
+            className="ghost"
+            disabled={highRiskConfirmationReading}
+            onClick={() => void refreshHighRiskConfirmation()}
+          >
+            {highRiskConfirmationReading
+              ? t("confirmation.checking")
+              : t("confirmation.retry")}
+          </button>
+        </div>
       ) : null}
     </div>
   );
@@ -5724,7 +5759,8 @@ function isConversationPollingState(state: JobState | undefined): boolean {
 
 function canFollowUpToConversation(timeline: AgentConversationTimeline | undefined): timeline is AgentConversationTimeline {
   return timeline?.canFollowUp === true && (
-    timeline.latestTurn?.state === "completed" ||
+    timeline.latestTurn === undefined ||
+    timeline.latestTurn.state === "completed" ||
     timeline.latestTurn?.state === "completed_with_warnings"
   );
 }

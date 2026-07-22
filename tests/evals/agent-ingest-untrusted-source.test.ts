@@ -9,10 +9,11 @@ import {
   AgentIngestService,
   type AgentIngestModelConfigPort
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
-import { CaptureService, type SourceFetchPort } from "../../apps/desktop/src/main/services/capture-service";
+import type { SourceFetchPort } from "../../apps/desktop/src/main/services/capture-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import { ScriptedAgentIngestRuntime } from "../helpers/scripted-agent-ingest-runtime";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 
 const roots: string[] = [];
 
@@ -199,11 +200,11 @@ function makeVault(name: string): TestVault {
   return { root, vaultPath, appDataPath, vault: loadVaultSummary(vaultPath) };
 }
 
-function makeCapture(testVault: TestVault, sourceFetch?: SourceFetchPort): CaptureService {
-  return new CaptureService({
+function makeCapture(testVault: TestVault, sourceFetch?: SourceFetchPort): LegacyCaptureFixture {
+  return new LegacyCaptureFixture({
     current: () => testVault.vault,
     activeVaultPath: () => testVault.vaultPath
-  }, sourceFetch);
+  }, testVault.vaultPath, sourceFetch);
 }
 
 async function createUrlFixture(testVault: TestVault): Promise<IngestFixture> {

@@ -1097,7 +1097,7 @@ describe("Home durable Agent conversation UI", () => {
     harness.windowMode = "expanded";
     harness.sidebarOpen = true;
     harness.enforceJobFilters = true;
-    harness.onboarding = captureOnlyOnboarding(false);
+    harness.onboarding = readyWithoutModelOnboarding(false);
     harness.jobs = [sourceWaitingForModelJob()];
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
@@ -1160,7 +1160,7 @@ describe("Home durable Agent conversation UI", () => {
   it("keeps an initial no-source model wait out of Recent Work until its conversation owner loads", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
-    harness.onboarding = captureOnlyOnboarding(true);
+    harness.onboarding = readyWithoutModelOnboarding(true);
     harness.jobs = [modelWaitingJob()];
     let resolveConversation: ((timeline: AgentConversationTimeline) => void) | undefined;
     harness.loadConversation = () => new Promise((resolve) => {
@@ -1191,7 +1191,7 @@ describe("Home durable Agent conversation UI", () => {
         const harness = createHarness(modelWaitingTimeline());
         harness.locale = locale;
         harness.windowMode = windowMode;
-        harness.onboarding = captureOnlyOnboarding(true);
+        harness.onboarding = readyWithoutModelOnboarding(true);
         harness.jobs = [modelWaitingJob()];
         const { container, root } = await mountHome(dom, makePigeApi(harness));
 
@@ -1371,7 +1371,7 @@ describe("Home durable Agent conversation UI", () => {
   it("docks processing files to the composer and removes terminal or non-source Jobs", async () => {
     const dom = createDom(420);
     const harness = createHarness(undefined);
-    harness.onboarding = captureOnlyOnboarding(true);
+    harness.onboarding = readyWithoutModelOnboarding(true);
     harness.jobs = [
       sourceWaitingForModelJob(),
       {
@@ -1402,7 +1402,7 @@ describe("Home durable Agent conversation UI", () => {
 
     const terminalDom = createDom(420);
     const terminalHarness = createHarness(undefined);
-    terminalHarness.onboarding = captureOnlyOnboarding(true);
+    terminalHarness.onboarding = readyWithoutModelOnboarding(true);
     terminalHarness.jobs = [{
       ...sourceWaitingForModelJob(),
       state: "completed",
@@ -1418,7 +1418,7 @@ describe("Home durable Agent conversation UI", () => {
   it("filters conversation-owned model waits before capping Recent Work", async () => {
     const dom = createDom();
     const harness = createHarness(modelWaitingTimeline());
-    harness.onboarding = captureOnlyOnboarding(false);
+    harness.onboarding = readyWithoutModelOnboarding(false);
     harness.enforceJobFilters = true;
     harness.jobs = [
       {
@@ -1466,7 +1466,7 @@ describe("Home durable Agent conversation UI", () => {
         error: defaultModelMissingError()
       }
     });
-    harness.onboarding = captureOnlyOnboarding(true);
+    harness.onboarding = readyWithoutModelOnboarding(true);
     harness.jobs = [sourceWaitingForModelJob()];
     const api = makePigeApi(harness);
     const firstMount = await mountHome(dom, api);
@@ -1580,21 +1580,33 @@ describe("Home durable Agent conversation UI", () => {
     ]) expect(dialog.textContent).not.toContain(unsafeCopy);
     await waitFor(dom, () => dom.window.document.activeElement === buttons(dialog, "Deny")[0]);
 
+    const composer = homeComposer(container);
+    let underlyingEscapeCount = 0;
+    composer.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") underlyingEscapeCount += 1;
+    });
+    composer.focus();
+
     await act(async () => {
-      dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
+      composer.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
         key: "Escape",
         bubbles: true,
         isComposing: true
       }));
       await settle(dom);
     });
+    expect(underlyingEscapeCount).toBe(0);
     expect(harness.confirmationResolveRequests).toHaveLength(0);
     expect(container.querySelector('[role="dialog"]')).not.toBeNull();
 
     await act(async () => {
-      dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      composer.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true
+      }));
       await settle(dom);
     });
+    expect(underlyingEscapeCount).toBe(0);
     expect(harness.confirmationResolveRequests).toEqual([{
       apiVersion: 1,
       confirmationId: "confirm_20260722_abcdefghijklmnop",
@@ -1671,10 +1683,35 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("keeps an unreadable confirmation query body-free and offers an explicit retry", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.confirmationResolveMode = "reject_initial";
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => container.querySelector(".confirmation-recovery-notice") !== null);
+    const notice = requireElement(container.querySelector<HTMLElement>(".confirmation-recovery-notice"));
+    expect(notice.getAttribute("role")).toBe("alert");
+    expect(notice.textContent).toContain(
+      "Pige could not check whether a high-risk effect needs your decision."
+    );
+    expect(notice.textContent).not.toContain("synthetic");
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+
+    harness.confirmationResolveMode = "success";
+    harness.confirmationPending = pendingHighRiskConfirmation();
+    await clickButton(dom, notice, "Retry");
+    await waitFor(dom, () => container.querySelector('[role="dialog"]') !== null);
+    expect(harness.confirmationPendingReads).toBe(2);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("gives a picker source Job sole status ownership before submission resolves", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
-    harness.onboarding = captureOnlyOnboarding(true);
+    harness.onboarding = readyWithoutModelOnboarding(true);
     let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
     harness.submitTurn = (request) => {
       harness.submitRequests.push(request);
@@ -1709,7 +1746,7 @@ describe("Home durable Agent conversation UI", () => {
   it("routes a full-window Home drop through the same intermediate source owner", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
-    harness.onboarding = captureOnlyOnboarding(true);
+    harness.onboarding = readyWithoutModelOnboarding(true);
     let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
     harness.submitTurn = (request) => {
       harness.submitRequests.push(request);
@@ -1810,6 +1847,79 @@ describe("Home durable Agent conversation UI", () => {
     const secondMount = await mountHome(dom, api);
     expect(secondMount.container.textContent).toContain("Continue with one practical example.");
     expect(secondMount.container.textContent).toContain("Here is the second answer.");
+    expect(secondMount.container.querySelectorAll(".conversation-message")).toHaveLength(4);
+
+    await act(async () => secondMount.root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps following the recovered conversation when its obsolete Job metadata is safely omitted", async () => {
+    const dom = createDom();
+    const { latestTurn: _obsoleteJob, ...recoveredTimeline } = completedTimeline();
+    const harness = createHarness(recoveredTimeline);
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      harness.timeline = {
+        conversationId: recoveredTimeline.conversationId,
+        tailEventId: "event_20260712_assistant02",
+        canFollowUp: true,
+        messages: [
+          ...recoveredTimeline.messages,
+          {
+            id: "event_20260712_user02",
+            role: "user",
+            createdAt: "2026-07-12T08:02:00.000Z",
+            text: "Continue after recovering the old turn.",
+            jobId: "job_20260712_turn02"
+          },
+          {
+            id: "event_20260712_assistant02",
+            role: "assistant",
+            createdAt: "2026-07-12T08:02:01.000Z",
+            text: "The recovered conversation remains continuous.",
+            jobId: "job_20260712_turn02"
+          }
+        ],
+        latestTurn: {
+          jobId: "job_20260712_turn02",
+          userEventId: "event_20260712_user02",
+          state: "completed"
+        }
+      };
+      const completed = completedResult();
+      if (completed.state !== "completed") throw new Error("Expected completed result fixture.");
+      return {
+        ...completed,
+        answer: {
+          ...completed.answer,
+          answer: "The recovered conversation remains continuous."
+        }
+      };
+    };
+    const firstMount = await mountHome(dom, makePigeApi(harness));
+
+    expect(firstMount.container.textContent).toContain("What should I remember?");
+    expect(firstMount.container.textContent).toContain("Remember the durable boundary.");
+    await setTextareaValue(dom, firstMount.container, "Continue after recovering the old turn.");
+    await clickButton(dom, firstMount.container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    expect(harness.submitRequests[0]).toMatchObject({
+      inputKind: "follow_up",
+      conversationId: recoveredTimeline.conversationId,
+      expectedTailEventId: recoveredTimeline.tailEventId
+    });
+    await waitFor(dom, () => countText(
+      firstMount.container,
+      "The recovered conversation remains continuous."
+    ) === 1);
+
+    await act(async () => firstMount.root.unmount());
+    const secondMount = await mountHome(dom, makePigeApi(harness));
+    expect(secondMount.container.textContent).toContain("What should I remember?");
+    expect(secondMount.container.textContent).toContain("Remember the durable boundary.");
+    expect(secondMount.container.textContent).toContain("Continue after recovering the old turn.");
+    expect(secondMount.container.textContent).toContain("The recovered conversation remains continuous.");
     expect(secondMount.container.querySelectorAll(".conversation-message")).toHaveLength(4);
 
     await act(async () => secondMount.root.unmount());
@@ -2887,7 +2997,7 @@ interface ConversationHarness {
   confirmationPendingReads: number;
   readonly confirmationResolveRequests: HighRiskConfirmationResolveRequest[];
   readonly confirmationListeners: Set<(event: HighRiskConfirmationChangedEvent) => void>;
-  confirmationResolveMode: "success" | "failed" | "stale" | "reject_pending" | "reject_unknown";
+  confirmationResolveMode: "success" | "failed" | "stale" | "reject_initial" | "reject_pending" | "reject_unknown";
   locale: "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de";
   windowMode: "compact" | "expanded";
   readonly windowModeRequests: ("compact" | "expanded")[];
@@ -3304,6 +3414,10 @@ function makePigeApi(harness: ConversationHarness): object {
     confirmations: {
       pending: async () => {
         harness.confirmationPendingReads += 1;
+        if (
+          harness.confirmationResolveMode === "reject_initial" &&
+          harness.confirmationPendingReads === 1
+        ) throw new Error("synthetic unreadable confirmation state");
         if (
           harness.confirmationResolveMode === "reject_unknown" &&
           harness.confirmationResolveRequests.length > 0
@@ -3896,9 +4010,9 @@ function readyOnboarding(): OnboardingStatus {
   };
 }
 
-function captureOnlyOnboarding(showFirstHomeGuide: boolean): OnboardingStatus {
+function readyWithoutModelOnboarding(showFirstHomeGuide: boolean): OnboardingStatus {
   return {
-    state: "capture_only",
+    state: "ready",
     hasDefaultModel: false,
     showFirstHomeGuide,
     activeVault: homeVaultSummary()

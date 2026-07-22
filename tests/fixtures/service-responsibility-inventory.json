@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "fd869668bb7d53cb1946b3b70e2127de1e1959af",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 118,
-  "baselineLines": 69839,
+  "baselineFileCount": 120,
+  "baselineLines": 69734,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -27,7 +27,8 @@
       ["backup-service.ts", 3210, "rd"],
       ["external-file-publication-protocol.ts", 183, "prd"],
       ["generated-note-file.ts", 518, "rdf"],
-      ["home-agent-turn-lifecycle.ts", 584, "jard"],
+      ["agent-turn-publication.ts", 386, "jrd"],
+      ["durable-agent-turn-answer.ts", 79, "rd"],
       ["high-risk-confirmation-service.ts", 268, "pr"],
       ["jobs-service.ts", 6956, "japrd"],
       ["knowledge-activity-service.ts", 1622, "rd"],
@@ -75,6 +76,7 @@
       ["vault-service.ts", 450, "rd"]
     ],
     "capability_executor": [
+      ["agent-source-tool-execution.ts", 14, "ar"],
       ["capture-service.ts", 1068, "jrd"],
       ["command-capability-adapter.ts", 127, "p"],
       ["command-execution-service.ts", 306, "p"],
@@ -151,7 +153,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 118,
+    "serviceOwnerCount": 120,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 15,

@@ -91,8 +91,12 @@ async function runOrchestrator() {
     assert.equal(connect.directProvisionalVisible, true);
     assert.ok(connect.directDraftEventCount >= 1);
     assert.equal(connect.groundedVisible, true);
+    assert.equal(connect.directStillVisibleAfterGrounded, true);
+    assert.equal(connect.groundedRetrievalVisible, true);
+    assert.equal(connect.noProvisionalAnswerDuplicates, true);
     assert.equal(connect.groundedCitationsDuringDraft, false);
     assert.equal(connect.citationVisible, true);
+    assert.equal(connect.citationOpenedReader, true);
     if (highRiskOnly) {
       assert.equal(connect.highRiskDialogVisible, true);
       assert.equal(connect.highRiskDenyDefaultFocused, true);
@@ -112,7 +116,7 @@ async function runOrchestrator() {
     assert.equal(connect.datasetCitationVisible, true);
     assert.equal(connect.datasetImportJobCount, 1);
     assert.deepEqual(connect.failedRetryableJobClasses, []);
-    assert.ok(requests.filter((request) => request.method === "GET" && request.path === "/v1/models").length >= 3);
+    assert.ok(requests.filter((request) => request.method === "GET" && request.path === "/v1/models").length >= 2);
     assert.ok(requests.filter((request) => request.method === "POST" && request.path === "/v1/responses").length >= 7);
     assert.ok(requests.every((request) => request.authorization === `Bearer ${syntheticToken}`));
     assert.ok(requests.every((request) => !request.body.includes(syntheticToken)));
@@ -678,10 +682,40 @@ async function runConnectRenderer(browserWindow, input) {
         ${JSON.stringify(GROUNDED_ANSWER)},
         { expectDraft: true, stage: "grounded_ui" }
       );
-      const citationVisible = await waitFor(
-        () => document.querySelector(".retrieval-citations") ? true : undefined,
-        "visible Home citations"
+      const durableAssistantMessages = Array.from(
+        document.querySelectorAll(".conversation-message.role-assistant:not(.provisional)")
       );
+      const directDurableMessages = durableAssistantMessages.filter(
+        (message) => message.textContent?.includes(${JSON.stringify(DIRECT_ANSWER)})
+      );
+      const groundedRetrievalAnswers = Array.from(document.querySelectorAll(".retrieval-answer")).filter(
+        (message) => message.textContent?.includes(${JSON.stringify(GROUNDED_ANSWER)})
+      );
+      const provisionalAnswerDuplicates = Array.from(
+        document.querySelectorAll('[data-agent-draft="true"]')
+      ).filter((message) =>
+        message.textContent?.includes(${JSON.stringify(DIRECT_ANSWER)}) ||
+        message.textContent?.includes(${JSON.stringify(GROUNDED_ANSWER)})
+      );
+      mark("grounded_ui_citation_wait");
+      const citationButton = await waitFor(
+        () => document.querySelector(".retrieval-citations button:not(:disabled)"),
+        "visible Home citation button"
+      );
+      mark("grounded_ui_citation_visible");
+      citationButton.click();
+      await waitFor(() => document.querySelector(".note-reader"), "citation Reader");
+      mark("grounded_ui_reader_visible");
+      const readerBack = await waitFor(
+        () => document.querySelector(".home-reader .back-button"),
+        "Back to grounded results"
+      );
+      readerBack.click();
+      await waitFor(
+        () => document.querySelector(".note-reader") ? undefined : document.querySelector(".retrieval-results"),
+        "grounded results after citation Reader"
+      );
+      const citationOpenedReader = true;
       return {
         bindingState: summary.defaultBinding.state,
         sourceToolchainReady,
@@ -702,8 +736,12 @@ async function runConnectRenderer(browserWindow, input) {
         directProvisionalVisible: directTurn.provisionalVisible,
         directDraftEventCount: directTurn.draftEventCount,
         groundedVisible: groundedTurn.visible,
+        directStillVisibleAfterGrounded: directDurableMessages.length === 1,
+        groundedRetrievalVisible: groundedRetrievalAnswers.length === 1,
+        noProvisionalAnswerDuplicates: provisionalAnswerDuplicates.length === 0,
         groundedCitationsDuringDraft: groundedTurn.citationsDuringDraft,
-        citationVisible
+        citationVisible: Boolean(citationButton),
+        citationOpenedReader
       };
     })()
   `, true);
@@ -825,12 +863,13 @@ async function readSourceRendererResult(browserWindow, expectedAnswer, resultKey
     (async () => {
       const startedAt = Date.now();
       while (Date.now() - startedAt < 45000) {
-        const answer = document.querySelector('.retrieval-answer');
-        const completed = document.querySelector('.agent-run-state.state-completed');
-        if (answer?.textContent?.includes(${JSON.stringify(expectedAnswer)}) && completed) {
+        const answer = Array.from(document.querySelectorAll('.conversation-message.role-assistant:not(.provisional)'))
+          .find((message) => message.textContent?.includes(${JSON.stringify(expectedAnswer)}));
+        const provisional = document.querySelector('[data-agent-draft="true"]');
+        if (answer && !provisional) {
           return { [${JSON.stringify(resultKey)}]: true };
         }
-        const failed = document.querySelector('.agent-run-state.state-failed');
+        const failed = document.querySelector('.conversation-status-message.state-failed');
         if (failed) throw new Error('Unified source turn failed visibly.');
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
@@ -842,6 +881,10 @@ async function readSourceRendererResult(browserWindow, expectedAnswer, resultKey
 async function readActivityRendererResult(browserWindow) {
   return browserWindow.webContents.executeJavaScript(`
     (async () => {
+      const mark = (stage) => {
+        globalThis.__pigeRoundtripStage = stage;
+        console.info("PIGE_ROUNDTRIP_STAGE " + stage);
+      };
       const waitFor = async (predicate, label, timeoutMs = 45000) => {
         const startedAt = Date.now();
         while (Date.now() - startedAt < timeoutMs) {
@@ -859,10 +902,39 @@ async function readActivityRendererResult(browserWindow) {
           candidate.canUndo
         );
       }, "reversible Activity");
+      mark("activity_durable");
+      let settingsTrigger = document.querySelector("button.sidebar-settings-control");
+      if (!settingsTrigger) {
+        const sidebarToggle = await waitFor(
+          () => document.querySelector("button.sidebar-toggle-button"),
+          "sidebar toggle for Activity"
+        );
+        sidebarToggle.click();
+        settingsTrigger = await waitFor(
+          () => document.querySelector("button.sidebar-settings-control"),
+          "Settings trigger for Activity"
+        );
+      }
+      settingsTrigger.click();
+      mark("activity_settings_open");
+      const settingsItems = await waitFor(() => {
+        const items = Array.from(document.querySelectorAll("button.settings-nav-item"));
+        return items.length > 0 ? items : undefined;
+      }, "Settings navigation items for Activity");
+      const activitySection = settingsItems.find((item) => item.textContent?.includes("Activity History"));
+      mark("activity_nav_" + Math.min(settingsItems.length, 9) + "_" + (activitySection ? "1" : "0"));
+      if (!activitySection) throw new Error("Activity History Settings section is unavailable.");
+      activitySection.click();
+      await waitFor(
+        () => document.querySelector('section.settings-page.settings-history-page[aria-labelledby="settings-history-title"]'),
+        "Activity History Settings page"
+      );
+      mark("activity_page_visible");
       const row = await waitFor(
         () => document.querySelector('[data-activity-row-id="' + activity.operationId + '"]'),
         "visible Activity row"
       );
+      mark("activity_row_visible");
       const undo = row.querySelector('[data-activity-undo-id="' + activity.operationId + '"]:not(:disabled)');
       if (!undo) throw new Error("Visible Activity is missing its bounded Undo action.");
       undo.click();
@@ -872,12 +944,22 @@ async function readActivityRendererResult(browserWindow) {
           candidate.operationId === activity.operationId && candidate.status === "undone"
         );
       }, "durable Activity Undo");
+      mark("activity_undo_durable");
       await waitFor(
         () => {
           const current = document.querySelector('[data-activity-row-id="' + activity.operationId + '"]');
           return current && !current.querySelector('[data-activity-undo-id]') ? true : undefined;
         },
         "visible undone Activity"
+      );
+      const closeSettings = await waitFor(
+        () => document.querySelector("button.settings-return"),
+        "Settings close after Activity"
+      );
+      closeSettings.click();
+      await waitFor(
+        () => document.querySelector("[data-settings-overlay]") ? undefined : true,
+        "closed Settings after Activity"
       );
       return {
         activityVisible: true,
@@ -921,7 +1003,16 @@ async function readDatasetRendererResult(browserWindow) {
           const child = jobs.jobs.find((job) => job.class === "dataset_import");
           const parentState = parent?.state ?? "none";
           const childState = child?.state ?? "none";
-          mark("dataset_" + parentState + "_" + childState);
+          const timeline = await window.pige.agent.conversation({ limit: 24 });
+          const timelineDatasetCount = timeline.messages.filter((message) => message.answer?.datasetResult).length;
+          const domDatasetCount = document.querySelectorAll(".dataset-answer").length;
+          mark(
+            "dataset_" +
+            Math.min(timelineDatasetCount, 9) + "_" +
+            Math.min(domDatasetCount, 9) + "_" +
+            parentState + "_" +
+            childState
+          );
           if (parentState === "failed_final" || parentState === "failed_retryable" || childState === "failed_final") {
             throw new Error("Dataset continuation reached a durable failure state.");
           }
@@ -1046,7 +1137,7 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
       });
       return;
     }
-    if (latestUserText.includes(DATASET_PROMPT) && serializedTools.includes("pige_query_dataset")) {
+    if (serializedInput.includes('"call_id":"call_dataset_materialize"') && serializedInput.includes("function_call_output")) {
       writeToolCallResponse(response, "pige_query_dataset", "call_dataset_catalog", "dataset-catalog-1", {
         action: "catalog"
       });

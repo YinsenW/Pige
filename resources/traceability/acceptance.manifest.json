@@ -440,10 +440,8 @@
       }
     },
     "PIGE-CAP-002": {
-      "status": "verified",
-      "evidence": [
-        "EV-LARGE-PASTE"
-      ]
+      "status": "planned",
+      "plannedTarget": "Restore large pasted-text preservation through the single Agent-turn source owner without reviving capture-only submission."
     },
     "PIGE-CAP-003": {
       "status": "planned",
@@ -844,10 +842,8 @@
     },
     "E2.01":{"status":"partial","evidence":["EV-JOB-RECOVERY","EV-HOME-JOB-RECOVERY","EV-HOME-AGENT","EV-NOTE-AGENT-JOB","EV-NOTE-AGENT-RECOVERY","EV-CAPTURE-PUBLICATION-GUARD","EV-PARSE-FOLLOWUP-DURABILITY","EV-OCR-FOLLOWUP-DURABILITY","EV-DATASET-CONTINUATION","EV-DATASET-CONTINUATION-RESTART","EV-BACKUP-JOB-LIFECYCLE","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-STARTUP-ADOPTION"],"open":{"id":"OPEN-EXIT-E2.01","description":"Kill/reopen and resumable drainer proof across remaining Job classes stays open.","targetBuilds":["B2.08"],"targetExits":["E2.01"]}},
     "E2.02": {
-      "status": "verified",
-      "evidence": [
-        "EV-LARGE-PASTE"
-      ]
+      "status": "planned",
+      "plannedTarget": "Large pasted content still needs a single Agent-turn source-preservation path and reference-only conversation proof."
     },
     "E2.03": {
       "status": "partial",
@@ -1246,21 +1242,16 @@
     "EV-RUNTIME-CONTRACT": { "kind": "implementation", "path": "packages/contracts/src/index.ts", "selector": "export interface RuntimeCapabilities" },
     "EV-OCR-ADAPTER": { "kind": "test", "path": "tests/unit/macos-vision-ocr-adapter.test.ts", "selector": "preferredLanguages" },
     "EV-DROP-ZONE": { "kind": "implementation", "path": "apps/desktop/src/renderer/src/App.tsx", "selector": "onDrop={handleDrop}" },
-    "EV-CAPTURE": { "kind": "test", "path": "tests/unit/capture-service.test.ts", "selector": "preserves text capture as a managed source, source record, conversation event, and queued job" },
-    "EV-LARGE-PASTE": {
-      "kind": "test",
-      "path": "tests/unit/capture-service.test.ts",
-      "selector": "stores large pasted text once and references it from conversation history"
-    },
+    "EV-CAPTURE": { "kind": "test", "path": "tests/unit/capture-service.test.ts", "selector": "preserves a bound Markdown source without creating a shadow Job or conversation event" },
     "EV-FILE-CAPTURE": {
       "kind": "test",
       "path": "tests/unit/capture-service.test.ts",
-      "selector": "preserves dropped Markdown files as managed source copies without duplicating file bodies in conversation history"
+      "selector": "preserves a bound Markdown source without creating a shadow Job or conversation event"
     },
     "EV-DOCUMENT-CAPTURE": {
       "kind": "test",
-      "path": "tests/unit/capture-service.test.ts",
-      "selector": "preserves document and image files as managed sources for later parser or OCR work"
+      "path": "tests/unit/jobs-service.test.ts",
+      "selector": "routes preserved Office documents and direct images to Agent jobs without host parse or OCR children"
     },
     "EV-JOB-RECOVERY": {
       "kind": "test",
@@ -1391,7 +1382,7 @@
     "EV-DB-DRIVER": { "kind": "test", "path": "tests/unit/local-database-service.test.ts", "selector": "initializes the node sqlite migration state behind the driver abstraction" },
     "EV-READER-RELATED": { "kind": "test", "path": "tests/unit/library-service.test.ts", "selector": "returns related pages through the local database without exposing note bodies" },
     "EV-CJK": { "kind": "test", "path": "tests/unit/retrieval-service.test.ts", "selector": "uses CJK-friendly character grams instead of whitespace-only matching" },
-    "EV-RETRIEVAL": { "kind": "test", "path": "tests/unit/retrieval-service.test.ts", "selector": "answers from bounded local evidence with citations and ranked pages" },
+    "EV-RETRIEVAL": { "kind": "test", "path": "tests/unit/retrieval-service.test.ts", "selector": "builds bounded context evidence with citations and ranked pages" },
     "EV-HOME-AGENT": { "kind": "test", "path": "tests/unit/home-agent-service.test.ts", "selector": "Home Pi Agent service" },
     "EV-NOTE-AGENT-IPC":{"kind":"test","path":"tests/unit/desktop-shell-contract.test.ts","selector":"wires Home questions through Pi with visible typed outcomes"},
     "EV-NOTE-AGENT-JOB":{"kind":"test","path":"tests/unit/jobs-service.test.ts","selector":"creates current-note Jobs with an atomic scope ref"},

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SourceRecordSchema, type SourceRecord } from "@pige/schemas";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { SourcePageService } from "../../apps/desktop/src/main/services/source-page-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
@@ -30,7 +30,7 @@ describe("source page service", () => {
     const vaultPath = path.join(root, "Source Pages");
     const vault = loadVaultSummary(vaultPath);
     const vaultPort = { current: () => vault, activeVaultPath: () => vaultPath };
-    const capture = new CaptureService(vaultPort);
+    const capture = new LegacyCaptureFixture(vaultPort, vaultPath);
     const jobs = new JobsService(vaultPort);
     const captured = capture.submitText({
       text: "Initial source text.",
@@ -437,7 +437,7 @@ function makeTextFixture(processCapture: boolean): {
   const vaultPath = path.join(root, "Source Fixture");
   const vault = loadVaultSummary(vaultPath);
   const vaultPort = { current: () => vault, activeVaultPath: () => vaultPath };
-  const captured = new CaptureService(vaultPort).submitText({
+  const captured = new LegacyCaptureFixture(vaultPort, vaultPath).submitText({
     text: "Initial source text.",
     inputKind: "typed_text",
     userIntent: "capture",

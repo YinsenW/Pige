@@ -3,11 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { VaultSummary } from "@pige/contracts";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { LibraryService } from "../../apps/desktop/src/main/services/library-service";
 import { LocalDatabaseService } from "../../apps/desktop/src/main/services/local-database-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 
 const tempRoots: string[] = [];
 
@@ -26,7 +26,7 @@ function makeVault(): { vaultPath: string; vault: VaultSummary } {
 }
 
 function makeServices(vaultPath: string, vault: VaultSummary): {
-  capture: CaptureService;
+  capture: LegacyCaptureFixture;
   jobs: JobsService;
   library: LibraryService;
 } {
@@ -35,7 +35,7 @@ function makeServices(vaultPath: string, vault: VaultSummary): {
     activeVaultPath: () => vaultPath
   };
   return {
-    capture: new CaptureService(vaultPort),
+    capture: new LegacyCaptureFixture(vaultPort, vaultPath),
     jobs: new JobsService(vaultPort),
     library: new LibraryService(vaultPort)
   };

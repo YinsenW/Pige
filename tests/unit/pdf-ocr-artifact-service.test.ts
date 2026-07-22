@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import {
   PdfOcrArtifactService,
@@ -402,7 +402,7 @@ async function makeParsedPdf(bytes: Uint8Array, fileName: string): Promise<{
   const vaultPath = path.join(root, "Vault");
   const vault = loadVaultSummary(vaultPath);
   const vaultPort = { current: () => vault, activeVaultPath: () => vaultPath };
-  const capture = new CaptureService(vaultPort);
+  const capture = new LegacyCaptureFixture(vaultPort, vaultPath);
   const parser = new PdfParserService({
     isAvailable: () => true,
     extract: (filePath) => extractPdfText({

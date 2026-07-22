@@ -4,10 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
-  HomeAgentAskRequest,
   ModelProfileSummary,
   ProviderProfileSummary,
-  RetrievalAskResult,
+  RetrievalSearchRequest,
   RetrievalSearchResult,
   VaultSummary
 } from "@pige/contracts";
@@ -295,7 +294,7 @@ function makeModels(): HomeAgentModelPort {
 }
 
 function makeRetrieval(vaultId: string): HomeAgentRetrievalPort {
-  const search = (request: HomeAgentAskRequest): RetrievalSearchResult => ({
+  const search = (request: RetrievalSearchRequest): RetrievalSearchResult => ({
     searchedAt: "2026-07-22T00:00:00.000Z",
     activeVaultId: vaultId,
     query: request.query,
@@ -305,20 +304,7 @@ function makeRetrieval(vaultId: string): HomeAgentRetrievalPort {
     degraded: false,
     results: []
   });
-  return {
-    search,
-    ask: (request): RetrievalAskResult => ({
-      requestId: "request_ar1_home",
-      state: "completed",
-      result: {
-        query: request.query,
-        answerMode: "insufficient_evidence",
-        answer: "No local evidence.",
-        citations: [],
-        warnings: ["no_relevant_local_evidence"]
-      }
-    })
-  };
+  return { search };
 }
 
 function digest(value: string): `sha256:${string}` {
