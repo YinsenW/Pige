@@ -6,6 +6,7 @@ import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
   AgentConversationTimeline,
+  AppearanceSettingsSummary,
   AgentRuntimeStatus,
   AgentSubmitTurnRequest,
   AgentSubmitTurnResult,
@@ -32,6 +33,7 @@ import type {
   SpeechCancelRequest,
   SpeechSessionEvent,
   SpeechSessionRequest,
+  SetThemeRequest,
   SpeechStartRequest,
   SpeechStartResult,
   SpeechStopResult,
@@ -244,10 +246,7 @@ describe("Home durable Agent conversation UI", () => {
   it("defers a late system-locale result while the language asset installation is active", async () => {
     const dom = createDom(420);
     const harness = createHarness(undefined);
-    let resolveAppearance: ((appearance: {
-      readonly locale: "en";
-      readonly availableLocales: readonly ["en"];
-    }) => void) | undefined;
+    let resolveAppearance: ((appearance: AppearanceSettingsSummary) => void) | undefined;
     harness.loadAppearance = () => new Promise((resolve) => {
       resolveAppearance = resolve;
     });
@@ -265,7 +264,7 @@ describe("Home durable Agent conversation UI", () => {
     await waitFor(dom, () => container.textContent?.includes(zhHansMessages["home.voice.installingAssetTitle"]) === true);
 
     await act(async () => {
-      resolveAppearance?.({ locale: "en", availableLocales: ["en"] });
+      resolveAppearance?.(testAppearanceSummary("en"));
       await settle(dom);
     });
     expect(container.textContent).toContain(zhHansMessages["home.voice.installingAssetTitle"]);
@@ -570,6 +569,64 @@ describe("Home durable Agent conversation UI", () => {
 
     await act(async () => root.unmount());
     dom.window.close();
+  });
+
+  it("binds Appearance theme changes to the exact revision and ignores stale effective-theme events", async () => {
+    const dom = createDom(960);
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await openSettingsSection(dom, container, enMessages["settings.section.appearance"]);
+    const radios = () => Array.from(container.querySelectorAll<HTMLButtonElement>('.theme-option[role="radio"]'));
+    expect(radios().map((radio) => radio.getAttribute("aria-checked"))).toEqual(["true", "false", "false"]);
+    await clickElement(dom, radios()[2]!);
+
+    expect(harness.appearanceThemeRequests).toEqual([{ themePreference: "dark", expectedRevision: 0 }]);
+    expect(dom.window.document.documentElement.dataset.theme).toBe("dark");
+    expect(radios().map((radio) => radio.getAttribute("aria-checked"))).toEqual(["false", "false", "true"]);
+
+    await act(async () => {
+      for (const listener of harness.appearanceListeners) listener({
+        ...testAppearanceSummary("en"), themePreference: "light", revision: 0
+      });
+      await settle(dom);
+    });
+    expect(dom.window.document.documentElement.dataset.theme).toBe("dark");
+
+    await act(async () => {
+      for (const listener of harness.appearanceListeners) listener({
+        ...testAppearanceSummary("en"), themePreference: "light", revision: 2
+      });
+      await settle(dom);
+    });
+    expect(dom.window.document.documentElement.dataset.theme).toBe("light");
+    expect(radios().map((radio) => radio.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
+
+    await act(async () => root.unmount());
+    expect(dom.window.document.documentElement.hasAttribute("data-theme")).toBe(false);
+    dom.window.close();
+  });
+
+  it("keeps the authoritative theme and reports both stale and failed mutations locally", async () => {
+    for (const status of ["stale", "failed"] as const) {
+      const dom = createDom(960);
+      const harness = createHarness(undefined);
+      harness.appearanceThemeMutationStatus = status;
+      const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+      await openSettingsSection(dom, container, enMessages["settings.section.appearance"]);
+      const radios = Array.from(container.querySelectorAll<HTMLButtonElement>('.theme-option[role="radio"]'));
+      await clickElement(dom, radios[2]!);
+
+      await waitFor(dom, () => container.textContent?.includes(enMessages["appearance.themeUpdateFailed"]) === true);
+      expect(harness.appearanceThemeRequests).toEqual([{ themePreference: "dark", expectedRevision: 0 }]);
+      expect(dom.window.document.documentElement.dataset.theme).toBe("light");
+      expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["true", "false", "false"]);
+      expect(container.querySelector(".appearance-settings-page")).not.toBeNull();
+
+      await act(async () => root.unmount());
+      dom.window.close();
+    }
   });
 
   it("keeps Home Library modal only below its resident width budget", async () => {
@@ -3276,15 +3333,16 @@ interface ConversationHarness {
   windowLayoutRequest: WindowLayoutRequest;
   readonly windowLayoutRequests: WindowLayoutRequest[];
   readonly windowLayoutListeners: Set<(state: WindowLayoutState) => void>;
+  appearanceSummary: AppearanceSettingsSummary;
+  appearanceThemeMutationStatus: "committed" | "stale" | "failed";
+  readonly appearanceThemeRequests: SetThemeRequest[];
+  readonly appearanceListeners: Set<(settings: AppearanceSettingsSummary) => void>;
   failNextWindowLayout: boolean;
   readonly noteRenderRequests: string[];
   readonly inlineReferenceRequests: NoteResolveInlineReferenceRequest[];
   renderNote: (pageId: string) => Promise<NoteRenderResult>;
   resolveInlineReference: (request: NoteResolveInlineReferenceRequest) => Promise<NoteResolveInlineReferenceResult>;
-  loadAppearance: () => Promise<{
-    readonly locale: "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de";
-    readonly availableLocales: readonly ("zh-Hans" | "en" | "ja" | "ko" | "fr" | "de")[];
-  }>;
+  loadAppearance: () => Promise<AppearanceSettingsSummary>;
   loadOnboarding: () => Promise<OnboardingStatus>;
   loadModelSummary: () => Promise<ModelProviderSettingsSummary>;
   loadAgentRuntimeStatus: () => Promise<AgentRuntimeStatus | null>;
@@ -3349,6 +3407,10 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     },
     windowLayoutRequests: [],
     windowLayoutListeners: new Set(),
+    appearanceSummary: testAppearanceSummary("en"),
+    appearanceThemeMutationStatus: "committed",
+    appearanceThemeRequests: [],
+    appearanceListeners: new Set(),
     failNextWindowLayout: false,
     noteRenderRequests: [],
     inlineReferenceRequests: [],
@@ -3358,7 +3420,11 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
       requestId: request.requestId,
       status: "not_found"
     }),
-    loadAppearance: async () => ({ locale: harness.locale, availableLocales: [harness.locale] }),
+    loadAppearance: async () => ({
+      ...harness.appearanceSummary,
+      locale: harness.locale,
+      availableLocales: [harness.locale]
+    }),
     loadOnboarding: async () => harness.onboarding,
     loadModelSummary: async () => harness.onboarding.state === "ready"
       ? switchableModelSummary("model_alpha")
@@ -3444,6 +3510,16 @@ function pendingHighRiskConfirmation(): HighRiskConfirmationPendingResult {
       },
       owner: { kind: "agent_turn", clientTurnId: "turn_20260722_abcdefghijkl" }
     }
+  };
+}
+
+function testAppearanceSummary(locale: AppearanceSettingsSummary["locale"]): AppearanceSettingsSummary {
+  return {
+    locale,
+    availableLocales: [locale],
+    themePreference: "system",
+    effectiveTheme: "light",
+    revision: 0
   };
 }
 
@@ -3566,7 +3642,24 @@ function makePigeApi(harness: ConversationHarness): object {
       setAlwaysOnTop: async () => windowState(harness)
     },
     settings: {
-      appearance: () => harness.loadAppearance()
+      appearance: () => harness.loadAppearance(),
+      setTheme: async (request: SetThemeRequest) => {
+        harness.appearanceThemeRequests.push(request);
+        if (harness.appearanceThemeMutationStatus !== "committed") {
+          return { status: harness.appearanceThemeMutationStatus, settings: harness.appearanceSummary };
+        }
+        harness.appearanceSummary = {
+          ...harness.appearanceSummary,
+          themePreference: request.themePreference,
+          effectiveTheme: request.themePreference === "dark" ? "dark" : "light",
+          revision: harness.appearanceSummary.revision + 1
+        };
+        return { status: "committed" as const, settings: harness.appearanceSummary };
+      },
+      onAppearanceChanged: (listener: (settings: AppearanceSettingsSummary) => void) => {
+        harness.appearanceListeners.add(listener);
+        return () => harness.appearanceListeners.delete(listener);
+      }
     },
     system: {
       toolchainHealth: async () => ({ status: "ready" })

@@ -3,6 +3,7 @@ import { act } from "react";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
+  AppearanceSettingsSummary,
   JobSummary,
   JobsListRequest,
   LocalDatabaseStatus,
@@ -47,7 +48,7 @@ describe("First-run onboarding UI", () => {
   it("keeps first paint language-neutral until the system-derived appearance owner resolves", async () => {
     const dom = createDom();
     const harness = createHarness(blockedOnboarding(), cloneOnlyPreview());
-    let resolveAppearance: ((value: { readonly locale: Locale; readonly availableLocales: readonly Locale[] }) => void) | undefined;
+    let resolveAppearance: ((value: AppearanceSettingsSummary) => void) | undefined;
     harness.appearance = () => new Promise((resolve) => { resolveAppearance = resolve; });
 
     const { container, root } = await mountApp(dom, makePigeApi(harness));
@@ -57,7 +58,7 @@ describe("First-run onboarding UI", () => {
     expect(container.textContent).not.toContain("中文");
 
     await act(async () => {
-      resolveAppearance?.({ locale: "en", availableLocales: ["zh-Hans", "en", "ja", "ko", "fr", "de"] });
+      resolveAppearance?.(appearanceSummary("en"));
       await settle(dom);
     });
     await waitFor(dom, () => container.querySelector("#first-run-language") !== null);
@@ -685,7 +686,7 @@ describe("Restore identity UI", () => {
 
 interface RestoreHarness {
   onboarding: OnboardingStatus;
-  appearance: () => Promise<{ readonly locale: Locale; readonly availableLocales: readonly Locale[] }>;
+  appearance: () => Promise<AppearanceSettingsSummary>;
   readonly localeRequests: Locale[];
   modelSummary: ModelProviderSettingsSummary;
   modelSummaryReads: number;
@@ -707,7 +708,7 @@ interface RestoreHarness {
 function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResult): RestoreHarness {
   const harness: RestoreHarness = {
     onboarding,
-    appearance: async () => ({ locale: "en", availableLocales: ["zh-Hans", "en", "ja", "ko", "fr", "de"] }),
+    appearance: async () => appearanceSummary("en"),
     localeRequests: [],
     modelSummary: emptyModelSummary(),
     modelSummaryReads: 0,
@@ -794,9 +795,10 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
     },
     settings: {
       appearance: () => harness.appearance(),
+      onAppearanceChanged: () => () => undefined,
       setLocale: async ({ locale }: { readonly locale: Locale }) => {
         harness.localeRequests.push(locale);
-        return { locale, availableLocales: ["zh-Hans", "en", "ja", "ko", "fr", "de"] };
+        return appearanceSummary(locale);
       }
     },
     system: {
@@ -917,6 +919,16 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
         activities: []
       })
     }
+  };
+}
+
+function appearanceSummary(locale: Locale): AppearanceSettingsSummary {
+  return {
+    locale,
+    availableLocales: ["zh-Hans", "en", "ja", "ko", "fr", "de"],
+    themePreference: "system",
+    effectiveTheme: "light",
+    revision: 0
   };
 }
 

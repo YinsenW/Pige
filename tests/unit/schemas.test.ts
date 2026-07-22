@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  AppearanceSettingsSummarySchema,
+  AppearanceThemeMutationResultSchema,
   ConfirmationProposalSchema,
   ConversationEventSchema,
   FixtureManifestSchema,
@@ -9,6 +11,7 @@ import {
   MarkdownPageStatusSchema,
   MarkdownPageTypeSchema,
   RequirementIdSchema,
+  SetThemeRequestSchema,
   SourceRecordSchema,
   ToolchainManifestSchema,
   VaultConfigSchema,
@@ -306,6 +309,34 @@ describe("schemas", () => {
     expect(() => KnowledgeActivityListResultSchema.parse({
       ...result,
       activities: [{ ...result.activities[0], path: "/private/vault/page.md" }]
+    })).toThrow();
+  });
+
+  it("strictly validates appearance summaries, CAS requests, and machine-local persistence", () => {
+    const summary = AppearanceSettingsSummarySchema.parse({
+      apiVersion: 1,
+      locale: "en",
+      availableLocales: ["en", "zh-Hans"],
+      themePreference: "system",
+      effectiveTheme: "dark",
+      revision: 4
+    });
+    expect(SetThemeRequestSchema.parse({ themePreference: "light", expectedRevision: 4 })).toEqual({
+      themePreference: "light",
+      expectedRevision: 4
+    });
+    expect(AppearanceThemeMutationResultSchema.parse({ status: "stale", settings: summary }).status).toBe("stale");
+    expect(MachineLocalSettingsSchema.parse({
+      schemaVersion: 1,
+      appearance: { revision: 4, themePreference: "system" },
+      recentVaults: []
+    }).appearance).toEqual({ revision: 4, themePreference: "system" });
+
+    expect(() => SetThemeRequestSchema.parse({ themePreference: "sepia", expectedRevision: 4 })).toThrow();
+    expect(() => SetThemeRequestSchema.parse({
+      themePreference: "dark",
+      expectedRevision: 4,
+      rawCss: "body{}"
     })).toThrow();
   });
 

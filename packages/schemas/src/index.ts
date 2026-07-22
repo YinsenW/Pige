@@ -5,6 +5,41 @@ export const RequirementIdSchema = z.string().regex(PIGE_REQUIREMENT_ID_PATTERN)
 
 export const LocaleSchema = z.enum(["zh-Hans", "en", "ja", "ko", "fr", "de"]);
 
+export const AppearanceThemePreferenceSchema = z.enum(["system", "light", "dark"]);
+
+export const EffectiveAppearanceThemeSchema = z.enum(["light", "dark"]);
+
+export const AppearanceSettingsRevisionSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+
+export const AppearanceMachineSettingsSchema = z.object({
+  revision: AppearanceSettingsRevisionSchema,
+  themePreference: AppearanceThemePreferenceSchema
+}).strict();
+
+export const AppearanceSettingsSummarySchema = z.object({
+  apiVersion: z.literal(1),
+  locale: LocaleSchema,
+  availableLocales: z.array(LocaleSchema).min(1),
+  themePreference: AppearanceThemePreferenceSchema,
+  effectiveTheme: EffectiveAppearanceThemeSchema,
+  revision: AppearanceSettingsRevisionSchema
+}).strict();
+
+export const SetLocaleRequestSchema = z.object({
+  locale: LocaleSchema
+}).strict();
+
+export const SetThemeRequestSchema = z.object({
+  themePreference: AppearanceThemePreferenceSchema,
+  expectedRevision: AppearanceSettingsRevisionSchema
+}).strict();
+
+export const AppearanceThemeMutationResultSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("committed"), settings: AppearanceSettingsSummarySchema }).strict(),
+  z.object({ status: z.literal("stale"), settings: AppearanceSettingsSummarySchema }).strict(),
+  z.object({ status: z.literal("failed"), settings: AppearanceSettingsSummarySchema }).strict()
+]);
+
 export const VaultIdSchema = z.string().regex(PIGE_VAULT_ID_PATTERN);
 
 // Durable IDs are path-independent vocabulary. Keep these schemas centralized so
@@ -1254,6 +1289,7 @@ export const MachineLocalSettingsSchema = z.object({
   schemaVersion: z.literal(1),
   activeVaultPath: z.string().min(1).optional(),
   appLocale: LocaleSchema.optional(),
+  appearance: AppearanceMachineSettingsSchema.optional(),
   window: WindowPreferencesSchema.optional(),
   updates: UpdateMachineSettingsSchema.optional(),
   dismissedFirstHomeVaultIds: z.array(VaultIdSchema).max(32).optional(),
@@ -3285,6 +3321,13 @@ export type UpdateChannel = z.infer<typeof UpdateChannelSchema>;
 export type UpdateCheckRequest = z.infer<typeof UpdateCheckRequestSchema>;
 export type UpdateCheckResult = z.infer<typeof UpdateCheckResultSchema>;
 export type UpdateMachineSettings = z.infer<typeof UpdateMachineSettingsSchema>;
+export type AppearanceThemePreference = z.infer<typeof AppearanceThemePreferenceSchema>;
+export type EffectiveAppearanceTheme = z.infer<typeof EffectiveAppearanceThemeSchema>;
+export type AppearanceMachineSettings = z.infer<typeof AppearanceMachineSettingsSchema>;
+export type AppearanceSettingsSummary = z.infer<typeof AppearanceSettingsSummarySchema>;
+export type SetLocaleRequest = z.infer<typeof SetLocaleRequestSchema>;
+export type SetThemeRequest = z.infer<typeof SetThemeRequestSchema>;
+export type AppearanceThemeMutationResult = z.infer<typeof AppearanceThemeMutationResultSchema>;
 export type UpdatePhase = z.infer<typeof UpdatePhaseSchema>;
 export type UpdateStatusEvent = z.infer<typeof UpdateStatusEventSchema>;
 export type UpdateSummary = z.infer<typeof UpdateSummarySchema>;

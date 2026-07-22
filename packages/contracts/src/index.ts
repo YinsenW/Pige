@@ -2,6 +2,9 @@ import type { PigeClientCapabilityTier, PigeRuntimeKind } from "@pige/domain";
 import type {
   AgentAttachmentCandidate,
   AgentSubmitTurnIpcPayload,
+  AppearanceSettingsSummary,
+  AppearanceThemeMutationResult,
+  AppearanceThemePreference,
   BoundaryVerification,
   CaptureFileRejection,
   CaptureFileRejectionReason,
@@ -10,6 +13,7 @@ import type {
   ChangeOperation,
   ConfirmationProposal,
   DatasetLogicalType,
+  EffectiveAppearanceTheme,
   HighRiskConfirmationChangedEvent,
   HighRiskConfirmationPendingResult,
   HighRiskConfirmationResolveRequest,
@@ -70,6 +74,8 @@ import type {
   SettingApplyBehavior,
   SettingPermissionRequirement,
   SettingScope,
+  SetLocaleRequest,
+  SetThemeRequest,
   SourceKind,
   SourceAssetRootKind,
   SourceStorageStrategy,
@@ -83,6 +89,9 @@ import type {
 export type {
   AgentAttachmentCandidate,
   AgentSubmitTurnIpcPayload,
+  AppearanceSettingsSummary,
+  AppearanceThemeMutationResult,
+  AppearanceThemePreference,
   CaptureFileRejection,
   CaptureFileRejectionReason,
   DiagnosticError,
@@ -92,6 +101,7 @@ export type {
   PigeErrorSeverity,
   PigeErrorSummary,
   PigeWarning,
+  EffectiveAppearanceTheme,
   HighRiskConfirmationAction,
   HighRiskConfirmationChangedEvent,
   HighRiskConfirmationId,
@@ -104,6 +114,8 @@ export type {
   HighRiskConfirmationTarget,
   HighRiskEffect,
   RendererSafeSubjectLabel,
+  SetLocaleRequest,
+  SetThemeRequest,
   VaultRevealResult,
   VaultRevealTarget,
   NoteInlineReferenceTarget,
@@ -498,15 +510,6 @@ export interface SettingRegistryEntry {
 
 export interface SettingsRegistrySummary {
   readonly entries: readonly SettingRegistryEntry[];
-}
-
-export interface AppearanceSettingsSummary {
-  readonly locale: Locale;
-  readonly availableLocales: readonly Locale[];
-}
-
-export interface SetLocaleRequest {
-  readonly locale: Locale;
 }
 
 export type UpdateChannel = "alpha";
@@ -1332,6 +1335,8 @@ export interface PigeDesktopApi {
   readonly settings: {
     readonly appearance: () => Promise<AppearanceSettingsSummary>;
     readonly setLocale: (request: SetLocaleRequest) => Promise<AppearanceSettingsSummary>;
+    readonly setTheme: (request: SetThemeRequest) => Promise<AppearanceThemeMutationResult>;
+    readonly onAppearanceChanged: (listener: (settings: AppearanceSettingsSummary) => void) => () => void;
     readonly registry: () => Promise<SettingsRegistrySummary>;
   };
   readonly updates: {

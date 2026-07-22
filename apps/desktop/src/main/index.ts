@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, screen, shell, type WebContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, safeStorage, screen, shell, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
 import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -11,6 +11,7 @@ import type {
   AgentConversationRequest,
   AgentSubmitTurnRequest,
   AppHealth,
+  AppearanceThemeMutationResult,
   BackupCreateResult,
   CreateVaultRequest,
   CancelSupportBundleExportRequest,
@@ -44,6 +45,7 @@ import type {
   SetDefaultModelRequest,
   UpdateModelRequest,
   SetLocaleRequest,
+  SetThemeRequest,
   SetSidebarOpenRequest,
   SetWindowModeRequest,
   SkillDisableRequest,
@@ -61,6 +63,8 @@ import type {
 import {
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
+  AppearanceSettingsSummarySchema,
+  AppearanceThemeMutationResultSchema,
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
   HighRiskConfirmationResolveResultSchema,
@@ -103,6 +107,8 @@ import {
   SkillDisableRequestSchema,
   SkillRegistryMutationResultSchema,
   SkillRegistryQueryResultSchema,
+  SetLocaleRequestSchema,
+  SetThemeRequestSchema,
   WindowLayoutRequestSchema,
   WindowLayoutStateSchema,
   VaultActionResultSchema
@@ -209,6 +215,7 @@ let agentIngestService: AgentIngestService | undefined;
 let homeAgentService: HomeAgentService | undefined;
 let homeAgentUrlService: HomeAgentUrlService | undefined;
 let appearanceService: AppearanceService | undefined;
+let appearanceServiceUnsubscribe: (() => void) | undefined;
 let toolchainService: ToolchainService | undefined;
 let captureService: CaptureService | undefined;
 let homeAgentAttachmentService: HomeAgentAttachmentService | undefined;
@@ -621,7 +628,15 @@ const getAgentRuntimeService = (): AgentRuntimeService => {
 
 const getAppearanceService = (): AppearanceService => {
   if (!appearanceService) {
-    appearanceService = new AppearanceService(getLocalSettingsStore(), app.getLocale());
+    appearanceService = new AppearanceService(getLocalSettingsStore(), app.getLocale(), nativeTheme);
+    appearanceServiceUnsubscribe = appearanceService.onChanged((summary) => {
+      const parsed = AppearanceSettingsSummarySchema.parse(summary);
+      for (const browserWindow of mainWindows) {
+        if (!browserWindow.webContents.isDestroyed()) {
+          browserWindow.webContents.send("settings.appearanceChanged", parsed);
+        }
+      }
+    });
   }
   return appearanceService;
 };
@@ -1884,8 +1899,19 @@ ipcMain.handle("models.setDefaultModel", async (_event, request: SetDefaultModel
     scheduleWaitingAgentIngestAfterModelReady();
     return summary;
 });
-ipcMain.handle("settings.appearance", () => getAppearanceService().summary());
-ipcMain.handle("settings.setLocale", (_event, request: SetLocaleRequest) => getAppearanceService().setLocale(request));
+ipcMain.handle("settings.appearance", () =>
+  AppearanceSettingsSummarySchema.parse(getAppearanceService().summary())
+);
+ipcMain.handle("settings.setLocale", (_event, request: SetLocaleRequest) =>
+  AppearanceSettingsSummarySchema.parse(
+    getAppearanceService().setLocale(SetLocaleRequestSchema.parse(request))
+  )
+);
+ipcMain.handle("settings.setTheme", (_event, request: SetThemeRequest): AppearanceThemeMutationResult =>
+  AppearanceThemeMutationResultSchema.parse(
+    getAppearanceService().setTheme(SetThemeRequestSchema.parse(request))
+  )
+);
 ipcMain.handle("settings.registry", () => getSettingsRegistry());
 ipcMain.handle("updates.summary", () => UpdateSummarySchema.parse(getUpdateService().summary()));
 ipcMain.handle("updates.check", async (_event, request: UpdateCheckRequest) =>
@@ -2078,6 +2104,8 @@ ipcMain.handle("system.toolchainHealth", () => getToolchainService().health());
 
 app.whenReady().then(async () => {
   if (!ownsAppInstanceLock) return;
+  localSettingsStore = new LocalSettingsStore(app.getPath("userData"));
+  getAppearanceService();
   const packagedRuntimeSmokeReportPath = resolvePackagedRuntimeSmokeReportPath();
   if (packagedRuntimeSmokeReportPath) {
     let smokeWindow: BrowserWindow | undefined;
@@ -2135,11 +2163,9 @@ app.whenReady().then(async () => {
     return;
   }
 
-  localSettingsStore = new LocalSettingsStore(app.getPath("userData"));
   skillRegistryService = new SkillRegistryService(app.getPath("userData"), {
     recoverOrphanedMutationLock: true
   });
-  appearanceService = new AppearanceService(getLocalSettingsStore(), app.getLocale());
   updateService = new UpdateService({
     settings: getLocalSettingsStore(),
     adapter: new NoNetworkUpdateCheckAdapter(),
@@ -2215,6 +2241,9 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  appearanceServiceUnsubscribe?.();
+  appearanceServiceUnsubscribe = undefined;
+  appearanceService?.dispose();
   restoreCoordinatorService?.close();
   vaultService?.close();
 });

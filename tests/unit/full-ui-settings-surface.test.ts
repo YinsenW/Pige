@@ -134,6 +134,47 @@ describe("full UI Settings surface", () => {
     expect(compactSettings).toContain("grid-template-columns: 32px minmax(0, 1fr);");
     expect(compactSettings).toContain(".settings-skills .skill-registry-control");
     expect(compactSettings).toContain("grid-column: 1 / -1;");
+    expect(styles).toContain(".skill-registry-control .settings-status.is-enabled {\n  color: var(--accent);");
+    expect(styles).not.toContain("--accent-strong");
+    expect(styles).toContain("--border-strong: var(--border-heavy);");
+    expect(styles).toContain("--danger-soft: var(--danger-surface);");
+    expect(styles).toContain("--shadow-float: var(--shadow-floating);");
+    expect(styles).toContain("--shadow-lg: var(--shadow-floating);");
+    expect(styles).toContain("--shadow-xl: var(--shadow-floating);");
+    expect(styles).toContain("--ease-basic: var(--ease-standard);");
+    expect(styles).toContain("--settings-text: var(--text-primary);");
+    expect(styles).toContain("--settings-secondary: var(--text-secondary);");
+    expect(styles).toContain("--settings-border: var(--border-default);");
+    expect(styles).toContain("--settings-elevated: var(--surface-elevated);");
+    expect(styles).toContain("--titlebar-height: 58px;");
+    const reducedTransparency = styles.slice(
+      styles.indexOf("@media (prefers-reduced-transparency: reduce)"),
+      styles.indexOf("\n* {\n  box-sizing: border-box;")
+    );
+    expect(reducedTransparency).toContain("*::before,\n  *::after {");
+    expect(reducedTransparency).toContain("-webkit-backdrop-filter: none !important;");
+    expect(reducedTransparency).toContain("backdrop-filter: none !important;");
+    const customPropertyDefinitions = new Set(
+      Array.from(styles.matchAll(/(--[a-z0-9-]+)\s*:/gi), (match) => match[1]!)
+    );
+    const undefinedCustomPropertyUses = Array.from(
+      new Set(Array.from(styles.matchAll(/var\((--[a-z0-9-]+)/gi), (match) => match[1]!))
+    ).filter((property) => !customPropertyDefinitions.has(property)).sort();
+    expect(undefinedCustomPropertyUses).toEqual([
+      "--branch-opacity",
+      "--branch-width",
+      "--home-processing-panel-height",
+      "--minimap-opacity",
+      "--minimap-width",
+      "--progress"
+    ]);
+    expect(styles).toContain("--knowledge-node-root: #d9e2ef;");
+    expect(styles).toContain("stroke: var(--knowledge-branch-strong);");
+    expect(styles).toContain("color: var(--knowledge-node-root);");
+    expect(styles).toContain(".diff-line.removed { background: var(--danger-surface); color: var(--danger); }");
+    expect(styles).toContain("--success-text: #13733a;");
+    expect(styles).toContain(".diff-line.added { background: var(--success-surface); color: var(--success-text); }");
+    expect(styles).toContain("background: color-mix(in oklab, var(--surface-elevated) 97%, transparent);");
     expect(compactSettings).toContain("grid-template-columns: minmax(0, 1fr);");
     expect(compactSettings).toContain("width: min(320px, calc(100% - 48px));");
     expect(compactSettings).toContain('.settings-surface[data-compact-navigation-open="true"] .settings-sidebar');
@@ -907,7 +948,7 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("binds app language while keeping unfinished appearance choices honest and accessible", async () => {
+  it("binds the real theme and app language while keeping unfinished language choices honest", async () => {
     const dom = createDom();
     let ipcRead = false;
     Object.defineProperty(dom.window, "pige", {
@@ -917,14 +958,23 @@ describe("full UI Settings surface", () => {
         throw new Error("The Appearance panel must use only its provided adapters.");
       }
     });
-    const onLocaleChange = vi.fn(async () => undefined);
+    let finishLocaleChange: (() => void) | undefined;
+    const onLocaleChange = vi.fn(async (locale: string) => {
+      if (locale === "fr") await new Promise<void>((resolve) => { finishLocaleChange = resolve; });
+      if (locale === "de") throw new Error("raw locale persistence failure /Users/private");
+    });
+    const onThemeChange = vi.fn(async () => true);
     const onDevelopment = vi.fn();
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
       root.render(createElement(AppearanceSettingsPanel, {
         locale: "en",
         availableLocales: ["en", "fr", "de"],
+        themePreference: "system",
+        themeBusy: false,
+        themeError: null,
         onLocaleChange,
+        onThemeChange,
         onDevelopment,
         t
       }));
@@ -936,7 +986,7 @@ describe("full UI Settings surface", () => {
     const themeGroup = requireElement(container.querySelector<HTMLElement>('[role="radiogroup"]'));
     const themes = Array.from(themeGroup.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
     expect(themes).toHaveLength(3);
-    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["false", "false", "false"]);
+    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["true", "false", "false"]);
     expect(themes.map((theme) => theme.tabIndex)).toEqual([0, -1, -1]);
 
     await act(async () => {
@@ -946,7 +996,8 @@ describe("full UI Settings surface", () => {
       await settle(dom);
     });
     expect(dom.window.document.activeElement).toBe(themes[1]);
-    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["false", "false", "false"]);
+    expect(onThemeChange.mock.calls.map(([theme]) => theme)).toEqual(["dark", "light"]);
+    expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["true", "false", "false"]);
 
     const appLanguage = requireElement(container.querySelector<HTMLSelectElement>('select[aria-label="App language"]'));
     const knowledgeLanguage = requireElement(container.querySelector<HTMLButtonElement>('[data-appearance-control="knowledge-language"]'));
@@ -957,15 +1008,43 @@ describe("full UI Settings surface", () => {
     expect(container.querySelector('select[aria-label="OCR language hint"]')).toBeNull();
     await act(async () => {
       selectValue(dom, appLanguage, "fr");
+      await settle(dom);
+    });
+    expect(appLanguage.disabled).toBe(true);
+    await act(async () => {
+      selectValue(dom, appLanguage, "de");
+      await settle(dom);
+    });
+    expect(onLocaleChange.mock.calls.map(([locale]) => locale)).toEqual(["fr"]);
+    await act(async () => {
+      finishLocaleChange?.();
+      await settle(dom);
+    });
+    expect(appLanguage.disabled).toBe(false);
+    await act(async () => {
       knowledgeLanguage.click();
       ocrLanguage.click();
       await settle(dom);
     });
     expect(onLocaleChange).toHaveBeenCalledWith("fr");
-    expect(onDevelopment).toHaveBeenCalledTimes(4);
+    expect(onDevelopment).toHaveBeenCalledTimes(2);
     expect(knowledgeLanguage.textContent).toBe("In development");
     expect(ocrLanguage.textContent).toBe("In development");
     expect(ipcRead).toBe(false);
+
+    await act(async () => {
+      selectValue(dom, appLanguage, "de");
+      await settle(dom);
+    });
+    expect(onLocaleChange).toHaveBeenLastCalledWith("de");
+    expect(container.querySelector("#appearance-language-error")?.textContent)
+      .toBe("Language could not be changed. The current language was kept.");
+    expect(appLanguage.getAttribute("aria-describedby"))
+      .toBe("appearance-app-language-description appearance-language-error");
+    expect(container.querySelector("#appearance-language-error")?.getAttribute("role")).toBe("status");
+    expect(appLanguage.disabled).toBe(false);
+    expect(container.textContent).not.toContain("raw locale persistence failure");
+    expect(container.textContent).not.toContain("/Users/private");
 
     await act(async () => root.unmount());
     dom.window.close();

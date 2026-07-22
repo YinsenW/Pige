@@ -29,6 +29,8 @@ import koMessages from "./locales/ko/messages.json";
 import zhHansMessages from "./locales/zh-Hans/messages.json";
 import type {
   AgentConversationTimeline,
+  AppearanceSettingsSummary,
+  AppearanceThemePreference,
   AgentTurnAnswer,
   AgentTurnDraftEvent,
   AgentSubmitTurnResult,
@@ -252,6 +254,9 @@ export function App(): React.JSX.Element {
   const [agentRuntimeStatus, setAgentRuntimeStatus] = useState<AgentRuntimeStatus | null>(null);
   const [locale, setLocale] = useState<Locale>("zh-Hans");
   const [availableLocales, setAvailableLocales] = useState<readonly Locale[]>(["zh-Hans", "en", "ja", "ko", "fr", "de"]);
+  const [appearanceSummary, setAppearanceSummary] = useState<AppearanceSettingsSummary | null>(null);
+  const [appearanceThemeBusy, setAppearanceThemeBusy] = useState(false);
+  const [appearanceThemeError, setAppearanceThemeError] = useState<string | null>(null);
   const [appearanceLoadState, setAppearanceLoadState] = useState<AppearanceLoadState>("loading");
   const [toolchainHealth, setToolchainHealth] = useState<ToolchainHealth | null>(null);
   const [speechAvailability, setSpeechAvailability] = useState<SpeechAvailabilityResult | null>(null);
@@ -306,6 +311,7 @@ export function App(): React.JSX.Element {
   const vaultRefreshSequence = useRef(0);
   const recentVaultOpenRequestRef = useRef<string | null>(null);
   const voiceAssetInstallActiveRef = useRef(false);
+  const appearanceRevisionRef = useRef(-1);
   const deferredAppearanceRef = useRef<{
     readonly locale: Locale;
     readonly availableLocales: readonly Locale[];
@@ -410,6 +416,19 @@ export function App(): React.JSX.Element {
     setAvailableLocales(appearance.availableLocales);
   };
 
+  const applyAppearanceSummary = (appearance: AppearanceSettingsSummary): boolean => {
+    if (appearance.revision < appearanceRevisionRef.current) return false;
+    appearanceRevisionRef.current = appearance.revision;
+    setAppearanceSummary(appearance);
+    if (voiceAssetInstallActiveRef.current) {
+      deferredAppearanceRef.current = appearance;
+      return true;
+    }
+    setLocale(appearance.locale);
+    setAvailableLocales(appearance.availableLocales);
+    return true;
+  };
+
   const refreshAgentRuntimeStatus = async (): Promise<void> => {
     const refreshId = ++agentRuntimeRefreshSequence.current;
     const nextStatus = await window.pige.agent.runtimeStatus();
@@ -433,13 +452,7 @@ export function App(): React.JSX.Element {
     setAppearanceLoadState("loading");
     try {
       const appearance = await window.pige.settings.appearance();
-      if (voiceAssetInstallActiveRef.current) {
-        deferredAppearanceRef.current = appearance;
-        setAppearanceLoadState("ready");
-        return true;
-      }
-      setLocale(appearance.locale);
-      setAvailableLocales(appearance.availableLocales);
+      applyAppearanceSummary(appearance);
       setAppearanceLoadState("ready");
       return true;
     } catch {
@@ -491,6 +504,11 @@ export function App(): React.JSX.Element {
     const unsubscribeLayout = window.pige.window.onLayoutChanged((nextState) => {
       if (active) applyWindowLayoutState(nextState);
     });
+    const unsubscribeAppearance = window.pige.settings.onAppearanceChanged((appearance) => {
+      if (!active) return;
+      applyAppearanceSummary(appearance);
+      setAppearanceLoadState("ready");
+    });
     void window.pige.getHealth().then(setHealth);
     void window.pige.window.current().then(setWindowState);
     void window.pige.window.currentLayout().then((nextState) => {
@@ -503,8 +521,17 @@ export function App(): React.JSX.Element {
     return () => {
       active = false;
       unsubscribeLayout();
+      unsubscribeAppearance();
     };
   }, []);
+
+  useLayoutEffect(() => {
+    if (!appearanceSummary) return;
+    document.documentElement.dataset.theme = appearanceSummary.effectiveTheme;
+    return () => {
+      delete document.documentElement.dataset.theme;
+    };
+  }, [appearanceSummary?.effectiveTheme]);
 
   useEffect(() => {
     const homeWorkActive = recentJobs.some((job) => job.state === "queued" || job.state === "running");
@@ -932,9 +959,31 @@ export function App(): React.JSX.Element {
   const updateLocale = async (nextLocale: Locale): Promise<void> => {
     if (voiceAssetInstallActiveRef.current) return;
     const appearance = await window.pige.settings.setLocale({ locale: nextLocale });
-    setLocale(appearance.locale);
-    setAvailableLocales(appearance.availableLocales);
+    applyAppearanceSummary(appearance);
     setAppearanceLoadState("ready");
+  };
+
+  const updateTheme = async (themePreference: AppearanceThemePreference): Promise<boolean> => {
+    if (!appearanceSummary || appearanceThemeBusy) return false;
+    setAppearanceThemeBusy(true);
+    setAppearanceThemeError(null);
+    try {
+      const result = await window.pige.settings.setTheme({
+        themePreference,
+        expectedRevision: appearanceSummary.revision
+      });
+      applyAppearanceSummary(result.settings);
+      if (result.status !== "committed") {
+        setAppearanceThemeError(t("appearance.themeUpdateFailed"));
+        return false;
+      }
+      return true;
+    } catch {
+      setAppearanceThemeError(t("appearance.themeUpdateFailed"));
+      return false;
+    } finally {
+      setAppearanceThemeBusy(false);
+    }
   };
 
   const submitFiles = async (
@@ -1739,7 +1788,11 @@ export function App(): React.JSX.Element {
             <AppearanceSettingsPanel
               locale={locale}
               availableLocales={availableLocales}
+              themePreference={appearanceSummary?.themePreference ?? null}
+              themeBusy={appearanceThemeBusy}
+              themeError={appearanceThemeError}
               onLocaleChange={updateLocale}
+              onThemeChange={updateTheme}
               onDevelopment={() => showDevelopmentCapability("settings", "appearance")}
               t={t}
             />
@@ -6634,12 +6687,35 @@ export function GeneralSettingsPanel(props: {
 export function AppearanceSettingsPanel(props: {
   readonly locale: Locale;
   readonly availableLocales: readonly Locale[];
+  readonly themePreference: AppearanceThemePreference | null;
+  readonly themeBusy: boolean;
+  readonly themeError: string | null;
   readonly onLocaleChange: (locale: Locale) => Promise<void>;
+  readonly onThemeChange: (themePreference: AppearanceThemePreference) => Promise<boolean>;
   readonly onDevelopment: () => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const themeOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const themeChoices = ["system", "light", "dark"] as const;
+  const [languageBusy, setLanguageBusy] = useState(false);
+  const [languageError, setLanguageError] = useState(false);
+
+  useEffect(() => {
+    setLanguageError(false);
+  }, [props.locale]);
+
+  const changeLanguage = async (nextLocale: Locale): Promise<void> => {
+    if (languageBusy || nextLocale === props.locale) return;
+    setLanguageBusy(true);
+    setLanguageError(false);
+    try {
+      await props.onLocaleChange(nextLocale);
+    } catch {
+      setLanguageError(true);
+    } finally {
+      setLanguageBusy(false);
+    }
+  };
 
   const moveThemeFocus = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number): void => {
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
@@ -6650,7 +6726,7 @@ export function AppearanceSettingsPanel(props: {
     else if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (index + 1) % themeChoices.length;
     else nextIndex = (index - 1 + themeChoices.length) % themeChoices.length;
     themeOptionRefs.current[nextIndex]?.focus();
-    props.onDevelopment();
+    if (!props.themeBusy) void props.onThemeChange(themeChoices[nextIndex]!);
   };
 
   return (
@@ -6662,17 +6738,24 @@ export function AppearanceSettingsPanel(props: {
 
       <section className="settings-section" aria-labelledby="appearance-theme-title">
         <h2 className="settings-section-title" id="appearance-theme-title">{props.t("appearance.theme")}</h2>
-        <div className="theme-grid" role="radiogroup" aria-labelledby="appearance-theme-title" aria-describedby="appearance-partial-note">
+        <div
+          className="theme-grid"
+          role="radiogroup"
+          aria-labelledby="appearance-theme-title"
+          aria-describedby={props.themeError ? "appearance-theme-error" : undefined}
+          aria-busy={props.themeBusy}
+        >
           {themeChoices.map((choice, index) => (
             <button
               key={choice}
               ref={(element) => { themeOptionRefs.current[index] = element; }}
-              className="theme-option"
+              className={`theme-option${props.themePreference === choice ? " active" : ""}`}
               type="button"
               role="radio"
-              aria-checked={false}
-              tabIndex={index === 0 ? 0 : -1}
-              onClick={props.onDevelopment}
+              aria-checked={props.themePreference === choice}
+              tabIndex={props.themePreference === choice || (props.themePreference === null && index === 0) ? 0 : -1}
+              disabled={props.themePreference === null || props.themeBusy}
+              onClick={() => void props.onThemeChange(choice)}
               onKeyDown={(event) => moveThemeFocus(event, index)}
             >
               <span className={`theme-preview ${choice}`} aria-hidden="true" />
@@ -6680,6 +6763,9 @@ export function AppearanceSettingsPanel(props: {
             </button>
           ))}
         </div>
+        {props.themeError ? (
+          <p className="settings-inline-status error" id="appearance-theme-error" role="status">{props.themeError}</p>
+        ) : null}
       </section>
 
       <section className="settings-section" aria-labelledby="appearance-language-title">
@@ -6688,13 +6774,15 @@ export function AppearanceSettingsPanel(props: {
           <div className="settings-row">
             <div className="settings-row-copy">
               <strong>{props.t("appearance.appLanguage")}</strong>
-              <span>{props.t("appearance.appLanguageDescription")}</span>
+              <span id="appearance-app-language-description">{props.t("appearance.appLanguageDescription")}</span>
             </div>
             <select
               className="settings-select"
               value={props.locale}
+              disabled={languageBusy}
               aria-label={props.t("appearance.appLanguage")}
-              onChange={(event) => void props.onLocaleChange(event.target.value as Locale)}
+              aria-describedby={`appearance-app-language-description${languageError ? " appearance-language-error" : ""}`}
+              onChange={(event) => void changeLanguage(event.target.value as Locale)}
             >
               {props.availableLocales.map((availableLocale) => (
                 <option key={availableLocale} value={availableLocale}>{localeLabels[availableLocale]}</option>
@@ -6734,6 +6822,11 @@ export function AppearanceSettingsPanel(props: {
             </button>
           </div>
         </div>
+        {languageError ? (
+          <p className="settings-inline-status error" id="appearance-language-error" role="status">
+            {props.t("appearance.languageUpdateFailed")}
+          </p>
+        ) : null}
       </section>
 
       <p className="settings-note" id="appearance-partial-note">{props.t("appearance.partialNote")}</p>
