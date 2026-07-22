@@ -1397,7 +1397,6 @@ export const ToolchainManifestSchema = z.object({
 
 export const SourceSemanticOrchestrationSchema = z.enum([
   "legacy_agent_ingest",
-  "capture_only",
   "agent_turn"
 ]);
 

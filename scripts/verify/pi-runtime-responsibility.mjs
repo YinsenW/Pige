@@ -312,11 +312,12 @@ if (/ipcMain\.handle\("capture\.submit(?:Text|Url|Files)"/u.test(h2Main)) {
 }
 if (
   !h2Capture.includes("CurrentSourceRecordSchema.parse") ||
-  !h2Capture.includes('semanticOrchestration: "capture_only"') ||
-  !h2Capture.includes('semanticOrchestration: agentTurnBinding ? "agent_turn" : "capture_only"') ||
-  !h2Capture.includes('semanticOrchestration: input.agentTurn ? "agent_turn" : "capture_only"')
+  !h2Capture.includes('semanticOrchestration: "agent_turn"')
 ) {
-  failures.push("H2 CaptureService must durably classify every new source as capture_only or agent_turn");
+  failures.push("H2 CaptureService must durably bind every new source to one agent_turn");
+}
+if (`${h2Capture}\n${h2Jobs}\n${h2Home}`.includes("capture_only")) {
+  failures.push("H2 current source and Agent owners still contain removed capture_only semantics");
 }
 if (!h2Jobs.includes('sourceRecord.semanticOrchestration === "legacy_agent_ingest"')) {
   failures.push("H2 historical agent_ingest compatibility must require the normalized typed legacy marker");
