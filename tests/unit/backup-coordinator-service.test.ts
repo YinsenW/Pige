@@ -547,7 +547,7 @@ describe("BackupCoordinatorService", () => {
         id: sourceId,
         kind: "pdf_file",
         storageStrategy: "copy_to_source_library",
-        semanticOrchestration: "capture_only",
+        semanticOrchestration: "agent_turn",
         managedCopy: {
           rootId: "root_externalwait01",
           pathBasis: "root_relative",

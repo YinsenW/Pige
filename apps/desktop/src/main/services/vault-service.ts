@@ -117,7 +117,7 @@ export class VaultService {
     const activeVault = this.current();
     const hasDefaultModel = this.#hasDefaultModel();
     return {
-      state: activeVault ? (hasDefaultModel ? "ready" : "capture_only") : "blocked_no_vault",
+      state: activeVault ? "ready" : "blocked_no_vault",
       ...(activeVault ? { activeVault } : {}),
       hasDefaultModel,
       showFirstHomeGuide: Boolean(

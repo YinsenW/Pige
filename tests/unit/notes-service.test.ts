@@ -93,7 +93,7 @@ function writeSourceRecord(input: {
     id: input.sourceId,
     kind: "text",
     storageStrategy: "reference_original",
-    semanticOrchestration: "capture_only",
+    semanticOrchestration: "agent_turn",
     ...(input.pageId ? { knowledgePageId: input.pageId } : {}),
     ...(input.pagePath ? { knowledgePagePath: input.pagePath } : {}),
     original: { uri: `pige-test://${input.sourceId}` },
