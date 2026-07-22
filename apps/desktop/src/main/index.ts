@@ -25,8 +25,6 @@ import type {
   KnowledgeActivityUndoRequest,
   LibraryListRequest,
   LibraryRelatedRequest,
-  ModelEgressPendingRequestQuery,
-  ModelEgressResolveRequest,
   PermissionPendingRequestQuery,
   PermissionResolveRequest,
   PermissionSetDefaultModeRequest,
@@ -83,10 +81,6 @@ import {
   RefreshProviderModelsRequestSchema,
   UpdateProviderCredentialRequestSchema,
   DeleteProviderRequestSchema,
-  ModelEgressPendingRequestQuerySchema,
-  ModelEgressPendingRequestSchema,
-  ModelEgressResolveRequestSchema,
-  ModelEgressResolveResultSchema,
   PermissionPendingRequestQuerySchema,
   PermissionPendingRequestSchema,
   PermissionResolveRequestSchema,
@@ -174,7 +168,6 @@ import { LocalDatabaseService } from "./services/local-database-service";
 import { listMarkdownTagCatalog } from "./services/markdown-page-index";
 import { LocalSettingsStore } from "./services/local-settings";
 import { ModelProviderRegistry } from "./services/model-provider-registry";
-import { ModelEgressApprovalService } from "./services/model-egress-approval-service";
 import { PermissionBrokerService } from "./services/permission-broker-service";
 import { PermissionSettingsService } from "./services/permission-settings-service";
 import { PermissionYoloConfirmationRegistry } from "./services/permission-yolo-confirmation-registry";
@@ -223,7 +216,6 @@ let localSettingsStore: LocalSettingsStore | undefined;
 let diagnosticsService: DiagnosticsService | undefined;
 let localDatabaseService: LocalDatabaseService | undefined;
 let modelProviderRegistry: ModelProviderRegistry | undefined;
-let modelEgressApprovalService: ModelEgressApprovalService | undefined;
 let highRiskConfirmationService: HighRiskConfirmationService | undefined;
 let permissionBrokerService: PermissionBrokerService | undefined;
 let permissionSettingsService: PermissionSettingsService | undefined;
@@ -781,22 +773,12 @@ const getCaptureService = (): CaptureService => {
   return captureService;
 };
 
-const getModelEgressApprovalService = (): ModelEgressApprovalService => {
-  if (!modelEgressApprovalService) {
-    modelEgressApprovalService = new ModelEgressApprovalService({
-      rootPath: app.getPath("userData"),
-      assertWriterLease: (vaultPath) => getVaultService().assertWriterLease(vaultPath)
-    });
-  }
-  return modelEgressApprovalService;
-};
-
 const getPermissionBrokerService = (): PermissionBrokerService => {
   if (!permissionBrokerService) {
     permissionBrokerService = new PermissionBrokerService({
       rootPath: app.getPath("userData"),
       assertWriterLease: (vaultPath) => getVaultService().assertWriterLease(vaultPath),
-      permissionSettings: getPermissionSettingsService()
+      confirmations: getHighRiskConfirmationService()
     });
   }
   return permissionBrokerService;
@@ -810,9 +792,7 @@ const getJobsService = (): JobsService => {
       getLocalDatabaseService(),
       getDocumentParserService(),
       getOcrService(),
-      getDatasetService(),
-      getModelEgressApprovalService(),
-      getPermissionBrokerService()
+      getDatasetService()
     );
   }
   return jobsService;
@@ -839,8 +819,7 @@ const getPermissionedExternalCapabilityRegistry = (): PermissionedExternalCapabi
       firstPartyCommandCapabilityRegistered = true;
     }
     permissionedExternalCapabilityRegistry = createPermissionedExternalCapabilityRegistry(
-      getPermissionBrokerService(),
-      getJobsService()
+      getPermissionBrokerService()
     );
   }
   return permissionedExternalCapabilityRegistry;
@@ -896,7 +875,7 @@ const getAgentIngestService = (): AgentIngestService => {
   if (!agentIngestService) {
     agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
       snapshot: getAgentCapabilitySnapshot
-    }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort(), getModelEgressApprovalService(), getPermissionSettingsService());
+    }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort(), getPermissionSettingsService());
   }
   return agentIngestService;
 };
@@ -972,7 +951,6 @@ const getHomeAgentService = (): HomeAgentService => {
       undefined,
       getHomeAgentUrlService(),
       getDatasetQueryService(),
-      getModelEgressApprovalService(),
       getPermissionedExternalCapabilityRegistry(),
       getPermissionSettingsService(),
       {
@@ -1153,7 +1131,6 @@ const getModelProviderRegistry = (): ModelProviderRegistry => {
               "A running Agent Job still owns an active model runtime reference."
             );
           }
-          getModelEgressApprovalService().assertProviderInactive(activeVaultPath, providerProfileId);
         }
       }
     );
@@ -1356,14 +1333,6 @@ const resumeBackgroundJobs = (): void => {
         level: "info",
         code: "jobs.interrupted_reconciled",
         message: `Recovered ${recovery.requeued} idempotent job(s); ${recovery.failedRetryable} job(s) require explicit retry.`
-      });
-    }
-    const modelEgressRecovery = getJobsService().reconcileModelEgressApprovals();
-    if (modelEgressRecovery.reconciled > 0) {
-      getDiagnosticsService().recordEvent({
-        level: "info",
-        code: "model_egress.approval_reconciled",
-        message: `Reconciled ${modelEgressRecovery.reconciled} body-free model egress decision(s).`
       });
     }
     getJobsService().requeueWaitingParses();
@@ -1641,35 +1610,6 @@ ipcMain.handle("confirmations.resolve", async (_event, request: HighRiskConfirma
   return HighRiskConfirmationResolveResultSchema.parse(
     await getHighRiskConfirmationService().resolve(parsed)
   );
-});
-ipcMain.handle("modelEgress.pending", (_event, request: ModelEgressPendingRequestQuery) => {
-  const parsed = ModelEgressPendingRequestQuerySchema.safeParse(request);
-  if (!parsed.success) {
-    throw new PigeDomainError("model_egress.approval_invalid", "The model egress request query is invalid.");
-  }
-  const pending = getJobsService().pendingModelEgress(parsed.data.requestId);
-  if (pending === undefined) return undefined;
-  const projected = ModelEgressPendingRequestSchema.safeParse(pending);
-  if (!projected.success) {
-    throw new PigeDomainError("model_egress.approval_store_invalid", "The model egress approval state is unavailable.");
-  }
-  return projected.data;
-});
-ipcMain.handle("modelEgress.resolve", (_event, request: ModelEgressResolveRequest) => {
-  const parsed = ModelEgressResolveRequestSchema.safeParse(request);
-  if (!parsed.success) {
-    throw new PigeDomainError("model_egress.approval_invalid", "The model egress resolution is invalid.");
-  }
-  const result = getJobsService().resolveModelEgress(parsed.data);
-  if (result.status === "approved") {
-    scheduleAgentIngestProcessing();
-    scheduleAgentTurnProcessing();
-  }
-  const projected = ModelEgressResolveResultSchema.safeParse(result);
-  if (!projected.success) {
-    throw new PigeDomainError("model_egress.approval_store_invalid", "The model egress decision result is unavailable.");
-  }
-  return projected.data;
 });
 ipcMain.handle("permissions.pending", (_event, request: PermissionPendingRequestQuery) => {
   const parsed = PermissionPendingRequestQuerySchema.safeParse(request);
@@ -2398,7 +2338,7 @@ app.whenReady().then(async () => {
   knowledgeActivityService = new KnowledgeActivityService(getVaultService());
   agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
     snapshot: getAgentCapabilitySnapshot
-  }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort(), getModelEgressApprovalService(), getPermissionSettingsService());
+  }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort(), getPermissionSettingsService());
   documentParserService = new DocumentParserService();
   datasetService = new DatasetService(new DatasetIngestWorkerService());
   ocrService = new OcrService();
@@ -2410,9 +2350,7 @@ app.whenReady().then(async () => {
     getLocalDatabaseService(),
     getDocumentParserService(),
     getOcrService(),
-    getDatasetService(),
-    getModelEgressApprovalService(),
-    getPermissionBrokerService()
+    getDatasetService()
   );
   diagnosticsService = new DiagnosticsService(app.getPath("userData"));
   const restoreRecovery = await getRestoreCoordinatorService().recoverInterrupted();

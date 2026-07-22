@@ -11,9 +11,6 @@ import {
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
 import { CaptureService, type SourceFetchPort } from "../../apps/desktop/src/main/services/capture-service";
 import { KnowledgeActivityService } from "../../apps/desktop/src/main/services/knowledge-activity-service";
-import {
-  ModelEgressApprovalService
-} from "../../apps/desktop/src/main/services/model-egress-approval-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import { OperationRecordSchema, type JobRecord, type OperationRecord, type SourceRecord } from "@pige/schemas";
@@ -288,7 +285,7 @@ describe("agent ingest service", () => {
     expect(fs.readFileSync(occupiedPath as string, "utf8")).toBe(occupiedBytes);
   });
 
-  it("requires an egress decision before credential lookup or model invocation", async () => {
+  it("blocks an unverified provider boundary before credential lookup or model invocation", async () => {
     const { vaultPath, vault } = makeVault();
     const captured = makeCapture(vaultPath, vault).submitText({
       text: "Ordinary source text for an endpoint whose data boundary is unknown.",
@@ -312,15 +309,15 @@ describe("agent ingest service", () => {
     }, modelClient);
 
     await expect(service.ingestSource(vaultPath, sourceRecord, job)).rejects.toMatchObject({
-      code: "model_egress.confirmation_required"
+      code: "model_egress.blocked"
     });
     expect(credentialLookups).toBe(0);
     expect(modelClient.lastUserPrompt).toBe("");
     expect(requireOperation(readOperationFiles(vaultPath), '"kind": "model_egress_decision"').text)
-      .toContain("Model egress confirm");
+      .toContain("Model egress block");
 
     await expect(service.ingestSource(vaultPath, sourceRecord, job)).rejects.toMatchObject({
-      code: "model_egress.confirmation_required"
+      code: "model_egress.blocked"
     });
     expect(readOperationFiles(vaultPath)
       .filter((operation) => operation.text.includes('"kind": "model_egress_decision"'))).toHaveLength(1);
@@ -330,7 +327,7 @@ describe("agent ingest service", () => {
       metadata: { ...sourceRecord.metadata, private: true }
     };
     await expect(service.ingestSource(vaultPath, privateSource, job)).rejects.toMatchObject({
-      code: "model_egress.confirmation_required"
+      code: "model_egress.blocked"
     });
     const classificationOperations = readOperationFiles(vaultPath)
       .filter((operation) => operation.text.includes('"kind": "model_egress_decision"'))
@@ -361,7 +358,7 @@ describe("agent ingest service", () => {
       }
     };
     await expect(service.ingestSource(vaultPath, changedSource, job)).rejects.toMatchObject({
-      code: "model_egress.confirmation_required"
+      code: "model_egress.blocked"
     });
     const egressOperations = readOperationFiles(vaultPath)
       .filter((operation) => operation.text.includes('"kind": "model_egress_decision"'))
@@ -378,84 +375,6 @@ describe("agent ingest service", () => {
     expect(new Set(egressOperations.map((operation) => operation.modelEgressAudit.payloadHash)).size).toBe(2);
     expect(new Set(egressOperations.map((operation) => operation.modelEgressAudit.evidenceSummaryHash)).size).toBe(2);
     expect(credentialLookups).toBe(0);
-  });
-
-  it("consumes one exact approval before invoking an unknown-boundary ingest model", async () => {
-    const { vaultPath, vault } = makeVault();
-    const captured = makeCapture(vaultPath, vault).submitText({
-      text: "A bounded source that needs one exact external model approval.",
-      inputKind: "typed_text",
-      userIntent: "capture",
-      locale: "en"
-    });
-    const sourceRecord = readJson<SourceRecord>(findFile(
-      path.join(vaultPath, ".pige/source-records"),
-      `${captured.sourceId}.json`
-    ));
-    const job: JobRecord = {
-      ...readJson<JobRecord>(findFile(path.join(vaultPath, ".pige/jobs"), `${captured.jobId}.json`)),
-      activeVaultId: vault.vaultId
-    };
-    const provider = {
-      ...runtimeConfig.provider,
-      cloudBoundary: "unknown" as const,
-      boundaryVerification: "unknown" as const
-    };
-    let credentialLookups = 0;
-    const modelClient = new CapturingModelClient({
-      title: "Approved external capture",
-      summary: { text: "The exact send was approved once.", evidenceRefs: ["ev_01"] },
-      keyPoints: [{ text: "Approval is single use", evidenceRefs: ["ev_01"] }],
-      tags: [],
-      topics: [],
-      entities: [],
-      warnings: [],
-      confidence: "high"
-    });
-    const machineRoot = path.join(path.dirname(vaultPath), "machine-egress");
-    fs.mkdirSync(machineRoot);
-    const approvals = new ModelEgressApprovalService({ rootPath: machineRoot, unsafeAllowUnfenced: true });
-    const service = new AgentIngestService(
-      {
-        getDefaultModel: () => ({ ...runtimeConfig.model, isDefault: true }),
-        getDefaultProvider: () => provider,
-        hasDefaultRuntimeBinding: () => true,
-        getDefaultRuntimeConfig: () => {
-          credentialLookups += 1;
-          return { ...runtimeConfig, provider };
-        }
-      },
-      modelClient,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      approvals
-    );
-
-    const resultPromise = service.ingestSource(vaultPath, sourceRecord, job);
-    const first = await waitForValue(() => approvals.listForJob(vaultPath, job.id)
-      .find((record) => record.state === "pending"));
-    const requestId = first.id;
-    expect(credentialLookups).toBe(0);
-    expect(modelClient.lastUserPrompt).toBe("");
-
-    approvals.resolve(vaultPath, requestId, "allow_once");
-    const second = await waitForValue(() => approvals.listForJob(vaultPath, job.id)
-      .find((record) => record.state === "pending" && record.id !== requestId));
-    expect(approvals.read(vaultPath, requestId).state).toBe("consumed");
-    expect(credentialLookups).toBe(1);
-    approvals.resolve(vaultPath, second.id, "allow_once");
-    const result = await resultPromise;
-    expect(result).toMatchObject({ outcome: "published", created: true });
-    expect(credentialLookups).toBe(1);
-    expect(modelClient.callCount).toBe(1);
-    expect(approvals.read(vaultPath, requestId).state).toBe("consumed");
-    expect(approvals.read(vaultPath, second.id).state).toBe("consumed");
-    expect(readOperationFiles(vaultPath).filter((operation) =>
-      operation.text.includes(`\"modelEgressApprovalRequestId\": \"${requestId}\"`)
-    )).toHaveLength(1);
   });
 
   it("rejects a same-ID provider endpoint change before prompt rendering or credential lookup", async () => {

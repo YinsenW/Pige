@@ -23,8 +23,6 @@ const BEGIN_STATES = new Set<JobState>([
 
 const RESUME_STATES = new Set<JobState>([
   "waiting_dependency",
-  "waiting_permission",
-  "waiting_model_egress",
   "awaiting_review"
 ]);
 
@@ -32,8 +30,6 @@ const PENDING_CANCELLATION_STATES = new Set<JobState>([
   "queued",
   "failed_retryable",
   "waiting_dependency",
-  "waiting_permission",
-  "waiting_model_egress",
   "awaiting_review"
 ]);
 
@@ -45,8 +41,6 @@ const EXPLICIT_RETRY_STATES = new Set<JobState>([
 
 const PRE_EXECUTION_OUTCOME_STATES = new Set<JobState>([
   "waiting_dependency",
-  "waiting_permission",
-  "waiting_model_egress",
   "awaiting_review",
   "failed_retryable",
   "failed_final"
@@ -58,8 +52,6 @@ const WAITING_RESOLUTION_STATES = new Set<JobState>([
 ]);
 const OUTCOME_STATES = new Set<JobState>([
   "waiting_dependency",
-  "waiting_permission",
-  "waiting_model_egress",
   "awaiting_review",
   "completed",
   "completed_with_warnings",
@@ -132,16 +124,6 @@ export type JobExecutionResumeProof =
       readonly conversationEventId: string;
     }
   | {
-      readonly kind: "permission_decided";
-      readonly permissionRequestId: string;
-      readonly permissionDecisionId: string;
-    }
-  | {
-      readonly kind: "model_egress_decided";
-      readonly approvalRequestId: string;
-      readonly operationId: string;
-    }
-  | {
       readonly kind: "review_resolved";
       readonly proposalId: string;
       readonly operationId: string;
@@ -182,22 +164,6 @@ export type JobExecutionOutcome =
     }
   | {
       readonly kind: "waiting";
-      readonly reason: "permission";
-      readonly permissionRequestId: string;
-      readonly error: PigeErrorSummary;
-      readonly message: string;
-      readonly facts?: JobExecutionFactsPatch;
-    }
-  | {
-      readonly kind: "waiting";
-      readonly reason: "model_egress";
-      readonly approvalRequestId: string;
-      readonly error: PigeErrorSummary;
-      readonly message: string;
-      readonly facts?: JobExecutionFactsPatch;
-    }
-  | {
-      readonly kind: "waiting";
       readonly reason: "review";
       readonly proposalId: string;
       readonly message: string;
@@ -230,8 +196,6 @@ export type QueueJobReason =
   | "idempotent_recovery"
   | "agent_continuation"
   | "source_changed"
-  | "permission_decided"
-  | "model_egress_decided"
   | "review_resolved";
 
 interface QueueJobInputBase {
@@ -251,14 +215,6 @@ export type QueueJobInput = QueueJobInputBase & (
       readonly proof: Extract<JobExecutionResumeProof, { kind: "source_preserved" }>;
     }
   | {
-      readonly reason: "permission_decided";
-      readonly proof: Extract<JobExecutionResumeProof, { kind: "permission_decided" }>;
-    }
-  | {
-      readonly reason: "model_egress_decided";
-      readonly proof: Extract<JobExecutionResumeProof, { kind: "model_egress_decided" }>;
-    }
-  | {
       readonly reason: "review_resolved";
       readonly proof: Extract<JobExecutionResumeProof, { kind: "review_resolved" }>;
     }
@@ -266,8 +222,6 @@ export type QueueJobInput = QueueJobInputBase & (
       readonly reason: Exclude<QueueJobReason,
         | "dependency_repaired"
         | "source_preserved"
-        | "permission_decided"
-        | "model_egress_decided"
         | "review_resolved">;
       readonly proof?: never;
     }
@@ -420,10 +374,6 @@ export class JobExecutionCoordinator {
         switch (outcome.reason) {
           case "dependency":
             return this.#waitForDependency(snapshot, outcome);
-          case "permission":
-            return this.#waitForPermission(snapshot, outcome);
-          case "model_egress":
-            return this.#waitForModelEgress(snapshot, outcome);
           case "review":
             return this.#waitForReview(snapshot, outcome);
         }
@@ -438,33 +388,6 @@ export class JobExecutionCoordinator {
       waitingDependency: input.dependency,
       ...(input.error ? { error: parseError(input.error) } : {})
     });
-  }
-
-  #waitForPermission(
-    snapshot: JobRecordSnapshot,
-    input: Extract<JobExecutionOutcome, { kind: "waiting"; reason: "permission" }>
-  ): JobRecordSnapshot {
-    assertMatchingOptionalId(input.error.permissionRequestId, input.permissionRequestId);
-    const error = parseError({ ...input.error, permissionRequestId: input.permissionRequestId });
-    return this.#wait(snapshot, "waiting_permission", input.message, {
-      ...input.facts,
-      permissionRequestIds: [
-        ...(input.facts?.permissionRequestIds ?? []),
-        input.permissionRequestId
-      ]
-    }, { error });
-  }
-
-  #waitForModelEgress(
-    snapshot: JobRecordSnapshot,
-    input: Extract<JobExecutionOutcome, { kind: "waiting"; reason: "model_egress" }>
-  ): JobRecordSnapshot {
-    assertMatchingOptionalId(input.error.modelEgressApprovalRequestId, input.approvalRequestId);
-    const error = parseError({
-      ...input.error,
-      modelEgressApprovalRequestId: input.approvalRequestId
-    });
-    return this.#wait(snapshot, "waiting_model_egress", input.message, input.facts, { error });
   }
 
   #waitForReview(
@@ -641,8 +564,6 @@ export class JobExecutionCoordinator {
     if (input.facts) assertFacts(input.facts);
     const resumeReason = input.reason === "dependency_repaired" ||
       input.reason === "source_preserved" ||
-      input.reason === "permission_decided" ||
-      input.reason === "model_egress_decided" ||
       input.reason === "review_resolved";
     const decisionReason = resumeReason &&
       input.reason !== "dependency_repaired" &&
@@ -654,8 +575,7 @@ export class JobExecutionCoordinator {
       throw new PigeDomainError("job.command_invalid", "This queue reason does not accept a decision proof.");
     }
     const allowed = decisionReason
-      ? RESUME_STATES.has(snapshot.job.state) ||
-        (input.reason === "model_egress_decided" && snapshot.job.state === "failed_retryable")
+      ? snapshot.job.state === "awaiting_review"
       : input.reason === "dependency_repaired"
         ? snapshot.job.state === "waiting_dependency"
         : input.reason === "source_preserved"
@@ -966,7 +886,7 @@ export class JobExecutionCoordinator {
 
   #wait(
     snapshot: JobRecordSnapshot,
-    state: Extract<JobState, "waiting_dependency" | "waiting_permission" | "waiting_model_egress" | "awaiting_review">,
+    state: Extract<JobState, "waiting_dependency" | "awaiting_review">,
     message: string,
     facts?: JobExecutionFactsPatch,
     additions: Partial<Pick<JobRecord, "waitingDependency" | "error">> = {}
@@ -1089,12 +1009,6 @@ function assertOutcomeKeys(outcome: JobExecutionOutcome): void {
         case "dependency":
           assertKeys(outcome, ["kind", "reason", "dependency", "error", "message", "facts"]);
           return;
-        case "permission":
-          assertKeys(outcome, ["kind", "reason", "permissionRequestId", "error", "message", "facts"]);
-          return;
-        case "model_egress":
-          assertKeys(outcome, ["kind", "reason", "approvalRequestId", "error", "message", "facts"]);
-          return;
         case "review":
           assertKeys(outcome, ["kind", "reason", "proposalId", "message", "facts"]);
           return;
@@ -1107,8 +1021,6 @@ function validateQueueResumeProof(
   reason: Extract<QueueJobReason,
     | "dependency_repaired"
     | "source_preserved"
-    | "permission_decided"
-    | "model_egress_decided"
     | "review_resolved">,
   proof: JobExecutionResumeProof | undefined
 ): JobExecutionFactsPatch {
@@ -1143,33 +1055,6 @@ function validateResumeProof(job: JobRecord, proof: JobExecutionResumeProof): Jo
         throw invalidResumeProof();
       }
       return {};
-    case "permission_decided":
-      assertKeys(proof, ["kind", "permissionRequestId", "permissionDecisionId"]);
-      if (
-        job.state !== "waiting_permission" ||
-        job.error?.permissionRequestId !== proof.permissionRequestId ||
-        !job.permissionRequestIds?.includes(proof.permissionRequestId)
-      ) {
-        throw invalidResumeProof();
-      }
-      return {
-        privacy: {
-          usedCloudModel: false,
-          usedNetwork: false,
-          usedShell: false,
-          accessedExternalFiles: false,
-          permissionDecisionIds: [proof.permissionDecisionId]
-        }
-      };
-    case "model_egress_decided":
-      assertKeys(proof, ["kind", "approvalRequestId", "operationId"]);
-      if (
-        (job.state !== "waiting_model_egress" && job.state !== "failed_retryable") ||
-        job.error?.modelEgressApprovalRequestId !== proof.approvalRequestId
-      ) {
-        throw invalidResumeProof();
-      }
-      return { operationIds: [proof.operationId] };
     case "review_resolved":
       assertKeys(proof, ["kind", "proposalId", "operationId"]);
       if (job.state !== "awaiting_review" || !job.proposalIds?.includes(proof.proposalId)) {
@@ -1186,15 +1071,6 @@ function isExactDependencyBinding(current: WaitingDependency, proof: WaitingDepe
     current.dependencyId === proof.dependencyId &&
     current.requiredAction === proof.requiredAction &&
     current.messageKey === proof.messageKey;
-}
-
-function assertMatchingOptionalId(current: string | undefined, expected: string): void {
-  if (current !== undefined && current !== expected) {
-    throw new PigeDomainError(
-      "job.wait_binding_invalid",
-      "The Job wait request does not match the bound shared error summary."
-    );
-  }
 }
 
 function assertKeys(value: object, allowed: Iterable<string>): void {

@@ -1,7 +1,8 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   HomeAgentAskRequest,
   ModelProfileSummary,
@@ -10,8 +11,7 @@ import type {
   RetrievalSearchResult,
   VaultSummary
 } from "@pige/contracts";
-import type { JobRecord } from "@pige/schemas";
-import type { AgentIngestCapabilityPort } from "../../apps/desktop/src/main/services/agent-ingest-service";
+import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
 import {
   HomeAgentService,
   type HomeAgentModelPort,
@@ -33,12 +33,14 @@ afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
-describe("Permission Broker Home Agent integration", () => {
-  it("pauses one real Pi tool turn, resumes the same Job after allow once, and executes exactly once", async () => {
+describe("AR1 submitted-turn authority in Home", () => {
+  it("completes an ordinary first-party tool turn with zero permission records or waiting state", async () => {
     const fixture = makeFixture();
+    const confirmations = new HighRiskConfirmationService();
     const broker = new PermissionBrokerService({
       rootPath: fixture.appDataPath,
-      assertWriterLease: () => undefined
+      assertWriterLease: () => undefined,
+      confirmations
     });
     const jobs = new JobsService(
       fixture.vaults,
@@ -50,28 +52,29 @@ describe("Permission Broker Home Agent integration", () => {
       undefined,
       broker
     );
-    let executeCalls = 0;
-    const external = makeExternalAdapter(() => { executeCalls += 1; });
+    const execute = vi.fn(async () => ({
+      content: [{ type: "text" as const, text: "release channel available" }],
+      details: { status: "available" }
+    }));
+    const external = makeFirstPartyAdapter(execute);
     const registry = new PermissionedExternalCapabilityRegistry([external], broker, jobs);
     const home = new HomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrieval(fixture.vault.vaultId),
       jobs,
-      new PiAgentRuntimeAdapter({
-        fauxResponses: [
-          { kind: "tool_call", toolName: external.tool.name, args: { channel: "stable" } },
-          {
-            kind: "tool_call",
-            toolName: "pige_finish_home_turn",
-            args: {
-              answer: "The external action completed after one explicit decision.",
-              citationRefs: [],
-              grounding: "general"
-            }
+      new PiAgentRuntimeAdapter({ fauxResponses: [
+        { kind: "tool_call", toolName: external.tool.name, args: { channel: "stable" } },
+        {
+          kind: "tool_call",
+          toolName: "pige_finish_home_turn",
+          args: {
+            answer: "The ordinary first-party action completed.",
+            citationRefs: [],
+            grounding: "general"
           }
-        ]
-      }),
+        }
+      ] }),
       undefined,
       undefined,
       undefined,
@@ -80,334 +83,151 @@ describe("Permission Broker Home Agent integration", () => {
       registry
     );
 
-    const first = await home.submitTurn({
-      text: "Check the synthetic release channel.",
+    const result = await home.submitTurn({
+      text: "Check the stable release channel.",
       inputKind: "typed_text",
       objective: "auto",
-      locale: "en"
+      locale: "en",
+      clientTurnId: "turn_20260722_homeauthority"
     });
 
-    expect(first).toMatchObject({
-      state: "waiting",
-      error: {
-        code: "permission.confirmation_required",
-        permissionRequestId: expect.stringMatching(/^permreq_/u)
-      }
-    });
-    expect(executeCalls).toBe(0);
-    const requestId = first.error?.permissionRequestId;
-    if (!requestId) throw new Error("Expected one pending Permission Broker request.");
-    expect(jobs.pendingPermission(requestId)).toMatchObject({
-      requestId,
-      jobId: first.jobId,
-      actorDisplayName: "Release Notes Skill",
-      capability: "external_network",
-      resourceCount: 1
-    });
-    expect(jobs.readAgentTurnJob(first.jobId)).toMatchObject({
-      state: "waiting_permission",
-      error: { permissionRequestId: requestId }
-    });
-
-    expect(jobs.resolvePermission({
-      requestId,
-      jobId: first.jobId,
-      decision: "allow_once"
-    })).toEqual({ status: "approved", requestId, jobId: first.jobId });
-    expect(jobs.resolvePermission({
-      requestId,
-      jobId: first.jobId,
-      decision: "allow_once"
-    })).toEqual({ status: "approved", requestId, jobId: first.jobId });
-
-    const resumed = await home.resumeWaitingTurns();
-    expect(resumed).toMatchObject({ processed: 1, completed: 1, failed: 0, waiting: 0 });
-    expect(executeCalls).toBe(1);
-    expect(jobs.readAgentTurnJob(first.jobId)).toMatchObject({
-      id: first.jobId,
+    expect(result).toMatchObject({ state: "completed", answer: "The ordinary first-party action completed." });
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(broker.listForJob(fixture.vaultPath, result.jobId)).toEqual([]);
+    expect(confirmations.pending()).toMatchObject({ status: "none" });
+    expect(jobs.readAgentTurnJob(result.jobId)).toMatchObject({
       state: "completed",
-      privacy: {
-        usedNetwork: true,
-        permissionDecisionIds: [expect.stringMatching(/^permdec_/u)]
-      }
-    });
-    const timeline = home.conversation();
-    expect(timeline?.messages.at(-1)).toMatchObject({
-      role: "assistant",
-      text: "The external action completed after one explicit decision."
-    });
-    expect(JSON.stringify(readJobs(fixture.vaultPath))).not.toContain("synthetic-external-body");
-  });
-
-  it("revalidates the exact runtime policy immediately before consuming authority or executing", async () => {
-    const fixture = makeFixture();
-    const broker = new PermissionBrokerService({
-      rootPath: fixture.appDataPath,
-      assertWriterLease: () => undefined
-    });
-    const jobs = new JobsService(
-      fixture.vaults,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      broker
-    );
-    let policyChanged = false;
-    let normalizeCalls = 0;
-    let executeCalls = 0;
-    const capabilities = capabilityPort(() => policyChanged);
-    const external = makeExternalAdapter(
-      () => { executeCalls += 1; },
-      () => {
-        normalizeCalls += 1;
-        if (normalizeCalls === 2) policyChanged = true;
-      }
-    );
-    const registry = new PermissionedExternalCapabilityRegistry([external], broker, jobs);
-    const home = new HomeAgentService(
-      fixture.vaults,
-      makeModels(),
-      makeRetrieval(fixture.vault.vaultId),
-      jobs,
-      new PiAgentRuntimeAdapter({
-        fauxResponses: [
-          { kind: "tool_call", toolName: external.tool.name, args: { channel: "stable" } },
-          {
-            kind: "tool_call",
-            toolName: "pige_finish_home_turn",
-            args: { answer: "This answer must not be reached.", citationRefs: [], grounding: "general" }
-          }
-        ]
-      }),
-      capabilities,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      registry
-    );
-
-    const first = await home.submitTurn({
-      text: "Check the synthetic release channel with a policy drift.",
-      inputKind: "typed_text",
-      objective: "auto",
-      locale: "en"
-    });
-    const requestId = first.error?.permissionRequestId;
-    if (!requestId) throw new Error("Expected one pending Permission Broker request.");
-    jobs.resolvePermission({ requestId, jobId: first.jobId, decision: "allow_once" });
-
-    await expect(home.resumeWaitingTurns()).resolves.toMatchObject({
-      processed: 1,
-      completed: 0,
-      failed: 1,
-      waiting: 0
-    });
-    expect(executeCalls).toBe(0);
-    expect(broker.read(fixture.vaultPath, requestId).state).toBe("approved");
-    expect(jobs.readAgentTurnJob(first.jobId)).toMatchObject({
-      state: "failed_final",
-      error: { code: "permission.binding_changed", retryable: false }
+      privacy: { usedNetwork: true, permissionDecisionIds: [] }
     });
   });
 
-  it("terminalizes cancellation after one-use consumption as non-retryable completion uncertainty", async () => {
+  it("keeps a denied high-risk effect out of the adapter and out of Job permission state", async () => {
     const fixture = makeFixture();
+    const confirmations = new HighRiskConfirmationService();
     const broker = new PermissionBrokerService({
       rootPath: fixture.appDataPath,
-      assertWriterLease: () => undefined
+      assertWriterLease: () => undefined,
+      confirmations
     });
-    const jobs = new JobsService(
-      fixture.vaults,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      broker
-    );
-    let activeJobId = "";
-    let executeCalls = 0;
-    const external = makeExternalAdapter((signal) => {
-      executeCalls += 1;
-      expect(jobs.cancel({ jobId: activeJobId }).status).toBe("cancel_requested");
-      signal.throwIfAborted();
-    });
-    const registry = new PermissionedExternalCapabilityRegistry([external], broker, jobs);
-    const home = new HomeAgentService(
-      fixture.vaults,
-      makeModels(),
-      makeRetrieval(fixture.vault.vaultId),
-      jobs,
-      new PiAgentRuntimeAdapter({
-        fauxResponses: [
-          { kind: "tool_call", toolName: external.tool.name, args: { channel: "stable" } },
-          {
-            kind: "tool_call",
-            toolName: "pige_finish_home_turn",
-            args: { answer: "This answer must not be reached.", citationRefs: [], grounding: "general" }
-          }
-        ]
-      }),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      registry
-    );
+    const execute = vi.fn(async () => ({ content: [{ type: "text" as const, text: "must not run" }] }));
+    const external = makeHighRiskAdapter(execute);
+    const registry = new PermissionedExternalCapabilityRegistry([external], broker);
+    const tool = registry.toolsForTurn({
+      vaultPath: fixture.vaultPath,
+      vaultId: fixture.vault.vaultId,
+      jobId: "job_20260722_highrisk01",
+      policyContextId: "policy_context_highrisk",
+      policyHash: digest("high risk policy"),
+      runtimeKind: "desktop_local",
+      clientCapabilityTier: "desktop_full",
+      confirmationOwner: { kind: "agent_turn", clientTurnId: "turn_20260722_highriskabcd" },
+      assertCurrent: vi.fn()
+    })[0];
+    if (!tool) throw new Error("Expected high-risk tool.");
+    const signal = new AbortController().signal;
+    const context = { toolCallId: "tool_call_highrisk", signal };
 
-    const first = await home.submitTurn({
-      text: "Run one synthetic action that is cancelled after consumption.",
-      inputKind: "typed_text",
-      objective: "auto",
-      locale: "en"
+    await expect(tool.execute({}, signal, context)).rejects.toMatchObject({
+      code: "permission.high_risk_confirmation_required"
     });
-    activeJobId = first.jobId;
-    const requestId = first.error?.permissionRequestId;
-    if (!requestId) throw new Error("Expected one pending Permission Broker request.");
-    jobs.resolvePermission({ requestId, jobId: first.jobId, decision: "allow_once" });
-
-    expect(await home.resumeWaitingTurns()).toMatchObject({
-      processed: 1,
-      completed: 0,
-      failed: 1,
-      waiting: 0
+    const pending = confirmations.pending();
+    if (pending.status !== "pending") throw new Error("Expected confirmation.");
+    await confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: pending.confirmation.confirmationId,
+      expectedRevision: pending.revision,
+      decision: "deny"
     });
-    expect(executeCalls).toBe(1);
-    const consumed = broker.read(fixture.vaultPath, requestId);
-    expect(consumed.state).toBe("consumed");
-    expect("completionMarkerHash" in consumed).toBe(false);
-    expect(jobs.readAgentTurnJob(first.jobId)).toMatchObject({
-      state: "failed_retryable",
-      cancellation: { durableWritesApplied: true },
-      error: {
-        code: "unknown.execution_failed",
-        retryable: true
-      },
-      retry: {
-        maxAutomaticRetries: 0,
-        requiresUserAction: true,
-        lastRetryReason: "job.cancelled_after_durable_output"
-      }
-    });
-    expect(executeCalls).toBe(1);
+    await expect(tool.execute({}, signal, context)).rejects.toMatchObject({ code: "permission.denied" });
+    expect(execute).toHaveBeenCalledTimes(0);
+    expect(broker.listForJob(fixture.vaultPath, "job_20260722_highrisk01")).toEqual([]);
   });
 });
 
-function makeExternalAdapter(
-  onExecute: (signal: AbortSignal) => void | Promise<void>,
-  onNormalize: () => void = () => undefined
-): PermissionedExternalCapabilityAdapter {
-  const result = {
-    content: [{ type: "text" as const, text: JSON.stringify({ status: "available", channel: "stable" }) }],
-    details: { status: "available" }
-  } as const;
+function makeFirstPartyAdapter(execute: PermissionedExternalCapabilityAdapter["execute"]): PermissionedExternalCapabilityAdapter {
+  return baseAdapter({ actorType: "local_tool", actorId: "local_tool.pige.node_os_readonly", execute });
+}
+
+function makeHighRiskAdapter(execute: PermissionedExternalCapabilityAdapter["execute"]): PermissionedExternalCapabilityAdapter {
+  return baseAdapter({
+    actorType: "skill",
+    actorId: "skill.external.shell",
+    execute,
+    highRisk: {
+      effect: "arbitrary_shell",
+      presentation: {
+        action: "run_shell_command",
+        target: "local_system",
+        subject: { kind: "executable_name", value: "lark-cli" }
+      }
+    }
+  });
+}
+
+function baseAdapter(input: {
+  actorType: "skill" | "local_tool";
+  actorId: string;
+  execute: PermissionedExternalCapabilityAdapter["execute"];
+  highRisk?: PermissionedExternalCapabilityAdapter["permission"]["highRisk"];
+}): PermissionedExternalCapabilityAdapter {
   return {
     tool: {
-      name: "pige_fetch_release_notes",
-      label: "Fetch release notes",
-      description: "Read one bounded synthetic release-notes status through an injected external adapter.",
-      parameters: {
-        type: "object",
-        properties: { channel: { type: "string", enum: ["stable"] } },
-        required: ["channel"],
-        additionalProperties: false
-      },
-      outputSchema: {
-        type: "object",
-        properties: { status: { type: "string" } },
-        required: ["status"],
-        additionalProperties: false
-      },
+      name: input.actorType === "local_tool" ? "pige_read_release_channel" : "pige_external_shell",
+      label: "Synthetic capability",
+      description: "One bounded synthetic capability.",
+      parameters: { type: "object", additionalProperties: true },
+      outputSchema: { type: "object", additionalProperties: true },
       effect: "read_only",
       inputTrust: "model_generated",
       outputTrust: "host_validated",
-      dataBoundary: {
-        resourceScope: "current_vault",
-        pathAuthority: "host_only",
-        sourceIdAuthority: "host_only",
-        modelAuthority: "none"
-      },
+      dataBoundary: { resourceScope: "current_vault", pathAuthority: "host_only", sourceIdAuthority: "host_only", modelAuthority: "none" },
       execution: "sequential",
-      idempotency: { mode: "idempotent", scope: "current_vault" },
-      limits: { maxInputBytes: 1_024, maxOutputBytes: 4_096, timeoutMs: 10_000 },
+      idempotency: { mode: "idempotent", scope: "tool_call" },
+      limits: { maxInputBytes: 1024, maxOutputBytes: 4096, timeoutMs: 10000 },
       ownerService: "PermissionBrokerHomeAgentTest"
     },
     actor: {
-      type: "skill",
-      id: "skill.release_notes",
-      displayName: "Release Notes Skill",
+      type: input.actorType,
+      id: input.actorId,
+      displayName: "Synthetic capability",
       version: "1.0.0",
-      digest: `sha256:${"a".repeat(64)}`
+      digest: digest(input.actorId)
     },
-    action: {
-      id: "fetch.release_notes",
-      version: "1",
-      labelKey: "permissions.action.fetch_release_notes"
-    },
+    action: { id: "synthetic.execute", version: "1", labelKey: "permissions.action.synthetic" },
     permission: {
-      capability: "external_network",
-      dataBoundary: "network",
+      capability: input.actorType === "local_tool" ? "external_network" : "run_shell",
+      dataBoundary: input.actorType === "local_tool" ? "network" : "local",
       resourceScope: "current_action",
-      resourceKind: "network",
-      reasonCode: "external.release_notes"
+      resourceKind: input.actorType === "local_tool" ? "network" : "shell",
+      reasonCode: "synthetic.execute",
+      ...(input.highRisk ? { highRisk: input.highRisk } : {})
     },
-    normalizeInput: (input) => {
-      onNormalize();
-      return input;
-    },
-    resourceIdentity: () => ({ endpointId: "synthetic-release-notes" }),
+    normalizeInput: (value) => value,
+    resourceIdentity: () => ({ identity: "synthetic" }),
+    resourceDisplayName: () => "lark-cli",
     resourceCount: () => 1,
-    execute: async (_input, signal) => {
-      await onExecute(signal);
-      return result;
-    },
-    adoptCompleted: async () => result
-  };
-}
-
-function capabilityPort(policyChanged: () => boolean): AgentIngestCapabilityPort {
-  return {
-    snapshot: () => ({
-      localDatabaseStatus: "ready",
-      parserToolchainReady: false,
-      ocrEngines: [],
-      speechInputAvailable: false,
-      embeddingModelInstalled: false,
-      lexicalSearchAvailable: policyChanged(),
-      vectorSearchAvailable: false,
-      rerankerAvailable: false
-    })
+    execute: input.execute
   };
 }
 
 function makeFixture(): {
-  readonly vaultPath: string;
-  readonly appDataPath: string;
-  readonly vault: VaultSummary;
-  readonly vaults: {
-    current(): VaultSummary;
-    activeVaultPath(): string;
-    assertWriterLease(): void;
-  };
+  vaultPath: string;
+  appDataPath: string;
+  vault: VaultSummary;
+  vaults: { current(): VaultSummary; activeVaultPath(): string; assertWriterLease(): void };
 } {
-  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-permission-home-")));
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-ar1-home-")));
   roots.push(root);
   const appDataPath = path.join(root, "app-data");
   fs.mkdirSync(appDataPath, { recursive: true });
   createVaultOnDisk({
     parentDirectory: root,
-    vaultName: "Permission Home",
+    vaultName: "AR1 Home",
     appDataPath,
     tempPath: path.join(root, "temp"),
-    now: new Date("2026-07-14T00:00:00.000Z")
+    now: new Date("2026-07-22T00:00:00.000Z")
   });
-  const vaultPath = path.join(root, "Permission Home");
+  const vaultPath = path.join(root, "AR1 Home");
   const vault = loadVaultSummary(vaultPath);
   return {
     vaultPath,
@@ -422,7 +242,7 @@ function makeFixture(): {
 }
 
 const provider: ProviderProfileSummary = {
-  id: "provider_permission_home",
+  id: "provider_ar1_home",
   presetId: "openai",
   displayName: "Synthetic Provider",
   providerKind: "openai",
@@ -430,41 +250,34 @@ const provider: ProviderProfileSummary = {
   modelListStrategy: "list_models",
   cloudBoundary: "cloud",
   boundaryVerification: "builtin_verified",
-  createdAt: "2026-07-14T00:00:00.000Z",
-  updatedAt: "2026-07-14T00:00:00.000Z"
+  createdAt: "2026-07-22T00:00:00.000Z",
+  updatedAt: "2026-07-22T00:00:00.000Z"
 };
 
 const model: ModelProfileSummary = {
-  id: "model_permission_home",
+  id: "model_ar1_home",
   providerProfileId: provider.id,
-  modelId: "synthetic-permission-model",
-  displayName: "Synthetic Permission Model",
+  modelId: "synthetic-ar1-model",
+  displayName: "Synthetic AR1 Model",
   source: "provider_list",
   enabled: true,
   isDefault: true,
-  createdAt: "2026-07-14T00:00:00.000Z",
-  updatedAt: "2026-07-14T00:00:00.000Z"
+  createdAt: "2026-07-22T00:00:00.000Z",
+  updatedAt: "2026-07-22T00:00:00.000Z"
 };
 
 const runtimeConfig: ModelProviderRuntimeConfig = {
-  provider: { ...provider, authSecretRef: "provider_secret_permission_home" },
+  provider: { ...provider, authSecretRef: "provider_secret_ar1_home" },
   model,
-  apiKey: "synthetic-permission-key"
+  apiKey: "synthetic-key"
 };
 
 function makeModels(): HomeAgentModelPort {
   return {
     summary: () => ({
-      presets: [],
-      providers: [provider],
-      models: [model],
-      defaultModelProfileId: model.id,
+      presets: [], providers: [provider], models: [model], defaultModelProfileId: model.id,
       hasDefaultModel: true,
-      defaultBinding: {
-        state: "ready",
-        providerProfileId: provider.id,
-        modelProfileId: model.id
-      }
+      defaultBinding: { state: "ready", providerProfileId: provider.id, modelProfileId: model.id }
     }),
     getDefaultModel: () => model,
     getDefaultProvider: () => provider,
@@ -475,7 +288,7 @@ function makeModels(): HomeAgentModelPort {
 
 function makeRetrieval(vaultId: string): HomeAgentRetrievalPort {
   const search = (request: HomeAgentAskRequest): RetrievalSearchResult => ({
-    searchedAt: "2026-07-14T00:00:00.000Z",
+    searchedAt: "2026-07-22T00:00:00.000Z",
     activeVaultId: vaultId,
     query: request.query,
     mode: "lexical_sqlite_fts",
@@ -487,7 +300,7 @@ function makeRetrieval(vaultId: string): HomeAgentRetrievalPort {
   return {
     search,
     ask: (request): RetrievalAskResult => ({
-      requestId: "request_permission_home",
+      requestId: "request_ar1_home",
       state: "completed",
       result: {
         query: request.query,
@@ -500,9 +313,6 @@ function makeRetrieval(vaultId: string): HomeAgentRetrievalPort {
   };
 }
 
-function readJobs(vaultPath: string): JobRecord[] {
-  const root = path.join(vaultPath, ".pige", "jobs");
-  return fs.readdirSync(root)
-    .filter((name) => name.endsWith(".json"))
-    .map((name) => JSON.parse(fs.readFileSync(path.join(root, name), "utf8")) as JobRecord);
+function digest(value: string): `sha256:${string}` {
+  return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
 }

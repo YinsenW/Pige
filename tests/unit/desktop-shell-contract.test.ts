@@ -271,7 +271,6 @@ describe("desktop shell build contract", () => {
       .toBeLessThan(deleteProviderHandler.indexOf("getModelProviderRegistry().deleteProvider(validatedRequest)"));
     expect(mainSource).toContain('states: ["running", "cancel_requested"]');
     expect(mainSource).toContain('classes: ["agent_turn", "agent_ingest"]');
-    expect(mainSource).toContain("getModelEgressApprovalService().assertProviderInactive(activeVaultPath, providerProfileId)");
     expect(credentialHandler).not.toContain("oldApiKey");
     expect(deleteProviderHandler).not.toContain("authSecretRef");
     expect(mainSource).not.toContain('title: "Connect this model service?"');
@@ -1020,9 +1019,7 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("new DatasetQueryService()");
     expect(mainSource).toContain("getDatasetQueryService()");
     expect(mainSource).toContain('getDatasetService().canMaterialize("csv_file")');
-    expect(mainSource).toContain(
-      "getDatasetService(),\n      getModelEgressApprovalService(),\n      getPermissionBrokerService()\n    );"
-    );
+    expect(mainSource).toContain("getDatasetService()\n    );");
     expect(buildSource).toContain("DATASET_QUERY_WORKER_ENTRY_NAME");
     expect(buildSource).toContain('alias("./src/main/workers/dataset-query-worker.ts")');
     expect(buildSource).toContain('"services/permissioned-external-capability-service": alias(');

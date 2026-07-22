@@ -9,9 +9,6 @@ import type {
   JobsListRequest,
   JobsListResult,
   LocalDatabaseRebuildResult,
-  ModelEgressPendingRequest,
-  ModelEgressResolveRequest,
-  ModelEgressResolveResult,
   PermissionPendingRequest,
   PermissionResolveRequest,
   PermissionResolveResult,
@@ -83,12 +80,7 @@ import {
   isValidReaderSelectionJobScope,
   type ReaderSelectionJobScope
 } from "./reader-selection-job-binding";
-import {
-  ModelEgressApprovalService,
-  ModelEgressConfirmationRequiredError
-} from "./model-egress-approval-service";
 import { PermissionBrokerService } from "./permission-broker-service";
-import type { PermissionedExternalJobPort } from "./permissioned-external-capability-service";
 
 type JobRecordFile = JobRecordSnapshot;
 
@@ -232,7 +224,7 @@ const COOPERATIVELY_CANCELABLE_CLASSES = new Set<JobClass>([
   "index_rebuild"
 ]);
 
-export class JobsService implements PermissionedExternalJobPort {
+export class JobsService {
   readonly #vaults: JobsVaultPort;
   readonly #sourcePages: SourcePageService;
   readonly #agentIngest: AgentIngestService | undefined;
@@ -240,7 +232,6 @@ export class JobsService implements PermissionedExternalJobPort {
   readonly #documentParser: DocumentParserPort | undefined;
   readonly #ocr: OcrPort | undefined;
   readonly #datasets: DatasetMaterializerPort | undefined;
-  readonly #modelEgressApprovals: ModelEgressApprovalService | undefined;
   readonly #permissionBroker: PermissionBrokerService | undefined;
   readonly #jobRecordStores = new Map<string, JobRecordStore>();
   readonly #jobExecutionCoordinators = new Map<string, JobExecutionCoordinator>();
@@ -254,7 +245,6 @@ export class JobsService implements PermissionedExternalJobPort {
     documentParser?: DocumentParserPort,
     ocr?: OcrPort,
     datasets?: DatasetMaterializerPort,
-    modelEgressApprovals?: ModelEgressApprovalService,
     permissionBroker?: PermissionBrokerService
   ) {
     this.#vaults = vaults;
@@ -264,7 +254,6 @@ export class JobsService implements PermissionedExternalJobPort {
     this.#documentParser = documentParser;
     this.#ocr = ocr;
     this.#datasets = datasets;
-    this.#modelEgressApprovals = modelEgressApprovals;
     this.#permissionBroker = permissionBroker;
   }
 
@@ -302,81 +291,6 @@ export class JobsService implements PermissionedExternalJobPort {
       throw new PigeDomainError("job.binding_changed", "The Job no longer belongs to the active vault.");
     }
     return toJobSummary(vaultPath, job);
-  }
-
-  resolveModelEgress(request: ModelEgressResolveRequest): ModelEgressResolveResult {
-    const approvals = this.#requireModelEgressApprovals();
-    const activeVault = this.#vaults.current();
-    const vaultPath = this.#requireActiveVaultPath();
-    if (!activeVault) throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
-    const before = approvals.read(vaultPath, request.requestId);
-    if (before.vaultId !== activeVault.vaultId || before.jobId !== request.jobId) {
-      throw new PigeDomainError("model_egress.approval_stale", "The model egress approval belongs to another vault.");
-    }
-    const currentSnapshot = this.#readJobSnapshot(vaultPath, before.jobId);
-    if (!currentSnapshot) {
-      throw new PigeDomainError("model_egress.approval_stale", "The model egress approval Job is unavailable.");
-    }
-    const sameCommittedDecision =
-      (before.state === "approved" && request.decision === "allow_once") ||
-      (before.state === "denied" && request.decision === "deny");
-    const decisionAlreadyApplied = sameCommittedDecision && (
-      (before.state === "approved" &&
-        (currentSnapshot.job.state === "queued" || currentSnapshot.job.state === "running") &&
-        currentSnapshot.job.error?.modelEgressApprovalRequestId === undefined) ||
-      (before.state === "denied" &&
-        currentSnapshot.job.state === "failed_final" &&
-        currentSnapshot.job.error?.modelEgressApprovalRequestId === before.id)
-    );
-    if (decisionAlreadyApplied) {
-      approvals.releaseDecision(vaultPath, before.id);
-      if (before.state === "denied") approvals.markReconciled(vaultPath, before.id);
-      return {
-        status: before.state === "denied" ? "denied" : "approved",
-        requestId: before.id,
-        jobId: before.jobId
-      };
-    }
-    if (before.state !== "pending" && !sameCommittedDecision) {
-      approvals.commitDecision(vaultPath, request.requestId, request.decision);
-    }
-    const jobSnapshot = this.#assertModelEgressResolutionCurrent(vaultPath, before, currentSnapshot);
-    const resumesLiveInvocation = approvals.hasLiveWaiter(request.requestId);
-    const resolved = approvals.commitDecision(vaultPath, request.requestId, request.decision);
-    this.#reconcileModelEgressRecord(vaultPath, resolved, resumesLiveInvocation, jobSnapshot);
-    approvals.releaseDecision(vaultPath, resolved.id);
-    if (resolved.state === "denied") approvals.markReconciled(vaultPath, resolved.id);
-    return {
-      status: resolved.state === "denied" ? "denied" : "approved",
-      requestId: resolved.id,
-      jobId: resolved.jobId
-    };
-  }
-
-  pendingModelEgress(requestId: string): ModelEgressPendingRequest | undefined {
-    const approvals = this.#requireModelEgressApprovals();
-    const activeVault = this.#vaults.current();
-    const vaultPath = this.#requireActiveVaultPath();
-    if (!activeVault) return undefined;
-    const record = approvals.pending(vaultPath, requestId);
-    if (!record || record.vaultId !== activeVault.vaultId || !record.operationId || !record.decisionHash) {
-      return undefined;
-    }
-    const snapshot = this.#readJobSnapshot(vaultPath, record.jobId);
-    if (
-      !snapshot ||
-      snapshot.job.state !== "waiting_model_egress" ||
-      snapshot.job.error?.modelEgressApprovalRequestId !== record.id
-    ) return undefined;
-    return {
-      requestId: record.id,
-      jobId: record.jobId,
-      providerProfileId: record.providerProfileId,
-      modelProfileId: record.modelProfileId,
-      reasonCode: record.reasonCode,
-      contentClasses: record.contentClasses,
-      requestedAt: record.createdAt
-    };
   }
 
   resolvePermission(request: PermissionResolveRequest): PermissionResolveResult {
@@ -630,18 +544,10 @@ export class JobsService implements PermissionedExternalJobPort {
       return true;
     }
     if (record.state !== "approved") return false;
-    this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
-      reason: "permission_decided",
-      clearStage: true,
-      proof: {
-        kind: "permission_decided",
-        permissionRequestId: record.id,
-        permissionDecisionId: record.decisionId
-      },
-      facts: { inputRefs: [decisionRef] },
-      message: "One-use permission approved; the same Agent Job will revalidate before execution."
-    });
-    return true;
+    throw new PigeDomainError(
+      "permission.request_stale",
+      "Legacy permission-wait Jobs cannot resume through the AR1 authority boundary."
+    );
   }
 
   bindPermissionRequest(input: {
@@ -668,33 +574,10 @@ export class JobsService implements PermissionedExternalJobPort {
       this.#jobExecutionCoordinator(vaultPath).patch(snapshot, { inputRefs: [permissionRef], permissionRequestIds: [input.requestId], checkpoints: [checkpoint], message: "The automatic permission decision is bound before consumption." });
       return;
     }
-    this.#jobExecutionCoordinator(vaultPath).settle(snapshot, {
-      kind: "waiting",
-      reason: "permission",
-      permissionRequestId: input.requestId,
-      error: {
-        code: "permission.confirmation_required",
-        domain: "permission",
-        messageKey: "errors.permission.confirmation_required",
-        retryable: false,
-        severity: "warning",
-        userAction: "grant_permission",
-        permissionRequestId: input.requestId
-      },
-      facts: {
-        stage: "waiting_for_tool",
-        inputRefs: [permissionRef],
-        checkpoints: [{
-          id: permissionCheckpointId(input.requestId),
-          step: "permission_authorization",
-          state: "not_started",
-          inputRefs: [permissionRef],
-          outputRefs: [],
-          resumeHint: "revalidate_exact_permission_action"
-        }]
-      },
-      message: "Waiting for one exact current-action permission decision."
-    });
+    throw new PigeDomainError(
+      "permission.request_stale",
+      "Legacy permission-wait Jobs cannot be created through the AR1 authority boundary."
+    );
   }
 
   commitPermissionConsumption(input: {
@@ -804,140 +687,6 @@ export class JobsService implements PermissionedExternalJobPort {
     const job = this.#readJobSnapshot(vaultPath, input.jobId)?.job;
     if (!job || !jobHasPermissionBinding(job, input.requestId, input.bindingHash)) return undefined;
     return readPermissionCompletionMarker(job, input.requestId, input.bindingHash);
-  }
-
-  reconcileModelEgressApprovals(): { readonly reconciled: number } {
-    const approvals = this.#modelEgressApprovals;
-    const activeVault = this.#vaults.current();
-    const vaultPath = this.#vaults.activeVaultPath();
-    if (!approvals || !activeVault || !vaultPath) return { reconciled: 0 };
-    let reconciled = 0;
-    for (const record of approvals.listResolvable(vaultPath)) {
-      if (record.vaultId !== activeVault.vaultId) continue;
-      try {
-        if (this.#reconcileModelEgressRecord(vaultPath, record)) reconciled += 1;
-        if (record.state === "denied" || record.state === "consumed") {
-          approvals.markReconciled(vaultPath, record.id);
-        }
-      } catch (caught) {
-        if (!(caught instanceof PigeDomainError) || caught.code !== "model_egress.approval_stale") throw caught;
-        if (record.state === "approved") {
-          approvals.invalidate(vaultPath, record.id);
-        } else if (record.state === "denied" || record.state === "consumed") {
-          approvals.markReconciled(vaultPath, record.id);
-        }
-      }
-    }
-    return { reconciled };
-  }
-
-  #assertModelEgressResolutionCurrent(
-    vaultPath: string,
-    record: ReturnType<ModelEgressApprovalService["read"]>,
-    existingSnapshot?: JobRecordSnapshot
-  ): JobRecordSnapshot {
-    const snapshot = existingSnapshot ?? this.#readJobSnapshot(vaultPath, record.jobId);
-    if (!snapshot) {
-      throw new PigeDomainError("model_egress.approval_stale", "The model egress approval Job is unavailable.");
-    }
-    const current = snapshot.job;
-    if (
-      current.activeVaultId !== record.vaultId ||
-      (current.class !== "agent_turn" && current.class !== "agent_ingest") ||
-      current.state !== "waiting_model_egress" ||
-      current.error?.modelEgressApprovalRequestId !== record.id
-    ) {
-      throw new PigeDomainError("model_egress.approval_stale", "The Job no longer waits for this model egress approval.");
-    }
-    return snapshot;
-  }
-
-  #reconcileModelEgressRecord(
-    vaultPath: string,
-    record: ReturnType<ModelEgressApprovalService["read"]>,
-    resumesLiveInvocation = false,
-    expectedSnapshot?: JobRecordSnapshot
-  ): boolean {
-    const snapshot = expectedSnapshot ?? this.#readJobSnapshot(vaultPath, record.jobId);
-    if (!snapshot) {
-      throw new PigeDomainError("model_egress.approval_stale", "The model egress approval Job is unavailable.");
-    }
-    const current = snapshot.job;
-    if (
-      current.activeVaultId !== record.vaultId ||
-      (current.class !== "agent_turn" && current.class !== "agent_ingest")
-    ) {
-      throw new PigeDomainError("model_egress.approval_stale", "The model egress approval Job binding changed.");
-    }
-    const boundRequestId = current.error?.modelEgressApprovalRequestId;
-    const terminalState = new Set<JobState>([
-      "completed",
-      "completed_with_warnings",
-      "failed_final",
-      "cancelled",
-      "awaiting_review"
-    ]).has(current.state);
-    if (terminalState) return false;
-    const alreadyApproved = record.state === "approved" &&
-      (current.state === "queued" || current.state === "running") &&
-      boundRequestId === undefined;
-    const alreadyDenied = record.state === "denied" && current.state === "failed_final";
-    if (alreadyApproved || alreadyDenied) return false;
-    if (record.state === "consumed" && current.state === "queued" && boundRequestId === undefined) {
-      const message = "A consumed model send could not prove completion; the Job will request fresh one-use approval before replay.";
-      if (current.message === message) return false;
-      this.#jobExecutionCoordinator(vaultPath).patch(snapshot, { message });
-      return true;
-    }
-    if (
-      boundRequestId !== record.id ||
-      !new Set<JobState>(["waiting_model_egress", "failed_retryable"]).has(current.state)
-    ) {
-      throw new PigeDomainError("model_egress.approval_stale", "The Job no longer waits for this model egress approval.");
-    }
-
-    if (record.state === "denied") {
-      this.#jobExecutionCoordinator(vaultPath).settle(snapshot, {
-        kind: "failed",
-        error: {
-          code: "model_provider.egress_denied",
-          domain: "model_provider",
-          messageKey: "errors.model_provider.egress_denied",
-          retryable: false,
-          severity: "info",
-          userAction: "none",
-          modelEgressApprovalRequestId: record.id
-        },
-        message: "The user denied this exact model send; preserved input and sources remain available."
-      });
-      return true;
-    }
-
-    if (!record.operationId) {
-      throw new PigeDomainError("model_egress.approval_stale", "The model egress decision operation is unavailable.");
-    }
-    const proof = {
-      kind: "model_egress_decided" as const,
-      approvalRequestId: record.id,
-      operationId: record.operationId
-    };
-    if (resumesLiveInvocation && current.state === "waiting_model_egress") {
-      this.#jobExecutionCoordinator(vaultPath).resume(snapshot, {
-        stage: current.stage ?? "planning",
-        proof,
-        message: "The exact model send was approved once; the active Agent invocation is resuming."
-      });
-    } else {
-      this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
-        reason: "model_egress_decided",
-        clearStage: true,
-        proof,
-        message: record.state === "consumed"
-          ? "A consumed model send could not prove completion; the Job will request fresh one-use approval before replay."
-          : "The exact model send was approved once; the same Job is ready to resume."
-      });
-    }
-    return true;
   }
 
   async approveProposal(
@@ -1093,12 +842,6 @@ export class JobsService implements PermissionedExternalJobPort {
       };
     }
 
-    const activeModelEgressApprovals = this.#modelEgressApprovals &&
-      (jobFile.job.class === "agent_turn" || jobFile.job.class === "agent_ingest")
-      ? this.#modelEgressApprovals.listForJob(vaultPath, jobFile.job.id).filter(
-          (record) => record.state === "pending" || record.state === "approved"
-        )
-      : [];
     const activePermissionRequests = this.#permissionBroker &&
       (jobFile.job.class === "agent_turn" || jobFile.job.class === "agent_ingest")
       ? this.#permissionBroker.listForJob(vaultPath, jobFile.job.id).filter(
@@ -1111,9 +854,6 @@ export class JobsService implements PermissionedExternalJobPort {
       message: "Job cancelled. Preserved source data remains in the vault."
     }).job;
     this.#activeExecutions.get(jobFile.job.id)?.abort();
-    for (const approval of activeModelEgressApprovals) {
-      this.#modelEgressApprovals?.invalidate(vaultPath, approval.id);
-    }
     for (const request of activePermissionRequests) {
       this.#permissionBroker?.cancel(vaultPath, request.id);
     }
@@ -2620,15 +2360,6 @@ export class JobsService implements PermissionedExternalJobPort {
               { operationIds: [operationId] }
             ).job;
           },
-          onModelEgressPending: (requestId) => {
-            activeJob = this.#markJobWaitingModelEgress(
-              jobFile.path,
-              activeJob,
-              requestId,
-              "Waiting for one exact approval before selected evidence is sent to the configured model service.",
-              execution.control.durableWriteState()
-            );
-          },
           assertSourceCurrent: (expectedSource) => {
             const currentSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id);
             if (
@@ -2897,21 +2628,6 @@ export class JobsService implements PermissionedExternalJobPort {
           this.#markJobWaitingDependency(jobFile.path, runningJob, "Waiting for the referenced original source to be reconnected before Agent ingest can continue.", durableState);
         } else if (caught instanceof PigeDomainError && /^source\.(?:checksum_mismatch|managed_unavailable|path_outside_vault|reference_invalid)$/u.test(caught.code)) {
           this.#markJobFailedFinal(jobFile.path, runningJob, "The source cannot be verified safely. Re-import it to create a new source version before Agent ingest.", durableState);
-        } else if (caught instanceof ModelEgressConfirmationRequiredError) {
-          this.#markJobWaitingModelEgress(
-            jobFile.path,
-            runningJob,
-            caught.requestId,
-            "Waiting for one exact approval before selected evidence is sent to the configured model service.",
-            durableState
-          );
-        } else if (caught instanceof PigeDomainError && caught.code === "model_egress.confirmation_required") {
-          this.#markJobFailedFinal(
-            jobFile.path,
-            runningJob,
-            "Model egress confirmation is unavailable; preserved source evidence remains local.",
-            durableState
-          );
         } else if (caught instanceof PigeDomainError && caught.code === "model_egress.blocked") {
           this.#markJobFailedFinal(jobFile.path, runningJob, "Model egress is blocked by the current privacy policy; the preserved source remains local.", durableState);
         } else if (caught instanceof PigeDomainError && caught.code === "model_egress.denied") {
@@ -3799,37 +3515,6 @@ export class JobsService implements PermissionedExternalJobPort {
     }).job;
   }
 
-  #markJobWaitingModelEgress(
-    filePath: string,
-    fallback: JobRecord,
-    requestId: string,
-    message: string,
-    durableState?: JobDurableWriteState
-  ): JobRecord {
-    const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
-    const snapshot = this.#alignDurableExecutionState(
-      coordinator,
-      this.#requireExecutionSnapshot(filePath, fallback),
-      durableState
-    );
-    return coordinator.settle(snapshot, {
-      kind: "waiting",
-      reason: "model_egress",
-      approvalRequestId: requestId,
-      error: {
-        code: "model_provider.egress_confirmation_required",
-        domain: "model_provider",
-        messageKey: "errors.model_provider.egress_confirmation_required",
-        retryable: false,
-        severity: "warning",
-        userAction: "confirm_model_egress",
-        modelEgressApprovalRequestId: requestId
-      },
-      message,
-      facts: { stage: "waiting_for_model" }
-    }).job;
-  }
-
   #markJobFailedFinal(
     filePath: string,
     fallback: JobRecord,
@@ -3879,16 +3564,6 @@ export class JobsService implements PermissionedExternalJobPort {
       throw new PigeDomainError("vault_missing", "The active Pige vault changed during Job creation.");
     }
     return activeVault.vaultId;
-  }
-
-  #requireModelEgressApprovals(): ModelEgressApprovalService {
-    if (!this.#modelEgressApprovals) {
-      throw new PigeDomainError(
-        "model_egress.approval_store_invalid",
-        "The model egress approval service is unavailable."
-      );
-    }
-    return this.#modelEgressApprovals;
   }
 
   #requirePermissionBroker(): PermissionBrokerService {

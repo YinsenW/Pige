@@ -32,7 +32,6 @@
       ["jobs-service.ts", 6956, "japrd"],
       ["knowledge-activity-service.ts", 1622, "rd"],
       ["local-tool-manager-service.ts", 1254, "prd"],
-      ["model-egress-approval-service.ts", 688, "prd"],
       ["model-egress-content.ts", 77, "pf"],
       ["model-egress-policy.ts", 79, "pf"],
       ["model-runtime-binding.ts", 113, "ap"],

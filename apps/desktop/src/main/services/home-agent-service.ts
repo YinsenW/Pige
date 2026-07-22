@@ -63,10 +63,6 @@ import {
 } from "./dataset-query-types";
 import { containsRestrictedModelContent } from "./model-egress-content";
 import { createModelEgressDecision } from "./model-egress-policy";
-import {
-  ModelEgressApprovalService,
-  ModelEgressConfirmationRequiredError
-} from "./model-egress-approval-service";
 import { PermissionConfirmationRequiredError } from "./permission-broker-service";
 import { PermissionedExternalCapabilityRegistry } from "./permissioned-external-capability-service";
 import type { ModelProviderRuntimeConfig } from "./model-provider-registry";
@@ -322,7 +318,6 @@ export class HomeAgentService {
   readonly #conversations: AgentTurnConversationStore;
   readonly #urls: HomeAgentUrlPort | undefined;
   readonly #datasets: HomeAgentDatasetQueryPort | undefined;
-  readonly #modelEgressApprovals: ModelEgressApprovalService | undefined;
   readonly #externalCapabilities: PermissionedExternalCapabilityRegistry | undefined;
   readonly #permissionSettings: AgentPermissionSettingsPort | undefined;
   readonly #readerSelectionMutations: HomeAgentReaderSelectionMutationPort | undefined;
@@ -337,7 +332,6 @@ export class HomeAgentService {
     conversations: AgentTurnConversationStore = new AgentTurnConversationStore(),
     urls?: HomeAgentUrlPort,
     datasets?: HomeAgentDatasetQueryPort,
-    modelEgressApprovals?: ModelEgressApprovalService,
     externalCapabilities?: PermissionedExternalCapabilityRegistry,
     permissionSettings?: AgentPermissionSettingsPort,
     readerSelectionMutations?: HomeAgentReaderSelectionMutationPort
@@ -351,7 +345,6 @@ export class HomeAgentService {
     this.#conversations = conversations;
     this.#urls = urls;
     this.#datasets = datasets;
-    this.#modelEgressApprovals = modelEgressApprovals;
     this.#externalCapabilities = externalCapabilities;
     this.#permissionSettings = permissionSettings;
     this.#readerSelectionMutations = readerSelectionMutations;
@@ -741,25 +734,6 @@ export class HomeAgentService {
             )
           };
         }
-        if (!datasetContinuation && sourceJob.state === "waiting_model_egress") {
-          return {
-            requestId,
-            jobId: sourceJob.id,
-            conversationEventId: preservedTurn.event.id,
-            conversationId: preservedTurn.event.conversationId,
-            tailEventId: preservedTurn.event.id,
-            state: "waiting",
-            modelUsage: "none",
-            sourceIds,
-            error: sourceJob.error ?? createErrorSummary(
-              "model_provider.egress_confirmation_required",
-              "errors.model_provider.egress_confirmation_required",
-              false,
-              "confirm_model_egress",
-              "warning"
-            )
-          };
-        }
         if (!datasetContinuation && sourceJob.state === "waiting_dependency") {
           return {
             requestId,
@@ -835,6 +809,7 @@ export class HomeAgentService {
               inputKind: validatedRequest.inputKind,
               objective,
               locale: validatedRequest.locale,
+              clientTurnId: requirePreservedClientTurnId(activeTurn),
               ...(validatedRequest.scope ? { scope: validatedRequest.scope } : {})
             },
             activeVault,
@@ -1064,6 +1039,7 @@ export class HomeAgentService {
               inputKind: preservedMetadata.inputKind,
               objective: preservedMetadata.objective,
               locale: preservedMetadata.locale,
+              clientTurnId: requirePreservedClientTurnId(preserved),
               ...(preservedMetadata.scope ? { scope: preservedMetadata.scope } : {})
             },
             activeVault,
@@ -1183,7 +1159,7 @@ export class HomeAgentService {
   }
 
   async #run(
-    request: AgentSubmitTurnRequest & { readonly text: string },
+    request: AgentSubmitTurnRequest & { readonly text: string; readonly clientTurnId: string },
     activeVault: VaultSummary,
     vaultPath: string,
     session: HomeAgentJobSession,
@@ -1722,6 +1698,7 @@ export class HomeAgentService {
       policyHash: policy.policyHash,
       runtimeKind: "desktop_local",
       clientCapabilityTier: "desktop_full",
+      confirmationOwner: { kind: "agent_turn", clientTurnId: request.clientTurnId },
       assertCurrent: assertCurrentBindingAndVault
     }) ?? [];
     const externalTools = registeredExternalTools.map((tool): PigeAgentToolDefinition => ({
@@ -1730,6 +1707,25 @@ export class HomeAgentService {
         try {
           const result = await tool.execute(args, toolSignal, context);
           externalToolEvidence.push(projectExternalToolEvidence(tool.name, result));
+          const currentPrivacy = session.current.privacy ?? {
+            usedCloudModel: false,
+            usedNetwork: false,
+            usedShell: false,
+            accessedExternalFiles: false,
+            permissionDecisionIds: []
+          };
+          session.current = this.#jobs.patchAgentTurnJob(session.current, {
+            privacy: {
+              ...currentPrivacy,
+              usedNetwork: currentPrivacy.usedNetwork ||
+                tool.capability === "external_network" ||
+                tool.capability === "install_package" ||
+                tool.capability === "install_local_tool",
+              usedShell: currentPrivacy.usedShell || tool.capability === "run_shell",
+              accessedExternalFiles: currentPrivacy.accessedExternalFiles ||
+                tool.capability === "external_filesystem"
+            }
+          });
           return result;
         } finally {
           session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;
@@ -2044,28 +2040,6 @@ export class HomeAgentService {
         throw new PigeDomainError("permission.request_stale", "The pending permission no longer matches this Agent turn.");
       }
       session.current = durable;
-      return;
-    }
-    if (failure.error.modelEgressApprovalRequestId) {
-      const durable = this.#jobs.readAgentTurnJob(session.current.id);
-      if (
-        durable?.state === "waiting_model_egress" &&
-        durable.error?.modelEgressApprovalRequestId === failure.error.modelEgressApprovalRequestId
-      ) {
-        session.current = durable;
-        return;
-      }
-      session.current = this.#jobs.settleAgentTurnJob(session.current, {
-        kind: "waiting",
-        reason: "model_egress",
-        approvalRequestId: failure.error.modelEgressApprovalRequestId,
-        error: failure.error,
-        message: "Agent turn is waiting for one exact model egress decision.",
-        facts: {
-          stage: "waiting_for_model",
-          privacy: modelInvocationPrivacy(session)
-        }
-      });
       return;
     }
     if (
@@ -3018,10 +2992,20 @@ function modelInvocationPrivacy(session: HomeAgentJobSession): NonNullable<JobRe
   return {
     usedCloudModel: usesExternalProvider,
     usedNetwork: usesExternalProvider || session.current.privacy?.usedNetwork === true,
-    usedShell: false,
-    accessedExternalFiles: false,
+    usedShell: session.current.privacy?.usedShell === true,
+    accessedExternalFiles: session.current.privacy?.accessedExternalFiles === true,
     permissionDecisionIds: session.current.privacy?.permissionDecisionIds ?? []
   };
+}
+
+function requirePreservedClientTurnId(turn: PreservedAgentTurn): string {
+  if (!turn.event.clientTurnId) {
+    throw new PigeDomainError(
+      "agent_runtime.turn_binding_invalid",
+      "The preserved Agent turn has no stable client identity."
+    );
+  }
+  return turn.event.clientTurnId;
 }
 
 function isDatasetQueryContinuationJob(job: JobRecord): boolean {
@@ -3311,27 +3295,6 @@ function toHomeAgentFailure(caught: unknown): HomeAgentFailure {
     }
     if (caught.code === "model_provider.binding_changed") {
       return homeAgentFailure("waiting", caught.code, "errors.model_provider.binding_unusable", false, "configure_model", "warning");
-    }
-    if (caught.code === "model_egress.confirmation_required") {
-      const requestId = caught instanceof ModelEgressConfirmationRequiredError
-        ? caught.requestId
-        : undefined;
-      return {
-        state: "waiting",
-        error: PigeErrorSummarySchema.parse({
-          ...createErrorSummary(
-            "model_provider.egress_confirmation_required",
-            "errors.model_provider.egress_confirmation_required",
-            false,
-            "confirm_model_egress",
-            "warning"
-          ),
-          ...(requestId ? { modelEgressApprovalRequestId: requestId } : {})
-        })
-      };
-    }
-    if (caught.code === "model_egress.denied") {
-      return homeAgentFailure("failed", "model_provider.egress_denied", "errors.model_provider.egress_denied", false, "none", "info");
     }
     if (caught.code === "permission.confirmation_required") {
       const requestId = caught instanceof PermissionConfirmationRequiredError

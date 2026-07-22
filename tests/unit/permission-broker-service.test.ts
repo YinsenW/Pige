@@ -3,37 +3,25 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { PermissionActionBinding } from "@pige/schemas";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
 import {
   assertPermissionActionBinding,
   createPermissionActionBinding,
-  PermissionBrokerService,
-  PermissionConfirmationRequiredError,
-  type PermissionActionSummary
+  PermissionBrokerService
 } from "../../apps/desktop/src/main/services/permission-broker-service";
-import { LocalSettingsStore } from "../../apps/desktop/src/main/services/local-settings";
-import { PermissionSettingsService } from "../../apps/desktop/src/main/services/permission-settings-service";
-import { createVaultOnDisk } from "../../apps/desktop/src/main/services/vault-layout";
 
-const VAULT_ID = "vault_20260714_permission01";
-const OTHER_VAULT_ID = "vault_20260714_permission02";
-const JOB_ID = "job_20260714_permission01";
 const roots: string[] = [];
-
-const summary: PermissionActionSummary = {
-  actorDisplayName: "Synthetic Network Skill",
-  actionLabelKey: "permissions.actions.syntheticNetwork",
-  resourceKind: "url",
-  resourceCount: 1,
-  reasonCode: "external.network"
-};
+const VAULT_ID = "vault_20260722_authority01";
+const JOB_ID = "job_20260722_authority01";
+const OWNER = { kind: "agent_turn" as const, clientTurnId: "turn_20260722_abcdefghijklmnop" };
 
 afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
-describe("PermissionBrokerService", () => {
-  it("treats ordinary first-party OS capability calls as authorized by the submitted user task", () => {
+describe("PermissionBrokerService AR1 authority", () => {
+  it("authorizes an ordinary registered first-party action without any permission record", () => {
     const fixture = createFixture();
     const exact = binding({
       actorType: "local_tool",
@@ -41,617 +29,137 @@ describe("PermissionBrokerService", () => {
       capability: "run_shell",
       dataBoundary: "local"
     });
-    const approved = fixture.service.prepare(fixture.vaultPath, exact, summary);
 
-    expect(approved).toMatchObject({ state: "approved", decision: "allow_once" });
-    expect(readJson(path.join(
-      decisionDirectory(fixture.machineRoot, VAULT_ID),
-      `${approved.decisionId}.json`
-    ))).toMatchObject({ decidedBy: "system", autoAllowedBy: "user_task" });
+    expect(fixture.broker.authorizeTurnAction({ vaultPath: fixture.vaultPath, binding: exact }))
+      .toEqual({ status: "authorized", binding: exact });
+    expect(fixture.broker.listForJob(fixture.vaultPath, JOB_ID)).toEqual([]);
+    expect(findJsonFiles(fixture.machineRoot)).toEqual([]);
   });
 
-  it("auto-authorizes only eligible desktop-local actions and binds the exact permission revision", () => {
-    const fixture = createYoloFixture();
-    const exact = binding();
-    const approved = fixture.service.prepare(fixture.vaultPath, exact, summary);
-
-    expect(approved).toMatchObject({ state: "approved", decision: "allow_once" });
-    const decision = readJson(path.join(
-      decisionDirectory(fixture.machineRoot, VAULT_ID),
-      `${approved.decisionId}.json`
-    ));
-    expect(decision).toMatchObject({
-      decidedBy: "system",
-      autoAllowedBy: "yolo_full_access",
-      permissionSettingsRevision: 1
-    });
-    expect(fixture.service.consume(fixture.vaultPath, approved.id, exact).state).toBe("consumed");
-    expect(() => fixture.service.assertExecutionAuthority(fixture.vaultPath, approved.id, exact)).not.toThrow();
-  });
-
-  it("revokes a YOLO decision before consume or adapter execution when settings change", () => {
-    const fixture = createYoloFixture();
-    const beforeConsumeBinding = binding();
-    const beforeConsume = fixture.service.prepare(fixture.vaultPath, beforeConsumeBinding, summary);
-    fixture.settings.disableYolo(1);
-    expect(captureError(() => fixture.service.consume(
-      fixture.vaultPath,
-      beforeConsume.id,
-      beforeConsumeBinding
-    ))).toMatchObject({ code: "permission.authority_revoked" });
-
-    fixture.settings.enableYolo(2);
-    const beforeExecuteBinding = binding({
-      jobId: "job_20260714_permissionexecute",
-      actionInputHash: digest("execute fence")
-    });
-    const beforeExecute = fixture.service.prepare(fixture.vaultPath, beforeExecuteBinding, summary);
-    fixture.service.consume(fixture.vaultPath, beforeExecute.id, beforeExecuteBinding);
-    fixture.settings.disableYolo(3);
-    expect(captureError(() => fixture.service.assertExecutionAuthority(
-      fixture.vaultPath,
-      beforeExecute.id,
-      beforeExecuteBinding
-    ))).toMatchObject({ code: "permission.authority_revoked" });
-  });
-
-  it("auto-authorizes ordinary local command and install capabilities under YOLO", () => {
-    const fixture = createYoloFixture();
-    for (const [index, capability] of (["run_shell", "install_package", "install_local_tool"] as const).entries()) {
-      const exact = binding({
-        jobId: `job_20260714_yolocap${index}`,
-        actionInputHash: digest(`yolo capability ${capability}`),
-        capability,
-        dataBoundary: capability === "run_shell" ? "local" : "network"
-      });
-      expect(fixture.service.prepare(fixture.vaultPath, exact, summary).state).toBe("approved");
-    }
-  });
-
-  it("keeps remote, destructive, credential, and unrelated capabilities pending under YOLO", () => {
-    const fixture = createYoloFixture();
-    const ineligible = [
-      binding({ runtimeKind: "remote_agent_backend", clientCapabilityTier: "web_client" }),
-      binding({
-        jobId: "job_20260714_destructive",
-        actionInputHash: digest("destructive"),
-        capability: "run_shell",
-        dataBoundary: "destructive"
-      }),
-      binding({
-        jobId: "job_20260714_credential",
-        actionInputHash: digest("credential"),
-        capability: "use_brokered_credential",
-        dataBoundary: "brokered_credential"
-      }),
-      binding({
-        jobId: "job_20260714_settings",
-        actionInputHash: digest("settings"),
-        capability: "change_settings",
-        dataBoundary: "local"
-      })
-    ];
-
-    for (const exact of ineligible) {
-      expect(fixture.service.prepare(fixture.vaultPath, exact, summary).state).toBe("pending");
-    }
-  });
-
-  it("does not let third-party actors inherit first-party user-task authority", () => {
+  it("does not let third-party or changed-boundary actions inherit submitted-turn authority", () => {
     const fixture = createFixture();
-    for (const [index, actor] of [
-      { actorType: "package" as const, actorId: "package.unreviewed.command" },
-      { actorType: "local_tool" as const, actorId: "third_party.pige.command-spoof" }
-    ].entries()) {
-      const thirdParty = binding({
-        jobId: `job_20260714_thirdparty${index}`,
-        actionInputHash: digest(`third-party ${index}`),
-        ...actor,
-        capability: "run_shell",
-        dataBoundary: "local"
-      });
-      expect(fixture.service.prepare(fixture.vaultPath, thirdParty, summary).state).toBe("pending");
+    for (const candidate of [
+      binding({ actorType: "skill", actorId: "skill.external.shell", capability: "run_shell" }),
+      binding({ actorType: "local_tool", actorId: "pige.command-execution", dataBoundary: "destructive" }),
+      binding({ actorType: "local_tool", actorId: "pige.command-execution", runtimeKind: "remote_agent_backend", clientCapabilityTier: "web_client" })
+    ]) {
+      expect(() => fixture.broker.authorizeTurnAction({ vaultPath: fixture.vaultPath, binding: candidate }))
+        .toThrowError(expect.objectContaining({ code: "permission.high_risk_classification_required" }));
     }
+    expect(findJsonFiles(fixture.machineRoot)).toEqual([]);
   });
 
-  it("rejects drift in every exact current-action binding fact", () => {
+  it("registers one exact high-risk effect with the canonical owner and honors deny without a lifecycle record", async () => {
+    const fixture = createFixture();
+    const exact = binding({ actorType: "skill", actorId: "skill.external.shell", capability: "run_shell" });
+    const request = {
+      vaultPath: fixture.vaultPath,
+      binding: exact,
+      owner: OWNER,
+      resolveHighRisk: () => "committed" as const,
+      highRisk: {
+        effect: "arbitrary_shell" as const,
+        presentation: {
+          action: "run_shell_command" as const,
+          target: "local_system" as const,
+          subject: { kind: "executable_name" as const, value: "lark-cli" }
+        }
+      }
+    };
+
+    const blocked = fixture.broker.authorizeTurnAction(request);
+    expect(blocked).toMatchObject({ status: "confirmation_required", revision: 1 });
+    if (blocked.status !== "confirmation_required") throw new Error("Expected confirmation.");
+    expect(fixture.confirmations.pending()).toMatchObject({
+      status: "pending",
+      revision: blocked.revision,
+      confirmation: { confirmationId: blocked.confirmationId, owner: OWNER, effect: "arbitrary_shell" }
+    });
+
+    await expect(fixture.confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: blocked.confirmationId,
+      expectedRevision: blocked.revision,
+      decision: "deny"
+    })).resolves.toMatchObject({ status: "committed", decision: "deny" });
+    expect(fixture.broker.authorizeTurnAction(request)).toMatchObject({ status: "denied" });
+    expect(findJsonFiles(fixture.machineRoot)).toEqual([]);
+  });
+
+  it("returns exact one-use authority after canonical allow and rejects contradictory effect tuples", async () => {
+    const fixture = createFixture();
+    const exact = binding({ actorType: "package", actorId: "package.external.install", capability: "install_package", dataBoundary: "network" });
+    const request = {
+      vaultPath: fixture.vaultPath,
+      binding: exact,
+      owner: OWNER,
+      resolveHighRisk: () => "committed" as const,
+      highRisk: {
+        effect: "install_unreviewed_package" as const,
+        presentation: {
+          action: "install_package" as const,
+          target: "local_toolchain" as const,
+          subject: { kind: "package_name" as const, value: "@larksuite/cli" }
+        }
+      }
+    };
+    const blocked = fixture.broker.authorizeTurnAction(request);
+    if (blocked.status !== "confirmation_required") throw new Error("Expected confirmation.");
+    await fixture.confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: blocked.confirmationId,
+      expectedRevision: blocked.revision,
+      decision: "allow"
+    });
+    expect(fixture.broker.authorizeTurnAction(request)).toEqual({ status: "authorized", binding: exact });
+
+    expect(() => fixture.broker.authorizeTurnAction({
+      ...request,
+      highRisk: {
+        effect: "arbitrary_shell",
+        presentation: {
+          action: "run_shell_command",
+          target: "local_system",
+          subject: { kind: "executable_name", value: "node" }
+        }
+      }
+    })).toThrowError(expect.objectContaining({ code: "permission.high_risk_classification_invalid" }));
+  });
+
+  it("preserves every exact path, scope, identity and policy fence in the binding hash", () => {
     const exact = binding();
     const variants: readonly Partial<BindingIdentity>[] = [
-      { vaultId: OTHER_VAULT_ID },
-      { jobId: "job_20260714_permission02" },
-      { actorType: "package" },
-      { actorId: "skill.synthetic.changed" },
-      { actorVersion: "2.0.0" },
-      { actorDigest: digest("changed actor") },
-      { actionId: "network.fetch_changed" },
-      { actionVersion: "2" },
+      { vaultId: "vault_20260722_authority02" },
+      { jobId: "job_20260722_authority02" },
+      { actorId: "skill.external.changed" },
       { actionInputHash: digest("changed input") },
-      { capability: "external_filesystem" },
-      { dataBoundary: "filesystem" },
       { resourceScope: "current_file" },
       { resourceIdentityHash: digest("changed resource") },
-      { policyContextId: "policy_context_permission_changed" },
       { policyHash: digest("changed policy") },
-      { runtimeKind: "remote_agent_backend" },
-      { clientCapabilityTier: "web_client" }
+      { runtimeKind: "remote_agent_backend", clientCapabilityTier: "web_client" }
     ];
-
     for (const variant of variants) {
-      expect(captureError(() => assertPermissionActionBinding(exact, binding(variant))))
-        .toMatchObject({ code: "permission.binding_changed" });
+      expect(() => assertPermissionActionBinding(exact, binding(variant)))
+        .toThrowError(expect.objectContaining({ code: "permission.binding_changed" }));
     }
   });
 
-  it("binds the canonical action strictly and cancels an unresolved request when policy facts drift", () => {
-    const fixture = createFixture();
-    const exact = binding();
-    const pending = fixture.service.prepare(fixture.vaultPath, exact, summary);
-
-    expect(fixture.service.prepare(fixture.vaultPath, binding(), summary).id).toBe(pending.id);
-    expect(binding().bindingHash).toBe(exact.bindingHash);
-
-    const forged = { ...exact, policyHash: digest("forged policy") };
-    expect(captureError(() => fixture.service.prepare(fixture.vaultPath, forged, summary)))
-      .toMatchObject({ code: "permission.binding_changed" });
-    expect(fixture.service.read(fixture.vaultPath, pending.id).state).toBe("pending");
-
-    const changed = binding({ policyHash: digest("changed policy") });
-    const replacement = fixture.service.prepare(fixture.vaultPath, changed, summary);
-    expect(replacement.id).not.toBe(pending.id);
-    expect(replacement.binding.bindingHash).toBe(changed.bindingHash);
-    expect(fixture.service.read(fixture.vaultPath, pending.id).state).toBe("cancelled");
-  });
-
-  it("persists pending, allow-once, consumption, completion, and denial as strict lifecycle states", () => {
-    const fixture = createFixture();
-    const exact = binding();
-    const pending = fixture.service.prepare(fixture.vaultPath, exact, summary);
-
-    expect(pending.state).toBe("pending");
-    expect(captureError(() => fixture.service.consume(fixture.vaultPath, pending.id, exact)))
-      .toBeInstanceOf(PermissionConfirmationRequiredError);
-
-    const allowed = fixture.service.commitDecision(fixture.vaultPath, {
-      requestId: pending.id,
-      jobId: JOB_ID,
-      decision: "allow_once"
-    });
-    expect(allowed.lifecycle).toMatchObject({
-      id: pending.id,
-      state: "approved",
-      decision: "allow_once",
-      decisionId: allowed.decision.id
-    });
-    expect(allowed.decision).toMatchObject({
-      decision: "allow_once",
-      scope: "once",
-      decidedBy: "user",
-      autoAllowedBy: "none"
-    });
-
-    const consumed = fixture.service.consume(fixture.vaultPath, pending.id, exact);
-    expect(consumed).toMatchObject({ state: "consumed", decision: "allow_once" });
-    expect(consumed.consumedAt).toBeDefined();
-
-    const completionMarkerHash = digest("synthetic completed action");
-    const completed = fixture.service.markCompleted(
-      fixture.vaultPath,
-      pending.id,
-      exact,
-      completionMarkerHash
-    );
-    expect(completed).toMatchObject({
-      state: "consumed",
-      completionMarkerHash
-    });
-    expect(completed.completedAt).toBeDefined();
-    expect(fixture.service.markCompleted(
-      fixture.vaultPath,
-      pending.id,
-      exact,
-      completionMarkerHash
-    ).completedAt).toBe(completed.completedAt);
-    expect(captureError(() => fixture.service.markCompleted(
-      fixture.vaultPath,
-      pending.id,
-      exact,
-      digest("different completion")
-    ))).toMatchObject({ code: "permission.request_stale" });
-
-    const deniedBinding = binding({
-      jobId: "job_20260714_permissiondeny",
-      actionInputHash: digest("denied input")
-    });
-    const deniedPending = fixture.service.prepare(fixture.vaultPath, deniedBinding, summary);
-    const denied = fixture.service.commitDecision(fixture.vaultPath, {
-      requestId: deniedPending.id,
-      jobId: deniedBinding.jobId,
-      decision: "deny"
-    });
-    expect(denied.lifecycle).toMatchObject({ state: "denied", decision: "deny" });
-    expect(denied.decision.scope).toBe("never");
-    expect(captureError(() => fixture.service.consume(
-      fixture.vaultPath,
-      deniedPending.id,
-      deniedBinding
-    ))).toBeInstanceOf(PermissionConfirmationRequiredError);
-  });
-
-  it("reconciles a committed decision after restart without making consumed authority reusable", () => {
-    const fixture = createFixture();
-    const exact = binding();
-    const pending = fixture.service.prepare(fixture.vaultPath, exact, summary);
-    const requestPath = lifecyclePath(fixture.machineRoot, VAULT_ID, pending.id);
-    const originalRename = fs.renameSync.bind(fs);
-    const rename = vi.spyOn(fs, "renameSync").mockImplementation((source, target) => {
-      if (
-        typeof source === "string" &&
-        typeof target === "string" &&
-        path.basename(source).startsWith(".tmp-") &&
-        target === requestPath
-      ) {
-        throw Object.assign(new Error("synthetic crash after decision commit"), { code: "EIO" });
-      }
-      return originalRename(source, target);
-    });
-    try {
-      expect(captureError(() => fixture.service.commitDecision(fixture.vaultPath, {
-        requestId: pending.id,
-        jobId: JOB_ID,
-        decision: "allow_once"
-      }))).toMatchObject({ code: "permission.store_invalid" });
-    } finally {
-      rename.mockRestore();
-    }
-
-    expect(fixture.service.read(fixture.vaultPath, pending.id).state).toBe("pending");
-    expect(jsonFiles(decisionDirectory(fixture.machineRoot, VAULT_ID))).toHaveLength(1);
-
-    expect(fixture.service.pending(fixture.vaultPath, pending.id)).toBeUndefined();
-    expect(fixture.service.read(fixture.vaultPath, pending.id).state).toBe("approved");
-    const reopened = reopen(fixture.machineRoot);
-    expect(reopened.reconcileCommittedDecisions(fixture.vaultPath)).toBe(0);
-    expect(reopened.read(fixture.vaultPath, pending.id).state).toBe("approved");
-    expect(reopened.consume(fixture.vaultPath, pending.id, exact).state).toBe("consumed");
-
-    const afterSecondRestart = reopen(fixture.machineRoot);
-    expect(afterSecondRestart.reconcileCommittedDecisions(fixture.vaultPath)).toBe(0);
-    expect(captureError(() => afterSecondRestart.prepare(fixture.vaultPath, exact, summary)))
-      .toMatchObject({ code: "permission.completion_uncertain" });
-    expect(afterSecondRestart.read(fixture.vaultPath, pending.id).state).toBe("consumed");
-  });
-
-  it("rejects recovered saved-grant or YOLO authority for the current-action core", () => {
-    const fixture = createFixture();
-    const pending = fixture.service.prepare(fixture.vaultPath, binding(), summary);
-    const decisionId = deterministicDecisionId(pending.id, pending.createdAt);
-    fs.writeFileSync(path.join(decisionDirectory(fixture.machineRoot, VAULT_ID), `${decisionId}.json`), `${JSON.stringify({
-      id: decisionId,
-      schemaVersion: 1,
-      authorizationLayer: "permission_broker",
-      permissionRequestId: pending.id,
-      decision: "allow_once",
-      scope: "once",
-      resourceScope: "current_action",
-      decidedBy: "system",
-      autoAllowedBy: "yolo_full_access",
-      decidedAt: new Date().toISOString()
-    }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-
-    const reopened = reopen(fixture.machineRoot);
-    expect(captureError(() => reopened.reconcileCommittedDecisions(fixture.vaultPath)))
-      .toMatchObject({ code: "permission.store_invalid" });
-    expect(reopened.read(fixture.vaultPath, pending.id).state).toBe("pending");
-  });
-
-  it("revalidates already-approved decision authority and deterministic record identity", () => {
-    const mutations = [
-      (decision: Record<string, unknown>) => ({
-        ...decision,
-        decidedBy: "system",
-        autoAllowedBy: "yolo_full_access"
-      }),
-      (decision: Record<string, unknown>) => ({
-        ...decision,
-        id: "permdec_20260714_craftedidentity01"
-      })
-    ];
-
-    for (const mutate of mutations) {
-      const fixture = createFixture();
-      const pending = fixture.service.prepare(fixture.vaultPath, binding(), summary);
-      const allowed = fixture.service.commitDecision(fixture.vaultPath, {
-        requestId: pending.id,
-        jobId: JOB_ID,
-        decision: "allow_once"
-      });
-      const decisionPath = path.join(
-        decisionDirectory(fixture.machineRoot, VAULT_ID),
-        `${allowed.decision.id}.json`
-      );
-      fs.writeFileSync(
-        decisionPath,
-        `${JSON.stringify(mutate(readJson(decisionPath)), null, 2)}\n`,
-        { encoding: "utf8", mode: 0o600 }
-      );
-
-      const reopened = reopen(fixture.machineRoot);
-      expect(captureError(() => reopened.read(fixture.vaultPath, pending.id)))
-        .toMatchObject({ code: "permission.store_invalid" });
-      expect(captureError(() => reopened.prepare(fixture.vaultPath, binding(), summary)))
-        .toMatchObject({ code: "permission.store_invalid" });
-    }
-  });
-
-  it.skipIf(process.platform === "win32")("detects a decision-directory replacement before commit", () => {
-    const fixture = createFixture();
-    const pending = fixture.service.prepare(fixture.vaultPath, binding(), summary);
-    const decisions = decisionDirectory(fixture.machineRoot, VAULT_ID);
-    const displaced = path.join(fixture.root, "displaced-decisions");
-    const external = path.join(fixture.root, "external-decisions");
-    fs.mkdirSync(external, { mode: 0o700 });
-    let swapped = false;
-    const guarded = new PermissionBrokerService({
-      rootPath: fixture.machineRoot,
-      unsafeAllowUnfenced: true,
-      testOnlyHooks: {
-        beforeCreateCommit(directory) {
-          if (directory !== "decisions" || swapped) return;
-          swapped = true;
-          fs.renameSync(decisions, displaced);
-          fs.symlinkSync(external, decisions);
+  it("fails closed when the canonical confirmation owner is not wired", () => {
+    const fixture = createFixture(false);
+    expect(() => fixture.broker.authorizeTurnAction({
+      vaultPath: fixture.vaultPath,
+      binding: binding({ actorType: "skill", actorId: "skill.external.shell", capability: "run_shell" }),
+      owner: OWNER,
+      resolveHighRisk: () => "committed" as const,
+      highRisk: {
+        effect: "arbitrary_shell",
+        presentation: {
+          action: "run_shell_command",
+          target: "local_system",
+          subject: { kind: "executable_name", value: "node" }
         }
       }
-    });
-
-    expect(captureError(() => guarded.commitDecision(fixture.vaultPath, {
-      requestId: pending.id,
-      jobId: JOB_ID,
-      decision: "allow_once"
-    }))).toMatchObject({ code: "permission.store_invalid" });
-    expect(fs.readdirSync(external)).toEqual([]);
-    fs.unlinkSync(decisions);
-    fs.renameSync(displaced, decisions);
-  });
-
-  it.skipIf(process.platform === "win32")("detects a request-directory replacement before lifecycle commit", () => {
-    const fixture = createFixture();
-    const pending = fixture.service.prepare(fixture.vaultPath, binding(), summary);
-    const requests = path.dirname(lifecyclePath(fixture.machineRoot, VAULT_ID, pending.id));
-    const displaced = path.join(fixture.root, "displaced-requests-at-commit");
-    const external = path.join(fixture.root, "external-requests-at-commit");
-    fs.mkdirSync(external, { mode: 0o700 });
-    let swapped = false;
-    let successorName: string | undefined;
-    const guarded = new PermissionBrokerService({
-      rootPath: fixture.machineRoot,
-      unsafeAllowUnfenced: true,
-      testOnlyHooks: {
-        beforeReplaceCommit(directory) {
-          if (directory !== "requests" || swapped) return;
-          swapped = true;
-          fs.renameSync(requests, displaced);
-          successorName = fs.readdirSync(displaced).find((name) => name.startsWith(".tmp-"));
-          if (!successorName) throw new Error("Expected one exact temporary request record.");
-          fs.writeFileSync(path.join(external, successorName), "successor-must-survive\n", {
-            encoding: "utf8",
-            mode: 0o600
-          });
-          fs.symlinkSync(external, requests);
-        }
-      }
-    });
-
-    expect(captureError(() => guarded.commitDecision(fixture.vaultPath, {
-      requestId: pending.id,
-      jobId: JOB_ID,
-      decision: "allow_once"
-    }))).toMatchObject({ code: "permission.store_invalid" });
-    expect(successorName).toBeDefined();
-    if (!successorName) throw new Error("Expected the successor temporary record name.");
-    expect(fs.readFileSync(path.join(external, successorName), "utf8"))
-      .toBe("successor-must-survive\n");
-    fs.unlinkSync(requests);
-    fs.renameSync(displaced, requests);
-    expect(fixture.service.pending(fixture.vaultPath, pending.id)).toBeUndefined();
-    expect(fixture.service.read(fixture.vaultPath, pending.id).state).toBe("approved");
-  });
-
-  it.skipIf(process.platform === "win32")("rejects and preserves a same-name temporary successor before lifecycle commit", () => {
-    const fixture = createFixture();
-    const pending = fixture.service.prepare(fixture.vaultPath, binding(), summary);
-    const requests = path.dirname(lifecyclePath(fixture.machineRoot, VAULT_ID, pending.id));
-    let successorPath: string | undefined;
-    let successorBytes: Buffer | undefined;
-    const guarded = new PermissionBrokerService({
-      rootPath: fixture.machineRoot,
-      unsafeAllowUnfenced: true,
-      testOnlyHooks: {
-        beforeReplaceCommit(directory) {
-          if (directory !== "requests" || successorPath) return;
-          const temporaryName = fs.readdirSync(requests).find((name) => name.startsWith(".tmp-"));
-          if (!temporaryName) throw new Error("Expected one exact temporary request record.");
-          successorPath = path.join(requests, temporaryName);
-          const byteLength = fs.statSync(successorPath).size;
-          fs.unlinkSync(successorPath);
-          successorBytes = Buffer.alloc(byteLength, 0x78);
-          fs.writeFileSync(successorPath, successorBytes, { mode: 0o600 });
-        }
-      }
-    });
-
-    expect(captureError(() => guarded.commitDecision(fixture.vaultPath, {
-      requestId: pending.id,
-      jobId: JOB_ID,
-      decision: "allow_once"
-    }))).toMatchObject({ code: "permission.store_invalid" });
-    if (!successorPath || !successorBytes) throw new Error("Expected one same-name successor record.");
-    expect(fs.readFileSync(successorPath)).toEqual(successorBytes);
-    fs.unlinkSync(successorPath);
-    expect(fixture.service.pending(fixture.vaultPath, pending.id)).toBeUndefined();
-    expect(fixture.service.read(fixture.vaultPath, pending.id).state).toBe("approved");
-  });
-
-  it.skipIf(process.platform === "win32")("reports directory durability failures instead of returning success", () => {
-    const fixture = createFixture();
-    const pending = fixture.service.prepare(fixture.vaultPath, binding(), summary);
-    let brokerCommitStarted = false;
-    let durabilityFailureInjected = false;
-    const guarded = new PermissionBrokerService({
-      rootPath: fixture.machineRoot,
-      unsafeAllowUnfenced: true,
-      testOnlyHooks: {
-        beforeCreateCommit(directory) {
-          if (directory === "decisions") brokerCommitStarted = true;
-        }
-      }
-    });
-    const originalFsync = fs.fsyncSync.bind(fs);
-    const fsync = vi.spyOn(fs, "fsyncSync").mockImplementation((descriptor) => {
-      if (
-        brokerCommitStarted
-        && !durabilityFailureInjected
-        && fs.fstatSync(descriptor).isDirectory()
-      ) {
-        durabilityFailureInjected = true;
-        throw Object.assign(new Error("synthetic directory durability failure"), { code: "EIO" });
-      }
-      return originalFsync(descriptor);
-    });
-    try {
-      expect(captureError(() => guarded.commitDecision(fixture.vaultPath, {
-        requestId: pending.id,
-        jobId: JOB_ID,
-        decision: "allow_once"
-      }))).toMatchObject({ code: "permission.store_invalid" });
-    } finally {
-      fsync.mockRestore();
-    }
-    expect(fixture.service.pending(fixture.vaultPath, pending.id)).toBeUndefined();
-    expect(fixture.service.read(fixture.vaultPath, pending.id).state).toBe("approved");
-  });
-
-  it("fails closed for the wrong vault, Job, or exact action binding", () => {
-    const fixture = createFixture();
-    const otherVaultPath = createTestVault(
-      fixture.root,
-      "Permission Vault B",
-      OTHER_VAULT_ID
-    );
-    const exact = binding();
-    const pending = fixture.service.prepare(fixture.vaultPath, exact, summary);
-
-    expect(captureError(() => fixture.service.prepare(
-      fixture.vaultPath,
-      binding({ vaultId: OTHER_VAULT_ID }),
-      summary
-    ))).toMatchObject({ code: "permission.request_stale" });
-    expect(captureError(() => fixture.service.commitDecision(fixture.vaultPath, {
-      requestId: pending.id,
-      jobId: "job_20260714_wrongjob",
-      decision: "allow_once"
-    }))).toMatchObject({ code: "permission.request_stale" });
-    expect(captureError(() => fixture.service.consume(
-      fixture.vaultPath,
-      pending.id,
-      binding({ resourceIdentityHash: digest("different resource") })
-    ))).toMatchObject({ code: "permission.binding_changed" });
-    expect(captureError(() => fixture.service.read(otherVaultPath, pending.id)))
-      .toMatchObject({ code: "permission.store_invalid" });
-    expect(fixture.service.read(fixture.vaultPath, pending.id).state).toBe("pending");
-  });
-
-  it("stores bounded private body-free request and decision records", () => {
-    const fixture = createFixture();
-    const privateBody = "SYNTHETIC_PRIVATE_BODY_DO_NOT_PERSIST";
-    const rawCredential = "SYNTHETIC_BEARER_DO_NOT_PERSIST";
-    const exact = binding({
-      actionInputHash: digest(privateBody),
-      resourceIdentityHash: digest(rawCredential)
-    });
-    const pending = fixture.service.prepare(fixture.vaultPath, exact, summary);
-    const allowed = fixture.service.commitDecision(fixture.vaultPath, {
-      requestId: pending.id,
-      jobId: JOB_ID,
-      decision: "allow_once"
-    });
-    const requestPath = lifecyclePath(fixture.machineRoot, VAULT_ID, pending.id);
-    const decisionPath = path.join(
-      decisionDirectory(fixture.machineRoot, VAULT_ID),
-      `${allowed.decision.id}.json`
-    );
-    const durableText = `${fs.readFileSync(requestPath, "utf8")}\n${fs.readFileSync(decisionPath, "utf8")}`;
-    const durableRecords = [readJson(requestPath), readJson(decisionPath)];
-
-    expect(Buffer.byteLength(durableText, "utf8")).toBeLessThan(64 * 1024);
-    expect(durableText).not.toContain(privateBody);
-    expect(durableText).not.toContain(rawCredential);
-    expect(collectKeys(durableRecords)).not.toEqual(expect.arrayContaining([
-      "body",
-      "prompt",
-      "arguments",
-      "command",
-      "credential",
-      "secret",
-      "token"
-    ]));
-    expect(readJson(requestPath)).toMatchObject({
-      binding: {
-        actionInputHash: digest(privateBody),
-        resourceIdentityHash: digest(rawCredential)
-      }
-    });
-    if (process.platform !== "win32") {
-      expect(fs.statSync(requestPath).mode & 0o777).toBe(0o600);
-      expect(fs.statSync(path.dirname(requestPath)).mode & 0o777).toBe(0o700);
-    }
-  });
-
-  it.skipIf(process.platform === "win32")("rejects symlinked machine roots, descendants, and request records", () => {
-    const root = tempRoot("pige-permission-symlink-");
-    const machineRoot = path.join(root, "machine");
-    const externalRoot = path.join(root, "external");
-    fs.mkdirSync(machineRoot, { mode: 0o700 });
-    fs.mkdirSync(externalRoot, { mode: 0o700 });
-    const vaultPath = createTestVault(root, "Symlink Vault", VAULT_ID);
-    fs.symlinkSync(externalRoot, path.join(machineRoot, "permission-broker"));
-    const symlinkedRoot = reopen(machineRoot);
-    expect(captureError(() => symlinkedRoot.prepare(vaultPath, binding(), summary)))
-      .toMatchObject({ code: "permission.store_invalid" });
-    fs.unlinkSync(path.join(machineRoot, "permission-broker"));
-
-    const safe = reopen(machineRoot);
-    const pending = safe.prepare(vaultPath, binding(), summary);
-    const requestDirectory = path.dirname(lifecyclePath(machineRoot, VAULT_ID, pending.id));
-    const displacedRequests = path.join(root, "displaced-requests");
-    fs.renameSync(requestDirectory, displacedRequests);
-    fs.symlinkSync(externalRoot, requestDirectory);
-    expect(captureError(() => safe.read(vaultPath, pending.id)))
-      .toMatchObject({ code: "permission.store_invalid" });
-    fs.unlinkSync(requestDirectory);
-    fs.renameSync(displacedRequests, requestDirectory);
-
-    const requestPath = lifecyclePath(machineRoot, VAULT_ID, pending.id);
-    const displacedRecord = path.join(root, "displaced-request.json");
-    fs.renameSync(requestPath, displacedRecord);
-    fs.symlinkSync(displacedRecord, requestPath);
-    expect(captureError(() => safe.read(vaultPath, pending.id)))
-      .toMatchObject({ code: "permission.store_invalid" });
-  });
-
-  it.skipIf(process.platform === "win32")("rejects a machine root reached through a symlinked ancestor", () => {
-    const root = tempRoot("pige-permission-ancestor-symlink-");
-    const realParent = path.join(root, "real-parent");
-    const aliasParent = path.join(root, "alias-parent");
-    fs.mkdirSync(realParent, { mode: 0o700 });
-    fs.symlinkSync(realParent, aliasParent);
-    const machineRoot = path.join(aliasParent, "machine");
-    fs.mkdirSync(path.join(realParent, "machine"), { mode: 0o700 });
-    const vaultPath = createTestVault(root, "Ancestor Symlink Vault", VAULT_ID);
-    const service = reopen(machineRoot);
-
-    expect(captureError(() => service.prepare(vaultPath, binding(), summary)))
-      .toMatchObject({ code: "permission.store_invalid" });
+    })).toThrowError(expect.objectContaining({ code: "permission.confirmation_owner_unavailable" }));
   });
 });
 
@@ -662,127 +170,51 @@ function binding(overrides: Partial<BindingIdentity> = {}): PermissionActionBind
     vaultId: VAULT_ID,
     jobId: JOB_ID,
     actorType: "skill",
-    actorId: "skill.synthetic.network",
+    actorId: "skill.external.network",
     actorVersion: "1.0.0",
-    actorDigest: digest("synthetic skill package"),
+    actorDigest: digest("actor"),
     actionId: "network.fetch",
     actionVersion: "1",
-    actionInputHash: digest("synthetic action input"),
+    actionInputHash: digest("input"),
     capability: "external_network",
     dataBoundary: "network",
     resourceScope: "current_action",
-    resourceIdentityHash: digest("https://example.invalid/current"),
-    policyContextId: "policy_context_permission_test",
-    policyHash: digest("permission policy"),
+    resourceIdentityHash: digest("resource"),
+    policyContextId: "policy_context_authority",
+    policyHash: digest("policy"),
     runtimeKind: "desktop_local",
     clientCapabilityTier: "desktop_full",
     ...overrides
   });
 }
 
-function createFixture(): {
-  readonly root: string;
-  readonly machineRoot: string;
-  readonly vaultPath: string;
-  readonly service: PermissionBrokerService;
+function createFixture(withConfirmations = true): {
+  machineRoot: string;
+  vaultPath: string;
+  confirmations: HighRiskConfirmationService;
+  broker: PermissionBrokerService;
 } {
-  const root = tempRoot("pige-permission-broker-");
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-ar1-authority-")));
+  roots.push(root);
   const machineRoot = path.join(root, "machine");
-  fs.mkdirSync(machineRoot, { mode: 0o700 });
-  const vaultPath = createTestVault(root, "Permission Vault", VAULT_ID);
-  return {
-    root,
-    machineRoot,
-    vaultPath,
-    service: reopen(machineRoot)
-  };
-}
-
-function createYoloFixture(): ReturnType<typeof createFixture> & {
-  readonly settings: PermissionSettingsService;
-} {
-  const fixture = createFixture();
-  const settings = new PermissionSettingsService(new LocalSettingsStore(fixture.machineRoot));
-  expect(settings.enableYolo(0).status).toBe("committed");
-  return {
-    ...fixture,
-    settings,
-    service: new PermissionBrokerService({
-      rootPath: fixture.machineRoot,
-      unsafeAllowUnfenced: true,
-      permissionSettings: settings
-    })
-  };
-}
-
-function reopen(machineRoot: string): PermissionBrokerService {
-  return new PermissionBrokerService({ rootPath: machineRoot, unsafeAllowUnfenced: true });
-}
-
-function createTestVault(root: string, vaultName: string, vaultId: string): string {
-  createVaultOnDisk({
-    parentDirectory: path.join(root, "vaults"),
-    vaultName,
-    appDataPath: path.join(root, "app-data"),
-    tempPath: path.join(root, "temp")
+  const vaultPath = path.join(root, "vault");
+  fs.mkdirSync(machineRoot);
+  fs.mkdirSync(vaultPath);
+  const confirmations = new HighRiskConfirmationService();
+  const broker = new PermissionBrokerService({
+    rootPath: machineRoot,
+    unsafeAllowUnfenced: true,
+    ...(withConfirmations ? { confirmations } : {})
   });
-  const vaultPath = path.join(root, "vaults", vaultName);
-  const manifestPath = path.join(vaultPath, ".pige", "manifest.json");
-  const manifest = readJson(manifestPath);
-  fs.writeFileSync(manifestPath, `${JSON.stringify({ ...manifest, vault_id: vaultId }, null, 2)}\n`, "utf8");
-  return vaultPath;
+  return { machineRoot, vaultPath, confirmations, broker };
 }
 
-function lifecyclePath(machineRoot: string, vaultId: string, requestId: string): string {
-  return path.join(machineRoot, "permission-broker", vaultId, "requests", `${requestId}.json`);
-}
-
-function decisionDirectory(machineRoot: string, vaultId: string): string {
-  return path.join(machineRoot, "permission-broker", vaultId, "decisions");
-}
-
-function deterministicDecisionId(requestId: string, createdAt: string): string {
-  return `permdec_${createdAt.slice(0, 10).replaceAll("-", "")}_${createHash("sha256")
-    .update(`pige.permission.decision.v1\0${requestId}`, "utf8")
-    .digest("hex")
-    .slice(0, 24)}`;
-}
-
-function jsonFiles(directory: string): string[] {
-  return fs.readdirSync(directory).filter((name) => name.endsWith(".json"));
-}
-
-function readJson(filePath: string): Record<string, unknown> {
-  return JSON.parse(fs.readFileSync(filePath, "utf8")) as Record<string, unknown>;
-}
-
-function collectKeys(value: unknown, keys: string[] = []): string[] {
-  if (Array.isArray(value)) {
-    for (const item of value) collectKeys(item, keys);
-  } else if (value && typeof value === "object") {
-    for (const [key, item] of Object.entries(value)) {
-      keys.push(key.toLowerCase());
-      collectKeys(item, keys);
-    }
-  }
-  return keys;
-}
-
-function captureError(action: () => unknown): unknown {
-  try {
-    action();
-  } catch (caught) {
-    return caught;
-  }
-  throw new Error("Expected the action to fail closed.");
+function findJsonFiles(root: string): string[] {
+  return fs.readdirSync(root, { recursive: true })
+    .map(String)
+    .filter((entry) => entry.endsWith(".json"));
 }
 
 function digest(value: string): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
-}
-
-function tempRoot(prefix: string): string {
-  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
-  roots.push(root);
-  return root;
 }

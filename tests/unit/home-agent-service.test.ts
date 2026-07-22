@@ -32,7 +32,6 @@ import type {
 } from "../../apps/desktop/src/main/services/dataset-query-types";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { LocalSettingsStore } from "../../apps/desktop/src/main/services/local-settings";
-import { ModelEgressApprovalService } from "../../apps/desktop/src/main/services/model-egress-approval-service";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
 import { PermissionSettingsService } from "../../apps/desktop/src/main/services/permission-settings-service";
 import { PermissionedExternalCapabilityRegistry } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
@@ -996,7 +995,6 @@ describe("Home Pi Agent service", () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       {
         apply: ({ vaultPath, job, selection: durableSelection, replacement, action }) => ({
           status: "applied" as const,
@@ -1417,10 +1415,7 @@ describe("Home Pi Agent service", () => {
     writeSourceRecord(fixture.vaultPath, sourceId, { sensitive: true });
     writeKnowledgePage(fixture.vaultPath, [sourceId]);
     const result = makeSearchResult(fixture.vault.vaultId, { sourceIds: [sourceId] });
-    const machineRoot = path.join(path.dirname(fixture.vaultPath), "machine-egress");
-    fs.mkdirSync(machineRoot);
-    const approvals = new ModelEgressApprovalService({ rootPath: machineRoot, unsafeAllowUnfenced: true });
-    const jobs = new JobsService(fixture.vaults, undefined, undefined, undefined, undefined, undefined, approvals);
+    const jobs = new JobsService(fixture.vaults);
     let runtimeConfigReads = 0;
     let runtimeCalls = 0;
     const service = new HomeAgentService(
@@ -1437,8 +1432,7 @@ describe("Home Pi Agent service", () => {
       undefined,
       new AgentTurnConversationStore(),
       undefined,
-      undefined,
-      approvals
+      undefined
     );
     const request = {
       schemaVersion: 1 as const,
@@ -1459,8 +1453,6 @@ describe("Home Pi Agent service", () => {
     expect(runtimeConfigReads).toBe(0);
     expect(runtimeCalls).toBe(0);
     expect(job?.state).toBe("failed_final");
-    expect(jobs.list({ states: ["waiting_model_egress"] }).jobs).toEqual([]);
-    expect(approvals.listForJob(fixture.vaultPath, job?.id ?? "job_missing")).toEqual([]);
     const operations = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"));
     expect(operations.find((operation) => operation.kind === "model_egress_decision")).toMatchObject({
       kind: "model_egress_decision",
@@ -1778,7 +1770,6 @@ describe("Home Pi Agent service", () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       registry,
       permissionSettings
     ).ask({ query: "Read the external file." });
@@ -1833,7 +1824,6 @@ describe("Home Pi Agent service", () => {
       makeRetrievalPort(fixture.vault.vaultId),
       jobs,
       { run: async (request) => adapter.run(request) },
-      undefined,
       undefined,
       undefined,
       undefined,
@@ -2542,7 +2532,6 @@ SYNTHETIC_DISTRACTOR_BODY
       undefined,
       undefined,
       undefined,
-      undefined,
       { apply: publish }
     );
 
@@ -2973,10 +2962,7 @@ SYNTHETIC_DISTRACTOR_BODY
     );
     writeSourceRecord(fixture.vaultPath, sourceId, { sensitive: false }, "2026-07-16T02:00:00.000Z");
     writeKnowledgePage(fixture.vaultPath, []);
-    const machineRoot = path.join(path.dirname(fixture.vaultPath), "machine-scope-history-egress");
-    fs.mkdirSync(machineRoot);
-    const approvals = new ModelEgressApprovalService({ rootPath: machineRoot, unsafeAllowUnfenced: true });
-    const jobs = new JobsService(fixture.vaults, undefined, undefined, undefined, undefined, undefined, approvals);
+    const jobs = new JobsService(fixture.vaults);
     let runtimeCalls = 0;
     const service = new HomeAgentService(
       fixture.vaults,
@@ -3000,8 +2986,7 @@ SYNTHETIC_DISTRACTOR_BODY
       undefined,
       conversations,
       undefined,
-      undefined,
-      approvals
+      undefined
     );
 
     const outcomePromise = service.submitTurn({
@@ -3015,7 +3000,6 @@ SYNTHETIC_DISTRACTOR_BODY
     });
     expect(await outcomePromise).toMatchObject({ state: "completed" });
     expect(runtimeCalls).toBe(1);
-    expect(jobs.list({ states: ["waiting_model_egress"] }).jobs).toEqual([]);
   });
 
   it("rejects scoped attachments and duplicate current-note page identities before Pi", async () => {
@@ -3209,10 +3193,7 @@ SYNTHETIC_DISTRACTOR_BODY
     const sourceId = "src_20260711_noteprivacy";
     writeKnowledgePage(fixture.vaultPath, [sourceId]);
     writeSourceRecord(fixture.vaultPath, sourceId, { private: false, sensitive: false });
-    const machineRoot = path.join(path.dirname(fixture.vaultPath), "machine-note-egress");
-    fs.mkdirSync(machineRoot);
-    const approvals = new ModelEgressApprovalService({ rootPath: machineRoot, unsafeAllowUnfenced: true });
-    const jobs = new JobsService(fixture.vaults, undefined, undefined, undefined, undefined, undefined, approvals);
+    const jobs = new JobsService(fixture.vaults);
     const service = new HomeAgentService(
       fixture.vaults,
       makeModels(),
@@ -3244,8 +3225,7 @@ SYNTHETIC_DISTRACTOR_BODY
       undefined,
       new AgentTurnConversationStore(),
       undefined,
-      undefined,
-      approvals
+      undefined
     );
 
     const outcome = await service.submitTurn({
@@ -3258,7 +3238,6 @@ SYNTHETIC_DISTRACTOR_BODY
 
     expect(outcome).toMatchObject({ state: "failed", error: { code: "model_provider.egress_blocked" } });
     expect(outcome.jobId).toBeDefined();
-    expect(approvals.listForJob(fixture.vaultPath, outcome.jobId ?? "")).toEqual([]);
     expect(service.conversation({ scope: { kind: "current_note", pageId: HOME_PAGE_ID } })?.messages).toEqual([
       expect.objectContaining({ role: "user" })
     ]);
