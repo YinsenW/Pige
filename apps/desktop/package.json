@@ -30,7 +30,7 @@
     "@pige/schemas": "0.0.0",
     "fast-xml-parser": "5.10.1",
     "jsdom": "29.1.1",
-    "lucide-react": "1.17.0",
+    "lucide-react": "1.25.0",
     "mammoth": "1.12.0",
     "pdfjs-dist": "6.1.200",
     "proper-lockfile": "4.1.2",
