@@ -1553,6 +1553,39 @@ export function App(): React.JSX.Element {
             onError={setError}
             t={t}
           />
+        ) : view === "home" && selectedNote && activeVault && selectedNoteVaultId === activeVault.vaultId ? (
+          <LibraryPanel
+            libraryList={libraryList}
+            activeVaultId={activeVault.vaultId}
+            onResolveReaderSelection={resolveReaderSelection}
+            onSubmitReaderSelectionAction={submitReaderSelectionAction}
+            onSubmitReaderSelectionTransform={submitReaderSelectionTransform}
+            locale={locale}
+            onReaderSelectionAction={revealReaderSelectionAction}
+            onReaderSelectionTransform={revealReaderSelectionTransform}
+            selectedNote={selectedNote}
+            selectedNoteRelated={selectedNoteRelated}
+            noteLoadingPageId={noteLoadingPageId}
+            error={libraryError}
+            readerBackLabel={t("retrieval.backToResults")}
+            onGoHome={navigateHome}
+            onRefresh={refreshLibrary}
+            onSearch={(request) => window.pige.retrieval.search(request)}
+            searchFocusRequest={librarySearchFocusRequest}
+            onOpenNote={openNote}
+            onCloseNote={navigateHome}
+            noteAgentOpen={noteAgentOpen}
+            onToggleNoteAgent={toggleNoteAgent}
+            noteAgentToggleRef={noteAgentToggleRef}
+            developmentNotice={developmentNotice?.surface === "reader" ? developmentNotice : null}
+            onClearDevelopment={() => setDevelopmentNotice(null)}
+            onCopyNote={copyNoteMarkdown}
+            {...(selectedNote.renderContextId
+              ? { onActivateInlineReference: activateInlineReference }
+              : {})}
+            onDevelopment={(capability) => showDevelopmentCapability("reader", capability)}
+            t={t}
+          />
         ) : view === "library" && activeVault ? (
           <LibraryPanel
             libraryList={libraryList}
@@ -1653,7 +1686,8 @@ export function App(): React.JSX.Element {
             modelSummary={modelSummary}
             recentJobs={recentJobs}
             locale={locale}
-            onReaderSelectionAction={revealReaderSelectionAction}
+            noteLoadingPageId={noteLoadingPageId}
+            onOpenNote={openNoteTarget}
             draftText={homeDraftText}
             onDraftChange={setHomeDraftText}
             showFirstHomeGuide={onboarding?.showFirstHomeGuide === true}
@@ -4098,7 +4132,8 @@ function HomeComposer(props: {
   readonly modelSummary: ModelProviderSettingsSummary | null;
   readonly recentJobs: readonly JobSummary[];
   readonly locale: Locale;
-  readonly onReaderSelectionAction: (result: ReaderSelectionActionResult) => void;
+  readonly noteLoadingPageId: string | null;
+  readonly onOpenNote: (pageId: string, reportError?: boolean) => Promise<boolean>;
   readonly draftText: string;
   readonly onDraftChange: (text: string) => void;
   readonly showFirstHomeGuide: boolean;
@@ -4149,9 +4184,7 @@ function HomeComposer(props: {
     readonly rejectedFiles: readonly CaptureFileRejection[];
   } | null>(null);
   const [composerSubmitActive, setComposerSubmitActive] = useState(false);
-  const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
-  const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
-  const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
+  const noteLoadingPageId = props.noteLoadingPageId;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const conversationTimelineRef = useRef<HTMLElement | null>(null);
@@ -4170,9 +4203,6 @@ function HomeComposer(props: {
     readonly key: string;
     readonly clientTurnId: string;
   } | null>(null);
-  const noteOpenSequence = useRef(0);
-  const inlineReferenceSequence = useRef(0);
-  const selectedNoteRef = useRef<NoteRenderResult | null>(selectedNote);
   const modelSwitcherRef = useRef<HTMLButtonElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const modelOptionRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -4198,7 +4228,6 @@ function HomeComposer(props: {
   const activeVaultIdRef = useRef<string | undefined>(props.activeVault?.vaultId);
   const activeAgentDraftRef = useRef<ActiveAgentDraftBinding | null>(null);
   activeVaultIdRef.current = props.activeVault?.vaultId;
-  selectedNoteRef.current = selectedNote;
   voiceLanguageTagRef.current = props.locale;
   draftTextRef.current = text;
 
@@ -4746,15 +4775,13 @@ function HomeComposer(props: {
   const showHomeHero = visibleConversationMessages.length === 0 &&
     visibleOptimisticConversationTurns.length === 0 &&
     agentDraft === null &&
-    agentAnswer === null &&
-    selectedNote === null;
+    agentAnswer === null;
   const showConversationTimeline = visibleConversationMessages.length > 0 ||
     visibleOptimisticConversationTurns.length > 0 ||
     agentDraft !== null ||
     showConversationRunMessage ||
     liveConversationAnswer !== null;
   const conversationOwnsFlexibleSpace = showConversationTimeline &&
-    selectedNote === null &&
     agentAnswer?.datasetResult === undefined &&
     agentAnswer?.retrieval === undefined;
 
@@ -4835,11 +4862,6 @@ function HomeComposer(props: {
 
   useEffect(() => {
     conversationLoadSequence.current += 1;
-    noteOpenSequence.current += 1;
-    inlineReferenceSequence.current += 1;
-    setSelectedNote(null);
-    setSelectedNoteRelated(null);
-    setNoteLoadingPageId(null);
     setConversationTimeline(undefined);
     locallyCompletedConversationTailRef.current = null;
     setOptimisticConversationTurns([]);
@@ -4910,10 +4932,6 @@ function HomeComposer(props: {
     setAgentRunState("idle");
     setAgentModelUsage("none");
     setActiveSourceTurn(null);
-    noteOpenSequence.current += 1;
-    inlineReferenceSequence.current += 1;
-    setSelectedNote(null);
-    setSelectedNoteRelated(null);
     const submittedFiles = stagedComposerFiles;
     const submittedText = text;
     const turnText = hasText ? submittedText : props.t("home.organizeAttachedFilesIntent");
@@ -5239,64 +5257,14 @@ function HomeComposer(props: {
     setAgentError(nextTimeline?.latestTurn?.error ?? null);
   };
 
-  const openResultTarget = async (pageId: string, reportError = true): Promise<boolean> => {
-    const vaultId = activeVaultIdRef.current;
-    if (!vaultId) return false;
-    inlineReferenceSequence.current += 1;
-    const requestId = noteOpenSequence.current + 1;
-    noteOpenSequence.current = requestId;
-    setCaptureError(null);
-    setSelectedNoteRelated("loading");
-    setNoteLoadingPageId(pageId);
-    try {
-      const note = await window.pige.notes.render({ pageId });
-      if (
-        requestId !== noteOpenSequence.current ||
-        activeVaultIdRef.current !== vaultId ||
-        note.summary.pageId !== pageId
-      ) return false;
-      setSelectedNote(note);
-      void loadNoteRelated(pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
-      return true;
-    } catch {
-      if (requestId !== noteOpenSequence.current) return false;
-      if (reportError) setCaptureError(props.t("error.generic"));
-      return false;
-    } finally {
-      if (requestId === noteOpenSequence.current) setNoteLoadingPageId(null);
-    }
-  };
-
   const openResult = async (pageId: string): Promise<void> => {
-    await openResultTarget(pageId);
-  };
-
-  const activateInlineReference = async (href: string): Promise<ReaderInlineReferenceActivation> => {
-    const vaultId = activeVaultIdRef.current;
-    const note = selectedNoteRef.current;
-    const renderContextId = note?.renderContextId;
-    if (!vaultId || !note || !renderContextId) return "failed";
-    const pageId = note.summary.pageId;
-    const sequence = inlineReferenceSequence.current + 1;
-    inlineReferenceSequence.current = sequence;
-    const request: NoteResolveInlineReferenceRequest = {
-      apiVersion: 1,
-      requestId: createNoteReferenceRequestId(),
-      activeVaultId: vaultId,
-      currentPageId: pageId,
-      renderContextId,
-      href
-    };
-    return resolveAndOpenInlineReference(
-      request,
-      () => (
-        inlineReferenceSequence.current === sequence &&
-        activeVaultIdRef.current === vaultId &&
-        selectedNoteRef.current?.summary.pageId === pageId &&
-        selectedNoteRef.current?.renderContextId === renderContextId
-      ),
-      (targetPageId) => openResultTarget(targetPageId, false)
-    );
+    setCaptureError(null);
+    try {
+      const opened = await props.onOpenNote(pageId);
+      if (!opened) setCaptureError(props.t("error.generic"));
+    } catch {
+      setCaptureError(props.t("error.generic"));
+    }
   };
 
   return (
@@ -5631,38 +5599,7 @@ function HomeComposer(props: {
           </div>
         </section>
       ) : null}
-      {selectedNote ? (
-        <section className="home-reader">
-          <button
-            type="button"
-            className="ghost back-button"
-            onClick={() => {
-              noteOpenSequence.current += 1;
-              inlineReferenceSequence.current += 1;
-              setSelectedNote(null);
-              setSelectedNoteRelated(null);
-            }}
-          >
-            {props.t("retrieval.backToResults")}
-          </button>
-          <NoteReader
-            note={selectedNote}
-            {...(props.activeVault && selectedNote.renderContextId ? {
-              activeVaultId: props.activeVault.vaultId,
-              onResolveSelection: resolveReaderSelection,
-              onSubmitSelectionAction: submitReaderSelectionAction
-            } : {})}
-            locale={props.locale}
-            onSelectionActionResult={props.onReaderSelectionAction}
-            related={selectedNoteRelated}
-            relatedLoadingPageId={noteLoadingPageId}
-            onOpenRelated={openResult}
-            {...(selectedNote.renderContextId ? { onActivateInlineReference: activateInlineReference } : {})}
-            onDevelopment={props.onDevelopment}
-            t={props.t}
-          />
-        </section>
-      ) : agentAnswer?.datasetResult ? (
+      {agentAnswer?.datasetResult ? (
         <DatasetAnswerResult
           answer={agentAnswer}
           modelUsage={agentModelUsage}

@@ -2579,8 +2579,10 @@ describe("Home durable Agent conversation UI", () => {
   });
 
   it("renders final grounded citations without internal retrieval data and opens the stable page target", async () => {
-    const dom = createDom();
+    const dom = createDom(420);
     const harness = createHarness(completedGroundedTimeline());
+    harness.windowLayoutWidth = 420;
+    harness.windowLayoutAvailableWidth = 1600;
     let resolveNote: ((note: NoteRenderResult) => void) | undefined;
     harness.renderNote = (pageId) => new Promise((resolve) => {
       if (pageId !== "page_20260715_note0001") throw new Error("Unexpected citation target.");
@@ -2608,6 +2610,31 @@ describe("Home durable Agent conversation UI", () => {
     });
     await waitFor(dom, () => mount.container.querySelector(".note-reader") !== null);
     expect(mount.container.querySelector(".note-reader")?.textContent).toContain("Note A");
+    expect(harness.windowLayoutRequests.at(-1)).toEqual({
+      apiVersion: 1,
+      surface: "reader",
+      sidebarOpen: false,
+      noteAgentOpen: false
+    });
+
+    await clickElement(dom, buttonsByAriaLabel(mount.container, "Show note conversation")[0]!);
+    await waitFor(dom, () => harness.windowLayoutWidth === 960 && mount.container.querySelector(".note-agent") !== null);
+    expect(harness.windowLayoutRequests.at(-1)).toEqual({
+      apiVersion: 1,
+      surface: "reader",
+      sidebarOpen: false,
+      noteAgentOpen: true
+    });
+    expect(currentWindowLayout(harness).noteAgentPresentation).toBe("resident");
+
+    await clickElement(dom, buttonsByAriaLabel(mount.container, "Close note")[0]!);
+    await waitFor(dom, () => mount.container.querySelector(".note-reader") === null && harness.windowLayoutWidth === 420);
+    expect(currentWindowLayout(harness)).toMatchObject({
+      surface: "home",
+      sidebarPresentation: "closed",
+      noteAgentPresentation: "closed",
+      autoExpanded: false
+    });
 
     await act(async () => mount.root.unmount());
     dom.window.close();
