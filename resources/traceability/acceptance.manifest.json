@@ -1238,7 +1238,7 @@
     "EV-PROVIDER-CONNECTION": { "kind": "test", "path": "tests/unit/model-provider-connection.test.ts", "selector": "model provider connection tester" },
     "EV-RUNTIME": { "kind": "test", "path": "tests/unit/agent-runtime-service.test.ts", "selector": "becomes ready without resolving credential-bearing runtime configuration" },
     "EV-RUNTIME-NONSECRET-BINDING": { "kind": "test", "path": "tests/unit/model-provider-registry.test.ts", "selector": "checks the selected runtime binding by secret reference without decrypting credentials" },
-    "EV-JOB-NONSECRET-READINESS": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "schedules Agent ingest readiness without resolving runtime credentials" },
+    "EV-JOB-NONSECRET-READINESS": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "does not resolve runtime credentials or create a successor after capture" },
     "EV-RUNTIME-CONTRACT": { "kind": "implementation", "path": "packages/contracts/src/index.ts", "selector": "export interface RuntimeCapabilities" },
     "EV-OCR-ADAPTER": { "kind": "test", "path": "tests/unit/macos-vision-ocr-adapter.test.ts", "selector": "preferredLanguages" },
     "EV-DROP-ZONE": { "kind": "implementation", "path": "apps/desktop/src/renderer/src/App.tsx", "selector": "onDrop={handleDrop}" },
@@ -1251,12 +1251,12 @@
     "EV-DOCUMENT-CAPTURE": {
       "kind": "test",
       "path": "tests/unit/jobs-service.test.ts",
-      "selector": "routes preserved Office documents and direct images to Agent jobs without host parse or OCR children"
+      "selector": "preserves Office documents and images without Host-selected successors"
     },
     "EV-JOB-RECOVERY": {
       "kind": "test",
       "path": "tests/unit/jobs-service.test.ts",
-      "selector": "recovers a parent crash after durable child handoff without duplicating the child"
+      "selector": "recovers an interrupted capture by the same ID without inventing a child"
     },
     "EV-JOB-RECORD-CAS": { "kind": "test", "path": "tests/unit/job-record-store.test.ts", "selector": "commits exactly one compare-and-swap winner and returns a fresh byte revision" },
     "EV-JOB-CLAIM-RECOVERY": { "kind": "test", "path": "tests/unit/job-record-store.test.ts", "selector": "recovers a stale malformed owner after claim-sentinel initialization fails" },
@@ -1265,7 +1265,7 @@
     "EV-JOB-WAIT": {
       "kind": "test",
       "path": "tests/unit/jobs-service.test.ts",
-      "selector": "creates a waiting Agent ingest job when no default model is ready"
+      "selector": "requeues waiting Agent ingest jobs after a default model becomes ready"
     },
     "EV-JOB-CANCEL": {
       "kind": "test",
@@ -1476,9 +1476,9 @@
     "EV-PARSE-FOLLOWUP-DURABILITY": {
       "kind": "test",
       "path": "tests/unit/jobs-service.test.ts",
-      "selector": "persists parse follow-up jobs before the parent can leave its recoverable state"
+      "selector": "does not create an OCR successor when parse completion fails"
     },
-    "EV-OCR-FOLLOWUP-DURABILITY": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "persists Agent follow-up before an OCR parent can leave its recoverable state" },
+    "EV-OCR-FOLLOWUP-DURABILITY": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "does not create an Agent successor when OCR completion fails" },
     "EV-WAITING-AGENT-REQUEUE": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "requeues waiting Agent ingest jobs after a default model becomes ready" },
     "EV-OCR-NATIVE-FALLBACK": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "releases verified native PDF text when OCR becomes unavailable after parsing" },
     "EV-AGENT-EVIDENCE-REVISION": { "kind": "test", "path": "tests/unit/jobs-service.test.ts", "selector": "requeues Agent ingest when OCR changes the evidence during a model call" },
