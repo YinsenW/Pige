@@ -4023,6 +4023,48 @@ dd {
 
 .chip-remove:hover { background: var(--surface-hover); color: var(--text-primary); }
 
+.attachment-submission-notice {
+  display: grid;
+  gap: 6px;
+  max-height: 132px;
+  margin: 0 0 4px;
+  padding: 9px 10px;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.attachment-submission-notice strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.attachment-submission-notice ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attachment-submission-notice li {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1px;
+}
+
+.attachment-submission-notice li > span,
+.attachment-submission-notice li > small {
+  overflow-wrap: anywhere;
+}
+
+.attachment-submission-notice li > small { color: var(--text-tertiary); }
+
 .conversation-attachment-list {
   display: flex;
   flex-wrap: wrap;

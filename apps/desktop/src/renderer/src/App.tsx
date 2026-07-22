@@ -33,6 +33,8 @@ import type {
   AgentTurnDraftEvent,
   AgentSubmitTurnResult,
   AgentRuntimeStatus,
+  CaptureFileRejection,
+  CaptureFileRejectionReason,
   AppHealth,
   BackupRestoreStatus,
   DiagnosticsHealth,
@@ -943,10 +945,6 @@ export function App(): React.JSX.Element {
     statusOwner: "home" | "shell" = "shell"
   ): Promise<AgentSubmitTurnResult | undefined> => {
     if (files.length === 0) return undefined;
-    if (files.length > 1) {
-      if (statusOwner === "shell") setCaptureToast({ kind: "error", message: t("home.oneFilePerTurn") });
-      return undefined;
-    }
     if (!onboarding?.activeVault) {
       if (statusOwner === "shell") setCaptureToast({ kind: "error", message: t("home.createVaultBeforeDrop") });
       return undefined;
@@ -4028,6 +4026,20 @@ function FirstRunPanel(props: FirstRunPanelProps): React.JSX.Element {
   );
 }
 
+function attachmentRejectionMessageKey(reason: CaptureFileRejectionReason): string {
+  switch (reason) {
+    case "empty_path": return "home.attachmentRejection.emptyPath";
+    case "missing": return "home.attachmentRejection.missing";
+    case "not_regular_file": return "home.attachmentRejection.notRegularFile";
+    case "unsupported_type": return "home.attachmentRejection.unsupportedType";
+    case "duplicate": return "home.attachmentRejection.duplicate";
+    case "too_many_files": return "home.attachmentRejection.tooManyFiles";
+    case "file_too_large": return "home.attachmentRejection.fileTooLarge";
+    case "total_size_exceeded": return "home.attachmentRejection.totalSizeExceeded";
+    case "copy_failed": return "home.attachmentRejection.copyFailed";
+  }
+}
+
 function HomeComposer(props: {
   readonly activeVault: VaultSummary | undefined;
   readonly agentRuntimeStatus: AgentRuntimeStatus | null;
@@ -4080,6 +4092,10 @@ function HomeComposer(props: {
   const [voiceCanOpenSystemSettings, setVoiceCanOpenSystemSettings] = useState(false);
   const [voiceAssetInstallProgress, setVoiceAssetInstallProgress] = useState<number | undefined>(undefined);
   const [stagedComposerFiles, setStagedComposerFiles] = useState<readonly File[]>([]);
+  const [attachmentSubmissionNotice, setAttachmentSubmissionNotice] = useState<{
+    readonly acceptedCount: number;
+    readonly rejectedFiles: readonly CaptureFileRejection[];
+  } | null>(null);
   const [composerSubmitActive, setComposerSubmitActive] = useState(false);
   const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
@@ -4837,6 +4853,7 @@ function HomeComposer(props: {
     composerSubmitInFlightRef.current = true;
     setComposerSubmitActive(true);
     setCaptureError(null);
+    setAttachmentSubmissionNotice(null);
     setAgentError(null);
     setAgentRunState("idle");
     setAgentModelUsage("none");
@@ -4908,6 +4925,12 @@ function HomeComposer(props: {
       }
       const outcome = await submission;
       if (!outcome) throw new Error("Attachment submission did not start.");
+      if (outcome.rejectedFiles?.length) {
+        setAttachmentSubmissionNotice({
+          acceptedCount: outcome.sourceIds.length,
+          rejectedFiles: outcome.rejectedFiles
+        });
+      }
       const durableUserTurnExists = outcome.state !== "failed" || Boolean(outcome.conversationEventId);
       if (durableUserTurnExists) {
         stagedComposerAttemptRef.current = null;
@@ -5090,6 +5113,7 @@ function HomeComposer(props: {
   ): Promise<void> => {
     const sourceDisplayName = files[0]?.name ?? null;
     setCaptureError(null);
+    setAttachmentSubmissionNotice(null);
     setAgentAnswer(null);
     setLiveAnswerEventId(null);
     setAgentError(null);
@@ -5104,6 +5128,12 @@ function HomeComposer(props: {
         setActiveSourceTurn(null);
         setAgentRunState("failed");
         return;
+      }
+      if (result.rejectedFiles?.length) {
+        setAttachmentSubmissionNotice({
+          acceptedCount: result.sourceIds.length,
+          rejectedFiles: result.rejectedFiles
+        });
       }
       setActiveSourceTurn({
         clientTurnId,
@@ -5637,6 +5667,7 @@ function HomeComposer(props: {
                     onClick={() => {
                       stagedAttachmentRevisionRef.current += 1;
                       stagedComposerAttemptRef.current = null;
+                      setAttachmentSubmissionNotice(null);
                       setStagedComposerFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
                       window.requestAnimationFrame(() => composerInputRef.current?.focus({ preventScroll: true }));
                     }}
@@ -5648,6 +5679,26 @@ function HomeComposer(props: {
             </div>
           </div>
         ) : null}
+        {attachmentSubmissionNotice ? (
+          <section
+            className="attachment-submission-notice"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <strong>{props.t(attachmentSubmissionNotice.acceptedCount > 0
+              ? "home.attachmentsPartiallyAccepted"
+              : "home.attachmentsRejected")}</strong>
+            <ul>
+              {attachmentSubmissionNotice.rejectedFiles.map((rejection, index) => (
+                <li key={`${rejection.displayName}-${rejection.reason}-${index}`}>
+                  <span>{rejection.displayName}</span>
+                  <small>{props.t(attachmentRejectionMessageKey(rejection.reason))}</small>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
         <textarea
           ref={composerInputRef}
           data-home-composer="true"
@@ -5658,6 +5709,7 @@ function HomeComposer(props: {
           onChange={(event) => {
             draftRevisionRef.current += 1;
             stagedComposerAttemptRef.current = null;
+            setAttachmentSubmissionNotice(null);
             props.onDraftChange(event.target.value);
           }}
           onCompositionStart={() => {
@@ -5776,6 +5828,7 @@ function HomeComposer(props: {
             ref={fileInputRef}
             className="visually-hidden"
             type="file"
+            multiple
             accept=".md,.markdown,.txt,.pdf,.docx,.pptx,.csv,.xlsx,.sqlite,.sqlite3,.db,.png,.jpg,.jpeg,.webp,.gif,.tif,.tiff,.bmp,text/plain,text/markdown,image/*"
             onChange={(event) => {
               const files = Array.from(event.currentTarget.files ?? []);
@@ -5783,8 +5836,9 @@ function HomeComposer(props: {
               if (files.length === 0) return;
               stagedAttachmentRevisionRef.current += 1;
               stagedComposerAttemptRef.current = null;
-              setStagedComposerFiles(files.slice(0, 1));
-              setCaptureError(files.length > 1 ? props.t("home.oneFilePerTurn") : null);
+              setAttachmentSubmissionNotice(null);
+              setStagedComposerFiles((current) => [...current, ...files]);
+              setCaptureError(null);
               window.requestAnimationFrame(() => composerInputRef.current?.focus({ preventScroll: true }));
             }}
           />

@@ -133,6 +133,10 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain('name="attach"');
     expect(appSource).toContain('props.t("home.attachToMessage")');
     expect(appSource).toContain('className="attachment-chip"');
+    expect(appSource).toContain("multiple");
+    expect(appSource).toContain('className="attachment-submission-notice"');
+    expect(appSource).toContain("attachmentRejectionMessageKey(rejection.reason)");
+    expect(appSource).not.toContain('props.t("home.oneFilePerTurn")');
     expect(appSource).toContain('submitHomeFiles(request.files, "file_drop"');
     expect(appSource).toContain('"file_picker"');
     expect(appSource).toContain('className="drop-overlay" role="status" aria-live="polite" aria-atomic="true"');

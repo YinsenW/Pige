@@ -1735,6 +1735,71 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("stages multiple picker attachments in order with zero side effects until one Send", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await attachFiles(dom, container, [
+      ["first.md", "# First\n"],
+      ["second.csv", "item,score\nBeta,8\n"]
+    ]);
+    expect(harness.submitRequests).toHaveLength(0);
+    expect(harness.submittedFileNames).toHaveLength(0);
+    expect(Array.from(container.querySelectorAll(".attachment-chip")).map((chip) => chip.textContent)).toEqual([
+      "first.md",
+      "second.csv"
+    ]);
+
+    await setTextareaValue(dom, container, "Compare these files with my notes.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    expect(harness.submitRequests[0]).toMatchObject({
+      inputKind: "file_picker",
+      text: "Compare these files with my notes."
+    });
+    expect(harness.submittedFileNames).toEqual([["first.md", "second.csv"]]);
+    expect(container.querySelector(".attachment-chip")).toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("renders only safe localized rejection details after partial attachment acceptance", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      const result = completedResult();
+      if (result.state !== "completed") throw new Error("Expected completed fixture.");
+      return {
+        ...result,
+        sourceIds: ["source_internal_safe"],
+        rejectedFiles: [{ displayName: "blocked.exe", reason: "unsupported_type" }]
+      };
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await attachFiles(dom, container, [
+      ["accepted.md", "# Accepted\n"],
+      ["blocked.exe", "not-an-executable"]
+    ]);
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => container.querySelector(".attachment-submission-notice") !== null);
+
+    const notice = requireElement(container.querySelector<HTMLElement>(".attachment-submission-notice"));
+    expect(notice.getAttribute("role")).toBe("status");
+    expect(notice.textContent).toContain("Some files could not be attached.");
+    expect(notice.textContent).toContain("blocked.exe");
+    expect(notice.textContent).toContain("This file type is not supported.");
+    expect(notice.textContent).not.toContain("source_internal_safe");
+    expect(notice.textContent).not.toContain("/Users/");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("submits an attachment without renderer-authored text and remains available without a model", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
@@ -1830,6 +1895,24 @@ describe("Home durable Agent conversation UI", () => {
     expect(harness.submitRequests[0]?.text).toBeUndefined();
     expect(harness.submittedFileNames).toEqual([["organize-now.md"]]);
     expect(textareaValue(container)).toBe("Keep this draft for a later message.");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("submits an ordered multi-file global drop immediately as one file_drop turn", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await dropFiles(dom, container, [
+      ["drop-first.md", "# First\n"],
+      ["drop-second.csv", "value\n2\n"]
+    ]);
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    expect(harness.submitRequests[0]).toMatchObject({ inputKind: "file_drop" });
+    expect(harness.submittedFileNames).toEqual([["drop-first.md", "drop-second.csv"]]);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -3124,7 +3207,8 @@ describe("Home durable Agent conversation UI", () => {
     expect(submitHomeInput).toContain('props.onFilesSelected(');
     expect(submitHomeInput).toContain('"file_picker"');
     expect(appSource).toContain('submitHomeFiles(request.files, "file_drop"');
-    expect(appSource).toContain("setStagedComposerFiles(files.slice(0, 1))");
+    expect(appSource).toContain("setStagedComposerFiles((current) => [...current, ...files])");
+    expect(appSource).toContain("multiple");
     expect(retryLatestTurn).toContain("props.onRetryJob(retryableLatestTurn.jobId)");
     expect(retryLatestTurn).not.toContain("submitTurn");
     expect(submitHomeInput.indexOf("window.pige.agent.submitTurn"))
@@ -4423,10 +4507,20 @@ function homeComposer(container: HTMLElement): HTMLTextAreaElement {
 }
 
 async function attachFile(dom: JSDOM, container: HTMLElement, name: string, content: string): Promise<void> {
+  await attachFiles(dom, container, [[name, content]]);
+}
+
+async function attachFiles(
+  dom: JSDOM,
+  container: HTMLElement,
+  files: readonly (readonly [name: string, content: string])[]
+): Promise<void> {
   const input = container.querySelector<HTMLInputElement>('input[type="file"]');
   if (!input) throw new Error("Home file input not found.");
-  const file = new dom.window.File([content], name, { type: "text/csv" });
-  Object.defineProperty(input, "files", { configurable: true, value: [file] });
+  const selectedFiles = files.map(([name, content]) =>
+    new dom.window.File([content], name, { type: "text/csv" })
+  );
+  Object.defineProperty(input, "files", { configurable: true, value: selectedFiles });
   await act(async () => {
     input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
     await settle(dom);
@@ -4434,13 +4528,23 @@ async function attachFile(dom: JSDOM, container: HTMLElement, name: string, cont
 }
 
 async function dropFile(dom: JSDOM, container: HTMLElement, name: string, content: string): Promise<void> {
+  await dropFiles(dom, container, [[name, content]]);
+}
+
+async function dropFiles(
+  dom: JSDOM,
+  container: HTMLElement,
+  files: readonly (readonly [name: string, content: string])[]
+): Promise<void> {
   const shell = container.querySelector<HTMLElement>('.shell[aria-label="Pige"]');
   if (!shell) throw new Error("Application shell not found.");
-  const file = new dom.window.File([content], name, { type: "text/csv" });
+  const droppedFiles = files.map(([name, content]) =>
+    new dom.window.File([content], name, { type: "text/csv" })
+  );
   const event = new dom.window.Event("drop", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "dataTransfer", {
     configurable: true,
-    value: { files: [file], types: ["Files"] }
+    value: { files: droppedFiles, types: ["Files"] }
   });
   await act(async () => {
     shell.dispatchEvent(event);
