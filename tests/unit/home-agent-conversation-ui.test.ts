@@ -2230,6 +2230,43 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("keeps a completed answer visible and follows its exact tail when an older timeline read arrives", async () => {
+    const dom = createDom();
+    const harness = createHarness(completedTimeline());
+    const completed = completedResult();
+    if (completed.state !== "completed") throw new Error("Expected completed result fixture.");
+    let submitCount = 0;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      submitCount += 1;
+      if (submitCount === 1) return Promise.resolve(completed);
+      harness.jobs = [{ ...runningAgentJob(), id: "job_20260722_multiturn03" }];
+      return new Promise<AgentSubmitTurnResult>(() => undefined);
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "Complete this turn before the timeline refreshes.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => container.querySelector('[data-live-agent-answer="true"]') !== null);
+    expect(container.textContent).toContain("Remember the durable boundary.");
+    expect(container.textContent).toContain(completed.answer.answer);
+
+    await setTextareaValue(dom, container, "Continue from that exact answer.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 2);
+
+    expect(container.textContent).toContain(completed.answer.answer);
+    expect(container.querySelectorAll(".conversation-message.role-assistant")).toHaveLength(3);
+    expect(harness.submitRequests[1]).toMatchObject({
+      inputKind: "follow_up",
+      conversationId: completed.conversationId,
+      expectedTailEventId: completed.tailEventId
+    });
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps the active draft when an older completed conversation load arrives late", async () => {
     const dom = createDom();
     const harness = createHarness(completedTimeline());

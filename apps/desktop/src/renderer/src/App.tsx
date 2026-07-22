@@ -4078,6 +4078,11 @@ function HomeComposer(props: {
   const voiceLanguageTagRef = useRef(props.locale);
   const draftTextRef = useRef(text);
   const conversationLoadSequence = useRef(0);
+  const locallyCompletedConversationTailRef = useRef<{
+    readonly vaultId: string;
+    readonly conversationId: string;
+    readonly tailEventId: string;
+  } | null>(null);
   const handledFileDropClientTurnIdRef = useRef<string | null>(null);
   const activeVaultIdRef = useRef<string | undefined>(props.activeVault?.vaultId);
   const activeAgentDraftRef = useRef<ActiveAgentDraftBinding | null>(null);
@@ -4655,7 +4660,19 @@ function HomeComposer(props: {
     try {
       const nextTimeline = await window.pige.agent.conversation({ limit: 24 });
       if (requestId === conversationLoadSequence.current && activeVaultIdRef.current === vaultId) {
-        setConversationTimeline(nextTimeline);
+        const localTail = locallyCompletedConversationTailRef.current;
+        const acknowledgesLocalTail = !localTail || (
+          localTail.vaultId === vaultId &&
+          nextTimeline?.conversationId === localTail.conversationId &&
+          (
+            nextTimeline.tailEventId === localTail.tailEventId ||
+            nextTimeline.messages.some((message) => message.id === localTail.tailEventId)
+          )
+        );
+        if (acknowledgesLocalTail) {
+          locallyCompletedConversationTailRef.current = null;
+          setConversationTimeline(nextTimeline);
+        }
       }
       return nextTimeline;
     } catch {
@@ -4705,6 +4722,7 @@ function HomeComposer(props: {
     setSelectedNoteRelated(null);
     setNoteLoadingPageId(null);
     setConversationTimeline(undefined);
+    locallyCompletedConversationTailRef.current = null;
     setOptimisticConversationTurns([]);
     setLiveAnswerEventId(null);
     setAgentAnswer(null);
@@ -4766,6 +4784,7 @@ function HomeComposer(props: {
     setSelectedNote(null);
     setSelectedNoteRelated(null);
     const turnText = text.trim();
+    const submittedVaultId = activeVaultIdRef.current;
     const submittedDraftRevision = draftRevisionRef.current;
     const clearedDraftRevision = submittedDraftRevision + 1;
     const clientTurnId = createAgentClientTurnId();
@@ -4819,6 +4838,50 @@ function HomeComposer(props: {
         props.onDraftChange(turnText);
       }
       if (outcome.state === "completed") {
+        const completedAt = new Date().toISOString();
+        const completedVaultId = activeVaultIdRef.current;
+        if (completedVaultId && completedVaultId === submittedVaultId) {
+          locallyCompletedConversationTailRef.current = {
+            vaultId: completedVaultId,
+            conversationId: outcome.conversationId,
+            tailEventId: outcome.tailEventId
+          };
+          setConversationTimeline((current) => {
+            const currentMessages = current?.conversationId === outcome.conversationId
+              ? current.messages
+              : [];
+            return {
+              conversationId: outcome.conversationId,
+              tailEventId: outcome.tailEventId,
+              canFollowUp: true,
+              messages: [
+                ...currentMessages.filter((message) =>
+                  message.id !== outcome.conversationEventId && message.id !== outcome.tailEventId
+                ),
+                {
+                  id: outcome.conversationEventId,
+                  role: "user",
+                  createdAt: completedAt,
+                  text: turnText,
+                  jobId: outcome.jobId
+                },
+                {
+                  id: outcome.tailEventId,
+                  role: "assistant",
+                  createdAt: completedAt,
+                  text: outcome.answer.answer,
+                  jobId: outcome.jobId,
+                  answer: outcome.answer
+                }
+              ],
+              latestTurn: {
+                jobId: outcome.jobId,
+                userEventId: outcome.conversationEventId,
+                state: "completed"
+              }
+            };
+          });
+        }
         clearAgentDraft();
         setAgentAnswer(outcome.answer);
         setLiveAnswerEventId(outcome.tailEventId);
