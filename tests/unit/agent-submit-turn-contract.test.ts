@@ -10,12 +10,12 @@ import { describe, expect, it } from "vitest";
 
 describe("Agent submit-turn attachment boundary", () => {
   it.each(["file_drop", "file_picker"] as const)(
-    "accepts ordered 1..8 paths for %s without inventing renderer file identity",
+    "accepts an ordered bounded candidate set for %s without inventing renderer file identity",
     (inputKind) => {
-      const filePaths = [
-        "/private/tmp/first.txt",
-        "/private/tmp/second.md",
-        "/private/tmp/first.txt"
+      const attachments = [
+        { displayName: "first.txt", internalPath: "/private/tmp/first.txt" },
+        { displayName: "second.md", internalPath: "/private/tmp/second.md" },
+        { displayName: "first.txt", internalPath: "/private/tmp/first.txt" }
       ];
       const payload = AgentSubmitTurnIpcPayloadSchema.parse({
         request: {
@@ -24,10 +24,10 @@ describe("Agent submit-turn attachment boundary", () => {
           locale: "en",
           clientTurnId: "turn_20260722_attachment001"
         },
-        filePaths
+        attachments
       }) satisfies AgentSubmitTurnIpcPayload;
 
-      expect(payload.filePaths).toEqual(filePaths);
+      expect(payload.attachments).toEqual(attachments);
       expect(payload.request).not.toHaveProperty("files");
       expect(payload.request).not.toHaveProperty("fileIds");
     }
@@ -37,43 +37,56 @@ describe("Agent submit-turn attachment boundary", () => {
     const text = "  Keep my spacing.\n\nAnd this line.  ";
     const parsed = AgentSubmitTurnIpcPayloadSchema.parse({
       request: { inputKind: "typed_text", locale: "en", text },
-      filePaths: []
+      attachments: []
     });
 
     expect(parsed.request.text).toBe(text);
     expect(AgentSubmitTurnIpcPayloadSchema.safeParse({
       request: { inputKind: "typed_text", locale: "en", text: " \n\t " },
-      filePaths: []
+      attachments: []
     }).success).toBe(false);
     expect(AgentSubmitTurnIpcPayloadSchema.parse({
       request: { inputKind: "file_picker", locale: "en", text: " \n\t " },
-      filePaths: ["/private/tmp/source.txt"]
+      attachments: [{ displayName: "source.txt", internalPath: "/private/tmp/source.txt" }]
     }).request.text).toBe(" \n\t ");
   });
 
-  it("rejects missing, excessive, unresolved, misplaced, and opaque file inputs", () => {
+  it("carries up to 64 candidates, including unresolved paths, for main-owned classification", () => {
     const request = { inputKind: "file_drop" as const, locale: "en" as const };
     expect(AgentSubmitTurnIpcPayloadSchema.parse({
       request,
-      filePaths: ["/tmp/only.txt"]
-    }).filePaths).toHaveLength(1);
+      attachments: [{ displayName: "only.txt", internalPath: "/tmp/only.txt" }]
+    }).attachments).toHaveLength(1);
     expect(AgentSubmitTurnIpcPayloadSchema.parse({
       request,
-      filePaths: Array.from({ length: 8 }, (_, index) => `/tmp/${index}.txt`)
-    }).filePaths).toHaveLength(8);
-    expect(AgentSubmitTurnIpcPayloadSchema.safeParse({ request, filePaths: [] }).success).toBe(false);
+      attachments: Array.from({ length: 64 }, (_, index) => ({
+        displayName: `${index}.txt`,
+        internalPath: `/tmp/${index}.txt`
+      }))
+    }).attachments).toHaveLength(64);
+    expect(AgentSubmitTurnIpcPayloadSchema.parse({
+      request,
+      attachments: [{ displayName: "unresolved.txt", internalPath: "" }]
+    }).attachments[0]).toEqual({ displayName: "unresolved.txt", internalPath: "" });
+    expect(AgentSubmitTurnIpcPayloadSchema.safeParse({ request, attachments: [] }).success).toBe(false);
     expect(AgentSubmitTurnIpcPayloadSchema.safeParse({
       request,
-      filePaths: Array.from({ length: 9 }, (_, index) => `/tmp/${index}.txt`)
+      attachments: Array.from({ length: 65 }, (_, index) => ({
+        displayName: `${index}.txt`,
+        internalPath: `/tmp/${index}.txt`
+      }))
     }).success).toBe(false);
-    expect(AgentSubmitTurnIpcPayloadSchema.safeParse({ request, filePaths: [""] }).success).toBe(false);
     expect(AgentSubmitTurnIpcPayloadSchema.safeParse({
       request: { inputKind: "typed_text", locale: "en", text: "hello" },
-      filePaths: ["/tmp/source.txt"]
+      attachments: [{ displayName: "source.txt", internalPath: "/tmp/source.txt" }]
     }).success).toBe(false);
     expect(AgentSubmitTurnIpcPayloadSchema.safeParse({
       request: { ...request, files: [{ name: "source.txt", size: 42 }] },
-      filePaths: ["/tmp/source.txt"]
+      attachments: [{ displayName: "source.txt", internalPath: "/tmp/source.txt" }]
+    }).success).toBe(false);
+    expect(AgentSubmitTurnIpcPayloadSchema.safeParse({
+      request,
+      attachments: [{ displayName: "source.txt", internalPath: "/tmp/source.txt", size: 42 }]
     }).success).toBe(false);
   });
 
@@ -127,7 +140,9 @@ describe("Agent submit-turn attachment boundary", () => {
       preloadSource.indexOf("onTurnDraft:")
     );
 
-    expect(submitTurnAdapter).toContain("files.map((file) => webUtils.getPathForFile(file))");
+    expect(submitTurnAdapter).toContain("files.map((file) => ({");
+    expect(submitTurnAdapter).toContain("displayName: file.name");
+    expect(submitTurnAdapter).toContain("internalPath: webUtils.getPathForFile(file)");
     expect(submitTurnAdapter).toContain("AgentSubmitTurnIpcPayloadSchema.parse({");
     expect(submitTurnAdapter).toContain('ipcRenderer.invoke("agent.submitTurn", payload)');
     expect(submitTurnAdapter).toContain("AgentSubmitTurnResultSchema.parse(");

@@ -1,5 +1,6 @@
 import type { PigeClientCapabilityTier, PigeRuntimeKind } from "@pige/domain";
 import type {
+  AgentAttachmentCandidate,
   AgentSubmitTurnIpcPayload,
   AgentSubmitTurnRequest,
   BoundaryVerification,
@@ -81,6 +82,7 @@ import type {
 } from "@pige/schemas";
 
 export type {
+  AgentAttachmentCandidate,
   AgentSubmitTurnIpcPayload,
   AgentSubmitTurnRequest,
   CaptureFileRejection,

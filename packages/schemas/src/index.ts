@@ -221,28 +221,30 @@ export const AgentSubmitTurnRequestSchema = z.object({
     });
   }
 });
-const AgentAttachmentPathSchema = z.string()
-  .min(1)
+const AgentAttachmentInternalPathSchema = z.string()
   .max(4_096)
-  .refine((value) => value.trim().length > 0, "Attachment paths must not be empty.")
   .refine((value) => !value.includes("\0"), "Attachment paths must not contain null bytes.");
+export const AgentAttachmentCandidateSchema = z.object({
+  displayName: z.string().max(512),
+  internalPath: AgentAttachmentInternalPathSchema
+}).strict();
 export const AgentSubmitTurnIpcPayloadSchema = z.object({
   request: AgentSubmitTurnRequestSchema,
-  filePaths: z.array(AgentAttachmentPathSchema).max(8).readonly()
+  attachments: z.array(AgentAttachmentCandidateSchema).max(64).readonly()
 }).strict().superRefine((payload, context) => {
   const fileInput = payload.request.inputKind === "file_drop" || payload.request.inputKind === "file_picker";
-  if (fileInput && payload.filePaths.length === 0) {
+  if (fileInput && payload.attachments.length === 0) {
     context.addIssue({
       code: "custom",
-      path: ["filePaths"],
-      message: "A file Agent turn requires at least one attachment path."
+      path: ["attachments"],
+      message: "A file Agent turn requires at least one attachment candidate."
     });
   }
-  if (!fileInput && payload.filePaths.length > 0) {
+  if (!fileInput && payload.attachments.length > 0) {
     context.addIssue({
       code: "custom",
-      path: ["filePaths"],
-      message: "Only file-drop and file-picker Agent turns may carry attachment paths."
+      path: ["attachments"],
+      message: "Only file-drop and file-picker Agent turns may carry attachment candidates."
     });
   }
 });
@@ -2109,7 +2111,7 @@ const AgentSubmitTurnResultBaseSchema = z.object({
   requestId: z.string().min(1).max(120),
   modelUsage: z.enum(["none", "local", "cloud"]),
   sourceIds: z.array(SourceIdSchema).max(8).readonly(),
-  rejectedFiles: z.array(CaptureFileRejectionSchema).max(8).readonly().optional()
+  rejectedFiles: z.array(CaptureFileRejectionSchema).max(64).readonly().optional()
 });
 export const AgentSubmitTurnResultSchema = z.discriminatedUnion("state", [
   AgentSubmitTurnResultBaseSchema.extend({
@@ -3238,6 +3240,7 @@ export type CloudSendPolicy = z.infer<typeof CloudSendPolicySchema>;
 export type ConfirmationProposal = z.infer<typeof ConfirmationProposalSchema>;
 export type ConversationEvent = z.infer<typeof ConversationEventSchema>;
 export type AgentSubmitTurnRequest = z.input<typeof AgentSubmitTurnRequestSchema>;
+export type AgentAttachmentCandidate = z.output<typeof AgentAttachmentCandidateSchema>;
 export type AgentSubmitTurnIpcPayload = z.output<typeof AgentSubmitTurnIpcPayloadSchema>;
 export type AgentSubmitTurnResult = z.output<typeof AgentSubmitTurnResultSchema>;
 export type CaptureFileRejection = z.output<typeof CaptureFileRejectionSchema>;

@@ -406,13 +406,16 @@ const api: PigeDesktopApi = {
       request: AgentSubmitTurnRequest,
       files: readonly File[] = []
     ): Promise<AgentSubmitTurnResult> => {
-      const filePaths = files.map((file) => webUtils.getPathForFile(file));
+      const attachments = files.map((file) => ({
+        displayName: file.name,
+        internalPath: webUtils.getPathForFile(file)
+      }));
       const normalizedRequest = request.scope
         ? { ...request, scope: { kind: "current_note" as const, pageId: request.scope.pageId } }
         : request;
       const payload = AgentSubmitTurnIpcPayloadSchema.parse({
         request: normalizedRequest,
-        filePaths
+        attachments
       });
       return AgentSubmitTurnResultSchema.parse(
         await ipcRenderer.invoke("agent.submitTurn", payload)
