@@ -221,6 +221,17 @@ export class AgentTurnConversationStore {
     return match;
   }
 
+  readAssistantAnswer(event: ConversationEvent): AgentTurnAnswer {
+    const normalized = normalizeStoredAssistant(event);
+    assertStoredAssistantIntegrity(event);
+    return {
+      answer: normalized.text,
+      grounding: normalized.grounding ?? "general",
+      citations: normalized.citations ?? [],
+      ...(normalized.datasetResult === undefined ? {} : { datasetResult: normalized.datasetResult })
+    };
+  }
+
   readContextBeforeUserTurn(
     vaultPath: string,
     userTurn: PreservedAgentTurn
