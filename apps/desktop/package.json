@@ -28,7 +28,7 @@
     "@pige/domain": "0.0.0",
     "@pige/markdown": "0.0.0",
     "@pige/schemas": "0.0.0",
-    "fast-xml-parser": "5.9.3",
+    "fast-xml-parser": "5.10.1",
     "jsdom": "29.1.1",
     "lucide-react": "1.17.0",
     "mammoth": "1.12.0",

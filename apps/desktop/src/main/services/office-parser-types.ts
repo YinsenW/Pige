@@ -3,7 +3,7 @@ import type { ParserTextCoverage } from "./parser-artifact-service";
 
 export const OFFICE_PARSER_ID = "office_openxml";
 export const MAMMOTH_VERSION = "1.12.0";
-export const FAST_XML_PARSER_VERSION = "5.9.3";
+export const FAST_XML_PARSER_VERSION = "5.10.1";
 export const YAUZL_VERSION = "3.4.0";
 export const OFFICE_PARSER_ENGINE = "mammoth+fast-xml-parser+yauzl";
 export const OFFICE_PARSER_VERSION = `${MAMMOTH_VERSION}+${FAST_XML_PARSER_VERSION}+${YAUZL_VERSION}`;
