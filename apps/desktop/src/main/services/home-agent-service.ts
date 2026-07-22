@@ -101,20 +101,22 @@ import { HomeAgentEvidenceLedger } from "./home-agent-evidence-ledger";
 import {
   actualHomeModelUsage,
   collectAgentTurnSourceIds,
-  createCurrentNoteJobScope,
   isDatasetAnswerCitation,
-  readBoundCurrentNoteEvidence,
   readDurableTurnResult,
-  readInitialCurrentNoteEvidence,
-  readerSelectionInputPresentation,
   recoverDurableAssistantPublication,
   settleJobAfterAssistant,
-  validateReaderSelectionTurnContext,
-  type HomeAgentCurrentNoteJobScope,
   type HomeAgentJobSession,
-  type HomeAgentReaderSelectionContext,
   type HomeAgentReaderSelectionMutationPort
 } from "./home-agent-turn-lifecycle";
+import {
+  createReaderSelectionJobScope,
+  readBoundReaderSelectionEvidence,
+  readInitialReaderSelectionEvidence,
+  readerSelectionInputPresentation,
+  validateReaderSelectionTurnContext,
+  type ReaderSelectionJobScope,
+  type ReaderSelectionTurnContext
+} from "./reader-selection-job-binding";
 import type {
   AdoptDurableCompletionInput,
   BeginJobInput,
@@ -191,7 +193,7 @@ export interface HomeAgentJobPort {
     readonly inputHash: string;
     readonly sourceIds?: readonly string[];
     readonly sourceExpected?: boolean;
-    readonly currentNoteScope?: HomeAgentCurrentNoteJobScope;
+    readonly currentNoteScope?: ReaderSelectionJobScope;
   }): JobRecord;
   findAgentTurnJobByConversationEvent(conversationEventId: string): JobRecord | undefined;
   runTextAgentTurn<T>(
@@ -490,7 +492,7 @@ export class HomeAgentService {
       readonly sourceIds?: readonly string[];
       readonly prepared?: PreparedSourceAgentTurn;
       readonly onDraft?: (snapshot: HomeAgentDraftSnapshot) => void;
-    } & HomeAgentReaderSelectionContext = {}
+    } & ReaderSelectionTurnContext = {}
   ): Promise<AgentSubmitTurnResult> {
     let requestId = `turn_${randomUUID().replaceAll("-", "")}`;
     let session: HomeAgentJobSession | undefined;
@@ -579,7 +581,7 @@ export class HomeAgentService {
           };
         } else {
           currentNoteBinding = validatedRequest.scope
-            ? readInitialCurrentNoteEvidence(vaultPath, validatedRequest.scope.pageId, context)
+            ? readInitialReaderSelectionEvidence(vaultPath, validatedRequest.scope.pageId, context)
             : undefined;
           session = {
             current: this.#jobs.createAgentTurnJob({
@@ -588,7 +590,7 @@ export class HomeAgentService {
               inputHash: preservedTurn.inputHash,
               ...(sourceIds.length > 0 ? { sourceIds } : {}),
               ...(validatedRequest.scope && currentNoteBinding ? {
-                currentNoteScope: createCurrentNoteJobScope(
+                currentNoteScope: createReaderSelectionJobScope(
                   validatedRequest.scope.pageId,
                   currentNoteBinding.bindingHash,
                   context
@@ -615,7 +617,7 @@ export class HomeAgentService {
         if (durableResult) return durableResult;
       }
       if (validatedRequest.scope) {
-        const currentNote = currentNoteBinding ?? readBoundCurrentNoteEvidence(
+        const currentNote = currentNoteBinding ?? readBoundReaderSelectionEvidence(
           vaultPath,
           validatedRequest.scope.pageId,
           session.current
@@ -1183,7 +1185,7 @@ export class HomeAgentService {
       )
       : undefined;
     if (currentNoteScope) {
-      const initialCurrentNote = readBoundCurrentNoteEvidence(
+      const initialCurrentNote = readBoundReaderSelectionEvidence(
         vaultPath,
         currentNoteScope.pageId,
         session.current
@@ -1217,7 +1219,7 @@ export class HomeAgentService {
       if (!currentNoteScope || !currentNoteRef?.checksum) {
         throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The current-note scope is unavailable.");
       }
-      const current = readBoundCurrentNoteEvidence(vaultPath, currentNoteScope.pageId, session.current);
+      const current = readBoundReaderSelectionEvidence(vaultPath, currentNoteScope.pageId, session.current);
       if (current.bindingHash !== currentNoteRef.checksum) {
         throw new PigeDomainError("model_egress.privacy_drift", "The current note changed during the Agent turn.");
       }
@@ -1260,7 +1262,7 @@ export class HomeAgentService {
     const authorizeCurrentModelTurn = async (): Promise<void> => {
       assertCurrentBindingAndVault();
       const currentNoteBinding = currentNoteScope && currentNoteToolUsed
-        ? readBoundCurrentNoteEvidence(vaultPath, currentNoteScope.pageId, session.current)
+        ? readBoundReaderSelectionEvidence(vaultPath, currentNoteScope.pageId, session.current)
         : undefined;
       const currentNoteEvidenceDrifted = currentNoteBinding !== undefined &&
         currentNoteRef?.checksum !== currentNoteBinding.bindingHash;
