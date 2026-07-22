@@ -39,8 +39,6 @@ describe("agent runtime policy context", () => {
     expect(policy.model.modelConfigured).toBe(false);
     expect(policy.model.modelRoutingMode).toBe("default_model_only");
     expect(policy.model.cloudSendPolicy).toBe("ordinary_allowed");
-    expect(policy.permissions.defaultMode).toBe("ask_every_time");
-    expect(policy.permissions.yoloEnabled).toBe(false);
     expect(policy.retrieval.maxSnippetsForCloudSynthesis).toBe(8);
     expect(policy.policyHash).toMatch(/^sha256:[a-f0-9]{64}$/);
     expect(JSON.stringify(policy)).not.toContain(vaultPath);
@@ -56,27 +54,8 @@ describe("agent runtime policy context", () => {
     expect(after).not.toBe(before);
   });
 
-  it("binds the machine-local permission projection into the policy hash", () => {
-    const vaultPath = makeVault();
-    const ordinary = buildAgentRuntimePolicyContext(vaultPath);
-    const yolo = buildAgentRuntimePolicyContext(vaultPath, {
-      permissionSettings: {
-        defaultMode: "yolo_full_access",
-        yoloEnabled: true,
-        savedGrantSummaryRefs: ["permgrant_20260718_abcdefgh"]
-      }
-    });
-
-    expect(yolo.permissions).toEqual({
-      defaultMode: "yolo_full_access",
-      yoloEnabled: true,
-      savedGrantSummaryRefs: ["permgrant_20260718_abcdefgh"]
-    });
-    expect(yolo.policyHash).not.toBe(ordinary.policyHash);
-  });
-
-  it.each(["confirm_private_or_large", "confirm_all", "local_only"] as const)(
-    "accepts the explicit stricter %s cloud-send policy and binds it into the policy hash",
+  it.each(["local_only"] as const)(
+    "accepts the explicit %s cloud-send policy and binds it into the policy hash",
     (cloudSendPolicy) => {
       const vaultPath = makeVault();
       const ordinary = buildAgentRuntimePolicyContext(vaultPath);

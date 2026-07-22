@@ -86,7 +86,7 @@ export interface PermissionedExternalCapabilityAdapter {
     readonly dataBoundary: PermissionDataBoundary;
     readonly resourceScope: PermissionResourceScope;
     readonly reasonCode: string;
-    readonly highRisk?: PermissionHighRiskIntent;
+    readonly highRisk?: (normalizedInput: unknown) => PermissionHighRiskIntent;
   };
   normalizeInput(args: unknown): unknown;
   resourceIdentity(normalizedInput: unknown): unknown;
@@ -160,8 +160,9 @@ export class PermissionedExternalCapabilityRegistry {
         turn.assertCurrent();
         const normalizedInput = adapter.normalizeInput(args);
         requireResourceCount(adapter.resourceCount(normalizedInput));
+        const highRisk = adapter.permission.highRisk?.(normalizedInput);
         const binding = createExternalActionBinding(adapter, turn, normalizedInput, context.toolCallId);
-        return this.#runBound(adapter, normalizedInput, signal, context, turn, binding, broker);
+        return this.#runBound(adapter, normalizedInput, signal, context, turn, binding, broker, highRisk);
       }
     }));
   }
@@ -173,14 +174,15 @@ export class PermissionedExternalCapabilityRegistry {
     context: PigeAgentToolCallContext,
     turn: PermissionedExternalTurnContext,
     binding: PermissionActionBinding,
-    broker: PermissionBrokerService
+    broker: PermissionBrokerService,
+    highRisk: PermissionHighRiskIntent | undefined
   ): Promise<PigeAgentToolResult> {
     const completed = this.#completed.get(binding.bindingHash);
     if (completed) return completed;
     const active = this.#inFlight.get(binding.bindingHash);
     if (active) return active;
 
-    const execution = this.#authorizeAndExecute(adapter, normalizedInput, signal, context, turn, binding, broker);
+    const execution = this.#authorizeAndExecute(adapter, normalizedInput, signal, context, turn, binding, broker, highRisk);
     this.#inFlight.set(binding.bindingHash, execution);
     try {
       return await execution;
@@ -196,7 +198,8 @@ export class PermissionedExternalCapabilityRegistry {
     context: PigeAgentToolCallContext,
     turn: PermissionedExternalTurnContext,
     binding: PermissionActionBinding,
-    broker: PermissionBrokerService
+    broker: PermissionBrokerService,
+    highRisk: PermissionHighRiskIntent | undefined
   ): Promise<PigeAgentToolResult> {
     let settle: ((result: PigeAgentToolResult) => void) | undefined;
     let fail: ((reason: unknown) => void) | undefined;
@@ -208,8 +211,8 @@ export class PermissionedExternalCapabilityRegistry {
       vaultPath: turn.vaultPath,
       binding,
       ...(turn.confirmationOwner ? { owner: turn.confirmationOwner } : {}),
-      ...(adapter.permission.highRisk ? { highRisk: adapter.permission.highRisk } : {}),
-      ...(adapter.permission.highRisk
+      ...(highRisk ? { highRisk } : {}),
+      ...(highRisk
         ? {
             resolveHighRisk: async (decision: "allow" | "deny") => {
               if (decision === "deny") {
@@ -402,6 +405,7 @@ function assertAdapter(adapter: PermissionedExternalCapabilityAdapter): void {
     !/^[a-z][a-z0-9_.-]{2,159}$/u.test(adapter.action.labelKey) ||
     typeof adapter.permission?.reasonCode !== "string" ||
     !/^[a-z][a-z0-9_.-]{2,119}$/u.test(adapter.permission.reasonCode) ||
+    (adapter.permission.highRisk !== undefined && typeof adapter.permission.highRisk !== "function") ||
     typeof adapter.normalizeInput !== "function" ||
     typeof adapter.resourceIdentity !== "function" ||
     typeof adapter.resourceCount !== "function" ||

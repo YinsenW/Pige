@@ -236,7 +236,7 @@ function adapter(input: {
       resourceScope: "current_action",
       resourceKind: "shell",
       reasonCode: "synthetic.execute",
-      ...(input.highRisk ? { highRisk: input.highRisk } : {})
+      ...(input.highRisk ? { highRisk: () => input.highRisk! } : {})
     },
     normalizeInput: (value) => value,
     resourceIdentity: (value) => value,

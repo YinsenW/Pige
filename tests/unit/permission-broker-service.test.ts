@@ -85,6 +85,39 @@ describe("PermissionBrokerService AR1 authority", () => {
     expect(findJsonFiles(fixture.machineRoot)).toEqual([]);
   });
 
+  it("routes a classified first-party shell action through canonical confirmation", async () => {
+    const fixture = createFixture();
+    const exact = binding({
+      actorType: "local_tool",
+      actorId: "pige.command-execution",
+      capability: "run_shell",
+      dataBoundary: "local"
+    });
+    const request = {
+      vaultPath: fixture.vaultPath,
+      binding: exact,
+      owner: OWNER,
+      resolveHighRisk: () => "committed" as const,
+      highRisk: {
+        effect: "arbitrary_shell" as const,
+        presentation: {
+          action: "run_shell_command" as const,
+          target: "local_system" as const,
+          subject: { kind: "executable_name" as const, value: "node" }
+        }
+      }
+    };
+
+    expect(fixture.broker.authorizeTurnAction(request)).toMatchObject({
+      status: "confirmation_required",
+      revision: 1
+    });
+    expect(fixture.confirmations.pending()).toMatchObject({
+      status: "pending",
+      confirmation: { effect: "arbitrary_shell" }
+    });
+  });
+
   it("returns exact one-use authority after canonical allow and rejects contradictory effect tuples", async () => {
     const fixture = createFixture();
     const exact = binding({ actorType: "package", actorId: "package.external.install", capability: "install_package", dataBoundary: "network" });
@@ -98,7 +131,7 @@ describe("PermissionBrokerService AR1 authority", () => {
         presentation: {
           action: "install_package" as const,
           target: "local_toolchain" as const,
-          subject: { kind: "package_name" as const, value: "@larksuite/cli" }
+          subject: { kind: "package_name" as const, value: "@larksuite/cli@1.0.72" }
         }
       }
     };

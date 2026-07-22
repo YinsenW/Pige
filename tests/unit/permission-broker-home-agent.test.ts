@@ -208,7 +208,7 @@ function baseAdapter(input: {
       dataBoundary: input.actorType === "local_tool" ? "network" : "local",
       resourceScope: "current_action",
       reasonCode: "synthetic.execute",
-      ...(input.highRisk ? { highRisk: input.highRisk } : {})
+      ...(input.highRisk ? { highRisk: () => input.highRisk! } : {})
     },
     normalizeInput: (value) => value,
     resourceIdentity: () => ({ identity: "synthetic" }),

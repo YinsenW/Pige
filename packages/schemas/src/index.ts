@@ -243,6 +243,13 @@ const isSafePackageName = (value: string): boolean => {
   }
   return !value.includes("/") && isPackageSegment(value);
 };
+const EXACT_PACKAGE_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
+const isSafePackageSpec = (value: string): boolean => {
+  if (value !== value.trim() || value.length > 165) return false;
+  const separator = value.lastIndexOf("@");
+  if (separator < 1) return false;
+  return isSafePackageName(value.slice(0, separator)) && EXACT_PACKAGE_VERSION_PATTERN.test(value.slice(separator + 1));
+};
 const isSafeExecutableName = (value: string): boolean => {
   if (value !== value.trim() || value.length < 1 || value.length > 64) return false;
   for (const character of value) {
@@ -257,7 +264,7 @@ export const RendererSafeSubjectLabelSchema = z.string().refine(hasSafeDisplayCh
 export const HighRiskConfirmationSubjectSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("item_count"), count: z.number().int().min(1).max(8) }).strict(),
   z.object({ kind: z.literal("display_name"), value: RendererSafeSubjectLabelSchema }).strict(),
-  z.object({ kind: z.literal("package_name"), value: z.string().refine(isSafePackageName) }).strict(),
+  z.object({ kind: z.literal("package_name"), value: z.string().refine(isSafePackageSpec) }).strict(),
   z.object({ kind: z.literal("executable_name"), value: z.string().refine(isSafeExecutableName) }).strict()
 ]);
 const HighRiskDisplayNameSubjectSchema = z.object({
@@ -320,7 +327,7 @@ export const HighRiskConfirmationSummarySchema = z.discriminatedUnion("effect", 
     effect: z.literal("install_unreviewed_package"),
     presentation: z.object({
       action: z.literal("install_package"), target: z.literal("local_toolchain"),
-      subject: z.object({ kind: z.literal("package_name"), value: z.string().refine(isSafePackageName) }).strict()
+      subject: z.object({ kind: z.literal("package_name"), value: z.string().refine(isSafePackageSpec) }).strict()
     }).strict(),
     owner: HighRiskConfirmationOwnerSchema
   }).strict(),

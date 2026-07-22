@@ -82,8 +82,7 @@ export class PermissionBrokerService {
     const binding = parseAndVerifyBinding(input.binding);
     this.#assertCurrentVault(input.vaultPath);
 
-    if (isFirstPartyTurnAuthority(binding)) {
-      if (input.highRisk) throw highRiskClassificationInvalid();
+    if (isFirstPartyTurnAuthority(binding) && !input.highRisk) {
       return { status: "authorized", binding };
     }
 

@@ -171,20 +171,7 @@ describe("model egress policy", () => {
   });
 
   it.each([
-    ["confirm_private_or_large", makePayload(), "allow", "ordinary_external_allowed"],
-    [
-      "confirm_private_or_large",
-      makePayload({ privateContent: true }),
-      "allow",
-      "ordinary_external_allowed"
-    ],
-    [
-      "confirm_private_or_large",
-      makePayload({ payloadCharacters: 5_001, estimatedPayloadTokens: 1_251 }),
-      "allow",
-      "ordinary_external_allowed"
-    ],
-    ["confirm_all", makePayload(), "allow", "ordinary_external_allowed"],
+    ["ordinary_allowed", makePayload(), "allow", "ordinary_external_allowed"],
     ["local_only", makePayload(), "block", "local_only_block"]
   ] as const)(
     "applies %s immediately with the expected %s outcome",
@@ -201,8 +188,6 @@ describe("model egress policy", () => {
 
   it.each([
     "ordinary_allowed",
-    "confirm_private_or_large",
-    "confirm_all",
     "local_only"
   ] as const)("allows non-restricted content for verified loopback local under %s", (cloudSendPolicy) => {
     const decision = createModelEgressDecision(

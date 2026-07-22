@@ -31,6 +31,7 @@ import type {
   DatasetQueryToolRequest
 } from "../../apps/desktop/src/main/services/dataset-query-types";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
+import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
 import { PermissionedExternalCapabilityRegistry } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
 import { createFirstPartyCommandCapabilityAdapter } from "../../apps/desktop/src/main/services/command-capability-adapter";
@@ -1778,19 +1779,20 @@ describe("Home Pi Agent service", () => {
     });
   });
 
-  it("offers Pi the first-party OS command tool and executes it under the submitted task", async () => {
+  it("offers Pi the first-party OS command tool and executes it after canonical confirmation", async () => {
     const fixture = makeFixture();
     const jobs = new JobsService(fixture.vaults);
     const commandPermissionCandidate = path.join(path.dirname(fixture.vaultPath), "command-permission");
     fs.mkdirSync(commandPermissionCandidate, { mode: 0o700 });
     const commandPermissionRoot = fs.realpathSync.native(commandPermissionCandidate);
+    const confirmations = new HighRiskConfirmationService();
     const registry = new PermissionedExternalCapabilityRegistry(
       [createFirstPartyCommandCapabilityAdapter()],
       new PermissionBrokerService({
         rootPath: commandPermissionRoot,
-        unsafeAllowUnfenced: true
-      }),
-      jobs
+        unsafeAllowUnfenced: true,
+        confirmations
+      })
     );
     const adapter = new PiAgentRuntimeAdapter({
       fauxResponses: [
@@ -1809,7 +1811,7 @@ describe("Home Pi Agent service", () => {
         })
       ]
     });
-    const outcome = await new HomeAgentService(
+    const outcomePromise = new HomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
@@ -1826,6 +1828,24 @@ describe("Home Pi Agent service", () => {
       objective: "auto",
       locale: "en"
     });
+    await vi.waitFor(() => expect(confirmations.pending()).toMatchObject({
+      status: "pending",
+      confirmation: {
+        effect: "arbitrary_shell",
+        presentation: {
+          subject: { kind: "executable_name", value: path.basename(fs.realpathSync.native(process.execPath)) }
+        }
+      }
+    }));
+    const pending = confirmations.pending();
+    if (pending.status !== "pending") throw new Error("Expected command confirmation.");
+    await confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: pending.confirmation.confirmationId,
+      expectedRevision: pending.revision,
+      decision: "allow"
+    });
+    const outcome = await outcomePromise;
 
     expect(outcome).toMatchObject({ state: "completed" });
     expect(jobs.readAgentTurnJob(outcome.requestId)?.privacy?.usedShell).toBe(true);

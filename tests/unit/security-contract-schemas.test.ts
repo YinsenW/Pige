@@ -154,7 +154,10 @@ describe("security-sensitive shared contracts", () => {
       "xoxb-example",
       "token=example",
       "plugin-op_20260722_abcdefgh",
-      "plugin-provider_20260722_abcdefgh"
+      "plugin-provider_20260722_abcdefgh",
+      "@larksuite/cli",
+      "safe-package@latest",
+      "safe-package@1.2"
     ]) {
       expect(() => HighRiskConfirmationSummarySchema.parse({
         ...confirmation,
@@ -172,9 +175,9 @@ describe("security-sensitive shared contracts", () => {
       presentation: {
         action: "install_package",
         target: "local_toolchain",
-        subject: { kind: "package_name", value: "@larksuite/cli" }
+        subject: { kind: "package_name", value: "@larksuite/cli@1.0.72" }
       }
-    }).presentation.subject).toEqual({ kind: "package_name", value: "@larksuite/cli" });
+    }).presentation.subject).toEqual({ kind: "package_name", value: "@larksuite/cli@1.0.72" });
   });
 
   it("keeps Skill inventory and lifecycle requests strict, pathless, and body-free", () => {
