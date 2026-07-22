@@ -13,6 +13,7 @@ import type {
   BackupManifestSummary,
   BackupCreateResult,
   AppearanceSettingsSummary,
+  AppearanceThemeMutationResult,
   BackupRestoreStatus,
   CreateVaultRequest,
   DiagnosticsHealth,
@@ -81,6 +82,7 @@ import type {
   SetDefaultModelRequest,
   UpdateModelRequest,
   SetLocaleRequest,
+  SetThemeRequest,
   SetSidebarOpenRequest,
   SetWindowModeRequest,
   SettingsRegistrySummary,
@@ -120,6 +122,8 @@ import type {
 import {
   AgentSubmitTurnIpcPayloadSchema,
   AgentSubmitTurnResultSchema,
+  AppearanceSettingsSummarySchema,
+  AppearanceThemeMutationResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   HighRiskConfirmationChangedEventSchema,
@@ -162,6 +166,8 @@ import {
   SkillRegistryMutationResultSchema,
   SkillRegistryQueryResultSchema,
   SkillRegistrySummarySchema,
+  SetLocaleRequestSchema,
+  SetThemeRequestSchema,
   WindowLayoutRequestSchema,
   WindowLayoutStateSchema,
   VaultActionResultSchema
@@ -636,9 +642,23 @@ const api: PigeDesktopApi = {
   },
   settings: {
     appearance: async (): Promise<AppearanceSettingsSummary> =>
-      ipcRenderer.invoke("settings.appearance") as Promise<AppearanceSettingsSummary>,
+      AppearanceSettingsSummarySchema.parse(await ipcRenderer.invoke("settings.appearance")),
     setLocale: async (request: SetLocaleRequest): Promise<AppearanceSettingsSummary> =>
-      ipcRenderer.invoke("settings.setLocale", request) as Promise<AppearanceSettingsSummary>,
+      AppearanceSettingsSummarySchema.parse(
+        await ipcRenderer.invoke("settings.setLocale", SetLocaleRequestSchema.parse(request))
+      ),
+    setTheme: async (request: SetThemeRequest): Promise<AppearanceThemeMutationResult> =>
+      AppearanceThemeMutationResultSchema.parse(
+        await ipcRenderer.invoke("settings.setTheme", SetThemeRequestSchema.parse(request))
+      ),
+    onAppearanceChanged: (listener: (settings: AppearanceSettingsSummary) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, value: unknown): void => {
+        const parsed = AppearanceSettingsSummarySchema.safeParse(value);
+        if (parsed.success) listener(parsed.data);
+      };
+      ipcRenderer.on("settings.appearanceChanged", handler);
+      return () => ipcRenderer.removeListener("settings.appearanceChanged", handler);
+    },
     registry: async (): Promise<SettingsRegistrySummary> =>
       ipcRenderer.invoke("settings.registry") as Promise<SettingsRegistrySummary>
   },

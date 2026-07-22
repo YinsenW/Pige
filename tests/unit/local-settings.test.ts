@@ -74,6 +74,32 @@ describe("local settings store", () => {
     expect(reopened.read().dismissedFirstHomeVaultIds).toEqual([vaultId]);
   });
 
+  it("CAS-writes appearance independently and preserves it through unrelated settings writes", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-local-settings-test-"));
+    tempRoots.push(root);
+    const store = new LocalSettingsStore(root);
+
+    expect(store.mutateAppearanceSettings(0, (current) => ({
+      ...current,
+      themePreference: "dark"
+    }))).toEqual({
+      status: "committed",
+      settings: { revision: 1, themePreference: "dark" }
+    });
+    expect(store.mutateAppearanceSettings(0, (current) => current)).toEqual({
+      status: "stale",
+      settings: { revision: 1, themePreference: "dark" }
+    });
+
+    store.setAppLocale("fr");
+    store.setWindowPreferences({ mode: "compact", alwaysOnTop: false, sidebarOpen: false });
+
+    expect(new LocalSettingsStore(root).getAppearanceSettings()).toEqual({
+      revision: 1,
+      themePreference: "dark"
+    });
+  });
+
   it("atomically swaps one active vault binding without retaining a duplicate identity", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-local-settings-test-"));
     tempRoots.push(root);

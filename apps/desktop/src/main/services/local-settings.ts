@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  AppearanceMachineSettingsSchema,
   MachineLocalSettingsSchema,
   UpdateMachineSettingsSchema,
+  type AppearanceMachineSettings,
   type Locale,
   type MachineLocalSettings,
   type UpdateMachineSettings,
@@ -23,6 +25,11 @@ export interface RecentVaultBinding {
 export interface UpdateSettingsMutation {
   readonly status: "committed" | "stale";
   readonly settings: UpdateMachineSettings;
+}
+
+export interface AppearanceSettingsMutation {
+  readonly status: "committed" | "stale";
+  readonly settings: AppearanceMachineSettings;
 }
 
 export class LocalSettingsStore {
@@ -60,6 +67,41 @@ export class LocalSettingsStore {
     return this.read().appLocale ?? fallback;
   }
 
+  getAppearanceSettings(): AppearanceMachineSettings {
+    return this.read().appearance ?? createDefaultAppearanceSettings();
+  }
+
+  mutateAppearanceSettings(
+    expectedRevision: number,
+    mutation: (settings: AppearanceMachineSettings) => AppearanceMachineSettings
+  ): AppearanceSettingsMutation {
+    return this.#withWriterLease(() => {
+      const current = this.read();
+      const appearance = current.appearance ?? createDefaultAppearanceSettings();
+      if (appearance.revision !== expectedRevision) {
+        return { status: "stale", settings: appearance };
+      }
+      if (appearance.revision === Number.MAX_SAFE_INTEGER) {
+        throw new PigeDomainError("settings.revision_exhausted", "Appearance settings revision is exhausted.");
+      }
+      const candidate = AppearanceMachineSettingsSchema.parse(mutation(appearance));
+      const nextAppearance = AppearanceMachineSettingsSchema.parse({
+        ...candidate,
+        revision: appearance.revision + 1
+      });
+      this.#writeUnlocked(createMachineLocalSettings({
+        activeVaultPath: current.activeVaultPath,
+        appLocale: current.appLocale,
+        appearance: nextAppearance,
+        window: current.window,
+        updates: current.updates,
+        dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
+        recentVaults: current.recentVaults
+      }));
+      return { status: "committed", settings: nextAppearance };
+    });
+  }
+
   getUpdateSettings(): UpdateMachineSettings {
     return this.read().updates ?? createDefaultUpdateSettings();
   }
@@ -85,6 +127,7 @@ export class LocalSettingsStore {
       this.#writeUnlocked(createMachineLocalSettings({
         activeVaultPath: current.activeVaultPath,
         appLocale: current.appLocale,
+        appearance: current.appearance,
         window: current.window,
         updates: nextUpdates,
         dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
@@ -103,6 +146,7 @@ export class LocalSettingsStore {
       createMachineLocalSettings({
         activeVaultPath: settings.activeVaultPath,
         appLocale: settings.appLocale,
+        appearance: settings.appearance,
         window: settings.window,
         updates: settings.updates,
         dismissedFirstHomeVaultIds: [
@@ -118,6 +162,7 @@ export class LocalSettingsStore {
     return this.#mutate((settings) => createMachineLocalSettings({
       activeVaultPath: settings.activeVaultPath,
       appLocale,
+      appearance: settings.appearance,
       window: settings.window,
       updates: settings.updates,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
@@ -129,6 +174,7 @@ export class LocalSettingsStore {
     return this.#mutate((settings) => createMachineLocalSettings({
       activeVaultPath: settings.activeVaultPath,
       appLocale: settings.appLocale,
+      appearance: settings.appearance,
       window,
       updates: settings.updates,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
@@ -161,6 +207,7 @@ export class LocalSettingsStore {
   clearActiveVault(): MachineLocalSettings {
     return this.#mutate((settings) => createMachineLocalSettings({
       appLocale: settings.appLocale,
+      appearance: settings.appearance,
       window: settings.window,
       updates: settings.updates,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
@@ -172,6 +219,7 @@ export class LocalSettingsStore {
     const nextSettings = this.#mutate((settings) => createMachineLocalSettings({
       activeVaultPath: settings.activeVaultPath,
       appLocale: settings.appLocale,
+      appearance: settings.appearance,
       window: settings.window,
       updates: settings.updates,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
@@ -306,6 +354,7 @@ function activateVault(
   return createMachineLocalSettings({
     activeVaultPath: resolvedVaultPath,
     appLocale: settings.appLocale,
+    appearance: settings.appearance,
     window: settings.window,
     updates: settings.updates,
     dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
@@ -416,6 +465,7 @@ function isErrno(caught: unknown, code: string): boolean {
 function createMachineLocalSettings(input: {
   readonly activeVaultPath?: string | undefined;
   readonly appLocale?: Locale | undefined;
+  readonly appearance?: AppearanceMachineSettings | undefined;
   readonly window?: WindowPreferences | undefined;
   readonly updates?: UpdateMachineSettings | undefined;
   readonly dismissedFirstHomeVaultIds?: readonly string[] | undefined;
@@ -432,6 +482,10 @@ function createMachineLocalSettings(input: {
 
   if (input.appLocale) {
     settings.appLocale = input.appLocale;
+  }
+
+  if (input.appearance) {
+    settings.appearance = input.appearance;
   }
 
   if (input.window) {
@@ -453,5 +507,12 @@ function createDefaultUpdateSettings(): UpdateMachineSettings {
   return UpdateMachineSettingsSchema.parse({
     revision: 0,
     channel: "alpha"
+  });
+}
+
+function createDefaultAppearanceSettings(): AppearanceMachineSettings {
+  return AppearanceMachineSettingsSchema.parse({
+    revision: 0,
+    themePreference: "system"
   });
 }

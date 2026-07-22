@@ -125,6 +125,26 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).not.toContain("ReaderSelectionPath");
   });
 
+  it("keeps machine-local Appearance theme main-owned, revision-fenced, and strictly projected", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const backupSource = fs.readFileSync(path.resolve("apps/desktop/src/main/services/backup-service.ts"), "utf8");
+
+    expect(contractsSource).toContain("readonly setTheme:");
+    expect(contractsSource).toContain("readonly onAppearanceChanged:");
+    expect(mainSource).toContain('ipcMain.handle("settings.setTheme"');
+    expect(mainSource).toContain("SetThemeRequestSchema.parse(request)");
+    expect(mainSource).toContain('browserWindow.webContents.send("settings.appearanceChanged"');
+    expect(mainSource.indexOf("getAppearanceService();")).toBeLessThan(mainSource.indexOf("createMainWindow(false)"));
+    expect(mainSource).toContain("appearanceService?.dispose();");
+    expect(preloadSource).toContain("AppearanceSettingsSummarySchema.parse(await ipcRenderer.invoke");
+    expect(preloadSource).toContain("SetThemeRequestSchema.parse(request)");
+    expect(preloadSource).toContain("AppearanceSettingsSummarySchema.safeParse(value)");
+    expect(backupSource).not.toContain("settings.json");
+    expect(backupSource).not.toContain("appearance");
+  });
+
   it("uses one integrated title bar while preserving native platform controls", () => {
     expect(getWindowShellOptions("darwin")).toEqual({
       titleBarStyle: "hiddenInset",
