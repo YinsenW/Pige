@@ -443,9 +443,11 @@ This integration contract defines behavior, not a second IPC vocabulary.
 
 `agent.submitTurn` is the sole production semantic ingress. Main no longer registers
 `capture.submitText`, `capture.submitFiles`, or `capture.submitUrl`; preservation invoked
-inside an Agent turn is checkpoint work, while explicit non-Agent preservation is marked
-`capture_only`. Legacy missing-field records normalize to `legacy_agent_ingest`; current
-records accept only `capture_only | agent_turn`, and unknown values fail validation.
+inside an Agent turn is checkpoint work. At this contract freeze, legacy code still
+accepts `capture_only` and normalizes missing-field records to `legacy_agent_ingest`
+solely for the bounded AR2 deletion window; neither may be created for new work. AR2
+removes current `capture_only` creation/acceptance so `agent_turn` is the only current
+record mode. Unknown values fail validation throughout.
 
 Durable proposal list/get/decision remains Main-internal for recovery/tests. Renderer
 list/get/approve/reject all fail closed pending a projection that excludes model-generated

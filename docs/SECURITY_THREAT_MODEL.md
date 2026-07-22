@@ -237,7 +237,8 @@ Mitigations:
 - Install-time code is not executed during staging.
 - Runtime capabilities are declared and enforced by Pige services.
 - Sensitive capabilities require a first-class authorization dialog.
-- Permissions can be remembered narrowly, revoked, and inspected later.
+- Authorization is allow or deny for the exact current third-party action. It is not a
+  saved grant, does not persist across actions, and cannot become a global mode.
 - Package writes use brokered Pige APIs; core tools are separate.
 - Skills/packages cannot directly access API keys. A reviewed adapter can request brokered credential use for one declared provider action, but never receives or returns raw credential bytes.
 - Executable/package-backed Skills run only through reviewed runtime adapters in a
@@ -281,8 +282,9 @@ Authorization dialog requirements:
 - Short plain-language reason.
 - Capability list with scope.
 - Data boundary label: local, network, cloud, filesystem, secret, destructive.
-- Buttons: Deny, Allow Once, Always Allow.
-- Always Allow must be scoped and displayed clearly, such as only this URL, only this domain, only this file, only this folder, only this vault, only this Skill/package/tool version, or only this provider profile.
+- Buttons: Deny and Allow This Action.
+- The authorization binds the exact Skill/package identity, version, capability, and
+  current scope only; another action or changed identity requires a new decision.
 - Destructive actions use stronger copy and do not default to Allow.
 - Dialog style should be calm, compact, and polished, similar in spirit to modern ChatGPT/Codex permission prompts.
 - No global mode can let third-party code inherit first-party turn authority or bypass a
@@ -498,7 +500,8 @@ Before v0.1 public alpha:
   network, write, delete, model, and brokered-credential capabilities; raw-secret access
   is rejected rather than prompted.
 - Core Pi tools cannot bypass validation; extensions cannot bypass Broker or access raw files/secrets.
-- Permission prompts support Deny, Allow Once, and Always Allow.
+- Third-party permission prompts support Deny and Allow This Action only; no persistent
+  grant or global YOLO authority exists.
 - Ordinary first-party work produces no per-tool prompt or permission record.
 - High-risk classification cannot be bypassed by source, model, Skill, package, or UI drift.
 - Denied permissions are respected.

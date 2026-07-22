@@ -14,6 +14,7 @@
       "PRIVACY.md",
       "docs/AI_DEVELOPMENT_GUIDE.md",
       "docs/TECH_ARCHITECTURE.md",
+      "docs/SECURITY_THREAT_MODEL.md",
       "docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md",
       "docs/JOB_OPERATION_AND_RECOVERY.md",
       "docs/QUALITY_AND_TEST_STRATEGY.md",
@@ -27,8 +28,8 @@
     ],
     "scope": "Independent review of the personal-Agent architecture reset: Pi semantic ownership, submitted-turn authority, closed high-risk effects, Provider Send, deletion inventory, risk-tiered verification, budgets, macOS-first sequencing, and unchanged product status.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
-    "minimumFileCount": 17,
-    "reviewedSha256": "88281e9fbad4f63b469c6c91a2813b19d7835c41614dcc6c359ad4f16c16b1d0"
+    "minimumFileCount": 18,
+    "reviewedSha256": "9a4a2a661b4b6b047ed6002510396e9747caebf0ef92232a97e84ed64a5baf8f"
   },
   "reviewers": [{
     "reviewerId": "architecture-reset-planning-review",
