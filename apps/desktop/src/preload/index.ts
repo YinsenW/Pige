@@ -118,6 +118,8 @@ import type {
   VaultSummary
 } from "@pige/contracts";
 import {
+  AgentSubmitTurnIpcPayloadSchema,
+  AgentSubmitTurnResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   HighRiskConfirmationChangedEventSchema,
@@ -404,16 +406,17 @@ const api: PigeDesktopApi = {
       request: AgentSubmitTurnRequest,
       files: readonly File[] = []
     ): Promise<AgentSubmitTurnResult> => {
-      const filePaths = files
-        .map((file) => webUtils.getPathForFile(file))
-        .filter((filePath): filePath is string => filePath.length > 0);
+      const filePaths = files.map((file) => webUtils.getPathForFile(file));
       const normalizedRequest = request.scope
         ? { ...request, scope: { kind: "current_note" as const, pageId: request.scope.pageId } }
         : request;
-      return ipcRenderer.invoke("agent.submitTurn", {
+      const payload = AgentSubmitTurnIpcPayloadSchema.parse({
         request: normalizedRequest,
         filePaths
-      }) as Promise<AgentSubmitTurnResult>;
+      });
+      return AgentSubmitTurnResultSchema.parse(
+        await ipcRenderer.invoke("agent.submitTurn", payload)
+      ) as AgentSubmitTurnResult;
     },
     onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void): (() => void) => {
       const handleDraft = (_event: IpcRendererEvent, draft: AgentTurnDraftEvent): void => listener(draft);

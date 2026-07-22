@@ -457,7 +457,9 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("...(request.scope === undefined ? {} : { scope: request.scope })");
     expect(mainSource).toContain("draftPublisher.close()");
     expect(preloadSource).toContain('scope: { kind: "current_note" as const, pageId: request.scope.pageId }');
-    expect(preloadSource).toContain('ipcRenderer.invoke("agent.submitTurn", {');
+    expect(preloadSource).toContain("AgentSubmitTurnIpcPayloadSchema.parse({");
+    expect(preloadSource).toContain('ipcRenderer.invoke("agent.submitTurn", payload)');
+    expect(preloadSource).toContain("AgentSubmitTurnResultSchema.parse(");
     expect(preloadSource).toContain("request: normalizedRequest");
     expect(preloadSource).toContain('ipcRenderer.on("agent.turnDraft", handleDraft)');
     expect(preloadSource).toContain('ipcRenderer.removeListener("agent.turnDraft", handleDraft)');
