@@ -1097,7 +1097,7 @@ describe("Home durable Agent conversation UI", () => {
     harness.windowMode = "expanded";
     harness.sidebarOpen = true;
     harness.enforceJobFilters = true;
-    harness.onboarding = captureOnlyOnboarding(false);
+    harness.onboarding = readyWithoutModelOnboarding(false);
     harness.jobs = [sourceWaitingForModelJob()];
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
@@ -1160,7 +1160,7 @@ describe("Home durable Agent conversation UI", () => {
   it("keeps an initial no-source model wait out of Recent Work until its conversation owner loads", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
-    harness.onboarding = captureOnlyOnboarding(true);
+    harness.onboarding = readyWithoutModelOnboarding(true);
     harness.jobs = [modelWaitingJob()];
     let resolveConversation: ((timeline: AgentConversationTimeline) => void) | undefined;
     harness.loadConversation = () => new Promise((resolve) => {
@@ -1191,7 +1191,7 @@ describe("Home durable Agent conversation UI", () => {
         const harness = createHarness(modelWaitingTimeline());
         harness.locale = locale;
         harness.windowMode = windowMode;
-        harness.onboarding = captureOnlyOnboarding(true);
+        harness.onboarding = readyWithoutModelOnboarding(true);
         harness.jobs = [modelWaitingJob()];
         const { container, root } = await mountHome(dom, makePigeApi(harness));
 
@@ -1371,7 +1371,7 @@ describe("Home durable Agent conversation UI", () => {
   it("docks processing files to the composer and removes terminal or non-source Jobs", async () => {
     const dom = createDom(420);
     const harness = createHarness(undefined);
-    harness.onboarding = captureOnlyOnboarding(true);
+    harness.onboarding = readyWithoutModelOnboarding(true);
     harness.jobs = [
       sourceWaitingForModelJob(),
       {
@@ -1402,7 +1402,7 @@ describe("Home durable Agent conversation UI", () => {
 
     const terminalDom = createDom(420);
     const terminalHarness = createHarness(undefined);
-    terminalHarness.onboarding = captureOnlyOnboarding(true);
+    terminalHarness.onboarding = readyWithoutModelOnboarding(true);
     terminalHarness.jobs = [{
       ...sourceWaitingForModelJob(),
       state: "completed",
@@ -1418,7 +1418,7 @@ describe("Home durable Agent conversation UI", () => {
   it("filters conversation-owned model waits before capping Recent Work", async () => {
     const dom = createDom();
     const harness = createHarness(modelWaitingTimeline());
-    harness.onboarding = captureOnlyOnboarding(false);
+    harness.onboarding = readyWithoutModelOnboarding(false);
     harness.enforceJobFilters = true;
     harness.jobs = [
       {
@@ -1466,7 +1466,7 @@ describe("Home durable Agent conversation UI", () => {
         error: defaultModelMissingError()
       }
     });
-    harness.onboarding = captureOnlyOnboarding(true);
+    harness.onboarding = readyWithoutModelOnboarding(true);
     harness.jobs = [sourceWaitingForModelJob()];
     const api = makePigeApi(harness);
     const firstMount = await mountHome(dom, api);
@@ -1702,7 +1702,7 @@ describe("Home durable Agent conversation UI", () => {
   it("gives a picker source Job sole status ownership before submission resolves", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
-    harness.onboarding = captureOnlyOnboarding(true);
+    harness.onboarding = readyWithoutModelOnboarding(true);
     let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
     harness.submitTurn = (request) => {
       harness.submitRequests.push(request);
@@ -1737,7 +1737,7 @@ describe("Home durable Agent conversation UI", () => {
   it("routes a full-window Home drop through the same intermediate source owner", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
-    harness.onboarding = captureOnlyOnboarding(true);
+    harness.onboarding = readyWithoutModelOnboarding(true);
     let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
     harness.submitTurn = (request) => {
       harness.submitRequests.push(request);
@@ -3928,9 +3928,9 @@ function readyOnboarding(): OnboardingStatus {
   };
 }
 
-function captureOnlyOnboarding(showFirstHomeGuide: boolean): OnboardingStatus {
+function readyWithoutModelOnboarding(showFirstHomeGuide: boolean): OnboardingStatus {
   return {
-    state: "capture_only",
+    state: "ready",
     hasDefaultModel: false,
     showFirstHomeGuide,
     activeVault: homeVaultSummary()
