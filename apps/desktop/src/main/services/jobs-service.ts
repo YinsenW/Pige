@@ -39,7 +39,8 @@ import {
   type AgentIngestParseToolRequest,
   type AgentIngestPublicationBinding,
   type AgentIngestPublishedResult,
-  type AgentIngestProposalBinding
+  type AgentIngestProposalBinding,
+  type AgentSourceToolSession
 } from "./agent-ingest-service";
 import type { DocumentParserPort } from "./document-parser-service";
 import type { DatasetMaterializerPort } from "./dataset-service";
@@ -155,6 +156,7 @@ export interface TextAgentTurnExecution {
   readonly job: JobRecord;
   readonly signal: AbortSignal;
   readonly sourceTools?: AgentSourceToolExecutionPort;
+  readonly sourceSession?: AgentSourceToolSession;
   readonly markDurableCheckpoint: (checkpointId: string) => void;
 }
 
@@ -694,10 +696,20 @@ export class JobsService {
             )
           }
         : undefined;
+      const sourceSession = sourceTools && this.#agentIngest
+        ? await this.#prepareAgentSourceToolSession(
+          vaultPath,
+          jobFile.path,
+          execution.job,
+          execution.control,
+          sourceTools
+        )
+        : undefined;
       return await execute({
         job: execution.job,
         signal: execution.control.signal,
         ...(sourceTools ? { sourceTools } : {}),
+        ...(sourceSession ? { sourceSession } : {}),
         markDurableCheckpoint: (checkpointId) => {
           const current = this.#readJobSnapshot(vaultPath, jobId)?.job;
           if (current?.cancellation?.durableWritesApplied === true) return;
@@ -714,6 +726,87 @@ export class JobsService {
     } finally {
       this.#finishCooperativeExecution(jobId, execution.controller);
     }
+  }
+
+  async #prepareAgentSourceToolSession(
+    vaultPath: string,
+    jobPath: string,
+    job: JobRecord,
+    control: JobExecutionControl,
+    sourceTools: AgentSourceToolExecutionPort
+  ): Promise<AgentSourceToolSession> {
+    const sourceId = job.sourceId;
+    const sourceFile = sourceId ? readSourceRecordFile(vaultPath, sourceId) : undefined;
+    if (
+      !this.#agentIngest ||
+      !sourceFile ||
+      sourceFile.sourceRecord.metadata.agentTurnJobId !== job.id
+    ) {
+      throw new PigeDomainError(
+        "agent_runtime.turn_binding_invalid",
+        "The source-bearing Agent turn is missing its exact preserved source binding."
+      );
+    }
+    return this.#agentIngest.prepareSourceToolSession(vaultPath, sourceFile.sourceRecord, job, {
+      onPolicyResolved: (snapshot) => {
+        this.#jobExecutionCoordinator(vaultPath).patch(
+          this.#jobRecordStore(vaultPath).read(jobPath),
+          {
+            policyContextId: snapshot.policyContextId,
+            policyHash: snapshot.policyHash,
+            message: "Pi Agent source tools are bound to the current policy and source revision."
+          }
+        );
+      },
+      onEgressRecorded: (operationId) => {
+        this.#jobExecutionCoordinator(vaultPath).patch(
+          this.#jobRecordStore(vaultPath).read(jobPath),
+          { operationIds: [operationId] }
+        );
+      },
+      assertSourceCurrent: (expectedSource) => {
+        const currentSource = readSourceRecord(vaultPath, sourceFile.sourceRecord.id);
+        if (
+          !currentSource ||
+          sourceRecordRevision(currentSource) !== sourceRecordRevision(expectedSource)
+        ) {
+          throw new PigeDomainError(
+            "agent_ingest.source_changed",
+            "The selected source evidence changed while the Agent turn was running."
+          );
+        }
+      },
+      parseCurrentSource: sourceTools.parse,
+      materializeCurrentDataset: sourceTools.materializeDataset,
+      ocrCurrentSource: sourceTools.ocr,
+      throwIfCancellationRequested: () => control.throwIfCancellationRequested(),
+      onPublicationStart: (checkpointId, publicationBinding) => {
+        if (publicationBinding) {
+          recordAgentNotePublicationCheckpoint(
+            this.#jobRecordStore(vaultPath),
+            this.#jobExecutionCoordinator(vaultPath),
+            vaultPath,
+            jobPath,
+            checkpointId,
+            publicationBinding
+          );
+        }
+        control.markDurableCheckpoint(checkpointId);
+      },
+      onProposalStaged: (proposalResult) => {
+        markAgentProposalAwaitingReview(
+          this.#jobRecordStore(vaultPath),
+          this.#jobExecutionCoordinator(vaultPath),
+          jobPath,
+          proposalResult.proposalId,
+          proposalResult.proposalBinding,
+          proposalResult.operationIds,
+          proposalResult.pageId,
+          proposalResult.pagePath
+        );
+      },
+      signal: control.signal
+    });
   }
 
   attachAgentTurnSource(jobId: string, sourceId: string): JobRecord {

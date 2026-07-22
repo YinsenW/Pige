@@ -329,6 +329,23 @@ export type AgentIngestResult =
   | AgentIngestResponseResult
   | AgentIngestDatasetResult;
 
+/**
+ * Source-bound tools prepared for the single Home-owned Pi turn. The session
+ * retains source freshness and durable-result state; callers only compose its
+ * tools into their runtime request and settle it after that request finishes.
+ */
+export interface AgentSourceToolSession {
+  readonly tools: readonly PigeAgentToolDefinition[];
+  readonly terminalToolNames: readonly string[];
+  beforeModelTurn(): Promise<void>;
+  settle(): AgentIngestResult;
+  result(): AgentIngestResult | undefined;
+}
+
+interface LegacyAgentSourceToolSession extends AgentSourceToolSession {
+  runLegacy(): Promise<AgentIngestResult>;
+}
+
 interface AgentIngestPromptContext {
   readonly source: {
     readonly id: string;
@@ -675,6 +692,26 @@ export class AgentIngestService {
     job: JobRecord,
     hooks: AgentIngestHooks = {}
   ): Promise<AgentIngestResult> {
+    const session = await this.#prepareSourceToolSession(vaultPath, sourceRecord, job, hooks, true);
+    return session.runLegacy();
+  }
+
+  async prepareSourceToolSession(
+    vaultPath: string,
+    sourceRecord: SourceRecord,
+    job: JobRecord,
+    hooks: AgentIngestHooks = {}
+  ): Promise<AgentSourceToolSession> {
+    return this.#prepareSourceToolSession(vaultPath, sourceRecord, job, hooks, false);
+  }
+
+  async #prepareSourceToolSession(
+    vaultPath: string,
+    sourceRecord: SourceRecord,
+    job: JobRecord,
+    hooks: AgentIngestHooks,
+    datasetTerminal: boolean
+  ): Promise<LegacyAgentSourceToolSession> {
     const recoveredUpdate = recoverAgentPageUpdate({
       vaultPath,
       job,
@@ -710,7 +747,7 @@ export class AgentIngestService {
       } : {})
     });
     if (recoveredUpdate) {
-      return {
+      return createSettledAgentSourceToolSession({
         outcome: "published",
         mutationKind: "update_page",
         pageId: recoveredUpdate.pageId,
@@ -722,7 +759,7 @@ export class AgentIngestService {
         operationId: recoveredUpdate.operation.id,
         operationIds: Array.from(new Set([...(job.operationIds ?? []), recoveredUpdate.operation.id])),
         ...(recoveredUpdate.relationshipPageId ? { knowledgeAction: "linked" as const } : {})
-      };
+      });
     }
     const pageId = createWikiNotePageId(sourceRecord.id);
     const pagePath = createWikiNotePagePath(sourceRecord.id, pageId);
@@ -736,7 +773,7 @@ export class AgentIngestService {
       );
     }
     if (existing) {
-      return recoverExistingGeneratedNote({
+      return createSettledAgentSourceToolSession(recoverExistingGeneratedNote({
         vaultPath,
         job,
         pageId,
@@ -744,7 +781,7 @@ export class AgentIngestService {
         sourceRecord,
         existing,
         hooks
-      });
+      }));
     }
 
     if (existingProposal) {
@@ -769,7 +806,7 @@ export class AgentIngestService {
         hooks
       });
       hooks.onProposalStaged?.(recoveredProposal);
-      return recoveredProposal;
+      return createSettledAgentSourceToolSession(recoveredProposal);
     }
 
     const defaultModel = this.#models.getDefaultModel();
@@ -820,7 +857,7 @@ export class AgentIngestService {
     const proposalStageAvailable = this.#proposals !== undefined && job.class === "agent_ingest";
 
     const authorizeCurrentModelTurn = async (): Promise<void> => {
-      if (publication || datasetMaterialization) return;
+      if (publication || (datasetTerminal && datasetMaterialization)) return;
       if (stagedProposal || sourceResponse) {
         throw new PigeDomainError(
           "agent_runtime.terminal_action_committed",
@@ -996,7 +1033,7 @@ export class AgentIngestService {
         ? createAlreadyProposedToolResult(stagedProposal)
         : sourceResponse
           ? createAlreadyRespondedToolResult(sourceResponse)
-          : datasetMaterialization
+          : datasetTerminal && datasetMaterialization
             ? createAlreadyMaterializedToolResult(datasetMaterialization)
             : undefined;
     let terminalEffectTail: Promise<void> = Promise.resolve();
@@ -1368,7 +1405,7 @@ export class AgentIngestService {
       };
     };
 
-    const tools = createAgentIngestToolRegistry({
+    const registeredTools = createAgentIngestToolRegistry({
       jobId: job.id,
       sourceId: currentSourceRecord.id,
       authorization: this.#toolAuthorization,
@@ -1461,7 +1498,7 @@ export class AgentIngestService {
               warnings: normalizeList(execution.warnings),
               operationIds: execution.operationIds
             };
-            return createDatasetToolResult(execution, true);
+            return createDatasetToolResult(execution, datasetTerminal);
           })
         } : {}),
         parse: async (context) => {
@@ -2036,49 +2073,94 @@ export class AgentIngestService {
         })
       }
     });
+    const tools = datasetTerminal
+      ? registeredTools
+      : makeDatasetMaterializationNonTerminal(registeredTools);
     toolCatalogHash = createPigeAgentToolCatalogHash(tools);
     compatibleToolCatalogHashes = createCompatibleAgentIngestCatalogHashes(tools);
-
-    try {
-      await this.#runtime.run({
-        runtimeConfig,
-        jobId: job.id,
-        systemPrompt,
-        userPrompt,
-        tools,
-        beforeModelTurn: () => authorizeCurrentModelTurn(),
-        completionPolicy: {
-          terminalToolNames: tools
-            .map((tool) => tool.name)
-            .filter((name) => AGENT_INGEST_TERMINAL_TOOL_NAMES.has(name)),
-          maxWallTimeMs: 600_000,
-          maxToolCalls: 256,
-          maxWorkBytes: 1_048_576,
-          maxRepeatedFailureFingerprints: 3
-        },
-        ...(hooks.signal ? { signal: hooks.signal } : {})
-      });
-    } catch (caught) {
-      if (datasetMaterialization) return datasetMaterialization;
-      if (stagedProposal) return stagedProposal;
-      if (sourceResponse) return sourceResponse;
-      throw caught;
-    }
-    if (dependencyWait) {
-      throw new PigeDomainError(
-        "agent_runtime.tool_dependency_waiting",
-        `Agent-selected processing is waiting: ${dependencyWait.dependencyCode ?? dependencyWait.status}.`
-      );
-    }
-    if (sourceResponse) return sourceResponse;
-    if (datasetMaterialization) return datasetMaterialization;
-    if (stagedProposal) return stagedProposal;
-    if (publication) return publication;
-    throw new PigeDomainError(
-      "agent_runtime.knowledge_action_missing",
-      "The embedded Pi Agent turn finished without a validated knowledge action."
+    const legacyTerminalToolNames = tools
+      .map((tool) => tool.name)
+      .filter((name) => AGENT_INGEST_TERMINAL_TOOL_NAMES.has(name));
+    const terminalToolNames = legacyTerminalToolNames.filter(
+      (name) => name !== INSPECT_DATASET_TOOL_NAME
     );
+    const result = (): AgentIngestResult | undefined => sourceResponse
+      ?? stagedProposal
+      ?? publication
+      ?? datasetMaterialization;
+    const settle = (): AgentIngestResult => {
+      if (dependencyWait) {
+        throw new PigeDomainError(
+          "agent_runtime.tool_dependency_waiting",
+          `Agent-selected processing is waiting: ${dependencyWait.dependencyCode ?? dependencyWait.status}.`
+        );
+      }
+      const settled = result();
+      if (settled) return settled;
+      throw new PigeDomainError(
+        "agent_runtime.knowledge_action_missing",
+        "The embedded Pi Agent turn finished without a validated knowledge action."
+      );
+    };
+    return {
+      tools,
+      terminalToolNames,
+      beforeModelTurn: authorizeCurrentModelTurn,
+      result,
+      settle,
+      runLegacy: async () => {
+        try {
+          await this.#runtime.run({
+            runtimeConfig,
+            jobId: job.id,
+            systemPrompt,
+            userPrompt,
+            tools,
+            beforeModelTurn: authorizeCurrentModelTurn,
+            completionPolicy: {
+              terminalToolNames: legacyTerminalToolNames,
+              maxWallTimeMs: 600_000,
+              maxToolCalls: 256,
+              maxWorkBytes: 1_048_576,
+              maxRepeatedFailureFingerprints: 3
+            },
+            ...(hooks.signal ? { signal: hooks.signal } : {})
+          });
+        } catch (caught) {
+          const recovered = result();
+          if (recovered) return recovered;
+          throw caught;
+        }
+        return settle();
+      }
+    };
   }
+}
+
+function createSettledAgentSourceToolSession(result: AgentIngestResult): LegacyAgentSourceToolSession {
+  return {
+    tools: [],
+    terminalToolNames: [],
+    beforeModelTurn: async () => undefined,
+    settle: () => result,
+    result: () => result,
+    runLegacy: async () => result
+  };
+}
+
+function makeDatasetMaterializationNonTerminal(
+  tools: readonly PigeAgentToolDefinition[]
+): readonly PigeAgentToolDefinition[] {
+  return tools.map((tool) => {
+    if (tool.name !== INSPECT_DATASET_TOOL_NAME) return tool;
+    return {
+      ...tool,
+      execute: async (args, signal, context, onUpdate) => {
+        const result = await tool.execute(args, signal, context, onUpdate);
+        return { ...result, terminate: false };
+      }
+    };
+  });
 }
 
 const unavailableCapabilityPort: AgentIngestCapabilityPort = {
