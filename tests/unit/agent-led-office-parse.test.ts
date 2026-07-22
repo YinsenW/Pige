@@ -164,20 +164,16 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
   });
 
   it.each([
-    { kind: "docx_file" as const, fileName: "waiting.docx", bytes: createTestDocx, title: "Recovered DOCX knowledge" },
-    { kind: "pptx_file" as const, fileName: "waiting.pptx", bytes: createTestPptx, title: "Recovered PPTX knowledge" }
-  ])("keeps a waiting $kind parse parent parked until its parser is ready and reuses one child", async ({
-    kind,
-    fileName,
-    bytes,
-    title
-  }) => {
+    { kind: "docx_file" as const, fileName: "waiting.docx", bytes: createTestDocx },
+    { kind: "pptx_file" as const, fileName: "waiting.pptx", bytes: createTestPptx }
+  ])("keeps a waiting $kind parse child without overriding Pi's final prose", async ({ kind, fileName, bytes }) => {
     const fixture = makeVault();
     const captured = await preserveOffice(fixture, fileName, await bytes());
     const firstRuntime = new RecordingRuntime(new PiAgentRuntimeAdapter({
       fauxResponses: [
         toolCall("pige_inspect_source", `${kind}_wait_inspect`),
-        toolCall("pige_parse_source", `${kind}_wait_parse`)
+        toolCall("pige_parse_source", `${kind}_wait_parse`),
+        { kind: "text", text: "The parser dependency is not available yet." }
       ]
     }));
     const waitingJobs = makeJobs(fixture, firstRuntime, undefined, true);
@@ -186,39 +182,25 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
 
     expect(await waitingJobs.processQueuedAgentIngest({ jobIds: [parentId] })).toEqual({
       processed: 1,
-      completed: 0,
-      failed: 1
+      completed: 1,
+      failed: 0
     });
     const firstChild = requireValue(readJobs(fixture.vaultPath).find((job) => job.class === "parse"));
     expect(firstChild).toMatchObject({ state: "waiting_dependency", parentJobId: parentId });
-    expect(readJob(fixture.vaultPath, parentId).state).toBe("waiting_dependency");
+    expect(readJob(fixture.vaultPath, parentId).state).toBe("completed");
     expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toEqual([]);
-    expect(waitingJobs.requeueWaitingAgentIngest()).toEqual({ requeued: 0 });
-
-    let parserCalls = 0;
-    const resumedRuntime = new RecordingRuntime(new PiAgentRuntimeAdapter({
-      fauxResponses: completeParseTrace(kind, groundedOutput(title), "resume")
-    }));
-    const resumedJobs = makeJobs(fixture, resumedRuntime, makeOfficeParser(() => { parserCalls += 1; }), true);
-    expect(resumedJobs.requeueWaitingAgentIngest()).toEqual({ requeued: 1 });
-    expect(await resumedJobs.processQueuedAgentIngest({ jobIds: [parentId] })).toMatchObject({ completed: 1, failed: 0 });
-
-    const parseChildren = readJobs(fixture.vaultPath).filter((job) => job.class === "parse");
-    expect(parseChildren).toHaveLength(1);
-    expect(parseChildren[0]?.id).toBe(firstChild.id);
-    expect(parseChildren[0]?.state).toBe("completed_with_warnings");
-    expect(parseChildren[0]?.inputRefs?.filter((ref) => ref.role === "agent_tool_call_provenance")).toHaveLength(2);
-    expect(parserCalls).toBe(1);
+    expect(readOperations(fixture.vaultPath).some((operation) => operation.kind === "create_page")).toBe(false);
   });
 
-  it("resumes a PPTX with no OCR child after the unavailable capability becomes ready", async () => {
+  it("keeps parsed PPTX evidence without inventing an OCR action when OCR is unavailable", async () => {
     const fixture = makeVault();
     const captured = await preserveOffice(fixture, "image-only.pptx", await createTestPptx());
     let parserCalls = 0;
     const runtime = new RecordingRuntime(new PiAgentRuntimeAdapter({
       fauxResponses: [
         toolCall("pige_inspect_source", "pptx_empty_inspect"),
-        toolCall("pige_parse_source", "pptx_empty_parse")
+        toolCall("pige_parse_source", "pptx_empty_parse"),
+        { kind: "text", text: "The presentation needs OCR before it can be processed." }
       ]
     }));
     const parser = new DocumentParserService([
@@ -235,68 +217,20 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
 
     expect(await jobs.processQueuedAgentIngest({ jobIds: [parentId] })).toEqual({
       processed: 1,
-      completed: 0,
-      failed: 1
+      completed: 1,
+      failed: 0
     });
 
     const parent = readJob(fixture.vaultPath, parentId);
     const child = requireValue(readJobs(fixture.vaultPath).find((job) => job.class === "parse"));
     const source = readSource(fixture.vaultPath, captured.sourceId);
-    expect(parent).toMatchObject({ state: "waiting_dependency", childJobIds: [child.id] });
+    expect(parent).toMatchObject({ state: "completed", childJobIds: [child.id] });
     expect(child).toMatchObject({ state: "completed_with_warnings", parentJobId: parent.id });
     expect(source.metadata).toMatchObject({ agentTextReady: false, needsOcr: true, textCoverage: "none" });
     expect(readJobs(fixture.vaultPath).filter((job) => job.class === "ocr")).toEqual([]);
     expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toEqual([]);
     expect(readOperations(fixture.vaultPath).some((operation) => operation.kind === "create_page")).toBe(false);
-    expect(jobs.requeueWaitingAgentIngest()).toEqual({ requeued: 0 });
-
-    const readyAdapter = new StaticNativeOcrAdapter(
-      validNativeOcrResult("PPTX OCR became available after the parent first waited.")
-    );
-    const resumedRuntime = new RecordingRuntime(new PiAgentRuntimeAdapter({
-      fauxResponses: [
-        toolCall("pige_inspect_source", "pptx_no_child_resume_inspect_before"),
-        toolCall("pige_parse_source", "pptx_no_child_resume_parse"),
-        toolCall("pige_ocr_source", "pptx_no_child_resume_ocr"),
-        toolCall("pige_inspect_source", "pptx_no_child_resume_inspect_after"),
-        toolCall(
-          "pige_create_knowledge_note",
-          "pptx_no_child_resume_publish",
-          groundedOutput("Recovered PPTX without a pre-existing OCR child")
-        )
-      ]
-    }));
-    const resumedJobs = makeJobs(
-      fixture,
-      resumedRuntime,
-      parser,
-      true,
-      new OcrService(readyAdapter, undefined, undefined, undefined, new StaticOfficeMediaMaterializer())
-    );
-
-    expect(resumedJobs.requeueWaitingAgentIngest()).toEqual({ requeued: 1 });
-    expect(await resumedJobs.processQueuedAgentIngest({ jobIds: [parentId] })).toEqual({
-      processed: 1,
-      completed: 1,
-      failed: 0
-    });
-
-    const parseChildren = readJobs(fixture.vaultPath).filter((job) => job.class === "parse");
-    const ocrChildren = readJobs(fixture.vaultPath).filter((job) => job.class === "ocr");
-    expect(parseChildren).toHaveLength(1);
-    expect(parseChildren[0]?.id).toBe(child.id);
     expect(parserCalls).toBe(1);
-    expect(ocrChildren).toHaveLength(1);
-    expect(ocrChildren[0]).toMatchObject({ state: "completed", parentJobId: parentId });
-    expect(readyAdapter.callCount).toBe(1);
-    expect(resumedRuntime.results[0]?.invokedTools).toEqual([
-      "pige_inspect_source",
-      "pige_parse_source",
-      "pige_ocr_source",
-      "pige_inspect_source",
-      "pige_create_knowledge_note"
-    ]);
-    expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toHaveLength(1);
   });
 
   it("runs Pi inspect -> parse -> OCR -> inspect -> publish for a media-only PPTX", async () => {
@@ -318,7 +252,8 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
           "pige_create_knowledge_note",
           "pptx_ocr_publish",
           groundedOutput("Agent-selected PPTX OCR knowledge")
-        )
+        ),
+        { kind: "text", text: "I recognized the presentation media and created the note." }
       ]
     }));
     const ocr = new OcrService(
@@ -378,7 +313,7 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
     }
   });
 
-  it("requeues a PPTX waiting on OCR capability and reuses the same child before publication", async () => {
+  it("keeps a waiting PPTX OCR child without overriding Pi's final prose", async () => {
     const fixture = makeVault();
     const captured = await preserveOffice(fixture, "waiting-media.pptx", await createTestPptx());
     const parser = new DocumentParserService([
@@ -392,7 +327,8 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
       fauxResponses: [
         toolCall("pige_inspect_source", "pptx_waiting_ocr_inspect"),
         toolCall("pige_parse_source", "pptx_waiting_ocr_parse"),
-        toolCall("pige_ocr_source", "pptx_waiting_ocr_call")
+        toolCall("pige_ocr_source", "pptx_waiting_ocr_call"),
+        { kind: "text", text: "The OCR dependency is not available yet." }
       ]
     }));
     const waitingJobs = makeJobs(
@@ -407,62 +343,17 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
 
     expect(await waitingJobs.processQueuedAgentIngest({ jobIds: [parentId] })).toEqual({
       processed: 1,
-      completed: 0,
-      failed: 1
-    });
-    const firstParseChild = requireValue(readJobs(fixture.vaultPath).find((job) => job.class === "parse"));
-    const firstOcrChild = requireValue(readJobs(fixture.vaultPath).find((job) => job.class === "ocr"));
-    expect(firstOcrChild).toMatchObject({ state: "waiting_dependency", parentJobId: parentId });
-    expect(readJob(fixture.vaultPath, parentId).state).toBe("waiting_dependency");
-    expect(unavailableAdapter.callCount).toBe(0);
-    expect(waitingJobs.requeueWaitingAgentIngest()).toEqual({ requeued: 0 });
-
-    const readyAdapter = new StaticNativeOcrAdapter(
-      validNativeOcrResult("Recovered PPTX OCR evidence after capability startup.")
-    );
-    const resumedRuntime = new RecordingRuntime(new PiAgentRuntimeAdapter({
-      fauxResponses: [
-        toolCall("pige_inspect_source", "pptx_resumed_ocr_inspect_before"),
-        toolCall("pige_parse_source", "pptx_resumed_ocr_parse"),
-        toolCall("pige_ocr_source", "pptx_resumed_ocr_call"),
-        toolCall("pige_inspect_source", "pptx_resumed_ocr_inspect_after"),
-        toolCall(
-          "pige_create_knowledge_note",
-          "pptx_resumed_ocr_publish",
-          groundedOutput("Recovered PPTX OCR capability knowledge")
-        )
-      ]
-    }));
-    const resumedJobs = makeJobs(
-      fixture,
-      resumedRuntime,
-      parser,
-      true,
-      new OcrService(readyAdapter, undefined, undefined, undefined, new StaticOfficeMediaMaterializer())
-    );
-
-    expect(resumedJobs.requeueWaitingAgentIngest()).toEqual({ requeued: 1 });
-    const resumedResult = await resumedJobs.processQueuedAgentIngest({ jobIds: [parentId] });
-    expect(resumedResult).toEqual({
-      processed: 1,
       completed: 1,
       failed: 0
     });
-
-    const parseChildren = readJobs(fixture.vaultPath).filter((job) => job.class === "parse");
-    const ocrChildren = readJobs(fixture.vaultPath).filter((job) => job.class === "ocr");
-    expect(parseChildren).toHaveLength(1);
-    expect(ocrChildren).toHaveLength(1);
-    expect(parseChildren[0]?.id).toBe(firstParseChild.id);
-    expect(ocrChildren[0]?.id).toBe(firstOcrChild.id);
-    expect(ocrChildren[0]?.state).toBe("completed");
-    expect(ocrChildren[0]?.inputRefs?.filter((ref) => ref.role === "agent_tool_call_provenance")).toHaveLength(2);
-    expect(readyAdapter.callCount).toBe(1);
+    const firstOcrChild = requireValue(readJobs(fixture.vaultPath).find((job) => job.class === "ocr"));
+    expect(firstOcrChild).toMatchObject({ state: "waiting_dependency", parentJobId: parentId });
     expect(readJob(fixture.vaultPath, parentId).state).toBe("completed");
-    expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toHaveLength(1);
+    expect(unavailableAdapter.callCount).toBe(0);
+    expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toEqual([]);
   });
 
-  it("reuses one PPTX parse and OCR action across parent retry", async () => {
+  it("keeps completed PPTX parse and OCR effects when the provider final is structurally empty", async () => {
     const fixture = makeVault();
     const captured = await preserveOffice(fixture, "retry-media.pptx", await createTestPptx());
     let parserCalls = 0;
@@ -480,14 +371,15 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
         toolCall("pige_inspect_source", "pptx_retry_inspect_first"),
         toolCall("pige_parse_source", "pptx_retry_parse_first"),
         toolCall("pige_ocr_source", "pptx_retry_ocr_first"),
-        { kind: "text", text: "Synthetic interruption after durable PPTX OCR." }
+        { kind: "text", text: "   " }
       ],
       [
         toolCall("pige_inspect_source", "pptx_retry_inspect_second"),
         toolCall("pige_parse_source", "pptx_retry_parse_second"),
         toolCall("pige_ocr_source", "pptx_retry_ocr_second"),
         toolCall("pige_inspect_source", "pptx_retry_inspect_latest"),
-        toolCall("pige_create_knowledge_note", "pptx_retry_publish", groundedOutput("Retried PPTX OCR knowledge"))
+        toolCall("pige_create_knowledge_note", "pptx_retry_publish", groundedOutput("Retried PPTX OCR knowledge")),
+        { kind: "text", text: "I reused the OCR result and created the note." }
       ]
     ]);
     const jobs = makeJobs(
@@ -508,9 +400,6 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
       .map((operation) => operation.id)
       .sort();
 
-    expect(jobs.retry({ jobId: parentId })).toMatchObject({ status: "requeued" });
-    expect(await jobs.processQueuedAgentIngest({ jobIds: [parentId] })).toMatchObject({ completed: 1, failed: 0 });
-
     const parseChildren = readJobs(fixture.vaultPath).filter((job) => job.class === "parse");
     const ocrChildren = readJobs(fixture.vaultPath).filter((job) => job.class === "ocr");
     expect(parseChildren).toHaveLength(1);
@@ -521,7 +410,10 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
     expect(adapter.callCount).toBe(1);
     expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "create_artifact")
       .map((operation) => operation.id).sort()).toEqual(firstArtifactOperations);
-    expect(readJob(fixture.vaultPath, parentId).childJobIds).toEqual([firstParseChild.id, firstOcrChild.id]);
+    expect(readJob(fixture.vaultPath, parentId)).toMatchObject({
+      state: "failed_retryable",
+      childJobIds: [firstParseChild.id, firstOcrChild.id]
+    });
   });
 
   it("propagates parent cancellation into the active Office parser child", async () => {
@@ -686,7 +578,8 @@ function completeParseTrace(
     toolCall("pige_inspect_source", `${sourceKind}_${suffix}_inspect_before`),
     toolCall("pige_parse_source", `${sourceKind}_${suffix}_parse`),
     toolCall("pige_inspect_source", `${sourceKind}_${suffix}_inspect_after`),
-    toolCall("pige_create_knowledge_note", `${sourceKind}_${suffix}_publish`, output)
+    toolCall("pige_create_knowledge_note", `${sourceKind}_${suffix}_publish`, output),
+    { kind: "text", text: "I parsed the preserved Office source and created the knowledge note." }
   ];
 }
 

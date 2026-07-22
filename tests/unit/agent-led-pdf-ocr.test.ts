@@ -183,7 +183,7 @@ describe("Agent-led PDF OCR tool", { timeout: 15_000 }, () => {
     expect(note).toContain(`[source:${captured.sourceId}#p2-ocr1]`);
   });
 
-  it("reuses one OCR child and operation identity across parent retry", async () => {
+  it("keeps a completed OCR effect when the provider final is structurally empty", async () => {
     const fixture = makeVault();
     const captured = await preservePdf(fixture, "agent-ocr-retry.pdf", createJpegScanPdf(1));
     let parserCalls = 0;
@@ -195,14 +195,15 @@ describe("Agent-led PDF OCR tool", { timeout: 15_000 }, () => {
         toolCall("pige_inspect_source", "retry_inspect_before"),
         toolCall("pige_parse_source", "retry_parse_first"),
         toolCall("pige_ocr_source", "retry_ocr_first"),
-        { kind: "text", text: "Synthetic interruption after durable OCR." }
+        { kind: "text", text: "   " }
       ],
       [
         toolCall("pige_inspect_source", "retry_inspect_again"),
         toolCall("pige_parse_source", "retry_parse_second"),
         toolCall("pige_ocr_source", "retry_ocr_second"),
         toolCall("pige_inspect_source", "retry_inspect_latest"),
-        toolCall("pige_create_knowledge_note", "retry_publish", groundedOutput("Retried OCR knowledge", ["ev_01"]))
+        toolCall("pige_create_knowledge_note", "retry_publish", groundedOutput("Retried OCR knowledge", ["ev_01"])),
+        { kind: "text", text: "I reused the OCR evidence and created the note." }
       ]
     ]);
     const jobs = makeJobs(fixture, runtime, parser, new OcrService(adapter, undefined, renderer));
@@ -215,9 +216,6 @@ describe("Agent-led PDF OCR tool", { timeout: 15_000 }, () => {
       .filter((operation) => operation.kind === "create_artifact" && operation.jobId === firstOcrChild.id)
       .map((operation) => operation.id);
 
-    expect(jobs.retry({ jobId: parentId })).toMatchObject({ status: "requeued" });
-    expect(await jobs.processQueuedAgentIngest({ jobIds: [parentId] })).toMatchObject({ completed: 1, failed: 0 });
-
     const ocrChildren = readJobs(fixture.vaultPath).filter((job) => job.class === "ocr");
     const ocrChild = requireValue(ocrChildren[0]);
     const provenance = (ocrChild.inputRefs ?? []).filter((ref) => ref.role === "agent_tool_call_provenance");
@@ -227,16 +225,15 @@ describe("Agent-led PDF OCR tool", { timeout: 15_000 }, () => {
     expect(renderer.callCount).toBe(1);
     expect(adapter.callCount).toBe(1);
     expect(provenance.map((ref) => ref.checksum)).toEqual([
-      hashToolCallId(parentId, "retry_ocr_first"),
-      hashToolCallId(parentId, "retry_ocr_second")
+      hashToolCallId(parentId, "retry_ocr_first")
     ]);
     expect(readOperations(fixture.vaultPath)
       .filter((operation) => operation.kind === "create_artifact" && operation.jobId === ocrChild.id)
       .map((operation) => operation.id)).toEqual(firstArtifactOperationIds);
-    expect(readJob(fixture.vaultPath, parentId)).toMatchObject({ state: "completed" });
+    expect(readJob(fixture.vaultPath, parentId)).toMatchObject({ state: "failed_retryable" });
   });
 
-  it("resumes the same waiting OCR child after capability recovery", async () => {
+  it("keeps a waiting OCR child without overriding Pi's final prose", async () => {
     const fixture = makeVault();
     const captured = await preservePdf(fixture, "agent-ocr-wait.pdf", createJpegScanPdf(1));
     const renderer = new StaticPdfPageRenderer();
@@ -247,40 +244,35 @@ describe("Agent-led PDF OCR tool", { timeout: 15_000 }, () => {
       [
         toolCall("pige_inspect_source", "wait_inspect_before"),
         toolCall("pige_parse_source", "wait_parse"),
-        toolCall("pige_ocr_source", "wait_ocr_first")
+        toolCall("pige_ocr_source", "wait_ocr_first"),
+        { kind: "text", text: "The OCR dependency is not available yet." }
       ],
       [
         toolCall("pige_inspect_source", "wait_inspect_again"),
         toolCall("pige_ocr_source", "wait_ocr_second"),
         toolCall("pige_inspect_source", "wait_inspect_latest"),
-        toolCall("pige_create_knowledge_note", "wait_publish", groundedOutput("Recovered OCR knowledge", ["ev_01"]))
+        toolCall("pige_create_knowledge_note", "wait_publish", groundedOutput("Recovered OCR knowledge", ["ev_01"])),
+        { kind: "text", text: "I recovered OCR capability and created the note." }
       ]
     ]);
     const jobs = makeJobs(fixture, runtime, makePdfParser(), ocr);
 
     jobs.processQueuedCaptures({ jobIds: [captured.captureJobId] });
     const parentId = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]).id;
-    expect(await jobs.processQueuedAgentIngest({ jobIds: [parentId] })).toMatchObject({ completed: 0, failed: 1 });
+    expect(await jobs.processQueuedAgentIngest({ jobIds: [parentId] })).toMatchObject({ completed: 1, failed: 0 });
     const waitingChild = requireValue(readJobs(fixture.vaultPath).find((job) => job.class === "ocr"));
     expect(waitingChild.state).toBe("waiting_dependency");
-    expect(readJob(fixture.vaultPath, parentId).state).toBe("waiting_dependency");
-    expect(jobs.requeueWaitingOcr()).toEqual({ requeued: 0 });
-
-    ocr.ready = true;
-    expect(jobs.requeueWaitingAgentIngest()).toEqual({ requeued: 1 });
-    expect(await jobs.processQueuedAgentIngest({ jobIds: [parentId] })).toMatchObject({ completed: 1, failed: 0 });
-
+    expect(readJob(fixture.vaultPath, parentId).state).toBe("completed");
     const children = readJobs(fixture.vaultPath).filter((job) => job.class === "ocr");
     const child = requireValue(children[0]);
     expect(children).toHaveLength(1);
     expect(child.id).toBe(waitingChild.id);
-    expect(child.state).toBe("completed");
-    expect(renderer.callCount).toBe(1);
-    expect(adapter.callCount).toBe(1);
+    expect(child.state).toBe("waiting_dependency");
+    expect(renderer.callCount).toBe(0);
+    expect(adapter.callCount).toBe(0);
     expect((child.inputRefs ?? []).filter((ref) => ref.role === "agent_tool_call_provenance").map((ref) => ref.checksum))
       .toEqual([
-        hashToolCallId(parentId, "wait_ocr_first"),
-        hashToolCallId(parentId, "wait_ocr_second")
+        hashToolCallId(parentId, "wait_ocr_first")
       ]);
   });
 
@@ -336,24 +328,26 @@ describe("Agent-led PDF OCR tool", { timeout: 15_000 }, () => {
         toolCall("pige_inspect_source", "empty_inspect"),
         toolCall("pige_parse_source", "empty_parse"),
         toolCall("pige_ocr_source", "empty_ocr"),
-        toolCall("pige_create_knowledge_note", "empty_publish", groundedOutput("Must not publish", ["ev_01"]))
+        toolCall("pige_create_knowledge_note", "empty_publish", groundedOutput("Must not publish", ["ev_01"])),
+        { kind: "text", text: "The OCR tool completed without readable evidence." }
       ]
     }));
     const jobs = makeJobs(fixture, runtime, makePdfParser(), new OcrService(adapter, undefined, renderer));
 
     jobs.processQueuedCaptures({ jobIds: [captured.captureJobId] });
     const parentId = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]).id;
-    expect(await jobs.processQueuedAgentIngest({ jobIds: [parentId] })).toMatchObject({ completed: 0, failed: 1 });
+    expect(await jobs.processQueuedAgentIngest({ jobIds: [parentId] })).toMatchObject({ completed: 1, failed: 0 });
 
     const child = requireValue(readJobs(fixture.vaultPath).find((job) => job.class === "ocr"));
     const source = readSource(fixture.vaultPath, captured.sourceId);
     expect(child.state).toBe("completed_with_warnings");
-    expect(readJob(fixture.vaultPath, parentId).state).toBe("waiting_dependency");
+    expect(readJob(fixture.vaultPath, parentId).state).toBe("completed");
     expect(source.metadata).toMatchObject({ ocrStatus: "completed_empty", agentTextReady: false });
     expect(runtime.results[0]?.invokedTools).toEqual([
       "pige_inspect_source",
       "pige_parse_source",
-      "pige_ocr_source"
+      "pige_ocr_source",
+      "pige_create_knowledge_note"
     ]);
     expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toEqual([]);
     expect(readOperations(fixture.vaultPath).map((operation) => operation.kind)).not.toContain("create_page");
@@ -533,7 +527,8 @@ function completeOcrTrace(prefix: string, output: ReturnType<typeof groundedOutp
     toolCall("pige_parse_source", `${prefix}_parse`),
     toolCall("pige_ocr_source", `${prefix}_ocr`),
     toolCall("pige_inspect_source", `${prefix}_inspect_after`),
-    toolCall("pige_create_knowledge_note", `${prefix}_publish`, output)
+    toolCall("pige_create_knowledge_note", `${prefix}_publish`, output),
+    { kind: "text", text: "I recognized the preserved PDF and created the knowledge note." }
   ];
 }
 

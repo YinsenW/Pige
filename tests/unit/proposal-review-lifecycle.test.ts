@@ -602,7 +602,7 @@ describe("proposal review lifecycle", () => {
     expect(staged.proposals.get({ proposalId: staged.proposal.id }).proposal.state).toBe("approved");
     expect(fs.existsSync(resolveVaultPath(fixture.vaultPath, create.path))).toBe(false);
     expect(fs.readdirSync(outsideRoot)).toEqual([]);
-    expect(listFiles(preservedOperations, ".json").length).toBeGreaterThan(0);
+    expect(listFiles(preservedOperations, ".json")).toEqual([]);
   });
 
   it("marks an occupied deterministic Operation identity conflicted before page commit", async () => {
