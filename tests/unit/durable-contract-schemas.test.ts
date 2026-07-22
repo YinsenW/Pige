@@ -255,7 +255,7 @@ describe("durable contract schemas", () => {
   it("keeps job class, state, and record fields on the shared executable contract", () => {
     expect(JobClassSchema.parse("capture_batch")).toBe("capture_batch");
     expect(JobStateSchema.parse("waiting_dependency")).toBe("waiting_dependency");
-    expect(() => JobStateSchema.parse("waiting_model_egress")).toThrow();
+    expect(() => JobStateSchema.parse("retired_unknown_state")).toThrow();
     expect(() => JobStateSchema.parse("waiting_permission")).toThrow();
 
     const record = JobRecordSchema.parse({
@@ -614,18 +614,7 @@ describe("durable contract schemas", () => {
     })).toThrow("Unrecognized key");
   });
 
-  it("requires typed body-free audit identity for model-egress operations", () => {
-    const audit = {
-      payloadHash: checksum,
-      evidenceSummaryHash: `sha256:${"b".repeat(64)}`,
-      decisionHash: `sha256:${"c".repeat(64)}`,
-      payloadCharacters: 42,
-      estimatedPayloadTokens: 11,
-      normalPayloadCharacterLimit: 18_000,
-      contentClasses: ["ordinary"] as const,
-      outcome: "allow" as const,
-      reasonCode: "ordinary_external_allowed" as const
-    };
+  it("rejects unknown Operation kinds and fields", () => {
     const operation = {
       id: "op_20260710_abcdef13",
       schemaVersion: 1 as const,
@@ -637,12 +626,7 @@ describe("durable contract schemas", () => {
         clientCapabilityTier: "desktop_full" as const
       },
       modelProfileId: "model_example",
-      policyAudit: {
-        policyContextId: "policy_20260710_abcdef12",
-        policyHash: checksum,
-        enforcementOwners: ["Model Egress Policy"]
-      },
-      kind: "model_egress_decision" as const,
+      kind: "retired_unknown_operation" as const,
       targetRefs: [{ kind: "model" as const, id: "model_example" }],
       sourceRefs: [{ kind: "job" as const, id: "job_20260710_abcdef12" }],
       summary: "Allowed ordinary selected evidence.",
@@ -650,11 +634,8 @@ describe("durable contract schemas", () => {
       warnings: []
     };
 
-    expect(OperationRecordSchema.parse({ ...operation, modelEgressAudit: audit }).modelEgressAudit)
-      .toMatchObject({ payloadHash: checksum, outcome: "allow" });
-    expect(() => OperationRecordSchema.parse(operation)).toThrow("requires a typed payload and evidence audit summary");
-    expect(() => OperationRecordSchema.parse({ ...operation, modelEgressAudit: { ...audit, rawPrompt: "secret" } }))
-      .toThrow("Unrecognized key");
+    expect(() => OperationRecordSchema.parse(operation)).toThrow();
+    expect(() => OperationRecordSchema.parse({ ...operation, rawPrompt: "secret" })).toThrow();
   });
 
   it("validates backup domain ranges and structured external dependencies", () => {

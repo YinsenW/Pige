@@ -32,7 +32,7 @@ describe("Agent turn conversation store", () => {
 
     expect(preserved.event).toMatchObject({
       type: "user_message",
-      text: text.trim(),
+      text,
       inputHash: preserved.inputHash
     });
     expect(preserved.locator).toMatch(
@@ -41,7 +41,7 @@ describe("Agent turn conversation store", () => {
     expect(preserved.event.clientTurnId).toMatch(/^turn_\d{8}_[a-z0-9]{12,64}$/u);
     expect(preserved.event.conversationId).toBe(preserved.event.clientTurnId?.replace(/^turn_/u, "conv_"));
     expect(preserved.inputHash).toBe(hashValue(
-      `pige.agent_turn.user.v2\0${text.trim()}\0null\0${preserved.event.clientTurnId}` +
+      `pige.agent_turn.user.v2\0${text}\0null\0${preserved.event.clientTurnId}` +
       `\0${preserved.event.conversationId}\0`
     ));
     expect(resumed).toEqual(preserved);
@@ -623,8 +623,8 @@ describe("Agent turn conversation store", () => {
       expectedTailEventId: assistant.id
     });
     expect(restarted.readContextBeforeUserTurn(vaultPath, sameScopeFollowUp)).toEqual([
-      expect.objectContaining({ role: "user", historyContentClasses: ["sensitive"] }),
-      expect.objectContaining({ role: "assistant", historyContentClasses: ["sensitive"] })
+      expect.objectContaining({ role: "user" }),
+      expect.objectContaining({ role: "assistant" })
     ]);
 
     expect(captureError(() => restarted.appendUserTurn(vaultPath, "Cross-note follow-up.", {

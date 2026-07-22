@@ -94,15 +94,7 @@ describe("Unified Agent ingress", () => {
             limit: 2
           }
         },
-        {
-          kind: "tool_call",
-          toolName: "pige_finish_home_turn",
-          args: {
-            answer: "Grace has the largest count in the attached Dataset. [D1]",
-            citationRefs: ["citation_9"],
-            grounding: "local_knowledge"
-          }
-        }
+        { kind: "text", text: "Grace has the largest count in the attached Dataset. [citation_9]" }
       ]
     });
     const datasetQueries = new DatasetQueryService(directDatasetExecutor);
@@ -162,7 +154,7 @@ describe("Unified Agent ingress", () => {
       jobId: prepared.jobId,
       sourceIds: preserved.sourceIds,
       answer: {
-        answer: "Grace has the largest count in the attached Dataset. [D1]",
+        answer: "Grace has the largest count in the attached Dataset. [citation_9]",
         grounding: "local_knowledge",
         citations: [expect.objectContaining({ kind: "dataset", refId: "citation_9" })],
         datasetResult: expect.objectContaining({ returnedRowCount: 2, matchedRowCount: 2 })
@@ -193,7 +185,7 @@ describe("Unified Agent ingress", () => {
     expect(home.conversation()?.messages.at(-1)).toMatchObject({
       role: "assistant",
       answer: expect.objectContaining({
-        answer: "Grace has the largest count in the attached Dataset. [D1]",
+        answer: "Grace has the largest count in the attached Dataset. [citation_9]",
         datasetResult: expect.objectContaining({ returnedRowCount: 2 })
       })
     });
@@ -211,7 +203,7 @@ describe("Unified Agent ingress", () => {
       fauxResponses: [
         { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
         { kind: "tool_call", toolName: "pige_inspect_dataset", args: {} },
-        { kind: "text", text: "The provider stopped before the terminal answer." }
+        { kind: "text", text: "   " }
       ]
     });
     const firstJobs = new JobsService(
@@ -247,7 +239,7 @@ describe("Unified Agent ingress", () => {
     }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
     expect(await firstHome.submitPreparedSourceTurn(prepared)).toMatchObject({
       state: "failed",
-      error: { code: "agent_runtime.knowledge_action_missing" }
+      error: { code: "model_provider.tool_protocol_incompatible" }
     });
     expect(firstJobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
       state: "failed_retryable",
@@ -298,15 +290,7 @@ describe("Unified Agent ingress", () => {
               limit: 2
             }
           },
-          {
-            kind: "tool_call",
-            toolName: "pige_finish_home_turn",
-            args: {
-              answer: "Grace remains the largest count after restart. [D1]",
-              citationRefs: ["citation_9"],
-              grounding: "local_knowledge"
-            }
-          }
+          { kind: "text", text: "Grace remains the largest count after restart. [citation_9]" }
         ]
       }),
       datasetCapabilities,
@@ -329,7 +313,7 @@ describe("Unified Agent ingress", () => {
       .toMatchObject({
       role: "assistant",
       answer: expect.objectContaining({
-        answer: "Grace remains the largest count after restart. [D1]",
+        answer: "Grace remains the largest count after restart. [citation_9]",
         datasetResult: expect.objectContaining({ returnedRowCount: 2 })
       })
       });
@@ -354,7 +338,8 @@ describe("Unified Agent ingress", () => {
           kind: "tool_call",
           toolName: "pige_create_knowledge_note",
           args: groundedOutput("Unified source result")
-        }
+        },
+        { kind: "text", text: "The source was inspected and published." }
       ]
     });
     const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, adapter));
@@ -381,7 +366,7 @@ describe("Unified Agent ingress", () => {
       state: "completed",
       modelUsage: "local",
       sourceIds: preserved.sourceIds,
-      answer: { grounding: "source", citations: [] }
+      answer: { grounding: "general", citations: [] }
     });
     const allJobs = jobs.list({ limit: 20 }).jobs;
     expect(allJobs).toEqual([
@@ -403,11 +388,7 @@ describe("Unified Agent ingress", () => {
     const adapter = new PiAgentRuntimeAdapter({
       fauxResponses: [
         { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
-        {
-          kind: "tool_call",
-          toolName: "pige_respond_to_user",
-          args: { answer: "The preserved source supports a direct answer.", evidenceRefs: ["ev_01"] }
-        }
+        { kind: "text", text: "The preserved source supports a direct answer." }
       ]
     });
     const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, adapter));
@@ -432,7 +413,7 @@ describe("Unified Agent ingress", () => {
       sourceIds: preserved.sourceIds,
       answer: {
         answer: "The preserved source supports a direct answer.",
-        grounding: "source",
+        grounding: "general",
         citations: []
       }
     });
@@ -452,11 +433,7 @@ describe("Unified Agent ingress", () => {
       fauxResponses: [
         { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
         { kind: "text", text: "I inspected the source but stopped too early." },
-        {
-          kind: "tool_call",
-          toolName: "pige_respond_to_user",
-          args: { answer: "This Host-forced terminal turn must never run.", evidenceRefs: ["ev_01"] }
-        }
+        { kind: "text", text: "This later response must never run." }
       ]
     });
     const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, adapter));
@@ -476,20 +453,16 @@ describe("Unified Agent ingress", () => {
     const outcome = await home.submitPreparedSourceTurn(prepared);
 
     expect(outcome).toMatchObject({
-      state: "failed",
+      state: "completed",
       jobId: prepared.jobId,
-      error: {
-        code: "agent_runtime.knowledge_action_missing",
-        messageKey: "errors.agent_runtime.completion_invalid"
-      }
+      answer: { answer: "I inspected the source but stopped too early." }
     });
     expect(jobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
-      state: "failed_retryable",
-      error: { code: "agent_runtime.knowledge_action_missing" }
+      state: "completed"
     });
   });
 
-  it("persists a body-free terminal-action error when the provider stops as prose", async () => {
+  it("accepts provider prose after source inspection without a terminal action", async () => {
     const fixture = makeVault();
     const sourceFile = path.join(path.dirname(fixture.vaultPath), "terminal-missing-source.txt");
     fs.writeFileSync(sourceFile, "The source remains retryable when no terminal tool succeeds.\n", "utf8");
@@ -517,20 +490,11 @@ describe("Unified Agent ingress", () => {
     const outcome = await home.submitPreparedSourceTurn(prepared);
 
     expect(outcome).toMatchObject({
-      state: "failed",
-      error: {
-        code: "agent_runtime.knowledge_action_missing",
-        messageKey: "errors.agent_runtime.completion_invalid",
-        retryable: true,
-        userAction: "retry"
-      }
+      state: "completed",
+      answer: { answer: "Incomplete response without a terminal action." }
     });
     expect(jobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
-      state: "failed_retryable",
-      error: {
-        code: "agent_runtime.knowledge_action_missing",
-        messageKey: "errors.agent_runtime.completion_invalid"
-      }
+      state: "completed"
     });
   });
 
@@ -542,11 +506,7 @@ describe("Unified Agent ingress", () => {
     const adapter = new PiAgentRuntimeAdapter({
       fauxResponses: [
         { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
-        {
-          kind: "tool_call",
-          toolName: "pige_respond_to_user",
-          args: { answer: "The restarted turn reused its preserved source.", evidenceRefs: ["ev_01"] }
-        }
+        { kind: "text", text: "The restarted turn reused its preserved source." }
       ]
     });
     const firstJobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, adapter));
@@ -606,7 +566,8 @@ describe("Unified Agent ingress", () => {
           kind: "tool_call",
           toolName: "pige_create_knowledge_note",
           args: groundedOutput("Resumed source result")
-        }
+        },
+        { kind: "text", text: "The source was organized after the model became available." }
       ]
     });
     const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, adapter));
@@ -690,6 +651,9 @@ function createMutableModels(initiallyReady: boolean): MutableModels {
 const neverRetrieval: HomeAgentRetrievalPort = {
   search: (_request: RetrievalSearchRequest): RetrievalSearchResult => {
     throw new Error("Source-only unified ingress must not use the Home retrieval port.");
+  },
+  readExactSelectedEvidence: () => {
+    throw new Error("Source-only unified ingress must not bind vault evidence.");
   }
 };
 

@@ -28,8 +28,9 @@ Pige may store these on your machine:
 
 - API keys and tokens are secrets. Store them in the local OS keychain or encrypted
   store and present them only to the configured provider for authentication.
-- Never write secrets to Markdown, SQLite, logs, prompts, operations, conversations,
-  diagnostics, or default backups.
+- Never inject Pige-owned stored credentials into user content, prompts, Markdown,
+  SQLite, logs, operations, conversations, diagnostics, or default backups. This is
+  credential isolation and storage hygiene, not rewriting the user's submitted text.
 - Plaintext portable/developer mode is allowed only as an explicit advanced choice with a warning.
 - Default backups exclude secrets.
 
@@ -39,8 +40,9 @@ Pige is local-first, not network-free: local durable knowledge is trusted truth,
 reason to reapprove normal Agent work or connected model calls.
 
 - BYOK: one disclosure grants routine bounded calls to the exact Profile/endpoint with
-  selected context and quiet status. The default policy sends all non-restricted task
-  context without another prompt; boundary drift reconnects and restricted content blocks.
+  selected context and quiet status. Pressing Send transmits the exact user-authored and
+  explicitly selected bounded context without content classification or another prompt;
+  Provider identity drift requires a new explicit action.
 - URL capture fetches a pasted link and stores the result locally as a source.
 - Model/tool/Apple speech assets download only through explicit flows. Apple speech
   install may contact Apple; Pige receives only bounded progress/completion, never assets.
@@ -63,10 +65,9 @@ a Pige cloud service; other network features still disclose their boundary.
 
 - One explicit user submit authorizes registered first-party reads, preservation,
   parsing, OCR, retrieval, user-specified fetch, and bounded local tools for that turn.
-- Connecting/selecting a cloud Provider and pressing Send authorizes that turn's bounded
-  selected context. Pige strips explicit secrets/credentials, blocks `local_only`, and
-  never sends the whole vault by default; ordinary/private/bounded-large context does not
-  trigger a second approval.
+- Connecting/selecting a cloud Provider and pressing Send authorizes that turn's exact user-authored and explicitly selected bounded context. Pige does not classify, redact, or rewrite user-authored content for
+  send authorization and never sends the whole vault by default. Stored Provider
+  credentials remain confined to the secret store and authentication header.
 - Skills and packages are untrusted until reviewed and cannot acquire first-party turn
   authority through prompt text, naming, source content, or model output.
 - Pige asks only for a closed high-risk effect: irreversible deletion, overwrite of a

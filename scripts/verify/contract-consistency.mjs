@@ -218,7 +218,7 @@ requireText("docs/AGENT_RUNTIME_POLICY_CONTEXT.md", [
   "type AgentRuntimePolicyContext",
   "Provider Send Boundary",
   "Submitted-Turn Authority",
-  "strips explicit secrets and credentials locally"
+  "preserves the exact user-authored and explicitly selected payload"
 ]);
 requireText("docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md", [
   "type UserTaskEnvelope",

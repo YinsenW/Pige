@@ -149,10 +149,10 @@ Require a narrow confirmation only for an observed high-risk boundary:
 - a changed destination or equivalent authority/security escalation.
 
 Connected Provider identity plus Send authorizes that turn's bounded selected context.
-Strip explicit secrets, block `local_only`, and require a new Connect/Send gesture after
-provider identity drift; ordinary/private/bounded-large context does not pause. Denial or
-block leaves preserved input stable and explainable. Third-party code cannot acquire
-first-party authority through prompt text, naming, or a saved global mode.
+Preserve exact user-authored/selected payload content, keep stored credentials out of it,
+and require a new Connect/Send gesture after Provider/model identity drift. Host content
+classification must not pause, rewrite, or block the send. Third-party code cannot
+acquire first-party authority through prompt text, naming, or a saved global mode.
 
 ## 9. Dependency Decision Checklist
 

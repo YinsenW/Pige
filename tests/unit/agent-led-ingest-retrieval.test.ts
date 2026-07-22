@@ -185,10 +185,6 @@ describe("Agent-selected ingest retrieval tool", () => {
       const notePath = requireValue(generatedNotes(fixture.vaultPath)[0]);
       const note = fs.readFileSync(notePath, "utf8");
       const operations = readOperations(fixture.vaultPath);
-      const retrievedAudit = requireValue(operations.find((operation) =>
-        operation.kind === "model_egress_decision" &&
-        operation.sourceRefs.some((ref) => ref.kind === "page" && ref.id === RELATED_PAGE_ID)
-      ));
       const createPage = requireValue(operations.find((operation) => operation.kind === "create_page"));
       const durableAudit = JSON.stringify(operations);
 
@@ -208,7 +204,6 @@ describe("Agent-selected ingest retrieval tool", () => {
       }]);
       expect(note).toContain(`related_page_ids: ["${RELATED_PAGE_ID}"]`);
       expect(note).toContain(`[source:${capture.sourceId}#source]`);
-      expect(retrievedAudit.sourceRefs).toContainEqual({ kind: "page", id: RELATED_PAGE_ID });
       expect(createPage.sourceRefs).toContainEqual({ kind: "page", id: RELATED_PAGE_ID });
       expect(readJobs(fixture.vaultPath).filter((job) => job.class === "retrieval_query")).toEqual([]);
       expect(durableAudit).not.toContain(RELATED_TITLE);
@@ -1523,7 +1518,13 @@ describe("Agent-selected ingest retrieval tool", () => {
       const prepared = prepareAgentSource(fixture, `Boundary case: ${testCase.name}.`);
       const retrieval = new RecordingRetrievalPort(fixture, (request) => makeSearchResult(fixture, request.query));
       const runtime = new FunctionalRuntime(async (request) => {
-        const failure = await testCase.drive(request);
+        let failure: PigeAgentToolResult;
+        try {
+          failure = await testCase.drive(request);
+        } catch (caught) {
+          expect(caught, testCase.name).toMatchObject({ code: testCase.expectedCode });
+          return runtimeResult(request, []);
+        }
         expect(failure.details, testCase.name).toEqual({
           status: "unavailable",
           code: testCase.expectedCode
@@ -1535,17 +1536,17 @@ describe("Agent-selected ingest retrieval tool", () => {
         return runtimeResult(request, []);
       });
 
-      await expect(new AgentIngestService(
+      const result = await new AgentIngestService(
         modelPort(),
         runtime,
         undefined,
         undefined,
         undefined,
         retrieval
-      ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent), testCase.name).rejects.toMatchObject({
-        code: testCase.rejectedByToolSchema
-          ? testCase.expectedCode
-          : "agent_runtime.knowledge_action_missing"
+      ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent);
+      expect(result, testCase.name).toMatchObject({
+        outcome: "responded",
+        answer: "The selected knowledge action completed."
       });
       expect(retrieval.calls, testCase.name).toHaveLength(testCase.expectedSearchCalls);
       expect(generatedNotes(fixture.vaultPath), testCase.name).toEqual([]);
@@ -1689,7 +1690,7 @@ describe("Agent-selected ingest retrieval tool", () => {
       retrieval
     ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent);
 
-    expect(postPublicationSearch).toMatchObject({ terminate: true });
+    expect(postPublicationSearch).toMatchObject({ terminate: false });
     expect(readPiToolText(postPublicationSearch)).toContain('"status":"already_published"');
     expect(retrieval.calls).toEqual([]);
     expect(generatedNotes(fixture.vaultPath)).toHaveLength(1);
@@ -1900,7 +1901,7 @@ describe("Agent-selected ingest retrieval tool", () => {
     );
     expect(runtime.searchOutput).toContain("<PIGE_UNTRUSTED_RETRIEVAL_V1>");
     expect(runtime.searchOutput.match(/<\/PIGE_UNTRUSTED_RETRIEVAL_V1>/gu)).toHaveLength(1);
-    expect(runtime.searchOutput).toContain("&lt;/PIGE UNTRUSTED RETRIEVAL V1");
+    expect(runtime.searchOutput).toContain("&lt;/PIGE_UNTRUSTED_RETRIEVAL_V1&gt;");
     expect(runtime.searchOutput).toContain("&lt;override");
     expect(runtime.searchOutput).not.toContain(hostileSnippet);
     expect(note).toContain("# Validated hostile-evidence note");
@@ -2037,21 +2038,7 @@ describe("Agent-selected ingest retrieval tool", () => {
       retrieval
     ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent);
 
-    const operations = readOperations(fixture.vaultPath).filter((operation) =>
-      operation.kind === "model_egress_decision"
-    );
-    const privateAudit = requireValue(operations.find((operation) =>
-      operation.modelEgressAudit?.contentClasses.includes("private")
-    ));
-    expect(privateAudit).toMatchObject({
-      modelEgressAudit: {
-        outcome: "allow",
-        reasonCode: "ordinary_external_allowed",
-        contentClasses: ["private"]
-      }
-    });
-    expect(privateAudit.sourceRefs).toContainEqual({ kind: "page", id: RELATED_PAGE_ID });
-    const bodyFreeAudit = JSON.stringify(operations);
+    const bodyFreeAudit = JSON.stringify(readOperations(fixture.vaultPath));
     expect(bodyFreeAudit).not.toContain(RELATED_TITLE);
     expect(bodyFreeAudit).not.toContain(RELATED_BODY);
     expect(bodyFreeAudit).not.toContain("search_private");
@@ -2083,16 +2070,6 @@ describe("Agent-selected ingest retrieval tool", () => {
       undefined,
       retrieval
     ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent);
-    const operations = readOperations(fixture.vaultPath).filter((operation) =>
-      operation.kind === "model_egress_decision"
-    );
-    expect(operations.at(-1)).toMatchObject({
-      modelEgressAudit: {
-        outcome: "allow",
-        reasonCode: "ordinary_external_allowed",
-        contentClasses: ["sensitive"]
-      }
-    });
     expect(generatedNotes(fixture.vaultPath)).toHaveLength(1);
   });
 
@@ -2120,20 +2097,9 @@ describe("Agent-selected ingest retrieval tool", () => {
         undefined,
         retrieval
       ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent)).rejects.toMatchObject({
-        code: "model_egress.privacy_drift"
+        code: "agent_runtime.turn_conflict"
       });
-
-      const operations = readOperations(fixture.vaultPath).filter((operation) =>
-        operation.kind === "model_egress_decision"
-      );
       expect(postSearchModelInvocations).toBe(0);
-      expect(operations).toHaveLength(2);
-      expect(new Set(operations.map((operation) => operation.id)).size).toBe(2);
-      expect(new Set(operations.map((operation) => operation.modelEgressAudit?.evidenceSummaryHash)).size).toBe(2);
-      expect(operations.at(-1)).toMatchObject({
-        modelEgressAudit: { contentClasses: ["ordinary"], outcome: "allow" }
-      });
-      expect(operations.at(-1)?.sourceRefs).toContainEqual({ kind: "page", id: RELATED_PAGE_ID });
       expect(generatedNotes(fixture.vaultPath)).toEqual([]);
     }
   );
@@ -2162,23 +2128,9 @@ describe("Agent-selected ingest retrieval tool", () => {
         undefined,
         retrieval
       ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent)).rejects.toMatchObject({
-        code: "model_egress.privacy_drift"
+        code: "agent_runtime.turn_conflict"
       });
-      const operations = readOperations(fixture.vaultPath).filter((operation) =>
-        operation.kind === "model_egress_decision"
-      );
       expect(postSearchModelInvocations).toBe(0);
-      expect(operations).toHaveLength(2);
-      expect(new Set(operations.map((operation) => operation.id)).size).toBe(2);
-      expect(operations.at(-1)).toMatchObject({
-        modelEgressAudit: {
-          contentClasses: ["restricted"],
-          outcome: "block",
-          reasonCode: "restricted_content_block"
-        }
-      });
-      expect(operations.at(-1)?.sourceRefs).toContainEqual({ kind: "page", id: RELATED_PAGE_ID });
-      expect(JSON.stringify(operations)).not.toContain(fixture.vaultPath);
       expect(generatedNotes(fixture.vaultPath)).toEqual([]);
     }
   );
@@ -2206,23 +2158,9 @@ describe("Agent-selected ingest retrieval tool", () => {
       undefined,
       retrieval
     ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent)).rejects.toMatchObject({
-      code: "model_egress.privacy_drift"
+      code: "agent_runtime.turn_conflict"
     });
-
-    const operations = readOperations(fixture.vaultPath).filter((operation) =>
-      operation.kind === "model_egress_decision"
-    );
     expect(postSearchModelInvocations).toBe(0);
-    expect(operations).toHaveLength(2);
-    expect(new Set(operations.map((operation) => operation.id)).size).toBe(2);
-    expect(operations.at(-1)).toMatchObject({
-      modelEgressAudit: {
-        contentClasses: ["private"],
-        outcome: "allow",
-        reasonCode: "ordinary_external_allowed"
-      }
-    });
-    expect(operations.at(-1)?.sourceRefs).toContainEqual({ kind: "page", id: RELATED_PAGE_ID });
     expect(generatedNotes(fixture.vaultPath)).toEqual([]);
   });
 
@@ -2316,7 +2254,11 @@ describe("Agent-selected ingest retrieval tool", () => {
         groundedOutput("Recovered related knowledge", ["related_01"]),
         "publish_retry"
       );
-      throw new Error("Synthetic crash after the durable note and Operation commit.");
+      return runtimeResult(request, [
+        "pige_inspect_source",
+        "pige_search_knowledge",
+        "pige_create_knowledge_note"
+      ]);
     });
     const firstJobs = new JobsService(
       fixture.vaultPort,
@@ -2353,7 +2295,11 @@ describe("Agent-selected ingest retrieval tool", () => {
 class RecordingPiRuntime implements AgentIngestRuntimePort {
   readonly results: PiAgentRunResult[] = [];
 
-  constructor(private readonly fauxResponses: readonly PiFauxResponse[]) {}
+  private readonly fauxResponses: readonly PiFauxResponse[];
+
+  constructor(fauxResponses: readonly PiFauxResponse[]) {
+    this.fauxResponses = withAssistantFinal(fauxResponses);
+  }
 
   async run(request: PiAgentRunRequest): Promise<PiAgentRunResult> {
     const result = await new PiAgentRuntimeAdapter({ fauxResponses: this.fauxResponses }).run(request);
@@ -2367,7 +2313,11 @@ class ObservingPiRuntime implements AgentIngestRuntimePort {
   systemPrompt = "";
   result: PiAgentRunResult | undefined;
 
-  constructor(private readonly fauxResponses: readonly PiFauxResponse[]) {}
+  private readonly fauxResponses: readonly PiFauxResponse[];
+
+  constructor(fauxResponses: readonly PiFauxResponse[]) {
+    this.fauxResponses = withAssistantFinal(fauxResponses);
+  }
 
   async run(request: PiAgentRunRequest): Promise<PiAgentRunResult> {
     this.systemPrompt = request.systemPrompt;
@@ -2447,7 +2397,7 @@ function runtimeResult(request: PiAgentRunRequest, invokedTools: readonly string
     modelProfileId: request.runtimeConfig.model.id,
     modelId: request.runtimeConfig.model.modelId,
     events: [],
-    assistantText: "",
+    assistantText: "The selected knowledge action completed.",
     invokedTools
   };
 }
@@ -2458,6 +2408,12 @@ function toolCall(
   args: Readonly<Record<string, unknown>>
 ): PiFauxResponse {
   return { kind: "tool_call", toolName, toolCallId, args };
+}
+
+function withAssistantFinal(responses: readonly PiFauxResponse[]): readonly PiFauxResponse[] {
+  return responses.at(-1)?.kind === "text"
+    ? responses
+    : [...responses, { kind: "text", text: "The selected knowledge action completed." }];
 }
 
 function groundedOutput(title: string, relatedPageRefs: readonly string[] = []) {

@@ -955,7 +955,7 @@ export function App(): React.JSX.Element {
       const submission = window.pige.agent.submitTurn({
         schemaVersion: 1,
         clientTurnId,
-        ...(text?.trim() ? { text: text.trim() } : {}),
+        ...(text?.trim() ? { text } : {}),
         inputKind,
         objective: "auto",
         locale
@@ -1768,7 +1768,6 @@ export function App(): React.JSX.Element {
             />
           ) : settingsSection === "privacy" ? (
             <PermissionsPrivacySettingsPanel
-              onDevelopment={() => showDevelopmentCapability("settings", "permissions_privacy")}
               t={t}
             />
           ) : settingsSection === "skills" ? (
@@ -4826,7 +4825,7 @@ function HomeComposer(props: {
     inlineReferenceSequence.current += 1;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
-    const turnText = text.trim();
+    const turnText = text;
     const submittedVaultId = activeVaultIdRef.current;
     const submittedDraftRevision = draftRevisionRef.current;
     const clearedDraftRevision = submittedDraftRevision + 1;
@@ -6554,7 +6553,6 @@ export function AppearanceSettingsPanel(props: {
 }
 
 export function PermissionsPrivacySettingsPanel(props: {
-  readonly onDevelopment: () => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   return (
@@ -6579,18 +6577,9 @@ export function PermissionsPrivacySettingsPanel(props: {
           <div className="settings-row">
             <div className="settings-row-copy">
               <strong>{props.t("privacy.cloudPolicyTitle")}</strong>
-              <span id="privacy-cloud-policy-description">{props.t("privacy.cloudPolicyDescription")}</span>
+              <span>{props.t("privacy.cloudPolicyDescription")}</span>
             </div>
-            <button
-              className="settings-button"
-              type="button"
-              data-privacy-control="cloud-policy"
-              aria-label={props.t("privacy.cloudPolicyTitle")}
-              aria-describedby="privacy-cloud-policy-description privacy-partial-note"
-              onClick={props.onDevelopment}
-            >
-              {props.t("settings.status.development")}
-            </button>
+            <span className="settings-status">{props.t("privacy.cloudPolicyStatus")}</span>
           </div>
         </div>
       </section>
@@ -6613,13 +6602,6 @@ export function PermissionsPrivacySettingsPanel(props: {
               <span>{props.t("privacy.noSavedAuthorityDescription")}</span>
             </div>
           </div>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("privacy.redactionTitle")}</strong>
-              <span>{props.t("privacy.redactionDescription")}</span>
-            </div>
-            <span className="settings-status">{props.t("privacy.protected")}</span>
-          </div>
         </div>
       </section>
 
@@ -6637,8 +6619,6 @@ export function PermissionsPrivacySettingsPanel(props: {
           </div>
         </div>
       </section>
-
-      <p className="settings-note" id="privacy-partial-note">{props.t("privacy.partialNote")}</p>
     </section>
   );
 }

@@ -253,7 +253,7 @@ Default home requirements:
 - If local knowledge is relevant, Pi prefers bounded local retrieval and cites what it
   uses. Otherwise it answers normally without fabricated local citations.
 - Model-backed answers replace a safe provisional draft in place while Pi works; the
-  final Host-validated durable answer is authoritative, and citations appear only then.
+  durable upstream Pi final is authoritative. Known citation metadata appears only then.
 - Voice input should be available from the composer toolbar as a low-friction alternative to typing.
 
 #### 6.1.1 Window And Layout Modes
@@ -690,9 +690,9 @@ Navigation:
 - Knowledge Base settings must include a real Vault & Note Storage page for local note storage: current vault name, active vault path, knowledge root path, managed source-copy path (the v1 UI compatibility label is Source asset root), default source storage strategy, reveal in file manager, open existing vault folder, create new vault, recent vaults, backup, restore, trash policy, and safe index repair entry points.
 - Models settings contain BYOK provider details, model list status, and one default Pi Agent model. Advanced/Fast model assignment is not a v0.1 visible setting unless a real Pi-compatible routing layer exists.
 - Local Capabilities settings contain local RAG, embeddings/reranking downloads, OCR, speech input, document parsers, and bundled toolchain health.
-- Permissions & Privacy settings contain API key storage, connected-provider/local-only
-  cloud-send behavior, secret redaction, and a clear high-risk boundary. It has no
-  permission-mode, saved-grant, or YOLO controls.
+- Permissions & Privacy settings contain API key storage, exact connected-Provider send
+  disclosure, and a clear high-risk boundary. It has no content-redaction setting,
+  permission mode, saved grant, or YOLO control.
 - Skills and Pi Packages live under Extensions, not under Models.
 
 Internationalization:
@@ -721,7 +721,8 @@ Models:
 - Models support Refresh, enable/disable, and optional display aliases.
 - No user-facing per-workflow model selection in v0.1; Advanced/Fast routing stays hidden.
 - No required user-facing embedding or reranker provider setup. Local RAG uses Pige-managed local models.
-- After BYOK setup, bounded selected context uses the configured provider with visible status; stricter confirmation remains configurable.
+- After BYOK setup, explicit Send transmits bounded selected context to the configured
+  Provider with visible destination status and no second content-policy confirmation.
 - API keys are stored encrypted by default through OS keychain or encrypted local storage; plaintext portable/developer mode is explicit and warned.
 
 Local RAG:
@@ -1043,14 +1044,12 @@ conflicts remain exceptional.
 
 ## 11. Agent Workflows
 
-One user submission owns one durable Agent Job, not one fragile model-output attempt. Pi
-may use multiple internal model turns and registered tool calls while it is making
-progress. Recoverable schema, citation, grounding, evidence, or tool-input rejection is
-returned to Pi as bounded typed feedback so it can correct, retrieve, inspect, or choose
-another authorized tool without asking the user to retry. The Job completes with a valid
-answer/result, a grounded abstention, or an explicit external blocked outcome. Only user
-cancellation, unavailable model/capability, security or authority denial, irreconcilable
-conflict/drift, or another true external boundary terminates autonomous completion.
+One user submission owns one durable Agent Job. Pi may use multiple internal model turns
+and registered tool calls; its final assistant message is the ordinary answer authority.
+Host does not require a terminal tool, grounding label, citation count/shape, or semantic
+repair follow-up. Tool inputs and durable mutations remain validated by their owners;
+user cancellation, unavailable model/capability, security or authority denial,
+irreconcilable conflict/drift, and malformed provider transport remain real boundaries.
 
 ### 11.1 Ingest
 
@@ -1080,9 +1079,9 @@ Example result:
 ### 11.2 Home Query
 
 Every Home submission is one durable Pi-owned Agent Job. Pi may answer directly, retrieve
-local knowledge, call and revisit authorized tools, repair a rejected answer, or ask for
-clarification. Source-bearing payloads are preserved first; Host services do not select
-the semantic branch or turn the first invalid attempt into a user retry.
+local knowledge, call and revisit authorized tools, or ask for clarification.
+Source-bearing payloads are preserved first; Host services do not select the semantic
+branch, reject candidate assistant answers, or issue a semantic repair turn.
 
 Required outcomes:
 
@@ -1094,14 +1093,12 @@ Required outcomes:
 4. Valuable answers become Markdown through a validated autonomous write tool; only an
    exceptional boundary uses a proposal.
 5. Home does not wait behind a spinner when safe answer text is available. It renders a
-   bounded non-durable replacement draft, then atomically replaces it with the validated
-   final answer or clears it on cancellation or a true external block; restart restores
-   durable state only. Draft incompleteness or a rejected candidate answer does not fail
-   the Job: Pi revises the same provisional surface until the accepted result replaces it.
-6. Recoverable model-output validation is internal Agent progress. Home does not show
-   “output invalid, retry” while Pi can correct it. If the selected provider cannot support
-   the required Agent/tool protocol after autonomous recovery, Pige reports a typed model
-   compatibility action instead of asking the user to resubmit the same prompt.
+   bounded non-durable Pi draft, then atomically replaces it with Pi's authoritative final
+   assistant message or clears it on cancellation or a true external block; restart
+   restores durable state only.
+6. Host does not validate assistant-answer semantics. Malformed Provider transport uses
+   the existing call/protocol error, invalid registered-tool input stays at that tool
+   boundary, and durable effect failure keeps its exact owning-service code.
 
 Without a model, source-bearing inputs remain safe and wait for setup/resume. Any
 deterministic local search fallback is explicit and never presented as Agent synthesis.
@@ -1456,8 +1453,10 @@ StepFun, SiliconFlow, CherryIn, Ollama, and LM Studio; DeepSeek is the first rea
 Connecting and selecting a Provider Profile is the user's standing choice for ordinary,
 private, and larger bounded calls to that exact destination. Setup explains once that
 selected context may leave the device; routine calls then proceed without per-call
-confirmation and show calm non-blocking status. Users may choose a stricter policy.
-Secret/local-only/unknown/changed Provider boundaries follow the Provider send contract.
+confirmation and show calm non-blocking status. Pressing Send transmits the exact
+user-authored and explicitly selected bounded context without Host content classification,
+redaction, rewriting, or blocking. Unknown or changed Provider/model identity requires a
+new explicit user action; stored credentials stay outside payload content.
 
 Models shows Provider connection/sync health, its unified inventory, and Global Default.
 Cloud, self-hosted, and local remain internal endpoint/egress facts, not setup categories
@@ -1491,9 +1490,11 @@ Privacy promises:
 - Plaintext secret storage is allowed only as an explicit portable/developer mode with warning.
 - Connecting and selecting a BYOK Provider Profile authorizes ordinary, private, and
   larger bounded calls to that destination. Setup discloses the boundary once; routine
-  calls use non-blocking status instead of repeated prompts. Explicit secrets and
-  credentials are stripped locally, `local_only` is blocked, provider drift requires a
-  new explicit action, and the whole vault is never sent by default.
+  calls use non-blocking status instead of repeated prompts. Explicit Send transmits the
+  exact user-authored and explicitly selected bounded context; Pige does not classify,
+  redact, rewrite, or block that content. Provider/model drift requires a new explicit
+  action, stored credentials remain authentication-only, and the whole vault is never
+  sent by default.
 - Agent memory is inspectable, reversible, and can be disabled or reset.
 - Memory candidates are scanned for secrets before persistence.
 - Skill content is untrusted until installed and still cannot weaken authority, privacy settings, prompt-injection defenses, or confirmation gates.

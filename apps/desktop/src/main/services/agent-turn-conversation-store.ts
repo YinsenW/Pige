@@ -15,8 +15,7 @@ import {
   AgentTurnCurrentNoteScopeSchema,
   ConversationEventSchema,
   type ConversationEvent,
-  type Locale,
-  type ModelEgressContentClass
+  type Locale
 } from "@pige/schemas";
 import {
   assertDurableAssistantIntegrity,
@@ -64,7 +63,6 @@ export interface AgentTurnConversationContextMessage {
   readonly role: "user" | "assistant";
   readonly createdAt: string;
   readonly text: string;
-  readonly historyContentClasses: readonly ModelEgressContentClass[];
 }
 
 export interface AgentTurnConversationTimeline {
@@ -254,8 +252,7 @@ export class AgentTurnConversationStore {
     return selectRecentContextMessages(
       contextEvents,
       MAX_CONTEXT_MESSAGES,
-      MAX_CONTEXT_TEXT_BYTES,
-      contextEvents.some((event) => event.type === "user_message" && event.scope?.kind === "current_note")
+      MAX_CONTEXT_TEXT_BYTES
     );
   }
 
@@ -721,8 +718,7 @@ function scopesEqual(left: AgentTurnScope | undefined, right: AgentTurnScope | u
 function selectRecentContextMessages(
   events: readonly ConversationEvent[],
   limit: number,
-  maxTextBytes: number,
-  scopedConversation: boolean
+  maxTextBytes: number
 ): AgentTurnConversationContextMessage[] {
   const selected: AgentTurnConversationContextMessage[] = [];
   let textBytes = 0;
@@ -737,22 +733,10 @@ function selectRecentContextMessages(
     }
     const bytes = Buffer.byteLength(event.text, "utf8");
     if (textBytes + bytes > maxTextBytes) break;
-    const messageNeedsConservativeClassification =
-      scopedConversation ||
-      (
-        event.type === "assistant_message" &&
-        (
-          event.answerGrounding === "local_knowledge" ||
-          event.answerGrounding === "source"
-        )
-      );
     selected.push({
       role: event.type === "user_message" ? "user" : "assistant",
       createdAt: event.createdAt,
-      text: event.text,
-      historyContentClasses: messageNeedsConservativeClassification
-        ? ["sensitive"]
-        : ["ordinary"]
+      text: event.text
     });
     textBytes += bytes;
   }
@@ -833,11 +817,10 @@ function assertConversationEventsBelong(
 }
 
 function validateTurnText(value: string): string {
-  const text = value.trim();
-  if (!text || Buffer.byteLength(text, "utf8") > MAX_TURN_TEXT_BYTES || /\u0000/u.test(text)) {
+  if (value.trim().length === 0 || Buffer.byteLength(value, "utf8") > MAX_TURN_TEXT_BYTES || /\u0000/u.test(value)) {
     throw new PigeDomainError("agent_runtime.turn_invalid", "The Agent turn is empty or exceeds its transport limit.");
   }
-  return text;
+  return value;
 }
 
 function conversationLocator(conversationId: string): string {

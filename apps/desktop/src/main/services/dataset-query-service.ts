@@ -24,7 +24,6 @@ import {
   type DatasetTable,
   type SourceRecord
 } from "@pige/schemas";
-import { containsRestrictedModelContent } from "./model-egress-content";
 import {
   DATASET_QUERY_DEFAULT_LIMITS,
   DATASET_QUERY_PROTOCOL_VERSION,
@@ -744,8 +743,7 @@ function createCatalogEvidence(
   const sourceIds = [...new Set(snapshots.map(({ source }) => source.sourceId))].sort(binaryCompare);
   const privateContent = snapshots.some(({ source }) => source.privateContent);
   const sensitiveContent = snapshots.some(({ source }) => source.sensitiveContent);
-  const restrictedContent = snapshots.some(({ source }) => source.restrictedContent) ||
-    containsRestrictedModelContent(modelText);
+  const restrictedContent = snapshots.some(({ source }) => source.restrictedContent);
   return Object.freeze({
     evidenceHash: hashCanonical({
       kind: "dataset_catalog",
@@ -1144,7 +1142,7 @@ function createResultEvidence(
 ): DatasetQueryEvidenceSnapshot {
   const privateContent = bundle.source.privateContent;
   const sensitiveContent = bundle.source.sensitiveContent;
-  const restrictedContent = bundle.source.restrictedContent || containsRestrictedModelContent(modelText);
+  const restrictedContent = bundle.source.restrictedContent;
   const sourceIds = [bundle.source.sourceId];
   return Object.freeze({
     evidenceHash: hashCanonical({

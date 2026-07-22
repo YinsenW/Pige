@@ -531,6 +531,7 @@ export const PigeErrorDomainSchema = z.enum([
   "rag",
   "model_provider",
   "agent_runtime",
+  "agent_ingest",
   "permission",
   "skill",
   "package",
@@ -879,101 +880,6 @@ export const ExternalMutationIntentSchema = z.object({
       code: "custom",
       path: ["targetLeafName"],
       message: "An external mutation target leaf is invalid."
-    });
-  }
-});
-
-export const ModelEgressContentClassSchema = z.enum([
-  "ordinary",
-  "private",
-  "large",
-  "sensitive",
-  "restricted"
-]);
-
-export const ModelEgressOutcomeSchema = z.enum(["allow", "block"]);
-
-export const ModelEgressReasonCodeSchema = z.enum([
-  "verified_local",
-  "ordinary_external_allowed",
-  "unknown_boundary_confirmation",
-  "local_only_block",
-  "restricted_content_block"
-]);
-
-export const ModelEgressDecisionSchema = z.object({
-  schemaVersion: z.literal(1),
-  outcome: ModelEgressOutcomeSchema,
-  reasonCode: ModelEgressReasonCodeSchema,
-  providerProfileId: z.string().regex(/^provider_[a-z0-9_]+$/),
-  cloudBoundary: CloudBoundarySchema,
-  boundaryVerification: BoundaryVerificationSchema,
-  cloudSendPolicy: CloudSendPolicySchema,
-  contentClasses: z.array(ModelEgressContentClassSchema).min(1).refine(
-    (values) => new Set(values).size === values.length,
-    "Model egress content classes must be unique."
-  ),
-  payloadCharacters: z.number().int().nonnegative(),
-  estimatedPayloadTokens: z.number().int().nonnegative(),
-  normalPayloadCharacterLimit: z.number().int().positive(),
-  policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/)
-}).superRefine((decision, context) => {
-  const classes = new Set(decision.contentClasses);
-  if (classes.has("ordinary") && classes.size > 1) {
-    context.addIssue({
-      code: "custom",
-      message: "ordinary is mutually exclusive with private, large, sensitive, and restricted content.",
-      path: ["contentClasses"]
-    });
-  }
-  if (decision.payloadCharacters > decision.normalPayloadCharacterLimit && !classes.has("large")) {
-    context.addIssue({
-      code: "custom",
-      message: "Payloads above the recorded normal character limit must be classified as large.",
-      path: ["contentClasses"]
-    });
-  }
-  const verifiedLocal = decision.cloudBoundary === "local" && decision.boundaryVerification === "loopback_verified";
-  let expectedOutcome: "allow" | "block";
-  let expectedReason:
-    | "verified_local"
-    | "ordinary_external_allowed"
-    | "unknown_boundary_confirmation"
-    | "local_only_block"
-    | "restricted_content_block";
-
-  if (classes.has("restricted")) {
-    expectedOutcome = "block";
-    expectedReason = "restricted_content_block";
-  } else if (verifiedLocal) {
-    expectedOutcome = "allow";
-    expectedReason = "verified_local";
-  } else if (decision.cloudSendPolicy === "local_only") {
-    expectedOutcome = "block";
-    expectedReason = "local_only_block";
-  } else if (
-    decision.cloudBoundary === "local" ||
-    (decision.cloudBoundary === "unknown" && decision.boundaryVerification !== "user_asserted")
-  ) {
-    expectedOutcome = "block";
-    expectedReason = "unknown_boundary_confirmation";
-  } else {
-    expectedOutcome = "allow";
-    expectedReason = "ordinary_external_allowed";
-  }
-
-  if (decision.outcome !== expectedOutcome) {
-    context.addIssue({
-      code: "custom",
-      message: `Model egress outcome must be ${expectedOutcome} for this boundary and policy.`,
-      path: ["outcome"]
-    });
-  }
-  if (decision.reasonCode !== expectedReason) {
-    context.addIssue({
-      code: "custom",
-      message: `Model egress reason must be ${expectedReason} for this boundary and policy.`,
-      path: ["reasonCode"]
     });
   }
 });
@@ -2651,21 +2557,6 @@ export const OperationRefSchema = z.object({
   }
 });
 
-export const ModelEgressAuditSchema = z.object({
-  payloadHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-  evidenceSummaryHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-  decisionHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-  payloadCharacters: z.number().int().nonnegative(),
-  estimatedPayloadTokens: z.number().int().nonnegative(),
-  normalPayloadCharacterLimit: z.number().int().positive(),
-  contentClasses: z.array(ModelEgressContentClassSchema).min(1).refine(
-    (values) => new Set(values).size === values.length,
-    "Model egress audit content classes must be unique."
-  ),
-  outcome: ModelEgressOutcomeSchema,
-  reasonCode: ModelEgressReasonCodeSchema
-}).strict();
-
 export const ChangeOperationSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("create"),
@@ -2741,7 +2632,6 @@ export const OperationRecordSchema = z.object({
     policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
     enforcementOwners: z.array(z.string().min(1)).min(1)
   }).strict().optional(),
-  modelEgressAudit: ModelEgressAuditSchema.optional(),
   kind: z.enum([
     "create_source_record",
     "update_source_record",
@@ -2772,7 +2662,6 @@ export const OperationRecordSchema = z.object({
     "disable_package",
     "uninstall_package",
     "change_setting",
-    "model_egress_decision",
     "compact_job",
     "repair_record",
     "backup_created",
@@ -2790,20 +2679,6 @@ export const OperationRecordSchema = z.object({
   rollbackHint: z.string().min(1).optional(),
   warnings: z.array(z.string().min(1))
 }).strict().superRefine((operation, context) => {
-  if (operation.kind === "model_egress_decision" && !operation.modelEgressAudit) {
-    context.addIssue({
-      code: "custom",
-      path: ["modelEgressAudit"],
-      message: "A model-egress decision operation requires a typed payload and evidence audit summary."
-    });
-  }
-  if (operation.kind !== "model_egress_decision" && operation.modelEgressAudit) {
-    context.addIssue({
-      code: "custom",
-      path: ["modelEgressAudit"],
-      message: "Only a model-egress decision operation may contain modelEgressAudit."
-    });
-  }
   if (operation.kind === "create_external_file") {
     const target = operation.targetRefs[0];
     if (
@@ -3284,11 +3159,6 @@ export type ReaderSelectionResolveResult = z.infer<typeof ReaderSelectionResolve
 export type ReaderSelectionSegmentId = z.infer<typeof ReaderSelectionSegmentIdSchema>;
 export type ReaderSelectionUtf8ByteSpan = z.infer<typeof ReaderSelectionUtf8ByteSpanSchema>;
 export type ModelListStrategy = z.infer<typeof ModelListStrategySchema>;
-export type ModelEgressContentClass = z.infer<typeof ModelEgressContentClassSchema>;
-export type ModelEgressDecision = z.infer<typeof ModelEgressDecisionSchema>;
-export type ModelEgressAudit = z.infer<typeof ModelEgressAuditSchema>;
-export type ModelEgressOutcome = z.infer<typeof ModelEgressOutcomeSchema>;
-export type ModelEgressReasonCode = z.infer<typeof ModelEgressReasonCodeSchema>;
 export type ModelProfilesFile = z.infer<typeof ModelProfilesFileSchema>;
 export type ModelProfile = z.infer<typeof ModelProfileSchema>;
 export type ModelProviderState = z.infer<typeof ModelProviderStateSchema>;

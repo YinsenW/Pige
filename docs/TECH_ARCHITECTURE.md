@@ -641,7 +641,8 @@ The boundary has three planes:
 - **Tool execution plane:** the Pige Tool Registry exposes narrow typed capabilities
   backed by deterministic services and bounded results.
 - **Host policy and commit plane:** Pige owns preservation, high-risk authority checks,
-  secret/local-only stripping, provider identity, limits, Jobs, provenance, validation,
+  exact payload preservation, provider identity, context limits, stored-credential
+  isolation, Jobs, provenance, validation,
   exceptional intervention, and atomic publication.
 
 Agent decisions never weaken the host plane. A refusal returns a typed result to Pi or
@@ -1154,7 +1155,7 @@ Settings categories:
 - AI > Local Capabilities settings: local RAG engine status, embedding/reranking model downloads, OCR engines, speech input, parser/toolchain health, and local runtime repair state.
 - AI > Agent & Memory settings: `PIGE.md`, behavior, memory, autonomous Activity/history,
   export/delete/reset, and vault-memory backup inclusion.
-- Security settings: API key storage mode, cloud-send visibility, secret redaction policy,
+- Security settings: API key storage mode, Provider-send disclosure,
   and privacy indicators. Pige has no YOLO or saved-grant mode.
 - Extensions settings: installed Skill records, staged Skill install proposals, Pi package install records, scopes, versions, capabilities, enablement state, update state, and rollback metadata.
 - System settings: auto-update channel/status, diagnostics, app version, bundled dependency versions, and support export without secrets.

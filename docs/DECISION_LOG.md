@@ -2694,7 +2694,7 @@ References:
 
 Status: Superseded
 Date: 2026-07-13
-Superseded by: D-20260714-Pi-Autonomous-Completion
+Superseded by: D-20260722-Pi-Agent-Pass-Through
 
 Decision:
 
@@ -2735,10 +2735,10 @@ References:
 
 ### D-20260714-Pi-Autonomous-Completion
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-14
 Revised: 2026-07-17
-Supersedes: D-20260713-Safe-Home-Draft-Replacement
+Superseded by: D-20260722-Pi-Agent-Pass-Through
 
 Decision:
 
@@ -3037,6 +3037,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-22
+Revised: 2026-07-22
 Supersedes: D-20260709-Permissioned-External-Skills, D-20260709-Permission-Modes-And-YOLO, D-20260710-Strict-Durable-Records-And-Egress-Identity, D-20260714-Pi-Capability-And-Authority, D-20260719-OS-Agent-Capability-Is-Present-By-Default
 
 Decision:
@@ -3044,9 +3045,10 @@ Decision:
 Pige is a personal local Agent with a minimal Host. Pi exclusively chooses semantic work;
 Host supplies typed capabilities, closed high-risk authority, data reliability, and
 recovery. One user submit authorizes ordinary registered first-party tools. Connected
-Provider identity plus Send authorizes bounded selected context after secret/local-only/
-identity checks. Per-tool Permission lifecycles, saved grants/YOLO, model-egress approval
-digests, and waiting approval Job states are deleted rather than extended.
+Provider/model identity plus Send authorizes exact user-authored and selected bounded
+context without Host content classification or rewriting. Per-tool Permission lifecycles,
+saved grants/YOLO, model-egress policy/approval/audit state, and waiting approval Job
+states are deleted rather than extended.
 
 Governance and validation are risk-tiered. Ordinary development uses affected tests,
 typecheck, and build; full trace/independent review/package belongs to architecture,
@@ -3079,6 +3081,55 @@ References:
 - `docs/SECURITY_THREAT_MODEL.md`
 - `docs/QUALITY_AND_TEST_STRATEGY.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+- `resources/architecture-reset.manifest.json`
+
+### D-20260722-Pi-Agent-Pass-Through
+
+Status: Accepted
+Date: 2026-07-22
+Supersedes: D-20260713-Safe-Home-Draft-Replacement, D-20260714-Pi-Autonomous-Completion
+
+Decision:
+
+Every production Pi entry uses one pass-through turn contract. Attachment plus query is
+one turn; attachment without text supplies only the minimal user intent to organize the
+files. Pi owns tool choice/order, semantic route, response body, and completion. Its final
+assistant message is authoritative without a Pige terminal tool, grounding/citation
+shape, answer schema, content classifier, or Host semantic repair follow-up.
+
+Explicit Send to an exact connected Provider/model transmits the exact user-authored and
+explicitly selected bounded context unchanged. Pige does not regex-classify, redact,
+rewrite, or block the payload. Stored Provider credentials remain isolated in the secret
+store/authentication layer and are never injected into content.
+
+Host owns only atomic turn submission, Provider/model/credential transport, registered
+tool schemas and resource limits, narrow high-risk effects, durable identity/recovery,
+typed capability execution, mutation commit, and safe renderer projection. Tool/effect
+owners still validate inputs, authority, revisions and commits. Unknown/stale citation
+refs are omitted or marked unavailable without rejecting answer text.
+
+Rationale:
+
+Mandatory finish tools, output schemas, grounding/citation verdicts, content policy and
+repair follow-ups make the Host a shadow Agent and discard valid model answers. They also
+duplicate upstream Pi's lifecycle and make ordinary personal use brittle.
+
+Consequences:
+
+- PT1-PT4 remove completion policy, all Host terminal tools, semantic output errors,
+  objective/mode dispatch, fixed ingest/source pipelines, egress content policy, legacy
+  capture/retrieval routes, and dead UI copy in small reviewable PRs.
+- Jobs may recover the same Pi turn and effects but cannot choose semantic work.
+- Transport/protocol failures remain typed; tool and durable mutation boundaries remain
+  strict. Safe DOM projection limits structure and size without judging answer semantics.
+- Requirement, Exit, and Phase status is not promoted by this decision.
+
+References:
+
+- `AGENTS.md`
+- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
+- `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
 - `resources/architecture-reset.manifest.json`
 
 ## 4. Deferred Decisions

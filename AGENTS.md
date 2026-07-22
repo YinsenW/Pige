@@ -21,8 +21,9 @@ When implementation exposes powerful catalogs, provider ecosystems, package ecos
 For model setup, connect one service and choose one default model. One disclosure grants
 routine bounded calls to that exact Profile; show quiet status, not repeat prompts.
 Local-first means local ownership/truth and no Pige telemetry, not confirmation-first UX.
-Sensitive/restricted content and endpoint drift keep their narrow gates. Hide routing,
-matrices, marketplaces, and taxonomy until a tested runtime needs them.
+Exact Provider/model identity and bounded context keep their technical gates; Pige does
+not classify or rewrite user-authored content before an explicitly submitted model call.
+Hide routing, matrices, marketplaces, and taxonomy until a tested runtime needs them.
 
 ### 0.1 Named Agent Roles
 
@@ -52,15 +53,13 @@ names it for rationale or package curation.
 ## 2. Non-Negotiable Invariants
 
 - Simplicity is a product invariant: default UI should minimize decisions, labels, modes, and visible technical metadata.
-- Every text, follow-up, URL, or file enters one Pi Agent decision path. Host code may
-  preserve attached evidence first and enforce safety, but must not use heuristics or a
-  fixed format workflow to choose semantic intent. Retrieval, fetch, parsers, OCR,
-  analysis, proposals, and writers are typed tools selected by Pi.
-- **Host provides capability, authority, reliability, and recovery; Pi decides semantic
-  work.** Host code must not choose the next semantic action through a format switch,
-  boolean workflow, fixed child-Job chain, correction prompt, terminal repair loop, or
-  hidden fallback pipeline. Deterministic dispatch inside an already selected tool is
-  allowed.
+- **Host provides capabilities, authority and reliability; Pi decides semantic work.**
+  Every text, URL, file and Agent surface uses one Pi turn. Attachment plus query is one
+  turn; no-text attachment adds only “organize these files.” Host may preserve evidence
+  and validate selected tools/effects, but never selects or requires a semantic route,
+  tool order, terminal, answer schema, correction prompt or fallback pipeline.
+- Upstream Pi's final assistant message is authoritative. Host does not reject or rewrite it for
+  missing grounding/citation shape; it only omits or marks unknown refs unavailable.
 - One explicit user submit authorizes that Agent turn to use registered first-party
   read, parse, OCR, retrieval, user-directed fetch, and bounded local-tool capabilities.
   These ordinary actions do not create per-tool permission records or prompts.
@@ -70,9 +69,13 @@ names it for rationale or package curation.
   equivalent authority escalation. There are no YOLO or saved-grant modes for ordinary
   Agent work.
 - Connecting and selecting a cloud Provider, then submitting a turn, authorizes the
-  bounded selected context for that destination. Secrets/credentials are stripped,
-  `local_only` is blocked, and provider identity drift requires a new explicit user
-  action; ordinary/private/bounded-large context does not pause for a second approval.
+  exact user-authored and explicitly selected bounded context for that destination.
+  Host code must not classify, redact, or rewrite that payload for send authorization.
+  Whitespace inspection may decide only whether authored text is empty; accepted text,
+  including leading/trailing whitespace and line breaks, stays byte-for-byte identical
+  in durable input, identity, history, retry and Provider payload.
+  Provider identity drift requires a new explicit user action; Pige-owned credentials
+  remain isolated in the secret store and authentication layer.
 - Ordinary conversation works without local evidence. When personal knowledge is
   relevant, Pi prefers bounded local retrieval and cites what it uses; retrieval is an
   Agent-selected advantage, not a mandatory gate for every answer.
@@ -91,7 +94,9 @@ names it for rationale or package curation.
 - Data lifecycle is trash-first for durable vault data: Agent, Skill, package, cleanup, reset, cancellation, and compaction flows must not permanently delete durable knowledge, source evidence, memory, conversations, proposals, or operation records.
 - Pige's internal SQLite, indexes, thumbnails, and caches are rebuildable working layers;
   a documented SQLite payload inside a Dataset Bundle is structured knowledge, not an index.
-- API keys and tokens must not be written to Markdown, SQLite, logs, prompts, operation records, conversation logs, diagnostics, or backups by default.
+- Pige-owned API keys and tokens must not be written to Markdown, SQLite, logs, prompt
+  content, operation records, conversation logs, diagnostics, or backups by default;
+  this credential-isolation rule does not rewrite user-authored turn content.
 - Diagnostics and support bundles are local, user-initiated, redacted by default, and never uploaded automatically in v0.1.
 - Errors use stable codes, localized keys, redacted details and typed repair actions.
 - Follow `SECURITY.md`, `PRIVACY.md` and `SUPPORT.md`: never expose secrets, private

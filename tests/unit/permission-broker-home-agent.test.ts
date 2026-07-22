@@ -64,15 +64,7 @@ describe("AR1 submitted-turn authority in Home", () => {
       jobs,
       new PiAgentRuntimeAdapter({ fauxResponses: [
         { kind: "tool_call", toolName: external.tool.name, args: { channel: "stable" } },
-        {
-          kind: "tool_call",
-          toolName: "pige_finish_home_turn",
-          args: {
-            answer: "The ordinary first-party action completed.",
-            citationRefs: [],
-            grounding: "general"
-          }
-        }
+        { kind: "text", text: "The ordinary first-party action completed." }
       ] }),
       undefined,
       undefined,
@@ -304,7 +296,7 @@ function makeRetrieval(vaultId: string): HomeAgentRetrievalPort {
     degraded: false,
     results: []
   });
-  return { search };
+  return { search, readExactSelectedEvidence: (result) => ({ items: result.results }) };
 }
 
 function digest(value: string): `sha256:${string}` {

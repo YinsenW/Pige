@@ -137,12 +137,15 @@ Error code rules:
 - Home classifies only exact `model_provider.call_failed` as provider-call failure;
   `model_provider.binding_changed` becomes binding repair. Other typed Host errors keep
   their safe code with body-free Agent repair; only unknown non-domain exceptions fall back.
-- Recoverable Agent-output/tool validation is internal Pi progress, not an API/UI error.
-  It keeps the same Job active; first invalid/omitted candidates alone do not emit
-  `model_provider.output_invalid` or `agent_runtime.knowledge_action_missing`. Terminal
-  external/incompatibility failures remain body-free.
+- Successful upstream Pi assistant finals are not subject to Host semantic output
+  validation and do not emit `model_provider.output_invalid`,
+  `agent_runtime.knowledge_action_missing`, or `agent_runtime.completion_invalid`.
+  Registered tool
+  inputs and durable mutation effects retain their owner validation. Malformed provider
+  transport/incompatibility remains a body-free technical failure.
 
-Internal Agent repair result; this never crosses renderer IPC directly:
+Internal tool/effect repair result; this never judges assistant prose or crosses renderer
+IPC directly:
 
 ```ts
 type AgentRepairFeedback = {
@@ -151,8 +154,6 @@ type AgentRepairFeedback = {
   category:
     | "schema_invalid"
     | "tool_input_invalid"
-    | "grounding_invalid"
-    | "citation_invalid"
     | "evidence_stale"
     | "result_incomplete";
   fieldRefs: string[];
@@ -560,11 +561,9 @@ Rules:
 - `text` is the complete replacement snapshot, not an append delta. It is non-empty,
   escaped by renderer, bounded by the final 8,000-character answer limit, and may shrink
   when the provider repairs an in-progress tool argument.
-- Main emits only bounded answer snapshots from a reviewed Pi-owned answer/parsed terminal
-  channel after control/restricted-content filtering. It never starts a second provider
-  turn solely to reproduce an already generated final for presentation. A repair may
-  replace or shrink the provisional answer; incomplete or changed draft text is not a Job
-  failure and never bypasses final validation.
+- Main emits bounded snapshots from Pi's assistant-text event channel after structural
+  event/size checks. It neither trims nor semantically validates accepted assistant text,
+  and never starts a second Provider turn solely to reproduce or repair an existing final.
 - The Host must not parse or forward partial JSON, pre-authorization/generic Pi text,
   thinking, tool arguments, citations, grounding, model/provider identifiers, raw
   payloads, errors, or credentials. Draft delivery grants no new authority and never
@@ -593,8 +592,17 @@ YOLO, request/decision/consume/completion chain, or waiting Job state exists.
 
 Ordinary first-party reads, parse/OCR/retrieval, user-specified fetch, and bounded local
 tools have no renderer permission API. Provider calls have no model-egress approval API:
-Connect/select plus Send authorizes bounded context; main strips secrets, blocks
-`local_only`, and rejects provider identity drift.
+Connect/select plus Send authorizes exact user-authored and explicitly selected bounded
+context; main preserves that payload unchanged, keeps stored credentials out of it, and
+rejects Provider/model identity drift.
+
+Whitespace inspection is permitted only to decide whether an authored field is empty.
+For non-empty text, the original string—including leading/trailing whitespace, line
+breaks, punctuation and secret/path-like text—is the durable conversation input and the
+input identity/hash used by history, retry/restart and Provider payload. Text-only
+whitespace creates no turn; attachments plus whitespace-only text use the minimal
+“organize these files” intent. Context selection/bounding happens before assembly and
+does not trim or rewrite the selected text.
 
 ### 6.8 Settings, Providers, Tools
 

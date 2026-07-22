@@ -315,11 +315,11 @@ function completionMessage(result: AgentTurnAnswer): string {
   if (result.grounding === "insufficient_evidence") {
     return "Agent turn completed with a contract-owned insufficient-evidence result.";
   }
-  if (result.grounding === "local_knowledge") return "Agent turn completed with validated local citations.";
+  if (result.grounding === "local_knowledge") return "Agent turn completed with explicit local citations.";
   if (result.grounding === "source") {
     return "Agent turn completed from one Agent-selected preserved URL source.";
   }
-  return "Agent turn completed with a validated general response.";
+  return "Agent turn completed with a general response.";
 }
 
 function mergeAgentTurnOutputRefs(

@@ -177,7 +177,8 @@ Rules:
 - Ingest starts with the current preserved source. Related summaries enter only after
   the Agent selects a retrieval tool; parser/OCR evidence enters only from its selected
   tool result.
-- Permissions and cloud-send policy can further narrow what may be sent to a cloud model.
+- Provider/model identity and explicit context selection bound what is sent to a model;
+  Host content classification is not an authorization layer.
 
 ## 7. Context Budget Classes
 
@@ -276,9 +277,11 @@ Current `capture_ingest` bridge:
 - Text Artifacts are checksum/size verified. Parser/OCR sidecars are paired to their own body by source ID, sidecar Artifact ID, sidecar kind, and `extractedTextChecksum` or `ocrTextChecksum`; the first metadata sidecar is never treated as a universal locator source.
 - The pack contains ordered fragment refs, Artifact IDs, locators, character spans, optional confidence, budget warnings, and bodies only for the lifetime of the call. Job/Operation/conversation records keep references and hashes, never the assembled body.
 - The current bridge caps selected evidence at 24 fragments and 18,000 characters. Native evidence precedes OCR, mixed packs reserve up to one quarter of the bounded budget for supplemental OCR, and same-parent OCR is deduplicated only when native text already contains it. Canonical citation-locator collisions across distinct Artifacts receive deterministic Artifact-qualified suffixes.
-- The Provider send boundary revalidates the connected identity, strips secrets, blocks
-  `local_only`, and bounds selected evidence before prompt rendering. Prompt rendering
-  exposes only supplied `ev_NN` refs; validated output resolves them into citations.
+- The Provider send boundary revalidates connected Provider/model identity and bounds
+  selected evidence before prompt rendering. It preserves user-authored and explicitly
+  selected content unchanged; authentication uses the stored credential out-of-band.
+  Prompt rendering exposes only supplied `ev_NN` refs; validated output resolves them
+  into citations.
 
 ## 9. Prompt Packaging Order
 
@@ -344,11 +347,25 @@ Cloud model calls must not receive:
 
 Connecting/selecting the exact Provider and pressing Send authorizes the bounded selected
 context for that turn. Before provider invocation, context assembly revalidates Provider
-identity, strips explicit secrets/credentials, blocks `local_only`, and enforces body,
-scope, and whole-vault limits. Ordinary/private/bounded-large content proceeds without a
-second approval; unknown or changed destination fails closed and requires a new explicit
-user action. No egress digest store, one-use approval, renderer action, or waiting Job is
-part of context assembly.
+and model identity and enforces body, scope, and whole-vault limits, but does not classify,
+redact, rewrite, or block user-authored/selected payload content. Stored credentials are
+used only for authentication and never injected into the payload. An unknown or changed
+destination requires a new explicit user action. No egress decision/audit, digest store,
+one-use approval, renderer action, or waiting Job is part of context assembly.
+
+This exact-content rule covers the user-authored message and the body of explicitly
+selected bounded evidence. Provider credentials remain secret-store/auth-header data.
+URL credentials and query transport metadata may be stripped before a URL is preserved
+or projected because they are not selected message/evidence body. Diagnostics/support
+export may redact its separately exported artifact; it never mutates Provider payload.
+
+Retrieval persistence remains a separate boundary. SQLite, RAG/index caches, search
+display, logs and diagnostics must not persist credentials or secret-like material
+contrary to their storage invariants. Their persistence-safe projections are never
+Provider-payload authority: model context re-reads the selected evidence from source
+truth, verifies its exact revision/identity, applies only character/token selection
+bounds, and sends that selected body exact and ephemeral without classification,
+trimming, redaction or rewriting.
 
 For parser/OCR-backed Agent ingest, the call-scoped Evidence Pack is guarded by the
 complete Source Record revision. The current bridge rechecks before/after the model and
@@ -376,7 +393,8 @@ Settings that affect Agent behavior are compiled into `AgentRuntimePolicyContext
 Examples:
 
 - Source storage strategy affects source record creation before ingest. Context assembly sees the resulting source refs and storage strategy; it does not choose where to put files.
-- Cloud-send policy affects whether selected snippets can be sent to a provider or require confirmation.
+- The explicit Send and selected Provider/model identity authorize the bounded selected
+  snippets; no content-policy confirmation is inserted.
 - Default model affects model calls through Model Provider Registry and Agent Orchestrator.
 - Permission mode affects tool call mediation, not just prompt prose.
 - Language settings affect generated answer language and OCR/speech hints when services support them.
@@ -401,13 +419,15 @@ Tests must verify:
 
 - Context budget allocator preserves authority/safety, runtime policy, task state, output schema, and citations before lower-priority context.
 - Home retrieval sends selected snippets, not the whole vault.
-- Cloud calls obey cloud-send policy and permission decisions.
+- Cloud calls require explicit Send, an exact connected Provider/model, and bounded
+  explicitly selected context.
 - Home and ingest retrieval re-read confined Markdown and Source Record privacy; drift
   writes a new audit before rejecting turn/publication.
 - Composer capture bodies, pasted blocks, files, URLs, selections, retrieved snippets, and tool output cannot acquire current-user-instruction authority.
-- Every external model call proves connected Provider identity, secret stripping,
-  `local_only` blocking, bounded selected evidence, and no whole-vault default. It does not
-  create a per-call approval/digest state machine.
+- Every external model call proves connected Provider/model identity, exact selected
+  payload preservation, stored-credential non-injection, bounded selected evidence, and
+  no whole-vault default. It does not create content classification, mutation, blocking,
+  or a per-call approval/audit/digest state machine.
 - Parser/OCR ingest rejects changed Source Record evidence and creates no note; B3.13
   returns a typed stale result and requires an Agent replan before another side effect.
 - Source content cannot change settings, storage strategy, provider, permissions, or `PIGE.md`.
@@ -420,7 +440,8 @@ Tests must verify:
 
 Current Phase 5 ingest bridge:
 
-- Parser-backed Agent ingest reads at most 96 KiB from the verified selected text/OCR artifact and sends at most 18,000 redacted characters.
+- Parser-backed Agent ingest reads at most 96 KiB from the verified selected text/OCR
+  artifact and sends at most 18,000 bounded exact selected characters.
 - The untrusted evidence block includes source ID, artifact ID, and up to 24 available page/block/slide locators. It does not include arbitrary filesystem paths, sidecar bodies, or source archives.
 - Artifact checksum/size is verified before model handoff when recorded; delimiter-like source text is escaped inside the untrusted evidence wrapper.
 - The bridge hashes the complete selected Source Record as an ephemeral evidence-revision guard, checks it before prompt rendering/model invocation and after the provider response, and does not persist or send the Source Record body as part of that guard.
@@ -432,13 +453,13 @@ Current unified Home foundation:
 - `agent.submitTurn` lets Pi answer directly or call one current-vault search tool with
   at most eight evidence items. Tool output is escaped inside
   `PIGE_UNTRUSTED_EVIDENCE_V1`; it cannot change tools, providers, settings, output
-  shape, permissions, or authority. Final JSON and citation refs are host-validated.
+  shape, permissions, or authority. Pi's final assistant text is answer authority; only
+  Host-known citation metadata is projected.
 - Before each model turn, Pige re-reads bounded confined Markdown bytes and complete
   Source Record privacy facts, binds their hashes into the body-free evidence summary,
-  records the current egress decision, and rejects revision/privacy drift.
+  records the current Provider/model and evidence identity, and rejects revision drift.
 - With no usable runtime, the durable `agent_turn` waits and later resumes the same
-  identity. Empty/irrelevant evidence does not block ordinary chat; `vault_only` must
-  cite selected evidence or fail closed.
+  identity. Empty/irrelevant evidence does not block ordinary chat or require citations.
 - Renderer results contain only the answer, bounded snippets, ranked page summaries,
   citations, warnings, degraded state, and `none|local|cloud`; no prompt, Context Pack,
   private path, credential, provider error, or evidence body is exposed.
@@ -449,7 +470,8 @@ Current unified Home foundation:
 - Memory injection is scoped, ranked, secret-scanned, and lower authority than explicit user instruction.
 - Current follow-up uses at most 16 integrity-checked prior user/assistant messages and
   64 KiB UTF-8; older-turn compaction/indexing remains B7.09.
-- Prompt snapshots redact secrets and include expected policy/context sections.
+- Diagnostic prompt-snapshot artifacts exclude Provider credentials and raw bodies; this
+  export hygiene does not alter the Provider payload.
 - Context pack serialization works for future remote Agent backend and Mobile Lite clients without desktop-only objects.
 
 ## 16. Traceability

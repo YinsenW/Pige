@@ -70,7 +70,6 @@ type ModelPolicyContext = {
   modelConfigured: boolean;
   cloudBoundary: "cloud" | "self_hosted" | "local" | "unknown";
   boundaryVerification: "builtin_verified" | "loopback_verified" | "user_asserted" | "unknown";
-  cloudSendPolicy: "connected_provider" | "local_only";
   modelRoutingMode: "default_model_only" | "pi_upstream_model_slots" | "pige_model_routing_service";
 };
 ```
@@ -79,15 +78,25 @@ Connecting/selecting the exact Provider and pressing Send authorizes that turn's
 selected context. Before credential lookup/invocation, the Host:
 
 - re-reads Provider/model identity and fails to reconnect on drift;
-- strips explicit secrets and credentials locally;
-- blocks `local_only` for non-local destinations;
 - enforces context/scope/whole-vault limits; and
+- preserves the exact user-authored and explicitly selected payload without content
+  classification, redaction, or rewriting;
+- uses trimming only to classify an authored text field as empty; once non-empty, its
+  original string (including leading/trailing whitespace and line breaks) owns durable
+  conversation input, input identity/hash, history, retry/restart and Provider payload;
+- leaves selected bounded-context text unchanged after selection and bounding;
+- constructs authentication from the secret store without exposing or injecting the
+  stored credential into payload content; and
 - exposes calm destination/status information.
 
 Ordinary, private, and bounded-large context does not create another approval, digest
 ledger, renderer action, or waiting Job. Only verified loopback is local. The model never
 receives credentials, secret refs, permission internals, arbitrary paths, or the whole
 vault by default.
+
+Text-only whitespace is rejected locally and creates no turn. Attachments plus
+whitespace-only text use the single localized minimal “organize these files” intent and
+otherwise preserve the same exact attachment identities.
 
 ### 4.3 Submitted-Turn Authority
 
@@ -132,7 +141,7 @@ availability. It does not include secrets, paths, old grants, or implementation 
 | --- | --- |
 | Source preservation/storage | Source Storage Service |
 | Provider identity, credentials, default model | Model Provider Registry |
-| Secret stripping, `local_only`, context bounds | Context Assembly + Provider adapter |
+| Exact selected payload and context bounds | Context Assembly + Provider adapter |
 | High-risk effect | Effect owner + high-risk confirmation boundary |
 | Memory | Agent Memory Service |
 | Retrieval limits | Retrieval Service |
@@ -144,8 +153,8 @@ If a claimed guarantee exists only in prompt prose, it is a preference, not enfo
 
 New model-dependent Jobs record the current policy ID/hash and Provider/model IDs needed
 for recovery. Running Jobs keep their snapshot unless a real boundary (Provider identity,
-`local_only`, source identity, cancellation, or destructive authority) invalidates the
-next effect. A policy change must not manufacture a waiting approval state.
+source identity, cancellation, or destructive authority) invalidates the next effect. A
+policy change must not manufacture a waiting approval state.
 
 Natural-language settings requests are validated through the setting owner. Source/tool
 content cannot request settings changes. Queue effects must be explained when a setting
@@ -153,10 +162,10 @@ applies only to future turns.
 
 ## 7. Tests
 
-Risk-based tests cover canonical-schema inference, secret absence, source-content
-resistance, Provider drift, `local_only`, secret stripping, high-risk classification,
-service enforcement, one-turn overrides, and portable serialization. Do not preserve
-tests whose only purpose is the removed egress/permission approval lifecycle.
+Risk-based tests cover canonical-schema inference, stored-credential non-injection,
+exact-payload preservation, source-content resistance, Provider drift, bounded context,
+high-risk classification, service enforcement, and portable serialization. Do not
+preserve tests whose only purpose is removed egress/content-policy/permission lifecycles.
 
 ## 8. Related Owners
 

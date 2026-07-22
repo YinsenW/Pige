@@ -24,7 +24,6 @@ import {
   type PiAgentRunRequest,
   type PiAgentRunResult
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
-import { RESPOND_TO_USER_TOOL_NAME } from "../../apps/desktop/src/main/services/agent-ingest-tool-registry";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import { markSourceAsLegacyAgentIngestFixture } from "../helpers/legacy-agent-ingest-fixture";
 import { createTestPdf } from "./helpers/pdf-fixture";
@@ -95,7 +94,8 @@ describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
           toolName: "pige_create_knowledge_note",
           args: groundedOutput("Agent-selected PDF knowledge"),
           toolCallId: "pi_publish_native"
-        }
+        },
+        { kind: "text", text: "I parsed the PDF and created the grounded knowledge note." }
       ]
     }));
     const jobs = new JobsService(
@@ -190,7 +190,6 @@ describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
       expect(noteOperation.jobId).toBe(parent.id);
       expect(parent.operationIds).toContain(noteOperation.id);
       expect(operations.map((operation) => operation.kind)).toEqual(expect.arrayContaining([
-        "model_egress_decision",
         "create_artifact",
         "create_page"
       ]));
@@ -221,7 +220,7 @@ describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
       [
         { kind: "tool_call", toolName: "pige_inspect_source", args: {}, toolCallId: "pi_inspect_retry_before" },
         { kind: "tool_call", toolName: "pige_parse_source", args: {}, toolCallId: "pi_parse_retry_first" },
-        { kind: "text", text: "Synthetic interruption after durable parsing." }
+        { kind: "text", text: "   " }
       ],
       [
         { kind: "tool_call", toolName: "pige_inspect_source", args: {}, toolCallId: "pi_inspect_retry_again" },
@@ -232,7 +231,8 @@ describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
           toolName: "pige_create_knowledge_note",
           args: groundedOutput("Retried Agent-selected PDF knowledge"),
           toolCallId: "pi_publish_retry"
-        }
+        },
+        { kind: "text", text: "I reused the parsed evidence and created the knowledge note." }
       ]
     ]);
     const jobs = new JobsService(
@@ -286,20 +286,11 @@ describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
     )).toContain("# Retried Agent-selected PDF knowledge");
   });
 
-  it("reuses one waiting parse child across a known prior catalog generation and genuine Pi call IDs", async () => {
+  it("keeps one waiting parse child while Pi completes the parent with ordinary prose", async () => {
     const fixture = makeVault();
     const sourceBody = "This preserved PDF waits safely when its local parser dependency is unavailable.";
     const captured = await preservePdf(fixture, "waiting-parser.pdf", sourceBody);
-    const uniqueCallIds = Array.from(
-      { length: 18 },
-      (_, index) => `pi_parse_retry_${String(index + 1).padStart(2, "0")}`
-    );
-    const parseCallIds = [
-      ...uniqueCallIds.slice(0, 16),
-      uniqueCallIds[7] as string,
-      ...uniqueCallIds.slice(16)
-    ];
-    const runtime = new SequencedWaitingParseRuntime(parseCallIds);
+    const runtime = new SequencedWaitingParseRuntime(["pi_parse_waiting"]);
     const jobs = new JobsService(
       fixture.vaultPort,
       new AgentIngestService(modelPort, runtime, capabilityPort(false))
@@ -315,31 +306,11 @@ describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
       const parentId = requireValue(
         jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]
       ).id;
-      const observedChildIds: string[] = [];
-
-      for (const [index] of parseCallIds.entries()) {
-        expect(await jobs.processQueuedAgentIngest({ jobIds: [parentId] })).toEqual({
-          processed: 1,
-          completed: 0,
-          failed: 1
-        });
-        const waitingChildren = readJobs(fixture.vaultPath).filter((job) => job.class === "parse");
-        expect(waitingChildren).toHaveLength(1);
-        if (index === 0) {
-          const firstChild = requireValue(waitingChildren[0]);
-          writeJob(fixture.vaultPath, {
-            ...firstChild,
-            inputRefs: firstChild.inputRefs?.map((ref) => ref.role === "agent_tool_catalog"
-              ? { ...ref, checksum: runtime.legacyCatalogHash }
-              : ref)
-          });
-        }
-        observedChildIds.push(requireValue(waitingChildren[0]).id);
-        expect(readJob(fixture.vaultPath, parentId).state).toBe("waiting_dependency");
-        if (index < parseCallIds.length - 1) {
-          expect(jobs.retry({ jobId: parentId })).toMatchObject({ status: "requeued" });
-        }
-      }
+      expect(await jobs.processQueuedAgentIngest({ jobIds: [parentId] })).toEqual({
+        processed: 1,
+        completed: 1,
+        failed: 0
+      });
 
       const parent = readJob(fixture.vaultPath, parentId);
       const child = requireValue(
@@ -352,12 +323,9 @@ describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
         .map((filePath) => fs.readFileSync(filePath, "utf8"))
         .join("\n");
 
-      expect(runtime.results).toHaveLength(parseCallIds.length);
-      expect(runtime.results.every((result) => (
-        result.invokedTools.join(",") === "pige_inspect_source,pige_parse_source"
-      ))).toBe(true);
-      expect(new Set(observedChildIds)).toEqual(new Set([child.id]));
-      expect(parent).toMatchObject({ class: "agent_ingest", state: "waiting_dependency" });
+      expect(runtime.results).toHaveLength(1);
+      expect(runtime.results[0]?.invokedTools).toEqual(["pige_inspect_source", "pige_parse_source"]);
+      expect(parent).toMatchObject({ class: "agent_ingest", state: "completed" });
       expect(parent.childJobIds).toEqual([child.id]);
       expect(child).toMatchObject({
         class: "parse",
@@ -368,17 +336,16 @@ describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
       expect(child.inputRefs?.filter((ref) => ref.role === "agent_tool_source_revision")).toHaveLength(1);
       expect(child.inputRefs?.filter((ref) => ref.role === "agent_tool_canonical_input")).toHaveLength(1);
       expect(child.inputRefs?.filter((ref) => ref.role === "agent_tool_catalog")).toHaveLength(1);
-      expect(provenance).toHaveLength(16);
-      expect(provenance.map((ref) => ref.checksum)).toEqual(
-        uniqueCallIds.slice(0, 16).map((toolCallId) => hashToolCallId(parent.id, toolCallId))
-      );
-      expect(new Set(provenance.map((ref) => ref.checksum))).toHaveLength(16);
+      expect(provenance).toHaveLength(1);
+      expect(provenance.map((ref) => ref.checksum)).toEqual([
+        hashToolCallId(parent.id, "pi_parse_waiting")
+      ]);
       expect(provenance.every((ref) => (
         ref.kind === "tool" &&
         ref.id === "pige_parse_source" &&
         /^sha256:[a-f0-9]{64}$/u.test(ref.checksum ?? "")
       ))).toBe(true);
-      for (const toolCallId of new Set(parseCallIds)) expect(jobJson).not.toContain(toolCallId);
+      expect(jobJson).not.toContain("pi_parse_waiting");
       expect(jobJson).not.toContain(captured.inputPath);
       expect(jobJson).not.toContain(sourceBody);
       expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toEqual([]);
@@ -403,7 +370,7 @@ describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
       const runtime = new SequencedWaitingParseRuntime([
         `pi_parse_${binding}_first`,
         `pi_parse_${binding}_second`
-      ]);
+      ], "   ");
       const jobs = new JobsService(
         fixture.vaultPort,
         new AgentIngestService(modelPort, runtime, capabilityPort(false))
@@ -457,7 +424,7 @@ describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
     const runtime = new SequencedWaitingParseRuntime([
       "pi_parse_source_revision_first",
       "pi_parse_source_revision_second"
-    ]);
+    ], "   ");
     const jobs = new JobsService(
       fixture.vaultPort,
       new AgentIngestService(modelPort, runtime, capabilityPort(false))
@@ -605,12 +572,13 @@ class SequencedWaitingParseRuntime implements AgentIngestRuntimePort {
   legacyCatalogHash = "";
   #nextCall = 0;
 
-  constructor(private readonly parseCallIds: readonly string[]) {}
+  constructor(
+    private readonly parseCallIds: readonly string[],
+    private readonly assistantText = "The parser dependency is not available yet."
+  ) {}
 
   async run(request: PiAgentRunRequest): Promise<PiAgentRunResult> {
-    this.legacyCatalogHash ||= createPigeAgentToolCatalogHash(
-      request.tools.filter((tool) => tool.name !== RESPOND_TO_USER_TOOL_NAME)
-    );
+    this.legacyCatalogHash ||= createPigeAgentToolCatalogHash(request.tools);
     const parseCallId = requireValue(this.parseCallIds[this.#nextCall]);
     const callNumber = this.#nextCall + 1;
     this.#nextCall += 1;
@@ -622,7 +590,8 @@ class SequencedWaitingParseRuntime implements AgentIngestRuntimePort {
           args: {},
           toolCallId: `pi_inspect_retry_${String(callNumber).padStart(2, "0")}`
         },
-        { kind: "tool_call", toolName: "pige_parse_source", args: {}, toolCallId: parseCallId }
+        { kind: "tool_call", toolName: "pige_parse_source", args: {}, toolCallId: parseCallId },
+        { kind: "text", text: this.assistantText }
       ]
     });
     const result = await adapter.run(request);

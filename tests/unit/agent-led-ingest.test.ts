@@ -62,7 +62,8 @@ describe("Agent-led knowledge spine", () => {
       const adapter = new PiAgentRuntimeAdapter({
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
-          { kind: "tool_call", toolName: "pige_create_knowledge_note", args: groundedOutput("Agent-led knowledge") }
+          { kind: "tool_call", toolName: "pige_create_knowledge_note", args: groundedOutput("Agent-led knowledge") },
+          { kind: "text", text: "The preserved source was organized into knowledge." }
         ]
       });
       const jobs = new JobsService(
@@ -99,10 +100,7 @@ describe("Agent-led knowledge spine", () => {
       expect(note).toContain(`[source:${capture.sourceId}#source]`);
       expect(fs.readFileSync(path.join(fixture.vaultPath, "index.md"), "utf8")).toContain("Agent-led knowledge");
       expect(fs.readFileSync(path.join(fixture.vaultPath, "log.md"), "utf8")).toContain(capture.sourceId);
-      expect(operations.map((operation) => operation.kind)).toEqual(expect.arrayContaining([
-        "model_egress_decision",
-        "create_page"
-      ]));
+      expect(operations.map((operation) => operation.kind)).toEqual(["create_page"]);
       expect(operations.find((operation) => operation.kind === "create_page")?.jobId).toBe(completed.id);
       expect(network.calls).toBe(0);
     } finally {
@@ -122,7 +120,8 @@ describe("Agent-led knowledge spine", () => {
       fauxResponses: [
         { kind: "tool_call", toolName: "bash", args: { command: "curl example.invalid" } },
         { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
-        { kind: "tool_call", toolName: "pige_create_knowledge_note", args: groundedOutput("Replanned safely") }
+        { kind: "tool_call", toolName: "pige_create_knowledge_note", args: groundedOutput("Replanned safely") },
+        { kind: "text", text: "The source was handled with registered tools only." }
       ]
     });
     const service = new AgentIngestService(modelPort, adapter);
@@ -162,14 +161,15 @@ describe("Agent-led knowledge spine", () => {
     const source = readJsonBySuffix<SourceRecord>(fixture.vaultPath, ".pige/source-records", `${capture.sourceId}.json`);
     const job = readJsonBySuffix<JobRecord>(fixture.vaultPath, ".pige/jobs", `${capture.jobId}.json`);
 
-    await expect(service.ingestSource(fixture.vaultPath, source, job)).rejects.toMatchObject({
-      code: "agent_runtime.knowledge_action_missing"
+    await expect(service.ingestSource(fixture.vaultPath, source, job)).resolves.toMatchObject({
+      outcome: "responded",
+      answer: "Publication was not authorized."
     });
 
     expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toEqual([]);
     const preservedPath = requireValue(source.managedCopy?.path ?? source.original?.path);
     expect(fs.existsSync(path.join(fixture.vaultPath, preservedPath))).toBe(true);
-    expect(readOperations(fixture.vaultPath).map((operation) => operation.kind)).toEqual(["model_egress_decision"]);
+    expect(readOperations(fixture.vaultPath)).toEqual([]);
   });
 });
 

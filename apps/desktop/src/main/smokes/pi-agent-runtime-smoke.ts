@@ -47,14 +47,15 @@ export async function runPiAgentRuntimeSmoke(): Promise<{
       },
       execute: async () => {
         publicationCount += 1;
-        return createPigeTextToolResult("Published.", {}, { terminate: true });
+        return createPigeTextToolResult("Published.", {});
       }
     }
   ];
   const result = await new PiAgentRuntimeAdapter({
     fauxResponses: [
       { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
-      { kind: "tool_call", toolName: "pige_create_knowledge_note", args: { title: "Smoke" } }
+      { kind: "tool_call", toolName: "pige_create_knowledge_note", args: { title: "Smoke" } },
+      { kind: "text", text: "The synthetic smoke evidence was inspected and published." }
     ]
   }).run({
     runtimeConfig,
@@ -110,21 +111,14 @@ export async function runHomeAgentRuntimeSmoke(): Promise<{
         getDefaultRuntimeConfig: () => runtimeConfig
       },
       {
-        search: () => createSmokeSearchResult(vault.vaultId)
+        search: () => createSmokeSearchResult(vault.vaultId),
+        readExactSelectedEvidence: (result) => ({ items: result.results })
       },
       new JobsService(vaults),
       new PiAgentRuntimeAdapter({
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
-          {
-            kind: "tool_call",
-            toolName: "pige_finish_home_turn",
-            args: {
-              answer: "Smoke evidence is grounded. [1]",
-              citationRefs: ["citation_1"],
-              grounding: "local_knowledge"
-            }
-          }
+          { kind: "text", text: "Smoke evidence is grounded. [citation_1]" }
         ]
       })
     );

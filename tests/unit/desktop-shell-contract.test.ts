@@ -465,9 +465,7 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("export interface AgentTurnCurrentNoteScope");
     expect(contractsSource).toContain("readonly scope?: AgentTurnScope");
     expect(contractsSource).toContain("readonly onTurnDraft:");
-    expect(runtimeSource).toContain("terminalDrafts.observe(event)");
-    expect(runtimeSource).toContain("terminalDrafts.afterToolExecute(executedTool, args, result)");
-    expect(projectionSource).toContain('toolName: "pige_finish_home_turn"');
+    expect(runtimeSource).toContain("drafts.observe(event)");
     expect(preloadSource).not.toContain('ipcRenderer.invoke("capture.submit');
     expect(preloadSource).not.toContain('ipcRenderer.invoke("retrieval.ask"');
     expect(homeComposer).toContain("window.pige.agent.submitTurn");
@@ -553,10 +551,9 @@ describe("desktop shell build contract", () => {
       "utf8"
     );
     const confirmationsStart = preloadSource.indexOf("confirmations: {");
-    const legacyBoundary = preloadSource.indexOf("modelEgress: {", confirmationsStart);
     const preloadApi = preloadSource.slice(
       confirmationsStart,
-      legacyBoundary >= 0 ? legacyBoundary : preloadSource.indexOf("skills: {", confirmationsStart)
+      preloadSource.indexOf("skills: {", confirmationsStart)
     );
 
     expect(contractsSource).toContain("readonly confirmations: {");
@@ -593,7 +590,6 @@ describe("desktop shell build contract", () => {
       expect(preloadApi).not.toContain(unsafeField);
     }
     expect(preloadApi).not.toContain("Permission");
-    expect(preloadApi).not.toContain("ModelEgress");
   });
 
   it("projects Activity open authority as a parsed stable page identity without paths", () => {

@@ -113,7 +113,7 @@ export class ReaderSelectionProposalService {
       throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The Reader proposal Job binding is invalid.");
     }
     if (Buffer.byteLength(input.replacement, "utf8") > MAX_REPLACEMENT_BYTES) {
-      throw new PigeDomainError("model_provider.output_invalid", "The Reader transform replacement is too large.");
+      throw new PigeDomainError("agent_ingest.update_content_restricted", "The Reader transform replacement is too large.");
     }
     if (containsRestrictedModelContent(input.replacement)) {
       throw new PigeDomainError(

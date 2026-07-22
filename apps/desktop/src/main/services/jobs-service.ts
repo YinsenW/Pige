@@ -758,12 +758,6 @@ export class JobsService {
           }
         );
       },
-      onEgressRecorded: (operationId) => {
-        this.#jobExecutionCoordinator(vaultPath).patch(
-          this.#jobRecordStore(vaultPath).read(jobPath),
-          { operationIds: [operationId] }
-        );
-      },
       assertSourceCurrent: (expectedSource) => {
         const currentSource = readSourceRecord(vaultPath, sourceFile.sourceRecord.id);
         if (
@@ -1992,14 +1986,8 @@ export class JobsService {
               {
               policyContextId: snapshot.policyContextId,
               policyHash: snapshot.policyHash,
-              message: "Agent ingest policy and model-egress gates resolved before provider access."
+              message: "Agent source tools are bound to the current policy and source revision."
               }
-            );
-          },
-          onEgressRecorded: (operationId) => {
-            this.#jobExecutionCoordinator(vaultPath).patch(
-              this.#jobRecordStore(vaultPath).read(jobFile.path),
-              { operationIds: [operationId] }
             );
           },
           assertSourceCurrent: (expectedSource) => {
@@ -2066,10 +2054,18 @@ export class JobsService {
           signal: execution.control.signal
         });
         if (result.outcome === "responded") {
-          throw new PigeDomainError(
-            "agent_runtime.turn_binding_invalid",
-            "Historical Agent ingest cannot publish a current conversation response."
+          const completedJob = this.#completeCooperativeExecution(
+            jobFile.path,
+            runningJob,
+            "completed",
+            "Historical Agent ingest completed without a durable knowledge effect.",
+            "source",
+            execution.control.durableWriteState(),
+            []
           );
+          if (completedJob.state === "cancelled") failed += 1;
+          else completed += 1;
+          continue;
         }
         if (result.outcome === "dataset_materialized") {
           const datasetSnapshot = this.#requireExecutionSnapshot(jobFile.path, runningJob);
@@ -2171,10 +2167,6 @@ export class JobsService {
           this.#markJobWaitingDependency(jobFile.path, runningJob, "Waiting for the referenced original source to be reconnected before Agent ingest can continue.", durableState);
         } else if (caught instanceof PigeDomainError && /^source\.(?:checksum_mismatch|managed_unavailable|path_outside_vault|reference_invalid)$/u.test(caught.code)) {
           this.#markJobFailedFinal(jobFile.path, runningJob, "The source cannot be verified safely. Re-import it to create a new source version before Agent ingest.", durableState);
-        } else if (caught instanceof PigeDomainError && caught.code === "model_egress.blocked") {
-          this.#markJobFailedFinal(jobFile.path, runningJob, "Model egress is blocked by the current privacy policy; the preserved source remains local.", durableState);
-        } else if (caught instanceof PigeDomainError && caught.code === "model_egress.denied") {
-          this.#markJobFailedFinal(jobFile.path, runningJob, "The exact model send was denied; preserved source evidence remains available.", durableState);
         } else if (caught instanceof PigeDomainError && caught.code === "agent_ingest.source_changed") {
           const currentSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id);
           if (currentSource && shouldWaitForRunnableOcr(this.#ocr, currentSource)) {
@@ -4586,16 +4578,6 @@ function createAgentIngestRetryError(caught: unknown): PigeErrorSummary {
       code: caught.code,
       domain: "model_provider",
       messageKey: "errors.model_provider.call_failed",
-      retryable: true,
-      severity: "error",
-      userAction: "retry"
-    };
-  }
-  if (caught instanceof PigeDomainError && caught.code === "agent_runtime.knowledge_action_missing") {
-    return {
-      code: caught.code,
-      domain: "agent_runtime",
-      messageKey: "errors.agent_runtime.source_turn_failed",
       retryable: true,
       severity: "error",
       userAction: "retry"

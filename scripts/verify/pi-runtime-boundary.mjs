@@ -83,8 +83,8 @@ export function auditPiRuntimeBoundary(repositoryRoot) {
     forbidden: ["toolExecution:"]
   });
   inspectBoundaryModule(root, SAFE_PROJECTION_PATH, failures, {
-    required: ["containsRestrictedModelContent(text)", "MAX_HISTORY_UTF8_BYTES"],
-    forbidden: ["new Agent(", "agent.followUp(", "streamFn:"]
+    required: ["MAX_HISTORY_UTF8_BYTES"],
+    forbidden: ["containsRestrictedModelContent", "new Agent(", "agent.followUp(", "streamFn:"]
   });
   inspectBoundaryModule(root, MODEL_CAPABILITY_PATH, failures, {
     required: ["conservative_unknown", "findReviewedPiModel"],

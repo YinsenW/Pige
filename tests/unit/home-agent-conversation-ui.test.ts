@@ -2075,6 +2075,7 @@ describe("Home durable Agent conversation UI", () => {
   it("clears and posts the prompt immediately, then converges one streamed turn without a final duplicate", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
+    const authoredText = "  Show this prompt immediately.\nKeep the authored spacing.  ";
     const completed = completedResult();
     if (completed.state !== "completed") throw new Error("Expected completed result fixture.");
     let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
@@ -2085,9 +2086,10 @@ describe("Home durable Agent conversation UI", () => {
     };
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
-    await setTextareaValue(dom, container, "Show this prompt immediately.");
+    await setTextareaValue(dom, container, authoredText);
     await clickButton(dom, container, "Send");
     await waitFor(dom, () => harness.submitRequests.length === 1);
+    expect(harness.submitRequests[0]?.text).toBe(authoredText);
     const clientTurnId = harness.submitRequests[0]?.clientTurnId;
     if (!clientTurnId) throw new Error("Expected a client turn identity.");
 
@@ -2125,7 +2127,7 @@ describe("Home durable Agent conversation UI", () => {
           id: completed.conversationEventId,
           role: "user",
           createdAt: "2026-07-18T08:00:00.000Z",
-          text: "Show this prompt immediately.",
+          text: authoredText,
           jobId: completed.jobId
         },
         {
@@ -2943,7 +2945,11 @@ describe("Home durable Agent conversation UI", () => {
     expect(submitFiles).toContain("schemaVersion: 1");
     expect(submitFiles).toContain("clientTurnId = createAgentClientTurnId()");
     expect(submitFiles).toContain("clientTurnId,");
+    expect(submitFiles).toContain("text?.trim() ? { text } : {}");
+    expect(submitFiles).not.toContain("text: text.trim()");
     expect(submitFiles).not.toContain("conversationId:");
+    expect(submitHomeInput).toContain("const turnText = text;");
+    expect(submitHomeInput).not.toContain("const turnText = text.trim()");
     expect(retryLatestTurn).toContain("props.onRetryJob(retryableLatestTurn.jobId)");
     expect(retryLatestTurn).not.toContain("submitTurn");
     expect(submitHomeInput.indexOf("const submission = window.pige.agent.submitTurn"))

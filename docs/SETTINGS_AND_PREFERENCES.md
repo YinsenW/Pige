@@ -128,9 +128,13 @@ Rules:
   Global Default; only Custom exposes protocol/Base URL.
 - Model/provider behavior must follow `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`; do not add Advanced/Fast model settings unless runtime routing support is real and tested.
 - Local embeddings, OCR, speech, parsers, and bundled tool health belong to Local Capabilities.
-- Cloud-send policy, API key storage mode, and high-risk boundaries belong to
-  Permissions & Privacy; ordinary submitted-turn
-  authority has no user mode.
+- Provider-send disclosure, API key storage mode, and high-risk boundaries belong to
+  Permissions & Privacy; ordinary submitted-turn authority has no policy toggle or user
+  mode.
+- The Provider-send row is informational only: no button, toggle, modal, confirmation,
+  content class, or action affordance. Its exact visible copy is owned by
+  `docs/UI_PROTOTYPE.md`. Provider payload redaction is not a setting. Diagnostics/support
+  export redaction remains fixed behavior of its separate artifact owner.
 - Vault & Note Storage separately shows note and source locations; each available root has one platform-neutral reveal action, while an unavailable external source binding is shown as not connected and cannot fall back to the vault root.
 - Trash/archive policy follows `docs/DATA_ARCHITECTURE.md`; no setting lets any actor permanently delete durable knowledge/source evidence automatically.
 
@@ -167,7 +171,6 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Provider model inventory: exact ID, source, enabled state, optional alias/capabilities | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `none` | Journaled Refresh; atomic manual/alias/enabled updates |
 | Provider discovery/generation health | Models | `runtime_transient` | Model Provider Registry, Renderer | None | No | `none` | Session-local; discovery and generation truth remain separate |
 | Global Default Pi Agent model | Models | `machine_local` | Model Provider Registry, Agent Orchestrator | OS app data | No by default | `none` | New calls; must reference an enabled model |
-| Cloud-send policy (`connected_provider` default / `local_only`) | Permissions & Privacy | `machine_local` | Settings Service, Model Provider Registry | OS app data | No | `explicit_confirmation` | Next model call |
 | Local embedding model status | Local Capabilities | `derived_status` plus machine asset | Local RAG Engine, Local Tool Service | OS app data | No | `permission_and_confirmation` | After download/remove job |
 | OCR engine preference | Local Capabilities | `machine_local` | OCR Service | OS app data | No | `none` | New OCR jobs |
 | OCR language hints | Local Capabilities | `machine_local` | OCR Service, I18N Service | OS app data | No | `none` | New OCR jobs |
@@ -179,7 +182,6 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Memory backup inclusion | Agent & Memory/Backup flow | `vault_portable` | Backup Service | `.pige/config.json` | Yes | `none` | Next backup |
 | Exceptional intervention policy (`confirmation.*` compatibility) | Agent & Memory | `vault_portable` | Agent Orchestrator, Change Proposal Service | `.pige/config.json` | Yes | `explicit_confirmation` | New jobs; cannot turn uncertainty into routine prompts |
 | Secret storage mode | Permissions & Privacy | `machine_local` plus `secret` | Settings and Secrets Service | OS app data + secret store | No | `explicit_warning` | Requires explicit warning |
-| Secret redaction policy | Permissions & Privacy | `machine_local` | Diagnostics Service | OS app data | No | `explicit_confirmation` | Immediate |
 | Vault-scoped Skill enablement | Skills | `vault_portable` | Skill Registry Service | `.pige/skills/` metadata or `.pige/config.json` | Yes | `permission_broker` | New Agent runs |
 | Machine-local Skill enablement | Skills | `machine_local` | Skill Registry Service | OS app data | No | `permission_broker` | New Agent runs |
 | Pi package install records | Pi Packages | `machine_local` | Pi Package Registry Service | OS app data | No | `permission_and_confirmation` | After install/remove job |
@@ -227,7 +229,6 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 | External managed-copy root binding | `sourceStorage.sourceAssetRootKind` plus stable root binding availability | Sometimes | Source Storage Service | New managed sources and source availability checks; existing sources resolve their recorded root ID |
 | Default Pi Agent model | `model.defaultModelProfileId` | Yes | Model Provider Registry, Agent Orchestrator | New model calls |
 | Provider profile metadata | protocol-bound availability and internal `model.cloudBoundary` | Yes, redacted | Model Provider Registry | New model calls |
-| Cloud-send policy (`connected_provider` / `local_only`) | `model.cloudSendPolicy` | Yes | Model Provider Registry, context assembly | Next model call |
 | App language | `language.appLocale` | Yes | I18N Service, Renderer | UI immediately; generated text only when policy says so |
 | OCR language hints | `language.ocrLanguageHints` | Maybe | OCR Service | New OCR jobs |
 | Agent behavior preferences | Workflow-specific policy fields | Yes | Agent Orchestrator | New Agent jobs |
@@ -281,7 +282,8 @@ Allowed paths:
 Sensitive settings that always require explicit confirmation:
 
 - API key storage mode.
-- Cloud-send policy that sends more data to cloud providers.
+- Provider credential storage mode or Provider/endpoint identity changes. The disclosed
+  Send behavior is not a content-policy setting.
 - No saved-grant or YOLO mode is a setting; ordinary first-party authority comes from
   the submitted turn and exceptional effects use the high-risk confirmation owner.
 - Provider profile changes.

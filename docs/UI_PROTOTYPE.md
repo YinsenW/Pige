@@ -456,7 +456,7 @@ shrink or revise; it is not a saved message. Do not announce every replacement t
 live region—keep the turn `aria-busy`, expose a bounded status, and announce the final or
 failure once.
 
-The validated durable answer replaces the draft without duplicating a bubble. On
+The durable upstream Pi final replaces the draft without duplicating a bubble. On
 failure/cancellation, remove the provisional text or mark the pending bubble with the
 existing localized recovery state; never leave it looking like a completed answer.
 Reopen/restart shows only durable messages. Verified citations and evidence rows appear
@@ -856,7 +856,8 @@ Settings rules:
 - A settings page owns one conceptual domain. Do not mix models, permissions, local tools, extensions, and backup in one screen.
 - Models contains cloud language model provider connection only.
 - Local Capabilities contains local RAG, embedding/reranking downloads, OCR, speech input, parsers, and bundled toolchain health.
-- Permissions & Privacy explains submitted-turn authority, the closed high-risk boundary, Provider-send policy, secret storage/redaction, and `local_only`.
+- Permissions & Privacy explains submitted-turn authority, the closed high-risk boundary,
+  exact Provider-send behavior, and stored-credential isolation.
 - Vault & Note Storage contains vault identity, active vault path, note/knowledge root path, source asset root path, source storage policy, recent vaults, backup, restore, export, and trash.
 - Index & Maintenance contains rebuild index, reset local database, knowledge health, chunk status, and repair actions.
 - Agent & Memory contains `PIGE.md`, Agent behavior preferences, memory inspection, and autonomous activity/history controls.
@@ -957,21 +958,29 @@ until Pi or a tested Pige routing service makes them change real calls.
 ```txt
 Permissions & Privacy
 
-Model use
-Default: Allow selected context for connected providers
-Ordinary Home and Agent calls continue without confirmation.
-
-▸ Stricter cloud-send controls
-
-( ) Confirm private or large content
-( ) Confirm every cloud send
-( ) Local only
-
-Sensitive content: Confirm each time
-Restricted content: Never send
+Model service
+Sending a message sends exactly what you wrote and the selected context to the connected
+model service. Pige does not classify, redact, or block message content.
+Uses your connected provider
 ```
 
-Provider setup discloses the destination once. Saved authority is exact to that reviewed Profile/endpoint; routine calls do not open a permission dialog, while an unknown or changed boundary asks again. Stricter controls stay collapsed. Plaintext secret storage remains an advanced warned escape hatch.
+Provider setup discloses the destination once. Send requires an exact connected Provider
+and selected model; there is no content-policy modal, toggle, confirmation control, or
+content-class indicator or action affordance; this row is informational only. UI Design
+translates the three strings mechanically across all six locales and deletes unused
+`errors.model_provider.egress_confirmation_required` keys/tests. Plaintext secret storage
+remains an advanced warned escape hatch.
+
+Remove the entire `privacy.redactionTitle`/`privacy.redactionDescription` row and
+`privacy.partialNote`, including all dead six-locale keys/tests. Do not replace either
+with a control, static status, warning, note, or development affordance. The existing API
+key secure-store row remains. Diagnostics/support-export redaction applies only to exported
+artifacts under its separate owner and is not Provider-message mutation.
+
+Also delete all reachable references, tests and six-locale keys for
+`errors.model_provider.output_invalid` and `errors.agent_runtime.completion_invalid`.
+Do not replace them with another generic “validated answer” or “completion invalid” copy;
+transport/tool/effect failures keep their exact existing owner codes.
 
 Voice input, OCR, local RAG, parser health, and bundled toolchain status belong to Local Capabilities. Models should not contain those controls.
 
@@ -983,7 +992,8 @@ Only a concrete closed-list high-risk effect opens a focused modal: irreversible
 overwrite of a user file, write outside an explicitly selected directory, arbitrary
 shell/unknown-package install, or credential display/export. Deny is safe and executes
 no effect. Connected Provider plus Send authorizes the selected bounded context; secrets
-are removed locally and `local_only` blocks the call.
+stored by Pige remain outside payload content, while user-authored/selected content is
+sent unchanged.
 
 ### Agent And Memory Settings
 
@@ -1554,7 +1564,8 @@ Must implement:
 - Settings: grouped sidebar with Basic, Knowledge Base, AI, Security, Extensions, and System.
 - Settings: Models page for Provider connection, inventory, and Global Default.
 - Settings: Local Capabilities page for local RAG, OCR, speech, parsers, and bundled toolchain.
-- Settings: Permissions & Privacy page for submitted-turn authority, closed high-risk effects, Provider-send policy, secrets, redaction, and `local_only`.
+- Settings: Permissions & Privacy page for submitted-turn authority, closed high-risk
+  effects, exact Provider-send disclosure, and stored-credential isolation.
 - Settings: Agent & Memory page.
 - Settings: Skills and Pi Packages under Extensions.
 - Settings: Vault & Note Storage plus Index & Maintenance under Knowledge Base.

@@ -35,7 +35,7 @@ export interface NoteAgentContextPack {
 }
 
 export function buildNoteAgentContextPack(binding: CurrentNoteEvidenceBinding): NoteAgentContextPack {
-  const hasEvidence = binding.modelText.length > 0;
+  const hasEvidence = binding.modelText.trim().length > 0;
   const contextPackId = `context_${createHash("sha256")
     .update(JSON.stringify({
       workflow: "note_agent",

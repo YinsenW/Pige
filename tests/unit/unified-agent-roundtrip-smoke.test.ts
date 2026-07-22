@@ -42,6 +42,11 @@ describe("unified Agent assembled smoke navigation", () => {
   });
 
   it("proves unified durable conversation, citation navigation, and source results", () => {
+    expect(source).not.toContain('writeToolCallResponse(response, "pige_finish_home_turn"');
+    expect(source).not.toContain('writeStreamingToolCallResponse(');
+    expect(source).not.toContain("terminal-answer");
+    expect(source).toContain("writeTextResponse(response, GROUNDED_ANSWER");
+    expect(source).toContain("writeTextResponse(response, DATASET_ANSWER");
     expect(source).toContain('document.querySelectorAll(".conversation-message.role-assistant:not(.provisional)")');
     expect(source).toContain('document.querySelector(".retrieval-citations button:not(:disabled)")');
     expect(source).toContain('await waitFor(() => document.querySelector(".note-reader"), "citation Reader")');

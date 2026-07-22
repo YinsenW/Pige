@@ -12,12 +12,6 @@ const modules = [
     upstreamGap: "Pige must assemble scoped product boundaries around one upstream Agent instance."
   },
   {
-    path: "apps/desktop/src/main/services/pi-agent-completion-policy.ts",
-    owner: "Agent completion policy",
-    classification: "product_control",
-    upstreamGap: "Pi owns turn execution; Pige owns durable work budgets, terminal acceptance, and bounded tool-validation feedback."
-  },
-  {
     path: "apps/desktop/src/main/services/pi-agent-provider-binding.ts",
     owner: "Model Provider Registry",
     classification: "product_boundary",

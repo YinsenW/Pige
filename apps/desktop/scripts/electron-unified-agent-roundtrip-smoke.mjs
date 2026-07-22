@@ -17,7 +17,7 @@ const DIRECT_PROMPT = "Reply directly with the roundtrip greeting.";
 const GROUNDING_PROMPT = "What is the roundtrip launch phrase in my local knowledge?";
 const HIGH_RISK_DENY_PROMPT = "Run the harmless synthetic command requested by this test.";
 const DIRECT_ANSWER = "The real Pi roundtrip is ready, and this longer answer arrives through several safe visible replacements before completion.";
-const GROUNDED_ANSWER = "The roundtrip launch phrase is heliotrope seven. [1]";
+const GROUNDED_ANSWER = "The roundtrip launch phrase is heliotrope seven. [citation_1]";
 const SOURCE_PROMPT = "Inspect this attachment and answer without creating a note.";
 const SOURCE_ANSWER = "The preserved attachment is available to the unified Agent.";
 const MARKDOWN_PROMPT = "Inspect this Markdown attachment and answer without creating a note.";
@@ -25,7 +25,7 @@ const MARKDOWN_ANSWER = "The preserved Markdown attachment is available to the u
 const ACTIVITY_PROMPT = "Create a grounded knowledge note from this attachment.";
 const ACTIVITY_TITLE = "Unified Agent activity note";
 const DATASET_PROMPT = "Which person has the largest count in this attached Dataset?";
-const DATASET_ANSWER = "Grace has the largest count in the attached Dataset. [D1]";
+const DATASET_ANSWER = "Grace has the largest count in the attached Dataset. [citation_9]";
 const DATASET_CITATION_REF = "citation_9";
 const CHILD_RESULT_PREFIX = "PIGE_ROUNDTRIP_RESULT ";
 const MAX_CHILD_MS = 90_000;
@@ -115,19 +115,18 @@ async function runOrchestrator() {
     assert.equal(connect.datasetVisible, true);
     assert.equal(connect.datasetCitationVisible, true);
     assert.equal(connect.datasetImportJobCount, 1);
-    assert.deepEqual(connect.failedRetryableJobClasses, []);
+    assert.deepEqual(connect.failedRetryableJobs, []);
     assert.ok(requests.filter((request) => request.method === "GET" && request.path === "/v1/models").length >= 2);
     assert.ok(requests.filter((request) => request.method === "POST" && request.path === "/v1/responses").length >= 7);
     assert.ok(requests.every((request) => request.authorization === `Bearer ${syntheticToken}`));
     assert.ok(requests.every((request) => !request.body.includes(syntheticToken)));
     assert.ok(requests.some((request) => request.body.includes('"name":"pige_provider_probe"')));
     assert.ok(requests.some((request) => request.body.includes('"name":"pige_search_knowledge"')));
-    assert.ok(requests.some((request) => request.body.includes('"name":"pige_finish_home_turn"')));
+    assert.equal(requests.some((request) => request.body.includes('"name":"pige_finish_home_turn"')), false);
     assert.ok(requests.some((request) => request.body.includes('"name":"pige_inspect_source"')));
     assert.ok(requests.some((request) => request.body.includes('"name":"pige_inspect_dataset"')));
     assert.ok(requests.some((request) => request.body.includes('"name":"pige_query_dataset"')));
     assert.ok(requests.some((request) => request.body.includes('"name":"pige_create_knowledge_note"')));
-    assert.ok(requests.some((request) => request.body.includes('"name":"pige_respond_to_user"')));
     assert.ok(requests.some((request) => request.body.includes('"type":"function_call_output"')));
 
     const secretsPath = path.join(userDataPath, "secrets.json");
@@ -149,7 +148,7 @@ async function runOrchestrator() {
       `Electron unified Agent roundtrip OK: persisted ${connect.providerProfileId}/${connect.modelProfileId}, ` +
       `reopened binding, real Responses tool loop and ${connect.draftEventCount} safe draft replacements ` +
       `(${connect.firstDraftReceivedAt - streamTiming.firstSafeAnswerMaterialAt}ms from first safe material), ` +
-      `${connect.directDraftEventCount} parsed terminal-answer replacement(s) with no presentation-only provider turn plus Enter submission, ` +
+      `${connect.directDraftEventCount} final-answer replacement(s) with no presentation-only provider turn plus Enter submission, ` +
       `visible direct/cited Home, preserved-source, ` +
       `TXT/Markdown ingress, Dataset continuation, ordinary provider sends without a second approval, zero retryable Jobs, ` +
       `and reversible Activity/Undo results.`
@@ -1039,10 +1038,14 @@ async function readDatasetRendererResult(browserWindow) {
         datasetVisible: Boolean(datasetVisible),
         datasetCitationVisible: Boolean(datasetCitationVisible),
         datasetImportJobCount,
-        failedRetryableJobClasses: settledJobs
+        failedRetryableJobs: settledJobs
           .filter((job) => job.state === "failed_retryable")
-          .map((job) => job.class)
-          .sort()
+          .map((job) => ({
+            class: job.class,
+            stage: job.stage ?? "none",
+            errorCode: job.error?.code ?? "none"
+          }))
+          .sort((left, right) => left.class.localeCompare(right.class))
       };
     })()
   `, true);
@@ -1095,9 +1098,10 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
       return;
     }
     const parsed = JSON.parse(body);
-    const serializedInput = JSON.stringify(parsed.input ?? "");
+    const currentTurnInput = readCurrentTurnInput(parsed.input);
+    const serializedInput = JSON.stringify(currentTurnInput);
     const serializedTools = JSON.stringify(parsed.tools ?? "");
-    const latestUserText = readLatestUserText(parsed.input);
+    const latestUserText = readLatestUserText(currentTurnInput);
     if (serializedInput.includes('"call_id":"call_provider_probe"') && serializedInput.includes("function_call_output")) {
       writeTextResponse(response, "probe ready", "provider-probe-2");
       return;
@@ -1117,15 +1121,11 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
       return;
     }
     if (serializedInput.includes('"call_id":"call_dataset_query"') && serializedInput.includes("function_call_output")) {
-      writeToolCallResponse(response, "pige_finish_home_turn", "call_dataset_finish", "dataset-finish-1", {
-        answer: DATASET_ANSWER,
-        citationRefs: [DATASET_CITATION_REF],
-        grounding: "local_knowledge"
-      });
+      writeTextResponse(response, DATASET_ANSWER, "dataset-final-1");
       return;
     }
     if (serializedInput.includes('"call_id":"call_dataset_catalog"') && serializedInput.includes("function_call_output")) {
-      const catalogOutput = findFunctionCallOutput(parsed.input, "call_dataset_catalog");
+      const catalogOutput = findFunctionCallOutput(currentTurnInput, "call_dataset_catalog");
       const refs = readDatasetCatalogRefs(catalogOutput);
       writeToolCallResponse(response, "pige_query_dataset", "call_dataset_query", "dataset-query-1", {
         action: "query",
@@ -1149,6 +1149,10 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
     }
     if (latestUserText.includes(DATASET_PROMPT) && serializedTools.includes("pige_inspect_source")) {
       writeToolCallResponse(response, "pige_inspect_source", "call_dataset_source_inspect", "dataset-source-inspect-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_activity_create"') && serializedInput.includes("function_call_output")) {
+      writeTextResponse(response, "The reversible knowledge note was created from the selected evidence.", "activity-final-1");
       return;
     }
     if (serializedInput.includes('"call_id":"call_activity_inspect"') && serializedInput.includes("function_call_output")) {
@@ -1175,11 +1179,7 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
       return;
     }
     if (serializedInput.includes('"call_id":"call_home_search"') && serializedInput.includes("function_call_output")) {
-      writeToolCallResponse(response, "pige_finish_home_turn", "call_home_finish_grounded", "home-grounded-2", {
-        answer: GROUNDED_ANSWER,
-        citationRefs: ["citation_1"],
-        grounding: "local_knowledge"
-      });
+      writeTextResponse(response, GROUNDED_ANSWER, "home-grounded-2");
       return;
     }
     if (latestUserText.includes(GROUNDING_PROMPT)) {
@@ -1188,39 +1188,18 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
     }
     if (serializedInput.includes('"call_id":"call_source_inspect"') && serializedInput.includes("function_call_output")) {
       const markdownTurn = latestUserText.includes(MARKDOWN_PROMPT);
-      writeToolCallResponse(response, "pige_respond_to_user", "call_source_respond", markdownTurn ? "markdown-respond-1" : "source-respond-1", {
-        answer: markdownTurn ? MARKDOWN_ANSWER : SOURCE_ANSWER,
-        evidenceRefs: ["ev_01"]
-      });
+      writeTextResponse(response, markdownTurn ? MARKDOWN_ANSWER : SOURCE_ANSWER, markdownTurn ? "markdown-final-1" : "source-final-1");
       return;
     }
     if (serializedTools.includes("pige_inspect_source")) {
       writeToolCallResponse(response, "pige_inspect_source", "call_source_inspect", "source-inspect-1");
       return;
     }
-    const directArgs = {
-      answer: DIRECT_ANSWER,
-      citationRefs: [],
-      grounding: "general"
-    };
     if (latestUserText.includes(STREAMING_API_PROMPT)) {
-      await writeStreamingToolCallResponse(
-        response,
-        "pige_finish_home_turn",
-        `call_home_finish_${requests.length}`,
-        `home-direct-${requests.length}`,
-        directArgs,
-        streamTiming
-      );
+      await writeStreamingTextResponse(response, DIRECT_ANSWER, `home-direct-${requests.length}`, streamTiming);
       return;
     }
-    writeToolCallResponse(
-      response,
-      "pige_finish_home_turn",
-      `call_home_finish_${requests.length}`,
-      `home-direct-${requests.length}`,
-      directArgs
-    );
+    writeTextResponse(response, DIRECT_ANSWER, `home-direct-${requests.length}`);
   });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -1241,6 +1220,15 @@ function readLatestUserText(input) {
       .join("\n");
   }
   return "";
+}
+
+function readCurrentTurnInput(input) {
+  if (!Array.isArray(input)) return [];
+  for (let index = input.length - 1; index >= 0; index -= 1) {
+    const item = input[index];
+    if (item && typeof item === "object" && item.role === "user") return input.slice(index);
+  }
+  return input;
 }
 
 function findFunctionCallOutput(input, callId) {
@@ -1324,72 +1312,6 @@ function writeToolCallResponse(response, name, callId, suffix, args = {}) {
   response.end("data: [DONE]\n\n");
 }
 
-async function writeStreamingToolCallResponse(response, name, callId, suffix, args, timing) {
-  const argumentsJson = JSON.stringify(args);
-  const item = {
-    id: `fc_${suffix}`,
-    type: "function_call",
-    status: "completed",
-    arguments: argumentsJson,
-    call_id: callId,
-    name
-  };
-  beginEventStream(response);
-  writeResponseEvent(response, {
-    type: "response.created",
-    sequence_number: 0,
-    response: openAiResponse(`resp_${suffix}`, "in_progress", [])
-  });
-  writeResponseEvent(response, {
-    type: "response.output_item.added",
-    sequence_number: 1,
-    output_index: 0,
-    item: { ...item, status: "in_progress", arguments: "" }
-  });
-  let offset = 0;
-  let sequence = 2;
-  while (offset < argumentsJson.length) {
-    const nextOffset = Math.min(argumentsJson.length, offset + 28);
-    const delta = argumentsJson.slice(offset, nextOffset);
-    if (
-      timing.firstSafeAnswerMaterialAt === undefined &&
-      nextOffset > '{"answer":"'.length
-    ) {
-      timing.firstSafeAnswerMaterialAt = Date.now();
-    }
-    writeResponseEvent(response, {
-      type: "response.function_call_arguments.delta",
-      sequence_number: sequence,
-      output_index: 0,
-      item_id: item.id,
-      delta
-    });
-    offset = nextOffset;
-    sequence += 1;
-    await new Promise((resolve) => setTimeout(resolve, 110));
-  }
-  writeResponseEvent(response, {
-    type: "response.function_call_arguments.done",
-    sequence_number: sequence,
-    output_index: 0,
-    item_id: item.id,
-    name,
-    arguments: argumentsJson
-  });
-  writeResponseEvent(response, {
-    type: "response.output_item.done",
-    sequence_number: sequence + 1,
-    output_index: 0,
-    item
-  });
-  writeResponseEvent(response, {
-    type: "response.completed",
-    sequence_number: sequence + 2,
-    response: openAiResponse(`resp_${suffix}`, "completed", [item])
-  });
-  response.end("data: [DONE]\n\n");
-}
-
 function writeTextResponse(response, text, suffix) {
   const initialItem = {
     id: `msg_${suffix}`,
@@ -1438,7 +1360,7 @@ function writeTextResponse(response, text, suffix) {
   response.end("data: [DONE]\n\n");
 }
 
-async function writeStreamingTextResponse(response, text, suffix) {
+async function writeStreamingTextResponse(response, text, suffix, timing) {
   const initialItem = {
     id: `msg_${suffix}`,
     type: "message",
@@ -1467,6 +1389,7 @@ async function writeStreamingTextResponse(response, text, suffix) {
   let sequence = 2;
   while (offset < text.length) {
     const nextOffset = Math.min(text.length, offset + 24);
+    if (timing.firstSafeAnswerMaterialAt === undefined) timing.firstSafeAnswerMaterialAt = Date.now();
     writeResponseEvent(response, {
       type: "response.output_text.delta",
       sequence_number: sequence,

@@ -180,7 +180,8 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
               warnings: [],
               confidence: "high"
             }
-          }
+          },
+          { kind: "text", text: "I recognized the image and created the knowledge note." }
         ]
       });
       const capabilities = {
@@ -308,7 +309,8 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
               warnings: [],
               confidence: "high"
             }
-          }
+          },
+          { kind: "text", text: "I recognized the presentation media and created the knowledge note." }
         ]
       });
       const capabilities = {
@@ -367,6 +369,9 @@ describe.runIf(hasBuiltHelper)("macOS Vision OCR production adapter smoke", () =
 const noRetrieval: HomeAgentRetrievalPort = {
   search: () => {
     throw new Error("Source-backed Vision smoke must not use Home retrieval.");
+  },
+  readExactSelectedEvidence: () => {
+    throw new Error("Source-backed Vision smoke must not bind vault evidence.");
   },
   ask: () => {
     throw new Error("Source-backed Vision smoke must not use legacy retrieval ask.");

@@ -124,11 +124,14 @@ describe("Agent-led image OCR tool", () => {
     )).toBe(true);
   });
 
-  it("keeps an image parent parked without a child until OCR capability becomes ready", async () => {
+  it("lets Pi explain an unavailable OCR capability without starting a hidden child", async () => {
     const fixture = makeVault();
     const captured = await preserveImage(fixture, "waiting.png");
     const waitingRuntime = new RecordingRuntime(new PiAgentRuntimeAdapter({
-      fauxResponses: [toolCall("pige_inspect_source", "image_wait_inspect")]
+      fauxResponses: [
+        toolCall("pige_inspect_source", "image_wait_inspect"),
+        { kind: "text", text: "OCR is not available for this image yet." }
+      ]
     }));
     const waitingJobs = makeJobs(fixture, waitingRuntime, undefined, false);
     waitingJobs.processQueuedCaptures({ jobIds: [captured.captureJobId] });
@@ -136,31 +139,14 @@ describe("Agent-led image OCR tool", () => {
 
     expect(await waitingJobs.processQueuedAgentIngest({ jobIds: [parentId] })).toEqual({
       processed: 1,
-      completed: 0,
-      failed: 1
+      completed: 1,
+      failed: 0
     });
-    expect(readJob(fixture.vaultPath, parentId).state).toBe("waiting_dependency");
+    expect(readJob(fixture.vaultPath, parentId).state).toBe("completed");
     expect(readJobs(fixture.vaultPath).filter((job) => job.class === "ocr")).toEqual([]);
     expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toEqual([]);
     expect(waitingJobs.requeueWaitingAgentIngest()).toEqual({ requeued: 0 });
 
-    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult("Recovered image evidence."));
-    const resumedRuntime = new RecordingRuntime(new PiAgentRuntimeAdapter({
-      fauxResponses: completeImageTrace(groundedOutput("Recovered image knowledge"), "resume")
-    }));
-    const resumedJobs = makeJobs(fixture, resumedRuntime, new OcrService(adapter), true);
-
-    expect(resumedJobs.requeueWaitingAgentIngest()).toEqual({ requeued: 1 });
-    expect(await resumedJobs.processQueuedAgentIngest({ jobIds: [parentId] })).toEqual({
-      processed: 1,
-      completed: 1,
-      failed: 0
-    });
-    const children = readJobs(fixture.vaultPath).filter((job) => job.class === "ocr");
-    expect(children).toHaveLength(1);
-    expect(children[0]).toMatchObject({ state: "completed", parentJobId: parentId });
-    expect(adapter.callCount).toBe(1);
-    expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toHaveLength(1);
   });
 
   it("reuses one image OCR child and artifact operation across parent retry", async () => {
@@ -171,7 +157,7 @@ describe("Agent-led image OCR tool", () => {
       [
         toolCall("pige_inspect_source", "image_retry_inspect_first"),
         toolCall("pige_ocr_source", "image_retry_ocr_first"),
-        { kind: "text", text: "Synthetic interruption after durable image OCR." }
+        { kind: "text", text: "   " }
       ],
       completeImageTrace(groundedOutput("Retried image knowledge"), "retry_second")
     ]);
@@ -210,7 +196,8 @@ describe("Agent-led image OCR tool", () => {
     const runtime = new RecordingRuntime(new PiAgentRuntimeAdapter({
       fauxResponses: [
         toolCall("pige_inspect_source", "image_empty_inspect"),
-        toolCall("pige_ocr_source", "image_empty_ocr")
+        toolCall("pige_ocr_source", "image_empty_ocr"),
+        { kind: "text", text: "No readable text was found in the image." }
       ]
     }));
     const jobs = makeJobs(fixture, runtime, new OcrService(adapter), true);
@@ -219,12 +206,12 @@ describe("Agent-led image OCR tool", () => {
 
     expect(await jobs.processQueuedAgentIngest({ jobIds: [parentId] })).toEqual({
       processed: 1,
-      completed: 0,
-      failed: 1
+      completed: 1,
+      failed: 0
     });
     const child = requireValue(readJobs(fixture.vaultPath).find((job) => job.class === "ocr"));
     expect(readJob(fixture.vaultPath, parentId)).toMatchObject({
-      state: "waiting_dependency",
+      state: "completed",
       childJobIds: [child.id]
     });
     expect(child.state).toBe("completed_with_warnings");
@@ -233,19 +220,6 @@ describe("Agent-led image OCR tool", () => {
       agentTextReady: false
     });
     expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toEqual([]);
-    expect(jobs.requeueWaitingAgentIngest()).toEqual({ requeued: 0 });
-
-    const restartedJobs = makeJobs(
-      fixture,
-      new RecordingRuntime(new PiAgentRuntimeAdapter({ fauxResponses: [] })),
-      new OcrService(adapter),
-      true
-    );
-    expect(restartedJobs.requeueWaitingAgentIngest()).toEqual({ requeued: 0 });
-    expect(readJob(fixture.vaultPath, parentId)).toMatchObject({
-      state: "waiting_dependency",
-      childJobIds: [child.id]
-    });
     expect(adapter.callCount).toBe(1);
   });
 
@@ -418,7 +392,8 @@ function completeImageTrace(output: unknown, suffix: string): readonly PiFauxRes
     toolCall("pige_inspect_source", `image_${suffix}_inspect_before`),
     toolCall("pige_ocr_source", `image_${suffix}_ocr`),
     toolCall("pige_inspect_source", `image_${suffix}_inspect_after`),
-    toolCall("pige_create_knowledge_note", `image_${suffix}_publish`, output)
+    toolCall("pige_create_knowledge_note", `image_${suffix}_publish`, output),
+    { kind: "text", text: "The image evidence was processed and the knowledge action completed." }
   ];
 }
 
