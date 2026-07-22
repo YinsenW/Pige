@@ -1039,6 +1039,60 @@ describe("Home Pi Agent service", () => {
     });
   });
 
+  it("preserves durable conversation messages when a pre-AR2 Job record is obsolete", () => {
+    const fixture = makeFixture();
+    const conversations = new AgentTurnConversationStore();
+    const user = conversations.appendUserTurn(
+      fixture.vaultPath,
+      "Keep this durable turn visible.",
+      { inputKind: "typed_text", objective: "auto", locale: "en" },
+      { clientTurnId: "turn_20260711_obsoletejob01" }
+    );
+    const obsoleteJobId = "job_20260711_obsoletejob01";
+    conversations.appendAssistantTurn(
+      fixture.vaultPath,
+      user,
+      obsoleteJobId,
+      "This durable answer survives the obsolete Job record."
+    );
+    const obsoleteJobPath = path.join(
+      fixture.vaultPath,
+      ".pige",
+      "jobs",
+      "2026",
+      "07",
+      `${obsoleteJobId}.json`
+    );
+    const obsoleteJobBytes = `${JSON.stringify({
+      schemaVersion: 1,
+      id: obsoleteJobId,
+      class: "agent_turn",
+      state: "waiting_model_egress"
+    })}\n`;
+    fs.mkdirSync(path.dirname(obsoleteJobPath), { recursive: true });
+    fs.writeFileSync(obsoleteJobPath, obsoleteJobBytes, "utf8");
+    const service = new TestHomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      { run: async () => { throw new Error("Conversation reads must not execute the obsolete Job."); } },
+      undefined,
+      conversations
+    );
+
+    expect(service.conversation()).toMatchObject({
+      conversationId: "conv_20260711_obsoletejob01",
+      canFollowUp: true,
+      messages: [
+        { role: "user", text: "Keep this durable turn visible." },
+        { role: "assistant", text: "This durable answer survives the obsolete Job record." }
+      ]
+    });
+    expect(service.conversation()).not.toHaveProperty("latestTurn");
+    expect(fs.readFileSync(obsoleteJobPath, "utf8")).toBe(obsoleteJobBytes);
+  });
+
   it("adopts a durable Reader transform answer without replaying its mutation", async () => {
     const fixture = makeFixture();
     const pageId = "page_20260718_recovertransform";

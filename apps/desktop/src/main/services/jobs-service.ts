@@ -1303,8 +1303,13 @@ export class JobsService {
 
   readAgentTurnJob(jobId: string): JobRecord | undefined {
     const vaultPath = this.#requireActiveVaultPath();
-    const snapshot = this.#readJobSnapshot(vaultPath, jobId);
-    return snapshot?.job.class === "agent_turn" ? snapshot.job : undefined;
+    try {
+      const snapshot = this.#readJobSnapshot(vaultPath, jobId);
+      return snapshot?.job.class === "agent_turn" ? snapshot.job : undefined;
+    } catch (caught) {
+      if (caught instanceof PigeDomainError && caught.code === "job.record_invalid") return undefined;
+      throw caught;
+    }
   }
 
   requeueWaitingTextAgentTurns(): { readonly requeued: number } {
