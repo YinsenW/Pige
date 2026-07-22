@@ -850,6 +850,11 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
       applyRestore: (request: RestoreApplyRequest) => harness.applyRestore(request),
       create: async () => ({ status: "canceled" })
     },
+    confirmations: {
+      pending: async () => ({ apiVersion: 1 as const, status: "none" as const, revision: 0 }),
+      resolve: async () => ({ apiVersion: 1 as const, status: "not_found" as const, revision: 0 }),
+      onChanged: () => () => undefined
+    },
     speech: {
       onAssetInstallEvent: () => () => undefined
     },
@@ -863,9 +868,6 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
         harness.modelSummaryReads += 1;
         return harness.modelSummary;
       }
-    },
-    modelEgress: {
-      pending: async () => undefined
     },
     jobs: {
       list: async (request: JobsListRequest = {}) => {

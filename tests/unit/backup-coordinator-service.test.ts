@@ -357,8 +357,7 @@ describe("BackupCoordinatorService", () => {
       usedCloudModel: false,
       usedNetwork: false,
       usedShell: false,
-      accessedExternalFiles: true,
-      permissionDecisionIds: []
+      accessedExternalFiles: true
     });
     expect(job.cancellation?.durableWritesApplied).toBe(true);
     expect(JSON.stringify(job)).not.toContain("source body");
@@ -941,7 +940,6 @@ function createOperationWriter(): OperationWriterFixture {
         jobId: input.job.id,
         createdAt: input.job.createdAt,
         actor: input.job.actor,
-        permissionDecisionIds: [],
         kind: "backup_created",
         targetRefs: [{ kind: "backup", id: input.backupId, checksum: input.archiveDigest }],
         sourceRefs: [

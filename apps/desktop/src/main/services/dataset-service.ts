@@ -818,7 +818,6 @@ function writeDatasetOperation(
     jobId: job.id,
     createdAt: bundle.revision.createdAt,
     actor: { kind: "system", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
-    permissionDecisionIds: [],
     ...(job.policyContextId && job.policyHash ? {
       policyAudit: {
         policyContextId: job.policyContextId,
@@ -875,7 +874,6 @@ function assertExistingDatasetOperation(
     existing.kind !== "create_dataset_revision" ||
     existing.createdAt !== bundle.revision.createdAt ||
     hashCanonical(existing.actor) !== hashCanonical(expected.actor) ||
-    existing.permissionDecisionIds.length !== 0 ||
     hashCanonical(existing.targetRefs) !== hashCanonical(expected.targetRefs) ||
     hashCanonical(existing.sourceRefs) !== hashCanonical(expectedSourceRefs) ||
     hashCanonical(existing.after) !== hashCanonical(expected.after) ||

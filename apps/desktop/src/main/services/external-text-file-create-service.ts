@@ -6,8 +6,7 @@ import {
   OperationRecordSchema,
   type ExternalMutationIntent,
   type OperationRecord,
-  type PermissionActionBinding,
-  type PermissionActionLifecycleRecord
+  type PermissionActionBinding
 } from "@pige/schemas";
 import { ExternalMutationIntentStore } from "./external-mutation-intent-store";
 import { ExternalOperationRecordStore } from "./external-operation-record-store";
@@ -67,12 +66,9 @@ export interface ExternalFilePublicationPort {
 export interface ExternalTextFileCreateAuthority {
   readonly vaultPath: string;
   readonly toolCallId: string;
-  readonly permission: PermissionActionLifecycleRecord;
-  readonly assertPermissionAuthority: (permission: PermissionActionLifecycleRecord) => void;
-  readonly markPermissionCompleted: (
-    permission: PermissionActionLifecycleRecord,
-    completionMarkerHash: `sha256:${string}`
-  ) => void;
+  readonly binding: PermissionActionBinding;
+  readonly assertExecutionAuthority: (binding: PermissionActionBinding) => void;
+  readonly markCompleted: (completionMarkerHash: `sha256:${string}`) => void;
   readonly assertWriterLease: () => void;
 }
 
@@ -117,9 +113,8 @@ export class ExternalTextFileCreateService {
     const createdAt = new Date().toISOString();
     const targetResourceHash = capturedTarget.targetResourceHash;
     const contentHash = hashDomain("pige.external_content.v1", contentBytes);
-    assertPermissionAuthority(authority, targetResourceHash, contentHash, contentBytes.byteLength);
-    const binding = authority.permission.binding;
-    const permissionDecisionId = authority.permission.decisionId as string;
+    assertExecutionAuthority(authority, targetResourceHash, contentHash, contentBytes.byteLength);
+    const binding = authority.binding;
     const identitySuffix = hashDomain(
       "pige.external_mutation_identity.v1",
       `${binding.jobId}\0${authority.toolCallId}\0${binding.bindingHash}\0${targetResourceHash}\0${contentHash}`
@@ -137,8 +132,6 @@ export class ExternalTextFileCreateService {
       vaultId: binding.vaultId,
       jobId: binding.jobId,
       toolCallId: authority.toolCallId,
-      permissionRequestId: authority.permission.id,
-      permissionDecisionId,
       bindingHash: binding.bindingHash,
       policyContextId: binding.policyContextId,
       policyHash: binding.policyHash,
@@ -202,7 +195,7 @@ export class ExternalTextFileCreateService {
     if (intent.state === "cancelled") throw externalCreateError("external_filesystem.cancelled");
     if (intent.state === "failed_no_effect") throw externalCreateError("external_filesystem.write_failed");
     if (intent.state === "completed") {
-      markPermissionCompleted(intent, authority);
+      markCompleted(intent, authority);
       return projectResult(intent);
     }
     let receipt: ExternalFilePublicationReceipt;
@@ -233,7 +226,7 @@ export class ExternalTextFileCreateService {
     let intent = this.#intents.read(intentId);
     assertAuthority(intent, authority);
     if (intent.state === "completed") {
-      markPermissionCompleted(intent, authority);
+      markCompleted(intent, authority);
       return projectResult(intent);
     }
     if (intent.state !== "operation_committed") throw externalCreateError("external_filesystem.write_uncertain");
@@ -258,7 +251,7 @@ export class ExternalTextFileCreateService {
       throw externalCreateError("external_filesystem.publication_protocol_invalid");
     }
     intent = this.#intents.transition(intent.id, "operation_committed", "completed");
-    markPermissionCompleted(intent, authority);
+    markCompleted(intent, authority);
     return projectResult(intent);
   }
 
@@ -313,17 +306,16 @@ function createOperation(intent: ExternalMutationIntent): OperationRecord {
     jobId: intent.jobId,
     createdAt: intent.createdAt,
     actor: { kind: "pige_agent", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
-    permissionDecisionIds: [intent.permissionDecisionId],
     policyAudit: {
       policyContextId: intent.policyContextId,
       policyHash: intent.policyHash,
-      enforcementOwners: ["Permission Broker", "External Filesystem Mutation Service", "Platform Publication Adapter"]
+      enforcementOwners: ["Submitted Turn Authority", "External Filesystem Mutation Service", "Platform Publication Adapter"]
     },
     kind: "create_external_file",
     targetRefs: [{ kind: "external_resource", id: intent.targetResourceHash }],
     sourceRefs: [],
     after: { kind: "external_resource", id: intent.targetResourceHash, checksum: intent.contentHash },
-    summary: "Created one permission-approved external UTF-8 file.",
+    summary: "Created one authority-bound external UTF-8 file.",
     reversible: "no",
     warnings: []
   });
@@ -346,16 +338,15 @@ function assertContent(intent: ExternalMutationIntent, content: Buffer): void {
 }
 
 function assertAuthority(intent: ExternalMutationIntent, authority: ExternalTextFileCreateAuthority): void {
-  const binding = authority.permission.binding;
+  const binding = authority.binding;
   if (
     intent.vaultId !== binding.vaultId || intent.jobId !== binding.jobId ||
-    intent.toolCallId !== authority.toolCallId || intent.permissionRequestId !== authority.permission.id ||
-    intent.permissionDecisionId !== authority.permission.decisionId ||
+    intent.toolCallId !== authority.toolCallId ||
     intent.bindingHash !== binding.bindingHash ||
     intent.policyContextId !== binding.policyContextId ||
     intent.policyHash !== binding.policyHash
   ) throw externalCreateError("external_filesystem.authority_changed");
-  assertPermissionAuthority(
+  assertExecutionAuthority(
     authority,
     intent.targetResourceHash as `sha256:${string}`,
     intent.contentHash as `sha256:${string}`,
@@ -363,20 +354,15 @@ function assertAuthority(intent: ExternalMutationIntent, authority: ExternalText
   );
 }
 
-function assertPermissionAuthority(
+function assertExecutionAuthority(
   authority: ExternalTextFileCreateAuthority,
   targetResourceHash: `sha256:${string}`,
   contentHash: `sha256:${string}`,
   byteLength: number
 ): void {
-  const permission = authority.permission;
-  if (
-    permission.state !== "consumed" || permission.decision !== "allow_once" ||
-    permission.decisionId === undefined || permission.consumedAt === undefined
-  ) throw externalCreateError("external_filesystem.authority_changed");
-  assertCreatePermission(permission.binding, authority.toolCallId, targetResourceHash, contentHash, byteLength);
+  assertCreatePermission(authority.binding, authority.toolCallId, targetResourceHash, contentHash, byteLength);
   try {
-    authority.assertPermissionAuthority(permission);
+    authority.assertExecutionAuthority(authority.binding);
   } catch {
     throw externalCreateError("external_filesystem.authority_changed");
   }
@@ -390,7 +376,7 @@ function publicationAuthorityFor(
 ): () => void {
   return () => {
     authority.assertWriterLease();
-    assertPermissionAuthority(authority, targetResourceHash, contentHash, byteLength);
+    assertExecutionAuthority(authority, targetResourceHash, contentHash, byteLength);
   };
 }
 
@@ -422,13 +408,13 @@ function assertCreatePermission(
   ) throw externalCreateError("external_filesystem.authority_changed");
 }
 
-function markPermissionCompleted(intent: ExternalMutationIntent, authority: ExternalTextFileCreateAuthority): void {
+function markCompleted(intent: ExternalMutationIntent, authority: ExternalTextFileCreateAuthority): void {
   const completionMarkerHash = hashDomain(
     "pige.external_mutation_completion.v1",
     `${intent.id}\0${intent.operationId}\0${intent.targetResourceHash}\0${intent.contentHash}`
   );
   try {
-    authority.markPermissionCompleted(authority.permission, completionMarkerHash);
+    authority.markCompleted(completionMarkerHash);
   } catch {
     throw externalCreateError("external_filesystem.authority_changed");
   }

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { HighRiskConfirmationOwner } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import type {
   PermissionActionBinding,
@@ -10,8 +11,7 @@ import type {
 import {
   createPermissionActionBinding,
   PermissionBrokerService,
-  PermissionConfirmationRequiredError,
-  type PermissionActionSummary
+  type PermissionHighRiskIntent
 } from "./permission-broker-service";
 import type {
   PigeAgentToolCallContext,
@@ -30,6 +30,7 @@ const EXTERNAL_TOOL_NAME_PATTERN = /^[a-z][a-z0-9_]{2,63}$/u;
 const ID_PATTERN = /^[a-z][a-z0-9_.:-]{2,127}$/u;
 const VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/u;
 const MAX_EXTERNAL_CAPABILITIES = 16;
+const MAX_COMPLETED_EXECUTIONS = 128;
 const processAdapters: PermissionedExternalCapabilityAdapter[] = [];
 const executionAuthorities = new WeakMap<object, {
   readonly bindingHash: string;
@@ -84,8 +85,8 @@ export interface PermissionedExternalCapabilityAdapter {
     readonly capability: PermissionCapability;
     readonly dataBoundary: PermissionDataBoundary;
     readonly resourceScope: PermissionResourceScope;
-    readonly resourceKind: PermissionActionSummary["resourceKind"];
     readonly reasonCode: string;
+    readonly highRisk?: (normalizedInput: unknown) => PermissionHighRiskIntent;
   };
   normalizeInput(args: unknown): unknown;
   resourceIdentity(normalizedInput: unknown): unknown;
@@ -113,45 +114,19 @@ export interface PermissionedExternalTurnContext {
   readonly policyHash: string;
   readonly runtimeKind: "desktop_local" | "remote_agent_backend";
   readonly clientCapabilityTier: "desktop_full" | "web_client" | "mobile_lite";
+  readonly confirmationOwner?: HighRiskConfirmationOwner;
   readonly assertCurrent: () => void;
-}
-
-export interface PermissionedExternalJobPort {
-  bindPermissionRequest(input: {
-    readonly jobId: string;
-    readonly requestId: string;
-    readonly bindingHash: string;
-    readonly waitForDecision?: boolean;
-  }): void;
-  commitPermissionConsumption(input: {
-    readonly jobId: string;
-    readonly requestId: string;
-    readonly bindingHash: string;
-    readonly decisionId: string;
-    readonly capability: PermissionCapability;
-  }): void;
-  completePermissionAction(input: {
-    readonly jobId: string;
-    readonly requestId: string;
-    readonly bindingHash: string;
-    readonly completionMarkerHash: string;
-  }): void;
-  readPermissionCompletion(input: {
-    readonly jobId: string;
-    readonly requestId: string;
-    readonly bindingHash: string;
-  }): string | undefined;
 }
 
 export class PermissionedExternalCapabilityRegistry {
   readonly #adapters: readonly PermissionedExternalCapabilityAdapter[];
   readonly #broker: PermissionBrokerService | undefined;
-  readonly #jobs: PermissionedExternalJobPort | undefined;
+  readonly #inFlight = new Map<string, Promise<PigeAgentToolResult>>();
+  readonly #completed = new Map<string, PigeAgentToolResult>();
 
   constructor(
     adapters: readonly PermissionedExternalCapabilityAdapter[] = [],
-    broker?: PermissionBrokerService,
-    jobs?: PermissionedExternalJobPort
+    broker?: PermissionBrokerService
   ) {
     if (adapters.length > MAX_EXTERNAL_CAPABILITIES) throw registryInvalid();
     const names = new Set<string>();
@@ -160,10 +135,9 @@ export class PermissionedExternalCapabilityRegistry {
       if (names.has(adapter.tool.name)) throw registryInvalid();
       names.add(adapter.tool.name);
     }
-    if (adapters.length > 0 && (!broker || !jobs)) throw registryInvalid();
+    if (adapters.length > 0 && !broker) throw registryInvalid();
     this.#adapters = Object.freeze([...adapters]);
     this.#broker = broker;
-    this.#jobs = jobs;
   }
 
   toolNames(): readonly string[] {
@@ -173,7 +147,6 @@ export class PermissionedExternalCapabilityRegistry {
   toolsForTurn(turn: PermissionedExternalTurnContext): readonly PigeAgentToolDefinition[] {
     if (this.#adapters.length === 0) return [];
     const broker = this.broker();
-    const jobs = this.jobPort();
     return this.#adapters.map((adapter): PigeAgentToolDefinition => ({
       ...adapter.tool,
       version: adapter.action.version,
@@ -186,93 +159,129 @@ export class PermissionedExternalCapabilityRegistry {
         signal.throwIfAborted();
         turn.assertCurrent();
         const normalizedInput = adapter.normalizeInput(args);
-        const binding = createExternalActionBinding(adapter, turn, normalizedInput);
-        const summary: PermissionActionSummary = {
-          actorDisplayName: adapter.actor.displayName,
-          actionLabelKey: adapter.action.labelKey,
-          ...(adapter.resourceDisplayName ? { resourceDisplayName: adapter.resourceDisplayName(normalizedInput) } : {}),
-          resourceKind: adapter.permission.resourceKind,
-          resourceCount: requireResourceCount(adapter.resourceCount(normalizedInput)),
-          reasonCode: adapter.permission.reasonCode
-        };
-        const lifecycle = broker.prepare(turn.vaultPath, binding, summary);
-
-        if (lifecycle.state === "pending" || lifecycle.state === "approved") {
-          jobs.bindPermissionRequest({
-            jobId: turn.jobId,
-            requestId: lifecycle.id,
-            bindingHash: binding.bindingHash,
-            waitForDecision: lifecycle.state === "pending"
-          });
-        }
-        if (lifecycle.state === "pending") {
-          throw new PermissionConfirmationRequiredError(lifecycle.id, binding.bindingHash);
-        }
-        if (lifecycle.state === "denied" || lifecycle.state === "cancelled") {
-          throw new PigeDomainError("permission.denied", "The current external action was denied.");
-        }
-        if (lifecycle.state === "consumed" && lifecycle.completionMarkerHash) {
-          const jobMarker = jobs.readPermissionCompletion({
-            jobId: turn.jobId,
-            requestId: lifecycle.id,
-            bindingHash: binding.bindingHash
-          });
-          if (jobMarker !== lifecycle.completionMarkerHash || !adapter.adoptCompleted) {
-            throw new PigeDomainError(
-              "permission.completed_output_unavailable",
-              "The completed external action cannot be adopted safely."
-            );
-          }
-          const adopted = await adapter.adoptCompleted(
-            lifecycle.completionMarkerHash,
-            normalizedInput,
-            signal,
-            context
-          );
-          if (hashToolResult(adopted) !== lifecycle.completionMarkerHash) {
-            throw new PigeDomainError(
-              "permission.completed_output_changed",
-              "The adopted external action output changed."
-            );
-          }
-          return adopted;
-        }
-        if (lifecycle.state !== "approved" || !lifecycle.decisionId) {
-          throw new PermissionConfirmationRequiredError(lifecycle.id, binding.bindingHash);
-        }
-
-        signal.throwIfAborted();
-        turn.assertCurrent();
-        const consumed = broker.consume(turn.vaultPath, lifecycle.id, binding);
-        if (!consumed.decisionId) throw new PigeDomainError("permission.request_stale", "Permission decision is unavailable.");
-        jobs.commitPermissionConsumption({
-          jobId: turn.jobId,
-          requestId: consumed.id,
-          bindingHash: binding.bindingHash,
-          decisionId: consumed.decisionId,
-          capability: adapter.permission.capability
-        });
-        turn.assertCurrent();
-        signal.throwIfAborted();
-        broker.assertExecutionAuthority(turn.vaultPath, consumed.id, binding);
-        const authority = issueExecutionAuthority(binding);
-        let result: PigeAgentToolResult;
-        try {
-          result = await adapter.execute(normalizedInput, signal, context, authority);
-        } finally {
-          executionAuthorities.delete(authority);
-        }
-        const completionMarkerHash = hashToolResult(result);
-        jobs.completePermissionAction({
-          jobId: turn.jobId,
-          requestId: consumed.id,
-          bindingHash: binding.bindingHash,
-          completionMarkerHash
-        });
-        broker.markCompleted(turn.vaultPath, consumed.id, binding, completionMarkerHash);
-        return result;
+        requireResourceCount(adapter.resourceCount(normalizedInput));
+        const highRisk = adapter.permission.highRisk?.(normalizedInput);
+        const binding = createExternalActionBinding(adapter, turn, normalizedInput, context.toolCallId);
+        return this.#runBound(adapter, normalizedInput, signal, context, turn, binding, broker, highRisk);
       }
     }));
+  }
+
+  async #runBound(
+    adapter: PermissionedExternalCapabilityAdapter,
+    normalizedInput: unknown,
+    signal: AbortSignal,
+    context: PigeAgentToolCallContext,
+    turn: PermissionedExternalTurnContext,
+    binding: PermissionActionBinding,
+    broker: PermissionBrokerService,
+    highRisk: PermissionHighRiskIntent | undefined
+  ): Promise<PigeAgentToolResult> {
+    const completed = this.#completed.get(binding.bindingHash);
+    if (completed) return completed;
+    const active = this.#inFlight.get(binding.bindingHash);
+    if (active) return active;
+
+    const execution = this.#authorizeAndExecute(adapter, normalizedInput, signal, context, turn, binding, broker, highRisk);
+    this.#inFlight.set(binding.bindingHash, execution);
+    try {
+      return await execution;
+    } finally {
+      if (this.#inFlight.get(binding.bindingHash) === execution) this.#inFlight.delete(binding.bindingHash);
+    }
+  }
+
+  async #authorizeAndExecute(
+    adapter: PermissionedExternalCapabilityAdapter,
+    normalizedInput: unknown,
+    signal: AbortSignal,
+    context: PigeAgentToolCallContext,
+    turn: PermissionedExternalTurnContext,
+    binding: PermissionActionBinding,
+    broker: PermissionBrokerService,
+    highRisk: PermissionHighRiskIntent | undefined
+  ): Promise<PigeAgentToolResult> {
+    let settle: ((result: PigeAgentToolResult) => void) | undefined;
+    let fail: ((reason: unknown) => void) | undefined;
+    const confirmedExecution = new Promise<PigeAgentToolResult>((resolve, reject) => {
+      settle = resolve;
+      fail = reject;
+    });
+    const authority = broker.authorizeTurnAction({
+      vaultPath: turn.vaultPath,
+      binding,
+      ...(turn.confirmationOwner ? { owner: turn.confirmationOwner } : {}),
+      ...(highRisk ? { highRisk } : {}),
+      ...(highRisk
+        ? {
+            resolveHighRisk: async (decision: "allow" | "deny") => {
+              if (decision === "deny") {
+                fail?.(new PigeDomainError("permission.denied", "The exact high-risk effect was denied."));
+                return "committed" as const;
+              }
+              try {
+                const result = await this.#executeBound(adapter, normalizedInput, signal, context, turn, binding);
+                settle?.(result);
+                return "committed" as const;
+              } catch (caught) {
+                fail?.(caught);
+                return "failed" as const;
+              }
+            }
+          }
+        : {})
+    });
+    if (authority.status === "authorized") {
+      return this.#executeBound(adapter, normalizedInput, signal, context, turn, binding);
+    }
+    if (authority.status === "denied") {
+      throw new PigeDomainError("permission.denied", "The exact high-risk effect was denied.");
+    }
+    if (authority.status === "busy") {
+      throw new PigeDomainError("permission.confirmation_busy", "Another high-risk effect is awaiting confirmation.");
+    }
+    const abort = (): void => {
+      broker.withdrawHighRisk({
+        confirmationId: authority.confirmationId,
+        expectedRevision: authority.revision,
+        owner: turn.confirmationOwner!
+      });
+      fail?.(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    try {
+      return await confirmedExecution;
+    } finally {
+      signal.removeEventListener("abort", abort);
+    }
+  }
+
+  async #executeBound(
+    adapter: PermissionedExternalCapabilityAdapter,
+    normalizedInput: unknown,
+    signal: AbortSignal,
+    context: PigeAgentToolCallContext,
+    turn: PermissionedExternalTurnContext,
+    binding: PermissionActionBinding
+  ): Promise<PigeAgentToolResult> {
+    signal.throwIfAborted();
+    turn.assertCurrent();
+    const authority = issueExecutionAuthority(binding);
+    try {
+      const result = await adapter.execute(normalizedInput, signal, context, authority);
+      turn.assertCurrent();
+      hashToolResult(result);
+      this.#rememberCompleted(binding.bindingHash, result);
+      return result;
+    } finally {
+      executionAuthorities.delete(authority);
+    }
+  }
+
+  #rememberCompleted(bindingHash: string, result: PigeAgentToolResult): void {
+    this.#completed.set(bindingHash, result);
+    const oldest = this.#completed.keys().next().value as string | undefined;
+    if (this.#completed.size > MAX_COMPLETED_EXECUTIONS && oldest) this.#completed.delete(oldest);
   }
 
   private broker(): PermissionBrokerService {
@@ -280,10 +289,6 @@ export class PermissionedExternalCapabilityRegistry {
     return this.#broker;
   }
 
-  private jobPort(): PermissionedExternalJobPort {
-    if (!this.#jobs) throw registryInvalid();
-    return this.#jobs;
-  }
 }
 
 function issueExecutionAuthority(binding: PermissionActionBinding): PermissionedExternalExecutionAuthority {
@@ -315,19 +320,22 @@ export function registerPermissionedExternalCapabilityAdapter(
 }
 
 export function createPermissionedExternalCapabilityRegistry(
-  broker: PermissionBrokerService,
-  jobs: PermissionedExternalJobPort
+  broker: PermissionBrokerService
 ): PermissionedExternalCapabilityRegistry {
   processRegistryCreated = true;
-  return new PermissionedExternalCapabilityRegistry(processAdapters, broker, jobs);
+  return new PermissionedExternalCapabilityRegistry(processAdapters, broker);
 }
 
 function createExternalActionBinding(
   adapter: PermissionedExternalCapabilityAdapter,
   turn: PermissionedExternalTurnContext,
-  normalizedInput: unknown
+  normalizedInput: unknown,
+  toolCallId: string
 ): PermissionActionBinding {
-  const actionInputHash = hashCanonical("pige.permission.action_input.v1", normalizedInput);
+  const actionInputHash = hashCanonical("pige.permission.action_input.v1", {
+    toolCallId,
+    input: normalizedInput
+  });
   const resourceIdentityHash = hashCanonical(
     "pige.permission.resource_identity.v1",
     adapter.resourceIdentity(normalizedInput)
@@ -397,6 +405,7 @@ function assertAdapter(adapter: PermissionedExternalCapabilityAdapter): void {
     !/^[a-z][a-z0-9_.-]{2,159}$/u.test(adapter.action.labelKey) ||
     typeof adapter.permission?.reasonCode !== "string" ||
     !/^[a-z][a-z0-9_.-]{2,119}$/u.test(adapter.permission.reasonCode) ||
+    (adapter.permission.highRisk !== undefined && typeof adapter.permission.highRisk !== "function") ||
     typeof adapter.normalizeInput !== "function" ||
     typeof adapter.resourceIdentity !== "function" ||
     typeof adapter.resourceCount !== "function" ||

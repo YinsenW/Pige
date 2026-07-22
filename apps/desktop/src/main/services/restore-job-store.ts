@@ -220,7 +220,6 @@ export class RestoreJobStore {
         usedNetwork: false,
         usedShell: false,
         accessedExternalFiles: true,
-        permissionDecisionIds: []
       },
       message: "Restore is queued with an explicit identity mode and validated archive binding."
     });
@@ -768,7 +767,6 @@ function createRestoreAppliedOperation(input: RestoreOperationInput): OperationR
       runtimeKind: "desktop_local",
       clientCapabilityTier: "desktop_full"
     },
-    permissionDecisionIds: [],
     kind: "restore_applied",
     targetRefs: [
       { kind: "vault", id: input.resultVaultId },
@@ -812,7 +810,6 @@ function createBackupCreatedOperation(input: BackupOperationInput): OperationRec
       runtimeKind: "desktop_local",
       clientCapabilityTier: "desktop_full"
     },
-    permissionDecisionIds: [],
     kind: "backup_created",
     targetRefs: [{ kind: "backup", id: input.backupId, checksum: input.archiveDigest }],
     sourceRefs: [

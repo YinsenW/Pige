@@ -6,10 +6,10 @@ import * as tar from "tar";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPiPackageInstallCapabilityAdapter } from "../../apps/desktop/src/main/services/pi-package-capability-adapter";
 import { PiPackageManagerService } from "../../apps/desktop/src/main/services/pi-package-manager-service";
+import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
 import {
   PermissionedExternalCapabilityRegistry,
-  type PermissionedExternalJobPort,
   type PermissionedExternalTurnContext
 } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
 import type { PigeAgentToolCallContext, PigeAgentToolDefinition } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
@@ -20,7 +20,10 @@ const PACKAGE_VERSION = "1.2.3";
 const REQUEST_ID = "package_request_0001";
 const VAULT_ID = "vault_20260719_package01";
 const JOB_ID = "job_20260719_package01";
+const OWNER = { kind: "agent_turn" as const, clientTurnId: "turn_20260719_package01abcd" };
 const roots: string[] = [];
+const confirmationsForTool = new WeakMap<PigeAgentToolDefinition, HighRiskConfirmationService>();
+let latestConfirmations: HighRiskConfirmationService | undefined;
 
 afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
@@ -61,7 +64,65 @@ describe("PiPackageManagerService", () => {
       package_name: `safe\u202epackage`,
       version: PACKAGE_VERSION
     }, context.signal, context)).rejects.toMatchObject({ code: "package.name_invalid" });
-    expect(fixture.broker.listForJob(fixture.vaultPath, JOB_ID)).toEqual([]);
+    expect(fixture.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("binds the normalized package identity to canonical confirmation and denial has zero effect", async () => {
+    const fixture = await createFixture();
+    const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
+    const controller = new AbortController();
+    const context: PigeAgentToolCallContext = { toolCallId: "tool_call_package_denied", signal: controller.signal };
+    const execution = tool.execute({
+      request_id: REQUEST_ID,
+      package_name: PACKAGE_NAME,
+      version: PACKAGE_VERSION
+    }, controller.signal, context);
+
+    await vi.waitFor(() => expect(fixture.confirmations.pending()).toMatchObject({
+      status: "pending",
+      confirmation: {
+        effect: "install_unreviewed_package",
+        presentation: { subject: { kind: "package_name", value: `${PACKAGE_NAME}@${PACKAGE_VERSION}` } }
+      }
+    }));
+    const pending = fixture.confirmations.pending();
+    if (pending.status !== "pending") throw new Error("Expected package confirmation.");
+    await fixture.confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: pending.confirmation.confirmationId,
+      expectedRevision: pending.revision,
+      decision: "deny"
+    });
+
+    await expect(execution).rejects.toMatchObject({ code: "permission.denied" });
+    expect(fixture.fetchImpl).not.toHaveBeenCalled();
+
+    const changedContext: PigeAgentToolCallContext = {
+      toolCallId: "tool_call_package_changed",
+      signal: controller.signal
+    };
+    const changed = tool.execute({
+      request_id: "package_request_0002",
+      package_name: PACKAGE_NAME,
+      version: "1.2.4"
+    }, controller.signal, changedContext);
+    await vi.waitFor(() => expect(fixture.confirmations.pending()).toMatchObject({ status: "pending" }));
+    const changedPending = fixture.confirmations.pending();
+    if (changedPending.status !== "pending") throw new Error("Expected changed package confirmation.");
+    expect(changedPending.confirmation.confirmationId).not.toBe(pending.confirmation.confirmationId);
+    expect(changedPending.confirmation.presentation.subject).toEqual({
+      kind: "package_name",
+      value: `${PACKAGE_NAME}@1.2.4`
+    });
+    await expect(fixture.confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: pending.confirmation.confirmationId,
+      expectedRevision: pending.revision,
+      decision: "allow"
+    })).resolves.toMatchObject({ status: "stale" });
+    expect(fixture.fetchImpl).not.toHaveBeenCalled();
+    controller.abort();
+    await expect(changed).rejects.toMatchObject({ name: "AbortError" });
     expect(fixture.fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -115,14 +176,6 @@ describe("PiPackageManagerService", () => {
       dependencyCount: 0,
       requiresEnable: true
     });
-    expect(fixture.broker.listForJob(fixture.vaultPath, JOB_ID)[0]).toMatchObject({
-      state: "consumed",
-      decision: "allow_once",
-      actionLabelKey: "permissions.actions.install_pi_package",
-      resourceDisplayName: `${PACKAGE_NAME}@${PACKAGE_VERSION}`
-    });
-    expect(fixture.jobs.consumptions).toHaveLength(1);
-    expect(fixture.jobs.completions).toHaveLength(1);
     const registryBody = fs.readFileSync(path.join(fixture.machineRoot, "pi-packages", "registry.json"), "utf8");
     expect(registryBody).toContain(PACKAGE_NAME);
     expect(registryBody).not.toContain("https://registry.npmjs.org");
@@ -159,7 +212,7 @@ describe("PiPackageManagerService", () => {
     );
 
     const fetchesAfterInstall = fixture.fetchImpl.mock.calls.length;
-    const adopted = await callTool(tool);
+    const adopted = await callTool(tool, new AbortController(), undefined, undefined, false);
     expect(adopted.details).toMatchObject({ status: "installed_disabled", revision: 1 });
     expect(fixture.fetchImpl).toHaveBeenCalledTimes(fetchesAfterInstall);
     expect(() => fixture.packages.adopt({
@@ -179,7 +232,7 @@ describe("PiPackageManagerService", () => {
       signal: new AbortController().signal
     };
 
-    await expect(tool.execute(args, context.signal, context)).resolves.toMatchObject({
+    await expect(callTool(tool, new AbortController(), args, context.toolCallId)).resolves.toMatchObject({
       details: { packageName, status: "installed_disabled" }
     });
     expect(fixture.fetchImpl.mock.calls[0]?.[0].toString()).toBe(
@@ -366,8 +419,8 @@ interface Fixture {
   readonly machineRoot: string;
   readonly vaultPath: string;
   readonly broker: PermissionBrokerService;
+  readonly confirmations: HighRiskConfirmationService;
   readonly packages: PiPackageManagerService;
-  readonly jobs: MemoryJobPort;
   readonly registry: PermissionedExternalCapabilityRegistry;
   readonly turn: PermissionedExternalTurnContext;
   readonly fetchImpl: ReturnType<typeof vi.fn>;
@@ -464,18 +517,23 @@ async function createFixture(options: {
       : { testOnlyMaxExtractedEntries: options.testOnlyMaxExtractedEntries })
   });
   const vaultPath = createTestVault(root);
-  const broker = new PermissionBrokerService({ rootPath: fs.realpathSync.native(machineRoot), unsafeAllowUnfenced: true });
-  const jobs = new MemoryJobPort();
+  const confirmations = new HighRiskConfirmationService();
+  latestConfirmations = confirmations;
+  const broker = new PermissionBrokerService({
+    rootPath: fs.realpathSync.native(machineRoot),
+    unsafeAllowUnfenced: true,
+    confirmations
+  });
   const registry = new PermissionedExternalCapabilityRegistry(
-    [createPiPackageInstallCapabilityAdapter(packages)], broker, jobs
+    [createPiPackageInstallCapabilityAdapter(packages)], broker
   );
   return {
     root,
     machineRoot,
     vaultPath,
     broker,
+    confirmations,
     packages,
-    jobs,
     registry,
     fetchImpl,
     turn: {
@@ -486,6 +544,7 @@ async function createFixture(options: {
       policyHash: digest("package policy"),
       runtimeKind: "desktop_local",
       clientCapabilityTier: "desktop_full",
+      confirmationOwner: OWNER,
       assertCurrent: vi.fn()
     }
   };
@@ -496,33 +555,40 @@ async function approveTool(fixture: Fixture, tool: PigeAgentToolDefinition): Pro
   void tool;
 }
 
-function callTool(tool: PigeAgentToolDefinition, controller = new AbortController()) {
-  const context: PigeAgentToolCallContext = { toolCallId: "tool_call_package_install", signal: controller.signal };
-  return tool.execute({ request_id: REQUEST_ID, package_name: PACKAGE_NAME, version: PACKAGE_VERSION }, controller.signal, context);
+async function callTool(
+  tool: PigeAgentToolDefinition,
+  controller = new AbortController(),
+  args: Readonly<Record<string, string>> = {
+    request_id: REQUEST_ID,
+    package_name: PACKAGE_NAME,
+    version: PACKAGE_VERSION
+  },
+  toolCallId = "tool_call_package_install",
+  confirm = true
+) {
+  const context: PigeAgentToolCallContext = { toolCallId, signal: controller.signal };
+  const execution = tool.execute(args, controller.signal, context);
+  if (!confirm) return execution;
+  const confirmations = confirmationsForTool.get(tool);
+  if (!confirmations) throw new Error("Expected package confirmation owner.");
+  await vi.waitFor(() => expect(confirmations.pending()).toMatchObject({ status: "pending" }));
+  const pending = confirmations.pending();
+  if (pending.status !== "pending") throw new Error("Expected package confirmation.");
+  await confirmations.resolve({
+    apiVersion: 1,
+    confirmationId: pending.confirmation.confirmationId,
+    expectedRevision: pending.revision,
+    decision: "allow"
+  });
+  return execution;
 }
 
 function requireTool(tools: readonly PigeAgentToolDefinition[]): PigeAgentToolDefinition {
   const tool = tools.find((candidate) => candidate.name === "pige_install_pi_package");
   if (!tool) throw new Error("Expected Pi package install tool.");
+  // The fixture installs one confirmation owner for its sole production adapter.
+  if (latestConfirmations) confirmationsForTool.set(tool, latestConfirmations);
   return tool;
-}
-
-class MemoryJobPort implements PermissionedExternalJobPort {
-  readonly bindings: any[] = [];
-  readonly consumptions: any[] = [];
-  readonly completions: any[] = [];
-  readonly #markers = new Map<string, string>();
-  bindPermissionRequest(input: any): void { this.bindings.push(input); }
-  commitPermissionConsumption(input: any): void { this.consumptions.push(input); }
-  completePermissionAction(input: any): void {
-    this.completions.push(input);
-    this.#markers.set(completionKey(input), input.completionMarkerHash);
-  }
-  readPermissionCompletion(input: any): string | undefined { return this.#markers.get(completionKey(input)); }
-}
-
-function completionKey(input: { readonly jobId: string; readonly requestId: string; readonly bindingHash: string }): string {
-  return `${input.jobId}\0${input.requestId}\0${input.bindingHash}`;
 }
 
 function createTestVault(root: string): string {

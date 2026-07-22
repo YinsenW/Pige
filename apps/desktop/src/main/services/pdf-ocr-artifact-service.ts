@@ -1058,7 +1058,6 @@ function writeArtifactOperation(
     jobId: job.id,
     createdAt: new Date().toISOString(),
     actor: { kind: "system", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
-    permissionDecisionIds: [],
     kind: "create_artifact",
     targetRefs: input.targetArtifacts.map((artifact) => ({
       kind: "artifact",

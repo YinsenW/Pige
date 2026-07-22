@@ -41,10 +41,7 @@ import {
   type PigeErrorSummary
 } from "@pige/schemas";
 import { z } from "zod";
-import {
-  buildAgentRuntimePolicyContext,
-  type AgentPermissionSettingsPort
-} from "./agent-policy-context";
+import { buildAgentRuntimePolicyContext } from "./agent-policy-context";
 import {
   AgentTurnConversationStore,
   type AgentTurnConversationBinding,
@@ -63,12 +60,6 @@ import {
 } from "./dataset-query-types";
 import { containsRestrictedModelContent } from "./model-egress-content";
 import { createModelEgressDecision } from "./model-egress-policy";
-import {
-  ModelEgressApprovalService,
-  ModelEgressConfirmationRequiredError,
-  type ModelEgressApprovalBinding
-} from "./model-egress-approval-service";
-import { PermissionConfirmationRequiredError } from "./permission-broker-service";
 import { PermissionedExternalCapabilityRegistry } from "./permissioned-external-capability-service";
 import type { ModelProviderRuntimeConfig } from "./model-provider-registry";
 import {
@@ -323,9 +314,7 @@ export class HomeAgentService {
   readonly #conversations: AgentTurnConversationStore;
   readonly #urls: HomeAgentUrlPort | undefined;
   readonly #datasets: HomeAgentDatasetQueryPort | undefined;
-  readonly #modelEgressApprovals: ModelEgressApprovalService | undefined;
   readonly #externalCapabilities: PermissionedExternalCapabilityRegistry | undefined;
-  readonly #permissionSettings: AgentPermissionSettingsPort | undefined;
   readonly #readerSelectionMutations: HomeAgentReaderSelectionMutationPort | undefined;
 
   constructor(
@@ -338,9 +327,7 @@ export class HomeAgentService {
     conversations: AgentTurnConversationStore = new AgentTurnConversationStore(),
     urls?: HomeAgentUrlPort,
     datasets?: HomeAgentDatasetQueryPort,
-    modelEgressApprovals?: ModelEgressApprovalService,
     externalCapabilities?: PermissionedExternalCapabilityRegistry,
-    permissionSettings?: AgentPermissionSettingsPort,
     readerSelectionMutations?: HomeAgentReaderSelectionMutationPort
   ) {
     this.#vaults = vaults;
@@ -352,9 +339,7 @@ export class HomeAgentService {
     this.#conversations = conversations;
     this.#urls = urls;
     this.#datasets = datasets;
-    this.#modelEgressApprovals = modelEgressApprovals;
     this.#externalCapabilities = externalCapabilities;
-    this.#permissionSettings = permissionSettings;
     this.#readerSelectionMutations = readerSelectionMutations;
   }
 
@@ -742,25 +727,6 @@ export class HomeAgentService {
             )
           };
         }
-        if (!datasetContinuation && sourceJob.state === "waiting_model_egress") {
-          return {
-            requestId,
-            jobId: sourceJob.id,
-            conversationEventId: preservedTurn.event.id,
-            conversationId: preservedTurn.event.conversationId,
-            tailEventId: preservedTurn.event.id,
-            state: "waiting",
-            modelUsage: "none",
-            sourceIds,
-            error: sourceJob.error ?? createErrorSummary(
-              "model_provider.egress_confirmation_required",
-              "errors.model_provider.egress_confirmation_required",
-              false,
-              "confirm_model_egress",
-              "warning"
-            )
-          };
-        }
         if (!datasetContinuation && sourceJob.state === "waiting_dependency") {
           return {
             requestId,
@@ -836,6 +802,7 @@ export class HomeAgentService {
               inputKind: validatedRequest.inputKind,
               objective,
               locale: validatedRequest.locale,
+              clientTurnId: requirePreservedClientTurnId(activeTurn),
               ...(validatedRequest.scope ? { scope: validatedRequest.scope } : {})
             },
             activeVault,
@@ -911,15 +878,8 @@ export class HomeAgentService {
           caught.code === "agent_runtime.turn_cancelled";
         const refreshed = this.#jobs.readAgentTurnJob(session.current.id);
         if (refreshed) session.current = refreshed;
-        const permissionHandled = failure.error.permissionRequestId !== undefined &&
-          session.current.state === "waiting_permission" &&
-          session.current.error?.permissionRequestId === failure.error.permissionRequestId;
-        const uncertainCompletionHandled = caught instanceof PigeDomainError &&
-          caught.code === "permission.completion_uncertain" &&
-          session.current.state === "failed_final" &&
-          session.current.error?.code === "permission.completion_uncertain";
         try {
-          if (!cancellationHandled && !permissionHandled && !uncertainCompletionHandled) {
+          if (!cancellationHandled) {
             this.#failJob(session, failure);
           }
         } catch {
@@ -1065,6 +1025,7 @@ export class HomeAgentService {
               inputKind: preservedMetadata.inputKind,
               objective: preservedMetadata.objective,
               locale: preservedMetadata.locale,
+              clientTurnId: requirePreservedClientTurnId(preserved),
               ...(preservedMetadata.scope ? { scope: preservedMetadata.scope } : {})
             },
             activeVault,
@@ -1111,15 +1072,8 @@ export class HomeAgentService {
           caught.code === "agent_runtime.turn_cancelled";
         const refreshed = this.#jobs.readAgentTurnJob(session.current.id);
         if (refreshed) session.current = refreshed;
-        const permissionHandled = failure.error.permissionRequestId !== undefined &&
-          session.current.state === "waiting_permission" &&
-          session.current.error?.permissionRequestId === failure.error.permissionRequestId;
-        const uncertainCompletionHandled = caught instanceof PigeDomainError &&
-          caught.code === "permission.completion_uncertain" &&
-          session.current.state === "failed_final" &&
-          session.current.error?.code === "permission.completion_uncertain";
         try {
-          if (!cancellationHandled && !permissionHandled && !uncertainCompletionHandled) {
+          if (!cancellationHandled) {
             this.#failJob(session, failure);
           }
         } catch {
@@ -1146,9 +1100,6 @@ export class HomeAgentService {
       jobId: session.current.id,
       defaultModel: model,
       defaultProvider: provider,
-      ...(this.#permissionSettings
-        ? { permissionSettings: this.#permissionSettings.policyProjection() }
-        : {}),
       ...(this.#capabilities?.snapshot() ?? {})
     });
     const payloadCharacters = Array.from(query).length;
@@ -1184,7 +1135,7 @@ export class HomeAgentService {
   }
 
   async #run(
-    request: AgentSubmitTurnRequest & { readonly text: string },
+    request: AgentSubmitTurnRequest & { readonly text: string; readonly clientTurnId: string },
     activeVault: VaultSummary,
     vaultPath: string,
     session: HomeAgentJobSession,
@@ -1218,9 +1169,6 @@ export class HomeAgentService {
       jobId,
       defaultModel,
       defaultProvider,
-      ...(this.#permissionSettings
-        ? { permissionSettings: this.#permissionSettings.policyProjection() }
-        : {}),
       ...(this.#capabilities?.snapshot() ?? {})
     });
     session.current = this.#jobs.patchAgentTurnJob(session.current, {
@@ -1296,9 +1244,6 @@ export class HomeAgentService {
         jobId,
         defaultModel: currentDefaultModel,
         defaultProvider: currentDefaultProvider,
-        ...(this.#permissionSettings
-          ? { permissionSettings: this.#permissionSettings.policyProjection() }
-          : {}),
         ...(this.#capabilities?.snapshot() ?? {})
       });
       if (
@@ -1312,8 +1257,7 @@ export class HomeAgentService {
       }
     };
 
-    const consumedModelEgressApprovalRequestIds = new Set<string>();
-    const authorizeCurrentModelTurn = async (consumeApproval = false): Promise<void> => {
+    const authorizeCurrentModelTurn = async (): Promise<void> => {
       assertCurrentBindingAndVault();
       const currentNoteBinding = currentNoteScope && currentNoteToolUsed
         ? readBoundCurrentNoteEvidence(vaultPath, currentNoteScope.pageId, session.current)
@@ -1410,36 +1354,9 @@ export class HomeAgentService {
         normalizeContentClasses(historyContentClasses),
         externalToolEvidence
       );
-      const baseDecisionHash = createModelEgressDecisionHash(decision);
       const evidenceBindingDrifted =
         currentNoteEvidenceDrifted || evidenceDrifted || urlEvidenceDrifted || datasetEvidenceDrifted;
-      const approvalBinding: ModelEgressApprovalBinding | undefined =
-        decision.outcome === "confirm" && !evidenceBindingDrifted && this.#modelEgressApprovals
-          ? {
-              jobId,
-              vaultId: activeVault.vaultId,
-              providerProfileId: defaultProvider.id,
-              modelProfileId: defaultModel.id,
-              providerIdentityHash: approvedBinding.providerIdentityHash,
-              modelIdentityHash: approvedBinding.modelIdentityHash,
-              policyHash: policy.policyHash,
-              payloadHash,
-              evidenceSummaryHash,
-              baseDecisionHash,
-              reasonCode: decision.reasonCode,
-              contentClasses: decision.contentClasses,
-              payloadCharacters: decision.payloadCharacters,
-              estimatedPayloadTokens: decision.estimatedPayloadTokens,
-              normalPayloadCharacterLimit: decision.normalPayloadCharacterLimit
-            }
-          : undefined;
-      const approvalRequest = approvalBinding
-        ? this.#modelEgressApprovals?.prepare(vaultPath, approvalBinding)
-        : undefined;
-      const auditedDecision: ModelEgressDecision = approvalRequest
-        ? { ...decision, modelEgressApprovalRequestId: approvalRequest.id }
-        : decision;
-      const decisionHash = createModelEgressDecisionHash(auditedDecision);
+      const decisionHash = createModelEgressDecisionHash(decision);
       const operation = writeHomeModelEgressDecisionOperation({
         vaultPath,
         job: session.current,
@@ -1449,25 +1366,15 @@ export class HomeAgentService {
         payloadHash,
         evidenceSummaryHash,
         decisionHash,
-        decision: auditedDecision
+        decision
       });
-      if (approvalRequest && approvalBinding) {
-        this.#modelEgressApprovals?.bindAudit(
-          vaultPath,
-          approvalRequest.id,
-          approvalBinding,
-          operation.id,
-          decisionHash
-        );
-      }
       session.current = this.#jobs.patchAgentTurnJob(session.current, {
         operationIds: [operation.id],
         privacy: {
           usedCloudModel: session.current.privacy?.usedCloudModel ?? false,
           usedNetwork: session.current.privacy?.usedNetwork ?? false,
           usedShell: false,
-          accessedExternalFiles: false,
-          permissionDecisionIds: session.current.privacy?.permissionDecisionIds ?? []
+          accessedExternalFiles: false
         }
       });
       if (evidenceBindingDrifted) {
@@ -1476,55 +1383,8 @@ export class HomeAgentService {
           "The selected evidence binding changed during the Home Agent turn."
         );
       }
-      if (auditedDecision.outcome === "block") {
+      if (decision.outcome === "block") {
         throw new PigeDomainError("model_egress.blocked", "The Home question is blocked by model egress policy.");
-      }
-      if (auditedDecision.outcome === "confirm") {
-        if (approvalRequest && approvalBinding && this.#modelEgressApprovals) {
-          if (approvalRequest.state === "pending") {
-            const egressError = PigeErrorSummarySchema.parse({
-              ...createErrorSummary(
-                "model_provider.egress_confirmation_required",
-                "errors.model_provider.egress_confirmation_required",
-                false,
-                "confirm_model_egress",
-                "warning"
-              ),
-              modelEgressApprovalRequestId: approvalRequest.id
-            });
-            session.current = this.#jobs.settleAgentTurnJob(session.current, {
-              kind: "waiting",
-              reason: "model_egress",
-              approvalRequestId: approvalRequest.id,
-              error: egressError,
-              message: "Agent turn is waiting for one exact model egress decision.",
-              facts: {
-                stage: "waiting_for_model"
-              }
-            });
-            try {
-              await this.#modelEgressApprovals.waitForDecision(
-                vaultPath,
-                approvalRequest.id,
-                approvalBinding,
-                signal
-              );
-            } finally {
-              session.current = this.#jobs.readAgentTurnJob(session.current.id) ?? session.current;
-            }
-          }
-          if (consumeApproval) {
-            const consumed = this.#modelEgressApprovals.consume(vaultPath, approvalRequest.id, approvalBinding);
-            consumedModelEgressApprovalRequestIds.add(consumed.id);
-          } else {
-            this.#modelEgressApprovals.assertApproved(vaultPath, approvalRequest.id, approvalBinding);
-          }
-          return;
-        }
-        throw new PigeDomainError(
-          "model_egress.confirmation_required",
-          "The Home question requires model egress confirmation."
-        );
       }
     };
     const assertCurrentNotePublicationCurrent = async (): Promise<void> => {
@@ -1807,6 +1667,7 @@ export class HomeAgentService {
       policyHash: policy.policyHash,
       runtimeKind: "desktop_local",
       clientCapabilityTier: "desktop_full",
+      confirmationOwner: { kind: "agent_turn", clientTurnId: request.clientTurnId },
       assertCurrent: assertCurrentBindingAndVault
     }) ?? [];
     const externalTools = registeredExternalTools.map((tool): PigeAgentToolDefinition => ({
@@ -1815,6 +1676,24 @@ export class HomeAgentService {
         try {
           const result = await tool.execute(args, toolSignal, context);
           externalToolEvidence.push(projectExternalToolEvidence(tool.name, result));
+          const currentPrivacy = session.current.privacy ?? {
+            usedCloudModel: false,
+            usedNetwork: false,
+            usedShell: false,
+            accessedExternalFiles: false
+          };
+          session.current = this.#jobs.patchAgentTurnJob(session.current, {
+            privacy: {
+              ...currentPrivacy,
+              usedNetwork: currentPrivacy.usedNetwork ||
+                tool.capability === "external_network" ||
+                tool.capability === "install_package" ||
+                tool.capability === "install_local_tool",
+              usedShell: currentPrivacy.usedShell || tool.capability === "run_shell",
+              accessedExternalFiles: currentPrivacy.accessedExternalFiles ||
+                tool.capability === "external_filesystem"
+            }
+          });
           return result;
         } finally {
           session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;
@@ -2029,7 +1908,7 @@ export class HomeAgentService {
           // Pi may prepare once after a terminating tool even though no provider call follows.
           if (finalExecution) return;
           modelTurnSequence += 1;
-          await authorizeCurrentModelTurn(true);
+          await authorizeCurrentModelTurn();
           session.modelInvocationStarted = true;
         },
         completionPolicy: {
@@ -2058,10 +1937,6 @@ export class HomeAgentService {
       }
       if (urlDependencyFailure) throw urlDependencyFailure;
       throw caught;
-    } finally {
-      for (const requestId of consumedModelEgressApprovalRequestIds) {
-        this.#modelEgressApprovals?.markReconciled(vaultPath, requestId);
-      }
     }
     session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;
     assertCurrentBindingAndVault();
@@ -2124,39 +1999,6 @@ export class HomeAgentService {
     session: HomeAgentJobSession,
     failure: ReturnType<typeof toHomeAgentFailure>
   ): void {
-    if (failure.error.permissionRequestId) {
-      const durable = this.#jobs.readAgentTurnJob(session.current.id);
-      if (
-        durable?.state !== "waiting_permission" ||
-        durable.error?.permissionRequestId !== failure.error.permissionRequestId
-      ) {
-        throw new PigeDomainError("permission.request_stale", "The pending permission no longer matches this Agent turn.");
-      }
-      session.current = durable;
-      return;
-    }
-    if (failure.error.modelEgressApprovalRequestId) {
-      const durable = this.#jobs.readAgentTurnJob(session.current.id);
-      if (
-        durable?.state === "waiting_model_egress" &&
-        durable.error?.modelEgressApprovalRequestId === failure.error.modelEgressApprovalRequestId
-      ) {
-        session.current = durable;
-        return;
-      }
-      session.current = this.#jobs.settleAgentTurnJob(session.current, {
-        kind: "waiting",
-        reason: "model_egress",
-        approvalRequestId: failure.error.modelEgressApprovalRequestId,
-        error: failure.error,
-        message: "Agent turn is waiting for one exact model egress decision.",
-        facts: {
-          stage: "waiting_for_model",
-          privacy: modelInvocationPrivacy(session)
-        }
-      });
-      return;
-    }
     if (
       failure.error.code === "model_provider.default_model_missing" ||
       failure.error.code === "model_provider.binding_unusable"
@@ -3048,7 +2890,6 @@ function writeHomeModelEgressDecisionOperation(input: {
       clientCapabilityTier: "desktop_full"
     },
     modelProfileId: input.modelProfileId,
-    permissionDecisionIds: [],
     policyAudit: {
       policyContextId: input.policy.policyContextId,
       policyHash: input.policy.policyHash,
@@ -3063,10 +2904,7 @@ function writeHomeModelEgressDecisionOperation(input: {
       normalPayloadCharacterLimit: input.decision.normalPayloadCharacterLimit,
       contentClasses: input.decision.contentClasses,
       outcome: input.decision.outcome,
-      reasonCode: input.decision.reasonCode,
-      ...(input.decision.modelEgressApprovalRequestId
-        ? { modelEgressApprovalRequestId: input.decision.modelEgressApprovalRequestId }
-        : {})
+      reasonCode: input.decision.reasonCode
     },
     kind: "model_egress_decision",
     targetRefs: [{ kind: "model", id: input.modelProfileId }],
@@ -3095,9 +2933,7 @@ function createModelEgressDecisionHash(decision: ModelEgressDecision): string {
     payloadCharacters: decision.payloadCharacters,
     estimatedPayloadTokens: decision.estimatedPayloadTokens,
     normalPayloadCharacterLimit: decision.normalPayloadCharacterLimit,
-    policyHash: decision.policyHash,
-    modelEgressApprovalRequestId: decision.modelEgressApprovalRequestId ?? null,
-    permissionDecisionId: decision.permissionDecisionId ?? null
+    policyHash: decision.policyHash
   }));
 }
 
@@ -3107,10 +2943,19 @@ function modelInvocationPrivacy(session: HomeAgentJobSession): NonNullable<JobRe
   return {
     usedCloudModel: usesExternalProvider,
     usedNetwork: usesExternalProvider || session.current.privacy?.usedNetwork === true,
-    usedShell: false,
-    accessedExternalFiles: false,
-    permissionDecisionIds: session.current.privacy?.permissionDecisionIds ?? []
+    usedShell: session.current.privacy?.usedShell === true,
+    accessedExternalFiles: session.current.privacy?.accessedExternalFiles === true
   };
+}
+
+function requirePreservedClientTurnId(turn: PreservedAgentTurn): string {
+  if (!turn.event.clientTurnId) {
+    throw new PigeDomainError(
+      "agent_runtime.turn_binding_invalid",
+      "The preserved Agent turn has no stable client identity."
+    );
+  }
+  return turn.event.clientTurnId;
 }
 
 function isDatasetQueryContinuationJob(job: JobRecord): boolean {
@@ -3400,45 +3245,6 @@ function toHomeAgentFailure(caught: unknown): HomeAgentFailure {
     }
     if (caught.code === "model_provider.binding_changed") {
       return homeAgentFailure("waiting", caught.code, "errors.model_provider.binding_unusable", false, "configure_model", "warning");
-    }
-    if (caught.code === "model_egress.confirmation_required") {
-      const requestId = caught instanceof ModelEgressConfirmationRequiredError
-        ? caught.requestId
-        : undefined;
-      return {
-        state: "waiting",
-        error: PigeErrorSummarySchema.parse({
-          ...createErrorSummary(
-            "model_provider.egress_confirmation_required",
-            "errors.model_provider.egress_confirmation_required",
-            false,
-            "confirm_model_egress",
-            "warning"
-          ),
-          ...(requestId ? { modelEgressApprovalRequestId: requestId } : {})
-        })
-      };
-    }
-    if (caught.code === "model_egress.denied") {
-      return homeAgentFailure("failed", "model_provider.egress_denied", "errors.model_provider.egress_denied", false, "none", "info");
-    }
-    if (caught.code === "permission.confirmation_required") {
-      const requestId = caught instanceof PermissionConfirmationRequiredError
-        ? caught.requestId
-        : undefined;
-      return {
-        state: "waiting",
-        error: PigeErrorSummarySchema.parse({
-          ...createErrorSummary(
-            "permission.confirmation_required",
-            "errors.permission.confirmation_required",
-            false,
-            "grant_permission",
-            "warning"
-          ),
-          ...(requestId ? { permissionRequestId: requestId } : {})
-        })
-      };
     }
     if (caught.code === "permission.denied") {
       return homeAgentFailure("failed", "permission.denied", "errors.permission.denied", false, "none", "info");

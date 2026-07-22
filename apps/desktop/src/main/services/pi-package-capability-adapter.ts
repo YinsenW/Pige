@@ -70,8 +70,18 @@ export function createPiPackageInstallCapabilityAdapter(
       capability: "install_package",
       dataBoundary: "network",
       resourceScope: "current_action",
-      resourceKind: "package",
-      reasonCode: "package.install.exact"
+      reasonCode: "package.install.exact",
+      highRisk: (input) => ({
+        effect: "install_unreviewed_package",
+        presentation: {
+          action: "install_package",
+          target: "local_toolchain",
+          subject: {
+            kind: "package_name",
+            value: `${(input as PiPackageInstallRequest).packageName}@${(input as PiPackageInstallRequest).version}`
+          }
+        }
+      })
     },
     normalizeInput: normalizeInput,
     resourceIdentity: (input) => {

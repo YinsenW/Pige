@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
-import { JobRecordSchema, PermissionDecisionIdSchema, type JobRecord } from "@pige/schemas";
+import { JobRecordSchema, type JobRecord } from "@pige/schemas";
 import {
   LocalToolPackageError,
   stageLocalToolPackage,
@@ -28,7 +28,7 @@ import type {
   LocalToolLifecycleRecord,
   LocalToolLifecycleResult,
   LocalToolMutationIdentity,
-  LocalToolPermissionPort,
+  LocalToolAuthorityPort,
   LocalToolRecoveryRequest,
   LocalToolRecoveryResult,
   LocalToolSelfTestPort,
@@ -47,7 +47,7 @@ export interface LocalToolManagerOptions {
   readonly trustedAppDataRoot: string;
   readonly localToolRoot: string;
   readonly catalog: LocalToolCatalog;
-  readonly permissionPort: LocalToolPermissionPort;
+  readonly authorityPort: LocalToolAuthorityPort;
   readonly jobRecorder: LocalToolLifecycleJobRecorder;
   readonly selfTestPort: LocalToolSelfTestPort;
   readonly platform?: "macos" | "windows" | "linux";
@@ -84,7 +84,7 @@ class LocalToolActionError extends Error {
 export class LocalToolManagerService {
   readonly #store: LocalToolLifecycleStore;
   readonly #catalog: ReadonlyMap<string, LocalToolDefinition>;
-  readonly #permissionPort: LocalToolPermissionPort;
+  readonly #authorityPort: LocalToolAuthorityPort;
   readonly #jobRecorder: LocalToolLifecycleJobRecorder;
   readonly #selfTestPort: LocalToolSelfTestPort;
   readonly #platform: "macos" | "windows" | "linux";
@@ -97,7 +97,7 @@ export class LocalToolManagerService {
   constructor(options: LocalToolManagerOptions) {
     this.#store = new LocalToolLifecycleStore(options.localToolRoot, options.trustedAppDataRoot);
     this.#catalog = validateCatalog(options.catalog);
-    this.#permissionPort = options.permissionPort;
+    this.#authorityPort = options.authorityPort;
     this.#jobRecorder = options.jobRecorder;
     this.#selfTestPort = options.selfTestPort;
     this.#platform = options.platform ?? normalizePlatform(process.platform);
@@ -472,19 +472,14 @@ export class LocalToolManagerService {
   ): TargetDefinition {
     assertExplicitUserOrigin(request.userOrigin);
     assertRequestId(request.requestId);
-    let decisionId: string;
-    try {
-      decisionId = PermissionDecisionIdSchema.parse(request.permissionDecisionId);
-    } catch {
-      throw new PigeDomainError("permission.decision_invalid", "A valid local-tool permission decision is required.");
-    }
     const target = this.#requireTarget(request.toolId, request.assetId);
     if (!isPlatformSupported(target.target, this.#platform, this.#architecture)) {
       throw new PigeDomainError("settings.local_tool_unsupported", "Local tool is unsupported on this platform.");
     }
     const enabled = requestEnabledValue(request);
-    this.#permissionPort.assertAuthorized({
-      permissionDecisionId: decisionId,
+    this.#authorityPort.assertAuthorized({
+      requestId: request.requestId,
+      userOrigin: request.userOrigin,
       actorType: "local_tool",
       action,
       toolId: request.toolId,
@@ -500,14 +495,9 @@ export class LocalToolManagerService {
   #authorizeRecovery(request: LocalToolRecoveryRequest): void {
     assertExplicitUserOrigin(request.userOrigin);
     assertRequestId(request.requestId);
-    let decisionId: string;
-    try {
-      decisionId = PermissionDecisionIdSchema.parse(request.permissionDecisionId);
-    } catch {
-      throw new PigeDomainError("permission.decision_invalid", "A valid local-tool permission decision is required.");
-    }
-    this.#permissionPort.assertAuthorized({
-      permissionDecisionId: decisionId,
+    this.#authorityPort.assertAuthorized({
+      requestId: request.requestId,
+      userOrigin: request.userOrigin,
       actorType: "local_tool",
       action: "recover_staging",
       toolId: "local-tool-root",
@@ -542,8 +532,7 @@ export class LocalToolManagerService {
         usedCloudModel: false,
         usedNetwork: false,
         usedShell: false,
-        accessedExternalFiles: accessesExternalFiles,
-        permissionDecisionIds: [request.permissionDecisionId]
+        accessedExternalFiles: accessesExternalFiles
       },
       message: `Local tool ${action} queued.`
     });

@@ -89,8 +89,7 @@ describe("proposal service", () => {
       reason: "The Agent produced a low-confidence note.",
       sourceRefs: [{ kind: "job" as const, id: "job_20260709_abcdef123456" }],
       targetRefs: [{ kind: "page" as const, id: "page_20260709_abcdef123456", path: "wiki/generated.md" }],
-      proposedOperations: [{ kind: "create" as const, path: "wiki/generated.md", content: "# Generated\n" }],
-      requiredPermissionIds: ["permreq_20260709_abcdef123456"]
+      proposedOperations: [{ kind: "create" as const, path: "wiki/generated.md", content: "# Generated\n" }]
     };
 
     const first = makeService(vaultPath, vault).stage(request);

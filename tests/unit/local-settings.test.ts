@@ -74,30 +74,6 @@ describe("local settings store", () => {
     expect(reopened.read().dismissedFirstHomeVaultIds).toEqual([vaultId]);
   });
 
-  it("preserves machine-local permission state across unrelated settings rewrites", () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-local-settings-test-"));
-    tempRoots.push(root);
-    const store = new LocalSettingsStore(root);
-    expect(store.mutatePermissionSettings(0, (current) => ({
-      ...current,
-      defaultMode: "remember_scoped_grants"
-    })).status).toBe("committed");
-
-    store.setAppLocale("fr");
-    store.setWindowPreferences({
-      mode: "compact",
-      alwaysOnTop: false,
-      sidebarOpen: false
-    });
-
-    expect(new LocalSettingsStore(root).getPermissionSettings()).toMatchObject({
-      revision: 1,
-      defaultMode: "remember_scoped_grants",
-      yoloEnabled: false,
-      savedGrants: []
-    });
-  });
-
   it("atomically swaps one active vault binding without retaining a duplicate identity", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-local-settings-test-"));
     tempRoots.push(root);

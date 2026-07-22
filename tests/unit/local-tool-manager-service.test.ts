@@ -12,8 +12,8 @@ import type {
   LocalToolCatalog,
   LocalToolFailurePoint,
   LocalToolLifecycleJobRecorder,
-  LocalToolPermissionPort,
-  LocalToolPermissionRequest,
+  LocalToolAuthorityPort,
+  LocalToolAuthorityRequest,
   LocalToolSelfTestPort,
   LocalToolSelfTestRequest,
   LocalToolSelfTestResult
@@ -27,7 +27,6 @@ import {
   type FakeLocalToolFixture
 } from "./helpers/local-tool-fixture";
 
-const PERMISSION_DECISION_ID = "permdec_20260711_abcdefgh";
 const tempRoots: string[] = [];
 
 class MemoryJobRecorder implements LocalToolLifecycleJobRecorder {
@@ -46,17 +45,16 @@ class MemoryJobRecorder implements LocalToolLifecycleJobRecorder {
   }
 }
 
-class AllowingPermissionPort implements LocalToolPermissionPort {
-  readonly calls: LocalToolPermissionRequest[] = [];
+class AllowingAuthorityPort implements LocalToolAuthorityPort {
+  readonly calls: LocalToolAuthorityRequest[] = [];
   deny = false;
 
-  assertAuthorized(request: LocalToolPermissionRequest): void {
+  assertAuthorized(request: LocalToolAuthorityRequest): void {
     this.calls.push(request);
     if (this.deny) throw new PigeDomainError("permission.user_denied", "User denied local-tool permission.");
     expect(request.actorType).toBe("local_tool");
     expect(request.capability).toBe("install_local_tool");
     expect(request.resourceScope).toBe("current_action");
-    expect(request.permissionDecisionId).toBe(PERMISSION_DECISION_ID);
   }
 }
 
@@ -108,7 +106,7 @@ interface Harness {
   readonly service: LocalToolManagerService;
   readonly localToolRoot: string;
   readonly jobs: MemoryJobRecorder;
-  readonly permissions: AllowingPermissionPort;
+  readonly permissions: AllowingAuthorityPort;
   readonly selfTest: FakeSelfTestPort;
 }
 
@@ -126,15 +124,15 @@ function makeHarness(
   const trustedAppDataRoot = overrides.trustedAppDataRoot ?? path.dirname(localToolRoot);
   fs.mkdirSync(trustedAppDataRoot, { recursive: true });
   const jobs = overrides.jobRecorder instanceof MemoryJobRecorder ? overrides.jobRecorder : new MemoryJobRecorder();
-  const permissions = overrides.permissionPort instanceof AllowingPermissionPort
-    ? overrides.permissionPort
-    : new AllowingPermissionPort();
+  const permissions = overrides.authorityPort instanceof AllowingAuthorityPort
+    ? overrides.authorityPort
+    : new AllowingAuthorityPort();
   const selfTest = overrides.selfTestPort instanceof FakeSelfTestPort ? overrides.selfTestPort : new FakeSelfTestPort();
   const service = new LocalToolManagerService({
     trustedAppDataRoot,
     localToolRoot,
     catalog,
-    permissionPort: permissions,
+    authorityPort: permissions,
     jobRecorder: jobs,
     selfTestPort: selfTest,
     platform: "macos",
@@ -154,7 +152,6 @@ function installRequest(fixture: FakeLocalToolFixture, requestId: string, userOr
     expectedSha256: fixture.packageSha256,
     requestId,
     userOrigin,
-    permissionDecisionId: PERMISSION_DECISION_ID
   };
 }
 
@@ -165,7 +162,6 @@ function targetRequest(fixture: FakeLocalToolFixture, requestId: string) {
     version: fixture.manifest.version,
     requestId,
     userOrigin: "user",
-    permissionDecisionId: PERMISSION_DECISION_ID
   };
 }
 
@@ -228,7 +224,7 @@ describe("local tool manager service", () => {
     }
   );
 
-  it("rejects an unapproved permission decision before Job or filesystem mutation", async () => {
+  it("rejects a denied exact action authority before Job or filesystem mutation", async () => {
     const fixture = createFakeLocalToolFixture(path.join(makeTempRoot("permission"), "fixture"));
     const harness = makeHarness({ tools: [toToolDefinition(fixture)] });
     harness.permissions.deny = true;
@@ -528,7 +524,6 @@ describe("local tool manager service", () => {
     const recovered = harness.service.recoverStaging({
       requestId: "request-cleanup-ownership-recover",
       userOrigin: "user",
-      permissionDecisionId: PERMISSION_DECISION_ID
     });
     expect(recovered.job.state).toBe("completed");
     expect(fs.readFileSync(unrelatedPath, "utf8")).toBe("{\"unrelated\":true}\n");
@@ -558,9 +553,9 @@ describe("local tool manager service", () => {
     });
     const localToolRoot = path.join(makeTempRoot("side-by-side-root"), "local-tools");
     const jobs = new MemoryJobRecorder();
-    const permissions = new AllowingPermissionPort();
+    const permissions = new AllowingAuthorityPort();
     const selfTest = new FakeSelfTestPort();
-    const initial = makeHarness({ tools: [toToolDefinition(v1)] }, { localToolRoot, jobRecorder: jobs, permissionPort: permissions, selfTestPort: selfTest });
+    const initial = makeHarness({ tools: [toToolDefinition(v1)] }, { localToolRoot, jobRecorder: jobs, authorityPort: permissions, selfTestPort: selfTest });
     await initial.service.install(installRequest(v1, "request-side-v1"));
 
     const points: LocalToolFailurePoint[] = ["copy", "verify", "test", "publish", "record_precommit"];
@@ -568,7 +563,7 @@ describe("local tool manager service", () => {
       const failing = makeHarness({ tools: [toToolDefinition(v2)] }, {
         localToolRoot,
         jobRecorder: jobs,
-        permissionPort: permissions,
+        authorityPort: permissions,
         selfTestPort: selfTest,
         faultInjector: (point) => {
           if (point === failurePoint) throw new Error(`injected-${point}`);
@@ -582,7 +577,7 @@ describe("local tool manager service", () => {
     const succeeding = makeHarness({ tools: [toToolDefinition(v2)] }, {
       localToolRoot,
       jobRecorder: jobs,
-      permissionPort: permissions,
+      authorityPort: permissions,
       selfTestPort: selfTest
     });
     const result = await succeeding.service.update(installRequest(v2, "request-v2-success"));
@@ -601,12 +596,12 @@ describe("local tool manager service", () => {
     });
     const localToolRoot = path.join(root, "app-data", "local-tools");
     const jobs = new MemoryJobRecorder();
-    const permissions = new AllowingPermissionPort();
+    const permissions = new AllowingAuthorityPort();
     const initialSelfTest = new FakeSelfTestPort();
     const initial = makeHarness({ tools: [toToolDefinition(v1)] }, {
       localToolRoot,
       jobRecorder: jobs,
-      permissionPort: permissions,
+      authorityPort: permissions,
       selfTestPort: initialSelfTest
     });
     await initial.service.install(installRequest(v1, "request-record-race-v1"));
@@ -615,7 +610,7 @@ describe("local tool manager service", () => {
     const updating = makeHarness({ tools: [toToolDefinition(v2)] }, {
       localToolRoot,
       jobRecorder: jobs,
-      permissionPort: permissions,
+      authorityPort: permissions,
       selfTestPort: deferred
     });
     const updatePromise = updating.service.update(installRequest(v2, "request-record-race-v2"));
@@ -645,11 +640,11 @@ describe("local tool manager service", () => {
     const fixture = createFakeLocalToolFixture(path.join(root, "fixture"));
     const localToolRoot = path.join(root, "app-data", "local-tools");
     const jobs = new MemoryJobRecorder();
-    const permissions = new AllowingPermissionPort();
+    const permissions = new AllowingAuthorityPort();
     const initial = makeHarness({ tools: [toToolDefinition(fixture)] }, {
       localToolRoot,
       jobRecorder: jobs,
-      permissionPort: permissions
+      authorityPort: permissions
     });
     await initial.service.install(installRequest(fixture, "request-test-race-install"));
 
@@ -657,7 +652,7 @@ describe("local tool manager service", () => {
     const testing = makeHarness({ tools: [toToolDefinition(fixture)] }, {
       localToolRoot,
       jobRecorder: jobs,
-      permissionPort: permissions,
+      authorityPort: permissions,
       selfTestPort: deferred
     });
     const testPromise = testing.service.test(targetRequest(fixture, "request-test-race-health"));
@@ -724,7 +719,7 @@ describe("local tool manager service", () => {
     const precommitFailure = makeHarness({ tools: [toToolDefinition(restoredFixture)] }, {
       localToolRoot: harness.localToolRoot,
       jobRecorder: harness.jobs,
-      permissionPort: harness.permissions,
+      authorityPort: harness.permissions,
       selfTestPort: harness.selfTest,
       faultInjector: (point) => {
         if (point === "record_precommit") throw new Error("injected-repair-precommit");
@@ -825,7 +820,6 @@ describe("local tool manager service", () => {
     const first = harness.service.recoverStaging({
       requestId: "request-recover-first",
       userOrigin: "user",
-      permissionDecisionId: PERMISSION_DECISION_ID
     });
     expect(first.job.state).toBe("completed");
     expect(first.recoveredEntries).toBeGreaterThanOrEqual(3);
@@ -837,7 +831,6 @@ describe("local tool manager service", () => {
     const second = harness.service.recoverStaging({
       requestId: "request-recover-second",
       userOrigin: "user",
-      permissionDecisionId: PERMISSION_DECISION_ID
     });
     expect(second.recoveredEntries).toBe(0);
   });
@@ -921,12 +914,12 @@ describe("local tool manager service", () => {
     });
     const localToolRoot = path.join(root, "app-data", "local-tools");
     const jobs = new MemoryJobRecorder();
-    const permissions = new AllowingPermissionPort();
+    const permissions = new AllowingAuthorityPort();
     const selfTest = new FakeSelfTestPort();
     const v1Harness = makeHarness({ tools: [toToolDefinition(v1)] }, {
       localToolRoot,
       jobRecorder: jobs,
-      permissionPort: permissions,
+      authorityPort: permissions,
       selfTestPort: selfTest
     });
     await v1Harness.service.install(installRequest(v1, "request-vault-install"));
@@ -934,7 +927,7 @@ describe("local tool manager service", () => {
     const v2Harness = makeHarness({ tools: [toToolDefinition(v2)] }, {
       localToolRoot,
       jobRecorder: jobs,
-      permissionPort: permissions,
+      authorityPort: permissions,
       selfTestPort: selfTest
     });
     await v2Harness.service.update(installRequest(v2, "request-vault-update"));

@@ -62,7 +62,6 @@ describe("external mutation durable foundation", () => {
     })).toThrow();
     expect(() => OperationRecordSchema.parse({
       ...operationFixture(),
-      permissionDecisionIds: [],
       policyAudit: undefined
     })).toThrow();
     expect(() => OperationRecordSchema.parse({
@@ -162,8 +161,6 @@ function intentFixture(root: string): ExternalMutationIntent {
     vaultId: "vault_20260718_external01",
     jobId: "job_20260718_external01",
     toolCallId: "call_external_create_01",
-    permissionRequestId: "permreq_20260718_external01",
-    permissionDecisionId: "permdec_20260718_external01",
     bindingHash: `sha256:${"a".repeat(64)}`,
     policyContextId: "policy_external_create_01",
     policyHash: `sha256:${"b".repeat(64)}`,
@@ -188,17 +185,16 @@ function operationFixture(): OperationRecord {
     jobId: "job_20260718_external01",
     createdAt: "2026-07-18T06:00:00.000Z",
     actor: { kind: "pige_agent", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
-    permissionDecisionIds: ["permdec_20260718_external01"],
     policyAudit: {
       policyContextId: "policy_external_create_01",
       policyHash: `sha256:${"b".repeat(64)}`,
-      enforcementOwners: ["Permission Broker", "External Filesystem Mutation Service"]
+      enforcementOwners: ["Submitted Turn Authority", "External Filesystem Mutation Service"]
     },
     kind: "create_external_file",
     targetRefs: [{ kind: "external_resource", id: resourceHash }],
     sourceRefs: [],
     after: { kind: "external_resource", id: resourceHash, checksum: `sha256:${"c".repeat(64)}` },
-    summary: "Created one permission-approved external UTF-8 file.",
+    summary: "Created one authority-bound external UTF-8 file.",
     reversible: "no",
     warnings: []
   });

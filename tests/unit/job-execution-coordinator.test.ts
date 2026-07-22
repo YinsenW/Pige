@@ -28,8 +28,6 @@ describe("JobExecutionCoordinator", () => {
       "queued",
       "failed_retryable",
       "waiting_dependency",
-      "waiting_permission",
-      "waiting_model_egress",
       "awaiting_review"
     ];
     const outcomeStates: JobState[] = [
@@ -39,8 +37,6 @@ describe("JobExecutionCoordinator", () => {
       "failed_retryable",
       "failed_final",
       "waiting_dependency",
-      "waiting_permission",
-      "waiting_model_egress",
       "awaiting_review"
     ];
 
@@ -48,8 +44,6 @@ describe("JobExecutionCoordinator", () => {
     expect(isLegalJobStateTransition("running", "cancel_requested")).toBe(true);
     expect(isLegalJobStateTransition("queued", "cancelled")).toBe(true);
     expect(isLegalJobStateTransition("waiting_dependency", "cancelled")).toBe(true);
-    expect(isLegalJobStateTransition("waiting_permission", "failed_final")).toBe(true);
-    expect(isLegalJobStateTransition("waiting_model_egress", "failed_retryable")).toBe(true);
     expect(isLegalJobStateTransition("queued", "waiting_dependency")).toBe(true);
     expect(isLegalJobStateTransition("queued", "failed_final")).toBe(true);
     expect(isLegalJobStateTransition("queued", "completed")).toBe(false);
@@ -65,8 +59,6 @@ describe("JobExecutionCoordinator", () => {
       "completed",
       "failed_final",
       "waiting_dependency",
-      "waiting_permission",
-      "waiting_model_egress",
       "awaiting_review"
     ] satisfies JobState[]) {
       expect(isLegalJobStateTransition("cancel_requested", state)).toBe(false);
@@ -165,8 +157,7 @@ describe("JobExecutionCoordinator", () => {
         usedCloudModel: true,
         usedNetwork: true,
         usedShell: false,
-        accessedExternalFiles: false,
-        permissionDecisionIds: ["permdec_20260716_abcdef12"]
+        accessedExternalFiles: false
       },
       message: "Writing durable output."
     }).job;
@@ -190,7 +181,7 @@ describe("JobExecutionCoordinator", () => {
     }
   });
 
-  it("requires exact durable proof before resuming dependency, permission, model-egress, and review waits", () => {
+  it("requires exact durable proof before resuming dependency and review waits", () => {
     const fixture = makeFixture();
     const running = fixture.coordinator.begin(fixture.create(), {
       stage: "planning",
@@ -230,69 +221,7 @@ describe("JobExecutionCoordinator", () => {
       }
     });
     expect(resumedDependency.job.operationIds).toBeUndefined();
-    const waitingPermission = fixture.coordinator.settle(resumedDependency, {
-      kind: "waiting",
-      reason: "permission",
-      permissionRequestId: "permreq_20260716_abcdef12",
-      error: permissionError(),
-      message: "Permission is required."
-    });
-    expect(waitingPermission.job).toMatchObject({
-      state: "waiting_permission",
-      permissionRequestIds: ["permreq_20260716_abcdef12"],
-      error: { permissionRequestId: "permreq_20260716_abcdef12" }
-    });
-
-    expect(() => fixture.coordinator.resume(waitingPermission, {
-      stage: "planning",
-      message: "Wrong permission resolved.",
-      proof: {
-        kind: "permission_decided",
-        permissionRequestId: "permreq_20260716_other000",
-        permissionDecisionId: "permdec_20260716_abcdef12"
-      }
-    })).toThrowError(expect.objectContaining({ code: "job.resume_proof_invalid" }));
-    const resumedPermission = fixture.coordinator.resume(waitingPermission, {
-      stage: "planning",
-      message: "Permission resolved.",
-      proof: {
-        kind: "permission_decided",
-        permissionRequestId: "permreq_20260716_abcdef12",
-        permissionDecisionId: "permdec_20260716_abcdef12"
-      }
-    });
-    expect(resumedPermission.job.privacy?.permissionDecisionIds).toContain("permdec_20260716_abcdef12");
-    const waitingEgress = fixture.coordinator.settle(resumedPermission, {
-      kind: "waiting",
-      reason: "model_egress",
-      approvalRequestId: "egressreq_20260716_abcdef1234567890",
-      error: egressError(),
-      message: "Model egress approval is required."
-    });
-    expect(waitingEgress.job).toMatchObject({
-      state: "waiting_model_egress",
-      error: { modelEgressApprovalRequestId: "egressreq_20260716_abcdef1234567890" }
-    });
-
-    expect(() => fixture.coordinator.resume(waitingEgress, {
-      stage: "planning",
-      message: "Wrong egress resolved.",
-      proof: {
-        kind: "model_egress_decided",
-        approvalRequestId: "egressreq_20260716_0000000000000000",
-        operationId: "op_20260716_egress0001"
-      }
-    })).toThrowError(expect.objectContaining({ code: "job.resume_proof_invalid" }));
-    const resumedEgress = fixture.coordinator.resume(waitingEgress, {
-      stage: "planning",
-      message: "Model egress resolved.",
-      proof: {
-        kind: "model_egress_decided",
-        approvalRequestId: "egressreq_20260716_abcdef1234567890",
-        operationId: "op_20260716_egress0001"
-      }
-    });
-    const waitingReview = fixture.coordinator.settle(resumedEgress, {
+    const waitingReview = fixture.coordinator.settle(resumedDependency, {
       kind: "waiting",
       reason: "review",
       proposalId: "proposal_20260716_abcdef12",
@@ -322,10 +251,7 @@ describe("JobExecutionCoordinator", () => {
     });
     expect(resumedReview.job).toMatchObject({
       state: "running",
-      operationIds: [
-        "op_20260716_egress0001",
-        "op_20260716_review0001"
-      ]
+      operationIds: ["op_20260716_review0001"]
     });
   });
 
@@ -912,7 +838,7 @@ describe("JobExecutionCoordinator", () => {
       "apps/desktop/src/main/services/jobs-service.ts"
     ), "utf8");
     expect(source).not.toMatch(
-      /state:\s*"(?:waiting_permission|waiting_model_egress|awaiting_review|cancel_requested|cancelled|completed|completed_with_warnings|failed_retryable|failed_final)"/u
+      /state:\s*"(?:awaiting_review|cancel_requested|cancelled|completed|completed_with_warnings|failed_retryable|failed_final)"/u
     );
     expect(source).not.toContain("#mutateJob(");
     expect(source).not.toContain("#replaceExpectedJob(");
@@ -953,20 +879,6 @@ function lateNonCompletionOutcomes(): JobExecutionOutcome[] {
       dependency: dependency(),
       error: retryableError(),
       message: "Late dependency wait."
-    },
-    {
-      kind: "waiting",
-      reason: "permission",
-      permissionRequestId: "permreq_20260716_abcdef12",
-      error: permissionError(),
-      message: "Late permission wait."
-    },
-    {
-      kind: "waiting",
-      reason: "model_egress",
-      approvalRequestId: "egressreq_20260716_abcdef1234567890",
-      error: egressError(),
-      message: "Late model-egress wait."
     },
     {
       kind: "waiting",
@@ -1049,28 +961,6 @@ function retryableError(): NonNullable<JobRecord["error"]> {
     retryable: true,
     severity: "error",
     userAction: "configure_model"
-  };
-}
-
-function permissionError(): NonNullable<JobRecord["error"]> {
-  return {
-    code: "permission.required",
-    domain: "permission",
-    messageKey: "errors.permission.required",
-    retryable: true,
-    severity: "warning",
-    userAction: "grant_permission"
-  };
-}
-
-function egressError(): NonNullable<JobRecord["error"]> {
-  return {
-    code: "agent_runtime.model_egress_confirmation_required",
-    domain: "agent_runtime",
-    messageKey: "errors.agent_runtime.model_egress_confirmation_required",
-    retryable: true,
-    severity: "warning",
-    userAction: "confirm_model_egress"
   };
 }
 

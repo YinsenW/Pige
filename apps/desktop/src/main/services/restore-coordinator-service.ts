@@ -633,7 +633,6 @@ function createOrReadRollbackBackupJob(
       usedNetwork: false,
       usedShell: false,
       accessedExternalFiles: true,
-      permissionDecisionIds: []
     },
     message: "Rollback backup is queued before replacing the active vault binding."
   });

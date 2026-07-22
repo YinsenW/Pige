@@ -279,7 +279,7 @@ const h3Coordinator = fs.readFileSync(path.join(
   root,
   "apps/desktop/src/main/services/job-execution-coordinator.ts"
 ), "utf8");
-const h3DirectLifecycleStatePattern = /state:\s*"(?:waiting_permission|waiting_model_egress|awaiting_review|cancel_requested|cancelled|completed|completed_with_warnings|failed_retryable|failed_final)"/gu;
+const h3DirectLifecycleStatePattern = /state:\s*"(?:awaiting_review|cancel_requested|cancelled|completed|completed_with_warnings|failed_retryable|failed_final)"/gu;
 const h3DirectLifecycleStateWriters = h2Jobs.match(h3DirectLifecycleStatePattern) ?? [];
 const h3JobsCompareAndSwapCount = h2Jobs.match(/compareAndSwap\(/gu)?.length ?? 0;
 const h3ResidualClosedLoops = [

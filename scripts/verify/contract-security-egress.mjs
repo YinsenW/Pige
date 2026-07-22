@@ -70,4 +70,4 @@ if (failures.length) {
   failures.forEach((failure) => console.error(`- ${failure}`));
   process.exit(1);
 }
-console.log("CON-004 OK: the new authority/provider-send contract is frozen; legacy permission and egress mechanisms are bounded AR1 deletion debt, not accepted completion evidence.");
+console.log("CON-004 OK: submitted-turn authority, direct provider sends, and canonical high-risk confirmations are frozen without legacy approval state machines.");

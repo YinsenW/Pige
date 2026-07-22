@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PigeDomainError } from "@pige/domain";
-import { PermissionActionLifecycleRecordSchema } from "@pige/schemas";
 import { ExternalOperationRecordStore } from "../../apps/desktop/src/main/services/external-operation-record-store";
 import {
   ExternalTextFileCreateService,
@@ -70,7 +69,6 @@ describe("ExternalTextFileCreateService", () => {
     expect(operationText).not.toContain("Pige external text");
     expect(JSON.parse(operationText)).toMatchObject({
       kind: "create_external_file",
-      permissionDecisionIds: [prepared.authority.permission.decisionId],
       after: { kind: "external_resource", checksum: result.contentHash }
     });
 
@@ -85,9 +83,9 @@ describe("ExternalTextFileCreateService", () => {
     expect(fs.readFileSync(targetPath, "utf8")).toBe("Pige external text: 中文");
     expect(fs.existsSync(intent.stagePath)).toBe(false);
     expect(readIntent(fixture.machineRoot).state).toBe("completed");
-    const markPermissionCompleted = vi.mocked(prepared.authority.markPermissionCompleted);
-    expect(markPermissionCompleted).toHaveBeenCalledTimes(1);
-    const completionMarkerHash = markPermissionCompleted.mock.calls[0]?.[1];
+    const markCompleted = vi.mocked(prepared.authority.markCompleted);
+    expect(markCompleted).toHaveBeenCalledTimes(1);
+    const completionMarkerHash = markCompleted.mock.calls[0]?.[0];
     expect(completionMarkerHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
     expect(await fixture.service.create(
       prepared.target,
@@ -95,10 +93,10 @@ describe("ExternalTextFileCreateService", () => {
       prepared.authority,
       liveSignal()
     )).toEqual(result);
-    expect(markPermissionCompleted).toHaveBeenLastCalledWith(prepared.authority.permission, completionMarkerHash);
+    expect(markCompleted).toHaveBeenLastCalledWith(completionMarkerHash);
   });
 
-  it("cannot mint a successor mutation by replaying one consumed decision with another tool call", async () => {
+  it("cannot mint a successor mutation by replaying one action binding with another tool call", async () => {
     const fixture = createFixture();
     const targetPath = path.join(fixture.externalRoot, "one-use.txt");
     const prepared = await fixture.prepare(targetPath, "one use");
@@ -140,19 +138,16 @@ describe("ExternalTextFileCreateService", () => {
     );
   });
 
-  it("rejects a replaced parent directory and a permission authority for another captured target", async () => {
+  it("rejects a replaced parent directory and an action authority for another captured target", async () => {
     const fixture = createFixture();
     const targetPath = path.join(fixture.externalRoot, "captured.txt");
     const prepared = await fixture.prepare(targetPath, "blocked");
 
     await expect(fixture.service.create(prepared.target, "blocked", {
       ...prepared.authority,
-      permission: {
-        ...prepared.authority.permission,
-        binding: {
-          ...prepared.authority.permission.binding,
-          resourceIdentityHash: `sha256:${"f".repeat(64)}`
-        }
+      binding: {
+        ...prepared.authority.binding,
+        resourceIdentityHash: `sha256:${"f".repeat(64)}`
       }
     }, liveSignal())).rejects.toMatchObject(
       expect.objectContaining({ code: "external_filesystem.authority_changed" })
@@ -173,40 +168,40 @@ describe("ExternalTextFileCreateService", () => {
     expect(fs.existsSync(targetPath)).toBe(false);
   });
 
-  it("requires the current Permission Broker to accept the consumed action authority", async () => {
+  it("requires the current execution owner to accept the exact action authority", async () => {
     const fixture = createFixture();
     const targetPath = path.join(fixture.externalRoot, "revoked.txt");
     const prepared = await fixture.prepare(targetPath, "blocked");
     const authority = {
       ...prepared.authority,
-      assertPermissionAuthority: vi.fn(() => {
-        throw new PigeDomainError("permission.denied", "Permission authority is no longer valid.");
+      assertExecutionAuthority: vi.fn(() => {
+        throw new PigeDomainError("permission.denied", "Execution authority is no longer valid.");
       })
     };
 
     await expect(fixture.service.create(prepared.target, "blocked", authority, liveSignal())).rejects.toMatchObject(
       expect.objectContaining({ code: "external_filesystem.authority_changed" })
     );
-    expect(authority.assertPermissionAuthority).toHaveBeenCalledWith(prepared.authority.permission);
+    expect(authority.assertExecutionAuthority).toHaveBeenCalledWith(prepared.authority.binding);
     expect(intentFiles(fixture.machineRoot)).toEqual([]);
     expect(fs.existsSync(targetPath)).toBe(false);
   });
 
-  it("rechecks the consumed authority immediately before exclusive publication", async () => {
+  it("rechecks execution authority immediately before exclusive publication", async () => {
     const fixture = createFixture();
     const targetPath = path.join(fixture.externalRoot, "revoked-before-publish.txt");
     const prepared = await fixture.prepare(targetPath, "blocked");
-    const assertPermissionAuthority = vi.fn()
+    const assertExecutionAuthority = vi.fn()
       .mockImplementationOnce(() => undefined)
       .mockImplementationOnce(() => {
         throw new PigeDomainError("permission.stale", "Permission authority expired.");
       });
-    const authority = { ...prepared.authority, assertPermissionAuthority };
+    const authority = { ...prepared.authority, assertExecutionAuthority };
 
     await expect(fixture.service.create(prepared.target, "blocked", authority, liveSignal())).rejects.toMatchObject(
       expect.objectContaining({ code: "external_filesystem.authority_changed" })
     );
-    expect(assertPermissionAuthority).toHaveBeenCalledTimes(2);
+    expect(assertExecutionAuthority).toHaveBeenCalledTimes(2);
     expect(fs.existsSync(targetPath)).toBe(false);
     const intent = readIntent(fixture.machineRoot);
     expect(intent.state).toBe("failed_no_effect");
@@ -356,12 +351,9 @@ describe("ExternalTextFileCreateService", () => {
 
     await expect(fixture.service.adopt(result.intentId, {
       ...prepared.authority,
-      permission: {
-        ...prepared.authority.permission,
-        binding: {
-          ...prepared.authority.permission.binding,
-          bindingHash: `sha256:${"2".repeat(64)}`
-        }
+      binding: {
+        ...prepared.authority.binding,
+        bindingHash: `sha256:${"2".repeat(64)}`
       }
     })).rejects.toMatchObject(expect.objectContaining({ code: "external_filesystem.authority_changed" }));
     fs.unlinkSync(intent.stagePath);
@@ -409,8 +401,6 @@ function createFixture() {
     vaultId: "vault_20260718_external01",
     jobId: "job_20260718_external01",
     toolCallId: "call_external_create_01",
-    permissionRequestId: "permreq_20260718_external01",
-    permissionDecisionId: "permdec_20260718_external01",
     policyContextId: "policy_external_create_01",
     policyHash: `sha256:${"b".repeat(64)}`,
     assertWriterLease: vi.fn()
@@ -439,7 +429,7 @@ function authorityFor(
 ): ExternalTextFileCreateAuthority {
   const contentBytes = Buffer.from(content, "utf8");
   const contentHash = hashContent(contentBytes);
-  const permissionBinding = createPermissionActionBinding({
+  const binding = createPermissionActionBinding({
     vaultId: authority.vaultId,
     jobId: authority.jobId,
     actorType: "local_tool",
@@ -463,31 +453,12 @@ function authorityFor(
     runtimeKind: "desktop_local",
     clientCapabilityTier: "desktop_full"
   });
-  const now = "2026-07-18T06:00:00.000Z";
-  const permission = PermissionActionLifecycleRecordSchema.parse({
-    schemaVersion: 1,
-    id: authority.permissionRequestId,
-    authorizationLayer: "permission_broker",
-    state: "consumed",
-    binding: permissionBinding,
-    actorDisplayName: "Pige External Text File",
-    actionLabelKey: "permission.external_text_file.create",
-    resourceKind: "file",
-    resourceCount: 1,
-    reasonCode: "external_text_file.create",
-    decision: "allow_once",
-    decisionId: authority.permissionDecisionId,
-    createdAt: now,
-    updatedAt: now,
-    decidedAt: now,
-    consumedAt: now
-  });
   return Object.freeze({
     vaultPath: authority.vaultPath,
     toolCallId: authority.toolCallId,
-    permission,
-    assertPermissionAuthority: vi.fn(),
-    markPermissionCompleted: vi.fn(),
+    binding,
+    assertExecutionAuthority: vi.fn(),
+    markCompleted: vi.fn(),
     assertWriterLease: authority.assertWriterLease
   });
 }
@@ -497,8 +468,6 @@ interface TestAuthorityBase {
   readonly vaultId: string;
   readonly jobId: string;
   readonly toolCallId: string;
-  readonly permissionRequestId: string;
-  readonly permissionDecisionId: string;
   readonly policyContextId: string;
   readonly policyHash: `sha256:${string}`;
   readonly assertWriterLease: () => void;

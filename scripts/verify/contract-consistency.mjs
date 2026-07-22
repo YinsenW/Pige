@@ -473,5 +473,5 @@ console.log(
   `Owner-only negative fixtures OK: rejected ${ownerOnlyNegativeFixtures.length} duplicate-type, stale-channel, error-delta, and source-strategy mutations.`
 );
 console.log(
-  "Cross-document contracts OK: owner-only types, current IPC plus bounded AR1 legacy channels, shared errors, source strategy, stable IDs, Job reliability, Provider send, high-risk authority, backup/restore and secret-use are single-owned."
+  "Cross-document contracts OK: owner-only types, canonical IPC, shared errors, source strategy, stable IDs, Job reliability, Provider send, high-risk authority, backup/restore and secret-use are single-owned."
 );

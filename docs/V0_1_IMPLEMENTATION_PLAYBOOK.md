@@ -238,7 +238,7 @@ Build:
 - [B2.07 -> E2.08] Source-record creation and policy-driven source-asset preservation.
 - [B2.08 -> E2.01] Persistent job queue.
 - [B2.09 -> E2.03] Reference-based conversation events for captures.
-- [B2.10 -> E2.09] Home queued, running, failed, completed, waiting-dependency, and waiting-permission status presentation.
+- [B2.10 -> E2.09] Home queued, running, failed, completed, waiting-dependency, and awaiting-review status presentation.
 - [B2.11 -> E2.10] Retry and cooperative cancellation contracts.
 - [B2.12 -> E2.09] Timeline progress events with safe summaries.
 - [B2.13 -> E2.11] Dependency-state enforcement for missing model, tool, path, and runtime capabilities with retryable repair metadata.
@@ -319,11 +319,9 @@ Migration-window ingest recovery, durable mid-repair adoption, source-ingest dra
 provider timing, multi-window/source recovery, and signed packaged macOS/Windows BYOK
 remain open; E3.09 stays incomplete.
 
-B3.05 has the default, exact-destination disclosure, Home private allow/sensitive wait,
-matrix/profile-switch tests, per-turn audits/drift rejection, and one current-action
-model-egress request shared by Home and Agent ingest. Exact one-use allow/deny, Job CAS,
-restart reconciliation, binding revalidation, redacted Home status ownership, and
-backup-excluded storage are proven. Persisted stricter-policy settings/UI, durable
+B3.05 has the default, exact-destination disclosure, matrix/profile-switch tests,
+per-turn body-free audits, binding revalidation, secret stripping, `local_only` blocking,
+and ordinary selected-provider sends without a second approval state machine. Durable
 no-duplicate continuation of an in-flight Pi transcript, remaining provider adoption,
 and signed cross-platform proof keep E3.03 incomplete.
 

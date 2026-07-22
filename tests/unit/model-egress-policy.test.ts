@@ -161,30 +161,17 @@ describe("model egress policy", () => {
   it.each([
     ["unknown boundary", makeProvider("provider_unknown", "unknown", "unknown")],
     ["unverified local boundary", makeProvider("provider_local_unverified", "local", "user_asserted")]
-  ] as const)("requires confirmation for a %s", (_label, provider) => {
+  ] as const)("blocks an unverified %s without creating a confirmation", (_label, provider) => {
     const decision = createModelEgressDecision(provider, makePolicy(makeVault()), makePayload());
 
     expect(decision).toMatchObject({
-      outcome: "confirm",
+      outcome: "block",
       reasonCode: "unknown_boundary_confirmation"
     });
   });
 
   it.each([
-    ["confirm_private_or_large", makePayload(), "allow", "ordinary_external_allowed"],
-    [
-      "confirm_private_or_large",
-      makePayload({ privateContent: true }),
-      "confirm",
-      "private_or_large_confirmation"
-    ],
-    [
-      "confirm_private_or_large",
-      makePayload({ payloadCharacters: 5_001, estimatedPayloadTokens: 1_251 }),
-      "confirm",
-      "private_or_large_confirmation"
-    ],
-    ["confirm_all", makePayload(), "confirm", "confirm_all"],
+    ["ordinary_allowed", makePayload(), "allow", "ordinary_external_allowed"],
     ["local_only", makePayload(), "block", "local_only_block"]
   ] as const)(
     "applies %s immediately with the expected %s outcome",
@@ -201,8 +188,6 @@ describe("model egress policy", () => {
 
   it.each([
     "ordinary_allowed",
-    "confirm_private_or_large",
-    "confirm_all",
     "local_only"
   ] as const)("allows non-restricted content for verified loopback local under %s", (cloudSendPolicy) => {
     const decision = createModelEgressDecision(

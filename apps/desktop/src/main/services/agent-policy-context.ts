@@ -15,11 +15,6 @@ export interface BuildAgentRuntimePolicyContextOptions {
   readonly lexicalSearchAvailable?: boolean;
   readonly vectorSearchAvailable?: boolean;
   readonly rerankerAvailable?: boolean;
-  readonly permissionSettings?: AgentRuntimePolicyContext["permissions"];
-}
-
-export interface AgentPermissionSettingsPort {
-  policyProjection(): AgentRuntimePolicyContext["permissions"];
 }
 
 export function buildAgentRuntimePolicyContext(
@@ -45,11 +40,6 @@ export function buildAgentRuntimePolicyContext(
       boundaryVerification: options.defaultProvider?.boundaryVerification ?? "unknown",
       cloudSendPolicy: options.cloudSendPolicy ?? "ordinary_allowed",
       modelRoutingMode: "default_model_only" as const
-    },
-    permissions: options.permissionSettings ?? {
-      defaultMode: "ask_every_time" as const,
-      yoloEnabled: false,
-      savedGrantSummaryRefs: []
     },
     confirmation: {
       safeAutoApplyThreshold: 0.9,

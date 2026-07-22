@@ -3,18 +3,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
-import { LocalSettingsStore } from "../../apps/desktop/src/main/services/local-settings";
-import { PermissionSettingsService } from "../../apps/desktop/src/main/services/permission-settings-service";
-import { SourceFetchService } from "../../apps/desktop/src/main/services/source-fetch-service";
-import { createFirstPartyCommandCapabilityAdapter } from "../../apps/desktop/src/main/services/command-capability-adapter";
-import { createFirstPartyReadonlyNodeOsCapabilityAdapters } from "../../apps/desktop/src/main/services/readonly-node-os/first-party-readonly-node-os-capability-adapters";
 import {
   assertPermissionedExternalExecutionAuthority,
   PermissionedExternalCapabilityRegistry,
   type PermissionedExternalCapabilityAdapter,
   type PermissionedExternalExecutionAuthority,
-  type PermissionedExternalJobPort,
   type PermissionedExternalTurnContext
 } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
 import type {
@@ -22,482 +17,263 @@ import type {
   PigeAgentToolDefinition,
   PigeAgentToolResult
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
-import { createVaultOnDisk } from "../../apps/desktop/src/main/services/vault-layout";
 
-const VAULT_ID = "vault_20260714_external01";
-const JOB_ID = "job_20260714_external01";
-const PRIVATE_BODY = "SYNTHETIC_EXTERNAL_PRIVATE_BODY_DO_NOT_PERSIST";
-const TOOL_RESULT: PigeAgentToolResult = {
-  content: [{ type: "text", text: "Synthetic external result." }],
-  details: { status: "ok", receipt: "synthetic-receipt" }
-};
 const roots: string[] = [];
+const VAULT_ID = "vault_20260722_external01";
+const JOB_ID = "job_20260722_external01";
+const OWNER = { kind: "agent_turn" as const, clientTurnId: "turn_20260722_externalabcdef" };
+const RESULT: PigeAgentToolResult = {
+  content: [{ type: "text", text: "bounded result" }],
+  details: { status: "ok" }
+};
 
 afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
-describe("PermissionedExternalCapabilityRegistry", () => {
-  it("keeps the production-default capability registry empty without a Broker dependency", () => {
+describe("PermissionedExternalCapabilityRegistry AR1 authority", () => {
+  it("keeps the production-default registry empty without authority dependencies", () => {
     const registry = new PermissionedExternalCapabilityRegistry();
     expect(registry.toolNames()).toEqual([]);
-    expect(registry.toolsForTurn({
-      vaultPath: "/synthetic/not-read",
-      vaultId: VAULT_ID,
-      jobId: JOB_ID,
-      policyContextId: "policy_context_external_test",
-      policyHash: digest("external policy"),
-      runtimeKind: "desktop_local",
-      clientCapabilityTier: "desktop_full",
-      assertCurrent: vi.fn()
-    })).toEqual([]);
+    expect(registry.toolsForTurn(turn("/not/read"))).toEqual([]);
   });
 
-  it("never invokes the adapter when the exact external action is denied", async () => {
-    const fixture = createFixture();
+  it("executes an ordinary registered first-party capability under the submitted turn with zero permission records", async () => {
+    const fixture = createFixture(firstPartyAdapter());
     const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
 
-    await expect(callTool(tool)).rejects.toMatchObject({
-      code: "permission.confirmation_required"
+    await expect(call(tool)).resolves.toEqual(RESULT);
+    expect(fixture.execute).toHaveBeenCalledTimes(1);
+    expect(findJsonFiles(fixture.machineRoot)).toEqual([]);
+  });
+
+  it("registers a closed high-risk effect without creating a Job waiting state and denial has no effect", async () => {
+    const fixture = createFixture(highRiskShellAdapter());
+    const tool = requireTool(fixture.registry.toolsForTurn({ ...fixture.turn, confirmationOwner: OWNER }));
+
+    const execution = call(tool);
+    await vi.waitFor(() => expect(fixture.confirmations.pending()).toMatchObject({ status: "pending" }));
+    expect(fixture.execute).toHaveBeenCalledTimes(0);
+    const pending = fixture.confirmations.pending();
+    expect(pending).toMatchObject({
+      status: "pending",
+      confirmation: {
+        effect: "arbitrary_shell",
+        presentation: { subject: { kind: "executable_name", value: "lark-cli" } },
+        owner: OWNER
+      }
     });
-    const pending = requireRecord(fixture.broker.listForJob(fixture.vaultPath, JOB_ID));
-    const denied = fixture.broker.commitDecision(fixture.vaultPath, {
-      requestId: pending.id,
-      jobId: JOB_ID,
+    if (pending.status !== "pending") throw new Error("Expected pending confirmation.");
+    await fixture.confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: pending.confirmation.confirmationId,
+      expectedRevision: pending.revision,
       decision: "deny"
     });
-
-    expect(denied.lifecycle).toMatchObject({ state: "denied", decision: "deny" });
+    await expect(execution).rejects.toMatchObject({ code: "permission.denied" });
+    await expect(call(tool)).rejects.toMatchObject({ code: "permission.denied" });
     expect(fixture.execute).toHaveBeenCalledTimes(0);
-    expect(fixture.jobs.consumptions).toHaveLength(0);
-    expect(fixture.jobs.completions).toHaveLength(0);
   });
 
-  it("lets the first-party task reach an explicitly requested private redirect without a duplicate prompt", async () => {
-    const fixture = createFixture();
-    const requests: string[] = [];
-    const sourceFetch = new SourceFetchService({
-      lookup: async (hostname) => hostname === "example.com" ? ["93.184.216.34"] : ["169.254.169.254"],
-      fetchImpl: async (url) => {
-        requests.push(url.toString());
-        if (requests.length === 1) {
-          return new Response("", {
-            status: 302,
-            headers: { location: "http://169.254.169.254/latest" }
-          });
-        }
-        return new Response("metadata", { headers: { "content-type": "text/plain" } });
-      }
+  it("executes exactly once after canonical allow and revokes the unforgeable authority", async () => {
+    let captured: PermissionedExternalExecutionAuthority | undefined;
+    const adapter = highRiskShellAdapter(async (_input, _signal, _context, authority) => {
+      captured = authority;
+      assertPermissionedExternalExecutionAuthority(authority, "run_shell");
+      return RESULT;
     });
-    const adapter = createFirstPartyReadonlyNodeOsCapabilityAdapters({ sourceFetch })
-      .find((candidate) => candidate.tool.name === "pige_external_network_fetch_text");
-    if (!adapter) throw new Error("Expected the first-party network adapter.");
-    const registry = new PermissionedExternalCapabilityRegistry([adapter], fixture.broker, fixture.jobs);
-    const tool = requireTool(registry.toolsForTurn(fixture.turn));
-    const controller = new AbortController();
-    const args = { url: "https://example.com/start", maxBytes: 1_024 };
-    const context: PigeAgentToolCallContext = {
-      toolCallId: "tool_call_permissioned_private_network",
-      signal: controller.signal
-    };
+    const fixture = createFixture(adapter);
+    const tool = requireTool(fixture.registry.toolsForTurn({ ...fixture.turn, confirmationOwner: OWNER }));
 
-    const result = await tool.execute(args, controller.signal, context);
-    expect(result.content).toEqual([{ type: "text", text: "metadata" }]);
-    expect(requests).toEqual([
-      "https://example.com/start",
-      "http://169.254.169.254/latest"
-    ]);
-    expect(fixture.broker.listForJob(fixture.vaultPath, JOB_ID)[0]).toMatchObject({
-      state: "consumed",
-      decision: "allow_once"
+    const execution = call(tool);
+    await vi.waitFor(() => expect(fixture.confirmations.pending()).toMatchObject({ status: "pending" }));
+    const pending = fixture.confirmations.pending();
+    if (pending.status !== "pending") throw new Error("Expected pending confirmation.");
+    await fixture.confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: pending.confirmation.confirmationId,
+      expectedRevision: pending.revision,
+      decision: "allow"
     });
-  });
-
-  it("runs a first-party OS command directly under the submitted user task", async () => {
-    const fixture = createFixture();
-    const registry = new PermissionedExternalCapabilityRegistry(
-      [createFirstPartyCommandCapabilityAdapter()],
-      fixture.broker,
-      fixture.jobs
-    );
-    const tool = requireTool(registry.toolsForTurn(fixture.turn));
-    const signal = new AbortController().signal;
-    const result = await tool.execute({
-      executable: process.execPath,
-      args: ["-e", "process.stdout.write('command-ok')"]
-    }, signal, { toolCallId: "tool_call_command", signal });
-
-    expect(result.details).toMatchObject({ status: "completed", stdout: "command-ok" });
-    expect(fixture.jobs.consumptions).toHaveLength(1);
-    expect(fixture.jobs.completions).toHaveLength(1);
-  });
-
-  it("revokes the unforgeable execution authority when the adapter settles", async () => {
-    const fixture = createFixture();
-    let capturedAuthority: PermissionedExternalExecutionAuthority | undefined;
-    const adapter: PermissionedExternalCapabilityAdapter = {
-      ...fixture.adapter,
-      execute: async (_input, _signal, _context, authority) => {
-        capturedAuthority = authority;
-        return TOOL_RESULT;
-      }
-    };
-    const registry = new PermissionedExternalCapabilityRegistry([adapter], fixture.broker, fixture.jobs);
-    const tool = requireTool(registry.toolsForTurn(fixture.turn));
-
-    await expect(callTool(tool)).rejects.toMatchObject({ code: "permission.confirmation_required" });
-    const pending = requireRecord(fixture.broker.listForJob(fixture.vaultPath, JOB_ID));
-    fixture.broker.commitDecision(fixture.vaultPath, {
-      requestId: pending.id,
-      jobId: JOB_ID,
-      decision: "allow_once"
-    });
-    await expect(callTool(tool)).resolves.toEqual(TOOL_RESULT);
-
-    expect(capturedAuthority).toBeDefined();
-    expect(() => assertPermissionedExternalExecutionAuthority(
-      capturedAuthority,
-      "external_network"
-    )).toThrowError(expect.objectContaining({ code: "permission.execution_authority_invalid" }));
-  });
-
-  it("executes one allow-once action exactly once and adopts its completion after restart", async () => {
-    const fixture = createFixture();
-    const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
-
-    await expect(callTool(tool)).rejects.toMatchObject({
-      code: "permission.confirmation_required"
-    });
-    const pending = requireRecord(fixture.broker.listForJob(fixture.vaultPath, JOB_ID));
-    expect(readMachineJson(fixture.machineRoot)).not.toContain(PRIVATE_BODY);
-    fixture.broker.commitDecision(fixture.vaultPath, {
-      requestId: pending.id,
-      jobId: JOB_ID,
-      decision: "allow_once"
-    });
-
-    await expect(callTool(tool)).resolves.toEqual(TOOL_RESULT);
+    await expect(execution).resolves.toEqual(RESULT);
+    await expect(call(tool)).resolves.toEqual(RESULT);
     expect(fixture.execute).toHaveBeenCalledTimes(1);
-    expect(fixture.adoptCompleted).toHaveBeenCalledTimes(0);
-    expect(fixture.jobs.consumptions).toHaveLength(1);
-    expect(fixture.jobs.completions).toHaveLength(1);
-    const completed = fixture.broker.read(fixture.vaultPath, pending.id);
-    expect(completed).toMatchObject({ state: "consumed" });
-    expect(completed.completionMarkerHash).toBeDefined();
-    expect(fixture.jobs.completions[0]?.completionMarkerHash).toBe(completed.completionMarkerHash);
-
-    const reopenedBroker = new PermissionBrokerService({
-      rootPath: fixture.machineRoot,
-      unsafeAllowUnfenced: true
-    });
-    const restartedRegistry = new PermissionedExternalCapabilityRegistry(
-      [fixture.adapter],
-      reopenedBroker,
-      fixture.jobs
-    );
-    const restartedTool = requireTool(restartedRegistry.toolsForTurn(fixture.turn));
-
-    await expect(callTool(restartedTool)).resolves.toEqual(TOOL_RESULT);
-    expect(fixture.execute).toHaveBeenCalledTimes(1);
-    expect(fixture.adoptCompleted).toHaveBeenCalledTimes(1);
-    expect(fixture.adoptCompleted).toHaveBeenCalledWith(
-      completed.completionMarkerHash,
-      { url: "https://example.invalid/current", body: PRIVATE_BODY },
-      expect.any(AbortSignal),
-      expect.objectContaining({ toolCallId: "tool_call_external_test" })
-    );
-    expect(fixture.jobs.consumptions).toHaveLength(1);
-    expect(fixture.jobs.completions).toHaveLength(1);
-    expect(readMachineJson(fixture.machineRoot)).not.toContain(PRIVATE_BODY);
+    expect(() => assertPermissionedExternalExecutionAuthority(captured, "run_shell"))
+      .toThrowError(expect.objectContaining({ code: "permission.execution_authority_invalid" }));
   });
 
-  it("does not consume or execute an approved action after cancellation wins", async () => {
-    const fixture = createFixture();
+  it("single-flights the same exact tool call but does not collapse distinct tool-call identities", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const fixture = createFixture(firstPartyAdapter(async () => {
+      await gate;
+      return RESULT;
+    }));
     const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
+    const first = call(tool, "tool_call_same");
+    const joined = call(tool, "tool_call_same");
+    await vi.waitFor(() => expect(fixture.execute).toHaveBeenCalledTimes(1));
+    release();
+    await expect(Promise.all([first, joined])).resolves.toEqual([RESULT, RESULT]);
 
-    await expect(callTool(tool)).rejects.toMatchObject({ code: "permission.confirmation_required" });
-    const pending = requireRecord(fixture.broker.listForJob(fixture.vaultPath, JOB_ID));
-    fixture.broker.commitDecision(fixture.vaultPath, {
-      requestId: pending.id,
-      jobId: JOB_ID,
-      decision: "allow_once"
-    });
+    await expect(call(tool, "tool_call_distinct")).resolves.toEqual(RESULT);
+    expect(fixture.execute).toHaveBeenCalledTimes(2);
+  });
+
+  it("revalidates cancellation and turn scope immediately before execution", async () => {
+    const fixture = createFixture(firstPartyAdapter());
+    let current = true;
+    const tool = requireTool(fixture.registry.toolsForTurn({
+      ...fixture.turn,
+      assertCurrent: () => {
+        if (!current) throw Object.assign(new Error("stale"), { code: "permission.binding_changed" });
+        current = false;
+      }
+    }));
+
+    await expect(call(tool)).rejects.toMatchObject({ code: "permission.binding_changed" });
+    expect(fixture.execute).toHaveBeenCalledTimes(0);
+
     const controller = new AbortController();
     controller.abort();
-
-    await expect(callTool(tool, controller)).rejects.toMatchObject({ name: "AbortError" });
-    expect(fixture.execute).toHaveBeenCalledTimes(0);
-    expect(fixture.jobs.consumptions).toHaveLength(0);
-    expect(fixture.jobs.completions).toHaveLength(0);
-    expect(fixture.broker.read(fixture.vaultPath, pending.id).state).toBe("approved");
+    const fresh = requireTool(fixture.registry.toolsForTurn(fixture.turn));
+    await expect(call(fresh, "tool_call_aborted", controller)).rejects.toMatchObject({ name: "AbortError" });
   });
 
-  it("never repeats a non-idempotent effect when completion persistence fails after execution", async () => {
-    const fixture = createFixture({ destructive: true });
-    const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
-
-    await expect(callTool(tool)).rejects.toMatchObject({ code: "permission.confirmation_required" });
-    const pending = requireRecord(fixture.broker.listForJob(fixture.vaultPath, JOB_ID));
-    fixture.broker.commitDecision(fixture.vaultPath, {
-      requestId: pending.id,
-      jobId: JOB_ID,
-      decision: "allow_once"
-    });
-    fixture.jobs.failCompletion = true;
-
-    await expect(callTool(tool)).rejects.toThrow("synthetic completion persistence failure");
-    expect(fixture.execute).toHaveBeenCalledTimes(1);
-    const consumed = fixture.broker.read(fixture.vaultPath, pending.id);
-    expect(consumed.state).toBe("consumed");
-    expect("completionMarkerHash" in consumed).toBe(false);
-
-    fixture.jobs.failCompletion = false;
-    await expect(callTool(tool)).rejects.toMatchObject({ code: "permission.completion_uncertain" });
-    expect(fixture.execute).toHaveBeenCalledTimes(1);
-    expect(fixture.jobs.completions).toHaveLength(0);
-  });
-
-  it("rechecks YOLO revision immediately before adapter execution", async () => {
-    const fixture = createFixture({ yolo: true });
-    const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
-    fixture.jobs.onConsumption = () => {
-      const current = fixture.settings?.current();
-      if (current) fixture.settings?.disableYolo(current.revision);
-    };
-
-    await expect(callTool(tool)).rejects.toMatchObject({ code: "permission.authority_revoked" });
+  it("fails closed for an unclassified third-party capability", async () => {
+    const fixture = createFixture(thirdPartyOrdinaryAdapter());
+    const tool = requireTool(fixture.registry.toolsForTurn({ ...fixture.turn, confirmationOwner: OWNER }));
+    await expect(call(tool)).rejects.toMatchObject({ code: "permission.high_risk_classification_required" });
     expect(fixture.execute).toHaveBeenCalledTimes(0);
-    expect(fixture.jobs.consumptions).toHaveLength(1);
-    expect(fixture.jobs.completions).toHaveLength(0);
+    expect(fixture.confirmations.pending()).toMatchObject({ status: "none" });
   });
 });
 
-type ExternalExecute = PermissionedExternalCapabilityAdapter["execute"];
-type ExternalAdopt = NonNullable<PermissionedExternalCapabilityAdapter["adoptCompleted"]>;
-type JobPortInput<T extends keyof PermissionedExternalJobPort> =
-  Parameters<PermissionedExternalJobPort[T]>[0];
+type Execute = PermissionedExternalCapabilityAdapter["execute"];
 
-class MemoryJobPort implements PermissionedExternalJobPort {
-  readonly bindings: Array<JobPortInput<"bindPermissionRequest">> = [];
-  readonly consumptions: Array<JobPortInput<"commitPermissionConsumption">> = [];
-  readonly completions: Array<JobPortInput<"completePermissionAction">> = [];
-  readonly #completionMarkers = new Map<string, string>();
-  failCompletion = false;
-  onConsumption: (() => void) | undefined;
-
-  bindPermissionRequest(input: JobPortInput<"bindPermissionRequest">): void {
-    this.bindings.push(input);
-  }
-
-  commitPermissionConsumption(input: JobPortInput<"commitPermissionConsumption">): void {
-    this.consumptions.push(input);
-    this.onConsumption?.();
-  }
-
-  completePermissionAction(input: JobPortInput<"completePermissionAction">): void {
-    if (this.failCompletion) throw new Error("synthetic completion persistence failure");
-    this.completions.push(input);
-    this.#completionMarkers.set(completionKey(input), input.completionMarkerHash);
-  }
-
-  readPermissionCompletion(input: JobPortInput<"readPermissionCompletion">): string | undefined {
-    return this.#completionMarkers.get(completionKey(input));
-  }
-}
-
-function createFixture(options: { readonly destructive?: boolean; readonly yolo?: boolean } = {}): {
-  readonly root: string;
-  readonly machineRoot: string;
-  readonly vaultPath: string;
-  readonly broker: PermissionBrokerService;
-  readonly settings: PermissionSettingsService | undefined;
-  readonly jobs: MemoryJobPort;
-  readonly adapter: PermissionedExternalCapabilityAdapter;
-  readonly execute: ReturnType<typeof vi.fn<ExternalExecute>>;
-  readonly adoptCompleted: ReturnType<typeof vi.fn<ExternalAdopt>>;
-  readonly registry: PermissionedExternalCapabilityRegistry;
-  readonly turn: PermissionedExternalTurnContext;
+function createFixture(adapter: PermissionedExternalCapabilityAdapter): {
+  machineRoot: string;
+  vaultPath: string;
+  confirmations: HighRiskConfirmationService;
+  broker: PermissionBrokerService;
+  execute: ReturnType<typeof vi.fn<Execute>>;
+  registry: PermissionedExternalCapabilityRegistry;
+  turn: PermissionedExternalTurnContext;
 } {
-  const root = tempRoot("pige-permissioned-external-");
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-ar1-external-")));
+  roots.push(root);
   const machineRoot = path.join(root, "machine");
-  fs.mkdirSync(machineRoot, { mode: 0o700 });
-  const vaultPath = createTestVault(root);
-  const settings = options.yolo
-    ? new PermissionSettingsService(new LocalSettingsStore(machineRoot))
-    : undefined;
-  if (settings) settings.enableYolo(0);
-  const broker = new PermissionBrokerService({
-    rootPath: machineRoot,
-    unsafeAllowUnfenced: true,
-    ...(settings ? { permissionSettings: settings } : {})
-  });
-  const jobs = new MemoryJobPort();
-  const execute = vi.fn<ExternalExecute>(async () => TOOL_RESULT);
-  const adoptCompleted = vi.fn<ExternalAdopt>(async () => TOOL_RESULT);
-  const adapter = createAdapter(execute, adoptCompleted, options);
-  const registry = new PermissionedExternalCapabilityRegistry([adapter], broker, jobs);
+  const vaultPath = path.join(root, "vault");
+  fs.mkdirSync(machineRoot);
+  fs.mkdirSync(vaultPath);
+  const confirmations = new HighRiskConfirmationService();
+  const broker = new PermissionBrokerService({ rootPath: machineRoot, unsafeAllowUnfenced: true, confirmations });
+  const execute = adapter.execute as ReturnType<typeof vi.fn<Execute>>;
   return {
-    root,
     machineRoot,
     vaultPath,
+    confirmations,
     broker,
-    settings,
-    jobs,
-    adapter,
     execute,
-    adoptCompleted,
-    registry,
-    turn: {
-      vaultPath,
-      vaultId: VAULT_ID,
-      jobId: JOB_ID,
-      policyContextId: "policy_context_external_test",
-      policyHash: digest("external policy"),
-      runtimeKind: "desktop_local",
-      clientCapabilityTier: "desktop_full",
-      assertCurrent: vi.fn()
-    }
+    registry: new PermissionedExternalCapabilityRegistry([adapter], broker),
+    turn: turn(vaultPath)
   };
 }
 
-function createAdapter(
-  execute: ExternalExecute,
-  adoptCompleted: ExternalAdopt,
-  options: { readonly destructive?: boolean } = {}
-): PermissionedExternalCapabilityAdapter {
+function firstPartyAdapter(execute: Execute = vi.fn(async () => RESULT)): PermissionedExternalCapabilityAdapter {
+  return adapter({ actorType: "local_tool", actorId: "pige.command-execution", execute });
+}
+
+function highRiskShellAdapter(execute: Execute = vi.fn(async () => RESULT)): PermissionedExternalCapabilityAdapter {
+  return adapter({
+    actorType: "skill",
+    actorId: "skill.external.shell",
+    execute,
+    highRisk: {
+      effect: "arbitrary_shell",
+      presentation: {
+        action: "run_shell_command",
+        target: "local_system",
+        subject: { kind: "executable_name", value: "lark-cli" }
+      }
+    }
+  });
+}
+
+function thirdPartyOrdinaryAdapter(execute: Execute = vi.fn(async () => RESULT)): PermissionedExternalCapabilityAdapter {
+  return adapter({ actorType: "skill", actorId: "skill.external.network", execute, capability: "external_network" });
+}
+
+function adapter(input: {
+  actorType: "skill" | "package" | "local_tool";
+  actorId: string;
+  execute: Execute;
+  capability?: "run_shell" | "external_network";
+  highRisk?: PermissionedExternalCapabilityAdapter["permission"]["highRisk"];
+}): PermissionedExternalCapabilityAdapter {
+  const execute = vi.isMockFunction(input.execute) ? input.execute : vi.fn(input.execute);
   return {
     tool: {
-      name: "synthetic_external_fetch",
-      label: "Synthetic external fetch",
-      description: "Fetches one synthetic external resource.",
-      parameters: {
-        type: "object",
-        properties: { url: { type: "string" }, body: { type: "string" } },
-        required: ["url", "body"],
-        additionalProperties: false
-      },
-      outputSchema: {
-        type: "object",
-        properties: { status: { type: "string" } },
-        required: ["status"],
-        additionalProperties: true
-      },
-      effect: options.destructive ? "destructive" : "read_only",
+      name: `synthetic_${input.actorType}_tool`,
+      label: "Synthetic tool",
+      description: "Synthetic bounded tool.",
+      parameters: { type: "object", additionalProperties: false },
+      outputSchema: { type: "object" },
+      effect: "idempotent_write",
       inputTrust: "model_generated",
-      outputTrust: "untrusted_source",
-      dataBoundary: {
-        resourceScope: "current_vault",
-        pathAuthority: "host_only",
-        sourceIdAuthority: "host_only",
-        modelAuthority: "none"
-      },
+      outputTrust: "host_validated",
+      dataBoundary: { resourceScope: "current_vault", pathAuthority: "host_only", sourceIdAuthority: "host_only", modelAuthority: "none" },
       execution: "sequential",
-      idempotency: options.destructive
-        ? { mode: "non_idempotent", scope: "none" }
-        : { mode: "idempotent", scope: "tool_call" },
-      limits: { maxInputBytes: 2_048, maxOutputBytes: 4_096, timeoutMs: 5_000 },
-      ownerService: "SyntheticExternalCapabilityService"
+      idempotency: { mode: "idempotent", scope: "tool_call" },
+      limits: { maxInputBytes: 1024, maxOutputBytes: 4096, timeoutMs: 5000 },
+      ownerService: "SyntheticService"
     },
-    actor: {
-      type: "skill",
-      id: "skill.synthetic.external",
-      displayName: "Synthetic External Skill",
-      version: "1.0.0",
-      digest: digest("synthetic external skill")
-    },
-    action: {
-      id: "network.fetch_current_url",
-      version: "1",
-      labelKey: "permissions.actions.synthetic_external_fetch"
-    },
+    actor: { type: input.actorType, id: input.actorId, displayName: "Synthetic actor", version: "1.0.0", digest: digest(input.actorId) },
+    action: { id: "synthetic.execute", version: "1", labelKey: "permissions.actions.synthetic" },
     permission: {
-      capability: "external_network",
-      dataBoundary: "network",
+      capability: input.capability ?? "run_shell",
+      dataBoundary: "local",
       resourceScope: "current_action",
-      resourceKind: "url",
-      reasonCode: "external.network"
+      resourceKind: "shell",
+      reasonCode: "synthetic.execute",
+      ...(input.highRisk ? { highRisk: () => input.highRisk! } : {})
     },
-    normalizeInput: (args) => {
-      const input = args as { readonly url: string; readonly body: string };
-      return { url: input.url, body: input.body };
-    },
-    resourceIdentity: (normalizedInput) => ({
-      url: (normalizedInput as { readonly url: string }).url
-    }),
+    normalizeInput: (value) => value,
+    resourceIdentity: (value) => value,
+    resourceDisplayName: () => "lark-cli",
     resourceCount: () => 1,
-    execute,
-    adoptCompleted
+    execute
   };
 }
 
-function callTool(
-  tool: PigeAgentToolDefinition,
-  controller = new AbortController()
-): Promise<PigeAgentToolResult> {
-  const context: PigeAgentToolCallContext = {
-    toolCallId: "tool_call_external_test",
-    signal: controller.signal
+function turn(vaultPath: string): PermissionedExternalTurnContext {
+  return {
+    vaultPath,
+    vaultId: VAULT_ID,
+    jobId: JOB_ID,
+    policyContextId: "policy_context_external",
+    policyHash: digest("policy"),
+    runtimeKind: "desktop_local",
+    clientCapabilityTier: "desktop_full",
+    assertCurrent: vi.fn()
   };
-  return tool.execute({
-    url: "https://example.invalid/current",
-    body: PRIVATE_BODY
-  }, controller.signal, context);
+}
+
+function call(tool: PigeAgentToolDefinition, toolCallId = "tool_call_external", controller = new AbortController()): Promise<PigeAgentToolResult> {
+  const context: PigeAgentToolCallContext = { toolCallId, signal: controller.signal };
+  return tool.execute({}, controller.signal, context);
 }
 
 function requireTool(tools: readonly PigeAgentToolDefinition[]): PigeAgentToolDefinition {
   const tool = tools[0];
-  if (!tool) throw new Error("Expected one permissioned external tool.");
+  if (!tool) throw new Error("Expected one tool.");
   return tool;
 }
 
-function requireRecord<T>(records: readonly T[]): T {
-  const record = records[0];
-  if (!record) throw new Error("Expected one permission request record.");
-  return record;
-}
-
-function completionKey(input: {
-  readonly jobId: string;
-  readonly requestId: string;
-  readonly bindingHash: string;
-}): string {
-  return `${input.jobId}\0${input.requestId}\0${input.bindingHash}`;
-}
-
-function createTestVault(root: string): string {
-  const vaultName = "External Capability Vault";
-  createVaultOnDisk({
-    parentDirectory: path.join(root, "vaults"),
-    vaultName,
-    appDataPath: path.join(root, "app-data"),
-    tempPath: path.join(root, "temp")
-  });
-  const vaultPath = path.join(root, "vaults", vaultName);
-  const manifestPath = path.join(vaultPath, ".pige", "manifest.json");
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
-  fs.writeFileSync(manifestPath, `${JSON.stringify({ ...manifest, vault_id: VAULT_ID }, null, 2)}\n`, "utf8");
-  return vaultPath;
-}
-
-function readMachineJson(machineRoot: string): string {
-  const files: string[] = [];
-  const visit = (directory: string): void => {
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      const entryPath = path.join(directory, entry.name);
-      if (entry.isDirectory()) visit(entryPath);
-      else if (entry.isFile() && entry.name.endsWith(".json")) files.push(entryPath);
-    }
-  };
-  visit(machineRoot);
-  return files.sort().map((filePath) => fs.readFileSync(filePath, "utf8")).join("\n");
+function findJsonFiles(root: string): string[] {
+  return fs.readdirSync(root, { recursive: true }).map(String).filter((entry) => entry.endsWith(".json"));
 }
 
 function digest(value: string): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
-}
-
-function tempRoot(prefix: string): string {
-  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
-  roots.push(root);
-  return root;
 }

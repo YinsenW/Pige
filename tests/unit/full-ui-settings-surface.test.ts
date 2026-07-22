@@ -20,8 +20,6 @@ import {
 } from "../../apps/desktop/src/renderer/src/App";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 import type {
-  PermissionPrepareYoloEnableResult,
-  PermissionSettingsSummary,
   SkillRegistryMutationResult,
   SkillRegistryQueryResult,
   SkillRegistrySummary,
@@ -857,41 +855,14 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("binds permission mode and saved grants through revision-fenced settings IPC", async () => {
+  it("presents connected services and exact high-risk confirmation without standing permission modes", async () => {
     const dom = createDom();
-    const grantId = "permgrant_20260718_abcdefgh";
-    const initial = permissionSettings(4, {
-      savedGrants: [{
-        grantId,
-        actorType: "local_tool",
-        actorDisplayName: "Local file reader",
-        capability: "external_filesystem",
-        resourceScope: "current_folder",
-        resourceKind: "folder",
-        decisionScope: "resource_scope",
-        createdAt: "2026-07-18T01:00:00.000Z"
-      }]
-    });
-    const changed = permissionSettings(5, {
-      defaultMode: "remember_scoped_grants",
-      savedGrants: initial.savedGrants
-    });
-    const revoked = permissionSettings(6, { defaultMode: "remember_scoped_grants" });
-    const current = vi.fn(async () => initial);
-    const setDefaultMode = vi.fn(async () => ({ status: "committed" as const, settings: changed }));
-    const revokeGrant = vi.fn(async () => ({ status: "committed" as const, settings: revoked }));
+    let ipcRead = false;
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
-      value: {
-        permissions: { settings: {
-          current,
-          setDefaultMode,
-          prepareYoloEnable: vi.fn(),
-          enableYolo: vi.fn(),
-          disableYolo: vi.fn(),
-          revokeGrant,
-          revokeAllGrants: vi.fn()
-        } }
+      get() {
+        ipcRead = true;
+        throw new Error("The Privacy panel must remain a truthful static projection.");
       }
     });
     const onDevelopment = vi.fn();
@@ -903,205 +874,26 @@ describe("full UI Settings surface", () => {
 
     const container = dom.window.document.querySelector("#root")!;
     expect(container.querySelector("h1")?.textContent).toBe("Permissions & Privacy");
-    expect(container.textContent).toContain("Ordinary selected context for connected services");
+    expect(container.textContent).toContain("Connected model services");
+    expect(container.textContent).toContain("without a second confirmation dialog");
+    expect(container.textContent).toContain("Exact high-risk effects");
+    expect(container.textContent).toContain("Confirm each effect");
+    expect(container.textContent).toContain("No standing authority");
     expect(container.textContent).toContain("Protected");
-    expect(container.textContent).toContain("Credential protection and permission settings are active");
-    expect(container.textContent).not.toContain("Allowed");
-    expect(container.textContent).toContain("YOLO full accessEligible local tools may proceed automatically");
+    expect(container.textContent).not.toContain("Default mode");
+    expect(container.textContent).not.toContain("Saved scoped grants");
+    expect(container.textContent).not.toContain("YOLO");
+    expect(container.querySelector('select')).toBeNull();
+    expect(ipcRead).toBe(false);
 
-    expect(container.querySelector('select[aria-label="Cloud-send policy"]')).toBeNull();
-    const defaultMode = requireElement(container.querySelector<HTMLSelectElement>('select[aria-label="Default mode"]'));
-    expect(defaultMode.value).toBe("ask_every_time");
-    expect(defaultMode.disabled).toBe(false);
-    expect(container.querySelector('button[role="switch"][aria-label="Hide obvious secrets before sending"]')).toBeNull();
-    const controls = Array.from(container.querySelectorAll<HTMLElement>("[data-privacy-control]"));
-    expect(controls.map((control) => control.dataset.privacyControl)).toEqual([
-      "ordinary-policy",
-      "cloud-policy",
-      "redaction-policy",
-      "default-mode",
-      "saved-grants",
-      "yolo"
-    ]);
-
+    const cloudPolicy = requireElement(
+      container.querySelector<HTMLButtonElement>('[data-privacy-control="cloud-policy"]')
+    );
     await act(async () => {
-      selectValue(dom, defaultMode, "remember_scoped_grants");
+      cloudPolicy.click();
       await settle(dom);
     });
-    expect(setDefaultMode).toHaveBeenCalledWith({
-      apiVersion: 1,
-      expectedRevision: 4,
-      defaultMode: "remember_scoped_grants"
-    });
-    expect(defaultMode.value).toBe("remember_scoped_grants");
-    expect(container.querySelector('[role="status"]')?.textContent).toBe("Permission settings updated.");
-
-    await act(async () => {
-      buttonNamed(container, "Review...").click();
-      await settle(dom);
-    });
-    expect(container.textContent).toContain("Local file reader");
-    expect(container.textContent).toContain("Folder access");
-    expect(container.textContent).not.toContain(grantId);
-
-    await act(async () => {
-      buttonNamed(container, "Revoke: Local file reader").click();
-      await settle(dom);
-    });
-    expect(revokeGrant).toHaveBeenCalledWith({ apiVersion: 1, expectedRevision: 5, grantId });
-    expect(container.textContent).toContain("No saved scoped grants");
-    expect(current).toHaveBeenCalledOnce();
-
-    await act(async () => root.unmount());
-    dom.window.close();
-  });
-
-  it("serializes the explicit YOLO confirmation token flow and supports disable and revoke-all", async () => {
-    const dom = createDom();
-    const grants = ["abcdefgh", "ijklmnop"].map((suffix, index) => ({
-      grantId: `permgrant_20260718_${suffix}`,
-      actorType: "local_tool" as const,
-      actorDisplayName: `Tool ${index + 1}`,
-      capability: "external_network" as const,
-      resourceScope: "current_domain" as const,
-      resourceKind: "network" as const,
-      decisionScope: "resource_scope" as const,
-      createdAt: "2026-07-18T01:00:00.000Z"
-    }));
-    const initial = permissionSettings(8, { defaultMode: "remember_scoped_grants", savedGrants: grants });
-    const enabled = permissionSettings(9, {
-      defaultMode: "yolo_full_access",
-      yoloEnabled: true,
-      savedGrants: grants
-    });
-    const disabled = permissionSettings(10, { defaultMode: "remember_scoped_grants", savedGrants: grants });
-    const cleared = permissionSettings(11, { defaultMode: "remember_scoped_grants" });
-    let resolvePreparation!: (result: PermissionPrepareYoloEnableResult) => void;
-    const preparation = new Promise<PermissionPrepareYoloEnableResult>((resolve) => {
-      resolvePreparation = resolve;
-    });
-    const prepareYoloEnable = vi.fn(() => preparation);
-    const enableYolo = vi.fn(async () => ({ status: "committed" as const, settings: enabled }));
-    const disableYolo = vi.fn(async () => ({ status: "committed" as const, settings: disabled }));
-    const revokeAllGrants = vi.fn(async () => ({ status: "committed" as const, settings: cleared }));
-    Object.defineProperty(dom.window, "pige", {
-      configurable: true,
-      value: {
-        permissions: { settings: {
-          current: vi.fn(async () => initial),
-          setDefaultMode: vi.fn(),
-          prepareYoloEnable,
-          enableYolo,
-          disableYolo,
-          revokeGrant: vi.fn(),
-          revokeAllGrants
-        } }
-      }
-    });
-    const root = createRoot(dom.window.document.querySelector("#root")!);
-    await act(async () => {
-      root.render(createElement(PermissionsPrivacySettingsPanel, { onDevelopment: vi.fn(), t }));
-      await settle(dom);
-    });
-    const container = dom.window.document.querySelector("#root")!;
-    const enable = buttonNamed(container, "Enable…");
-
-    await act(async () => {
-      enable.click();
-      enable.click();
-      await settle(dom);
-    });
-    expect(prepareYoloEnable).toHaveBeenCalledOnce();
-    expect(prepareYoloEnable).toHaveBeenCalledWith({ apiVersion: 1, expectedRevision: 8 });
-
-    await act(async () => {
-      resolvePreparation({
-        status: "confirmation_ready",
-        revision: 8,
-        confirmationToken: "permyolo_20260718_abcdefghijklmnop",
-        expiresAt: "2026-07-18T01:05:00.000Z"
-      });
-      await settle(dom);
-    });
-    expect(enableYolo).toHaveBeenCalledWith({
-      apiVersion: 1,
-      expectedRevision: 8,
-      confirmationToken: "permyolo_20260718_abcdefghijklmnop"
-    });
-    expect(buttonNamed(container, "Disable")).not.toBeNull();
-    expect(requireElement(container.querySelector<HTMLSelectElement>('select[aria-label="Default mode"]')).value)
-      .toBe("yolo_full_access");
-
-    await act(async () => {
-      buttonNamed(container, "Disable").click();
-      await settle(dom);
-    });
-    await act(async () => {
-      buttonNamed(container, "Review...").click();
-      await settle(dom);
-    });
-    await act(async () => {
-      buttonNamed(container, "Revoke all").click();
-      await settle(dom);
-    });
-    expect(disableYolo).toHaveBeenCalledWith({ apiVersion: 1, expectedRevision: 9 });
-    expect(revokeAllGrants).toHaveBeenCalledWith({ apiVersion: 1, expectedRevision: 10 });
-    expect(container.textContent).toContain("No saved scoped grants");
-
-    await act(async () => root.unmount());
-    dom.window.close();
-  });
-
-  it("refreshes stale permission revisions and keeps thrown error bodies out of Settings", async () => {
-    const dom = createDom();
-    const initial = permissionSettings(20, { defaultMode: "remember_scoped_grants" });
-    const latest = permissionSettings(21);
-    const setDefaultMode = vi.fn()
-      .mockResolvedValueOnce({ status: "stale", settings: latest })
-      .mockRejectedValueOnce(new Error("raw /Users/private/.ssh/id_ed25519 permission body"));
-    Object.defineProperty(dom.window, "pige", {
-      configurable: true,
-      value: {
-        permissions: { settings: {
-          current: vi.fn(async () => initial),
-          setDefaultMode,
-          prepareYoloEnable: vi.fn(),
-          enableYolo: vi.fn(),
-          disableYolo: vi.fn(),
-          revokeGrant: vi.fn(),
-          revokeAllGrants: vi.fn()
-        } }
-      }
-    });
-    const root = createRoot(dom.window.document.querySelector("#root")!);
-    await act(async () => {
-      root.render(createElement(PermissionsPrivacySettingsPanel, { onDevelopment: vi.fn(), t }));
-      await settle(dom);
-    });
-    const container = dom.window.document.querySelector("#root")!;
-    const defaultMode = requireElement(container.querySelector<HTMLSelectElement>('select[aria-label="Default mode"]'));
-
-    await act(async () => {
-      selectValue(dom, defaultMode, "ask_every_time");
-      await settle(dom);
-    });
-    expect(defaultMode.value).toBe("ask_every_time");
-    expect(container.querySelector('[role="status"]')?.textContent)
-      .toBe("Permission settings changed elsewhere. The latest state is shown.");
-
-    await act(async () => {
-      selectValue(dom, defaultMode, "remember_scoped_grants");
-      await settle(dom);
-    });
-    expect(setDefaultMode).toHaveBeenLastCalledWith({
-      apiVersion: 1,
-      expectedRevision: 21,
-      defaultMode: "remember_scoped_grants"
-    });
-    expect(container.querySelector('[role="alert"]')?.textContent)
-      .toBe("Permission settings could not be updated.");
-    expect(container.textContent).not.toContain("/Users/private");
-    expect(container.textContent).not.toContain("id_ed25519");
+    expect(onDevelopment).toHaveBeenCalledOnce();
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -1481,20 +1273,6 @@ function selectValue(dom: JSDOM, select: HTMLSelectElement, value: string): void
 
 async function settle(dom: JSDOM): Promise<void> {
   await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 0));
-}
-
-function permissionSettings(
-  revision: number,
-  overrides: Partial<PermissionSettingsSummary> = {}
-): PermissionSettingsSummary {
-  return {
-    apiVersion: 1,
-    revision,
-    defaultMode: "ask_every_time",
-    yoloEnabled: false,
-    savedGrants: [],
-    ...overrides
-  };
 }
 
 function skillRegistry(

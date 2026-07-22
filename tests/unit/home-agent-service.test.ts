@@ -31,10 +31,8 @@ import type {
   DatasetQueryToolRequest
 } from "../../apps/desktop/src/main/services/dataset-query-types";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
-import { LocalSettingsStore } from "../../apps/desktop/src/main/services/local-settings";
-import { ModelEgressApprovalService } from "../../apps/desktop/src/main/services/model-egress-approval-service";
+import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
-import { PermissionSettingsService } from "../../apps/desktop/src/main/services/permission-settings-service";
 import { PermissionedExternalCapabilityRegistry } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
 import { createFirstPartyCommandCapabilityAdapter } from "../../apps/desktop/src/main/services/command-capability-adapter";
 import { applyReaderSelectionPageUpdate } from "../../apps/desktop/src/main/services/agent-page-update-service";
@@ -995,8 +993,6 @@ describe("Home Pi Agent service", () => {
       undefined,
       undefined,
       undefined,
-      undefined,
-      undefined,
       {
         apply: ({ vaultPath, job, selection: durableSelection, replacement, action }) => ({
           status: "applied" as const,
@@ -1411,43 +1407,30 @@ describe("Home Pi Agent service", () => {
     });
   });
 
-  it("keeps the exact approval path for an unverified provider boundary", async () => {
+  it("blocks an unverified provider boundary without creating an approval or waiting Job", async () => {
     const fixture = makeFixture();
     const sourceId = "src_20260711_sensitive2";
     writeSourceRecord(fixture.vaultPath, sourceId, { sensitive: true });
     writeKnowledgePage(fixture.vaultPath, [sourceId]);
     const result = makeSearchResult(fixture.vault.vaultId, { sourceIds: [sourceId] });
-    const machineRoot = path.join(path.dirname(fixture.vaultPath), "machine-egress");
-    fs.mkdirSync(machineRoot);
-    const approvals = new ModelEgressApprovalService({ rootPath: machineRoot, unsafeAllowUnfenced: true });
-    const jobs = new JobsService(fixture.vaults, undefined, undefined, undefined, undefined, undefined, approvals);
+    const jobs = new JobsService(fixture.vaults);
     let runtimeConfigReads = 0;
     let runtimeCalls = 0;
-    const completedAdapter = new PiAgentRuntimeAdapter({
-      fauxResponses: [
-        finishHome({
-          answer: "The connected provider answered.",
-          citationRefs: [],
-          grounding: "general"
-        })
-      ]
-    });
     const service = new HomeAgentService(
       fixture.vaults,
       makeUnverifiedModels(() => { runtimeConfigReads += 1; }),
       makeRetrievalPort(fixture.vault.vaultId, { result }),
       jobs,
       {
-        run: async (runtimeRequest) => {
+        run: async () => {
           runtimeCalls += 1;
-          return completedAdapter.run(runtimeRequest);
+          throw new Error("The runtime must not be called for an unverified provider boundary.");
         }
       },
       undefined,
       new AgentTurnConversationStore(),
       undefined,
-      undefined,
-      approvals
+      undefined
     );
     const request = {
       schemaVersion: 1 as const,
@@ -1458,49 +1441,22 @@ describe("Home Pi Agent service", () => {
       clientTurnId: "turn_20260714_sensitive001"
     };
 
-    const outcomePromise = service.submitTurn(request);
-    const waitingJob = await waitForValue(() => jobs.list({ states: ["waiting_model_egress"] }).jobs[0]);
-    const requestId = waitingJob.modelEgressApprovalRequestId;
-    expect(requestId).toMatch(/^egressreq_/u);
+    const outcome = await service.submitTurn(request);
+    const job = jobs.list().jobs[0];
+
+    expect(outcome).toMatchObject({
+      state: "failed",
+      error: { code: "model_provider.egress_blocked" }
+    });
     expect(runtimeConfigReads).toBe(0);
     expect(runtimeCalls).toBe(0);
-    expect(jobs.readAgentTurnJob(waitingJob.id)?.state).toBe("waiting_model_egress");
-    expect(jobs.pendingModelEgress(requestId ?? "")).toMatchObject({
-      requestId,
-      jobId: waitingJob.id,
-      reasonCode: "unknown_boundary_confirmation",
-      contentClasses: ["ordinary"]
-    });
-
-    const decision = jobs.resolveModelEgress({
-      requestId: requestId ?? "",
-      jobId: waitingJob.id,
-      decision: "allow_once"
-    });
-    expect(decision.status).toBe("approved");
-    expect(jobs.readAgentTurnJob(waitingJob.id)?.state).toBe("running");
-
-    const completed = await outcomePromise;
-    expect(completed).toMatchObject({ state: "completed", modelUsage: "cloud" });
-    expect(jobs.readAgentTurnJob(waitingJob.id)?.state).toBe("completed");
-    expect(service.conversation().messages.at(-1)).toMatchObject({
-      role: "assistant",
-      text: "The connected provider answered."
-    });
-    expect(runtimeConfigReads).toBe(1);
-    expect(runtimeCalls).toBe(1);
-    expect(approvals.read(fixture.vaultPath, requestId ?? "").state).toBe("consumed");
+    expect(job?.state).toBe("failed_final");
     const operations = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"));
-    const confirmationAudit = operations.find((operation) =>
-      operation.modelEgressAudit?.modelEgressApprovalRequestId === requestId
-    );
-    expect(confirmationAudit).toMatchObject({
+    expect(operations.find((operation) => operation.kind === "model_egress_decision")).toMatchObject({
       kind: "model_egress_decision",
-      permissionDecisionIds: [],
       modelEgressAudit: {
-        outcome: "confirm",
-        reasonCode: "unknown_boundary_confirmation",
-        modelEgressApprovalRequestId: requestId
+        outcome: "block",
+        reasonCode: "unknown_boundary_confirmation"
       }
     });
   });
@@ -1765,17 +1721,13 @@ describe("Home Pi Agent service", () => {
     fs.mkdirSync(userDataCandidate, { mode: 0o700 });
     const userDataPath = fs.realpathSync.native(userDataCandidate);
     fs.writeFileSync(externalPath, "api_key=sk-never-send-this-secret", "utf8");
-    const permissionSettings = new PermissionSettingsService(new LocalSettingsStore(userDataPath));
-    expect(permissionSettings.enableYolo(0).status).toBe("committed");
     const jobs = new JobsService(fixture.vaults);
     const registry = new PermissionedExternalCapabilityRegistry(
       createFirstPartyReadonlyNodeOsCapabilityAdapters({ protectedRoots: [userDataPath] }),
       new PermissionBrokerService({
         rootPath: userDataPath,
-        permissionSettings,
         unsafeAllowUnfenced: true
-      }),
-      jobs
+      })
     );
     let modelTurns = 0;
     let blockedSecondTurn: unknown;
@@ -1811,9 +1763,7 @@ describe("Home Pi Agent service", () => {
       undefined,
       undefined,
       undefined,
-      undefined,
-      registry,
-      permissionSettings
+      registry
     ).ask({ query: "Read the external file." });
 
     expect(modelTurns).toBe(1);
@@ -1829,19 +1779,20 @@ describe("Home Pi Agent service", () => {
     });
   });
 
-  it("offers Pi the first-party OS command tool and executes it under the submitted task", async () => {
+  it("offers Pi the first-party OS command tool and executes it after canonical confirmation", async () => {
     const fixture = makeFixture();
     const jobs = new JobsService(fixture.vaults);
     const commandPermissionCandidate = path.join(path.dirname(fixture.vaultPath), "command-permission");
     fs.mkdirSync(commandPermissionCandidate, { mode: 0o700 });
     const commandPermissionRoot = fs.realpathSync.native(commandPermissionCandidate);
+    const confirmations = new HighRiskConfirmationService();
     const registry = new PermissionedExternalCapabilityRegistry(
       [createFirstPartyCommandCapabilityAdapter()],
       new PermissionBrokerService({
         rootPath: commandPermissionRoot,
-        unsafeAllowUnfenced: true
-      }),
-      jobs
+        unsafeAllowUnfenced: true,
+        confirmations
+      })
     );
     const adapter = new PiAgentRuntimeAdapter({
       fauxResponses: [
@@ -1860,13 +1811,12 @@ describe("Home Pi Agent service", () => {
         })
       ]
     });
-    const outcome = await new HomeAgentService(
+    const outcomePromise = new HomeAgentService(
       fixture.vaults,
       makeModels(),
       makeRetrievalPort(fixture.vault.vaultId),
       jobs,
       { run: async (request) => adapter.run(request) },
-      undefined,
       undefined,
       undefined,
       undefined,
@@ -1878,10 +1828,27 @@ describe("Home Pi Agent service", () => {
       objective: "auto",
       locale: "en"
     });
+    await vi.waitFor(() => expect(confirmations.pending()).toMatchObject({
+      status: "pending",
+      confirmation: {
+        effect: "arbitrary_shell",
+        presentation: {
+          subject: { kind: "executable_name", value: path.basename(fs.realpathSync.native(process.execPath)) }
+        }
+      }
+    }));
+    const pending = confirmations.pending();
+    if (pending.status !== "pending") throw new Error("Expected command confirmation.");
+    await confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: pending.confirmation.confirmationId,
+      expectedRevision: pending.revision,
+      decision: "allow"
+    });
+    const outcome = await outcomePromise;
 
     expect(outcome).toMatchObject({ state: "completed" });
     expect(jobs.readAgentTurnJob(outcome.requestId)?.privacy?.usedShell).toBe(true);
-    expect(jobs.list({ states: ["waiting_permission"] }).jobs).toEqual([]);
   });
 
   it("lets Pi decide how to answer after an optional empty search instead of substituting Host prose", async () => {
@@ -2440,7 +2407,6 @@ SYNTHETIC_DISTRACTOR_BODY
         checksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u)
       })
     ]));
-    expect(job?.permissionDecisionIds ?? []).toEqual([]);
     expect(service.conversation({ scope: { kind: "current_note", pageId: HOME_PAGE_ID } })).toMatchObject({
       canFollowUp: true,
       messages: [
@@ -2569,8 +2535,6 @@ SYNTHETIC_DISTRACTOR_BODY
           });
         }
       },
-      undefined,
-      undefined,
       undefined,
       undefined,
       undefined,
@@ -3006,10 +2970,7 @@ SYNTHETIC_DISTRACTOR_BODY
     );
     writeSourceRecord(fixture.vaultPath, sourceId, { sensitive: false }, "2026-07-16T02:00:00.000Z");
     writeKnowledgePage(fixture.vaultPath, []);
-    const machineRoot = path.join(path.dirname(fixture.vaultPath), "machine-scope-history-egress");
-    fs.mkdirSync(machineRoot);
-    const approvals = new ModelEgressApprovalService({ rootPath: machineRoot, unsafeAllowUnfenced: true });
-    const jobs = new JobsService(fixture.vaults, undefined, undefined, undefined, undefined, undefined, approvals);
+    const jobs = new JobsService(fixture.vaults);
     let runtimeCalls = 0;
     const service = new HomeAgentService(
       fixture.vaults,
@@ -3033,8 +2994,7 @@ SYNTHETIC_DISTRACTOR_BODY
       undefined,
       conversations,
       undefined,
-      undefined,
-      approvals
+      undefined
     );
 
     const outcomePromise = service.submitTurn({
@@ -3048,7 +3008,6 @@ SYNTHETIC_DISTRACTOR_BODY
     });
     expect(await outcomePromise).toMatchObject({ state: "completed" });
     expect(runtimeCalls).toBe(1);
-    expect(jobs.list({ states: ["waiting_model_egress"] }).jobs).toEqual([]);
   });
 
   it("rejects scoped attachments and duplicate current-note page identities before Pi", async () => {
@@ -3242,10 +3201,7 @@ SYNTHETIC_DISTRACTOR_BODY
     const sourceId = "src_20260711_noteprivacy";
     writeKnowledgePage(fixture.vaultPath, [sourceId]);
     writeSourceRecord(fixture.vaultPath, sourceId, { private: false, sensitive: false });
-    const machineRoot = path.join(path.dirname(fixture.vaultPath), "machine-note-egress");
-    fs.mkdirSync(machineRoot);
-    const approvals = new ModelEgressApprovalService({ rootPath: machineRoot, unsafeAllowUnfenced: true });
-    const jobs = new JobsService(fixture.vaults, undefined, undefined, undefined, undefined, undefined, approvals);
+    const jobs = new JobsService(fixture.vaults);
     const service = new HomeAgentService(
       fixture.vaults,
       makeModels(),
@@ -3277,8 +3233,7 @@ SYNTHETIC_DISTRACTOR_BODY
       undefined,
       new AgentTurnConversationStore(),
       undefined,
-      undefined,
-      approvals
+      undefined
     );
 
     const outcome = await service.submitTurn({
@@ -3291,7 +3246,6 @@ SYNTHETIC_DISTRACTOR_BODY
 
     expect(outcome).toMatchObject({ state: "failed", error: { code: "model_provider.egress_blocked" } });
     expect(outcome.jobId).toBeDefined();
-    expect(approvals.listForJob(fixture.vaultPath, outcome.jobId ?? "")).toEqual([]);
     expect(service.conversation({ scope: { kind: "current_note", pageId: HOME_PAGE_ID } })?.messages).toEqual([
       expect.objectContaining({ role: "user" })
     ]);

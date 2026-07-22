@@ -1,12 +1,16 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFirstPartyCommandCapabilityAdapter } from "../../apps/desktop/src/main/services/command-capability-adapter";
 import {
   CommandExecutionService,
   MAX_COMMAND_OUTPUT_BYTES
 } from "../../apps/desktop/src/main/services/command-execution-service";
+import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
+import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
+import { PermissionedExternalCapabilityRegistry } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
 
 const roots: string[] = [];
 
@@ -93,6 +97,99 @@ describe("CommandExecutionService", () => {
     });
   });
 
+  it("binds the normalized executable to canonical confirmation before command execution", async () => {
+    const root = tempRoot();
+    const machineRoot = path.join(root, "machine");
+    const vaultPath = path.join(root, "vault");
+    fs.mkdirSync(machineRoot);
+    fs.mkdirSync(vaultPath);
+    const commands = new CommandExecutionService();
+    const execute = vi.spyOn(commands, "execute").mockResolvedValue({
+      status: "completed",
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+      signal: null,
+      outputBytes: 0,
+      truncated: false
+    });
+    const confirmations = new HighRiskConfirmationService();
+    const broker = new PermissionBrokerService({
+      rootPath: machineRoot,
+      unsafeAllowUnfenced: true,
+      confirmations
+    });
+    const registry = new PermissionedExternalCapabilityRegistry([
+      createFirstPartyCommandCapabilityAdapter(commands)
+    ], broker);
+    const [tool] = registry.toolsForTurn({
+      vaultPath,
+      vaultId: "vault_20260722_command01",
+      jobId: "job_20260722_command01",
+      policyContextId: "policy_context_command",
+      policyHash: digest("command policy"),
+      runtimeKind: "desktop_local",
+      clientCapabilityTier: "desktop_full",
+      confirmationOwner: { kind: "agent_turn", clientTurnId: "turn_20260722_command01abcd" },
+      assertCurrent: vi.fn()
+    });
+    if (!tool) throw new Error("Expected command tool.");
+
+    const deniedController = new AbortController();
+    const denied = tool.execute({ executable: process.execPath, args: ["--version"] }, deniedController.signal, {
+      toolCallId: "tool_call_command_denied",
+      signal: deniedController.signal
+    });
+    await vi.waitFor(() => expect(confirmations.pending()).toMatchObject({
+      status: "pending",
+      confirmation: {
+        effect: "arbitrary_shell",
+        presentation: {
+          subject: { kind: "executable_name", value: path.basename(fs.realpathSync.native(process.execPath)) }
+        }
+      }
+    }));
+    const deniedPending = confirmations.pending();
+    if (deniedPending.status !== "pending") throw new Error("Expected command confirmation.");
+    await confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: deniedPending.confirmation.confirmationId,
+      expectedRevision: deniedPending.revision,
+      decision: "deny"
+    });
+    await expect(denied).rejects.toMatchObject({ code: "permission.denied" });
+    await expect(confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: deniedPending.confirmation.confirmationId,
+      expectedRevision: deniedPending.revision,
+      decision: "allow"
+    })).resolves.toMatchObject({ status: "stale" });
+    expect(execute).not.toHaveBeenCalled();
+
+    const allowedExecutable = process.platform === "win32" ? process.env.ComSpec! : "/bin/sh";
+    const allowedController = new AbortController();
+    const allowed = tool.execute({ executable: allowedExecutable }, allowedController.signal, {
+      toolCallId: "tool_call_command_allowed",
+      signal: allowedController.signal
+    });
+    await vi.waitFor(() => expect(confirmations.pending()).toMatchObject({ status: "pending" }));
+    const allowedPending = confirmations.pending();
+    if (allowedPending.status !== "pending") throw new Error("Expected changed command confirmation.");
+    expect(allowedPending.confirmation.confirmationId).not.toBe(deniedPending.confirmation.confirmationId);
+    expect(allowedPending.confirmation.presentation.subject).toEqual({
+      kind: "executable_name",
+      value: path.basename(fs.realpathSync.native(allowedExecutable))
+    });
+    await confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: allowedPending.confirmation.confirmationId,
+      expectedRevision: allowedPending.revision,
+      decision: "allow"
+    });
+    await expect(allowed).resolves.toMatchObject({ details: { status: "completed" } });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
   it.runIf(process.env.PIGE_RUN_CLI_INSTALL_EVIDENCE === "1")(
     "installs and invokes the Feishu CLI in an isolated prefix",
     async () => {
@@ -123,4 +220,8 @@ function tempRoot(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-command-execution-"));
   roots.push(root);
   return root;
+}
+
+function digest(value: string): `sha256:${string}` {
+  return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
 }

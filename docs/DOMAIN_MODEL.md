@@ -161,8 +161,7 @@ Canonical ID prefixes:
 | `chunk_` | Retrieval chunk |
 | `skill_` | Skill |
 | `pkg_` | Package |
-| `permreq_` | Permission request |
-| `permdec_` | Permission decision |
+| `confirm_` | High-risk confirmation |
 | `backup_` | Backup manifest |
 | `root_` | Machine-local external root binding |
 

@@ -5,10 +5,7 @@ import type {
   ProviderProfileSummary,
   VaultSummary
 } from "@pige/contracts";
-import {
-  buildAgentRuntimePolicyContext,
-  type AgentPermissionSettingsPort
-} from "./agent-policy-context";
+import { buildAgentRuntimePolicyContext } from "./agent-policy-context";
 import type { AgentIngestCapabilityPort } from "./agent-ingest-service";
 
 export interface AgentRuntimeVaultPort {
@@ -31,20 +28,17 @@ export class AgentRuntimeService {
   readonly #models: AgentRuntimeModelPort;
   readonly #database: AgentRuntimeDatabasePort;
   readonly #capabilities: AgentIngestCapabilityPort | undefined;
-  readonly #permissionSettings: AgentPermissionSettingsPort | undefined;
 
   constructor(
     vaults: AgentRuntimeVaultPort,
     models: AgentRuntimeModelPort,
     database: AgentRuntimeDatabasePort,
-    capabilities?: AgentIngestCapabilityPort,
-    permissionSettings?: AgentPermissionSettingsPort
+    capabilities?: AgentIngestCapabilityPort
   ) {
     this.#vaults = vaults;
     this.#models = models;
     this.#database = database;
     this.#capabilities = capabilities;
-    this.#permissionSettings = permissionSettings;
   }
 
   runtimeStatus(): AgentRuntimeStatus {
@@ -66,9 +60,6 @@ export class AgentRuntimeService {
       ...(defaultModel ? { defaultModel } : {}),
       ...(defaultProvider ? { defaultProvider } : {}),
       localDatabaseStatus: localDatabase,
-      ...(this.#permissionSettings
-        ? { permissionSettings: this.#permissionSettings.policyProjection() }
-        : {}),
       ...(this.#capabilities?.snapshot() ?? {})
     });
 

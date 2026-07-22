@@ -37,23 +37,8 @@ export function createModelEgressDecision(
     provider.cloudBoundary === "local" ||
     (provider.cloudBoundary === "unknown" && provider.boundaryVerification !== "user_asserted")
   ) {
-    outcome = "confirm";
+    outcome = "block";
     reasonCode = "unknown_boundary_confirmation";
-  } else if (policy.model.cloudSendPolicy === "confirm_all") {
-    outcome = "confirm";
-    reasonCode = "confirm_all";
-  } else if (
-    contentClasses.includes("sensitive") &&
-    policy.model.cloudSendPolicy !== "ordinary_allowed"
-  ) {
-    outcome = "confirm";
-    reasonCode = "sensitive_confirmation";
-  } else if (
-    policy.model.cloudSendPolicy === "confirm_private_or_large" &&
-    (contentClasses.includes("private") || contentClasses.includes("large"))
-  ) {
-    outcome = "confirm";
-    reasonCode = "private_or_large_confirmation";
   } else {
     outcome = "allow";
     reasonCode = "ordinary_external_allowed";

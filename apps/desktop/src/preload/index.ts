@@ -21,6 +21,10 @@ import type {
   CancelSupportBundleExportResult,
   HomeAgentAskRequest,
   HomeAgentAskResult,
+  HighRiskConfirmationChangedEvent,
+  HighRiskConfirmationPendingResult,
+  HighRiskConfirmationResolveRequest,
+  HighRiskConfirmationResolveResult,
   JobActionRequest,
   JobActionResult,
   JobsListRequest,
@@ -36,23 +40,6 @@ import type {
   LibraryRelatedResult,
   LocalDatabaseRebuildResult,
   LocalDatabaseStatus,
-  ModelEgressPendingRequest,
-  ModelEgressPendingRequestQuery,
-  ModelEgressResolveRequest,
-  ModelEgressResolveResult,
-  PermissionPendingRequest,
-  PermissionPendingRequestQuery,
-  PermissionResolveRequest,
-  PermissionResolveResult,
-  PermissionSettingsSummary,
-  PermissionSetDefaultModeRequest,
-  PermissionPrepareYoloEnableRequest,
-  PermissionPrepareYoloEnableResult,
-  PermissionEnableYoloRequest,
-  PermissionDisableYoloRequest,
-  PermissionRevokeSavedGrantRequest,
-  PermissionRevokeAllSavedGrantsRequest,
-  PermissionSettingsMutationResult,
   LocalDatabaseResetResult,
   ModelProviderSettingsSummary,
   ProviderConnectResult,
@@ -135,6 +122,10 @@ import type {
 import {
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
+  HighRiskConfirmationChangedEventSchema,
+  HighRiskConfirmationPendingResultSchema,
+  HighRiskConfirmationResolveRequestSchema,
+  HighRiskConfirmationResolveResultSchema,
   RetrievalSearchRequestSchema,
   RetrievalSearchResultSchema,
   NoteResolveInlineReferenceRequestSchema,
@@ -150,15 +141,6 @@ import {
   ReaderSelectionResolveRequestSchema,
   ReaderSelectionResolveResultSchema,
   OpenRecentVaultRequestSchema,
-  PermissionSettingsSummarySchema,
-  PermissionSetDefaultModeRequestSchema,
-  PermissionPrepareYoloEnableRequestSchema,
-  PermissionPrepareYoloEnableResultSchema,
-  PermissionEnableYoloRequestSchema,
-  PermissionDisableYoloRequestSchema,
-  PermissionRevokeSavedGrantRequestSchema,
-  PermissionRevokeAllSavedGrantsRequestSchema,
-  PermissionSettingsMutationResultSchema,
   SpeechAvailabilityRequestSchema,
   SpeechAvailabilityResultSchema,
   SpeechAssetInstallEventSchema,
@@ -451,54 +433,23 @@ const api: PigeDesktopApi = {
     retry: async (request: JobActionRequest): Promise<JobActionResult> =>
       ipcRenderer.invoke("jobs.retry", request) as Promise<JobActionResult>
   },
-  modelEgress: {
-    pending: async (request: ModelEgressPendingRequestQuery): Promise<ModelEgressPendingRequest | undefined> =>
-      ipcRenderer.invoke("modelEgress.pending", request) as Promise<ModelEgressPendingRequest | undefined>,
-    resolve: async (request: ModelEgressResolveRequest): Promise<ModelEgressResolveResult> =>
-      ipcRenderer.invoke("modelEgress.resolve", request) as Promise<ModelEgressResolveResult>
-  },
-  permissions: {
-    pending: async (request: PermissionPendingRequestQuery): Promise<PermissionPendingRequest | undefined> =>
-      ipcRenderer.invoke("permissions.pending", request) as Promise<PermissionPendingRequest | undefined>,
-    resolve: async (request: PermissionResolveRequest): Promise<PermissionResolveResult> =>
-      ipcRenderer.invoke("permissions.resolve", request) as Promise<PermissionResolveResult>,
-    settings: {
-      current: async (): Promise<PermissionSettingsSummary> =>
-        PermissionSettingsSummarySchema.parse(await ipcRenderer.invoke("permissions.settings.current")),
-      setDefaultMode: async (request: PermissionSetDefaultModeRequest): Promise<PermissionSettingsMutationResult> =>
-        PermissionSettingsMutationResultSchema.parse(await ipcRenderer.invoke(
-          "permissions.settings.setDefaultMode",
-          PermissionSetDefaultModeRequestSchema.parse(request)
-        )),
-      prepareYoloEnable: async (
-        request: PermissionPrepareYoloEnableRequest
-      ): Promise<PermissionPrepareYoloEnableResult> =>
-        PermissionPrepareYoloEnableResultSchema.parse(await ipcRenderer.invoke(
-          "permissions.settings.prepareYoloEnable",
-          PermissionPrepareYoloEnableRequestSchema.parse(request)
-        )),
-      enableYolo: async (request: PermissionEnableYoloRequest): Promise<PermissionSettingsMutationResult> =>
-        PermissionSettingsMutationResultSchema.parse(await ipcRenderer.invoke(
-          "permissions.settings.enableYolo",
-          PermissionEnableYoloRequestSchema.parse(request)
-        )),
-      disableYolo: async (request: PermissionDisableYoloRequest): Promise<PermissionSettingsMutationResult> =>
-        PermissionSettingsMutationResultSchema.parse(await ipcRenderer.invoke(
-          "permissions.settings.disableYolo",
-          PermissionDisableYoloRequestSchema.parse(request)
-        )),
-      revokeGrant: async (request: PermissionRevokeSavedGrantRequest): Promise<PermissionSettingsMutationResult> =>
-        PermissionSettingsMutationResultSchema.parse(await ipcRenderer.invoke(
-          "permissions.settings.revokeGrant",
-          PermissionRevokeSavedGrantRequestSchema.parse(request)
-        )),
-      revokeAllGrants: async (
-        request: PermissionRevokeAllSavedGrantsRequest
-      ): Promise<PermissionSettingsMutationResult> =>
-        PermissionSettingsMutationResultSchema.parse(await ipcRenderer.invoke(
-          "permissions.settings.revokeAllGrants",
-          PermissionRevokeAllSavedGrantsRequestSchema.parse(request)
-        ))
+  confirmations: {
+    pending: async (): Promise<HighRiskConfirmationPendingResult> =>
+      HighRiskConfirmationPendingResultSchema.parse(await ipcRenderer.invoke("confirmations.pending")),
+    resolve: async (
+      request: HighRiskConfirmationResolveRequest
+    ): Promise<HighRiskConfirmationResolveResult> =>
+      HighRiskConfirmationResolveResultSchema.parse(await ipcRenderer.invoke(
+        "confirmations.resolve",
+        HighRiskConfirmationResolveRequestSchema.parse(request)
+      )),
+    onChanged: (listener: (event: HighRiskConfirmationChangedEvent) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, value: unknown): void => {
+        const parsed = HighRiskConfirmationChangedEventSchema.safeParse(value);
+        if (parsed.success) listener(parsed.data);
+      };
+      ipcRenderer.on("confirmations.changed", handler);
+      return () => ipcRenderer.removeListener("confirmations.changed", handler);
     }
   },
   skills: {

@@ -520,7 +520,6 @@ function createQueuedBackupJob(binding: BackupBinding): JobRecord {
       usedNetwork: false,
       usedShell: false,
       accessedExternalFiles: true,
-      permissionDecisionIds: []
     },
     message: "Backup is queued."
   });
@@ -787,7 +786,6 @@ function assertOperationBinding(
     operation.kind !== "backup_created" ||
     operation.jobId !== binding.jobId ||
     operation.createdAt !== binding.createdAt ||
-    operation.permissionDecisionIds.length !== 0 ||
     !operation.targetRefs.some((ref) =>
       ref.kind === "backup" && ref.id === binding.backupId && ref.checksum === inspected.archiveDigest
     ) ||

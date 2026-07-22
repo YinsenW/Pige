@@ -3,25 +3,14 @@ import {
   AddManualProviderRequestSchema,
   AddPresetProviderRequestSchema,
   DeleteProviderRequestSchema,
-  ModelEgressApprovalRequestRecordSchema,
+  HighRiskConfirmationChangedEventSchema,
+  HighRiskConfirmationPendingResultSchema,
+  HighRiskConfirmationResolveRequestSchema,
+  HighRiskConfirmationSummarySchema,
   ModelEgressDecisionSchema,
-  ModelEgressPendingRequestQuerySchema,
-  ModelEgressPendingRequestSchema,
-  ModelEgressResolveRequestSchema,
-  ModelEgressResolveResultSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
   PermissionActionBindingSchema,
-  PermissionActionLifecycleRecordSchema,
-  PermissionDecisionRecordSchema,
-  PermissionPendingRequestQuerySchema,
-  PermissionPendingRequestSchema,
-  PermissionRequestSchema,
-  PermissionResolveRequestSchema,
-  PermissionResolveResultSchema,
-  PermissionMachineSettingsSchema,
-  PermissionSettingsSummarySchema,
-  PermissionEnableYoloRequestSchema,
   PigeErrorSummarySchema,
   ProviderProfileSchema,
   ReaderSelectionActionRequestSchema,
@@ -45,6 +34,152 @@ const timestamp = "2026-07-10T00:00:00.000Z";
 const policyHash = `sha256:${"a".repeat(64)}`;
 
 describe("security-sensitive shared contracts", () => {
+  it("keeps high-risk confirmation projection closed, coherent, and body-free", () => {
+    const confirmation = {
+      apiVersion: 1 as const,
+      confirmationId: "confirm_20260722_abcdefghijklmnop",
+      effect: "arbitrary_shell" as const,
+      presentation: {
+        action: "run_shell_command" as const,
+        target: "local_system" as const,
+        subject: { kind: "executable_name" as const, value: "lark-cli" }
+      },
+      owner: { kind: "agent_turn" as const, clientTurnId: "turn_20260722_abcdefghijklmnop" }
+    };
+    expect(HighRiskConfirmationSummarySchema.parse(confirmation)).toEqual(confirmation);
+    expect(HighRiskConfirmationPendingResultSchema.parse({
+      apiVersion: 1,
+      status: "pending",
+      revision: 4,
+      confirmation
+    })).toMatchObject({ status: "pending", revision: 4 });
+    expect(HighRiskConfirmationChangedEventSchema.parse({
+      apiVersion: 1,
+      status: "pending",
+      revision: 4,
+      confirmation
+    })).toMatchObject({ status: "pending", revision: 4 });
+    expect(HighRiskConfirmationResolveRequestSchema.parse({
+      apiVersion: 1,
+      confirmationId: confirmation.confirmationId,
+      expectedRevision: 4,
+      decision: "deny"
+    })).toMatchObject({ decision: "deny" });
+
+    expect(() => HighRiskConfirmationSummarySchema.parse({
+      ...confirmation,
+      effect: "export_secret",
+      presentation: {
+        action: "delete_permanently",
+        target: "current_note",
+        subject: { kind: "display_name", value: "Note" }
+      }
+    })).toThrow();
+    expect(() => HighRiskConfirmationSummarySchema.parse({
+      ...confirmation,
+      effect: "risky_agent_edit",
+      presentation: {
+        action: "apply_risky_edit",
+        target: "current_note",
+        subject: { kind: "display_name", value: "Note" }
+      }
+    })).toThrow();
+    expect(() => HighRiskConfirmationPendingResultSchema.parse({
+      apiVersion: 1,
+      status: "pending",
+      revision: 4,
+      confirmation: { ...confirmation, revision: 3 }
+    })).toThrow();
+    for (const unsafeField of ["path", "command", "body", "hash", "credential", "provider", "rawError", "jobId"]) {
+      expect(() => HighRiskConfirmationSummarySchema.parse({ ...confirmation, [unsafeField]: "private" })).toThrow();
+    }
+    for (const unsafeValue of [
+      "/Users/example/private.txt",
+      "C:\\Users\\example\\private.txt",
+      "https://example.com/package",
+      "npm install unsafe-package",
+      "rm -rf data",
+      "curl example.com",
+      "Key sk-example-secret",
+      "github_pat_example",
+      "xoxb-example",
+      "access token=example",
+      "Bearer example-secret",
+      "access_token_example",
+      "clientSecretExample",
+      "private_key_example",
+      "Review op_20260722_abcdefgh",
+      "Retry job_20260722_abcdefgh",
+      "Use provider_20260722_abcdefgh",
+      "secret_20260722_abcdefghijklmnop",
+      "note; rm -rf data"
+    ]) {
+      expect(() => HighRiskConfirmationSummarySchema.parse({
+        ...confirmation,
+        presentation: {
+          action: "run_shell_command",
+          target: "local_system",
+          subject: { kind: "executable_name", value: unsafeValue }
+        }
+      }), `executable_name accepted ${unsafeValue}`).toThrow();
+    }
+    for (const unsafeValue of [
+      "C:\\Users\\example\\private.txt",
+      "https://example.com/package",
+      "rm -rf data",
+      "curl example.com",
+      "Key sk-example-secret",
+      "github_pat_example",
+      "xoxp-example",
+      "access token=example",
+      "Review op_20260722_abcdefgh",
+      "Retry job_20260722_abcdefgh",
+      "Use provider_20260722_abcdefgh"
+    ]) {
+      expect(() => HighRiskConfirmationSummarySchema.parse({
+        apiVersion: 1,
+        confirmationId: confirmation.confirmationId,
+        effect: "write_outside_authorized_root",
+        presentation: {
+          action: "write_external_item",
+          target: "external_location",
+          subject: { kind: "display_name", value: unsafeValue }
+        },
+        owner: confirmation.owner
+      }), `display_name accepted ${unsafeValue}`).toThrow();
+    }
+    for (const unsafeValue of [
+      "sk-example-secret",
+      "github_pat_example",
+      "xoxb-example",
+      "token=example",
+      "plugin-op_20260722_abcdefgh",
+      "plugin-provider_20260722_abcdefgh",
+      "@larksuite/cli",
+      "safe-package@latest",
+      "safe-package@1.2"
+    ]) {
+      expect(() => HighRiskConfirmationSummarySchema.parse({
+        ...confirmation,
+        effect: "install_unreviewed_package",
+        presentation: {
+          action: "install_package",
+          target: "local_toolchain",
+          subject: { kind: "package_name", value: unsafeValue }
+        }
+      }), `package_name accepted ${unsafeValue}`).toThrow();
+    }
+    expect(HighRiskConfirmationSummarySchema.parse({
+      ...confirmation,
+      effect: "install_unreviewed_package",
+      presentation: {
+        action: "install_package",
+        target: "local_toolchain",
+        subject: { kind: "package_name", value: "@larksuite/cli@1.0.72" }
+      }
+    }).presentation.subject).toEqual({ kind: "package_name", value: "@larksuite/cli@1.0.72" });
+  });
+
   it("keeps Skill inventory and lifecycle requests strict, pathless, and body-free", () => {
     const summary = {
       apiVersion: 1 as const,
@@ -319,164 +454,6 @@ describe("security-sensitive shared contracts", () => {
     })).toMatchObject({ status: "applied" });
   });
 
-  it("rejects raw-secret capabilities and YOLO eligibility for always-confirmed actions", () => {
-    const request = {
-      id: "permreq_20260710_abcdef12",
-      schemaVersion: 1 as const,
-      authorizationLayer: "permission_broker" as const,
-      actorType: "skill" as const,
-      actorId: "skill_example",
-      actorVersion: "1.0.0",
-      capability: "change_settings" as const,
-      resourceScope: "current_vault" as const,
-      dataBoundary: "destructive" as const,
-      duration: "once" as const,
-      runtimeKind: "desktop_local" as const,
-      clientCapabilityTier: "desktop_full" as const,
-      requiresExplicitConfirmation: true,
-      yoloEligible: false,
-      reason: "Apply a user-reviewed settings change.",
-      createdAt: timestamp,
-      defaultModeAtRequest: "yolo_full_access" as const
-    };
-
-    expect(PermissionRequestSchema.parse(request).yoloEligible).toBe(false);
-    expect(() => PermissionRequestSchema.parse({ ...request, yoloEligible: true })).toThrow(
-      "An always-confirmed action cannot be YOLO eligible."
-    );
-    expect(() => PermissionRequestSchema.parse({ ...request, capability: "access_secret" })).toThrow();
-  });
-
-  it("rejects contradictory permission decision, scope, actor, and auto-allow combinations", () => {
-    const manualAllowOnce = {
-      id: "permdec_20260710_abcdef12",
-      schemaVersion: 1 as const,
-      authorizationLayer: "permission_broker" as const,
-      permissionRequestId: "permreq_20260710_abcdef12",
-      decision: "allow_once" as const,
-      scope: "once" as const,
-      resourceScope: "current_file" as const,
-      decidedBy: "user" as const,
-      autoAllowedBy: "none" as const,
-      decidedAt: timestamp
-    };
-    const automaticAllowOnce = {
-      ...manualAllowOnce,
-      id: "permdec_20260710_abcdef13",
-      decidedBy: "system" as const,
-      autoAllowedBy: "saved_grant" as const
-    };
-    const scopedAllow = {
-      ...manualAllowOnce,
-      id: "permdec_20260710_abcdef14",
-      decision: "allow_scoped" as const,
-      scope: "resource_scope" as const
-    };
-
-    expect(PermissionDecisionRecordSchema.parse(manualAllowOnce).scope).toBe("once");
-    expect(PermissionDecisionRecordSchema.parse(automaticAllowOnce).autoAllowedBy).toBe("saved_grant");
-    expect(PermissionDecisionRecordSchema.parse({
-      ...automaticAllowOnce,
-      id: "permdec_20260710_abcdef15",
-      autoAllowedBy: "user_task"
-    }).autoAllowedBy).toBe("user_task");
-    expect(PermissionDecisionRecordSchema.parse(scopedAllow).decision).toBe("allow_scoped");
-    expect(() => PermissionDecisionRecordSchema.parse({ ...manualAllowOnce, scope: "never" })).toThrow(
-      "allow-once decision must use the once"
-    );
-    expect(() => PermissionDecisionRecordSchema.parse({
-      ...automaticAllowOnce,
-      decidedBy: "user"
-    })).toThrow("must be recorded as a system decision");
-    expect(() => PermissionDecisionRecordSchema.parse({
-      ...scopedAllow,
-      decidedBy: "system",
-      autoAllowedBy: "yolo_full_access"
-    })).toThrow("must not create another persistent scoped grant");
-    expect(() => PermissionDecisionRecordSchema.parse({
-      ...scopedAllow,
-      resourceScope: "current_action"
-    })).toThrow("cannot target only the current action");
-    expect(() => PermissionDecisionRecordSchema.parse({
-      ...manualAllowOnce,
-      decision: "deny",
-      scope: "once"
-    })).toThrow("denial must use the never");
-    expect(() => PermissionDecisionRecordSchema.parse({
-      ...manualAllowOnce,
-      decidedBy: "system",
-      autoAllowedBy: "yolo_full_access"
-    })).toThrow("bind exactly one machine-local permission settings revision");
-    expect(PermissionDecisionRecordSchema.parse({
-      ...manualAllowOnce,
-      decidedBy: "system",
-      autoAllowedBy: "yolo_full_access",
-      permissionSettingsRevision: 4
-    }).permissionSettingsRevision).toBe(4);
-  });
-
-  it("keeps permission settings internally strict and renderer projections body-free", () => {
-    const grant = {
-      grantId: "permgrant_20260718_abcdefgh",
-      actorType: "skill" as const,
-      actorId: "skill.synthetic.internal",
-      actorVersion: "1.0.0",
-      actorDigest: policyHash,
-      actorDisplayName: "Synthetic Skill",
-      capability: "external_filesystem" as const,
-      dataBoundary: "filesystem" as const,
-      resourceScope: "current_folder" as const,
-      resourceKind: "folder" as const,
-      resourceIdentityHash: policyHash,
-      decisionScope: "resource_scope" as const,
-      createdAt: timestamp
-    };
-    const machine = PermissionMachineSettingsSchema.parse({
-      revision: 2,
-      defaultMode: "remember_scoped_grants",
-      yoloEnabled: false,
-      savedGrants: [grant]
-    });
-    expect(machine.savedGrants[0]?.actorId).toBe("skill.synthetic.internal");
-    expect(() => PermissionMachineSettingsSchema.parse({
-      ...machine,
-      defaultMode: "yolo_full_access",
-      yoloEnabled: false
-    })).toThrow("must change atomically");
-    expect(() => PermissionMachineSettingsSchema.parse({
-      ...machine,
-      savedGrants: [{ ...grant, capability: "change_settings", dataBoundary: "destructive" }]
-    })).toThrow("cannot cover destructive");
-
-    const summary = PermissionSettingsSummarySchema.parse({
-      apiVersion: 1,
-      revision: 2,
-      defaultMode: "remember_scoped_grants",
-      yoloEnabled: false,
-      savedGrants: [{
-        grantId: grant.grantId,
-        actorType: grant.actorType,
-        actorDisplayName: grant.actorDisplayName,
-        capability: grant.capability,
-        resourceScope: grant.resourceScope,
-        resourceKind: grant.resourceKind,
-        decisionScope: grant.decisionScope,
-        createdAt: grant.createdAt
-      }]
-    });
-    expect(JSON.stringify(summary)).not.toContain("actorId");
-    expect(JSON.stringify(summary)).not.toContain("sha256:");
-    expect(() => PermissionSettingsSummarySchema.parse({
-      ...summary,
-      savedGrants: [{ ...summary.savedGrants[0], actorId: grant.actorId }]
-    })).toThrow();
-    expect(PermissionEnableYoloRequestSchema.parse({
-      apiVersion: 1,
-      expectedRevision: 2,
-      confirmationToken: "permyolo_20260718_abcdefghijklmnop"
-    }).expectedRevision).toBe(2);
-  });
-
   it("binds current permission actions to an exact versioned actor and hashed input identity", () => {
     const binding = {
       vaultId: "vault_20260710_abcdef12",
@@ -526,219 +503,6 @@ describe("security-sensitive shared contracts", () => {
     })).toThrow();
   });
 
-  it("keeps current-action lifecycle records body-free and state exact", () => {
-    const binding = PermissionActionBindingSchema.parse({
-      vaultId: "vault_20260710_abcdef12",
-      jobId: "job_20260710_abcdef12",
-      actorType: "skill",
-      actorId: "skill_example",
-      actorVersion: "1.2.3",
-      actorDigest: policyHash,
-      actionId: "fetch_release_notes",
-      actionVersion: "1",
-      actionInputHash: policyHash,
-      capability: "external_network",
-      dataBoundary: "network",
-      resourceScope: "current_domain",
-      resourceIdentityHash: policyHash,
-      policyContextId: "policy_context_example",
-      policyHash,
-      runtimeKind: "desktop_local",
-      clientCapabilityTier: "desktop_full",
-      bindingHash: policyHash
-    });
-    const pending = {
-      schemaVersion: 1 as const,
-      id: "permreq_20260710_abcdef12",
-      authorizationLayer: "permission_broker" as const,
-      state: "pending" as const,
-      binding,
-      actorDisplayName: "Release Notes Skill",
-      actionLabelKey: "permissions.action.fetch_release_notes",
-      resourceKind: "network" as const,
-      resourceCount: 1,
-      reasonCode: "permission.external_network_required",
-      createdAt: timestamp,
-      updatedAt: timestamp
-    };
-    const approved = {
-      ...pending,
-      state: "approved" as const,
-      decision: "allow_once" as const,
-      decisionId: "permdec_20260710_abcdef12",
-      decidedAt: timestamp
-    };
-    const consumed = {
-      ...approved,
-      state: "consumed" as const,
-      consumedAt: timestamp,
-      completionMarkerHash: policyHash,
-      completedAt: timestamp
-    };
-
-    expect(PermissionActionLifecycleRecordSchema.parse(pending).state).toBe("pending");
-    expect(PermissionActionLifecycleRecordSchema.parse(approved).decision).toBe("allow_once");
-    expect(PermissionActionLifecycleRecordSchema.parse(consumed).completionMarkerHash).toBe(policyHash);
-    expect(PermissionActionLifecycleRecordSchema.parse({
-      ...pending,
-      state: "denied",
-      decision: "deny",
-      decisionId: "permdec_20260710_abcdef13",
-      decidedAt: timestamp
-    }).state).toBe("denied");
-    expect(PermissionActionLifecycleRecordSchema.parse({
-      ...pending,
-      state: "cancelled",
-      cancelledAt: timestamp
-    }).state).toBe("cancelled");
-
-    expect(() => PermissionActionLifecycleRecordSchema.parse({
-      ...pending,
-      decision: "allow_once",
-      decisionId: "permdec_20260710_abcdef12"
-    })).toThrow("pending permission action");
-    expect(() => PermissionActionLifecycleRecordSchema.parse({
-      ...approved,
-      decision: "deny"
-    })).toThrow("approved permission action");
-    expect(() => PermissionActionLifecycleRecordSchema.parse({
-      ...consumed,
-      completedAt: undefined
-    })).toThrow("recorded together");
-    expect(() => PermissionActionLifecycleRecordSchema.parse({
-      ...approved,
-      completionMarkerHash: policyHash,
-      completedAt: timestamp
-    })).toThrow("Only a consumed permission action");
-    expect(() => PermissionActionLifecycleRecordSchema.parse({
-      ...pending,
-      resourceKind: "path"
-    })).toThrow();
-    expect(() => PermissionActionLifecycleRecordSchema.parse({
-      ...pending,
-      reasonCode: "r".repeat(121)
-    })).toThrow();
-
-    for (const unsafeField of ["params", "path", "url", "body", "command", "credential"] as const) {
-      expect(() => PermissionActionLifecycleRecordSchema.parse({
-        ...pending,
-        [unsafeField]: "private action material"
-      })).toThrow();
-    }
-  });
-
-  it("exposes only safe Permission Broker pending and resolve IPC fields", () => {
-    const pending = {
-      requestId: "permreq_20260710_abcdef12",
-      jobId: "job_20260710_abcdef12",
-      actorType: "skill" as const,
-      actorDisplayName: "Release Notes Skill",
-      actorVersion: "1.2.3",
-      capability: "external_network" as const,
-      dataBoundary: "network" as const,
-      actionLabelKey: "permissions.action.fetch_release_notes",
-      resourceScope: "current_domain" as const,
-      resourceKind: "network" as const,
-      resourceCount: 1,
-      reasonCode: "permission.external_network_required",
-      createdAt: timestamp
-    };
-
-    expect(PermissionPendingRequestQuerySchema.parse({ requestId: pending.requestId })).toEqual({
-      requestId: pending.requestId
-    });
-    expect(PermissionPendingRequestSchema.parse(pending)).toEqual(pending);
-    expect(PermissionResolveRequestSchema.parse({
-      requestId: pending.requestId,
-      jobId: pending.jobId,
-      decision: "allow_once"
-    }).decision).toBe("allow_once");
-    expect(PermissionResolveResultSchema.parse({
-      status: "approved",
-      requestId: pending.requestId,
-      jobId: pending.jobId
-    }).status).toBe("approved");
-    expect(PigeErrorSummarySchema.parse({
-      code: "permission.user_denied",
-      domain: "permission",
-      messageKey: "errors.permission.user_denied",
-      retryable: false,
-      severity: "warning",
-      userAction: "none",
-      permissionRequestId: pending.requestId
-    }).permissionRequestId).toBe(pending.requestId);
-
-    expect(() => PermissionPendingRequestQuerySchema.parse({
-      requestId: pending.requestId,
-      jobId: pending.jobId
-    })).toThrow();
-    expect(() => PermissionResolveRequestSchema.parse({
-      requestId: pending.requestId,
-      jobId: pending.jobId,
-      decision: "allow_scoped"
-    })).toThrow();
-    expect(() => PermissionResolveResultSchema.parse({
-      status: "approved",
-      requestId: pending.requestId,
-      jobId: pending.jobId,
-      decisionId: "permdec_20260710_abcdef12"
-    })).toThrow();
-
-    for (const unsafeField of ["params", "path", "url", "body", "command", "credential"] as const) {
-      expect(() => PermissionPendingRequestSchema.parse({
-        ...pending,
-        [unsafeField]: "private action material"
-      })).toThrow();
-    }
-  });
-
-  it("enforces fail-safe model-egress outcomes from boundary, policy, and content class", () => {
-    const common = {
-      schemaVersion: 1 as const,
-      providerProfileId: "provider_example",
-      payloadCharacters: 1000,
-      estimatedPayloadTokens: 250,
-      normalPayloadCharacterLimit: 18000,
-      policyHash
-    };
-
-    expect(
-      ModelEgressDecisionSchema.parse({
-        ...common,
-        outcome: "confirm",
-        reasonCode: "unknown_boundary_confirmation",
-        cloudBoundary: "unknown",
-        boundaryVerification: "unknown",
-        cloudSendPolicy: "ordinary_allowed",
-        contentClasses: ["ordinary"]
-      }).outcome
-    ).toBe("confirm");
-
-    expect(() =>
-      ModelEgressDecisionSchema.parse({
-        ...common,
-        outcome: "allow",
-        reasonCode: "ordinary_external_allowed",
-        cloudBoundary: "unknown",
-        boundaryVerification: "unknown",
-        cloudSendPolicy: "ordinary_allowed",
-        contentClasses: ["ordinary"]
-      })
-    ).toThrow("Model egress outcome must be confirm");
-
-    expect(
-      ModelEgressDecisionSchema.parse({
-        ...common,
-        outcome: "block",
-        reasonCode: "restricted_content_block",
-        cloudBoundary: "local",
-        boundaryVerification: "loopback_verified",
-        cloudSendPolicy: "ordinary_allowed",
-        contentClasses: ["restricted"]
-      }).outcome
-    ).toBe("block");
-  });
-
   it("rejects contradictory or understated model-egress classifications", () => {
     const common = {
       schemaVersion: 1 as const,
@@ -764,86 +528,6 @@ describe("security-sensitive shared contracts", () => {
       contentClasses: ["ordinary"],
       payloadCharacters: 1001
     })).toThrow("must be classified as large");
-  });
-
-  it("keeps one-use model-egress approvals strict, body-free, and distinct from Permission Broker grants", () => {
-    const pending = {
-      schemaVersion: 1 as const,
-      id: "egressreq_20260710_abcdef1234567890",
-      authorizationLayer: "model_egress" as const,
-      state: "pending" as const,
-      jobId: "job_20260710_abcdef12",
-      vaultId: "vault_20260710_abcdef12",
-      providerProfileId: "provider_example",
-      modelProfileId: "model_example",
-      providerIdentityHash: policyHash,
-      modelIdentityHash: policyHash,
-      policyHash,
-      payloadHash: policyHash,
-      evidenceSummaryHash: policyHash,
-      baseDecisionHash: policyHash,
-      decisionHash: policyHash,
-      operationId: "op_20260710_abcdef12",
-      reasonCode: "sensitive_confirmation" as const,
-      contentClasses: ["sensitive"] as const,
-      payloadCharacters: 100,
-      estimatedPayloadTokens: 25,
-      normalPayloadCharacterLimit: 1_000,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    };
-
-    expect(ModelEgressApprovalRequestRecordSchema.parse(pending).authorizationLayer).toBe("model_egress");
-    expect(() => ModelEgressApprovalRequestRecordSchema.parse({
-      ...pending,
-      permissionDecisionId: "permdec_20260710_abcdef12"
-    })).toThrow();
-    expect(() => ModelEgressApprovalRequestRecordSchema.parse({
-      ...pending,
-      prompt: "private body"
-    })).toThrow();
-    expect(() => ModelEgressApprovalRequestRecordSchema.parse({
-      ...pending,
-      state: "approved",
-      decision: "allow_once",
-      decidedAt: timestamp,
-      consumedAt: timestamp
-    })).toThrow("An approved model egress request must contain one unconsumed allow-once decision.");
-
-    expect(ModelEgressPendingRequestQuerySchema.parse({ requestId: pending.id })).toEqual({
-      requestId: pending.id
-    });
-    expect(() => ModelEgressPendingRequestQuerySchema.parse({
-      requestId: pending.id,
-      prompt: "private body"
-    })).toThrow();
-    expect(ModelEgressResolveRequestSchema.parse({
-      requestId: pending.id,
-      jobId: pending.jobId,
-      decision: "allow_once"
-    })).toMatchObject({ decision: "allow_once" });
-    expect(() => ModelEgressResolveRequestSchema.parse({
-      requestId: pending.id,
-      jobId: pending.jobId,
-      decision: "allow_once",
-      permissionDecisionId: "permdec_20260710_abcdef12"
-    })).toThrow();
-    expect(() => ModelEgressPendingRequestSchema.parse({
-      requestId: pending.id,
-      jobId: pending.jobId,
-      providerProfileId: pending.providerProfileId,
-      modelProfileId: pending.modelProfileId,
-      reasonCode: pending.reasonCode,
-      contentClasses: pending.contentClasses,
-      requestedAt: pending.createdAt,
-      secretRef: "provider_secret_private"
-    })).toThrow();
-    expect(() => ModelEgressResolveResultSchema.parse({
-      status: "approved",
-      requestId: pending.id,
-      jobId: pending.jobId,
-      endpoint: "https://private.example"
-    })).toThrow();
   });
 
   it("strips arbitrary provider headers from persisted provider metadata", () => {
