@@ -71,7 +71,7 @@ Storage:
 Runtime portability:
 
 - v0.1 implements desktop-local runtime only.
-- Agent jobs, tool calls, parser work, OCR, retrieval jobs, permission requests, and operation records should use serializable contracts.
+- Agent Jobs, tool calls, parser work, OCR, retrieval, high-risk effects and Operation records use serializable contracts at their real trust boundaries.
 - Heavy capabilities should be resolved through runtime capability adapters rather than direct desktop binary assumptions.
 - Future Agent runtime kinds are reserved: `desktop_local` and `remote_agent_backend`.
 - Future client capability tiers are reserved: `desktop_full`, `web_client`, and `mobile_lite`.
@@ -110,7 +110,7 @@ flowchart LR
   Main --> Tools["Pige Tool Registry"]
   Main --> Runtime["Runtime Capability Service"]
   Main --> Skills["Skill Registry Service"]
-  Main --> Permission["Permission Broker Service"]
+  Main --> Permission["High-risk Confirmation Service"]
   Main --> Conversations["Conversation History Service"]
   Main --> Proposals["Change Proposal Service"]
   Main --> Compiler["Wiki Compiler"]
@@ -407,7 +407,8 @@ vocabulary remains solely in `packages/schemas/src/index.ts`.
 Responsibilities:
 
 - Own vault open/close lifecycle.
-- Own startup onboarding state together with Settings Service and Model Provider Registry: `blocked_no_vault`, `capture_only`, or `ready`.
+- Own startup onboarding state together with Settings Service and Model Provider Registry:
+  `blocked_no_vault` or `ready`; model availability is a capability fact, not a mode.
 - Create new vaults from a selected parent folder and vault name.
 - Open existing Pige-compatible folders as vaults.
 - Switch active vaults only after pending writes are flushed and active jobs are paused, cancelled, or safely resumed later.
@@ -449,7 +450,7 @@ Deletion rule:
 Vault location and note storage rule:
 
 - The current vault location is a machine-local setting, not a portable vault setting.
-- First-run and capture-only behavior follows `docs/ONBOARDING_AND_FIRST_RUN.md`.
+- First-run and unavailable-model behavior follows `docs/ONBOARDING_AND_FIRST_RUN.md`; there is no separate capture-only workflow.
 - The vault path is displayed in Settings > Knowledge Base > Vault & Note Storage.
 - The vault manifest stores stable vault identity and schema metadata, not the active absolute path on the current computer.
 - "Open another vault" changes the active vault after service shutdown/startup checks.
@@ -639,8 +640,9 @@ The boundary has three planes:
 - **Agent control plane:** Pi decides semantic work; Host never shadows selection/replanning.
 - **Tool execution plane:** the Pige Tool Registry exposes narrow typed capabilities
   backed by deterministic services and bounded results.
-- **Host policy and commit plane:** Pige owns preservation, permissions, egress, limits,
-  Jobs, provenance, validation, exceptional intervention, and atomic publication.
+- **Host policy and commit plane:** Pige owns preservation, high-risk authority checks,
+  secret/local-only stripping, provider identity, limits, Jobs, provenance, validation,
+  exceptional intervention, and atomic publication.
 
 Agent decisions never weaken the host plane. A refusal returns a typed result to Pi or
 stops safely; it does not authorize a Host-selected fallback. Recoverable validation
@@ -652,14 +654,13 @@ result; it is neither a second semantic orchestrator nor an atomic cross-file cl
 Responsibilities:
 
 - Load `PIGE.md` schema.
-- Build Agent Runtime Policy Context from settings, vault policy, permissions, provider state, and local capabilities.
+- Build Agent Runtime Policy Context from settings, vault policy, provider state, and local capabilities.
 - Build workflow prompts.
 - Select an internal model call profile from app defaults.
 - Run the embedded Pi Agent loop through the one approved adapter.
-- Present the capability-scoped Pige tool catalog and each tool's current authority gate.
-  Task binding limits the current effect; it does not let Host intent heuristics hide an
-  otherwise relevant brokerable filesystem/commit tool merely because the exact path is
-  not pre-authorized. Pi may request it and pause for permission.
+- Present a typed Pige tool catalog. One submitted turn authorizes registered first-party
+  reads, parse/OCR/retrieval, user-directed fetch, and bounded local tools; each call is
+  still scope/resource validated but does not create an approval lifecycle.
 - Keep recoverable schema/tool/citation/evidence rejection inside that Pi loop as typed
   feedback until an accepted result, grounded abstention, or true external boundary.
 - Run Pi as the owner of wiki-change planning and bounded Markdown authorship.
@@ -668,17 +669,30 @@ Responsibilities:
 - Report created, updated, and flagged pages.
 - Treat extracted source content as untrusted data.
 - Produce structured write-tool calls; generic assistant prose never implicitly writes a
-  file. Pi may request arbitrary path/filesystem/commit actions through registered tools,
-  but receives no ambient Node handle and no effect occurs outside standing authority
-  until Permission Broker authorizes the exact action.
+  file. Pi receives no ambient Node handle. Irreversible deletion, original-file
+  overwrite, out-of-root write, arbitrary shell/unknown install, credential disclosure,
+  and equivalent escalation use the exceptional confirmation owner.
+
+Architecture invariant: **Host provides capabilities, authority boundaries, data
+reliability, and recovery; Pi Agent decides semantic work.** A Host `switch`, boolean
+state machine, fixed child-Job chain, correction prompt, terminal-repair loop, or hidden
+fallback pipeline that selects the next semantic action is a defect. Format dispatch
+inside an already selected deterministic tool, typed validation, CAS/idempotency,
+cancellation/recovery, citation checks, and Backup/Restore are allowed Host work.
+
+The machine reset inventory at `resources/architecture-reset.manifest.json` freezes the
+legacy mechanisms, large-owner budget, and AR1-AR4 sequence. Counts may fall, never grow.
+It is a review trigger rather than a compression target: a deterministic single-owner
+core may retain justified size, while mixed semantic coordinators must split or delete
+control rather than move it intact.
 
 The executable service inventory freezes five no-growth owners and responsibility
 deltas; budgets trigger review, not compression. H1 aligns Pi `0.80.7`; H2-H4 converge
 Home/Ingest, Job reliability and legacy retrieval without status promotion.
 
-H2 uses only `agent.submitTurn`/`agent_turn` for new semantics. Current sources require
-top-level `semanticOrchestration: agent_turn | capture_only`; old missing-field records
-normalize to `legacy_agent_ingest`, the only compatibility route. Pi-selected children
+H2 uses only `agent.submitTurn`/`agent_turn` for new semantics. Legacy `capture_only` and
+missing-field records normalize only for one bounded cleanup window; no new records use
+them. Pi-selected children
 stay deterministic; Home evidence order is Pi-owned and Host visibility-validated.
 
 `docs/PROMPT_DESIGN.md` is the detailed contract for prompt hierarchy, context packaging, untrusted source blocks, structured outputs, and prompt tests.
@@ -727,7 +741,9 @@ Responsibilities:
 - Route Agent/tool/parser/OCR/RAG jobs to the selected runtime adapter.
 - Prevent product logic from directly depending on Bun, `uv`, npm, shell, parser binaries, or large local model availability.
 - Let UI and Agent workflows degrade when capabilities are unavailable.
-- Record execution location, deployment kind, client tier, and data boundary in permission requests, job records, and operation records.
+- Record execution location, deployment kind, client tier, and data boundary in the
+  owning Job/Operation when it affects recovery or audit; do not create a permission
+  record for an ordinary tool call.
 
 Executable runtime and client-tier vocabulary is owned once by
 `PigeRuntimeKind`/`PigeClientCapabilityTier` in `packages/domain/src/index.ts`.
@@ -1138,7 +1154,8 @@ Settings categories:
 - AI > Local Capabilities settings: local RAG engine status, embedding/reranking model downloads, OCR engines, speech input, parser/toolchain health, and local runtime repair state.
 - AI > Agent & Memory settings: `PIGE.md`, behavior, memory, autonomous Activity/history,
   export/delete/reset, and vault-memory backup inclusion.
-- Security settings: default permission mode, saved scoped grants, YOLO status, grant revocation history, API key storage mode, cloud-send policy, secret redaction policy, and privacy indicators.
+- Security settings: API key storage mode, cloud-send visibility, secret redaction policy,
+  and privacy indicators. Pige has no YOLO or saved-grant mode.
 - Extensions settings: installed Skill records, staged Skill install proposals, Pi package install records, scopes, versions, capabilities, enablement state, update state, and rollback metadata.
 - System settings: auto-update channel/status, diagnostics, app version, bundled dependency versions, and support export without secrets.
 
@@ -1156,31 +1173,32 @@ Settings storage rules:
 
 Responsibilities:
 
-- Separate registered capability from exact action authority for Agent, Skill, package,
-  tool, filesystem, network, model and settings effects.
-- Produce safe prompts, store body-free machine-local decisions, and pause/resume
-  `waiting_permission` Jobs through exact claim/CAS reconciliation.
+- Own only exceptional high-risk confirmation: irreversible deletion, user-original
+  overwrite, out-of-root write, arbitrary shell or unknown package install, credential
+  disclosure, risky Agent edits, and equivalent authority/security escalation.
+- Produce one safe summary and return an allow/deny result to the active Pi turn or
+  deterministic operation. New Jobs never enter `waiting_permission`.
 
 Contract ownership:
 
-- The [Security Threat Model permission model](SECURITY_THREAT_MODEL.md#7-permission-model) owns permission modes, scopes, YOLO semantics, and the separation between capability authorization, high-impact confirmation, and model-egress approval.
-- `PermissionRequestSchema` and the related decision/grant schemas in `packages/schemas/src/index.ts` own the executable values and record invariants.
-- The [Permissions API domain](API_AND_IPC_DESIGN.md#67-permissions) owns renderer-facing commands and queries; this service never creates channel aliases.
-- [Settings and Preferences](SETTINGS_AND_PREFERENCES.md#6-setting-registry) owns storage, backup, apply, and confirmation behavior for permission settings.
+- The [Security Threat Model authority model](SECURITY_THREAT_MODEL.md#7-submitted-turn-authority-and-high-risk-confirmation)
+  owns the closed high-risk list and third-party boundary.
+- One canonical shared schema owns the minimal confirmation DTO and inferred type.
+- The [High-Risk Confirmation API domain](API_AND_IPC_DESIGN.md#67-high-risk-confirmation) owns the narrow
+  renderer command only where a user decision is actually required.
 
 Service-level constraints:
 
-- Current-action records bind vault, Job, actor/action version and digest, input/resource,
-  policy/runtime and binding hashes. Allow once is revalidated, consumed once, and marked
-  complete; denial executes nothing. Restart adopts exact durable truth, while ambiguous
-  consumed/effect state fails final without replay or Retry.
+- Durable replay/idempotency belongs to the effect's Job/Operation owner, not a parallel
+  request/decision/consume/completion state machine.
 - The renderer receives only reviewed actor/action/resource summaries. Raw action input,
   paths, commands, hashes, credentials, bodies, records and transport errors stay in main.
-- Prompts expose Deny/Allow once; mode/YOLO/revocation use CAS; grants remain deferred.
-- Every applicable authorization layer must pass; a broader grant or YOLO result cannot stand in for destructive intent or weaken a stricter Model Egress Decision.
+- Prompts expose only the concrete high-risk effect and Deny/Allow. There is no global
+  mode, saved grant, or model-egress approval layer.
 - Raw credentials stay inside reviewed provider adapters behind secret references and are never returned to the requesting actor.
 - Renderer surfaces receive safe request/decision summaries, not permission-store internals.
-- A denial or revocation leaves prior safe durable outputs intact and produces an explainable job result.
+- A denial leaves prior safe durable outputs intact and produces an explainable turn or
+  operation result.
 - Main registers read-only folder/text/fetch plus current-action `pige_install_pi_package`
   (`install_package`) for exact-package `installed_disabled` install only. No
   enable/runtime/shell/catalog/update/uninstall adapter is registered.
@@ -1200,9 +1218,13 @@ body-free failures/events):
 - Select relevant active Skills for Agent workflows based on explicit user request, capture type, note/source type, trigger phrases, and vault conventions.
 - Log Skill use when a Skill materially affects output.
 - Enforce that pure Skills are instruction packs.
-- Support external/Web Skills and package-provided Skills only through declared capabilities and Pige's permission broker.
+- Support external/Web Skills and package-provided Skills through declared capabilities;
+  only effects in the closed high-risk list invoke confirmation.
 - Prevent install-time execution during staging.
-- Route package install, local tool install, shell execution, network access, model calls, settings changes, brokered credential use, and destructive writes through explicit runtime permission checks. Raw credential access is rejected rather than offered as a Skill/package capability.
+- Never let third-party code inherit first-party turn authority. Unknown package install,
+  arbitrary shell, credential disclosure, out-of-root writes, and destructive actions
+  require confirmation; ordinary declared reads/fetches remain scope constrained. Raw
+  credential access is rejected rather than offered as a capability.
 
 Skill scope, storage/staging layout, metadata, capability vocabulary, and installation
 lifecycle are owned by
@@ -1910,7 +1932,7 @@ Reference-only capture, conversion, and local-tool evaluation:
 | --- | --- | --- | --- | --- | --- |
 | Git CLI | required | Git-friendly workflows and local helper operations. | https://git-scm.com | Bundle/pin or require packaged path per platform. | No automatic internal Git history in v0.1. |
 | Git for Windows / Git Bash | required | POSIX-like shell compatibility for helper workflows in the Windows package. | https://gitforwindows.org | Bundle/pin with Windows package. | Used by Pige-owned workflows only. |
-| Bun | required | Packaged JavaScript/TypeScript helper tools and permissioned Skill/package helper execution. | https://bun.sh | Bundle/pin runtime version. | No hidden installs during ordinary jobs; third-party package use must go through explicit Skill/package flow and Permission Broker checks. |
+| Bun | required | Packaged JavaScript/TypeScript helper tools and reviewed Skill/package execution. | https://bun.sh | Bundle/pin runtime version. | No hidden installs during ordinary Jobs; third-party package use must go through its explicit install/capability boundary and closed high-risk checks. |
 | uv | required | Managed Python helper environments and tools owned by Pige. | https://docs.astral.sh/uv/ | Bundle/pin version. | Do not allow task-time dependency downloads for core parser/runtime tools. |
 | Managed Python runtime | required | OCR/parsing helper execution when Python-based Pige-owned tools are used. | https://www.python.org | Pin runtime if bundled. | Isolate Pige-owned helper environments. |
 

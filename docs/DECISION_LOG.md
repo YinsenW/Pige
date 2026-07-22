@@ -1,7 +1,7 @@
 # Decision Log
 
 Status: Active decision ledger
-Last reviewed: 2026-07-19
+Last reviewed: 2026-07-22
 
 ## 1. Purpose
 
@@ -139,33 +139,6 @@ Critical accepted decisions below are bound to an owner statement, executable co
         {
           "path": "tests/unit/referenced-source-pipeline.test.ts",
           "markers": ["runs a referenced PDF through parser artifacts and Agent ingest without a managed copy"]
-        }
-      ]
-    },
-    {
-      "decisionId": "D-20260710-Strict-Durable-Records-And-Egress-Identity",
-      "owner": {
-        "path": "docs/AGENT_RUNTIME_POLICY_CONTEXT.md",
-        "markers": ["`payloadHash`", "`evidenceSummaryHash`", "`decisionHash`", "changed payload, prompt metadata, endpoint, model, or evidence identity creates a new audit"]
-      },
-      "code": [
-        {
-          "path": "apps/desktop/src/main/services/agent-ingest-service.ts",
-          "markers": ["createModelEgressPayloadHash", "createModelEgressEvidenceSummaryHash", "createModelEgressDecisionHash", "modelEgressAudit: {"]
-        },
-        {
-          "path": "packages/schemas/src/index.ts",
-          "markers": ["export const ModelEgressAuditSchema", "decisionHash", "A model-egress decision operation requires a typed payload and evidence audit summary"]
-        }
-      ],
-      "tests": [
-        {
-          "path": "tests/unit/agent-ingest-service.test.ts",
-          "markers": ["decisionHash", "expect(classificationOperations).toHaveLength(2)"]
-        },
-        {
-          "path": "tests/unit/durable-contract-schemas.test.ts",
-          "markers": ["requires typed body-free audit identity for model-egress operations"]
         }
       ]
     },
@@ -626,8 +599,9 @@ References:
 
 ### D-20260709-Permissioned-External-Skills
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-09
+Superseded by: D-20260722-Personal-Agent-Architecture-Reset
 
 Decision:
 
@@ -653,7 +627,7 @@ References:
 Status: Superseded
 Date: 2026-07-09
 Revised: 2026-07-12
-Superseded by: D-20260714-Pi-Capability-And-Authority
+Superseded by: D-20260722-Personal-Agent-Architecture-Reset
 
 Decision:
 
@@ -680,10 +654,10 @@ References:
 
 ### D-20260714-Pi-Capability-And-Authority
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-14
 Revised: 2026-07-18
-Supersedes: D-20260709-Permission-Modes-And-YOLO
+Superseded by: D-20260722-Personal-Agent-Architecture-Reset
 
 Decision:
 
@@ -2332,9 +2306,10 @@ References:
 
 ### D-20260710-Strict-Durable-Records-And-Egress-Identity
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-10
 Revised: 2026-07-10
+Superseded by: D-20260722-Personal-Agent-Architecture-Reset
 
 Decision:
 
@@ -3027,8 +3002,9 @@ References:
 
 ### D-20260719-OS-Agent-Capability-Is-Present-By-Default
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-19
+Superseded by: D-20260722-Personal-Agent-Architecture-Reset
 
 Decision:
 
@@ -3056,6 +3032,54 @@ References:
 - `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
 - `docs/SECURITY_THREAT_MODEL.md`
 - `docs/API_AND_IPC_DESIGN.md`
+
+### D-20260722-Personal-Agent-Architecture-Reset
+
+Status: Accepted
+Date: 2026-07-22
+Supersedes: D-20260709-Permissioned-External-Skills, D-20260709-Permission-Modes-And-YOLO, D-20260710-Strict-Durable-Records-And-Egress-Identity, D-20260714-Pi-Capability-And-Authority, D-20260719-OS-Agent-Capability-Is-Present-By-Default
+
+Decision:
+
+Pige is a personal local Agent with a minimal Host. Pi exclusively chooses semantic work;
+Host supplies typed capabilities, closed high-risk authority, data reliability, and
+recovery. One user submit authorizes ordinary registered first-party tools. Connected
+Provider identity plus Send authorizes bounded selected context after secret/local-only/
+identity checks. Per-tool Permission lifecycles, saved grants/YOLO, model-egress approval
+digests, and waiting approval Job states are deleted rather than extended.
+
+Governance and validation are risk-tiered. Ordinary development uses affected tests,
+typecheck, and build; full trace/independent review/package belongs to architecture,
+security, durable-data, migration, release, merge-candidate, and main nodes. macOS is the
+foreground early platform; other platforms are explicitly qualified later.
+
+Rationale:
+
+The pre-alpha accumulated SaaS-style state, duplicate schemas, approval choreography,
+Host semantic routing, brittle internal tests, and repeated documentation projections.
+Those mechanisms slow a personal project, obscure Pi ownership, and introduce more
+failure modes than the current v0.1 risks justify.
+
+Consequences:
+
+- AR1 removes approval/mode state; AR2 removes Host semantic pipelines; AR3 converges
+  Job/schema/recovery ownership; AR4 removes legacy UI/tests and splits mixed owners.
+- Existing unpublished approval data may be cleared or rejected; no long migration is
+  promised for internal development state.
+- Renderer/main isolation, secret storage, path confinement, source preservation,
+  citation validation, CAS/idempotency/cancel/recovery, and Backup/Restore remain.
+- Services above roughly 800-1000 lines trigger owner review. Deterministic single-owner
+  cores may be justified; mixed coordinators must split/delete orchestration.
+- Requirement, Exit, and Phase status is not promoted by this contract reset.
+
+References:
+
+- `AGENTS.md`
+- `docs/TECH_ARCHITECTURE.md`
+- `docs/SECURITY_THREAT_MODEL.md`
+- `docs/QUALITY_AND_TEST_STRATEGY.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+- `resources/architecture-reset.manifest.json`
 
 ## 4. Deferred Decisions
 

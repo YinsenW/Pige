@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 1,
+  "contractVersion": "2026-07-22",
+  "baselineCommit": "f0cfdd5cd7effccb0f7eca197dfc38c2000b878a",
+  "status": "contract_frozen_implementation_pending",
+  "statusPolicy": "Requirement, Exit, and Phase status may stay equal or move down while legacy evidence is removed; this contract never promotes status.",
+  "principle": "Host provides capabilities, authority boundaries, data reliability, and recovery; Pi Agent chooses semantic work.",
+  "phases": [
+    {
+      "id": "AR1",
+      "owner": "Development",
+      "goal": "Remove routine Permission/YOLO/saved-grant and model-egress approval state machines; retain only high-risk confirmation and a simple provider-send boundary."
+    },
+    {
+      "id": "AR2",
+      "owner": "Development",
+      "goal": "Delete Host semantic pipelines and make Home, ingest, retrieval, OCR, parsing, URL, Dataset, and current-note work Pi-selected typed tools."
+    },
+    {
+      "id": "AR3",
+      "owner": "Development",
+      "goal": "Converge Job lifecycle, recovery, IPC schemas, and durable primitives around one owner per boundary."
+    },
+    {
+      "id": "AR4",
+      "owner": "UI Design and Development",
+      "goal": "Remove legacy approval UI/tests and split App.tsx and oversized mixed-owner services without restyling or moving orchestration intact."
+    }
+  ],
+  "legacyMarkers": [
+    {
+      "id": "onboarding.capture_only",
+      "disposition": "DELETE",
+      "targetPhase": "AR2",
+      "token": "capture_only",
+      "maximumMatches": 9,
+      "allowedPaths": [
+        "apps/desktop/src/main/services/capture-service.ts",
+        "apps/desktop/src/main/services/vault-service.ts",
+        "apps/desktop/src/renderer/src/App.tsx",
+        "packages/contracts/src/index.ts",
+        "packages/schemas/src/index.ts"
+      ]
+    },
+    {
+      "id": "job.waiting_permission",
+      "disposition": "DELETE",
+      "targetPhase": "AR1",
+      "token": "waiting_permission",
+      "maximumMatches": 22,
+      "allowedPaths": [
+        "apps/desktop/src/main/services/home-agent-service.ts",
+        "apps/desktop/src/main/services/home-agent-turn-lifecycle.ts",
+        "apps/desktop/src/main/services/job-execution-coordinator.ts",
+        "apps/desktop/src/main/services/jobs-service.ts",
+        "apps/desktop/src/renderer/src/App.tsx",
+        "packages/schemas/src/index.ts"
+      ]
+    },
+    {
+      "id": "job.waiting_model_egress",
+      "disposition": "DELETE",
+      "targetPhase": "AR1",
+      "token": "waiting_model_egress",
+      "maximumMatches": 23,
+      "allowedPaths": [
+        "apps/desktop/src/main/services/home-agent-service.ts",
+        "apps/desktop/src/main/services/home-agent-turn-lifecycle.ts",
+        "apps/desktop/src/main/services/job-execution-coordinator.ts",
+        "apps/desktop/src/main/services/jobs-service.ts",
+        "apps/desktop/src/renderer/src/App.tsx",
+        "apps/desktop/src/renderer/src/components/CurrentNoteAgent.tsx",
+        "packages/schemas/src/index.ts"
+      ]
+    },
+    {
+      "id": "permission.yolo",
+      "disposition": "DELETE",
+      "targetPhase": "AR1",
+      "token": "YOLO",
+      "maximumMatches": 41,
+      "allowedPaths": [
+        "apps/desktop/src/main/index.ts",
+        "apps/desktop/src/main/services/permission-settings-service.ts",
+        "apps/desktop/src/main/services/permission-yolo-confirmation-registry.ts",
+        "apps/desktop/src/renderer/src/locales/de/messages.json",
+        "apps/desktop/src/renderer/src/locales/en/messages.json",
+        "apps/desktop/src/renderer/src/locales/fr/messages.json",
+        "apps/desktop/src/renderer/src/locales/ja/messages.json",
+        "apps/desktop/src/renderer/src/locales/ko/messages.json",
+        "apps/desktop/src/renderer/src/locales/zh-Hans/messages.json",
+        "packages/schemas/src/index.ts"
+      ]
+    },
+    {
+      "id": "model.egress_approval",
+      "disposition": "REWRITE",
+      "targetPhase": "AR1",
+      "token": "ModelEgress",
+      "maximumMatches": 354,
+      "allowedPaths": [
+        "apps/desktop/src/main/index.ts",
+        "apps/desktop/src/main/services/agent-ingest-service.ts",
+        "apps/desktop/src/main/services/agent-turn-conversation-store.ts",
+        "apps/desktop/src/main/services/home-agent-service.ts",
+        "apps/desktop/src/main/services/job-execution-coordinator.ts",
+        "apps/desktop/src/main/services/jobs-service.ts",
+        "apps/desktop/src/main/services/model-egress-approval-service.ts",
+        "apps/desktop/src/main/services/model-egress-policy.ts",
+        "apps/desktop/src/preload/index.ts",
+        "apps/desktop/src/renderer/src/App.tsx",
+        "apps/desktop/src/renderer/src/components/CurrentNoteAgent.tsx",
+        "apps/desktop/src/renderer/src/components/NoteAgentPanel.tsx",
+        "packages/contracts/src/index.ts",
+        "packages/schemas/src/index.ts"
+      ]
+    },
+    {
+      "id": "permission.broker",
+      "disposition": "REWRITE",
+      "targetPhase": "AR1",
+      "token": "PermissionBroker",
+      "maximumMatches": 29,
+      "allowedPaths": [
+        "apps/desktop/src/main/index.ts",
+        "apps/desktop/src/main/services/jobs-service.ts",
+        "apps/desktop/src/main/services/permission-broker-service.ts",
+        "apps/desktop/src/main/services/permissioned-external-capability-service.ts"
+      ]
+    }
+  ],
+  "implementationInventory": {
+    "DELETE": [
+      ["apps/desktop/src/main/services/model-egress-approval-service.ts", "AR1", "Development", "12-hash/one-shot approval owner is replaced by Provider Connect/select plus Send."],
+      ["apps/desktop/src/main/services/permission-settings-service.ts", "AR1", "Development", "Saved grants and ordinary permission defaults are removed."],
+      ["apps/desktop/src/main/services/permission-yolo-confirmation-registry.ts", "AR1", "Development", "YOLO is not a product mode."],
+      ["tests/unit/model-egress-approval-service.test.ts", "AR1", "Development", "Tests an implementation intentionally deleted."],
+      ["tests/unit/model-egress-job-recovery.test.ts", "AR1", "Development", "Approval waiting/recovery is no longer a Job lifecycle."],
+      ["tests/unit/permission-settings-service.test.ts", "AR1", "Development", "Tests removed saved-grant/default modes."],
+      ["tests/unit/permission-yolo-confirmation-registry.test.ts", "AR1", "Development", "Tests removed YOLO mode."],
+      ["tests/unit/permission-broker-job-recovery.test.ts", "AR1", "Development", "Ordinary permission waiting/recovery is removed."],
+      ["apps/desktop/src/main/services/home-agent-turn-lifecycle.ts", "AR2", "Development", "Host turn/repair shadow lifecycle is replaced by upstream Pi events and one durable projection owner."]
+    ],
+    "REWRITE": [
+      ["apps/desktop/src/main/services/permission-broker-service.ts", "AR1", "Development", "Shrink to the closed high-risk effect boundary."],
+      ["apps/desktop/src/main/services/model-egress-policy.ts", "AR1", "Development", "Retain local secret stripping, local_only blocking, identity drift, and bounded-context validation only."],
+      ["packages/schemas/src/index.ts", "AR1", "Development", "Remove permission/egress approval DTOs and unreachable Job states; keep canonical boundary schemas."],
+      ["packages/contracts/src/index.ts", "AR1", "Development", "Derive public types from canonical schemas and remove duplicate approval contracts."],
+      ["apps/desktop/src/main/index.ts", "AR1", "Development", "Remove approval IPC/actions while preserving renderer/main isolation."],
+      ["apps/desktop/src/preload/index.ts", "AR1", "Development", "Expose only the reduced typed authority/high-risk surface."],
+      ["apps/desktop/src/renderer/src/App.tsx", "AR1/AR4", "UI Design", "Remove approval/settings actions, then split by page/state owner without restyling."],
+      ["apps/desktop/src/renderer/src/components/CurrentNoteAgent.tsx", "AR1", "UI Design", "Remove model-egress approval actions; retain ordinary turn/error states."],
+      ["apps/desktop/src/renderer/src/components/NoteAgentPanel.tsx", "AR1", "UI Design", "Remove model-egress approval actions; retain ordinary turn/error states."],
+      ["apps/desktop/src/main/services/agent-ingest-service.ts", "AR2", "Development", "Keep preservation and tool adapters; delete Host-selected semantic sequence/repair."],
+      ["apps/desktop/src/main/services/home-agent-service.ts", "AR2", "Development", "Become a thin entry/projection owner around Pi and typed tools."],
+      ["apps/desktop/src/main/services/retrieval-service.ts", "AR2", "Development", "Retire Host answer synthesis/new retrieval_query route; retain typed retrieval capability."],
+      ["apps/desktop/src/main/services/job-execution-coordinator.ts", "AR3", "Development", "Own reliability transitions only, never semantic dispatch."],
+      ["tests/unit/permission-broker-service.test.ts", "AR1", "Development", "Replace lifecycle internals with closed-list allow/deny/effect tests."],
+      ["tests/unit/permission-broker-home-agent.test.ts", "AR1", "Development", "Prove ordinary tools create zero permission records and high-risk denial has no effect."],
+      ["tests/unit/model-egress-policy.test.ts", "AR1", "Development", "Replace approval hashes with secret/local_only/identity/bounded-context tests."],
+      ["tests/unit/agent-ingest-service.test.ts", "AR1/AR2", "Development", "Remove egress approval and fixed pipeline assertions; test Pi-selected tools and retained boundaries."],
+      ["tests/unit/home-agent-service.test.ts", "AR1/AR2", "Development", "Remove waiting states/Host routing internals; retain user-visible turn, persistence and failure behavior."],
+      ["tests/unit/job-execution-coordinator.test.ts", "AR3", "Development", "Test CAS/cancel/retry/checkpoint/terminal only."],
+      ["tests/unit/agent-led-ingest-retrieval.test.ts", "AR2", "Development", "Prove Pi chooses capabilities rather than a fixed Host chain."]
+    ],
+    "KEEP": [
+      ["apps/desktop/src/main/services/agent-ingest-tool-registry.ts", "AR2", "Development", "Typed capability catalog; it must not choose semantic order."],
+      ["apps/desktop/src/main/services/retrieval-evidence-boundary.ts", "AR2", "Development", "Scope, budget, redaction and citation validation remain Host-owned."],
+      ["apps/desktop/src/main/services/job-record-store.ts", "AR3", "Development", "Durable Job identity and storage remain Host-owned."],
+      ["apps/desktop/src/main/services/secret-store.ts", "AR1", "Development", "Credentials remain main-owned and non-exportable by default."],
+      ["apps/desktop/src/main/services/backup-service.ts", "AR3", "Development", "Backup/Restore is deterministic reliability work, not Agent semantic orchestration."],
+      ["apps/desktop/src/main/services/restore-coordinator-service.ts", "AR3", "Development", "Restore commit/rollback/recovery remains Host-owned."]
+    ]
+  },
+  "oversizedOwners": [
+    ["apps/desktop/src/main/services/jobs-service.ts", 6936, "REWRITE", "Job storage plus compatibility facade; lifecycle moves to one coordinator and semantic dispatch is deleted.", "AR3"],
+    ["apps/desktop/src/main/services/agent-ingest-service.ts", 4639, "REWRITE", "Preservation and capability adapters remain; Host semantic orchestration is deleted.", "AR2"],
+    ["apps/desktop/src/main/services/backup-service.ts", 4182, "KEEP", "Deterministic non-Agent backup transaction; split only where reliability ownership becomes unclear.", "AR3"],
+    ["apps/desktop/src/main/services/home-agent-service.ts", 3554, "REWRITE", "Split entry, conversation, tool registry, evidence validation, and publication; Pi keeps semantic control.", "AR2"],
+    ["apps/desktop/src/main/services/dataset-ingest-core.ts", 1839, "KEEP", "Deterministic selected-tool format core; cannot choose another semantic action.", "AR2"],
+    ["apps/desktop/src/main/services/agent-page-update-service.ts", 1804, "REWRITE", "Separate typed mutation validation from Operation commit and recovery.", "AR3"],
+    ["apps/desktop/src/main/services/knowledge-activity-service.ts", 1661, "REWRITE", "Separate query projection from durable undo/Operation reliability.", "AR3"],
+    ["apps/desktop/src/main/services/pdf-ocr-artifact-service.ts", 1524, "KEEP", "Deterministic selected-tool OCR artifact core.", "AR2"],
+    ["apps/desktop/src/main/services/local-database-service.ts", 1491, "KEEP", "Rebuildable local index owner with no Agent semantic routing.", "AR3"],
+    ["apps/desktop/src/main/services/dataset-query-service.ts", 1428, "REWRITE", "Separate deterministic query execution from durable projection and validation.", "AR3"],
+    ["apps/desktop/src/main/services/model-provider-registry.ts", 1409, "REWRITE", "Split provider identity/credential operations from model inventory when touched.", "AR3"],
+    ["apps/desktop/src/main/services/job-execution-coordinator.ts", 1275, "REWRITE", "Reduce to claim/CAS/cancel/retry/checkpoint/terminal reliability below the 1000-line target.", "AR3"],
+    ["apps/desktop/src/main/services/local-tool-manager-service.ts", 1254, "REWRITE", "Tool lifecycle returns typed outcomes; shared Job coordinator owns transitions.", "AR3"],
+    ["apps/desktop/src/main/services/dataset-service.ts", 1204, "KEEP", "Durable Dataset identity/revision owner.", "AR3"],
+    ["apps/desktop/src/main/services/job-record-store.ts", 1184, "KEEP", "Single durable Job record storage owner.", "AR3"],
+    ["apps/desktop/src/main/services/pi-package-manager-service.ts", 1124, "REWRITE", "Package transaction remains deterministic; high-risk installation confirmation is external.", "AR3"],
+    ["apps/desktop/src/main/services/agent-turn-conversation-store.ts", 1124, "KEEP", "Reference-based durable conversation storage owner.", "AR3"],
+    ["apps/desktop/src/main/services/dataset-query-core.ts", 1103, "KEEP", "Deterministic selected-tool query core.", "AR2"],
+    ["apps/desktop/src/main/services/permission-broker-service.ts", 1074, "REWRITE", "Shrink to exceptional high-risk confirmation only.", "AR1"],
+    ["apps/desktop/src/main/services/capture-service.ts", 1072, "REWRITE", "Preserve evidence and bind a turn; do not choose parse/OCR/ingest semantics.", "AR2"],
+    ["apps/desktop/src/main/services/pptx-media-ocr-artifact-service.ts", 1057, "KEEP", "Deterministic selected-tool OCR artifact core.", "AR2"],
+    ["apps/desktop/src/main/services/source-page-service.ts", 1055, "KEEP", "Durable source-page projection and checksum owner.", "AR3"],
+    ["apps/desktop/src/main/services/backup-coordinator-service.ts", 1031, "KEEP", "Deterministic non-Agent backup coordination and recovery.", "AR3"],
+    ["apps/desktop/src/main/services/restore-coordinator-service.ts", 1015, "KEEP", "Deterministic non-Agent restore coordination and rollback.", "AR3"],
+    ["apps/desktop/src/main/services/restore-job-store.ts", 1002, "KEEP", "Restore-specific durable recovery storage.", "AR3"],
+    ["apps/desktop/src/renderer/src/App.tsx", 9954, "REWRITE", "Split by page and state owner; UI behavior and visual contract remain unchanged.", "AR4"]
+  ],
+  "hardLimits": {
+    "newServiceLines": 1000,
+    "newRendererOwnerLines": 1000,
+    "piAdapterLines": 400,
+    "jobCoordinatorTargetLines": 1000
+  },
+  "validationTiers": {
+    "inner": ["affected tests", "typecheck", "build when runtime or renderer output changes"],
+    "ordinaryPullRequest": ["affected tests", "typecheck", "build", "changed-owner contract gate"],
+    "highRiskOrArchitecture": ["full tests", "full governance and trace", "security/data adversarial checks", "real macOS Electron when user-visible"],
+    "mergeCandidateAndMain": ["full verify", "macOS package", "downloaded-distribution smoke"],
+    "deferredPlatforms": ["Windows/Linux qualification only in explicit platform batches"]
+  }
+}

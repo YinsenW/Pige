@@ -144,7 +144,7 @@ Rules:
 - Device/client IDs are stable machine-local identifiers, not secrets.
 - Device/client IDs are stored in app data and referenced in operation records when useful.
 - Vault-scoped operation records may include device/client IDs, but not OS usernames, hostnames, API keys, or raw provider credentials.
-- Desktop YOLO grants do not imply future remote/mobile YOLO grants.
+- Desktop submitted-turn authority does not imply future remote/mobile authority.
 
 ## 6. Change Records
 
@@ -389,7 +389,7 @@ Restore rules:
   publishes a fresh destination, and CAS-swaps its machine binding only after validation.
   The old physical folder stays intact but unregistered; CAS failure leaves the old
   binding authoritative.
-- `clone_as_new` mints a new `vault_id`, preserves object IDs within the new vault namespace, records `origin_vault_id`/`restored_from_backup_id`, and never inherits permission grants, YOLO state, provider secrets, or raw external bindings.
+- `clone_as_new` mints a new `vault_id`, preserves object IDs within the new vault namespace, records `origin_vault_id`/`restored_from_backup_id`, and never inherits high-risk confirmations, Provider secrets, or raw external bindings.
 - Two registered vault paths must not share one `vault_id`.
 - Derived DB/indexes rebuild after restore.
 - If the current app cannot read the backup schema, show a clear unsupported message.

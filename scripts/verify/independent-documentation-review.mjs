@@ -16,22 +16,22 @@ const expectedDimensions = new Set([
   "documentation_leanness_and_maintainability"
 ]);
 const requiredSnapshotRoots = new Set([
-  ".github",
+  ".github/workflows/ci.yml",
+  ".github/workflows/packageability.yml",
   "AGENTS.md",
-  "README.md",
-  "CONTRIBUTING.md",
   "SECURITY.md",
   "PRIVACY.md",
-  "SUPPORT.md",
-  "LICENSE",
-  "NOTICE",
-  "docs",
-  "resources/documentation-quality",
-  "resources/parser-manifests",
-  "resources/traceability",
-  "resources/ui-visual-contract.manifest.json",
-  "scripts/verify",
-  "packages/schemas/src/index.ts",
+  "docs/AI_DEVELOPMENT_GUIDE.md",
+  "docs/TECH_ARCHITECTURE.md",
+  "docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md",
+  "docs/JOB_OPERATION_AND_RECOVERY.md",
+  "docs/QUALITY_AND_TEST_STRATEGY.md",
+  "docs/V0_1_IMPLEMENTATION_PLAYBOOK.md",
+  "docs/DECISION_LOG.md",
+  "resources/architecture-reset.manifest.json",
+  "resources/traceability/acceptance.manifest.json",
+  "resources/traceability/semantic-claims.manifest.json",
+  "scripts/verify/architecture-reset.mjs",
   "package.json"
 ]);
 

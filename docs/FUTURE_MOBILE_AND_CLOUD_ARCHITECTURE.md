@@ -272,7 +272,14 @@ Self-host requirements later:
 - Same permission and data-boundary model as hosted backend.
 - No requirement that ordinary mobile users understand server deployment.
 
-## 11. Permission Model Across Runtimes
+## 11. Authority Model Across Runtimes
+
+This section's former saved-grant/YOLO proposal is superseded by
+`D-20260722-Personal-Agent-Architecture-Reset`. Future clients must define explicit
+submitted-turn resource authority, third-party isolation and closed-list high-risk
+effects for their own runtime; desktop authority never transfers implicitly.
+
+<!-- Historical remote permission details below are non-normative migration research. -->
 
 Permission Broker remains the authority, but execution location matters.
 

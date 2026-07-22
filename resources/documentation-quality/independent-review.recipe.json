@@ -1,198 +1,72 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-19T07:30:00Z",
+  "reviewedAt": "2026-07-22T12:00:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
   "snapshot": {
     "roots": [
-      ".github",
+      ".github/workflows/ci.yml",
+      ".github/workflows/packageability.yml",
       "AGENTS.md",
-      "README.md",
-      "CONTRIBUTING.md",
       "SECURITY.md",
       "PRIVACY.md",
-      "SUPPORT.md",
-      "LICENSE",
-      "NOTICE",
-      "docs",
-      "resources/brand",
-      "resources/documentation-quality",
-      "resources/dependency-manifest",
-      "resources/parser-manifests",
-      "resources/traceability",
-      "resources/ui-visual-contract.manifest.json",
-      "scripts/verify",
-      "scripts/release",
-      "apps/desktop/electron-builder.release.yml",
-      "packages/schemas/src/index.ts",
-      "packages/contracts/src/index.ts",
-      "apps/desktop/src/main/index.ts",
-      "apps/desktop/src/main/services/local-settings.ts",
-      "apps/desktop/src/main/services/update-service.ts",
-      "apps/desktop/src/main/services/backup-coordinator-service.ts",
-      "apps/desktop/src/main/services/backup-service.ts",
-      "apps/desktop/src/main/services/agent-page-update-service.ts",
-      "apps/desktop/src/main/services/agent-turn-conversation-store.ts",
-      "apps/desktop/src/main/services/home-agent-service.ts",
-      "apps/desktop/src/main/services/home-agent-turn-lifecycle.ts",
-      "apps/desktop/src/main/services/jobs-service.ts",
-      "apps/desktop/src/main/services/command-capability-adapter.ts",
-      "apps/desktop/src/main/services/command-execution-service.ts",
-      "apps/desktop/src/main/services/model-egress-policy.ts",
-      "apps/desktop/src/main/services/model-egress-approval-service.ts",
-      "apps/desktop/src/main/services/model-provider-registry.ts",
-      "apps/desktop/src/main/services/notes-service.ts",
-      "apps/desktop/src/main/services/pi-agent-completion-policy.ts",
-      "apps/desktop/src/main/services/pi-agent-runtime-adapter.ts",
-      "apps/desktop/src/main/services/pi-package-capability-adapter.ts",
-      "apps/desktop/src/main/services/pi-package-manager-service.ts",
-      "apps/desktop/src/main/services/permission-broker-service.ts",
-      "apps/desktop/src/main/services/reader-selection-action-service.ts",
-      "apps/desktop/src/main/services/reader-selection-job-binding.ts",
-      "apps/desktop/src/main/services/reader-selection-proposal-service.ts",
-      "apps/desktop/src/main/services/retrieval-evidence-boundary.ts",
-      "apps/desktop/src/main/services/secret-store.ts",
-      "apps/desktop/src/main/services/skill-registry-service.ts",
-      "apps/desktop/src/main/services/source-fetch-service.ts",
-      "apps/desktop/src/main/services/readonly-node-os/first-party-readonly-node-os-capability-adapters.ts",
-      "apps/desktop/src/preload/index.ts",
-      "apps/desktop/src/renderer/src/App.tsx",
-      "apps/desktop/src/renderer/src/components/CurrentNoteAgent.tsx",
-      "apps/desktop/src/renderer/src/components/KnowledgeTreeMap.tsx",
-      "apps/desktop/src/renderer/src/components/NoteAgentPanel.tsx",
-      "apps/desktop/src/renderer/src/locales/de/messages.json",
-      "apps/desktop/src/renderer/src/locales/en/messages.json",
-      "apps/desktop/src/renderer/src/locales/fr/messages.json",
-      "apps/desktop/src/renderer/src/locales/ja/messages.json",
-      "apps/desktop/src/renderer/src/locales/ko/messages.json",
-      "apps/desktop/src/renderer/src/locales/zh-Hans/messages.json",
-      "apps/desktop/src/renderer/src/styles/app.css",
-      "packages/markdown/src/index.ts",
-      "tests/fixtures/service-responsibility-inventory.json",
-      "tests/unit/desktop-shell-contract.test.ts",
-      "tests/unit/command-execution-service.test.ts",
-      "tests/unit/agent-led-ingest-retrieval.test.ts",
-      "tests/unit/backup-coordinator-service.test.ts",
-      "tests/unit/backup-service.test.ts",
-      "tests/unit/full-ui-library.test.ts",
-      "tests/unit/full-ui-renderer-contract.test.ts",
-      "tests/unit/full-ui-settings-surface.test.ts",
-      "tests/unit/home-agent-service.test.ts",
-      "tests/unit/home-agent-conversation-ui.test.ts",
-      "tests/unit/knowledge-tree-ui.test.ts",
-      "tests/unit/markdown-renderer.test.ts",
-      "tests/unit/model-egress-approval-service.test.ts",
-      "tests/unit/model-egress-policy.test.ts",
-      "tests/unit/model-provider-registry.test.ts",
-      "tests/unit/model-settings-error-ui.test.ts",
-      "tests/unit/note-agent-ui.test.ts",
-      "tests/unit/notes-service.test.ts",
-      "tests/unit/pi-agent-runtime-adapter.test.ts",
-      "tests/unit/pi-package-manager-service.test.ts",
-      "tests/unit/permission-broker-service.test.ts",
-      "tests/unit/permissioned-external-capability-service.test.ts",
-      "tests/unit/reader-selection-action-service.test.ts",
-      "tests/unit/reader-selection-mutation-service.test.ts",
-      "tests/unit/reader-selection-proposal-service.test.ts",
-      "tests/unit/restore-ui.test.ts",
-      "tests/unit/security-contract-schemas.test.ts",
-      "tests/unit/skill-registry-service.test.ts",
-      "tests/unit/source-fetch-service.test.ts",
-      "tests/unit/first-party-readonly-node-os-capabilities.test.ts",
-      "tests/unit/update-contract-schemas.test.ts",
-      "tests/unit/update-service.test.ts",
-      "tests/unit/local-settings.test.ts",
+      "docs/AI_DEVELOPMENT_GUIDE.md",
+      "docs/TECH_ARCHITECTURE.md",
+      "docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md",
+      "docs/JOB_OPERATION_AND_RECOVERY.md",
+      "docs/QUALITY_AND_TEST_STRATEGY.md",
+      "docs/V0_1_IMPLEMENTATION_PLAYBOOK.md",
+      "docs/DECISION_LOG.md",
+      "resources/architecture-reset.manifest.json",
+      "resources/traceability/acceptance.manifest.json",
+      "resources/traceability/semantic-claims.manifest.json",
+      "scripts/verify/architecture-reset.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review binds the built-in desktop Agent's first-party filesystem, network, command and package capabilities to one submitted-task authority and one exact audit without duplicate prompts. The general command tool uses exact executable/argv execution, bounded output/time/cancellation and a reduced environment; ordinary connected-provider task context proceeds without a second confirmation. Restricted content, unknown or changed provider boundaries, irreversible destructive effects, credential disclosure and third-party self-authorization remain separate hard boundaries.",
-    "exclude": [
-      "resources/documentation-quality/independent-review.recipe.json"
-    ],
-    "minimumFileCount": 132,
-      "reviewedSha256": "84f11802738be9fe6b12a469c91b17b14343b5f99c805c01c1007a4da6c1d722"
+    "scope": "Independent review of the personal-Agent architecture reset: Pi semantic ownership, submitted-turn authority, closed high-risk effects, Provider Send, deletion inventory, risk-tiered verification, budgets, macOS-first sequencing, and unchanged product status.",
+    "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
+    "minimumFileCount": 17,
+    "reviewedSha256": "88281e9fbad4f63b469c6c91a2813b19d7835c41614dcc6c359ad4f16c16b1d0"
   },
-  "reviewers": [
-    {
-      "reviewerId": "os-agent-task-authority-planning-review",
-      "task": "Built-in OS capability and submitted-task authority review",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance",
-        "ongoing_development_support",
-        "documentation_leanness_and_maintainability"
-      ],
-      "independence": "Product Planning owns only documentation and independently compares the Development-owned command executor, capability adapter, Permission Broker and model-egress policy with task authority, secret handling, hard safety boundaries, recovery, IPC and test contracts."
-    }
-  ],
+  "reviewers": [{
+    "reviewerId": "architecture-reset-planning-review",
+    "task": "Personal Agent architecture reset contract review",
+    "independentDimensions": [
+      "navigation_and_resource_lifecycle",
+      "cross_document_contract_consistency",
+      "continuous_traceability_and_acceptance",
+      "ongoing_development_support",
+      "documentation_leanness_and_maintainability"
+    ],
+    "independence": "Product Planning reviews only contracts and executable governance; Development still owns every implementation deletion, rewrite, security test, package and runtime artifact."
+  }],
   "dimensions": [
-    {
-      "id": "navigation_and_resource_lifecycle",
-      "score": 9.8,
-      "reviewerId": "os-agent-task-authority-planning-review",
-      "blockerCount": 0,
-      "summary": "Built-in OS capabilities stay main-owned and machine-local. Exact executable identity, argv, working directory, timeout and one-use task authority are bound without exposing raw command authority to the renderer."
-    },
-    {
-      "id": "cross_document_contract_consistency",
-      "score": 9.8,
-      "reviewerId": "os-agent-task-authority-planning-review",
-      "blockerCount": 0,
-      "summary": "PRD, runtime policy, API, Pi integration, privacy and security owners agree that submitting a task authorizes ordinary first-party OS effects and connected-provider context once, while hard boundaries remain explicit."
-    },
-    {
-      "id": "continuous_traceability_and_acceptance",
-      "score": 9.8,
-      "reviewerId": "os-agent-task-authority-planning-review",
-      "blockerCount": 0,
-      "summary": "The change binds capability presence and duplicate-prompt removal without promoting unrelated Requirements, Exits or phases; full interactive terminal sessions and third-party grant defaults remain separate follow-ups."
-    },
-    {
-      "id": "ongoing_development_support",
-      "score": 9.8,
-      "reviewerId": "os-agent-task-authority-planning-review",
-      "blockerCount": 0,
-      "summary": "Focused tests cover exact command execution, output and time bounds, cancellation, environment reduction, real Feishu CLI installation, Home tool use, task authority, third-party spoof rejection and context-egress policy."
-    },
-    {
-      "id": "documentation_leanness_and_maintainability",
-      "score": 9.8,
-      "reviewerId": "os-agent-task-authority-planning-review",
-      "blockerCount": 0,
-      "summary": "Existing Pi, permission, runtime-policy, API, privacy and security owners absorb the decision; two bounded main services and the responsibility inventory avoid a renderer or parallel permission stack."
-    }
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"The start contract routes ordinary work to one semantic owner, Pi, while Host capability, authority, persistence and recovery owners stay explicit."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Security, privacy, runtime, Job, Provider and UI owners share submitted-turn authority, a closed high-risk list and no ordinary approval state machine."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Affected Requirements and Exits are planned, AR1 through AR4 are explicit, and the reset cannot promote product status."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"The machine inventory gives Development exact DELETE, REWRITE and KEEP targets, no-growth guards, owner budgets and staged verification nodes."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Decisions are defined once in canonical owners; ordinary PRs avoid full snapshot ceremony while architecture, merge-candidate and main retain complete review."}
   ],
   "verification": [
-    {
-      "command": "Independent review of built-in OS capability and submitted-task authority",
-      "status": "passed",
-      "evidence": "Review confirms the Agent can use first-party filesystem, network, command and package capabilities without duplicate prompts while third-party self-authorization, restricted content and irreversible effects remain blocked or separately confirmed."
-    },
-    {
-      "command": "npm run verify:docs && npm run verify:decisions && npm run verify:traceability",
-      "status": "passed",
-      "evidence": "Links, document map, decisions and locked claims pass with no Requirement, Exit or Phase promotion."
-    },
-    {
-      "command": "npm run verify:contracts && npm run verify:independent-documentation-review && npm run verify:documentation-leanness",
-      "status": "passed",
-      "evidence": "CON-001 through CON-004, service inventory and focused command/permission/egress tests bind the implementation while the union recipe retains published product roots."
-    }
+    {"command":"npm run verify:architecture-reset","status":"passed","evidence":"Executable guards freeze AR1-AR4, legacy-mechanism no-growth, implementation dispositions, owner budgets and planned status."},
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Canonical Job reliability plus submitted-turn, high-risk and Provider-send contracts remain single-owned and fail safe."},
+    {"command":"npm run verify","status":"passed","evidence":"The full merge-candidate governance suite passes after trace, semantic and reviewed-snapshot regeneration."}
   ],
   "coordination": {
-      "taskId": "os-agent-task-authority-20260719",
-      "taskTitle": "Built-in OS capability and submitted-task authority",
+    "taskId": "personal-agent-architecture-reset-20260722",
+    "taskTitle": "Personal Agent architecture reset",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-      "compatibility": "The candidate adds one bounded first-party command executor and removes duplicate first-party task/context prompts; it does not expose secrets, grant third-party packages authority, bypass restricted content, or change destructive, backup, restore or vault confirmations.",
-      "acknowledgement": "Product Planning records the user-authoritative OS Agent model, keeps Development code/test ownership separate, and leaves interactive terminal sessions and broader third-party grant policy as explicit future work."
+    "compatibility": "Legacy internal approval and Host-orchestration mechanisms are intentionally not a compatibility target; durable user knowledge, sources, credentials and recoverable data remain protected.",
+    "acknowledgement": "Product Planning freezes the contract and machine inventory; Development executes AR1-AR4 before ordinary feature work resumes, with no Requirement, Exit or Phase promotion."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The bounded command runner has no persistent PTY or interactive stdin session; commands that require an interactive terminal may still need a dedicated follow-up capability.",
-    "Third-party packages and Skills remain unable to inherit Pige first-party task authority by naming convention and still require their own reviewed authority path."
+    "Current product code still contains the bounded legacy permission and model-egress mechanisms until AR1 lands.",
+    "Current Host ingest/retrieval orchestration remains bounded deletion debt until AR2 lands.",
+    "Windows and Linux qualification remains deferred and unclaimed during early macOS-first development."
   ]
 }

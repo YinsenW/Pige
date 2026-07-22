@@ -20,7 +20,7 @@
         { "id": "CON-001", "weight": 2, "title": "Stable IDs, page types, source kinds, and durable schema versions have one executable vocabulary." },
         { "id": "CON-002", "weight": 2, "title": "Job classes, states, records, operations, and recovery contracts are single-owned and compatible." },
         { "id": "CON-003", "weight": 2, "title": "Source records, asset roots, backup, restore, and vault identity have unambiguous authority and migration rules." },
-        { "id": "CON-004", "weight": 2, "title": "Provider, permission, secret-use, and model-egress contracts are typed and fail safe." },
+        { "id": "CON-004", "weight": 2, "title": "Submitted-turn authority, high-risk effects, Provider sends, and secret handling fail safe." },
         { "id": "CON-005", "weight": 2, "title": "Decision history identifies current versus superseded contracts and passes semantic contract validation." }
       ]
     },
@@ -42,8 +42,8 @@
         { "id": "DEV-001", "weight": 2, "title": "Current implementation status and remaining work are honest and centrally discoverable." },
         { "id": "DEV-002", "weight": 2, "title": "Implementation starts from requirement, owner, durable data, risks, tests, and documentation impact." },
         { "id": "DEV-003", "weight": 2, "title": "Concurrent planning and implementation changes carry explicit cost and compatibility notifications." },
-        { "id": "DEV-004", "weight": 2, "title": "Normal repository verification runs documentation, traceability, decision, and contract gates." },
-        { "id": "DEV-005", "weight": 2, "title": "Generated score evidence is reproducible and each dimension independently meets the threshold." }
+        { "id": "DEV-004", "weight": 2, "title": "Ordinary changes use affected tests and change-tier checks; full governance runs at architecture, security, data, release, merge-candidate, and main nodes." },
+        { "id": "DEV-005", "weight": 2, "title": "Architecture-reset manifests and scheduled full evidence are reproducible without per-slice hash ceremony." }
       ]
     },
     {

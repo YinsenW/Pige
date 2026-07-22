@@ -219,8 +219,8 @@ Behavior:
 - No mode chips: Pi decides semantics; Host handles exceptional boundaries.
 - Host UI does not classify by punctuation, URL, attachment, or file type. Pi may answer
   directly or retrieve; citations appear only when local evidence is used.
-- The first idle capture-only Home shows one compact inline choice above the composer:
-  `Connect Model` or quiet `Continue capture-only`. Either explicit choice dismisses it
+- The first idle model-unavailable Home shows one compact inline choice above the composer:
+  `Connect Model` or quiet `Continue without model`. Either explicit choice dismisses it
   for that vault on this machine; it is not a modal, destination, or recurring banner.
 - A no-source model wait replaces that guide and matching Recent Work row: one localized
   status plus `Open Models`, never Retry, Job ID, or local-capability copy. Source waits
@@ -389,7 +389,7 @@ On submit:
   Import/Table/Database mode; after preservation, Pi decides whether to inspect or query.
 
 Home's accessible model listbox changes the Global Default for new calls, never
-per-turn routing. Unavailable or switching blocks Agent Send, not capture-only.
+per-turn routing. Unavailable or switching blocks Agent Send while source submission remains available; there is no separate capture-only mode.
 
 ## 6. Processing Timeline
 
@@ -856,7 +856,7 @@ Settings rules:
 - A settings page owns one conceptual domain. Do not mix models, permissions, local tools, extensions, and backup in one screen.
 - Models contains cloud language model provider connection only.
 - Local Capabilities contains local RAG, embedding/reranking downloads, OCR, speech input, parsers, and bundled toolchain health.
-- Permissions & Privacy contains permission modes, saved grants, API key storage, cloud-send policy, secret redaction, and YOLO.
+- Permissions & Privacy explains submitted-turn authority, the closed high-risk boundary, Provider-send policy, secret storage/redaction, and `local_only`.
 - Vault & Note Storage contains vault identity, active vault path, note/knowledge root path, source asset root path, source storage policy, recent vaults, backup, restore, export, and trash.
 - Index & Maintenance contains rebuild index, reset local database, knowledge health, chunk status, and repair actions.
 - Agent & Memory contains `PIGE.md`, Agent behavior preferences, memory inspection, and autonomous activity/history controls.
@@ -975,60 +975,15 @@ Provider setup discloses the destination once. Saved authority is exact to that 
 
 Voice input, OCR, local RAG, parser health, and bundled toolchain status belong to Local Capabilities. Models should not contain those controls.
 
-### Agent Capability Permission Mode And Grants
+### Submitted-turn Authority And High-risk Effects
 
-```txt
-Permissions
-
-Default mode
-( ) Ask every time
-(x) Remember scoped grants
-( ) YOLO full access
-
-Saved scoped grants
-Source Research
-  External network: always allowed for this Skill version
-  Revoke
-
-YOLO full access
-Off
-Enable...
-```
-
-These modes cover eligible requests outside standing authority; actor/tool names do not
-grant authority. Active-vault recoverable knowledge Markdown and exact selected-source
-admission remain prompt-free. Other filesystem, network, shell, package, credential-use,
-or commit effects open Permission Broker and resume the same Job after resolution.
-
-- Ask every time: prompt for each eligible capability action.
-- Remember scoped grants: prompts may offer `Always Allow` for an exact stable
-  actor/version/capability/resource scope.
-- YOLO full access: auto-allows eligible external scopes; never raw secrets,
-  destructive/irreversible effects, policy changes, original-source mutation, or
-  exceptional Model Egress gates.
-
-Common grant scopes:
-
-- Only this URL.
-`Always Allow` appears only for a Broker-defined stable scope such as one file, folder,
-URL, or domain. The [Security permission model](SECURITY_THREAT_MODEL.md#7-permission-model)
-owns authority and scope semantics; this document owns their presentation only.
-
-YOLO enable dialog:
-
-```txt
-Enable YOLO full access?
-
-Pige will stop asking for eligible external Skill, package, network,
-shell, and filesystem scopes. Exceptional boundaries and stricter
-cloud-send choices still apply. Raw secrets are never exposed.
-
-Actions will still be logged. You can turn this off anytime.
-
-Cancel        Enable YOLO
-```
-
-When YOLO is enabled, show a calm persistent `YOLO: On` indicator.
+The user pressing Send authorizes ordinary registered first-party tools for that exact
+turn. Do not show permission modes, saved grants, per-tool approval cards, or YOLO.
+Only a concrete closed-list high-risk effect opens a focused modal: irreversible delete,
+overwrite of a user file, write outside an explicitly selected directory, arbitrary
+shell/unknown-package install, or credential display/export. Deny is safe and executes
+no effect. Connected Provider plus Send authorizes the selected bounded context; secrets
+are removed locally and `local_only` blocks the call.
 
 ### Agent And Memory Settings
 
@@ -1098,14 +1053,14 @@ Skill details should show:
 - Files included.
 - Requested capabilities.
 - Data boundary.
-- Saved permission grants and revoke controls.
+- Declared capabilities and whether they are first-party or third-party.
 - Trigger phrases.
 - Last used.
 - Enable, disable, uninstall, export, and update actions.
 
-Skills should feel like small knowledge workflows, not apps. Pure Skills are Markdown instruction packs. External/Web Skills can declare sensitive capabilities, but the UI must show those capabilities before enabling and route runtime actions through the Permission Broker.
+Skills should feel like small knowledge workflows, not apps. Pure Skills are Markdown instruction packs. External/Web Skills declare capabilities before enabling and run in their reviewed isolation boundary; they do not inherit first-party turn authority.
 
-Focused permission dialog target:
+Focused high-risk dialog target:
 
 ```txt
 Pi Agent wants to commit an external file change
@@ -1119,11 +1074,11 @@ Selected project · docs/meeting-notes.md
 Command
 Create or replace this file for the current task
 
-Deny        Allow Once        Always Allow
+Deny        Confirm write
 ```
 
-The target permission request opens one compact, calm modal owned by the active Agent
-Job; it is not a passive inline status or a second workflow. It uses `role="dialog"`, moves
+The high-risk request opens one compact, calm modal owned by the effect surface, not a
+waiting Job state or second workflow. It uses `role="dialog"`, moves
 and traps focus inside while open, and restores focus to the invoking task/composer
 control after resolution. Action, target, and command summary are bounded, localized,
 and authored from the typed Host request—not copied from model prose, a tool description,
@@ -1131,27 +1086,10 @@ raw `reason`, `commandPreview`, `affectedPaths`, shell text, or an unredacted ab
 path. A Pige-owned tool name cannot bypass this dialog when its requested effect is
 outside standing authority.
 
-`Deny` is the default/cancel-safe action; Escape or closing the dialog denies that exact
-pending request. `Allow Once` authorizes only the bound current action. `Always Allow`
-appears only when Permission Broker marks the actor/version/capability/resource scope as
-eligible for a saved grant. While the dialog is active, suppress the exact matching Job
-from Recent Work so the user never sees a second progress/failure owner. Disable all
-actions while resolving. After allow or deny, close the dialog, restore focus, and let
-the ordinary Job row return with its resumed or terminal truth.
-
-The implemented current-action foundation is narrower: one compact Home card with safe
-localized actor/action/resource summaries, `Deny` focused by default, and `Allow once`
-only. It already provides one status owner, durable reread, exact identity guards, and
-fail-closed uncertainty. Converging that card to the focused modal plus saved-grant/
-Always Allow/YOLO presentation remains planned and is not claimed by current evidence.
-
-Destructive, irreversible, policy-changing, original-source mutation, and other always-
-confirm effects use stronger explicit consequence copy with the safe action as default;
-`Always Allow`, saved grants, and YOLO never suppress that confirmation. Raw secret access
-remains blocked rather than promptable. If YOLO full access is enabled, only eligible
-Permission Broker actions skip the dialog; the timeline may show a subtle `Auto-allowed
-by YOLO` event with details available on inspection. Stricter Model Egress Decisions keep
-their own focused confirmation.
+`Deny` is default/cancel-safe; Escape denies that exact effect. Confirmation authorizes
+only the bound effect and is never reusable. Disable actions while resolving, restore
+focus afterward, and keep raw secrets blocked rather than promptable. Ordinary parsing,
+OCR, retrieval, user-specified fetches and registered local tools never open this modal.
 
 ### Local Capabilities Settings
 
@@ -1616,7 +1554,7 @@ Must implement:
 - Settings: grouped sidebar with Basic, Knowledge Base, AI, Security, Extensions, and System.
 - Settings: Models page for Provider connection, inventory, and Global Default.
 - Settings: Local Capabilities page for local RAG, OCR, speech, parsers, and bundled toolchain.
-- Settings: Permissions & Privacy page for default permission mode, saved grants, cloud-send policy, secrets, and YOLO.
+- Settings: Permissions & Privacy page for submitted-turn authority, closed high-risk effects, Provider-send policy, secrets, redaction, and `local_only`.
 - Settings: Agent & Memory page.
 - Settings: Skills and Pi Packages under Extensions.
 - Settings: Vault & Note Storage plus Index & Maintenance under Knowledge Base.

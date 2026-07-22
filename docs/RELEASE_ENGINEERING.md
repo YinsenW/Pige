@@ -156,7 +156,7 @@ Update flow:
 Rules:
 
 - Never interrupt active capture, review, backup, restore, parsing, OCR, or index rebuild without user action.
-- Do not update while a destructive or long-running permissioned operation is active.
+- Do not update while an irreversible/high-risk effect or long-running durable operation is active.
 - Store update state machine in machine-local app data.
 - Failed update should leave current app usable.
 - User can disable automatic download, but update checks remain visible in About/Settings.
@@ -376,6 +376,15 @@ exact final metadata/manifests; GitHub update check plus alpha-to-alpha risky-jo
 distributables at or below 330,000,000 bytes (300,000,000 target); packaged memory/scale/
 recovery budgets with no hidden waiver; notices, current dependency registry, smokes,
 backup/restore across update, and the 25-source scenario on macOS plus supported Windows.
+
+### Early macOS-first qualification
+
+During personal-use v0.1 iteration, macOS is the foreground real-Electron, package and
+user-acceptance platform. Ordinary feature PRs do not wait for Windows/Linux packaging.
+Full verify plus macOS package/downloaded-distribution runs at merge-candidate and main;
+Windows/Linux installers, native behavior and visual qualification are batched later.
+Portable contracts and platform adapters remain required, and no Windows/Linux support
+claim is made until that explicit qualification succeeds.
 No critical security issue may remain; current security/private-reporting, privacy,
 support/redaction, conduct and issue/PR policies must match the released behavior.
 

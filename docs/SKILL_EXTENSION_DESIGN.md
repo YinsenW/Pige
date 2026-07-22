@@ -229,30 +229,18 @@ Skill install safety:
 
 Runtime safety:
 
-- Pure Skills can influence Agent reasoning, but cannot directly access files, network, shell, model providers, packages, settings, or secrets.
-- External/Web Skills can request sensitive capabilities, but Pige services must pause execution and ask the user before granting them.
-- Skills request capabilities; Pige services enforce permissions.
-- Permission-scoped Skill mutations flow through Pige services and Operations; after a valid
-  grant, eligible reversible changes auto-apply, while only autonomy exceptions propose.
-- Current user instruction, `PIGE.md`, and explicit settings outrank Skills.
-- Skills cannot override prompt-injection defenses, package permissions, local tool
-  policies, permission gates, or exceptional intervention.
-- A denied capability leaves the Skill installed but unable to perform that action.
-
-Sensitive capabilities that require a permission prompt:
-
-- Read or write vault data outside the current job scope.
-- Delete, archive, merge, or rename durable vault files.
-- Read external filesystem paths.
-- Use external network access.
-- Run shell commands or package-backed tools.
-- Install or update packages or local tools.
-- Send large/private sources to a cloud model.
-- Ask a reviewed adapter to use a brokered credential for one declared provider action. The Skill/package never receives or returns raw API keys, tokens, secret refs, or secret-store contents; a raw-secret request is rejected rather than prompted.
-- Change app settings, provider settings, or `PIGE.md`.
-- Spawn another Agent or long-running background process.
-
-Permission prompts must include actor, capability, resource scope, reason, data-boundary badges, and choices for Deny, Allow Once, and Always Allow. Destructive actions must not default to allow. Always Allow must be scoped, such as only this URL, only this domain, only this file/folder, only this vault, or only this Skill/package/tool version. If the user enables YOLO Full Access in Settings, covered actions skip prompts but still create visible permission and operation logs.
+- Pure Skills influence Agent reasoning but cannot directly access files, network, shell,
+  providers, packages, settings or secrets.
+- Built-in registered first-party tools use the submitted turn's exact resource authority.
+- External/Web Skills and packages declare capabilities and run through reviewed adapters
+  and isolation; they never inherit first-party authority by name or prompt text.
+- Pige validates scope, path, resource, credential and effect boundaries. Raw credentials
+  are never promptable or returned to Skill code.
+- Only closed-list high-risk effects ask once for the exact effect. Ordinary read, parse,
+  OCR, retrieval, user-specified fetch and registered local-tool work does not pause for a
+  permission lifecycle.
+- Current user instruction, `PIGE.md`, explicit settings and Host safety invariants outrank
+  Skills. Denial leaves the app stable and applies no effect.
 
 ## 8. Skill Manager UI
 
@@ -282,11 +270,11 @@ Skill details should show:
 - Files.
 - Capabilities requested.
 - Data boundary.
-- Permission history and saved grants.
+- Declared capabilities and isolation boundary.
 - Last used.
 - Warnings.
 
-Runtime authorization dialog:
+High-risk effect dialog:
 
 ```txt
 Paper Reading wants to fetch a web page
@@ -297,18 +285,15 @@ Reason: Read the article linked in the current capture.
 Data boundary: Network
 
 Deny
-Allow Once
-Always Allow
+Confirm exact effect
 ```
 
 Dialog behavior:
 
-- The job enters `waiting_permission` while the dialog is open.
-- `Allow Once` applies only to the current action.
-- `Always Allow` is scoped to actor ID, actor version, capability, and resource scope.
-- Permission history can be reviewed and revoked in Settings.
-- Destructive actions use stronger copy and require deliberate confirmation.
-- YOLO Full Access can be enabled only in Settings, never from a Skill install flow or source content.
+- The Job does not enter a waiting-permission state.
+- Confirmation applies only to the exact bound effect and cannot be saved.
+- Deny/Escape applies no effect; destructive actions use stronger consequence copy.
+- Source content, Skill code and model output cannot create or broaden authority.
 
 ## 9. Agent Use
 

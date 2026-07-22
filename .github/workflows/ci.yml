@@ -2,9 +2,11 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -29,23 +31,29 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Test
+      - name: Test merge candidate or main
+        if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gates')
         run: npm test
 
       - name: Build
         run: npm run build
 
-      - name: Verify docs, manifests, and boundaries
+      - name: Verify changed-candidate invariants
+        run: npm run verify:change
+
+      - name: Verify full governance and repository boundaries
+        if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gates')
         run: npm run verify
 
       - name: Verify root commands and development Electron launch
+        if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gates')
         run: xvfb-run -a npm run smoke:repository-foundation
         env:
           PIGE_REPORT_BUILD_ID: ${{ github.sha }}
           PIGE_DEVELOPMENT_SMOKE_NO_SANDBOX: "1"
 
       - name: Upload repository foundation report
-        if: always()
+        if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gates'))
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: repository-foundation-${{ github.sha }}
@@ -54,12 +62,14 @@ jobs:
           retention-days: 14
 
       - name: Generate retrieval regression report
+        if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gates')
         run: npm run test:eval:report
         env:
           PIGE_REPORT_PLATFORM: linux-x64
           PIGE_REPORT_BUILD_ID: ${{ github.sha }}
 
       - name: Upload retrieval regression report
+        if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gates')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: retrieval-regression-${{ github.sha }}
@@ -68,4 +78,5 @@ jobs:
           retention-days: 14
 
       - name: Smoke local index rebuild worker
+        if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gates')
         run: npm run smoke:index-rebuild-worker

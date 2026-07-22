@@ -81,14 +81,14 @@
         { "range": [10, 11], "requirements": ["PIGE-UI-005"], "capabilities": ["ui.note-agent-actions"] },
         { "items": [12], "requirements": ["PIGE-SKILL-001"], "capabilities": ["skill.lifecycle"] },
         { "items": [13], "requirements": ["PIGE-SKILL-002"], "capabilities": ["package.curated-lifecycle"] },
-        { "items": [14], "requirements": ["PIGE-SEC-002"], "capabilities": ["security.permission-broker"] },
-        { "items": [15], "requirements": ["PIGE-SEC-003"], "capabilities": ["security.permission-modes"] },
+        { "items": [14], "requirements": ["PIGE-SEC-002"], "capabilities": ["security.high-risk-confirmation"] },
+        { "items": [15], "requirements": ["PIGE-SEC-003"], "capabilities": ["security.submitted-turn-authority"] },
         { "items": [16], "requirements": ["PIGE-SETTINGS-001", "PIGE-UI-003"], "capabilities": ["settings.registry", "ui.home-navigation-shell"] },
         { "items": [17], "requirements": ["PIGE-SETTINGS-001"], "capabilities": ["settings.registry"] },
         { "items": [18], "requirements": ["PIGE-VAULT-005", "PIGE-SETTINGS-001"], "capabilities": ["vault.storage-settings-layout", "settings.registry"] },
         { "items": [19], "requirements": ["PIGE-PI-002", "PIGE-PI-004"], "capabilities": ["pi.default-model", "pi.byok-providers"] },
         { "items": [20], "requirements": ["PIGE-CAP-003", "PIGE-DEP-002", "PIGE-INGEST-001", "PIGE-INGEST-002", "PIGE-INGEST-003", "PIGE-INGEST-004", "PIGE-SEARCH-003", "PIGE-SETTINGS-001"], "capabilities": ["capture.local-voice", "dependency.bundled-toolchain", "ingest.no-task-download", "ingest.paddle-lifecycle", "ingest.web-pdf-office", "ingest.native-ocr-routing", "search.local-rag", "settings.registry"] },
-        { "items": [21], "requirements": ["PIGE-DIAG-003", "PIGE-SEC-001", "PIGE-SEC-002", "PIGE-SEC-003", "PIGE-SEC-005", "PIGE-SETTINGS-001"], "capabilities": ["diagnostics.bounded-redacted-logs", "security.secret-storage", "security.permission-broker", "security.permission-modes", "security.model-egress", "settings.registry"] },
+        { "items": [21], "requirements": ["PIGE-DIAG-003", "PIGE-SEC-001", "PIGE-SEC-002", "PIGE-SEC-003", "PIGE-SEC-005", "PIGE-SETTINGS-001"], "capabilities": ["diagnostics.bounded-redacted-logs", "security.secret-storage", "security.high-risk-confirmation", "security.submitted-turn-authority", "security.provider-send-boundary", "settings.registry"] },
         { "items": [22], "requirements": ["PIGE-SKILL-001", "PIGE-SKILL-002", "PIGE-SETTINGS-001"], "capabilities": ["skill.lifecycle", "package.curated-lifecycle", "settings.registry"] }
       ]
     },
@@ -118,7 +118,7 @@
         { "range": [1, 5], "requirements": ["PIGE-PI-004"], "capabilities": ["pi.byok-providers"] },
         { "items": [6], "requirements": ["PIGE-PI-002"], "capabilities": ["pi.default-model"] },
         { "items": [7], "requirements": ["PIGE-SEARCH-003"], "capabilities": ["search.local-rag"] },
-        { "items": [8], "requirements": ["PIGE-SEC-005"], "capabilities": ["security.model-egress"] },
+        { "items": [8], "requirements": ["PIGE-SEC-005"], "capabilities": ["security.provider-send-boundary"] },
         { "items": [9], "requirements": ["PIGE-SEC-001"], "capabilities": ["security.secret-storage"] }
       ]
     },
@@ -174,7 +174,7 @@
       "name": "Pi packages",
       "expectedItems": 5,
       "coverage": [
-        { "range": [1, 5], "requirements": ["PIGE-SKILL-002", "PIGE-SEC-002"], "capabilities": ["package.curated-lifecycle", "security.permission-broker"] }
+        { "range": [1, 5], "requirements": ["PIGE-SKILL-002", "PIGE-SEC-002"], "capabilities": ["package.curated-lifecycle", "security.high-risk-confirmation"] }
       ]
     },
     {
@@ -183,7 +183,7 @@
       "expectedItems": 6,
       "coverage": [
         { "range": [1, 4], "requirements": ["PIGE-SKILL-001"], "capabilities": ["skill.lifecycle"] },
-        { "range": [5, 6], "requirements": ["PIGE-SKILL-001", "PIGE-SEC-002"], "capabilities": ["skill.lifecycle", "security.permission-broker"] }
+        { "range": [5, 6], "requirements": ["PIGE-SKILL-001", "PIGE-SEC-002"], "capabilities": ["skill.lifecycle", "security.high-risk-confirmation"] }
       ]
     },
     {

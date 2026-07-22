@@ -88,7 +88,7 @@ settings, permissions, providers, destructive writes, or secret use.
 
 ```ts
 type UserTaskEnvelope = {
-  kind: "agent_turn" | "settings_change" | "permission_response";
+  kind: "agent_turn" | "settings_change" | "high_risk_response";
   instructionText?: string;
   evidenceRefs: string[];
   currentSelectionRef?: string;
@@ -276,7 +276,9 @@ Current `capture_ingest` bridge:
 - Text Artifacts are checksum/size verified. Parser/OCR sidecars are paired to their own body by source ID, sidecar Artifact ID, sidecar kind, and `extractedTextChecksum` or `ocrTextChecksum`; the first metadata sidecar is never treated as a universal locator source.
 - The pack contains ordered fragment refs, Artifact IDs, locators, character spans, optional confidence, budget warnings, and bodies only for the lifetime of the call. Job/Operation/conversation records keep references and hashes, never the assembled body.
 - The current bridge caps selected evidence at 24 fragments and 18,000 characters. Native evidence precedes OCR, mixed packs reserve up to one quarter of the bounded budget for supplemental OCR, and same-parent OCR is deduplicated only when native text already contains it. Canonical citation-locator collisions across distinct Artifacts receive deterministic Artifact-qualified suffixes.
-- A Model Egress Decision is recorded from the redacted selected evidence plus a body-free hash of the bounded dynamic prompt metadata and concrete Provider/Model routing identity before prompt rendering or provider credential lookup. Prompt rendering then exposes only supplied `ev_NN` refs; validated output resolves those refs into canonical source citations.
+- The Provider send boundary revalidates the connected identity, strips secrets, blocks
+  `local_only`, and bounds selected evidence before prompt rendering. Prompt rendering
+  exposes only supplied `ev_NN` refs; validated output resolves them into citations.
 
 ## 9. Prompt Packaging Order
 
@@ -319,7 +321,7 @@ Rules:
 
 A cloud model call does not require retrieval. The first turn may contain only the user
 instruction, policy, and tool descriptors. If Pi selects local retrieval, a later turn
-consumes its validated evidence under a fresh egress decision.
+may consume validated evidence under the same submitted-turn Provider authority.
 
 Cloud model calls receive:
 
@@ -340,7 +342,13 @@ Cloud model calls must not receive:
 - Machine-local paths that are not already user-visible and necessary.
 - Permission-store internals.
 
-The Model Egress Decision contract in `docs/AGENT_RUNTIME_POLICY_CONTEXT.md` classifies the exact planned payload and combines its content classes, provider-boundary verification, and cloud-send policy into `allow`, `confirm`, or `block`. Context assembly must obtain that decision before prompt rendering or provider credential lookup. `unknown` boundaries fail safe, restricted content is always blocked, and general YOLO permission mode cannot weaken a stricter egress outcome.
+Connecting/selecting the exact Provider and pressing Send authorizes the bounded selected
+context for that turn. Before provider invocation, context assembly revalidates Provider
+identity, strips explicit secrets/credentials, blocks `local_only`, and enforces body,
+scope, and whole-vault limits. Ordinary/private/bounded-large content proceeds without a
+second approval; unknown or changed destination fails closed and requires a new explicit
+user action. No egress digest store, one-use approval, renderer action, or waiting Job is
+part of context assembly.
 
 For parser/OCR-backed Agent ingest, the call-scoped Evidence Pack is guarded by the
 complete Source Record revision. The current bridge rechecks before/after the model and
@@ -355,7 +363,8 @@ Long conversations and long jobs must compact context by reference.
 Rules:
 
 - Conversation compaction keeps source/page/job/proposal/operation refs, not duplicated bodies.
-- Compaction must not drop unresolved proposals, source IDs, page IDs, citation refs, permission state, policy hash, or user-visible decisions.
+- Compaction must not drop unresolved proposals, source IDs, page IDs, citation refs,
+  policy hash, or a current high-risk decision.
 - Summaries should say what was omitted when omission affects answer confidence.
 - Job checkpoints should keep enough context refs to resume or explain work after restart.
 - Raw prompt and provider response storage remains off by default.
@@ -396,7 +405,9 @@ Tests must verify:
 - Home and ingest retrieval re-read confined Markdown and Source Record privacy; drift
   writes a new audit before rejecting turn/publication.
 - Composer capture bodies, pasted blocks, files, URLs, selections, retrieved snippets, and tool output cannot acquire current-user-instruction authority.
-- Every external model call records a redacted Model Egress Decision with payload size, content classes, boundary verification, policy hash, outcome, reason code, exact-redacted-payload hash, body-free evidence-summary hash, and canonical final-decision hash. A changed payload, evidence summary, or classification/decision must not reuse the prior audit operation ID.
+- Every external model call proves connected Provider identity, secret stripping,
+  `local_only` blocking, bounded selected evidence, and no whole-vault default. It does not
+  create a per-call approval/digest state machine.
 - Parser/OCR ingest rejects changed Source Record evidence and creates no note; B3.13
   returns a typed stale result and requires an Agent replan before another side effect.
 - Source content cannot change settings, storage strategy, provider, permissions, or `PIGE.md`.

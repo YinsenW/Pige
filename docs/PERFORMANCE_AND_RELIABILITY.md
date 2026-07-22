@@ -165,7 +165,10 @@ Every expensive or failure-prone operation should run through the job system.
 
 Canonical job classes, states, and the `state` field are owned by `JobClassSchema`, `JobStateSchema`, and `JobRecordSchema` in `packages/schemas/src/index.ts`, with lifecycle semantics in `docs/JOB_OPERATION_AND_RECOVERY.md`. Reliability code must not translate them into aliases such as `capture_preserve`, `parse_source`, `backup_create`, or `restore_validate`.
 
-`waiting_dependency` is a canonical state for a missing model, tool, runtime capability, vault binding, or external source root. A network backoff within an otherwise runnable job is stage/retry metadata; it must not invent another canonical state. A genuine permission decision uses `waiting_permission`.
+`waiting_dependency` is a canonical state for a missing model, tool, runtime capability,
+vault binding, or external source root. A network backoff within an otherwise runnable
+job is stage/retry metadata; it must not invent another canonical state. High-risk
+confirmation is a short-lived effect boundary, not a Job state.
 
 Rules:
 
