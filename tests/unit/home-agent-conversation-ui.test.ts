@@ -1671,6 +1671,31 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("keeps an unreadable confirmation query body-free and offers an explicit retry", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.confirmationResolveMode = "reject_initial";
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => container.querySelector(".confirmation-recovery-notice") !== null);
+    const notice = requireElement(container.querySelector<HTMLElement>(".confirmation-recovery-notice"));
+    expect(notice.getAttribute("role")).toBe("alert");
+    expect(notice.textContent).toContain(
+      "Pige could not check whether a high-risk effect needs your decision."
+    );
+    expect(notice.textContent).not.toContain("synthetic");
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+
+    harness.confirmationResolveMode = "success";
+    harness.confirmationPending = pendingHighRiskConfirmation();
+    await clickButton(dom, notice, "Retry");
+    await waitFor(dom, () => container.querySelector('[role="dialog"]') !== null);
+    expect(harness.confirmationPendingReads).toBe(2);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("gives a picker source Job sole status ownership before submission resolves", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
@@ -2887,7 +2912,7 @@ interface ConversationHarness {
   confirmationPendingReads: number;
   readonly confirmationResolveRequests: HighRiskConfirmationResolveRequest[];
   readonly confirmationListeners: Set<(event: HighRiskConfirmationChangedEvent) => void>;
-  confirmationResolveMode: "success" | "failed" | "stale" | "reject_pending" | "reject_unknown";
+  confirmationResolveMode: "success" | "failed" | "stale" | "reject_initial" | "reject_pending" | "reject_unknown";
   locale: "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de";
   windowMode: "compact" | "expanded";
   readonly windowModeRequests: ("compact" | "expanded")[];
@@ -3304,6 +3329,10 @@ function makePigeApi(harness: ConversationHarness): object {
     confirmations: {
       pending: async () => {
         harness.confirmationPendingReads += 1;
+        if (
+          harness.confirmationResolveMode === "reject_initial" &&
+          harness.confirmationPendingReads === 1
+        ) throw new Error("synthetic unreadable confirmation state");
         if (
           harness.confirmationResolveMode === "reject_unknown" &&
           harness.confirmationResolveRequests.length > 0

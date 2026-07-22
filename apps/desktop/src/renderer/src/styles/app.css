@@ -1943,7 +1943,7 @@ textarea {
   grid-template-columns: 38px minmax(0, 1fr);
   gap: 16px;
   padding: 20px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: 16px;
   background: var(--surface);
   color: var(--text-primary);
@@ -1956,7 +1956,7 @@ textarea {
   display: grid;
   place-items: center;
   border-radius: 12px;
-  background: var(--surface-soft);
+  background: var(--surface-subtle);
   color: var(--text-primary);
   font-size: 18px;
   font-weight: 700;
@@ -2043,6 +2043,36 @@ textarea {
   color: #fff;
 }
 
+.confirmation-recovery-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 70;
+  width: min(calc(100% - 24px), 520px);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px 8px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-floating);
+  transform: translateX(-50%);
+}
+
+.confirmation-recovery-notice span {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.confirmation-recovery-notice button {
+  flex: 0 0 auto;
+}
+
 @media (max-width: 420px) {
   .confirmation-backdrop {
     padding: 12px;
@@ -2071,6 +2101,10 @@ textarea {
 
   .confirmation-actions button {
     width: 100%;
+  }
+
+  .confirmation-recovery-notice {
+    align-items: flex-start;
   }
 }
 .drop-overlay {

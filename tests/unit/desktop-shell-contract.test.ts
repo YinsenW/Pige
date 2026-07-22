@@ -540,6 +540,10 @@ describe("desktop shell build contract", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const rendererStyles = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/styles/app.css"),
+      "utf8"
+    );
     const dialogSource = fs.readFileSync(
       path.resolve("apps/desktop/src/renderer/src/components/HighRiskConfirmationDialog.tsx"),
       "utf8"
@@ -575,6 +579,14 @@ describe("desktop shell build contract", () => {
     expect(dialogSource).toContain('role="dialog"');
     expect(dialogSource).toContain('if (event.key === "Escape")');
     expect(dialogSource).toContain('props.onResolve("deny")');
+    const confirmationStyles = rendererStyles.slice(
+      rendererStyles.indexOf(".confirmation-backdrop"),
+      rendererStyles.indexOf("@media (max-width: 420px)", rendererStyles.indexOf(".confirmation-backdrop"))
+    );
+    expect(confirmationStyles).toContain("var(--border-default)");
+    expect(confirmationStyles).toContain("var(--surface-subtle)");
+    expect(confirmationStyles).not.toContain("var(--border)");
+    expect(confirmationStyles).not.toContain("var(--surface-soft)");
     for (const unsafeField of ["path", "command", "body", "hash", "credential", "provider", "rawError", "jobId"]) {
       expect(preloadApi).not.toContain(unsafeField);
     }
