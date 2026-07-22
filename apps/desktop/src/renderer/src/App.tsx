@@ -955,7 +955,7 @@ export function App(): React.JSX.Element {
       const submission = window.pige.agent.submitTurn({
         schemaVersion: 1,
         clientTurnId,
-        ...(text?.trim() ? { text: text.trim() } : {}),
+        ...(text?.trim() ? { text } : {}),
         inputKind,
         objective: "auto",
         locale
@@ -4825,7 +4825,7 @@ function HomeComposer(props: {
     inlineReferenceSequence.current += 1;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
-    const turnText = text.trim();
+    const turnText = text;
     const submittedVaultId = activeVaultIdRef.current;
     const submittedDraftRevision = draftRevisionRef.current;
     const clearedDraftRevision = submittedDraftRevision + 1;
