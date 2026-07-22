@@ -182,8 +182,12 @@ export type HomeLargePasteItem = {
 export type HomeLargePasteClassification =
   | { readonly kind: "ordinary" }
   | { readonly kind: "staged"; readonly item: HomeLargePasteItem };
+export type HomeLargePasteClassificationRequest = {
+  readonly composerText: string;
+  readonly pastedText: string;
+};
 export interface HomeLargePasteAdapter {
-  classifyPaste(text: string): HomeLargePasteClassification;
+  classifyPaste(request: HomeLargePasteClassificationRequest): HomeLargePasteClassification;
 }
 type StagedComposerItem =
   | { readonly kind: "file"; readonly localId: string; readonly file: File }
@@ -5804,7 +5808,7 @@ function HomeComposer(props: {
           placeholder={props.t("home.placeholder")}
           rows={4}
           value={text}
-          onPaste={(event) => handleComposerPaste(event, props.largePasteAdapter, (item) => {
+          onPaste={(event) => handleComposerPaste(event, text, props.largePasteAdapter, (item) => {
             stagedAttachmentRevisionRef.current += 1;
             stagedComposerAttemptRef.current = null;
             setAttachmentSubmissionNotice(null);
@@ -6102,12 +6106,13 @@ function createComposerItemId(kind: "file" | "paste"): string {
 
 function handleComposerPaste(
   event: ReactClipboardEvent<HTMLTextAreaElement>,
+  composerText: string,
   adapter: HomeLargePasteAdapter | undefined,
   onStage: (item: HomeLargePasteItem) => void
 ): void {
   if (!adapter) return;
   const pastedText = event.clipboardData.getData("text/plain");
-  const classification = adapter.classifyPaste(pastedText);
+  const classification = adapter.classifyPaste({ composerText, pastedText });
   if (classification.kind === "ordinary") return;
   event.preventDefault();
   onStage(classification.item);

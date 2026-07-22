@@ -1837,6 +1837,41 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("classifies against the exact existing composer text and keeps that draft unchanged when staging", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const classifications: Array<{ composerText: string; pastedText: string }> = [];
+    const adapter: import("../../apps/desktop/src/renderer/src/App").HomeLargePasteAdapter = {
+      classifyPaste: (request) => {
+        classifications.push(request);
+        return {
+          kind: "staged",
+          item: {
+            localId: "paste_with_existing_draft",
+            text: request.pastedText,
+            characterCount: 8_001,
+            byteCount: 8_001
+          }
+        };
+      }
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness), adapter);
+
+    await setTextareaValue(dom, container, "Existing exact draft.");
+    await pasteText(dom, container, "Pasted exact fragment.");
+
+    expect(classifications).toEqual([{
+      composerText: "Existing exact draft.",
+      pastedText: "Pasted exact fragment."
+    }]);
+    expect(textareaValue(container)).toBe("Existing exact draft.");
+    expect(container.querySelector(".pasted-text-chip")).not.toBeNull();
+    expect(harness.submitRequests).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps files and pasted text in one visible order and removes the paste locally", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
