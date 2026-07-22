@@ -10,6 +10,7 @@ import type {
   AgentRuntimeStatus,
   AgentSubmitTurnRequest,
   AgentSubmitTurnResult,
+  AgentStagedSubmitTurnResult,
   AgentTurnDraftEvent,
   HighRiskConfirmationChangedEvent,
   HighRiskConfirmationPendingResult,
@@ -1341,7 +1342,7 @@ describe("Home durable Agent conversation UI", () => {
   it("prevents repeat and second Enter submission while the first turn is in flight", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
-    let resolveTurn: ((result: AgentSubmitTurnResult) => void) | undefined;
+    let resolveTurn: ((result: AgentStagedSubmitTurnResult) => void) | undefined;
     harness.submitTurn = (request) => {
       harness.submitRequests.push(request);
       return new Promise((resolve) => { resolveTurn = resolve; });
@@ -1792,15 +1793,12 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
-  it("leaves ordinary paste to the native textarea path when the fixture classifies it as ordinary", async () => {
+  it("leaves an ordinary paste on the native textarea path at the canonical code-point boundary", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
-    const adapter = {
-      classifyPaste: () => ({ kind: "ordinary" as const })
-    };
-    const { container, root } = await mountHome(dom, makePigeApi(harness), adapter);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
 
-    const accepted = await pasteText(dom, container, "A normal paste");
+    const accepted = await pasteText(dom, container, `${"a".repeat(7_998)}😀`);
 
     expect(accepted).toBe(true);
     expect(container.querySelector(".pasted-text-chip")).toBeNull();
@@ -1813,22 +1811,16 @@ describe("Home durable Agent conversation UI", () => {
   it("stages oversized pasted text locally without rendering its body or causing side effects", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
-    const pastedBody = "private fixture body that must not be rendered";
-    const adapter = stagedPasteAdapter({
-      localId: "paste_safe_fixture",
-      text: pastedBody,
-      characterCount: 12_345,
-      byteCount: 18_432
-    });
-    const { container, root } = await mountHome(dom, makePigeApi(harness), adapter);
+    const pastedBody = "x".repeat(8_001);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
 
     const accepted = await pasteText(dom, container, pastedBody);
     const chip = requireElement(container.querySelector<HTMLElement>(".pasted-text-chip"));
 
     expect(accepted).toBe(false);
     expect(chip.textContent).toContain("Pasted text");
-    expect(chip.textContent).toContain("12,345 characters");
-    expect(chip.textContent).toContain("18 KiB");
+    expect(chip.textContent).toContain("8,001 characters");
+    expect(chip.textContent).toContain("7.8 KiB");
     expect(chip.textContent).not.toContain(pastedBody);
     expect(harness.submitRequests).toHaveLength(0);
     expect(harness.submittedFileNames).toHaveLength(0);
@@ -1837,35 +1829,34 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
-  it("classifies against the exact existing composer text and keeps that draft unchanged when staging", async () => {
+  it("classifies the exact resulting body and keeps the existing draft unchanged when staging", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
-    const classifications: Array<{ composerText: string; pastedText: string }> = [];
-    const adapter: import("../../apps/desktop/src/renderer/src/App").HomeLargePasteAdapter = {
-      classifyPaste: (request) => {
-        classifications.push(request);
-        return {
-          kind: "staged",
-          item: {
-            localId: "paste_with_existing_draft",
-            text: request.pastedText,
-            characterCount: 8_001,
-            byteCount: 8_001
-          }
-        };
-      }
-    };
-    const { container, root } = await mountHome(dom, makePigeApi(harness), adapter);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
 
     await setTextareaValue(dom, container, "Existing exact draft.");
-    await pasteText(dom, container, "Pasted exact fragment.");
+    await pasteText(dom, container, "x".repeat(8_000));
 
-    expect(classifications).toEqual([{
-      composerText: "Existing exact draft.",
-      pastedText: "Pasted exact fragment."
-    }]);
     expect(textareaValue(container)).toBe("Existing exact draft.");
     expect(container.querySelector(".pasted-text-chip")).not.toBeNull();
+    expect(harness.submitRequests).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("uses the exact textarea selection when the resulting body remains within the canonical limit", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "a".repeat(8_001));
+    const composer = homeComposer(container);
+    composer.setSelectionRange(0, 2);
+    const accepted = await pasteText(dom, container, "b");
+
+    expect(accepted).toBe(true);
+    expect(container.querySelector(".pasted-text-chip")).toBeNull();
     expect(harness.submitRequests).toHaveLength(0);
 
     await act(async () => root.unmount());
@@ -1875,20 +1866,8 @@ describe("Home durable Agent conversation UI", () => {
   it("keeps a structurally rejected paste visible and removable without clearing the draft or submitting", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
-    const rejectedBody = "exact rejected fixture body that must remain local";
-    const adapter: import("../../apps/desktop/src/renderer/src/App").HomeLargePasteAdapter = {
-      classifyPaste: () => ({
-        kind: "rejected",
-        reason: "item_too_large",
-        item: {
-          localId: "paste_rejected_fixture",
-          text: rejectedBody,
-          characterCount: 4_500_000,
-          byteCount: 4_500_000
-        }
-      })
-    };
-    const { container, root } = await mountHome(dom, makePigeApi(harness), adapter);
+    const rejectedBody = "x".repeat(4_194_305);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
 
     await setTextareaValue(dom, container, "Keep this exact draft.");
     const accepted = await pasteText(dom, container, rejectedBody);
@@ -1917,19 +1896,54 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("shares the canonical eight-item limit across files and oversized pasted text", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await attachFiles(dom, container, Array.from({ length: 8 }, (_, index) => [
+      `item-${index + 1}.md`,
+      `# Item ${index + 1}\n`
+    ] as const));
+    await pasteText(dom, container, "x".repeat(8_001));
+
+    expect(container.querySelectorAll(".attachment-chip")).toHaveLength(9);
+    expect(container.querySelector(".rejected-pasted-text-chip")?.textContent).toContain(
+      "The message item limit was reached"
+    );
+    expect(harness.submitRequests).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps an aggregate-overflow paste visible and local after two exact four-MiB items", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    const fourMiB = "x".repeat(4_194_304);
+
+    await pasteText(dom, container, fourMiB);
+    await pasteText(dom, container, fourMiB);
+    await pasteText(dom, container, "x".repeat(8_001));
+
+    expect(container.querySelectorAll(".pasted-text-chip")).toHaveLength(3);
+    expect(container.querySelector(".rejected-pasted-text-chip")?.textContent).toContain(
+      "The pasted-text limit was reached"
+    );
+    expect(harness.submitRequests).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps files and pasted text in one visible order and removes the paste locally", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
-    const adapter = stagedPasteAdapter({
-      localId: "paste_between_files",
-      text: "oversized body",
-      characterCount: 9_000,
-      byteCount: 9_000
-    });
-    const { container, root } = await mountHome(dom, makePigeApi(harness), adapter);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
 
     await attachFile(dom, container, "first.md", "# First\n");
-    await pasteText(dom, container, "oversized body");
+    await pasteText(dom, container, "x".repeat(8_001));
     await attachFile(dom, container, "last.csv", "value\n1\n");
 
     expect(Array.from(container.querySelectorAll(".attachment-chip")).map((chip) =>
@@ -1946,29 +1960,69 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
-  it("fails closed before IPC and retains the exact query and items when pasted-text submission has no owner", async () => {
+  it("submits the exact ordered official staged-item projection and clears after durable acceptance", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
-    const adapter = stagedPasteAdapter({
-      localId: "paste_submit_blocked",
-      text: "oversized body",
-      characterCount: 9_500,
-      byteCount: 12_000
-    });
-    const { container, root } = await mountHome(dom, makePigeApi(harness), adapter);
+    const pastedBody = "x".repeat(8_001);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
 
     await attachFile(dom, container, "context.md", "# Context\n");
-    await pasteText(dom, container, "oversized body");
+    await pasteText(dom, container, pastedBody);
     await setTextareaValue(dom, container, "Compare these exact items.");
     await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
 
-    expect(harness.submitRequests).toHaveLength(0);
-    expect(harness.submittedFileNames).toHaveLength(0);
-    expect(textareaValue(container)).toBe("Compare these exact items.");
-    expect(container.querySelectorAll(".attachment-chip")).toHaveLength(2);
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      "Sending it is still in development"
+    expect(harness.submitRequests[0]).toMatchObject({
+      inputKind: "file_picker",
+      text: "Compare these exact items.",
+      stagedItems: [
+        { kind: "file", ordinal: 0, displayName: "context.md" },
+        {
+          kind: "large_paste",
+          ordinal: 1,
+          text: pastedBody,
+          unicodeCodePointCount: 8_001,
+          utf8ByteSize: 8_001
+        }
+      ]
+    });
+    expect(harness.submittedFileNames).toEqual([["context.md"]]);
+    expect(textareaValue(container)).toBe("");
+    expect(container.querySelectorAll(".attachment-chip")).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps the exact composer snapshot until the early durable acceptance receipt resolves", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    let resolveSubmission: ((result: AgentStagedSubmitTurnResult) => void) | undefined;
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => { resolveSubmission = resolve; });
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await pasteText(dom, container, "x".repeat(8_001));
+    await setTextareaValue(dom, container, "Keep until accepted.");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    expect(textareaValue(container)).toBe("Keep until accepted.");
+    expect(container.querySelectorAll(".attachment-chip")).toHaveLength(1);
+    expect(container.querySelector('[data-optimistic-user-message="true"]')?.textContent).toContain(
+      "Keep until accepted."
     );
+
+    await act(async () => {
+      resolveSubmission?.(acceptedStagedResult(harness.submitRequests[0]!));
+      await settle(dom);
+      await settle(dom);
+    });
+
+    expect(textareaValue(container)).toBe("");
+    expect(container.querySelector(".attachment-chip")).toBeNull();
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -2010,12 +2064,18 @@ describe("Home durable Agent conversation UI", () => {
     const harness = createHarness(undefined);
     harness.submitTurn = async (request) => {
       harness.submitRequests.push(request);
-      const result = completedResult();
-      if (result.state !== "completed") throw new Error("Expected completed fixture.");
+      const result = acceptedStagedResult(request);
+      if (result.state !== "accepted") throw new Error("Expected accepted fixture.");
       return {
         ...result,
         sourceIds: ["source_internal_safe"],
-        rejectedFiles: [{ displayName: "blocked.exe", reason: "unsupported_type" }]
+        acceptedItems: [{ ordinal: 0, kind: "file", sourceId: "source_internal_safe" }],
+        rejectedItems: [{
+          ordinal: 1,
+          kind: "file",
+          displayName: "blocked.exe",
+          reason: "unsupported_type"
+        }]
       };
     };
     const { container, root } = await mountHome(dom, makePigeApi(harness));
@@ -2047,7 +2107,7 @@ describe("Home durable Agent conversation UI", () => {
     harness.submitTurn = async (request) => {
       harness.submitRequests.push(request);
       harness.jobs = [sourceWaitingForModelJob()];
-      return sourceWaitingForModelResult();
+      return acceptedStagedResult(request);
     };
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
@@ -2212,22 +2272,22 @@ describe("Home durable Agent conversation UI", () => {
     expect(harness.submittedFileNames).toHaveLength(0);
     expect(container.querySelector(".attachment-chip")?.textContent).toContain("public-alpha.csv");
     await clickButton(dom, container, "Send");
-    await waitFor(dom, () => countText(container, expectedStatus) === 1);
+    await waitFor(dom, () => harness.submitRequests.length === 1);
     expect(harness.submitRequests[0]).toMatchObject({ inputKind: "file_picker" });
     expect(harness.submittedFileNames).toEqual([["public-alpha.csv"]]);
-    expect(countText(container, expectedStatus)).toBe(1);
-    expect(buttons(container, "Connect Model")).toHaveLength(1);
-    expect(modelActionButtons(container)).toHaveLength(1);
-    expect(container.textContent).not.toContain("Pi Agent is working.");
-    expect(container.textContent).not.toContain("Connect a model service before asking Pi Agent.");
-    expect(container.textContent).not.toContain("Open Models");
-    expect(container.textContent).not.toContain("Waiting for a local capability");
 
     await act(async () => {
-      resolveTurn?.(sourceWaitingForModelResult());
+      resolveTurn?.({
+        ...acceptedStagedResult(harness.submitRequests[0]!),
+        jobId: "job_20260713_sourcewait"
+      });
       await settle(dom);
     });
-    await waitFor(dom, () => countText(container, expectedStatus) === 1);
+    await waitFor(dom, () =>
+      countText(container, expectedStatus) === 1 &&
+      !container.textContent?.includes("Pi Agent is working.")
+    );
+    expect(buttons(container, "Connect Model")).toHaveLength(1);
     expect(modelActionButtons(container)).toHaveLength(1);
     expect(container.textContent).not.toContain("Pi Agent is working.");
 
@@ -3442,8 +3502,13 @@ describe("Home durable Agent conversation UI", () => {
     expect(submitHomeInput).toContain("const submittedText = text;");
     expect(submitHomeInput).toContain('const turnText = hasText ? submittedText : props.t("home.organizeAttachedFilesIntent")');
     expect(submitHomeInput).not.toContain("const submittedText = text.trim()");
-    expect(submitHomeInput).toContain('props.onFilesSelected(');
-    expect(submitHomeInput).toContain('"file_picker"');
+    expect(submitHomeInput).toContain("const stagedItems = toAgentStagedItems(submittedItems)");
+    expect(submitHomeInput).toContain("stagedItems,");
+    expect(submitHomeInput).toContain('inputKind: "file_picker"');
+    expect(submitHomeInput).toContain('if (outcome.state !== "accepted")');
+    expect(submitHomeInput.indexOf('if (outcome.state !== "accepted")'))
+      .toBeLessThan(submitHomeInput.indexOf('props.onDraftChange("")'));
+    expect(appSource).not.toContain("HomeLargePasteAdapter");
     expect(appSource).toContain('submitHomeFiles(request.files, "file_drop"');
     expect(appSource).toContain("setStagedComposerItems((current) => [");
     expect(appSource).toContain('kind: "file" as const');
@@ -3451,9 +3516,7 @@ describe("Home durable Agent conversation UI", () => {
     expect(retryLatestTurn).toContain("props.onRetryJob(retryableLatestTurn.jobId)");
     expect(retryLatestTurn).not.toContain("submitTurn");
     expect(submitHomeInput.indexOf("window.pige.agent.submitTurn"))
-      .toBeLessThan(submitHomeInput.indexOf("props.onHomeStateChanged()"));
-    expect(submitHomeInput.indexOf("props.onHomeStateChanged()"))
-      .toBeLessThan(submitHomeInput.indexOf("const outcome = await submission"));
+      .toBeLessThan(submitHomeInput.indexOf('if (outcome.state !== "accepted")'));
     expect(conversationStyles).toContain("min-width: 0;");
     expect(conversationStyles).toContain("overflow-wrap: anywhere;");
     expect(conversationStyles).toContain("white-space: pre-wrap;");
@@ -3538,7 +3601,10 @@ interface ConversationHarness {
   startSpeech: (request: SpeechStartRequest) => Promise<SpeechStartResult>;
   installSpeechAsset: (request: SpeechAssetInstallRequest) => Promise<SpeechAssetInstallResult>;
   loadConversation: () => Promise<AgentConversationTimeline | undefined>;
-  submitTurn: (request: AgentSubmitTurnRequest, files?: readonly File[]) => Promise<AgentSubmitTurnResult>;
+  submitTurn: (
+    request: AgentSubmitTurnRequest,
+    files?: readonly File[]
+  ) => Promise<AgentSubmitTurnResult | AgentStagedSubmitTurnResult>;
   emitDraft: (event: AgentTurnDraftEvent) => void;
   emitSpeech: (event: SpeechSessionEvent) => void;
   emitSpeechAsset: (event: SpeechAssetInstallEvent) => void;
@@ -3654,7 +3720,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     loadConversation: async () => harness.timeline,
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
-      return completedResult();
+      return request.stagedItems ? acceptedStagedResult(request) : completedResult();
     },
     emitDraft: (event) => {
       for (const listener of harness.draftListeners) listener(event);
@@ -4347,6 +4413,25 @@ function completedResult(): AgentSubmitTurnResult {
   };
 }
 
+function acceptedStagedResult(request: AgentSubmitTurnRequest): AgentStagedSubmitTurnResult {
+  const acceptedItems = (request.stagedItems ?? []).map((item) => ({
+    ordinal: item.ordinal,
+    kind: item.kind,
+    sourceId: `src_20260723_staged${item.ordinal}`
+  }));
+  return {
+    requestId: "request_20260723_stagedturn",
+    jobId: "job_20260723_stagedturn",
+    conversationEventId: "event_20260723_stageduser",
+    conversationId: "conv_20260723_staged",
+    tailEventId: "event_20260723_stageduser",
+    state: "accepted",
+    modelUsage: "none",
+    sourceIds: acceptedItems.map((item) => item.sourceId),
+    acceptedItems
+  };
+}
+
 function retrievalCompletedResult(): AgentSubmitTurnResult {
   const result = completedResult();
   if (result.state !== "completed") throw new Error("Expected a completed Agent result fixture.");
@@ -4708,8 +4793,7 @@ function installResizableMatchMedia(dom: JSDOM, initialWidth: number): (width: n
 
 async function mountHome(
   dom: JSDOM,
-  api: object,
-  largePasteAdapter?: import("../../apps/desktop/src/renderer/src/App").HomeLargePasteAdapter
+  api: object
 ): Promise<{
   readonly container: HTMLElement;
   readonly root: { unmount: () => void };
@@ -4722,16 +4806,10 @@ async function mountHome(
   const container = requireElement(dom.window.document.getElementById("root"));
   const root = createRoot(container);
   await act(async () => {
-    root.render(createElement(App, largePasteAdapter ? { largePasteAdapter } : {}));
+    root.render(createElement(App));
     await settle(dom);
   });
   return { container, root };
-}
-
-function stagedPasteAdapter(
-  item: import("../../apps/desktop/src/renderer/src/App").HomeLargePasteItem
-): import("../../apps/desktop/src/renderer/src/App").HomeLargePasteAdapter {
-  return { classifyPaste: () => ({ kind: "staged", item }) };
 }
 
 async function pasteText(dom: JSDOM, container: HTMLElement, text: string): Promise<boolean> {

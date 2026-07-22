@@ -94,11 +94,18 @@ import type {
   WindowLayoutState,
   WindowState
 } from "@pige/contracts";
-import type {
-  JobState,
-  Locale,
-  ProviderEndpointProtocol,
-  SourceStorageStrategy
+import {
+  AGENT_AUTHORED_TEXT_MAX_CODE_POINTS,
+  AGENT_LARGE_PASTE_AGGREGATE_MAX_UTF8_BYTES,
+  AGENT_LARGE_PASTE_ITEM_MAX_UTF8_BYTES,
+  AGENT_STAGED_ITEM_MAX_COUNT,
+  type AgentStagedItem,
+  type AgentStagedItemRejectionReason,
+  type AgentStagedLargePasteItem,
+  type JobState,
+  type Locale,
+  type ProviderEndpointProtocol,
+  type SourceStorageStrategy
 } from "@pige/schemas";
 
 type View = "home" | "library" | "knowledgeTree";
@@ -173,32 +180,21 @@ type ActiveSourceTurnBinding = {
   readonly pending: boolean;
   readonly sourceDisplayName: string | null;
 };
-export type HomeLargePasteItem = {
+type StagedPastedTextItem = {
   readonly localId: string;
-  readonly text: string;
-  readonly characterCount: number;
-  readonly byteCount: number;
-};
-export type HomeLargePasteClassification =
+} & Omit<AgentStagedLargePasteItem, "kind" | "ordinal">;
+type HomeLargePasteClassification =
   | { readonly kind: "ordinary" }
-  | { readonly kind: "staged"; readonly item: HomeLargePasteItem }
+  | { readonly kind: "staged"; readonly item: StagedPastedTextItem }
   | {
       readonly kind: "rejected";
-      readonly item: HomeLargePasteItem;
-      readonly reason: HomeLargePasteRejectionReason;
+      readonly item: StagedPastedTextItem;
+      readonly reason: AgentStagedItemRejectionReason;
     };
-export type HomeLargePasteRejectionReason = "item_limit" | "item_too_large" | "aggregate_too_large";
-export type HomeLargePasteClassificationRequest = {
-  readonly composerText: string;
-  readonly pastedText: string;
-};
-export interface HomeLargePasteAdapter {
-  classifyPaste(request: HomeLargePasteClassificationRequest): HomeLargePasteClassification;
-}
 type StagedComposerItem =
   | { readonly kind: "file"; readonly localId: string; readonly file: File }
-  | ({ readonly kind: "pasted_text" } & HomeLargePasteItem)
-  | ({ readonly kind: "rejected_pasted_text"; readonly reason: HomeLargePasteRejectionReason } & HomeLargePasteItem);
+  | ({ readonly kind: "pasted_text" } & StagedPastedTextItem)
+  | ({ readonly kind: "rejected_pasted_text"; readonly reason: AgentStagedItemRejectionReason } & StagedPastedTextItem);
 type ActiveReaderSelectionProposal = {
   readonly vaultId: string;
   readonly pageId: string;
@@ -249,7 +245,7 @@ function useMediaQuery(query: string): boolean {
   return matches;
 }
 
-export function App(props: { readonly largePasteAdapter?: HomeLargePasteAdapter } = {}): React.JSX.Element {
+export function App(): React.JSX.Element {
   const macosWindowShell = /Macintosh|Mac OS X/.test(window.navigator.userAgent);
   const sidebarHomeOverlayViewport = useMediaQuery("(max-width: 719px)");
   const sidebarReaderOverlayViewport = useMediaQuery("(max-width: 839px)");
@@ -1680,7 +1676,6 @@ export function App(props: { readonly largePasteAdapter?: HomeLargePasteAdapter 
             modelSummary={modelSummary}
             recentJobs={recentJobs}
             locale={locale}
-            {...(props.largePasteAdapter ? { largePasteAdapter: props.largePasteAdapter } : {})}
             onReaderSelectionAction={revealReaderSelectionAction}
             draftText={homeDraftText}
             onDraftChange={setHomeDraftText}
@@ -4126,7 +4121,6 @@ function HomeComposer(props: {
   readonly modelSummary: ModelProviderSettingsSummary | null;
   readonly recentJobs: readonly JobSummary[];
   readonly locale: Locale;
-  readonly largePasteAdapter?: HomeLargePasteAdapter;
   readonly onReaderSelectionAction: (result: ReaderSelectionActionResult) => void;
   readonly draftText: string;
   readonly onDraftChange: (text: string) => void;
@@ -4926,7 +4920,6 @@ function HomeComposer(props: {
     const stagedComposerFiles = stagedComposerItems
       .filter((item): item is Extract<StagedComposerItem, { kind: "file" }> => item.kind === "file")
       .map((item) => item.file);
-    const hasStagedPaste = stagedComposerItems.some((item) => item.kind !== "file");
     const hasRejectedPaste = stagedComposerItems.some((item) => item.kind === "rejected_pasted_text");
     const hasAttachments = stagedComposerItems.length > 0;
     if (
@@ -4935,10 +4928,133 @@ function HomeComposer(props: {
       modelSwitching ||
       composerSubmitInFlightRef.current
     ) return;
-    if (hasStagedPaste) {
-      setCaptureError(props.t(hasRejectedPaste
-        ? "home.largePasteRejectedSubmissionBlocked"
-        : "home.largePasteSubmissionUnavailable"));
+    if (hasRejectedPaste) {
+      setCaptureError(props.t("home.largePasteRejectedSubmissionBlocked"));
+      return;
+    }
+    if (hasAttachments) {
+      const submittedItems = stagedComposerItems;
+      const submittedText = text;
+      const submittedDraftRevision = draftRevisionRef.current;
+      const submittedAttachmentRevision = stagedAttachmentRevisionRef.current;
+      const stagedItems = toAgentStagedItems(submittedItems);
+      const submittedFiles = submittedItems
+        .filter((item): item is Extract<StagedComposerItem, { kind: "file" }> => item.kind === "file")
+        .map((item) => item.file);
+      const turnText = hasText ? submittedText : props.t("home.organizeAttachedFilesIntent");
+      const sourceDisplayName = submittedItems[0]?.kind === "file"
+        ? submittedItems[0].file.name
+        : props.t("home.pastedText");
+      const attemptKey = composerAttemptKey(submittedText, submittedItems);
+      const clientTurnId = stagedComposerAttemptRef.current?.key === attemptKey
+        ? stagedComposerAttemptRef.current.clientTurnId
+        : createAgentClientTurnId();
+      stagedComposerAttemptRef.current = { key: attemptKey, clientTurnId };
+      followConversationRef.current = true;
+      composerSubmitInFlightRef.current = true;
+      setComposerSubmitActive(true);
+      setCaptureError(null);
+      setAttachmentSubmissionNotice(null);
+      setAgentError(null);
+      setAgentAnswer(null);
+      setLiveAnswerEventId(null);
+      setAgentModelUsage("none");
+      setAgentRunState("accepted");
+      setActiveSourceTurn({ clientTurnId, jobId: null, pending: true, sourceDisplayName });
+      noteOpenSequence.current += 1;
+      inlineReferenceSequence.current += 1;
+      setSelectedNote(null);
+      setSelectedNoteRelated(null);
+      setOptimisticConversationTurns((current) => [
+        ...current,
+        {
+          clientTurnId,
+          text: turnText,
+          attachmentNames: submittedItems.map((item) => item.kind === "file"
+            ? item.file.name
+            : props.t("home.pastedText"))
+        }
+      ]);
+      const followUpConversation = canFollowUpToConversation(conversationTimeline)
+        ? conversationTimeline
+        : undefined;
+      beginAgentDraft(clientTurnId);
+      try {
+        const outcome = await window.pige.agent.submitTurn({
+          schemaVersion: 1,
+          ...(hasText ? { text: submittedText } : {}),
+          inputKind: "file_picker",
+          locale: props.locale,
+          stagedItems,
+          clientTurnId,
+          ...(followUpConversation ? {
+            conversationId: followUpConversation.conversationId,
+            expectedTailEventId: followUpConversation.tailEventId
+          } : {})
+        }, submittedFiles);
+        if (outcome.state !== "accepted") {
+          clearAgentDraft();
+          setActiveSourceTurn(null);
+          setOptimisticConversationTurns((current) => current.filter((turn) => turn.clientTurnId !== clientTurnId));
+          setAgentError(outcome.error);
+          setAgentRunState("failed");
+          void refreshConversation();
+          return;
+        }
+        stagedComposerAttemptRef.current = null;
+        if (draftRevisionRef.current === submittedDraftRevision) {
+          draftRevisionRef.current += 1;
+          props.onDraftChange("");
+        }
+        if (stagedAttachmentRevisionRef.current === submittedAttachmentRevision) {
+          stagedAttachmentRevisionRef.current += 1;
+          setStagedComposerItems([]);
+        }
+        if (outcome.rejectedItems?.length) {
+          setAttachmentSubmissionNotice({
+            acceptedCount: outcome.acceptedItems?.length ?? outcome.sourceIds.length,
+            rejectedFiles: outcome.rejectedItems.map((item) => ({
+              displayName: item.displayName,
+              reason: item.reason
+            }))
+          });
+        }
+        setActiveSourceTurn({
+          clientTurnId,
+          jobId: outcome.jobId,
+          pending: false,
+          sourceDisplayName
+        });
+        setOptimisticConversationTurns((current) => current.map((turn) =>
+          turn.clientTurnId === clientTurnId
+            ? {
+                ...turn,
+                conversationEventId: outcome.conversationEventId,
+                jobId: outcome.jobId
+              }
+            : turn
+        ));
+        setAgentRunState("running");
+        await props.onHomeStateChanged().catch(() => undefined);
+        void refreshConversation();
+      } catch {
+        clearAgentDraft();
+        setActiveSourceTurn(null);
+        setOptimisticConversationTurns((current) => current.filter((turn) => turn.clientTurnId !== clientTurnId));
+        setAgentError({
+          code: "model_provider.call_failed",
+          domain: "model_provider",
+          messageKey: "errors.model_provider.call_failed",
+          retryable: true,
+          severity: "error",
+          userAction: "retry"
+        });
+        setAgentRunState("failed");
+        void refreshConversation();
+      } finally {
+        composerSubmitInFlightRef.current = false;
+        setComposerSubmitActive(false);
+      }
       return;
     }
     followConversationRef.current = true;
@@ -4963,7 +5079,7 @@ function HomeComposer(props: {
     const clearedDraftRevision = submittedDraftRevision + 1;
     const submittedAttachmentRevision = stagedAttachmentRevisionRef.current;
     const clearedAttachmentRevision = submittedAttachmentRevision + 1;
-    const attemptKey = composerAttemptKey(submittedText, submittedFiles);
+    const attemptKey = composerAttemptKey(submittedText, []);
     const clientTurnId = stagedComposerAttemptRef.current?.key === attemptKey
       ? stagedComposerAttemptRef.current.clientTurnId
       : createAgentClientTurnId();
@@ -5770,8 +5886,8 @@ function HomeComposer(props: {
                     <strong>{label}</strong>
                     {isPastedText ? (
                       <small>{props.t("home.pastedTextMeta")
-                        .replace("{characters}", new Intl.NumberFormat(props.locale).format(item.characterCount))
-                        .replace("{size}", formatByteCount(item.byteCount, props.locale))}</small>
+                        .replace("{characters}", new Intl.NumberFormat(props.locale).format(item.unicodeCodePointCount))
+                        .replace("{size}", formatByteCount(item.utf8ByteSize, props.locale))}</small>
                     ) : null}
                     {item.kind === "rejected_pasted_text" ? (
                       <small className="attachment-chip-rejection" role="status">
@@ -5827,7 +5943,7 @@ function HomeComposer(props: {
           placeholder={props.t("home.placeholder")}
           rows={4}
           value={text}
-          onPaste={(event) => handleComposerPaste(event, text, props.largePasteAdapter, (classification) => {
+          onPaste={(event) => handleComposerPaste(event, text, stagedComposerItems, (classification) => {
             stagedAttachmentRevisionRef.current += 1;
             stagedComposerAttemptRef.current = null;
             setAttachmentSubmissionNotice(null);
@@ -5964,18 +6080,27 @@ function HomeComposer(props: {
               const files = Array.from(event.currentTarget.files ?? []);
               event.currentTarget.value = "";
               if (files.length === 0) return;
+              const acceptedItemCount = stagedComposerItems.filter((item) => item.kind !== "rejected_pasted_text").length;
+              const availableItemCount = Math.max(0, AGENT_STAGED_ITEM_MAX_COUNT - acceptedItemCount);
+              const acceptedFiles = files.slice(0, availableItemCount);
+              if (acceptedFiles.length === 0) {
+                setCaptureError(props.t("home.attachmentRejection.tooManyFiles"));
+                return;
+              }
               stagedAttachmentRevisionRef.current += 1;
               stagedComposerAttemptRef.current = null;
               setAttachmentSubmissionNotice(null);
               setStagedComposerItems((current) => [
                 ...current,
-                ...files.map((file) => ({
+                ...acceptedFiles.map((file) => ({
                   kind: "file" as const,
                   localId: createComposerItemId("file"),
                   file
                 }))
               ]);
-              setCaptureError(null);
+              setCaptureError(acceptedFiles.length < files.length
+                ? props.t("home.attachmentRejection.tooManyFiles")
+                : null);
               window.requestAnimationFrame(() => composerInputRef.current?.focus({ preventScroll: true }));
             }}
           />
@@ -6114,10 +6239,12 @@ function createAgentClientTurnId(now = new Date()): string {
   return `turn_${date}_${opaqueId}`;
 }
 
-function composerAttemptKey(text: string, files: readonly File[]): string {
+function composerAttemptKey(text: string, items: readonly StagedComposerItem[]): string {
   return JSON.stringify([
     text,
-    files.map((file) => [file.name, file.size, file.type, file.lastModified])
+    items.map((item) => item.kind === "file"
+      ? [item.kind, item.localId, item.file.name, item.file.size, item.file.type, item.file.lastModified]
+      : [item.kind, item.localId, item.unicodeCodePointCount, item.utf8ByteSize])
   ]);
 }
 
@@ -6128,18 +6255,51 @@ function createComposerItemId(kind: "file" | "paste"): string {
 function handleComposerPaste(
   event: ReactClipboardEvent<HTMLTextAreaElement>,
   composerText: string,
-  adapter: HomeLargePasteAdapter | undefined,
+  stagedItems: readonly StagedComposerItem[],
   onStage: (classification: Exclude<HomeLargePasteClassification, { readonly kind: "ordinary" }>) => void
 ): void {
-  if (!adapter) return;
   const pastedText = event.clipboardData.getData("text/plain");
-  const classification = adapter.classifyPaste({ composerText, pastedText });
-  if (classification.kind === "ordinary") return;
+  if (!pastedText) return;
+  const selectionStart = event.currentTarget.selectionStart ?? composerText.length;
+  const selectionEnd = event.currentTarget.selectionEnd ?? selectionStart;
+  const resultingText = `${composerText.slice(0, selectionStart)}${pastedText}${composerText.slice(selectionEnd)}`;
+  if (Array.from(resultingText).length <= AGENT_AUTHORED_TEXT_MAX_CODE_POINTS) return;
+  const utf8ByteSize = new TextEncoder().encode(pastedText).byteLength;
+  const item: StagedPastedTextItem = {
+    localId: createComposerItemId("paste"),
+    text: pastedText,
+    unicodeCodePointCount: Array.from(pastedText).length,
+    utf8ByteSize
+  };
+  const acceptedItems = stagedItems.filter((stagedItem) => stagedItem.kind !== "rejected_pasted_text");
+  const aggregatePasteBytes = acceptedItems.reduce((total, stagedItem) =>
+    total + (stagedItem.kind === "pasted_text" ? stagedItem.utf8ByteSize : 0), 0);
+  const classification: HomeLargePasteClassification = acceptedItems.length >= AGENT_STAGED_ITEM_MAX_COUNT
+    ? { kind: "rejected", item, reason: "item_limit" }
+    : utf8ByteSize > AGENT_LARGE_PASTE_ITEM_MAX_UTF8_BYTES
+      ? { kind: "rejected", item, reason: "item_too_large" }
+      : aggregatePasteBytes + utf8ByteSize > AGENT_LARGE_PASTE_AGGREGATE_MAX_UTF8_BYTES
+        ? { kind: "rejected", item, reason: "aggregate_too_large" }
+        : { kind: "staged", item };
   event.preventDefault();
   onStage(classification);
 }
 
-function largePasteRejectionMessageKey(reason: HomeLargePasteRejectionReason): string {
+function toAgentStagedItems(items: readonly StagedComposerItem[]): readonly AgentStagedItem[] {
+  return items
+    .filter((item) => item.kind !== "rejected_pasted_text")
+    .map((item, ordinal) => item.kind === "file"
+      ? { kind: "file", ordinal, displayName: item.file.name }
+      : {
+          kind: "large_paste",
+          ordinal,
+          text: item.text,
+          unicodeCodePointCount: item.unicodeCodePointCount,
+          utf8ByteSize: item.utf8ByteSize
+        });
+}
+
+function largePasteRejectionMessageKey(reason: AgentStagedItemRejectionReason): string {
   if (reason === "item_limit") return "home.largePasteRejectedItemLimit";
   if (reason === "aggregate_too_large") return "home.largePasteRejectedAggregateLimit";
   return "home.largePasteRejectedItemTooLarge";

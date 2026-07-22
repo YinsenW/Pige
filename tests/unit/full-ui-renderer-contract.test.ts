@@ -135,7 +135,7 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain('onClick={() => fileInputRef.current?.click()}');
     expect(appSource).toContain('name="attach"');
     expect(appSource).toContain('props.t("home.attachToMessage")');
-    expect(appSource).toContain('className="attachment-chip"');
+    expect(appSource).toContain('className={`attachment-chip${isPastedText ? " pasted-text-chip" : ""}');
     expect(appSource).toContain("multiple");
     expect(appSource).toContain('className="attachment-submission-notice"');
     expect(appSource).toContain("attachmentRejectionMessageKey(rejection.reason)");
