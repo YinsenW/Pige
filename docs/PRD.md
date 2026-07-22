@@ -244,6 +244,15 @@ authored query and staged attachments to one Agent turn and one parent Job. Atta
 only submit adds only the minimal organize intent. A rejected submit preserves the exact
 query and chips; idempotent retry cannot duplicate the turn or source preservation.
 
+Paste uses the same submit boundary. Exact clipboard text remains ordinary composer text
+only when insertion keeps the composer within 8,000 Unicode code points, without trim or
+normalization. Otherwise the whole clipboard payload becomes one removable large-paste
+item and existing composer text stays unchanged. Files and large pastes share one ordered
+staged-item list; selection, staging and removal remain side-effect free. Send snapshots
+the exact query and ordered list, preserves each accepted paste once as a managed source,
+and stores conversation references rather than duplicate bodies. The canonical counts,
+byte bounds and retry rules live in `resources/large-paste-boundary.manifest.json`.
+
 The home timeline should show recent captures, retrieved answers, job progress, and Agent summaries. Durable knowledge belongs in Markdown pages, source pages, `index.md`, and `log.md`.
 
 Default home requirements:

@@ -15,25 +15,33 @@
       "docs/AI_DEVELOPMENT_GUIDE.md",
       "docs/TECH_ARCHITECTURE.md",
       "docs/SECURITY_THREAT_MODEL.md",
+      "docs/PRD.md",
+      "docs/UI_PROTOTYPE.md",
+      "docs/API_AND_IPC_DESIGN.md",
+      "docs/DATA_ARCHITECTURE.md",
+      "docs/SOURCE_STORAGE_STRATEGY.md",
       "docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md",
       "docs/JOB_OPERATION_AND_RECOVERY.md",
       "docs/QUALITY_AND_TEST_STRATEGY.md",
       "docs/V0_1_IMPLEMENTATION_PLAYBOOK.md",
+      "docs/SPEC_TRACEABILITY.md",
       "docs/DECISION_LOG.md",
       "resources/architecture-reset.manifest.json",
+      "resources/large-paste-boundary.manifest.json",
       "resources/traceability/acceptance.manifest.json",
       "resources/traceability/semantic-claims.manifest.json",
       "scripts/verify/architecture-reset.mjs",
+      "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent review of the Pi pass-through reset: exact Provider payload, upstream final authority, strict tool/effect boundaries, removal inventory/no-growth guards, static Privacy UI truth, staged implementation, and unchanged product status.",
+    "scope": "Independent review of the large-paste Agent-turn boundary: canonical Unicode and UTF-8 limits, side-effect-free ordered staging, atomic exact submission, exact-once managed-source preservation, reference-only history, safe UI projection, retry identity, and unchanged status.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
-    "minimumFileCount": 18,
-    "reviewedSha256": "9afc322a46e6ebca1397fb3622e601808778ec892754601507af9049ad5aa01b"
+    "minimumFileCount": 26,
+    "reviewedSha256": "03ff8895794777f57a57e268967fe814fc9cdbcd8f7a750d27d39ac7b393742e"
   },
   "reviewers": [{
     "reviewerId": "architecture-reset-planning-review",
-    "task": "Personal Agent architecture reset contract review",
+    "task": "Large pasted content boundary contract review",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -44,29 +52,29 @@
     "independence": "Product Planning reviews only contracts and executable governance; Development still owns every implementation deletion, rewrite, security test, package and runtime artifact."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"The start contract routes ordinary work to one semantic owner, Pi, while Host capability, authority, persistence and recovery owners stay explicit."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Security, privacy, runtime, Job, Provider and UI owners share exact payload/Pi-final pass-through while tool, effect, credential and durable boundaries stay strict."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Affected statuses remain unchanged, AR1-AR4/PT1-PT4 are explicit, and the reset cannot promote product status."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"The machine inventory gives Development exact DELETE, REWRITE and KEEP targets, no-growth guards, owner budgets and staged verification nodes."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Decisions are defined once in canonical owners; ordinary PRs avoid full snapshot ceremony while architecture, merge-candidate and main retain complete review."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"One composer boundary distinguishes ordinary paste, staged large paste and independent immediate file drop without introducing another product mode."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"UI, IPC, source, data and Job owners share one manifest for exact text, ordered staging, preservation and retry semantics."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"PIGE-CAP-002 and E2.02 remain planned while acceptance names the exact executable evidence still required."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"The manifest and mutation gate give UI, preload and service owners one constants source and fail deterministic drift."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Numeric limits are defined once in a compact manifest and prose owners project only their own observable or durability boundary."}
   ],
   "verification": [
-    {"command":"npm run verify:architecture-reset","status":"passed","evidence":"Executable guards freeze AR1-AR4/PT1-PT4, 32 production call sites, pass-through no-growth, implementation dispositions and unchanged status."},
+    {"command":"npm run verify:large-paste-boundary","status":"passed","evidence":"Canonical values, owner markers, planned statuses and deterministic mutation controls pass."},
     {"command":"npm run verify:contracts","status":"passed","evidence":"Canonical Job reliability plus submitted-turn, high-risk and Provider-send contracts remain single-owned and fail safe."},
     {"command":"npm run verify","status":"passed","evidence":"The full merge-candidate governance suite passes after trace, semantic and reviewed-snapshot regeneration."}
   ],
   "coordination": {
-    "taskId": "personal-agent-architecture-reset-20260722",
-    "taskTitle": "Personal Agent architecture reset",
+    "taskId": "large-paste-boundary-20260723",
+    "taskTitle": "Large pasted content Agent-turn boundary",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Legacy internal approval and Host-orchestration mechanisms are intentionally not a compatibility target; durable user knowledge, sources, credentials and recoverable data remain protected.",
-    "acknowledgement": "Product Planning freezes the contract and machine inventory; Development executes PT1-PT4 as small reviewable candidates without Requirement, Exit or Phase promotion."
+    "compatibility": "The current 8,000-code-point request bound stays authoritative while staged large-paste implementation is pending; no capture-only route is restored.",
+    "acknowledgement": "Product Planning freezes one cross-layer manifest; Development and UI bind it in one later candidate without Requirement, Exit or Phase promotion."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Current terminal/output validators and remaining Host pipelines are bounded deletion debt until PT1-PT4 land.",
+    "The manifest is frozen but staged large-paste runtime and UI binding remain unimplemented.",
     "Windows and Linux qualification remains deferred and unclaimed during early macOS-first development."
   ]
 }

@@ -553,6 +553,30 @@ It does not merge with, consume, or clear a staged composer draft. Attachment-on
 injects the minimal organize intent only when the request is accepted; picker time never
 creates synthetic text or durable state.
 
+`resources/large-paste-boundary.manifest.json` is the machine-readable cross-layer owner
+for staged paste constants. `AgentSubmitTurnRequest` retains an ordinary authored-text
+maximum of 8,000 Unicode code points. The implementation extends the submitted staged
+collection to an ordered strict union whose item kind is `file` or `large_paste`; both
+kinds share the maximum of eight items. A large-paste item carries the exact clipboard
+UTF-8 body only across the strict renderer/preload/main submit boundary, never in a safe
+pending projection. Each item is at most 4 MiB UTF-8 and all paste bodies in one request
+are at most 8 MiB UTF-8. These preservation limits are not Provider-context budgets.
+`@pige/schemas` must export the manifest-named constants and strict staged-item types;
+renderer, preload and service consumers import them and may not hardcode parallel limits.
+`AgentStagedItemRejectionReason` is exactly `item_limit | item_too_large |
+aggregate_too_large`. A rejected paste remains a safe local item with its reason and no
+body preview; it is excluded from submission and blocks atomic Send until removed or
+adjusted. Structural partial acceptance never clears rejected items or composer text.
+
+The renderer measures exact code points without normalization or trim. If exact insertion
+would exceed the ordinary boundary, it stages the whole payload and leaves current text
+unchanged. Send binds exact query, ordered mixed items, active vault and one client-turn
+identity. Main either accepts the complete immutable snapshot under one parent Job or
+returns safe per-item/structural errors; failure preserves text, items, order and identity.
+Retry adopts preserved source refs and cannot duplicate bodies, events or Jobs. The
+whole-window `file_drop` route remains a separate immediate turn and cannot consume this
+composer snapshot.
+
 `agent.turnDraft` is a sender-scoped presentation event for an active
 `agent.submitTurn`, not a durable result or raw runtime stream:
 
