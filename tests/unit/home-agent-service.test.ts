@@ -36,12 +36,10 @@ import { HighRiskConfirmationService } from "../../apps/desktop/src/main/service
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
 import { PermissionedExternalCapabilityRegistry } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
 import { createFirstPartyCommandCapabilityAdapter } from "../../apps/desktop/src/main/services/command-capability-adapter";
-import { applyReaderSelectionPageUpdate } from "../../apps/desktop/src/main/services/agent-page-update-service";
 import { createFirstPartyReadonlyNodeOsCapabilityAdapters } from "../../apps/desktop/src/main/services/readonly-node-os/first-party-readonly-node-os-capability-adapters";
 import { readMarkdownPageByRelativePath } from "../../apps/desktop/src/main/services/markdown-page-index";
 import {
   readCurrentNoteEvidenceBinding,
-  readCurrentNotePageForMutation,
   resolveCurrentNoteEvidenceQuoteLocator
 } from "../../apps/desktop/src/main/services/retrieval-evidence-boundary";
 import {
@@ -970,7 +968,7 @@ describe("Home Pi Agent service", () => {
     });
   });
 
-  it("recovers a durable Reader transform assistant event and publishes one reversible Operation", async () => {
+  it("adopts a durable Reader transform answer without replaying its mutation", async () => {
     const fixture = makeFixture();
     const pageId = "page_20260718_recovertransform";
     const pagePath = path.join(fixture.vaultPath, "wiki", "generated", "2026", `${pageId}.md`);
@@ -990,6 +988,7 @@ describe("Home Pi Agent service", () => {
     const jobs = new JobsService(fixture.vaults);
     const conversations = new AgentTurnConversationStore();
     let runtimeCalls = 0;
+    let mutationCalls = 0;
     const service = new TestHomeAgentService(
       fixture.vaults,
       models,
@@ -1002,17 +1001,10 @@ describe("Home Pi Agent service", () => {
       undefined,
       undefined,
       {
-        apply: ({ vaultPath, job, selection: durableSelection, replacement, action }) => ({
-          status: "applied" as const,
-          operationId: applyReaderSelectionPageUpdate({
-            vaultPath,
-            job,
-            target: readCurrentNotePageForMutation(vaultPath, durableSelection.pageId),
-            selection: durableSelection,
-            replacement,
-            action
-          }).operation.id
-        })
+        apply: () => {
+          mutationCalls += 1;
+          throw new Error("Recovery must not replay a Reader mutation.");
+        }
       }
     );
     const internalInstruction = "Polish the selected passage while preserving its meaning. " +
@@ -1061,6 +1053,7 @@ describe("Home Pi Agent service", () => {
       failed: 0
     });
     expect(runtimeCalls).toBe(0);
+    expect(mutationCalls).toBe(0);
     const recoveredTimeline = service.conversation({ scope: { kind: "current_note", pageId } });
     expect(recoveredTimeline?.messages[0]).toMatchObject({
       text: "",
@@ -1070,14 +1063,14 @@ describe("Home Pi Agent service", () => {
       }
     });
     expect(JSON.stringify(recoveredTimeline)).not.toContain(internalInstruction);
-    expect(fs.readFileSync(pagePath, "utf8")).toContain("The recovery passage is polished.");
+    expect(fs.readFileSync(pagePath, "utf8")).toContain("The recovery passage needs polishing.");
     expect(jobs.readAgentTurnJob(waiting.jobId)).toMatchObject({
       state: "completed",
-      operationIds: [expect.stringMatching(/^op_/u)],
       outputRefs: expect.arrayContaining([
-        expect.objectContaining({ kind: "operation", role: "reader_selection_transform_operation" })
+        expect.objectContaining({ kind: "conversation", role: "agent_turn_assistant_event" })
       ])
     });
+    expect(jobs.readAgentTurnJob(waiting.jobId)?.operationIds ?? []).toEqual([]);
   });
 
   it("blocks restricted query content before credential resolution, retrieval, or a Pi turn", async () => {

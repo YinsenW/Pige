@@ -19,6 +19,7 @@ import type {
   AdoptDurableCompletionInput,
   JobExecutionOutcome
 } from "./job-execution-coordinator";
+import { readDurableAgentTurnAnswer } from "./durable-agent-turn-answer";
 import { readReaderSelectionTransformBinding } from "./reader-selection-job-binding";
 
 export interface HomeAgentJobSession {
@@ -161,7 +162,7 @@ export function readDurableTurnResult(input: {
     input.session.current.id
   );
   if (assistant) {
-    const answer = readAssistantAnswer(assistant);
+    const answer = readDurableAgentTurnAnswer(assistant);
     input.session.modelInvocationStarted = true;
     input.session.modelUsage = input.session.current.privacy?.usedCloudModel === true ? "cloud" : "local";
     if (input.session.current.state === "awaiting_review") {
@@ -240,33 +241,12 @@ export function readDurableTurnResult(input: {
 }
 
 export function recoverDurableAssistantPublication(input: {
-  readonly vaultPath: string;
   readonly session: HomeAgentJobSession;
   readonly assistant: ConversationEvent;
   readonly jobs: HomeAgentTurnJobPort;
-  readonly mutations: HomeAgentReaderSelectionMutationPort | undefined;
-}): "completed" | "waiting" {
+}): "completed" {
   input.session.modelInvocationStarted = true;
-  const answer = readAssistantAnswer(input.assistant);
-  const publication = applyReaderSelectionTransform(
-    input.mutations,
-    input.vaultPath,
-    input.session.current,
-    answer
-  );
-  if (publication?.status === "review_required") {
-    settleJobAfterAssistant({
-      session: input.session,
-      jobs: input.jobs,
-      mutations: input.mutations,
-      vaultPath: input.vaultPath,
-      result: answer,
-      assistantEventId: input.assistant.id,
-      sourceIds: collectAgentTurnSourceIds(input.session.current, []),
-      ...(input.assistant.contentHash ? { assistantContentHash: input.assistant.contentHash } : {})
-    });
-    return "waiting";
-  }
+  readDurableAgentTurnAnswer(input.assistant);
   input.session.current = input.jobs.adoptAgentTurnCompletion(input.session.current, {
     checkpointId: "agent_turn_assistant_event_persisted",
     message: "Recovered the durable assistant result without another model call.",
@@ -276,12 +256,7 @@ export function recoverDurableAssistantPublication(input: {
         id: input.assistant.id,
         role: "agent_turn_assistant_event",
         ...(input.assistant.contentHash ? { checksum: input.assistant.contentHash } : {})
-      }, ...(publication?.status === "applied" ? [{
-        kind: "operation" as const,
-        id: publication.operationId,
-        role: "reader_selection_transform_operation"
-      }] : [])],
-      ...(publication?.status === "applied" ? { operationIds: [publication.operationId] } : {}),
+      }],
       privacy: modelInvocationPrivacy(input.session)
     }
   });
@@ -304,18 +279,6 @@ export function collectAgentTurnSourceIds(
       ))
       .flatMap((ref) => ref.id ? [ref.id] : [])
   ]));
-}
-
-export function readAssistantAnswer(event: ConversationEvent): AgentTurnAnswer {
-  if (event.type !== "assistant_message" || typeof event.text !== "string") {
-    throw new PigeDomainError("agent_runtime.turn_conflict", "The durable assistant event is invalid.");
-  }
-  return {
-    answer: event.text,
-    grounding: event.answerGrounding ?? "general",
-    citations: event.answerCitations ?? [],
-    ...(event.answerDatasetResult ? { datasetResult: event.answerDatasetResult } : {})
-  };
 }
 
 export function isDatasetAnswerCitation(

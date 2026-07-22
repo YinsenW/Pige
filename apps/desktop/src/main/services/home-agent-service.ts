@@ -943,16 +943,11 @@ export class HomeAgentService {
         }
         const durableAssistant = this.#conversations.findAssistantTurn(vaultPath, preserved.locator, job.id);
         if (durableAssistant) {
-          if (recoverDurableAssistantPublication({
-            vaultPath,
+          recoverDurableAssistantPublication({
             session,
             assistant: durableAssistant,
-            jobs: this.#jobs,
-            mutations: this.#readerSelectionMutations
-          }) === "waiting") {
-            waiting += 1;
-            continue;
-          }
+            jobs: this.#jobs
+          });
           completed += 1;
           continue;
         }
