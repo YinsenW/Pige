@@ -387,28 +387,6 @@ describe("Note Agent production UI", () => {
     await unmount(dom, mount.root);
   });
 
-  it("gives model egress one body-free current-action owner", async () => {
-    const dom = createDom();
-    const decisions: string[] = [];
-    const mount = await mountPanel(dom, {
-      availability: "running",
-      modelEgressPrompt: {
-        kind: "ready",
-        reasonMessageKey: "home.modelEgress.sensitive"
-      },
-      onModelEgressDecision: (decision) => decisions.push(decision)
-    });
-
-    expect(mount.container.querySelectorAll(".note-agent-egress-prompt")).toHaveLength(1);
-    expect(mount.container.querySelector(".note-agent-run-state")).toBeNull();
-    expect(mount.container.textContent).toContain(t("home.modelEgress.sensitive"));
-    await click(dom, required(buttonNamed(mount.container, t("home.modelEgress.deny"))));
-    await click(dom, required(buttonNamed(mount.container, t("home.modelEgress.allowOnce"))));
-    expect(decisions).toEqual(["deny", "allow_once"]);
-
-    await unmount(dom, mount.root);
-  });
-
   it("keeps overlay focus contained and closes through Escape", async () => {
     const dom = createDom();
     let closes = 0;
@@ -475,10 +453,6 @@ describe("Note Agent production UI", () => {
         jobs: {
           cancel: vi.fn(),
           retry: vi.fn()
-        },
-        modelEgress: {
-          pending: vi.fn(),
-          resolve: vi.fn()
         }
       }
     });
@@ -574,80 +548,6 @@ describe("Note Agent production UI", () => {
     expect(buttonNamed(container, "Current note · quote")).toBeDefined();
     expect(container.querySelector(".proposal-panel")).toBeNull();
     expect(container.querySelector(".attach-button")?.hasAttribute("disabled")).toBe(true);
-
-    await unmount(dom, root);
-  });
-
-  it("reconciles the exact current-note model-egress decision without a duplicate status", async () => {
-    const dom = createDom();
-    const waitingTimeline = noteEgressTimeline("waiting_model_egress");
-    const deniedTimeline = noteEgressTimeline("failed_final");
-    const conversation = vi.fn()
-      .mockResolvedValueOnce(waitingTimeline)
-      .mockResolvedValue(deniedTimeline);
-    const resolve = vi.fn().mockResolvedValue({
-      status: "denied",
-      requestId: "egressreq_note_1",
-      jobId: "job_note_egress_1"
-    });
-    Object.defineProperty(dom.window, "pige", {
-      configurable: true,
-      value: {
-        agent: {
-          conversation,
-          submitTurn: vi.fn(),
-          onTurnDraft: () => () => undefined
-        },
-        jobs: { cancel: vi.fn(), retry: vi.fn() },
-        modelEgress: {
-          pending: vi.fn().mockResolvedValue({
-            requestId: "egressreq_note_1",
-            jobId: "job_note_egress_1",
-            providerProfileId: "provider_note_1",
-            modelProfileId: "model-note-a",
-            reasonCode: "sensitive_confirmation",
-            contentClasses: ["sensitive"],
-            requestedAt: "2026-07-16T01:00:00.000Z"
-          }),
-          resolve
-        }
-      }
-    });
-    const container = dom.window.document.createElement("div");
-    dom.window.document.body.append(container);
-    const { createRoot } = await import("react-dom/client");
-    const root = createRoot(container);
-    await act(async () => {
-      root.render(createElement(CurrentNoteAgent, {
-        modal: false,
-        vaultId: "vault_current_note_1",
-        pageId: "page_current_note_1",
-        noteTitle: "Current note.md",
-        locale: "en",
-        models: modelFixtures(),
-        onClose: () => undefined,
-        onOpenModels: () => undefined,
-        onSelectModel: async () => true,
-        onOpenCitation: () => undefined,
-        t
-      }));
-      await settle(dom);
-    });
-    await waitFor(dom, () => buttonNamed(container, t("home.modelEgress.deny")) !== undefined);
-    expect(container.querySelectorAll(".note-agent-egress-prompt")).toHaveLength(1);
-    expect(container.querySelector(".note-agent-run-state")).toBeNull();
-    expect(required(container.querySelector<HTMLButtonElement>(".note-agent-model-switcher")).disabled).toBe(true);
-
-    await click(dom, required(buttonNamed(container, t("home.modelEgress.deny"))));
-    await waitFor(dom, () => container.querySelector(".note-agent-egress-prompt") === null);
-    expect(resolve).toHaveBeenCalledWith({
-      requestId: "egressreq_note_1",
-      jobId: "job_note_egress_1",
-      decision: "deny"
-    });
-    expect(container.querySelectorAll(".note-agent-run-state.error")).toHaveLength(1);
-    expect(container.textContent).toContain(t("errors.model_provider.egress_denied"));
-    expect(container.querySelector(".note-agent-run-state button")).toBeNull();
 
     await unmount(dom, root);
   });
@@ -1292,42 +1192,6 @@ function proposalFixture(): NoteAgentProposal {
   };
 }
 
-function noteEgressTimeline(state: "waiting_model_egress" | "failed_final"): Record<string, unknown> {
-  return {
-    conversationId: "conversation_note_egress_1",
-    tailEventId: "event_note_user_egress_1",
-    canFollowUp: false,
-    messages: [{
-      id: "event_note_user_egress_1",
-      role: "user",
-      createdAt: "2026-07-16T01:00:00.000Z",
-      text: "Explain the sensitive section.",
-      jobId: "job_note_egress_1"
-    }],
-    latestTurn: {
-      jobId: "job_note_egress_1",
-      userEventId: "event_note_user_egress_1",
-      state,
-      error: state === "waiting_model_egress" ? {
-        code: "model_provider.egress_confirmation_required",
-        domain: "model_provider",
-        messageKey: "errors.model_provider.egress_confirmation_required",
-        retryable: false,
-        severity: "warning",
-        userAction: "confirm_model_egress",
-        modelEgressApprovalRequestId: "egressreq_note_1"
-      } : {
-        code: "model_provider.egress_denied",
-        domain: "model_provider",
-        messageKey: "errors.model_provider.egress_denied",
-        retryable: false,
-        severity: "warning",
-        userAction: "none"
-      }
-    }
-  };
-}
-
 function noteRecoveryTimeline(state: "waiting_dependency" | "queued" | "running" | "completed"): Record<string, unknown> {
   const pageId = "page_current_note_recovery";
   const jobId = "job_note_recovery_1";
@@ -1462,8 +1326,7 @@ function noteAgentApi(conversation: ReturnType<typeof vi.fn>): Record<string, un
       submitTurn: vi.fn(),
       onTurnDraft: () => () => undefined
     },
-    jobs: { cancel: vi.fn(), retry: vi.fn() },
-    modelEgress: { pending: vi.fn(), resolve: vi.fn() }
+    jobs: { cancel: vi.fn(), retry: vi.fn() }
   };
 }
 

@@ -535,7 +535,7 @@ describe("desktop shell build contract", () => {
     );
   });
 
-  it("exposes one-use Model Egress decisions through strict main and preload boundaries", () => {
+  it("keeps legacy Model Egress IPC out of the canonical renderer owner", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
@@ -562,13 +562,12 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("getVaultService().assertWriterLease(vaultPath)");
     expect(preloadSource).toContain('ipcRenderer.invoke("modelEgress.pending", request)');
     expect(preloadSource).toContain('ipcRenderer.invoke("modelEgress.resolve", request)');
-    expect(rendererSource).toContain('window.pige.modelEgress.resolve({');
-    expect(rendererSource).toContain('decideModelEgress("allow_once")');
-    expect(rendererSource).toContain('decideModelEgress("deny")');
+    expect(rendererSource).not.toContain("window.pige.modelEgress");
+    expect(rendererSource).not.toContain("decideModelEgress");
     expect(resolveHandler).not.toContain("permissionDecisionId");
   });
 
-  it("exposes current-action Permission Broker decisions through strict body-free main and preload boundaries", () => {
+  it("keeps legacy Permission Broker prompts out of the canonical renderer owner", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
@@ -593,9 +592,8 @@ describe("desktop shell build contract", () => {
     expect(resolveHandler).toContain("scheduleAgentTurnProcessing()");
     expect(preloadSource).toContain('ipcRenderer.invoke("permissions.pending", request)');
     expect(preloadSource).toContain('ipcRenderer.invoke("permissions.resolve", request)');
-    expect(rendererSource).toContain('window.pige.permissions.resolve({');
-    expect(rendererSource).toContain('decidePermission("allow_once")');
-    expect(rendererSource).toContain('decidePermission("deny")');
+    expect(rendererSource).not.toContain("window.pige.permissions");
+    expect(rendererSource).not.toContain("decidePermission");
     for (const unsafeField of ["actionInputHash", "resourceIdentityHash", "policyHash", "bindingHash", "actorDigest"]) {
       expect(pendingHandler).not.toContain(unsafeField);
       expect(resolveHandler).not.toContain(unsafeField);
@@ -611,13 +609,20 @@ describe("desktop shell build contract", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const dialogSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/components/HighRiskConfirmationDialog.tsx"),
+      "utf8"
+    );
     const serviceSource = fs.readFileSync(
       path.resolve("apps/desktop/src/main/services/high-risk-confirmation-service.ts"),
       "utf8"
     );
+    const confirmationsStart = preloadSource.indexOf("confirmations: {");
+    const legacyBoundary = preloadSource.indexOf("modelEgress: {", confirmationsStart);
     const preloadApi = preloadSource.slice(
-      preloadSource.indexOf("confirmations: {"),
-      preloadSource.indexOf("modelEgress: {")
+      confirmationsStart,
+      legacyBoundary >= 0 ? legacyBoundary : preloadSource.indexOf("skills: {", confirmationsStart)
     );
 
     expect(contractsSource).toContain("readonly confirmations: {");
@@ -634,6 +639,12 @@ describe("desktop shell build contract", () => {
     expect(preloadApi).toContain('ipcRenderer.on("confirmations.changed", handler)');
     expect(serviceSource).toContain("#inFlight");
     expect(serviceSource).toContain("withdraw(request: HighRiskConfirmationWithdrawal)");
+    expect(rendererSource).toContain("window.pige.confirmations.onChanged");
+    expect(rendererSource).toContain("window.pige.confirmations.pending()");
+    expect(rendererSource).toContain("window.pige.confirmations.resolve({");
+    expect(dialogSource).toContain('role="dialog"');
+    expect(dialogSource).toContain('if (event.key === "Escape")');
+    expect(dialogSource).toContain('props.onResolve("deny")');
     for (const unsafeField of ["path", "command", "body", "hash", "credential", "provider", "rawError", "jobId"]) {
       expect(preloadApi).not.toContain(unsafeField);
     }

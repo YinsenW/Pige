@@ -114,6 +114,11 @@ function makePigeApi(awaitingReview: boolean, calls: ProposalApiCalls): object {
     backup: {
       status: async () => null
     },
+    confirmations: {
+      pending: async () => ({ apiVersion: 1 as const, status: "none" as const, revision: 0 }),
+      resolve: async () => ({ apiVersion: 1 as const, status: "not_found" as const, revision: 0 }),
+      onChanged: () => () => undefined
+    },
     speech: {
       onAssetInstallEvent: () => () => undefined
     },

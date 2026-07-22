@@ -43,14 +43,6 @@ export type NoteAgentModelOption = {
   readonly ready: boolean;
 };
 
-export type NoteAgentModelEgressPrompt =
-  | { readonly kind: "loading" | "unknown" }
-  | {
-      readonly kind: "ready" | "resolving";
-      readonly reasonMessageKey: string;
-      readonly errorMessageKey?: string;
-    };
-
 export function NoteAgentPanel(props: {
   readonly modal: boolean;
   readonly noteTitle: string;
@@ -62,7 +54,6 @@ export function NoteAgentPanel(props: {
   readonly models: readonly NoteAgentModelOption[];
   readonly switchingModel: boolean;
   readonly errorMessageKey?: string;
-  readonly modelEgressPrompt?: NoteAgentModelEgressPrompt | null;
   readonly onClose: () => void;
   readonly onDraftChange: (value: string) => void;
   readonly onSubmit?: () => void;
@@ -71,7 +62,6 @@ export function NoteAgentPanel(props: {
   readonly onAttach?: () => void;
   readonly onOpenModels?: (opener: HTMLButtonElement) => void;
   readonly onSelectModel?: (modelId: string) => Promise<boolean>;
-  readonly onModelEgressDecision?: (decision: "allow_once" | "deny") => void;
   readonly onOpenCitation?: (pageId: string) => void;
   readonly onCopyMessage?: (messageId: string) => Promise<boolean> | boolean;
   readonly onProposalAction?: (proposalId: string, action: "reject" | "later" | "apply") => void;
@@ -105,7 +95,6 @@ export function NoteAgentPanel(props: {
     props.messages.at(-1)?.id ?? "none",
     props.messages.at(-1)?.body.length ?? 0,
     props.availability,
-    props.modelEgressPrompt?.kind ?? "none",
     props.proposal?.state ?? "none"
   ].join(":");
 
@@ -406,42 +395,7 @@ export function NoteAgentPanel(props: {
             </div>
           )}
 
-          {props.modelEgressPrompt ? (
-            <div className="model-egress-prompt note-agent-egress-prompt" role="group" aria-labelledby="note-agent-egress-title">
-              <strong id="note-agent-egress-title">{props.t("home.modelEgress.title")}</strong>
-              <span>
-                {props.modelEgressPrompt.kind === "ready" || props.modelEgressPrompt.kind === "resolving"
-                  ? props.t(props.modelEgressPrompt.reasonMessageKey)
-                  : props.t(props.modelEgressPrompt.kind === "unknown"
-                    ? "home.modelEgress.unknown"
-                    : "home.modelEgress.loading")}
-              </span>
-              {props.modelEgressPrompt.kind === "ready" && props.modelEgressPrompt.errorMessageKey ? (
-                <span className="error">{props.t(props.modelEgressPrompt.errorMessageKey)}</span>
-              ) : null}
-              {props.modelEgressPrompt.kind === "ready" || props.modelEgressPrompt.kind === "resolving" ? (
-                <div className="model-egress-actions">
-                  <button
-                    className="ghost"
-                    type="button"
-                    disabled={props.modelEgressPrompt.kind === "resolving"}
-                    onClick={() => props.onModelEgressDecision?.("deny")}
-                  >
-                    {props.t("home.modelEgress.deny")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={props.modelEgressPrompt.kind === "resolving"}
-                    onClick={() => props.onModelEgressDecision?.("allow_once")}
-                  >
-                    {props.modelEgressPrompt.kind === "resolving"
-                      ? props.t("home.modelEgress.saving")
-                      : props.t("home.modelEgress.allowOnce")}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : props.availability === "running" ? (
+          {props.availability === "running" ? (
             <article className="note-agent-run-state note-agent-loading-message role-assistant" role="status" aria-live="polite">
               <span className="agent-message-role visually-hidden">{props.t("note.agentAssistant")}</span>
               <span className="conversation-loading-dots" aria-hidden="true"><i /><i /><i /></span>

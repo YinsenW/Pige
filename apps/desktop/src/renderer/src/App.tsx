@@ -15,6 +15,7 @@ import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ConversationMarkdown } from "./components/ConversationMarkdown";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
+import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
 import {
   ReaderInlineReferenceSurface,
   type ReaderInlineReferenceActivation
@@ -36,6 +37,7 @@ import type {
   BackupRestoreStatus,
   DiagnosticsHealth,
   HomeAgentModelUsage,
+  HighRiskConfirmationPendingResult,
   JobSummary,
   KnowledgeActivityListResult,
   KnowledgeActivitySummary,
@@ -45,7 +47,6 @@ import type {
   LibraryRelatedPage,
   LibraryRelatedResult,
   LocalDatabaseStatus,
-  ModelEgressPendingRequest,
   ModelProviderSettingsSummary,
   ModelProfileSummary,
   NoteRenderResult,
@@ -62,9 +63,6 @@ import type {
   ReaderSelectionResolveResult,
   OnboardingStatus,
   PigeErrorSummary,
-  PermissionPendingRequest,
-  PermissionSettingsMutationResult,
-  PermissionSettingsSummary,
   ProviderConnectNeedsManualModel,
   RecentVaultSummary,
   RetrievalAnswerCitation,
@@ -180,22 +178,6 @@ type HomeFileDropRequest = {
   readonly files: readonly File[];
   readonly text?: string;
 };
-type HomeModelEgressPromptState =
-  | { readonly kind: "loading"; readonly requestId: string }
-  | {
-      readonly kind: "ready" | "resolving";
-      readonly request: ModelEgressPendingRequest;
-      readonly errorMessageKey?: string;
-    }
-  | { readonly kind: "unknown"; readonly requestId: string };
-type HomePermissionPromptState =
-  | { readonly kind: "loading"; readonly requestId: string }
-  | {
-      readonly kind: "ready" | "resolving";
-      readonly request: PermissionPendingRequest;
-      readonly errorMessageKey?: string;
-    }
-  | { readonly kind: "unknown"; readonly requestId: string };
 type AppearanceLoadState = "loading" | "ready" | "failed";
 
 const initialVaultName = "Pige Vault";
@@ -277,6 +259,9 @@ export function App(): React.JSX.Element {
   const [voiceAssetInstallActive, setVoiceAssetInstallActive] = useState(false);
   const [homeFileDropRequest, setHomeFileDropRequest] = useState<HomeFileDropRequest | null>(null);
   const [captureToast, setCaptureToast] = useState<CaptureToast | null>(null);
+  const [highRiskConfirmation, setHighRiskConfirmation] = useState<HighRiskConfirmationPendingResult | null>(null);
+  const [highRiskConfirmationDecision, setHighRiskConfirmationDecision] = useState<"allow" | "deny" | null>(null);
+  const [highRiskConfirmationFailed, setHighRiskConfirmationFailed] = useState(false);
   const [recentJobs, setRecentJobs] = useState<readonly JobSummary[]>([]);
   const [activityList, setActivityList] = useState<KnowledgeActivityListResult | null>(null);
   const [activityUndoingId, setActivityUndoingId] = useState<string | null>(null);
@@ -308,6 +293,7 @@ export function App(): React.JSX.Element {
   const sidebarToggleRef = useRef<HTMLButtonElement | null>(null);
   const noteAgentToggleRef = useRef<HTMLButtonElement | null>(null);
   const windowLayoutRevisionRef = useRef(-1);
+  const highRiskConfirmationRevisionRef = useRef(-1);
   const knowledgeTreeReturnFocusKey = useRef<string | null>(null);
   const modelRefreshSequence = useRef(0);
   const agentRuntimeRefreshSequence = useRef(0);
@@ -457,6 +443,30 @@ export function App(): React.JSX.Element {
     }
   };
 
+  const applyHighRiskConfirmation = (next: HighRiskConfirmationPendingResult): void => {
+    if (next.revision < highRiskConfirmationRevisionRef.current) return;
+    highRiskConfirmationRevisionRef.current = next.revision;
+    setHighRiskConfirmation(next);
+    setHighRiskConfirmationDecision(null);
+    setHighRiskConfirmationFailed(false);
+  };
+
+  useEffect(() => {
+    let active = true;
+    const unsubscribe = window.pige.confirmations.onChanged((next) => {
+      if (active) applyHighRiskConfirmation(next);
+    });
+    void window.pige.confirmations.pending().then((next) => {
+      if (active) applyHighRiskConfirmation(next);
+    }).catch(() => {
+      if (active) setHighRiskConfirmationFailed(true);
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
   useEffect(() => {
     let active = true;
     const unsubscribeLayout = window.pige.window.onLayoutChanged((nextState) => {
@@ -509,8 +519,6 @@ export function App(): React.JSX.Element {
       };
       homeJobStateFilter.states.push("awaiting_review");
       homeJobStateFilter.states.push("cancel_requested");
-      homeJobStateFilter.states.push("waiting_permission");
-      homeJobStateFilter.states.push("waiting_model_egress");
       const [nextJobs, nextBackupJobs, nextActivities] = nextOnboarding.activeVault
         ? await Promise.all([
           window.pige.jobs.list({
@@ -1266,6 +1274,43 @@ export function App(): React.JSX.Element {
     if (result.status === "applied") await openNoteTarget(current.pageId);
   };
 
+  const resolveHighRiskConfirmation = async (decision: "allow" | "deny"): Promise<void> => {
+    if (highRiskConfirmation?.status !== "pending" || highRiskConfirmationDecision) return;
+    const current = highRiskConfirmation;
+    setHighRiskConfirmationDecision(decision);
+    setHighRiskConfirmationFailed(false);
+    try {
+      const result = await window.pige.confirmations.resolve({
+        apiVersion: 1,
+        confirmationId: current.confirmation.confirmationId,
+        expectedRevision: current.revision,
+        decision
+      });
+      if (result.status === "stale") {
+        applyHighRiskConfirmation(result.current);
+        return;
+      }
+      if (result.status === "committed" || result.status === "already_resolved") {
+        applyHighRiskConfirmation({ apiVersion: 1, status: "none", revision: result.revision });
+        return;
+      }
+      if (result.status === "not_found") {
+        applyHighRiskConfirmation(await window.pige.confirmations.pending());
+        return;
+      }
+      setHighRiskConfirmationFailed(true);
+    } catch {
+      try {
+        applyHighRiskConfirmation(await window.pige.confirmations.pending());
+      } catch {
+        setHighRiskConfirmationFailed(true);
+      }
+    } finally {
+      setHighRiskConfirmationDecision(null);
+    }
+  };
+  const highRiskConfirmationOpen = highRiskConfirmation?.status === "pending";
+
   return (
     <div
       className={`shell app-window mode-${windowState?.mode ?? "compact"}${macosWindowShell ? " platform-macos" : ""}${homeSurface ? " home-surface" : ""}${sidebarOpen ? " sidebar-expanded" : ""}${selectedNote ? " note-mode" : ""}${dropActive ? " drop-active" : ""}`}
@@ -1275,7 +1320,7 @@ export function App(): React.JSX.Element {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <header className="topbar titlebar" inert={settingsOpen || agentModal}>
+      <header className="topbar titlebar" inert={settingsOpen || agentModal || highRiskConfirmationOpen}>
         <div className="topbar-leading titlebar-navigation">
           {view !== "home" ? (
             <button
@@ -1318,7 +1363,10 @@ export function App(): React.JSX.Element {
         </div>
       </header>
 
-      <div className={`main-layout${sidebarOpen ? " sidebar-open" : ""}${selectedNote ? " note-open" : ""}${selectedNote && noteAgentOpen ? " agent-open" : ""}`}>
+      <div
+        className={`main-layout${sidebarOpen ? " sidebar-open" : ""}${selectedNote ? " note-open" : ""}${selectedNote && noteAgentOpen ? " agent-open" : ""}`}
+        inert={highRiskConfirmationOpen}
+      >
         {sidebarOpen ? (
           <aside
             ref={sidebarRef}
@@ -1542,7 +1590,6 @@ export function App(): React.JSX.Element {
         ) : (
           <HomeComposer
             activeVault={activeVault}
-            captureOnly={onboarding?.state === "capture_only"}
             agentRuntimeStatus={agentRuntimeStatus}
             modelSummary={modelSummary}
             recentJobs={recentJobs}
@@ -1615,6 +1662,7 @@ export function App(): React.JSX.Element {
       {settingsOpen ? (
         <SettingsSurface
           section={settingsSection}
+          backgroundInert={highRiskConfirmationOpen}
           macosWindowShell={macosWindowShell}
           locale={locale}
           availableLocales={availableLocales}
@@ -1753,6 +1801,16 @@ export function App(): React.JSX.Element {
         >
           {captureToast.message}
         </div>
+      ) : null}
+      {highRiskConfirmation?.status === "pending" ? (
+        <HighRiskConfirmationDialog
+          key={highRiskConfirmation.confirmation.confirmationId}
+          confirmation={highRiskConfirmation.confirmation}
+          resolving={highRiskConfirmationDecision !== null}
+          error={highRiskConfirmationFailed}
+          onResolve={(decision) => void resolveHighRiskConfirmation(decision)}
+          t={t}
+        />
       ) : null}
     </div>
   );
@@ -3937,7 +3995,6 @@ function FirstRunPanel(props: FirstRunPanelProps): React.JSX.Element {
 
 function HomeComposer(props: {
   readonly activeVault: VaultSummary | undefined;
-  readonly captureOnly: boolean;
   readonly agentRuntimeStatus: AgentRuntimeStatus | null;
   readonly modelSummary: ModelProviderSettingsSummary | null;
   readonly recentJobs: readonly JobSummary[];
@@ -3970,10 +4027,6 @@ function HomeComposer(props: {
   const [agentDraft, setAgentDraft] = useState<AgentTurnDraftEvent | null>(null);
   const [agentRunState, setAgentRunState] = useState<HomeAgentUiState>("idle");
   const [agentError, setAgentError] = useState<PigeErrorSummary | null>(null);
-  const [permissionPrompt, setPermissionPrompt] = useState<HomePermissionPromptState | null>(null);
-  const [resolvedPermissionRequestId, setResolvedPermissionRequestId] = useState<string | null>(null);
-  const [modelEgressPrompt, setModelEgressPrompt] = useState<HomeModelEgressPromptState | null>(null);
-  const [resolvedModelEgressRequestId, setResolvedModelEgressRequestId] = useState<string | null>(null);
   const [agentModelUsage, setAgentModelUsage] = useState<HomeAgentModelUsage>("none");
   const [activeSourceTurn, setActiveSourceTurn] = useState<ActiveSourceTurnBinding | null>(null);
   const [conversationTimeline, setConversationTimeline] = useState<AgentConversationTimeline | undefined>();
@@ -4009,15 +4062,6 @@ function HomeComposer(props: {
   const noteOpenSequence = useRef(0);
   const inlineReferenceSequence = useRef(0);
   const selectedNoteRef = useRef<NoteRenderResult | null>(selectedNote);
-  const permissionDecisionInFlight = useRef<string | null>(null);
-  const permissionReadSequence = useRef(0);
-  const currentPermissionRequestIdRef = useRef<string | undefined>(undefined);
-  const currentPermissionJobIdRef = useRef<string | undefined>(undefined);
-  const permissionDenyButtonRef = useRef<HTMLButtonElement | null>(null);
-  const permissionHeadingRef = useRef<HTMLHeadingElement | null>(null);
-  const modelEgressDecisionInFlight = useRef(false);
-  const modelEgressReadSequence = useRef(0);
-  const currentModelEgressRequestIdRef = useRef<string | undefined>(undefined);
   const modelSwitcherRef = useRef<HTMLButtonElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const modelOptionRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -4100,7 +4144,7 @@ function HomeComposer(props: {
       </div>
     );
   };
-  const agentStatusLabel = props.agentRuntimeStatus?.state === "ready" ? props.t("home.agentReady") : props.t("home.captureOnly");
+  const agentStatusLabel = props.agentRuntimeStatus?.state === "ready" ? props.t("home.agentReady") : props.t("home.modelUnavailable");
   const enabledHomeModels = props.modelSummary?.models.filter((model) => model.enabled) ?? [];
   const selectedHomeModel = enabledHomeModels.find(
     (model) => model.id === props.modelSummary?.defaultModelProfileId
@@ -4111,7 +4155,7 @@ function HomeComposer(props: {
     props.agentRuntimeStatus.canRunModelJobs &&
     props.agentRuntimeStatus.defaultModelProfileId === selectedHomeModel.id
   );
-  const homeModelSendAvailable = props.captureOnly || selectedHomeModelReady;
+  const homeModelSendAvailable = selectedHomeModelReady;
   const selectedHomeModelName = selectedHomeModel?.displayName ?? selectedHomeModel?.modelId ?? agentStatusLabel;
   const homeModelProviders = new Map(
     (props.modelSummary?.providers ?? []).map((provider) => [provider.id, provider.displayName] as const)
@@ -4440,40 +4484,9 @@ function HomeComposer(props: {
   }, [modelMenuOpen]);
 
   const latestTurn = conversationTimeline?.latestTurn;
-  const latestPermissionJob = props.recentJobs.find((job) =>
-    job.state === "waiting_permission" &&
-    job.permissionRequestId !== undefined
-  );
-  const latestTurnPermissionRequestId = latestTurn?.state === "waiting_permission"
-    ? latestTurn.error?.permissionRequestId
-    : undefined;
-  const pendingPermissionRequestId = latestTurnPermissionRequestId ?? latestPermissionJob?.permissionRequestId;
-  const permissionRequestId = pendingPermissionRequestId === resolvedPermissionRequestId
-    ? undefined
-    : pendingPermissionRequestId;
-  const permissionRequestJobId = permissionRequestId
-    ? latestTurnPermissionRequestId === permissionRequestId
-      ? latestTurn?.jobId
-      : latestPermissionJob?.id
-    : undefined;
-  currentPermissionRequestIdRef.current = permissionRequestId;
-  currentPermissionJobIdRef.current = permissionRequestJobId;
-  const latestModelEgressJob = props.recentJobs.find((job) =>
-    job.state === "waiting_model_egress" &&
-    job.modelEgressApprovalRequestId !== undefined
-  );
-  const pendingModelEgressRequestId = agentError?.modelEgressApprovalRequestId ??
-    latestTurn?.error?.modelEgressApprovalRequestId ??
-    latestModelEgressJob?.modelEgressApprovalRequestId;
-  const modelEgressRequestId = pendingModelEgressRequestId === resolvedModelEgressRequestId
-    ? undefined
-    : pendingModelEgressRequestId;
-  currentModelEgressRequestIdRef.current = modelEgressRequestId;
   const visibleRecentJobs = props.recentJobs
     .filter((job) =>
       isActiveProcessingFileJob(job) &&
-      (!permissionRequestId || job.permissionRequestId !== permissionRequestId) &&
-      (!modelEgressRequestId || job.modelEgressApprovalRequestId !== modelEgressRequestId) &&
       !(
         job.class === "agent_turn" &&
         job.sourceId === undefined &&
@@ -4541,9 +4554,7 @@ function HomeComposer(props: {
   const showFirstHomeGuide = props.showFirstHomeGuide &&
     effectiveAgentRunState === "idle" &&
     sourceWaitingForModelJobs.length === 0;
-  const showConversationRunMessage = !permissionRequestId &&
-    !modelEgressRequestId &&
-    !sourceWaitOwnsAgentState &&
+  const showConversationRunMessage = !sourceWaitOwnsAgentState &&
     agentAnswer === null &&
     effectiveAgentRunState !== "idle" &&
     effectiveAgentRunState !== "completed";
@@ -4612,9 +4623,7 @@ function HomeComposer(props: {
     visibleOptimisticConversationTurns.length === 0 &&
     agentDraft === null &&
     agentAnswer === null &&
-    selectedNote === null &&
-    permissionPrompt === null &&
-    modelEgressPrompt === null;
+    selectedNote === null;
   const showConversationTimeline = visibleConversationMessages.length > 0 ||
     visibleOptimisticConversationTurns.length > 0 ||
     agentDraft !== null ||
@@ -4701,10 +4710,6 @@ function HomeComposer(props: {
     setAgentAnswer(null);
     clearAgentDraft();
     setAgentError(null);
-    setPermissionPrompt(null);
-    setResolvedPermissionRequestId(null);
-    setModelEgressPrompt(null);
-    setResolvedModelEgressRequestId(null);
     setAgentModelUsage("none");
     setActiveSourceTurn(null);
     setAgentRunState("idle");
@@ -4713,73 +4718,6 @@ function HomeComposer(props: {
       conversationLoadSequence.current += 1;
     };
   }, [props.activeVault?.vaultId]);
-
-  useEffect(() => {
-    const sequence = permissionReadSequence.current + 1;
-    permissionReadSequence.current = sequence;
-    const vaultId = props.activeVault?.vaultId;
-    const requestId = permissionRequestId;
-    const jobId = permissionRequestJobId;
-    if (!requestId) {
-      setPermissionPrompt(null);
-      return;
-    }
-    if (!vaultId || !jobId) {
-      setPermissionPrompt({ kind: "unknown", requestId });
-      return;
-    }
-    const isCurrentRead = (): boolean =>
-      sequence === permissionReadSequence.current &&
-      activeVaultIdRef.current === vaultId &&
-      currentPermissionRequestIdRef.current === requestId &&
-      currentPermissionJobIdRef.current === jobId;
-    setPermissionPrompt({ kind: "loading", requestId });
-    void window.pige.permissions.pending({ requestId }).then((request) => {
-      if (!isCurrentRead()) return;
-      if (!request || request.requestId !== requestId || request.jobId !== jobId) {
-        setPermissionPrompt({ kind: "unknown", requestId });
-        return;
-      }
-      setPermissionPrompt({ kind: "ready", request });
-    }).catch(() => {
-      if (isCurrentRead()) setPermissionPrompt({ kind: "unknown", requestId });
-    });
-  }, [permissionRequestId, props.activeVault?.vaultId]);
-
-  useEffect(() => {
-    if (permissionPrompt?.kind !== "ready" && permissionPrompt?.kind !== "unknown") return;
-    const timer = window.setTimeout(() => {
-      if (permissionPrompt.kind === "ready") permissionDenyButtonRef.current?.focus();
-      else permissionHeadingRef.current?.focus();
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [permissionPrompt]);
-
-  useEffect(() => {
-    const sequence = modelEgressReadSequence.current + 1;
-    modelEgressReadSequence.current = sequence;
-    if (!modelEgressRequestId) {
-      setModelEgressPrompt(null);
-      return;
-    }
-    setModelEgressPrompt({ kind: "loading", requestId: modelEgressRequestId });
-    void window.pige.modelEgress.pending({ requestId: modelEgressRequestId }).then((request) => {
-      if (sequence !== modelEgressReadSequence.current) return;
-      if (!request) {
-        setModelEgressPrompt({ kind: "unknown", requestId: modelEgressRequestId });
-        return;
-      }
-      if (modelEgressRequestId !== request.requestId) {
-        setModelEgressPrompt({ kind: "unknown", requestId: modelEgressRequestId });
-        return;
-      }
-      setModelEgressPrompt({ kind: "ready", request });
-    }).catch(() => {
-      if (sequence === modelEgressReadSequence.current) {
-        setModelEgressPrompt({ kind: "unknown", requestId: modelEgressRequestId });
-      }
-    });
-  }, [modelEgressRequestId, props.activeVault?.vaultId]);
 
   useEffect(() => {
     if (!latestTurn) return;
@@ -4805,9 +4743,7 @@ function HomeComposer(props: {
     agentRunState,
     latestTurn?.jobId,
     latestTurn?.state,
-    latestTurn?.error?.code,
-    latestTurn?.error?.permissionRequestId,
-    latestTurn?.error?.modelEgressApprovalRequestId
+    latestTurn?.error?.code
   ]);
 
   useEffect(() => {
@@ -5031,142 +4967,6 @@ function HomeComposer(props: {
     setAgentError(nextTimeline?.latestTurn?.error ?? null);
   };
 
-  const decidePermission = async (decision: "allow_once" | "deny"): Promise<void> => {
-    if (
-      permissionPrompt?.kind !== "ready" ||
-      permissionPrompt.request.requestId !== permissionRequestId ||
-      permissionPrompt.request.jobId !== permissionRequestJobId
-    ) return;
-    const request = permissionPrompt.request;
-    const decisionVaultId = activeVaultIdRef.current;
-    if (!decisionVaultId) return;
-    const decisionKey = `${decisionVaultId}:${request.requestId}`;
-    if (permissionDecisionInFlight.current === decisionKey) return;
-    const isCurrentDecision = (): boolean =>
-      activeVaultIdRef.current === decisionVaultId &&
-      currentPermissionRequestIdRef.current === request.requestId &&
-      currentPermissionJobIdRef.current === request.jobId;
-    permissionDecisionInFlight.current = decisionKey;
-    setPermissionPrompt({ kind: "resolving", request });
-    try {
-      await window.pige.permissions.resolve({
-        requestId: request.requestId,
-        jobId: request.jobId,
-        decision
-      });
-      if (!isCurrentDecision()) return;
-      await props.onHomeStateChanged().catch(() => undefined);
-      const timeline = await refreshConversation();
-      if (!isCurrentDecision()) return;
-      const nextState = homeUiStateForJobState(timeline?.latestTurn?.state);
-      setResolvedPermissionRequestId(request.requestId);
-      setPermissionPrompt(null);
-      setAgentRunState(nextState ?? (decision === "deny" ? "failed" : "accepted"));
-      setAgentError(timeline?.latestTurn?.error ?? null);
-      if (decision === "allow_once") composerInputRef.current?.focus();
-    } catch {
-      if (!isCurrentDecision()) return;
-      try {
-        const current = await window.pige.permissions.pending({ requestId: request.requestId });
-        if (!isCurrentDecision()) return;
-        if (current) {
-          if (current.requestId === request.requestId && current.jobId === request.jobId) {
-            setPermissionPrompt({
-              kind: "ready",
-              request: current,
-              errorMessageKey: "home.permission.resolveFailed"
-            });
-          } else {
-            setPermissionPrompt({ kind: "unknown", requestId: request.requestId });
-          }
-          return;
-        }
-
-        setResolvedPermissionRequestId(request.requestId);
-        setPermissionPrompt(null);
-        await props.onHomeStateChanged().catch(() => undefined);
-        const timeline = await refreshConversation();
-        if (activeVaultIdRef.current !== decisionVaultId) return;
-        const nextState = homeUiStateForJobState(timeline?.latestTurn?.state);
-        setAgentRunState(nextState ?? (decision === "deny" ? "failed" : "accepted"));
-        setAgentError(timeline?.latestTurn?.error ?? null);
-        if (decision === "allow_once") composerInputRef.current?.focus();
-      } catch {
-        if (isCurrentDecision()) {
-          setPermissionPrompt({ kind: "unknown", requestId: request.requestId });
-        }
-      }
-    } finally {
-      if (permissionDecisionInFlight.current === decisionKey) {
-        permissionDecisionInFlight.current = null;
-      }
-    }
-  };
-
-  const decideModelEgress = async (decision: "allow_once" | "deny"): Promise<void> => {
-    if (
-      modelEgressDecisionInFlight.current ||
-      modelEgressPrompt?.kind !== "ready" ||
-      modelEgressPrompt.request.requestId !== modelEgressRequestId
-    ) return;
-    const request = modelEgressPrompt.request;
-    const decisionVaultId = activeVaultIdRef.current;
-    const isCurrentDecision = (): boolean =>
-      activeVaultIdRef.current === decisionVaultId &&
-      currentModelEgressRequestIdRef.current === request.requestId;
-    modelEgressDecisionInFlight.current = true;
-    setModelEgressPrompt({ kind: "resolving", request });
-    try {
-      const result = await window.pige.modelEgress.resolve({
-        requestId: request.requestId,
-        jobId: request.jobId,
-        decision
-      });
-      if (!isCurrentDecision()) return;
-      await props.onHomeStateChanged().catch(() => undefined);
-      const timeline = await refreshConversation();
-      if (!isCurrentDecision()) return;
-      const nextState = homeUiStateForJobState(timeline?.latestTurn?.state);
-      setResolvedModelEgressRequestId(request.requestId);
-      setModelEgressPrompt(null);
-      setAgentRunState(nextState ?? (result.status === "denied" ? "failed" : "accepted"));
-      setAgentError(timeline?.latestTurn?.error ?? null);
-      if (result.status === "approved") composerInputRef.current?.focus();
-    } catch {
-      if (!isCurrentDecision()) return;
-      try {
-        const current = await window.pige.modelEgress.pending({ requestId: request.requestId });
-        if (!isCurrentDecision()) return;
-        if (current?.requestId === request.requestId && current.jobId === request.jobId) {
-          setModelEgressPrompt({
-            kind: "ready",
-            request: current,
-            errorMessageKey: "home.modelEgress.resolveFailed"
-          });
-        } else {
-          await props.onHomeStateChanged().catch(() => undefined);
-          const timeline = await refreshConversation();
-          if (!isCurrentDecision()) return;
-          if (timeline?.latestTurn?.error?.modelEgressApprovalRequestId === request.requestId) {
-            setModelEgressPrompt({ kind: "unknown", requestId: request.requestId });
-          } else {
-            const nextState = homeUiStateForJobState(timeline?.latestTurn?.state);
-            setResolvedModelEgressRequestId(request.requestId);
-            setModelEgressPrompt(null);
-            setAgentRunState(nextState ?? (decision === "deny" ? "failed" : "accepted"));
-            setAgentError(timeline?.latestTurn?.error ?? null);
-          }
-        }
-      } catch {
-        if (isCurrentDecision()) {
-          setModelEgressPrompt({ kind: "unknown", requestId: request.requestId });
-        }
-      }
-    } finally {
-      modelEgressDecisionInFlight.current = false;
-    }
-  };
-
   const openResultTarget = async (pageId: string, reportError = true): Promise<boolean> => {
     const vaultId = activeVaultIdRef.current;
     if (!vaultId) return false;
@@ -5258,7 +5058,7 @@ function HomeComposer(props: {
           <div className="first-home-guide-actions">
             <button type="button" onClick={(event) => void props.onOpenModels(event.currentTarget)}>{props.t("home.connectModel")}</button>
             <button type="button" className="ghost" onClick={() => void props.onDismissFirstHome()}>
-              {props.t("home.continueCaptureOnly")}
+              {props.t("home.notNow")}
             </button>
           </div>
         </section>
@@ -5780,7 +5580,7 @@ function HomeComposer(props: {
             type="button"
             className="composer-send"
             aria-label={props.t("home.send")}
-            title={!homeModelSendAvailable && !props.captureOnly ? props.t("home.modelUnavailable") : undefined}
+            title={!homeModelSendAvailable ? props.t("home.modelUnavailable") : undefined}
             disabled={!text.trim() || !homeModelSendAvailable || modelSwitching || effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running"}
             onClick={() => void submitHomeInput()}
           >
@@ -5795,101 +5595,6 @@ function HomeComposer(props: {
           </>
         )}
         <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
-        {permissionRequestId ? (
-          <section
-            className="permission-prompt"
-            role="group"
-            aria-labelledby="home-permission-title"
-            aria-describedby="home-permission-status"
-            aria-busy={permissionPrompt?.kind === "loading" || permissionPrompt?.kind === "resolving"}
-          >
-            <h2 id="home-permission-title" ref={permissionHeadingRef} tabIndex={-1}>
-              {props.t("home.permission.title")}
-            </h2>
-            <div
-              id="home-permission-status"
-              className="permission-status"
-              role="status"
-              aria-live="polite"
-              aria-atomic="true"
-            >
-              {permissionPrompt?.kind === "ready" || permissionPrompt?.kind === "resolving" ? (
-                <div className="permission-summary">
-                  <strong>{permissionPrompt.request.actorDisplayName}</strong>
-                  <span>{permissionActionMessage(permissionPrompt.request.actionLabelKey, props.t)}</span>
-                  {permissionPrompt.request.resourceDisplayName ? (
-                    <span>{permissionPrompt.request.resourceDisplayName}</span>
-                  ) : null}
-                  <span className="permission-category">
-                    {props.t(permissionResourceMessageKey(permissionPrompt.request.resourceKind))}
-                  </span>
-                  {permissionPrompt.kind === "ready" && permissionPrompt.errorMessageKey ? (
-                    <span className="error">{props.t(permissionPrompt.errorMessageKey)}</span>
-                  ) : null}
-                </div>
-              ) : permissionPrompt?.kind === "unknown" ? (
-                props.t("home.permission.unknown")
-              ) : (
-                props.t("home.permission.loading")
-              )}
-            </div>
-            {permissionPrompt?.kind === "ready" || permissionPrompt?.kind === "resolving" ? (
-              <div className="permission-actions">
-                <button
-                  ref={permissionDenyButtonRef}
-                  type="button"
-                  className="ghost"
-                  disabled={permissionPrompt.kind === "resolving"}
-                  onClick={() => void decidePermission("deny")}
-                >
-                  {props.t("home.permission.deny")}
-                </button>
-                <button
-                  type="button"
-                  disabled={permissionPrompt.kind === "resolving"}
-                  onClick={() => void decidePermission("allow_once")}
-                >
-                  {props.t("home.permission.allowOnce")}
-                </button>
-              </div>
-            ) : null}
-          </section>
-        ) : modelEgressRequestId ? (
-          <div className="model-egress-prompt" role="group" aria-labelledby="home-model-egress-title">
-            <strong id="home-model-egress-title">{props.t("home.modelEgress.title")}</strong>
-            <span>
-              {modelEgressPrompt?.kind === "ready" || modelEgressPrompt?.kind === "resolving"
-                ? props.t(modelEgressReasonMessageKey(modelEgressPrompt.request.reasonCode))
-                : modelEgressPrompt?.kind === "unknown"
-                  ? props.t("home.modelEgress.unknown")
-                  : props.t("home.modelEgress.loading")}
-            </span>
-            {modelEgressPrompt?.kind === "ready" && modelEgressPrompt.errorMessageKey ? (
-              <span className="error">{props.t(modelEgressPrompt.errorMessageKey)}</span>
-            ) : null}
-            {modelEgressPrompt?.kind === "ready" || modelEgressPrompt?.kind === "resolving" ? (
-              <div className="model-egress-actions">
-                <button
-                  type="button"
-                  className="ghost"
-                  disabled={modelEgressPrompt.kind === "resolving"}
-                  onClick={() => void decideModelEgress("deny")}
-                >
-                  {props.t("home.modelEgress.deny")}
-                </button>
-                <button
-                  type="button"
-                  disabled={modelEgressPrompt.kind === "resolving"}
-                  onClick={() => void decideModelEgress("allow_once")}
-                >
-                  {modelEgressPrompt.kind === "resolving"
-                    ? props.t("home.modelEgress.saving")
-                    : props.t("home.modelEgress.allowOnce")}
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
         {captureError ? <p className="error">{captureError}</p> : null}
       </section>
     </section>
@@ -5908,8 +5613,6 @@ function isActiveProcessingFileJob(job: JobSummary): boolean {
   return job.state === "queued" ||
     job.state === "running" ||
     job.state === "waiting_dependency" ||
-    job.state === "waiting_permission" ||
-    job.state === "waiting_model_egress" ||
     job.state === "awaiting_review" ||
     job.state === "cancel_requested" ||
     job.state === "failed_retryable";
@@ -5930,32 +5633,11 @@ function homeUiStateForJobState(state: JobState | undefined): HomeAgentUiState |
   if (state === "running" || state === "cancel_requested") return "running";
   if (
     state === "waiting_dependency" ||
-    state === "waiting_permission" ||
-    state === "waiting_model_egress" ||
     state === "awaiting_review"
   ) return "waiting";
   if (state === "completed" || state === "completed_with_warnings" || state === "compacted") return "completed";
   if (state === "failed_retryable" || state === "failed_final" || state === "cancelled") return "failed";
   return undefined;
-}
-
-function permissionActionMessage(
-  actionLabelKey: PermissionPendingRequest["actionLabelKey"],
-  t: (key: string) => string
-): string {
-  const translated = t(actionLabelKey);
-  return translated === actionLabelKey ? t("permissions.action.generic") : translated;
-}
-
-function permissionResourceMessageKey(resourceKind: PermissionPendingRequest["resourceKind"]): string {
-  return `permissions.resource.${resourceKind}`;
-}
-
-function modelEgressReasonMessageKey(reasonCode: ModelEgressPendingRequest["reasonCode"]): string {
-  if (reasonCode === "sensitive_confirmation") return "home.modelEgress.sensitive";
-  if (reasonCode === "unknown_boundary_confirmation") return "home.modelEgress.unknownBoundary";
-  if (reasonCode === "private_or_large_confirmation") return "home.modelEgress.privateOrLarge";
-  return "home.modelEgress.confirmAll";
 }
 
 function isConversationPollingState(state: JobState | undefined): boolean {
@@ -6348,6 +6030,7 @@ export function DevelopmentStatus(props: {
 
 export function SettingsSurface(props: {
   readonly section: SettingsSection;
+  readonly backgroundInert?: boolean;
   readonly macosWindowShell?: boolean;
   readonly locale: Locale;
   readonly availableLocales: readonly Locale[];
@@ -6421,6 +6104,7 @@ export function SettingsSurface(props: {
     <div
       className={`settings-overlay${props.macosWindowShell ? " platform-macos" : ""}`}
       data-settings-overlay="true"
+      inert={props.backgroundInert}
     >
       <div
         ref={dialogRef}
@@ -6762,135 +6446,6 @@ export function PermissionsPrivacySettingsPanel(props: {
   readonly onDevelopment: () => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
-  const [permissionSettings, setPermissionSettings] = useState<PermissionSettingsSummary | null>(null);
-  const [permissionSettingsLoading, setPermissionSettingsLoading] = useState(true);
-  const [permissionSettingsBusy, setPermissionSettingsBusy] = useState<string | null>(null);
-  const [permissionSettingsNotice, setPermissionSettingsNotice] = useState<
-    "updated" | "stale" | "cancelled" | "failed" | null
-  >(null);
-  const [savedGrantsOpen, setSavedGrantsOpen] = useState(false);
-  const permissionSettingsRef = useRef<PermissionSettingsSummary | null>(null);
-  const permissionSettingsSequence = useRef(0);
-  const permissionSettingsMutationInFlight = useRef(false);
-
-  const commitPermissionSettings = (next: PermissionSettingsSummary): void => {
-    const current = permissionSettingsRef.current;
-    if (current && next.revision < current.revision) return;
-    permissionSettingsRef.current = next;
-    setPermissionSettings(next);
-  };
-
-  useEffect(() => {
-    const sequence = permissionSettingsSequence.current + 1;
-    permissionSettingsSequence.current = sequence;
-    setPermissionSettingsLoading(true);
-    setPermissionSettingsNotice(null);
-    void window.pige.permissions.settings.current().then((current) => {
-      if (permissionSettingsSequence.current !== sequence) return;
-      commitPermissionSettings(current);
-    }).catch(() => {
-      if (permissionSettingsSequence.current === sequence) setPermissionSettingsNotice("failed");
-    }).finally(() => {
-      if (permissionSettingsSequence.current === sequence) setPermissionSettingsLoading(false);
-    });
-    return () => {
-      if (permissionSettingsSequence.current === sequence) permissionSettingsSequence.current += 1;
-    };
-  }, []);
-
-  const runPermissionSettingsMutation = async (
-    action: string,
-    mutate: (
-      current: PermissionSettingsSummary
-    ) => Promise<PermissionSettingsMutationResult | "cancelled" | "stale">
-  ): Promise<void> => {
-    const current = permissionSettingsRef.current;
-    if (!current || permissionSettingsMutationInFlight.current) return;
-    permissionSettingsMutationInFlight.current = true;
-    const sequence = permissionSettingsSequence.current + 1;
-    permissionSettingsSequence.current = sequence;
-    setPermissionSettingsBusy(action);
-    setPermissionSettingsNotice(null);
-    try {
-      const result = await mutate(current);
-      if (permissionSettingsSequence.current !== sequence) return;
-      if (result === "cancelled") {
-        setPermissionSettingsNotice("cancelled");
-      } else if (result === "stale") {
-        const latest = await window.pige.permissions.settings.current();
-        if (permissionSettingsSequence.current !== sequence) return;
-        commitPermissionSettings(latest);
-        setPermissionSettingsNotice("stale");
-      } else {
-        commitPermissionSettings(result.settings);
-        setPermissionSettingsNotice(result.status === "committed" ? "updated" : "stale");
-      }
-    } catch {
-      if (permissionSettingsSequence.current === sequence) setPermissionSettingsNotice("failed");
-    } finally {
-      permissionSettingsMutationInFlight.current = false;
-      if (permissionSettingsSequence.current === sequence) setPermissionSettingsBusy(null);
-    }
-  };
-
-  const updateDefaultMode = (defaultMode: "ask_every_time" | "remember_scoped_grants"): void => {
-    void runPermissionSettingsMutation("default-mode", (current) =>
-      window.pige.permissions.settings.setDefaultMode({
-        apiVersion: 1,
-        expectedRevision: current.revision,
-        defaultMode
-      })
-    );
-  };
-
-  const toggleYolo = (): void => {
-    if (permissionSettings?.yoloEnabled) {
-      void runPermissionSettingsMutation("yolo", (current) =>
-        window.pige.permissions.settings.disableYolo({
-          apiVersion: 1,
-          expectedRevision: current.revision
-        })
-      );
-      return;
-    }
-    void runPermissionSettingsMutation("yolo", async (current) => {
-      const prepared = await window.pige.permissions.settings.prepareYoloEnable({
-        apiVersion: 1,
-        expectedRevision: current.revision
-      });
-      if (prepared.status === "cancelled") return "cancelled";
-      if (prepared.status === "stale") return "stale";
-      return window.pige.permissions.settings.enableYolo({
-        apiVersion: 1,
-        expectedRevision: prepared.revision,
-        confirmationToken: prepared.confirmationToken
-      });
-    });
-  };
-
-  const revokeGrant = (grantId: PermissionSettingsSummary["savedGrants"][number]["grantId"]): void => {
-    void runPermissionSettingsMutation(`grant:${grantId}`, (current) =>
-      window.pige.permissions.settings.revokeGrant({
-        apiVersion: 1,
-        expectedRevision: current.revision,
-        grantId
-      })
-    );
-  };
-
-  const revokeAllGrants = (): void => {
-    void runPermissionSettingsMutation("all-grants", (current) =>
-      window.pige.permissions.settings.revokeAllGrants({
-        apiVersion: 1,
-        expectedRevision: current.revision
-      })
-    );
-  };
-
-  const selectedMode = permissionSettings?.defaultMode ?? "unavailable";
-  const settingsUnavailable = permissionSettingsLoading || permissionSettings === null;
-  const settingsBusy = permissionSettingsBusy !== null;
-
   return (
     <section className="settings-page privacy-settings-page" aria-labelledby="settings-privacy-title">
       <header className="settings-panel-header">
@@ -6908,15 +6463,7 @@ export function PermissionsPrivacySettingsPanel(props: {
               <strong>{props.t("privacy.ordinaryTitle")}</strong>
               <span>{props.t("privacy.ordinaryDescription")}</span>
             </div>
-            <button
-              className="settings-button"
-              type="button"
-              data-privacy-control="ordinary-policy"
-              aria-describedby="privacy-partial-note"
-              onClick={props.onDevelopment}
-            >
-              {props.t("settings.status.development")}
-            </button>
+            <span className="settings-status">{props.t("privacy.connectedDefault")}</span>
           </div>
           <div className="settings-row">
             <div className="settings-row-copy">
@@ -6934,152 +6481,35 @@ export function PermissionsPrivacySettingsPanel(props: {
               {props.t("settings.status.development")}
             </button>
           </div>
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="privacy-high-risk-title">
+        <h2 className="settings-section-title" id="privacy-high-risk-title">
+          {props.t("privacy.highRiskTitle")}
+        </h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("privacy.highRiskEffectsTitle")}</strong>
+              <span>{props.t("privacy.highRiskEffectsDescription")}</span>
+            </div>
+            <span className="settings-status">{props.t("privacy.confirmEachEffect")}</span>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("privacy.noSavedAuthorityTitle")}</strong>
+              <span>{props.t("privacy.noSavedAuthorityDescription")}</span>
+            </div>
+          </div>
           <div className="settings-row">
             <div className="settings-row-copy">
               <strong>{props.t("privacy.redactionTitle")}</strong>
               <span>{props.t("privacy.redactionDescription")}</span>
             </div>
-            <button
-              className="settings-button"
-              type="button"
-              data-privacy-control="redaction-policy"
-              aria-label={props.t("privacy.redactionTitle")}
-              aria-describedby="privacy-partial-note"
-              onClick={props.onDevelopment}
-            >
-              {props.t("settings.status.development")}
-            </button>
+            <span className="settings-status">{props.t("privacy.protected")}</span>
           </div>
         </div>
-      </section>
-
-      <section className="settings-section" aria-labelledby="privacy-permissions-title">
-        <h2 className="settings-section-title" id="privacy-permissions-title">
-          {props.t("privacy.permissions")}
-        </h2>
-        <div className="settings-card">
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("privacy.defaultModeTitle")}</strong>
-              <span id="privacy-default-mode-description">{props.t("privacy.defaultModeDescription")}</span>
-            </div>
-            <select
-              className="settings-select"
-              data-privacy-control="default-mode"
-              aria-label={props.t("privacy.defaultModeTitle")}
-              aria-describedby="privacy-default-mode-description privacy-partial-note"
-              value={selectedMode}
-              disabled={settingsUnavailable || settingsBusy || permissionSettings?.yoloEnabled === true}
-              onChange={(event) => {
-                const next = event.target.value;
-                if (next === "ask_every_time" || next === "remember_scoped_grants") updateDefaultMode(next);
-              }}
-            >
-              <option value="unavailable" disabled>{props.t("privacy.mode.unavailable")}</option>
-              <option value="ask_every_time">{props.t("privacy.mode.askEveryTime")}</option>
-              <option value="remember_scoped_grants">{props.t("privacy.mode.rememberScoped")}</option>
-              <option value="yolo_full_access" disabled={!permissionSettings?.yoloEnabled}>
-                {props.t("privacy.mode.yolo")}
-              </option>
-            </select>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("privacy.savedGrantsTitle")}</strong>
-              <span>{props.t("privacy.savedGrantsDescription")}</span>
-            </div>
-            <div className="settings-row-control">
-              {permissionSettings ? (
-                <span className={`settings-status ${permissionSettings.savedGrants.length === 0 ? "neutral" : ""}`}>
-                  {permissionSettings.savedGrants.length} {props.t("privacy.savedGrantsCount")}
-                </span>
-              ) : null}
-              <button
-                className="settings-button"
-                type="button"
-                data-privacy-control="saved-grants"
-                aria-expanded={savedGrantsOpen}
-                aria-controls="privacy-saved-grants"
-                aria-describedby="privacy-partial-note"
-                disabled={settingsUnavailable || settingsBusy}
-                onClick={() => setSavedGrantsOpen((open) => !open)}
-              >
-                {props.t(savedGrantsOpen ? "privacy.close" : "privacy.review")}
-              </button>
-            </div>
-          </div>
-          {savedGrantsOpen && permissionSettings ? (
-            <div id="privacy-saved-grants">
-              {permissionSettings.savedGrants.length === 0 ? (
-                <div className="settings-row">
-                  <span className="settings-status neutral">{props.t("privacy.savedGrantsEmpty")}</span>
-                </div>
-              ) : permissionSettings.savedGrants.map((grant) => (
-                <div className="settings-row tall" key={grant.grantId}>
-                  <div className="settings-row-copy">
-                    <strong>{grant.actorDisplayName}</strong>
-                    <span>{props.t(permissionResourceMessageKey(grant.resourceKind))}</span>
-                  </div>
-                  <button
-                    className="settings-button"
-                    type="button"
-                    aria-label={`${props.t("privacy.revoke")}: ${grant.actorDisplayName}`}
-                    disabled={settingsBusy}
-                    onClick={() => revokeGrant(grant.grantId)}
-                  >
-                    {props.t("privacy.revoke")}
-                  </button>
-                </div>
-              ))}
-              {permissionSettings.savedGrants.length > 0 ? (
-                <div className="settings-row">
-                  <div className="settings-row-copy">
-                    <span>{props.t("privacy.revokeAllDescription")}</span>
-                  </div>
-                  <button
-                    className="settings-button danger"
-                    type="button"
-                    disabled={settingsBusy}
-                    onClick={revokeAllGrants}
-                  >
-                    {props.t("privacy.revokeAll")}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("privacy.yoloTitle")}</strong>
-              <span>{props.t("privacy.yoloDescription")}</span>
-            </div>
-            <div className="settings-row-control">
-              {permissionSettings ? (
-                <span className={`settings-status ${permissionSettings.yoloEnabled ? "warning" : "neutral"}`}>
-                  {props.t(permissionSettings.yoloEnabled ? "privacy.yoloEnabled" : "privacy.yoloDisabled")}
-                </span>
-              ) : null}
-              <button
-                className={`settings-button${permissionSettings?.yoloEnabled ? "" : " danger"}`}
-                type="button"
-                data-privacy-control="yolo"
-                aria-describedby="privacy-partial-note"
-                disabled={settingsUnavailable || settingsBusy}
-                onClick={toggleYolo}
-              >
-                {props.t(permissionSettings?.yoloEnabled ? "privacy.yoloDisable" : "privacy.yoloEnable")}
-              </button>
-            </div>
-          </div>
-        </div>
-        {permissionSettingsNotice ? (
-          <p
-            className={permissionSettingsNotice === "failed" ? "settings-note error" : "settings-note"}
-            role={permissionSettingsNotice === "failed" ? "alert" : "status"}
-          >
-            {props.t(`privacy.status.${permissionSettingsNotice}`)}
-          </p>
-        ) : null}
       </section>
 
       <section className="settings-section" aria-labelledby="privacy-api-keys-title">
