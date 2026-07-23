@@ -37,7 +37,7 @@
     "scope": "Independent review of the PR package-impact classifier, fail-closed unknown handling, unconditional main-push macOS distribution evidence, and separation from full-gates.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 26,
-    "reviewedSha256": "c57e5a78b18d1a204f6dc4d4f9eb2a0bf4e0dbceb439667a174dff096e33e9a3"
+    "reviewedSha256": "d9154ee43d5a6cf6c037181becd833395e49efaf7049bed3074576edd1cb2f3b"
   },
   "reviewers": [{
     "reviewerId": "package-impact-planning-review",
