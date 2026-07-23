@@ -11,6 +11,9 @@ import { createPortal } from "react-dom";
 
 const MESSAGE_SELECTOR = ".conversation-timeline-content > .conversation-message";
 const PREVIEW_MAX_CODE_POINTS = 160;
+const RAIL_EDGE_INSET = 8;
+const RAIL_MIN_HEIGHT = 36;
+const RAIL_ANCHOR_PITCH = 6;
 
 type ConversationAnchor = {
   readonly element: HTMLElement;
@@ -64,7 +67,10 @@ export function ConversationScrollRail({ timelineRef, t }: ConversationScrollRai
         position: messages.length === 1 ? 0.5 : index / (messages.length - 1)
       }));
       const rect = timeline.getBoundingClientRect();
-      const railHeight = Math.min(rect.height, Math.max(64, nextAnchors.length * 9));
+      const railHeight = Math.min(
+        rect.height,
+        Math.max(RAIL_MIN_HEIGHT, RAIL_EDGE_INSET * 2 + (nextAnchors.length - 1) * RAIL_ANCHOR_PITCH)
+      );
       setAnchors(nextAnchors);
       setLayout({
         top: Math.round(rect.top + (rect.height - railHeight) / 2),
@@ -150,7 +156,12 @@ export function ConversationScrollRail({ timelineRef, t }: ConversationScrollRai
 
   const pointerIndex = (event: ReactMouseEvent<HTMLElement>): number => {
     const rect = event.currentTarget.getBoundingClientRect();
-    const position = clamp((event.clientY - rect.top - 9) / Math.max(1, rect.height - 18), 0, 1);
+    const position = clamp(
+      (event.clientY - rect.top - RAIL_EDGE_INSET) /
+        Math.max(1, rect.height - RAIL_EDGE_INSET * 2),
+      0,
+      1
+    );
     return Math.round(position * (anchors.length - 1));
   };
 
