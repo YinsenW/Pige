@@ -596,7 +596,7 @@ describe("Unified Agent ingress", () => {
       new DatasetQueryService(directDatasetExecutor)
     );
 
-    expect(await restartedJobs.processQueuedDatasetImports({ limit: 20 })).toEqual({
+    expect(await restartedJobs.datasetImportExecutor().process({ limit: 20 })).toEqual({
       processed: 0,
       completed: 0,
       failed: 0
