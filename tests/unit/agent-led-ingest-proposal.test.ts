@@ -285,26 +285,34 @@ describe("Agent-selected ingest proposal tool", () => {
     expect(runtime.calls).toBe(1);
   });
 
-  it("rejects any later model turn after the proposal terminal commits", async () => {
+  it("allows a later model turn after a durable proposal is staged", async () => {
     const fixture = makeVault();
     const proposals = new ProposalService(fixture.vaultPort);
-    let blockedCode = "";
+    let continuedModelTurns = 0;
+    let postProposalInspect: PigeAgentToolResult | undefined;
     const runtime = new FunctionalRuntime(async (request) => {
-      await invokeTool(request, "pige_inspect_source", {}, "inspect_terminal_model_guard");
+      await invokeTool(request, "pige_inspect_source", {}, "inspect_post_effect_model");
       await invokeTool(
         request,
         "pige_stage_knowledge_note_proposal",
-        groundedOutput("Terminal proposal stops later model turns"),
-        "terminal_model_guard"
+        groundedOutput("Proposal does not end the Pi turn"),
+        "proposal_before_model_continuation"
       );
-      try {
-        await request.beforeModelTurn?.();
-      } catch (caught) {
-        blockedCode = (caught as { readonly code?: string }).code ?? "";
-      }
-      return runtimeResult(request, ["pige_inspect_source", "pige_stage_knowledge_note_proposal"]);
+      await request.beforeModelTurn?.();
+      continuedModelTurns += 1;
+      postProposalInspect = await invokeTool(
+        request,
+        "pige_inspect_source",
+        {},
+        "inspect_after_proposal"
+      );
+      return runtimeResult(
+        request,
+        ["pige_inspect_source", "pige_stage_knowledge_note_proposal"],
+        "The proposal is ready for review."
+      );
     });
-    const prepared = prepareAgentSource(fixture, "No provider turn may follow a durable proposal terminal.");
+    const prepared = prepareAgentSource(fixture, "Continue after staging a durable proposal.");
 
     const result = await new AgentIngestService(
       modelPort(),
@@ -317,7 +325,8 @@ describe("Agent-selected ingest proposal tool", () => {
     ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent);
 
     expect(result.outcome).toBe("confirmation_needed");
-    expect(blockedCode).toBe("agent_runtime.terminal_action_committed");
+    expect(continuedModelTurns).toBe(1);
+    expect(readPiToolText(postProposalInspect)).toContain("<untrusted_source_evidence>");
     expect(proposals.list().total).toBe(1);
   });
 
@@ -448,18 +457,18 @@ describe("Agent-selected ingest proposal tool", () => {
   it.each([
     ["proposal", "pige_stage_knowledge_note_proposal", "pige_create_knowledge_note"],
     ["publication", "pige_create_knowledge_note", "pige_stage_knowledge_note_proposal"]
-  ] as const)("allows only the first %s terminal action under concurrent sibling calls", async (
+  ] as const)("keeps only the first %s durable mutation under concurrent sibling calls", async (
     winner,
     firstTool,
     secondTool
   ) => {
     const fixture = makeVault();
-    const prepared = prepareAgentSource(fixture, `Only the ${winner} terminal action may commit.`);
+    const prepared = prepareAgentSource(fixture, `Only the ${winner} durable mutation may commit.`);
     const proposals = new ProposalService(fixture.vaultPort);
-    let siblingResults: readonly PigeAgentToolResult[] = [];
+    let siblingResults: readonly PromiseSettledResult<PigeAgentToolResult>[] = [];
     const runtime = new FunctionalRuntime(async (request) => {
       await invokeTool(request, "pige_inspect_source", {}, `inspect_${winner}`);
-      siblingResults = await Promise.all([
+      siblingResults = await Promise.allSettled([
         invokeTool(request, firstTool, groundedOutput(`${winner} wins`), `${winner}_first`),
         invokeTool(request, secondTool, groundedOutput(`${winner} loses sibling`), `${winner}_second`)
       ]);
@@ -480,11 +489,17 @@ describe("Agent-selected ingest proposal tool", () => {
     if (winner === "proposal") {
       expect(proposals.list().total).toBe(1);
       expect(generatedNotes(fixture.vaultPath)).toEqual([]);
-      expect(readPiToolText(siblingResults[1])).toContain("already_awaiting_review");
+      expect(siblingResults[1]).toMatchObject({
+        status: "rejected",
+        reason: expect.objectContaining({ code: "proposal.identity_conflict" })
+      });
     } else {
       expect(proposals.list().total).toBe(0);
       expect(generatedNotes(fixture.vaultPath)).toHaveLength(1);
-      expect(readPiToolText(siblingResults[1])).toContain("already_published");
+      expect(siblingResults[1]).toMatchObject({
+        status: "rejected",
+        reason: expect.objectContaining({ code: "agent_ingest.page_conflict" })
+      });
     }
   });
 
@@ -651,7 +666,7 @@ describe("Agent-selected ingest proposal tool", () => {
       undefined,
       bindProposalPort(proposals, fixture.vaultPath)
     ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent)).rejects.toMatchObject({
-      code: "agent_runtime.terminal_action_conflict"
+      code: "proposal.identity_conflict"
     });
     expect(runtimeCalls).toBe(0);
   });

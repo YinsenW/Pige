@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   ModelProviderSettingsSummary,
   RetrievalSearchRequest,
@@ -17,6 +17,7 @@ import {
 } from "../../apps/desktop/src/main/services/agent-ingest-service";
 import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
 import { HomeAgentAttachmentService } from "../../apps/desktop/src/main/services/home-agent-attachment-service";
+import { JobExecutionCoordinator } from "../../apps/desktop/src/main/services/job-execution-coordinator";
 import { executeDatasetQuery } from "../../apps/desktop/src/main/services/dataset-query-core";
 import { DatasetQueryService } from "../../apps/desktop/src/main/services/dataset-query-service";
 import {
@@ -35,7 +36,10 @@ import {
 } from "../../apps/desktop/src/main/services/home-agent-service";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
-import { PiAgentRuntimeAdapter } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
+import {
+  PiAgentRuntimeAdapter,
+  type PiAgentRunRequest
+} from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 
 const roots: string[] = [];
@@ -68,6 +72,7 @@ const runtimeConfig: ModelProviderRuntimeConfig = {
 };
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -361,6 +366,109 @@ describe("Unified Agent ingress", () => {
     });
   });
 
+  it("keeps a same-run committed Dataset child exclusive after parent adoption checkpoint failure", async () => {
+    const fixture = makeVault();
+    const sourceFile = path.join(path.dirname(fixture.vaultPath), "checkpoint-counts.csv");
+    const sourceBytes = Buffer.from("name,count\nAda,3\nGrace,5\n", "utf8");
+    fs.writeFileSync(sourceFile, sourceBytes);
+    const models = createMutableModels(true);
+    const planner = new StaticDatasetPlanner(csvPlan(sourceBytes));
+    let checkpointFailure = "";
+    let pageEffectCode = "";
+    const runtime = {
+      run: async (request: PiAgentRunRequest) => {
+        const invoke = async (toolName: string, args: unknown, toolCallId: string): Promise<void> => {
+          const tool = requireValue(request.tools.find((candidate) => candidate.name === toolName));
+          const signal = request.signal ?? new AbortController().signal;
+          const context = { toolCallId, signal };
+          if (await tool.authorize?.(args, context) === false) throw new Error(`Tool ${toolName} was denied.`);
+          await tool.execute(args, signal, context);
+        };
+        await invoke("pige_inspect_source", {}, "unified_dataset_inspect");
+        try {
+          await invoke("pige_inspect_dataset", {}, "unified_dataset_materialize");
+        } catch (caught) {
+          checkpointFailure = (caught as Error).message;
+        }
+        try {
+          await invoke(
+            "pige_create_knowledge_note",
+            groundedOutput("Conflicting page"),
+            "unified_page_after_dataset_checkpoint_failure"
+          );
+        } catch (caught) {
+          pageEffectCode = (caught as { readonly code?: string }).code ?? "";
+        }
+        return {
+          adapterMode: "embedded_pi_sdk" as const,
+          providerProfileId: request.runtimeConfig.provider.id,
+          modelProfileId: request.runtimeConfig.model.id,
+          modelId: request.runtimeConfig.model.modelId,
+          events: [],
+          assistantText: "The committed Dataset remains the only durable effect.",
+          invokedTools: ["pige_inspect_source", "pige_inspect_dataset", "pige_create_knowledge_note"]
+        };
+      }
+    };
+    const jobs = new JobsService(
+      fixture.vaultPort,
+      new AgentIngestService(models, runtime, datasetCapabilities),
+      undefined,
+      undefined,
+      undefined,
+      new DatasetService(planner)
+    );
+    const home = new HomeAgentService(
+      fixture.vaultPort,
+      models,
+      neverRetrieval,
+      jobs,
+      runtime,
+      datasetCapabilities
+    );
+    const prepared = home.prepareSourceTurn({
+      text: "Keep one durable effect.",
+      inputKind: "file_picker",
+      locale: "en"
+    });
+    await new CaptureService(fixture.vaultPort).preserveFilesForAgentTurn({
+      filePaths: [sourceFile],
+      inputKind: "file_picker",
+      userIntent: "unknown",
+      locale: "en"
+    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+    const originalMarkDurableBoundary = JobExecutionCoordinator.prototype.markDurableBoundary;
+    vi.spyOn(JobExecutionCoordinator.prototype, "markDurableBoundary").mockImplementation(function (
+      snapshot,
+      input
+    ) {
+      if (
+        snapshot.job.id === prepared.jobId &&
+        input.checkpointId === "agent_dataset_child_output_adoption_started"
+      ) {
+        throw new Error("synthetic unified Dataset adoption checkpoint failure");
+      }
+      return originalMarkDurableBoundary.call(this, snapshot, input);
+    });
+
+    const outcome = await home.submitPreparedSourceTurn(prepared);
+    const parent = requireValue(readJobs(fixture.vaultPath).find((job) => job.id === prepared.jobId));
+    const child = requireValue(readJobs(fixture.vaultPath).find((job) => job.class === "dataset_import"));
+
+    expect(outcome.state, JSON.stringify({ outcome, parent, child })).toBe("completed");
+    expect(outcome).toMatchObject({
+      answer: { answer: "The committed Dataset remains the only durable effect." }
+    });
+    expect(parent.childJobIds).toEqual([child.id]);
+    expect(checkpointFailure).toBe("synthetic unified Dataset adoption checkpoint failure");
+    expect(pageEffectCode).toBe("dataset.operation_conflict");
+    expect(parent.outputRefs?.some((ref) => ref.kind === "dataset_revision")).not.toBe(true);
+    expect(child).toMatchObject({ state: "completed", parentJobId: prepared.jobId });
+    expect(child.outputRefs?.some((ref) => ref.kind === "dataset_revision")).toBe(true);
+    expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toEqual([]);
+    expect(planner.callCount).toBe(1);
+  });
+
   it("restarts from the durable Dataset continuation without rematerializing or another source loop", async () => {
     const fixture = makeVault();
     const sourceFile = path.join(path.dirname(fixture.vaultPath), "restart-counts.csv");
@@ -495,7 +603,7 @@ describe("Unified Agent ingress", () => {
     });
   });
 
-  it("preserves one dropped source and lets the agent_turn own inspect and publication", async () => {
+  it("continues from a durable Home effect to Pi's ordinary final assistant prose", async () => {
     const fixture = makeVault();
     const sourceFile = path.join(path.dirname(fixture.vaultPath), "unified-source.txt");
     fs.writeFileSync(sourceFile, "Pige keeps host preservation separate from Agent semantic planning.\n", "utf8");
@@ -534,7 +642,11 @@ describe("Unified Agent ingress", () => {
       state: "completed",
       modelUsage: "local",
       sourceIds: preserved.sourceIds,
-      answer: { grounding: "general", citations: [] }
+      answer: {
+        answer: "The source was inspected and published.",
+        grounding: "general",
+        citations: []
+      }
     });
     const allJobs = jobs.list({ limit: 20 }).jobs;
     expect(allJobs).toEqual([
