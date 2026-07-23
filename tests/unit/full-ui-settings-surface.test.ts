@@ -190,6 +190,11 @@ describe("full UI Settings surface", () => {
     expect(undefinedCustomPropertyUses).toEqual([
       "--branch-opacity",
       "--branch-width",
+      "--conversation-anchor-opacity",
+      "--conversation-anchor-position",
+      "--conversation-rail-height",
+      "--conversation-rail-right",
+      "--conversation-rail-top",
       "--home-processing-panel-height",
       "--minimap-opacity",
       "--minimap-width",

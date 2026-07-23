@@ -3631,6 +3631,11 @@ describe("Home durable Agent conversation UI", () => {
     expect(conversationStyles).toContain("white-space: pre-wrap;");
     expect(conversationStyles).toContain("max-height: min(36vh, 26rem);");
     expect(appSource).toContain('className="conversation-timeline-content"');
+    expect(appSource).toContain("<ConversationScrollRail timelineRef={conversationTimelineRef} t={props.t} />");
+    expect(styles).toContain(".conversation-scroll-rail");
+    expect(styles).toContain(".conversation-scroll-anchor-preview");
+    expect(styles).toMatch(/\.conversation-scroll-anchor:is\(:hover, :focus-visible\)[\s\S]*?--conversation-anchor-width:\s*20px;/);
+    expect(styles).toMatch(/\.conversation-timeline\.has-conversation-scroll-rail[\s\S]*?scrollbar-width:\s*none;/);
     expect(styles).toMatch(/\.home\.home-conversation-active\s*>\s*\.conversation-timeline\s*\{[\s\S]*?display:\s*block;[\s\S]*?flex:\s*1 1 auto;[\s\S]*?max-height:\s*none;/);
     expect(styles).not.toMatch(/\.home\.home-conversation-active\s*>\s*\.conversation-timeline\s*\{[\s\S]*?align-content:\s*end;/);
     expect(styles).toMatch(/\.conversation-timeline-content\s*\{[\s\S]*?min-height:\s*100%;[\s\S]*?flex-direction:\s*column;[\s\S]*?justify-content:\s*flex-end;[\s\S]*?gap:\s*18px;/);

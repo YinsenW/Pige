@@ -15,6 +15,7 @@ import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
 import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ConversationMarkdown } from "./components/ConversationMarkdown";
+import { ConversationScrollRail } from "./components/ConversationScrollRail";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
 import { WindowModeToggle } from "./components/WindowModeToggle";
@@ -5736,6 +5737,7 @@ function HomeComposer(props: {
             </article>
             ) : null}
           </div>
+          <ConversationScrollRail timelineRef={conversationTimelineRef} t={props.t} />
         </section>
       ) : null}
       {selectedNote ? (
