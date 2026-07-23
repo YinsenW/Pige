@@ -3978,7 +3978,8 @@ dd {
   right: var(--conversation-rail-right);
   width: 24px;
   height: var(--conversation-rail-height);
-  pointer-events: none;
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 .conversation-scroll-anchor {
@@ -3995,7 +3996,7 @@ dd {
   padding: 0;
   background: transparent;
   box-shadow: none;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .conversation-scroll-anchor-mark {
@@ -4020,7 +4021,8 @@ dd {
   opacity: .86;
 }
 
-.conversation-scroll-anchor:is(:hover, :focus-visible) .conversation-scroll-anchor-mark {
+.conversation-scroll-anchor:is(:hover, :focus-visible) .conversation-scroll-anchor-mark,
+.conversation-scroll-anchor.is-engaged .conversation-scroll-anchor-mark {
   --conversation-anchor-width: 20px;
   background: color-mix(in srgb, var(--text-primary) 76%, transparent);
   opacity: 1;

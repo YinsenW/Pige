@@ -60,16 +60,24 @@ describe("Conversation scroll rail", () => {
     expect(anchors[0]?.getAttribute("aria-current")).toBe("true");
     expect(anchors.map((anchor) => anchor.tabIndex)).toEqual([0, -1, -1]);
 
-    await act(async () => {
-      anchors[1]!.dispatchEvent(new dom.window.MouseEvent("mouseover", { bubbles: true }));
+    rail!.getBoundingClientRect = () => ({
+      x: 386, y: 38, top: 38, right: 410, bottom: 102, left: 386,
+      width: 24, height: 64, toJSON: () => ({})
     });
+    await act(async () => rail!.dispatchEvent(new dom.window.MouseEvent("mousemove", {
+      bubbles: true,
+      clientY: 70
+    })));
     const preview = rail!.querySelector<HTMLElement>(".conversation-scroll-anchor-preview");
     expect(preview?.textContent?.endsWith("…")).toBe(true);
     expect(Array.from(preview?.textContent ?? "")).toHaveLength(161);
     expect(anchors[0]?.classList.contains("neighbor-one")).toBe(true);
     expect(anchors[2]?.classList.contains("neighbor-one")).toBe(true);
 
-    await act(async () => anchors[1]!.click());
+    await act(async () => rail!.dispatchEvent(new dom.window.MouseEvent("click", {
+      bubbles: true,
+      clientY: 70
+    })));
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 250, behavior: "smooth" });
     expect(anchors[1]?.getAttribute("aria-current")).toBe("true");
 

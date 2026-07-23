@@ -4,6 +4,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type RefObject
 } from "react";
 import { createPortal } from "react-dom";
@@ -147,6 +148,12 @@ export function ConversationScrollRail({ timelineRef, t }: ConversationScrollRai
     activate(nextIndex);
   };
 
+  const pointerIndex = (event: ReactMouseEvent<HTMLElement>): number => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const position = clamp((event.clientY - rect.top - 9) / Math.max(1, rect.height - 18), 0, 1);
+    return Math.round(position * (anchors.length - 1));
+  };
+
   return createPortal((
     <nav
       ref={railRef}
@@ -154,13 +161,19 @@ export function ConversationScrollRail({ timelineRef, t }: ConversationScrollRai
       style={style}
       aria-label={t("home.scrollRailLabel")}
       data-conversation-scroll-rail="true"
+      onClick={(event) => {
+        if (event.target !== event.currentTarget) return;
+        activate(pointerIndex(event));
+      }}
+      onMouseLeave={() => setEngagedIndex(null)}
+      onMouseMove={(event) => setEngagedIndex(pointerIndex(event))}
     >
       {anchors.map((anchor, index) => {
         const distance = engagedIndex === null ? Number.POSITIVE_INFINITY : Math.abs(engagedIndex - index);
         return (
           <button
             type="button"
-            className={`conversation-scroll-anchor${distance === 1 ? " neighbor-one" : ""}${distance === 2 ? " neighbor-two" : ""}${distance === 3 ? " neighbor-three" : ""}`}
+            className={`conversation-scroll-anchor${distance === 0 ? " is-engaged" : ""}${distance === 1 ? " neighbor-one" : ""}${distance === 2 ? " neighbor-two" : ""}${distance === 3 ? " neighbor-three" : ""}`}
             style={{
               "--conversation-anchor-position": anchor.position,
               "--conversation-anchor-opacity": anchorEdgeOpacity(anchor.position)
@@ -173,8 +186,6 @@ export function ConversationScrollRail({ timelineRef, t }: ConversationScrollRai
             onClick={() => activate(index)}
             onFocus={() => setEngagedIndex(index)}
             onBlur={() => setEngagedIndex(null)}
-            onMouseEnter={() => setEngagedIndex(index)}
-            onMouseLeave={() => setEngagedIndex(null)}
             onKeyDown={(event) => handleKeyDown(event, index)}
           >
             <span className="conversation-scroll-anchor-mark" aria-hidden="true" />
