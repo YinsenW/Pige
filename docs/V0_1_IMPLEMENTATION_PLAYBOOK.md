@@ -19,20 +19,24 @@ and back up/restore safely.
 
 ### 3.0 Foreground Architecture Reset
 
-Ordinary feature work pauses while the incompatible personal-project contract reset is
-active. Statuses do not rise during the reset. `resources/architecture-reset.manifest.json`
-is the executable deletion/budget inventory; legacy counts may fall, never grow.
+Only AR1-AR3 may pause features: Day 10 runs proof; Day 14 returns unfinished work to P0-P9
+and ends the pause. Dates/statuses do not backfill or rise. AR4 is historical, and no new
+AR phase follows AR3.
+
+The manifest owns AR1 proof: `node scripts/verify/architecture-reset.mjs --phase-proof=AR1`
+requires zero executable JS/TS authority matches under `apps/` and `packages/` after
+test/catalog/generated/build/vendor exclusions. Non-authoritative shorthand is
+`grep -r "YOLO\|saved.grant\|permission_lifecycle\|waiting_permission\|waiting_model_egress" packages/ apps/ | wc -l`;
+its one deny-copy locale hit is not AR1 debt. The Node command alone decides completion.
 
 | Phase | Development outcome | Required proof |
 | --- | --- | --- |
-| AR1 authority simplification | Delete YOLO/saved grants, routine per-tool Permission lifecycle, model-egress approval/digest/wait UI, and new `waiting_permission` / `waiting_model_egress`; retain closed-list high-risk confirmation plus Provider Connect/Send boundary | Ordinary tool turn has zero permission records; high-risk deny executes nothing; secret/local-only/provider-drift tests |
-| AR2 Pi semantic ownership | Remove Host parse→OCR→retrieve→organize chains, correction prompts, terminal repair/dispatch, and fixed child-Job routing; expose atomic typed tools to Pi | Distinct Pi-selected traces, zero Host answer synthesis, no shadow loop; source preservation still precedes use |
-| AR3 reliability/schema convergence | One Job coordinator for claim/CAS/cancel/retry/checkpoint/terminal; domain executors return outcomes; one canonical schema/type at real trust boundaries; remove obsolete unpublished state compatibility | Crash/cancel/idempotency/data-safety tests; IPC/security boundaries remain strict |
-| AR4 UI/test decomposition | Remove legacy approval UI/actions/tests/docs; split `App.tsx` by page/state owner and mixed services by responsibility without restyling or moving orchestration intact | Real macOS Electron happy paths, affected UI tests, architecture budget reduced or explicitly justified |
+| AR1 authority | Remove routine permission/egress state; retain narrow high-risk/Provider boundaries | Zero markers; denied risk executes nothing |
+| AR2 Pi ownership | Replace Host pipelines with Pi-selected tools | Pi traces; no Host synthesis; sources preserved |
+| AR3 reliability | Unify Job reliability and trust-boundary schemas | Crash/cancel/idempotency/data/IPC proof |
 
-AR1 → AR2 → AR3 → AR4 is the default serialization where files/contracts overlap.
-Independent UI work may continue only if it does not consume or preserve a legacy
-authority/API. Project Management coordinates delivery and does not implement the reset.
+Planning defines Phase 0 efficacy evidence; Project Management records body-free Git/CI/task
+timing and blocked-feature facts. No new document/tier, pause extension or status claim.
 
 Build vertical slices. Do not pull isolated breadth ahead of the Provider-to-Pi-to-Home
 turn and Agent-selected capture-to-Markdown path merely because its design is nearby.

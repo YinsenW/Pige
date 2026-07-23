@@ -1,12 +1,53 @@
 {
   "schemaVersion": 1,
-  "contractVersion": "2026-07-22",
+  "contractVersion": "2026-07-23",
   "baselineCommit": "6812dd53917171963378e98bdfe5716888708e82",
   "status": "contract_frozen_implementation_pending",
   "statusPolicy": "Requirement, Exit, and Phase status may stay equal or move down while legacy evidence is removed; this contract never promotes status.",
   "verificationModes": {
     "staged": "node scripts/verify/architecture-reset.mjs",
-    "postCombined": "node scripts/verify/architecture-reset.mjs --post-combined"
+    "postCombined": "node scripts/verify/architecture-reset.mjs --post-combined",
+    "ar1RequiredProof": "node scripts/verify/architecture-reset.mjs --phase-proof=AR1"
+  },
+  "timeboxPolicy": {
+    "foregroundPhaseIds": ["AR1", "AR2", "AR3"],
+    "historicalInventoryTags": ["AR4"],
+    "calendarDays": 14,
+    "requiredProofDay": 10,
+    "day14Disposition": "normal_p0_p9_priority",
+    "featurePauseAfterExpiry": false,
+    "futureArchitectureQueue": "P0-P9",
+    "dateStatusPolicy": "Preserve recorded starts and statuses; do not backfill or promote them."
+  },
+  "ar1RequiredProof": {
+    "owner": "Product Planning",
+    "sourceRoots": ["apps", "packages"],
+    "includedExtensions": [".js", ".mjs", ".ts", ".tsx"],
+    "pattern": "YOLO|saved.grant|permission_lifecycle|waiting_permission|waiting_model_egress",
+    "maximumMatches": 0,
+    "excludedDirectories": [".git", "artifacts", "build", "coverage", "dist", "node_modules", "out", "test", "tests", "vendor"],
+    "humanShorthandKnownFalsePositive": {"count": 1, "path": "apps/desktop/src/renderer/src/locales/en/messages.json", "kind": "negative_truth_copy_not_authority"}
+  },
+  "governanceEfficacyEvidence": {
+    "definitionOwner": "Product Planning",
+    "collectionOwner": "Project Management",
+    "source": "Existing Git, CI and task timestamps",
+    "fields": ["recordedStart", "day10Proof", "completionOrDegradationDate", "foregroundDays", "featureCandidatesBlockedOrUnblocked"],
+    "initialPullRequestSample": {
+      "pullRequests": "114-123",
+      "existingFullGatePullRequests": [114, 115, 116, 117, 118, 122, 123],
+      "backfilledFullGateRuns": {"119": 29975503573, "120": 29975505581, "121": 29975507916},
+      "exactHeadFullGateCoverage": "10/10",
+      "knownTruePositive": {"pullRequest": 117, "run": 29933636527, "gate": "verify:contracts/contract-consistency", "resolutionPullRequest": 118},
+      "governanceBlocks": 1,
+      "truePositives": 1,
+      "humanOverrides": 0,
+      "falsePositives": 0,
+      "falsePositiveRateAmongBlocks": 0,
+      "excludedFailureClasses": ["packageability", "stale_synthetic_smoke", "environment_lock", "resource_timeout"]
+    },
+    "phase1Document": "not_created",
+    "statusImpact": "none"
   },
   "principle": "Host provides capabilities, authority boundaries, data reliability, and recovery; Pi Agent chooses semantic work.",
   "phases": [
@@ -24,11 +65,6 @@
       "id": "AR3",
       "owner": "Development",
       "goal": "Converge Job lifecycle, recovery, IPC schemas, and durable primitives around one owner per boundary."
-    },
-    {
-      "id": "AR4",
-      "owner": "UI Design and Development",
-      "goal": "Remove legacy approval UI/tests and split App.tsx and oversized mixed-owner services without restyling or moving orchestration intact."
     }
   ],
   "passThroughSequence": [

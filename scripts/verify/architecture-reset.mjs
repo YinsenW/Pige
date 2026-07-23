@@ -6,34 +6,39 @@ const root = process.cwd();
 const manifestPath = path.join(root, "resources/architecture-reset.manifest.json");
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 const failures = [];
-const knownArguments = new Set(["--post-combined"]);
+const knownArguments = new Set(["--post-combined", "--phase-proof=AR1"]);
 const unknownArguments = process.argv.slice(2).filter((argument) => !knownArguments.has(argument));
 const verificationMode = process.argv.includes("--post-combined") ? "post-combined" : "staged";
+const ar1ProofMode = process.argv.includes("--phase-proof=AR1");
 
 if (unknownArguments.length > 0) failures.push(`unknown architecture-reset arguments: ${unknownArguments.join(", ")}`);
 
 if (manifest.schemaVersion !== 1) failures.push("architecture reset manifest must use schemaVersion 1");
 if (manifest.status !== "contract_frozen_implementation_pending") failures.push("architecture reset status changed without a reviewed contract transition");
 if (manifest.verificationModes?.staged !== "node scripts/verify/architecture-reset.mjs" ||
-  manifest.verificationModes?.postCombined !== "node scripts/verify/architecture-reset.mjs --post-combined") {
-  failures.push("architecture reset must expose exact staged and post-combined invocations");
+  manifest.verificationModes?.postCombined !== "node scripts/verify/architecture-reset.mjs --post-combined" ||
+  manifest.verificationModes?.ar1RequiredProof !== "node scripts/verify/architecture-reset.mjs --phase-proof=AR1") {
+  failures.push("architecture reset must expose exact staged, post-combined and AR1 proof invocations");
 }
-if (!Array.isArray(manifest.phases) || manifest.phases.map((phase) => phase.id).join(",") !== "AR1,AR2,AR3,AR4") {
-  failures.push("architecture reset must retain the reviewed AR1-AR4 sequence");
+if (!Array.isArray(manifest.phases) || manifest.phases.map((phase) => phase.id).join(",") !== "AR1,AR2,AR3") {
+  failures.push("architecture reset foreground phases must end at AR3");
 }
+failures.push(...auditTimeboxPolicy(manifest));
 if (!Array.isArray(manifest.passThroughSequence) || manifest.passThroughSequence.map((phase) => phase.id).join(",") !== "PT1,PT2,PT3,PT4") {
   failures.push("Pi pass-through remediation must retain the reviewed PT1-PT4 sequence");
 }
 
 const sourceRoots = ["apps/desktop/src", "packages"];
 const ignoredSourceDirectories = new Set([
-  ".git", "artifacts", "build", "coverage", "dist", "node_modules", "out", "vendor"
+  ".git", "artifacts", "build", "coverage", "dist", "node_modules", "out", "test", "tests", "vendor"
 ]);
 const sourceFiles = collectAuthoritativeSourceFiles(root);
 failures.push(...auditLegacyMarkers(root, sourceFiles, manifest.legacyMarkers, verificationMode));
 failures.push(...auditNoGrowthMarkers(root, sourceFiles, manifest.passThroughNoGrowth, verificationMode));
 failures.push(...auditPostCombinedZeroBudgets(manifest));
 failures.push(...verifySourceScopeGuard());
+failures.push(...verifyAr1ProofGuard());
+if (ar1ProofMode) failures.push(...auditAr1RequiredProof(root, manifest.ar1RequiredProof));
 
 if (!Array.isArray(manifest.agentPassThroughInventory) || manifest.agentPassThroughInventory.length < 30) {
   failures.push("agent pass-through production inventory is incomplete");
@@ -52,7 +57,7 @@ for (const disposition of ["DELETE", "REWRITE", "KEEP"]) {
   if (!Array.isArray(entries) || entries.length === 0) failures.push(`implementation inventory ${disposition} is empty`);
   for (const [relativePath, phase, owner, rationale] of entries ?? []) {
     if (!relativePath || !phase || !owner || !rationale) failures.push(`invalid ${disposition} inventory entry for ${relativePath ?? "unknown"}`);
-    if (!/^(?:AR[1-4])(?:\/AR[1-4])?$/u.test(phase)) failures.push(`${relativePath} has invalid phase ${phase}`);
+    if (!isResetInventoryPhase(phase, manifest.timeboxPolicy?.historicalInventoryTags ?? [])) failures.push(`${relativePath} has invalid phase ${phase}`);
     if (!fs.existsSync(path.join(root, relativePath)) && disposition !== "DELETE") failures.push(`${disposition} inventory path is missing: ${relativePath}`);
   }
 }
@@ -74,7 +79,7 @@ for (const absolutePath of ownerFiles) {
   if (lines > threshold && !entry) failures.push(`${relativePath} exceeds ${threshold} lines without KEEP/REWRITE ownership`);
   if (entry) {
     if (lines > entry.baselineLines) failures.push(`${relativePath} grew above frozen ${entry.baselineLines}-line reset baseline`);
-    if (!["KEEP", "REWRITE"].includes(entry.disposition) || !entry.rationale || !/^AR[1-4]$/u.test(entry.phase)) {
+    if (!["KEEP", "REWRITE"].includes(entry.disposition) || !entry.rationale || !isResetInventoryPhase(entry.phase, manifest.timeboxPolicy?.historicalInventoryTags ?? [])) {
       failures.push(`${relativePath} has an invalid reset disposition`);
     }
   }
@@ -107,7 +112,91 @@ if (failures.length > 0) {
 }
 
 const inventoryCount = Object.values(manifest.implementationInventory).reduce((total, entries) => total + entries.length, 0);
-console.log(`Architecture reset contract OK (${verificationMode}): ${manifest.legacyMarkers.length} legacy guards, ${manifest.passThroughNoGrowth.length} pass-through no-growth guards, ${manifest.agentPassThroughInventory.length} production call sites, ${inventoryCount} DELETE/REWRITE/KEEP entries, ${oversized.size} oversized owners, authoritative-source/post-combined regressions passed, AR1-AR4/PT1-PT4 frozen without status promotion.`);
+console.log(`Architecture reset contract OK (${ar1ProofMode ? "AR1-required-proof" : verificationMode}): ${manifest.legacyMarkers.length} legacy guards, ${manifest.passThroughNoGrowth.length} pass-through no-growth guards, ${manifest.agentPassThroughInventory.length} production call sites, ${inventoryCount} DELETE/REWRITE/KEEP entries, ${oversized.size} oversized owners, authoritative-source/post-combined regressions passed, AR1-AR3 timeboxed without status promotion.`);
+
+function auditTimeboxPolicy(candidate) {
+  const diagnostics = [];
+  const policy = candidate.timeboxPolicy ?? {};
+  if (JSON.stringify(policy.foregroundPhaseIds) !== JSON.stringify(["AR1", "AR2", "AR3"])) diagnostics.push("foreground AR sequence must end at AR3");
+  if (JSON.stringify(policy.historicalInventoryTags) !== JSON.stringify(["AR4"])) diagnostics.push("AR4 must remain historical inventory only");
+  if (policy.calendarDays !== 14 || policy.requiredProofDay !== 10) diagnostics.push("AR timebox must use Day 10 proof and Day 14 expiry");
+  if (policy.day14Disposition !== "normal_p0_p9_priority" || policy.featurePauseAfterExpiry !== false || policy.futureArchitectureQueue !== "P0-P9") {
+    diagnostics.push("expired or future architecture work must use normal P0-P9 priority without a global pause");
+  }
+  const evidence = candidate.governanceEfficacyEvidence ?? {};
+  if (evidence.definitionOwner !== "Product Planning" || evidence.collectionOwner !== "Project Management" || evidence.phase1Document !== "not_created" || evidence.statusImpact !== "none") {
+    diagnostics.push("Phase 0 governance-efficacy ownership must remain bounded and status-neutral");
+  }
+  const sample = evidence.initialPullRequestSample ?? {};
+  if (sample.pullRequests !== "114-123" || JSON.stringify(sample.existingFullGatePullRequests) !== JSON.stringify([114, 115, 116, 117, 118, 122, 123]) ||
+    JSON.stringify(sample.backfilledFullGateRuns) !== JSON.stringify({"119": 29975503573, "120": 29975505581, "121": 29975507916}) ||
+    sample.exactHeadFullGateCoverage !== "10/10" ||
+    sample.knownTruePositive?.pullRequest !== 117 || sample.knownTruePositive?.run !== 29933636527 ||
+    sample.knownTruePositive?.resolutionPullRequest !== 118 || sample.governanceBlocks !== 1 || sample.truePositives !== 1 ||
+    sample.humanOverrides !== 0 || sample.falsePositives !== 0 || sample.falsePositiveRateAmongBlocks !== 0 ||
+    JSON.stringify(sample.excludedFailureClasses) !== JSON.stringify(["packageability", "stale_synthetic_smoke", "environment_lock", "resource_timeout"])) {
+    diagnostics.push("Phase 0 governance-efficacy initial PR sample drifted or changed classification scope");
+  }
+  return diagnostics;
+}
+
+function isResetInventoryPhase(value, historicalTags) {
+  const allowed = new Set(["AR1", "AR2", "AR3", ...historicalTags]);
+  return typeof value === "string" && value.split("/").every((part) => allowed.has(part));
+}
+
+function auditAr1RequiredProof(baseRoot, proof) {
+  const diagnostics = [];
+  if (proof?.owner !== "Product Planning" || proof?.pattern !== "YOLO|saved.grant|permission_lifecycle|waiting_permission|waiting_model_egress" || proof?.maximumMatches !== 0) {
+    return ["AR1 Required Proof owner/pattern/zero budget drifted"];
+  }
+  if (JSON.stringify(proof.sourceRoots) !== JSON.stringify(["apps", "packages"]) ||
+    JSON.stringify(proof.includedExtensions) !== JSON.stringify([".js", ".mjs", ".ts", ".tsx"]) ||
+    JSON.stringify(proof.excludedDirectories) !== JSON.stringify([...ignoredSourceDirectories])) {
+    return ["AR1 Required Proof roots/exclusions drifted"];
+  }
+  if (proof.humanShorthandKnownFalsePositive?.count !== 1 ||
+    proof.humanShorthandKnownFalsePositive?.path !== "apps/desktop/src/renderer/src/locales/en/messages.json" ||
+    proof.humanShorthandKnownFalsePositive?.kind !== "negative_truth_copy_not_authority") {
+    return ["AR1 human shorthand deny-copy false-positive record drifted"];
+  }
+  const expression = new RegExp(proof.pattern, "gu");
+  let total = 0;
+  for (const sourceRoot of proof.sourceRoots) {
+    for (const absolutePath of walk(path.join(baseRoot, sourceRoot))) {
+      if (!proof.includedExtensions.includes(path.extname(absolutePath))) continue;
+      const relativePath = relative(baseRoot, absolutePath);
+      const count = [...fs.readFileSync(absolutePath, "utf8").matchAll(expression)].length;
+      if (count === 0) continue;
+      total += count;
+      diagnostics.push(`AR1 Required Proof found ${count} current production match(es) in ${relativePath}`);
+    }
+  }
+  if (total > proof.maximumMatches) diagnostics.push(`AR1 Required Proof found ${total} matches; maximum is ${proof.maximumMatches}`);
+  return diagnostics;
+}
+
+function verifyAr1ProofGuard() {
+  const clean = auditAr1RequiredProofFixture([{ path: "apps/desktop/src/main/clean.ts", source: "const safe = true;" }]);
+  const mutated = auditAr1RequiredProofFixture([{ path: "packages/contracts/src/index.ts", source: "waiting_permission" }]);
+  const excluded = auditAr1RequiredProofFixture([{ path: "packages/contracts/dist/index.js", source: "waiting_permission" }]);
+  const denyCopy = auditAr1RequiredProofFixture([{
+    path: "apps/desktop/src/renderer/src/locales/en/messages.json",
+    source: "Pige does not offer a default permission mode, saved grants, or a blanket full-access switch."
+  }]);
+  const diagnostics = [];
+  if (clean !== 0 || mutated !== 1 || excluded !== 0 || denyCopy !== 0) diagnostics.push("AR1 Required Proof authority/deny-copy/excluded-source self-test failed");
+  return diagnostics;
+}
+
+function auditAr1RequiredProofFixture(entries) {
+  const expression = /YOLO|saved.grant|permission_lifecycle|waiting_permission|waiting_model_egress/gu;
+  return entries.reduce((total, entry) => {
+    if (entry.path.split("/").some((part) => ignoredSourceDirectories.has(part))) return total;
+    if (![".js", ".mjs", ".ts", ".tsx"].includes(path.extname(entry.path))) return total;
+    return total + [...entry.source.matchAll(expression)].length;
+  }, 0);
+}
 
 function collectAuthoritativeSourceFiles(baseRoot) {
   return sourceRoots.flatMap((relativeRoot) => walk(path.join(baseRoot, relativeRoot)))
