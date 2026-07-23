@@ -829,6 +829,8 @@ export class JobsService {
         }
         return result;
       },
+      hasDurableDatasetEffect: () => this.#readJobSnapshot(vaultPath, job.id)?.job.outputRefs
+        ?.some((ref) => ref.kind === "dataset_revision") === true,
       ocrCurrentSource: sourceTools.ocr,
       throwIfCancellationRequested: () => control.throwIfCancellationRequested(),
       onPublicationStart: (checkpointId, publicationBinding) => {
@@ -2109,6 +2111,12 @@ export class JobsService {
             datasetRequest,
             execution.control
           ),
+          hasDurableDatasetEffect: () => (runningJob.childJobIds ?? []).some((childJobId) => {
+            const child = this.#readJobSnapshot(vaultPath, childJobId)?.job;
+            return child?.class === "dataset_import" &&
+              (child.state === "completed" || child.state === "completed_with_warnings") &&
+              child.outputRefs?.some((ref) => ref.kind === "dataset_revision") === true;
+          }),
           ocrCurrentSource: (ocrRequest) => this.#runAgentSelectedOcrTool(
             vaultPath,
             runningJob,

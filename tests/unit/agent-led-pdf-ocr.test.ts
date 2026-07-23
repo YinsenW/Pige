@@ -88,7 +88,11 @@ describe("Agent-led PDF OCR tool", { timeout: 15_000 }, () => {
     const renderer = new StaticPdfPageRenderer();
     const adapter = new StaticNativeOcrAdapter(nativeOcrResult("Agent-selected OCR recovered durable scan evidence."));
     const runtime = new RecordingRuntime(new PiAgentRuntimeAdapter({
-      fauxResponses: completeOcrTrace("scan", groundedOutput("Agent-selected OCR knowledge", ["ev_01"]))
+      fauxResponses: completeOcrTrace(
+        "scan",
+        groundedOutput("Agent-selected OCR knowledge", ["ev_01"]),
+        true
+      )
     }));
     const jobs = makeJobs(fixture, runtime, parser, new OcrService(adapter, undefined, renderer));
     const network = installNetworkTripwire();
@@ -118,7 +122,8 @@ describe("Agent-led PDF OCR tool", { timeout: 15_000 }, () => {
         "pige_parse_source",
         "pige_ocr_source",
         "pige_inspect_source",
-        "pige_create_knowledge_note"
+        "pige_create_knowledge_note",
+        "pige_ocr_source"
       ]);
       expect(parent).toMatchObject({ class: "agent_ingest", state: "completed" });
       expect(parent.childJobIds).toEqual([parseChild.id, ocrChild.id]);
@@ -521,13 +526,18 @@ function capabilityPort(): AgentIngestCapabilityPort {
   };
 }
 
-function completeOcrTrace(prefix: string, output: ReturnType<typeof groundedOutput>): readonly PiFauxResponse[] {
+function completeOcrTrace(
+  prefix: string,
+  output: ReturnType<typeof groundedOutput>,
+  repeatOcrAfterPublish = false
+): readonly PiFauxResponse[] {
   return [
     toolCall("pige_inspect_source", `${prefix}_inspect_before`),
     toolCall("pige_parse_source", `${prefix}_parse`),
     toolCall("pige_ocr_source", `${prefix}_ocr`),
     toolCall("pige_inspect_source", `${prefix}_inspect_after`),
     toolCall("pige_create_knowledge_note", `${prefix}_publish`, output),
+    ...(repeatOcrAfterPublish ? [toolCall("pige_ocr_source", `${prefix}_ocr_after_publish`)] : []),
     { kind: "text", text: "I recognized the preserved PDF and created the knowledge note." }
   ];
 }

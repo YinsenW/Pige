@@ -89,6 +89,7 @@ describe("Agent-selected Dataset ingest tool", () => {
       fauxResponses: [
         toolCall("pige_inspect_source", "dataset_inspect_1"),
         toolCall("pige_inspect_dataset", "dataset_materialize_1"),
+        toolCall("pige_inspect_source", "dataset_inspect_after_materialize"),
         { kind: "text", text: "The Dataset was materialized from the preserved source." }
       ]
     }));
@@ -110,7 +111,11 @@ describe("Agent-selected Dataset ingest tool", () => {
     const child = requireValue(readJobs(fixture.vaultPath).find((job) => job.class === "dataset_import"));
     const parent = readJob(fixture.vaultPath, parentId);
     const source = readSource(fixture.vaultPath, captured.sourceId);
-    expect(runtime.results[0]?.invokedTools).toEqual(["pige_inspect_source", "pige_inspect_dataset"]);
+    expect(runtime.results[0]?.invokedTools).toEqual([
+      "pige_inspect_source",
+      "pige_inspect_dataset",
+      "pige_inspect_source"
+    ]);
     expect(parent).toMatchObject({ state: "completed", childJobIds: [child.id] });
     expect(child).toMatchObject({ state: "completed", parentJobId: parentId, sourceId: captured.sourceId });
     expect(child.outputRefs?.map((ref) => ref.kind)).toEqual(expect.arrayContaining(["dataset", "dataset_revision"]));
@@ -171,6 +176,71 @@ describe("Agent-selected Dataset ingest tool", () => {
       .filter((operation) => operation.kind === "create_dataset_revision")
       .map((operation) => operation.id)).toEqual(firstOperationIds);
     expect(fs.readdirSync(path.join(fixture.vaultPath, "datasets"))).toHaveLength(1);
+  });
+
+  it("rejects an opposing page effect after restart from the durable Dataset child owner", async () => {
+    const fixture = makeVault();
+    const captured = await preserveCsv(fixture);
+    const planner = new StaticPlanner(csvPlan(captured.bytes));
+    const firstJobs = makeJobs(fixture, new RecordingRuntime(new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        toolCall("pige_inspect_source", "dataset_owner_inspect"),
+        toolCall("pige_inspect_dataset", "dataset_owner_materialize"),
+        { kind: "text", text: "The Dataset materialization completed." }
+      ]
+    })), planner);
+    firstJobs.processQueuedCaptures({ jobIds: [captured.captureJobId] });
+    const parentId = requireValue(firstJobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]).id;
+    await firstJobs.processQueuedAgentIngest({ jobIds: [parentId] });
+
+    const parentPath = findFile(path.join(fixture.vaultPath, ".pige/jobs"), `${parentId}.json`);
+    const completedParent = readJob(fixture.vaultPath, parentId);
+    const { finishedAt: _finishedAt, progress: _progress, ...retryableParent } = completedParent;
+    fs.writeFileSync(parentPath, `${JSON.stringify(JobRecordSchema.parse({
+      ...retryableParent,
+      state: "failed_retryable",
+      updatedAt: "2026-07-13T02:00:00.000Z",
+      message: "Simulated restart after Dataset commit."
+    }), null, 2)}\n`, "utf8");
+
+    let blockedCode = "";
+    const opposingRuntime: AgentIngestRuntimePort = {
+      run: async (request) => {
+        await executeTool(request, "pige_inspect_source", {}, "inspect_after_dataset_restart");
+        try {
+          await executeTool(
+            request,
+            "pige_create_knowledge_note",
+            knowledgeOutput("Must not publish after Dataset restart"),
+            "publish_after_dataset_restart"
+          );
+        } catch (caught) {
+          blockedCode = (caught as { readonly code?: string }).code ?? "";
+        }
+        return {
+          adapterMode: "embedded_pi_sdk",
+          providerProfileId: request.runtimeConfig.provider.id,
+          modelProfileId: request.runtimeConfig.model.id,
+          modelId: request.runtimeConfig.model.modelId,
+          events: [],
+          assistantText: "The existing Dataset remains the durable effect.",
+          invokedTools: ["pige_inspect_source", "pige_create_knowledge_note"]
+        };
+      }
+    };
+    const resumedJobs = makeJobs(fixture, opposingRuntime, planner);
+    expect(resumedJobs.retry({ jobId: parentId })).toMatchObject({ status: "requeued" });
+    expect(await resumedJobs.processQueuedAgentIngest({ jobIds: [parentId] })).toMatchObject({
+      completed: 1,
+      failed: 0
+    });
+
+    expect(blockedCode).toBe("dataset.operation_conflict");
+    expect(readJobs(fixture.vaultPath).filter((job) => job.class === "dataset_import")).toHaveLength(1);
+    expect(readOperations(fixture.vaultPath).filter((operation) =>
+      operation.kind === "create_dataset_revision"
+    )).toHaveLength(1);
+    expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toEqual([]);
   });
 
   it("preserves a structured source without creating a Dataset child when no model is ready", async () => {
@@ -318,6 +388,33 @@ function makeJobs(
 
 function toolCall(toolName: string, toolCallId: string): PiFauxResponse {
   return { kind: "tool_call", toolName, args: {}, toolCallId };
+}
+
+async function executeTool(
+  request: PiAgentRunRequest,
+  toolName: string,
+  args: unknown,
+  toolCallId: string
+): Promise<void> {
+  const tool = requireValue(request.tools.find((candidate) => candidate.name === toolName));
+  const signal = request.signal ?? new AbortController().signal;
+  const context = { toolCallId, signal };
+  if (await tool.authorize?.(args, context) === false) throw new Error(`Tool ${toolName} was denied.`);
+  await tool.execute(args, signal, context);
+}
+
+function knowledgeOutput(title: string) {
+  return {
+    title,
+    summary: { text: "The preserved source remains the evidence.", evidenceRefs: ["ev_01"] },
+    keyPoints: [{ text: "The source remains durable.", evidenceRefs: ["ev_01"] }],
+    tags: ["dataset"],
+    topics: ["Dataset"],
+    entities: [],
+    relatedPageRefs: [],
+    warnings: [],
+    confidence: "high"
+  };
 }
 
 async function preserveCsv(fixture: ReturnType<typeof makeVault>) {

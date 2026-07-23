@@ -513,6 +513,6 @@ function isErrno(value: unknown, code: string): value is NodeJS.ErrnoException {
   return value instanceof Error && "code" in value && value.code === code;
 }
 
-function pageConflict(message: string): PigeDomainError {
+export function pageConflict(message: string): PigeDomainError {
   return new PigeDomainError("agent_ingest.page_conflict", message);
 }
