@@ -247,7 +247,8 @@ describe("Agent-selected ingest retrieval tool", () => {
     const runtime = new RecordingPiRuntime([
       toolCall("pige_inspect_source", "inspect_update", {}),
       toolCall("pige_search_knowledge", "search_update", { query: "existing managed knowledge" }),
-      toolCall("pige_update_knowledge_note", "update_existing_call", existingNoteUpdateInput())
+      toolCall("pige_update_knowledge_note", "update_existing_call", existingNoteUpdateInput()),
+      toolCall("pige_search_knowledge", "search_after_update", { query: "verify updated knowledge" })
     ]);
     const retrieval = new RecordingRetrievalPort(
       fixture,
@@ -280,8 +281,10 @@ describe("Agent-selected ingest retrieval tool", () => {
     expect(runtime.results[0]?.invokedTools).toEqual([
       "pige_inspect_source",
       "pige_search_knowledge",
-      "pige_update_knowledge_note"
+      "pige_update_knowledge_note",
+      "pige_search_knowledge"
     ]);
+    expect(retrieval.calls).toHaveLength(2);
     expect(operations.filter((operation) => operation.kind === "create_page")).toEqual([]);
     expect(update).toMatchObject({
       jobId: parent.id,
@@ -1657,15 +1660,20 @@ describe("Agent-selected ingest retrieval tool", () => {
     expect(JSON.stringify(readOperations(fixture.vaultPath))).not.toContain(privateHostError);
   });
 
-  it("treats a sibling search queued after successful publication as a benign completed no-op", async () => {
+  it("lets Pi search after successful publication without substituting the durable effect", async () => {
     const fixture = makeVault();
-    const prepared = prepareAgentSource(fixture, "A committed publication is the terminal durable effect for its tool batch.");
-    const retrieval = new RecordingRetrievalPort(fixture, () => {
-      throw new Error("Retrieval must not run after publication.");
-    });
+    const prepared = prepareAgentSource(fixture, "A durable publication does not end Pi's read-only work.");
+    const retrieval = new RecordingRetrievalPort(fixture, (request) => makeSearchResult(fixture, request.query));
     let postPublicationSearch: PigeAgentToolResult | undefined;
     const runtime = new FunctionalRuntime(async (request) => {
       await invokeTool(request, "pige_inspect_source", {}, "inspect_before_publish_sibling");
+      await invokeTool(
+        request,
+        "pige_search_knowledge",
+        { query: "evidence before publication" },
+        "search_before_publication"
+      );
+      await request.beforeModelTurn?.();
       await invokeTool(
         request,
         "pige_create_knowledge_note",
@@ -1675,10 +1683,15 @@ describe("Agent-selected ingest retrieval tool", () => {
       postPublicationSearch = await invokeTool(
         request,
         "pige_search_knowledge",
-        { query: "must not execute" },
+        { query: "continue after publication" },
         "search_after_publish_sibling"
       );
-      return runtimeResult(request, ["pige_inspect_source", "pige_create_knowledge_note"]);
+      return runtimeResult(request, [
+        "pige_inspect_source",
+        "pige_search_knowledge",
+        "pige_create_knowledge_note",
+        "pige_search_knowledge"
+      ]);
     });
 
     const result = await new AgentIngestService(
@@ -1691,12 +1704,459 @@ describe("Agent-selected ingest retrieval tool", () => {
     ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent);
 
     expect(postPublicationSearch).toMatchObject({ terminate: false });
-    expect(readPiToolText(postPublicationSearch)).toContain('"status":"already_published"');
-    expect(retrieval.calls).toEqual([]);
+    expect(readPiToolText(postPublicationSearch)).toContain('"status":"evidence_found"');
+    expect(retrieval.calls).toHaveLength(2);
     expect(generatedNotes(fixture.vaultPath)).toHaveLength(1);
     expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "create_page"))
       .toHaveLength(1);
     expect(result.created).toBe(true);
+  });
+
+  it.each(["publish_then_update", "update_then_publish"] as const)(
+    "rejects a distinct page effect through the page owner for %s",
+    async (order) => {
+      const fixture = makeVault();
+      writeUpdateTargetPage(fixture.vaultPath);
+      const prepared = prepareAgentSource(fixture, `Only one page identity may own ${order}.`);
+      const retrieval = new RecordingRetrievalPort(
+        fixture,
+        (request) => makeUpdateSearchResult(fixture, request.query)
+      );
+      let blockedCode = "";
+      const runtime = new FunctionalRuntime(async (request) => {
+        await invokeTool(request, "pige_inspect_source", {}, `inspect_${order}`);
+        if (order === "publish_then_update") {
+          await invokeTool(
+            request,
+            "pige_create_knowledge_note",
+            groundedOutput("Published page wins"),
+            "publish_before_update"
+          );
+          await invokeTool(
+            request,
+            "pige_search_knowledge",
+            { query: "existing managed knowledge" },
+            "search_after_publish"
+          );
+          await request.beforeModelTurn?.();
+          try {
+            await invokeTool(
+              request,
+              "pige_update_knowledge_note",
+              existingNoteUpdateInput(),
+              "update_after_publish"
+            );
+          } catch (caught) {
+            blockedCode = (caught as { readonly code?: string }).code ?? "";
+          }
+        } else {
+          await invokeTool(
+            request,
+            "pige_search_knowledge",
+            { query: "existing managed knowledge" },
+            "search_before_update"
+          );
+          await request.beforeModelTurn?.();
+          await invokeTool(
+            request,
+            "pige_update_knowledge_note",
+            existingNoteUpdateInput(),
+            "update_before_publish"
+          );
+          try {
+            await invokeTool(
+              request,
+              "pige_create_knowledge_note",
+              groundedOutput("Generated page loses"),
+              "publish_after_update"
+            );
+          } catch (caught) {
+            blockedCode = (caught as { readonly code?: string }).code ?? "";
+          }
+        }
+        return runtimeResult(request, [], "The first page effect remains authoritative.");
+      });
+
+      const result = await new AgentIngestService(
+        modelPort(),
+        runtime,
+        undefined,
+        undefined,
+        undefined,
+        retrieval
+      ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent);
+
+      expect(blockedCode).toBe("agent_ingest.page_conflict");
+      expect(readOperations(fixture.vaultPath).filter((operation) =>
+        operation.kind === "create_page" || operation.kind === "update_page"
+      )).toHaveLength(1);
+      if (order === "publish_then_update") expect(result.pageId).not.toBe(UPDATE_PAGE_ID);
+      else expect(result.pageId).toBe(UPDATE_PAGE_ID);
+    }
+  );
+
+  it("adopts only the exact generated-page intent and rejects changed content", async () => {
+    const fixture = makeVault();
+    const prepared = prepareAgentSource(fixture, "Exact generated-page intent owns adoption.");
+    const exactOutput = groundedOutput("Exact generated page");
+    let changedCode = "";
+    let adopted: PigeAgentToolResult | undefined;
+    const runtime = new FunctionalRuntime(async (request) => {
+      await invokeTool(request, "pige_inspect_source", {}, "inspect_exact_publish");
+      await invokeTool(request, "pige_create_knowledge_note", exactOutput, "publish_exact_first");
+      try {
+        await invokeTool(
+          request,
+          "pige_create_knowledge_note",
+          groundedOutput("Changed generated page"),
+          "publish_changed_second"
+        );
+      } catch (caught) {
+        changedCode = (caught as { readonly code?: string }).code ?? "";
+      }
+      adopted = await invokeTool(
+        request,
+        "pige_create_knowledge_note",
+        exactOutput,
+        "publish_exact_retry"
+      );
+      return runtimeResult(request, [], "The exact generated page was adopted once.");
+    });
+
+    await new AgentIngestService(modelPort(), runtime)
+      .ingestSource(fixture.vaultPath, prepared.source, prepared.parent);
+
+    expect(changedCode).toBe("agent_ingest.page_conflict");
+    expect(readPiToolText(adopted)).toContain('"status":"recovered"');
+    expect(generatedNotes(fixture.vaultPath)).toHaveLength(1);
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "create_page"))
+      .toHaveLength(1);
+  });
+
+  it("routes an exact repeated existing-page effect through the idempotent page owner", async () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    const prepared = prepareAgentSource(fixture, "An exact repeated page effect adopts one durable receipt.");
+    const retrieval = new RecordingRetrievalPort(
+      fixture,
+      (request) => makeUpdateSearchResult(fixture, request.query)
+    );
+    let repeated: PigeAgentToolResult | undefined;
+    let staleReplayCode = "";
+    const runtime = new FunctionalRuntime(async (request) => {
+      await invokeTool(request, "pige_inspect_source", {}, "inspect_exact_page_repeat");
+      await invokeTool(
+        request,
+        "pige_search_knowledge",
+        { query: "existing managed knowledge" },
+        "search_exact_page_repeat"
+      );
+      await request.beforeModelTurn?.();
+      await invokeTool(
+        request,
+        "pige_update_knowledge_note",
+        existingNoteUpdateInput(),
+        "update_exact_page_first"
+      );
+      repeated = await invokeTool(
+        request,
+        "pige_update_knowledge_note",
+        existingNoteUpdateInput(),
+        "update_exact_page_repeat"
+      );
+      mutateUpdateTarget(fixture.vaultPath);
+      try {
+        await invokeTool(
+          request,
+          "pige_update_knowledge_note",
+          existingNoteUpdateInput(),
+          "update_exact_page_after_external_edit"
+        );
+      } catch (caught) {
+        staleReplayCode = (caught as { readonly code?: string }).code ?? "";
+      }
+      return runtimeResult(request, [], "The exact page update was adopted without another mutation.");
+    });
+
+    await new AgentIngestService(
+      modelPort(),
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      retrieval
+    ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent);
+
+    expect(readPiToolText(repeated)).toContain('"status":"recovered"');
+    expect(staleReplayCode).toBe("agent_ingest.page_conflict");
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+      .toHaveLength(1);
+  });
+
+  it("rejects a different durable intent for the same existing page", async () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    const prepared = prepareAgentSource(fixture, "One exact existing-page intent owns the Job.");
+    let searchCalls = 0;
+    const retrieval = new RecordingRetrievalPort(
+      fixture,
+      (request) => {
+        searchCalls += 1;
+        const result = makeUpdateSearchResult(fixture, request.query);
+        if (searchCalls === 1) return result;
+        const markdown = fs.readFileSync(
+          path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/")),
+          "utf8"
+        );
+        const parsed = requireValue(parsePigeFrontmatter(markdown));
+        return {
+          ...result,
+          results: result.results.map((item) => ({
+            ...item,
+            summary: {
+              ...item.summary,
+              updatedAt: parsed.frontmatter.updated_at,
+              sourceIds: parsed.frontmatter.source_ids
+            },
+            snippets: [readMarkdownBody(markdown)]
+          }))
+        };
+      }
+    );
+    let blockedCode = "";
+    const runtime = new FunctionalRuntime(async (request) => {
+      await invokeTool(request, "pige_inspect_source", {}, "inspect_same_page_intents");
+      await invokeTool(
+        request,
+        "pige_search_knowledge",
+        { query: "existing managed knowledge" },
+        "search_before_update_intent"
+      );
+      await request.beforeModelTurn?.();
+      await invokeTool(
+        request,
+        "pige_update_knowledge_note",
+        existingNoteUpdateInput(),
+        "update_intent_first"
+      );
+      await invokeTool(
+        request,
+        "pige_search_knowledge",
+        { query: "existing managed knowledge" },
+        "search_before_tag_intent"
+      );
+      await request.beforeModelTurn?.();
+          try {
+            await invokeTool(
+              request,
+              "pige_update_knowledge_note",
+              {
+                ...existingNoteUpdateInput(),
+                summary: {
+                  text: "A different durable update must not replace the first intent.",
+                  evidenceRefs: ["ev_01"]
+                }
+              },
+              "update_intent_second"
+            );
+      } catch (caught) {
+        blockedCode = (caught as { readonly code?: string }).code ?? "";
+      }
+      return runtimeResult(request, [], "The first existing-page intent remains authoritative.");
+    });
+
+    await new AgentIngestService(
+      modelPort(),
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      retrieval
+    ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent);
+
+    expect(blockedCode).toBe("agent_ingest.page_conflict");
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+      .toHaveLength(1);
+  });
+
+  it("keeps an existing-page effect exclusive from later proposal and Dataset effects", async () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    const prepared = prepareAgentSource(fixture, "One existing-page effect owns this structured turn.");
+    const datasetSource = createDatasetCapableSource(fixture.vaultPath, prepared.source);
+    const retrieval = new RecordingRetrievalPort(
+      fixture,
+      (request) => makeUpdateSearchResult(fixture, request.query)
+    );
+    const proposals = new ProposalService(fixture.vaultPort);
+    let proposalCode = "";
+    let datasetCode = "";
+    let datasetCalls = 0;
+    const runtime = new FunctionalRuntime(async (request) => {
+      await invokeTool(request, "pige_inspect_source", {}, "inspect_exclusive_page_effect");
+      const searchResult = await invokeTool(
+        request,
+        "pige_search_knowledge",
+        { query: "existing managed knowledge" },
+        "search_exclusive_page_effect"
+      );
+      expect(readPiToolText(searchResult)).toContain('"status":"evidence_found"');
+      await request.beforeModelTurn?.();
+      await invokeTool(
+        request,
+        "pige_update_knowledge_note",
+        existingNoteUpdateInput(),
+        "update_exclusive_page_effect"
+      );
+      try {
+        await invokeTool(
+          request,
+          "pige_stage_knowledge_note_proposal",
+          groundedOutput("Conflicting proposal after page update"),
+          "proposal_after_page_effect"
+        );
+      } catch (caught) {
+        proposalCode = (caught as { readonly code?: string }).code ?? "";
+      }
+      try {
+        await invokeTool(request, "pige_inspect_dataset", {}, "dataset_after_page_effect");
+      } catch (caught) {
+        datasetCode = (caught as { readonly code?: string }).code ?? "";
+      }
+      return runtimeResult(request, [], "The existing-page effect remains the sole durable owner.");
+    });
+    const capabilityPort: AgentIngestCapabilityPort = {
+      snapshot: () => ({
+        ...readyParserCapabilityPort.snapshot(),
+        datasetToolchainReady: true
+      })
+    };
+
+    await new AgentIngestService(
+      modelPort(),
+      runtime,
+      capabilityPort,
+      undefined,
+      undefined,
+      retrieval,
+      {
+        findForJob: (vaultPath, jobId) => {
+          if (vaultPath !== fixture.vaultPath) throw new Error("Proposal recovery escaped the active test vault.");
+          return proposals.findForJob(jobId);
+        },
+        stage: (vaultPath, request) => {
+          if (vaultPath !== fixture.vaultPath) throw new Error("Proposal staging escaped the active test vault.");
+          return proposals.stage(request);
+        }
+      }
+    ).ingestSource(fixture.vaultPath, datasetSource, prepared.parent, {
+      materializeCurrentDataset: async () => {
+        datasetCalls += 1;
+        throw new Error("The Dataset owner must not run after a page effect.");
+      }
+    });
+
+    expect(proposalCode).toBe("agent_ingest.page_conflict");
+    expect(datasetCode).toBe("agent_ingest.page_conflict");
+    expect(proposals.list().total).toBe(0);
+    expect(datasetCalls).toBe(0);
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+      .toHaveLength(1);
+  });
+
+  it("latches the page owner across a post-boundary failure before sibling effects", async () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    const prepared = prepareAgentSource(fixture, "A partial page effect must remain the sole durable intent.");
+    const datasetSource = createDatasetCapableSource(fixture.vaultPath, prepared.source);
+    const retrieval = new RecordingRetrievalPort(
+      fixture,
+      (request) => makeUpdateSearchResult(fixture, request.query)
+    );
+    const proposals = new ProposalService(fixture.vaultPort);
+    let publicationStarted = false;
+    let updateFailedAfterBoundary = false;
+    let proposalCode = "";
+    let datasetCode = "";
+    let datasetCalls = 0;
+    const runtime = new FunctionalRuntime(async (request) => {
+      await invokeTool(request, "pige_inspect_source", {}, "inspect_partial_page_effect");
+      await invokeTool(
+        request,
+        "pige_search_knowledge",
+        { query: "existing managed knowledge" },
+        "search_partial_page_effect"
+      );
+      await request.beforeModelTurn?.();
+      try {
+        await invokeTool(
+          request,
+          "pige_update_knowledge_note",
+          existingNoteUpdateInput(),
+          "update_partial_page_effect"
+        );
+      } catch {
+        updateFailedAfterBoundary = publicationStarted;
+      }
+      try {
+        await invokeTool(
+          request,
+          "pige_stage_knowledge_note_proposal",
+          groundedOutput("Conflicting proposal after partial page update"),
+          "proposal_after_partial_page_effect"
+        );
+      } catch (caught) {
+        proposalCode = (caught as { readonly code?: string }).code ?? "";
+      }
+      try {
+        await invokeTool(request, "pige_inspect_dataset", {}, "dataset_after_partial_page_effect");
+      } catch (caught) {
+        datasetCode = (caught as { readonly code?: string }).code ?? "";
+      }
+      return runtimeResult(request, [], "The partial page intent remains isolated for recovery.");
+    });
+    const capabilityPort: AgentIngestCapabilityPort = {
+      snapshot: () => ({
+        ...readyParserCapabilityPort.snapshot(),
+        datasetToolchainReady: true
+      })
+    };
+
+    await new AgentIngestService(
+      modelPort(),
+      runtime,
+      capabilityPort,
+      undefined,
+      undefined,
+      retrieval,
+      {
+        findForJob: (vaultPath, jobId) => {
+          if (vaultPath !== fixture.vaultPath) throw new Error("Proposal recovery escaped the active test vault.");
+          return proposals.findForJob(jobId);
+        },
+        stage: (vaultPath, request) => {
+          if (vaultPath !== fixture.vaultPath) throw new Error("Proposal staging escaped the active test vault.");
+          return proposals.stage(request);
+        }
+      }
+    ).ingestSource(fixture.vaultPath, datasetSource, prepared.parent, {
+      onPublicationStart: () => { publicationStarted = true; },
+      assertSourceCurrent: () => {
+        if (publicationStarted) throw new Error("synthetic source drift after page publication start");
+      },
+      materializeCurrentDataset: async () => {
+        datasetCalls += 1;
+        throw new Error("The Dataset owner must not run after a partial page effect.");
+      }
+    });
+
+    expect(updateFailedAfterBoundary).toBe(true);
+    expect(proposalCode).toBe("agent_ingest.page_conflict");
+    expect(datasetCode).toBe("agent_ingest.page_conflict");
+    expect(proposals.list().total).toBe(0);
+    expect(datasetCalls).toBe(0);
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+      .toHaveLength(0);
   });
 
   it("lets Pi publish from source while excluding an invalid related page identity", async () => {
@@ -2940,6 +3400,43 @@ function prepareAgentSource(
     job.class === "agent_ingest" && job.sourceId === capture.sourceId
   ));
   return { source: readSource(fixture.vaultPath, capture.sourceId), parent };
+}
+
+function createDatasetCapableSource(vaultPath: string, source: SourceRecord): SourceRecord {
+  const artifactText = "Structured evidence remains readable before an optional Dataset effect.";
+  const artifactPath = `artifacts/extracted-text/${source.id}.txt`;
+  const metadataPath = `artifacts/metadata/${source.id}.json`;
+  const metadataText = JSON.stringify({
+    schemaVersion: 1,
+    artifactId: "art_exclusive_dataset_metadata",
+    sourceId: source.id,
+    kind: "docx_parse_metadata",
+    extractedTextChecksum: syntheticHash(artifactText),
+    units: [{ locator: "row:1", characterStart: 0, characterEnd: artifactText.length }]
+  });
+  const absoluteArtifactPath = path.join(vaultPath, ...artifactPath.split("/"));
+  const absoluteMetadataPath = path.join(vaultPath, ...metadataPath.split("/"));
+  fs.mkdirSync(path.dirname(absoluteArtifactPath), { recursive: true });
+  fs.mkdirSync(path.dirname(absoluteMetadataPath), { recursive: true });
+  fs.writeFileSync(absoluteArtifactPath, artifactText, "utf8");
+  fs.writeFileSync(absoluteMetadataPath, metadataText, "utf8");
+  return SourceRecordSchema.parse({
+    ...source,
+    kind: "csv_file",
+    artifacts: [{
+      id: "art_exclusive_dataset_text",
+      kind: "extracted_text",
+      path: artifactPath,
+      checksum: syntheticHash(artifactText),
+      size: Buffer.byteLength(artifactText)
+    }, {
+      id: "art_exclusive_dataset_metadata",
+      kind: "metadata",
+      path: metadataPath,
+      checksum: syntheticHash(metadataText),
+      size: Buffer.byteLength(metadataText)
+    }]
+  });
 }
 
 function makeSearchResult(

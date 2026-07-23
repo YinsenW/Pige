@@ -95,6 +95,7 @@ describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
           args: groundedOutput("Agent-selected PDF knowledge"),
           toolCallId: "pi_publish_native"
         },
+        { kind: "tool_call", toolName: "pige_parse_source", args: {}, toolCallId: "pi_parse_after_publish" },
         { kind: "text", text: "I parsed the PDF and created the grounded knowledge note." }
       ]
     }));
@@ -156,7 +157,8 @@ describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
         "pige_inspect_source",
         "pige_parse_source",
         "pige_inspect_source",
-        "pige_create_knowledge_note"
+        "pige_create_knowledge_note",
+        "pige_parse_source"
       ]);
       expect(parent).toMatchObject({ class: "agent_ingest", state: "completed" });
       expect(parseChildren).toHaveLength(1);

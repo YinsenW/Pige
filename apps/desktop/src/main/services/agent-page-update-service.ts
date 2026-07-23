@@ -233,14 +233,14 @@ export function applyAgentPageUpdate(input: {
     } : {}),
     ...(tagAdditions ? { tagAdditions } : {})
   };
-  const expectedOperation = createUpdateOperation({
-    binding,
-    job,
-    sourceRecord,
-    createdAt: job.createdAt
-  });
+  const expectedOperation = createUpdateOperation({ binding, job, sourceRecord, createdAt: job.createdAt });
   preflightUpdateOperation(input.vaultPath, expectedOperation);
-
+  const existingOperation = readCommittedOperation(input.vaultPath, expectedOperation);
+  if (existingOperation) {
+    input.throwIfCancellationRequested?.(); input.assertSourceCurrent?.();
+    assertRelationshipTargetCurrent(input.vaultPath, binding); requireExact(input.vaultPath, binding.pagePath, binding.contentHash);
+    return { pageId: binding.pageId, pagePath: binding.pagePath, title: target.title, operation: existingOperation, recovered: true, ...(relationshipTarget ? { relationshipPageId: relationshipTarget.pageId } : {}) };
+  }
   stageExact(input.vaultPath, binding.stagedPath, nextMarkdown, binding.contentHash);
   try {
     input.throwIfCancellationRequested?.();

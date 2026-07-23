@@ -829,6 +829,7 @@ export class JobsService {
         }
         return result;
       },
+      hasDurableDatasetEffect: () => this.#hasDurableDatasetEffect(vaultPath, job.id),
       ocrCurrentSource: sourceTools.ocr,
       throwIfCancellationRequested: () => control.throwIfCancellationRequested(),
       onPublicationStart: (checkpointId, publicationBinding) => {
@@ -2109,6 +2110,7 @@ export class JobsService {
             datasetRequest,
             execution.control
           ),
+          hasDurableDatasetEffect: () => this.#hasDurableDatasetEffect(vaultPath, runningJob.id),
           ocrCurrentSource: (ocrRequest) => this.#runAgentSelectedOcrTool(
             vaultPath,
             runningJob,
@@ -3059,7 +3061,15 @@ export class JobsService {
       throw caught;
     }
   }
-
+  #hasDurableDatasetEffect(vaultPath: string, jobId: string): boolean {
+    const parent = this.#readJobSnapshot(vaultPath, jobId)?.job;
+    return parent?.outputRefs?.some((ref) => ref.kind === "dataset_revision") === true ||
+      (parent?.childJobIds ?? []).some((childId) => {
+        const child = this.#readJobSnapshot(vaultPath, childId)?.job;
+        return child?.class === "dataset_import" && ["completed", "completed_with_warnings"].includes(child.state) &&
+          child.outputRefs?.some((ref) => ref.kind === "dataset_revision") === true;
+      });
+  }
   #replaceJob(snapshot: JobRecordSnapshot, next: JobRecord): JobRecordSnapshot {
     return this.#jobRecordStore(this.#requireActiveVaultPath()).compareAndSwap(snapshot, next);
   }
