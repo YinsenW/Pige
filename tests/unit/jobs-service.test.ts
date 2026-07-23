@@ -2745,7 +2745,7 @@ describe("jobs service", () => {
       body: "Durable index rebuild jobs make local search recoverable."
     });
 
-    const rebuild = await jobs.requestIndexRebuild();
+    const rebuild = await jobs.indexRebuildExecutor().request();
     const listedJob = jobs.list({ classes: ["index_rebuild"], states: ["completed"] }).jobs[0];
     const search = database.searchPages(vaultPath, { query: "recoverable search" });
     const log = fs.readFileSync(path.join(vaultPath, "log.md"), "utf8");
@@ -2786,7 +2786,7 @@ describe("jobs service", () => {
       body: "Durable Markdown remains untouched when its derived index worker is cancelled."
     });
 
-    const rebuilding = jobs.requestIndexRebuild();
+    const rebuilding = jobs.indexRebuildExecutor().request();
     await started;
     const runningJob = jobs.list({ classes: ["index_rebuild"], states: ["running"] }).jobs[0];
     expect(runningJob?.progress).toEqual({ completedUnits: 0, totalUnits: 5, unit: "index_item" });
@@ -2829,13 +2829,81 @@ describe("jobs service", () => {
     const { jobs } = makeServices(vaultPath, vault, undefined, database);
 
     const results = await Promise.all([
-      jobs.requestIndexRebuild(),
-      jobs.requestIndexRebuild()
+      jobs.indexRebuildExecutor().request(),
+      jobs.indexRebuildExecutor().request()
     ]);
 
     expect(maxActive).toBe(1);
     expect(results.map((result) => result.pageCount)).toEqual([0, 0]);
     expect(jobs.list({ classes: ["index_rebuild"], states: ["completed"] }).jobs).toHaveLength(2);
+  });
+
+  it("keeps queued rebuilds with their original vault across a lease switch and restart", async () => {
+    const first = makeVault();
+    const second = makeVault();
+    let active = first;
+    let releaseFirstRun: (() => void) | undefined;
+    const firstRunBlocked = new Promise<void>((resolve) => {
+      releaseFirstRun = resolve;
+    });
+    let markWorkerStarted: (() => void) | undefined;
+    const workerStarted = new Promise<void>((resolve) => {
+      markWorkerStarted = resolve;
+    });
+    let rebuildCalls = 0;
+    const rebuilder: LocalDatabaseRebuildPort = {
+      rebuild: async () => {
+        rebuildCalls += 1;
+        markWorkerStarted?.();
+        if (rebuildCalls === 1) await firstRunBlocked;
+        return {
+          rebuiltAt: "2026-07-23T04:00:00.000Z",
+          pageCount: 1,
+          invalidPageCount: 0
+        };
+      }
+    };
+    const database = new LocalDatabaseService(new NodeSqliteDriver(), rebuilder);
+    const jobs = new JobsService({
+      current: () => active.vault,
+      activeVaultPath: () => active.vaultPath,
+      assertWriterLease: (vaultPath) => {
+        if (vaultPath !== active.vaultPath) {
+          throw new PigeDomainError("vault.binding_changed", "The active vault binding changed.");
+        }
+      }
+    }, undefined, database);
+
+    const requested = jobs.indexRebuildExecutor().request();
+    await workerStarted;
+    const queuedBehind = jobs.indexRebuildExecutor().request();
+    active = second;
+    releaseFirstRun?.();
+
+    const switched = await Promise.allSettled([requested, queuedBehind]);
+    expect(switched).toEqual([
+      expect.objectContaining({ status: "rejected", reason: expect.objectContaining({ code: "vault.binding_changed" }) }),
+      expect.objectContaining({ status: "rejected", reason: expect.objectContaining({ code: "vault.binding_changed" }) })
+    ]);
+    expect(fs.readFileSync(path.join(first.vaultPath, "log.md"), "utf8"))
+      .not.toContain("Rebuilt local database index from Markdown");
+    expect(listJobRecords(first.vaultPath).filter((job) => job.class === "index_rebuild"))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ state: "running" }),
+        expect.objectContaining({ state: "queued" })
+      ]));
+    expect(listJobRecords(second.vaultPath).filter((job) => job.class === "index_rebuild"))
+      .toHaveLength(0);
+    expect(rebuildCalls).toBe(1);
+
+    active = first;
+    expect(jobs.recoverInterruptedJobs()).toEqual({ requeued: 1, failedRetryable: 0 });
+    await expect(jobs.indexRebuildExecutor().process()).resolves.toMatchObject({
+      completed: 2,
+      failed: 0
+    });
+    expect(jobs.list({ classes: ["index_rebuild"], states: ["completed"] }).jobs).toHaveLength(2);
+    expect(rebuildCalls).toBe(3);
   });
 });
 
