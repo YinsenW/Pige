@@ -3976,7 +3976,7 @@ dd {
   z-index: 16;
   top: var(--conversation-rail-top);
   right: var(--conversation-rail-right);
-  width: 14px;
+  width: 18px;
   height: var(--conversation-rail-height);
   border: 0;
   background: transparent;
@@ -3986,12 +3986,12 @@ dd {
 }
 
 .conversation-scroll-anchor {
-  --conversation-anchor-width: 3px;
+  --conversation-anchor-width: 4px;
   position: absolute;
-  top: calc(var(--conversation-anchor-position) * (100% - 6px) + 3px);
+  top: calc(var(--conversation-anchor-position) * (100% - 8px) + 4px);
   right: 0;
-  width: 14px;
-  height: 6px;
+  width: 18px;
+  height: 8px;
   min-height: 0;
   transform: translateY(-50%);
   border: 0;
@@ -4019,30 +4019,30 @@ dd {
 }
 
 .conversation-scroll-anchor[aria-current="true"] .conversation-scroll-anchor-mark {
-  --conversation-anchor-width: 6px;
+  --conversation-anchor-width: 8px;
   background: color-mix(in srgb, var(--text-primary) 72%, transparent);
   opacity: .9;
 }
 
 .conversation-scroll-anchor:is(:hover, :focus-visible) .conversation-scroll-anchor-mark,
 .conversation-scroll-anchor.is-engaged .conversation-scroll-anchor-mark {
-  --conversation-anchor-width: 14px;
+  --conversation-anchor-width: 18px;
   background: color-mix(in srgb, var(--text-primary) 76%, transparent);
   opacity: 1;
 }
 
 .conversation-scroll-anchor.neighbor-one .conversation-scroll-anchor-mark {
-  --conversation-anchor-width: 9px;
+  --conversation-anchor-width: 12px;
   opacity: .78;
 }
 
 .conversation-scroll-anchor.neighbor-two .conversation-scroll-anchor-mark {
-  --conversation-anchor-width: 6px;
+  --conversation-anchor-width: 8px;
   opacity: .62;
 }
 
 .conversation-scroll-anchor.neighbor-three .conversation-scroll-anchor-mark {
-  --conversation-anchor-width: 4px;
+  --conversation-anchor-width: 6px;
   opacity: .48;
 }
 
