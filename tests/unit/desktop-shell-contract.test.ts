@@ -444,10 +444,20 @@ describe("desktop shell build contract", () => {
     expect(createHandler).not.toContain("getBackupRestoreService().createBackup(");
     expect(mainSource).toContain('job.backupKind === "user_backup"');
     expect(mainSource).toContain("lastBackupAt: lastBackup.updatedAt");
-    expect(cancelHandler).toContain("getBackupCoordinatorService().cancel(request)");
+    expect(cancelHandler).toContain("getJobClassExecutorRegistry().require(jobClass)");
+    expect(cancelHandler).not.toContain("getBackupCoordinatorService().cancel(request)");
+    expect(mainSource).toContain("backup: {");
+    expect(mainSource).toContain("getBackupCoordinatorService().cancel(request)");
     expect(mainSource).toContain("getBackupCoordinatorService().recoverInterrupted()");
     expect(mainSource.indexOf("getBackupCoordinatorService().recoverInterrupted()"))
       .toBeLessThan(mainSource.indexOf("recoverInterruptedJobs()"));
+    const resumeBackgroundJobs = mainSource.slice(
+      mainSource.indexOf("const resumeBackgroundJobs"),
+      mainSource.indexOf("const scheduleWaitingAgentIngestAfterModelReady")
+    );
+    expect(resumeBackgroundJobs).toContain("getJobClassExecutorRegistry().scheduleAll()");
+    expect(resumeBackgroundJobs).not.toContain("scheduleCaptureProcessing();");
+    expect(resumeBackgroundJobs).not.toContain("scheduleDatasetImportProcessing();");
   });
 
   it("wires Home questions through Pi with visible typed outcomes and no raw provider error surface", () => {
@@ -541,9 +551,10 @@ describe("desktop shell build contract", () => {
       mainSource.indexOf('ipcMain.handle("jobs.retry"'),
       mainSource.indexOf('ipcMain.handle("library.list"')
     );
-    expect(retryHandler).toContain('result.job?.class === "agent_turn"');
-    expect(retryHandler).toContain("scheduleAgentIngestProcessing()");
-    expect(retryHandler).toContain("scheduleAgentTurnProcessing()");
+    expect(retryHandler).toContain("getJobClassExecutorRegistry().require(result.job.class).schedule?.(result.job.id)");
+    expect(retryHandler).not.toContain('result.job?.class === "agent_turn"');
+    expect(mainSource).toContain("agent_turn: {");
+    expect(mainSource).toContain("scheduleAgentTurnProcessing();");
   });
 
   it("runtime-validates retrieval.search at preload and main boundaries", () => {
@@ -975,7 +986,7 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("new DatasetQueryService()");
     expect(mainSource).toContain("getDatasetQueryService()");
     expect(mainSource).toContain('getDatasetService().canMaterialize("csv_file")');
-    expect(mainSource).toContain("getDatasetService()\n    );");
+    expect(mainSource).toMatch(/getDatasetService\(\),\s+getJobClassExecutorRegistry\(\)/u);
     expect(buildSource).toContain("DATASET_QUERY_WORKER_ENTRY_NAME");
     expect(buildSource).toContain('alias("./src/main/workers/dataset-query-worker.ts")');
     expect(buildSource).toContain('"services/permissioned-external-capability-service": alias(');
