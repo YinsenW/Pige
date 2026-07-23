@@ -1,0 +1,5 @@
+/.github/CODEOWNERS @YinsenW
+/.github/workflows/ @YinsenW
+/package.json @YinsenW
+/scripts/verify/ @YinsenW
+/resources/governance/verify-scripts.manifest.json @YinsenW
