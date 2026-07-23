@@ -8,7 +8,6 @@ import type {
   JobSummary,
   JobsListRequest,
   JobsListResult,
-  LocalDatabaseRebuildResult,
   ProposalDecisionRequest,
   ProposalDecisionResult,
   VaultSummary
@@ -78,6 +77,12 @@ import {
   createJobClassExecutorRegistry,
   type JobClassExecutorRegistry
 } from "./job-class-executor-registry";
+import {
+  IndexRebuildJobExecutor,
+  type ActiveIndexRebuildJob,
+  type ProcessQueuedIndexRebuildRequest,
+  type QueuedIndexRebuildJob
+} from "./index-rebuild-job-executor";
 import {
   assertReaderSelectionJobBinding,
   createReaderSelectionJobRefs,
@@ -192,15 +197,6 @@ export interface AgentTurnUrlSourceLink {
   readonly title: string;
 }
 
-export interface ProcessQueuedIndexRebuildRequest {
-  readonly jobIds?: readonly string[];
-  readonly limit?: number;
-}
-
-export interface ProcessQueuedIndexRebuildResult extends ProcessQueuedCapturesResult {
-  readonly lastRebuild?: LocalDatabaseRebuildResult;
-}
-
 export interface ProcessQueuedOcrRequest {
   readonly jobIds?: readonly string[];
   readonly sourceIds?: readonly string[];
@@ -227,10 +223,10 @@ export class JobsService {
   readonly #ocr: OcrPort | undefined;
   readonly #datasets: DatasetMaterializerPort | undefined;
   readonly #executors: JobClassExecutorRegistry;
+  readonly #indexRebuildExecutor: IndexRebuildJobExecutor;
   readonly #jobRecordStores = new Map<string, JobRecordStore>();
   readonly #jobExecutionCoordinators = new Map<string, JobExecutionCoordinator>();
   readonly #activeExecutions = new Map<string, AbortController>();
-  #indexRebuildTail: Promise<void> = Promise.resolve();
 
   constructor(
     vaults: JobsVaultPort,
@@ -249,6 +245,25 @@ export class JobsService {
     this.#ocr = ocr;
     this.#datasets = datasets;
     this.#executors = executors;
+    this.#indexRebuildExecutor = new IndexRebuildJobExecutor(database, {
+      createJob: () => {
+        const vaultPath = this.#requireActiveVaultPath();
+        return createIndexRebuildJob(this.#jobRecordStore(vaultPath), vaultPath);
+      },
+      queued: (request) => {
+        const vaultPath = this.#requireActiveVaultPath();
+        return findQueuedIndexRebuildJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request)
+          .map((snapshot) => this.#queuedIndexRebuildJob(vaultPath, snapshot));
+      },
+      appendActivity: (vaultPath, message) => {
+        this.#assertWriterLease(vaultPath);
+        appendLog(vaultPath, message);
+      }
+    });
+  }
+
+  indexRebuildExecutor(): IndexRebuildJobExecutor {
+    return this.#indexRebuildExecutor;
   }
 
   list(request: JobsListRequest = {}): JobsListResult {
@@ -1563,16 +1578,6 @@ export class JobsService {
     return { requeued };
   }
 
-  async requestIndexRebuild(): Promise<LocalDatabaseRebuildResult> {
-    const vaultPath = this.#requireActiveVaultPath();
-    const job = createIndexRebuildJob(this.#jobRecordStore(vaultPath), vaultPath);
-    const result = await this.processQueuedIndexRebuild({ jobIds: [job.id] });
-    if (!result.lastRebuild) {
-      throw new PigeDomainError("index_rebuild_failed", "Index rebuild failed. The job remains retryable.");
-    }
-    return result.lastRebuild;
-  }
-
   processQueuedCaptures(request: ProcessQueuedCapturesRequest = {}): ProcessQueuedCapturesResult {
     const vaultPath = this.#requireActiveVaultPath();
     const jobFiles = findQueuedCaptureJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
@@ -2831,90 +2836,53 @@ export class JobsService {
     throw new PigeDomainError("ocr.tool_failed_retryable", "The durable source OCR child remains retryable.");
   }
 
-  processQueuedIndexRebuild(
-    request: ProcessQueuedIndexRebuildRequest = {}
-  ): Promise<ProcessQueuedIndexRebuildResult> {
-    const next = this.#indexRebuildTail.then(() => this.#processQueuedIndexRebuild(request));
-    this.#indexRebuildTail = next.then(() => undefined, () => undefined);
-    return next;
+  #queuedIndexRebuildJob(vaultPath: string, snapshot: JobRecordSnapshot): QueuedIndexRebuildJob {
+    return {
+      job: snapshot.job,
+      vaultPath,
+      waitForDatabase: (message) => {
+        this.#markJobWaitingDependency(snapshot.path, snapshot.job, message);
+      },
+      begin: () => this.#activeIndexRebuildJob(vaultPath, snapshot)
+    };
   }
 
-  async #processQueuedIndexRebuild(
-    request: ProcessQueuedIndexRebuildRequest
-  ): Promise<ProcessQueuedIndexRebuildResult> {
-    const vaultPath = this.#requireActiveVaultPath();
-    const jobFiles = findQueuedIndexRebuildJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
-    let completed = 0;
-    let failed = 0;
-    let lastRebuild: LocalDatabaseRebuildResult | undefined;
-
-    for (const jobFile of jobFiles) {
-      const database = this.#database;
-      if (!database) {
-        this.#markJobWaitingDependency(jobFile.path, jobFile.job, "Waiting for the Local Database Service before index rebuild.");
-        failed += 1;
-        continue;
-      }
-
-      const execution = this.#beginCooperativeExecution(
-        jobFile,
-        "indexing",
-        "Rebuilding local database index from Markdown in a local worker."
-      );
-      const runningJob = execution.job;
-      try {
-        const rebuild = await database.rebuildInWorker(vaultPath, {
-          signal: execution.control.signal,
-          onProgress: (progress) => execution.control.reportProgress(progress)
-        });
-        execution.control.throwIfCancellationRequested();
-        let completionState: Extract<JobState, "completed" | "completed_with_warnings"> = "completed";
-        let message = `Index rebuilt from Markdown: ${rebuild.pageCount} pages, ${rebuild.invalidPageCount} invalid pages skipped.`;
-        try {
-          appendLog(vaultPath, `${new Date().toISOString()} Rebuilt local database index from Markdown: ${rebuild.pageCount} pages, ${rebuild.invalidPageCount} invalid pages skipped.`);
-        } catch {
-          completionState = "completed_with_warnings";
-          message = `${message} Local activity log update needs repair.`;
-        }
-        const completedJob = this.#completeCooperativeExecution(
-          jobFile.path,
+  #activeIndexRebuildJob(vaultPath: string, snapshot: JobRecordSnapshot): ActiveIndexRebuildJob {
+    const execution = this.#beginCooperativeExecution(
+      snapshot,
+      "indexing",
+      "Rebuilding local database index from Markdown in a local worker."
+    );
+    const runningJob = execution.job;
+    return {
+      job: runningJob,
+      control: execution.control,
+      complete: (state, message) => {
+        this.#assertWriterLease(vaultPath);
+        return this.#completeCooperativeExecution(
+          snapshot.path,
           runningJob,
-          completionState,
+          state,
           message,
           "index_item",
           execution.control.durableWriteState()
         );
-        if (completedJob.state === "cancelled") {
-          failed += 1;
-          continue;
-        }
-        lastRebuild = { ...rebuild, jobId: runningJob.id, state: completedJob.state };
-        completed += 1;
-      } catch (caught) {
+      },
+      fail: (caught, message) => {
+        this.#assertWriterLease(vaultPath);
         const cancellation = resolveCancellation(execution.control, caught);
         if (cancellation) {
-          this.#markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
-        } else if (isJobMutationContention(caught)) {
-          // Another exact Job revision won; do not overwrite its authoritative state.
-        } else {
+          this.#markJobCancellationOutcome(snapshot.path, runningJob, cancellation);
+        } else if (!isJobMutationContention(caught)) {
           this.#markJobFailedRetryable(
-            jobFile.path,
+            snapshot.path,
             runningJob,
-            "Index rebuild failed. Markdown knowledge and the previous committed index remain intact; the job is retryable.",
+            message,
             execution.control.durableWriteState()
           );
         }
-        failed += 1;
-      } finally {
-        this.#finishCooperativeExecution(runningJob.id, execution.controller);
-      }
-    }
-
-    return {
-      processed: jobFiles.length,
-      completed,
-      failed,
-      ...(lastRebuild ? { lastRebuild } : {})
+      },
+      finish: () => this.#finishCooperativeExecution(runningJob.id, execution.controller)
     };
   }
 

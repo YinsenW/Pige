@@ -460,6 +460,22 @@ describe("desktop shell build contract", () => {
     expect(resumeBackgroundJobs).not.toContain("scheduleDatasetImportProcessing();");
   });
 
+  it("routes production index rebuild execution through its concrete class executor", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const jobsSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/jobs-service.ts"),
+      "utf8"
+    );
+
+    expect(mainSource).toContain("getJobsService().indexRebuildExecutor()");
+    expect(mainSource).toContain("getIndexRebuildJobExecutor().process({ limit: 1 })");
+    expect(mainSource).toContain("getIndexRebuildJobExecutor().request()");
+    expect(mainSource).not.toContain("getJobsService().requestIndexRebuild()");
+    expect(mainSource).not.toContain("getJobsService().processQueuedIndexRebuild(");
+    expect(jobsSource).not.toContain("requestIndexRebuild(");
+    expect(jobsSource).not.toContain("processQueuedIndexRebuild(");
+  });
+
   it("wires Home questions through Pi with visible typed outcomes and no raw provider error surface", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
