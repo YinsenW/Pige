@@ -9,7 +9,7 @@ import type {
   RetrievalSearchResult,
   VaultSummary
 } from "@pige/contracts";
-import type { JobRecord } from "@pige/schemas";
+import { JobRecordSchema, type JobRecord } from "@pige/schemas";
 import {
   AgentIngestService,
   type AgentIngestCapabilityPort,
@@ -531,6 +531,26 @@ describe("Unified Agent ingress", () => {
       .toMatchObject({ canFollowUp: false, messages: [{ role: "user" }] });
     expect(firstJobs.retry({ jobId: prepared.jobId })).toMatchObject({ status: "requeued" });
 
+    const queuedParent = requireValue(readJobs(fixture.vaultPath).find((job) => job.id === prepared.jobId));
+    const completedChild = requireValue(
+      readJobs(fixture.vaultPath).find((job) => job.class === "dataset_import")
+    );
+    writeJob(fixture.vaultPath, {
+      ...queuedParent,
+      outputRefs: queuedParent.outputRefs?.filter((ref) =>
+        ref.kind !== "dataset" && ref.kind !== "dataset_revision"
+      )
+    });
+    writeJob(fixture.vaultPath, {
+      ...completedChild,
+      state: "queued",
+      stage: undefined,
+      startedAt: undefined,
+      finishedAt: undefined,
+      error: undefined,
+      message: "Dataset child queued for parent-owned restart execution."
+    });
+
     let sourceRuntimeCalls = 0;
     const restartedJobs = new JobsService(
       fixture.vaultPort,
@@ -576,6 +596,12 @@ describe("Unified Agent ingress", () => {
       new DatasetQueryService(directDatasetExecutor)
     );
 
+    expect(await restartedJobs.processQueuedDatasetImports({ limit: 20 })).toEqual({
+      processed: 0,
+      completed: 0,
+      failed: 0
+    });
+    expect(readJobs(fixture.vaultPath).find((job) => job.id === completedChild.id)?.state).toBe("queued");
     expect(await restartedHome.resumeWaitingTurns(20)).toEqual({
       requeued: 0,
       processed: 1,
@@ -1101,6 +1127,15 @@ function makeVault(): {
 function readJobs(vaultPath: string): JobRecord[] {
   return listFiles(path.join(vaultPath, ".pige", "jobs"), ".json")
     .map((filePath) => JSON.parse(fs.readFileSync(filePath, "utf8")) as JobRecord);
+}
+
+function writeJob(vaultPath: string, input: JobRecord): void {
+  const job = JobRecordSchema.parse(input);
+  const jobPath = requireValue(
+    listFiles(path.join(vaultPath, ".pige", "jobs"), ".json")
+      .find((filePath) => filePath.endsWith(`${job.id}.json`))
+  );
+  fs.writeFileSync(jobPath, `${JSON.stringify(job, null, 2)}\n`, "utf8");
 }
 
 function requireValue<T>(value: T | undefined): T {
