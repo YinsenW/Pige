@@ -959,6 +959,25 @@ describe("Home durable Agent conversation UI", () => {
     }
   });
 
+  it("places the persistent compact and expanded window switch immediately before Pin", async () => {
+    const dom = createDom(420);
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    const expandedButton = buttonsByAriaLabel(container, "Expanded window")[0]!;
+    const pinButton = buttonsByAriaLabel(container, "Pin on top")[0]!;
+    expect(expandedButton.compareDocumentPosition(pinButton) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+
+    await clickElement(dom, expandedButton);
+    await waitFor(dom, () => container.querySelector('.shell.mode-expanded') !== null);
+    expect(harness.windowModeRequests).toEqual(["expanded"]);
+    await clickButtonByAriaLabel(dom, container, "Compact window");
+    await waitFor(dom, () => container.querySelector('.shell.mode-compact') !== null);
+    expect(harness.windowModeRequests).toEqual(["expanded", "compact"]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("expands resident panes through 720, 840, and 1240 then restores the exact user base", async () => {
     const dom = createDom(420);
     const harness = createHarness(undefined);

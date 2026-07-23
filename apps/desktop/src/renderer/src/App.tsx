@@ -17,6 +17,7 @@ import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ConversationMarkdown } from "./components/ConversationMarkdown";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
+import { WindowModeToggle } from "./components/WindowModeToggle";
 import {
   ReaderInlineReferenceSurface,
   type ReaderInlineReferenceActivation
@@ -107,7 +108,6 @@ import {
   type ProviderEndpointProtocol,
   type SourceStorageStrategy
 } from "@pige/schemas";
-
 type View = "home" | "library" | "knowledgeTree";
 export type SettingsSection =
   | "general"
@@ -968,11 +968,9 @@ export function App(): React.JSX.Element {
     });
     setLibrarySearchFocusRequest((current) => current + 1);
   };
-
   const toggleAlwaysOnTop = async (): Promise<void> => {
     setWindowState(await window.pige.window.setAlwaysOnTop({ alwaysOnTop: !(windowState?.alwaysOnTop ?? false) }));
   };
-
   const updateLocale = async (nextLocale: Locale): Promise<void> => {
     if (voiceAssetInstallActiveRef.current) return;
     const appearance = await window.pige.settings.setLocale({ locale: nextLocale });
@@ -1425,6 +1423,8 @@ export function App(): React.JSX.Element {
         </div>
         <span className="topbar-title" aria-hidden="true">{currentTitle}</span>
         <div className="topbar-actions">
+          <WindowModeToggle state={windowState} compactLabel={t("topbar.compact")} expandedLabel={t("topbar.expanded")}
+            tabIndex={sidebarModal ? -1 : undefined} onStateChange={setWindowState} />
           <button
             type="button"
             className={windowState?.alwaysOnTop ? "icon-button pin-button active" : "icon-button pin-button"}

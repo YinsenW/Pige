@@ -6,6 +6,7 @@ const rendererRoot = path.resolve("apps/desktop/src/renderer/src");
 const appSource = fs.readFileSync(path.join(rendererRoot, "App.tsx"), "utf8");
 const cssSource = fs.readFileSync(path.join(rendererRoot, "styles/app.css"), "utf8");
 const iconSource = fs.readFileSync(path.join(rendererRoot, "components/PigeIcon.tsx"), "utf8");
+const windowModeToggleSource = fs.readFileSync(path.join(rendererRoot, "components/WindowModeToggle.tsx"), "utf8");
 const enMessages = JSON.parse(
   fs.readFileSync(path.join(rendererRoot, "locales/en/messages.json"), "utf8")
 ) as Record<string, string>;
@@ -91,7 +92,9 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain("windowLayoutRevisionRef.current");
     expect(appSource).toContain('surface: "home"');
     expect(appSource).toContain('surface: "reader"');
-    expect(appSource).not.toContain("window.pige.window.setMode(");
+    expect(appSource).toContain("<WindowModeToggle");
+    expect(windowModeToggleSource).toContain("window.pige.window.setMode({ mode:");
+    expect(windowModeToggleSource).not.toMatch(/\b(width|height|workArea|presentation)\s*:/);
     expect(appSource).not.toContain("window.pige.window.setSidebarOpen(");
     const layoutAdapter = appSource.slice(
       appSource.indexOf("const requestWindowLayout"),
