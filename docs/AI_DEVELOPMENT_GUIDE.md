@@ -43,21 +43,27 @@ Every non-trivial implementation task should follow this loop:
 6. Add risk-proportional tests and hand Product Planning only actual semantic deltas.
 7. Report what changed, what was verified, and what remains risky.
 
-Architecture reset work may deliberately remove a cross-cutting obsolete mechanism. It
-still freezes one contract, deletes in bounded phases, and preserves data/safety evidence;
-ordinary feature work stays paused while an incompatible reset phase is active.
+Architecture reset work may remove a cross-cutting obsolete mechanism in bounded,
+timeboxed ownership slices while compatible feature work continues.
 
-## 3. Bounded Design Iterations
+## 3. Bounded, Early Review
 
-Each design iteration should state:
+State the risk, owners, artifact, exit, and exclusions. Stop at that quality line; continue
+only for failed evidence, a blocker/conflict, a new decision, or a new request.
 
-- The question or risk being examined.
-- The owner documents that may change.
-- The expected artifact, such as a decision, a doc patch, a checklist update, or a backlog item.
-- The exit condition for the round.
-- What is explicitly out of scope.
+After affected tests, typecheck, and build pass, open the first coherent slice as Draft;
+Design/Planning continue there. Draft CI stays lightweight; Ready/full gates require owner clear.
 
-End the iteration when its stated exit condition is satisfied. Continue only for failed verification, an unresolved blocking risk, a document conflict, a new product decision, or a new user request. Move non-blocking ideas to the relevant owner document, decision log, milestone backlog, or implementation notes.
+- Routine identity is commit SHA plus changed paths. Add standard/full/content hashes only
+  for cross-worktree byte replay, H-level security/release work, or observed identity drift.
+- Each owner reviews stable bytes once, then only changed delta/impacted contracts. Reuse
+  UI/Electron/package evidence and Design Sync when their bytes did not change.
+- Fixture, snapshot, or metadata-only repair runs affected gates without unrelated full
+  review. Planning binds semantic contract changes only; PM decides scope, risk, and publication.
+- Another full review names its new risk/owner; “confirm again” and fixed round counts do not.
+- Routine PRs target one semantic slice, at most 20 paths and two primary owner domains.
+  Above 30 paths or three domains, split unless runtime/migration atomicity would break, then
+  explain indivisibility in Draft. This is no LOC/CI limit; large deletion still splits by owner.
 
 Implementation phases and slices use the exit criteria and Definition of Done in `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`. Progress updates should report new work or changed state rather than restating this operating rule.
 
@@ -205,32 +211,28 @@ naming/placement. Early delivery is macOS-first: proportional shared checks plus
 packaged macOS evidence close ordinary slices. Keep portable contracts and record other
 platform gaps; qualify them later before support claims unless the task targets them.
 
-Inner loops run affected tests plus typecheck and a build when output changes. Full
-tests, trace, independent review, package, and distribution belong to high-risk
-architecture/security/data work, explicit merge candidates, and main—not every local
-iteration or ordinary PR. Tests protect observable behavior and irreversible boundaries;
-delete tests whose only value is preserving an obsolete internal state-machine step.
+Inner loops run affected tests, typecheck, and a build when output changes. Full tests,
+trace, independent review, package, and distribution belong to high-risk work, Ready merge
+candidates, and main—not routine drafts or metadata repair. Protect observable/irreversible
+boundaries; delete tests that only preserve an obsolete internal state-machine step.
 
 ## 12. Documentation Drift Control
 
-When code diverges from a semantic contract, Development fixes the code or hands the
-delta to Product Planning. `AGENTS.md` owns the triggers and the document map identifies
-the editing role. No-contract refactors, test repairs, evidence refreshes, and ordinary
-implementation details do not trigger broad Owner, trace, semantic-lock, or snapshot
-rewrites.
+Development fixes semantic drift or hands its exact delta to Planning. `AGENTS.md` and the
+document map own triggers/roles. No-contract refactors, test repairs, evidence refreshes,
+and implementation details do not trigger broad Owner/trace/semantic rewrites.
 
 ### 12.1 PRD Impact Classification
 
-Classify every change using the highest applicable PRD impact before editing. Record it
-in the pull request or handoff; Product Planning applies the required owner/PRD/trace
-updates unless it explicitly delegates that scope.
+Use the highest PRD impact and record it in the PR/handoff; Planning applies its owner and
+trace treatment unless delegated.
 
 | PRD impact | Use when | Required treatment |
 | --- | --- | --- |
-| `none` | Neither the PRD nor a product-facing promise changes. Typical examples are an internal refactor, dependency patch, or owner-detail correction with identical observable behavior. | Leave the PRD unchanged and state the concrete no-contract-impact reason. Update only the affected technical owners and verification. |
-| `editorial` | PRD wording, ordering, links, or structure changes without changing normative meaning, scope, defaults, degraded behavior, or acceptance. | Preserve stable IDs and semantic claims. Update a public summary only if it repeats the edited statement; do not churn technical owners or trace projections. State why semantics are unchanged. |
-| `behavior` | User workflow, visible state, default, failure/degraded path, forbidden behavior, trust boundary, or acceptance intent changes. | Update the PRD when its promise changes and the single specialized Owner that defines the detail. Update trace only when mapping, status, or evidence meaning changes. |
-| `release_scope` | P0/P1/P2 assignment, supported platform, release gate, non-goal, or deferred capability changes. | Update the PRD, phase owner, minimal trace/acceptance projection, and one durable decision; reconcile active work. |
+| `none` | No product promise changes; e.g. refactor, dependency patch, owner-detail repair. | State why; update only affected technical owner/evidence. |
+| `editorial` | Wording/structure changes without normative meaning, scope, defaults or acceptance. | Preserve IDs/claims; update repeated summaries only. |
+| `behavior` | Workflow, state, default, failure, trust, or acceptance changes. | Update PRD promise plus one detail Owner; trace only if mapping/status/evidence meaning changes. |
+| `release_scope` | P0/P1/P2, platform, release gate, non-goal, or deferral changes. | Update PRD, phase owner, minimal trace/acceptance, and one decision. |
 
 `none` and `editorial` are not shortcuts around semantic review. If a user can observe the difference, a default or failure path changes, or release acceptance changes, classify it as `behavior` or `release_scope` even when the code patch is small.
 
@@ -277,6 +279,12 @@ Exit IDs:
 Requirement IDs:
 Requirement owner sources:
 Tests/evidence:
+Documents actually loaded:
+Documents loaded but unnecessary:
+Documents needed but not routed:
+Review delta:
+Evidence reused:
+New material finding:
 Visual baseline impact/evidence: Not affected | Captured <matrix subset> | Open <matrix subset and reason>
 Known gaps:
 Docs updated:
