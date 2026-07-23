@@ -74,7 +74,7 @@ describe("machine-local Restore Job store", () => {
     try {
       let snapshot = store.create(input);
       snapshot = store.markFailed(snapshot, {
-        retryable: true,
+        error: restoreFailure(true),
         message: "Synthetic retryable restore failure."
       });
 
@@ -93,7 +93,7 @@ describe("machine-local Restore Job store", () => {
       expect(retried.job.finishedAt).toBeUndefined();
 
       const final = store.markFailed(retried, {
-        retryable: false,
+        error: restoreFailure(false),
         message: "Synthetic final restore failure."
       });
       expect(() => store.prepareExplicitRetry(final)).toThrowError(expect.objectContaining({
@@ -169,6 +169,8 @@ describe("machine-local Restore Job store", () => {
         snapshot = store.beginCheckpoint(snapshot, checkpointId);
         snapshot = store.completeCheckpoint(snapshot, checkpointId);
       }
+      snapshot = store.recoverInterrupted(snapshot);
+      expect(snapshot.job.state).toBe("queued");
       const operation = store.writeRestoreAppliedOperation({
         snapshot,
         vaultPath,
@@ -248,6 +250,19 @@ function identityInput(mode: "clone_as_new" | "replace_existing") {
     sourceVaultId: "vault_20260714_source123",
     destinationIdentity: sha("c"),
     previousBindingHash: createPreviousVaultBindingHash()
+  };
+}
+
+function restoreFailure(retryable: boolean) {
+  return {
+    code: retryable ? "restore.execution_failed" : "restore.identity_conflict",
+    domain: "restore" as const,
+    messageKey: retryable
+      ? "errors.restore.execution_failed"
+      : "errors.restore.identity_conflict",
+    retryable,
+    severity: "error" as const,
+    userAction: retryable ? "retry" as const : "choose_path" as const
   };
 }
 

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
-import { JobRecordSchema, type JobRecord } from "@pige/schemas";
+import { JobRecordSchema, type JobRecord, type JobRef } from "@pige/schemas";
 import {
   LocalToolPackageError,
   stageLocalToolPackage,
@@ -13,6 +13,8 @@ import {
   LocalToolLifecycleStore,
   LocalToolLifecycleStoreError
 } from "./local-tool-lifecycle-store";
+import { JobExecutionCoordinator } from "./job-execution-coordinator";
+import type { JobRecordSnapshot } from "./job-record-store";
 import type {
   LocalToolAssetDefinition,
   LocalToolAssetRecord,
@@ -65,7 +67,7 @@ interface TargetDefinition {
 }
 
 interface BegunJob {
-  readonly job: JobRecord;
+  readonly snapshot: JobRecordSnapshot;
   readonly idempotent: boolean;
 }
 
@@ -170,9 +172,10 @@ export class LocalToolManagerService {
   async test(request: LocalToolTargetActionRequest): Promise<LocalToolLifecycleResult> {
     const target = this.#authorizeTargetAction("test", request);
     const begun = this.#beginJob("test", request, true);
-    if (begun.idempotent) return this.#resultFromExistingJob(begun.job, request.toolId);
+    if (begun.idempotent) return this.#resultFromExistingJob(begun.snapshot.job, request.toolId);
 
-    let job = begun.job;
+    let snapshot = begun.snapshot;
+    let job = snapshot.job;
     let stagingOwned = false;
     let healthFailureDetected = false;
     let testedRecord: LocalToolLifecycleRecord | undefined;
@@ -213,7 +216,8 @@ export class LocalToolManagerService {
         health: "pass"
       }, job.id, this.#nowIso());
       this.#store.write(updatedRecord);
-      job = this.#completeJob(job, "Local tool test passed.", [toolOutputRef(request, identity.expectedSha256)]);
+      snapshot = this.#completeJob(snapshot, "Local tool test passed.", [toolOutputRef(request, identity.expectedSha256)]);
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     } catch (caught) {
       if (stagingOwned) this.#store.discardStaging(request.requestId);
@@ -224,7 +228,8 @@ export class LocalToolManagerService {
           // The durable Job still reports the failed test if the health record cannot be updated.
         }
       }
-      job = this.#failJob(job, caught);
+      snapshot = this.#failJob(snapshot, caught);
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     }
   }
@@ -232,9 +237,10 @@ export class LocalToolManagerService {
   setEnabled(request: LocalToolSetEnabledRequest): LocalToolLifecycleResult {
     this.#authorizeTargetAction("set_enabled", request);
     const begun = this.#beginJob("set_enabled", request, false);
-    if (begun.idempotent) return this.#resultFromExistingJob(begun.job, request.toolId);
+    if (begun.idempotent) return this.#resultFromExistingJob(begun.snapshot.job, request.toolId);
 
-    let job = begun.job;
+    let snapshot = begun.snapshot;
+    let job = snapshot.job;
     try {
       const record = this.#requireRecord(request.toolId);
       const targetRecord = requireActiveTargetRecord(record, request.assetId);
@@ -258,10 +264,12 @@ export class LocalToolManagerService {
       );
       this.#inject("record_precommit");
       this.#store.write(updatedRecord);
-      job = this.#completeJob(job, request.enabled ? "Local tool enabled." : "Local tool disabled.");
+      snapshot = this.#completeJob(snapshot, request.enabled ? "Local tool enabled." : "Local tool disabled.");
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     } catch (caught) {
-      job = this.#failJob(job, caught);
+      snapshot = this.#failJob(snapshot, caught);
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     }
   }
@@ -269,18 +277,21 @@ export class LocalToolManagerService {
   remove(request: LocalToolTargetActionRequest): LocalToolLifecycleResult {
     const target = this.#authorizeTargetAction("remove", request);
     const begun = this.#beginJob("remove", request, false);
-    if (begun.idempotent) return this.#resultFromExistingJob(begun.job, request.toolId);
+    if (begun.idempotent) return this.#resultFromExistingJob(begun.snapshot.job, request.toolId);
 
-    let job = begun.job;
+    let snapshot = begun.snapshot;
+    let job = snapshot.job;
     try {
       const existing = this.#store.read(request.toolId);
       if (!existing) {
-        job = this.#completeJob(job, "Local tool was already available.");
+        snapshot = this.#completeJob(snapshot, "Local tool was already available.");
+        job = snapshot.job;
         return { job, inspection: this.inspect(request.toolId), idempotent: false };
       }
       const currentTarget = targetRecordFor(existing, request.assetId);
       if (!currentTarget?.activeRelativePath) {
-        job = this.#completeJob(job, "Local tool was already available.");
+        snapshot = this.#completeJob(snapshot, "Local tool was already available.");
+        job = snapshot.job;
         return { job, inspection: this.inspect(request.toolId), idempotent: false };
       }
       assertRequestedVersion(request.version, currentTarget.activeVersion);
@@ -310,12 +321,14 @@ export class LocalToolManagerService {
         cleanupWarning = true;
       }
 
-      job = cleanupWarning
-        ? this.#completeJobWithWarnings(job, "Local tool was disabled; owned-byte cleanup remains pending.")
-        : this.#completeJob(job, "Local tool removed.");
+      snapshot = cleanupWarning
+        ? this.#completeJobWithWarnings(snapshot, "Local tool was disabled; owned-byte cleanup remains pending.")
+        : this.#completeJob(snapshot, "Local tool removed.");
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     } catch (caught) {
-      job = this.#failJob(job, caught);
+      snapshot = this.#failJob(snapshot, caught);
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     }
   }
@@ -324,16 +337,19 @@ export class LocalToolManagerService {
     this.#authorizeRecovery(request);
     const begun = this.#beginRecoveryJob(request);
     if (begun.idempotent) {
-      return { job: begun.job, idempotent: true, recoveredEntries: 0 };
+      return { job: begun.snapshot.job, idempotent: true, recoveredEntries: 0 };
     }
 
-    let job = begun.job;
+    let snapshot = begun.snapshot;
+    let job = snapshot.job;
     try {
       const recoveredEntries = this.#store.recoverOwnedEntries(request.requestId, job.id, this.#nowIso());
-      job = this.#completeJob(job, "Local-tool staging recovery completed.");
+      snapshot = this.#completeJob(snapshot, "Local-tool staging recovery completed.");
+      job = snapshot.job;
       return { job, idempotent: false, recoveredEntries };
     } catch (caught) {
-      job = this.#failJob(job, caught);
+      snapshot = this.#failJob(snapshot, caught);
+      job = snapshot.job;
       return { job, idempotent: false, recoveredEntries: 0 };
     }
   }
@@ -344,9 +360,10 @@ export class LocalToolManagerService {
   ): Promise<LocalToolLifecycleResult> {
     const target = this.#authorizeCandidateAction(action, request);
     const begun = this.#beginJob(action, request, true);
-    if (begun.idempotent) return this.#resultFromExistingJob(begun.job, request.toolId);
+    if (begun.idempotent) return this.#resultFromExistingJob(begun.snapshot.job, request.toolId);
 
-    let job = begun.job;
+    let snapshot = begun.snapshot;
+    let job = snapshot.job;
     let publishedRelativePath: string | undefined;
     let publishedNew = false;
     let repairRollbackPath: string | undefined;
@@ -414,9 +431,10 @@ export class LocalToolManagerService {
       this.#inject("record_precommit");
       this.#store.write(updatedRecord);
       repairRollbackPath = undefined;
-      job = this.#completeJob(job, `Local tool ${action} completed.`, [
+      snapshot = this.#completeJob(snapshot, `Local tool ${action} completed.`, [
         toolOutputRef(request, staged.packageSha256)
       ]);
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     } catch (caught) {
       if (stagingOwned) this.#store.discardStaging(request.requestId);
@@ -441,7 +459,8 @@ export class LocalToolManagerService {
           // Cross-file repair rollback is best effort in this bounded foundation.
         }
       }
-      job = this.#failJob(job, caught);
+      snapshot = this.#failJob(snapshot, caught);
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     }
   }
@@ -513,8 +532,8 @@ export class LocalToolManagerService {
   ): BegunJob {
     const existing = this.#jobRecorder.findByRequestId(request.requestId);
     if (existing) {
-      assertExistingJobMatches(existing, action, request);
-      return { job: existing, idempotent: true };
+      assertExistingJobMatches(existing.job, action, request);
+      return { snapshot: existing, idempotent: true };
     }
     const now = this.#nowIso();
     const queued = JobRecordSchema.parse({
@@ -536,16 +555,11 @@ export class LocalToolManagerService {
       },
       message: `Local tool ${action} queued.`
     });
-    this.#jobRecorder.write(queued);
-    const running = JobRecordSchema.parse({
-      ...queued,
-      state: "running",
-      updatedAt: now,
-      startedAt: now,
+    const created = this.#jobRecorder.createIfAbsent(queued);
+    const running = this.#coordinator().begin(created, {
       message: `Local tool ${action} is running.`
     });
-    this.#jobRecorder.write(running);
-    return { job: running, idempotent: false };
+    return { snapshot: running, idempotent: false };
   }
 
   #beginRecoveryJob(request: LocalToolRecoveryRequest): BegunJob {
@@ -556,63 +570,57 @@ export class LocalToolManagerService {
     return this.#beginJob("recover_staging", identity, false);
   }
 
-  #completeJob(job: JobRecord, message: string, outputRefs?: readonly unknown[]): JobRecord {
-    const finishedAt = this.#nowIso();
-    const completed = JobRecordSchema.parse({
-      ...job,
-      state: "completed",
-      updatedAt: finishedAt,
-      finishedAt,
-      ...(outputRefs ? { outputRefs } : {}),
-      message
+  #completeJob(
+    snapshot: JobRecordSnapshot,
+    message: string,
+    outputRefs?: readonly JobRef[]
+  ): JobRecordSnapshot {
+    return this.#coordinator().settle(snapshot, {
+      kind: "completed",
+      message,
+      ...(outputRefs ? { facts: { outputRefs } } : {})
     });
-    this.#jobRecorder.write(completed);
-    return completed;
   }
 
-  #completeJobWithWarnings(job: JobRecord, message: string): JobRecord {
-    const finishedAt = this.#nowIso();
-    const completed = JobRecordSchema.parse({
-      ...job,
-      state: "completed_with_warnings",
-      updatedAt: finishedAt,
-      finishedAt,
-      warnings: [{
+  #completeJobWithWarnings(snapshot: JobRecordSnapshot, message: string): JobRecordSnapshot {
+    return this.#coordinator().settle(snapshot, {
+      kind: "completed",
+      result: "completed_with_warnings",
+      facts: { warnings: [{
         code: "settings.local_tool_cleanup_pending",
         domain: "settings",
         messageKey: "error.settings.local_tool_cleanup_pending"
-      }],
+      }] },
       message
     });
-    this.#jobRecorder.write(completed);
-    return completed;
   }
 
-  #failJob(job: JobRecord, caught: unknown): JobRecord {
+  #failJob(snapshot: JobRecordSnapshot, caught: unknown): JobRecordSnapshot {
     const failure = normalizeFailure(caught);
-    const finishedAt = this.#nowIso();
-    const failed = JobRecordSchema.parse({
-      ...job,
-      state: failure.retryable ? "failed_retryable" : "failed_final",
-      updatedAt: finishedAt,
-      finishedAt,
-      error: {
-        code: failure.code,
-        domain: "settings",
-        messageKey: `error.${failure.code}`,
-        retryable: failure.retryable,
-        severity: "error",
-        userAction: failure.retryable ? "retry" : "repair_tool"
-      },
-      retry: failure.retryable
-        ? { retryCount: 0, maxAutomaticRetries: 0, requiresUserAction: true }
-        : undefined,
-      message: failure.retryable
-        ? "Local tool action failed and can be retried."
-        : "Local tool action failed closed."
+    const error = {
+      code: failure.code,
+      domain: "settings" as const,
+      messageKey: `error.${failure.code}`,
+      retryable: failure.retryable,
+      severity: "error" as const,
+      userAction: failure.retryable ? "retry" as const : "repair_tool" as const
+    };
+    return this.#coordinator().settle(snapshot, failure.retryable ? {
+      kind: "requeue",
+      error: { ...error, retryable: true },
+      reason: failure.code,
+      maxAutomaticRetries: 0,
+      requiresUserAction: true,
+      message: "Local tool action failed and can be retried."
+    } : {
+      kind: "failed",
+      error: { ...error, retryable: false },
+      message: "Local tool action failed closed."
     });
-    this.#jobRecorder.write(failed);
-    return failed;
+  }
+
+  #coordinator(): JobExecutionCoordinator {
+    return new JobExecutionCoordinator(this.#jobRecorder, { now: this.#now });
   }
 
   async #runSelfTest(

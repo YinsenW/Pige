@@ -18,6 +18,7 @@ import type {
   LocalToolSelfTestRequest,
   LocalToolSelfTestResult
 } from "../../apps/desktop/src/main/services/local-tool-manager-types";
+import type { JobRecordSnapshot } from "../../apps/desktop/src/main/services/job-record-store";
 import {
   createFakeLocalToolFixture,
   hashTree,
@@ -31,17 +32,47 @@ const tempRoots: string[] = [];
 
 class MemoryJobRecorder implements LocalToolLifecycleJobRecorder {
   readonly writes: JobRecord[] = [];
-  readonly #byRequestId = new Map<string, JobRecord>();
+  readonly #byRequestId = new Map<string, JobRecordSnapshot>();
+  readonly #byJobId = new Map<string, JobRecordSnapshot>();
+  #revision = 0;
 
-  findByRequestId(requestId: string): JobRecord | undefined {
+  findByRequestId(requestId: string): JobRecordSnapshot | undefined {
     return this.#byRequestId.get(requestId);
   }
 
-  write(job: JobRecord): void {
+  createIfAbsent(job: JobRecord): JobRecordSnapshot {
     const parsed = JobRecordSchema.parse(job);
+    if (this.#byJobId.has(parsed.id)) {
+      throw new PigeDomainError("job.revision_conflict", "Synthetic Job already exists.");
+    }
+    return this.#commit(parsed);
+  }
+
+  compareAndSwap(snapshot: JobRecordSnapshot, next: JobRecord): JobRecordSnapshot {
+    const current = this.#byJobId.get(snapshot.job.id);
+    if (!current || current.revision.sha256 !== snapshot.revision.sha256) {
+      throw new PigeDomainError("job.revision_conflict", "Synthetic Job revision changed.");
+    }
+    return this.#commit(JobRecordSchema.parse(next));
+  }
+
+  #commit(parsed: JobRecord): JobRecordSnapshot {
     this.writes.push(parsed);
+    this.#revision += 1;
+    const snapshot: JobRecordSnapshot = {
+      path: `memory:${parsed.id}`,
+      job: parsed,
+      revision: {
+        sha256: `sha256:${this.#revision.toString(16).padStart(64, "0")}`,
+        size: Buffer.byteLength(JSON.stringify(parsed), "utf8"),
+        dev: 1,
+        ino: this.#revision
+      }
+    };
     const requestId = parsed.inputRefs?.find((ref) => ref.role === "local_tool_request")?.id;
-    if (requestId) this.#byRequestId.set(requestId, parsed);
+    if (requestId) this.#byRequestId.set(requestId, snapshot);
+    this.#byJobId.set(parsed.id, snapshot);
+    return snapshot;
   }
 }
 
@@ -170,6 +201,43 @@ afterEach(() => {
 });
 
 describe("local tool manager service", () => {
+  it("rejects stale lifecycle Job snapshots without overwriting the CAS winner", () => {
+    const recorder = new MemoryJobRecorder();
+    const created = recorder.createIfAbsent(JobRecordSchema.parse({
+      schemaVersion: 1,
+      id: "job_20260723_localtool01",
+      class: "tool_install",
+      state: "queued",
+      priority: "maintenance",
+      scope: "machine_local",
+      createdAt: "2026-07-23T00:00:00.000Z",
+      updatedAt: "2026-07-23T00:00:00.000Z",
+      actor: {
+        kind: "user",
+        runtimeKind: "desktop_local",
+        clientCapabilityTier: "desktop_full"
+      },
+      inputRefs: [{ kind: "tool", role: "local_tool_request", id: "request_localtool01" }],
+      message: "Queued."
+    }));
+    const winner = recorder.compareAndSwap(created, JobRecordSchema.parse({
+      ...created.job,
+      state: "running",
+      updatedAt: "2026-07-23T00:00:01.000Z",
+      startedAt: "2026-07-23T00:00:01.000Z",
+      message: "Running."
+    }));
+
+    expect(() => recorder.compareAndSwap(created, JobRecordSchema.parse({
+      ...created.job,
+      state: "running",
+      updatedAt: "2026-07-23T00:00:02.000Z",
+      startedAt: "2026-07-23T00:00:02.000Z",
+      message: "Stale writer."
+    }))).toThrowError(expect.objectContaining({ code: "job.revision_conflict" }));
+    expect(recorder.findByRequestId("request_localtool01")?.job).toEqual(winner.job);
+  });
+
   it("installs an explicit local fixture and derives a ready capability without network access", async () => {
     const fixture = createFakeLocalToolFixture(path.join(makeTempRoot("fixture"), "fake-v1"));
     const harness = makeHarness({ tools: [toToolDefinition(fixture)] });

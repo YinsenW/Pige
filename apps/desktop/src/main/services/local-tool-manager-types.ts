@@ -1,4 +1,5 @@
 import type { JobRecord } from "@pige/schemas";
+import type { JobRecordSnapshot } from "./job-record-store";
 import type {
   LocalToolLicenseIdentity,
   LocalToolPackageIdentity,
@@ -124,8 +125,9 @@ export interface LocalToolAuthorityPort {
 }
 
 export interface LocalToolLifecycleJobRecorder {
-  findByRequestId(requestId: string): JobRecord | undefined;
-  write(job: JobRecord): void;
+  findByRequestId(requestId: string): JobRecordSnapshot | undefined;
+  createIfAbsent(job: JobRecord): JobRecordSnapshot;
+  compareAndSwap(snapshot: JobRecordSnapshot, next: JobRecord): JobRecordSnapshot;
 }
 
 export interface LocalToolSelfTestRequest {
