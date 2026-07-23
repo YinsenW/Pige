@@ -52,8 +52,8 @@ describe("Conversation scroll rail", () => {
 
     const rail = dom.window.document.querySelector<HTMLElement>(".conversation-scroll-rail");
     expect(rail?.getAttribute("aria-label")).toBe("Conversation navigation");
-    expect(rail?.style.getPropertyValue("--conversation-rail-height")).toBe("24px");
-    expect(rail?.style.getPropertyValue("--conversation-rail-top")).toBe("58px");
+    expect(rail?.style.getPropertyValue("--conversation-rail-height")).toBe("14px");
+    expect(rail?.style.getPropertyValue("--conversation-rail-top")).toBe("63px");
     expect(timeline.classList.contains("has-conversation-scroll-rail")).toBe(true);
     const anchors = Array.from(rail!.querySelectorAll<HTMLButtonElement>(".conversation-scroll-anchor"));
     expect(anchors).toHaveLength(3);
@@ -61,8 +61,8 @@ describe("Conversation scroll rail", () => {
     expect(anchors.map((anchor) => anchor.tabIndex)).toEqual([0, -1, -1]);
 
     rail!.getBoundingClientRect = () => ({
-      x: 394, y: 58, top: 58, right: 410, bottom: 82, left: 394,
-      width: 16, height: 24, toJSON: () => ({})
+      x: 396, y: 63, top: 63, right: 410, bottom: 77, left: 396,
+      width: 14, height: 14, toJSON: () => ({})
     });
     await act(async () => rail!.dispatchEvent(new dom.window.MouseEvent("mousemove", {
       bubbles: true,
@@ -156,8 +156,8 @@ describe("Conversation scroll rail", () => {
     });
 
     const rail = dom.window.document.querySelector<HTMLElement>(".conversation-scroll-rail");
-    expect(rail?.style.getPropertyValue("--conversation-rail-height")).toBe("199px");
-    expect(rail?.style.getPropertyValue("--conversation-rail-top")).toBe("221px");
+    expect(rail?.style.getPropertyValue("--conversation-rail-height")).toBe("132px");
+    expect(rail?.style.getPropertyValue("--conversation-rail-top")).toBe("254px");
     expect(rail?.querySelectorAll(".conversation-scroll-anchor")).toHaveLength(64);
 
     await act(async () => root.unmount());

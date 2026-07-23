@@ -11,9 +11,9 @@ import { createPortal } from "react-dom";
 
 const MESSAGE_SELECTOR = ".conversation-timeline-content > .conversation-message";
 const PREVIEW_MAX_CODE_POINTS = 160;
-const RAIL_EDGE_INSET = 5;
-const RAIL_MIN_HEIGHT = 24;
-const RAIL_ANCHOR_PITCH = 3;
+const RAIL_EDGE_INSET = 3;
+const RAIL_MIN_HEIGHT = 14;
+const RAIL_ANCHOR_PITCH = 2;
 
 type ConversationAnchor = {
   readonly element: HTMLElement;
