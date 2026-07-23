@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-22T12:00:00Z",
+  "reviewedAt": "2026-07-23T02:57:25Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -34,14 +34,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent review of the large-paste Agent-turn boundary: canonical Unicode and UTF-8 limits, side-effect-free ordered staging, atomic exact submission, exact-once managed-source preservation, reference-only history, safe UI projection, retry identity, and unchanged status.",
+    "scope": "Independent review of the bounded architecture-reset timebox: Day-10 proof, Day-14 expiry to normal P0-P9 priority, AR3 foreground stop, authoritative-source AR1 proof, minimal efficacy evidence ownership, and unchanged status.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 26,
-    "reviewedSha256": "8d7cf6f269c3546185f2e7ef0ca864d1e15a903d13671ed481426921348b3d08"
+    "reviewedSha256": "4beaf9cdeb471dc40df7230300770eee8476ed94c7906ca1044659442db2e9db"
   },
   "reviewers": [{
     "reviewerId": "architecture-reset-planning-review",
-    "task": "Large pasted content boundary contract review",
+    "task": "Architecture-reset timebox contract review",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -52,29 +52,29 @@
     "independence": "Product Planning reviews only contracts and executable governance; Development still owns every implementation deletion, rewrite, security test, package and runtime artifact."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"One composer boundary distinguishes ordinary paste, staged large paste and independent immediate file drop without introducing another product mode."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"UI, IPC, source, data and Job owners share one manifest for exact text, ordered staging, preservation and retry semantics."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"PIGE-CAP-002 and E2.02 remain planned while acceptance names the exact executable evidence still required."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"The manifest and mutation gate give UI, preload and service owners one constants source and fail deterministic drift."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Numeric limits are defined once in a compact manifest and prose owners project only their own observable or durability boundary."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"The Playbook keeps AR1-AR3 as the only foreground reset sequence and returns later architecture work to the existing P0-P9 queue."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Playbook, decision, manifest and verifier agree on Day 10 proof, Day 14 expiry, historical AR4 and status-neutral evidence ownership."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Existing Requirement, Exit and Phase claims remain unchanged; the optional AR1 proof reports current debt without inventing completion."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"The executable authoritative-source proof and expiry rule prevent architecture work from becoming an indefinite global feature pause."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"One existing manifest owns timebox, proof and body-free sample fields; no effectiveness document or new trace tier is added."}
   ],
   "verification": [
-    {"command":"npm run verify:large-paste-boundary","status":"passed","evidence":"Canonical values, exported schemas/types, strict request/result binding, early durable receipt, planned statuses and mutations pass."},
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Canonical Job reliability plus submitted-turn, high-risk and Provider-send contracts remain single-owned and fail safe."},
-    {"command":"npm run verify","status":"passed","evidence":"The full merge-candidate governance suite passes after trace, semantic and reviewed-snapshot regeneration."}
+    {"command":"node scripts/verify/architecture-reset.mjs","status":"passed","evidence":"Staged architecture contract, timebox fields, authoritative-source exclusions and AR1 proof mutation guard pass."},
+    {"command":"npm run verify:traceability","status":"passed","evidence":"Existing Requirement, Exit and Phase projections remain unchanged after the timebox policy bind."},
+    {"command":"npm run verify","status":"passed","evidence":"The full Planning governance suite passes after semantic-lock and reviewed-snapshot regeneration."}
   ],
   "coordination": {
-    "taskId": "large-paste-boundary-20260723",
-    "taskTitle": "Large pasted content Agent-turn boundary",
+    "taskId": "architecture-reset-timebox-20260723",
+    "taskTitle": "Phase 0 architecture-reset timebox",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The typed large-paste request/result boundary is bound while legacy non-staged file submission remains compatible; no capture-only route is restored.",
-    "acknowledgement": "Product Planning binds the exact Development schema and receipt evidence; UI integration remains separate without Requirement, Exit or Phase promotion."
+    "compatibility": "AR1-AR3 implementation contracts remain intact; only foreground duration and priority after expiry change, with AR4 retained as historical inventory.",
+    "acknowledgement": "Product Planning owns proof and metric definitions; Project Management collects existing body-free Git, CI and task evidence without Requirement, Exit or Phase promotion."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Typed runtime binding is complete, while UI integration and final assembled evidence remain separate.",
-    "Windows and Linux qualification remains deferred and unclaimed during early macOS-first development."
+    "The raw human grep has one known negative-truth locale hit; only the executable authority-source Node proof owns AR1 completion.",
+    "The ten-PR sample is an initial body-free baseline, not a Phase 1 dashboard or a product-status claim."
   ]
 }

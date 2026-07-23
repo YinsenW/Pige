@@ -3083,6 +3083,30 @@ References:
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 - `resources/architecture-reset.manifest.json`
 
+### D-20260723-Architecture-Reset-Timebox
+
+Status: Accepted
+Date: 2026-07-23
+
+Decision:
+
+Amend D-20260722-Personal-Agent-Architecture-Reset: AR1-AR3 use Day-10 proof and Day-14
+expiry; unfinished/future architecture work uses P0-P9.
+
+Rationale:
+
+Architecture scrutiny needs a deterministic stop rather than an indefinite feature pause.
+
+Consequences:
+
+- Manifest/verifier own proof/expiry and sample #114-#123: 10/10 gates, one true block
+  (#117/#118), zero false positives/overrides; statuses and recorded dates do not change.
+
+References:
+
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+- `resources/architecture-reset.manifest.json`
+
 ### D-20260722-Pi-Agent-Pass-Through
 
 Status: Accepted
