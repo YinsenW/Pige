@@ -1,4 +1,7 @@
-import type { JobRecord } from "@pige/schemas";
+import { createHash, randomUUID } from "node:crypto";
+import { PigeDomainError } from "@pige/domain";
+import type { JobRecord, JobRef } from "@pige/schemas";
+import type { JobRecordSnapshot } from "./job-record-store";
 import type {
   LocalToolLicenseIdentity,
   LocalToolPackageIdentity,
@@ -124,8 +127,106 @@ export interface LocalToolAuthorityPort {
 }
 
 export interface LocalToolLifecycleJobRecorder {
-  findByRequestId(requestId: string): JobRecord | undefined;
-  write(job: JobRecord): void;
+  findByRequestId(requestId: string): JobRecordSnapshot | undefined;
+  claimByRequestId(job: JobRecord): {
+    readonly snapshot: JobRecordSnapshot;
+    readonly created: boolean;
+  };
+  compareAndSwap(snapshot: JobRecordSnapshot, next: JobRecord): JobRecordSnapshot;
+}
+
+export function localToolRequestIdFromJob(job: JobRecord): string {
+  const requestId = job.inputRefs?.find((ref) => ref.role === "local_tool_request")?.id;
+  if (!requestId || !/^[A-Za-z0-9][A-Za-z0-9._-]{7,119}$/u.test(requestId)) {
+    throw new PigeDomainError("job.record_invalid", "The Local Tool Job request identity is missing or invalid.");
+  }
+  return requestId;
+}
+
+export function localToolTargetRefId(toolId: string, assetId?: string, version?: string): string {
+  return [toolId, assetId ?? "engine", version ?? "active"].join(":");
+}
+
+export function localToolRequestFingerprint(
+  action: LocalToolLifecycleAction,
+  request: LocalToolMutationIdentity
+): string {
+  const extended = request as LocalToolMutationIdentity & {
+    readonly enabled?: boolean;
+    readonly expectedSha256?: string;
+  };
+  const payload = JSON.stringify({
+    action,
+    toolId: request.toolId,
+    assetId: request.assetId ?? null,
+    version: request.version ?? null,
+    enabled: extended.enabled ?? null,
+    expectedSha256: extended.expectedSha256 ?? null
+  });
+  return `sha256:${createHash("sha256").update(payload, "utf8").digest("hex")}`;
+}
+
+export function localToolJobInputRefs(
+  action: LocalToolLifecycleAction,
+  request: LocalToolMutationIdentity
+): JobRef[] {
+  return [
+    { kind: "tool", id: request.requestId, role: "local_tool_request" },
+    { kind: "tool", id: action, role: "local_tool_action" },
+    { kind: "tool", id: localToolTargetRefId(request.toolId, request.assetId, request.version), role: "local_tool_target" },
+    { kind: "tool", id: localToolRequestFingerprint(action, request), role: "local_tool_parameters" }
+  ];
+}
+
+export function localToolEffectRef(
+  action: LocalToolLifecycleAction,
+  request: LocalToolMutationIdentity
+): JobRef {
+  return {
+    kind: "tool",
+    id: localToolTargetRefId(request.toolId, request.assetId, request.version),
+    checksum: localToolRequestFingerprint(action, request),
+    role: `local_tool_${action}_effect`
+  };
+}
+
+export function hasExactLocalToolJobRef(refs: readonly JobRef[] | undefined, expected: JobRef): boolean {
+  return refs?.some((ref) => ref.kind === expected.kind && ref.id === expected.id &&
+    ref.checksum === expected.checksum && ref.role === expected.role) === true;
+}
+
+export function localToolRequestEnabledValue(request: LocalToolMutationIdentity): boolean | undefined {
+  const value = (request as LocalToolMutationIdentity & { readonly enabled?: boolean }).enabled;
+  return typeof value === "boolean" ? value : undefined;
+}
+
+export function localToolOutputRef(request: LocalToolMutationIdentity, checksum: string): JobRef {
+  return {
+    kind: "tool",
+    id: localToolTargetRefId(request.toolId, request.assetId, request.version),
+    checksum,
+    role: "local_tool_active_version"
+  };
+}
+
+export function localToolCleanupPendingWarning() {
+  return {
+    code: "settings.local_tool_cleanup_pending",
+    domain: "settings" as const,
+    messageKey: "error.settings.local_tool_cleanup_pending"
+  };
+}
+
+export function createLocalToolJobId(now: string): string {
+  return `job_${now.slice(0, 10).replaceAll("-", "")}_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+}
+
+export function localToolUserActor() {
+  return {
+    kind: "user" as const,
+    runtimeKind: "desktop_local" as const,
+    clientCapabilityTier: "desktop_full" as const
+  };
 }
 
 export interface LocalToolSelfTestRequest {

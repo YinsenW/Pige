@@ -34,7 +34,7 @@
     { "path": "scripts/verify/pi-import-side-effects.mjs", "sha256": "27bc8c0f094f58b91054da1c90e50a97a8ec57cd50137963bfad88e53eb43255" },
     { "path": "scripts/verify/pi-runtime-boundary-negative-cases.mjs", "sha256": "533244372e0b4f765241b7691aebf9f6dcd71a6bb5b0fccc26df45d8befa3e50" },
     { "path": "scripts/verify/pi-runtime-boundary.mjs", "sha256": "573110dd3f7ef93bedb3ed826abbf78298acd9ea6155915cf203707cb7abb1e3" },
-    { "path": "scripts/verify/pi-runtime-responsibility.mjs", "sha256": "252b75c9e97e4352d337fbaeeb11a02d8918ee5f355121e14481f67eb06d1839" },
+    { "path": "scripts/verify/pi-runtime-responsibility.mjs", "sha256": "a4b5d892487baaefaf199da70554a674aba0c045afb94b3e72b6c4ae16111c0e" },
     { "path": "scripts/verify/prd-contract-negative-cases.mjs", "sha256": "5bcbab2bd8656e98edb4901b59d770bb5398e4f44d807a2d078d2218b4101ee3" },
     { "path": "scripts/verify/prd-contract.mjs", "sha256": "142490bc2e7bf77592328e880cdb7135106e457351709c098ad6f3a8f473ce1d" },
     { "path": "scripts/verify/repository-foundation-smoke.mjs", "sha256": "0793c4b9184cc79efa5407157ccaaaae17db6d6084be9c38afa3cad69902814f" },

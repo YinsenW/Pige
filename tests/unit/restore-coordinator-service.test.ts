@@ -338,7 +338,14 @@ describe("RestoreCoordinatorService", () => {
     const fixture = await makeFixture("clone_as_new");
     const seeded = seedRestoreJob(fixture);
     const failed = seeded.store.markFailed(seeded.snapshot, {
-      retryable: false,
+      error: {
+        code: "restore.identity_conflict",
+        domain: "restore",
+        messageKey: "errors.restore.identity_conflict",
+        retryable: false,
+        severity: "error",
+        userAction: "choose_path"
+      },
       message: "Synthetic final restore identity failure."
     });
     seeded.store.close();

@@ -134,6 +134,39 @@ describe("JobExecutionCoordinator", () => {
     }
   });
 
+  it("preserves explicit begin progress while clearing stale progress when none is supplied", () => {
+    const progressFixture = makeFixture();
+    const withProgress = progressFixture.coordinator.begin(progressFixture.create(), {
+      stage: "restoring",
+      message: "Restore checkpoint started.",
+      facts: {
+        progress: { completedUnits: 0, totalUnits: 7, unit: "checkpoint" }
+      }
+    }).job;
+    expect(withProgress.progress).toEqual({
+      completedUnits: 0,
+      totalUnits: 7,
+      unit: "checkpoint"
+    });
+
+    const staleFixture = makeFixture(1);
+    const withoutProgress = staleFixture.coordinator.begin(staleFixture.create(makeJob(
+      staleFixture.jobId,
+      {
+        state: "failed_retryable",
+        startedAt: "2026-07-16T08:00:10.000Z",
+        finishedAt: "2026-07-16T08:00:20.000Z",
+        progress: { completedUnits: 1, totalUnits: 2, unit: "steps" },
+        retry: { retryCount: 1, maxAutomaticRetries: 3, lastRetryReason: "provider timeout" },
+        error: retryableError()
+      }
+    )), {
+      stage: "planning",
+      message: "Retry started without reusable progress."
+    }).job;
+    expect(withoutProgress.progress).toBeUndefined();
+  });
+
   it("patches only bounded durable facts and merges monotonic evidence", () => {
     const fixture = makeFixture();
     const running = fixture.coordinator.begin(fixture.create(), {
@@ -353,11 +386,25 @@ describe("JobExecutionCoordinator", () => {
         message: "Retry explicitly."
       }
     );
-    const queued = fixture.coordinator.prepareRetry(retryable, { message: "Retry queued." });
-    expect(queued.job).toMatchObject({ id: retryable.job.id, state: "queued", message: "Retry queued." });
+    const queued = fixture.coordinator.prepareRetry(retryable, {
+      message: "Retry queued.",
+      reason: "explicit_user_retry"
+    });
+    expect(queued.job).toMatchObject({
+      id: retryable.job.id,
+      state: "queued",
+      message: "Retry queued.",
+      retry: {
+        retryCount: 1,
+        maxAutomaticRetries: 0,
+        requiresUserAction: false,
+        lastRetryReason: "explicit_user_retry"
+      }
+    });
     expect(Date.parse(queued.job.updatedAt)).toBeGreaterThan(Date.parse(retryable.job.updatedAt));
     expect(queued.job.error).toBeUndefined();
     expect(queued.job.progress).toBeUndefined();
+
   });
 
   it("queues only explicit dependency, recovery, and Agent continuation commands", () => {
@@ -556,6 +603,24 @@ describe("JobExecutionCoordinator", () => {
     expect(completed.job.startedAt).toBeUndefined();
     expect(completed.job.finishedAt).toBe(completed.job.updatedAt);
 
+    const warningFixture = makeFixture(2);
+    const completedWithWarnings = warningFixture.coordinator.adoptDurableCompletion(
+      warningFixture.create(),
+      {
+        checkpointId: "destination_committed",
+        result: "completed_with_warnings",
+        message: "Recovered with a bounded warning.",
+        facts: {
+          outputRefs: [{ kind: "operation", id: "op_20260716_abcdef12" }],
+          warnings: [warning()]
+        }
+      }
+    );
+    expect(completedWithWarnings.job).toMatchObject({
+      state: "completed_with_warnings",
+      warnings: [{ code: "agent_runtime.output_partial" }]
+    });
+
     const cancellationRace = makeCancellationRace(1, false);
     const preserved = cancellationRace.fixture.coordinator.adoptDurableCompletion(
       cancellationRace.requested,
@@ -713,6 +778,31 @@ describe("JobExecutionCoordinator", () => {
       safeCheckpointId: "before_execution",
       message: "Cancelled."
     })).toThrowError(expect.objectContaining({ code: "job.cancellation_unsafe" }));
+  });
+
+  it("requests deterministic cleanup from a retryable Job without fabricating a retry", () => {
+    const fixture = makeFixture();
+    const retryable = fixture.coordinator.settle(
+      fixture.coordinator.begin(fixture.create(), { stage: "planning", message: "Planning." }),
+      {
+        kind: "requeue",
+        error: retryableError(),
+        reason: "provider timeout",
+        maxAutomaticRetries: 0,
+        requiresUserAction: true,
+        message: "Retry explicitly."
+      }
+    );
+
+    const requested = fixture.coordinator.requestCancellation(retryable, {
+      requestedBy: "user",
+      message: "Cleanup requested."
+    });
+    expect(requested.job).toMatchObject({
+      state: "cancel_requested",
+      retry: retryable.job.retry,
+      cancellation: { requestedBy: "user" }
+    });
   });
 
   it("projects every late wait or failure to clean cancellation when no durable effect exists", () => {

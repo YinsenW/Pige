@@ -276,7 +276,7 @@ const h3Coordinator = fs.readFileSync(path.join(
 const h3DirectLifecycleStatePattern = /state:\s*"(?:awaiting_review|cancel_requested|cancelled|completed|completed_with_warnings|failed_retryable|failed_final)"/gu;
 const h3DirectLifecycleStateWriters = h2Jobs.match(h3DirectLifecycleStatePattern) ?? [];
 const h3JobsCompareAndSwapCount = h2Jobs.match(/compareAndSwap\(/gu)?.length ?? 0;
-const h3ResidualClosedLoops = [
+const h3MigratedTransitionAdapters = [
   "apps/desktop/src/main/services/backup-coordinator-service.ts",
   "apps/desktop/src/main/services/restore-coordinator-service.ts",
   "apps/desktop/src/main/services/local-tool-manager-service.ts"
@@ -292,6 +292,11 @@ if (h3DirectLifecycleStateWriters.length !== 0) {
 }
 if (h3JobsCompareAndSwapCount !== 2) {
   failures.push(`H3 JobsService must retain only two non-lifecycle CAS boundaries, found ${h3JobsCompareAndSwapCount}`);
+}
+for (const adapter of h3MigratedTransitionAdapters) {
+  if (adapter.directLifecycleStateLiterals !== 0) {
+    failures.push(`H3b ${adapter.path} reintroduced ${adapter.directLifecycleStateLiterals} direct lifecycle state writers`);
+  }
 }
 for (const removedWriter of [
   "#mutateJob(",
@@ -391,7 +396,7 @@ console.log(`Pi runtime responsibility OK: ${JSON.stringify({
   },
   h3ResponsibilityDelta: {
     baseline: "b9b624df9ea13b17ac869e1193b88095f0ba3806",
-    candidateScope: "coordinator_core_and_jobs_home_migration",
+    candidateScope: "coordinator_core_jobs_home_and_transition_adapter_migration",
     lineBudget: {
       "job-execution-coordinator.ts": { before: 0, after: lineCount(h3Coordinator), delta: lineCount(h3Coordinator) },
       "jobs-service.ts": { before: 6_952, after: lineCount(h2Jobs), delta: lineCount(h2Jobs) - 6_952 },
@@ -415,9 +420,8 @@ console.log(`Pi runtime responsibility OK: ${JSON.stringify({
     ],
     homeDurableAssistantRecovery: "adopt_durable_completion_without_provider_replay",
     retryConvergence: "same_job_requeue_acknowledgement_yields_to_next_authoritative_state",
-    remainingClosedLoops: h3ResidualClosedLoops,
+    migratedTransitionAdapters: h3MigratedTransitionAdapters,
     serializedNextSteps: [
-      "H3b_migrate_backup_restore_and_local_tool_transition_adapters",
       "H3c_register_per_class_executors_and_remove_jobs_service_dispatch_ownership"
     ]
   },

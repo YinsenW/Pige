@@ -1,8 +1,7 @@
 import fs from "node:fs";
-import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
-import { JobRecordSchema, type JobRecord } from "@pige/schemas";
+import { JobRecordSchema, type JobRecord, type JobRef } from "@pige/schemas";
 import {
   LocalToolPackageError,
   stageLocalToolPackage,
@@ -13,6 +12,21 @@ import {
   LocalToolLifecycleStore,
   LocalToolLifecycleStoreError
 } from "./local-tool-lifecycle-store";
+import { JobExecutionCoordinator, type JobExecutionOutcome } from "./job-execution-coordinator";
+import type { JobRecordSnapshot } from "./job-record-store";
+import {
+  hasExactLocalToolJobRef,
+  createLocalToolJobId,
+  localToolCleanupPendingWarning,
+  localToolEffectRef,
+  localToolJobInputRefs,
+  localToolOutputRef,
+  localToolRequestEnabledValue,
+  localToolRequestFingerprint,
+  localToolRequestIdFromJob,
+  localToolTargetRefId,
+  localToolUserActor
+} from "./local-tool-manager-types";
 import type {
   LocalToolAssetDefinition,
   LocalToolAssetRecord,
@@ -65,7 +79,7 @@ interface TargetDefinition {
 }
 
 interface BegunJob {
-  readonly job: JobRecord;
+  readonly snapshot: JobRecordSnapshot;
   readonly idempotent: boolean;
 }
 
@@ -170,9 +184,10 @@ export class LocalToolManagerService {
   async test(request: LocalToolTargetActionRequest): Promise<LocalToolLifecycleResult> {
     const target = this.#authorizeTargetAction("test", request);
     const begun = this.#beginJob("test", request, true);
-    if (begun.idempotent) return this.#resultFromExistingJob(begun.job, request.toolId);
+    if (begun.idempotent) return this.#resultFromExistingJob(begun.snapshot.job, request.toolId);
 
-    let job = begun.job;
+    let snapshot = begun.snapshot;
+    let job = snapshot.job;
     let stagingOwned = false;
     let healthFailureDetected = false;
     let testedRecord: LocalToolLifecycleRecord | undefined;
@@ -213,7 +228,10 @@ export class LocalToolManagerService {
         health: "pass"
       }, job.id, this.#nowIso());
       this.#store.write(updatedRecord);
-      job = this.#completeJob(job, "Local tool test passed.", [toolOutputRef(request, identity.expectedSha256)]);
+      snapshot = this.#adoptDurableJob("test", request, "Local tool test passed.", {
+        outputRefs: [localToolOutputRef(request, identity.expectedSha256)]
+      });
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     } catch (caught) {
       if (stagingOwned) this.#store.discardStaging(request.requestId);
@@ -224,7 +242,8 @@ export class LocalToolManagerService {
           // The durable Job still reports the failed test if the health record cannot be updated.
         }
       }
-      job = this.#failJob(job, caught);
+      snapshot = this.#failJob(snapshot, caught);
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     }
   }
@@ -232,9 +251,10 @@ export class LocalToolManagerService {
   setEnabled(request: LocalToolSetEnabledRequest): LocalToolLifecycleResult {
     this.#authorizeTargetAction("set_enabled", request);
     const begun = this.#beginJob("set_enabled", request, false);
-    if (begun.idempotent) return this.#resultFromExistingJob(begun.job, request.toolId);
+    if (begun.idempotent) return this.#resultFromExistingJob(begun.snapshot.job, request.toolId);
 
-    let job = begun.job;
+    let snapshot = begun.snapshot;
+    let job = snapshot.job;
     try {
       const record = this.#requireRecord(request.toolId);
       const targetRecord = requireActiveTargetRecord(record, request.assetId);
@@ -258,10 +278,16 @@ export class LocalToolManagerService {
       );
       this.#inject("record_precommit");
       this.#store.write(updatedRecord);
-      job = this.#completeJob(job, request.enabled ? "Local tool enabled." : "Local tool disabled.");
+      snapshot = this.#adoptDurableJob(
+        "set_enabled",
+        request,
+        request.enabled ? "Local tool enabled." : "Local tool disabled."
+      );
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     } catch (caught) {
-      job = this.#failJob(job, caught);
+      snapshot = this.#failJob(snapshot, caught);
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     }
   }
@@ -269,18 +295,21 @@ export class LocalToolManagerService {
   remove(request: LocalToolTargetActionRequest): LocalToolLifecycleResult {
     const target = this.#authorizeTargetAction("remove", request);
     const begun = this.#beginJob("remove", request, false);
-    if (begun.idempotent) return this.#resultFromExistingJob(begun.job, request.toolId);
+    if (begun.idempotent) return this.#resultFromExistingJob(begun.snapshot.job, request.toolId);
 
-    let job = begun.job;
+    let snapshot = begun.snapshot;
+    let job = snapshot.job;
     try {
       const existing = this.#store.read(request.toolId);
       if (!existing) {
-        job = this.#completeJob(job, "Local tool was already available.");
+        snapshot = this.#completeJob(snapshot, "Local tool was already available.");
+        job = snapshot.job;
         return { job, inspection: this.inspect(request.toolId), idempotent: false };
       }
       const currentTarget = targetRecordFor(existing, request.assetId);
       if (!currentTarget?.activeRelativePath) {
-        job = this.#completeJob(job, "Local tool was already available.");
+        snapshot = this.#completeJob(snapshot, "Local tool was already available.");
+        job = snapshot.job;
         return { job, inspection: this.inspect(request.toolId), idempotent: false };
       }
       assertRequestedVersion(request.version, currentTarget.activeVersion);
@@ -310,12 +339,19 @@ export class LocalToolManagerService {
         cleanupWarning = true;
       }
 
-      job = cleanupWarning
-        ? this.#completeJobWithWarnings(job, "Local tool was disabled; owned-byte cleanup remains pending.")
-        : this.#completeJob(job, "Local tool removed.");
+      snapshot = this.#adoptDurableJob(
+        "remove",
+        request,
+        cleanupWarning
+          ? "Local tool was disabled; owned-byte cleanup remains pending."
+          : "Local tool removed.",
+        cleanupWarning ? { result: "completed_with_warnings", warnings: [localToolCleanupPendingWarning()] } : undefined
+      );
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     } catch (caught) {
-      job = this.#failJob(job, caught);
+      snapshot = this.#failJob(snapshot, caught);
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     }
   }
@@ -324,16 +360,24 @@ export class LocalToolManagerService {
     this.#authorizeRecovery(request);
     const begun = this.#beginRecoveryJob(request);
     if (begun.idempotent) {
-      return { job: begun.job, idempotent: true, recoveredEntries: 0 };
+      return { job: begun.snapshot.job, idempotent: true, recoveredEntries: 0 };
     }
 
-    let job = begun.job;
+    let snapshot = begun.snapshot;
+    let job = snapshot.job;
     try {
       const recoveredEntries = this.#store.recoverOwnedEntries(request.requestId, job.id, this.#nowIso());
-      job = this.#completeJob(job, "Local-tool staging recovery completed.");
+      snapshot = this.#adoptDurableJob("recover_staging", {
+        ...request,
+        toolId: "local-tool-root"
+      }, recoveredEntries > 0
+        ? "Local-tool staging recovery completed with durable changes."
+        : "Local-tool staging recovery completed.");
+      job = snapshot.job;
       return { job, idempotent: false, recoveredEntries };
     } catch (caught) {
-      job = this.#failJob(job, caught);
+      snapshot = this.#failJob(snapshot, caught);
+      job = snapshot.job;
       return { job, idempotent: false, recoveredEntries: 0 };
     }
   }
@@ -344,9 +388,10 @@ export class LocalToolManagerService {
   ): Promise<LocalToolLifecycleResult> {
     const target = this.#authorizeCandidateAction(action, request);
     const begun = this.#beginJob(action, request, true);
-    if (begun.idempotent) return this.#resultFromExistingJob(begun.job, request.toolId);
+    if (begun.idempotent) return this.#resultFromExistingJob(begun.snapshot.job, request.toolId);
 
-    let job = begun.job;
+    let snapshot = begun.snapshot;
+    let job = snapshot.job;
     let publishedRelativePath: string | undefined;
     let publishedNew = false;
     let repairRollbackPath: string | undefined;
@@ -414,9 +459,10 @@ export class LocalToolManagerService {
       this.#inject("record_precommit");
       this.#store.write(updatedRecord);
       repairRollbackPath = undefined;
-      job = this.#completeJob(job, `Local tool ${action} completed.`, [
-        toolOutputRef(request, staged.packageSha256)
-      ]);
+      snapshot = this.#adoptDurableJob(action, request, `Local tool ${action} completed.`, {
+        outputRefs: [localToolOutputRef(request, staged.packageSha256)]
+      });
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     } catch (caught) {
       if (stagingOwned) this.#store.discardStaging(request.requestId);
@@ -441,7 +487,8 @@ export class LocalToolManagerService {
           // Cross-file repair rollback is best effort in this bounded foundation.
         }
       }
-      job = this.#failJob(job, caught);
+      snapshot = this.#failJob(snapshot, caught);
+      job = snapshot.job;
       return { job, inspection: this.inspect(request.toolId), idempotent: false };
     }
   }
@@ -476,7 +523,7 @@ export class LocalToolManagerService {
     if (!isPlatformSupported(target.target, this.#platform, this.#architecture)) {
       throw new PigeDomainError("settings.local_tool_unsupported", "Local tool is unsupported on this platform.");
     }
-    const enabled = requestEnabledValue(request);
+    const enabled = localToolRequestEnabledValue(request);
     this.#authorityPort.assertAuthorized({
       requestId: request.requestId,
       userOrigin: request.userOrigin,
@@ -511,23 +558,18 @@ export class LocalToolManagerService {
     request: LocalToolMutationIdentity,
     accessesExternalFiles: boolean
   ): BegunJob {
-    const existing = this.#jobRecorder.findByRequestId(request.requestId);
-    if (existing) {
-      assertExistingJobMatches(existing, action, request);
-      return { job: existing, idempotent: true };
-    }
     const now = this.#nowIso();
     const queued = JobRecordSchema.parse({
       schemaVersion: 1,
-      id: createJobId(now),
+      id: createLocalToolJobId(now),
       class: "tool_install",
       state: "queued",
       priority: "maintenance",
       scope: "machine_local",
       createdAt: now,
       updatedAt: now,
-      actor: userActor(),
-      inputRefs: jobInputRefs(action, request),
+      actor: localToolUserActor(),
+      inputRefs: localToolJobInputRefs(action, request),
       privacy: {
         usedCloudModel: false,
         usedNetwork: false,
@@ -536,16 +578,14 @@ export class LocalToolManagerService {
       },
       message: `Local tool ${action} queued.`
     });
-    this.#jobRecorder.write(queued);
-    const running = JobRecordSchema.parse({
-      ...queued,
-      state: "running",
-      updatedAt: now,
-      startedAt: now,
-      message: `Local tool ${action} is running.`
+    return this.#coordinator().claimAndBegin(queued, {
+      requestId: request.requestId,
+      find: (requestId) => this.#jobRecorder.findByRequestId(requestId),
+      claim: (job) => this.#jobRecorder.claimByRequestId(job).snapshot,
+      assertMatches: (job) => assertExistingJobMatches(job, action, request),
+      runningMessage: `Local tool ${action} is running.`,
+      retryMessage: `Local tool ${action} retry is queued with its original identity.`
     });
-    this.#jobRecorder.write(running);
-    return { job: running, idempotent: false };
   }
 
   #beginRecoveryJob(request: LocalToolRecoveryRequest): BegunJob {
@@ -556,63 +596,89 @@ export class LocalToolManagerService {
     return this.#beginJob("recover_staging", identity, false);
   }
 
-  #completeJob(job: JobRecord, message: string, outputRefs?: readonly unknown[]): JobRecord {
-    const finishedAt = this.#nowIso();
-    const completed = JobRecordSchema.parse({
-      ...job,
-      state: "completed",
-      updatedAt: finishedAt,
-      finishedAt,
-      ...(outputRefs ? { outputRefs } : {}),
-      message
+  #completeJob(
+    snapshot: JobRecordSnapshot,
+    message: string,
+    outputRefs?: readonly JobRef[]
+  ): JobRecordSnapshot {
+    return this.#coordinator().settle(snapshot, {
+      kind: "completed",
+      message,
+      ...(outputRefs ? { facts: { outputRefs } } : {})
     });
-    this.#jobRecorder.write(completed);
-    return completed;
   }
 
-  #completeJobWithWarnings(job: JobRecord, message: string): JobRecord {
-    const finishedAt = this.#nowIso();
-    const completed = JobRecordSchema.parse({
-      ...job,
-      state: "completed_with_warnings",
-      updatedAt: finishedAt,
-      finishedAt,
-      warnings: [{
-        code: "settings.local_tool_cleanup_pending",
-        domain: "settings",
-        messageKey: "error.settings.local_tool_cleanup_pending"
-      }],
-      message
-    });
-    this.#jobRecorder.write(completed);
-    return completed;
-  }
-
-  #failJob(job: JobRecord, caught: unknown): JobRecord {
-    const failure = normalizeFailure(caught);
-    const finishedAt = this.#nowIso();
-    const failed = JobRecordSchema.parse({
-      ...job,
-      state: failure.retryable ? "failed_retryable" : "failed_final",
-      updatedAt: finishedAt,
-      finishedAt,
-      error: {
-        code: failure.code,
-        domain: "settings",
-        messageKey: `error.${failure.code}`,
-        retryable: failure.retryable,
-        severity: "error",
-        userAction: failure.retryable ? "retry" : "repair_tool"
+  #adoptDurableJob(
+    action: LocalToolLifecycleAction,
+    request: LocalToolMutationIdentity,
+    message: string,
+    options: {
+      readonly result?: "completed" | "completed_with_warnings";
+      readonly outputRefs?: readonly JobRef[];
+      readonly warnings?: readonly ReturnType<typeof localToolCleanupPendingWarning>[];
+    } = {}
+  ): JobRecordSnapshot {
+    const effectRef = localToolEffectRef(action, request);
+    const current = this.#jobRecorder.findByRequestId(request.requestId);
+    if (!current) throw new PigeDomainError("job.record_not_found", "The Local Tool Job disappeared after its durable effect.");
+    return this.#coordinator().convergeLatest(current, {
+      read: () => this.#jobRecorder.findByRequestId(request.requestId),
+      acceptTerminal: (job) => {
+        assertExistingJobMatches(job, action, request);
+        if (job.state !== "completed" && job.state !== "completed_with_warnings") return false;
+        if (hasExactLocalToolJobRef(job.outputRefs, effectRef)) return true;
+        throw new PigeDomainError("job.result_conflict", "The Local Tool Job completed without its exact durable effect proof.");
       },
-      retry: failure.retryable
-        ? { retryCount: 0, maxAutomaticRetries: 0, requiresUserAction: true }
-        : undefined,
-      message: failure.retryable
-        ? "Local tool action failed and can be retried."
-        : "Local tool action failed closed."
+      apply: (snapshot) => {
+        assertExistingJobMatches(snapshot.job, action, request);
+        return this.#coordinator().adoptDurableCompletion(snapshot, {
+          checkpointId: "local_tool_effect_committed",
+          ...(options.result ? { result: options.result } : {}),
+          message,
+          facts: {
+            outputRefs: [...(options.outputRefs ?? []), effectRef],
+            ...(options.warnings ? { warnings: options.warnings } : {})
+          }
+        });
+      },
+      missingMessage: "The Local Tool Job disappeared after its durable effect.",
+      conflictMessage: "The Local Tool Job could not converge after its durable effect."
     });
-    this.#jobRecorder.write(failed);
-    return failed;
+  }
+
+  #failJob(snapshot: JobRecordSnapshot, caught: unknown): JobRecordSnapshot {
+    const failure = normalizeFailure(caught);
+    const error = {
+      code: failure.code,
+      domain: "settings" as const,
+      messageKey: `error.${failure.code}`,
+      retryable: failure.retryable,
+      severity: "error" as const,
+      userAction: failure.retryable ? "retry" as const : "repair_tool" as const
+    };
+    const outcome: JobExecutionOutcome = failure.retryable ? {
+          kind: "requeue",
+          error: { ...error, retryable: true },
+          reason: failure.code,
+          maxAutomaticRetries: 0,
+          requiresUserAction: true,
+          message: "Local tool action failed and can be retried."
+        } : {
+          kind: "failed",
+          error: { ...error, retryable: false },
+          message: "Local tool action failed closed."
+        };
+    return this.#coordinator().convergeLatest(snapshot, {
+      read: () => this.#jobRecorder.findByRequestId(localToolRequestIdFromJob(snapshot.job)),
+      acceptTerminal: () => true,
+      apply: (current) => this.#coordinator().settle(current, outcome),
+      missingMessage: "The Local Tool Job disappeared during failure settlement.",
+      conflictMessage: "The Local Tool Job failure could not converge."
+    });
+  }
+
+  #coordinator(): JobExecutionCoordinator {
+    return new JobExecutionCoordinator(this.#jobRecorder, { now: this.#now });
   }
 
   async #runSelfTest(
@@ -1070,73 +1136,17 @@ function assertExistingJobMatches(
   if (job.class !== "tool_install" || job.scope !== "machine_local") {
     throw new PigeDomainError("settings.local_tool_request_conflict", "Local-tool request identity is already in use.");
   }
-  const targetId = targetRefId(request.toolId, request.assetId, request.version);
+  const targetId = localToolTargetRefId(request.toolId, request.assetId, request.version);
   const actionRef = job.inputRefs?.find((ref) => ref.role === "local_tool_action");
   const targetRef = job.inputRefs?.find((ref) => ref.role === "local_tool_target");
   const parameterRef = job.inputRefs?.find((ref) => ref.role === "local_tool_parameters");
   if (
     actionRef?.id !== action ||
     targetRef?.id !== targetId ||
-    parameterRef?.id !== requestFingerprint(action, request)
+    parameterRef?.id !== localToolRequestFingerprint(action, request)
   ) {
     throw new PigeDomainError("settings.local_tool_request_conflict", "Local-tool request identity conflicts with prior input.");
   }
-}
-
-function jobInputRefs(action: LocalToolLifecycleAction, request: LocalToolMutationIdentity) {
-  return [
-    { kind: "tool" as const, id: request.requestId, role: "local_tool_request" },
-    { kind: "tool" as const, id: action, role: "local_tool_action" },
-    { kind: "tool" as const, id: targetRefId(request.toolId, request.assetId, request.version), role: "local_tool_target" },
-    { kind: "tool" as const, id: requestFingerprint(action, request), role: "local_tool_parameters" }
-  ];
-}
-
-function requestFingerprint(action: LocalToolLifecycleAction, request: LocalToolMutationIdentity): string {
-  const extended = request as LocalToolMutationIdentity & {
-    readonly enabled?: boolean;
-    readonly expectedSha256?: string;
-  };
-  const payload = JSON.stringify({
-    action,
-    toolId: request.toolId,
-    assetId: request.assetId ?? null,
-    version: request.version ?? null,
-    enabled: extended.enabled ?? null,
-    expectedSha256: extended.expectedSha256 ?? null
-  });
-  return `sha256:${createHash("sha256").update(payload, "utf8").digest("hex")}`;
-}
-
-function requestEnabledValue(request: LocalToolMutationIdentity): boolean | undefined {
-  const value = (request as LocalToolMutationIdentity & { readonly enabled?: boolean }).enabled;
-  return typeof value === "boolean" ? value : undefined;
-}
-
-function targetRefId(toolId: string, assetId?: string, version?: string): string {
-  return [toolId, assetId ?? "engine", version ?? "active"].join(":");
-}
-
-function toolOutputRef(request: LocalToolMutationIdentity, checksum: string) {
-  return {
-    kind: "tool" as const,
-    id: targetRefId(request.toolId, request.assetId, request.version),
-    checksum,
-    role: "local_tool_active_version"
-  };
-}
-
-function createJobId(now: string): string {
-  const dateKey = now.slice(0, 10).replaceAll("-", "");
-  return `job_${dateKey}_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
-}
-
-function userActor() {
-  return {
-    kind: "user" as const,
-    runtimeKind: "desktop_local" as const,
-    clientCapabilityTier: "desktop_full" as const
-  };
 }
 
 function normalizeFailure(caught: unknown): LocalToolActionError {

@@ -569,6 +569,12 @@ describe("BackupCoordinatorService", () => {
     expect(waiting.error).toBeUndefined();
     expect(waiting).toMatchObject({
       state: "waiting_dependency",
+      retry: {
+        retryCount: 0,
+        maxAutomaticRetries: 0,
+        requiresUserAction: true,
+        lastRetryReason: "backup.external_managed_copy_root_missing"
+      },
       waitingDependency: {
         dependencyKind: "vault_binding",
         dependencyId: "root_externalwait01",

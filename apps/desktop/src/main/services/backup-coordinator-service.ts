@@ -22,6 +22,7 @@ import {
   type BackupDestinationFence,
   type RestoreCorePreviewResult
 } from "./backup-service";
+import { JobExecutionCoordinator } from "./job-execution-coordinator";
 import { JobRecordStore, type JobRecordSnapshot } from "./job-record-store";
 
 export const BACKUP_CHECKPOINT_IDS = [
@@ -167,20 +168,11 @@ export class BackupCoordinatorService {
     if (TERMINAL_STATES.has(snapshot.job.state) || checkpointDone(snapshot.job, "archive_finalized")) {
       return snapshot.job;
     }
-    const now = this.#now().toISOString();
-    const next = store.compareAndSwap(snapshot, JobRecordSchema.parse({
-      ...snapshot.job,
-      state: "cancel_requested",
-      updatedAt: now,
-      cancellation: {
-        ...(snapshot.job.cancellation ?? {}),
-        requestedAt: snapshot.job.cancellation?.requestedAt ?? now,
-        requestedBy: snapshot.job.cancellation?.requestedBy ?? "user",
-        safeCheckpointId: lastDoneCheckpoint(snapshot.job),
-        durableWritesApplied: false
-      },
+    const owner = coordinator(store, this.#now());
+    const next = owner.requestCancellation(snapshot, {
+      requestedBy: "user",
       message: "Backup cancellation was requested."
-    }));
+    });
     const activeController = this.#controllers.get(jobId);
     activeController?.abort();
     if (activeController) return next.job;
@@ -201,25 +193,9 @@ export class BackupCoordinatorService {
     const binding = readBackupBinding(snapshot.job, active.vaultPath);
     assertActiveBinding(active, binding);
     if (snapshot.job.state === "failed_retryable" || snapshot.job.state === "waiting_dependency") {
-      const now = this.#now().toISOString();
-      const {
-        error: _error,
-        finishedAt: _finishedAt,
-        waitingDependency: _waitingDependency,
-        ...rest
-      } = snapshot.job;
-      snapshot = store.compareAndSwap(snapshot, JobRecordSchema.parse({
-        ...rest,
-        state: "queued",
-        updatedAt: now,
-        retry: {
-          retryCount: (snapshot.job.retry?.retryCount ?? 0) + 1,
-          maxAutomaticRetries: 0,
-          requiresUserAction: false,
-          lastRetryReason: snapshot.job.error?.code ?? "backup.retry_requested"
-        },
+      snapshot = coordinator(store, this.#now()).prepareRetry(snapshot, {
         message: "Backup retry is queued with its original identity."
-      }));
+      });
     } else if (snapshot.job.state !== "queued") {
       return { status: "not_allowed", job: snapshot.job };
     }
@@ -237,8 +213,15 @@ export class BackupCoordinatorService {
     const store = this.#store(active.vaultPath);
     let recovered = 0;
     let failed = 0;
-    for (const snapshot of listRecoverableBackupJobs(store, active.vaultPath)) {
+    for (const initialSnapshot of listRecoverableBackupJobs(store, active.vaultPath)) {
       try {
+        const snapshot = initialSnapshot.job.state === "running"
+          ? coordinator(store, this.#now()).recoverInterrupted(initialSnapshot, {
+              canResumeIdempotently: true,
+              queuedMessage: "Interrupted Backup recovery is queued with its exact checkpoint identity.",
+              retryableMessage: "Interrupted Backup recovery requires an explicit retry."
+            })
+          : initialSnapshot;
         const binding = readBackupBinding(snapshot.job, active.vaultPath);
         assertActiveBinding(active, binding);
         const result = await this.#run(store, snapshot, binding);
@@ -364,6 +347,7 @@ export class BackupCoordinatorService {
       assertCompletedJob(snapshot.job, binding, inspected);
       return snapshot;
     }
+    snapshot = prepareForDurableCompletion(store, snapshot, this.#now());
     snapshot = completeMissingCheckpoints(store, snapshot, binding, inspected, this.#now());
     this.#assertBinding(binding);
     const operation = OperationRecordSchema.parse(await this.#writeOperation({
@@ -380,32 +364,25 @@ export class BackupCoordinatorService {
       assertCompletedJob(snapshot.job, binding, inspected, operation.id);
       return snapshot;
     }
-    const now = this.#now().toISOString();
     const backupRef = createBackupRef(binding, inspected);
-    return store.compareAndSwap(snapshot, JobRecordSchema.parse({
-      ...snapshot.job,
-      state: "completed",
-      stage: "backing_up",
-      updatedAt: now,
-      finishedAt: now,
-      outputRefs: dedupeRefs([
-        ...(snapshot.job.outputRefs ?? []),
-        backupRef,
-        { kind: "operation", id: operation.id, role: "backup_created" }
-      ]),
-      operationIds: Array.from(new Set([...(snapshot.job.operationIds ?? []), operation.id])),
-      cancellation: snapshot.job.cancellation ? {
-        ...snapshot.job.cancellation,
-        safeCheckpointId: "archive_finalized",
-        durableWritesApplied: true
-      } : { safeCheckpointId: "archive_finalized", durableWritesApplied: true },
-      progress: {
-        completedUnits: BACKUP_CHECKPOINT_IDS.length,
-        totalUnits: BACKUP_CHECKPOINT_IDS.length,
-        unit: "checkpoint"
-      },
-      message: "Backup completed and passed exact archive inspection."
-    }));
+    return coordinator(store, this.#now()).adoptDurableCompletion(snapshot, {
+      checkpointId: "archive_finalized",
+      message: "Backup completed and passed exact archive inspection.",
+      facts: {
+        stage: "backing_up",
+        outputRefs: dedupeRefs([
+          ...(snapshot.job.outputRefs ?? []),
+          backupRef,
+          { kind: "operation", id: operation.id, role: "backup_created" }
+        ]),
+        operationIds: Array.from(new Set([...(snapshot.job.operationIds ?? []), operation.id])),
+        progress: {
+          completedUnits: BACKUP_CHECKPOINT_IDS.length,
+          totalUnits: BACKUP_CHECKPOINT_IDS.length,
+          unit: "checkpoint"
+        }
+      }
+    });
   }
 
   async #inspectExactFinal(
@@ -551,28 +528,24 @@ function readBackupBinding(job: JobRecord, vaultPath: string): BackupBinding {
 
 function startJob(store: JobRecordStore, snapshot: JobRecordSnapshot, nowSource: Date): JobRecordSnapshot {
   if (snapshot.job.state === "running") return snapshot;
-  if (
-    snapshot.job.state !== "queued" &&
-    snapshot.job.state !== "failed_retryable" &&
-    snapshot.job.state !== "waiting_dependency"
-  ) {
-    throw new PigeDomainError("backup.job_conflict", "The Backup Job cannot start from its durable state.");
+  const owner = coordinator(store, nowSource);
+  if (snapshot.job.state === "waiting_dependency" && snapshot.job.waitingDependency) {
+    return owner.resume(snapshot, {
+      stage: "backing_up",
+      message: "Backup is running.",
+      proof: {
+        kind: "dependency_repaired",
+        dependency: snapshot.job.waitingDependency
+      }
+    });
   }
-  const now = nowSource.toISOString();
-  const {
-    error: _error,
-    finishedAt: _finishedAt,
-    waitingDependency: _waitingDependency,
-    ...rest
-  } = snapshot.job;
-  return store.compareAndSwap(snapshot, JobRecordSchema.parse({
-    ...rest,
-    state: "running",
-    stage: "backing_up",
-    startedAt: snapshot.job.startedAt ?? now,
-    updatedAt: now,
-    message: "Backup is running."
-  }));
+  if (snapshot.job.state === "queued" || snapshot.job.state === "failed_retryable") {
+    return owner.begin(snapshot, {
+      stage: "backing_up",
+      message: "Backup is running."
+    });
+  }
+  throw new PigeDomainError("backup.job_conflict", "The Backup Job cannot start from its durable state.");
 }
 
 function recordCheckpoint(
@@ -617,25 +590,23 @@ function recordCheckpoint(
     outputRefs: backupRef,
     ...(checksum ? { checksumAfter: checksum } : {})
   } : checkpoint);
-  return store.compareAndSwap(snapshot, JobRecordSchema.parse({
-    ...snapshot.job,
-    state: "running",
-    stage: "backing_up",
-    startedAt: snapshot.job.startedAt ?? now,
-    updatedAt: now,
+  const facts = {
+    stage: "backing_up" as const,
     checkpoints: nextCheckpoints,
     progress: {
       completedUnits: nextCheckpoints.filter((checkpoint) => checkpoint.state === "done").length,
       totalUnits: BACKUP_CHECKPOINT_IDS.length,
       unit: "checkpoint"
     },
-    cancellation: event.phase === "archive_finalized" ? {
-      ...(snapshot.job.cancellation ?? {}),
-      safeCheckpointId: "archive_finalized",
-      durableWritesApplied: true
-    } : snapshot.job.cancellation,
     message: `Backup checkpoint ${event.phase} completed.`
-  }));
+  };
+  return event.phase === "archive_finalized"
+    ? coordinator(store, nowSource).markDurableBoundary(snapshot, {
+        checkpointId: "archive_finalized",
+        message: facts.message,
+        facts
+      })
+    : coordinator(store, nowSource).patch(snapshot, facts);
 }
 
 function completeMissingCheckpoints(
@@ -667,25 +638,22 @@ function markCancelled(
   initialSnapshot: JobRecordSnapshot,
   nowSource: Date
 ): JobRecordSnapshot {
-  const snapshot = refreshSnapshot(store, initialSnapshot);
+  let snapshot = refreshSnapshot(store, initialSnapshot);
   if (checkpointDone(snapshot.job, "archive_finalized")) {
     throw new PigeDomainError("backup.result_conflict", "A finalized Backup cannot be recorded as cancelled.");
   }
-  const now = nowSource.toISOString();
-  return store.compareAndSwap(snapshot, JobRecordSchema.parse({
-    ...snapshot.job,
-    state: "cancelled",
-    updatedAt: now,
-    finishedAt: now,
-    cancellation: {
-      ...(snapshot.job.cancellation ?? {}),
-      requestedAt: snapshot.job.cancellation?.requestedAt ?? now,
-      requestedBy: snapshot.job.cancellation?.requestedBy ?? "system",
-      safeCheckpointId: lastDoneCheckpoint(snapshot.job),
-      durableWritesApplied: false
-    },
-    message: "Backup was cancelled before archive finalization."
-  }));
+  const owner = coordinator(store, nowSource);
+  if (snapshot.job.state !== "cancel_requested") {
+    snapshot = owner.requestCancellation(snapshot, {
+      requestedBy: "system",
+      message: "Backup cancellation was requested."
+    });
+  }
+  return owner.cancellationOutcome(snapshot, {
+    cancelledMessage: "Backup was cancelled before archive finalization.",
+    preservedResultMessage: "Backup was cancelled before archive finalization.",
+    safeCheckpointId: lastDoneCheckpoint(snapshot.job) ?? "before_durable_write"
+  });
 }
 
 function markFailed(
@@ -694,56 +662,70 @@ function markFailed(
   caught: unknown,
   nowSource: Date
 ): JobRecordSnapshot {
-  const snapshot = refreshSnapshot(store, initialSnapshot);
+  let snapshot = refreshSnapshot(store, initialSnapshot);
   if (isCompleted(snapshot.job)) return snapshot;
+  if (snapshot.job.state === "failed_retryable") {
+    snapshot = coordinator(store, nowSource).prepareRetry(snapshot, {
+      message: "Backup recovery is retrying the same durable Job."
+    });
+    snapshot = startJob(store, snapshot, nowSource);
+  }
   if (caught instanceof BackupManagedCopyDependencyError) {
-    const now = nowSource.toISOString();
-    const { error: _error, finishedAt: _finishedAt, ...rest } = snapshot.job;
-    return store.compareAndSwap(snapshot, JobRecordSchema.parse({
-      ...rest,
-      state: "waiting_dependency",
-      updatedAt: now,
-      waitingDependency: {
+    return coordinator(store, nowSource).settle(snapshot, {
+      kind: "waiting",
+      reason: "dependency",
+      dependency: {
         dependencyKind: caught.dependencyKind,
         dependencyId: caught.dependencyId,
         requiredAction: "reconnect_path",
         messageKey: `errors.${caught.code}`
       },
-      retry: {
-        retryCount: snapshot.job.retry?.retryCount ?? 0,
-        maxAutomaticRetries: 0,
-        requiresUserAction: true,
-        lastRetryReason: caught.code
-      },
+      retryReason: caught.code,
+      requiresUserAction: true,
       message: "Backup is waiting for a required managed source location."
-    }));
+    });
   }
   const retryable = isRetryableFailure(caught);
   const code = safeErrorCode(caught);
-  const now = nowSource.toISOString();
-  return store.compareAndSwap(snapshot, JobRecordSchema.parse({
-    ...snapshot.job,
-    state: retryable ? "failed_retryable" : "failed_final",
-    updatedAt: now,
-    finishedAt: now,
+  const error = {
+    code,
+    domain: "backup" as const,
+    messageKey: `errors.${code}`,
+    retryable,
+    severity: "error" as const,
+    userAction: retryable ? "retry" as const : "choose_path" as const
+  };
+  return coordinator(store, nowSource).settle(snapshot, retryable ? {
+    kind: "requeue",
     error: {
-      code,
-      domain: "backup",
-      messageKey: `errors.${code}`,
-      retryable,
-      severity: "error",
-      userAction: retryable ? "retry" : "choose_path"
+      ...error,
+      retryable: true
     },
-    retry: {
-      retryCount: snapshot.job.retry?.retryCount ?? 0,
-      maxAutomaticRetries: 0,
-      requiresUserAction: true,
-      lastRetryReason: code
+    reason: code,
+    maxAutomaticRetries: 0,
+    requiresUserAction: true,
+    message: "Backup stopped safely and can be retried with the same identity."
+  } : {
+    kind: "failed",
+    error: {
+      ...error,
+      retryable: false
     },
-    message: retryable
-      ? "Backup stopped safely and can be retried with the same identity."
-      : "Backup stopped because its durable binding or output conflicted."
-  }));
+    message: "Backup stopped because its durable binding or output conflicted."
+  });
+}
+
+function prepareForDurableCompletion(
+  store: JobRecordStore,
+  snapshot: JobRecordSnapshot,
+  nowSource: Date
+): JobRecordSnapshot {
+  if (snapshot.job.state === "running" || snapshot.job.state === "cancel_requested") return snapshot;
+  return startJob(store, snapshot, nowSource);
+}
+
+function coordinator(store: JobRecordStore, nowSource: Date): JobExecutionCoordinator {
+  return new JobExecutionCoordinator(store, { now: () => nowSource });
 }
 
 function assertCoreEventBinding(event: BackupCreateCheckpointEvent, binding: BackupBinding): void {
