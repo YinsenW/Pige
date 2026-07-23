@@ -3987,10 +3987,10 @@ dd {
 .conversation-scroll-anchor {
   --conversation-anchor-width: 5px;
   position: absolute;
-  top: calc(var(--conversation-anchor-position) * (100% - 16px) + 8px);
+  top: calc(var(--conversation-anchor-position) * (100% - 12px) + 6px);
   right: 0;
   width: 20px;
-  height: 18px;
+  height: 14px;
   min-height: 0;
   transform: translateY(-50%);
   border: 0;
@@ -4006,7 +4006,7 @@ dd {
   top: 50%;
   right: 1px;
   width: var(--conversation-anchor-width);
-  height: 1.5px;
+  height: 1px;
   transform: translateY(-50%);
   border-radius: 999px;
   background: color-mix(in srgb, var(--text-tertiary) 54%, transparent);

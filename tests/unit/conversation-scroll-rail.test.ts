@@ -52,8 +52,8 @@ describe("Conversation scroll rail", () => {
 
     const rail = dom.window.document.querySelector<HTMLElement>(".conversation-scroll-rail");
     expect(rail?.getAttribute("aria-label")).toBe("Conversation navigation");
-    expect(rail?.style.getPropertyValue("--conversation-rail-height")).toBe("36px");
-    expect(rail?.style.getPropertyValue("--conversation-rail-top")).toBe("52px");
+    expect(rail?.style.getPropertyValue("--conversation-rail-height")).toBe("28px");
+    expect(rail?.style.getPropertyValue("--conversation-rail-top")).toBe("56px");
     expect(timeline.classList.contains("has-conversation-scroll-rail")).toBe(true);
     const anchors = Array.from(rail!.querySelectorAll<HTMLButtonElement>(".conversation-scroll-anchor"));
     expect(anchors).toHaveLength(3);
@@ -61,8 +61,8 @@ describe("Conversation scroll rail", () => {
     expect(anchors.map((anchor) => anchor.tabIndex)).toEqual([0, -1, -1]);
 
     rail!.getBoundingClientRect = () => ({
-      x: 390, y: 52, top: 52, right: 410, bottom: 88, left: 390,
-      width: 20, height: 36, toJSON: () => ({})
+      x: 390, y: 56, top: 56, right: 410, bottom: 84, left: 390,
+      width: 20, height: 28, toJSON: () => ({})
     });
     await act(async () => rail!.dispatchEvent(new dom.window.MouseEvent("mousemove", {
       bubbles: true,
@@ -120,6 +120,45 @@ describe("Conversation scroll rail", () => {
     anchors = Array.from(dom.window.document.querySelectorAll<HTMLButtonElement>(".conversation-scroll-anchor"));
     expect(anchors).toHaveLength(0);
     expect(timeline.classList.contains("has-conversation-scroll-rail")).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps a long transcript in a compact centered tick band", async () => {
+    const dom = createDom();
+    const { timeline } = createTimeline(dom, Array.from(
+      { length: 64 },
+      (_, index) => `Message ${index + 1}`
+    ));
+    Object.defineProperties(timeline, {
+      clientHeight: { configurable: true, value: 600 },
+      scrollHeight: { configurable: true, value: 6_000 }
+    });
+    timeline.getBoundingClientRect = () => ({
+      x: 10,
+      y: 20,
+      top: 20,
+      right: 410,
+      bottom: 620,
+      left: 10,
+      width: 400,
+      height: 600,
+      toJSON: () => ({})
+    });
+    const root = createRoot(dom.window.document.getElementById("root")!);
+
+    await act(async () => {
+      root.render(createElement(ConversationScrollRail, {
+        timelineRef: { current: timeline } as RefObject<HTMLElement>,
+        t: translate
+      }));
+    });
+
+    const rail = dom.window.document.querySelector<HTMLElement>(".conversation-scroll-rail");
+    expect(rail?.style.getPropertyValue("--conversation-rail-height")).toBe("264px");
+    expect(rail?.style.getPropertyValue("--conversation-rail-top")).toBe("188px");
+    expect(rail?.querySelectorAll(".conversation-scroll-anchor")).toHaveLength(64);
 
     await act(async () => root.unmount());
     dom.window.close();
