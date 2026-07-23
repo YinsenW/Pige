@@ -179,6 +179,67 @@ describe("Agent-selected Dataset ingest tool", () => {
     expect(fs.readdirSync(path.join(fixture.vaultPath, "datasets"))).toHaveLength(1);
   });
 
+  it("adopts one durable Dataset result after stale child settlement contention without rematerializing", async () => {
+    const fixture = makeVault();
+    const captured = await preserveCsv(fixture);
+    const planner = new StaticPlanner(csvPlan(captured.bytes));
+    const jobs = makeJobs(fixture, new RecordingRuntime(new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        toolCall("pige_inspect_source", "dataset_contention_inspect"),
+        toolCall("pige_inspect_dataset", "dataset_contention_materialize"),
+        { kind: "text", text: "The durable Dataset result was adopted." }
+      ]
+    })), planner);
+    jobs.processQueuedCaptures({ jobIds: [captured.captureJobId] });
+    const parentId = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]).id;
+    const originalAdopt = JobExecutionCoordinator.prototype.adoptDurableCompletion;
+    let contentionInjected = false;
+    vi.spyOn(JobExecutionCoordinator.prototype, "adoptDurableCompletion").mockImplementation(function (
+      snapshot,
+      input
+    ) {
+      if (!contentionInjected && snapshot.job.class === "dataset_import") {
+        contentionInjected = true;
+        this.settle(snapshot, {
+          kind: "requeue",
+          error: {
+            code: "unknown.execution_failed",
+            domain: "unknown",
+            messageKey: "error.generic",
+            retryable: true,
+            severity: "error",
+            userAction: "retry"
+          },
+          reason: "synthetic_stale_settlement",
+          maxAutomaticRetries: 0,
+          requiresUserAction: true,
+          message: "Synthetic stale settlement won the first Dataset Job CAS."
+        });
+      }
+      return originalAdopt.call(this, snapshot, input);
+    });
+
+    await expect(jobs.processQueuedAgentIngest({ jobIds: [parentId] })).resolves.toMatchObject({
+      completed: 1,
+      failed: 0
+    });
+
+    const child = requireValue(readJobs(fixture.vaultPath).find((job) => job.class === "dataset_import"));
+    expect(contentionInjected).toBe(true);
+    expect(child).toMatchObject({
+      state: "completed",
+      retry: { retryCount: 1, lastRetryReason: "dataset_durable_output_adoption" }
+    });
+    expect(child.outputRefs?.map((ref) => ref.kind)).toEqual(expect.arrayContaining([
+      "dataset",
+      "dataset_revision"
+    ]));
+    expect(planner.callCount).toBe(1);
+    expect(fs.readdirSync(path.join(fixture.vaultPath, "datasets"))).toHaveLength(1);
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "create_dataset_revision"))
+      .toHaveLength(1);
+  });
+
   it("detects a same-run Dataset child after post-commit parent checkpoint failure", async () => {
     const fixture = makeVault();
     const captured = await preserveCsv(fixture);
