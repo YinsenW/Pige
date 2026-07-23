@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "fd869668bb7d53cb1946b3b70e2127de1e1959af",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 121,
-  "baselineLines": 70111,
+  "baselineFileCount": 122,
+  "baselineLines": 70245,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -88,6 +88,7 @@
       ["evidence-assembly-service.ts", 577, "pf"],
       ["external-text-file-create-service.ts", 260, "prd"],
       ["home-agent-url-service.ts", 155, "pr"],
+      ["index-rebuild-job-executor.ts", 134, "jr"],
       ["knowledge-tree-aggregate.ts", 390, "f"],
       ["library-service.ts", 142, "f"],
       ["local-tool-package.ts", 671, "pdf"],
@@ -154,7 +155,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 121,
+    "serviceOwnerCount": 122,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 15,

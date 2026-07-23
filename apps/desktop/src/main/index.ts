@@ -138,10 +138,13 @@ import {
   JobsService,
   type ProcessQueuedCapturesResult,
   type ProcessQueuedDatasetImportsResult,
-  type ProcessQueuedIndexRebuildResult,
   type ProcessQueuedOcrResult,
   type ProcessQueuedParsesResult
 } from "./services/jobs-service";
+import {
+  type IndexRebuildJobExecutor,
+  type ProcessQueuedIndexRebuildResult
+} from "./services/index-rebuild-job-executor";
 import {
   createJobClassExecutorRegistry,
   type JobClassExecutorRegistry
@@ -1134,6 +1137,9 @@ const getLocalDatabaseService = (): LocalDatabaseService => {
   return localDatabaseService;
 };
 
+const getIndexRebuildJobExecutor = (): IndexRebuildJobExecutor =>
+  getJobsService().indexRebuildExecutor();
+
 const databaseInitializationRebuilds = new Set<string>();
 
 const getModelProviderRegistry = (): ModelProviderRegistry => {
@@ -1171,7 +1177,7 @@ const initializeActiveDatabase = (): void => {
     const status = getLocalDatabaseService().initialize(activeVaultPath);
     if (status.status !== "ready" && !databaseInitializationRebuilds.has(activeVaultPath)) {
       databaseInitializationRebuilds.add(activeVaultPath);
-      void getJobsService().requestIndexRebuild().catch(() => {
+      void getIndexRebuildJobExecutor().request().catch(() => {
         getDiagnosticsService().recordEvent({
           level: "warning",
           code: "database.index_rebuild.initialization_failed",
@@ -1264,7 +1270,7 @@ const scheduleAgentTurnProcessing = (): void => {
 
 const scheduleIndexRebuildProcessing = (): void => {
   indexRebuildDrainer ??= new CoalescedBatchDrainer({
-    runBatch: () => getJobsService().processQueuedIndexRebuild({ limit: 1 }),
+    runBatch: () => getIndexRebuildJobExecutor().process({ limit: 1 }),
     onError: () => recordBackgroundFailure(
       "database.index_rebuild.background_failed",
       "Background local index rebuild failed."
@@ -1297,7 +1303,7 @@ const pauseMutableWorkForRestore = async (): Promise<() => void> => {
 };
 
 const scheduleActivityIndexRebuild = (): void => {
-  void getJobsService().requestIndexRebuild().catch(() => {
+  void getIndexRebuildJobExecutor().request().catch(() => {
     getDiagnosticsService().recordEvent({
       level: "warning",
       code: "activity.index_rebuild_failed",
@@ -1869,7 +1875,7 @@ ipcMain.handle("vault.updateSourceStoragePolicy", (_event, request: UpdateSource
   getVaultService().updateSourceStoragePolicy(request)
 );
 ipcMain.handle("vault.removeRecent", (_event, vaultId: string) => getVaultService().removeRecent(vaultId));
-ipcMain.handle("maintenance.rebuildLocalDatabase", () => getJobsService().requestIndexRebuild());
+ipcMain.handle("maintenance.rebuildLocalDatabase", () => getIndexRebuildJobExecutor().request());
 ipcMain.handle("maintenance.resetLocalDatabase", async (event) => {
   await confirmSettingAction(event.sender, ["maintenance.localDatabaseReset"], {
     title: "Reset local index data?",
