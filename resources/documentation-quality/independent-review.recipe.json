@@ -37,7 +37,7 @@
     "scope": "Independent Product Planning review of PT3 post-effect continuation: Pi may continue model and inspect/search/parse/OCR work after a durable effect, exact effect owners retain incompatible/concurrent mutation rejection, multi-effect aggregation stays AR3, and statuses remain unchanged.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 26,
-    "reviewedSha256": "8e0517869d9b81aab580d15b459310acdd943fc6b13571fd3dd486b275690a05"
+    "reviewedSha256": "45a1417abc3ad214870f10ed9e868856b5c8a072bb6083b28fae1c65382a88de"
   },
   "reviewers": [{
     "reviewerId": "architecture-reset-planning-review",
