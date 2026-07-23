@@ -309,6 +309,7 @@ describe("jobs service", () => {
       { id: "job_20260710_agent0001", class: "agent_ingest", state: "running" },
       { id: "job_20260710_backup001", class: "backup", state: "running" },
       { id: "job_20260710_restore01", class: "restore", state: "running" },
+      { id: "job_20260710_maint0001", class: "maintenance", state: "running" },
       {
         id: "job_20260710_cancel001",
         class: "parse",
@@ -332,30 +333,30 @@ describe("jobs service", () => {
     const queued = jobs.list({ states: ["queued"], limit: 10 }).jobs;
     const retryable = jobs.list({ states: ["failed_retryable"], limit: 10 }).jobs;
 
-    expect(result).toEqual({ requeued: 4, failedRetryable: 1 });
+    expect(result).toEqual({ requeued: 4, failedRetryable: 2 });
     expect(queued.map((job) => job.class).sort()).toEqual(["agent_ingest", "capture", "ocr", "parse"]);
     expect(queued.every((job) => job.message.includes("validated outputs will be reused"))).toBe(true);
     expect(readJobCancellation(vaultPath, "job_20260710_capture01")).toEqual({
       safeCheckpointId: "capture_source_page_publication_started",
       durableWritesApplied: true
     });
-    expect(retryable.map((job) => job.id)).toEqual(["job_20260710_restore01"]);
-    expect(retryable.every((job) => job.message.includes("explicit retry"))).toBe(true);
+    expect(retryable.map((job) => job.id).sort()).toEqual([
+      "job_20260710_maint0001",
+      "job_20260710_restore01"
+    ]);
     expect(jobs.list({ states: ["cancelled"], limit: 10 }).jobs).toEqual([
       expect.objectContaining({ id: "job_20260710_cancel001", state: "cancelled" })
     ]);
     expect(jobs.list({ classes: ["backup"], limit: 10 }).jobs).toEqual([
       expect.objectContaining({ id: "job_20260710_backup001", state: "running" })
     ]);
-
-    const retryableWithoutDurableOutput = requireValue(
-      retryable.find((job) => job.id === "job_20260710_restore01")
-    );
-    expect(jobs.cancel({ jobId: retryableWithoutDurableOutput.id })).toMatchObject({
-      status: "cancelled",
-      job: { id: retryableWithoutDurableOutput.id, state: "cancelled" }
+    expect(jobs.list({ classes: ["restore"], limit: 10 }).jobs).toEqual([
+      expect.objectContaining({ id: "job_20260710_restore01", state: "failed_retryable" })
+    ]);
+    expect(jobs.cancel({ jobId: "job_20260710_maint0001" })).toMatchObject({
+      status: "not_allowed",
+      job: { id: "job_20260710_maint0001", state: "failed_retryable" }
     });
-    expect(readJobCancellation(vaultPath, retryableWithoutDurableOutput.id)?.durableWritesApplied).toBe(false);
   });
 
   it("marks an interrupted Home retrieval query retryable without queuing an unsupported generic retry", () => {

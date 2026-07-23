@@ -75,6 +75,10 @@ import {
   type ResumeJobInput
 } from "./job-execution-coordinator";
 import {
+  createJobClassExecutorRegistry,
+  type JobClassExecutorRegistry
+} from "./job-class-executor-registry";
+import {
   assertReaderSelectionJobBinding,
   createReaderSelectionJobRefs,
   isValidReaderSelectionJobScope,
@@ -214,15 +218,6 @@ const CANCELABLE_STATES = new Set<JobState>([
   "failed_retryable"
 ]);
 const RETRYABLE_STATES = new Set<JobState>(["failed_retryable", "waiting_dependency", "cancelled"]);
-const COOPERATIVELY_CANCELABLE_CLASSES = new Set<JobClass>([
-  "parse",
-  "ocr",
-  "dataset_import",
-  "agent_turn",
-  "agent_ingest",
-  "index_rebuild"
-]);
-
 export class JobsService {
   readonly #vaults: JobsVaultPort;
   readonly #sourcePages: SourcePageService;
@@ -231,6 +226,7 @@ export class JobsService {
   readonly #documentParser: DocumentParserPort | undefined;
   readonly #ocr: OcrPort | undefined;
   readonly #datasets: DatasetMaterializerPort | undefined;
+  readonly #executors: JobClassExecutorRegistry;
   readonly #jobRecordStores = new Map<string, JobRecordStore>();
   readonly #jobExecutionCoordinators = new Map<string, JobExecutionCoordinator>();
   readonly #activeExecutions = new Map<string, AbortController>();
@@ -242,7 +238,8 @@ export class JobsService {
     database?: LocalDatabaseService,
     documentParser?: DocumentParserPort,
     ocr?: OcrPort,
-    datasets?: DatasetMaterializerPort
+    datasets?: DatasetMaterializerPort,
+    executors: JobClassExecutorRegistry = createJobClassExecutorRegistry()
   ) {
     this.#vaults = vaults;
     this.#sourcePages = new SourcePageService();
@@ -251,6 +248,7 @@ export class JobsService {
     this.#documentParser = documentParser;
     this.#ocr = ocr;
     this.#datasets = datasets;
+    this.#executors = executors;
   }
 
   list(request: JobsListRequest = {}): JobsListResult {
@@ -287,6 +285,11 @@ export class JobsService {
       throw new PigeDomainError("job.binding_changed", "The Job no longer belongs to the active vault.");
     }
     return toJobSummary(vaultPath, job);
+  }
+
+  readJobClass(jobId: string): JobClass | undefined {
+    const vaultPath = this.#requireActiveVaultPath();
+    return this.#readJobSnapshot(vaultPath, jobId)?.job.class;
   }
 
   async approveProposal(
@@ -395,6 +398,15 @@ export class JobsService {
       return { status: "not_found", reason: "Job record was not found." };
     }
     const jobFile = { path: snapshot.path, job: snapshot.job };
+    const executor = this.#executors.require(jobFile.job.class);
+
+    if (executor.actionOwner === "external") {
+      return {
+        status: "not_allowed",
+        reason: `The ${jobFile.job.class} owner must handle cancellation.`,
+        job: toJobSummary(vaultPath, jobFile.job)
+      };
+    }
 
     if (jobFile.job.state === "cancel_requested") {
       return {
@@ -405,7 +417,10 @@ export class JobsService {
 
     if (jobFile.job.state === "running") {
       const controller = this.#activeExecutions.get(jobFile.job.id);
-      if (!controller || !COOPERATIVELY_CANCELABLE_CLASSES.has(jobFile.job.class)) {
+      if (
+        !controller ||
+        executor.runningCancellation !== "cooperative"
+      ) {
         return {
           status: "not_allowed",
           reason: `Running ${jobFile.job.class} jobs do not support cooperative cancellation.`,
@@ -470,10 +485,13 @@ export class JobsService {
       };
     }
 
-    if (jobFile.job.class === "retrieval_query") {
+    const retryPolicy = this.#executors.require(jobFile.job.class).retryPolicy;
+    if (retryPolicy !== "requeue") {
       return {
         status: "not_allowed",
-        reason: "Submit the Home question again to start a new bounded Agent turn.",
+        reason: retryPolicy === "external"
+          ? `The ${jobFile.job.class} owner must handle this retry.`
+          : "Submit the original action again instead of replaying this Job class.",
         job: toJobSummary(vaultPath, jobFile.job)
       };
     }
@@ -1435,15 +1453,9 @@ export class JobsService {
     let failedRetryable = 0;
     for (const jobFile of readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))) {
       if (jobFile.job.state !== "running" && jobFile.job.state !== "cancel_requested") continue;
-      if (jobFile.job.class === "backup") continue;
-      const canResumeIdempotently = jobFile.job.state === "running" &&
-        (jobFile.job.class === "capture" ||
-          jobFile.job.class === "parse" ||
-          jobFile.job.class === "ocr" ||
-          jobFile.job.class === "dataset_import" ||
-          jobFile.job.class === "agent_turn" ||
-          jobFile.job.class === "agent_ingest" ||
-          jobFile.job.class === "index_rebuild");
+      const recoveryPolicy = this.#executors.require(jobFile.job.class).interruptedRecovery;
+      if (recoveryPolicy === "external") continue;
+      const canResumeIdempotently = jobFile.job.state === "running" && recoveryPolicy === "idempotent";
       const message = canResumeIdempotently
         ? "Pige restarted during this idempotent local job; validated outputs will be reused and processing has been requeued."
         : "Pige restarted before this job reached a safe completion point. Preserved inputs remain available for an explicit retry.";
@@ -1568,7 +1580,11 @@ export class JobsService {
     let failed = 0;
 
     for (const jobFile of jobFiles) {
-      let execution: { readonly job: JobRecord; readonly control: JobExecutionControl } | undefined;
+      let execution: {
+        readonly job: JobRecord;
+        readonly controller: AbortController;
+        readonly control: JobExecutionControl;
+      } | undefined;
       try {
         const sourceRecordFile = jobFile.job.sourceId ? readSourceRecordFile(vaultPath, jobFile.job.sourceId) : undefined;
         if (!sourceRecordFile) {
@@ -1577,7 +1593,7 @@ export class JobsService {
           continue;
         }
 
-        const captureExecution = this.#beginNonCooperativeExecution(
+        const captureExecution = this.#beginCooperativeExecution(
           jobFile,
           "capturing_source",
           "Publishing the preserved source into the local knowledge vault."
@@ -1590,9 +1606,12 @@ export class JobsService {
           captureExecution.job.id,
           sourceRecordFile.sourceRecord,
           {
-            onPublicationStart: () => captureExecution.control.markDurableCheckpoint(
-              "capture_source_page_publication_started"
-            )
+            onPublicationStart: () => {
+              captureExecution.control.throwIfCancellationRequested();
+              captureExecution.control.markDurableCheckpoint(
+                "capture_source_page_publication_started"
+              );
+            }
           }
         );
         appendLog(
@@ -1627,6 +1646,8 @@ export class JobsService {
           );
         }
         failed += 1;
+      } finally {
+        if (execution) this.#finishCooperativeExecution(execution.job.id, execution.controller);
       }
     }
 
@@ -3105,33 +3126,15 @@ export class JobsService {
     stage: JobStage,
     message: string
   ): { readonly job: JobRecord; readonly controller: AbortController; readonly control: JobExecutionControl } {
-    return this.#beginExecution(snapshot, stage, message, true);
-  }
-
-  #beginNonCooperativeExecution(
-    snapshot: JobRecordSnapshot,
-    stage: JobStage,
-    message: string
-  ): { readonly job: JobRecord; readonly control: JobExecutionControl } {
-    const execution = this.#beginExecution(snapshot, stage, message, false);
-    return { job: execution.job, control: execution.control };
-  }
-
-  #beginExecution(
-    snapshot: JobRecordSnapshot,
-    stage: JobStage,
-    message: string,
-    cooperative: boolean
-  ): { readonly job: JobRecord; readonly controller: AbortController; readonly control: JobExecutionControl } {
     const { path: jobPath, job } = snapshot;
     const controller = new AbortController();
     const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
-    if (cooperative) this.#activeExecutions.set(job.id, controller);
+    this.#activeExecutions.set(job.id, controller);
     let committed: JobRecord;
     try {
       committed = coordinator.begin(snapshot, { stage, message }).job;
     } catch (caught) {
-      if (cooperative) this.#activeExecutions.delete(job.id);
+      this.#activeExecutions.delete(job.id);
       throw caught;
     }
     return {

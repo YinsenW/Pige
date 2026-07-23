@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { VaultSummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import { JobRecordSchema, type JobRecord, type SourceKind, type SourceRecord } from "@pige/schemas";
@@ -40,10 +40,59 @@ const ONE_PIXEL_PNG = Uint8Array.from(Buffer.from(
 ));
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of tempRoots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
 describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
+  it("cancels a running capture before the source-page publication guard", () => {
+    const fixture = makeFixture();
+    const { capture, jobs } = makeServices(fixture);
+    const captured = capture.submitText({
+      text: "Preserve this source while cancelling its derived page.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const jobId = captured.jobId;
+    const createForSource = SourcePageService.prototype.createForSource;
+    let cancellation: ReturnType<JobsService["cancel"]> | undefined;
+    vi.spyOn(SourcePageService.prototype, "createForSource").mockImplementation(function (
+      vaultPath,
+      sourceRecord,
+      sourceRecordPath,
+      sourceJobId,
+      expectedCurrentSourceRecord,
+      hooks
+    ) {
+      cancellation = jobs.cancel({ jobId });
+      return createForSource.call(
+        this,
+        vaultPath,
+        sourceRecord,
+        sourceRecordPath,
+        sourceJobId,
+        expectedCurrentSourceRecord,
+        hooks
+      );
+    });
+
+    expect(jobs.processQueuedCaptures({ jobIds: [jobId] })).toEqual({
+      processed: 1,
+      completed: 0,
+      failed: 1
+    });
+    expect(cancellation).toMatchObject({
+      status: "cancel_requested",
+      job: { id: jobId, state: "cancel_requested" }
+    });
+    expect(readJobRecord(fixture.vaultPath, jobId)).toMatchObject({
+      state: "cancelled",
+      cancellation: { durableWritesApplied: false }
+    });
+    expect(readSourceRecord(fixture.vaultPath, captured.sourceId).knowledgePagePath).toBeUndefined();
+  });
+
   it("cancels running image OCR before durable output and clears retry orchestration state", async () => {
     const fixture = makeFixture();
     const adapter = new BlockingNativeOcrAdapter();

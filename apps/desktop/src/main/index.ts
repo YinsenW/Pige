@@ -137,10 +137,15 @@ import { DocumentParserService } from "./services/document-parser-service";
 import {
   JobsService,
   type ProcessQueuedCapturesResult,
+  type ProcessQueuedDatasetImportsResult,
   type ProcessQueuedIndexRebuildResult,
   type ProcessQueuedOcrResult,
   type ProcessQueuedParsesResult
 } from "./services/jobs-service";
+import {
+  createJobClassExecutorRegistry,
+  type JobClassExecutorRegistry
+} from "./services/job-class-executor-registry";
 import { LibraryService } from "./services/library-service";
 import { KnowledgeActivityService } from "./services/knowledge-activity-service";
 import {
@@ -226,6 +231,7 @@ let toolchainService: ToolchainService | undefined;
 let captureService: CaptureService | undefined;
 let homeAgentAttachmentService: HomeAgentAttachmentService | undefined;
 let jobsService: JobsService | undefined;
+let jobClassExecutorRegistry: JobClassExecutorRegistry | undefined;
 let knowledgeActivityService: KnowledgeActivityService | undefined;
 let libraryService: LibraryService | undefined;
 let notesService: NotesService | undefined;
@@ -344,6 +350,7 @@ app.on("second-instance", () => {
 });
 let captureDrainer: CoalescedBatchDrainer<ProcessQueuedCapturesResult> | undefined;
 let parseDrainer: CoalescedBatchDrainer<ProcessQueuedParsesResult> | undefined;
+let datasetImportDrainer: CoalescedBatchDrainer<ProcessQueuedDatasetImportsResult> | undefined;
 let ocrDrainer: CoalescedBatchDrainer<ProcessQueuedOcrResult> | undefined;
 let agentIngestDrainer: CoalescedBatchDrainer<ProcessQueuedCapturesResult> | undefined;
 let agentTurnDrainer: CoalescedBatchDrainer<Awaited<ReturnType<HomeAgentService["resumeWaitingTurns"]>>> | undefined;
@@ -729,10 +736,50 @@ const getJobsService = (): JobsService => {
       getLocalDatabaseService(),
       getDocumentParserService(),
       getOcrService(),
-      getDatasetService()
+      getDatasetService(),
+      getJobClassExecutorRegistry()
     );
   }
   return jobsService;
+};
+
+const getJobClassExecutorRegistry = (): JobClassExecutorRegistry => {
+  jobClassExecutorRegistry ??= createJobClassExecutorRegistry({
+    capture: { schedule: scheduleCaptureProcessing },
+    parse: { schedule: scheduleParseProcessing },
+    ocr: { schedule: scheduleOcrProcessing },
+    dataset_import: { schedule: scheduleDatasetImportProcessing },
+    agent_ingest: { schedule: scheduleAgentIngestProcessing },
+    agent_turn: {
+      schedule: () => {
+        scheduleAgentIngestProcessing();
+        scheduleAgentTurnProcessing();
+      }
+    },
+    index_rebuild: { schedule: scheduleIndexRebuildProcessing },
+    backup: {
+      cancel: async (request) => {
+        const backup = await getBackupCoordinatorService().cancel(request);
+        return backup
+          ? projectBackupJobAction(
+              backup.id,
+              backup.state === "cancel_requested"
+                ? "cancel_requested"
+                : backup.state === "cancelled"
+                  ? "cancelled"
+                  : "not_allowed"
+            )
+          : { status: "not_found", reason: "Job record was not found." };
+      },
+      retry: async (request) => {
+        const backup = await getBackupCoordinatorService().retry(request);
+        return backup
+          ? { status: backup.status, job: getJobsService().summarize(backup.job) }
+          : { status: "not_found", reason: "Job record was not found." };
+      }
+    }
+  });
+  return jobClassExecutorRegistry;
 };
 
 const getPermissionedExternalCapabilityRegistry = (): PermissionedExternalCapabilityRegistry => {
@@ -1159,6 +1206,17 @@ const scheduleParseProcessing = (): void => {
   parseDrainer.schedule();
 };
 
+const scheduleDatasetImportProcessing = (): void => {
+  datasetImportDrainer ??= new CoalescedBatchDrainer({
+    runBatch: () => getJobsService().processQueuedDatasetImports({ limit: 20 }),
+    onError: () => recordBackgroundFailure(
+      "dataset.import.background_failed",
+      "Background Dataset materialization failed."
+    )
+  });
+  datasetImportDrainer.schedule();
+};
+
 const scheduleOcrProcessing = (): void => {
   ocrDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getJobsService().processQueuedOcr({ limit: 20 }),
@@ -1209,6 +1267,7 @@ const pauseMutableWorkForRestore = async (): Promise<() => void> => {
     for (const drainer of [
       captureDrainer,
       parseDrainer,
+      datasetImportDrainer,
       ocrDrainer,
       agentIngestDrainer,
       agentTurnDrainer,
@@ -1334,12 +1393,7 @@ const resumeBackgroundJobs = (): void => {
         message: "Durable proposal decision recovery failed."
       });
     });
-    scheduleCaptureProcessing();
-    scheduleParseProcessing();
-    scheduleOcrProcessing();
-    scheduleAgentIngestProcessing();
-    scheduleAgentTurnProcessing();
-    scheduleIndexRebuildProcessing();
+    getJobClassExecutorRegistry().scheduleAll();
   } catch {
     getDiagnosticsService().recordEvent({
       level: "warning",
@@ -1592,46 +1646,18 @@ ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
 });
 ipcMain.handle("jobs.list", (_event, request?: JobsListRequest) => getJobsService().list(request));
 ipcMain.handle("jobs.cancel", async (_event, request: JobActionRequest): Promise<JobActionResult> => {
-  const backup = await getBackupCoordinatorService().cancel(request);
-  if (backup) {
-    return projectBackupJobAction(
-      backup.id,
-      backup.state === "cancel_requested"
-        ? "cancel_requested"
-        : backup.state === "cancelled"
-          ? "cancelled"
-          : "not_allowed"
-    );
-  }
-  return getJobsService().cancel(request);
+  const jobs = getJobsService();
+  const jobClass = jobs.readJobClass(request.jobId);
+  const executor = jobClass ? getJobClassExecutorRegistry().require(jobClass) : undefined;
+  return executor?.cancel ? await executor.cancel(request) : jobs.cancel(request);
 });
 ipcMain.handle("jobs.retry", async (_event, request: JobActionRequest) => {
-  const backup = await getBackupCoordinatorService().retry(request);
-  if (backup) {
-    return {
-      status: backup.status,
-      job: getJobsService().summarize(backup.job)
-    } satisfies JobActionResult;
-  }
-  const result = getJobsService().retry(request);
-  if (result.status === "requeued" && result.job?.class === "capture") {
-    scheduleCaptureProcessing();
-  }
-  if (result.status === "requeued" && result.job?.class === "parse") {
-    scheduleParseProcessing();
-  }
-  if (result.status === "requeued" && result.job?.class === "ocr") {
-    scheduleOcrProcessing();
-  }
-  if (result.status === "requeued" && result.job?.class === "agent_ingest") {
-    scheduleAgentIngestProcessing();
-  }
-  if (result.status === "requeued" && result.job?.class === "agent_turn") {
-    scheduleAgentIngestProcessing();
-    scheduleAgentTurnProcessing();
-  }
-  if (result.status === "requeued" && result.job?.class === "index_rebuild") {
-    scheduleIndexRebuildProcessing();
+  const jobs = getJobsService();
+  const jobClass = jobs.readJobClass(request.jobId);
+  const executor = jobClass ? getJobClassExecutorRegistry().require(jobClass) : undefined;
+  const result = executor?.retry ? await executor.retry(request) : jobs.retry(request);
+  if (result.status === "requeued" && result.job) {
+    getJobClassExecutorRegistry().require(result.job.class).schedule?.(result.job.id);
   }
   return result;
 });
@@ -2281,7 +2307,8 @@ app.whenReady().then(async () => {
     getLocalDatabaseService(),
     getDocumentParserService(),
     getOcrService(),
-    getDatasetService()
+    getDatasetService(),
+    getJobClassExecutorRegistry()
   );
   diagnosticsService = new DiagnosticsService(app.getPath("userData"));
   const restoreRecovery = await getRestoreCoordinatorService().recoverInterrupted();
