@@ -11,8 +11,10 @@ import {
   type JobCheckpoint,
   type JobRecord,
   type JobRef,
-  type OperationRecord
+  type OperationRecord,
+  type PigeErrorSummary
 } from "@pige/schemas";
+import { JobExecutionCoordinator } from "./job-execution-coordinator";
 import { JobRecordStore, type JobRecordSnapshot } from "./job-record-store";
 import { acquireVaultWriterLease, type VaultWriterLease } from "./vault-writer-lease";
 
@@ -26,6 +28,20 @@ export const RESTORE_CHECKPOINT_IDS = [
   "destination_committed",
   "indexes_rebuilt"
 ] as const;
+
+export function createRestoreJobError(codeInput: string | undefined, retryable: boolean): PigeErrorSummary {
+  const code = codeInput && /^(?:backup|restore|vault)\./u.test(codeInput)
+    ? codeInput
+    : "restore.execution_failed";
+  return {
+    code,
+    domain: code.startsWith("backup.") ? "backup" : code.startsWith("vault.") ? "vault" : "restore",
+    messageKey: `errors.${code}`,
+    retryable,
+    severity: "error",
+    userAction: retryable ? "retry" : "choose_path"
+  };
+}
 
 export type RestoreCheckpointId = typeof RESTORE_CHECKPOINT_IDS[number];
 export type RestoreJobMode = "clone_as_new" | "replace_existing";
@@ -245,7 +261,7 @@ export class RestoreJobStore {
   listRecoverable(): readonly JobRecordSnapshot[] {
     return this.#listAll()
       .filter(({ job }) =>
-        job.class === "restore" && new Set(["queued", "running"]).has(job.state)
+        job.class === "restore" && new Set(["queued", "running", "cancel_requested"]).has(job.state)
       )
       .sort((left, right) => left.job.createdAt.localeCompare(right.job.createdAt));
   }
@@ -272,32 +288,24 @@ export class RestoreJobStore {
   }
 
   prepareExplicitRetry(snapshot: JobRecordSnapshot): JobRecordSnapshot {
+    if (snapshot.job.state === "running") return this.recoverInterrupted(snapshot);
     if (snapshot.job.state === "failed_retryable") {
-      return this.#mutate(snapshot, (current) => {
-        if (current.state !== "failed_retryable") return assertRestoreApplyState(current);
-        const {
-          finishedAt: _finishedAt,
-          error: _error,
-          waitingDependency: _waitingDependency,
-          ...rest
-        } = current;
-        return JobRecordSchema.parse({
-          ...rest,
-          state: "queued",
-          stage: "restoring",
-          updatedAt: new Date().toISOString(),
-          retry: {
-            retryCount: (current.retry?.retryCount ?? 0) + 1,
-            maxAutomaticRetries: 0,
-            requiresUserAction: false,
-            lastRetryReason: "explicit_user_retry"
-          },
-          message: "An explicit Restore retry was accepted for the same durable Job."
-        });
+      return this.#coordinator().prepareRetry(snapshot, {
+        message: "An explicit Restore retry was accepted for the same durable Job.",
+        reason: "explicit_user_retry"
       });
     }
     assertRestoreApplyState(snapshot.job);
     return snapshot;
+  }
+
+  recoverInterrupted(snapshot: JobRecordSnapshot): JobRecordSnapshot {
+    if (snapshot.job.state !== "running" && snapshot.job.state !== "cancel_requested") return snapshot;
+    return this.#coordinator().recoverInterrupted(snapshot, {
+      canResumeIdempotently: snapshot.job.state === "running",
+      queuedMessage: "Interrupted Restore recovery is queued with its exact checkpoint identity.",
+      retryableMessage: "Interrupted Restore recovery requires an explicit retry."
+    });
   }
 
   beginCheckpoint(snapshot: JobRecordSnapshot, checkpointId: RestoreCheckpointId): JobRecordSnapshot {
@@ -321,70 +329,68 @@ export class RestoreJobStore {
 
   markFailed(
     snapshot: JobRecordSnapshot,
-    input: { readonly retryable: boolean; readonly message: string }
+    input: { readonly error: PigeErrorSummary; readonly message: string }
   ): JobRecordSnapshot {
-    return this.#mutate(snapshot, (current) => JobRecordSchema.parse({
-      ...current,
-      state: input.retryable ? "failed_retryable" : "failed_final",
-      stage: "restoring",
-      updatedAt: new Date().toISOString(),
-      finishedAt: new Date().toISOString(),
-      retry: {
-        retryCount: current.retry?.retryCount ?? 0,
-        maxAutomaticRetries: 0,
-        requiresUserAction: input.retryable
-      },
-      message: input.message
-    }));
+    return this.#coordinator().settle(snapshot, input.error.retryable ? {
+      kind: "requeue",
+      error: { ...input.error, retryable: true },
+      reason: input.error.code,
+      maxAutomaticRetries: 0,
+      requiresUserAction: true,
+      message: input.message,
+      facts: { stage: "restoring" }
+    } : {
+      kind: "failed",
+      error: { ...input.error, retryable: false },
+      message: input.message,
+      facts: { stage: "restoring" }
+    });
   }
 
   linkChildJob(snapshot: JobRecordSnapshot, childJobId: string): JobRecordSnapshot {
     const parsedChildJobId = JobIdSchema.parse(childJobId);
-    return this.#mutate(snapshot, (current) => JobRecordSchema.parse({
-      ...current,
-      updatedAt: new Date().toISOString(),
-      childJobIds: Array.from(new Set([...(current.childJobIds ?? []), parsedChildJobId]))
-    }));
+    return this.#coordinator().patch(snapshot, { childJobIds: [parsedChildJobId] });
   }
 
-  markCompleted(
-    snapshot: JobRecordSnapshot,
-    operation: OperationRecord,
-    resultVaultId: string,
-    destinationPath: string
-  ): JobRecordSnapshot {
-    return this.#mutate(snapshot, (current) => {
-      if ((current.checkpoints ?? []).some((checkpoint) => checkpoint.state !== "done")) {
+  markCompleted(snapshot: JobRecordSnapshot, operation: OperationRecord, resultVaultId: string, destinationPath: string): JobRecordSnapshot {
+    return this.#coordinator().convergeLatest(this.read(snapshot.job.id), {
+      read: () => this.read(snapshot.job.id),
+      acceptTerminal: (job) => {
+        const exact = job.operationIds?.includes(operation.id) &&
+          job.outputRefs?.some((ref) => ref.role === "restore_applied" && ref.id === operation.id) &&
+          job.outputRefs.some((ref) => ref.role === "restored_vault" &&
+          ref.id === resultVaultId && path.resolve(ref.path ?? "") === path.resolve(destinationPath));
+        if (!exact) throw new PigeDomainError("restore.job_conflict", "Completed Restore Job output binding changed.");
+        return true;
+      },
+      apply: (current) => {
+        if ((current.job.checkpoints ?? []).some((checkpoint) => checkpoint.state !== "done")) {
         throw new PigeDomainError("restore.checkpoint_invalid", "Restore cannot complete before every checkpoint.");
-      }
-      const outputRefs: JobRef[] = [
-        ...(current.outputRefs ?? []),
-        { kind: "operation", id: operation.id, role: "restore_applied" },
-        {
-          kind: "external_uri",
-          id: resultVaultId,
-          path: path.resolve(destinationPath),
-          role: "restored_vault"
         }
-      ];
-      return JobRecordSchema.parse({
-        ...current,
-        state: operation.warnings.length > 0 ? "completed_with_warnings" : "completed",
-        stage: "restoring",
-        updatedAt: new Date().toISOString(),
-        finishedAt: new Date().toISOString(),
-        activeVaultId: VaultIdSchema.parse(resultVaultId),
-        outputRefs: dedupeJobRefs(outputRefs),
-        operationIds: Array.from(new Set([...(current.operationIds ?? []), operation.id])),
-        progress: {
-          completedUnits: RESTORE_CHECKPOINT_IDS.length,
-          totalUnits: RESTORE_CHECKPOINT_IDS.length,
-          unit: "checkpoint"
-        },
-        message: operation.warnings.length > 0
-          ? "Restore completed with bounded external dependency warnings."
-          : "Restore completed and the restored vault binding is active."
-      });
+        const outputRefs: JobRef[] = [...(current.job.outputRefs ?? []),
+          { kind: "operation", id: operation.id, role: "restore_applied" },
+          { kind: "external_uri", id: resultVaultId, path: path.resolve(destinationPath), role: "restored_vault" }];
+        return this.#coordinator().adoptDurableCompletion(current, {
+          checkpointId: "destination_committed",
+          ...(operation.warnings.length > 0 ? { result: "completed_with_warnings" as const } : {}),
+          message: operation.warnings.length > 0
+            ? "Restore completed with bounded external dependency warnings."
+            : "Restore completed and the restored vault binding is active.",
+          facts: {
+            stage: "restoring",
+            activeVaultId: VaultIdSchema.parse(resultVaultId),
+            outputRefs: dedupeJobRefs(outputRefs),
+            operationIds: Array.from(new Set([...(current.job.operationIds ?? []), operation.id])),
+            progress: {
+              completedUnits: RESTORE_CHECKPOINT_IDS.length,
+              totalUnits: RESTORE_CHECKPOINT_IDS.length,
+              unit: "checkpoint"
+            }
+          }
+        });
+      },
+      missingMessage: "The Restore Job disappeared after its durable effect.",
+      conflictMessage: "The Restore Job could not converge after its durable effect."
     });
   }
 
@@ -465,71 +471,67 @@ export class RestoreJobStore {
       readonly resumeHint?: string;
     } = {}
   ): JobRecordSnapshot {
-    return this.#mutate(snapshot, (current) => {
-      const checkpoints = current.checkpoints ?? [];
-      const index = RESTORE_CHECKPOINT_IDS.indexOf(checkpointId);
-      const currentCheckpoint = checkpoints[index];
-      if (!currentCheckpoint || currentCheckpoint.id !== checkpointId) {
-        throw new PigeDomainError("restore.checkpoint_invalid", "Restore checkpoint order is invalid.");
-      }
-      if (checkpoints.slice(0, index).some((checkpoint) => checkpoint.state !== "done")) {
-        throw new PigeDomainError("restore.checkpoint_invalid", "A restore checkpoint was attempted out of order.");
-      }
-      if (currentCheckpoint.state === "done") return current;
-      if (state === "done" && currentCheckpoint.state !== "running") {
-        throw new PigeDomainError("restore.checkpoint_invalid", "A restore checkpoint must begin before completion.");
-      }
-      const now = new Date().toISOString();
-      const nextCheckpoint: JobCheckpoint = {
-        ...currentCheckpoint,
-        state,
-        startedAt: currentCheckpoint.startedAt ?? now,
-        ...(state === "done" ? { finishedAt: now } : {}),
-        inputRefs: [...(input.inputRefs ?? currentCheckpoint.inputRefs)],
-        outputRefs: [...(input.outputRefs ?? currentCheckpoint.outputRefs)],
-        ...(input.checksumBefore ? { checksumBefore: input.checksumBefore } : {}),
-        ...(input.checksumAfter ? { checksumAfter: input.checksumAfter } : {}),
-        ...(input.operationId ? { operationId: OperationIdSchema.parse(input.operationId) } : {}),
-        ...(input.resumeHint ? { resumeHint: input.resumeHint } : {})
-      };
-      const nextCheckpoints = checkpoints.map((checkpoint, checkpointIndex) =>
-        checkpointIndex === index ? nextCheckpoint : checkpoint
-      );
-      const completedUnits = nextCheckpoints.filter((checkpoint) => checkpoint.state === "done").length;
-      return JobRecordSchema.parse({
-        ...current,
-        state: "running",
-        stage: "restoring",
-        startedAt: current.startedAt ?? now,
-        updatedAt: now,
-        checkpoints: nextCheckpoints,
-        progress: {
-          completedUnits,
-          totalUnits: RESTORE_CHECKPOINT_IDS.length,
-          unit: "checkpoint"
-        },
-        message: state === "done"
-          ? `Restore checkpoint ${checkpointId} completed.`
-          : `Restore checkpoint ${checkpointId} is running.`
+    const current = snapshot.job;
+    const checkpoints = current.checkpoints ?? [];
+    const index = RESTORE_CHECKPOINT_IDS.indexOf(checkpointId);
+    const currentCheckpoint = checkpoints[index];
+    if (!currentCheckpoint || currentCheckpoint.id !== checkpointId) {
+      throw new PigeDomainError("restore.checkpoint_invalid", "Restore checkpoint order is invalid.");
+    }
+    if (checkpoints.slice(0, index).some((checkpoint) => checkpoint.state !== "done")) {
+      throw new PigeDomainError("restore.checkpoint_invalid", "A restore checkpoint was attempted out of order.");
+    }
+    if (currentCheckpoint.state === "done") return snapshot;
+    if (state === "done" && currentCheckpoint.state !== "running") {
+      throw new PigeDomainError("restore.checkpoint_invalid", "A restore checkpoint must begin before completion.");
+    }
+    const now = new Date().toISOString();
+    const nextCheckpoint: JobCheckpoint = {
+      ...currentCheckpoint,
+      state,
+      startedAt: currentCheckpoint.startedAt ?? now,
+      ...(state === "done" ? { finishedAt: now } : {}),
+      inputRefs: [...(input.inputRefs ?? currentCheckpoint.inputRefs)],
+      outputRefs: [...(input.outputRefs ?? currentCheckpoint.outputRefs)],
+      ...(input.checksumBefore ? { checksumBefore: input.checksumBefore } : {}),
+      ...(input.checksumAfter ? { checksumAfter: input.checksumAfter } : {}),
+      ...(input.operationId ? { operationId: OperationIdSchema.parse(input.operationId) } : {}),
+      ...(input.resumeHint ? { resumeHint: input.resumeHint } : {})
+    };
+    const nextCheckpoints = checkpoints.map((checkpoint, checkpointIndex) =>
+      checkpointIndex === index ? nextCheckpoint : checkpoint
+    );
+    const completedUnits = nextCheckpoints.filter((checkpoint) => checkpoint.state === "done").length;
+    const message = state === "done"
+      ? `Restore checkpoint ${checkpointId} completed.`
+      : `Restore checkpoint ${checkpointId} is running.`;
+    const facts = {
+      stage: "restoring" as const,
+      checkpoints: nextCheckpoints,
+      progress: {
+        completedUnits,
+        totalUnits: RESTORE_CHECKPOINT_IDS.length,
+        unit: "checkpoint"
+      },
+      message
+    };
+    const owner = this.#coordinator();
+    if (state === "running" && current.state === "queued") {
+      return owner.begin(snapshot, { stage: "restoring", message, facts });
+    }
+    if (state === "done" && checkpointId === "destination_committed") {
+      return owner.markDurableBoundary(snapshot, {
+        checkpointId: "destination_committed",
+        message,
+        facts
       });
-    });
+    }
+    return owner.patch(snapshot, facts);
   }
 
-  #mutate(
-    snapshot: JobRecordSnapshot,
-    transform: (current: JobRecord) => JobRecord
-  ): JobRecordSnapshot {
+  #coordinator(): JobExecutionCoordinator {
     this.#assertHeld();
-    const claim = this.#jobs.acquireClaim(snapshot.path);
-    try {
-      const current = claim.read();
-      if (current.job.id !== snapshot.job.id) {
-        throw new PigeDomainError("job.revision_conflict", "The Restore Job identity changed.");
-      }
-      return claim.compareAndSwap(current, transform(current.job));
-    } finally {
-      claim.release();
-    }
+    return new JobExecutionCoordinator(this.#jobs);
   }
 
   #assertHeld(): void {

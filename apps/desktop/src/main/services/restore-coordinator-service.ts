@@ -27,8 +27,10 @@ import {
   type RestoreDestinationIdentity
 } from "./backup-service";
 import { JobRecordStore, type JobRecordSnapshot } from "./job-record-store";
+import { JobExecutionCoordinator } from "./job-execution-coordinator";
 import type { ApplyingRestorePreview } from "./restore-preview-registry";
 import {
+  createRestoreJobError,
   RestoreJobStore,
   createPreviousVaultBindingHash,
   type RestoreJobBinding
@@ -174,7 +176,8 @@ export class RestoreCoordinatorService {
     try {
       for (const snapshot of this.#jobs.listRecoverable()) {
         try {
-          const binding = this.#jobs.binding(snapshot);
+          const recoverable = this.#jobs.recoverInterrupted(snapshot);
+          const binding = this.#jobs.binding(recoverable);
           const destinationIdentity = createRestoreDestinationIdentity(
             binding.destinationPath,
             this.#pathSafety
@@ -182,14 +185,14 @@ export class RestoreCoordinatorService {
           if (destinationIdentity.identityDigest !== binding.destinationIdentity) {
             throw new PigeDomainError("restore.destination_changed", "Restore destination identity changed.");
           }
-          await this.#run(snapshot, binding, destinationIdentity);
+          await this.#run(recoverable, binding, destinationIdentity);
           recovered += 1;
         } catch (caught) {
           try {
             const current = this.#jobs.read(snapshot.job.id);
             if (current.job.state === "queued" || current.job.state === "running") {
               this.#jobs.markFailed(current, {
-                retryable: isRetryableRestoreFailure(caught),
+                error: createRestoreJobError(caught instanceof PigeDomainError ? caught.code : undefined, isRetryableRestoreFailure(caught)),
                 message: safeRestoreFailureMessage(caught)
               });
             }
@@ -337,7 +340,7 @@ export class RestoreCoordinatorService {
       }
       try {
         this.#jobs.markFailed(snapshot, {
-          retryable: isRetryableRestoreFailure(caught),
+          error: createRestoreJobError(caught instanceof PigeDomainError ? caught.code : undefined, isRetryableRestoreFailure(caught)),
           message: safeRestoreFailureMessage(caught)
         });
       } catch {
@@ -659,20 +662,18 @@ function startRollbackBackupJob(store: JobRecordStore, snapshot: JobRecordSnapsh
   if (snapshot.job.state === "failed_final" || snapshot.job.state === "cancelled") {
     throw new PigeDomainError("backup.job_conflict", "Rollback backup cannot restart from a terminal state.");
   }
-  const { error: _error, finishedAt: _finishedAt, ...rest } = snapshot.job;
-  return store.compareAndSwap(snapshot, JobRecordSchema.parse({
-    ...rest,
-    state: "running",
-    stage: "backing_up",
-    startedAt: snapshot.job.startedAt ?? new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    checkpoints: (snapshot.job.checkpoints ?? []).map((checkpoint, index) => index === 0 ? {
-      ...checkpoint,
-      state: "running",
-      startedAt: checkpoint.startedAt ?? new Date().toISOString()
-    } : checkpoint),
-    message: "Rollback backup preflight is running."
-  }));
+  const checkpoints = (snapshot.job.checkpoints ?? []).map((checkpoint, index) => index === 0
+    ? { ...checkpoint, state: "running" as const, startedAt: checkpoint.startedAt ?? new Date().toISOString() }
+    : checkpoint);
+  const facts = { stage: "backing_up" as const, checkpoints };
+  const owner = new JobExecutionCoordinator(store);
+  return snapshot.job.state === "running"
+    ? owner.patch(snapshot, { ...facts, message: "Rollback backup preflight is running." })
+    : owner.begin(snapshot, {
+        stage: "backing_up",
+        message: "Rollback backup preflight is running.",
+        facts
+      });
 }
 
 function assertRollbackBackupCheckpoints(job: JobRecord, inspected: RestoreCorePreviewResult): void {
@@ -709,30 +710,27 @@ function markRollbackBackupFailed(
   const code = caught instanceof PigeDomainError && caught.code.startsWith("backup.")
     ? caught.code
     : "backup.execution_failed";
-  const now = new Date().toISOString();
-  return store.compareAndSwap(snapshot, JobRecordSchema.parse({
-    ...snapshot.job,
-    state: retryable ? "failed_retryable" : "failed_final",
-    updatedAt: now,
-    finishedAt: now,
-    error: {
-      code,
-      domain: "backup",
-      messageKey: `errors.${code}`,
-      retryable,
-      severity: "error",
-      userAction: retryable ? "retry" : "none"
-    },
-    retry: {
-      retryCount: snapshot.job.retry?.retryCount ?? 0,
-      maxAutomaticRetries: 0,
-      requiresUserAction: retryable,
-      lastRetryReason: code
-    },
-    message: retryable
-      ? "Rollback backup stopped safely and may be retried with the same identity."
-      : "Rollback backup stopped because its durable identity or archive conflicted."
-  }));
+  const error = {
+    code,
+    domain: "backup" as const,
+    messageKey: `errors.${code}`,
+    retryable,
+    severity: "error" as const,
+    userAction: retryable ? "retry" as const : "none" as const
+  };
+  const owner = new JobExecutionCoordinator(store);
+  return owner.settle(snapshot, retryable ? {
+    kind: "requeue",
+    error: { ...error, retryable: true },
+    reason: code,
+    maxAutomaticRetries: 0,
+    requiresUserAction: true,
+    message: "Rollback backup stopped safely and may be retried with the same identity."
+  } : {
+    kind: "failed",
+    error: { ...error, retryable: false },
+    message: "Rollback backup stopped because its durable identity or archive conflicted."
+  });
 }
 
 function rollbackBackupCheckpointDigests(job: JobRecord): Pick<
@@ -792,10 +790,7 @@ function recordRollbackBackupCheckpoint(
       ...(checksum ? { checksumAfter: checksum } : {})
     };
   });
-  return store.compareAndSwap(snapshot, JobRecordSchema.parse({
-    ...snapshot.job,
-    state: "running",
-    updatedAt: now,
+  const facts = {
     checkpoints,
     progress: {
       completedUnits: checkpoints.filter((checkpoint) => checkpoint.state === "done").length,
@@ -803,7 +798,15 @@ function recordRollbackBackupCheckpoint(
       unit: "checkpoint"
     },
     message: `Rollback backup checkpoint ${event.phase} completed.`
-  }));
+  };
+  const owner = new JobExecutionCoordinator(store);
+  return event.phase === "archive_finalized"
+    ? owner.markDurableBoundary(snapshot, {
+        checkpointId: "archive_finalized",
+        message: facts.message,
+        facts
+      })
+    : owner.patch(snapshot, facts);
 }
 
 function completeRollbackBackupJob(
@@ -813,7 +816,6 @@ function completeRollbackBackupJob(
   operationId: string
 ): JobRecordSnapshot {
   assertRollbackBackupCheckpoints(snapshot.job, inspected);
-  const now = new Date().toISOString();
   const backupRef: JobRef = {
     kind: "backup",
     id: inspected.backupId,
@@ -821,25 +823,24 @@ function completeRollbackBackupJob(
     checksum: inspected.archiveDigest,
     role: "rollback_backup"
   };
-  return store.compareAndSwap(snapshot, JobRecordSchema.parse({
-    ...snapshot.job,
-    state: "completed",
-    stage: "backing_up",
-    updatedAt: now,
-    finishedAt: now,
-    outputRefs: [backupRef, { kind: "operation", id: operationId, role: "backup_created" }],
-    operationIds: [operationId],
-    checkpoints: (snapshot.job.checkpoints ?? []).map((checkpoint) => ({
-      ...checkpoint,
-      outputRefs: checkpoint.id === "archive_finalized" ? [backupRef] : checkpoint.outputRefs
-    })),
-    progress: {
-      completedUnits: BACKUP_CHECKPOINT_IDS.length,
-      totalUnits: BACKUP_CHECKPOINT_IDS.length,
-      unit: "checkpoint"
-    },
-    message: "Rollback backup completed and passed archive validation."
-  }));
+  return new JobExecutionCoordinator(store).adoptDurableCompletion(snapshot, {
+    checkpointId: "archive_finalized",
+    message: "Rollback backup completed and passed archive validation.",
+    facts: {
+      stage: "backing_up",
+      outputRefs: [backupRef, { kind: "operation", id: operationId, role: "backup_created" }],
+      operationIds: [operationId],
+      checkpoints: (snapshot.job.checkpoints ?? []).map((checkpoint) => ({
+        ...checkpoint,
+        outputRefs: checkpoint.id === "archive_finalized" ? [backupRef] : checkpoint.outputRefs
+      })),
+      progress: {
+        completedUnits: BACKUP_CHECKPOINT_IDS.length,
+        totalUnits: BACKUP_CHECKPOINT_IDS.length,
+        unit: "checkpoint"
+      }
+    }
+  });
 }
 
 function isCompletedJob(job: JobRecord): boolean {

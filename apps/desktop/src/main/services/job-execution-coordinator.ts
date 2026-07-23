@@ -10,7 +10,11 @@ import {
   type PigeErrorSummary,
   type PigeWarning
 } from "@pige/schemas";
-import { type JobRecordSnapshot, JobRecordStore } from "./job-record-store";
+import type { JobRecordSnapshot } from "./job-record-store";
+
+export interface JobExecutionStorePort {
+  compareAndSwap(snapshot: JobRecordSnapshot, next: JobRecord): JobRecordSnapshot;
+}
 
 type JobProgress = NonNullable<JobRecord["progress"]>;
 type JobPrivacy = NonNullable<JobRecord["privacy"]>;
@@ -85,6 +89,7 @@ const FACT_KEYS = new Set([
   "warnings",
   "policyContextId",
   "policyHash",
+  "activeVaultId",
   "privacy",
   "message"
 ]);
@@ -101,12 +106,13 @@ export interface JobExecutionFactsPatch {
   readonly warnings?: readonly PigeWarning[];
   readonly policyContextId?: string;
   readonly policyHash?: string;
+  readonly activeVaultId?: string;
   readonly privacy?: JobPrivacy;
   readonly message?: string;
 }
 
 export interface BeginJobInput {
-  readonly stage: JobStage;
+  readonly stage?: JobStage;
   readonly message: string;
   readonly facts?: JobExecutionFactsPatch;
 }
@@ -157,6 +163,8 @@ export type JobExecutionOutcome =
       readonly reason: "dependency";
       readonly dependency: WaitingDependency;
       readonly error?: PigeErrorSummary;
+      readonly retryReason?: string;
+      readonly requiresUserAction?: boolean;
       readonly message: string;
       readonly facts?: JobExecutionFactsPatch;
     }
@@ -186,6 +194,7 @@ export interface CancelPendingJobInput extends RequestCancellationInput {
 
 export interface PrepareJobRetryInput {
   readonly message: string;
+  readonly reason?: string;
 }
 
 export type QueueJobReason =
@@ -241,6 +250,7 @@ export interface TerminalizeUncertainEffectInput {
 
 export interface AdoptDurableCompletionInput {
   readonly checkpointId: string;
+  readonly result?: "completed" | "completed_with_warnings";
   readonly message: string;
   readonly facts: JobExecutionFactsPatch;
 }
@@ -280,7 +290,7 @@ export function isLegalJobStateTransition(from: JobState, to: JobState): boolean
   if (isTerminalJobState(from)) return false;
   if (BEGIN_STATES.has(from) && to === "running") return true;
   if (RESUME_STATES.has(from) && (to === "running" || WAITING_RESOLUTION_STATES.has(to))) return true;
-  if (PENDING_CANCELLATION_STATES.has(from) && to === "cancelled") return true;
+  if (PENDING_CANCELLATION_STATES.has(from) && (to === "cancel_requested" || to === "cancelled")) return true;
   if (from === "running" && to === "cancel_requested") return true;
   if (from === "queued" && PRE_EXECUTION_OUTCOME_STATES.has(to)) return true;
   if (from === "running" && OUTCOME_STATES.has(to)) return true;
@@ -288,10 +298,10 @@ export function isLegalJobStateTransition(from: JobState, to: JobState): boolean
 }
 
 export class JobExecutionCoordinator {
-  readonly #store: JobRecordStore;
+  readonly #store: JobExecutionStorePort;
   readonly #now: () => Date;
 
-  constructor(store: JobRecordStore, options: JobExecutionCoordinatorOptions = {}) {
+  constructor(store: JobExecutionStorePort, options: JobExecutionCoordinatorOptions = {}) {
     this.#store = store;
     this.#now = options.now ?? (() => new Date());
   }
@@ -311,10 +321,10 @@ export class JobExecutionCoordinator {
     return this.#commit(snapshot, {
       ...next,
       state: "running",
-      stage: input.stage,
+      ...(input.stage ? { stage: input.stage } : {}),
       startedAt: timestamp,
       updatedAt: timestamp,
-      progress: undefined,
+      progress: input.facts?.progress ? { ...input.facts.progress } : undefined,
       message: input.message,
       ...(retry ? { retry } : {}),
       cancellation,
@@ -322,6 +332,66 @@ export class JobExecutionCoordinator {
       waitingDependency: undefined,
       error: undefined
     });
+  }
+
+  claimAndBegin(
+    queued: JobRecord,
+    input: {
+      readonly requestId: string;
+      readonly find: (requestId: string) => JobRecordSnapshot | undefined;
+      readonly claim: (job: JobRecord) => JobRecordSnapshot;
+      readonly assertMatches: (job: JobRecord) => void;
+      readonly runningMessage: string;
+      readonly retryMessage: string;
+    }
+  ): { readonly snapshot: JobRecordSnapshot; readonly idempotent: boolean } {
+    let current = input.find(input.requestId) ?? input.claim(queued);
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      input.assertMatches(current.job);
+      if (current.job.state !== "queued" && current.job.state !== "failed_retryable") {
+        return { snapshot: current, idempotent: true };
+      }
+      try {
+        const start = current.job.state === "failed_retryable"
+          ? this.prepareRetry(current, { reason: "same_request_retry", message: input.retryMessage })
+          : current;
+        return { snapshot: this.begin(start, { message: input.runningMessage }), idempotent: false };
+      } catch (caught) {
+        if (!(caught instanceof PigeDomainError) || caught.code !== "job.revision_conflict") throw caught;
+        const latest = input.find(input.requestId);
+        if (!latest) throw new PigeDomainError("job.record_not_found", "The claimed Job disappeared.");
+        current = latest;
+      }
+    }
+    throw new PigeDomainError("job.revision_conflict", "The claimed Job could not converge.");
+  }
+
+  convergeLatest(
+    initial: JobRecordSnapshot,
+    input: {
+      readonly read: () => JobRecordSnapshot | undefined;
+      readonly acceptTerminal: (job: JobRecord) => boolean;
+      readonly apply: (snapshot: JobRecordSnapshot) => JobRecordSnapshot;
+      readonly missingMessage: string;
+      readonly conflictMessage: string;
+    }
+  ): JobRecordSnapshot {
+    let current = initial;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      if (isTerminalJobState(current.job.state)) {
+        if (input.acceptTerminal(current.job)) return current;
+        throw terminalImmutable(current.job.state);
+      }
+      try {
+        return input.apply(current);
+      } catch (caught) {
+        if (!(caught instanceof PigeDomainError) || caught.code !== "job.revision_conflict") throw caught;
+        const latest = input.read();
+        if (!latest) throw new PigeDomainError("job.record_not_found", input.missingMessage);
+        current = latest;
+      }
+    }
+    throw new PigeDomainError("job.revision_conflict", input.conflictMessage);
   }
 
   resume(snapshot: JobRecordSnapshot, input: ResumeJobInput): JobRecordSnapshot {
@@ -384,7 +454,15 @@ export class JobExecutionCoordinator {
   ): JobRecordSnapshot {
     return this.#wait(snapshot, "waiting_dependency", input.message, input.facts, {
       waitingDependency: input.dependency,
-      ...(input.error ? { error: parseError(input.error) } : {})
+      ...(input.error ? { error: parseError(input.error) } : {}),
+      ...(input.retryReason || input.requiresUserAction !== undefined ? {
+        retry: {
+          retryCount: snapshot.job.retry?.retryCount ?? 0,
+          maxAutomaticRetries: 0,
+          requiresUserAction: input.requiresUserAction ?? false,
+          ...(input.retryReason ? { lastRetryReason: input.retryReason } : {})
+        }
+      } : {})
     });
   }
 
@@ -532,7 +610,7 @@ export class JobExecutionCoordinator {
   }
 
   prepareRetry(snapshot: JobRecordSnapshot, input: PrepareJobRetryInput): JobRecordSnapshot {
-    assertKeys(input, ["message"]);
+    assertKeys(input, ["message", "reason"]);
     if (!EXPLICIT_RETRY_STATES.has(snapshot.job.state)) {
       if (isTerminalJobState(snapshot.job.state)) throw terminalImmutable(snapshot.job.state);
       throw invalidTransition(snapshot.job.state, "queued");
@@ -548,11 +626,20 @@ export class JobExecutionCoordinator {
       waitingDependency: _waitingDependency,
       ...base
     } = snapshot.job;
+    const retry = {
+      retryCount: (snapshot.job.retry?.retryCount ?? 0) + 1,
+      maxAutomaticRetries: snapshot.job.retry?.maxAutomaticRetries ?? 0,
+      requiresUserAction: false,
+      ...(input.reason || snapshot.job.error?.code
+        ? { lastRetryReason: input.reason ?? snapshot.job.error!.code }
+        : {})
+    };
     return this.#commit(snapshot, {
       ...base,
       state: "queued",
       updatedAt: this.#timestamp(snapshot.job),
       ...(preserveDurableWrites ? { cancellation: { durableWritesApplied: true } } : {}),
+      retry,
       message: input.message
     });
   }
@@ -702,7 +789,7 @@ export class JobExecutionCoordinator {
     snapshot: JobRecordSnapshot,
     input: AdoptDurableCompletionInput
   ): JobRecordSnapshot {
-    assertKeys(input, ["checkpointId", "message", "facts"]);
+    assertKeys(input, ["checkpointId", "result", "message", "facts"]);
     assertFacts(input.facts);
     if (isTerminalJobState(snapshot.job.state)) throw terminalImmutable(snapshot.job.state);
     if (snapshot.job.state !== "queued" && snapshot.job.state !== "running" && snapshot.job.state !== "cancel_requested") {
@@ -727,7 +814,7 @@ export class JobExecutionCoordinator {
     const next = applyFacts(snapshot.job, input.facts);
     return this.#commit(snapshot, {
       ...next,
-      state: "completed",
+      state: input.result ?? "completed",
       updatedAt: timestamp,
       finishedAt: timestamp,
       waitingDependency: undefined,
@@ -887,7 +974,7 @@ export class JobExecutionCoordinator {
     state: Extract<JobState, "waiting_dependency" | "awaiting_review">,
     message: string,
     facts?: JobExecutionFactsPatch,
-    additions: Partial<Pick<JobRecord, "waitingDependency" | "error">> = {}
+    additions: Partial<Pick<JobRecord, "waitingDependency" | "error" | "retry">> = {}
   ): JobRecordSnapshot {
     if (snapshot.job.state === "cancel_requested") {
       return this.#lateCancellationOutcome(snapshot, message, facts);
@@ -970,6 +1057,7 @@ function applyFacts(job: JobRecord, facts?: JobExecutionFactsPatch): JobRecord {
     ...(facts.warnings ? { warnings: mergeValues(job.warnings, facts.warnings) } : {}),
     ...(facts.policyContextId ? { policyContextId: facts.policyContextId } : {}),
     ...(facts.policyHash ? { policyHash: facts.policyHash } : {}),
+    ...(facts.activeVaultId ? { activeVaultId: facts.activeVaultId } : {}),
     ...(facts.privacy ? { privacy: mergePrivacy(job.privacy, facts.privacy) } : {}),
     ...(facts.message ? { message: facts.message } : {})
   };
@@ -1002,7 +1090,9 @@ function assertOutcomeKeys(outcome: JobExecutionOutcome): void {
     case "waiting":
       switch (outcome.reason) {
         case "dependency":
-          assertKeys(outcome, ["kind", "reason", "dependency", "error", "message", "facts"]);
+          assertKeys(outcome, [
+            "kind", "reason", "dependency", "error", "retryReason", "requiresUserAction", "message", "facts"
+          ]);
           return;
         case "review":
           assertKeys(outcome, ["kind", "reason", "proposalId", "message", "facts"]);

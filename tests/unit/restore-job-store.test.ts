@@ -2,6 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { JobExecutionCoordinator } from "../../apps/desktop/src/main/services/job-execution-coordinator";
+import { JobRecordStore } from "../../apps/desktop/src/main/services/job-record-store";
 import { createVaultOnDisk } from "../../apps/desktop/src/main/services/vault-layout";
 import {
   RESTORE_CHECKPOINT_IDS,
@@ -74,7 +76,7 @@ describe("machine-local Restore Job store", () => {
     try {
       let snapshot = store.create(input);
       snapshot = store.markFailed(snapshot, {
-        retryable: true,
+        error: restoreFailure(true),
         message: "Synthetic retryable restore failure."
       });
 
@@ -93,7 +95,7 @@ describe("machine-local Restore Job store", () => {
       expect(retried.job.finishedAt).toBeUndefined();
 
       const final = store.markFailed(retried, {
-        retryable: false,
+        error: restoreFailure(false),
         message: "Synthetic final restore failure."
       });
       expect(() => store.prepareExplicitRetry(final)).toThrowError(expect.objectContaining({
@@ -114,6 +116,11 @@ describe("machine-local Restore Job store", () => {
     expect(() => store.beginCheckpoint(snapshot, "archive_extracted"))
       .toThrowError(expect.objectContaining({ code: "restore.checkpoint_invalid" }));
     snapshot = store.beginCheckpoint(snapshot, "manifest_validated");
+    expect(snapshot.job.progress).toEqual({
+      completedUnits: 0,
+      totalUnits: RESTORE_CHECKPOINT_IDS.length,
+      unit: "checkpoint"
+    });
     snapshot = store.completeCheckpoint(snapshot, "manifest_validated", {
       checksumAfter: input.archiveDigest
     });
@@ -126,6 +133,11 @@ describe("machine-local Restore Job store", () => {
       const recovered = store.listRecoverable();
       expect(recovered).toHaveLength(1);
       expect(recovered[0]?.job.id).toBe(snapshot.job.id);
+      expect(recovered[0]?.job.progress).toEqual({
+        completedUnits: 1,
+        totalUnits: RESTORE_CHECKPOINT_IDS.length,
+        unit: "checkpoint"
+      });
       expect(recovered[0]?.job.checkpoints?.find(({ id }) => id === "destination_reserved")?.state)
         .toBe("running");
     } finally {
@@ -169,6 +181,8 @@ describe("machine-local Restore Job store", () => {
         snapshot = store.beginCheckpoint(snapshot, checkpointId);
         snapshot = store.completeCheckpoint(snapshot, checkpointId);
       }
+      snapshot = store.recoverInterrupted(snapshot);
+      expect(snapshot.job.state).toBe("queued");
       const operation = store.writeRestoreAppliedOperation({
         snapshot,
         vaultPath,
@@ -193,13 +207,29 @@ describe("machine-local Restore Job store", () => {
       });
       expect(repeated).toEqual(operation);
 
-      snapshot = store.markCompleted(snapshot, operation, vault.vaultId, vaultPath);
-      expect(snapshot.job.state).toBe("completed");
+      const staleSnapshot = snapshot;
+      const rawStore = new JobRecordStore({
+        rootPath: path.dirname(path.dirname(path.dirname(snapshot.path))),
+        unsafeAllowUnfenced: true
+      });
+      snapshot = new JobExecutionCoordinator(rawStore).requestCancellation(snapshot, {
+        requestedBy: "user",
+        message: "Cancel raced with committed Restore output."
+      });
+      expect(store.listRecoverable().map(({ job }) => job.id)).toContain(snapshot.job.id);
+
+      snapshot = store.markCompleted(staleSnapshot, operation, vault.vaultId, vaultPath);
+      expect(snapshot.job.state).toBe("completed_with_warnings");
       expect(snapshot.job.operationIds).toEqual([operation.id]);
       expect(snapshot.job.outputRefs).toContainEqual(expect.objectContaining({
         kind: "operation",
         id: operation.id
       }));
+      expect(snapshot.job.cancellation).toMatchObject({
+        requestedBy: "user",
+        durableWritesApplied: true,
+        safeCheckpointId: "destination_committed"
+      });
     } finally {
       store.close();
       vaultLease.release();
@@ -248,6 +278,19 @@ function identityInput(mode: "clone_as_new" | "replace_existing") {
     sourceVaultId: "vault_20260714_source123",
     destinationIdentity: sha("c"),
     previousBindingHash: createPreviousVaultBindingHash()
+  };
+}
+
+function restoreFailure(retryable: boolean) {
+  return {
+    code: retryable ? "restore.execution_failed" : "restore.identity_conflict",
+    domain: "restore" as const,
+    messageKey: retryable
+      ? "errors.restore.execution_failed"
+      : "errors.restore.identity_conflict",
+    retryable,
+    severity: "error" as const,
+    userAction: retryable ? "retry" as const : "choose_path" as const
   };
 }
 

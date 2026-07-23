@@ -18,6 +18,7 @@ import type {
   LocalToolSelfTestRequest,
   LocalToolSelfTestResult
 } from "../../apps/desktop/src/main/services/local-tool-manager-types";
+import type { JobRecordSnapshot } from "../../apps/desktop/src/main/services/job-record-store";
 import {
   createFakeLocalToolFixture,
   hashTree,
@@ -31,17 +32,60 @@ const tempRoots: string[] = [];
 
 class MemoryJobRecorder implements LocalToolLifecycleJobRecorder {
   readonly writes: JobRecord[] = [];
-  readonly #byRequestId = new Map<string, JobRecord>();
+  readonly #byRequestId = new Map<string, JobRecordSnapshot>();
+  readonly #byJobId = new Map<string, JobRecordSnapshot>();
+  #revision = 0;
+  #nextContention: ((job: JobRecord) => JobRecord) | undefined;
 
-  findByRequestId(requestId: string): JobRecord | undefined {
+  findByRequestId(requestId: string): JobRecordSnapshot | undefined {
     return this.#byRequestId.get(requestId);
   }
 
-  write(job: JobRecord): void {
+  claimByRequestId(job: JobRecord): { snapshot: JobRecordSnapshot; created: boolean } {
     const parsed = JobRecordSchema.parse(job);
-    this.writes.push(parsed);
     const requestId = parsed.inputRefs?.find((ref) => ref.role === "local_tool_request")?.id;
-    if (requestId) this.#byRequestId.set(requestId, parsed);
+    const existing = requestId ? this.#byRequestId.get(requestId) : undefined;
+    if (existing) return { snapshot: existing, created: false };
+    if (this.#byJobId.has(parsed.id)) {
+      throw new PigeDomainError("job.revision_conflict", "Synthetic Job already exists.");
+    }
+    return { snapshot: this.#commit(parsed), created: true };
+  }
+
+  compareAndSwap(snapshot: JobRecordSnapshot, next: JobRecord): JobRecordSnapshot {
+    let current = this.#byJobId.get(snapshot.job.id);
+    if (current && this.#nextContention) {
+      const contend = this.#nextContention;
+      this.#nextContention = undefined;
+      current = this.#commit(JobRecordSchema.parse(contend(current.job)));
+    }
+    if (!current || current.revision.sha256 !== snapshot.revision.sha256) {
+      throw new PigeDomainError("job.revision_conflict", "Synthetic Job revision changed.");
+    }
+    return this.#commit(JobRecordSchema.parse(next));
+  }
+
+  contendNextCompareAndSwap(contend: (job: JobRecord) => JobRecord): void {
+    this.#nextContention = contend;
+  }
+
+  #commit(parsed: JobRecord): JobRecordSnapshot {
+    this.writes.push(parsed);
+    this.#revision += 1;
+    const snapshot: JobRecordSnapshot = {
+      path: `memory:${parsed.id}`,
+      job: parsed,
+      revision: {
+        sha256: `sha256:${this.#revision.toString(16).padStart(64, "0")}`,
+        size: Buffer.byteLength(JSON.stringify(parsed), "utf8"),
+        dev: 1,
+        ino: this.#revision
+      }
+    };
+    const requestId = parsed.inputRefs?.find((ref) => ref.role === "local_tool_request")?.id;
+    if (requestId) this.#byRequestId.set(requestId, snapshot);
+    this.#byJobId.set(parsed.id, snapshot);
+    return snapshot;
   }
 }
 
@@ -75,10 +119,18 @@ class FakeSelfTestPort implements LocalToolSelfTestPort {
 
 class DeferredSelfTestPort implements LocalToolSelfTestPort {
   readonly started: Promise<void>;
+  callCount = 0;
   #markStarted!: () => void;
   #release!: () => void;
+  readonly #result: LocalToolSelfTestResult;
 
-  constructor() {
+  constructor(result: LocalToolSelfTestResult = {
+    schemaVersion: 1,
+    passed: true,
+    outputBytes: 8,
+    messageCode: "local_tool.test_passed"
+  }) {
+    this.#result = result;
     this.started = new Promise((resolve) => {
       this.#markStarted = resolve;
     });
@@ -89,16 +141,12 @@ class DeferredSelfTestPort implements LocalToolSelfTestPort {
   }
 
   async run(): Promise<LocalToolSelfTestResult> {
+    this.callCount += 1;
     this.#markStarted();
     await new Promise<void>((resolve) => {
       this.#release = resolve;
     });
-    return {
-      schemaVersion: 1,
-      passed: true,
-      outputBytes: 8,
-      messageCode: "local_tool.test_passed"
-    };
+    return this.#result;
   }
 }
 
@@ -170,6 +218,43 @@ afterEach(() => {
 });
 
 describe("local tool manager service", () => {
+  it("rejects stale lifecycle Job snapshots without overwriting the CAS winner", () => {
+    const recorder = new MemoryJobRecorder();
+    const created = recorder.claimByRequestId(JobRecordSchema.parse({
+      schemaVersion: 1,
+      id: "job_20260723_localtool01",
+      class: "tool_install",
+      state: "queued",
+      priority: "maintenance",
+      scope: "machine_local",
+      createdAt: "2026-07-23T00:00:00.000Z",
+      updatedAt: "2026-07-23T00:00:00.000Z",
+      actor: {
+        kind: "user",
+        runtimeKind: "desktop_local",
+        clientCapabilityTier: "desktop_full"
+      },
+      inputRefs: [{ kind: "tool", role: "local_tool_request", id: "request_localtool01" }],
+      message: "Queued."
+    })).snapshot;
+    const winner = recorder.compareAndSwap(created, JobRecordSchema.parse({
+      ...created.job,
+      state: "running",
+      updatedAt: "2026-07-23T00:00:01.000Z",
+      startedAt: "2026-07-23T00:00:01.000Z",
+      message: "Running."
+    }));
+
+    expect(() => recorder.compareAndSwap(created, JobRecordSchema.parse({
+      ...created.job,
+      state: "running",
+      updatedAt: "2026-07-23T00:00:02.000Z",
+      startedAt: "2026-07-23T00:00:02.000Z",
+      message: "Stale writer."
+    }))).toThrowError(expect.objectContaining({ code: "job.revision_conflict" }));
+    expect(recorder.findByRequestId("request_localtool01")?.job).toEqual(winner.job);
+  });
+
   it("installs an explicit local fixture and derives a ready capability without network access", async () => {
     const fixture = createFakeLocalToolFixture(path.join(makeTempRoot("fixture"), "fake-v1"));
     const harness = makeHarness({ tools: [toToolDefinition(fixture)] });
@@ -873,6 +958,147 @@ describe("local tool manager service", () => {
       enabled: false,
       routable: false
     });
+  });
+
+  it("retries a retryable request through the same Job and admits only one concurrent execution", async () => {
+    const root = makeTempRoot("same-request-retry");
+    const fixture = createFakeLocalToolFixture(path.join(root, "fixture"));
+    const localToolRoot = path.join(root, "app-data", "local-tools");
+    const jobs = new MemoryJobRecorder();
+    const permissions = new AllowingAuthorityPort();
+    const first = makeHarness({ tools: [toToolDefinition(fixture)] }, {
+      localToolRoot,
+      jobRecorder: jobs,
+      authorityPort: permissions
+    });
+    first.selfTest.result = {
+      schemaVersion: 1,
+      passed: false,
+      outputBytes: 8,
+      messageCode: "local_tool.test_failed"
+    };
+    const request = installRequest(fixture, "request-same-job-retry");
+    const failed = await first.service.install(request);
+    expect(failed.job).toMatchObject({ state: "failed_retryable", retry: { retryCount: 0 } });
+
+    const deferred = new DeferredSelfTestPort();
+    const retrying = makeHarness({ tools: [toToolDefinition(fixture)] }, {
+      localToolRoot,
+      jobRecorder: jobs,
+      authorityPort: permissions,
+      selfTestPort: deferred
+    });
+    const retryPromise = retrying.service.install(request);
+    await deferred.started;
+    const duplicate = await retrying.service.install(request);
+
+    expect(duplicate).toMatchObject({ idempotent: true, job: { id: failed.job.id, state: "running" } });
+    expect(deferred.callCount).toBe(1);
+    deferred.release();
+    const completed = await retryPromise;
+    expect(completed).toMatchObject({
+      idempotent: false,
+      job: {
+        id: failed.job.id,
+        state: "completed",
+        retry: { retryCount: 1, lastRetryReason: "same_request_retry" }
+      },
+      inspection: { installState: "installed", routable: true }
+    });
+    expect(findVersionDirectories(localToolRoot)).toHaveLength(1);
+  });
+
+  it("adopts a committed Local Tool record after stale Job settlement contention", async () => {
+    const root = makeTempRoot("durable-effect-contention");
+    const fixture = createFakeLocalToolFixture(path.join(root, "fixture"));
+    const localToolRoot = path.join(root, "app-data", "local-tools");
+    const jobs = new MemoryJobRecorder();
+    const permissions = new AllowingAuthorityPort();
+    const initial = makeHarness({ tools: [toToolDefinition(fixture)] }, {
+      localToolRoot,
+      jobRecorder: jobs,
+      authorityPort: permissions
+    });
+    await initial.service.install(installRequest(fixture, "request-contention-install"));
+
+    let contentionArmed = false;
+    const contended = makeHarness({ tools: [toToolDefinition(fixture)] }, {
+      localToolRoot,
+      jobRecorder: jobs,
+      authorityPort: permissions,
+      faultInjector: (point) => {
+        if (point !== "record_precommit" || contentionArmed) return;
+        contentionArmed = true;
+        jobs.contendNextCompareAndSwap((job) => ({
+          ...job,
+          state: "cancel_requested",
+          updatedAt: "2026-07-23T00:00:01.000Z",
+          cancellation: {
+            requestedAt: "2026-07-23T00:00:01.000Z",
+            requestedBy: "user"
+          },
+          message: "Synthetic cancellation won the stale snapshot race."
+        }));
+      }
+    });
+    const result = contended.service.setEnabled({
+      ...targetRequest(fixture, "request-contention-disable"),
+      enabled: false
+    });
+
+    expect(contentionArmed).toBe(true);
+    expect(result).toMatchObject({
+      idempotent: false,
+      job: {
+        state: "completed_with_warnings",
+        cancellation: { requestedBy: "user", durableWritesApplied: true }
+      },
+      inspection: { enabled: false, routable: false }
+    });
+    expect(result.job.outputRefs).toContainEqual(expect.objectContaining({
+      kind: "tool",
+      role: "local_tool_set_enabled_effect"
+    }));
+    expect(jobs.findByRequestId("request-contention-disable")?.job).toEqual(result.job);
+  });
+
+  it("converges stale async failure settlement after cancellation wins the Job CAS", async () => {
+    const root = makeTempRoot("failure-contention");
+    const fixture = createFakeLocalToolFixture(path.join(root, "fixture"));
+    const jobs = new MemoryJobRecorder();
+    const deferred = new DeferredSelfTestPort({
+      schemaVersion: 1,
+      passed: false,
+      outputBytes: 8,
+      messageCode: "local_tool.test_failed"
+    });
+    const harness = makeHarness({ tools: [toToolDefinition(fixture)] }, {
+      localToolRoot: path.join(root, "app-data", "local-tools"),
+      jobRecorder: jobs,
+      selfTestPort: deferred
+    });
+    const pending = harness.service.install(installRequest(fixture, "request-failure-contention"));
+    await deferred.started;
+    jobs.contendNextCompareAndSwap((job) => ({
+      ...job,
+      state: "cancel_requested",
+      updatedAt: "2026-07-23T00:00:01.000Z",
+      cancellation: {
+        requestedAt: "2026-07-23T00:00:01.000Z",
+        requestedBy: "user",
+        durableWritesApplied: false
+      },
+      message: "Synthetic cancellation won failure settlement."
+    }));
+    deferred.release();
+
+    const result = await pending;
+    expect(result.job).toMatchObject({
+      state: "cancelled",
+      cancellation: { requestedBy: "user", durableWritesApplied: false }
+    });
+    expect(jobs.findByRequestId("request-failure-contention")?.job).toEqual(result.job);
+    expect(findVersionDirectories(harness.localToolRoot)).toHaveLength(0);
   });
 
   it("enforces distinct install, update, and repair transition preconditions", async () => {
