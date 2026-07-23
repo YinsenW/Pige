@@ -379,10 +379,10 @@ backup/restore across update, and the 25-source scenario on macOS plus supported
 
 ### Early macOS-first qualification
 
-During personal-use v0.1 iteration, macOS is the foreground real-Electron, package and
-user-acceptance platform. Ordinary feature PRs do not wait for Windows/Linux packaging.
-Full verify plus macOS package/downloaded-distribution runs at merge-candidate and main;
-Windows/Linux installers, native behavior and visual qualification are batched later.
+Every `main` push runs the full macOS package plus downloaded-distribution
+check; PR packaging follows the
+fail-closed impact classifier in `QUALITY_AND_TEST_STRATEGY.md`, independently of
+`full-gates` tests/governance. Windows/Linux packaging and qualification are batched later.
 Portable contracts and platform adapters remain required, and no Windows/Linux support
 claim is made until that explicit qualification succeeds.
 No critical security issue may remain; current security/private-reporting, privacy,

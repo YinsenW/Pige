@@ -28,6 +28,7 @@
     { "path": "scripts/verify/markdown-links.mjs", "sha256": "c6465c4d7e9d8fbe6fab10ff6237520a1c508b05c11dcafc10bb03c9e1ca3b9e" },
     { "path": "scripts/verify/no-telemetry-negative-cases.mjs", "sha256": "8303b63572e5cf368a9dbdb0dead81f189f7b1c1a6f546f0f2c21d1f28cd5f7d" },
     { "path": "scripts/verify/no-telemetry.mjs", "sha256": "5b8abb246e05308d6409e79bb64de2ad1a0d7bac172c97dfdd2b9c76736fb4a9" },
+    { "path": "scripts/verify/package-impact.mjs", "sha256": "2a9220d8f9099d39f80a7a19b2521720afcc77bf48c263f5310b35b70af082bf" },
     { "path": "scripts/verify/parser-manifest-alignment.mjs", "sha256": "7fb376511a8765cb0d1607fec10748bfc19428f0d70c4819ef44ad2e938126aa" },
     { "path": "scripts/verify/parser-worker-smoke.mjs", "sha256": "27bcace50048e5df7db62c79845dd318c9552ad468c7dfeb3d7e59903001b420" },
     { "path": "scripts/verify/pi-import-side-effects.mjs", "sha256": "27bc8c0f094f58b91054da1c90e50a97a8ec57cd50137963bfad88e53eb43255" },

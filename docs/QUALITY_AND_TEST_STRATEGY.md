@@ -31,12 +31,18 @@ This document defines the test strategy future AI agents should follow while imp
 | Inner implementation loop | Affected tests; typecheck; build when renderer/runtime output changes | Full trace, independent snapshot, package/distribution |
 | Ordinary PR | Affected/changed-owner tests, typecheck, build, architecture reset guard, docs links/map when docs changed | Forty-document bind, semantic-lock refresh, five-dimension score, Windows/Linux |
 | P0/architecture/security/durable-data/migration/release PR | Full tests, full governance/trace, adversarial boundary tests, real macOS Electron if visible | Deferred platform qualification unless targeted |
-| Explicit merge candidate and `main` | Full `npm run verify`, macOS package and downloaded-distribution smoke | Windows/Linux unless an explicit platform batch |
+| PR and `main` | `full-gates` owns full tests/governance; macOS package/download runs for package-impact or unknown PRs and every `main` push | Proven non-package-impact PR package; Windows/Linux unless targeted |
 | Platform qualification batch | Target-platform package, filesystem/process/titlebar/installer/recovery evidence | Reopening unrelated macOS feature acceptance |
 
 An evidence-only or semantics-preserving test repair does not refresh trace, semantic
 lock, or independent review. Full gates remain available; they are scheduled at the node
 where their result is actionable.
+
+Package impact covers Electron main/preload/native/helpers; packaged resources/manifests;
+runtime dependencies/lockfiles; build, release, signing or installer scripts/config;
+package smokes; and release/security overrides. Pure docs, trace, governance, locale or
+test-fixture changes are non-impact unless they alter packaged resources or package
+verification. Unknown impact packages fail closed.
 
 ## 3. Test Pyramid
 
@@ -619,13 +625,10 @@ cleanup, traversal, symlinked parents, successor swaps, private fields and absol
 
 ## 13. Release Gates
 
-Early merge gates are macOS-first: affected shared tests, typecheck/build, assembled
-Electron, relevant macOS package/distribution and visible review. Safety-sensitive data,
-migration, backup/restore, permission/egress, worker, packaging, dependency and governance
-changes retain proportional shared gates. Windows/Linux native, installer and visual
-matrices are consolidated later unless targeted; gaps cannot prove support. Before a
-Windows or Public Alpha claim, its packageability plus remaining breadth, signing,
-installed/update, OCR, scale/recovery and alpha evidence still apply.
+Early merge gates are macOS-first and use the Section 2.1 risk and package-impact matrix.
+Windows/Linux native, installer and visual matrices are consolidated later unless targeted;
+gaps cannot prove support. Windows or Public Alpha claims require packageability, signing,
+installed/update, OCR and scale/recovery evidence.
 
 Before alpha release:
 
