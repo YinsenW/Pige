@@ -37,7 +37,7 @@
     "scope": "Independent review of the bounded architecture-reset timebox: Day-10 proof, Day-14 expiry to normal P0-P9 priority, AR3 foreground stop, authoritative-source AR1 proof, minimal efficacy evidence ownership, and unchanged status.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 26,
-    "reviewedSha256": "4beaf9cdeb471dc40df7230300770eee8476ed94c7906ca1044659442db2e9db"
+    "reviewedSha256": "7fc30044713a1ecf6708a67e6a0530948dc2ff831c0a3ca354ede532f6376765"
   },
   "reviewers": [{
     "reviewerId": "architecture-reset-planning-review",
