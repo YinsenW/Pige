@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "fd869668bb7d53cb1946b3b70e2127de1e1959af",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 122,
-  "baselineLines": 70245,
+  "baselineFileCount": 123,
+  "baselineLines": 70404,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -82,6 +82,7 @@
       ["command-capability-adapter.ts", 127, "p"],
       ["command-execution-service.ts", 306, "p"],
       ["dataset-ingest-core.ts", 1839, "f"],
+      ["dataset-import-job-executor.ts", 159, "jr"],
       ["dataset-query-core.ts", 1103, "rdf"],
       ["dataset-query-service.ts", 1428, "rd"],
       ["diagnostics-export-core.ts", 632, "df"],
@@ -155,7 +156,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 122,
+    "serviceOwnerCount": 123,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 15,

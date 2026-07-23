@@ -460,7 +460,7 @@ describe("desktop shell build contract", () => {
     expect(resumeBackgroundJobs).not.toContain("scheduleDatasetImportProcessing();");
   });
 
-  it("routes production index rebuild execution through its concrete class executor", () => {
+  it("routes production index rebuild and Dataset import execution through concrete class executors", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const jobsSource = fs.readFileSync(
       path.resolve("apps/desktop/src/main/services/jobs-service.ts"),
@@ -474,6 +474,11 @@ describe("desktop shell build contract", () => {
     expect(mainSource).not.toContain("getJobsService().processQueuedIndexRebuild(");
     expect(jobsSource).not.toContain("requestIndexRebuild(");
     expect(jobsSource).not.toContain("processQueuedIndexRebuild(");
+    expect(mainSource).toContain("getJobsService().datasetImportExecutor()");
+    expect(mainSource).toContain("getDatasetImportJobExecutor().process({ limit: 20 })");
+    expect(jobsSource).toContain("this.#datasetImportExecutor.process({");
+    expect(mainSource).not.toContain("getJobsService().processQueuedDatasetImports(");
+    expect(jobsSource).not.toContain("processQueuedDatasetImports(");
   });
 
   it("wires Home questions through Pi with visible typed outcomes and no raw provider error surface", () => {

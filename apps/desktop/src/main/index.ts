@@ -137,10 +137,13 @@ import { DocumentParserService } from "./services/document-parser-service";
 import {
   JobsService,
   type ProcessQueuedCapturesResult,
-  type ProcessQueuedDatasetImportsResult,
   type ProcessQueuedOcrResult,
   type ProcessQueuedParsesResult
 } from "./services/jobs-service";
+import {
+  type DatasetImportJobExecutor,
+  type ProcessQueuedDatasetImportsResult
+} from "./services/dataset-import-job-executor";
 import {
   type IndexRebuildJobExecutor,
   type ProcessQueuedIndexRebuildResult
@@ -1140,6 +1143,9 @@ const getLocalDatabaseService = (): LocalDatabaseService => {
 const getIndexRebuildJobExecutor = (): IndexRebuildJobExecutor =>
   getJobsService().indexRebuildExecutor();
 
+const getDatasetImportJobExecutor = (): DatasetImportJobExecutor =>
+  getJobsService().datasetImportExecutor();
+
 const databaseInitializationRebuilds = new Set<string>();
 
 const getModelProviderRegistry = (): ModelProviderRegistry => {
@@ -1214,7 +1220,7 @@ const scheduleParseProcessing = (): void => {
 
 const scheduleDatasetImportProcessing = (): void => {
   datasetImportDrainer ??= new CoalescedBatchDrainer({
-    runBatch: () => getJobsService().processQueuedDatasetImports({ limit: 20 }),
+    runBatch: () => getDatasetImportJobExecutor().process({ limit: 20 }),
     onError: () => recordBackgroundFailure(
       "dataset.import.background_failed",
       "Background Dataset materialization failed."
