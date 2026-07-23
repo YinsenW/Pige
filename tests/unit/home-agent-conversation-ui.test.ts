@@ -3634,7 +3634,8 @@ describe("Home durable Agent conversation UI", () => {
     expect(appSource).toContain("<ConversationScrollRail timelineRef={conversationTimelineRef} t={props.t} />");
     expect(styles).toContain(".conversation-scroll-rail");
     expect(styles).toContain(".conversation-scroll-anchor-preview");
-    expect(styles).toMatch(/\.conversation-scroll-anchor:is\(:hover, :focus-visible\)[\s\S]*?--conversation-anchor-width:\s*18px;/);
+    expect(styles).toMatch(/\.conversation-scroll-anchor:is\(:hover, :focus-visible\)[\s\S]*?--conversation-anchor-width:\s*16px;/);
+    expect(styles).toMatch(/\.conversation-scroll-rail\s*\{[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;[\s\S]*?box-shadow:\s*none;/);
     expect(styles).toMatch(/\.conversation-timeline\.has-conversation-scroll-rail[\s\S]*?scrollbar-width:\s*none;/);
     expect(styles).toMatch(/\.home\.home-conversation-active\s*>\s*\.conversation-timeline\s*\{[\s\S]*?display:\s*block;[\s\S]*?flex:\s*1 1 auto;[\s\S]*?max-height:\s*none;/);
     expect(styles).not.toMatch(/\.home\.home-conversation-active\s*>\s*\.conversation-timeline\s*\{[\s\S]*?align-content:\s*end;/);

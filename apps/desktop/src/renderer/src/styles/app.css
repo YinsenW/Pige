@@ -3962,7 +3962,7 @@ dd {
 }
 
 .conversation-timeline.has-conversation-scroll-rail {
-  padding-right: 20px;
+  padding-right: 16px;
   scrollbar-width: none;
 }
 
@@ -3976,21 +3976,22 @@ dd {
   z-index: 16;
   top: var(--conversation-rail-top);
   right: var(--conversation-rail-right);
-  width: 20px;
+  width: 16px;
   height: var(--conversation-rail-height);
   border: 0;
   background: transparent;
+  box-shadow: none;
   cursor: pointer;
   pointer-events: auto;
 }
 
 .conversation-scroll-anchor {
-  --conversation-anchor-width: 5px;
+  --conversation-anchor-width: 4px;
   position: absolute;
-  top: calc(var(--conversation-anchor-position) * (100% - 12px) + 6px);
+  top: calc(var(--conversation-anchor-position) * (100% - 10px) + 5px);
   right: 0;
-  width: 20px;
-  height: 14px;
+  width: 16px;
+  height: 10px;
   min-height: 0;
   transform: translateY(-50%);
   border: 0;
@@ -4018,30 +4019,30 @@ dd {
 }
 
 .conversation-scroll-anchor[aria-current="true"] .conversation-scroll-anchor-mark {
-  --conversation-anchor-width: 10px;
+  --conversation-anchor-width: 8px;
   background: color-mix(in srgb, var(--text-primary) 72%, transparent);
   opacity: .9;
 }
 
 .conversation-scroll-anchor:is(:hover, :focus-visible) .conversation-scroll-anchor-mark,
 .conversation-scroll-anchor.is-engaged .conversation-scroll-anchor-mark {
-  --conversation-anchor-width: 18px;
+  --conversation-anchor-width: 16px;
   background: color-mix(in srgb, var(--text-primary) 76%, transparent);
   opacity: 1;
 }
 
 .conversation-scroll-anchor.neighbor-one .conversation-scroll-anchor-mark {
-  --conversation-anchor-width: 12px;
+  --conversation-anchor-width: 10px;
   opacity: .78;
 }
 
 .conversation-scroll-anchor.neighbor-two .conversation-scroll-anchor-mark {
-  --conversation-anchor-width: 8px;
+  --conversation-anchor-width: 7px;
   opacity: .62;
 }
 
 .conversation-scroll-anchor.neighbor-three .conversation-scroll-anchor-mark {
-  --conversation-anchor-width: 6px;
+  --conversation-anchor-width: 5px;
   opacity: .48;
 }
 
