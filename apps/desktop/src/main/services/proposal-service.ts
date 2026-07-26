@@ -21,6 +21,7 @@ import {
   type ProposalState
 } from "@pige/schemas";
 import { containsRestrictedModelContent } from "./model-egress-content";
+import { hasErrorInstanceCode as isErrno } from "./object-error-code";
 
 export interface ProposalVaultPort {
   current(): VaultSummary | undefined;
@@ -894,10 +895,6 @@ function isUnsupportedDirectoryFlush(value: unknown): boolean {
   const code = String(value.code);
   if (new Set(["EBADF", "EINVAL", "ENOSYS", "ENOTSUP"]).has(code)) return true;
   return process.platform === "win32" && new Set(["EACCES", "EISDIR", "EPERM"]).has(code);
-}
-
-function isErrno(value: unknown, code: string): boolean {
-  return value instanceof Error && "code" in value && value.code === code;
 }
 
 function clampLimit(limit: number | undefined): number {
