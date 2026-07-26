@@ -137,22 +137,24 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 
 ### 8.2 URL
 
-- Fetch only through an Agent-selected Source Fetch tool.
-- Block private targets unless exact `external_network` authority permits them. For
-  `public_only` Fake-IP, target and fresh probe each require `198.18/15` IPv4 and only strict
-  Fake-IP forms; recheck redirects, pin target IPv4, and fail closed otherwise.
-- Store canonical/final URL, capture time, content type, warnings, and a readable snapshot.
-- Current static-URL ingress is Pi-selected and preserves one restart-recoverable source,
-  page, artifact, and Operation; locator, multi-URL, and packaged proof remain open.
-- Cap declared/decompressed bodies at 2 MiB; detect charset from HTTP, BOM, or leading HTML,
-  then preserve the decoded untrusted snapshot under `raw/web/YYYY/MM/`. Treat bounded
-  `text/markdown`/`text/plain` as inert text, never trusted renderer markup.
+- Fetch only through Pi's Source Fetch tool. Private targets require exact
+  `external_network`; `public_only` Fake-IP requires strict `198.18/15` target/probe,
+  redirect recheck and pinned IPv4, otherwise fail closed.
+- Persist canonical/final URL, capture time, type, warnings and a readable snapshot. Cap
+  declared/decompressed bodies at 2 MiB; detect charset, store decoded untrusted bytes
+  under `raw/web/YYYY/MM/`, and treat Markdown/plain text as inert.
+- Current static ingress writes one restartable Source/Page/Artifact/Operation. Only after
+  `pige_inspect_url_source`, `HomeAgentUrlService.citationCandidate(ReadHomeAgentUrlRequest)`
+  calls `readCurrent` to re-prove the same source/page identity, then projects existing
+  `RetrievalAnswerCitation` as `citation_17`
+  (`[17]`, current page ID/title, `source`, `source_page`). Source/input/URL/artifact
+  identity stays Host-only; renderer gets no URL/body/path/checksum/Provider data.
+  Multi-URL, locator expansion and packaged proof remain open.
 - HTML article extraction runs in the bounded `workers/web-extractor-worker.js` entry with exact Mozilla Readability and jsdom dependencies. Script execution and external resource loading are not enabled. The worker returns plain text and selected metadata, never trusted article HTML.
 - The serial worker allows eight pending requests, a 5-second deadline, 256 MiB old-generation heap, 2,097,152 decoded input characters, 20,000 inspected elements, 1,000,000 output characters, and 64 HTTP(S) image references. A worker/dependency failure terminates the worker, falls back to bounded DOM-less extraction, and records a reduced-extraction warning.
 - Extracted readable text is stored once as a checksummed `extracted_text` artifact under `artifacts/web/YYYY/MM/` and is the preferred input for source pages and Agent ingest.
-- Source Records keep charset, title, canonical URL, site/author/time/language, excerpt,
-  redacted images, parser identity/mode/counts/truncation/warnings; reduced quality reaches Pi.
-- Durable URL fields shown in Markdown, source records, prompts, operation records, jobs, diagnostics, or conversations must redact sensitive query values such as token, api_key, password, secret, signature, and similar keys.
+- Source Records keep charset, safe URL metadata, parser mode/counts/truncation/warnings;
+  reduced quality reaches Pi and durable projections redact sensitive query values.
 - Browser-rendered JavaScript-heavy capture remains deferred and must not silently enable page-script execution in this path.
 
 ### 8.3 PDF

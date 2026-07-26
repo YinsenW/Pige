@@ -306,7 +306,8 @@ Grounded answers and generated knowledge must preserve provenance.
 Rules:
 
 - Only a Pi-emitted known ref becomes a citation. Current-note owns `citation_1`, Home
-  search `citation_2`–`9`, Dataset `citation_10`, and source order `citation_11`–`16`.
+  search `citation_2`–`9`, Dataset `citation_10`, source order `citation_11`–`16`, and one
+  inspected current URL `citation_17`.
   Drift/unknown refs stay uncited; equal refs dedupe only on complete identity, while an
   unequal collision fails before durable publication rather than choosing an entry.
 - Ranked results must include snippets and match reasons.
