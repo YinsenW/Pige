@@ -110,6 +110,13 @@ import {
   type QueuedIndexRebuildJob
 } from "./index-rebuild-job-executor";
 import {
+  LegacyAgentIngestJobExecutor,
+  type ActiveLegacyAgentIngestJob,
+  type ProcessQueuedAgentIngestRequest,
+  type ProcessQueuedAgentIngestResult,
+  type QueuedLegacyAgentIngestJob
+} from "./legacy-agent-ingest-job-executor";
+import {
   assertReaderSelectionJobBinding,
   createReaderSelectionJobRefs,
   isValidReaderSelectionJobScope,
@@ -124,14 +131,6 @@ export interface JobsVaultPort {
   activeVaultPath(): string | undefined;
   assertWriterLease?(vaultPath: string): void;
 }
-
-export interface ProcessQueuedAgentIngestRequest {
-  readonly jobIds?: readonly string[];
-  readonly sourceIds?: readonly string[];
-  readonly limit?: number;
-}
-
-export type ProcessQueuedAgentIngestResult = ProcessQueuedCapturesResult;
 
 export interface RequeueWaitingAgentIngestResult {
   readonly requeued: number;
@@ -201,6 +200,10 @@ export interface AgentTurnUrlSourceLink {
 
 export type { ProcessQueuedOcrRequest, ProcessQueuedOcrResult } from "./ocr-job-executor";
 export type { ProcessQueuedCapturesRequest, ProcessQueuedCapturesResult } from "./capture-job-executor";
+export type {
+  ProcessQueuedAgentIngestRequest,
+  ProcessQueuedAgentIngestResult
+} from "./legacy-agent-ingest-job-executor";
 
 const DEFAULT_JOB_LIST_LIMIT = 20;
 const MAX_JOB_LIST_LIMIT = 100;
@@ -223,6 +226,7 @@ export class JobsService {
   readonly #datasetImportExecutor: DatasetImportJobExecutor;
   readonly #documentParseExecutor: DocumentParseJobExecutor;
   readonly #indexRebuildExecutor: IndexRebuildJobExecutor;
+  readonly #legacyAgentIngestExecutor: LegacyAgentIngestJobExecutor;
   readonly #ocrExecutor: OcrJobExecutor;
   readonly #jobRecordStores = new Map<string, JobRecordStore>();
   readonly #jobExecutionCoordinators = new Map<string, JobExecutionCoordinator>();
@@ -294,6 +298,14 @@ export class JobsService {
         appendLog(vaultPath, message);
       }
     });
+    this.#legacyAgentIngestExecutor = new LegacyAgentIngestJobExecutor(agentIngest, ocr, {
+      queued: (request) => {
+        const vaultPath = this.#requireActiveVaultPath();
+        this.#assertWriterLease(vaultPath);
+        return findQueuedAgentIngestJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request)
+          .map((snapshot) => this.#queuedLegacyAgentIngestJob(vaultPath, snapshot));
+      }
+    });
   }
 
   indexRebuildExecutor(): IndexRebuildJobExecutor {
@@ -314,6 +326,10 @@ export class JobsService {
 
   ocrExecutor(): OcrJobExecutor {
     return this.#ocrExecutor;
+  }
+
+  legacyAgentIngestExecutor(): LegacyAgentIngestJobExecutor {
+    return this.#legacyAgentIngestExecutor;
   }
 
   list(request: JobsListRequest = {}): JobsListResult {
@@ -1644,120 +1660,123 @@ export class JobsService {
     return this.#captureExecutor.process(request);
   }
 
-  async processQueuedAgentIngest(request: ProcessQueuedAgentIngestRequest = {}): Promise<ProcessQueuedAgentIngestResult> {
-    const vaultPath = this.#requireActiveVaultPath();
-    const jobFiles = findQueuedAgentIngestJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
-    let completed = 0;
-    let failed = 0;
+  #queuedLegacyAgentIngestJob(
+    vaultPath: string,
+    jobFile: JobRecordFile
+  ): QueuedLegacyAgentIngestJob {
+    const sourceRecordFile = jobFile.job.sourceId
+      ? readSourceRecordFile(vaultPath, jobFile.job.sourceId)
+      : undefined;
+    return {
+      job: jobFile.job,
+      vaultPath,
+      ...(sourceRecordFile ? {
+        source: { path: sourceRecordFile.path, record: sourceRecordFile.sourceRecord }
+      } : {}),
+      waitForModel: () => this.#markJobWaitingDependency(
+        jobFile.path,
+        jobFile.job,
+        "Waiting for a tested default model before Agent ingest."
+      ),
+      failMissingSource: () => this.#markJobFailedRetryable(
+        jobFile.path,
+        jobFile.job,
+        "Source record is missing. Agent ingest remains retryable."
+      ),
+      waitForOcr: (message) => this.#markJobWaitingDependency(jobFile.path, jobFile.job, message),
+      begin: () => this.#activeLegacyAgentIngestJob(vaultPath, jobFile, sourceRecordFile!)
+    };
+  }
 
-    for (const jobFile of jobFiles) {
-      const agentIngest = this.#agentIngest;
-      if (!agentIngest) {
-        this.#markJobWaitingDependency(jobFile.path, jobFile.job, "Waiting for a tested default model before Agent ingest.");
-        failed += 1;
-        continue;
-      }
-
-      const sourceRecordFile = jobFile.job.sourceId ? readSourceRecordFile(vaultPath, jobFile.job.sourceId) : undefined;
-      if (!sourceRecordFile) {
-        this.#markJobFailedRetryable(jobFile.path, jobFile.job, "Source record is missing. Agent ingest remains retryable.");
-        failed += 1;
-        continue;
-      }
-      if (
-        !supportsAgentSelectedOcr(sourceRecordFile.sourceRecord.kind) &&
-        shouldWaitForRunnableOcr(this.#ocr, sourceRecordFile.sourceRecord)
-      ) {
-        this.#markJobWaitingDependency(
-          jobFile.path,
-          jobFile.job,
-          createAgentOcrWaitMessage(sourceRecordFile.sourceRecord)
-        );
-        failed += 1;
-        continue;
-      }
-      const execution = this.#beginCooperativeExecution(
-        jobFile,
-        "waiting_for_model",
-        "Agent ingest is preparing grounded evidence for the configured model."
-      );
-      const runningJob = execution.job;
-      try {
-        const result = await agentIngest.ingestSource(vaultPath, sourceRecordFile.sourceRecord, runningJob, {
-          onPolicyResolved: (snapshot) => {
-            this.#jobExecutionCoordinator(vaultPath).patch(
-              this.#jobRecordStore(vaultPath).read(jobFile.path),
-              {
+  #activeLegacyAgentIngestJob(
+    vaultPath: string,
+    jobFile: JobRecordFile,
+    sourceRecordFile: { readonly path: string; readonly sourceRecord: SourceRecord }
+  ): ActiveLegacyAgentIngestJob {
+    const execution = this.#beginCooperativeExecution(
+      jobFile,
+      "waiting_for_model",
+      "Agent ingest is preparing grounded evidence for the configured model."
+    );
+    const runningJob = execution.job;
+    return {
+      job: runningJob,
+      hooks: {
+        onPolicyResolved: (snapshot) => {
+          this.#jobExecutionCoordinator(vaultPath).patch(
+            this.#jobRecordStore(vaultPath).read(jobFile.path),
+            {
               policyContextId: snapshot.policyContextId,
               policyHash: snapshot.policyHash,
               message: "Agent source tools are bound to the current policy and source revision."
-              }
+            }
+          );
+        },
+        assertSourceCurrent: (expectedSource) => {
+          const currentSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id);
+          if (
+            !currentSource ||
+            sourceRecordRevision(currentSource) !== sourceRecordRevision(expectedSource) ||
+            (
+              !supportsAgentSelectedParser(currentSource.kind) &&
+              !supportsAgentSelectedOcr(currentSource.kind) &&
+              shouldWaitForRunnableOcr(this.#ocr, currentSource)
+            )
+          ) {
+            throw new PigeDomainError(
+              "agent_ingest.source_changed",
+              "The selected source evidence changed while Agent ingest was running."
             );
-          },
-          assertSourceCurrent: (expectedSource) => {
-            const currentSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id);
-            if (
-              !currentSource ||
-              sourceRecordRevision(currentSource) !== sourceRecordRevision(expectedSource) ||
-              (
-                !supportsAgentSelectedParser(currentSource.kind) &&
-                !supportsAgentSelectedOcr(currentSource.kind) &&
-                shouldWaitForRunnableOcr(this.#ocr, currentSource)
-              )
-            ) {
-              throw new PigeDomainError(
-                "agent_ingest.source_changed",
-                "The selected source evidence changed while Agent ingest was running."
-              );
-            }
-          },
-          parseCurrentSource: (parseRequest) => this.#runAgentSelectedParseTool(
-            vaultPath,
-            runningJob,
-            parseRequest,
-            execution.control
-          ),
-          materializeCurrentDataset: (datasetRequest) => this.#runAgentSelectedDatasetTool(
-            vaultPath,
-            runningJob,
-            datasetRequest,
-            execution.control
-          ),
-          hasDurableDatasetEffect: () => this.#hasDurableDatasetEffect(vaultPath, runningJob.id),
-          ocrCurrentSource: (ocrRequest) => this.#runAgentSelectedOcrTool(
-            vaultPath,
-            runningJob,
-            ocrRequest,
-            execution.control
-          ),
-          throwIfCancellationRequested: () => execution.control.throwIfCancellationRequested(),
-          onPublicationStart: (checkpointId, publicationBinding) => {
-            if (publicationBinding) {
-              recordAgentNotePublicationCheckpoint(
-                this.#jobRecordStore(vaultPath),
-                this.#jobExecutionCoordinator(vaultPath),
-                vaultPath,
-                jobFile.path,
-                checkpointId,
-                publicationBinding
-              );
-            }
-            execution.control.markDurableCheckpoint(checkpointId);
-          },
-          onProposalStaged: (proposalResult) => {
-            markAgentProposalAwaitingReview(
+          }
+        },
+        parseCurrentSource: (request) => this.#runAgentSelectedParseTool(
+          vaultPath,
+          runningJob,
+          request,
+          execution.control
+        ),
+        materializeCurrentDataset: (request) => this.#runAgentSelectedDatasetTool(
+          vaultPath,
+          runningJob,
+          request,
+          execution.control
+        ),
+        hasDurableDatasetEffect: () => this.#hasDurableDatasetEffect(vaultPath, runningJob.id),
+        ocrCurrentSource: (request) => this.#runAgentSelectedOcrTool(
+          vaultPath,
+          runningJob,
+          request,
+          execution.control
+        ),
+        throwIfCancellationRequested: () => execution.control.throwIfCancellationRequested(),
+        onPublicationStart: (checkpointId, publicationBinding) => {
+          if (publicationBinding) {
+            recordAgentNotePublicationCheckpoint(
               this.#jobRecordStore(vaultPath),
               this.#jobExecutionCoordinator(vaultPath),
+              vaultPath,
               jobFile.path,
-              proposalResult.proposalId,
-              proposalResult.proposalBinding,
-              proposalResult.operationIds,
-              proposalResult.pageId,
-              proposalResult.pagePath
+              checkpointId,
+              publicationBinding
             );
-          },
-          signal: execution.control.signal
-        });
+          }
+          execution.control.markDurableCheckpoint(checkpointId);
+        },
+        onProposalStaged: (proposalResult) => {
+          markAgentProposalAwaitingReview(
+            this.#jobRecordStore(vaultPath),
+            this.#jobExecutionCoordinator(vaultPath),
+            jobFile.path,
+            proposalResult.proposalId,
+            proposalResult.proposalBinding,
+            proposalResult.operationIds,
+            proposalResult.pageId,
+            proposalResult.pagePath
+          );
+        },
+        signal: execution.control.signal
+      },
+      settle: (result) => {
         if (result.outcome === "responded") {
           const completedJob = this.#completeCooperativeExecution(
             jobFile.path,
@@ -1768,22 +1787,20 @@ export class JobsService {
             execution.control.durableWriteState(),
             []
           );
-          if (completedJob.state === "cancelled") failed += 1;
-          else completed += 1;
-          continue;
+          return completedJob.state !== "cancelled";
         }
         if (result.outcome === "dataset_materialized") {
           const datasetSnapshot = this.#requireExecutionSnapshot(jobFile.path, runningJob);
           this.#jobExecutionCoordinator(vaultPath).patch(datasetSnapshot, {
             outputRefs: [{
-                kind: "dataset" as const,
-                id: result.datasetId,
-                role: "agent_dataset"
-              }, {
-                kind: "dataset_revision" as const,
-                id: result.revisionId,
-                role: "agent_dataset_revision"
-              }],
+              kind: "dataset",
+              id: result.datasetId,
+              role: "agent_dataset"
+            }, {
+              kind: "dataset_revision",
+              id: result.revisionId,
+              role: "agent_dataset_revision"
+            }],
             operationIds: result.operationIds
           });
           const completedJob = this.#completeCooperativeExecution(
@@ -1795,9 +1812,7 @@ export class JobsService {
             execution.control.durableWriteState(),
             result.operationIds
           );
-          if (completedJob.state === "cancelled") failed += 1;
-          else completed += 1;
-          continue;
+          return completedJob.state !== "cancelled";
         }
         if (result.outcome === "confirmation_needed") {
           markAgentProposalAwaitingReview(
@@ -1810,8 +1825,7 @@ export class JobsService {
             result.pageId,
             result.pagePath
           );
-          completed += 1;
-          continue;
+          return true;
         }
         completeAgentNotePublicationCheckpoint(
           this.#jobRecordStore(vaultPath),
@@ -1819,7 +1833,9 @@ export class JobsService {
           jobFile.path,
           result
         );
-        const warningSuffix = result.reviewRequired ? " Review is needed before treating it as clean knowledge." : "";
+        const warningSuffix = result.reviewRequired
+          ? " Review is needed before treating it as clean knowledge."
+          : "";
         appendLog(
           vaultPath,
           `${new Date().toISOString()} ${result.knowledgeAction === "linked" ? "Linked related knowledge from" : result.mutationKind === "update_page" ? "Updated" : "Created"} wiki note [${result.title}](${result.pagePath}) from source \`${sourceRecordFile.sourceRecord.id}\`.${warningSuffix}`
@@ -1834,24 +1850,22 @@ export class JobsService {
               ? "Agent ingest linked two existing wiki notes."
               : result.mutationKind === "update_page"
                 ? "Agent ingest updated an existing wiki note."
-              : result.created ? "Agent ingest created a wiki note." : "Agent ingest wiki note already exists.",
+                : result.created
+                  ? "Agent ingest created a wiki note."
+                  : "Agent ingest wiki note already exists.",
           "source",
           execution.control.durableWriteState(),
           result.operationIds
         );
-        if (completedJob.state === "cancelled") {
-          failed += 1;
-        } else {
-          completed += 1;
-        }
-      } catch (caught) {
+        return completedJob.state !== "cancelled";
+      },
+      fail: (caught) => {
         const durableProposalParent = this.#readJobSnapshot(vaultPath, runningJob.id)?.job;
         if (
           durableProposalParent?.state === "awaiting_review" &&
           (durableProposalParent.proposalIds?.length ?? 0) > 0
         ) {
-          completed += 1;
-          continue;
+          return "completed";
         }
         const cancellation = resolveCancellation(execution.control, caught);
         const durableState = execution.control.durableWriteState();
@@ -1860,7 +1874,12 @@ export class JobsService {
         } else if (isJobMutationContention(caught)) {
           // Another exact Job revision won; do not overwrite its authoritative state.
         } else if (caught instanceof PigeDomainError && caught.code === "model_provider.default_model_missing") {
-          this.#markJobWaitingDependency(jobFile.path, runningJob, "Waiting for a tested default model before Agent ingest.", durableState);
+          this.#markJobWaitingDependency(
+            jobFile.path,
+            runningJob,
+            "Waiting for a tested default model before Agent ingest.",
+            durableState
+          );
         } else if (caught instanceof PigeDomainError && caught.code === "agent_runtime.tool_dependency_waiting") {
           this.#markJobWaitingDependency(
             jobFile.path,
@@ -1869,9 +1888,22 @@ export class JobsService {
             durableState
           );
         } else if (caught instanceof PigeDomainError && caught.code === "source.external_unavailable") {
-          this.#markJobWaitingDependency(jobFile.path, runningJob, "Waiting for the referenced original source to be reconnected before Agent ingest can continue.", durableState);
-        } else if (caught instanceof PigeDomainError && /^source\.(?:checksum_mismatch|managed_unavailable|path_outside_vault|reference_invalid)$/u.test(caught.code)) {
-          this.#markJobFailedFinal(jobFile.path, runningJob, "The source cannot be verified safely. Re-import it to create a new source version before Agent ingest.", durableState);
+          this.#markJobWaitingDependency(
+            jobFile.path,
+            runningJob,
+            "Waiting for the referenced original source to be reconnected before Agent ingest can continue.",
+            durableState
+          );
+        } else if (
+          caught instanceof PigeDomainError &&
+          /^source\.(?:checksum_mismatch|managed_unavailable|path_outside_vault|reference_invalid)$/u.test(caught.code)
+        ) {
+          this.#markJobFailedFinal(
+            jobFile.path,
+            runningJob,
+            "The source cannot be verified safely. Re-import it to create a new source version before Agent ingest.",
+            durableState
+          );
         } else if (caught instanceof PigeDomainError && caught.code === "agent_ingest.source_changed") {
           const currentSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id);
           if (currentSource && shouldWaitForRunnableOcr(this.#ocr, currentSource)) {
@@ -1901,17 +1933,16 @@ export class JobsService {
             createAgentIngestRetryError(caught)
           );
         }
-        failed += 1;
-      } finally {
-        this.#finishCooperativeExecution(runningJob.id, execution.controller);
-      }
-    }
-
-    return {
-      processed: jobFiles.length,
-      completed,
-      failed
+        return "failed";
+      },
+      finish: () => this.#finishCooperativeExecution(runningJob.id, execution.controller)
     };
+  }
+
+  processQueuedAgentIngest(
+    request: ProcessQueuedAgentIngestRequest = {}
+  ): Promise<ProcessQueuedAgentIngestResult> {
+    return this.#legacyAgentIngestExecutor.process(request);
   }
 
   async #applyApprovedProposal(
