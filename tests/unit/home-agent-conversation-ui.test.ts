@@ -3204,13 +3204,42 @@ describe("Home durable Agent conversation UI", () => {
       id: completed.latestTurn!.jobId,
       updatedAt: "2026-07-12T08:00:00.500Z"
     }];
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      const completedAt = "2026-07-12T08:00:02.000Z";
+      harness.timeline = {
+        ...timeline,
+        tailEventId: "event_20260726_picker_assistant",
+        messages: [
+          ...timeline.messages,
+          {
+            id: "event_20260726_picker_user",
+            role: "user",
+            createdAt: completedAt,
+            text: "Continue with this exact attachment.",
+            jobId: "job_20260723_stagedturn"
+          },
+          {
+            id: "event_20260726_picker_assistant",
+            role: "assistant",
+            createdAt: completedAt,
+            text: "The source continued in the same conversation.",
+            jobId: "job_20260723_stagedturn"
+          }
+        ],
+        latestTurn: {
+          jobId: "job_20260723_stagedturn",
+          userEventId: "event_20260726_picker_user",
+          state: "completed"
+        }
+      };
+      return {
+        ...acceptedStagedResult(request),
+        conversationId: timeline.conversationId,
+        tailEventId: "event_20260726_picker_user"
+      };
+    };
     const mount = await mountHome(dom, makePigeApi(harness));
-
-    harness.timeline = timeline;
-    await act(async () => {
-      await new Promise((resolve) => dom.window.setTimeout(resolve, 1_300));
-      await settle(dom);
-    });
 
     const citation = requireElement(mount.container.querySelector<HTMLButtonElement>(".conversation-citations .citation-row"));
     await clickElement(dom, citation);
@@ -3220,8 +3249,14 @@ describe("Home durable Agent conversation UI", () => {
 
     await attachFile(dom, mount.container, "follow-up.txt", "Exact staged evidence.\n");
     const send = requireElement(mount.container.querySelector<HTMLButtonElement>("button.composer-send"));
-    expect(send.disabled).toBe(false);
+    expect(send.disabled).toBe(true);
     expect(harness.submitRequests).toHaveLength(0);
+    harness.timeline = timeline;
+    await act(async () => {
+      await new Promise((resolve) => dom.window.setTimeout(resolve, 1_300));
+      await settle(dom);
+    });
+    expect(send.disabled).toBe(false);
     await clickElement(dom, send);
     await waitFor(dom, () => harness.submitRequests.length === 1);
 
@@ -3232,6 +3267,8 @@ describe("Home durable Agent conversation UI", () => {
       expectedTailEventId: timeline.tailEventId
     });
     expect(harness.submittedFileNames).toEqual([["follow-up.txt"]]);
+    await waitFor(dom, () => mount.container.textContent?.includes("The source continued in the same conversation.") === true);
+    expect(harness.timeline?.conversationId).toBe(timeline.conversationId);
 
     await act(async () => mount.root.unmount());
     dom.window.close();

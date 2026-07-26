@@ -3044,6 +3044,10 @@ function HomeComposer(props: {
   const [agentModelUsage, setAgentModelUsage] = useState<HomeAgentModelUsage>("none");
   const [activeSourceTurn, setActiveSourceTurn] = useState<ActiveSourceTurnBinding | null>(null);
   const [conversationTimeline, setConversationTimeline] = useState<AgentConversationInitialTimeline | undefined>();
+  const [pickerConversationAuthority, setPickerConversationAuthority] = useState<{
+    readonly items: readonly StagedComposerItem[];
+    readonly timeline: AgentConversationInitialTimeline | undefined;
+  } | null>(null);
   const [optimisticConversationTurns, setOptimisticConversationTurns] = useState<readonly OptimisticConversationTurn[]>([]);
   const [liveAnswerEventId, setLiveAnswerEventId] = useState<string | null>(null);
   const [conversationCopyState, setConversationCopyState] = useState<ConversationCopyState | null>(null);
@@ -3108,6 +3112,7 @@ function HomeComposer(props: {
   const voiceLanguageTagRef = useRef(props.locale);
   const draftTextRef = useRef(text);
   const conversationLoadSequence = useRef(0);
+  const pickerConversationLoadSequence = useRef(0);
   const locallyCompletedConversationTailRef = useRef<{
     readonly vaultId: string;
     readonly conversationId: string;
@@ -3698,11 +3703,14 @@ function HomeComposer(props: {
     setComposerSubmitActive(false);
   };
 
-  const refreshConversation = async (): Promise<AgentConversationInitialTimeline | undefined> => {
+  const refreshConversationResult = async (): Promise<
+    | { readonly status: "adopted"; readonly timeline: AgentConversationInitialTimeline | undefined }
+    | { readonly status: "ignored" | "failed" }
+  > => {
     const vaultId = props.activeVault?.vaultId;
     if (!vaultId) {
       setConversationTimeline(undefined);
-      return undefined;
+      return { status: "adopted", timeline: undefined };
     }
     const requestId = conversationLoadSequence.current + 1;
     conversationLoadSequence.current = requestId;
@@ -3721,13 +3729,48 @@ function HomeComposer(props: {
         if (acknowledgesLocalTail) {
           locallyCompletedConversationTailRef.current = null;
           setConversationTimeline(nextTimeline);
+          return { status: "adopted", timeline: nextTimeline };
         }
       }
-      return nextTimeline;
+      return { status: "ignored" };
     } catch {
-      return undefined;
+      return { status: "failed" };
     }
   };
+
+  const refreshConversation = async (): Promise<AgentConversationInitialTimeline | undefined> => {
+    const result = await refreshConversationResult();
+    return result.status === "adopted" ? result.timeline : undefined;
+  };
+
+  useEffect(() => {
+    const items = stagedComposerItems;
+    const vaultId = props.activeVault?.vaultId;
+    const sequence = pickerConversationLoadSequence.current + 1;
+    pickerConversationLoadSequence.current = sequence;
+    setPickerConversationAuthority(null);
+    if (!vaultId || items.length === 0) return;
+    let retryTimer: number | undefined;
+    const adoptCurrentConversation = async (): Promise<void> => {
+      const result = await refreshConversationResult();
+      if (
+        sequence !== pickerConversationLoadSequence.current ||
+        activeVaultIdRef.current !== vaultId
+      ) return;
+      if (
+        result.status === "adopted" &&
+        (result.timeline === undefined || canFollowUpToConversation(result.timeline))
+      ) {
+        setPickerConversationAuthority({ items, timeline: result.timeline });
+        return;
+      }
+      retryTimer = window.setTimeout(() => void adoptCurrentConversation(), 1_200);
+    };
+    void adoptCurrentConversation();
+    return () => {
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+    };
+  }, [props.activeVault?.vaultId, stagedComposerItems]);
 
   useEffect(() => window.pige.agent.onTurnDraft?.((event) => {
     if (!isAgentTurnDraftEvent(event)) return;
@@ -3855,6 +3898,7 @@ function HomeComposer(props: {
     if (
       (!hasText && !hasAttachments) ||
       (!homeModelSendAvailable && !hasAttachments) ||
+      (hasAttachments && pickerConversationAuthority?.items !== stagedComposerItems) ||
       modelSwitching ||
       composerSubmissionRef.current
     ) return;
@@ -3876,8 +3920,11 @@ function HomeComposer(props: {
       const attemptKey = composerAttemptKey(submittedText, submittedItems);
       const clientTurnId = stagedComposerAttemptRef.current?.key === attemptKey
         ? stagedComposerAttemptRef.current.clientTurnId : createAgentClientTurnId();
-      const followUpConversation = canFollowUpToConversation(conversationTimeline)
-        ? conversationTimeline
+      const adoptedTimeline = pickerConversationAuthority?.items === submittedItems
+        ? pickerConversationAuthority.timeline
+        : undefined;
+      const followUpConversation = canFollowUpToConversation(adoptedTimeline)
+        ? adoptedTimeline
         : undefined;
       stagedComposerAttemptRef.current = { key: attemptKey, clientTurnId };
       followConversationRef.current = true;
@@ -4139,6 +4186,7 @@ function HomeComposer(props: {
     if (
       event.repeat ||
       composerSubmissionRef.current ||
+      (stagedComposerItems.length > 0 && pickerConversationAuthority?.items !== stagedComposerItems) ||
       (!homeModelSendAvailable && stagedComposerItems.length === 0) ||
       modelSwitching ||
       agentRunState === "accepted" ||
@@ -4971,6 +5019,7 @@ function HomeComposer(props: {
             disabled={
               (!text.trim() && stagedComposerItems.length === 0) ||
               (!homeModelSendAvailable && stagedComposerItems.length === 0) ||
+              (stagedComposerItems.length > 0 && pickerConversationAuthority?.items !== stagedComposerItems) ||
               modelSwitching ||
               effectiveAgentRunState === "accepted" ||
               effectiveAgentRunState === "running"
