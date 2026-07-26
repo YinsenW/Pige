@@ -6,6 +6,7 @@ import {
   OperationRecordSchema,
   SourceRecordSchema,
   type JobRecord,
+  type JobRef,
   type OperationRecord,
   type SourceRecord
 } from "@pige/schemas";
@@ -33,6 +34,12 @@ export interface DocumentParseSourceResult {
   readonly warnings: readonly string[];
   readonly sourcePageUpdated: boolean;
   readonly sourcePageConflict: boolean;
+  readonly durableEffect: DocumentParseDurableEffect;
+}
+
+export interface DocumentParseDurableEffect {
+  readonly outputRefs: readonly JobRef[];
+  readonly operationIds: readonly string[];
 }
 
 export interface NormalizedParserExtraction {
@@ -129,7 +136,7 @@ export class ParserArtifactService {
     const warnings = page.conflict
       ? [...parserWarnings, sourcePageConflictWarning()]
       : parserWarnings;
-    writeArtifactOperation(vaultPath, sourceRecord, job, format, warnings);
+    const operation = writeArtifactOperation(vaultPath, sourceRecord, job, format, warnings);
     return {
       sourceId: sourceRecord.id,
       created: false,
@@ -141,7 +148,8 @@ export class ParserArtifactService {
       agentTextReady: sidecar.agentTextReady === true,
       warnings,
       sourcePageUpdated: page.updated,
-      sourcePageConflict: page.conflict
+      sourcePageConflict: page.conflict,
+      durableEffect: createDocumentParseDurableEffect(sourceRecord, format, operation)
     };
   }
 
@@ -247,7 +255,7 @@ export class ParserArtifactService {
       parsedSource
     );
     const warnings = page.conflict ? [...extraction.warnings, sourcePageConflictWarning()] : extraction.warnings;
-    writeArtifactOperation(vaultPath, updatedSource, job, extraction.format, warnings);
+    const operation = writeArtifactOperation(vaultPath, updatedSource, job, extraction.format, warnings);
 
     return {
       sourceId: parsedSource.id,
@@ -260,9 +268,34 @@ export class ParserArtifactService {
       agentTextReady: extraction.agentTextReady,
       warnings,
       sourcePageUpdated: page.updated,
-      sourcePageConflict: page.conflict
+      sourcePageConflict: page.conflict,
+      durableEffect: createDocumentParseDurableEffect(updatedSource, extraction.format, operation)
     };
   }
+}
+
+function createDocumentParseDurableEffect(
+  sourceRecord: SourceRecord,
+  format: NormalizedParserExtraction["format"],
+  operation: OperationRecord
+): DocumentParseDurableEffect {
+  const targetIds = new Set([
+    extractedTextArtifactId(sourceRecord.id, format),
+    metadataArtifactId(sourceRecord.id, format)
+  ]);
+  const outputRefs = sourceRecord.artifacts
+    .filter((artifact) => targetIds.has(artifact.id))
+    .map((artifact): JobRef => ({
+      kind: "artifact",
+      id: artifact.id,
+      path: artifact.path,
+      ...(artifact.checksum ? { checksum: artifact.checksum } : {}),
+      role: artifact.kind === "extracted_text" ? "parser_extracted_text" : "parser_metadata"
+    }));
+  if (outputRefs.length === 0 || operation.targetRefs.length !== outputRefs.length) {
+    throw new PigeDomainError("parser.durable_effect_invalid", "The parser durable effect receipt is incomplete.");
+  }
+  return { outputRefs, operationIds: [operation.id] };
 }
 
 function writeArtifactOperation(

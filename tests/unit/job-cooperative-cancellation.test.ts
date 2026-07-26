@@ -114,7 +114,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
 
-    const processing = jobs.processQueuedParses({ sourceIds: [sourceId] });
+    const processing = jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
     await extractor.started.promise;
     const running = requireValue(jobs.list({ classes: ["parse"], states: ["running"] }).jobs[0]);
     expect(running.progress).toEqual({ completedUnits: 0, totalUnits: 1, unit: "document" });
@@ -199,7 +199,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, sourceId);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
-    await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    await jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
 
     const processing = jobs.processQueuedOcr({ sourceIds: [sourceId] });
     await adapter.secondCallStarted.promise;
@@ -355,7 +355,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
 
-    expect(await jobs.processQueuedParses({ sourceIds: [sourceId] })).toMatchObject({
+    expect(await jobs.documentParseExecutor().process({ sourceIds: [sourceId] })).toMatchObject({
       processed: 1,
       completed: 0,
       failed: 1
@@ -398,7 +398,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     const sourceId = requireFirst(captured.sourceIds);
     initialServices.jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
-    expect(await initialServices.jobs.processQueuedParses({ sourceIds: [sourceId] })).toMatchObject({
+    expect(await initialServices.jobs.documentParseExecutor().process({ sourceIds: [sourceId] })).toMatchObject({
       processed: 1,
       completed: 1,
       failed: 0
@@ -421,7 +421,7 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     }, new ParserArtifactService(new FailingSourcePageService()));
     const reuseServices = makeServices(fixture, reuseParser);
 
-    expect(await reuseServices.jobs.processQueuedParses({ jobIds: [reuseJob.id] })).toMatchObject({
+    expect(await reuseServices.jobs.documentParseExecutor().process({ jobIds: [reuseJob.id] })).toMatchObject({
       processed: 1,
       completed: 0,
       failed: 1
@@ -771,7 +771,7 @@ async function prepareParsedPdfOcr(
   markSourceAsLegacyAgentIngestFixture(fixture.vaultPath, sourceId);
   services.jobs.processQueuedCaptures({ jobIds: captured.jobIds });
   seedExplicitPdfParseJob(fixture.vaultPath, requireFirst(captured.jobIds), sourceId);
-  await services.jobs.processQueuedParses({ sourceIds: [sourceId] });
+  await services.jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
   return { jobs: services.jobs, sourceId };
 }
 

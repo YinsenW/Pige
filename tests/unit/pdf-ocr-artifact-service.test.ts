@@ -423,7 +423,7 @@ async function makeParsedPdf(bytes: Uint8Array, fileName: string): Promise<{
   const sourceId = requireValue(captured.sourceIds[0]);
   jobs.processQueuedCaptures({ jobIds: captured.jobIds });
   seedExplicitPdfParseJob(vaultPath, requireValue(captured.jobIds[0]), sourceId);
-  await jobs.processQueuedParses({ sourceIds: [sourceId] });
+  await jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
   const sourceRecordPath = requireValue(listFiles(path.join(vaultPath, ".pige", "source-records"), `${sourceId}.json`)[0]);
   const sourceRecord = readSourceRecord(sourceRecordPath);
   const ocrJob = JobRecordSchema.parse({
