@@ -476,7 +476,7 @@ async function readDurableRestartSnapshot(browserWindow) {
       mark("durable_snapshot_library");
       const library = await window.pige.library.list({ limit: 100 });
       mark("durable_snapshot_activity");
-      const activity = await window.pige.activity.list({ limit: 100 });
+      const activity = await window.pige.activity.list({ limit: 20 });
       mark("durable_snapshot_models");
       const models = await window.pige.models.summary();
       if (!timeline) throw new Error("Durable conversation is unavailable.");
