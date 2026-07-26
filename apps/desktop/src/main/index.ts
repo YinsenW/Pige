@@ -155,6 +155,7 @@ import {
   type IndexRebuildJobExecutor,
   type ProcessQueuedIndexRebuildResult
 } from "./services/index-rebuild-job-executor";
+import type { LegacyAgentIngestJobExecutor } from "./services/legacy-agent-ingest-job-executor";
 import {
   createJobClassExecutorRegistry,
   type JobClassExecutorRegistry
@@ -1162,6 +1163,9 @@ const getDocumentParseJobExecutor = (): DocumentParseJobExecutor =>
 const getOcrJobExecutor = (): OcrJobExecutor =>
   getJobsService().ocrExecutor();
 
+const getLegacyAgentIngestJobExecutor = (): LegacyAgentIngestJobExecutor =>
+  getJobsService().legacyAgentIngestExecutor();
+
 const databaseInitializationRebuilds = new Set<string>();
 
 const getModelProviderRegistry = (): ModelProviderRegistry => {
@@ -1270,7 +1274,7 @@ const scheduleOcrProcessing = (): void => {
 
 const scheduleAgentIngestProcessing = (): void => {
   agentIngestDrainer ??= new CoalescedBatchDrainer({
-    runBatch: () => getJobsService().processQueuedAgentIngest({ limit: 20 }),
+    runBatch: () => getLegacyAgentIngestJobExecutor().process({ limit: 20 }),
     onError: () => recordBackgroundFailure(
       "agent_ingest.background_failed",
       "Background Agent ingest failed."
