@@ -13,6 +13,7 @@ import {
 } from "@pige/schemas";
 import type { RecentVaultSummary, VaultSummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
+import { hasObjectErrorCode as isErrno } from "./object-error-code";
 import { acquireVaultWriterLease } from "./vault-writer-lease";
 
 type RecentVaultSettings = MachineLocalSettings["recentVaults"];
@@ -456,10 +457,6 @@ export function isUnsupportedDirectoryFsync(
   const portableUnsupported = ["EINVAL", "EISDIR", "ENOSYS", "ENOTSUP", "EOPNOTSUPP"];
   return portableUnsupported.some((code) => isErrno(caught, code)) ||
     (platform === "win32" && ["EBADF", "EPERM"].some((code) => isErrno(caught, code)));
-}
-
-function isErrno(caught: unknown, code: string): boolean {
-  return Boolean(caught && typeof caught === "object" && "code" in caught && caught.code === code);
 }
 
 function createMachineLocalSettings(input: {

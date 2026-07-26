@@ -21,6 +21,7 @@ import {
   type SkillSummary
 } from "@pige/schemas";
 import { containsRestrictedModelContent } from "./model-egress-content";
+import { hasObjectErrorCode as isErrno } from "./object-error-code";
 
 const MAX_REGISTRY_BYTES = 1024 * 1024;
 const MAX_MANIFEST_BYTES = 256 * 1024;
@@ -515,10 +516,6 @@ function fsyncDirectory(directoryPath: string): void {
   } finally {
     if (descriptor !== undefined) fs.closeSync(descriptor);
   }
-}
-
-function isErrno(caught: unknown, code: string): boolean {
-  return Boolean(caught && typeof caught === "object" && "code" in caught && caught.code === code);
 }
 
 function assertRendererSafeDisplayText(value: string): void {
