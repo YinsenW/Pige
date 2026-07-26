@@ -20,6 +20,12 @@ import { ConversationScrollRail } from "./components/ConversationScrollRail";
 import { ConversationEarlierControl, projectCompletedConversation, useConversationPagination } from "./components/ConversationPagination";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
+import {
+  homeConversationStateForJob,
+  isTerminalConversationTurn,
+  selectCurrentNoSourceTurn,
+  type HomeConversationTurnState
+} from "./components/HomeConversationTurnState";
 import { WindowModeToggle } from "./components/WindowModeToggle";
 import { useWindowControls } from "./components/useWindowControls";
 import type { ReaderInlineReferenceActivation } from "./components/ReaderInlineReferenceSurface";
@@ -149,7 +155,7 @@ export type DevelopmentNotice = {
   readonly capability: DevelopmentCapability;
   readonly state: "development" | "unavailable";
 };
-type HomeAgentUiState = "idle" | "accepted" | "running" | "waiting" | "failed" | "completed";
+type HomeAgentUiState = HomeConversationTurnState;
 type ConversationCopyState = {
   readonly messageId: string;
   readonly state: "copying" | "copied" | "failed";
@@ -3523,33 +3529,19 @@ function HomeComposer(props: {
     )
     .slice(0, 5);
   const proposalReviewPending = props.recentJobs.some((job) => job.state === "awaiting_review");
-  const latestTurnJob = latestTurn
-    ? props.recentJobs.find((job) => job.id === latestTurn.jobId)
-    : undefined;
-  const newestNoSourceActiveTurn = props.recentJobs.find((job) =>
-    job.class === "agent_turn" &&
-    !job.sourceDisplayName &&
-    !job.sourceId &&
-    (job.state === "running" || job.state === "cancel_requested")
-  );
-  const exactNoSourceCurrentTurn = latestTurnJob &&
-    latestTurnJob.class === "agent_turn" &&
-    !latestTurnJob.sourceDisplayName &&
-    !latestTurnJob.sourceId &&
-    (
-      !activeAgentDraftRef.current ||
-      activeAgentDraftRef.current.jobId === latestTurnJob.id
-    )
-    ? latestTurnJob
-    : undefined;
-  const noSourceCurrentTurn = exactNoSourceCurrentTurn ??
-    (latestTurn ? undefined : newestNoSourceActiveTurn);
+  const noSourceCurrentTurn = selectCurrentNoSourceTurn({
+    latestTurn,
+    recentJobs: props.recentJobs,
+    ...(activeAgentDraftRef.current?.jobId
+      ? { activeDraftJobId: activeAgentDraftRef.current.jobId }
+      : {})
+  });
   const noSourceCancellableLatestTurn = noSourceCurrentTurn &&
     (noSourceCurrentTurn.state === "running" || noSourceCurrentTurn.state === "cancel_requested")
     ? noSourceCurrentTurn
     : undefined;
   const effectiveAgentRunState = noSourceCurrentTurn
-    ? homeUiStateForJobState(noSourceCurrentTurn.state) ?? agentRunState
+    ? homeConversationStateForJob(noSourceCurrentTurn.state) ?? agentRunState
     : agentRunState;
   const effectiveAgentError = noSourceCurrentTurn
     ? noSourceCurrentTurn.error ?? agentError
@@ -3780,7 +3772,7 @@ function HomeComposer(props: {
     ) {
       return;
     }
-    const nextState = homeUiStateForJobState(latestTurn.state);
+    const nextState = homeConversationStateForJob(latestTurn.state);
     if (nextState) setAgentRunState(nextState);
     setAgentError(latestTurn.error ?? null);
     if (
@@ -3796,6 +3788,11 @@ function HomeComposer(props: {
     latestTurn?.state,
     latestTurn?.error?.code
   ]);
+
+  useEffect(() => {
+    if (!latestTurn || !isTerminalConversationTurn(latestTurn.state)) return;
+    void props.onHomeStateChanged().catch(() => undefined);
+  }, [latestTurn?.jobId, latestTurn?.state]);
 
   useEffect(() => {
     if (!props.activeVault?.vaultId || !isConversationPollingState(latestTurn?.state)) return;
@@ -4185,7 +4182,7 @@ function HomeComposer(props: {
     setAgentRunState("accepted");
     await props.onRetryJob(retryableLatestTurn.jobId);
     const nextTimeline = await refreshConversation();
-    const nextState = homeUiStateForJobState(nextTimeline?.latestTurn?.state);
+    const nextState = homeConversationStateForJob(nextTimeline?.latestTurn?.state);
     setAgentRunState(nextState ?? "failed");
     setAgentError(nextTimeline?.latestTurn?.error ?? null);
   };
@@ -4978,18 +4975,6 @@ function jobStateMessageKey(job: JobSummary): string {
   if (job.state === "waiting_dependency") return "home.jobWaiting";
   if (job.state === "awaiting_review") return "home.jobReview";
   return "home.jobFailed";
-}
-
-function homeUiStateForJobState(state: JobState | undefined): HomeAgentUiState | undefined {
-  if (state === "queued") return "accepted";
-  if (state === "running" || state === "cancel_requested") return "running";
-  if (
-    state === "waiting_dependency" ||
-    state === "awaiting_review"
-  ) return "waiting";
-  if (state === "completed" || state === "completed_with_warnings" || state === "compacted") return "completed";
-  if (state === "failed_retryable" || state === "failed_final" || state === "cancelled") return "failed";
-  return undefined;
 }
 
 function isConversationPollingState(state: JobState | undefined): boolean {

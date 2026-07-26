@@ -53,6 +53,7 @@ import frMessages from "../../apps/desktop/src/renderer/src/locales/fr/messages.
 import jaMessages from "../../apps/desktop/src/renderer/src/locales/ja/messages.json";
 import koMessages from "../../apps/desktop/src/renderer/src/locales/ko/messages.json";
 import zhHansMessages from "../../apps/desktop/src/renderer/src/locales/zh-Hans/messages.json";
+import { selectCurrentNoSourceTurn } from "../../apps/desktop/src/renderer/src/components/HomeConversationTurnState";
 
 const globalKeys = [
   "window",
@@ -87,6 +88,20 @@ afterEach(() => {
 });
 
 describe("Home durable Agent conversation UI", () => {
+  it("lets a terminal timeline supersede only its stale same-Job running projection", () => {
+    const timeline = completedTimeline();
+    const staleJob = { ...runningAgentJob(), id: timeline.latestTurn!.jobId };
+    expect(selectCurrentNoSourceTurn({ latestTurn: timeline.latestTurn, recentJobs: [staleJob] }))
+      .toBeUndefined();
+
+    const currentJob = { ...runningAgentJob(), id: "job_20260726_currentdraft" };
+    expect(selectCurrentNoSourceTurn({
+      latestTurn: timeline.latestTurn,
+      recentJobs: [staleJob, currentJob],
+      activeDraftJobId: currentJob.id
+    })).toBe(currentJob);
+  });
+
   it("probes unsupported voice on demand without starting a session", async () => {
     const dom = createDom(420);
     const harness = createHarness(undefined);
@@ -3118,6 +3133,40 @@ describe("Home durable Agent conversation UI", () => {
     await clickElement(dom, buttons(mount.container, enMessages["retrieval.backToResults"])[0]!);
     expect(mount.container.querySelector(".conversation-timeline")).not.toBeNull();
     expect(mount.container.querySelector(".note-reader")).toBeNull();
+
+    await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
+  it("enables one staged source turn after a completed grounded Reader roundtrip despite a stale running Job", async () => {
+    const dom = createDom();
+    const timeline = completedGroundedTimeline();
+    const harness = createHarness(timeline);
+    harness.jobs = [{
+      ...runningAgentJob(),
+      id: timeline.latestTurn!.jobId,
+      updatedAt: "2026-07-12T08:00:00.500Z"
+    }];
+    const mount = await mountHome(dom, makePigeApi(harness));
+
+    const citation = requireElement(mount.container.querySelector<HTMLButtonElement>(".conversation-citations .citation-row"));
+    await clickElement(dom, citation);
+    await waitFor(dom, () => mount.container.querySelector(".note-reader") !== null);
+    await clickElement(dom, buttons(mount.container, enMessages["retrieval.backToResults"])[0]!);
+    await waitFor(dom, () => mount.container.querySelector(".note-reader") === null);
+
+    await attachFile(dom, mount.container, "follow-up.txt", "Exact staged evidence.\n");
+    const send = requireElement(mount.container.querySelector<HTMLButtonElement>("button.composer-send"));
+    expect(send.disabled).toBe(false);
+    expect(harness.submitRequests).toHaveLength(0);
+    await clickElement(dom, send);
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    expect(harness.submitRequests[0]).toMatchObject({
+      inputKind: "file_picker",
+      stagedItems: [{ kind: "file", ordinal: 0, displayName: "follow-up.txt" }]
+    });
+    expect(harness.submittedFileNames).toEqual([["follow-up.txt"]]);
 
     await act(async () => mount.root.unmount());
     dom.window.close();
