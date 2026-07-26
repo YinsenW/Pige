@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
@@ -10,6 +10,7 @@ import {
   type SourceRecord
 } from "@pige/schemas";
 import { createOcrDurableEffect, type OcrSourceResult } from "./ocr-artifact-service";
+import { createContainedFileCommit } from "./contained-file-commit";
 import {
   PDF_PAGE_RENDERER_ID,
   PDF_PAGE_RENDERER_MAX_EDGE,
@@ -37,6 +38,18 @@ export interface PdfRenderedPageForOcr {
   readonly width: number;
   readonly height: number;
 }
+
+const {
+  writeBinaryAtomicAsync,
+  writeJsonAtomic,
+  writeJsonAtomicAsync,
+  writeTextAtomicAsync
+} = createContainedFileCommit({
+  prepareSync: assertSafeWriteParentSync,
+  verifySync: assertRealPathContainedSync,
+  prepare: assertSafeWriteParent,
+  verify: assertRealPathContained
+});
 
 export interface PdfRenderForOcrInput {
   readonly rendererId: typeof PDF_PAGE_RENDERER_ID;
@@ -1391,46 +1404,6 @@ function resolveVaultRelativePath(vaultPath: string, relativePath: string): stri
     throw new PigeDomainError("ocr.path_outside_vault", "The PDF OCR path escapes the active vault.");
   }
   return resolvedPath;
-}
-
-function writeJsonAtomic(filePath: string, value: unknown, vaultPath: string): void {
-  assertSafeWriteParentSync(vaultPath, filePath);
-  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
-  try {
-    fs.writeFileSync(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
-    fs.renameSync(temporaryPath, filePath);
-    assertRealPathContainedSync(vaultPath, filePath);
-  } finally {
-    fs.rmSync(temporaryPath, { force: true });
-  }
-}
-
-async function writeJsonAtomicAsync(filePath: string, value: unknown, vaultPath: string): Promise<void> {
-  await writeTextAtomicAsync(filePath, `${JSON.stringify(value, null, 2)}\n`, vaultPath);
-}
-
-async function writeTextAtomicAsync(filePath: string, value: string, vaultPath: string): Promise<void> {
-  await assertSafeWriteParent(vaultPath, filePath);
-  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
-  try {
-    await fs.promises.writeFile(temporaryPath, value, { encoding: "utf8", flag: "wx", mode: 0o600 });
-    await fs.promises.rename(temporaryPath, filePath);
-    await assertRealPathContained(vaultPath, filePath);
-  } finally {
-    await fs.promises.rm(temporaryPath, { force: true });
-  }
-}
-
-async function writeBinaryAtomicAsync(filePath: string, value: Uint8Array, vaultPath: string): Promise<void> {
-  await assertSafeWriteParent(vaultPath, filePath);
-  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
-  try {
-    await fs.promises.writeFile(temporaryPath, value, { flag: "wx", mode: 0o600 });
-    await fs.promises.rename(temporaryPath, filePath);
-    await assertRealPathContained(vaultPath, filePath);
-  } finally {
-    await fs.promises.rm(temporaryPath, { force: true });
-  }
 }
 
 async function assertSafeWriteParent(vaultPath: string, filePath: string): Promise<void> {
