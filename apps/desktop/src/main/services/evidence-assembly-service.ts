@@ -4,6 +4,7 @@ import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
 import { SourceRecordSchema, type SourceRecord } from "@pige/schemas";
 import { verifyReadableSourceFileAsync } from "./source-file-access";
+import { createVaultRelativePathResolver } from "./vault-layout";
 
 export const EVIDENCE_CONTEXT_CHARACTER_LIMIT = 18_000;
 export const EVIDENCE_FILE_READ_LIMIT_BYTES = 96 * 1024;
@@ -567,11 +568,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function resolveVaultRelativePath(vaultPath: string, relativePath: string): string {
-  const resolvedVault = path.resolve(vaultPath);
-  const resolvedPath = path.resolve(vaultPath, ...relativePath.split("/"));
-  if (resolvedPath !== resolvedVault && !resolvedPath.startsWith(`${resolvedVault}${path.sep}`)) {
-    throw new PigeDomainError("source.path_outside_vault", "The evidence artifact path escapes the active vault.");
-  }
-  return resolvedPath;
-}
+const resolveVaultRelativePath = createVaultRelativePathResolver(
+  () => new PigeDomainError("source.path_outside_vault", "The evidence artifact path escapes the active vault.")
+);
