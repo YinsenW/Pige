@@ -3,13 +3,21 @@ import fs from "node:fs";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { PigeDomainError } from "@pige/domain";
-import { SourceRecordSchema, type SourceRecord } from "@pige/schemas";
+import { SourceRecordSchema, type JobRef, type SourceRecord } from "@pige/schemas";
 
 export interface SourcePageResult {
   readonly pageId: string;
   readonly pagePath: string;
   readonly created: boolean;
   readonly title: string;
+}
+
+export interface SourcePagePublicationResult extends SourcePageResult {
+  readonly sourceId: string;
+  readonly conflict: boolean;
+  readonly durableEffect: {
+    readonly outputRefs: readonly JobRef[];
+  };
 }
 
 export interface SourcePageRefreshResult extends SourcePageResult {
@@ -56,7 +64,7 @@ export class SourcePageService {
     jobId: string,
     expectedCurrentSourceRecord: SourceRecord = sourceRecord,
     hooks: SourcePagePublicationHooks = {}
-  ): SourcePageResult {
+  ): SourcePagePublicationResult {
     const startPublication = createPublicationGate(hooks.onPublicationStart);
     const pageId = createPageId(sourceRecord.id);
     const pagePath = createSourcePagePath(sourceRecord);
@@ -84,7 +92,16 @@ export class SourcePageService {
         sourceRecordRevision,
         onPublicationStart: startPublication
       });
-      return { pageId, pagePath, created: recovered.created, title };
+      return createSourcePageResult({
+        vaultPath,
+        sourceId: sourceRecord.id,
+        sourceRecordPath: sourceRecordProjectionPath,
+        pageId,
+        pagePath,
+        created: recovered.created,
+        conflict: recovered.conflict,
+        title
+      });
     }
 
     const existingPage = readOptionalRegularTextFile(vaultPath, absolutePagePath);
@@ -154,12 +171,16 @@ export class SourcePageService {
       "source_record.target_changed"
     );
 
-    return {
+    return createSourcePageResult({
+      vaultPath,
+      sourceId: sourceRecord.id,
+      sourceRecordPath: sourceRecordProjectionPath,
       pageId,
       pagePath,
       created: !pageAlreadyExists,
+      conflict: pageConflict,
       title
-    };
+    });
   }
 
   refreshForSource(
@@ -892,6 +913,49 @@ function isErrno(value: unknown, code: string): value is NodeJS.ErrnoException {
 
 function checksumText(value: string): string {
   return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
+}
+
+function createSourcePageResult(input: {
+  readonly vaultPath: string;
+  readonly sourceId: string;
+  readonly sourceRecordPath: string;
+  readonly pageId: string;
+  readonly pagePath: string;
+  readonly created: boolean;
+  readonly conflict: boolean;
+  readonly title: string;
+}): SourcePagePublicationResult {
+  const sourceRecord = readRequiredRegularTextFile(
+    input.vaultPath,
+    resolveSourceRecordPath(input.vaultPath, input.sourceRecordPath)
+  );
+  const page = readRequiredRegularTextFile(
+    input.vaultPath,
+    resolveVaultRelativePath(input.vaultPath, input.pagePath)
+  );
+  return {
+    sourceId: input.sourceId,
+    pageId: input.pageId,
+    pagePath: input.pagePath,
+    created: input.created,
+    conflict: input.conflict,
+    title: input.title,
+    durableEffect: {
+      outputRefs: [{
+        kind: "source",
+        id: input.sourceId,
+        path: input.sourceRecordPath,
+        checksum: sourceRecord.revision.checksum,
+        role: "capture_source_record"
+      }, {
+        kind: "page",
+        id: input.pageId,
+        path: input.pagePath,
+        checksum: page.revision.checksum,
+        role: "capture_source_page"
+      }]
+    }
+  };
 }
 
 function stringMetadata(value: unknown): string | undefined {
