@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
@@ -13,6 +13,7 @@ import {
 import { SourcePageService } from "./source-page-service";
 import { tryVerifyReadableSourceFile, verifyReadableSourceFile } from "./source-file-access";
 import { OFFICE_MEDIA_TARGET_SCHEMA_VERSION } from "./office-parser-types";
+import { writeArtifactJsonAtomic, writeArtifactTextAtomic } from "./artifact-file-commit";
 
 export type ParserTextCoverage = "none" | "low" | "medium" | "high";
 
@@ -186,13 +187,13 @@ export class ParserArtifactService {
     const now = new Date().toISOString();
 
     if (extractedTextArtifactPath) {
-      writeFileAtomic(resolveVaultRelativePath(vaultPath, extractedTextArtifactPath), `${extraction.text.trimEnd()}\n`);
+      writeArtifactTextAtomic(resolveVaultRelativePath(vaultPath, extractedTextArtifactPath), `${extraction.text.trimEnd()}\n`);
     }
     const extractedTextChecksum = extractedTextArtifactPath
       ? checksumFile(resolveVaultRelativePath(vaultPath, extractedTextArtifactPath))
       : undefined;
     const metadataAbsolutePath = resolveVaultRelativePath(vaultPath, metadataArtifactPath);
-    writeJsonAtomic(metadataAbsolutePath, {
+    writeArtifactJsonAtomic(metadataAbsolutePath, {
       ...extraction.sidecarMetadata,
       schemaVersion: 1,
       artifactId: metadataArtifactId(parsedSource.id, extraction.format),
@@ -337,7 +338,7 @@ function writeArtifactOperation(
     rollbackHint: "Remove derived parser artifacts only after confirming the Source Record no longer references them.",
     warnings: Array.from(new Set(warnings)).slice(0, 64)
   });
-  writeJsonAtomic(absoluteOperationPath, operation);
+  writeArtifactJsonAtomic(absoluteOperationPath, operation);
   return operation;
 }
 
@@ -520,15 +521,4 @@ function resolveVaultRelativePath(vaultPath: string, relativePath: string): stri
     throw new PigeDomainError("parser.path_outside_vault", "The parser path escapes the active vault.");
   }
   return resolvedPath;
-}
-
-function writeJsonAtomic(filePath: string, value: unknown): void {
-  writeFileAtomic(filePath, `${JSON.stringify(value, null, 2)}\n`);
-}
-
-function writeFileAtomic(filePath: string, value: string): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
-  fs.writeFileSync(temporaryPath, value, "utf8");
-  fs.renameSync(temporaryPath, filePath);
 }

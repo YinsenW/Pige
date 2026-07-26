@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
@@ -11,6 +11,11 @@ import {
   type SourceRecord
 } from "@pige/schemas";
 import { MACOS_VISION_OCR_ADAPTER_VERSION, type NativeOcrResult } from "./ocr-types";
+import {
+  writeArtifactJsonAtomic,
+  writeArtifactJsonAtomicAsync,
+  writeArtifactTextAtomicAsync
+} from "./artifact-file-commit";
 import { SourcePageService } from "./source-page-service";
 import { tryVerifyReadableSourceFileAsync, verifyReadableSourceFileAsync } from "./source-file-access";
 
@@ -112,14 +117,14 @@ export class OcrArtifactService {
     const metadataArtifactPath = ["artifacts", "metadata", ...dateBucket, `${parsedSource.id}.ocr.json`].join("/");
     const now = new Date().toISOString();
     if (textArtifactPath) {
-      await writeFileAtomicAsync(resolveVaultRelativePath(vaultPath, textArtifactPath), `${result.text.trimEnd()}\n`);
+      await writeArtifactTextAtomicAsync(resolveVaultRelativePath(vaultPath, textArtifactPath), `${result.text.trimEnd()}\n`);
     }
     const textIntegrity = textArtifactPath
       ? await fileIntegrity(resolveVaultRelativePath(vaultPath, textArtifactPath), "ocr.artifact_missing")
       : undefined;
     const units = createUnits(result);
     const metadataAbsolutePath = resolveVaultRelativePath(vaultPath, metadataArtifactPath);
-    await writeJsonAtomicAsync(metadataAbsolutePath, {
+    await writeArtifactJsonAtomicAsync(metadataAbsolutePath, {
       schemaVersion: 1,
       artifactId: ocrMetadataArtifactId(parsedSource.id),
       sourceId: parsedSource.id,
@@ -278,7 +283,7 @@ function writeOcrOperation(
     rollbackHint: "Remove derived OCR artifacts only after confirming the Source Record no longer references them.",
     warnings: Array.from(new Set(warnings)).slice(0, 64)
   });
-  writeJsonAtomic(absoluteOperationPath, operation);
+  writeArtifactJsonAtomic(absoluteOperationPath, operation);
   return operation;
 }
 
@@ -408,30 +413,4 @@ function resolveVaultRelativePath(vaultPath: string, relativePath: string): stri
     throw new PigeDomainError("ocr.path_outside_vault", "The OCR path escapes the active vault.");
   }
   return resolvedPath;
-}
-
-function writeJsonAtomic(filePath: string, value: unknown): void {
-  writeFileAtomic(filePath, `${JSON.stringify(value, null, 2)}\n`);
-}
-
-async function writeJsonAtomicAsync(filePath: string, value: unknown): Promise<void> {
-  await writeFileAtomicAsync(filePath, `${JSON.stringify(value, null, 2)}\n`);
-}
-
-function writeFileAtomic(filePath: string, value: string): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
-  fs.writeFileSync(temporaryPath, value, "utf8");
-  fs.renameSync(temporaryPath, filePath);
-}
-
-async function writeFileAtomicAsync(filePath: string, value: string): Promise<void> {
-  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
-  try {
-    await fs.promises.writeFile(temporaryPath, value, "utf8");
-    await fs.promises.rename(temporaryPath, filePath);
-  } finally {
-    await fs.promises.rm(temporaryPath, { force: true });
-  }
 }
