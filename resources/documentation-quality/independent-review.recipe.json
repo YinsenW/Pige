@@ -34,10 +34,10 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review of exact external-root reconnect: Main owns the chooser and private dependency identity, BackupRestoreService proves and persists the same stable binding, BackupCoordinator resumes only the same reread Job from current truth, generic retry cannot bypass repair, and statuses remain unchanged.",
+    "scope": "Independent Product Planning review of exact external-root reconnect: Jobs projects only required body-free reconnect eligibility, Main owns the chooser and private dependency identity, BackupRestoreService proves and persists the same stable binding, BackupCoordinator resumes only the same reread Job from current truth, generic retry cannot bypass repair, and statuses remain unchanged.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 26,
-    "reviewedSha256": "6b8d716b0fcc32fc03d2901de46f9cad3fb4e7040bb945941a6732a181c5a68e"
+    "reviewedSha256": "e20e0d2887ec5406eb450b4901346ec1d8acea450314e9c4523eb5dc8f0c8627"
   },
   "reviewers": [{
     "reviewerId": "backup-reconnect-planning-review",
@@ -53,9 +53,9 @@
   }],
   "dimensions": [
     {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"One waiting Backup owns one chooser, exact binding repair and same-Job continuation; cancel and failure create no second durable work."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"Source, Job, Settings, API and UI owners agree that current external truth—not waiting metadata—authorizes resume."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"Job, API and UI owners agree that a closed boolean offers the action while current private truth—not the projection—authorizes resume."},
     {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"Backup and waiting-dependency open work becomes exact while every Requirement/Exit/Phase status remains unchanged."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"Canonical schemas, two service owners, one registrar and one bounded UI component give Development and UI exact handoff boundaries."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"One required safe boolean, canonical reconnect schemas, two service owners, one registrar and one bounded UI component give exact handoff boundaries."},
     {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"Existing owner documents carry request, storage, retry and visible-state facts; no new design document or architecture phase was added."}
   ],
   "verification": [

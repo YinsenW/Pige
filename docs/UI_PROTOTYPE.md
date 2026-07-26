@@ -910,7 +910,8 @@ Required controls:
   pathless localized surface fences storage actions and restores invoking focus.
 - This page alone owns restarted user Backup, valid actions and latest completion; never
   expose raw Job/path/error or rollback children.
-- A `reconnect_path` Backup offers one focus-owned Reconnect action. Main completes
+- A Backup offers Reconnect only for `JobSummary.canReconnectDependency === true`; UI never
+  infers private eligibility. Main completes
   chooser→proof→persistence→same-Job resume; renderer sends only vault/Job/request identity,
   never calls `jobs.retry`, and polls. Cancel restores focus with no notice or mutation;
   `not_found` uses stale copy, and no state exposes a path/reason/modal/permission:

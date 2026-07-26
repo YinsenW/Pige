@@ -371,6 +371,7 @@ type JobSummary = {
   sourceDisplayName?: string;
   sourceKind?: SourceKind;
   backupKind?: "user_backup" | "restore_rollback";
+  canReconnectDependency: boolean;
   error?: PigeErrorSummary;
   stage?: JobStage;
   progress?: JobProgress;
@@ -404,6 +405,9 @@ Rules:
 - Summaries may include source display name/kind and Backup ownership/error types, never
   record/copy/original/destination paths, bodies, prompts, responses, secrets, raw error
   detail or archive internals. Settings filters rollback children.
+- Required `canReconnectDependency` is true only for parsed durable
+  `backup + waiting_dependency + reconnect_path + (vault_binding | external_source)`;
+  otherwise false/skipped, exposing no private wait field.
 - Invalid job JSON is counted and skipped so Home can still open.
 - `jobs.cancel` directly cancels eligible queued/waiting/retryable work only with a
   false/absent action-safety guard; active process-local parse/OCR/`agent_turn`/Agent
@@ -879,18 +883,15 @@ Rules:
 - `backup.create` uses a trusted main-process save dialog, persists one durable Backup Job
   before scan, and returns only after cancellation or exact terminal completion.
 - Missing/rebound roots return body-free `backup.dependency_waiting`; no path is exposed.
-- Reconnect accepts exactly the four request fields and rereads/fences the active-vault
-  `backup` Job in `waiting_dependency` with `reconnect_path` and
-  `vault_binding | external_source` before opening the chooser. Private `dependencyId` is
-  respectively `rootId` or `sourceId` (which derives the current record/root facts), never
-  one uniform ID and never renderer-visible. Cancel mutates nothing.
-- `BackupRestoreService` validates and atomically persists/rereads the exact binding and
-  evidence; Main rereads the same Job/dependency, then `BackupCoordinatorService`
-  re-proves truth and resumes that Job. No duplicate durable object is created; result has
-  no Job summary and renderer polling is the sole convergence owner, without `jobs.retry`.
-- Exact identity is echoed. Changed truth is `stale`, absence `not_found`, other failure
-  `failed`; all are detail-free and keep the wait. The chooser is the action—no Permission
-  Broker. Generic/Backup retry returns `not_allowed` without private repair proof.
+- Reconnect accepts four fields and fences the exact active-vault eligible Job before the
+  chooser. Private `dependencyId` is `rootId` for `vault_binding`, or `sourceId` for
+  `external_source` (derive current record/root); it is never exposed. Cancel writes nothing.
+- `BackupRestoreService` repairs/rereads exact binding/evidence; Main and
+  `BackupCoordinatorService` reread/re-prove the same Job/dependency before resuming it.
+  No duplicate is created; the five-field result has no Job summary, and UI only polls.
+- Echo identity; changed/absent/other failure is body-free `stale`/`not_found`/`failed`
+  and keeps the wait. Chooser owns the action—no Permission Broker; generic/Backup retry
+  is `not_allowed` without private proof.
 - `backup.status` derives last completion from user Backup Jobs, never rollback/renderer state.
 - Restore picker/preview binds and validates archive, entries, bounds, checksums, schemas,
   legacy input and dependency counts without raw detail. Apply requires that ID plus

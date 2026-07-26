@@ -391,6 +391,10 @@ legacy omissions require augmentation before resume. Refs never duplicate conten
 actor/client, policy/hash and privacy fields remain body/secret-free and portable, and
 migrations preserve unknown fields.
 
+Required `JobSummary.canReconnectDependency` is true only for parsed current
+`backup + waiting_dependency + reconnect_path + (vault_binding | external_source)`;
+otherwise fail closed; no private wait field crosses and Main re-proves the record.
+
 ## 7. Idempotency Rules
 
 Jobs must be idempotent or detect already-applied side effects.
