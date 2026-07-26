@@ -5,6 +5,7 @@ import { act } from "react";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
+  AgentConversationRequest,
   AgentConversationTimeline,
   AppearanceSettingsSummary,
   AgentRuntimeStatus,
@@ -2530,6 +2531,7 @@ describe("Home durable Agent conversation UI", () => {
     const api = makePigeApi(harness);
     const firstMount = await mountHome(dom, api);
 
+    expect(harness.conversationRequests[0]).toEqual({ limit: 100 });
     expect(firstMount.container.querySelector('[aria-label="Conversation"]')).not.toBeNull();
     expect(firstMount.container.textContent).toContain("What should I remember?");
     expect(firstMount.container.textContent).toContain("Remember the durable boundary.");
@@ -3711,6 +3713,7 @@ interface ConversationHarness {
   readonly jobListRequests: JobsListRequest[];
   activities: KnowledgeActivitySummary[];
   readonly submitRequests: AgentSubmitTurnRequest[];
+  readonly conversationRequests: AgentConversationRequest[];
   readonly submittedFileNames: string[][];
   readonly retryJobIds: string[];
   retryMode: "queued" | "immediate_refail";
@@ -3764,7 +3767,7 @@ interface ConversationHarness {
   speechStopResult: SpeechStopResult;
   startSpeech: (request: SpeechStartRequest) => Promise<SpeechStartResult>;
   installSpeechAsset: (request: SpeechAssetInstallRequest) => Promise<SpeechAssetInstallResult>;
-  loadConversation: () => Promise<AgentConversationTimeline | undefined>;
+  loadConversation: (request: AgentConversationRequest) => Promise<AgentConversationTimeline | undefined>;
   submitTurn: (
     request: AgentSubmitTurnRequest,
     files?: readonly File[]
@@ -3783,6 +3786,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     jobListRequests: [],
     activities: [],
     submitRequests: [],
+    conversationRequests: [],
     submittedFileNames: [],
     retryJobIds: [],
     retryMode: "queued",
@@ -3881,7 +3885,10 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
       languageTag: request.languageTag,
       metering: "available"
     }),
-    loadConversation: async () => harness.timeline,
+    loadConversation: async (request) => {
+      harness.conversationRequests.push(request);
+      return harness.timeline;
+    },
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
       return request.stagedItems ? acceptedStagedResult(request) : completedResult();
@@ -4131,7 +4138,7 @@ function makePigeApi(harness: ConversationHarness): object {
     },
     agent: {
       runtimeStatus: () => harness.loadAgentRuntimeStatus(),
-      conversation: () => harness.loadConversation(),
+      conversation: (request: AgentConversationRequest) => harness.loadConversation(request),
       submitTurn: (request: AgentSubmitTurnRequest, files: readonly File[] = []) => {
         harness.submittedFileNames.push(files.map((file) => file.name));
         return harness.submitTurn(request, files);

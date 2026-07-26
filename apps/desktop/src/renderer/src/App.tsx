@@ -4792,7 +4792,7 @@ function HomeComposer(props: {
     const requestId = conversationLoadSequence.current + 1;
     conversationLoadSequence.current = requestId;
     try {
-      const nextTimeline = await window.pige.agent.conversation({ limit: 24 });
+      const nextTimeline = await window.pige.agent.conversation({ limit: 100 });
       if (requestId === conversationLoadSequence.current && activeVaultIdRef.current === vaultId) {
         const localTail = locallyCompletedConversationTailRef.current;
         const acknowledgesLocalTail = !localTail || (
