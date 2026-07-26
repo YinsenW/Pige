@@ -4763,11 +4763,11 @@ function HomeComposer(props: {
     agentDraft === null &&
     agentAnswer === null &&
     selectedNote === null;
-  const showConversationTimeline = visibleConversationMessages.length > 0 ||
+  const showConversationTimeline = selectedNote === null && (visibleConversationMessages.length > 0 ||
     visibleOptimisticConversationTurns.length > 0 ||
     agentDraft !== null ||
     showConversationRunMessage ||
-    liveConversationAnswer !== null;
+    liveConversationAnswer !== null);
   const conversationOwnsFlexibleSpace = showConversationTimeline &&
     selectedNote === null &&
     agentAnswer?.datasetResult === undefined &&

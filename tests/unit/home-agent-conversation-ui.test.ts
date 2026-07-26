@@ -3010,6 +3010,11 @@ describe("Home durable Agent conversation UI", () => {
     });
     await waitFor(dom, () => mount.container.querySelector(".note-reader") !== null);
     expect(mount.container.querySelector(".note-reader")?.textContent).toContain("Note A");
+    expect(mount.container.querySelector(".conversation-timeline")).toBeNull();
+
+    await clickElement(dom, buttons(mount.container, enMessages["retrieval.backToResults"])[0]!);
+    expect(mount.container.querySelector(".conversation-timeline")).not.toBeNull();
+    expect(mount.container.querySelector(".note-reader")).toBeNull();
 
     await act(async () => mount.root.unmount());
     dom.window.close();
