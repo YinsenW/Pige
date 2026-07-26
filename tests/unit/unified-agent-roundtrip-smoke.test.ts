@@ -74,4 +74,30 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain('request.path !== "/v1/responses"');
     expect(source).not.toContain("await setRendererFileInput(browserWindow, attachmentPath);\n      result =");
   });
+
+  it("restarts the same durable Agent fixture before cleanup without another Provider call", () => {
+    const connect = source.indexOf('await runChild("connect"');
+    const requestFence = source.indexOf("const requestCountBeforeRestart = requests.length;", connect);
+    const restart = source.indexOf('await runChild("restart"', requestFence);
+    const identityCheck = source.indexOf("assert.deepEqual(restart.durableSnapshot, connect.durableSnapshot);", restart);
+    const providerCheck = source.indexOf("assert.equal(requests.length, requestCountBeforeRestart);", identityCheck);
+    const cleanup = source.indexOf("fs.rmSync(rootPath, { recursive: true, force: true });", providerCheck);
+
+    expect(connect).toBeGreaterThan(-1);
+    expect(requestFence).toBeGreaterThan(connect);
+    expect(restart).toBeGreaterThan(requestFence);
+    expect(identityCheck).toBeGreaterThan(restart);
+    expect(providerCheck).toBeGreaterThan(identityCheck);
+    expect(cleanup).toBeGreaterThan(providerCheck);
+    expect(source).toContain('} else if (phase !== "restart") {');
+    expect(source).toContain('throw new Error("Unknown unified Agent roundtrip phase.");');
+    expect(source).toContain('job.class === "agent_turn" || job.class === "dataset_import"');
+    expect(source).toContain("messageIdentities");
+    expect(source).toContain("pageIdentities");
+    expect(source).toContain("sourceIds");
+    expect(source).toContain("datasetIds");
+    expect(source).toContain("activities");
+    expect(source).toContain("nonterminalJobIds");
+    expect(source).toContain("failedRetryableJobIds");
+  });
 });
