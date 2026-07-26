@@ -360,7 +360,10 @@ describe("desktop shell build contract", () => {
       "utf8"
     );
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
-    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const rendererSource = [
+      "apps/desktop/src/renderer/src/App.tsx",
+      "apps/desktop/src/renderer/src/components/VaultBackupSettingsPanel.tsx"
+    ].map((file) => fs.readFileSync(path.resolve(file), "utf8")).join("\n");
     const previewContract = contractsSource.slice(
       contractsSource.indexOf("export type RestorePreviewResult"),
       contractsSource.indexOf("export interface RestoreApplyRequest")
