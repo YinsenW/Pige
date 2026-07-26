@@ -3,7 +3,7 @@
   "baseline": "fd869668bb7d53cb1946b3b70e2127de1e1959af",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 132,
-  "baselineLines": 71151,
+  "baselineLines": 71149,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -26,7 +26,7 @@
       ["backup-coordinator-service.ts", 989, "jr"],
       ["backup-service.ts", 3210, "rd"],
       ["external-file-publication-protocol.ts", 183, "prd"],
-      ["generated-note-file.ts", 518, "rdf"],
+      ["generated-note-file.ts", 515, "rdf"],
       ["agent-turn-publication.ts", 386, "jrd"],
       ["durable-agent-turn-answer.ts", 79, "rd"],
       ["home-agent-attachment-service.ts", 358, "jrd"],
@@ -67,7 +67,7 @@
       ["local-tool-lifecycle-store.ts", 696, "rd"],
       ["markdown-page-index.ts", 434, "f"],
       ["model-provider-registry.ts", 1083, "prd"],
-      ["object-error-code.ts", 7, "d"],
+      ["object-error-code.ts", 11, "d"],
       ["ocr-artifact-service.ts", 407, "rd"],
       ["parser-artifact-service.ts", 502, "rd"],
       ["pdf-ocr-artifact-service.ts", 1524, "rd"],
@@ -78,7 +78,7 @@
       ["secret-store.ts", 142, "pd"],
       ["single-writer-file-commit.ts", 13, "d"],
       ["skill-registry-service.ts", 455, "pd"],
-      ["source-page-service.ts", 1055, "rdf"],
+      ["source-page-service.ts", 1052, "rdf"],
       ["vault-service.ts", 450, "rd"]
     ],
     "capability_executor": [
@@ -170,7 +170,7 @@
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,
       "writeFileAtomicDefinitions": 4,
-      "isErrnoDefinitions": 7,
+      "isErrnoDefinitions": 5,
       "resolveVaultRelativePathFiles": 11
     },
     "oversizedServiceBranchAndFunctionProxies": {

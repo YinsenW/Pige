@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
+import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
 
 const GENERATED_NOTE_HEADER_READ_LIMIT_BYTES = 128 * 1024;
 
@@ -507,10 +508,6 @@ function isContainedPath(candidate: string, root: string): boolean {
 
 function hashText(value: string): string {
   return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
-}
-
-function isErrno(value: unknown, code: string): value is NodeJS.ErrnoException {
-  return value instanceof Error && "code" in value && value.code === code;
 }
 
 export function pageConflict(message: string): PigeDomainError {
