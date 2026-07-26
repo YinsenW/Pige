@@ -5,6 +5,7 @@ import { act } from "react";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
+  AgentConversationRequest,
   AgentConversationTimeline,
   AppearanceSettingsSummary,
   AgentRuntimeStatus,
@@ -39,7 +40,8 @@ import type {
   SpeechStartResult,
   SpeechStopResult,
   WindowLayoutRequest,
-  WindowLayoutState
+  WindowLayoutState,
+  WindowState
 } from "@pige/contracts";
 import deMessages from "../../apps/desktop/src/renderer/src/locales/de/messages.json";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
@@ -959,6 +961,163 @@ describe("Home durable Agent conversation UI", () => {
     }
   });
 
+  it("places the persistent compact and expanded window switch immediately before Pin", async () => {
+    const dom = createDom(420);
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    const expandedButton = buttonsByAriaLabel(container, "Switch to wide layout")[0]!;
+    const pinButton = buttonsByAriaLabel(container, "Pin on top")[0]!;
+    expect(expandedButton.compareDocumentPosition(pinButton) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+
+    await clickElement(dom, expandedButton);
+    await waitFor(dom, () => container.querySelector('.shell.mode-expanded') !== null);
+    expect(harness.windowModeRequests).toEqual(["expanded"]);
+    await clickButtonByAriaLabel(dom, container, "Switch to compact layout");
+    await waitFor(dom, () => container.querySelector('.shell.mode-compact') !== null);
+    expect(harness.windowModeRequests).toEqual(["expanded", "compact"]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("uses the wide layout on first paint while window truth is still loading", async () => {
+    const dom = createDom(960);
+    const harness = createHarness(undefined);
+    harness.windowMode = "expanded";
+    let resolveWindowState: ((state: WindowState) => void) | undefined;
+    const api = makePigeApi(harness) as ReturnType<typeof makePigeApi> & {
+      window: { current: () => Promise<WindowState> };
+    };
+    api.window.current = () => new Promise((resolve) => { resolveWindowState = resolve; });
+    const { container, root } = await mountHome(dom, api);
+
+    expect(container.querySelector(".shell.mode-expanded")).not.toBeNull();
+    expect(container.querySelector(".shell.mode-compact")).toBeNull();
+    const modeToggle = buttonsByAriaLabel(container, "Switch to compact layout")[0]!;
+    expect(modeToggle.disabled).toBe(true);
+    const pinToggle = buttonsByAriaLabel(container, "Pin on top")[0]!;
+    expect(pinToggle.disabled).toBe(true);
+
+    await act(async () => {
+      resolveWindowState?.(windowState(harness));
+      await settle(dom);
+    });
+    await waitFor(dom, () => modeToggle.disabled === false);
+    await waitFor(dom, () => pinToggle.disabled === false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("exposes mode-switch progress and keeps failures body-free", async () => {
+    const dom = createDom(960);
+    const harness = createHarness(undefined);
+    harness.windowMode = "expanded";
+    let modeRequests = 0;
+    let pinRequests = 0;
+    let resolveModeWrite: ((state: WindowState) => void) | undefined;
+    const api = makePigeApi(harness) as ReturnType<typeof makePigeApi> & {
+      window: {
+        setMode: (request: { readonly mode: "compact" | "expanded" }) => Promise<WindowState>;
+      };
+    };
+    api.window.setMode = () => {
+      modeRequests += 1;
+      return new Promise((resolve) => { resolveModeWrite = resolve; });
+    };
+    api.window.setAlwaysOnTop = async () => {
+      pinRequests += 1;
+      return { ...windowState(harness), alwaysOnTop: true };
+    };
+    const { container, root } = await mountHome(dom, api);
+    const modeToggle = buttonsByAriaLabel(container, "Switch to compact layout")[0]!;
+    const pinToggle = buttonsByAriaLabel(container, "Pin on top")[0]!;
+
+    await act(async () => {
+      modeToggle.click();
+      modeToggle.click();
+      pinToggle.click();
+      await settle(dom);
+    });
+    expect(modeRequests).toBe(1);
+    expect(pinRequests).toBe(0);
+    expect(modeToggle.disabled).toBe(true);
+    expect(pinToggle.disabled).toBe(true);
+    expect(modeToggle.getAttribute("aria-busy")).toBe("true");
+
+    harness.windowMode = "compact";
+    await act(async () => {
+      resolveModeWrite?.(windowState(harness));
+      await settle(dom);
+    });
+    await waitFor(dom, () => modeToggle.disabled === false);
+    expect(pinToggle.disabled).toBe(false);
+    expect(modeToggle.getAttribute("aria-label")).toBe("Switch to wide layout");
+
+    api.window.setMode = async () => {
+      throw new Error("raw private path /Users/example/window-state");
+    };
+    await clickElement(dom, modeToggle);
+    await waitFor(dom, () => container.querySelector(".capture-toast.error") !== null);
+    const errorToast = container.querySelector<HTMLElement>(".capture-toast.error")!;
+    expect(errorToast.textContent).toContain(enMessages["error.generic"]);
+    expect(errorToast.textContent).not.toContain("/Users/example/window-state");
+    expect(modeToggle.getAttribute("aria-label")).toBe("Switch to wide layout");
+    expect(modeToggle.disabled).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("serializes pin writes and keeps IPC failures body-free", async () => {
+    const dom = createDom(960);
+    const harness = createHarness(undefined);
+    harness.windowMode = "expanded";
+    let pinRequests = 0;
+    let resolvePinWrite: ((state: WindowState) => void) | undefined;
+    const api = makePigeApi(harness) as ReturnType<typeof makePigeApi> & {
+      window: {
+        setAlwaysOnTop: (request: { readonly alwaysOnTop: boolean }) => Promise<WindowState>;
+      };
+    };
+    api.window.setAlwaysOnTop = () => {
+      pinRequests += 1;
+      return new Promise((resolve) => { resolvePinWrite = resolve; });
+    };
+    const { container, root } = await mountHome(dom, api);
+    const pinToggle = buttonsByAriaLabel(container, "Pin on top")[0]!;
+
+    await act(async () => {
+      pinToggle.click();
+      pinToggle.click();
+      await settle(dom);
+    });
+    expect(pinRequests).toBe(1);
+    expect(pinToggle.disabled).toBe(true);
+    expect(pinToggle.getAttribute("aria-busy")).toBe("true");
+
+    await act(async () => {
+      resolvePinWrite?.({ ...windowState(harness), alwaysOnTop: true });
+      await settle(dom);
+    });
+    await waitFor(dom, () => pinToggle.disabled === false);
+    expect(pinToggle.getAttribute("aria-pressed")).toBe("true");
+
+    api.window.setAlwaysOnTop = async () => {
+      throw new Error("raw private path /Users/example/secret");
+    };
+    await clickElement(dom, pinToggle);
+    await waitFor(dom, () => container.querySelector(".capture-toast.error") !== null);
+    const errorToast = container.querySelector<HTMLElement>(".capture-toast.error")!;
+    expect(errorToast.textContent).toContain(enMessages["error.generic"]);
+    expect(errorToast.textContent).not.toContain("/Users/example/secret");
+    expect(pinToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(pinToggle.disabled).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("expands resident panes through 720, 840, and 1240 then restores the exact user base", async () => {
     const dom = createDom(420);
     const harness = createHarness(undefined);
@@ -1589,8 +1748,10 @@ describe("Home durable Agent conversation UI", () => {
     const compactNavigation = requireElement(dialog.querySelector<HTMLButtonElement>(
       'button[aria-label="Settings sections"]'
     ));
-    await waitFor(dom, () => dom.window.document.activeElement === compactNavigation);
-    expect(dom.window.document.activeElement).toBe(compactNavigation);
+    const compactReturn = requireElement(dialog.querySelector<HTMLButtonElement>(".settings-compact-return"));
+    await waitFor(dom, () => dom.window.document.activeElement === compactReturn);
+    expect(dom.window.document.activeElement).toBe(compactReturn);
+    expect(compactReturn.nextElementSibling).toBe(compactNavigation);
     expect(header.hasAttribute("inert")).toBe(true);
     expect(sidebar.hasAttribute("inert")).toBe(true);
     expect(workspace.hasAttribute("inert")).toBe(true);
@@ -2372,6 +2533,7 @@ describe("Home durable Agent conversation UI", () => {
     const api = makePigeApi(harness);
     const firstMount = await mountHome(dom, api);
 
+    expect(harness.conversationRequests[0]).toEqual({ limit: 100 });
     expect(firstMount.container.querySelector('[aria-label="Conversation"]')).not.toBeNull();
     expect(firstMount.container.textContent).toContain("What should I remember?");
     expect(firstMount.container.textContent).toContain("Remember the durable boundary.");
@@ -2850,6 +3012,11 @@ describe("Home durable Agent conversation UI", () => {
     });
     await waitFor(dom, () => mount.container.querySelector(".note-reader") !== null);
     expect(mount.container.querySelector(".note-reader")?.textContent).toContain("Note A");
+    expect(mount.container.querySelector(".conversation-timeline")).toBeNull();
+
+    await clickElement(dom, buttons(mount.container, enMessages["retrieval.backToResults"])[0]!);
+    expect(mount.container.querySelector(".conversation-timeline")).not.toBeNull();
+    expect(mount.container.querySelector(".note-reader")).toBeNull();
 
     await act(async () => mount.root.unmount());
     dom.window.close();
@@ -3522,6 +3689,12 @@ describe("Home durable Agent conversation UI", () => {
     expect(conversationStyles).toContain("white-space: pre-wrap;");
     expect(conversationStyles).toContain("max-height: min(36vh, 26rem);");
     expect(appSource).toContain('className="conversation-timeline-content"');
+    expect(appSource).toContain("<ConversationScrollRail timelineRef={conversationTimelineRef} t={props.t} />");
+    expect(styles).toContain(".conversation-scroll-rail");
+    expect(styles).toContain(".conversation-scroll-anchor-preview");
+    expect(styles).toMatch(/\.conversation-scroll-anchor:is\(:hover, :focus-visible\)[\s\S]*?--conversation-anchor-width:\s*16px;/);
+    expect(styles).toMatch(/\.conversation-scroll-rail\s*\{[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;[\s\S]*?box-shadow:\s*none;/);
+    expect(styles).toMatch(/\.conversation-timeline\.has-conversation-scroll-rail[\s\S]*?scrollbar-width:\s*none;/);
     expect(styles).toMatch(/\.home\.home-conversation-active\s*>\s*\.conversation-timeline\s*\{[\s\S]*?display:\s*block;[\s\S]*?flex:\s*1 1 auto;[\s\S]*?max-height:\s*none;/);
     expect(styles).not.toMatch(/\.home\.home-conversation-active\s*>\s*\.conversation-timeline\s*\{[\s\S]*?align-content:\s*end;/);
     expect(styles).toMatch(/\.conversation-timeline-content\s*\{[\s\S]*?min-height:\s*100%;[\s\S]*?flex-direction:\s*column;[\s\S]*?justify-content:\s*flex-end;[\s\S]*?gap:\s*18px;/);
@@ -3547,6 +3720,7 @@ interface ConversationHarness {
   readonly jobListRequests: JobsListRequest[];
   activities: KnowledgeActivitySummary[];
   readonly submitRequests: AgentSubmitTurnRequest[];
+  readonly conversationRequests: AgentConversationRequest[];
   readonly submittedFileNames: string[][];
   readonly retryJobIds: string[];
   retryMode: "queued" | "immediate_refail";
@@ -3600,7 +3774,7 @@ interface ConversationHarness {
   speechStopResult: SpeechStopResult;
   startSpeech: (request: SpeechStartRequest) => Promise<SpeechStartResult>;
   installSpeechAsset: (request: SpeechAssetInstallRequest) => Promise<SpeechAssetInstallResult>;
-  loadConversation: () => Promise<AgentConversationTimeline | undefined>;
+  loadConversation: (request: AgentConversationRequest) => Promise<AgentConversationTimeline | undefined>;
   submitTurn: (
     request: AgentSubmitTurnRequest,
     files?: readonly File[]
@@ -3619,6 +3793,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     jobListRequests: [],
     activities: [],
     submitRequests: [],
+    conversationRequests: [],
     submittedFileNames: [],
     retryJobIds: [],
     retryMode: "queued",
@@ -3717,7 +3892,10 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
       languageTag: request.languageTag,
       metering: "available"
     }),
-    loadConversation: async () => harness.timeline,
+    loadConversation: async (request) => {
+      harness.conversationRequests.push(request);
+      return harness.timeline;
+    },
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
       return request.stagedItems ? acceptedStagedResult(request) : completedResult();
@@ -3967,7 +4145,7 @@ function makePigeApi(harness: ConversationHarness): object {
     },
     agent: {
       runtimeStatus: () => harness.loadAgentRuntimeStatus(),
-      conversation: () => harness.loadConversation(),
+      conversation: (request: AgentConversationRequest) => harness.loadConversation(request),
       submitTurn: (request: AgentSubmitTurnRequest, files: readonly File[] = []) => {
         harness.submittedFileNames.push(files.map((file) => file.name));
         return harness.submitTurn(request, files);

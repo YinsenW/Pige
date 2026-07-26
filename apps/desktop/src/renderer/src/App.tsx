@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -15,12 +16,12 @@ import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
 import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ConversationMarkdown } from "./components/ConversationMarkdown";
+import { ConversationScrollRail } from "./components/ConversationScrollRail";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
-import {
-  ReaderInlineReferenceSurface,
-  type ReaderInlineReferenceActivation
-} from "./components/ReaderInlineReferenceSurface";
+import { WindowModeToggle } from "./components/WindowModeToggle";
+import { useWindowControls } from "./components/useWindowControls";
+import { ReaderInlineReferenceSurface, type ReaderInlineReferenceActivation } from "./components/ReaderInlineReferenceSurface";
 import pigeMarkUrl from "../../../../../resources/brand/pige-icon/master/pige-icon-1024.png";
 import deMessages from "./locales/de/messages.json";
 import enMessages from "./locales/en/messages.json";
@@ -107,7 +108,6 @@ import {
   type ProviderEndpointProtocol,
   type SourceStorageStrategy
 } from "@pige/schemas";
-
 type View = "home" | "library" | "knowledgeTree";
 export type SettingsSection =
   | "general"
@@ -565,7 +565,8 @@ export function App(): React.JSX.Element {
     void refreshSpeechAvailability();
   }, [locale, settingsOpen, settingsSection]);
 
-  const t = (key: string): string => messageCatalogs[locale][key] ?? messageCatalogs.en[key] ?? key;
+  const t = useCallback((key: string): string => messageCatalogs[locale][key] ?? messageCatalogs.en[key] ?? key, [locale]);
+  const windowControls = useWindowControls(windowState, setWindowState, () => setCaptureToast({ kind: "error", message: t("error.generic") }));
 
   const refreshVaultState = async (): Promise<void> => {
     const refreshId = ++vaultRefreshSequence.current;
@@ -968,11 +969,6 @@ export function App(): React.JSX.Element {
     });
     setLibrarySearchFocusRequest((current) => current + 1);
   };
-
-  const toggleAlwaysOnTop = async (): Promise<void> => {
-    setWindowState(await window.pige.window.setAlwaysOnTop({ alwaysOnTop: !(windowState?.alwaysOnTop ?? false) }));
-  };
-
   const updateLocale = async (nextLocale: Locale): Promise<void> => {
     if (voiceAssetInstallActiveRef.current) return;
     const appearance = await window.pige.settings.setLocale({ locale: nextLocale });
@@ -1389,7 +1385,7 @@ export function App(): React.JSX.Element {
 
   return (
     <div
-      className={`shell app-window mode-${windowState?.mode ?? "compact"}${macosWindowShell ? " platform-macos" : ""}${homeSurface ? " home-surface" : ""}${sidebarOpen ? " sidebar-expanded" : ""}${selectedNote ? " note-mode" : ""}${dropActive ? " drop-active" : ""}`}
+      className={`shell app-window mode-${windowState?.mode ?? "expanded"}${macosWindowShell ? " platform-macos" : ""}${homeSurface ? " home-surface" : ""}${sidebarOpen ? " sidebar-expanded" : ""}${selectedNote ? " note-mode" : ""}${dropActive ? " drop-active" : ""}`}
       aria-label="Pige"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
@@ -1425,14 +1421,17 @@ export function App(): React.JSX.Element {
         </div>
         <span className="topbar-title" aria-hidden="true">{currentTitle}</span>
         <div className="topbar-actions">
+          <WindowModeToggle state={windowState} compactLabel={t("topbar.compact")} expandedLabel={t("topbar.expanded")} tabIndex={sidebarModal ? -1 : undefined} busy={windowControls.busy} onToggle={() => void windowControls.toggleWindowMode()} />
           <button
             type="button"
             className={windowState?.alwaysOnTop ? "icon-button pin-button active" : "icon-button pin-button"}
             aria-label={t("topbar.pin")}
             title={t("topbar.pin")}
             aria-pressed={windowState?.alwaysOnTop ?? false}
+            aria-busy={windowControls.busy || undefined}
+            disabled={windowState === null || windowControls.busy}
             tabIndex={sidebarModal ? -1 : undefined}
-            onClick={() => void toggleAlwaysOnTop()}
+            onClick={() => void windowControls.toggleAlwaysOnTop()}
           >
             <PigeIcon name="pin" />
           </button>
@@ -1742,7 +1741,6 @@ export function App(): React.JSX.Element {
           macosWindowShell={macosWindowShell}
           locale={locale}
           availableLocales={availableLocales}
-          alwaysOnTop={windowState?.alwaysOnTop ?? false}
           developmentNotice={developmentNotice?.surface === "settings" ? developmentNotice : null}
           onSectionChange={(section) => {
             setSettingsSection(section);
@@ -1750,7 +1748,6 @@ export function App(): React.JSX.Element {
           }}
           onClose={closeSettings}
           onLocaleChange={updateLocale}
-          onAlwaysOnTopChange={toggleAlwaysOnTop}
           onDevelopment={(capability) => showDevelopmentCapability("settings", capability)}
           t={t}
         >
@@ -1791,8 +1788,9 @@ export function App(): React.JSX.Element {
             ) : null
           ) : settingsSection === "general" ? (
             <GeneralSettingsPanel
-              alwaysOnTop={windowState?.alwaysOnTop ?? false}
-              onAlwaysOnTopChange={toggleAlwaysOnTop}
+              alwaysOnTop={windowState?.alwaysOnTop ?? null}
+              alwaysOnTopBusy={windowControls.busy}
+              onAlwaysOnTopChange={windowControls.toggleAlwaysOnTop}
               onOpenAppearance={() => {
                 setSettingsSection("appearance");
                 setDevelopmentNotice(null);
@@ -4765,11 +4763,11 @@ function HomeComposer(props: {
     agentDraft === null &&
     agentAnswer === null &&
     selectedNote === null;
-  const showConversationTimeline = visibleConversationMessages.length > 0 ||
+  const showConversationTimeline = selectedNote === null && (visibleConversationMessages.length > 0 ||
     visibleOptimisticConversationTurns.length > 0 ||
     agentDraft !== null ||
     showConversationRunMessage ||
-    liveConversationAnswer !== null;
+    liveConversationAnswer !== null);
   const conversationOwnsFlexibleSpace = showConversationTimeline &&
     selectedNote === null &&
     agentAnswer?.datasetResult === undefined &&
@@ -4794,7 +4792,7 @@ function HomeComposer(props: {
     const requestId = conversationLoadSequence.current + 1;
     conversationLoadSequence.current = requestId;
     try {
-      const nextTimeline = await window.pige.agent.conversation({ limit: 24 });
+      const nextTimeline = await window.pige.agent.conversation({ limit: 100 });
       if (requestId === conversationLoadSequence.current && activeVaultIdRef.current === vaultId) {
         const localTail = locallyCompletedConversationTailRef.current;
         const acknowledgesLocalTail = !localTail || (
@@ -5720,6 +5718,7 @@ function HomeComposer(props: {
             </article>
             ) : null}
           </div>
+          <ConversationScrollRail timelineRef={conversationTimelineRef} t={props.t} />
         </section>
       ) : null}
       {selectedNote ? (
@@ -6583,12 +6582,10 @@ export function SettingsSurface(props: {
   readonly macosWindowShell?: boolean;
   readonly locale: Locale;
   readonly availableLocales: readonly Locale[];
-  readonly alwaysOnTop: boolean;
   readonly developmentNotice: DevelopmentNotice | null;
   readonly onSectionChange: (section: SettingsSection) => void;
   readonly onClose: () => void;
   readonly onLocaleChange: (locale: Locale) => Promise<void>;
-  readonly onAlwaysOnTopChange: () => Promise<void>;
   readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
   readonly children: ReactNode;
@@ -6596,17 +6593,16 @@ export function SettingsSurface(props: {
   const dialogRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const compactCloseButtonRef = useRef<HTMLButtonElement>(null);
   const compactNavigationButtonRef = useRef<HTMLButtonElement>(null);
   const compactSettings = useMediaQuery("(max-width: 520px)");
   const [compactNavigationOpen, setCompactNavigationOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-  const sectionMatches = (section: SettingsSection): boolean =>
-    normalizedQuery.length === 0 || props.t(`settings.section.${section}`).toLocaleLowerCase().includes(normalizedQuery);
+  const sectionMatches = (section: SettingsSection): boolean => normalizedQuery.length === 0 || props.t(`settings.section.${section}`).toLocaleLowerCase().includes(normalizedQuery);
   const matchingSectionCount = settingsSections.filter((item) => sectionMatches(item.id)).length;
-
   useEffect(() => {
-    if (compactSettings) compactNavigationButtonRef.current?.focus();
+    if (compactSettings) compactCloseButtonRef.current?.focus();
     else closeButtonRef.current?.focus();
   }, [compactSettings]);
 
@@ -6754,6 +6750,7 @@ export function SettingsSurface(props: {
           <div ref={contentRef} className="settings-content" inert={compactSettings && compactNavigationOpen}>
             <h1 id="settings-surface-title" className="visually-hidden">{props.t("settings.title")}</h1>
             <header className="settings-compact-header">
+              <button ref={compactCloseButtonRef} type="button" className="icon-button settings-compact-return" title={props.t("settings.close")} aria-label={props.t("settings.close")} onClick={props.onClose}><PigeIcon name="arrowLeft" size={17} /></button>
               <button
                 ref={compactNavigationButtonRef}
                 type="button"
@@ -6779,7 +6776,8 @@ export function SettingsSurface(props: {
 }
 
 export function GeneralSettingsPanel(props: {
-  readonly alwaysOnTop: boolean;
+  readonly alwaysOnTop: boolean | null;
+  readonly alwaysOnTopBusy: boolean;
   readonly onAlwaysOnTopChange: () => Promise<void>;
   readonly onOpenAppearance: () => void;
   readonly onDevelopment: () => void;
@@ -6838,7 +6836,9 @@ export function GeneralSettingsPanel(props: {
               role="switch"
               aria-label={props.t("settings.general.alwaysOnTop")}
               aria-describedby="settings-general-always-on-top-description"
-              aria-checked={props.alwaysOnTop}
+              aria-checked={props.alwaysOnTop ?? false}
+              aria-busy={props.alwaysOnTopBusy || undefined}
+              disabled={props.alwaysOnTop === null || props.alwaysOnTopBusy}
               onClick={() => void props.onAlwaysOnTopChange()}
             />
           </div>

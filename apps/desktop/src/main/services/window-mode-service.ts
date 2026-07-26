@@ -338,7 +338,7 @@ export class WindowModeService {
   #getPreferences(): WindowPreferences {
     const stored = this.#settings.getWindowPreferences();
     return {
-      mode: stored?.mode ?? "compact",
+      mode: stored?.mode ?? "expanded",
       alwaysOnTop: stored?.alwaysOnTop ?? false,
       sidebarOpen: stored?.sidebarOpen ?? false,
       noteAgentOpen: stored?.noteAgentOpen ?? false,

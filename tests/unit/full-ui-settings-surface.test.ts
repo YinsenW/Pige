@@ -40,6 +40,50 @@ afterEach(() => {
 });
 
 describe("full UI Settings surface", () => {
+  it("keeps the always-on-top control inert until window truth is known", async () => {
+    const dom = createDom();
+    const onAlwaysOnTopChange = vi.fn(async () => undefined);
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+
+    await act(async () => {
+      root.render(createElement(GeneralSettingsPanel, {
+        alwaysOnTop: null,
+        alwaysOnTopBusy: false,
+        onAlwaysOnTopChange,
+        onOpenAppearance: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+
+    const alwaysOnTop = requireElement(dom.window.document.querySelector<HTMLButtonElement>(
+      'button[role="switch"][aria-label="Keep Pige on top"]'
+    ));
+    expect(alwaysOnTop.disabled).toBe(true);
+    expect(alwaysOnTop.getAttribute("aria-checked")).toBe("false");
+    alwaysOnTop.click();
+    expect(onAlwaysOnTopChange).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.render(createElement(GeneralSettingsPanel, {
+        alwaysOnTop: true,
+        alwaysOnTopBusy: true,
+        onAlwaysOnTopChange,
+        onOpenAppearance: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+    expect(alwaysOnTop.disabled).toBe(true);
+    expect(alwaysOnTop.getAttribute("aria-checked")).toBe("true");
+    expect(alwaysOnTop.getAttribute("aria-busy")).toBe("true");
+    alwaysOnTop.click();
+    expect(onAlwaysOnTopChange).not.toHaveBeenCalled();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("reflects WindowLayout persistence without inventing a startup preference", async () => {
     const dom = createDom();
     const onAlwaysOnTopChange = vi.fn(async () => undefined);
@@ -58,6 +102,7 @@ describe("full UI Settings surface", () => {
     await act(async () => {
       root.render(createElement(GeneralSettingsPanel, {
         alwaysOnTop: false,
+        alwaysOnTopBusy: false,
         onAlwaysOnTopChange,
         onOpenAppearance,
         onDevelopment,
@@ -163,6 +208,11 @@ describe("full UI Settings surface", () => {
     expect(undefinedCustomPropertyUses).toEqual([
       "--branch-opacity",
       "--branch-width",
+      "--conversation-anchor-opacity",
+      "--conversation-anchor-position",
+      "--conversation-rail-height",
+      "--conversation-rail-right",
+      "--conversation-rail-top",
       "--home-processing-panel-height",
       "--minimap-opacity",
       "--minimap-width",
@@ -224,22 +274,23 @@ describe("full UI Settings surface", () => {
     const dialog = requireElement(dom.window.document.querySelector<HTMLElement>('[role="dialog"]'));
     const drawer = requireElement(dialog.querySelector<HTMLElement>(".settings-sidebar"));
     const content = requireElement(dialog.querySelector<HTMLElement>(".settings-content"));
+    const compactReturn = requireElement(dialog.querySelector<HTMLButtonElement>(".settings-compact-return"));
     const trigger = buttonNamed(dialog, "Settings sections");
     expect(dialog.dataset.compactNavigationOpen).toBe("false");
     expect(drawer.getAttribute("aria-hidden")).toBe("true");
     expect(drawer.hasAttribute("inert")).toBe(true);
     expect(content.hasAttribute("inert")).toBe(false);
-    expect(dom.window.document.activeElement).toBe(trigger);
+    expect(dom.window.document.activeElement).toBe(compactReturn);
 
     const pageControl = buttonNamed(content, "Page control");
     await act(async () => {
-      trigger.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+      compactReturn.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
     });
     expect(dom.window.document.activeElement).toBe(pageControl);
     await act(async () => {
       pageControl.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
     });
-    expect(dom.window.document.activeElement).toBe(trigger);
+    expect(dom.window.document.activeElement).toBe(compactReturn);
 
     await act(async () => {
       trigger.click();

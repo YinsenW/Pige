@@ -1205,7 +1205,7 @@
     "EV-SOURCE-PAGE-PATH-PROJECTION": { "kind": "test", "path": "tests/unit/source-page-service.test.ts", "selector": "accepts an absolute Source Record path only inside the vault Source Record root" },
     "EV-SOURCE-PAGE-PATH-CONFINEMENT": { "kind": "test", "path": "tests/unit/source-page-service.test.ts", "selector": "rejects an absolute Source Record path outside the vault Source Record root" },
     "EV-SOURCE-PAGE-PREVIEW-BOUNDARY": { "kind": "test", "path": "tests/unit/source-page-service.test.ts", "selector": "rejects a symlinked extracted-text preview without leaking external text" },
-    "EV-APP-SHELL": { "kind": "implementation", "path": "apps/desktop/src/renderer/src/App.tsx", "selector": "mode-${windowState?.mode ?? \"compact\"}" },
+    "EV-APP-SHELL": { "kind": "implementation", "path": "apps/desktop/src/renderer/src/App.tsx", "selector": "mode-${windowState?.mode ?? \"expanded\"}" },
     "EV-FULL-UI-RESPONSIVE": { "kind": "test", "path": "tests/unit/full-ui-renderer-contract.test.ts", "selector": "uses the reviewed pane dimensions and corrected resident/overlay breakpoints" },
     "EV-WINDOW-LAYOUT-IPC": { "kind": "test", "path": "tests/unit/desktop-shell-contract.test.ts", "selector": "keeps resident pane dimensions and presentation under one validated main-process owner" },
     "EV-FULL-UI-NAVIGATION": { "kind": "test", "path": "tests/unit/full-ui-renderer-contract.test.ts", "selector": "keeps Home-only navigation hidden and exposes one controlled Library tree" },

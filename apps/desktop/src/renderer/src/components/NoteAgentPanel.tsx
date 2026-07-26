@@ -328,15 +328,6 @@ export function NoteAgentPanel(props: {
                           {copyLabel}
                         </span>
                       ) : null}
-                      <button type="button" aria-label={props.t("note.agentHelpful")} disabled>
-                        <PigeIcon name="thumbsUp" size={16} />
-                      </button>
-                      <button type="button" aria-label={props.t("note.agentNotHelpful")} disabled>
-                        <PigeIcon name="thumbsDown" size={16} />
-                      </button>
-                      <button type="button" aria-label={props.t("note.agentMore")} disabled>
-                        <PigeIcon name="more" size={16} />
-                      </button>
                     </div>
                   ) : null}
                 </article>
@@ -452,15 +443,17 @@ export function NoteAgentPanel(props: {
               }}
             />
             <div className="note-composer-toolbar">
-              <button
-                className="attach-button"
-                type="button"
-                aria-label={props.t("home.attachFile")}
-                disabled={!props.onAttach || props.availability !== "ready"}
-                onClick={props.onAttach}
-              >
-                <PigeIcon name="attach" size={18} />
-              </button>
+              {props.onAttach ? (
+                <button
+                  className="attach-button"
+                  type="button"
+                  aria-label={props.t("home.attachFile")}
+                  disabled={props.availability !== "ready"}
+                  onClick={props.onAttach}
+                >
+                  <PigeIcon name="attach" size={18} />
+                </button>
+              ) : null}
               <div className="model-switcher-wrap note-agent-model-switcher-wrap">
                 <button
                   ref={modelSwitcherRef}

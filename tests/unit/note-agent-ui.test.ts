@@ -60,6 +60,22 @@ describe("Note Agent production UI", () => {
     await unmount(dom, mount.root);
   });
 
+  it("hides the attachment action without an owner and binds an explicit owner when supplied", async () => {
+    const unavailableDom = createDom();
+    const unavailable = await mountPanel(unavailableDom);
+    expect(unavailable.container.querySelector(".attach-button")).toBeNull();
+    await unmount(unavailableDom, unavailable.root);
+
+    const availableDom = createDom();
+    const onAttach = vi.fn();
+    const available = await mountPanel(availableDom, { onAttach });
+    const attachButton = required(available.container.querySelector<HTMLButtonElement>(".attach-button"));
+    expect(attachButton.disabled).toBe(false);
+    await click(availableDom, attachButton);
+    expect(onAttach).toHaveBeenCalledTimes(1);
+    await unmount(availableDom, available.root);
+  });
+
   it("renders contract-conformant answer and proposal fixtures without binding them as product truth", async () => {
     const dom = createDom();
     const opened: string[] = [];
@@ -215,6 +231,7 @@ describe("Note Agent production UI", () => {
     });
 
     const copyButton = required(buttonAriaNamed(mount.container, t("note.agentCopy")));
+    expect(mount.container.querySelectorAll(".message-actions button")).toHaveLength(1);
     copyButton.focus();
     await click(dom, copyButton);
     expect(onCopyMessage).toHaveBeenCalledTimes(1);
@@ -479,7 +496,7 @@ describe("Note Agent production UI", () => {
     });
     expect(conversation).toHaveBeenCalledWith({
       scope: { kind: "current_note", pageId: "page_current_note_1" },
-      limit: 24
+      limit: 100
     });
 
     const textarea = required(container.querySelector<HTMLTextAreaElement>("textarea"));
@@ -547,7 +564,7 @@ describe("Note Agent production UI", () => {
     expect(container.querySelector('[data-provisional="true"]')).toBeNull();
     expect(buttonNamed(container, "Current note · quote")).toBeDefined();
     expect(container.querySelector(".proposal-panel")).toBeNull();
-    expect(container.querySelector(".attach-button")?.hasAttribute("disabled")).toBe(true);
+    expect(container.querySelector(".attach-button")).toBeNull();
 
     await unmount(dom, root);
   });
@@ -612,7 +629,7 @@ describe("Note Agent production UI", () => {
     for (const [request] of conversation.mock.calls) {
       expect(request).toEqual({
         scope: { kind: "current_note", pageId: "page_current_note_recovery" },
-        limit: 24
+        limit: 100
       });
     }
 
@@ -651,8 +668,8 @@ describe("Note Agent production UI", () => {
     });
     expect(container.textContent).toContain("New page answer");
     expect(container.textContent).not.toContain("Stale old page answer");
-    expect(conversation).toHaveBeenCalledWith({ scope: { kind: "current_note", pageId: "page_old" }, limit: 24 });
-    expect(conversation).toHaveBeenCalledWith({ scope: { kind: "current_note", pageId: "page_new" }, limit: 24 });
+    expect(conversation).toHaveBeenCalledWith({ scope: { kind: "current_note", pageId: "page_old" }, limit: 100 });
+    expect(conversation).toHaveBeenCalledWith({ scope: { kind: "current_note", pageId: "page_new" }, limit: 100 });
 
     await unmount(dom, root);
   });

@@ -6,11 +6,18 @@ const rendererRoot = path.resolve("apps/desktop/src/renderer/src");
 const appSource = fs.readFileSync(path.join(rendererRoot, "App.tsx"), "utf8");
 const cssSource = fs.readFileSync(path.join(rendererRoot, "styles/app.css"), "utf8");
 const iconSource = fs.readFileSync(path.join(rendererRoot, "components/PigeIcon.tsx"), "utf8");
+const windowModeToggleSource = fs.readFileSync(path.join(rendererRoot, "components/WindowModeToggle.tsx"), "utf8");
+const windowControlsSource = fs.readFileSync(path.join(rendererRoot, "components/useWindowControls.ts"), "utf8");
 const enMessages = JSON.parse(
   fs.readFileSync(path.join(rendererRoot, "locales/en/messages.json"), "utf8")
 ) as Record<string, string>;
 
 describe("full production UI renderer contract", () => {
+  it("keeps locale lookup stable across unrelated renders", () => {
+    expect(appSource).toContain("const t = useCallback(");
+    expect(appSource).toContain("[locale]);");
+  });
+
   it("uses the reviewed pane dimensions and corrected resident/overlay breakpoints", () => {
     for (const declaration of [
       "--home-pane-min: 360px;",
@@ -91,7 +98,11 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain("windowLayoutRevisionRef.current");
     expect(appSource).toContain('surface: "home"');
     expect(appSource).toContain('surface: "reader"');
-    expect(appSource).not.toContain("window.pige.window.setMode(");
+    expect(appSource).toContain("<WindowModeToggle");
+    expect(windowControlsSource).toContain("window.pige.window.setMode({");
+    expect(windowModeToggleSource).not.toContain("window.pige.window.setMode(");
+    expect(windowControlsSource).not.toMatch(/\b(width|height|workArea|presentation)\s*:/);
+    expect(windowModeToggleSource).not.toMatch(/\b(width|height|workArea|presentation)\s*:/);
     expect(appSource).not.toContain("window.pige.window.setSidebarOpen(");
     const layoutAdapter = appSource.slice(
       appSource.indexOf("const requestWindowLayout"),
