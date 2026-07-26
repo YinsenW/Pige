@@ -143,8 +143,8 @@ describe("Conversation scroll rail", () => {
     const anchors = Array.from(dom.window.document.querySelectorAll<HTMLButtonElement>(".conversation-scroll-anchor"));
     expect(anchors).toHaveLength(2);
     expect(anchors.map((anchor) => anchor.getAttribute("aria-label"))).toEqual([
-      "Jump to message 1/2",
-      "Jump to message 2/2"
+      "Jump to turn 1/2",
+      "Jump to turn 2/2"
     ]);
 
     await act(async () => root.unmount());
@@ -301,7 +301,7 @@ function installDom(dom: JSDOM): void {
 function translate(key: string): string {
   return ({
     "home.scrollRailLabel": "Conversation navigation",
-    "home.scrollRailJump": "Jump to message",
-    "home.scrollRailMessageFallback": "Message"
+    "home.scrollRailJump": "Jump to turn",
+    "home.scrollRailMessageFallback": "Conversation turn"
   } as Record<string, string>)[key] ?? key;
 }
