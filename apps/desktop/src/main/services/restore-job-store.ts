@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
+import { hasObjectErrorCode as isErrno } from "./object-error-code";
 import {
   JobIdSchema,
   JobRecordSchema,
@@ -994,8 +995,4 @@ function canonicalJson(value: unknown): string {
     return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
   }
   return JSON.stringify(value);
-}
-
-function isErrno(caught: unknown, code: string): boolean {
-  return Boolean(caught && typeof caught === "object" && "code" in caught && caught.code === code);
 }

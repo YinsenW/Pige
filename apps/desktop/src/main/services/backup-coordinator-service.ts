@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { BackupCreateResult } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
+import { hasObjectErrorCode as isErrno } from "./object-error-code";
 import {
   BackupIdSchema,
   JobIdSchema,
@@ -980,10 +981,6 @@ function abortError(): Error {
   const error = new Error("Backup execution was aborted.");
   error.name = "AbortError";
   return error;
-}
-
-function isErrno(caught: unknown, code: string): boolean {
-  return Boolean(caught && typeof caught === "object" && "code" in caught && caught.code === code);
 }
 
 function dedupeRefs(refs: readonly JobRef[]): readonly JobRef[] {

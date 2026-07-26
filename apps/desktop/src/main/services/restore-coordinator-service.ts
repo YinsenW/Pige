@@ -7,6 +7,7 @@ import type {
   VaultSummary
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
+import { hasObjectErrorCode as isErrno } from "./object-error-code";
 import {
   BackupIdSchema,
   JobIdSchema,
@@ -973,10 +974,6 @@ function ensurePrivateDirectory(directoryPath: string): string {
   }
   fs.chmodSync(resolved, 0o700);
   return resolved;
-}
-
-function isErrno(caught: unknown, code: string): boolean {
-  return Boolean(caught && typeof caught === "object" && "code" in caught && caught.code === code);
 }
 
 function isRetryableRestoreFailure(caught: unknown): boolean {
