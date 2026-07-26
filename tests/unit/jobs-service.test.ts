@@ -357,16 +357,21 @@ describe("jobs service", () => {
   it("marks an interrupted Home retrieval query retryable without queuing an unsupported generic retry", () => {
     const { vaultPath, vault } = makeVault();
     const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
-    const jobs = new JobsService(vaults);
-    const created = jobs.createRetrievalQueryJob({ queryHash: `sha256:${"a".repeat(64)}` });
-    jobs.writeRetrievalQueryJob(created, JobRecordSchema.parse({
-      ...created,
+    const created = JobRecordSchema.parse({
+      id: "job_20260711_legacyquery1",
+      class: "retrieval_query",
       state: "running",
+      priority: "interactive",
+      scope: "vault",
+      createdAt: "2026-07-11T01:00:00.000Z",
       stage: "retrieving",
       startedAt: "2026-07-11T01:00:00.000Z",
       updatedAt: "2026-07-11T01:00:00.000Z",
+      activeVaultId: vault.vaultId,
+      retry: { retryCount: 0, maxAutomaticRetries: 0, requiresUserAction: true },
       message: "Home Agent is retrieving bounded local evidence."
-    }));
+    });
+    writeJob(vaultPath, created);
 
     const restarted = new JobsService(vaults);
     expect(restarted.recoverInterruptedJobs()).toEqual({ requeued: 0, failedRetryable: 1 });
@@ -3099,6 +3104,20 @@ function seedExplicitImageOcrJob(
 function readJobRecord(vaultPath: string, jobId: string): JobRecord {
   const jobPath = findFile(path.join(vaultPath, ".pige", "jobs"), `${jobId}.json`);
   return JSON.parse(fs.readFileSync(jobPath, "utf8")) as JobRecord;
+}
+
+function writeJob(vaultPath: string, job: JobRecord): void {
+  const dateKey = requireValue(/^job_(\d{8})_/u.exec(job.id)?.[1]);
+  const jobPath = path.join(
+    vaultPath,
+    ".pige",
+    "jobs",
+    dateKey.slice(0, 4),
+    dateKey.slice(4, 6),
+    `${job.id}.json`
+  );
+  fs.mkdirSync(path.dirname(jobPath), { recursive: true });
+  fs.writeFileSync(jobPath, `${JSON.stringify(job, null, 2)}\n`, "utf8");
 }
 
 function checksumText(value: string): string {

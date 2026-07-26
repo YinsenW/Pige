@@ -151,10 +151,6 @@ export interface RecoverProposalDecisionsResult {
   readonly failed: number;
 }
 
-export interface CreateRetrievalQueryJobRequest {
-  readonly queryHash: string;
-}
-
 export interface CreateAgentTurnJobRequest {
   readonly conversationEventId: string;
   readonly conversationLocator: string;
@@ -584,53 +580,6 @@ export class JobsService {
       status: "requeued",
       job: toJobSummary(vaultPath, committed)
     };
-  }
-
-  createRetrievalQueryJob(request: CreateRetrievalQueryJobRequest): JobRecord {
-    const activeVault = this.#vaults.current();
-    const vaultPath = this.#requireActiveVaultPath();
-    if (!activeVault || !/^sha256:[a-f0-9]{64}$/u.test(request.queryHash)) {
-      throw new PigeDomainError("rag.query_invalid", "The Home query identity is invalid.");
-    }
-
-    const now = new Date();
-    const timestamp = now.toISOString();
-    const dateKey = timestamp.slice(0, 10).replaceAll("-", "");
-    const jobId = `job_${dateKey}_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
-    const job = JobRecordSchema.parse({
-      id: jobId,
-      class: "retrieval_query",
-      state: "queued",
-      priority: "interactive",
-      scope: "vault",
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      activeVaultId: activeVault.vaultId,
-      actor: {
-        kind: "user",
-        runtimeKind: "desktop_local",
-        clientCapabilityTier: "desktop_full"
-      },
-      inputRefs: [{
-        kind: "tool",
-        id: "pige_home_query",
-        checksum: request.queryHash,
-        role: "query_hash"
-      }],
-      retry: {
-        retryCount: 0,
-        maxAutomaticRetries: 0,
-        requiresUserAction: true
-      },
-      privacy: {
-        usedCloudModel: false,
-        usedNetwork: false,
-        usedShell: false,
-        accessedExternalFiles: false
-      },
-      message: "Home Agent question accepted."
-    });
-    return this.#createJob(createJobRecordPath(vaultPath, job.id), job);
   }
 
   createAgentTurnJob(request: CreateAgentTurnJobRequest): JobRecord {
@@ -1379,32 +1328,6 @@ export class JobsService {
       );
     }
     return { job: jobFile.job, sourceId, pageId, pagePath, title };
-  }
-
-  writeRetrievalQueryJob(expected: JobRecord, job: JobRecord): JobRecord {
-    const activeVault = this.#vaults.current();
-    const vaultPath = this.#requireActiveVaultPath();
-    const snapshot = this.#readJobSnapshot(vaultPath, job.id);
-    const existing = snapshot ? { path: snapshot.path, job: snapshot.job } : undefined;
-    if (
-      !activeVault ||
-      !existing ||
-      existing.job.class !== "retrieval_query" ||
-      job.class !== "retrieval_query" ||
-      job.createdAt !== existing.job.createdAt ||
-      job.activeVaultId !== activeVault.vaultId ||
-      existing.job.activeVaultId !== activeVault.vaultId
-    ) {
-      throw new PigeDomainError("rag.job_binding_invalid", "The Home Agent Job binding is invalid.");
-    }
-    if (!isDeepStrictEqual(existing.job, JobRecordSchema.parse(expected))) {
-      throw new PigeDomainError(
-        "job.revision_conflict",
-        "The retrieval Job changed before the requested mutation could be committed."
-      );
-    }
-    const validated = JobRecordSchema.parse(job);
-    return this.#replaceJob(snapshot!, validated).job;
   }
 
   beginAgentTurnJob(expected: JobRecord, input: BeginJobInput): JobRecord {
