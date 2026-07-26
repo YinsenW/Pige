@@ -4,6 +4,7 @@ import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { PigeDomainError } from "@pige/domain";
 import { SourceRecordSchema, type SourceRecord } from "@pige/schemas";
+import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
 
 export interface SourcePageResult {
   readonly pageId: string;
@@ -884,10 +885,6 @@ function checksumBuffer(value: Buffer): string {
 
 function isContainedPath(candidate: string, root: string): boolean {
   return candidate === root || candidate.startsWith(`${root}${path.sep}`);
-}
-
-function isErrno(value: unknown, code: string): value is NodeJS.ErrnoException {
-  return value instanceof Error && "code" in value && value.code === code;
 }
 
 function checksumText(value: string): string {

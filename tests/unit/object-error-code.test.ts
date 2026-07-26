@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   hasErrorInstanceCode,
+  hasNodeErrnoExceptionCode,
   hasObjectErrorCode
 } from "../../apps/desktop/src/main/services/object-error-code";
 
@@ -21,5 +22,7 @@ describe("object error code", () => {
     expect(hasErrorInstanceCode(error, "EEXIST")).toBe(true);
     expect(hasErrorInstanceCode({ code: "EEXIST" }, "EEXIST")).toBe(false);
     expect(hasErrorInstanceCode(Object.assign(new Error("exists"), { code: 17 }), "17")).toBe(false);
+    expect(hasNodeErrnoExceptionCode(error, "EEXIST")).toBe(true);
+    expect(hasNodeErrnoExceptionCode({ code: "EEXIST" }, "EEXIST")).toBe(false);
   });
 });
