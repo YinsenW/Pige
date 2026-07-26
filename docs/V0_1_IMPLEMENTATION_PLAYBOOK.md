@@ -2,7 +2,7 @@
 
 Status: Active implementation sequence
 Baseline date: 2026-07-09
-Last revised: 2026-07-10
+Last revised: 2026-07-26
 
 ## 1. Purpose
 
@@ -38,16 +38,18 @@ its one deny-copy locale hit is not AR1 debt. The Node command alone decides com
 Planning defines Phase 0 efficacy evidence; Project Management records body-free Git/CI/task
 timing and blocked-feature facts. No new document/tier, pause extension or status claim.
 
-Build vertical slices. Do not pull isolated breadth ahead of the Provider-to-Pi-to-Home
-turn and Agent-selected capture-to-Markdown path merely because its design is nearby.
+Build one coherent vertical slice inside existing phase assignments; select by user value:
 
-Scope discipline for AI agents:
-
-- Treat PRD P0 as the v0.1 release acceptance list, not as the task scope for any single phase.
-- Each implementation session should choose one phase or one vertical slice inside a phase, name its requirement source, and preserve the phase's `Deferred from this phase` boundaries.
-- Do not pull later-phase items forward merely because their design is nearby in the docs.
-- If a later-phase item is required to make the current phase safe or testable, document the dependency and implement the smallest enabling contract rather than the full feature.
-- Any scope promotion or demotion must update PRD, Milestones, this playbook, Spec Traceability, and Decision Log together.
+- Core journeys outrank rare-edge completeness. After external-root reconnect, next is
+  the production file-ingestion loop on sole main: handoff/drop/attachment → one Agent
+  turn → Pi-selected preserve/parse/OCR/retrieve/organize → final/citations → restart
+  recovery. Close with real Electron evidence, not document status.
+- Core paths target the best implementation; common support reliable use; rare edges may
+  fail closed and stay planned. Settings/Backup/reconnect/recovery breadth is normal unless
+  it blocks that loop or presents P0 data-loss/security risk.
+- Each slice names its phase and requirements, preserves deferrals, and adds only the
+  smallest safety/test dependency. Only scope or assignment changes update PRD,
+  Milestones, this Playbook, Spec Traceability and Decision Log.
 
 Phase completion rule:
 
