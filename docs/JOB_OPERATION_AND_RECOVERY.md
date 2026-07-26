@@ -657,6 +657,7 @@ Recovery decisions:
 | --- | --- |
 | Source preserved, no selected child | Wake the Agent parent; never infer parse/OCR/retrieval from source shape. |
 | `agent_turn` has a valid assistant event | Adopt its checksum-bound output refs and finish without another model call. |
+| Picker turn has the current conversation/tail pair | Adopt that conversation/client turn; tail drift cannot create a split conversation or effects. |
 | Generated-page create/update Undo is interrupted | Adopt page/private-image/trash/index/quarantine/Operation only when IDs/hashes agree; else preserve/fail closed, then rebuild. |
 | Source copied, source record missing | Create repair proposal or source record if checksum/path proves source. |
 | Parse artifact exists, source page missing | Resume source page creation. |

@@ -540,28 +540,24 @@ scores. Other DTOs follow
 `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`.
 
 Schema-v1 `agent.submitTurn` binds optional client/conversation/tail IDs and strict
-`current_note` page ID; preload projects no path. Exact retry adopts its event/Job;
-changed binding/scope or stale tail fails before Job/Pi. `agent.conversation` requires
-matching scope and returns at most 100 bounded messages, tail, follow-up eligibility and
-safe latest Job; Home asks for 24. Results exclude bodies, paths, prompts, credentials,
-endpoints and raw errors. Legacy handlers remain readable; save-answer/multi-attachment
-recovery stays open.
+`current_note` scope; preload projects no path. `agent.conversation` returns at most 100
+bounded messages, tail, `canFollowUp` and safe latest Job; Home asks for 24. Results omit
+bodies, paths, prompts, credentials, endpoints and raw errors.
 
-The canonical submit schema must support one ordered bounded attachment collection owned
-by Development. Composer picker selection/removal changes renderer-local pending state
-only; any opaque selection handle and safe display metadata are ephemeral, reveal no raw
-path, and cannot create a Job, Source Record, conversation event, Provider call, upload,
-or network request. Send/valid Enter submits one immutable request containing the exact
-authored string, exact staged attachment identities, active vault binding and one
-client-turn idempotency identity. Main durably accepts one parent `agent_turn`/Job before
-the renderer clears the composer. A lost response or exact retry adopts that identity;
-rejection preserves the renderer snapshot and creates no duplicate durable work.
+`AgentSubmitTurnRequestSchema.superRefine` requires `conversationId` and
+`expectedTailEventId` together: `follow_up` requires them, `file_picker` may carry them,
+and all other kinds (including `file_drop`) reject them. Direct Home composer Send/Enter
+snapshots `canFollowUp`; picker must use that exact pair or, when absent, start one new
+conversation. `HomeAgentService.prepareSourceTurn` preserves it in `prepared.request`.
+Mixed/stale identity fails before Job/source/Provider work, preserves the composer
+snapshot and never falls back to another conversation.
 
-A whole-window `file_drop` is the other presentation gesture: release immediately calls
-the same submit owner with only that bounded ordered drop and its own client-turn identity.
-It does not merge with, consume, or clear a staged composer draft. Attachment-only submit
-injects the minimal organize intent only when the request is accepted; picker time never
-creates synthetic text or durable state.
+Picker selection/removal remains renderer-local, pathless and side-effect-free. Send
+submits exact text, ordered staged identities, active vault and one client-turn identity;
+Main accepts one parent `agent_turn`/Job before clear, and exact retry adopts it. Global
+`file_drop` submits only its ordered drop with a separate client-turn identity and no
+conversation pair; it never consumes the draft. Attachment-only intent appears only on
+accepted submit.
 
 `resources/large-paste-boundary.manifest.json` is the machine-readable cross-layer owner
 for staged paste constants. `AgentSubmitTurnRequest` retains an ordinary authored-text

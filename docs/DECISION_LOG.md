@@ -2599,8 +2599,9 @@ Consequences:
   waits/resumes the same turn instead of silent capture, retrieval, or local fallback.
 - Provider profiles gain explicit protocol, pre-save Pi probe, tri-state binding, and
   safe staged commit; legacy kinds map without silent Responses reinterpretation.
-- Exact-tail binding makes one client turn own one event/`agent_turn`; retry/restart
-  adopts it. Signed packaged direct/retrieved/file/URL/follow-up proof still gates E3.09.
+- Exact-tail binding makes one client turn own one event/`agent_turn`; composer picker
+  continues its active pair, global drop carries none, and stale tails fail before effects
+  instead of splitting history. Retry/restart adopts it; assembled proof gates E3.09.
 
 References:
 

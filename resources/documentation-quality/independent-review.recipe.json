@@ -34,14 +34,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review of exact external-root reconnect: Jobs projects only required body-free reconnect eligibility, Main owns the chooser and private dependency identity, BackupRestoreService proves and persists the same stable binding, BackupCoordinator resumes only the same reread Job from current truth, generic retry cannot bypass repair, and statuses remain unchanged.",
+    "scope": "Independent Product Planning review of exact composer file-picker continuation: existing request fields bind one current conversation tail, stale identity fails before effects, global drop stays isolated, restart adopts one durable conversation, and statuses remain unchanged.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 26,
-    "reviewedSha256": "4dde25f17b8a3a6680bd48b3bedc12ebea9c392f428acd1fc1a0b26b3fa548c5"
+    "reviewedSha256": "19e889bf09f2df797e30b57a6bcdf572c794b0239c7da941188dedfa5e4103a1"
   },
   "reviewers": [{
-    "reviewerId": "backup-reconnect-planning-review",
-    "task": "Backup external-root reconnect contract review",
+    "reviewerId": "file-picker-continuation-review",
+    "task": "Composer file-picker continuation contract review",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -49,32 +49,32 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Product Planning reviews only contracts, trace and protected verifier coverage; Development owns schemas, services, IPC, renderer, locale, tests and runtime evidence."
+    "independence": "Product Planning reviews only existing API, conversation, Job, UI, decision and trace owners; Development and UI own schema refinement, service forwarding, gesture binding, tests and runtime evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"One waiting Backup owns one chooser, exact binding repair and same-Job continuation; cancel and failure create no second durable work."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"Job, API and UI owners agree that a closed boolean offers the action while current private truth—not the projection—authorizes resume."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"Backup and waiting-dependency open work becomes exact while every Requirement/Exit/Phase status remains unchanged."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"One required safe boolean, canonical reconnect schemas, two service owners, one registrar and one bounded UI component give exact handoff boundaries."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"Existing owner documents carry request, storage, retry and visible-state facts; no new design document or architecture phase was added."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"file-picker-continuation-review","blockerCount":0,"summary":"One direct composer gesture snapshots one followable conversation tail; rejection preserves the draft and creates no second durable work."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"file-picker-continuation-review","blockerCount":0,"summary":"API, conversation, Job and UI owners agree on the existing paired fields, picker-only optional binding and identity-free global drop."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"file-picker-continuation-review","blockerCount":0,"summary":"Restart and packaged-history gaps now name exact picker continuation while every Requirement, Exit and Phase status remains unchanged."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"file-picker-continuation-review","blockerCount":0,"summary":"The existing submit schema, paired fields, source-turn preparation method and one Home gesture snapshot give exact implementation boundaries."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"file-picker-continuation-review","blockerCount":0,"summary":"Existing owners carry identity, restart and gesture facts; no new DTO, design document, roadmap entry or architecture phase was added."}
   ],
   "verification": [
-    {"command":"npm run verify:verify-scripts-integrity && npm run verify:contracts","status":"passed","evidence":"The protected explicit registrar list still rejects missing or undocumented channels and binds the future Backup/Restore registrar."},
+    {"command":"npm run verify:verify-scripts-integrity && npm run verify:contracts","status":"passed","evidence":"Existing submit request fields and channels remain canonical; the candidate introduces no IPC, preload or registrar vocabulary."},
     {"command":"npm run verify:docs && npm run verify:decisions && npm run verify:documentation-leanness","status":"passed","evidence":"Owner links, durable decision structure and governed byte limits pass without a new document."},
-    {"command":"npm run verify:traceability","status":"passed","evidence":"Backup reconnect remains open work and every Requirement/Exit/Phase status is unchanged."}
+    {"command":"npm run verify:traceability","status":"passed","evidence":"Picker continuation and assembled restart remain open work and every Requirement, Exit and Phase status is unchanged."}
   ],
   "coordination": {
-    "taskId": "backup-external-root-reconnect-20260726",
-    "taskTitle": "Backup external-root reconnect contract",
+    "taskId": "file-picker-conversation-continuation-20260726",
+    "taskTitle": "Composer file-picker conversation continuation contract",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Failed-retryable Backup behavior and referenced-original handling are unchanged; this contract repairs only an external managed-copy dependency for one waiting Backup.",
-    "acknowledgement": "Product Planning freezes the contract; implementation, UI, locales, tests, runtime evidence and status promotion remain outside this candidate."
+    "compatibility": "Historical split conversations remain unchanged; file-drop and every non-picker input kind retain their current identity rules.",
+    "acknowledgement": "Product Planning freezes identity semantics only; schema, service, Home UI, tests, restart evidence and status promotion remain outside this candidate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Development must prove chooser cancel, stale/not-found/failed, wrong/empty/symlink directory, source drift, binding write/reread, metadata-only retry denial and restart recovery.",
-    "UI Design must prove focus return, pathless localized settled states and polling convergence without a renderer jobs.retry call."
+    "Development must prove complete-pair refinement, source-turn forwarding, stale-tail rejection before effects, idempotent retry and same-userData restart without Provider replay.",
+    "UI Design must prove direct composer Send snapshots the active followable pair while App/global drop stays identity-free and stale failure preserves exact draft/items."
   ]
 }
