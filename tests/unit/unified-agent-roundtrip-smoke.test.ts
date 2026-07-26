@@ -102,7 +102,10 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(identityCheck).toBeGreaterThan(restart);
     expect(providerCheck).toBeGreaterThan(identityCheck);
     expect(cleanup).toBeGreaterThan(providerCheck);
-    expect(source).toContain('phase !== "restart" && phase !== "drop" && phase !== "drop_restart"');
+    expect(source).toContain('phase !== "large_paste"');
+    expect(source).toContain('phase !== "large_paste_restart"');
+    expect(source).toContain('phase !== "drop"');
+    expect(source).toContain('phase !== "drop_restart"');
     expect(source).toContain('throw new Error("Unknown unified Agent roundtrip phase.");');
     expect(source).toContain('job.class === "agent_turn" || job.class === "dataset_import"');
     expect(source).toContain("messageIdentities");
@@ -115,6 +118,44 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain("assertUniqueIdentities(connect.durableSnapshot.messageIdentities");
     expect(source).toContain('filter((job) => job.class === "agent_turn").length, 7');
     expect(source).toContain("PIGE_ROUNDTRIP_STATE");
+  });
+
+  it("stages one real clipboard paste, submits it atomically, and restarts without replay", () => {
+    const pickerRestart = source.indexOf('await runChild("restart"');
+    const paste = source.indexOf('await runChild("large_paste"', pickerRestart);
+    const pasteRestart = source.indexOf('await runChild("large_paste_restart"', paste);
+    const drop = source.indexOf('await runChild("drop"', pasteRestart);
+    const staging = source.indexOf("async function readLargePasteStagingRenderer");
+    const submit = source.indexOf("async function submitLargePasteRenderer", staging);
+    const stagingSource = source.slice(staging, submit);
+
+    expect(paste).toBeGreaterThan(pickerRestart);
+    expect(pasteRestart).toBeGreaterThan(paste);
+    expect(drop).toBeGreaterThan(pasteRestart);
+    expect(source).toContain("clipboard.writeText(LARGE_PASTE_BODY)");
+    expect(source.indexOf("const stagedAt = Date.now()")).toBeLessThan(source.indexOf("browserWindow.webContents.paste()"));
+    expect(source).toContain("browserWindow.webContents.paste()");
+    expect(source).toContain("clipboard.writeText(previousClipboardText)");
+    expect(source).not.toContain("new ClipboardEvent");
+    expect(source).not.toContain("HomeLargePasteAdapter");
+    expect(stagingSource).toContain("draftPreservedWhileStaged");
+    expect(stagingSource).toContain("oneRemovablePasteChip");
+    expect(stagingSource).toContain("safeMetadataExact");
+    expect(stagingSource).toContain("rawBodyHidden");
+    expect(stagingSource).toContain("preSendJobsUnchanged");
+    expect(stagingSource).toContain("preSendConversationUnchanged");
+    expect(stagingSource).not.toContain("send.click()");
+    expect(source).toContain("Large-paste staging created a SourceRecord before Send.");
+    expect(source.slice(submit, source.indexOf("async function runLargePasteRestartRenderer", submit)).match(/send\.click\(\)/g)).toHaveLength(1);
+    expect(source).toContain("assert.equal(largePasteProviderRequests.length, 3)");
+    expect(source).toContain('request.receivedAt < largePaste.stagedAt || request.receivedAt >= largePaste.submittedAt');
+    expect(source).toContain("assert.equal(pastedSource.kind, \"text\")");
+    expect(source).toContain("assert.equal(fs.readFileSync(pastedManagedPath, \"utf8\"), LARGE_PASTE_BODY)");
+    expect(source).toContain("findPlaintextFiles(path.join(vaultPath, \".pige\"), LARGE_PASTE_BODY)");
+    expect(source).toContain("assert.equal(JSON.stringify(pastedEvents).includes(LARGE_PASTE_BODY), false)");
+    expect(source).toContain("assert.equal(pastedUserEvent?.parentEventId, largePaste.baselineTailEventId)");
+    expect(source).toContain("assert.deepEqual(largePasteRestart.durableSnapshot, largePaste.durableSnapshot)");
+    expect(source).toContain("assert.equal(requests.length, requestCountBeforeLargePasteRestart)");
   });
 
   it("drives one identity-free whole-window drop through the real renderer event path and restart", () => {
@@ -142,10 +183,10 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain("identityFreeConversation");
     expect(source).toContain("assert.equal(drop.agentTurnDelta, 1)");
     expect(source).toContain("assert.equal(drop.sourceDelta, 1)");
-    expect(source).toContain("restart.durableSnapshot.relevantJobs.length + 1");
-    expect(source).toContain("restart.durableSnapshot.sourceIds.length + 1");
+    expect(source).toContain("largePasteRestart.durableSnapshot.relevantJobs.length + 1");
+    expect(source).toContain("largePasteRestart.durableSnapshot.sourceIds.length + 1");
     expect(source).toContain("assert.equal(drop.durableSnapshot.datasetIds.length, 0)");
-    expect(source).toContain("assert.deepEqual(drop.durableSnapshot.activities, restart.durableSnapshot.activities)");
+    expect(source).toContain("assert.deepEqual(drop.durableSnapshot.activities, largePasteRestart.durableSnapshot.activities)");
     expect(source).toContain('assertUniqueIdentities(drop.durableSnapshot.relevantJobs.map((job) => job.id), "Job after drop")');
     expect(source).toContain("assert.equal(dropProviderRequests.length, 2)");
     expect(source).toContain("assert.deepEqual(dropRestart.durableSnapshot, drop.durableSnapshot)");

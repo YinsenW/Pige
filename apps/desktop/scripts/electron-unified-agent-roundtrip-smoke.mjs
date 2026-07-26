@@ -27,6 +27,9 @@ const ACTIVITY_TITLE = "Unified Agent activity note";
 const DATASET_PROMPT = "Which person has the largest count in this attached Dataset?";
 const DATASET_ANSWER = "Grace has the largest count in the attached Dataset. [citation_9]";
 const DATASET_CITATION_REF = "citation_9";
+const LARGE_PASTE_DRAFT = "Compare this pasted source with local knowledge and cite the matching note.";
+const LARGE_PASTE_BODY = `The pasted source confirms the roundtrip launch phrase is heliotrope seven.\n${"界".repeat(8_001)}`;
+const LARGE_PASTE_ANSWER = "The pasted source agrees with the local roundtrip note on heliotrope seven. [citation_1]";
 const DROP_DRAFT = "Keep this exact draft local while the dropped file submits.";
 const DROP_ATTACHMENT_NAME = "whole-window-drop.txt";
 const CHILD_RESULT_PREFIX = "PIGE_ROUNDTRIP_RESULT ";
@@ -181,6 +184,104 @@ async function runOrchestrator() {
     assert.equal(restart.durableSnapshot.failedRetryableJobIds.length, 0);
     assert.equal(requests.length, requestCountBeforeRestart);
 
+    const requestCountBeforeLargePaste = requests.length;
+    const largePaste = await runChild("large_paste", {
+      rootPath,
+      userDataPath,
+      baseUrl,
+      syntheticToken,
+      attachmentPath,
+      markdownAttachmentPath,
+      activityAttachmentPath,
+      datasetAttachmentPath,
+      dropAttachmentPath,
+      deniedCommandSentinelPath,
+      highRiskOnly: false
+    });
+    assert.equal(largePaste.draftPreservedWhileStaged, true);
+    assert.equal(largePaste.oneRemovablePasteChip, true);
+    assert.equal(largePaste.safeMetadataExact, true);
+    assert.equal(largePaste.rawBodyHidden, true);
+    assert.equal(largePaste.preSendJobsUnchanged, true);
+    assert.equal(largePaste.preSendConversationUnchanged, true);
+    assert.equal(largePaste.preSendSourceRecordsUnchanged, true);
+    assert.equal(largePaste.continuedExactConversation, true);
+    assert.equal(largePaste.continuedExactTail, true);
+    assert.equal(largePaste.agentTurnDelta, 1);
+    assert.equal(largePaste.sourceDelta, 1);
+    assert.equal(largePaste.largePasteMessageCountDelta, 2);
+    assert.equal(largePaste.largePasteJobCompleted, true);
+    assert.equal(largePaste.largePasteSourceBound, true);
+    assert.equal(largePaste.largePasteAnswerVisible, true);
+    assert.equal(largePaste.largePasteCitationVisible, true);
+    assert.equal(largePaste.rawBodyAbsentFromConversation, true);
+    assert.equal(largePaste.durableSnapshot.nonterminalJobIds.length, 0);
+    assert.equal(largePaste.durableSnapshot.failedRetryableJobIds.length, 0);
+    assert.equal(largePaste.durableSnapshot.relevantJobs.length, restart.durableSnapshot.relevantJobs.length + 1);
+    assert.equal(largePaste.durableSnapshot.sourceIds.length, restart.durableSnapshot.sourceIds.length + 1);
+    assert.deepEqual(largePaste.durableSnapshot.datasetIds, restart.durableSnapshot.datasetIds);
+    assert.deepEqual(largePaste.durableSnapshot.activities, restart.durableSnapshot.activities);
+    assert.deepEqual(largePaste.durableSnapshot.pageIdentities, restart.durableSnapshot.pageIdentities);
+    assertUniqueIdentities(largePaste.durableSnapshot.messageIdentities.map((message) => message.id), "conversation event after paste");
+    assertUniqueIdentities(largePaste.durableSnapshot.relevantJobs.map((job) => job.id), "Job after paste");
+    assertUniqueIdentities(largePaste.durableSnapshot.sourceIds, "source after paste");
+    assert.ok(requests.every((request) =>
+      request.method !== "POST" || request.path !== "/v1/responses" ||
+      request.receivedAt < largePaste.stagedAt || request.receivedAt >= largePaste.submittedAt
+    ));
+    const largePasteProviderRequests = requests.slice(requestCountBeforeLargePaste)
+      .filter((request) => request.method === "POST" && request.path === "/v1/responses");
+    assert.equal(largePasteProviderRequests.length, 3);
+    assert.ok(largePasteProviderRequests[0]?.body.includes('"name":"pige_inspect_source"'));
+    assert.ok(largePasteProviderRequests[1]?.body.includes('"call_id":"call_large_paste_inspect"'));
+    assert.ok(largePasteProviderRequests[1]?.body.includes("function_call_output"));
+    assert.ok(largePasteProviderRequests[2]?.body.includes('"call_id":"call_large_paste_search"'));
+    assert.ok(largePasteProviderRequests[2]?.body.includes("function_call_output"));
+
+    const vaultPath = path.join(rootPath, "vaults", "Roundtrip Vault");
+    const pastedSource = readRoundtripRecord(vaultPath, "sources", largePaste.largePasteSourceId);
+    assert.equal(pastedSource.kind, "text");
+    assert.equal(pastedSource.semanticOrchestration, "agent_turn");
+    assert.equal(pastedSource.original?.uri, `pige://pasted-text/${largePaste.largePasteSourceId}`);
+    assert.equal(pastedSource.metadata?.inputKind, "file_picker");
+    assert.equal(pastedSource.metadata?.agentTurnJobId, largePaste.largePasteJobId);
+    assert.equal(pastedSource.metadata?.unicodeCodePointCount, [...LARGE_PASTE_BODY].length);
+    assert.equal(pastedSource.metadata?.utf8ByteSize, Buffer.byteLength(LARGE_PASTE_BODY));
+    assert.equal(pastedSource.managedCopy?.checksum, sha256Digest(LARGE_PASTE_BODY));
+    const pastedManagedPath = path.resolve(vaultPath, pastedSource.managedCopy.path);
+    assert.equal(fs.readFileSync(pastedManagedPath, "utf8"), LARGE_PASTE_BODY);
+    assert.deepEqual(findPlaintextFiles(path.join(vaultPath, ".pige"), LARGE_PASTE_BODY), [pastedManagedPath]);
+    const pastedJob = readRoundtripRecord(vaultPath, "jobs", largePaste.largePasteJobId);
+    assert.equal(pastedJob.conversationEventId, largePaste.largePasteUserEventId);
+    assert.equal(JSON.stringify(pastedJob).includes(LARGE_PASTE_BODY), false);
+    const pastedEvents = readRoundtripConversationEvents(vaultPath, largePaste.conversationId);
+    const pastedUserEvent = pastedEvents.find((event) => event.id === largePaste.largePasteUserEventId);
+    assert.equal(pastedUserEvent?.parentEventId, largePaste.baselineTailEventId);
+    assert.equal(pastedUserEvent?.text, LARGE_PASTE_DRAFT);
+    assert.equal(JSON.stringify(pastedEvents).includes(LARGE_PASTE_BODY), false);
+
+    const requestCountBeforeLargePasteRestart = requests.length;
+    const largePasteRestart = await runChild("large_paste_restart", {
+      rootPath,
+      userDataPath,
+      baseUrl,
+      syntheticToken,
+      attachmentPath,
+      markdownAttachmentPath,
+      activityAttachmentPath,
+      datasetAttachmentPath,
+      dropAttachmentPath,
+      deniedCommandSentinelPath,
+      highRiskOnly: false
+    });
+    assert.equal(largePasteRestart.largePasteAnswerVisible, true);
+    assert.equal(largePasteRestart.largePasteCitationVisible, true);
+    assert.equal(largePasteRestart.rawBodyAbsentFromConversation, true);
+    assert.deepEqual(largePasteRestart.durableSnapshot, largePaste.durableSnapshot);
+    assert.equal(largePasteRestart.durableSnapshot.nonterminalJobIds.length, 0);
+    assert.equal(largePasteRestart.durableSnapshot.failedRetryableJobIds.length, 0);
+    assert.equal(requests.length, requestCountBeforeLargePasteRestart);
+
     const requestCountBeforeDrop = requests.length;
     const drop = await runChild("drop", {
       rootPath,
@@ -209,10 +310,10 @@ async function runOrchestrator() {
     assert.equal(drop.dropAnswerVisible, true);
     assert.equal(drop.durableSnapshot.nonterminalJobIds.length, 0);
     assert.equal(drop.durableSnapshot.failedRetryableJobIds.length, 0);
-    assert.equal(drop.durableSnapshot.relevantJobs.length, restart.durableSnapshot.relevantJobs.length + 1);
-    assert.equal(drop.durableSnapshot.sourceIds.length, restart.durableSnapshot.sourceIds.length + 1);
+    assert.equal(drop.durableSnapshot.relevantJobs.length, largePasteRestart.durableSnapshot.relevantJobs.length + 1);
+    assert.equal(drop.durableSnapshot.sourceIds.length, largePasteRestart.durableSnapshot.sourceIds.length + 1);
     assert.equal(drop.durableSnapshot.datasetIds.length, 0);
-    assert.deepEqual(drop.durableSnapshot.activities, restart.durableSnapshot.activities);
+    assert.deepEqual(drop.durableSnapshot.activities, largePasteRestart.durableSnapshot.activities);
     assertUniqueIdentities(drop.durableSnapshot.messageIdentities.map((message) => message.id), "conversation event after drop");
     assertUniqueIdentities(drop.durableSnapshot.relevantJobs.map((job) => job.id), "Job after drop");
     assertUniqueIdentities(drop.durableSnapshot.sourceIds, "source after drop");
@@ -267,7 +368,8 @@ async function runOrchestrator() {
       `${connect.directDraftEventCount} final-answer replacement(s) with no presentation-only provider turn plus Enter submission, ` +
       `visible direct/cited Home, preserved-source, ` +
       `TXT/Markdown ingress, Dataset continuation, ordinary provider sends without a second approval, zero retryable Jobs, ` +
-      `reversible Activity/Undo results, one identity-free whole-window drop, and exact restart retention without another Provider call.`
+      `reversible Activity/Undo results, one exact large paste, one identity-free whole-window drop, ` +
+      `and exact restart retention without another Provider call.`
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));
@@ -352,6 +454,33 @@ function readRoundtripRecord(vaultPath, area, recordId) {
   return readUniqueJsonByName(path.join(vaultPath, ".pige", area), `${recordId}.json`);
 }
 
+function readRoundtripConversationEvents(vaultPath, conversationId) {
+  const conversationPath = readUniqueFileByName(
+    path.join(vaultPath, ".pige", "conversations"),
+    `${conversationId}.jsonl`
+  );
+  return fs.readFileSync(conversationPath, "utf8")
+    .split(/\r?\n/u)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
+function countRoundtripSourceRecords(rootPath) {
+  const sourcesPath = path.join(rootPath, "vaults", "Roundtrip Vault", ".pige", "sources");
+  if (!fs.existsSync(sourcesPath)) return 0;
+  const pending = [sourcesPath];
+  let count = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const absolute = path.join(current, entry.name);
+      if (entry.isDirectory()) pending.push(absolute);
+      else if (entry.isFile() && /^src_[a-z0-9_]+\.json$/u.test(entry.name)) count += 1;
+    }
+  }
+  return count;
+}
+
 function sha256Digest(value) {
   return `sha256:${crypto.createHash("sha256").update(value, "utf8").digest("hex")}`;
 }
@@ -361,6 +490,10 @@ function assertUniqueIdentities(values, label) {
 }
 
 function readUniqueJsonByName(rootPath, expectedName) {
+  return JSON.parse(fs.readFileSync(readUniqueFileByName(rootPath, expectedName), "utf8"));
+}
+
+function readUniqueFileByName(rootPath, expectedName) {
   assert.equal(fs.existsSync(rootPath), true);
   const matches = [];
   const pending = [rootPath];
@@ -373,7 +506,7 @@ function readUniqueJsonByName(rootPath, expectedName) {
     }
   }
   assert.equal(matches.length, 1);
-  return JSON.parse(fs.readFileSync(matches[0], "utf8"));
+  return matches[0];
 }
 
 async function runElectronPhase() {
@@ -390,7 +523,7 @@ async function runElectronPhase() {
   const deniedCommandSentinelPath = requireEnv("PIGE_ROUNDTRIP_DENY_SENTINEL_PATH");
   const runHighRiskOnly = requireEnv("PIGE_ROUNDTRIP_HIGH_RISK_ONLY") === "1";
   const stagePath = requireEnv("PIGE_ROUNDTRIP_STAGE_PATH");
-  const { app, BrowserWindow, dialog } = await import("electron");
+  const { app, BrowserWindow, clipboard, dialog } = await import("electron");
   if (phase !== "connect") installSyntheticOpenAiRedirect(baseUrl);
   fs.mkdirSync(userDataPath, { recursive: true });
   app.setPath("userData", userDataPath);
@@ -409,7 +542,13 @@ async function runElectronPhase() {
     if (phase === "connect") {
       const helper = await import("../out/main/unified-agent-roundtrip-smoke.js");
       helper.prepareUnifiedAgentRoundtripSmoke({ rootPath, userDataPath });
-    } else if (phase !== "restart" && phase !== "drop" && phase !== "drop_restart") {
+    } else if (
+      phase !== "restart" &&
+      phase !== "large_paste" &&
+      phase !== "large_paste_restart" &&
+      phase !== "drop" &&
+      phase !== "drop_restart"
+    ) {
       throw new Error("Unknown unified Agent roundtrip phase.");
     }
 
@@ -437,6 +576,33 @@ async function runElectronPhase() {
     } else if (phase === "restart") {
       markStage("renderer_restart_retention");
       result = await runRestartRenderer(browserWindow);
+    } else if (phase === "large_paste") {
+      markStage("renderer_large_paste_prepare");
+      const sourceRecordCountBeforePaste = countRoundtripSourceRecords(rootPath);
+      const prepared = await prepareLargePasteRenderer(browserWindow);
+      const previousClipboardText = clipboard.readText();
+      let staged;
+      try {
+        clipboard.writeText(LARGE_PASTE_BODY);
+        browserWindow.webContents.focus();
+        const stagedAt = Date.now();
+        browserWindow.webContents.paste();
+        staged = await readLargePasteStagingRenderer(browserWindow, { ...prepared, stagedAt });
+      } finally {
+        clipboard.writeText(previousClipboardText);
+      }
+      const preSendSourceRecordsUnchanged = countRoundtripSourceRecords(rootPath) === sourceRecordCountBeforePaste;
+      if (!preSendSourceRecordsUnchanged) {
+        throw new Error("Large-paste staging created a SourceRecord before Send.");
+      }
+      markStage("renderer_large_paste_submit");
+      result = {
+        ...(await submitLargePasteRenderer(browserWindow, staged)),
+        preSendSourceRecordsUnchanged
+      };
+    } else if (phase === "large_paste_restart") {
+      markStage("renderer_large_paste_restart");
+      result = await runLargePasteRestartRenderer(browserWindow);
     } else if (phase === "drop") {
       markStage("renderer_whole_window_drop");
       const prepared = await prepareWholeWindowDropRenderer(browserWindow);
@@ -510,6 +676,271 @@ async function runElectronPhase() {
     console.error(`PIGE_ROUNDTRIP_ERROR phase=${phase ?? "unknown"} stage=${stage} renderer=${safeRendererStage} error=${safeErrorName}`);
     app.exit(1);
   }
+}
+
+async function prepareLargePasteRenderer(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'large_paste_composer_prepare';
+      console.info('PIGE_ROUNDTRIP_STAGE large_paste_composer_prepare');
+      const deadline = Date.now() + 45000;
+      let composer;
+      let jobs;
+      let timeline;
+      while (Date.now() < deadline) {
+        composer = document.querySelector('section.home .composer textarea');
+        jobs = window.pige ? await window.pige.jobs.list({ limit: 100 }) : undefined;
+        timeline = window.pige ? await window.pige.agent.conversation({ limit: 100 }) : undefined;
+        const tail = timeline?.messages.at(-1);
+        const followable = timeline?.canFollowUp === true && tail?.role === 'assistant' &&
+          (timeline.latestTurn === undefined || timeline.latestTurn.state === 'completed' ||
+            timeline.latestTurn.state === 'completed_with_warnings');
+        if (composer && jobs && timeline && followable) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      if (!composer || !jobs || !timeline) {
+        throw new Error('Large-paste composer authority is unavailable.');
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(composer), 'value');
+      descriptor.set.call(composer, ${JSON.stringify(LARGE_PASTE_DRAFT)});
+      composer.dispatchEvent(new Event('input', { bubbles: true }));
+      composer.dispatchEvent(new Event('change', { bubbles: true }));
+      composer.focus();
+      composer.setSelectionRange(composer.value.length, composer.value.length);
+      while (Date.now() < deadline && composer.value !== ${JSON.stringify(LARGE_PASTE_DRAFT)}) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      if (composer.value !== ${JSON.stringify(LARGE_PASTE_DRAFT)}) {
+        throw new Error('Large-paste draft did not settle before paste.');
+      }
+      globalThis.__pigeRoundtripStage = 'large_paste_clipboard_ready';
+      console.info('PIGE_ROUNDTRIP_STAGE large_paste_clipboard_ready');
+      return {
+        activeVaultId: jobs.activeVaultId,
+        conversationId: timeline.conversationId,
+        baselineTailEventId: timeline.tailEventId,
+        baselineMessageCount: timeline.messages.length,
+        agentTurnJobIds: jobs.jobs.filter((job) => job.class === 'agent_turn').map((job) => job.id),
+        sourceIds: jobs.jobs.filter((job) => job.class === 'agent_turn' && job.sourceId).map((job) => job.sourceId)
+      };
+    })()
+  `, true);
+}
+
+async function readLargePasteStagingRenderer(browserWindow, expected) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'large_paste_staging_wait';
+      console.info('PIGE_ROUNDTRIP_STAGE large_paste_staging_wait');
+      const expected = ${JSON.stringify(expected)};
+      const pastedBody = ${JSON.stringify(LARGE_PASTE_BODY)};
+      const characterCount = [...pastedBody].length;
+      const byteSize = new TextEncoder().encode(pastedBody).byteLength;
+      const kibibytes = byteSize / 1024;
+      const expectedSize = byteSize < 1024
+        ? new Intl.NumberFormat('en').format(byteSize) + ' B'
+        : new Intl.NumberFormat('en', { maximumFractionDigits: kibibytes < 10 ? 1 : 0 }).format(kibibytes) + ' KiB';
+      const expectedMetadata = new Intl.NumberFormat('en').format(characterCount) + ' characters · ' + expectedSize;
+      const deadline = Date.now() + 45000;
+      while (Date.now() < deadline) {
+        const composer = document.querySelector('section.home .composer textarea');
+        const chips = Array.from(document.querySelectorAll('.attachment-chip'));
+        const pastedChips = chips.filter((chip) => chip.classList.contains('pasted-text-chip'));
+        const chip = pastedChips[0];
+        const remove = chip?.querySelector('button[aria-label^="Remove pasted text"]');
+        const metadata = chip?.querySelector('small')?.textContent?.trim() ?? '';
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const jobIds = jobs.jobs.filter((job) => job.class === 'agent_turn').map((job) => job.id);
+        const sourceIds = jobs.jobs.filter((job) => job.class === 'agent_turn' && job.sourceId).map((job) => job.sourceId);
+        const send = document.querySelector('button.composer-send');
+        const draftPreservedWhileStaged = composer?.value === ${JSON.stringify(LARGE_PASTE_DRAFT)};
+        const oneRemovablePasteChip = chips.length === 1 && pastedChips.length === 1 && Boolean(remove);
+        const safeMetadataExact = chip?.querySelector('strong')?.textContent?.trim() === 'Pasted text' &&
+          metadata === expectedMetadata;
+        const rawBodyHidden = !document.body.textContent?.includes(pastedBody);
+        const preSendJobsUnchanged = jobs.activeVaultId === expected.activeVaultId &&
+          JSON.stringify(jobIds) === JSON.stringify(expected.agentTurnJobIds) &&
+          JSON.stringify(sourceIds) === JSON.stringify(expected.sourceIds);
+        const preSendConversationUnchanged = timeline?.conversationId === expected.conversationId &&
+          timeline.tailEventId === expected.baselineTailEventId &&
+          timeline.messages.length === expected.baselineMessageCount;
+        globalThis.__pigeRoundtripWaitState = {
+          draftPreservedWhileStaged,
+          oneRemovablePasteChip,
+          safeMetadataExact,
+          rawBodyHidden,
+          preSendJobsUnchanged,
+          preSendConversationUnchanged,
+          sendPresent: Boolean(send),
+          sendEnabled: Boolean(send && !send.disabled),
+          chipCount: chips.length,
+          pastedChipCount: pastedChips.length,
+          jobCount: jobIds.length,
+          sourceCount: sourceIds.length,
+          messageCount: timeline?.messages.length ?? 0
+        };
+        if (
+          draftPreservedWhileStaged &&
+          oneRemovablePasteChip &&
+          safeMetadataExact &&
+          rawBodyHidden &&
+          preSendJobsUnchanged &&
+          preSendConversationUnchanged &&
+          send && !send.disabled
+        ) {
+          return {
+            ...expected,
+            stagedAt: expected.stagedAt,
+            draftPreservedWhileStaged,
+            oneRemovablePasteChip,
+            safeMetadataExact,
+            rawBodyHidden,
+            preSendJobsUnchanged,
+            preSendConversationUnchanged
+          };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for safe large-paste staging.');
+    })()
+  `, true);
+}
+
+async function submitLargePasteRenderer(browserWindow, expected) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'large_paste_submit_once';
+      console.info('PIGE_ROUNDTRIP_STAGE large_paste_submit_once');
+      const expected = ${JSON.stringify(expected)};
+      const pastedBody = ${JSON.stringify(LARGE_PASTE_BODY)};
+      const baselineJobIds = new Set(expected.agentTurnJobIds);
+      const baselineSourceIds = new Set(expected.sourceIds);
+      const send = document.querySelector('button.composer-send');
+      if (!send || send.disabled) throw new Error('Large-paste Send is unavailable after staging.');
+      const submittedAt = Date.now();
+      send.click();
+      const deadline = Date.now() + 45000;
+      while (Date.now() < deadline) {
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const agentJobs = jobs.jobs.filter((job) => job.class === 'agent_turn');
+        const newJobs = agentJobs.filter((job) => !baselineJobIds.has(job.id));
+        const sourceIds = agentJobs.filter((job) => job.sourceId).map((job) => job.sourceId);
+        const newSourceIds = [...new Set(sourceIds.filter((sourceId) => !baselineSourceIds.has(sourceId)))];
+        const newJob = newJobs.length === 1 ? newJobs[0] : undefined;
+        const assistant = timeline?.messages.find((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(LARGE_PASTE_ANSWER)})
+        );
+        const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_1');
+        const domAnswer = Array.from(document.querySelectorAll('.conversation-message.role-assistant:not(.provisional)'))
+          .find((message) => message.textContent?.includes(${JSON.stringify(LARGE_PASTE_ANSWER)}));
+        const domCitation = document.querySelector('.retrieval-citations button:not(:disabled)');
+        const composer = document.querySelector('section.home .composer textarea');
+        const rawBodyAbsentFromConversation = timeline?.messages.every((message) => !message.text.includes(pastedBody)) === true;
+        const largePasteSourceBound = Boolean(
+          newJob?.sourceId && newSourceIds.length === 1 && newJob.sourceId === newSourceIds[0]
+        );
+        const largePasteMessageCountDelta = (timeline?.messages.length ?? 0) - expected.baselineMessageCount;
+        const continuedExactConversation = timeline?.conversationId === expected.conversationId;
+        const continuedExactTail = continuedExactConversation &&
+          timeline?.messages.some((message) => message.id === expected.baselineTailEventId) === true &&
+          largePasteMessageCountDelta === 2;
+        globalThis.__pigeRoundtripWaitState = {
+          assistantVisible: Boolean(assistant && domAnswer),
+          citationVisible: Boolean(citation && domCitation),
+          rawBodyAbsentFromConversation,
+          continuedExactConversation,
+          continuedExactTail,
+          newJobCount: newJobs.length,
+          newSourceCount: newSourceIds.length,
+          jobState: newJob?.state ?? 'none',
+          sourceBound: largePasteSourceBound,
+          messageCount: timeline?.messages.length ?? 0,
+          chipCount: document.querySelectorAll('.attachment-chip').length,
+          composerCleared: composer?.value === ''
+        };
+        if (
+          assistant && domAnswer && citation && domCitation &&
+          rawBodyAbsentFromConversation &&
+          continuedExactConversation && continuedExactTail &&
+          newJobs.length === 1 && newSourceIds.length === 1 &&
+          newJob?.state === 'completed' && largePasteSourceBound &&
+          document.querySelectorAll('.attachment-chip').length === 0 && composer?.value === ''
+        ) {
+          return {
+            ...expected,
+            submittedAt,
+            continuedExactConversation,
+            continuedExactTail,
+            agentTurnDelta: newJobs.length,
+            sourceDelta: newSourceIds.length,
+            largePasteMessageCountDelta,
+            largePasteJobCompleted: true,
+            largePasteSourceBound,
+            largePasteAnswerVisible: true,
+            largePasteCitationVisible: true,
+            rawBodyAbsentFromConversation,
+            largePasteJobId: newJob.id,
+            largePasteUserEventId: newJob.conversationEventId,
+            largePasteSourceId: newSourceIds[0],
+            conversationId: timeline.conversationId
+          };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for the durable large-paste result.');
+    })()
+  `, true).then(async (result) => ({
+    ...result,
+    durableSnapshot: await readDurableRestartSnapshot(browserWindow)
+  }));
+}
+
+async function runLargePasteRestartRenderer(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'large_paste_restart_wait';
+      console.info('PIGE_ROUNDTRIP_STAGE large_paste_restart_wait');
+      const pastedBody = ${JSON.stringify(LARGE_PASTE_BODY)};
+      const deadline = Date.now() + 45000;
+      while (Date.now() < deadline) {
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const assistant = timeline?.messages.find((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(LARGE_PASTE_ANSWER)})
+        );
+        const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_1');
+        const domAnswer = Array.from(document.querySelectorAll('.conversation-message.role-assistant:not(.provisional)'))
+          .find((message) => message.textContent?.includes(${JSON.stringify(LARGE_PASTE_ANSWER)}));
+        const domCitation = document.querySelector('.retrieval-citations button:not(:disabled)');
+        const rawBodyAbsentFromConversation = timeline?.messages.every((message) => !message.text.includes(pastedBody)) === true;
+        const activeJobs = jobs.jobs.filter((job) =>
+          job.state === 'queued' || job.state === 'running' || job.state === 'waiting_dependency' ||
+          job.state === 'awaiting_review' || job.state === 'cancel_requested' || job.state === 'failed_retryable'
+        );
+        globalThis.__pigeRoundtripWaitState = {
+          answerVisible: Boolean(assistant && domAnswer),
+          citationVisible: Boolean(citation && domCitation),
+          rawBodyAbsentFromConversation,
+          activeJobCount: activeJobs.length,
+          messageCount: timeline?.messages.length ?? 0
+        };
+        if (assistant && domAnswer && citation && domCitation && rawBodyAbsentFromConversation && activeJobs.length === 0) {
+          return {
+            largePasteAnswerVisible: true,
+            largePasteCitationVisible: true,
+            rawBodyAbsentFromConversation
+          };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for restarted large-paste evidence.');
+    })()
+  `, true).then(async (result) => ({
+    ...result,
+    durableSnapshot: await readDurableRestartSnapshot(browserWindow)
+  }));
 }
 
 async function prepareWholeWindowDropRenderer(browserWindow) {
@@ -1803,6 +2234,20 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
       writeToolCallResponse(response, "pige_search_knowledge", "call_home_search", "home-grounded-1");
       return;
     }
+    if (serializedInput.includes('"call_id":"call_large_paste_search"') && serializedInput.includes("function_call_output")) {
+      writeTextResponse(response, LARGE_PASTE_ANSWER, "large-paste-final-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_large_paste_inspect"') && serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_search_knowledge", "call_large_paste_search", "large-paste-search-1", {
+        query: "roundtrip launch phrase heliotrope seven"
+      });
+      return;
+    }
+    if (latestUserText.includes(LARGE_PASTE_DRAFT) && serializedTools.includes("pige_inspect_source")) {
+      writeToolCallResponse(response, "pige_inspect_source", "call_large_paste_inspect", "large-paste-inspect-1");
+      return;
+    }
     if (serializedInput.includes('"call_id":"call_source_inspect"') && serializedInput.includes("function_call_output")) {
       const markdownTurn = latestUserText.includes(MARKDOWN_PROMPT);
       writeTextResponse(response, markdownTurn ? MARKDOWN_ANSWER : SOURCE_ANSWER, markdownTurn ? "markdown-final-1" : "source-final-1");
@@ -2112,8 +2557,13 @@ function safeChildEnvironment(extra) {
 }
 
 function findPlaintext(rootPath, needle) {
+  return findPlaintextFiles(rootPath, needle)[0];
+}
+
+function findPlaintextFiles(rootPath, needle) {
   const pending = [rootPath];
   const needleBuffer = Buffer.from(needle, "utf8");
+  const matches = [];
   while (pending.length > 0) {
     const current = pending.pop();
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
@@ -2121,9 +2571,9 @@ function findPlaintext(rootPath, needle) {
       if (entry.isDirectory()) {
         pending.push(absolute);
       } else if (entry.isFile() && fs.statSync(absolute).size <= 32 * 1024 * 1024) {
-        if (fs.readFileSync(absolute).includes(needleBuffer)) return absolute;
+        if (fs.readFileSync(absolute).includes(needleBuffer)) matches.push(absolute);
       }
     }
   }
-  return undefined;
+  return matches.sort();
 }
