@@ -195,6 +195,7 @@ export interface HomeAgentDraftSnapshot {
 export interface HomeAgentUrlPort {
   fetch(request: FetchHomeAgentUrlRequest): Promise<HomeAgentUrlEvidence>;
   readCurrent(request: ReadHomeAgentUrlRequest): HomeAgentUrlEvidence;
+  citationCandidate(request: ReadHomeAgentUrlRequest): RetrievalAnswerCitation;
 }
 
 export interface HomeAgentJobPort {
@@ -1565,11 +1566,19 @@ export class HomeAgentService {
       : [];
     const noteContext = currentNoteEvidence ? buildNoteAgentContextPack(currentNoteEvidence) : undefined;
     const sourceCitations = sourceSession?.citationCandidates() ?? [];
+    const urlCitations = urlEvidenceInspected && urlEvidence && this.#urls
+      ? [this.#urls.citationCandidate({
+          jobId: session.current.id,
+          sourceId: urlEvidence.sourceId,
+          inputHash: urlEvidence.inputHash
+        })]
+      : [];
     const availableCitations = mergeHomeCitationCandidates(
       noteContext?.citation ? [noteContext.citation] : [],
       searchCitations,
       datasetResult?.citations ?? [],
-      sourceCitations
+      sourceCitations,
+      urlCitations
     );
     const citations = selectExplicitAssistantCitations(runtimeResult.assistantText, availableCitations);
     const sourceIds = Array.from(new Set([
