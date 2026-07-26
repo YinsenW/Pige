@@ -47,6 +47,12 @@ import {
 } from "./home-agent-attachment-service";
 import type { DocumentParserPort } from "./document-parser-service";
 import type { DatasetMaterializerPort } from "./dataset-service";
+import {
+  DatasetImportJobExecutor,
+  type ActiveDatasetImportJob,
+  type ProcessQueuedDatasetImportsRequest,
+  type QueuedDatasetImportJob
+} from "./dataset-import-job-executor";
 import { SourcePageService } from "./source-page-service";
 import type { LocalDatabaseService } from "./local-database-service";
 import type { OcrPort, OcrSourceCapability } from "./ocr-service";
@@ -128,9 +134,6 @@ export interface ProcessQueuedParsesResult extends ProcessQueuedCapturesResult {
   readonly agentReadySourceIds: readonly string[];
   readonly ocrWaitingSourceIds: readonly string[];
 }
-
-export type ProcessQueuedDatasetImportsRequest = ProcessQueuedParsesRequest;
-export type ProcessQueuedDatasetImportsResult = ProcessQueuedCapturesResult;
 
 export interface RequeueWaitingAgentIngestResult {
   readonly requeued: number;
@@ -226,6 +229,7 @@ export class JobsService {
   readonly #ocr: OcrPort | undefined;
   readonly #datasets: DatasetMaterializerPort | undefined;
   readonly #executors: JobClassExecutorRegistry;
+  readonly #datasetImportExecutor: DatasetImportJobExecutor;
   readonly #indexRebuildExecutor: IndexRebuildJobExecutor;
   readonly #jobRecordStores = new Map<string, JobRecordStore>();
   readonly #jobExecutionCoordinators = new Map<string, JobExecutionCoordinator>();
@@ -248,6 +252,14 @@ export class JobsService {
     this.#ocr = ocr;
     this.#datasets = datasets;
     this.#executors = executors;
+    this.#datasetImportExecutor = new DatasetImportJobExecutor(datasets, {
+      queued: (request) => {
+        const vaultPath = this.#requireActiveVaultPath();
+        this.#assertWriterLease(vaultPath);
+        return findQueuedDatasetImportJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request)
+          .map((snapshot) => this.#queuedDatasetImportJob(vaultPath, snapshot));
+      }
+    });
     this.#indexRebuildExecutor = new IndexRebuildJobExecutor(database, {
       bind: () => ({ vaultPath: this.#requireActiveVaultPath() }),
       createJob: ({ vaultPath }) => {
@@ -268,6 +280,10 @@ export class JobsService {
 
   indexRebuildExecutor(): IndexRebuildJobExecutor {
     return this.#indexRebuildExecutor;
+  }
+
+  datasetImportExecutor(): DatasetImportJobExecutor {
+    return this.#datasetImportExecutor;
   }
 
   list(request: JobsListRequest = {}): JobsListResult {
@@ -1803,118 +1819,6 @@ export class JobsService {
     };
   }
 
-  async processQueuedDatasetImports(
-    request: ProcessQueuedDatasetImportsRequest = {}
-  ): Promise<ProcessQueuedDatasetImportsResult> {
-    const vaultPath = this.#requireActiveVaultPath();
-    const jobFiles = findQueuedDatasetImportJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
-    let completed = 0;
-    let failed = 0;
-
-    for (const jobFile of jobFiles) {
-      const sourceRecordFile = jobFile.job.sourceId
-        ? readSourceRecordFile(vaultPath, jobFile.job.sourceId)
-        : undefined;
-      if (!sourceRecordFile) {
-        this.#markJobFailedRetryable(
-          jobFile.path,
-          jobFile.job,
-          "Source record is missing. Preserved Dataset import remains retryable."
-        );
-        failed += 1;
-        continue;
-      }
-      const datasets = this.#datasets;
-      if (!datasets || !datasets.canMaterialize(sourceRecordFile.sourceRecord.kind)) {
-        this.#markJobWaitingDependency(
-          jobFile.path,
-          jobFile.job,
-          "Waiting for the bundled local Dataset materialization capability."
-        );
-        failed += 1;
-        continue;
-      }
-
-      const execution = this.#beginCooperativeExecution(
-        jobFile,
-        "importing",
-        "Materializing a bounded local Dataset Bundle from preserved structured evidence."
-      );
-      const runningJob = execution.job;
-      const detachParentAbort = bridgeParentAbortToChild(
-        this.#jobRecordStore(vaultPath),
-        this.#jobExecutionCoordinator(vaultPath),
-        jobFile.path,
-        execution.controller,
-        request.abortSignal
-      );
-      try {
-        execution.control.reportProgress({ completedUnits: 0, totalUnits: 1, unit: "dataset" });
-        const result = await datasets.materializeSource(
-          vaultPath,
-          sourceRecordFile.sourceRecord,
-          sourceRecordFile.path,
-          runningJob,
-          execution.control
-        );
-        this.#jobExecutionCoordinator(vaultPath).patch(
-          this.#jobRecordStore(vaultPath).read(jobFile.path),
-          {
-            outputRefs: [{
-              kind: "dataset" as const,
-              id: result.datasetId,
-              role: "dataset_bundle"
-            }, {
-              kind: "dataset_revision" as const,
-              id: result.revisionId,
-              role: "dataset_active_revision"
-            }]
-          }
-        );
-        appendLog(
-          vaultPath,
-          `${new Date().toISOString()} Materialized Dataset \`${result.datasetId}\` revision \`${result.revisionId}\` from source \`${sourceRecordFile.sourceRecord.id}\`: ${result.tableCount} tables, ${result.rowCount} rows.`
-        );
-        const completedJob = this.#completeCooperativeExecution(
-          jobFile.path,
-          runningJob,
-          result.warnings.length > 0 ? "completed_with_warnings" : "completed",
-          `Materialized Dataset revision with ${result.tableCount} table${result.tableCount === 1 ? "" : "s"} and ${result.rowCount} row${result.rowCount === 1 ? "" : "s"}.`,
-          "dataset",
-          execution.control.durableWriteState(),
-          result.operationIds
-        );
-        if (completedJob.state === "cancelled") {
-          failed += 1;
-        } else {
-          completed += 1;
-        }
-      } catch (caught) {
-        const cancellation = resolveCancellation(execution.control, caught);
-        if (cancellation) {
-          this.#markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
-        } else if (isJobMutationContention(caught)) {
-          // Another exact Job revision won; do not overwrite its authoritative state.
-        } else {
-          const failure = datasetImportFailure(caught);
-          if (failure.waiting) {
-            this.#markJobWaitingDependency(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
-          } else if (failure.final) {
-            this.#markJobFailedFinal(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
-          } else {
-            this.#markJobFailedRetryable(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
-          }
-        }
-        failed += 1;
-      } finally {
-        detachParentAbort();
-        this.#finishCooperativeExecution(runningJob.id, execution.controller);
-      }
-    }
-
-    return { processed: jobFiles.length, completed, failed };
-  }
-
   async processQueuedOcr(request: ProcessQueuedOcrRequest = {}): Promise<ProcessQueuedOcrResult> {
     const vaultPath = this.#requireActiveVaultPath();
     const jobFiles = findQueuedOcrJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
@@ -2778,7 +2682,7 @@ export class JobsService {
       }
       child = this.#readJobSnapshot(vaultPath, child.id)?.job ?? child;
     }
-    await this.processQueuedDatasetImports({
+    await this.#datasetImportExecutor.process({
       jobIds: [child.id],
       limit: 1,
       abortSignal: request.signal
@@ -2920,6 +2824,141 @@ export class JobsService {
       throw new PigeDomainError("ocr.tool_failed_final", "The durable source OCR child failed validation.");
     }
     throw new PigeDomainError("ocr.tool_failed_retryable", "The durable source OCR child remains retryable.");
+  }
+
+  #queuedDatasetImportJob(
+    vaultPath: string,
+    snapshot: JobRecordSnapshot
+  ): QueuedDatasetImportJob {
+    const sourceRecordFile = snapshot.job.sourceId
+      ? readSourceRecordFile(vaultPath, snapshot.job.sourceId)
+      : undefined;
+    return {
+      job: snapshot.job,
+      vaultPath,
+      ...(sourceRecordFile ? {
+        source: { path: sourceRecordFile.path, record: sourceRecordFile.sourceRecord }
+      } : {}),
+      failMissingSource: (message) => {
+        this.#assertWriterLease(vaultPath);
+        this.#markJobFailedRetryable(snapshot.path, snapshot.job, message);
+      },
+      waitForMaterializer: (message) => {
+        this.#assertWriterLease(vaultPath);
+        this.#markJobWaitingDependency(snapshot.path, snapshot.job, message);
+      },
+      begin: (abortSignal) => {
+        this.#assertWriterLease(vaultPath);
+        return this.#activeDatasetImportJob(vaultPath, snapshot, abortSignal);
+      }
+    };
+  }
+
+  #activeDatasetImportJob(
+    vaultPath: string,
+    snapshot: JobRecordSnapshot,
+    abortSignal?: AbortSignal
+  ): ActiveDatasetImportJob {
+    const execution = this.#beginCooperativeExecution(
+      snapshot,
+      "importing",
+      "Materializing a bounded local Dataset Bundle from preserved structured evidence."
+    );
+    const runningJob = execution.job;
+    const detachParentAbort = bridgeParentAbortToChild(
+      this.#jobRecordStore(vaultPath),
+      this.#jobExecutionCoordinator(vaultPath),
+      snapshot.path,
+      execution.controller,
+      abortSignal
+    );
+    return {
+      job: runningJob,
+      control: execution.control,
+      appendActivity: (message) => {
+        this.#assertWriterLease(vaultPath);
+        appendLog(vaultPath, message);
+      },
+      complete: (result, state, message) => {
+        this.#assertWriterLease(vaultPath);
+        const coordinator = this.#jobExecutionCoordinator(vaultPath);
+        const outputRefs: readonly JobRef[] = [{
+          kind: "dataset",
+          id: result.datasetId,
+          role: "dataset_bundle"
+        }, {
+          kind: "dataset_revision",
+          id: result.revisionId,
+          role: "dataset_active_revision"
+        }];
+        const current = this.#jobRecordStore(vaultPath).read(snapshot.path);
+        return coordinator.convergeLatest(current, {
+          read: () => this.#readJobSnapshot(vaultPath, runningJob.id),
+          acceptTerminal: (job) =>
+            (job.state === "completed" || job.state === "completed_with_warnings") &&
+            outputRefs.every((expected) => job.outputRefs?.some((actual) =>
+              actual.kind === expected.kind &&
+              actual.id === expected.id &&
+              actual.role === expected.role
+            )) === true &&
+            result.operationIds.every((operationId) => job.operationIds?.includes(operationId) === true),
+          apply: (latest) => {
+            const adoptable = latest.job.state === "failed_retryable" || latest.job.state === "waiting_dependency"
+              ? coordinator.prepareRetry(latest, {
+                  reason: "dataset_durable_output_adoption",
+                  message: "Adopting the existing durable Dataset result into its original Job."
+                })
+              : latest;
+            return coordinator.adoptDurableCompletion(adoptable, {
+              checkpointId: "dataset_bundle_committed",
+              result: state,
+              message,
+              facts: {
+                outputRefs,
+                progress: completedProgress(adoptable.job.progress, "dataset"),
+                operationIds: result.operationIds
+              }
+            });
+          },
+          missingMessage: "The Dataset import Job disappeared after its durable Bundle committed.",
+          conflictMessage: "The Dataset import Job could not converge after its durable Bundle committed."
+        }).job;
+      },
+      fail: (caught, failure) => {
+        this.#assertWriterLease(vaultPath);
+        const cancellation = resolveCancellation(execution.control, caught);
+        if (cancellation) {
+          this.#markJobCancellationOutcome(snapshot.path, runningJob, cancellation);
+        } else if (!isJobMutationContention(caught)) {
+          if (failure.waiting) {
+            this.#markJobWaitingDependency(
+              snapshot.path,
+              runningJob,
+              failure.message,
+              execution.control.durableWriteState()
+            );
+          } else if (failure.final) {
+            this.#markJobFailedFinal(
+              snapshot.path,
+              runningJob,
+              failure.message,
+              execution.control.durableWriteState()
+            );
+          } else {
+            this.#markJobFailedRetryable(
+              snapshot.path,
+              runningJob,
+              failure.message,
+              execution.control.durableWriteState()
+            );
+          }
+        }
+      },
+      finish: () => {
+        detachParentAbort();
+        this.#finishCooperativeExecution(runningJob.id, execution.controller);
+      }
+    };
   }
 
   #queuedIndexRebuildJob(vaultPath: string, snapshot: JobRecordSnapshot): QueuedIndexRebuildJob {
@@ -5799,40 +5838,6 @@ function parseFailure(caught: unknown, sourceKind: SourceKind): { readonly final
     }
   }
   return { final: false, waiting: false, message: `${label} parsing failed. Preserved source and validated partial artifacts remain retryable.` };
-}
-
-function datasetImportFailure(caught: unknown): { readonly final: boolean; readonly waiting: boolean; readonly message: string } {
-  if (caught instanceof PigeDomainError) {
-    if (caught.code === "source.external_unavailable") {
-      return {
-        final: false,
-        waiting: true,
-        message: "The referenced structured source is unavailable. Reconnect it before retrying Dataset materialization."
-      };
-    }
-    if (/^source\.(?:checksum_mismatch|managed_unavailable|path_outside_vault|reference_invalid)$/u.test(caught.code)) {
-      return {
-        final: true,
-        waiting: false,
-        message: "The preserved structured source cannot be verified safely. Re-import it to create a new source version."
-      };
-    }
-    if (
-      /^dataset\.ingest\.(?:csv|xlsx|sqlite|limit)\./u.test(caught.code) ||
-      /^dataset\.(?:import\.(?:invalid|unsupported|source_changed)|path_(?:invalid|unsafe)|identity_conflict|operation_conflict)$/u.test(caught.code)
-    ) {
-      return {
-        final: true,
-        waiting: false,
-        message: "The preserved structured source cannot be materialized safely within current Dataset bounds. Original evidence remains available."
-      };
-    }
-  }
-  return {
-    final: false,
-    waiting: false,
-    message: "Dataset materialization failed. Preserved source and validated immutable outputs remain retryable."
-  };
 }
 
 function isDeterministicParserInputFailure(code: string): boolean {
