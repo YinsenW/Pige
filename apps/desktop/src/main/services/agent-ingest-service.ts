@@ -2071,6 +2071,9 @@ export class AgentIngestService {
       },
       beforeModelTurn: authorizeCurrentModelTurn,
       citationCandidates: () => {
+        if (!retrievalSelection) {
+          return Object.freeze([]);
+        }
         hooks.throwIfCancellationRequested?.();
         hooks.assertSourceCurrent?.(currentSourceRecord);
         assertAgentRetrievalSelectionCurrent(
@@ -2083,9 +2086,7 @@ export class AgentIngestService {
             sourceBindingHash: createEvidenceInspectionBinding(currentSourceRecord, currentEvidencePack)
           }
         );
-        return retrievalSelection
-          ? Object.freeze(retrievalSelection.evidence.map(({ citation }) => citation))
-          : Object.freeze([]);
+        return Object.freeze(retrievalSelection.evidence.map(({ citation }) => citation));
       },
       result,
       runLegacy: async () => {

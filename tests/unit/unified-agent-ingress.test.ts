@@ -270,7 +270,7 @@ describe("Unified Agent ingress", () => {
             limit: 2
           }
         },
-        { kind: "text", text: "Grace has the largest count in the attached Dataset. [citation_9]" }
+        { kind: "text", text: "Grace has the largest count in the attached Dataset. [citation_10]" }
       ]
     });
     const datasetQueries = new DatasetQueryService(directDatasetExecutor);
@@ -329,9 +329,9 @@ describe("Unified Agent ingress", () => {
       jobId: prepared.jobId,
       sourceIds: preserved.sourceIds,
       answer: {
-        answer: "Grace has the largest count in the attached Dataset. [citation_9]",
+        answer: "Grace has the largest count in the attached Dataset. [citation_10]",
         grounding: "local_knowledge",
-        citations: [expect.objectContaining({ kind: "dataset", refId: "citation_9" })],
+        citations: [expect.objectContaining({ kind: "dataset", refId: "citation_10" })],
         datasetResult: expect.objectContaining({ returnedRowCount: 2, matchedRowCount: 2 })
       }
     });
@@ -360,7 +360,7 @@ describe("Unified Agent ingress", () => {
     expect(home.conversation()?.messages.at(-1)).toMatchObject({
       role: "assistant",
       answer: expect.objectContaining({
-        answer: "Grace has the largest count in the attached Dataset. [citation_9]",
+        answer: "Grace has the largest count in the attached Dataset. [citation_10]",
         datasetResult: expect.objectContaining({ returnedRowCount: 2 })
       })
     });
@@ -587,7 +587,7 @@ describe("Unified Agent ingress", () => {
               limit: 2
             }
           },
-          { kind: "text", text: "Grace remains the largest count after restart. [citation_9]" }
+          { kind: "text", text: "Grace remains the largest count after restart. [citation_10]" }
         ]
       }),
       datasetCapabilities,
@@ -616,7 +616,7 @@ describe("Unified Agent ingress", () => {
       .toMatchObject({
       role: "assistant",
       answer: expect.objectContaining({
-        answer: "Grace remains the largest count after restart. [citation_9]",
+        answer: "Grace remains the largest count after restart. [citation_10]",
         datasetResult: expect.objectContaining({ returnedRowCount: 2 })
       })
       });
