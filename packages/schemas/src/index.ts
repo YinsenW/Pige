@@ -230,6 +230,16 @@ export const AgentTurnCurrentNoteScopeSchema = z.object({
   kind: z.literal("current_note"),
   pageId: PageIdSchema
 }).strict();
+export const AgentConversationInputPresentationSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("reader_selection_action"),
+    action: z.enum(["explain", "summarize"])
+  }).strict(),
+  z.object({
+    kind: z.literal("reader_selection_transform"),
+    action: z.enum(["translate", "polish", "expand"])
+  }).strict()
+]);
 export const AgentSubmitTurnRequestSchema = z.object({
   schemaVersion: z.literal(1).optional().default(1),
   text: z.string().refine(
@@ -1977,16 +1987,7 @@ export const ConversationEventSchema = z.object({
   parentEventId: ConversationEventIdSchema.optional(),
   inputHash: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
   scope: AgentTurnCurrentNoteScopeSchema.optional(),
-  inputPresentation: z.discriminatedUnion("kind", [
-    z.object({
-      kind: z.literal("reader_selection_action"),
-      action: z.enum(["explain", "summarize"])
-    }).strict(),
-    z.object({
-      kind: z.literal("reader_selection_transform"),
-      action: z.enum(["translate", "polish", "expand"])
-    }).strict()
-  ]).optional(),
+  inputPresentation: AgentConversationInputPresentationSchema.optional(),
   contentHash: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
   sourceId: SourceIdSchema.optional(),
   captureId: CaptureIdSchema.optional(),
@@ -2210,13 +2211,87 @@ export const AgentStagedItemRejectedRefSchema = z.object({
   displayName: SafeAttachmentDisplayNameSchema,
   reason: CaptureFileRejectionReasonSchema
 }).strict();
-const AgentTurnAnswerSchema = z.object({
+export const AgentTurnAnswerSchema = z.object({
   answer: z.string().max(8_000),
   grounding: z.enum(["general", "local_knowledge", "source", "insufficient_evidence"]),
   citations: AgentAnswerCitationsSchema,
   retrieval: RetrievalSearchResultSchema.optional(),
   datasetResult: DatasetQueryPreviewSchema.optional()
 }).strict();
+export const AgentConversationCursorSchema = z.string()
+  .regex(/^timeline_[a-f0-9]{32}$/)
+  .max(80);
+export const AgentConversationMessageSchema = z.object({
+  id: ConversationEventIdSchema,
+  role: z.enum(["user", "assistant"]),
+  createdAt: z.string().datetime({ offset: true }),
+  text: z.string(),
+  jobId: JobIdSchema.optional(),
+  answer: AgentTurnAnswerSchema.optional(),
+  inputPresentation: AgentConversationInputPresentationSchema.optional()
+}).strict();
+export const AgentConversationTurnSummarySchema = z.object({
+  jobId: JobIdSchema,
+  userEventId: ConversationEventIdSchema,
+  state: JobStateSchema,
+  error: PigeErrorSummarySchema.optional()
+}).strict();
+export const AgentConversationInitialRequestSchema = z.object({
+  conversationId: ConversationIdSchema.optional(),
+  scope: AgentTurnCurrentNoteScopeSchema.optional(),
+  limit: z.number().int().min(1).max(100).optional()
+}).strict();
+export const AgentConversationEarlierRequestSchema = z.object({
+  conversationId: ConversationIdSchema,
+  scope: AgentTurnCurrentNoteScopeSchema.optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+  snapshotTailEventId: ConversationEventIdSchema,
+  earlierCursor: AgentConversationCursorSchema
+}).strict();
+export const AgentConversationRequestSchema = z.union([
+  AgentConversationEarlierRequestSchema,
+  AgentConversationInitialRequestSchema
+]);
+
+function requireConversationPageConsistency(
+  page: {
+    readonly messages: readonly { readonly id: string }[];
+    readonly hasEarlier: boolean;
+    readonly nextEarlierCursor?: string | undefined;
+  },
+  context: z.RefinementCtx
+): void {
+  if (new Set(page.messages.map((message) => message.id)).size !== page.messages.length) {
+    context.addIssue({ code: "custom", path: ["messages"], message: "Conversation page message ids must be unique." });
+  }
+  if (page.hasEarlier !== (page.nextEarlierCursor !== undefined)) {
+    context.addIssue({ code: "custom", path: ["nextEarlierCursor"], message: "Conversation pagination truth is inconsistent." });
+  }
+}
+
+export const AgentConversationInitialTimelineSchema = z.object({
+  kind: z.literal("initial"),
+  conversationId: ConversationIdSchema,
+  snapshotTailEventId: ConversationEventIdSchema,
+  tailEventId: ConversationEventIdSchema,
+  canFollowUp: z.boolean(),
+  messages: z.array(AgentConversationMessageSchema).max(100).readonly(),
+  hasEarlier: z.boolean(),
+  nextEarlierCursor: AgentConversationCursorSchema.optional(),
+  latestTurn: AgentConversationTurnSummarySchema.optional()
+}).strict().superRefine(requireConversationPageConsistency);
+export const AgentConversationEarlierPageSchema = z.object({
+  kind: z.literal("earlier"),
+  conversationId: ConversationIdSchema,
+  snapshotTailEventId: ConversationEventIdSchema,
+  messages: z.array(AgentConversationMessageSchema).max(100).readonly(),
+  hasEarlier: z.boolean(),
+  nextEarlierCursor: AgentConversationCursorSchema.optional()
+}).strict().superRefine(requireConversationPageConsistency);
+export const AgentConversationResultSchema = z.discriminatedUnion("kind", [
+  AgentConversationInitialTimelineSchema,
+  AgentConversationEarlierPageSchema
+]);
 const AgentSubmitTurnResultBaseSchema = z.object({
   requestId: z.string().min(1).max(120),
   modelUsage: z.enum(["none", "local", "cloud"]),
@@ -3385,6 +3460,15 @@ export type CloudBoundary = z.infer<typeof CloudBoundarySchema>;
 export type CloudSendPolicy = z.infer<typeof CloudSendPolicySchema>;
 export type ConfirmationProposal = z.infer<typeof ConfirmationProposalSchema>;
 export type ConversationEvent = z.infer<typeof ConversationEventSchema>;
+export type AgentConversationInputPresentation = z.output<typeof AgentConversationInputPresentationSchema>;
+export type AgentConversationMessage = z.output<typeof AgentConversationMessageSchema>;
+export type AgentConversationTurnSummary = z.output<typeof AgentConversationTurnSummarySchema>;
+export type AgentConversationInitialRequest = z.input<typeof AgentConversationInitialRequestSchema>;
+export type AgentConversationEarlierRequest = z.input<typeof AgentConversationEarlierRequestSchema>;
+export type AgentConversationRequest = z.input<typeof AgentConversationRequestSchema>;
+export type AgentConversationInitialTimeline = z.output<typeof AgentConversationInitialTimelineSchema>;
+export type AgentConversationEarlierPage = z.output<typeof AgentConversationEarlierPageSchema>;
+export type AgentConversationResult = z.output<typeof AgentConversationResultSchema>;
 export type AgentSubmitTurnRequest = z.input<typeof AgentSubmitTurnRequestSchema>;
 export type AgentStagedItem = z.input<typeof AgentStagedItemSchema>;
 export type AgentStagedLargePasteItem = z.input<typeof AgentStagedLargePasteItemSchema>;

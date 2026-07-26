@@ -2,8 +2,11 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
+  AgentConversationEarlierPage,
+  AgentConversationEarlierRequest,
+  AgentConversationInitialRequest,
+  AgentConversationInitialTimeline,
   AgentConversationRequest,
-  AgentConversationTimeline,
   AgentSubmitTurnRequest,
   AgentSubmitTurnAcceptedResult,
   AgentSubmitTurnResult,
@@ -22,9 +25,8 @@ import type {
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
+  AgentConversationRequestSchema,
   AgentSubmitTurnRequestSchema as CanonicalAgentSubmitTurnRequestSchema,
-  AgentTurnCurrentNoteScopeSchema,
-  ConversationIdSchema,
   JobRecordSchema,
   MarkdownPageTypeSchema,
   OperationRecordSchema,
@@ -261,12 +263,6 @@ const HOME_RUN_MAX_WORK_BYTES = 256 * 1_024;
 const UNTRUSTED_EVIDENCE_START = "<PIGE_UNTRUSTED_EVIDENCE_V1>";
 const UNTRUSTED_EVIDENCE_END = "</PIGE_UNTRUSTED_EVIDENCE_V1>";
 
-const AgentConversationRequestSchema = z.object({
-  conversationId: ConversationIdSchema.optional(),
-  scope: AgentTurnCurrentNoteScopeSchema.optional(),
-  limit: z.number().int().min(1).max(100).optional()
-}).strict();
-
 export class HomeAgentService {
   readonly #vaults: HomeAgentVaultPort;
   readonly #models: HomeAgentModelPort;
@@ -306,10 +302,28 @@ export class HomeAgentService {
     this.#readerSelectionMutations = readerSelectionMutations;
   }
 
-  conversation(request: AgentConversationRequest = {}): AgentConversationTimeline | undefined {
+  conversation(request: AgentConversationEarlierRequest): AgentConversationEarlierPage;
+  conversation(request?: AgentConversationInitialRequest): AgentConversationInitialTimeline | undefined;
+  conversation(request: AgentConversationRequest): AgentConversationInitialTimeline | AgentConversationEarlierPage | undefined;
+  conversation(request: AgentConversationRequest = {}): AgentConversationInitialTimeline | AgentConversationEarlierPage | undefined {
     const validated = AgentConversationRequestSchema.parse(request);
     const vaultPath = this.#vaults.activeVaultPath();
-    if (!vaultPath) return undefined;
+    if (!vaultPath) {
+      if ("earlierCursor" in validated) {
+        throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The conversation pagination cursor is invalid.");
+      }
+      return undefined;
+    }
+    if ("earlierCursor" in validated) {
+      return this.#conversations.readEarlierConversationPage(
+        vaultPath,
+        validated.conversationId,
+        validated.snapshotTailEventId,
+        validated.earlierCursor,
+        validated.limit ?? 24,
+        validated.scope
+      );
+    }
     const timeline = this.#conversations.readConversationTimeline(
       vaultPath,
       validated.conversationId,
@@ -325,6 +339,7 @@ export class HomeAgentService {
         ? this.#jobs.findAgentTurnJobByConversationEvent(latestUserMessage.id)
         : undefined;
     return {
+      kind: "initial",
       ...timeline,
       canFollowUp: tailMessage?.role === "assistant",
       ...(job?.conversationEventId ? {

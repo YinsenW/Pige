@@ -1016,11 +1016,21 @@ export type AgentSubmitTurnResult =
       readonly error: PigeErrorSummary;
     };
 
-export interface AgentConversationRequest {
+export interface AgentConversationInitialRequest {
   readonly conversationId?: string;
   readonly scope?: AgentTurnScope;
   readonly limit?: number;
 }
+
+export interface AgentConversationEarlierRequest {
+  readonly conversationId: string;
+  readonly scope?: AgentTurnScope;
+  readonly limit?: number;
+  readonly snapshotTailEventId: string;
+  readonly earlierCursor: string;
+}
+
+export type AgentConversationRequest = AgentConversationInitialRequest | AgentConversationEarlierRequest;
 
 export interface AgentConversationMessage {
   readonly id: string;
@@ -1049,12 +1059,39 @@ export interface AgentConversationTurnSummary {
   readonly error?: PigeErrorSummary;
 }
 
-export interface AgentConversationTimeline {
+export interface AgentConversationInitialTimeline {
+  readonly kind: "initial";
   readonly conversationId: string;
+  readonly snapshotTailEventId: string;
   readonly tailEventId: string;
   readonly canFollowUp: boolean;
   readonly messages: readonly AgentConversationMessage[];
-  readonly latestTurn?: AgentConversationTurnSummary;
+  readonly hasEarlier: boolean;
+  readonly nextEarlierCursor?: string | undefined;
+  readonly latestTurn?: AgentConversationTurnSummary | undefined;
+}
+
+export interface AgentConversationEarlierPage {
+  readonly kind: "earlier";
+  readonly conversationId: string;
+  readonly snapshotTailEventId: string;
+  readonly messages: readonly AgentConversationMessage[];
+  readonly hasEarlier: boolean;
+  readonly nextEarlierCursor?: string | undefined;
+}
+
+export type AgentConversationResult = AgentConversationInitialTimeline | AgentConversationEarlierPage;
+
+export interface AgentConversationTimeline {
+  readonly kind?: "initial";
+  readonly conversationId: string;
+  readonly snapshotTailEventId?: string;
+  readonly tailEventId: string;
+  readonly canFollowUp: boolean;
+  readonly messages: readonly AgentConversationMessage[];
+  readonly hasEarlier?: boolean;
+  readonly nextEarlierCursor?: string | undefined;
+  readonly latestTurn?: AgentConversationTurnSummary | undefined;
 }
 
 export interface AgentTurnDraftEvent {
@@ -1247,9 +1284,10 @@ export interface PigeDesktopApi {
         files?: readonly File[]
       ): Promise<AgentSubmitTurnResult>;
     };
-    readonly conversation: (
-      request?: AgentConversationRequest
-    ) => Promise<AgentConversationTimeline | undefined>;
+    readonly conversation: {
+      (request: AgentConversationEarlierRequest): Promise<AgentConversationEarlierPage>;
+      (request?: AgentConversationInitialRequest): Promise<AgentConversationInitialTimeline | undefined>;
+    };
     readonly onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void) => () => void;
   };
   readonly jobs: {
