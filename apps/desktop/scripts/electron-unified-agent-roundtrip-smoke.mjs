@@ -211,7 +211,7 @@ async function runOrchestrator() {
     assert.equal(drop.durableSnapshot.failedRetryableJobIds.length, 0);
     assert.equal(drop.durableSnapshot.relevantJobs.length, restart.durableSnapshot.relevantJobs.length + 1);
     assert.equal(drop.durableSnapshot.sourceIds.length, restart.durableSnapshot.sourceIds.length + 1);
-    assert.deepEqual(drop.durableSnapshot.datasetIds, restart.durableSnapshot.datasetIds);
+    assert.equal(drop.durableSnapshot.datasetIds.length, 0);
     assert.deepEqual(drop.durableSnapshot.activities, restart.durableSnapshot.activities);
     assertUniqueIdentities(drop.durableSnapshot.messageIdentities.map((message) => message.id), "conversation event after drop");
     assertUniqueIdentities(drop.durableSnapshot.relevantJobs.map((job) => job.id), "Job after drop");

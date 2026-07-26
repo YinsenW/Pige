@@ -144,6 +144,7 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain("assert.equal(drop.sourceDelta, 1)");
     expect(source).toContain("restart.durableSnapshot.relevantJobs.length + 1");
     expect(source).toContain("restart.durableSnapshot.sourceIds.length + 1");
+    expect(source).toContain("assert.equal(drop.durableSnapshot.datasetIds.length, 0)");
     expect(source).toContain("assert.deepEqual(drop.durableSnapshot.activities, restart.durableSnapshot.activities)");
     expect(source).toContain('assertUniqueIdentities(drop.durableSnapshot.relevantJobs.map((job) => job.id), "Job after drop")');
     expect(source).toContain("assert.equal(dropProviderRequests.length, 2)");
