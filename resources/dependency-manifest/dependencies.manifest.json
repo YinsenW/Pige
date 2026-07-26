@@ -1359,7 +1359,7 @@
       "usage": "Extract an already-downloaded and SHA-512-verified Pi package archive into the bounded machine-local install staging root.",
       "packageManager": "npm",
       "packageId": "tar",
-      "version": "7.5.20",
+      "version": "7.5.22",
       "upstreamUrl": "https://github.com/isaacs/node-tar",
       "license": "BlueOak-1.0.0",
       "noticeRequired": true,
@@ -1372,9 +1372,9 @@
       "sizeClass": "small",
       "updatePolicy": "security-update",
       "replacementPath": "Keep archive extraction behind the Pi Package Manager so a reviewed streaming extractor can replace tar without changing package records or runtime authority.",
-      "lastReviewedAt": "2026-07-19",
+      "lastReviewedAt": "2026-07-26",
       "reviewedBy": "Codex Product Planning",
-      "notes": "Exact lock integrity sha512-9FcyK4PA6+WbzlTM9WhQm6vB5W7cP7dUiPsv1g7YDwEQnQ1CGpK3MGlKk/ITVWMk05kHZuBhmVhiv8LZoy/PFQ==. Pige accepts only files/directories after strip=1, rejects links, unsafe/colliding paths, executable/native metadata, native-module content and oversized files, and bounds entry count, bytes and depth. Package lifecycle hooks and package code never execute during install."
+      "notes": "Exact lock integrity sha512-MFO/QzvtAOmJbkhOaCTvbGcFN9L9b+JunIsDwaKljSOdcLMea3NJ1k9Usz/rjdfSXTq4dfzfeS7W4p4YOAAHeA==. GHSA-r292-9mhp-454m affects tar <=7.5.20 and is patched from 7.5.21; Pige passes no member-selection list, so the advisory trigger was not reachable, but the bundled vulnerable pin failed package audit. Pige accepts only files/directories after strip=1, rejects links, unsafe/colliding paths, executable/native metadata, native-module content and oversized files, and bounds entry count, bytes and depth. Package lifecycle hooks and package code never execute during install."
     },
     {
       "registryRef": "types.jsdom",
