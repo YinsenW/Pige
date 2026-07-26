@@ -54,6 +54,10 @@ import jaMessages from "../../apps/desktop/src/renderer/src/locales/ja/messages.
 import koMessages from "../../apps/desktop/src/renderer/src/locales/ko/messages.json";
 import zhHansMessages from "../../apps/desktop/src/renderer/src/locales/zh-Hans/messages.json";
 import {
+  HOME_ACCEPTED_TURN_MAX_REFRESHES,
+  HOME_ACCEPTED_TURN_MAX_TERMINAL_REFRESHES,
+  homeAcceptedTurnProjectionExhausted,
+  homeAcceptedTurnProjectionStatus,
   selectCurrentNoSourceTurn,
   terminalTurnOwnsComposerSubmission
 } from "../../apps/desktop/src/renderer/src/components/HomeConversationTurnState";
@@ -91,6 +95,92 @@ afterEach(() => {
 });
 
 describe("Home durable Agent conversation UI", () => {
+  it("fences and bounds the exact accepted picker turn projection", () => {
+    const timeline = completedTimeline();
+    const binding = {
+      activeVaultId: "vault_home_conversation",
+      clientTurnId: "client_turn_projection",
+      conversationId: timeline.conversationId,
+      conversationEventId: "event_20260726_picker_user",
+      jobId: "job_20260726_picker"
+    } as const;
+    const waiting = {
+      ...timeline,
+      tailEventId: binding.conversationEventId,
+      canFollowUp: false,
+      messages: [...timeline.messages, {
+        id: binding.conversationEventId,
+        role: "user" as const,
+        createdAt: "2026-07-26T08:00:00.000Z",
+        text: "Inspect the PDF.",
+        jobId: binding.jobId
+      }],
+      latestTurn: {
+        jobId: binding.jobId,
+        userEventId: binding.conversationEventId,
+        state: "completed" as const
+      }
+    };
+
+    expect(homeAcceptedTurnProjectionStatus({
+      binding,
+      activeVaultId: binding.activeVaultId,
+      timeline: waiting
+    })).toBe("waiting_terminal_event");
+    expect(homeAcceptedTurnProjectionStatus({
+      binding,
+      activeVaultId: "vault_changed",
+      timeline: waiting
+    })).toBe("identity_changed");
+    expect(homeAcceptedTurnProjectionStatus({
+      binding,
+      activeVaultId: binding.activeVaultId,
+      timeline: { ...waiting, conversationId: "conv_changed" }
+    })).toBe("identity_changed");
+    expect(homeAcceptedTurnProjectionStatus({
+      binding,
+      activeVaultId: binding.activeVaultId,
+      timeline: {
+        ...waiting,
+        latestTurn: { ...waiting.latestTurn, state: "failed_final" }
+      }
+    })).toBe("failed");
+    expect(homeAcceptedTurnProjectionStatus({
+      binding,
+      activeVaultId: binding.activeVaultId,
+      timeline: {
+        ...waiting,
+        latestTurn: { ...waiting.latestTurn, state: "waiting_dependency" }
+      }
+    })).toBe("paused");
+    expect(homeAcceptedTurnProjectionStatus({
+      binding,
+      activeVaultId: binding.activeVaultId,
+      timeline: {
+        ...waiting,
+        tailEventId: "event_20260726_picker_assistant",
+        canFollowUp: true,
+        messages: [...waiting.messages, {
+          id: "event_20260726_picker_assistant",
+          role: "assistant",
+          createdAt: "2026-07-26T08:00:01.000Z",
+          text: "The durable answer.",
+          jobId: binding.jobId
+        }]
+      }
+    })).toBe("converged");
+    expect(homeAcceptedTurnProjectionExhausted({
+      status: "waiting",
+      refreshCount: HOME_ACCEPTED_TURN_MAX_REFRESHES,
+      terminalRefreshCount: 0
+    })).toBe(true);
+    expect(homeAcceptedTurnProjectionExhausted({
+      status: "waiting_terminal_event",
+      refreshCount: 1,
+      terminalRefreshCount: HOME_ACCEPTED_TURN_MAX_TERMINAL_REFRESHES
+    })).toBe(true);
+  });
+
   it("lets a terminal timeline supersede only its stale same-Job running projection", () => {
     const timeline = completedTimeline();
     const staleJob = { ...runningAgentJob(), id: timeline.latestTurn!.jobId };
@@ -2478,6 +2568,8 @@ describe("Home durable Agent conversation UI", () => {
 
     expect(harness.submitRequests[0]).toMatchObject({ inputKind: "file_drop" });
     expect(harness.submitRequests[0]?.text).toBeUndefined();
+    expect(harness.submitRequests[0]?.conversationId).toBeUndefined();
+    expect(harness.submitRequests[0]?.expectedTailEventId).toBeUndefined();
     expect(harness.submittedFileNames).toEqual([["organize-now.md"]]);
     expect(textareaValue(container)).toBe("Keep this draft for a later message.");
 
@@ -3204,12 +3296,25 @@ describe("Home durable Agent conversation UI", () => {
       id: completed.latestTurn!.jobId,
       updatedAt: "2026-07-12T08:00:00.500Z"
     }];
+    harness.renderNote = async (pageId) => pageId === "page_20260726_pdfsource" ? {
+      summary: {
+        ...testLibraryList().pages[0]!,
+        pageId,
+        title: "PDF source",
+        pageType: "source",
+        sourceIds: ["src_20260726_pdfsource"]
+      },
+      renderContextId: `notectx_${"c".repeat(32)}`,
+      html: "<h1>PDF source</h1><p>Current native-text PDF source.</p>",
+      byteSize: 64
+    } : testRenderedNote(pageId);
     harness.submitTurn = async (request) => {
       harness.submitRequests.push(request);
       const completedAt = "2026-07-12T08:00:02.000Z";
       harness.timeline = {
         ...timeline,
-        tailEventId: "event_20260726_picker_assistant",
+        tailEventId: "event_20260726_picker_user",
+        canFollowUp: false,
         messages: [
           ...timeline.messages,
           {
@@ -3217,13 +3322,6 @@ describe("Home durable Agent conversation UI", () => {
             role: "user",
             createdAt: completedAt,
             text: "Continue with this exact attachment.",
-            jobId: "job_20260723_stagedturn"
-          },
-          {
-            id: "event_20260726_picker_assistant",
-            role: "assistant",
-            createdAt: completedAt,
-            text: "The source continued in the same conversation.",
             jobId: "job_20260723_stagedturn"
           }
         ],
@@ -3233,9 +3331,12 @@ describe("Home durable Agent conversation UI", () => {
           state: "completed"
         }
       };
+      harness.jobs = [];
       return {
         ...acceptedStagedResult(request),
         conversationId: timeline.conversationId,
+        conversationEventId: "event_20260726_picker_user",
+        jobId: "job_20260723_stagedturn",
         tailEventId: "event_20260726_picker_user"
       };
     };
@@ -3267,7 +3368,48 @@ describe("Home durable Agent conversation UI", () => {
       expectedTailEventId: timeline.tailEventId
     });
     expect(harness.submittedFileNames).toEqual([["follow-up.txt"]]);
+    await act(async () => {
+      await new Promise((resolve) => dom.window.setTimeout(resolve, 1_300));
+      await settle(dom);
+    });
+    expect(mount.container.textContent).not.toContain("The source continued in the same conversation.");
+    const lateTimeline = harness.timeline;
+    if (!lateTimeline) throw new Error("Expected the accepted picker timeline.");
+    harness.timeline = {
+      ...lateTimeline,
+      tailEventId: "event_20260726_picker_assistant",
+      canFollowUp: true,
+      messages: [...lateTimeline.messages, {
+        id: "event_20260726_picker_assistant",
+        role: "assistant",
+        createdAt: "2026-07-12T08:00:03.000Z",
+        text: "The source continued in the same conversation.",
+        jobId: "job_20260723_stagedturn",
+        answer: {
+          answer: "The source continued in the same conversation.",
+          grounding: "local_knowledge",
+          citations: [{
+            refId: "citation_11",
+            label: "[11]",
+            pageId: "page_20260726_pdfsource",
+            title: "PDF source",
+            pageType: "source",
+            locator: "source_page"
+          }]
+        }
+      }]
+    };
+    await act(async () => {
+      await new Promise((resolve) => dom.window.setTimeout(resolve, 1_300));
+      await settle(dom);
+    });
     await waitFor(dom, () => mount.container.textContent?.includes("The source continued in the same conversation.") === true);
+    const pdfCitation = Array.from(mount.container.querySelectorAll<HTMLButtonElement>(".conversation-citations .citation-row"))
+      .find((button) => button.textContent?.includes("[11]"));
+    if (!pdfCitation) throw new Error("Expected the late durable PDF citation action.");
+    await clickElement(dom, pdfCitation);
+    await waitFor(dom, () => mount.container.querySelector(".note-reader") !== null);
+    expect(harness.noteRenderRequests.at(-1)).toBe("page_20260726_pdfsource");
     expect(harness.timeline?.conversationId).toBe(timeline.conversationId);
 
     await act(async () => mount.root.unmount());
