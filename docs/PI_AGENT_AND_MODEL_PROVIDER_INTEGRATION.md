@@ -381,9 +381,10 @@ Rules:
 - Pi session files are not included in vault backup by default.
 - If Pi needs transient runtime state, store it in machine-local app data or job-scoped temp state, not as the knowledge source of truth.
 
-Home follow-up creates fresh isolated Pi from at most 16 checked prior user/assistant
-messages/64 KiB; history cannot become the current result. Pige events/Jobs, not Pi
-sessions, are authoritative. Compaction/indexing and steer queues remain open.
+Home follow-up or paired composer `file_picker` creates fresh isolated Pi from at most 16
+checked prior messages/64 KiB; history cannot become the result. The pair changes durable
+identity, never Pi semantics. Pige events/Jobs, not Pi sessions, are authoritative;
+compaction/indexing and steer queues remain open.
 
 Home draft streaming is a Pi-owned answer presentation boundary, not raw provider output.
 Pige accepts bounded assistant replacement snapshots from reviewed upstream Pi events

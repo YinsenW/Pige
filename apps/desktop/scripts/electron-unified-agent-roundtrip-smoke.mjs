@@ -127,6 +127,17 @@ async function runOrchestrator() {
     assert.equal(connect.datasetCitationVisible, true);
     assert.equal(connect.datasetImportJobCount, 1);
     assert.deepEqual(connect.failedRetryableJobs, []);
+    assert.equal(connect.durableSnapshot.messageIdentities.length, 12);
+    assert.equal(connect.durableSnapshot.relevantJobs.filter((job) => job.class === "agent_turn").length, 7);
+    assert.equal(connect.durableSnapshot.relevantJobs.filter((job) => job.class === "dataset_import").length, 1);
+    assert.equal(connect.durableSnapshot.sourceIds.length, 4);
+    assert.equal(connect.durableSnapshot.datasetIds.length, 1);
+    assertUniqueIdentities(connect.durableSnapshot.messageIdentities.map((message) => message.id), "conversation event");
+    assertUniqueIdentities(connect.durableSnapshot.relevantJobs.map((job) => job.id), "Job");
+    assertUniqueIdentities(connect.durableSnapshot.pageIdentities.map((page) => page.pageId), "page");
+    assertUniqueIdentities(connect.durableSnapshot.sourceIds, "source");
+    assertUniqueIdentities(connect.durableSnapshot.datasetIds, "Dataset");
+    assertUniqueIdentities(connect.durableSnapshot.activities.map((activity) => activity.operationId), "Activity");
     assert.ok(requests.filter((request) => request.method === "GET" && request.path === "/v1/models").length >= 2);
     assert.ok(requests.filter((request) => request.method === "POST" && request.path === "/v1/responses").length >= 7);
     assert.ok(requests.every((request) => request.authorization === `Bearer ${syntheticToken}`));
@@ -139,6 +150,30 @@ async function runOrchestrator() {
     assert.ok(requests.some((request) => request.body.includes('"name":"pige_query_dataset"')));
     assert.ok(requests.some((request) => request.body.includes('"name":"pige_create_knowledge_note"')));
     assert.ok(requests.some((request) => request.body.includes('"type":"function_call_output"')));
+
+    const requestCountBeforeRestart = requests.length;
+    const restart = await runChild("restart", {
+      rootPath,
+      userDataPath,
+      baseUrl,
+      syntheticToken,
+      attachmentPath,
+      markdownAttachmentPath,
+      activityAttachmentPath,
+      datasetAttachmentPath,
+      deniedCommandSentinelPath,
+      highRiskOnly: false
+    });
+    assert.equal(restart.directVisible, true);
+    assert.equal(restart.groundedVisible, true);
+    assert.equal(restart.sourceVisible, true);
+    assert.equal(restart.markdownVisible, true);
+    assert.equal(restart.datasetVisible, true);
+    assert.equal(restart.datasetCitationVisible, true);
+    assert.deepEqual(restart.durableSnapshot, connect.durableSnapshot);
+    assert.equal(restart.durableSnapshot.nonterminalJobIds.length, 0);
+    assert.equal(restart.durableSnapshot.failedRetryableJobIds.length, 0);
+    assert.equal(requests.length, requestCountBeforeRestart);
 
     const secretsPath = path.join(userDataPath, "secrets.json");
     const secrets = JSON.parse(fs.readFileSync(secretsPath, "utf8"));
@@ -162,7 +197,7 @@ async function runOrchestrator() {
       `${connect.directDraftEventCount} final-answer replacement(s) with no presentation-only provider turn plus Enter submission, ` +
       `visible direct/cited Home, preserved-source, ` +
       `TXT/Markdown ingress, Dataset continuation, ordinary provider sends without a second approval, zero retryable Jobs, ` +
-      `and reversible Activity/Undo results.`
+      `reversible Activity/Undo results, and exact restart retention without another Provider call.`
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));
@@ -202,10 +237,11 @@ async function runChild(phase, values) {
   assert.equal(stderr.includes(values.syntheticToken), false);
   if (exitCode !== 0) {
     const marker = stderr.split(/\r?\n/u).find((line) => line.startsWith("PIGE_ROUNDTRIP_ERROR "));
+    const state = stderr.split(/\r?\n/u).find((line) => line.startsWith("PIGE_ROUNDTRIP_STATE "));
     const stagePath = path.join(values.rootPath, `stage-${phase}.txt`);
     const stage = fs.existsSync(stagePath) ? fs.readFileSync(stagePath, "utf8").trim() : "unknown";
     const jobs = readSafeJobFailureSummary(values.rootPath);
-    throw new Error(`${marker ?? `Electron unified Agent ${phase} phase failed at ${stage}.`} jobs=${JSON.stringify(jobs)}`);
+    throw new Error(`${marker ?? `Electron unified Agent ${phase} phase failed at ${stage}.`} ${state ?? ""} jobs=${JSON.stringify(jobs)}`);
   }
   const marker = stdout.split(/\r?\n/u).find((line) => line.startsWith(CHILD_RESULT_PREFIX));
   if (!marker) throw new Error(`Electron unified Agent ${phase} phase returned no result.`);
@@ -247,6 +283,10 @@ function readRoundtripRecord(vaultPath, area, recordId) {
 
 function sha256Digest(value) {
   return `sha256:${crypto.createHash("sha256").update(value, "utf8").digest("hex")}`;
+}
+
+function assertUniqueIdentities(values, label) {
+  assert.equal(new Set(values).size, values.length, `Unified roundtrip contains duplicate ${label} identities.`);
 }
 
 function readUniqueJsonByName(rootPath, expectedName) {
@@ -297,7 +337,7 @@ async function runElectronPhase() {
     if (phase === "connect") {
       const helper = await import("../out/main/unified-agent-roundtrip-smoke.js");
       helper.prepareUnifiedAgentRoundtripSmoke({ rootPath, userDataPath });
-    } else {
+    } else if (phase !== "restart") {
       throw new Error("Unknown unified Agent roundtrip phase.");
     }
 
@@ -320,7 +360,12 @@ async function runElectronPhase() {
     await waitForRenderer(browserWindow);
     markStage(`renderer_${phase}`);
     let result;
-    result = await runConnectRenderer(browserWindow, { baseUrl, syntheticToken });
+    if (phase === "connect") {
+      result = await runConnectRenderer(browserWindow, { baseUrl, syntheticToken });
+    } else {
+      markStage("renderer_restart_retention");
+      result = await runRestartRenderer(browserWindow);
+    }
     if (phase === "connect" && runHighRiskOnly) {
       markStage("renderer_high_risk_deny");
       result = { ...result, ...(await runHighRiskDenyRenderer(browserWindow)) };
@@ -347,7 +392,8 @@ async function runElectronPhase() {
       result = {
         ...result,
         sourceSelectionsHadZeroDurableSideEffects: true,
-        sourceStagingWindows
+        sourceStagingWindows,
+        durableSnapshot: await readDurableRestartSnapshot(browserWindow)
       };
     }
     console.log(`${CHILD_RESULT_PREFIX}${JSON.stringify(result)}`);
@@ -355,6 +401,7 @@ async function runElectronPhase() {
     app.quit();
   } catch (caught) {
     let rendererStage = "";
+    let rendererState = "";
     if (browserWindow && !browserWindow.isDestroyed()) {
       try {
         rendererStage = await browserWindow.webContents.executeJavaScript(
@@ -364,14 +411,175 @@ async function runElectronPhase() {
       } catch {
         rendererStage = "";
       }
+      try {
+        rendererState = await browserWindow.webContents.executeJavaScript(
+          "JSON.stringify(globalThis.__pigeRoundtripWaitState ?? {})",
+          true
+        );
+      } catch {
+        rendererState = "";
+      }
     }
     const safeRendererStage = /^[a-z0-9_]+$/u.test(rendererStage) ? rendererStage : "unknown";
     const safeErrorName = caught && typeof caught === "object" && typeof caught.name === "string" && /^[A-Za-z]+Error$/u.test(caught.name)
       ? caught.name
       : "Error";
+    if (/^\{[\x20-\x7e]{0,1000}\}$/u.test(rendererState)) {
+      console.error(`PIGE_ROUNDTRIP_STATE ${rendererState}`);
+    }
     console.error(`PIGE_ROUNDTRIP_ERROR phase=${phase ?? "unknown"} stage=${stage} renderer=${safeRendererStage} error=${safeErrorName}`);
     app.exit(1);
   }
+}
+
+async function runRestartRenderer(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      const mark = (stage) => {
+        globalThis.__pigeRoundtripStage = stage;
+        console.info("PIGE_ROUNDTRIP_STAGE " + stage);
+      };
+      const waitFor = async (predicate, label, timeoutMs = 45000) => {
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < timeoutMs) {
+          const value = await predicate();
+          if (value) return value;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        throw new Error("Timed out waiting for " + label);
+      };
+      const answerVisible = (expected) => Array.from(
+        document.querySelectorAll(".conversation-message.role-assistant:not(.provisional)")
+      ).some((message) => message.textContent?.includes(expected));
+
+      mark("restart_bridge");
+      await waitFor(() => window.pige, "restart preload bridge");
+      const timeline = await waitFor(
+        () => window.pige.agent.conversation({ limit: 100 }),
+        "restart durable conversation"
+      );
+      mark("restart_timeline_ready");
+      await waitFor(
+        () => answerVisible(${JSON.stringify(DIRECT_ANSWER)}) &&
+          answerVisible(${JSON.stringify(GROUNDED_ANSWER)}) &&
+          answerVisible(${JSON.stringify(SOURCE_ANSWER)}) &&
+          answerVisible(${JSON.stringify(MARKDOWN_ANSWER)}) &&
+          answerVisible(${JSON.stringify(DATASET_ANSWER)}),
+        "restart visible durable answers"
+      );
+      mark("restart_answers_visible");
+      const datasetCitationVisible = Boolean(document.querySelector(".dataset-citations"));
+      if (!datasetCitationVisible) throw new Error("Restarted Dataset citation is not visible.");
+      const summary = await window.pige.models.summary();
+      if (summary.defaultBinding.state !== "ready") {
+        throw new Error("Restarted Provider binding is not ready.");
+      }
+      return {
+        directVisible: answerVisible(${JSON.stringify(DIRECT_ANSWER)}),
+        groundedVisible: answerVisible(${JSON.stringify(GROUNDED_ANSWER)}),
+        sourceVisible: answerVisible(${JSON.stringify(SOURCE_ANSWER)}),
+        markdownVisible: answerVisible(${JSON.stringify(MARKDOWN_ANSWER)}),
+        datasetVisible: answerVisible(${JSON.stringify(DATASET_ANSWER)}),
+        datasetCitationVisible,
+        conversationId: timeline.conversationId
+      };
+    })()
+  `, true).then(async (visible) => ({
+    ...visible,
+    durableSnapshot: await readDurableRestartSnapshot(browserWindow)
+  }));
+}
+
+async function readDurableRestartSnapshot(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      const mark = (stage) => {
+        globalThis.__pigeRoundtripStage = stage;
+        console.info("PIGE_ROUNDTRIP_STAGE " + stage);
+      };
+      mark("durable_snapshot_conversation");
+      const timeline = await window.pige.agent.conversation({ limit: 100 });
+      mark("durable_snapshot_jobs");
+      const jobs = await window.pige.jobs.list({ limit: 100 });
+      mark("durable_snapshot_library");
+      const library = await window.pige.library.list({ limit: 100 });
+      mark("durable_snapshot_activity");
+      const activity = await window.pige.activity.list({ limit: 20 });
+      mark("durable_snapshot_models");
+      const models = await window.pige.models.summary();
+      if (!timeline) throw new Error("Durable conversation is unavailable.");
+
+      mark("durable_snapshot_projection");
+      const relevantJobs = jobs.jobs
+        .filter((job) => job.class === "agent_turn" || job.class === "dataset_import")
+        .map((job) => ({
+          id: job.id,
+          class: job.class,
+          state: job.state,
+          sourceId: job.sourceId ?? "",
+          conversationEventId: job.conversationEventId ?? ""
+        }))
+        .sort((left, right) => left.id.localeCompare(right.id));
+      const messageIdentities = timeline.messages.map((message) => ({
+        id: message.id,
+        role: message.role,
+        jobId: message.jobId ?? "",
+        citationRefs: (message.answer?.citations ?? []).map((citation) => citation.refId).sort(),
+        datasetIds: (message.answer?.citations ?? [])
+          .filter((citation) => citation.kind === "dataset")
+          .map((citation) => citation.evidence.datasetId)
+          .sort()
+      }));
+      const pageIdentities = library.pages
+        .map((page) => ({
+          pageId: page.pageId,
+          pageType: page.pageType,
+          sourceIds: [...page.sourceIds].sort()
+        }))
+        .sort((left, right) => left.pageId.localeCompare(right.pageId));
+      const activities = activity.activities
+        .map((entry) => ({
+          operationId: entry.operationId,
+          kind: entry.kind,
+          status: entry.status,
+          pageId: entry.target?.pageId ?? ""
+        }))
+        .sort((left, right) => left.operationId.localeCompare(right.operationId));
+      const sourceIds = [...new Set([
+        ...relevantJobs.map((job) => job.sourceId).filter(Boolean),
+        ...pageIdentities.flatMap((page) => page.sourceIds)
+      ])].sort();
+      const datasetIds = [...new Set(messageIdentities.flatMap((message) => message.datasetIds))].sort();
+      const nonterminalStates = new Set([
+        "queued", "running", "waiting_dependency", "awaiting_review", "cancel_requested"
+      ]);
+
+      return {
+        activeVaultId: jobs.activeVaultId,
+        providerProfileId: models.defaultBinding.providerProfileId ?? "",
+        modelProfileId: models.defaultBinding.modelProfileId ?? "",
+        conversationId: timeline.conversationId,
+        snapshotTailEventId: timeline.snapshotTailEventId,
+        tailEventId: timeline.tailEventId,
+        latestTurnJobId: timeline.latestTurn?.jobId ?? "",
+        latestTurnState: timeline.latestTurn?.state ?? "",
+        messageIdentities,
+        relevantJobs,
+        pageIdentities,
+        sourceIds,
+        datasetIds,
+        activities,
+        nonterminalJobIds: jobs.jobs
+          .filter((job) => nonterminalStates.has(job.state))
+          .map((job) => job.id)
+          .sort(),
+        failedRetryableJobIds: jobs.jobs
+          .filter((job) => job.state === "failed_retryable")
+          .map((job) => job.id)
+          .sort()
+      };
+    })()
+  `, true);
 }
 
 async function runConnectRenderer(browserWindow, input) {
@@ -885,31 +1093,64 @@ async function stageAndSubmitSourceRenderer(browserWindow, attachmentPath, markS
   markStage(`${stagePrefix}_side_effect_check`);
   const staged = await browserWindow.webContents.executeJavaScript(`
     (async () => {
-      globalThis.__pigeRoundtripStage = 'source_stage_chip_wait';
-      const waitFor = async (predicate, label, timeoutMs = 10000) => {
-        const startedAt = Date.now();
-        while (Date.now() - startedAt < timeoutMs) {
-          const value = await predicate();
-          if (value) return value;
-          await new Promise((resolve) => setTimeout(resolve, 50));
-        }
-        throw new Error("Timed out waiting for " + label);
-      };
-      await waitFor(() => document.querySelector('.attachment-chip'), 'staged attachment chip');
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      globalThis.__pigeRoundtripStage = 'source_stage_snapshot';
-      const jobs = await window.pige.jobs.list({ limit: 100 });
-      const timeline = await window.pige.agent.conversation({ limit: 24 });
       globalThis.__pigeRoundtripStage = 'source_stage_send_ready';
-      await waitFor(
-        () => document.querySelector('button.composer-send:not(:disabled)'),
-        'enabled Home Send for staged source turn'
-      );
-      return {
-        agentTurnCount: jobs.jobs.filter((job) => job.class === 'agent_turn').length,
-        conversationTailEventId: timeline?.tailEventId ?? '',
-        conversationMessageCount: timeline?.messages.length ?? 0
-      };
+      const expectedDisplayName = ${JSON.stringify(path.basename(attachmentPath))};
+      const expected = ${JSON.stringify(baseline)};
+      const deadline = Date.now() + 45000;
+      let stagedChip;
+      while (Date.now() < deadline) {
+        const currentJobs = await window.pige.jobs.list({ limit: 100 });
+        const currentTimeline = await window.pige.agent.conversation({ limit: 24 });
+        const chips = Array.from(document.querySelectorAll('.attachment-chip'));
+        if (!stagedChip && chips.length === 1 && chips[0]?.querySelector('strong')?.textContent === expectedDisplayName) {
+          stagedChip = chips[0];
+        }
+        const chipMatches = Boolean(stagedChip) && chips.length === 1 &&
+          chips[0] === stagedChip &&
+          chips[0]?.querySelector('strong')?.textContent === expectedDisplayName;
+        const send = document.querySelector('section.home .composer button.composer-send');
+        const tail = currentTimeline?.messages.find((message) => message.id === currentTimeline.tailEventId);
+        const latestTurnState = currentTimeline?.latestTurn?.state ?? 'none';
+        const terminalTail = currentTimeline?.canFollowUp === true &&
+          tail?.role === 'assistant' &&
+          (latestTurnState === 'none' || latestTurnState === 'completed' || latestTurnState === 'completed_with_warnings');
+        const activeVaultMatches = currentJobs.activeVaultId === expected.activeVaultId;
+        const conversationMatches = currentTimeline?.conversationId === expected.conversationId;
+        const tailMatches = currentTimeline?.tailEventId === expected.conversationTailEventId;
+        globalThis.__pigeRoundtripWaitState = {
+          chipCount: chips.length,
+          chipMatches,
+          sendPresent: Boolean(send),
+          sendEnabled: Boolean(send && !send.disabled),
+          canFollowUp: currentTimeline?.canFollowUp === true,
+          tailRoleAssistant: tail?.role === 'assistant',
+          latestTurnState,
+          activeVaultMatches,
+          conversationMatches,
+          tailMatches,
+          agentTurnCount: currentJobs.jobs.filter((job) => job.class === 'agent_turn').length
+        };
+        if (!activeVaultMatches || !conversationMatches || !tailMatches || (stagedChip && !chipMatches)) {
+          throw new Error('Staged source submission identity changed before Send.');
+        }
+        if (chipMatches && terminalTail && send && !send.disabled) {
+          const agentTurnCount = currentJobs.jobs.filter((job) => job.class === 'agent_turn').length;
+          const conversationTailEventId = currentTimeline?.tailEventId ?? '';
+          const conversationMessageCount = currentTimeline?.messages.length ?? 0;
+          if (
+            agentTurnCount !== expected.agentTurnCount ||
+            conversationTailEventId !== expected.conversationTailEventId ||
+            conversationMessageCount !== expected.conversationMessageCount
+          ) {
+            throw new Error('Picker staging created a durable Agent side effect before Send.');
+          }
+          const submittedAt = Date.now();
+          send.click();
+          return { agentTurnCount, conversationTailEventId, conversationMessageCount, submittedAt };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for exact staged Home Send authority.');
     })()
   `, true);
   if (
@@ -919,17 +1160,8 @@ async function stageAndSubmitSourceRenderer(browserWindow, attachmentPath, markS
   ) {
     throw new Error("Picker staging created a durable Agent side effect before Send.");
   }
-  const submittedAt = Date.now();
   markStage(`${stagePrefix}_send`);
-  await browserWindow.webContents.executeJavaScript(`
-    (() => {
-      const send = document.querySelector('button.composer-send:not(:disabled)');
-      if (!send) throw new Error('Home Send is unavailable for the staged source turn.');
-      send.click();
-      return true;
-    })()
-  `, true);
-  return { stagedAt, submittedAt };
+  return { stagedAt, submittedAt: staged.submittedAt };
 }
 
 async function readSourceSubmissionState(browserWindow) {
@@ -938,6 +1170,8 @@ async function readSourceSubmissionState(browserWindow) {
       const jobs = await window.pige.jobs.list({ limit: 100 });
       const timeline = await window.pige.agent.conversation({ limit: 24 });
       return {
+        activeVaultId: jobs.activeVaultId,
+        conversationId: timeline?.conversationId ?? '',
         agentTurnCount: jobs.jobs.filter((job) => job.class === 'agent_turn').length,
         conversationTailEventId: timeline?.tailEventId ?? '',
         conversationMessageCount: timeline?.messages.length ?? 0
@@ -950,10 +1184,27 @@ async function readSourceRendererResult(browserWindow, expectedAnswer, resultKey
   return browserWindow.webContents.executeJavaScript(`
     (async () => {
       const startedAt = Date.now();
+      globalThis.__pigeRoundtripStage = 'source_result_wait';
       while (Date.now() - startedAt < 45000) {
         const answer = Array.from(document.querySelectorAll('.conversation-message.role-assistant:not(.provisional)'))
           .find((message) => message.textContent?.includes(${JSON.stringify(expectedAnswer)}));
         const provisional = document.querySelector('[data-agent-draft="true"]');
+        const timeline = await window.pige.agent.conversation({ limit: 24 });
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const timelineAnswerVisible = timeline?.messages.some((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(expectedAnswer)})
+        ) === true;
+        globalThis.__pigeRoundtripWaitState = {
+          timelineAnswerVisible,
+          domAnswerVisible: Boolean(answer),
+          provisionalVisible: Boolean(provisional),
+          failedVisible: Boolean(document.querySelector('.conversation-status-message.state-failed')),
+          canFollowUp: timeline?.canFollowUp === true,
+          latestTurnState: timeline?.latestTurn?.state ?? 'none',
+          timelineMessageCount: timeline?.messages.length ?? 0,
+          domAssistantCount: document.querySelectorAll('.conversation-message.role-assistant:not(.provisional)').length,
+          agentTurnCount: jobs.jobs.filter((job) => job.class === 'agent_turn').length
+        };
         if (answer && !provisional) {
           return { [${JSON.stringify(resultKey)}]: true };
         }

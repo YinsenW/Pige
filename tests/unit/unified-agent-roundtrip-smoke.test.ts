@@ -61,17 +61,59 @@ describe("unified Agent assembled smoke navigation", () => {
 
   it("stages picker files without side effects and submits them through the real composer", () => {
     const stageHelper = source.indexOf("async function stageAndSubmitSourceRenderer");
+    const stageHelperEnd = source.indexOf("async function readSourceSubmissionState", stageHelper);
+    const stageHelperSource = source.slice(stageHelper, stageHelperEnd);
     const fileInjection = source.indexOf("await setRendererFileInput(browserWindow, attachmentPath);", stageHelper);
     const durableCheck = source.indexOf("Picker staging created a durable Agent side effect before Send.", fileInjection);
-    const sendClick = source.indexOf("send.click();", durableCheck);
+    const sendClick = source.indexOf("send.click();", fileInjection);
 
     expect(stageHelper).toBeGreaterThan(-1);
     expect(fileInjection).toBeGreaterThan(stageHelper);
+    expect(source.slice(stageHelper, durableCheck)).toContain("const deadline = Date.now() + 45000;");
+    expect(source.slice(stageHelper, durableCheck)).toContain("chips[0] === stagedChip");
+    expect(source.slice(stageHelper, durableCheck)).toContain("currentJobs.activeVaultId === expected.activeVaultId");
+    expect(source.slice(stageHelper, durableCheck)).toContain("currentTimeline?.conversationId === expected.conversationId");
+    expect(source.slice(stageHelper, durableCheck)).toContain("currentTimeline?.tailEventId === expected.conversationTailEventId");
+    expect(source.slice(stageHelper, durableCheck)).toContain("tail?.role === 'assistant'");
+    expect(source.slice(stageHelper, durableCheck)).toContain("send && !send.disabled");
     expect(durableCheck).toBeGreaterThan(fileInjection);
     expect(sendClick).toBeGreaterThan(durableCheck);
+    expect(stageHelperSource.match(/send\.click\(\)/g)).toHaveLength(1);
+    expect(source.slice(stageHelper, durableCheck)).not.toContain("setTimeout(resolve, 250)");
     expect(source).toContain("sourceSelectionsHadZeroDurableSideEffects: true");
+    expect(source).toContain("timelineAnswerVisible");
+    expect(source).toContain("domAnswerVisible: Boolean(answer)");
     expect(source).toContain("requests.every((request) =>");
     expect(source).toContain('request.path !== "/v1/responses"');
     expect(source).not.toContain("await setRendererFileInput(browserWindow, attachmentPath);\n      result =");
+  });
+
+  it("restarts the same durable Agent fixture before cleanup without another Provider call", () => {
+    const connect = source.indexOf('await runChild("connect"');
+    const requestFence = source.indexOf("const requestCountBeforeRestart = requests.length;", connect);
+    const restart = source.indexOf('await runChild("restart"', requestFence);
+    const identityCheck = source.indexOf("assert.deepEqual(restart.durableSnapshot, connect.durableSnapshot);", restart);
+    const providerCheck = source.indexOf("assert.equal(requests.length, requestCountBeforeRestart);", identityCheck);
+    const cleanup = source.indexOf("fs.rmSync(rootPath, { recursive: true, force: true });", providerCheck);
+
+    expect(connect).toBeGreaterThan(-1);
+    expect(requestFence).toBeGreaterThan(connect);
+    expect(restart).toBeGreaterThan(requestFence);
+    expect(identityCheck).toBeGreaterThan(restart);
+    expect(providerCheck).toBeGreaterThan(identityCheck);
+    expect(cleanup).toBeGreaterThan(providerCheck);
+    expect(source).toContain('} else if (phase !== "restart") {');
+    expect(source).toContain('throw new Error("Unknown unified Agent roundtrip phase.");');
+    expect(source).toContain('job.class === "agent_turn" || job.class === "dataset_import"');
+    expect(source).toContain("messageIdentities");
+    expect(source).toContain("pageIdentities");
+    expect(source).toContain("sourceIds");
+    expect(source).toContain("datasetIds");
+    expect(source).toContain("activities");
+    expect(source).toContain("nonterminalJobIds");
+    expect(source).toContain("failedRetryableJobIds");
+    expect(source).toContain("assertUniqueIdentities(connect.durableSnapshot.messageIdentities");
+    expect(source).toContain('filter((job) => job.class === "agent_turn").length, 7');
+    expect(source).toContain("PIGE_ROUNDTRIP_STATE");
   });
 });

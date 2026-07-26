@@ -219,10 +219,11 @@ Behavior:
   chip and the existing composer text remains unchanged. File and paste chips retain user
   staging order. Before preservation, a paste chip may show only localized label, ordinal,
   Unicode character count and bounded byte size—never body preview, path or internal ID.
-- Send or valid Enter takes one immutable snapshot of the exact authored text and staged
-  file/paste identities and submits one Agent turn/parent Job. Whitespace-only text with
-  staged items receives only the minimal organize intent at submit time. Text-only
-  whitespace remains invalid and creates no turn.
+- Send/valid Enter snapshots exact text and staged identities into one Agent turn/Job.
+  Direct `file_picker` also snapshots the active `canFollowUp` conversation/tail pair;
+  it must continue that pair, or starts one conversation when none exists. Stale rejection
+  preserves exact draft/item revisions. Attachment-only adds minimal organize intent;
+  text-only whitespace creates no turn.
 - Clear text/chips only after the authoritative accepted receipt. Validation, IPC, vault-
   identity, or submission failure preserves the exact composer state for idempotent retry.
   A Send-button/Enter race shares one client turn identity and cannot duplicate work.
@@ -270,8 +271,8 @@ Behavior:
 - Dragging files over any part of the window turns the entire window into a drop target.
 - The target should be visually obvious but calm.
 - Dropping files should not require aiming for a small attachment button.
-- Release immediately submits the dropped files as one Agent turn with one parent Job;
-  it neither consumes nor clears text or staged chips already in the composer.
+- Release immediately submits one Agent turn/parent Job without composer conversation
+  identity; it neither consumes nor clears existing text or staged chips.
 - Multi-file drops are one bounded ordered submission. Preservation checkpoints or child
   work exist only for reliability; Pi chooses all subsequent semantic tools.
 - Unsupported files are preserved when possible and reported with clear warnings.
