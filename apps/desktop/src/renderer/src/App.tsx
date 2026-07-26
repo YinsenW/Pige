@@ -969,7 +969,8 @@ export function App(): React.JSX.Element {
     setLibrarySearchFocusRequest((current) => current + 1);
   };
   const toggleAlwaysOnTop = async (): Promise<void> => {
-    setWindowState(await window.pige.window.setAlwaysOnTop({ alwaysOnTop: !(windowState?.alwaysOnTop ?? false) }));
+    if (!windowState) return;
+    setWindowState(await window.pige.window.setAlwaysOnTop({ alwaysOnTop: !windowState.alwaysOnTop }));
   };
   const updateLocale = async (nextLocale: Locale): Promise<void> => {
     if (voiceAssetInstallActiveRef.current) return;
@@ -1431,6 +1432,7 @@ export function App(): React.JSX.Element {
             aria-label={t("topbar.pin")}
             title={t("topbar.pin")}
             aria-pressed={windowState?.alwaysOnTop ?? false}
+            disabled={windowState === null}
             tabIndex={sidebarModal ? -1 : undefined}
             onClick={() => void toggleAlwaysOnTop()}
           >
@@ -1791,7 +1793,7 @@ export function App(): React.JSX.Element {
             ) : null
           ) : settingsSection === "general" ? (
             <GeneralSettingsPanel
-              alwaysOnTop={windowState?.alwaysOnTop ?? false}
+              alwaysOnTop={windowState?.alwaysOnTop ?? null}
               onAlwaysOnTopChange={toggleAlwaysOnTop}
               onOpenAppearance={() => {
                 setSettingsSection("appearance");
@@ -6779,7 +6781,7 @@ export function SettingsSurface(props: {
 }
 
 export function GeneralSettingsPanel(props: {
-  readonly alwaysOnTop: boolean;
+  readonly alwaysOnTop: boolean | null;
   readonly onAlwaysOnTopChange: () => Promise<void>;
   readonly onOpenAppearance: () => void;
   readonly onDevelopment: () => void;
@@ -6838,7 +6840,8 @@ export function GeneralSettingsPanel(props: {
               role="switch"
               aria-label={props.t("settings.general.alwaysOnTop")}
               aria-describedby="settings-general-always-on-top-description"
-              aria-checked={props.alwaysOnTop}
+              aria-checked={props.alwaysOnTop ?? false}
+              disabled={props.alwaysOnTop === null}
               onClick={() => void props.onAlwaysOnTopChange()}
             />
           </div>

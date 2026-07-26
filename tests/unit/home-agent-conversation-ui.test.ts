@@ -994,12 +994,15 @@ describe("Home durable Agent conversation UI", () => {
     expect(container.querySelector(".shell.mode-compact")).toBeNull();
     const modeToggle = buttonsByAriaLabel(container, "Switch to compact layout")[0]!;
     expect(modeToggle.disabled).toBe(true);
+    const pinToggle = buttonsByAriaLabel(container, "Pin on top")[0]!;
+    expect(pinToggle.disabled).toBe(true);
 
     await act(async () => {
       resolveWindowState?.(windowState(harness));
       await settle(dom);
     });
     await waitFor(dom, () => modeToggle.disabled === false);
+    await waitFor(dom, () => pinToggle.disabled === false);
 
     await act(async () => root.unmount());
     dom.window.close();

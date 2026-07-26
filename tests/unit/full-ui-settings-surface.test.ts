@@ -40,6 +40,33 @@ afterEach(() => {
 });
 
 describe("full UI Settings surface", () => {
+  it("keeps the always-on-top control inert until window truth is known", async () => {
+    const dom = createDom();
+    const onAlwaysOnTopChange = vi.fn(async () => undefined);
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+
+    await act(async () => {
+      root.render(createElement(GeneralSettingsPanel, {
+        alwaysOnTop: null,
+        onAlwaysOnTopChange,
+        onOpenAppearance: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+
+    const alwaysOnTop = requireElement(dom.window.document.querySelector<HTMLButtonElement>(
+      'button[role="switch"][aria-label="Keep Pige on top"]'
+    ));
+    expect(alwaysOnTop.disabled).toBe(true);
+    expect(alwaysOnTop.getAttribute("aria-checked")).toBe("false");
+    alwaysOnTop.click();
+    expect(onAlwaysOnTopChange).not.toHaveBeenCalled();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("reflects WindowLayout persistence without inventing a startup preference", async () => {
     const dom = createDom();
     const onAlwaysOnTopChange = vi.fn(async () => undefined);
