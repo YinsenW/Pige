@@ -39,7 +39,8 @@ import type {
   SpeechStartResult,
   SpeechStopResult,
   WindowLayoutRequest,
-  WindowLayoutState
+  WindowLayoutState,
+  WindowState
 } from "@pige/contracts";
 import deMessages from "../../apps/desktop/src/renderer/src/locales/de/messages.json";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
@@ -973,6 +974,32 @@ describe("Home durable Agent conversation UI", () => {
     await clickButtonByAriaLabel(dom, container, "Switch to compact layout");
     await waitFor(dom, () => container.querySelector('.shell.mode-compact') !== null);
     expect(harness.windowModeRequests).toEqual(["expanded", "compact"]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("uses the wide layout on first paint while window truth is still loading", async () => {
+    const dom = createDom(960);
+    const harness = createHarness(undefined);
+    harness.windowMode = "expanded";
+    let resolveWindowState: ((state: WindowState) => void) | undefined;
+    const api = makePigeApi(harness) as ReturnType<typeof makePigeApi> & {
+      window: { current: () => Promise<WindowState> };
+    };
+    api.window.current = () => new Promise((resolve) => { resolveWindowState = resolve; });
+    const { container, root } = await mountHome(dom, api);
+
+    expect(container.querySelector(".shell.mode-expanded")).not.toBeNull();
+    expect(container.querySelector(".shell.mode-compact")).toBeNull();
+    const modeToggle = buttonsByAriaLabel(container, "Switch to compact layout")[0]!;
+    expect(modeToggle.disabled).toBe(true);
+
+    await act(async () => {
+      resolveWindowState?.(windowState(harness));
+      await settle(dom);
+    });
+    await waitFor(dom, () => modeToggle.disabled === false);
 
     await act(async () => root.unmount());
     dom.window.close();

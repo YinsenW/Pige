@@ -1387,7 +1387,7 @@ export function App(): React.JSX.Element {
 
   return (
     <div
-      className={`shell app-window mode-${windowState?.mode ?? "compact"}${macosWindowShell ? " platform-macos" : ""}${homeSurface ? " home-surface" : ""}${sidebarOpen ? " sidebar-expanded" : ""}${selectedNote ? " note-mode" : ""}${dropActive ? " drop-active" : ""}`}
+      className={`shell app-window mode-${windowState?.mode ?? "expanded"}${macosWindowShell ? " platform-macos" : ""}${homeSurface ? " home-surface" : ""}${sidebarOpen ? " sidebar-expanded" : ""}${selectedNote ? " note-mode" : ""}${dropActive ? " drop-active" : ""}`}
       aria-label="Pige"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
