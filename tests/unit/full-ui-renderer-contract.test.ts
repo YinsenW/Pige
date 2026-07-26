@@ -93,7 +93,8 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain('surface: "home"');
     expect(appSource).toContain('surface: "reader"');
     expect(appSource).toContain("<WindowModeToggle");
-    expect(windowModeToggleSource).toContain("window.pige.window.setMode({ mode:");
+    expect(appSource).toContain("window.pige.window.setMode({ mode }");
+    expect(windowModeToggleSource).not.toContain("window.pige.window.setMode(");
     expect(windowModeToggleSource).not.toMatch(/\b(width|height|workArea|presentation)\s*:/);
     expect(appSource).not.toContain("window.pige.window.setSidebarOpen(");
     const layoutAdapter = appSource.slice(

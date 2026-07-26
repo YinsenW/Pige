@@ -972,6 +972,20 @@ export function App(): React.JSX.Element {
     if (!windowState) return;
     setWindowState(await window.pige.window.setAlwaysOnTop({ alwaysOnTop: !windowState.alwaysOnTop }));
   };
+  const toggleWindowMode = async (): Promise<void> => {
+    if (!windowState || windowStateBusyRef.current) return;
+    windowStateBusyRef.current = true;
+    setWindowStateBusy(true);
+    try {
+      const mode = windowState.mode === "compact" ? "expanded" : "compact";
+      setWindowState(await window.pige.window.setMode({ mode }));
+    } catch {
+      setCaptureToast({ kind: "error", message: t("error.generic") });
+    } finally {
+      windowStateBusyRef.current = false;
+      setWindowStateBusy(false);
+    }
+  };
   const updateLocale = async (nextLocale: Locale): Promise<void> => {
     if (voiceAssetInstallActiveRef.current) return;
     const appearance = await window.pige.settings.setLocale({ locale: nextLocale });
@@ -1425,8 +1439,7 @@ export function App(): React.JSX.Element {
         <span className="topbar-title" aria-hidden="true">{currentTitle}</span>
         <div className="topbar-actions">
           <WindowModeToggle state={windowState} compactLabel={t("topbar.compact")} expandedLabel={t("topbar.expanded")}
-            tabIndex={sidebarModal ? -1 : undefined} onStateChange={setWindowState}
-            onFailure={() => setCaptureToast({ kind: "error", message: t("error.generic") })} />
+            tabIndex={sidebarModal ? -1 : undefined} busy={windowStateBusy} onToggle={() => void toggleWindowMode()} />
           <button
             type="button"
             className={windowState?.alwaysOnTop ? "icon-button pin-button active" : "icon-button pin-button"}

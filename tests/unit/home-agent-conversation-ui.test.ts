@@ -1013,6 +1013,7 @@ describe("Home durable Agent conversation UI", () => {
     const harness = createHarness(undefined);
     harness.windowMode = "expanded";
     let modeRequests = 0;
+    let pinRequests = 0;
     let resolveModeWrite: ((state: WindowState) => void) | undefined;
     const api = makePigeApi(harness) as ReturnType<typeof makePigeApi> & {
       window: {
@@ -1023,16 +1024,24 @@ describe("Home durable Agent conversation UI", () => {
       modeRequests += 1;
       return new Promise((resolve) => { resolveModeWrite = resolve; });
     };
+    api.window.setAlwaysOnTop = async () => {
+      pinRequests += 1;
+      return { ...windowState(harness), alwaysOnTop: true };
+    };
     const { container, root } = await mountHome(dom, api);
     const modeToggle = buttonsByAriaLabel(container, "Switch to compact layout")[0]!;
+    const pinToggle = buttonsByAriaLabel(container, "Pin on top")[0]!;
 
     await act(async () => {
       modeToggle.click();
       modeToggle.click();
+      pinToggle.click();
       await settle(dom);
     });
     expect(modeRequests).toBe(1);
+    expect(pinRequests).toBe(0);
     expect(modeToggle.disabled).toBe(true);
+    expect(pinToggle.disabled).toBe(true);
     expect(modeToggle.getAttribute("aria-busy")).toBe("true");
 
     harness.windowMode = "compact";
@@ -1041,6 +1050,7 @@ describe("Home durable Agent conversation UI", () => {
       await settle(dom);
     });
     await waitFor(dom, () => modeToggle.disabled === false);
+    expect(pinToggle.disabled).toBe(false);
     expect(modeToggle.getAttribute("aria-label")).toBe("Switch to wide layout");
 
     api.window.setMode = async () => {
