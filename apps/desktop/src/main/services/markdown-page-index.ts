@@ -13,6 +13,7 @@ import {
   MarkdownPageTypeSchema,
   type MarkdownPageType
 } from "@pige/schemas";
+import { createVaultRelativePathResolver } from "./vault-layout";
 
 export interface MarkdownPageRecord {
   readonly summary: LibraryPageSummary;
@@ -496,15 +497,9 @@ function isIsoDateTime(value: string): boolean {
   return !Number.isNaN(Date.parse(value));
 }
 
-function resolveVaultRelativePath(vaultPath: string, relativePath: string): string {
-  const resolvedVault = path.resolve(vaultPath);
-  const resolvedPath = path.resolve(vaultPath, ...relativePath.split("/"));
-  const allowedPrefix = `${resolvedVault}${path.sep}`;
-  if (resolvedPath !== resolvedVault && !resolvedPath.startsWith(allowedPrefix)) {
-    throw new Error("Path escapes the active vault.");
-  }
-  return resolvedPath;
-}
+const resolveVaultRelativePath = createVaultRelativePathResolver(
+  () => new Error("Path escapes the active vault.")
+);
 
 function toVaultRelativePath(vaultPath: string, filePath: string): string {
   const resolvedVault = path.resolve(vaultPath);

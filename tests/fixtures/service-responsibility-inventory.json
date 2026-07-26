@@ -3,7 +3,7 @@
   "baseline": "fd869668bb7d53cb1946b3b70e2127de1e1959af",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 132,
-  "baselineLines": 71134,
+  "baselineLines": 71124,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -14,7 +14,7 @@
   },
   "categories": {
     "semantic_orchestrator": [
-      ["agent-ingest-service.ts", 4645, "aprdf"],
+      ["agent-ingest-service.ts", 4640, "aprdf"],
       ["home-agent-service.ts", 3736, "japrd"],
       ["pi-agent-runtime-adapter.ts", 1398, "aprf"]
     ],
@@ -65,7 +65,7 @@
       ["local-database-service.ts", 1284, "rd"],
       ["local-settings.ts", 351, "d"],
       ["local-tool-lifecycle-store.ts", 696, "rd"],
-      ["markdown-page-index.ts", 434, "f"],
+      ["markdown-page-index.ts", 429, "f"],
       ["model-provider-registry.ts", 1083, "prd"],
       ["object-error-code.ts", 11, "d"],
       ["ocr-artifact-service.ts", 403, "rd"],
@@ -171,7 +171,7 @@
       "writeJsonAtomicDefinitions": 9,
       "writeFileAtomicDefinitions": 4,
       "isErrnoDefinitions": 1,
-      "resolveVaultRelativePathFiles": 7
+      "resolveVaultRelativePathFiles": 5
     },
     "oversizedServiceBranchAndFunctionProxies": {
       "jobs-service.ts": [536, 221],

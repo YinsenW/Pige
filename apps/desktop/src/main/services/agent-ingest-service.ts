@@ -90,6 +90,7 @@ import {
   readGeneratedNoteHeader
 } from "./generated-note-file";
 import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
+import { createVaultRelativePathResolver } from "./vault-layout";
 import {
   bindRetrievalEvidenceToCurrentMarkdown,
   createRetrievalEvidencePrivacyHash,
@@ -4285,12 +4286,6 @@ function escapeMarkdownInline(value: string): string {
   return value.replace(/[\[\]\n\r]/gu, " ").trim() || "Untitled Note";
 }
 
-function resolveVaultRelativePath(vaultPath: string, relativePath: string): string {
-  const resolvedVault = path.resolve(vaultPath);
-  const resolvedPath = path.resolve(vaultPath, ...relativePath.split("/"));
-  const allowedPrefix = `${resolvedVault}${path.sep}`;
-  if (resolvedPath !== resolvedVault && !resolvedPath.startsWith(allowedPrefix)) {
-    throw new Error("Path escapes the active vault.");
-  }
-  return resolvedPath;
-}
+const resolveVaultRelativePath = createVaultRelativePathResolver(
+  () => new Error("Path escapes the active vault.")
+);
