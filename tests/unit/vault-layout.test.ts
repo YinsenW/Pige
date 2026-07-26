@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   PIGE_TRANSIENT_RUNTIME_ROOTS,
+  createVaultRelativePathResolver,
   createVaultOnDisk,
   loadVaultSummary,
   readVaultConfig,
@@ -27,6 +28,17 @@ afterEach(() => {
 });
 
 describe("vault layout", () => {
+  it("resolves vault-relative paths while preserving the caller-owned outside error", () => {
+    const outsideError = new Error("owner-specific path failure");
+    const resolveVaultRelativePath = createVaultRelativePathResolver(() => outsideError);
+    const vaultPath = path.join(makeTempRoot(), "vault");
+
+    expect(resolveVaultRelativePath(vaultPath, "artifacts/result.json"))
+      .toBe(path.join(vaultPath, "artifacts/result.json"));
+    expect(resolveVaultRelativePath(vaultPath, ".")).toBe(vaultPath);
+    expect(() => resolveVaultRelativePath(vaultPath, "../outside.json")).toThrow(outsideError);
+  });
+
   it("creates the required readable vault files without storing machine-local absolute paths in the manifest", () => {
     const root = makeTempRoot();
     const vault = createVaultOnDisk({

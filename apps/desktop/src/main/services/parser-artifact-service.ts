@@ -14,6 +14,7 @@ import { SourcePageService } from "./source-page-service";
 import { tryVerifyReadableSourceFile, verifyReadableSourceFile } from "./source-file-access";
 import { OFFICE_MEDIA_TARGET_SCHEMA_VERSION } from "./office-parser-types";
 import { writeArtifactJsonAtomic, writeArtifactTextAtomic } from "./artifact-file-commit";
+import { createVaultRelativePathResolver } from "./vault-layout";
 
 export type ParserTextCoverage = "none" | "low" | "medium" | "high";
 
@@ -514,11 +515,6 @@ function stringArrayMetadata(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
-function resolveVaultRelativePath(vaultPath: string, relativePath: string): string {
-  const resolvedVault = path.resolve(vaultPath);
-  const resolvedPath = path.resolve(vaultPath, ...relativePath.split("/"));
-  if (resolvedPath !== resolvedVault && !resolvedPath.startsWith(`${resolvedVault}${path.sep}`)) {
-    throw new PigeDomainError("parser.path_outside_vault", "The parser path escapes the active vault.");
-  }
-  return resolvedPath;
-}
+const resolveVaultRelativePath = createVaultRelativePathResolver(
+  () => new PigeDomainError("parser.path_outside_vault", "The parser path escapes the active vault.")
+);

@@ -3,7 +3,7 @@
   "baseline": "fd869668bb7d53cb1946b3b70e2127de1e1959af",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 132,
-  "baselineLines": 71137,
+  "baselineLines": 71142,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -68,8 +68,8 @@
       ["markdown-page-index.ts", 434, "f"],
       ["model-provider-registry.ts", 1083, "prd"],
       ["object-error-code.ts", 11, "d"],
-      ["ocr-artifact-service.ts", 407, "rd"],
-      ["parser-artifact-service.ts", 502, "rd"],
+      ["ocr-artifact-service.ts", 403, "rd"],
+      ["parser-artifact-service.ts", 498, "rd"],
       ["pdf-ocr-artifact-service.ts", 1524, "rd"],
       ["pptx-media-ocr-artifact-service.ts", 1057, "rd"],
       ["proposal-service.ts", 914, "rd"],
@@ -152,7 +152,7 @@
       ["provider-base-url.ts", 20, "p"],
       ["retrieval-search-ipc.ts", 37, ""],
       ["settings-registry.ts", 182, "p"],
-      ["vault-layout.ts", 515, "f"],
+      ["vault-layout.ts", 528, "f"],
       ["web-content-extractor-types.ts", 59, ""]
     ]
   },
@@ -171,7 +171,7 @@
       "writeJsonAtomicDefinitions": 9,
       "writeFileAtomicDefinitions": 4,
       "isErrnoDefinitions": 1,
-      "resolveVaultRelativePathFiles": 11
+      "resolveVaultRelativePathFiles": 9
     },
     "oversizedServiceBranchAndFunctionProxies": {
       "jobs-service.ts": [536, 221],
