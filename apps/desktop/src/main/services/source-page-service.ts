@@ -5,6 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 import { PigeDomainError } from "@pige/domain";
 import { SourceRecordSchema, type SourceRecord } from "@pige/schemas";
 import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
+import { createVaultRelativePathResolver } from "./vault-layout";
 
 export interface SourcePageResult {
   readonly pageId: string;
@@ -547,15 +548,9 @@ function escapeMarkdownHeading(value: string): string {
   return value.replace(/[\r\n]+/gu, " ").trim() || "Untitled Source";
 }
 
-function resolveVaultRelativePath(vaultPath: string, relativePath: string): string {
-  const resolvedVault = path.resolve(vaultPath);
-  const resolvedPath = path.resolve(vaultPath, ...relativePath.split("/"));
-  const allowedPrefix = `${resolvedVault}${path.sep}`;
-  if (resolvedPath !== resolvedVault && !resolvedPath.startsWith(allowedPrefix)) {
-    throw new PigeDomainError("vault.path_unsafe", "The source-page path escapes the active vault.");
-  }
-  return resolvedPath;
-}
+const resolveVaultRelativePath = createVaultRelativePathResolver(
+  () => new PigeDomainError("vault.path_unsafe", "The source-page path escapes the active vault.")
+);
 
 function resolveSourceRecordPath(vaultPath: string, sourceRecordPath: string): string {
   const sourceRecordRoot = path.resolve(vaultPath, ".pige", "source-records");
