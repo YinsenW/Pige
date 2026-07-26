@@ -48,6 +48,7 @@ import {
 import {
   CaptureJobExecutor,
   type ActiveCaptureJob,
+  type CapturePublishedResult,
   type ProcessQueuedCapturesRequest,
   type ProcessQueuedCapturesResult,
   type QueuedCaptureJob
@@ -67,6 +68,7 @@ import {
   type QueuedDatasetImportJob
 } from "./dataset-import-job-executor";
 import { SourcePageService } from "./source-page-service";
+import type { SourcePageResult } from "./source-page-service";
 import type { LocalDatabaseService } from "./local-database-service";
 import type { OcrPort, OcrSourceCapability } from "./ocr-service";
 import {
@@ -2552,6 +2554,12 @@ export class JobsService {
     return {
       job: runningJob,
       control: execution.control,
+      bindDurableEffect: (page) => this.#capturePublishedResult(
+        vaultPath,
+        sourceRecordFile.path,
+        sourceRecordFile.sourceRecord,
+        page
+      ),
       prepareFollowUp: (result) => {
         this.#assertWriterLease(vaultPath);
         const refreshedSource = readSourceRecord(vaultPath, result.sourceId);
@@ -2646,6 +2654,53 @@ export class JobsService {
             execution.control.durableWriteState()
           );
         }
+      }
+    };
+  }
+
+  #capturePublishedResult(
+    vaultPath: string,
+    sourceRecordPath: string,
+    expectedSource: SourceRecord,
+    page: SourcePageResult
+  ): CapturePublishedResult {
+    this.#assertWriterLease(vaultPath);
+    const refreshed = readSourceRecordFile(vaultPath, expectedSource.id);
+    const sourceChecksum = readCheckpointFileHash(vaultPath, sourceRecordPath, 2 * 1024 * 1024);
+    const pageChecksum = readCheckpointFileHash(vaultPath, page.pagePath, 16 * 1024 * 1024);
+    const conflict = refreshed?.sourceRecord.metadata.sourcePageRefreshConflict === true;
+    if (
+      !refreshed ||
+      refreshed.sourceRecord.id !== expectedSource.id ||
+      refreshed.sourceRecord.knowledgePageId !== page.pageId ||
+      refreshed.sourceRecord.knowledgePagePath !== page.pagePath ||
+      !sourceChecksum ||
+      !pageChecksum ||
+      (!conflict && refreshed.sourceRecord.metadata.knowledgePageChecksum !== pageChecksum)
+    ) {
+      throw new PigeDomainError(
+        "capture.durable_effect_invalid",
+        "The Capture durable source-page identity could not be verified."
+      );
+    }
+    return {
+      ...page,
+      sourceId: expectedSource.id,
+      conflict,
+      durableEffect: {
+        outputRefs: [{
+          kind: "source",
+          id: expectedSource.id,
+          path: sourceRecordPath,
+          checksum: sourceChecksum,
+          role: "capture_source_record"
+        }, {
+          kind: "page",
+          id: page.pageId,
+          path: page.pagePath,
+          checksum: pageChecksum,
+          role: "capture_source_page"
+        }]
       }
     };
   }

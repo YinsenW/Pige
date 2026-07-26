@@ -3,7 +3,7 @@
   "baseline": "fd869668bb7d53cb1946b3b70e2127de1e1959af",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 126,
-  "baselineLines": 70887,
+  "baselineLines": 70897,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -78,7 +78,7 @@
     ],
     "capability_executor": [
       ["agent-source-tool-execution.ts", 14, "ar"],
-      ["capture-job-executor.ts", 114, "jr"],
+      ["capture-job-executor.ts", 124, "jr"],
       ["capture-service.ts", 1068, "jrd"],
       ["command-capability-adapter.ts", 127, "p"],
       ["command-execution-service.ts", 306, "p"],

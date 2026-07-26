@@ -1,7 +1,7 @@
 import { PigeDomainError } from "@pige/domain";
-import type { JobRecord, SourceRecord } from "@pige/schemas";
+import type { JobRecord, JobRef, SourceRecord } from "@pige/schemas";
 import type { JobExecutionControl } from "./job-execution-control";
-import type { SourcePagePublicationResult, SourcePageService } from "./source-page-service";
+import type { SourcePageResult, SourcePageService } from "./source-page-service";
 
 export interface ProcessQueuedCapturesRequest {
   readonly jobIds?: readonly string[];
@@ -19,11 +19,20 @@ export interface CaptureSource {
   readonly record: SourceRecord;
 }
 
+export interface CapturePublishedResult extends SourcePageResult {
+  readonly sourceId: string;
+  readonly conflict: boolean;
+  readonly durableEffect: {
+    readonly outputRefs: readonly JobRef[];
+  };
+}
+
 export interface ActiveCaptureJob {
   readonly job: JobRecord;
   readonly control: JobExecutionControl;
-  prepareFollowUp(result: SourcePagePublicationResult): void;
-  complete(result: SourcePagePublicationResult): JobRecord;
+  bindDurableEffect(result: SourcePageResult): CapturePublishedResult;
+  prepareFollowUp(result: CapturePublishedResult): void;
+  complete(result: CapturePublishedResult): JobRecord;
   fail(caught: unknown, message: string): void;
 }
 
@@ -70,7 +79,7 @@ export class CaptureJobExecutor {
         continue;
       }
       try {
-        const result = this.#sourcePages.createForSource(
+        const page = this.#sourcePages.createForSource(
           candidate.vaultPath,
           source.record,
           source.path,
@@ -82,6 +91,7 @@ export class CaptureJobExecutor {
             )
           }
         );
+        const result = execution.bindDurableEffect(page);
         if (result.sourceId !== source.record.id) {
           throw new PigeDomainError(
             "capture.durable_effect_invalid",

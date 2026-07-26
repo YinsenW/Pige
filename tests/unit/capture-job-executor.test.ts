@@ -7,15 +7,12 @@ import {
   type QueuedCaptureJob
 } from "../../apps/desktop/src/main/services/capture-job-executor";
 import type { JobExecutionControl } from "../../apps/desktop/src/main/services/job-execution-control";
-import type {
-  SourcePagePublicationResult,
-  SourcePageService
-} from "../../apps/desktop/src/main/services/source-page-service";
+import type { SourcePageService } from "../../apps/desktop/src/main/services/source-page-service";
 
 describe("CaptureJobExecutor", () => {
   it("owns non-cooperative source-page publication and durable completion", () => {
     const fixture = makeQueuedCaptureJob();
-    const createForSource = vi.fn(() => sourcePageResult());
+    const createForSource = vi.fn(() => sourcePage());
     const executor = new CaptureJobExecutor({ createForSource } as unknown as SourcePageService, {
       queued: () => [fixture.candidate]
     });
@@ -34,6 +31,7 @@ describe("CaptureJobExecutor", () => {
     expect(fixture.control.markDurableCheckpoint).toHaveBeenCalledWith(
       "capture_source_page_publication_started"
     );
+    expect(fixture.bindDurableEffect).toHaveBeenCalledWith(sourcePage());
     expect(fixture.prepareFollowUp).toHaveBeenCalledWith(sourcePageResult());
     expect(fixture.complete).toHaveBeenCalledWith(sourcePageResult());
   });
@@ -83,8 +81,12 @@ describe("CaptureJobExecutor", () => {
 
   it("rejects a durable result bound to a different source identity", () => {
     const fixture = makeQueuedCaptureJob();
+    fixture.bindDurableEffect.mockReturnValue({
+      ...sourcePageResult(),
+      sourceId: "src_20260726_other001"
+    });
     const executor = new CaptureJobExecutor({
-      createForSource: () => ({ ...sourcePageResult(), sourceId: "src_20260726_other001" })
+      createForSource: () => sourcePage()
     } as unknown as SourcePageService, { queued: () => [fixture.candidate] });
 
     expect(executor.process()).toEqual({ processed: 1, completed: 0, failed: 1 });
@@ -97,14 +99,20 @@ describe("CaptureJobExecutor", () => {
   });
 });
 
-function sourcePageResult(): SourcePagePublicationResult {
+function sourcePage() {
   return {
-    sourceId: "src_20260726_capture01",
     pageId: "page_20260726_capture01",
     pagePath: "sources/text/2026/source.md",
     created: true,
+    title: "Captured source"
+  };
+}
+
+function sourcePageResult() {
+  return {
+    ...sourcePage(),
+    sourceId: "src_20260726_capture01",
     conflict: false,
-    title: "Captured source",
     durableEffect: {
       outputRefs: [{
         kind: "source",
@@ -151,9 +159,17 @@ function makeQueuedCaptureJob(options: { readonly source?: boolean } = {}) {
     durableWriteState: () => ({ durableWritesApplied: false })
   };
   const prepareFollowUp = vi.fn();
+  const bindDurableEffect = vi.fn(() => sourcePageResult());
   const complete = vi.fn(() => ({ ...job, state: "completed" as const }));
   const fail = vi.fn();
-  const active: ActiveCaptureJob = { job, control, prepareFollowUp, complete, fail };
+  const active: ActiveCaptureJob = {
+    job,
+    control,
+    bindDurableEffect,
+    prepareFollowUp,
+    complete,
+    fail
+  };
   const failMissingSource = vi.fn();
   const begin = vi.fn(() => active);
   const candidate: QueuedCaptureJob = {
@@ -170,6 +186,7 @@ function makeQueuedCaptureJob(options: { readonly source?: boolean } = {}) {
     source,
     candidate,
     control,
+    bindDurableEffect,
     prepareFollowUp,
     complete,
     fail,

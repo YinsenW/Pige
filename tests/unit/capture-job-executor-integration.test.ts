@@ -9,7 +9,7 @@ import { createJobClassExecutorRegistry } from "../../apps/desktop/src/main/serv
 import { JobsService, type JobsVaultPort } from "../../apps/desktop/src/main/services/jobs-service";
 import {
   SourcePageService,
-  type SourcePagePublicationResult
+  type SourcePageResult
 } from "../../apps/desktop/src/main/services/source-page-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
@@ -25,7 +25,7 @@ describe("Capture executor integration", () => {
     const fixture = makeVault("CaptureAdoption");
     const captured = preserveText(fixture, "Capture adoption\n\nDurable source evidence.");
     let publicationCalls = 0;
-    const sourcePages = new HookedSourcePageService((result) => {
+    const sourcePages = new HookedSourcePageService(() => {
       publicationCalls += 1;
       const filePath = jobPath(fixture.vaultPath, captured.jobId);
       const current = readJob(filePath);
@@ -42,7 +42,6 @@ describe("Capture executor integration", () => {
         },
         message: "Synthetic settlement winner retained the durable source page."
       }));
-      expect(result.sourceId).toBe(captured.sourceId);
     });
     const jobs = makeJobs(fixture.vaultPort, sourcePages);
 
@@ -124,9 +123,9 @@ describe("Capture executor integration", () => {
 
 class HookedSourcePageService extends SourcePageService {
   calls = 0;
-  readonly #afterPublication: (result: SourcePagePublicationResult) => void;
+  readonly #afterPublication: (result: SourcePageResult) => void;
 
-  constructor(afterPublication: (result: SourcePagePublicationResult) => void) {
+  constructor(afterPublication: (result: SourcePageResult) => void) {
     super();
     this.#afterPublication = afterPublication;
   }
