@@ -3865,6 +3865,9 @@ function HomeComposer(props: {
       const attemptKey = composerAttemptKey(submittedText, submittedItems);
       const clientTurnId = stagedComposerAttemptRef.current?.key === attemptKey
         ? stagedComposerAttemptRef.current.clientTurnId : createAgentClientTurnId();
+      const followUpConversation = canFollowUpToConversation(conversationTimeline)
+        ? conversationTimeline
+        : undefined;
       stagedComposerAttemptRef.current = { key: attemptKey, clientTurnId };
       followConversationRef.current = true;
       if (!beginComposerSubmission(clientTurnId)) return;
@@ -3898,7 +3901,11 @@ function HomeComposer(props: {
           inputKind: "file_picker",
           locale: props.locale,
           stagedItems,
-          clientTurnId
+          clientTurnId,
+          ...(followUpConversation ? {
+            conversationId: followUpConversation.conversationId,
+            expectedTailEventId: followUpConversation.tailEventId
+          } : {})
         }, submittedFiles);
         if (outcome.state !== "accepted") {
           clearAgentDraft();

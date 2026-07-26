@@ -2060,6 +2060,8 @@ describe("Home durable Agent conversation UI", () => {
       inputKind: "file_picker",
       text: "Compare this file with related notes."
     });
+    expect(harness.submitRequests[0]).not.toHaveProperty("conversationId");
+    expect(harness.submitRequests[0]).not.toHaveProperty("expectedTailEventId");
     expect(harness.submittedFileNames).toEqual([["public-alpha.csv"]]);
     expect(textareaValue(container)).toBe("");
     expect(container.querySelector(".attachment-chip")).toBeNull();
@@ -2416,19 +2418,18 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
-  it("restores an exact failed picker attempt and reuses its client turn ID until edited", async () => {
+  it("preserves an exact stale picker continuation and reuses its client turn ID until edited", async () => {
     const dom = createDom();
-    const harness = createHarness(undefined);
+    const timeline = completedGroundedTimeline();
+    const harness = createHarness(timeline);
     harness.submitTurn = async (request) => {
       harness.submitRequests.push(request);
-      const failed = failedResult();
-      if (failed.state !== "failed") throw new Error("Expected a failed fixture.");
       return {
-        requestId: failed.requestId,
-        state: failed.state,
-        modelUsage: failed.modelUsage,
-        sourceIds: failed.sourceIds,
-        error: failed.error
+        requestId: "request_20260726_stalepicker",
+        state: "failed",
+        modelUsage: "none",
+        sourceIds: [],
+        error: turnConflictError()
       };
     };
     const { container, root } = await mountHome(dom, makePigeApi(harness));
@@ -2436,16 +2437,26 @@ describe("Home durable Agent conversation UI", () => {
     await attachFile(dom, container, "retry.csv", "value\n1\n");
     await setTextareaValue(dom, container, "Analyze this exact file.");
     await clickButton(dom, container, "Send");
-    await waitFor(dom, () => container.querySelector(".conversation-status-message.state-failed") !== null);
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+    await act(async () => settle(dom));
 
     expect(textareaValue(container)).toBe("Analyze this exact file.");
     expect(container.querySelector(".attachment-chip")?.textContent).toContain("retry.csv");
     expect(container.querySelector('[data-optimistic-user-message="true"]')).toBeNull();
     const firstClientTurnId = harness.submitRequests[0]?.clientTurnId;
+    expect(harness.submitRequests[0]).toMatchObject({
+      inputKind: "file_picker",
+      conversationId: timeline.conversationId,
+      expectedTailEventId: timeline.tailEventId
+    });
 
     await clickButton(dom, container, "Send");
     await waitFor(dom, () => harness.submitRequests.length === 2);
     expect(harness.submitRequests[1]?.clientTurnId).toBe(firstClientTurnId);
+    expect(harness.submitRequests[1]).toMatchObject({
+      conversationId: timeline.conversationId,
+      expectedTailEventId: timeline.tailEventId
+    });
 
     await setTextareaValue(dom, container, "Analyze this changed request.");
     await clickButton(dom, container, "Send");
@@ -3202,10 +3213,10 @@ describe("Home durable Agent conversation UI", () => {
 
     expect(harness.submitRequests[0]).toMatchObject({
       inputKind: "file_picker",
-      stagedItems: [{ kind: "file", ordinal: 0, displayName: "follow-up.txt" }]
+      stagedItems: [{ kind: "file", ordinal: 0, displayName: "follow-up.txt" }],
+      conversationId: timeline.conversationId,
+      expectedTailEventId: timeline.tailEventId
     });
-    expect(harness.submitRequests[0]).not.toHaveProperty("conversationId");
-    expect(harness.submitRequests[0]).not.toHaveProperty("expectedTailEventId");
     expect(harness.submittedFileNames).toEqual([["follow-up.txt"]]);
 
     await act(async () => mount.root.unmount());
@@ -5073,6 +5084,17 @@ function safeCallError() {
     domain: "model_provider" as const,
     messageKey: "errors.model_provider.call_failed",
     retryable: true,
+    severity: "error" as const,
+    userAction: "retry" as const
+  };
+}
+
+function turnConflictError() {
+  return {
+    code: "agent_runtime.turn_conflict",
+    domain: "agent_runtime" as const,
+    messageKey: "errors.agent_runtime.turn_conflict",
+    retryable: false,
     severity: "error" as const,
     userAction: "retry" as const
   };
