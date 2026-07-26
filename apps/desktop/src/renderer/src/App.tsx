@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -566,7 +567,8 @@ export function App(): React.JSX.Element {
     void refreshSpeechAvailability();
   }, [locale, settingsOpen, settingsSection]);
 
-  const t = (key: string): string => messageCatalogs[locale][key] ?? messageCatalogs.en[key] ?? key;
+  const t = useCallback((key: string): string =>
+    messageCatalogs[locale][key] ?? messageCatalogs.en[key] ?? key, [locale]);
 
   const refreshVaultState = async (): Promise<void> => {
     const refreshId = ++vaultRefreshSequence.current;

@@ -12,6 +12,11 @@ const enMessages = JSON.parse(
 ) as Record<string, string>;
 
 describe("full production UI renderer contract", () => {
+  it("keeps locale lookup stable across unrelated renders", () => {
+    expect(appSource).toContain("const t = useCallback(");
+    expect(appSource).toContain("[locale]);");
+  });
+
   it("uses the reviewed pane dimensions and corrected resident/overlay breakpoints", () => {
     for (const declaration of [
       "--home-pane-min: 360px;",
