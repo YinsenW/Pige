@@ -3703,7 +3703,7 @@ function HomeComposer(props: {
     setComposerSubmitActive(false);
   };
 
-  const refreshConversationResult = async (): Promise<
+  const refreshConversationResult = async (expectedConversationId?: string): Promise<
     | { readonly status: "adopted"; readonly timeline: AgentConversationInitialTimeline | undefined }
     | { readonly status: "ignored" | "failed" }
   > => {
@@ -3717,6 +3717,9 @@ function HomeComposer(props: {
     try {
       const nextTimeline = await window.pige.agent.conversation({ limit: 100 });
       if (requestId === conversationLoadSequence.current && activeVaultIdRef.current === vaultId) {
+        if (expectedConversationId && nextTimeline?.conversationId !== expectedConversationId) {
+          return { status: "ignored" };
+        }
         const localTail = locallyCompletedConversationTailRef.current;
         const acknowledgesLocalTail = !localTail || (
           localTail.vaultId === vaultId &&
@@ -3746,20 +3749,24 @@ function HomeComposer(props: {
   useEffect(() => {
     const items = stagedComposerItems;
     const vaultId = props.activeVault?.vaultId;
+    const expectedConversationId = conversationTimeline?.conversationId;
     const sequence = pickerConversationLoadSequence.current + 1;
     pickerConversationLoadSequence.current = sequence;
     setPickerConversationAuthority(null);
     if (!vaultId || items.length === 0) return;
     let retryTimer: number | undefined;
     const adoptCurrentConversation = async (): Promise<void> => {
-      const result = await refreshConversationResult();
+      const result = await refreshConversationResult(expectedConversationId);
       if (
         sequence !== pickerConversationLoadSequence.current ||
         activeVaultIdRef.current !== vaultId
       ) return;
       if (
         result.status === "adopted" &&
-        (result.timeline === undefined || canFollowUpToConversation(result.timeline))
+        (
+          (result.timeline === undefined && expectedConversationId === undefined) ||
+          canFollowUpToConversation(result.timeline)
+        )
       ) {
         setPickerConversationAuthority({ items, timeline: result.timeline });
         return;

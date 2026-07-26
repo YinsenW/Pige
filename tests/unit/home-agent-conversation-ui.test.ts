@@ -3274,6 +3274,32 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("keeps a staged picker local when the refreshed conversation identity changes", async () => {
+    const dom = createDom();
+    const timeline = completedGroundedTimeline();
+    const harness = createHarness(timeline);
+    const mount = await mountHome(dom, makePigeApi(harness));
+
+    harness.timeline = {
+      ...timeline,
+      conversationId: "conv_20260726_changedfixture"
+    };
+    await attachFile(dom, mount.container, "identity-fenced.txt", "Keep this exact staged source.\n");
+    const send = requireElement(mount.container.querySelector<HTMLButtonElement>("button.composer-send"));
+    await act(async () => {
+      await new Promise((resolve) => dom.window.setTimeout(resolve, 1_300));
+      await settle(dom);
+    });
+
+    expect(send.disabled).toBe(true);
+    expect(mount.container.querySelector(".attachment-chip")?.textContent).toContain("identity-fenced.txt");
+    expect(harness.submitRequests).toHaveLength(0);
+    expect(harness.submittedFileNames).toHaveLength(0);
+
+    await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
   it("keeps citations final-only and omits them from user messages and provisional drafts", async () => {
     const dom = createDom();
     const harness = createHarness(completedGroundedTimeline());
