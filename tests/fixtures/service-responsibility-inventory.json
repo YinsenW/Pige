@@ -170,7 +170,7 @@
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,
       "writeFileAtomicDefinitions": 4,
-      "isErrnoDefinitions": 8,
+      "isErrnoDefinitions": 7,
       "resolveVaultRelativePathFiles": 11
     },
     "oversizedServiceBranchAndFunctionProxies": {

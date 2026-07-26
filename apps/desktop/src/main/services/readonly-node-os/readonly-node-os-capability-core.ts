@@ -10,6 +10,7 @@ import {
   MAX_EXTERNAL_PATH_UTF8_BYTES,
   normalizeExternalAbsolutePath
 } from "./external-filesystem-path-guard";
+import { hasErrorInstanceCode as isErrno } from "../object-error-code";
 
 export { MAX_EXTERNAL_PATH_UTF8_BYTES, normalizeExternalAbsolutePath } from "./external-filesystem-path-guard";
 export const MAX_EXTERNAL_LIST_ENTRIES = 128;
@@ -243,10 +244,6 @@ function hashCanonical(domain: string, value: unknown): `sha256:${string}` {
 
 function assertNotAborted(signal: AbortSignal): void {
   if (signal.aborted) throw filesystemError("external_filesystem.cancelled");
-}
-
-function isErrno(value: unknown, code: string): boolean {
-  return value instanceof Error && "code" in value && value.code === code;
 }
 
 function filesystemError(code: string): PigeDomainError {
