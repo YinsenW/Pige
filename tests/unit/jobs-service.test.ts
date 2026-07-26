@@ -1114,7 +1114,7 @@ describe("jobs service", () => {
     expect(parsed.ocrWaitingSourceIds).toEqual([sourceId]);
     expect(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
 
-    const firstRun = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const firstRun = await jobs.ocrExecutor().process({ sourceIds: [sourceId] });
     const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
     const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
       knowledgePagePath: string;
@@ -1150,7 +1150,7 @@ describe("jobs service", () => {
     fs.writeFileSync(completedJobPath, `${JSON.stringify({ ...jobRecord, state: "running" }, null, 2)}\n`, "utf8");
     adapter.available = false;
     expect(jobs.recoverInterruptedJobs()).toEqual({ requeued: 1, failedRetryable: 0 });
-    expect(await jobs.processQueuedOcr({ sourceIds: [sourceId] })).toMatchObject({ completed: 1, failed: 0 });
+    expect(await jobs.ocrExecutor().process({ sourceIds: [sourceId] })).toMatchObject({ completed: 1, failed: 0 });
     expect(renderer.callCount).toBe(1);
     expect(adapter.callCount).toBe(1);
   });
@@ -1220,7 +1220,7 @@ describe("jobs service", () => {
       .toBe(sourceId);
     expect(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
 
-    const ocrResult = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const ocrResult = await jobs.ocrExecutor().process({ sourceIds: [sourceId] });
     expect(ocrResult).toEqual({ processed: 1, completed: 1, failed: 0, agentReadySourceIds: [sourceId] });
     expect(renderer.requestedPageSets).toEqual([[2]]);
     expect(adapter.callCount).toBe(1);
@@ -1324,7 +1324,7 @@ describe("jobs service", () => {
     const noteBeforeOcr = fs.readFileSync(findFile(path.join(vaultPath, "wiki"), ".md"), "utf8");
     expect(noteBeforeOcr).toContain("Some visible document content may still be waiting for local OCR enrichment.");
 
-    expect(await jobs.processQueuedOcr({ sourceIds: [sourceId] })).toMatchObject({
+    expect(await jobs.ocrExecutor().process({ sourceIds: [sourceId] })).toMatchObject({
       completed: 1,
       failed: 0,
       agentReadySourceIds: [sourceId]
@@ -1374,7 +1374,7 @@ describe("jobs service", () => {
       .toBe(sourceId);
 
     adapter.available = false;
-    expect(await jobs.processQueuedOcr({ sourceIds: [sourceId] })).toEqual({
+    expect(await jobs.ocrExecutor().process({ sourceIds: [sourceId] })).toEqual({
       processed: 1,
       completed: 0,
       failed: 1,
@@ -1425,7 +1425,7 @@ describe("jobs service", () => {
       if (modelClient.requests.length !== 1) return;
       adapter.available = true;
       expect(jobs.requeueWaitingOcr()).toEqual({ requeued: 1 });
-      expect(await jobs.processQueuedOcr()).toMatchObject({ completed: 1, failed: 0 });
+      expect(await jobs.ocrExecutor().process()).toMatchObject({ completed: 1, failed: 0 });
     });
     const services = makeServices(
       vaultPath,
@@ -1511,7 +1511,7 @@ describe("jobs service", () => {
     const sidecar = JSON.parse(fs.readFileSync(parserMetadataPath, "utf8")) as Record<string, unknown>;
     fs.writeFileSync(parserMetadataPath, `${JSON.stringify({ ...sidecar, ocrCandidatePages: [1] }, null, 2)}\n`, "utf8");
 
-    const result = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const result = await jobs.ocrExecutor().process({ sourceIds: [sourceId] });
 
     expect(result).toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
     expect(renderer.callCount).toBe(0);
@@ -1620,7 +1620,7 @@ describe("jobs service", () => {
 
     let ocrResult;
     try {
-      ocrResult = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+      ocrResult = await jobs.ocrExecutor().process({ sourceIds: [sourceId] });
     } finally {
       terminalObservation.restore();
     }
@@ -1668,7 +1668,7 @@ describe("jobs service", () => {
     seedExplicitPdfParseJob(vaultPath, sourceId);
     await jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
 
-    const result = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const result = await jobs.ocrExecutor().process({ sourceIds: [sourceId] });
 
     expect(result).toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
     expect(adapter.callCount).toBe(0);
@@ -1766,7 +1766,7 @@ describe("jobs service", () => {
 
     adapter.available = true;
     expect(jobs.requeueWaitingOcr()).toEqual({ requeued: 1 });
-    const firstRun = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const firstRun = await jobs.ocrExecutor().process({ sourceIds: [sourceId] });
     const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
     const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
       knowledgePagePath: string;
@@ -1813,7 +1813,7 @@ describe("jobs service", () => {
     adapter.available = false;
     expect(jobs.recoverInterruptedJobs()).toEqual({ requeued: 1, failedRetryable: 0 });
 
-    const recoveredRun = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const recoveredRun = await jobs.ocrExecutor().process({ sourceIds: [sourceId] });
     const recoveredSource = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as { artifacts: { id: string }[] };
     expect(recoveredRun).toEqual({ processed: 1, completed: 1, failed: 0, agentReadySourceIds: [sourceId] });
     expect(adapter.callCount).toBe(1);
@@ -1825,7 +1825,7 @@ describe("jobs service", () => {
     fs.writeFileSync(completedOcrJobPath, `${JSON.stringify({ ...completedAgain, state: "running" }, null, 2)}\n`, "utf8");
     expect(jobs.recoverInterruptedJobs()).toEqual({ requeued: 1, failedRetryable: 0 });
 
-    const repairedRun = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const repairedRun = await jobs.ocrExecutor().process({ sourceIds: [sourceId] });
     expect(repairedRun).toEqual({ processed: 1, completed: 1, failed: 0, agentReadySourceIds: [sourceId] });
     expect(adapter.callCount).toBe(2);
     expect(fs.readFileSync(path.join(vaultPath, textArtifact.path), "utf8")).toBe("Pige OCR recovered local knowledge.\n");
@@ -1861,7 +1861,7 @@ describe("jobs service", () => {
     changed[0] = changed[0] === 0 ? 1 : changed[0] - 1;
     fs.writeFileSync(path.join(vaultPath, sourceRecord.managedCopy.path), changed);
 
-    const result = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const result = await jobs.ocrExecutor().process({ sourceIds: [sourceId] });
 
     expect(result).toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
     expect(adapter.callCount).toBe(0);
@@ -1901,7 +1901,7 @@ describe("jobs service", () => {
       managedCopy: { ...sourceRecord.managedCopy, path: "../path-escape.png" }
     }, null, 2)}\n`, "utf8");
 
-    const result = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const result = await jobs.ocrExecutor().process({ sourceIds: [sourceId] });
 
     expect(result).toEqual({ processed: 1, completed: 0, failed: 1, agentReadySourceIds: [] });
     expect(adapter.callCount).toBe(0);
@@ -1937,7 +1937,7 @@ describe("jobs service", () => {
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitImageOcrJob(vaultPath, sourceId);
 
-    const result = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const result = await jobs.ocrExecutor().process({ sourceIds: [sourceId] });
     const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
     const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
       artifacts: { kind: string }[];
@@ -2064,7 +2064,7 @@ describe("jobs service", () => {
     expect(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
     expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0]?.sourceId).toBe(sourceId);
 
-    const recognized = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
+    const recognized = await jobs.ocrExecutor().process({ sourceIds: [sourceId] });
     const sourceRecord = JSON.parse(fs.readFileSync(
       findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`),
       "utf8"

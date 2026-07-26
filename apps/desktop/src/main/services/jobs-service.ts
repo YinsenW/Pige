@@ -63,6 +63,12 @@ import { SourcePageService } from "./source-page-service";
 import type { LocalDatabaseService } from "./local-database-service";
 import type { OcrPort, OcrSourceCapability } from "./ocr-service";
 import {
+  OcrJobExecutor,
+  type ActiveOcrJob,
+  type ProcessQueuedOcrRequest,
+  type QueuedOcrJob
+} from "./ocr-job-executor";
+import {
   JobCancellationError,
   type JobCancellationBoundary,
   type JobDurableWriteState,
@@ -195,16 +201,7 @@ export interface AgentTurnUrlSourceLink {
   readonly title: string;
 }
 
-export interface ProcessQueuedOcrRequest {
-  readonly jobIds?: readonly string[];
-  readonly sourceIds?: readonly string[];
-  readonly limit?: number;
-  readonly abortSignal?: AbortSignal;
-}
-
-export interface ProcessQueuedOcrResult extends ProcessQueuedCapturesResult {
-  readonly agentReadySourceIds: readonly string[];
-}
+export type { ProcessQueuedOcrRequest, ProcessQueuedOcrResult } from "./ocr-job-executor";
 
 const DEFAULT_JOB_LIST_LIMIT = 20;
 const MAX_JOB_LIST_LIMIT = 100;
@@ -226,6 +223,7 @@ export class JobsService {
   readonly #datasetImportExecutor: DatasetImportJobExecutor;
   readonly #documentParseExecutor: DocumentParseJobExecutor;
   readonly #indexRebuildExecutor: IndexRebuildJobExecutor;
+  readonly #ocrExecutor: OcrJobExecutor;
   readonly #jobRecordStores = new Map<string, JobRecordStore>();
   readonly #jobExecutionCoordinators = new Map<string, JobExecutionCoordinator>();
   readonly #activeExecutions = new Map<string, AbortController>();
@@ -253,6 +251,14 @@ export class JobsService {
         this.#assertWriterLease(vaultPath);
         return findQueuedParseJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request)
           .map((snapshot) => this.#queuedDocumentParseJob(vaultPath, snapshot));
+      }
+    });
+    this.#ocrExecutor = new OcrJobExecutor(ocr, {
+      queued: (request) => {
+        const vaultPath = this.#requireActiveVaultPath();
+        this.#assertWriterLease(vaultPath);
+        return findQueuedOcrJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request)
+          .map((snapshot) => this.#queuedOcrJob(vaultPath, snapshot));
       }
     });
     this.#datasetImportExecutor = new DatasetImportJobExecutor(datasets, {
@@ -291,6 +297,10 @@ export class JobsService {
 
   documentParseExecutor(): DocumentParseJobExecutor {
     return this.#documentParseExecutor;
+  }
+
+  ocrExecutor(): OcrJobExecutor {
+    return this.#ocrExecutor;
   }
 
   list(request: JobsListRequest = {}): JobsListResult {
@@ -1703,140 +1713,6 @@ export class JobsService {
     };
   }
 
-  async processQueuedOcr(request: ProcessQueuedOcrRequest = {}): Promise<ProcessQueuedOcrResult> {
-    const vaultPath = this.#requireActiveVaultPath();
-    const jobFiles = findQueuedOcrJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
-    const agentReadySourceIds: string[] = [];
-    let completed = 0;
-    let failed = 0;
-
-    for (const jobFile of jobFiles) {
-      const sourceRecordFile = jobFile.job.sourceId ? readSourceRecordFile(vaultPath, jobFile.job.sourceId) : undefined;
-      if (!sourceRecordFile) {
-        this.#markJobFailedRetryable(jobFile.path, jobFile.job, "Source record is missing. Preserved OCR job remains retryable.");
-        failed += 1;
-        continue;
-      }
-      const agentSelected = isAgentSelectedOcrJob(jobFile.job);
-      const legacyAgentIngestSource = isLegacyAgentIngestSource(sourceRecordFile.sourceRecord);
-      const ocr = this.#ocr;
-      const capability = inspectOcrSource(ocr, sourceRecordFile.sourceRecord);
-      if (!ocr || !capability.ready) {
-        if (!agentSelected && legacyAgentIngestSource && sourceRecordFile.sourceRecord.metadata.agentTextReady === true) {
-          ensureAgentIngestJob(
-            this.#jobRecordStore(vaultPath),
-            vaultPath,
-            jobFile.job,
-            sourceRecordFile.sourceRecord.id,
-            canRunAgentIngest(this.#agentIngest),
-            this.#requireActiveVaultId(vaultPath)
-          );
-          agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
-        }
-        this.#markJobWaitingDependency(jobFile.path, jobFile.job, capability.message);
-        failed += 1;
-        continue;
-      }
-
-      const execution = this.#beginCooperativeExecution(
-        jobFile,
-        "ocr",
-        sourceRecordFile.sourceRecord.kind === "pdf_file"
-          ? "Rendering verified PDF page targets and recognizing them with local OCR."
-          : sourceRecordFile.sourceRecord.kind === "pptx_file"
-            ? "Materializing verified PPTX media targets and recognizing them with local OCR."
-            : "Recognizing image text with the local platform OCR helper."
-      );
-      const runningJob = execution.job;
-      const detachParentAbort = bridgeParentAbortToChild(
-        this.#jobRecordStore(vaultPath),
-        this.#jobExecutionCoordinator(vaultPath),
-        jobFile.path,
-        execution.controller,
-        request.abortSignal
-      );
-
-      try {
-        const result = await ocr.ocrSource(
-          vaultPath,
-          sourceRecordFile.sourceRecord,
-          sourceRecordFile.path,
-          runningJob,
-          execution.control
-        );
-        if (!agentSelected && legacyAgentIngestSource && result.agentTextReady) {
-          ensureAgentIngestJob(
-            this.#jobRecordStore(vaultPath),
-            vaultPath,
-            runningJob,
-            sourceRecordFile.sourceRecord.id,
-            canRunAgentIngest(this.#agentIngest),
-            this.#requireActiveVaultId(vaultPath)
-          );
-          agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
-        }
-        const hasWarnings = !result.agentTextReady || result.sourcePageConflict || result.warnings.length > 0;
-        appendLog(
-          vaultPath,
-          `${new Date().toISOString()} OCR processed ${documentLabel(sourceRecordFile.sourceRecord.kind)} source \`${sourceRecordFile.sourceRecord.id}\`: ${result.textCharacterCount} text characters.${result.confidence !== undefined ? ` confidence ${result.confidence.toFixed(3)}.` : ""}`
-        );
-        this.#completeCooperativeExecution(
-          jobFile.path,
-          runningJob,
-          hasWarnings ? "completed_with_warnings" : "completed",
-          createOcrCompletionMessage(result, sourceRecordFile.sourceRecord.kind),
-          sourceRecordFile.sourceRecord.kind === "pdf_file"
-            ? "page"
-            : sourceRecordFile.sourceRecord.kind === "pptx_file"
-              ? "media"
-              : "image",
-          execution.control.durableWriteState()
-        );
-        completed += 1;
-      } catch (caught) {
-        const cancellation = resolveCancellation(execution.control, caught);
-        if (cancellation) {
-          this.#markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
-        } else if (isJobMutationContention(caught)) {
-          // Another exact Job revision won; do not overwrite its authoritative state.
-        } else {
-          const failure = ocrFailure(caught, sourceRecordFile.sourceRecord.kind);
-          if (failure.waiting) {
-            if (
-              !agentSelected &&
-              legacyAgentIngestSource &&
-              sourceRecordFile.sourceRecord.metadata.agentTextReady === true &&
-              isOcrCapabilityUnavailableError(caught)
-            ) {
-              ensureAgentIngestJob(
-                this.#jobRecordStore(vaultPath),
-                vaultPath,
-                runningJob,
-                sourceRecordFile.sourceRecord.id,
-                canRunAgentIngest(this.#agentIngest),
-                this.#requireActiveVaultId(vaultPath)
-              );
-              if (!agentReadySourceIds.includes(sourceRecordFile.sourceRecord.id)) {
-                agentReadySourceIds.push(sourceRecordFile.sourceRecord.id);
-              }
-            }
-            this.#markJobWaitingDependency(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
-          } else if (failure.final) {
-            this.#markJobFailedFinal(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
-          } else {
-            this.#markJobFailedRetryable(jobFile.path, runningJob, failure.message, execution.control.durableWriteState());
-          }
-        }
-        failed += 1;
-      } finally {
-        detachParentAbort();
-        this.#finishCooperativeExecution(runningJob.id, execution.controller);
-      }
-    }
-
-    return { processed: jobFiles.length, completed, failed, agentReadySourceIds };
-  }
-
   async processQueuedAgentIngest(request: ProcessQueuedAgentIngestRequest = {}): Promise<ProcessQueuedAgentIngestResult> {
     const vaultPath = this.#requireActiveVaultPath();
     const jobFiles = findQueuedAgentIngestJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
@@ -2679,7 +2555,7 @@ export class JobsService {
       child = this.#readJobSnapshot(vaultPath, child.id)?.job ?? child;
     }
     parentControl.markDurableCheckpoint("agent_ocr_child_publication_started");
-    await this.processQueuedOcr({
+    await this.#ocrExecutor.process({
       jobIds: [child.id],
       limit: 1,
       abortSignal: request.signal
@@ -2708,6 +2584,181 @@ export class JobsService {
       throw new PigeDomainError("ocr.tool_failed_final", "The durable source OCR child failed validation.");
     }
     throw new PigeDomainError("ocr.tool_failed_retryable", "The durable source OCR child remains retryable.");
+  }
+
+  #queuedOcrJob(vaultPath: string, snapshot: JobRecordSnapshot): QueuedOcrJob {
+    const sourceRecordFile = snapshot.job.sourceId
+      ? readSourceRecordFile(vaultPath, snapshot.job.sourceId)
+      : undefined;
+    const prepareLegacyFollowUp = (): { readonly agentReadySourceId?: string } => {
+      const source = sourceRecordFile?.sourceRecord;
+      if (
+        source &&
+        !isAgentSelectedOcrJob(snapshot.job) &&
+        isLegacyAgentIngestSource(source) &&
+        source.metadata.agentTextReady === true
+      ) {
+        ensureAgentIngestJob(
+          this.#jobRecordStore(vaultPath),
+          vaultPath,
+          snapshot.job,
+          source.id,
+          canRunAgentIngest(this.#agentIngest),
+          this.#requireActiveVaultId(vaultPath)
+        );
+        return { agentReadySourceId: source.id };
+      }
+      return {};
+    };
+    return {
+      job: snapshot.job,
+      vaultPath,
+      ...(sourceRecordFile ? {
+        source: { path: sourceRecordFile.path, record: sourceRecordFile.sourceRecord }
+      } : {}),
+      failMissingSource: (message) => {
+        this.#assertWriterLease(vaultPath);
+        this.#markJobFailedRetryable(snapshot.path, snapshot.job, message);
+      },
+      waitForCapability: (message) => {
+        this.#assertWriterLease(vaultPath);
+        const followUp = prepareLegacyFollowUp();
+        this.#markJobWaitingDependency(snapshot.path, snapshot.job, message);
+        return followUp;
+      },
+      begin: (abortSignal) => {
+        this.#assertWriterLease(vaultPath);
+        return this.#activeOcrJob(vaultPath, snapshot, abortSignal);
+      }
+    };
+  }
+
+  #activeOcrJob(
+    vaultPath: string,
+    snapshot: JobRecordSnapshot,
+    abortSignal?: AbortSignal
+  ): ActiveOcrJob {
+    const sourceRecordFile = snapshot.job.sourceId
+      ? readSourceRecordFile(vaultPath, snapshot.job.sourceId)
+      : undefined;
+    if (!sourceRecordFile) {
+      throw new PigeDomainError("ocr.source_unavailable", "The preserved OCR source is unavailable.");
+    }
+    const source = sourceRecordFile.sourceRecord;
+    const execution = this.#beginCooperativeExecution(
+      snapshot,
+      "ocr",
+      source.kind === "pdf_file"
+        ? "Rendering verified PDF page targets and recognizing them with local OCR."
+        : source.kind === "pptx_file"
+          ? "Materializing verified PPTX media targets and recognizing them with local OCR."
+          : "Recognizing image text with the local platform OCR helper."
+    );
+    const runningJob = execution.job;
+    const detachParentAbort = bridgeParentAbortToChild(
+      this.#jobRecordStore(vaultPath),
+      this.#jobExecutionCoordinator(vaultPath),
+      snapshot.path,
+      execution.controller,
+      abortSignal
+    );
+    const prepareLegacyFollowUp = (resultAgentTextReady: boolean): { readonly agentReadySourceId?: string } => {
+      this.#assertWriterLease(vaultPath);
+      const refreshedSource = readSourceRecord(vaultPath, source.id);
+      if (!refreshedSource) {
+        throw new PigeDomainError("ocr.durable_effect_invalid", "The OCR Source Record is unavailable after artifact publication.");
+      }
+      if (
+        !isAgentSelectedOcrJob(runningJob) &&
+        isLegacyAgentIngestSource(refreshedSource) &&
+        resultAgentTextReady
+      ) {
+        ensureAgentIngestJob(
+          this.#jobRecordStore(vaultPath),
+          vaultPath,
+          runningJob,
+          refreshedSource.id,
+          canRunAgentIngest(this.#agentIngest),
+          this.#requireActiveVaultId(vaultPath)
+        );
+        return { agentReadySourceId: refreshedSource.id };
+      }
+      return {};
+    };
+    return {
+      job: runningJob,
+      control: execution.control,
+      prepareFollowUp: (result) => prepareLegacyFollowUp(result.agentTextReady),
+      complete: (result, state, message, unit) => {
+        this.#assertWriterLease(vaultPath);
+        const refreshedSource = readSourceRecord(vaultPath, result.sourceId);
+        if (!refreshedSource) {
+          throw new PigeDomainError("ocr.durable_effect_invalid", "The OCR Source Record is unavailable after artifact publication.");
+        }
+        appendLog(
+          vaultPath,
+          `${new Date().toISOString()} OCR processed ${documentLabel(refreshedSource.kind)} source \`${refreshedSource.id}\`: ${result.textCharacterCount} text characters.${result.confidence !== undefined ? ` confidence ${result.confidence.toFixed(3)}.` : ""}`
+        );
+        const coordinator = this.#jobExecutionCoordinator(vaultPath);
+        const { outputRefs, operationIds } = result.durableEffect;
+        const current = this.#jobRecordStore(vaultPath).read(snapshot.path);
+        return coordinator.convergeLatest(current, {
+          read: () => this.#readJobSnapshot(vaultPath, runningJob.id),
+          acceptTerminal: (job) =>
+            (job.state === "completed" || job.state === "completed_with_warnings") &&
+            outputRefs.every((expected) => job.outputRefs?.some((actual) =>
+              actual.kind === expected.kind &&
+              actual.id === expected.id &&
+              actual.path === expected.path &&
+              actual.checksum === expected.checksum &&
+              actual.role === expected.role
+            )) === true &&
+            operationIds.every((operationId) => job.operationIds?.includes(operationId) === true),
+          apply: (latest) => {
+            const adoptable = latest.job.state === "failed_retryable" || latest.job.state === "waiting_dependency"
+              ? coordinator.prepareRetry(latest, {
+                  reason: "ocr_durable_output_adoption",
+                  message: "Adopting the existing durable OCR artifacts into their original Job."
+                })
+              : latest;
+            return coordinator.adoptDurableCompletion(adoptable, {
+              checkpointId: "ocr_artifacts_committed",
+              result: state,
+              message,
+              facts: {
+                outputRefs,
+                progress: { completedUnits: 1, totalUnits: 1, unit },
+                operationIds
+              }
+            });
+          },
+          missingMessage: "The OCR Job disappeared after its durable artifacts committed.",
+          conflictMessage: "The OCR Job could not converge after its durable artifacts committed."
+        }).job;
+      },
+      fail: (caught, failure) => {
+        this.#assertWriterLease(vaultPath);
+        const cancellation = resolveCancellation(execution.control, caught);
+        if (cancellation) {
+          this.#markJobCancellationOutcome(snapshot.path, runningJob, cancellation);
+        } else if (!isJobMutationContention(caught)) {
+          if (failure.waiting) {
+            this.#markJobWaitingDependency(snapshot.path, runningJob, failure.message, execution.control.durableWriteState());
+          } else if (failure.final) {
+            this.#markJobFailedFinal(snapshot.path, runningJob, failure.message, execution.control.durableWriteState());
+          } else {
+            this.#markJobFailedRetryable(snapshot.path, runningJob, failure.message, execution.control.durableWriteState());
+          }
+        }
+        return failure.waiting && isOcrCapabilityUnavailableError(caught)
+          ? prepareLegacyFollowUp(source.metadata.agentTextReady === true)
+          : {};
+      },
+      finish: () => {
+        detachParentAbort();
+        this.#finishCooperativeExecution(runningJob.id, execution.controller);
+      }
+    };
   }
 
   #queuedDocumentParseJob(
@@ -5753,29 +5804,6 @@ function ensureParserOrOcrFollowUpJob(
   }));
 }
 
-function createOcrCompletionMessage(result: {
-  readonly textCharacterCount: number;
-  readonly confidence?: number;
-  readonly agentTextReady: boolean;
-  readonly sourcePageConflict: boolean;
-}, sourceKind: SourceKind): string {
-  const label = sourceKind === "pdf_file"
-    ? "PDF page OCR"
-    : sourceKind === "pptx_file"
-      ? "PPTX media OCR"
-      : "Image OCR";
-  if (result.sourcePageConflict) {
-    return `${label} completed; the edited source page was preserved and requires review before refresh.`;
-  }
-  if (!result.agentTextReady) {
-    return `${label} completed without readable text. The preserved source remains available.`;
-  }
-  if (sourceKind === "pdf_file" && result.textCharacterCount === 0) {
-    return "PDF page OCR enrichment completed without additional text; verified native PDF text remains ready for Agent ingest.";
-  }
-  return `${label} extracted ${result.textCharacterCount} characters${result.confidence !== undefined ? ` at confidence ${result.confidence.toFixed(3)}` : ""}.`;
-}
-
 function inspectOcrSource(ocr: OcrPort | undefined, sourceRecord: SourceRecord): OcrSourceCapability {
   if (!ocr) {
     return {
@@ -5813,51 +5841,12 @@ function createOcrDependencyMessage(sourceKind: SourceKind): string {
   return `${documentLabel(sourceKind)} OCR is waiting for a reviewed page, slide, or media pixel materializer.`;
 }
 
-function ocrFailure(caught: unknown, sourceKind: SourceKind): { readonly final: boolean; readonly waiting: boolean; readonly message: string } {
-  const label = documentLabel(sourceKind);
-  if (caught instanceof PigeDomainError) {
-    if (
-      /^ocr\.(?:adapter_unavailable|helper_unavailable|platform_unsupported)$/u.test(caught.code) ||
-      caught.code === "parser.pdf_page_renderer.unavailable" ||
-      caught.code === "ocr.pptx.target_not_ready"
-    ) {
-      return { final: false, waiting: true, message: `Waiting for a healthy local OCR capability before retrying this preserved ${label}.` };
-    }
-    if (caught.code === "source.external_unavailable") {
-      return { final: false, waiting: true, message: `Waiting for the referenced original ${label} to be reconnected before local OCR can continue.` };
-    }
-    if (/^source\.(?:checksum_mismatch|managed_unavailable|path_outside_vault|reference_invalid)$/u.test(caught.code)) {
-      return { final: true, waiting: false, message: `The preserved ${label} cannot be processed safely in its current form. Re-import it to create a verified source version.` };
-    }
-    if (/^parser\.pdf_page_renderer\.(?:invalid_request|invalid_page|file_too_large|password_required|invalid_pdf|page_out_of_range)$/u.test(caught.code)) {
-      return { final: true, waiting: false, message: "The preserved PDF cannot be rendered safely for OCR in its current form. Re-import or replace it with a supported PDF." };
-    }
-    if (/^ocr\.pdf\.(?:parser_metadata_invalid|source_record_invalid|render_result_invalid|rendered_page_invalid|rendered_pages_too_large|result_invalid)$/u.test(caught.code)) {
-      return { final: true, waiting: false, message: "The verified PDF OCR target or derived page data failed validation. Re-parse or re-import the preserved PDF before retrying." };
-    }
-    if (/^ocr\.pptx\.(?:parser_metadata_invalid|source_record_invalid|media_target_invalid|media_target_changed|materializer_result_invalid|result_invalid|invalid_archive|duplicate_entry|expanded_too_large|media_too_large)$/u.test(caught.code)) {
-      return { final: true, waiting: false, message: "The verified PPTX OCR target or embedded media failed validation. Re-parse or re-import the preserved presentation before retrying." };
-    }
-    if (sourceKind === "pptx_file" && isDeterministicParserInputFailure(caught.code)) {
-      return { final: true, waiting: false, message: "The preserved PPTX media cannot be materialized safely. Re-import it to create a verified source version." };
-    }
-    if (/^ocr\.(?:source_checksum_mismatch|source_unavailable|source_unsupported|path_outside_vault|image\.(?:source_missing|not_regular|file_too_large|invalid|unsupported_format|multiframe_unsupported|dimensions_invalid|dimensions_too_large|decode_failed))$/u.test(caught.code)) {
-      return { final: true, waiting: false, message: `The preserved ${label} cannot be processed safely in its current form. Re-import it to create a verified source version.` };
-    }
-  }
-  return { final: false, waiting: false, message: `Local OCR failed for this ${label}. The preserved source and validated artifacts remain retryable.` };
-}
-
 function isOcrCapabilityUnavailableError(caught: unknown): boolean {
   return caught instanceof PigeDomainError && (
     /^ocr\.(?:adapter_unavailable|helper_unavailable|platform_unsupported)$/u.test(caught.code) ||
     caught.code === "parser.pdf_page_renderer.unavailable" ||
     caught.code === "ocr.pptx.target_not_ready"
   );
-}
-
-function isDeterministicParserInputFailure(code: string): boolean {
-  return /^(?:parser\.(?:pdf|docx|pptx)\.(?:file_too_large|invalid|invalid_archive|invalid_output|required_part_missing|too_many_entries|duplicate_entry|duplicate_relationship|unsafe_entry|unsafe_relationship|invalid_entry_size|encrypted|unsupported_compression|entry_too_large|expanded_too_large|suspicious_compression|xml_part_too_large|selected_xml_too_large|doctype_not_allowed|invalid_xml)|parser\.(?:path_outside_vault|source_unavailable))$/u.test(code);
 }
 
 function documentLabel(sourceKind: SourceKind): string {
