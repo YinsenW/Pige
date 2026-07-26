@@ -148,6 +148,95 @@ afterEach(() => {
 });
 
 describe("Agent-selected ingest retrieval tool", () => {
+  it("registers six ordered opaque source citation candidates and revalidates their bindings", async () => {
+    const fixture = makeVault();
+    const prepared = prepareAgentSource(fixture, "Inspect this source before selecting related knowledge.");
+    const results = Array.from({ length: 7 }, (_, index) => writeSourceCitationPage(fixture.vaultPath, index));
+    const retrieval = new RecordingRetrievalPort(fixture, (request) => ({
+      searchedAt: "2026-07-27T00:00:00.000Z",
+      activeVaultId: fixture.vault.vaultId,
+      query: request.query,
+      mode: "lexical_markdown_scan",
+      total: results.length,
+      invalidPageCount: 0,
+      degraded: false,
+      results
+    }));
+    let sourceCurrent = true;
+    const service = new AgentIngestService(
+      modelPort(),
+      new FunctionalRuntime(async () => { throw new Error("The direct source session must not run Pi."); }),
+      undefined,
+      undefined,
+      undefined,
+      retrieval
+    );
+    const session = await service.prepareSourceToolSession(
+      fixture.vaultPath,
+      prepared.source,
+      prepared.parent,
+      {
+        assertSourceCurrent: () => {
+          if (!sourceCurrent) {
+            throw new PigeDomainError("agent_runtime.turn_conflict", "The source changed.");
+          }
+        }
+      }
+    );
+    const catalogHash = createPigeAgentToolCatalogHash(session.tools);
+    session.bindCatalog(catalogHash);
+    const invoke = async (toolName: string, args: unknown, toolCallId: string) => {
+      const tool = requireValue(session.tools.find((candidate) => candidate.name === toolName));
+      const signal = new AbortController().signal;
+      const context = { toolCallId, signal };
+      expect(await tool.authorize?.(args, context)).not.toBe(false);
+      return tool.execute(args, signal, context);
+    };
+
+    expect(session.citationCandidates()).toEqual([]);
+    await invoke("pige_inspect_source", {}, "inspect_citation_candidates");
+    const search = await invoke(
+      "pige_search_knowledge",
+      { query: "related source citation" },
+      "search_citation_candidates"
+    );
+    const modelText = readPiToolText(search);
+    expect(modelText).toContain('"relatedRef":"related_01"');
+    expect(modelText).toContain('"citationRef":"citation_11"');
+    expect(modelText).toContain('"citationRef":"citation_16"');
+    expect(modelText).not.toContain(results[0]!.summary.pageId);
+    expect(modelText).not.toContain(fixture.vaultPath);
+
+    await session.beforeModelTurn();
+    expect(session.citationCandidates()).toEqual(results.slice(0, 6).map((item, index) => ({
+      refId: `citation_${index + 11}`,
+      label: `[${index + 11}]`,
+      pageId: item.summary.pageId,
+      title: item.summary.title,
+      pageType: item.summary.pageType,
+      locator: "snippet:1"
+    })));
+
+    sourceCurrent = false;
+    expect(() => session.citationCandidates()).toThrowError(
+      expect.objectContaining({ code: "agent_runtime.turn_conflict" })
+    );
+    sourceCurrent = true;
+    session.bindCatalog(`sha256:${"f".repeat(64)}`);
+    expect(() => session.citationCandidates()).toThrowError(
+      expect.objectContaining({ code: "agent_ingest.related_evidence_changed" })
+    );
+    session.bindCatalog(catalogHash);
+    fs.appendFileSync(
+      path.join(fixture.vaultPath, results[0]!.summary.pagePath),
+      "\nChanged after retrieval.\n",
+      "utf8"
+    );
+    expect(() => session.citationCandidates()).toThrowError(
+      expect.objectContaining({ code: "agent_ingest.related_evidence_changed" })
+    );
+  });
+
   it("runs real Pi inspect -> search -> publish and persists stable related-page identity without a retrieval Job", async () => {
     const fixture = makeVault();
     const sourceText = "Pige should preserve this source citation while linking reviewed related knowledge.";
@@ -3494,6 +3583,48 @@ source_ids: ${JSON.stringify(options.sourceIds ?? [])}
 
 ${options.body ?? RELATED_BODY}
 `, "utf8");
+}
+
+function writeSourceCitationPage(
+  vaultPath: string,
+  index: number
+): RetrievalSearchResult["results"][number] {
+  const ordinal = String(index + 1).padStart(2, "0");
+  const pageId = `page_20260727_sourcecite${ordinal}`;
+  const pagePath = `wiki/source-citation-${ordinal}.md`;
+  const title = `Source citation ${ordinal}`;
+  const body = `Current related evidence ${ordinal}.`;
+  const filePath = path.join(vaultPath, ...pagePath.split("/"));
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `---
+id: "${pageId}"
+schema_version: 1
+title: "${title}"
+type: "note"
+created_at: "2026-07-27T00:00:00.000Z"
+updated_at: "2026-07-27T00:00:00.000Z"
+status: "active"
+language: "en"
+source_ids: []
+---
+
+${body}
+`, "utf8");
+  return {
+    summary: {
+      pageId,
+      title,
+      pageType: "note",
+      status: "active",
+      pagePath,
+      createdAt: "2026-07-27T00:00:00.000Z",
+      updatedAt: "2026-07-27T00:00:00.000Z",
+      sourceIds: []
+    },
+    score: 20 - index,
+    snippets: [body],
+    matchReasons: ["body"]
+  };
 }
 
 function mutateRelatedPage(vaultPath: string, mutation: "body" | "title"): void {

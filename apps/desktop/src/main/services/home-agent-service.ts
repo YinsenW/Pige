@@ -10,6 +10,7 @@ import type {
   AgentSubmitTurnRequest,
   AgentSubmitTurnAcceptedResult,
   AgentSubmitTurnResult,
+  AgentAnswerCitation,
   AgentTurnAnswer,
   AgentTurnCurrentNoteScope,
   AgentRuntimePolicyContext,
@@ -253,7 +254,8 @@ const HOME_REPLACE_READER_SELECTION_TOOL_NAME = "pige_replace_reader_selection";
 const HOME_QUERY_DATASET_TOOL_NAME = "pige_query_dataset";
 const HOME_FETCH_URL_TOOL_NAME = "pige_fetch_url";
 const HOME_INSPECT_URL_TOOL_NAME = "pige_inspect_url_source";
-const HOME_DATASET_CITATION_REF = "citation_9";
+const HOME_SEARCH_CITATION_START = 2;
+const HOME_DATASET_CITATION_REF = "citation_10";
 const MAX_QUERY_CHARACTERS = 8_000;
 const MAX_ANSWER_CHARACTERS = 8_000;
 const MAX_MODEL_PAYLOAD_CHARACTERS = 12_000;
@@ -1559,14 +1561,16 @@ export class HomeAgentService {
     }
     const sourceResult = sourceSession?.result();
     const searchCitations = searchResult
-      ? buildHomeQueryContextPack(searchResult).selectedEvidence.map(({ citation }) => citation)
+      ? buildHomeSearchSelectedEvidence(searchResult).map(({ citation }) => citation)
       : [];
     const noteContext = currentNoteEvidence ? buildNoteAgentContextPack(currentNoteEvidence) : undefined;
-    const availableCitations = Array.from(new Map([
-      ...searchCitations,
-      ...(noteContext?.citation ? [noteContext.citation] : []),
-      ...(datasetResult?.citations ?? [])
-    ].map((citation) => [citation.refId, citation])).values());
+    const sourceCitations = sourceSession?.citationCandidates() ?? [];
+    const availableCitations = mergeHomeCitationCandidates(
+      noteContext?.citation ? [noteContext.citation] : [],
+      searchCitations,
+      datasetResult?.citations ?? [],
+      sourceCitations
+    );
     const citations = selectExplicitAssistantCitations(runtimeResult.assistantText, availableCitations);
     const sourceIds = Array.from(new Set([
       ...(urlEvidenceInspected && urlEvidence ? [urlEvidence.sourceId] : []),
@@ -2320,10 +2324,10 @@ function projectDatasetModelEnvelopeForHome(modelText: string): string {
 function createUntrustedEvidenceEnvelope(
   searchResult: RetrievalSearchResult
 ): string {
-  const context = buildHomeQueryContextPack(searchResult);
+  const selectedEvidence = buildHomeSearchSelectedEvidence(searchResult);
   const serialized = JSON.stringify({
-    status: context.selectedEvidence.length > 0 ? "evidence_found" : "insufficient_evidence",
-    evidence: context.selectedEvidence.map(({ item, citation }) => ({
+    status: selectedEvidence.length > 0 ? "evidence_found" : "insufficient_evidence",
+    evidence: selectedEvidence.map(({ item, citation }) => ({
       citationRef: citation.refId,
       title: item.summary.title,
       pageType: item.summary.pageType,
@@ -2336,6 +2340,72 @@ function createUntrustedEvidenceEnvelope(
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
   return `${UNTRUSTED_EVIDENCE_START}\n${serialized}\n${UNTRUSTED_EVIDENCE_END}`;
+}
+
+function buildHomeSearchSelectedEvidence(searchResult: RetrievalSearchResult) {
+  return buildHomeQueryContextPack(searchResult).selectedEvidence.map(({ item, citation }, index) => ({
+    item,
+    citation: {
+      ...citation,
+      refId: `citation_${HOME_SEARCH_CITATION_START + index}`,
+      label: `[${HOME_SEARCH_CITATION_START + index}]`
+    }
+  }));
+}
+
+export function mergeHomeCitationCandidates(
+  ...candidateGroups: Array<readonly AgentAnswerCitation[]>
+): readonly AgentAnswerCitation[] {
+  const registry = new Map<string, { readonly citation: AgentAnswerCitation; readonly identity: string }>();
+  for (const citation of candidateGroups.flat()) {
+    const identity = createHomeCitationSafeIdentity(citation);
+    const existing = registry.get(citation.refId);
+    if (!existing) {
+      registry.set(citation.refId, { citation, identity });
+      continue;
+    }
+    if (existing.identity !== identity) {
+      throw new PigeDomainError(
+        "agent_runtime.turn_conflict",
+        "Two current evidence candidates claimed the same citation reference."
+      );
+    }
+  }
+  return Array.from(registry.values(), ({ citation }) => citation);
+}
+
+function createHomeCitationSafeIdentity(citation: AgentAnswerCitation): string {
+  if (!isDatasetAnswerCitation(citation)) {
+    return JSON.stringify([
+      "retrieval",
+      citation.refId,
+      citation.label,
+      citation.pageId,
+      citation.title,
+      citation.pageType,
+      citation.locator
+    ]);
+  }
+  return JSON.stringify([
+    "dataset",
+    citation.refId,
+    citation.label,
+    citation.title,
+    citation.locator,
+    citation.evidence.datasetId,
+    citation.evidence.revisionId,
+    citation.evidence.tableId,
+    citation.evidence.schemaId,
+    citation.evidence.columnIds,
+    citation.evidence.rowIds ?? null,
+    citation.evidence.range
+      ? [citation.evidence.range.startRow, citation.evidence.range.endRow]
+      : null,
+    citation.evidence.queryPlanHash,
+    citation.evidence.resultHash,
+    citation.evidence.sourceId,
+    citation.evidence.sourceRevisionHash
+  ]);
 }
 
 function createUntrustedCurrentNoteEnvelope(binding: CurrentNoteEvidenceBinding): string {

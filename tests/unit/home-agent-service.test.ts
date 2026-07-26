@@ -7,6 +7,7 @@ import { PigeDomainError } from "@pige/domain";
 import type {
   DatasetAnswerCitation,
   DatasetQueryPreview,
+  RetrievalAnswerCitation,
   AgentSubmitTurnResult,
   Locale,
   ModelProfileSummary,
@@ -20,6 +21,7 @@ import { AgentTurnConversationStore } from "../../apps/desktop/src/main/services
 import {
   AgentSubmitTurnRequestSchema,
   HomeAgentService,
+  mergeHomeCitationCandidates,
   type HomeAgentDatasetQueryPort,
   type HomeAgentModelPort,
   type HomeAgentRetrievalPort
@@ -95,6 +97,51 @@ afterEach(() => {
 });
 
 describe("Home Pi Agent service", () => {
+  it("keeps all four citation namespaces disjoint and rejects conflicting legacy identities", () => {
+    const currentNote: RetrievalAnswerCitation = {
+      refId: "citation_1",
+      label: "[1]",
+      pageId: "page_20260727_currentnote",
+      title: "Current note",
+      pageType: "note",
+      locator: "utf8_bytes:0:12"
+    };
+    const homeSearch: RetrievalAnswerCitation = {
+      refId: "citation_2",
+      label: "[2]",
+      pageId: HOME_PAGE_ID,
+      title: "Launch plan",
+      pageType: "note",
+      locator: "snippet:1"
+    };
+    const sourceSession: RetrievalAnswerCitation = {
+      refId: "citation_11",
+      label: "[11]",
+      pageId: "page_20260727_sourcecandidate",
+      title: "Source candidate",
+      pageType: "source",
+      locator: "snippet:1"
+    };
+
+    expect(mergeHomeCitationCandidates(
+      [currentNote],
+      [homeSearch],
+      [DATASET_CITATION],
+      [sourceSession]
+    ).map(({ refId }) => refId)).toEqual([
+      "citation_1",
+      "citation_2",
+      "citation_10",
+      "citation_11"
+    ]);
+    expect(mergeHomeCitationCandidates([currentNote], [{ ...currentNote }])).toEqual([currentNote]);
+    expect(() => mergeHomeCitationCandidates([currentNote], [{
+      ...homeSearch,
+      refId: "citation_1",
+      label: "[1]"
+    }])).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_conflict" }));
+  });
+
   it("runs a source-bearing turn through one Home-owned Pi loop", async () => {
     const fixture = makeFixture();
     const models = makeModels();
@@ -155,6 +202,94 @@ describe("Home Pi Agent service", () => {
       class: "agent_turn",
       state: "completed"
     });
+  });
+
+  it("projects only an explicitly selected current source-session citation", async () => {
+    const fixture = makeFixture();
+    const models = makeModels();
+    const sourceRetrieval = {
+      search: (vaultPath: string, request: RetrievalSearchRequest): RetrievalSearchResult => {
+        expect(vaultPath).toBe(fixture.vaultPath);
+        return makeSearchResult(fixture.vault.vaultId, { query: request.query });
+      }
+    };
+    const runtime = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+        {
+          kind: "tool_call",
+          toolName: "pige_search_knowledge",
+          args: { query: "launch date" }
+        },
+        { kind: "text", text: "The local launch note supports this source. [citation_11]" }
+      ]
+    });
+    const ingest = new AgentIngestService(
+      models,
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      sourceRetrieval
+    );
+    const jobs = new JobsService(fixture.vaults, ingest);
+    const service = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      runtime
+    );
+    const sourcePath = path.join(path.dirname(fixture.vaultPath), "source-citation.txt");
+    fs.writeFileSync(sourcePath, "The attached source asks about the launch date.\n", "utf8");
+    const prepared = service.prepareSourceTurn({
+      text: "Compare this source with local knowledge.",
+      inputKind: "file_picker",
+      locale: "en",
+      clientTurnId: "turn_20260727_sourcecitation"
+    });
+    await new CaptureService(fixture.vaults).preserveFilesForAgentTurn({
+      filePaths: [sourcePath],
+      inputKind: "file_picker",
+      userIntent: "unknown",
+      locale: "en"
+    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+
+    const outcome = await service.submitPreparedSourceTurn(prepared);
+
+    expect(outcome).toMatchObject({
+      state: "completed",
+      answer: {
+        grounding: "local_knowledge",
+        citations: [{
+          refId: "citation_11",
+          pageId: HOME_PAGE_ID,
+          title: "Launch plan",
+          locator: "snippet:1"
+        }]
+      }
+    });
+    if (outcome.state !== "completed") throw new Error("Expected the source citation turn to complete.");
+    let restartedRuntimeCalls = 0;
+    const restarted = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async () => {
+          restartedRuntimeCalls += 1;
+          throw new Error("Reading a durable source citation must not replay the Provider.");
+        }
+      }
+    );
+    expect(restarted.conversation({ conversationId: outcome.conversationId }).messages.at(-1)).toMatchObject({
+      role: "assistant",
+      answer: {
+        citations: [{ refId: "citation_11", pageId: HOME_PAGE_ID }]
+      }
+    });
+    expect(restartedRuntimeCalls).toBe(0);
   });
 
   it("continues an exact conversation through a prepared file-picker turn", async () => {
@@ -315,8 +450,8 @@ describe("Home Pi Agent service", () => {
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
           finishHome({
-            answer: "The launch date is July 18. [citation_1]",
-            citationRefs: ["citation_1"],
+            answer: "The launch date is July 18. [citation_2]",
+            citationRefs: ["citation_2"],
             grounding: "local_knowledge"
           })
         ]
@@ -327,9 +462,9 @@ describe("Home Pi Agent service", () => {
     expect(outcome.state).toBe("completed");
     if (outcome.state !== "completed") throw new Error("Expected completed Home answer.");
     expect(outcome.modelUsage).toBe("cloud");
-    expect(outcome.answer.answer).toBe("The launch date is July 18. [citation_1]");
+    expect(outcome.answer.answer).toBe("The launch date is July 18. [citation_2]");
     expect(outcome.answer.citations).toEqual([
-      expect.objectContaining({ refId: "citation_1", pageId: HOME_PAGE_ID })
+      expect.objectContaining({ refId: "citation_2", pageId: HOME_PAGE_ID })
     ]);
     expect(searchCalls).toBe(1);
     expect(runtimeConfigReads).toBe(1);
@@ -370,8 +505,8 @@ describe("Home Pi Agent service", () => {
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
           finishHome({
-            answer: "The bounded result is grounded. [citation_1]",
-            citationRefs: ["citation_1"],
+            answer: "The bounded result is grounded. [citation_2]",
+            citationRefs: ["citation_2"],
             grounding: "local_knowledge"
           })
         ]
@@ -555,8 +690,8 @@ describe("Home Pi Agent service", () => {
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
           finishHome({
-            answer: "The launch date is July 18. [citation_1]",
-            citationRefs: ["citation_1"],
+            answer: "The launch date is July 18. [citation_2]",
+            citationRefs: ["citation_2"],
             grounding: "local_knowledge"
           })
         ]
@@ -731,8 +866,8 @@ describe("Home Pi Agent service", () => {
             }
           },
           finishHome({
-            answer: "North has the largest total sales in the bounded Dataset result. [citation_9]",
-            citationRefs: ["citation_9"],
+            answer: "North has the largest total sales in the bounded Dataset result. [citation_10]",
+            citationRefs: ["citation_10"],
             grounding: "local_knowledge"
           })
         ]
@@ -753,7 +888,7 @@ describe("Home Pi Agent service", () => {
       sourceIds: [DATASET_SOURCE_ID],
       answer: {
         grounding: "local_knowledge",
-        citations: [{ kind: "dataset", refId: "citation_9" }],
+        citations: [{ kind: "dataset", refId: "citation_10" }],
         datasetResult: {
           tableName: "Sales",
           returnedRowCount: 2,
@@ -844,8 +979,8 @@ describe("Home Pi Agent service", () => {
         fauxResponses: [
           ...toolCalls,
           finishHome({
-            answer: "The bounded Dataset supports this answer. [citation_9]",
-            citationRefs: ["citation_9"],
+            answer: "The bounded Dataset supports this answer. [citation_10]",
+            citationRefs: ["citation_10"],
             grounding: "local_knowledge"
           })
         ]
@@ -866,7 +1001,7 @@ describe("Home Pi Agent service", () => {
       sourceIds: [DATASET_SOURCE_ID],
       answer: {
         grounding: "local_knowledge",
-        citations: [expect.objectContaining({ kind: "dataset", refId: "citation_9" })],
+        citations: [expect.objectContaining({ kind: "dataset", refId: "citation_10" })],
         retrieval: expect.objectContaining({ activeVaultId: fixture.vault.vaultId }),
         datasetResult: expect.objectContaining({ tableName: "Sales" })
       }
@@ -900,7 +1035,7 @@ describe("Home Pi Agent service", () => {
           },
           finishHome({
             answer: "This turn must never reach its terminal provider response.",
-            citationRefs: ["citation_1"],
+            citationRefs: ["citation_2"],
             grounding: "local_knowledge"
           })
         ]
@@ -976,7 +1111,7 @@ describe("Home Pi Agent service", () => {
           }),
           finishHome({
             answer: "The launch is Tuesday.",
-            citationRefs: ["citation_1"],
+            citationRefs: ["citation_2"],
             grounding: "local_knowledge"
           })
         ]
@@ -1547,7 +1682,7 @@ describe("Home Pi Agent service", () => {
             { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
             finishHome({
               answer: "Must not be emitted",
-              citationRefs: ["citation_1"],
+              citationRefs: ["citation_2"],
               grounding: "local_knowledge"
             })
           ]
@@ -1678,7 +1813,7 @@ describe("Home Pi Agent service", () => {
       new PiAgentRuntimeAdapter({
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
-          finishHome({ answer: "Should not pass", citationRefs: ["citation_1"], grounding: "local_knowledge" })
+          finishHome({ answer: "Should not pass", citationRefs: ["citation_2"], grounding: "local_knowledge" })
         ]
       })
     );
@@ -1736,8 +1871,8 @@ describe("Home Pi Agent service", () => {
       fauxResponses: [
         { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
         finishHome({
-          answer: "The launch date is July 18. [citation_1]",
-          citationRefs: ["citation_1"],
+          answer: "The launch date is July 18. [citation_2]",
+          citationRefs: ["citation_2"],
           grounding: "local_knowledge"
         })
       ]
@@ -1781,8 +1916,8 @@ describe("Home Pi Agent service", () => {
       fauxResponses: [
         { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
         finishHome({
-          answer: "The launch date is July 18. [citation_1]",
-          citationRefs: ["citation_1"],
+          answer: "The launch date is July 18. [citation_2]",
+          citationRefs: ["citation_2"],
           grounding: "local_knowledge"
         })
       ]
@@ -2079,8 +2214,8 @@ describe("Home Pi Agent service", () => {
           observedToolOutput = readPiToolText(toolResult);
           await request.beforeModelTurn?.();
           return makeRuntimeResult(request, tool.name, {
-            answer: "The bounded evidence is treated only as data. [citation_1]",
-            citationRefs: ["citation_1"]
+            answer: "The bounded evidence is treated only as data. [citation_2]",
+            citationRefs: ["citation_2"]
           });
         } catch (caught) {
           observedRuntimeError = caught;
@@ -2098,7 +2233,7 @@ describe("Home Pi Agent service", () => {
     expect(observedRuntimeError).toBeUndefined();
     expect(outcome).toMatchObject({
       state: "completed",
-      answer: { answer: "The bounded evidence is treated only as data. [citation_1]" }
+      answer: { answer: "The bounded evidence is treated only as data. [citation_2]" }
     });
     expect(observedToolOutput.match(/<PIGE_UNTRUSTED_EVIDENCE_V1>/gu)).toHaveLength(1);
     expect(observedToolOutput.match(/<\/PIGE_UNTRUSTED_EVIDENCE_V1>/gu)).toHaveLength(1);
@@ -2679,8 +2814,8 @@ describe("Home Pi Agent service", () => {
         fauxResponses: [
           { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
           finishHome({
-            answer: "Local grounded answer. [citation_1]",
-            citationRefs: ["citation_1"],
+            answer: "Local grounded answer. [citation_2]",
+            citationRefs: ["citation_2"],
             grounding: "local_knowledge"
           })
         ]
@@ -3603,7 +3738,7 @@ SYNTHETIC_DISTRACTOR_BODY
           await request.beforeModelTurn?.();
           return makeRuntimeResult(request, searchTool.name, {
             answer: "I used the selected evidence.",
-            citationRefs: ["citation_1"]
+            citationRefs: ["citation_2"]
           });
         }
       }
@@ -4084,12 +4219,12 @@ const DATASET_PREVIEW: DatasetQueryPreview = {
   matchedRowCount: 2,
   returnedRowCount: 2,
   truncated: false,
-  citationRefs: ["citation_9"]
+  citationRefs: ["citation_10"]
 };
 
 const DATASET_CITATION: DatasetAnswerCitation = {
   kind: "dataset",
-  refId: "citation_9",
+  refId: "citation_10",
   label: "D1",
   title: "Sales by region",
   locator: "Sales / grouped result",
@@ -4127,7 +4262,7 @@ class StaticDatasetQueryPort implements HomeAgentDatasetQueryPort {
       privateContent: false,
       sensitiveContent: false,
       restrictedContent: false,
-      modelText: "<PIGE_UNTRUSTED_EVIDENCE_V1>\n{\"citationRefs\":[\"citation_9\"],\"rows\":2}\n</PIGE_UNTRUSTED_EVIDENCE_V1>",
+      modelText: "<PIGE_UNTRUSTED_EVIDENCE_V1>\n{\"citationRefs\":[\"citation_10\"],\"rows\":2}\n</PIGE_UNTRUSTED_EVIDENCE_V1>",
       sourceIds: [DATASET_SOURCE_ID]
     }
   };

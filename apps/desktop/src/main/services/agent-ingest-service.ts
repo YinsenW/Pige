@@ -25,6 +25,7 @@ import type {
   AgentRuntimePolicyContext,
   ModelProfileSummary,
   ProviderProfileSummary,
+  RetrievalAnswerCitation,
   RetrievalSearchRequest,
   RetrievalSearchResult,
   RetrievalSearchResultItem,
@@ -330,6 +331,7 @@ export interface AgentSourceToolSession {
   readonly tools: readonly PigeAgentToolDefinition[];
   bindCatalog(catalogHash: string): void;
   beforeModelTurn(): Promise<void>;
+  citationCandidates(): readonly RetrievalAnswerCitation[];
   result(): AgentIngestResult | undefined;
 }
 
@@ -376,6 +378,7 @@ interface AgentIngestPromptContextResult {
 
 interface AgentIngestRelatedEvidence {
   readonly ref: string;
+  readonly citation: RetrievalAnswerCitation;
   readonly item: RetrievalSearchResultItem;
   readonly snippet: string;
 }
@@ -1594,6 +1597,14 @@ export class AgentIngestService {
               const evidence = currentBinding.items
                 .map((item, index): AgentIngestRelatedEvidence => ({
                   ref: `related_${String(index + 1).padStart(2, "0")}`,
+                  citation: Object.freeze({
+                    refId: `citation_${index + 11}`,
+                    label: `[${index + 11}]`,
+                    pageId: item.summary.pageId,
+                    title: item.summary.title,
+                    pageType: item.summary.pageType,
+                    locator: "snippet:1"
+                  }),
                   item,
                   snippet: item.snippets[0] ?? ""
                 }));
@@ -2059,6 +2070,23 @@ export class AgentIngestService {
         toolCatalogHash = catalogHash;
       },
       beforeModelTurn: authorizeCurrentModelTurn,
+      citationCandidates: () => {
+        hooks.throwIfCancellationRequested?.();
+        hooks.assertSourceCurrent?.(currentSourceRecord);
+        assertAgentRetrievalSelectionCurrent(
+          vaultPath,
+          retrievalSelection,
+          approvedRetrievalPrivacyHash,
+          {
+            policyHash: policy.policyHash,
+            catalogHash: toolCatalogHash,
+            sourceBindingHash: createEvidenceInspectionBinding(currentSourceRecord, currentEvidencePack)
+          }
+        );
+        return retrievalSelection
+          ? Object.freeze(retrievalSelection.evidence.map(({ citation }) => citation))
+          : Object.freeze([]);
+      },
       result,
       runLegacy: async () => {
         const runtimeResult = await this.#runtime.run({
@@ -2092,6 +2120,7 @@ function createSettledAgentSourceToolSession(result: AgentIngestResult): LegacyA
     tools: [],
     bindCatalog: () => undefined,
     beforeModelTurn: async () => undefined,
+    citationCandidates: () => [],
     result: () => result,
     runLegacy: async () => result
   };
@@ -2283,8 +2312,9 @@ function createAgentRetrievalToolPayload(
 ): string {
   const serialized = JSON.stringify({
     status: evidence.length > 0 ? "evidence_found" : "insufficient_evidence",
-    evidence: evidence.map(({ ref, item, snippet }) => ({
+    evidence: evidence.map(({ ref, citation, item, snippet }) => ({
       relatedRef: ref,
+      citationRef: citation.refId,
       title: item.summary.title,
       pageType: item.summary.pageType,
       snippet,
