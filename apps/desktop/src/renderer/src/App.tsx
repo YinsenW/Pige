@@ -1425,7 +1425,8 @@ export function App(): React.JSX.Element {
         <span className="topbar-title" aria-hidden="true">{currentTitle}</span>
         <div className="topbar-actions">
           <WindowModeToggle state={windowState} compactLabel={t("topbar.compact")} expandedLabel={t("topbar.expanded")}
-            tabIndex={sidebarModal ? -1 : undefined} onStateChange={setWindowState} />
+            tabIndex={sidebarModal ? -1 : undefined} onStateChange={setWindowState}
+            onFailure={() => setCaptureToast({ kind: "error", message: t("error.generic") })} />
           <button
             type="button"
             className={windowState?.alwaysOnTop ? "icon-button pin-button active" : "icon-button pin-button"}

@@ -1008,6 +1008,56 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("exposes mode-switch progress and keeps failures body-free", async () => {
+    const dom = createDom(960);
+    const harness = createHarness(undefined);
+    harness.windowMode = "expanded";
+    let modeRequests = 0;
+    let resolveModeWrite: ((state: WindowState) => void) | undefined;
+    const api = makePigeApi(harness) as ReturnType<typeof makePigeApi> & {
+      window: {
+        setMode: (request: { readonly mode: "compact" | "expanded" }) => Promise<WindowState>;
+      };
+    };
+    api.window.setMode = () => {
+      modeRequests += 1;
+      return new Promise((resolve) => { resolveModeWrite = resolve; });
+    };
+    const { container, root } = await mountHome(dom, api);
+    const modeToggle = buttonsByAriaLabel(container, "Switch to compact layout")[0]!;
+
+    await act(async () => {
+      modeToggle.click();
+      modeToggle.click();
+      await settle(dom);
+    });
+    expect(modeRequests).toBe(1);
+    expect(modeToggle.disabled).toBe(true);
+    expect(modeToggle.getAttribute("aria-busy")).toBe("true");
+
+    harness.windowMode = "compact";
+    await act(async () => {
+      resolveModeWrite?.(windowState(harness));
+      await settle(dom);
+    });
+    await waitFor(dom, () => modeToggle.disabled === false);
+    expect(modeToggle.getAttribute("aria-label")).toBe("Switch to wide layout");
+
+    api.window.setMode = async () => {
+      throw new Error("raw private path /Users/example/window-state");
+    };
+    await clickElement(dom, modeToggle);
+    await waitFor(dom, () => container.querySelector(".capture-toast.error") !== null);
+    const errorToast = container.querySelector<HTMLElement>(".capture-toast.error")!;
+    expect(errorToast.textContent).toContain(enMessages["error.generic"]);
+    expect(errorToast.textContent).not.toContain("/Users/example/window-state");
+    expect(modeToggle.getAttribute("aria-label")).toBe("Switch to wide layout");
+    expect(modeToggle.disabled).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("expands resident panes through 720, 840, and 1240 then restores the exact user base", async () => {
     const dom = createDom(420);
     const harness = createHarness(undefined);
