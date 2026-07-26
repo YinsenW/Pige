@@ -37,6 +37,14 @@ describe("vault layout", () => {
       .toBe(path.join(vaultPath, "artifacts/result.json"));
     expect(resolveVaultRelativePath(vaultPath, ".")).toBe(vaultPath);
     expect(() => resolveVaultRelativePath(vaultPath, "../outside.json")).toThrow(outsideError);
+
+    const rejectVaultRoot = createVaultRelativePathResolver(
+      () => outsideError,
+      { allowVaultRoot: false }
+    );
+    expect(rejectVaultRoot(vaultPath, "artifacts/result.json"))
+      .toBe(path.join(vaultPath, "artifacts/result.json"));
+    expect(() => rejectVaultRoot(vaultPath, ".")).toThrow(outsideError);
   });
 
   it("creates the required readable vault files without storing machine-local absolute paths in the manifest", () => {

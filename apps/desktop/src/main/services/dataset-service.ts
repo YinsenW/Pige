@@ -23,6 +23,7 @@ import {
 import type { JobExecutionControl } from "./job-execution-control";
 import { SourcePageService } from "./source-page-service";
 import { createVerifiedSourceFileSnapshotAsync } from "./source-file-access";
+import { createVaultRelativePathResolver } from "./vault-layout";
 import {
   DATASET_INGEST_PLANNER_ID,
   DATASET_INGEST_PLANNER_VERSION,
@@ -1029,14 +1030,10 @@ function resolveBundleRelativePath(bundlePath: string, relativePath: string): st
   return resolved;
 }
 
-function resolveVaultRelativePath(vaultPath: string, relativePath: string): string {
-  const resolvedVault = path.resolve(vaultPath);
-  const resolved = path.resolve(vaultPath, ...relativePath.split("/"));
-  if (resolved === resolvedVault || !resolved.startsWith(`${resolvedVault}${path.sep}`)) {
-    throw new PigeDomainError("dataset.path_invalid", "Dataset path escapes the active vault.");
-  }
-  return resolved;
-}
+const resolveVaultRelativePath = createVaultRelativePathResolver(
+  () => new PigeDomainError("dataset.path_invalid", "Dataset path escapes the active vault."),
+  { allowVaultRoot: false }
+);
 
 function ensureConfinedDirectory(vaultPath: string, relativePath: string, create: boolean): string {
   if (path.isAbsolute(relativePath) || relativePath.includes("\\")) {

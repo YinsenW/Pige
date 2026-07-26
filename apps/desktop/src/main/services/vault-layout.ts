@@ -62,12 +62,16 @@ export interface VaultStorageRevealBinding {
 }
 
 export function createVaultRelativePathResolver(
-  outsideVaultError: () => Error
+  outsideVaultError: () => Error,
+  options: { readonly allowVaultRoot?: boolean } = {}
 ): (vaultPath: string, relativePath: string) => string {
   return (vaultPath, relativePath) => {
     const resolvedVault = path.resolve(vaultPath);
     const resolvedPath = path.resolve(vaultPath, ...relativePath.split("/"));
-    if (resolvedPath !== resolvedVault && !resolvedPath.startsWith(`${resolvedVault}${path.sep}`)) {
+    if (
+      (options.allowVaultRoot === false && resolvedPath === resolvedVault) ||
+      (resolvedPath !== resolvedVault && !resolvedPath.startsWith(`${resolvedVault}${path.sep}`))
+    ) {
       throw outsideVaultError();
     }
     return resolvedPath;
