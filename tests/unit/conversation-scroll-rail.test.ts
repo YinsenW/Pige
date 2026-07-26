@@ -126,6 +126,31 @@ describe("Conversation scroll rail", () => {
     dom.window.close();
   });
 
+  it("uses one compact anchor per conversation turn instead of drawing a dense double rail", async () => {
+    const dom = createDom();
+    const { timeline, messages } = createTimeline(dom, ["Prompt one", "Answer one", "Prompt two", "Answer two"]);
+    messages.forEach((message, index) => message.classList.add(index % 2 === 0 ? "role-user" : "role-assistant"));
+    const root = createRoot(dom.window.document.getElementById("root")!);
+    timeline.scrollTo = vi.fn();
+
+    await act(async () => {
+      root.render(createElement(ConversationScrollRail, {
+        timelineRef: { current: timeline } as RefObject<HTMLElement>,
+        t: translate
+      }));
+    });
+
+    const anchors = Array.from(dom.window.document.querySelectorAll<HTMLButtonElement>(".conversation-scroll-anchor"));
+    expect(anchors).toHaveLength(2);
+    expect(anchors.map((anchor) => anchor.getAttribute("aria-label"))).toEqual([
+      "Jump to message 1/2",
+      "Jump to message 2/2"
+    ]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps a long transcript in a compact centered tick band", async () => {
     const dom = createDom();
     const { timeline } = createTimeline(dom, Array.from(

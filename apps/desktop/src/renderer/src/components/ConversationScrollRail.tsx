@@ -47,9 +47,7 @@ export function ConversationScrollRail({ timelineRef, t }: ConversationScrollRai
 
     const measure = (): void => {
       animationFrame = 0;
-      const messages = Array.from(
-        timeline.querySelectorAll<HTMLElement>(MESSAGE_SELECTOR)
-      );
+      const messages = conversationAnchorElements(timeline);
       const overflowing = messages.length > 1 && timeline.scrollHeight > timeline.clientHeight + 1;
       timeline.classList.toggle("has-conversation-scroll-rail", overflowing);
       if (!overflowing) {
@@ -247,7 +245,7 @@ function elementTopWithinTimeline(element: HTMLElement, timeline: HTMLElement): 
 }
 
 function currentAnchorIndexFromElements(timeline: HTMLElement): number {
-  const elements = Array.from(timeline.querySelectorAll<HTMLElement>(MESSAGE_SELECTOR));
+  const elements = conversationAnchorElements(timeline);
   if (elements.length === 0) return -1;
   return currentAnchorIndex(elements.map((element, index) => ({
     element,
@@ -255,6 +253,12 @@ function currentAnchorIndexFromElements(timeline: HTMLElement): number {
     preview: "",
     position: 0
   })), timeline);
+}
+
+function conversationAnchorElements(timeline: HTMLElement): HTMLElement[] {
+  const messages = Array.from(timeline.querySelectorAll<HTMLElement>(MESSAGE_SELECTOR));
+  const turns = messages.filter((message) => message.classList.contains("role-user"));
+  return turns.length > 0 ? turns : messages;
 }
 
 function messagePreview(element: HTMLElement, t: (key: string) => string): string {
