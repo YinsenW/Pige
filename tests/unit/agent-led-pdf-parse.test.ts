@@ -68,6 +68,153 @@ afterEach(() => {
 });
 
 describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
+  it("registers the current managed PDF page only for an exact inspected snapshot", async () => {
+    const fixture = makeVault();
+    const captured = await preservePdf(
+      fixture,
+      "current-source-citation.pdf",
+      "The current managed PDF page may be cited only while its inspected snapshot remains exact."
+    );
+    const jobs = new JobsService(fixture.vaultPort);
+    expect(jobs.processQueuedCaptures({ jobIds: [captured.captureJobId] })).toMatchObject({ completed: 1 });
+    const parent = requireValue(readJobs(fixture.vaultPath).find((job) =>
+      job.class === "agent_ingest" && job.sourceId === captured.sourceId
+    ));
+    const currentSource = { ...readSource(fixture.vaultPath, captured.sourceId), semanticOrchestration: "agent_turn" as const };
+    const ocrReadySource: SourceRecord = {
+      ...currentSource,
+      artifacts: [{
+        id: "art_pdf_metadata_current_source",
+        kind: "metadata",
+        path: `artifacts/metadata/2026/07/${currentSource.id}.pdf.json`,
+        checksum: `sha256:${"a".repeat(64)}`,
+        size: 128
+      }],
+      metadata: {
+        ...currentSource.metadata,
+        parserFormat: "pdf",
+        parserId: "pige.pdf_text",
+        parserVersion: "1",
+        parserStatus: "parsed_needs_ocr",
+        parserTruncated: false,
+        textCoverage: "medium",
+        pageCount: 1,
+        processedPageCount: 1,
+        ocrCandidatePages: [1],
+        ocrCandidateLocators: ["page:1"]
+      }
+    };
+    writeSource(fixture.vaultPath, currentSource);
+    let sourceCurrent = true;
+    const service = new AgentIngestService(
+      modelPort,
+      { run: async () => { throw new Error("The direct citation session must not call Pi."); } },
+      {
+        snapshot: () => ({
+          localDatabaseStatus: "not_initialized",
+          parserToolchainReady: true,
+          ocrEngines: ["apple_vision"],
+          speechInputAvailable: false,
+          embeddingModelInstalled: false,
+          lexicalSearchAvailable: false,
+          vectorSearchAvailable: false,
+          rerankerAvailable: false
+        })
+      }
+    );
+    const session = await service.prepareSourceToolSession(fixture.vaultPath, currentSource, parent, {
+      assertSourceCurrent: () => {
+        if (!sourceCurrent) throw new Error("The source changed.");
+      },
+      parseCurrentSource: async () => ({
+        status: "needs_ocr",
+        childJobId: "job_20260727_pdfparsechild",
+        sourceRecord: ocrReadySource,
+        artifactIds: [],
+        textCharacterCount: 85,
+        textCoverage: "medium",
+        needsOcr: true,
+        agentTextReady: true,
+        warnings: []
+      }),
+      ocrCurrentSource: async () => ({
+        status: "processed",
+        childJobId: "job_20260727_pdfocrchild",
+        sourceRecord: currentSource,
+        artifactIds: [],
+        textCharacterCount: 85,
+        confidence: 0.99,
+        agentTextReady: true,
+        warnings: []
+      })
+    });
+    const catalogHash = createPigeAgentToolCatalogHash(session.tools);
+    session.bindCatalog(catalogHash);
+    const invoke = async (toolName: string, toolCallId: string) => {
+      const tool = requireValue(session.tools.find((candidate) => candidate.name === toolName));
+      const signal = new AbortController().signal;
+      const context = { toolCallId, signal };
+      expect(await tool.authorize?.({}, context)).not.toBe(false);
+      return tool.execute({}, signal, context);
+    };
+
+    expect(session.citationCandidates()).toEqual([]);
+    const firstInspect = await invoke("pige_inspect_source", "inspect_current_pdf_before");
+    expect(JSON.stringify(firstInspect)).toContain('\\"citationRef\\":\\"citation_11\\"');
+    expect(JSON.stringify(firstInspect)).not.toContain(requireValue(currentSource.knowledgePageId));
+    const expectedCitation = {
+      refId: "citation_11",
+      label: "[11]",
+      pageId: requireValue(currentSource.knowledgePageId),
+      title: "current-source-citation",
+      pageType: "source" as const,
+      locator: "source_page"
+    };
+    expect(session.citationCandidates()).toEqual([expectedCitation]);
+
+    await invoke("pige_parse_source", "parse_current_pdf");
+    expect(session.citationCandidates()).toEqual([]);
+    await invoke("pige_inspect_source", "inspect_current_pdf_after_parse");
+    expect(session.citationCandidates()).toEqual([expectedCitation]);
+
+    await invoke("pige_ocr_source", "ocr_current_pdf");
+    expect(session.citationCandidates()).toEqual([]);
+    await invoke("pige_inspect_source", "inspect_current_pdf_after_ocr");
+    expect(session.citationCandidates()).toEqual([expectedCitation]);
+
+    sourceCurrent = false;
+    expect(() => session.citationCandidates()).toThrow();
+    sourceCurrent = true;
+    session.bindCatalog(`sha256:${"f".repeat(64)}`);
+    expect(() => session.citationCandidates()).toThrowError(
+      expect.objectContaining({ code: "agent_runtime.turn_conflict" })
+    );
+    session.bindCatalog(catalogHash);
+    const pagePath = path.join(fixture.vaultPath, requireValue(currentSource.knowledgePagePath));
+    const originalPage = fs.readFileSync(pagePath, "utf8");
+    fs.appendFileSync(
+      pagePath,
+      "\nChanged after current-source inspection.\n",
+      "utf8"
+    );
+    expect(() => session.citationCandidates()).toThrowError(
+      expect.objectContaining({ code: "agent_runtime.turn_conflict" })
+    );
+    fs.writeFileSync(pagePath, originalPage, "utf8");
+    const pageParent = path.dirname(pagePath);
+    const realPageParent = `${pageParent}-real`;
+    const escapedPageParent = path.join(path.dirname(fixture.vaultPath), "escaped-source-page");
+    fs.renameSync(pageParent, realPageParent);
+    fs.mkdirSync(escapedPageParent, { recursive: true });
+    fs.writeFileSync(path.join(escapedPageParent, path.basename(pagePath)), originalPage, "utf8");
+    fs.symlinkSync(escapedPageParent, pageParent, "dir");
+    expect(() => session.citationCandidates()).toThrowError(
+      expect.objectContaining({ code: "agent_runtime.turn_conflict" })
+    );
+    fs.rmSync(pageParent);
+    fs.renameSync(realPageParent, pageParent);
+  });
+
   it("runs Pi inspect -> parse -> inspect -> publish with one durable PDF parse child", async () => {
     const fixture = makeVault();
     const nativeText = "Pige keeps this native PDF evidence durable before its Agent selects the bounded local parser tool.";
