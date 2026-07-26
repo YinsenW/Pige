@@ -4,6 +4,7 @@ import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
 import { JobRecordSchema, type JobRecord } from "@pige/schemas";
 import lockfile from "proper-lockfile";
+import { flushDirectoryWhereSupported } from "./durable-directory-sync";
 
 const MAX_JOB_RECORD_BYTES = 2 * 1024 * 1024;
 const PRIVATE_FILE_MODE = 0o600;
@@ -1135,31 +1136,6 @@ function removeTemporaryFile(temporaryPath: string): void {
   } catch {
     // Cleanup must not replace the authoritative result.
   }
-}
-
-function flushDirectoryWhereSupported(directoryPath: string): void {
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(directoryPath, fs.constants.O_RDONLY);
-    fs.fsyncSync(descriptor);
-  } catch (caught) {
-    if (!isUnsupportedDirectoryFlush(caught)) throw caught;
-  } finally {
-    if (descriptor !== undefined) {
-      try {
-        fs.closeSync(descriptor);
-      } catch {
-        // Directory cleanup must not replace the durable write result.
-      }
-    }
-  }
-}
-
-function isUnsupportedDirectoryFlush(value: unknown): boolean {
-  if (!(value instanceof Error) || !("code" in value)) return false;
-  const code = String(value.code);
-  if (new Set(["EBADF", "EINVAL", "ENOSYS", "ENOTSUP"]).has(code)) return true;
-  return process.platform === "win32" && new Set(["EACCES", "EISDIR", "EPERM"]).has(code);
 }
 
 function pathExists(filePath: string): boolean {

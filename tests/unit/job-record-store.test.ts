@@ -502,13 +502,16 @@ function spawnClaimHolder(root: string, jobsRoot: string, filePath: string): Chi
   const domainSource = path.resolve("packages/domain/src/index.ts");
   const schemasSource = path.resolve("packages/schemas/src/index.ts");
   const storeSource = path.resolve("apps/desktop/src/main/services/job-record-store.ts");
+  const directorySyncSource = path.resolve("apps/desktop/src/main/services/durable-directory-sync.ts");
   fs.writeFileSync(loaderPath, [
     "import { pathToFileURL } from 'node:url';",
     `const domainUrl = ${JSON.stringify(pathToFileURL(domainSource).href)};`,
     `const schemasUrl = ${JSON.stringify(pathToFileURL(schemasSource).href)};`,
+    `const directorySyncUrl = ${JSON.stringify(pathToFileURL(directorySyncSource).href)};`,
     "export async function resolve(specifier, context, nextResolve) {",
     "  if (specifier === '@pige/domain') return { url: domainUrl, shortCircuit: true };",
     "  if (specifier === '@pige/schemas') return { url: schemasUrl, shortCircuit: true };",
+    "  if (specifier === './durable-directory-sync') return { url: directorySyncUrl, shortCircuit: true };",
     "  return nextResolve(specifier, context);",
     "}",
     ""
