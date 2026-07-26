@@ -1536,8 +1536,8 @@
     },
     "EV-READER-UI": {
       "kind": "implementation",
-      "path": "apps/desktop/src/renderer/src/App.tsx",
-      "selector": "function NoteReader(props:"
+      "path": "apps/desktop/src/renderer/src/components/NoteReader.tsx",
+      "selector": "export function NoteReader(props:"
     }
   }
 }
