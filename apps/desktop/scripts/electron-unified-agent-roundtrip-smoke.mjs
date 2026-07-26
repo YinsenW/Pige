@@ -35,6 +35,10 @@ const DROP_DRAFT = "Keep this exact draft local while the dropped file submits."
 const DROP_ATTACHMENT_NAME = "whole-window-drop.txt";
 const URL_PROMPT = "Read and cite https://example.com/roundtrip-url-citation";
 const URL_ANSWER = "The inspected URL confirms the roundtrip web citation. [citation_17]";
+const PDF_PROMPT = "Parse this native-text PDF and cite its durable source page.";
+const PDF_NATIVE_TEXT = "The native PDF confirms that durable parser evidence remains available after restart.";
+const PDF_ANSWER = "The native-text PDF confirms durable parser evidence remains available after restart. [citation_11]";
+const PDF_ATTACHMENT_NAME = "native-text-roundtrip.pdf";
 const CHILD_RESULT_PREFIX = "PIGE_ROUNDTRIP_RESULT ";
 const MAX_CHILD_MS = 90_000;
 const highRiskOnly = process.argv.includes("--high-risk-only");
@@ -55,12 +59,14 @@ async function runOrchestrator() {
   const activityAttachmentPath = path.join(rootPath, "unified-agent-activity.txt");
   const datasetAttachmentPath = path.join(rootPath, "unified-agent-dataset.csv");
   const dropAttachmentPath = path.join(rootPath, DROP_ATTACHMENT_NAME);
+  const pdfAttachmentPath = path.join(rootPath, PDF_ATTACHMENT_NAME);
   const deniedCommandSentinelPath = path.join(rootPath, "denied-command-must-not-exist.txt");
   fs.writeFileSync(attachmentPath, "Synthetic unified Agent attachment evidence.\n", "utf8");
   fs.writeFileSync(markdownAttachmentPath, "# Synthetic Markdown evidence\n\nThe Markdown source crosses the real file ingress.\n", "utf8");
   fs.writeFileSync(activityAttachmentPath, "Synthetic reversible knowledge for Activity and Undo.\n", "utf8");
   fs.writeFileSync(datasetAttachmentPath, "name,count\nAda,3\nGrace,5\n", "utf8");
   fs.writeFileSync(dropAttachmentPath, "Synthetic whole-window drop evidence.\n", "utf8");
+  fs.writeFileSync(pdfAttachmentPath, createRoundtripPdf([PDF_NATIVE_TEXT], "Native text roundtrip"));
   const syntheticToken = `synthetic-${crypto.randomBytes(24).toString("hex")}`;
   const requests = [];
   const streamTiming = {};
@@ -387,6 +393,87 @@ async function runOrchestrator() {
     assert.deepEqual(urlRestart.durableSnapshot, url.durableSnapshot);
     assert.equal(requests.length, requestCountBeforeUrlRestart);
 
+    const requestCountBeforePdf = requests.length;
+    const pdf = await runChild("pdf", {
+      rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
+      activityAttachmentPath, datasetAttachmentPath, dropAttachmentPath, deniedCommandSentinelPath,
+      highRiskOnly: false
+    });
+    assert.equal(pdf.pdfAnswerVisible, true);
+    assert.equal(pdf.pdfCitationVisible, true);
+    assert.equal(pdf.pdfCitationIdentityExact, true);
+    assert.equal(pdf.pdfCitationOpenedReader, true);
+    assert.equal(pdf.continuedExactConversation, true);
+    assert.equal(pdf.agentTurnDelta, 1);
+    assert.equal(pdf.sourceDelta, 1);
+    assert.equal(pdf.parseChildDelta, 1);
+    assert.equal(countRoundtripSourceRecords(rootPath), pdf.sourceRecordCountBeforePdf + 1);
+    assert.equal(pdf.durableSnapshot.relevantJobs.length, urlRestart.durableSnapshot.relevantJobs.length + 1);
+    assert.equal(pdf.durableSnapshot.sourceIds.length, urlRestart.durableSnapshot.sourceIds.length + 1);
+    assert.equal(pdf.durableSnapshot.nonterminalJobIds.length, 0);
+    assert.equal(pdf.durableSnapshot.failedRetryableJobIds.length, 0);
+    assertUniqueIdentities(pdf.durableSnapshot.messageIdentities.map((message) => message.id), "conversation event after PDF");
+    assertUniqueIdentities(pdf.durableSnapshot.relevantJobs.map((job) => job.id), "Job after PDF");
+    assertUniqueIdentities(pdf.durableSnapshot.sourceIds, "source after PDF");
+    const pdfProviderRequests = requests.slice(requestCountBeforePdf)
+      .filter((request) => request.method === "POST" && request.path === "/v1/responses");
+    assert.equal(pdfProviderRequests.length, 4);
+    assert.ok(pdfProviderRequests[0]?.body.includes('"name":"pige_inspect_source"'));
+    assert.ok(pdfProviderRequests[1]?.body.includes('"call_id":"call_pdf_inspect_before"'));
+    assert.ok(pdfProviderRequests[1]?.body.includes('"name":"pige_parse_source"'));
+    assert.ok(pdfProviderRequests[2]?.body.includes('"call_id":"call_pdf_parse"'));
+    assert.ok(pdfProviderRequests[2]?.body.includes('"name":"pige_inspect_source"'));
+    assert.ok(pdfProviderRequests[3]?.body.includes('"call_id":"call_pdf_inspect_after"'));
+    assert.ok(requests.every((request) =>
+      request.method !== "POST" || request.path !== "/v1/responses" ||
+      request.receivedAt < pdf.stagedAt || request.receivedAt >= pdf.submittedAt
+    ));
+
+    const pdfSource = readRoundtripRecord(vaultPath, "source-records", pdf.pdfSourceId);
+    const pdfParent = readRoundtripRecord(vaultPath, "jobs", pdf.pdfJobId);
+    const pdfJobs = readRoundtripRecords(vaultPath, "jobs");
+    const pdfParseChildren = pdfJobs.filter((job) =>
+      job.class === "parse" && job.parentJobId === pdf.pdfJobId && job.sourceId === pdf.pdfSourceId
+    );
+    assert.equal(pdfSource.kind, "pdf_file");
+    assert.equal(pdfSource.semanticOrchestration, "agent_turn");
+    assert.equal(pdfSource.metadata?.inputKind, "file_picker");
+    assert.equal(pdfSource.metadata?.agentTurnJobId, pdf.pdfJobId);
+    assert.equal(pdfSource.knowledgePageId, pdf.pdfCitationPageId);
+    assert.equal(pdfSource.managedCopy?.checksum, sha256BufferDigest(fs.readFileSync(pdfAttachmentPath)));
+    assert.equal(pdfParseChildren.length, 1);
+    assert.equal(pdfParseChildren[0]?.state, "completed");
+    assert.deepEqual(pdfParent.childJobIds, [pdfParseChildren[0].id]);
+    assert.deepEqual(pdfSource.artifacts.map((artifact) => artifact.kind), ["extracted_text", "metadata"]);
+    for (const artifact of pdfSource.artifacts) {
+      const artifactPath = path.resolve(vaultPath, artifact.path);
+      const artifactBytes = fs.readFileSync(artifactPath);
+      assert.equal(artifact.checksum, sha256BufferDigest(artifactBytes));
+      assert.equal(artifact.size, artifactBytes.byteLength);
+    }
+    const extractedText = pdfSource.artifacts.find((artifact) => artifact.kind === "extracted_text");
+    const metadataArtifact = pdfSource.artifacts.find((artifact) => artifact.kind === "metadata");
+    assert.ok(fs.readFileSync(path.resolve(vaultPath, extractedText.path), "utf8").includes(PDF_NATIVE_TEXT));
+    const pdfMetadata = JSON.parse(fs.readFileSync(path.resolve(vaultPath, metadataArtifact.path), "utf8"));
+    assert.equal(pdfMetadata.pages?.[0]?.locator, "page:1");
+    assert.equal(pdfMetadata.extractedTextChecksum, extractedText.checksum);
+
+    const requestCountBeforePdfRestart = requests.length;
+    const pdfRestart = await runChild("pdf_restart", {
+      rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
+      activityAttachmentPath, datasetAttachmentPath, dropAttachmentPath, deniedCommandSentinelPath,
+      highRiskOnly: false
+    });
+    assert.equal(pdfRestart.pdfAnswerVisible, true);
+    assert.equal(pdfRestart.pdfCitationVisible, true);
+    assert.equal(pdfRestart.pdfCitationIdentityExact, true);
+    assert.equal(pdfRestart.pdfCitationPageId, pdf.pdfCitationPageId);
+    assert.deepEqual(pdfRestart.durableSnapshot, pdf.durableSnapshot);
+    assert.equal(requests.length, requestCountBeforePdfRestart);
+    assert.equal(readRoundtripRecords(vaultPath, "jobs").filter((job) =>
+      job.class === "parse" && job.parentJobId === pdf.pdfJobId && job.sourceId === pdf.pdfSourceId
+    ).length, 1);
+
     const secretsPath = path.join(userDataPath, "secrets.json");
     const secrets = JSON.parse(fs.readFileSync(secretsPath, "utf8"));
     const providers = JSON.parse(fs.readFileSync(path.join(userDataPath, "provider-profiles.json"), "utf8"));
@@ -410,7 +497,8 @@ async function runOrchestrator() {
       `visible direct/cited Home, preserved-source, ` +
       `TXT/Markdown ingress, Dataset continuation, ordinary provider sends without a second approval, zero retryable Jobs, ` +
       `reversible Activity/Undo results, one exact large paste, one identity-free whole-window drop, ` +
-      `one inspected URL citation with stable Reader navigation, and exact restart retention without another Provider call.`
+      `one inspected URL citation, one native-text PDF parse/citation with stable Reader navigation, ` +
+      `and exact restart retention without another Provider or parser call.`
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));
@@ -432,6 +520,7 @@ async function runChild(phase, values) {
       PIGE_ROUNDTRIP_ACTIVITY_ATTACHMENT_PATH: values.activityAttachmentPath,
       PIGE_ROUNDTRIP_DATASET_ATTACHMENT_PATH: values.datasetAttachmentPath,
       PIGE_ROUNDTRIP_DROP_ATTACHMENT_PATH: values.dropAttachmentPath,
+      PIGE_ROUNDTRIP_PDF_ATTACHMENT_PATH: path.join(values.rootPath, PDF_ATTACHMENT_NAME),
       PIGE_ROUNDTRIP_DENY_SENTINEL_PATH: values.deniedCommandSentinelPath,
       PIGE_ROUNDTRIP_HIGH_RISK_ONLY: values.highRiskOnly ? "1" : "0",
       PIGE_ROUNDTRIP_STAGE_PATH: path.join(values.rootPath, `stage-${phase}.txt`)
@@ -495,6 +584,24 @@ function readRoundtripRecord(vaultPath, area, recordId) {
   return readUniqueJsonByName(path.join(vaultPath, ".pige", area), `${recordId}.json`);
 }
 
+function readRoundtripRecords(vaultPath, area) {
+  const areaPath = path.join(vaultPath, ".pige", area);
+  if (!fs.existsSync(areaPath)) return [];
+  const pending = [areaPath];
+  const records = [];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const absolute = path.join(current, entry.name);
+      if (entry.isDirectory()) pending.push(absolute);
+      else if (entry.isFile() && entry.name.endsWith(".json")) {
+        records.push(JSON.parse(fs.readFileSync(absolute, "utf8")));
+      }
+    }
+  }
+  return records;
+}
+
 function readRoundtripConversationEvents(vaultPath, conversationId) {
   const conversationPath = readUniqueFileByName(
     path.join(vaultPath, ".pige", "conversations"),
@@ -524,6 +631,61 @@ function countRoundtripSourceRecords(rootPath) {
 
 function sha256Digest(value) {
   return `sha256:${crypto.createHash("sha256").update(value, "utf8").digest("hex")}`;
+}
+
+function sha256BufferDigest(value) {
+  return `sha256:${crypto.createHash("sha256").update(value).digest("hex")}`;
+}
+
+function createRoundtripPdf(pages, title) {
+  const objects = new Map();
+  const pageObjectIds = [];
+  const fontObjectId = 3;
+  let nextObjectId = 4;
+  for (const pageText of pages) {
+    const pageObjectId = nextObjectId;
+    const contentObjectId = nextObjectId + 1;
+    nextObjectId += 2;
+    pageObjectIds.push(pageObjectId);
+    const content = renderRoundtripPdfPage(pageText);
+    objects.set(pageObjectId, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontObjectId} 0 R >> >> /Contents ${contentObjectId} 0 R >>`);
+    objects.set(contentObjectId, `<< /Length ${Buffer.byteLength(content, "ascii")} >>\nstream\n${content}\nendstream`);
+  }
+  const infoObjectId = nextObjectId;
+  objects.set(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  objects.set(2, `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageObjectIds.length} >>`);
+  objects.set(fontObjectId, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  objects.set(infoObjectId, `<< /Title (${escapeRoundtripPdfString(title)}) >>`);
+  const objectCount = Math.max(...objects.keys());
+  let document = "%PDF-1.4\n%PIGE\n";
+  const offsets = new Map();
+  for (let objectId = 1; objectId <= objectCount; objectId += 1) {
+    const body = objects.get(objectId);
+    if (!body) throw new Error(`Missing PDF fixture object ${objectId}.`);
+    offsets.set(objectId, Buffer.byteLength(document, "ascii"));
+    document += `${objectId} 0 obj\n${body}\nendobj\n`;
+  }
+  const xrefOffset = Buffer.byteLength(document, "ascii");
+  document += `xref\n0 ${objectCount + 1}\n0000000000 65535 f \n`;
+  for (let objectId = 1; objectId <= objectCount; objectId += 1) {
+    document += `${String(offsets.get(objectId)).padStart(10, "0")} 00000 n \n`;
+  }
+  document += `trailer\n<< /Size ${objectCount + 1} /Root 1 0 R /Info ${infoObjectId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return Buffer.from(document, "ascii");
+}
+
+function renderRoundtripPdfPage(value) {
+  const operations = ["BT", "/F1 12 Tf", "15 TL", "72 720 Td"];
+  value.split(/\r?\n/u).forEach((line, index) => {
+    if (index > 0) operations.push("T*");
+    operations.push(`(${escapeRoundtripPdfString(line)}) Tj`);
+  });
+  operations.push("ET");
+  return operations.join("\n");
+}
+
+function escapeRoundtripPdfString(value) {
+  return value.replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)");
 }
 
 function assertUniqueIdentities(values, label) {
@@ -561,6 +723,7 @@ async function runElectronPhase() {
   const activityAttachmentPath = requireEnv("PIGE_ROUNDTRIP_ACTIVITY_ATTACHMENT_PATH");
   const datasetAttachmentPath = requireEnv("PIGE_ROUNDTRIP_DATASET_ATTACHMENT_PATH");
   const dropAttachmentPath = requireEnv("PIGE_ROUNDTRIP_DROP_ATTACHMENT_PATH");
+  const pdfAttachmentPath = requireEnv("PIGE_ROUNDTRIP_PDF_ATTACHMENT_PATH");
   const deniedCommandSentinelPath = requireEnv("PIGE_ROUNDTRIP_DENY_SENTINEL_PATH");
   const runHighRiskOnly = requireEnv("PIGE_ROUNDTRIP_HIGH_RISK_ONLY") === "1";
   const stagePath = requireEnv("PIGE_ROUNDTRIP_STAGE_PATH");
@@ -591,7 +754,9 @@ async function runElectronPhase() {
       phase !== "drop" &&
       phase !== "drop_restart" &&
       phase !== "url" &&
-      phase !== "url_restart"
+      phase !== "url_restart" &&
+      phase !== "pdf" &&
+      phase !== "pdf_restart"
     ) {
       throw new Error("Unknown unified Agent roundtrip phase.");
     }
@@ -661,9 +826,25 @@ async function runElectronPhase() {
         ...(await runUrlCitationRenderer(browserWindow, clipboard)),
         urlTransportCalls: syntheticUrlTransport?.calls() ?? 0
       };
-    } else {
+    } else if (phase === "url_restart") {
       markStage("renderer_url_citation_restart");
       result = await runUrlCitationRestartRenderer(browserWindow);
+    } else if (phase === "pdf") {
+      markStage("renderer_pdf_prepare");
+      const sourceRecordCountBeforePdf = countRoundtripSourceRecords(rootPath);
+      const pdfBaseline = await readPdfBaselineRenderer(browserWindow);
+      await prepareSourceRenderer(browserWindow, PDF_PROMPT);
+      const staging = await stageAndSubmitSourceRenderer(browserWindow, pdfAttachmentPath, markStage, "renderer_pdf");
+      markStage("renderer_pdf_result");
+      result = {
+        ...(await readPdfRendererResult(browserWindow, pdfBaseline)),
+        stagedAt: staging.stagedAt,
+        submittedAt: staging.submittedAt,
+        sourceRecordCountBeforePdf
+      };
+    } else {
+      markStage("renderer_pdf_restart");
+      result = await runPdfRestartRenderer(browserWindow);
     }
     if (phase === "connect" && runHighRiskOnly) {
       markStage("renderer_high_risk_deny");
@@ -2129,6 +2310,150 @@ async function readSourceRendererResult(browserWindow, expectedAnswer, resultKey
   `, true);
 }
 
+async function readPdfBaselineRenderer(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      const jobs = await window.pige.jobs.list({ limit: 100 });
+      const timeline = await window.pige.agent.conversation({ limit: 100 });
+      const library = await window.pige.library.list({ limit: 100 });
+      if (!timeline) throw new Error('PDF baseline conversation is unavailable.');
+      return {
+        jobIds: jobs.jobs.map((job) => job.id),
+        sourceIds: [...new Set(library.pages.flatMap((page) => page.sourceIds))],
+        conversationId: timeline.conversationId,
+        tailEventId: timeline.tailEventId,
+        messageCount: timeline.messages.length
+      };
+    })()
+  `, true);
+}
+
+async function readPdfRendererResult(browserWindow, baseline) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'pdf_result_wait';
+      console.info('PIGE_ROUNDTRIP_STAGE pdf_result_wait');
+      const deadline = Date.now() + 60000;
+      const expected = ${JSON.stringify(baseline)};
+      const baselineJobIds = new Set(expected.jobIds);
+      const baselineSourceIds = new Set(expected.sourceIds);
+      while (Date.now() < deadline) {
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const library = await window.pige.library.list({ limit: 100 });
+        const newAgentJobs = jobs.jobs.filter((job) => job.class === 'agent_turn' && !baselineJobIds.has(job.id));
+        const newParseJobs = jobs.jobs.filter((job) => job.class === 'parse' && !baselineJobIds.has(job.id));
+        const newSourceIds = [...new Set(library.pages.flatMap((page) => page.sourceIds).filter((id) => !baselineSourceIds.has(id)))];
+        const assistant = timeline?.messages.find((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(PDF_ANSWER)})
+        );
+        const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_11');
+        const sourcePage = library.pages.find((page) =>
+          citation?.pageId === page.pageId && newSourceIds.some((sourceId) => page.sourceIds.includes(sourceId))
+        );
+        const parent = newAgentJobs.length === 1 ? newAgentJobs[0] : undefined;
+        const parseChild = newParseJobs.length === 1 ? newParseJobs[0] : undefined;
+        const continuedExactConversation = timeline?.conversationId === expected.conversationId &&
+          timeline?.messages.some((message) => message.id === expected.tailEventId) === true &&
+          timeline.messages.length === expected.messageCount + 2;
+        const citationIdentityExact = Boolean(citation?.pageId && sourcePage?.pageId === citation.pageId);
+        globalThis.__pigeRoundtripWaitState = {
+          agentTurnDelta: newAgentJobs.length,
+          parseChildDelta: newParseJobs.length,
+          sourceDelta: newSourceIds.length,
+          parentState: parent?.state ?? 'none',
+          parseState: parseChild?.state ?? 'none',
+          answerVisible: Boolean(assistant),
+          citationVisible: Boolean(citation),
+          citationIdentityExact,
+          continuedExactConversation
+        };
+        if (
+          parent?.state === 'completed' && parseChild?.state === 'completed' &&
+          newAgentJobs.length === 1 && newParseJobs.length === 1 && newSourceIds.length === 1 &&
+          assistant && citation && citationIdentityExact && continuedExactConversation
+        ) {
+          const button = Array.from(document.querySelectorAll('.conversation-citations .citation-row:not(:disabled)'))
+            .find((item) => item.textContent?.includes('[11]'));
+          if (!button) throw new Error('PDF citation navigation action is unavailable.');
+          button.click();
+          while (Date.now() < deadline && !document.querySelector('.note-reader')) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          if (!document.querySelector('.note-reader')) throw new Error('PDF citation did not open the Reader.');
+          return {
+            pdfAnswerVisible: true,
+            pdfCitationVisible: true,
+            pdfCitationIdentityExact: true,
+            pdfCitationOpenedReader: true,
+            pdfCitationPageId: citation.pageId,
+            pdfJobId: parent.id,
+            pdfSourceId: newSourceIds[0],
+            continuedExactConversation,
+            agentTurnDelta: 1,
+            parseChildDelta: 1,
+            sourceDelta: 1
+          };
+        }
+        if ([...newAgentJobs, ...newParseJobs].some((job) =>
+          job.state === 'failed_retryable' || job.state === 'failed_final'
+        )) {
+          throw new Error('PDF source turn reached a durable failure state.');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for native-text PDF convergence.');
+    })()
+  `, true).then(async (result) => ({
+    ...result,
+    durableSnapshot: await readDurableRestartSnapshot(browserWindow)
+  }));
+}
+
+async function runPdfRestartRenderer(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'pdf_restart_wait';
+      console.info('PIGE_ROUNDTRIP_STAGE pdf_restart_wait');
+      const deadline = Date.now() + 60000;
+      while (Date.now() < deadline) {
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const library = await window.pige.library.list({ limit: 100 });
+        const assistant = timeline?.messages.find((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(PDF_ANSWER)})
+        );
+        const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_11');
+        const sourcePage = library.pages.find((page) =>
+          page.pageId === citation?.pageId && page.sourceIds.length === 1
+        );
+        const activeJobs = jobs.jobs.filter((job) =>
+          ['queued', 'running', 'waiting_dependency', 'awaiting_review', 'cancel_requested', 'failed_retryable'].includes(job.state)
+        );
+        globalThis.__pigeRoundtripWaitState = {
+          answerVisible: Boolean(assistant),
+          citationVisible: Boolean(citation),
+          citationIdentityExact: Boolean(citation?.pageId && sourcePage?.pageId === citation.pageId),
+          activeJobCount: activeJobs.length
+        };
+        if (assistant && citation?.pageId && sourcePage?.pageId === citation.pageId && activeJobs.length === 0) {
+          return {
+            pdfAnswerVisible: true,
+            pdfCitationVisible: true,
+            pdfCitationIdentityExact: true,
+            pdfCitationPageId: citation.pageId
+          };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for restarted native-text PDF evidence.');
+    })()
+  `, true).then(async (result) => ({
+    ...result,
+    durableSnapshot: await readDurableRestartSnapshot(browserWindow)
+  }));
+}
+
 async function readActivityRendererResult(browserWindow) {
   return browserWindow.webContents.executeJavaScript(`
     (async () => {
@@ -2462,6 +2787,22 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
     }
     if (latestUserText.includes(LARGE_PASTE_DRAFT) && serializedTools.includes("pige_inspect_source")) {
       writeToolCallResponse(response, "pige_inspect_source", "call_large_paste_inspect", "large-paste-inspect-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_pdf_inspect_after"') && serializedInput.includes("function_call_output")) {
+      writeTextResponse(response, PDF_ANSWER, "pdf-final-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_pdf_parse"') && serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_inspect_source", "call_pdf_inspect_after", "pdf-inspect-after-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_pdf_inspect_before"') && serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_parse_source", "call_pdf_parse", "pdf-parse-1");
+      return;
+    }
+    if (latestUserText.includes(PDF_PROMPT) && serializedTools.includes("pige_inspect_source")) {
+      writeToolCallResponse(response, "pige_inspect_source", "call_pdf_inspect_before", "pdf-inspect-before-1");
       return;
     }
     if (serializedInput.includes('"call_id":"call_source_inspect"') && serializedInput.includes("function_call_output")) {
