@@ -1748,8 +1748,10 @@ describe("Home durable Agent conversation UI", () => {
     const compactNavigation = requireElement(dialog.querySelector<HTMLButtonElement>(
       'button[aria-label="Settings sections"]'
     ));
-    await waitFor(dom, () => dom.window.document.activeElement === compactNavigation);
-    expect(dom.window.document.activeElement).toBe(compactNavigation);
+    const compactReturn = requireElement(dialog.querySelector<HTMLButtonElement>(".settings-compact-return"));
+    await waitFor(dom, () => dom.window.document.activeElement === compactReturn);
+    expect(dom.window.document.activeElement).toBe(compactReturn);
+    expect(compactReturn.nextElementSibling).toBe(compactNavigation);
     expect(header.hasAttribute("inert")).toBe(true);
     expect(sidebar.hasAttribute("inert")).toBe(true);
     expect(workspace.hasAttribute("inert")).toBe(true);

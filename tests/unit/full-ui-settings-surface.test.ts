@@ -274,22 +274,23 @@ describe("full UI Settings surface", () => {
     const dialog = requireElement(dom.window.document.querySelector<HTMLElement>('[role="dialog"]'));
     const drawer = requireElement(dialog.querySelector<HTMLElement>(".settings-sidebar"));
     const content = requireElement(dialog.querySelector<HTMLElement>(".settings-content"));
+    const compactReturn = requireElement(dialog.querySelector<HTMLButtonElement>(".settings-compact-return"));
     const trigger = buttonNamed(dialog, "Settings sections");
     expect(dialog.dataset.compactNavigationOpen).toBe("false");
     expect(drawer.getAttribute("aria-hidden")).toBe("true");
     expect(drawer.hasAttribute("inert")).toBe(true);
     expect(content.hasAttribute("inert")).toBe(false);
-    expect(dom.window.document.activeElement).toBe(trigger);
+    expect(dom.window.document.activeElement).toBe(compactReturn);
 
     const pageControl = buttonNamed(content, "Page control");
     await act(async () => {
-      trigger.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+      compactReturn.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
     });
     expect(dom.window.document.activeElement).toBe(pageControl);
     await act(async () => {
       pageControl.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
     });
-    expect(dom.window.document.activeElement).toBe(trigger);
+    expect(dom.window.document.activeElement).toBe(compactReturn);
 
     await act(async () => {
       trigger.click();

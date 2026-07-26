@@ -6593,17 +6593,16 @@ export function SettingsSurface(props: {
   const dialogRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const compactCloseButtonRef = useRef<HTMLButtonElement>(null);
   const compactNavigationButtonRef = useRef<HTMLButtonElement>(null);
   const compactSettings = useMediaQuery("(max-width: 520px)");
   const [compactNavigationOpen, setCompactNavigationOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-  const sectionMatches = (section: SettingsSection): boolean =>
-    normalizedQuery.length === 0 || props.t(`settings.section.${section}`).toLocaleLowerCase().includes(normalizedQuery);
+  const sectionMatches = (section: SettingsSection): boolean => normalizedQuery.length === 0 || props.t(`settings.section.${section}`).toLocaleLowerCase().includes(normalizedQuery);
   const matchingSectionCount = settingsSections.filter((item) => sectionMatches(item.id)).length;
-
   useEffect(() => {
-    if (compactSettings) compactNavigationButtonRef.current?.focus();
+    if (compactSettings) compactCloseButtonRef.current?.focus();
     else closeButtonRef.current?.focus();
   }, [compactSettings]);
 
@@ -6751,6 +6750,7 @@ export function SettingsSurface(props: {
           <div ref={contentRef} className="settings-content" inert={compactSettings && compactNavigationOpen}>
             <h1 id="settings-surface-title" className="visually-hidden">{props.t("settings.title")}</h1>
             <header className="settings-compact-header">
+              <button ref={compactCloseButtonRef} type="button" className="icon-button settings-compact-return" title={props.t("settings.close")} aria-label={props.t("settings.close")} onClick={props.onClose}><PigeIcon name="arrowLeft" size={17} /></button>
               <button
                 ref={compactNavigationButtonRef}
                 type="button"
