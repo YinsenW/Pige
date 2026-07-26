@@ -3,7 +3,7 @@
   "baseline": "fd869668bb7d53cb1946b3b70e2127de1e1959af",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 132,
-  "baselineLines": 71142,
+  "baselineLines": 71134,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -46,7 +46,7 @@
       ["restore-coordinator-service.ts", 1015, "jr"],
       ["retrieval-evidence-boundary.ts", 470, "prf"],
       ["setting-action-guard.ts", 36, "p"],
-      ["source-file-access.ts", 221, "pr"],
+      ["source-file-access.ts", 217, "pr"],
       ["speech-service.ts", 541, "pr"],
       ["vault-writer-lease.ts", 894, "rd"],
       ["verified-file-snapshot.ts", 152, "rd"]
@@ -93,7 +93,7 @@
       ["dataset-query-service.ts", 1428, "rd"],
       ["diagnostics-export-core.ts", 632, "df"],
       ["document-parse-job-executor.ts", 180, "jr"],
-      ["evidence-assembly-service.ts", 577, "pf"],
+      ["evidence-assembly-service.ts", 573, "pf"],
       ["external-text-file-create-service.ts", 260, "prd"],
       ["home-agent-url-service.ts", 155, "pr"],
       ["index-rebuild-job-executor.ts", 134, "jr"],
@@ -171,7 +171,7 @@
       "writeJsonAtomicDefinitions": 9,
       "writeFileAtomicDefinitions": 4,
       "isErrnoDefinitions": 1,
-      "resolveVaultRelativePathFiles": 9
+      "resolveVaultRelativePathFiles": 7
     },
     "oversizedServiceBranchAndFunctionProxies": {
       "jobs-service.ts": [536, 221],

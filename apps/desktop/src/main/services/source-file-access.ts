@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
 import { SourceRecordSchema, type SourceRecord } from "@pige/schemas";
+import { createVaultRelativePathResolver } from "./vault-layout";
 import { createVerifiedFileSnapshot } from "./verified-file-snapshot";
 
 export interface VerifiedSourceFile {
@@ -211,11 +212,6 @@ function checksumFile(filePath: string): string {
   return `sha256:${hash.digest("hex")}`;
 }
 
-function resolveVaultRelativePath(vaultPath: string, relativePath: string): string {
-  const resolvedVault = path.resolve(vaultPath);
-  const resolvedPath = path.resolve(vaultPath, ...relativePath.split("/"));
-  if (resolvedPath !== resolvedVault && !resolvedPath.startsWith(`${resolvedVault}${path.sep}`)) {
-    throw new PigeDomainError("source.path_outside_vault", "The managed source path escapes the active vault.");
-  }
-  return resolvedPath;
-}
+const resolveVaultRelativePath = createVaultRelativePathResolver(
+  () => new PigeDomainError("source.path_outside_vault", "The managed source path escapes the active vault.")
+);
