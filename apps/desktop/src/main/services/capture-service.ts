@@ -23,6 +23,7 @@ import {
   writeSingleWriterFileAtomic as writeFileAtomic,
   writeSingleWriterJsonAtomic as writeJsonAtomic
 } from "./single-writer-file-commit";
+import { hasErrorInstanceCode as isErrnoCode } from "./object-error-code";
 import { redactSensitiveUrl, SourceFetchService, type SourceFetchSnapshot } from "./source-fetch-service";
 
 export interface CaptureVaultPort {
@@ -960,10 +961,6 @@ function writeConfinedVaultFileAtomic(vaultPath: string, filePath: string, value
       // The temporary path is absent after a successful atomic rename.
     }
   }
-}
-
-function isErrnoCode(value: unknown, code: string): boolean {
-  return value instanceof Error && "code" in value && value.code === code;
 }
 
 async function copyFileAtomicWithChecksum(sourcePath: string, destinationPath: string): Promise<{ checksum: string; size: number }> {
