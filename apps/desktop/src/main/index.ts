@@ -137,9 +137,12 @@ import { DocumentParserService } from "./services/document-parser-service";
 import {
   JobsService,
   type ProcessQueuedCapturesResult,
-  type ProcessQueuedOcrResult,
-  type ProcessQueuedParsesResult
+  type ProcessQueuedOcrResult
 } from "./services/jobs-service";
+import {
+  type DocumentParseJobExecutor,
+  type ProcessQueuedParsesResult
+} from "./services/document-parse-job-executor";
 import {
   type DatasetImportJobExecutor,
   type ProcessQueuedDatasetImportsResult
@@ -1146,6 +1149,9 @@ const getIndexRebuildJobExecutor = (): IndexRebuildJobExecutor =>
 const getDatasetImportJobExecutor = (): DatasetImportJobExecutor =>
   getJobsService().datasetImportExecutor();
 
+const getDocumentParseJobExecutor = (): DocumentParseJobExecutor =>
+  getJobsService().documentParseExecutor();
+
 const databaseInitializationRebuilds = new Set<string>();
 
 const getModelProviderRegistry = (): ModelProviderRegistry => {
@@ -1214,7 +1220,7 @@ const scheduleCaptureProcessing = (): void => {
 
 const scheduleParseProcessing = (): void => {
   parseDrainer ??= new CoalescedBatchDrainer({
-    runBatch: () => getJobsService().processQueuedParses({ limit: 20 }),
+    runBatch: () => getDocumentParseJobExecutor().process({ limit: 20 }),
     onBatch: (result) => {
       if (result.agentReadySourceIds.length > 0) scheduleAgentIngestProcessing();
       if (result.ocrWaitingSourceIds.length > 0) scheduleOcrProcessing();

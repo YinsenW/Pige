@@ -86,6 +86,7 @@
       ["dataset-query-core.ts", 1103, "rdf"],
       ["dataset-query-service.ts", 1428, "rd"],
       ["diagnostics-export-core.ts", 632, "df"],
+      ["document-parse-job-executor.ts", 180, "jr"],
       ["evidence-assembly-service.ts", 577, "pf"],
       ["external-text-file-create-service.ts", 260, "prd"],
       ["home-agent-url-service.ts", 155, "pr"],
