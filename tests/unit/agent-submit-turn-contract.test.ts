@@ -59,6 +59,48 @@ describe("Agent submit-turn attachment boundary", () => {
     }).success).toBe(false);
   });
 
+  it("allows only file picker to carry an optional exact conversation tail pair", () => {
+    const continuation = {
+      conversationId: "conv_20260726_filepicker01",
+      expectedTailEventId: "evt_20260726_filepickertail01"
+    };
+    const attachment = { displayName: "source.txt", internalPath: "/private/tmp/source.txt" };
+
+    expect(AgentSubmitTurnIpcPayloadSchema.parse({
+      request: {
+        inputKind: "file_picker",
+        locale: "en",
+        clientTurnId: "turn_20260726_filepicker01",
+        ...continuation
+      },
+      attachments: [attachment]
+    }).request).toMatchObject(continuation);
+    expect(AgentSubmitTurnIpcPayloadSchema.parse({
+      request: { inputKind: "file_picker", locale: "en" },
+      attachments: [attachment]
+    }).request).not.toHaveProperty("conversationId");
+    expect(AgentSubmitTurnIpcPayloadSchema.safeParse({
+      request: { inputKind: "file_picker", locale: "en", ...continuation },
+      attachments: [attachment]
+    }).success).toBe(false);
+    expect(AgentSubmitTurnIpcPayloadSchema.safeParse({
+      request: { inputKind: "file_picker", locale: "en", conversationId: continuation.conversationId },
+      attachments: [attachment]
+    }).success).toBe(false);
+    expect(AgentSubmitTurnIpcPayloadSchema.safeParse({
+      request: { inputKind: "file_picker", locale: "en", expectedTailEventId: continuation.expectedTailEventId },
+      attachments: [attachment]
+    }).success).toBe(false);
+    expect(AgentSubmitTurnIpcPayloadSchema.safeParse({
+      request: { inputKind: "file_drop", locale: "en", ...continuation },
+      attachments: [attachment]
+    }).success).toBe(false);
+    expect(AgentSubmitTurnIpcPayloadSchema.safeParse({
+      request: { inputKind: "typed_text", locale: "en", text: "Continue.", ...continuation },
+      attachments: []
+    }).success).toBe(false);
+  });
+
   it("accepts one exact large-paste-only staged source without an OS file candidate", () => {
     const text = "  token=exact\n😀  ";
     const payload = AgentSubmitTurnIpcPayloadSchema.parse({

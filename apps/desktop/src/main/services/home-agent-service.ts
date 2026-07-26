@@ -377,7 +377,11 @@ export class HomeAgentService {
       inputKind: validatedRequest.inputKind,
       locale: validatedRequest.locale,
       ...(authoredText === undefined ? {} : { text: authoredText }),
-      ...(validatedRequest.clientTurnId === undefined ? {} : { clientTurnId: validatedRequest.clientTurnId })
+      ...(validatedRequest.clientTurnId === undefined ? {} : { clientTurnId: validatedRequest.clientTurnId }),
+      ...(validatedRequest.conversationId === undefined ? {} : { conversationId: validatedRequest.conversationId }),
+      ...(validatedRequest.expectedTailEventId === undefined
+        ? {}
+        : { expectedTailEventId: validatedRequest.expectedTailEventId })
     };
     const query = authoredText ?? defaultAttachmentUserIntent(validatedRequest.locale);
     const activeVault = this.#vaults.current();

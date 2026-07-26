@@ -157,6 +157,145 @@ describe("Home Pi Agent service", () => {
     });
   });
 
+  it("continues an exact conversation through a prepared file-picker turn", async () => {
+    const fixture = makeFixture();
+    const models = makeModels();
+    const histories: PiAgentRunRequest["history"][] = [];
+    const runtime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        histories.push(request.history);
+        return new PiAgentRuntimeAdapter({
+          fauxResponses: histories.length === 1
+            ? [{ kind: "text", text: "Base conversation answer." }]
+            : [
+                { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+                { kind: "text", text: "Continued with the attached source." }
+              ]
+        }).run(request);
+      }
+    };
+    const ingest = new AgentIngestService(models, runtime);
+    const jobs = new JobsService(fixture.vaults, ingest);
+    const service = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      runtime
+    );
+    const first = await service.submitTurn({
+      schemaVersion: 1,
+      clientTurnId: "turn_20260726_pickerbase001",
+      text: "Start one durable conversation.",
+      inputKind: "typed_text",
+      locale: "en"
+    });
+    expect(first.state).toBe("completed");
+    if (first.state !== "completed") throw new Error("Expected the base turn to complete.");
+
+    const prepared = service.prepareSourceTurn({
+      schemaVersion: 1,
+      clientTurnId: "turn_20260726_pickerfollow01",
+      conversationId: first.conversationId,
+      expectedTailEventId: first.tailEventId,
+      text: "Continue with this attachment.",
+      inputKind: "file_picker",
+      locale: "en"
+    });
+    expect(prepared.request).toMatchObject({
+      conversationId: first.conversationId,
+      expectedTailEventId: first.tailEventId
+    });
+    expect(prepared.preservedTurn.event.conversationId).toBe(first.conversationId);
+
+    const sourcePath = path.join(path.dirname(fixture.vaultPath), "continued-source.txt");
+    fs.writeFileSync(sourcePath, "One exact continuation source.\n", "utf8");
+    await new CaptureService(fixture.vaults).preserveFilesForAgentTurn({
+      filePaths: [sourcePath],
+      inputKind: "file_picker",
+      userIntent: "unknown",
+      locale: "en"
+    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+    const outcome = await service.submitPreparedSourceTurn(prepared);
+
+    expect(outcome).toMatchObject({
+      state: "completed",
+      conversationId: first.conversationId,
+      answer: { answer: "Continued with the attached source." }
+    });
+    expect(histories).toHaveLength(2);
+    expect(histories[1]).toEqual([
+      expect.objectContaining({ role: "user", text: "Start one durable conversation." }),
+      expect.objectContaining({ role: "assistant", text: "Base conversation answer." })
+    ]);
+    expect(service.conversation({ conversationId: first.conversationId })).toMatchObject({
+      messages: [
+        { role: "user", text: "Start one durable conversation." },
+        { role: "assistant", text: "Base conversation answer." },
+        { role: "user", text: "Continue with this attachment." },
+        { role: "assistant", text: "Continued with the attached source." }
+      ]
+    });
+  });
+
+  it("fails a stale picker continuation before side effects and starts a new conversation without a pair", async () => {
+    const fixture = makeFixture();
+    let runtimeCalls = 0;
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          runtimeCalls += 1;
+          return new PiAgentRuntimeAdapter({
+            fauxResponses: [{ kind: "text", text: "Stable base answer." }]
+          }).run(request);
+        }
+      }
+    );
+    const first = await service.submitTurn({
+      schemaVersion: 1,
+      clientTurnId: "turn_20260726_stalepickerbase",
+      text: "Create a stable base.",
+      inputKind: "typed_text",
+      locale: "en"
+    });
+    expect(first.state).toBe("completed");
+    if (first.state !== "completed") throw new Error("Expected the base turn to complete.");
+    const beforeTimeline = service.conversation({ conversationId: first.conversationId });
+    const jobsPath = path.join(fixture.vaultPath, ".pige", "jobs");
+    const sourcesPath = path.join(fixture.vaultPath, ".pige", "source-records");
+    const beforeJobs = readRecords<JobRecord>(jobsPath);
+    const beforeSources = readRecords<SourceRecord>(sourcesPath);
+
+    expect(() => service.prepareSourceTurn({
+      schemaVersion: 1,
+      clientTurnId: "turn_20260726_stalepicker001",
+      conversationId: first.conversationId,
+      expectedTailEventId: "evt_20260726_stalepickertail",
+      text: "Do not append this stale source turn.",
+      inputKind: "file_picker",
+      locale: "en"
+    })).toThrowError(PigeDomainError);
+    expect(runtimeCalls).toBe(1);
+    expect(service.conversation({ conversationId: first.conversationId })).toEqual(beforeTimeline);
+    expect(readRecords<JobRecord>(jobsPath)).toEqual(beforeJobs);
+    expect(readRecords<SourceRecord>(sourcesPath)).toEqual(beforeSources);
+
+    const independent = service.prepareSourceTurn({
+      schemaVersion: 1,
+      clientTurnId: "turn_20260726_newpicker001",
+      text: "Start a separate source turn.",
+      inputKind: "file_picker",
+      locale: "en"
+    });
+    expect(independent.preservedTurn.event.conversationId).not.toBe(first.conversationId);
+    expect(independent.request).not.toHaveProperty("conversationId");
+    expect(runtimeCalls).toBe(1);
+  });
+
   it("runs a real Pi tool turn against bounded local evidence and returns a validated grounded answer", async () => {
     const fixture = makeFixture();
     let runtimeConfigReads = 0;

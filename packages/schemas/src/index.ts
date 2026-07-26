@@ -310,6 +310,13 @@ export const AgentSubmitTurnRequestSchema = z.object({
   }
   const hasConversation = request.conversationId !== undefined;
   const hasExpectedTail = request.expectedTailEventId !== undefined;
+  if (hasConversation !== hasExpectedTail) {
+    context.addIssue({
+      code: "custom",
+      path: [hasConversation ? "expectedTailEventId" : "conversationId"],
+      message: "A conversation continuation requires an exact conversation and tail pair."
+    });
+  }
   if (request.inputKind === "follow_up") {
     if (!request.clientTurnId) {
       context.addIssue({
@@ -325,11 +332,17 @@ export const AgentSubmitTurnRequestSchema = z.object({
         message: "A follow-up requires an exact conversation tail binding."
       });
     }
-  } else if (hasConversation || hasExpectedTail) {
+  } else if (request.inputKind === "file_picker" && hasConversation && !request.clientTurnId) {
+    context.addIssue({
+      code: "custom",
+      path: ["clientTurnId"],
+      message: "A file picker continuation requires a stable client turn identity."
+    });
+  } else if (request.inputKind !== "file_picker" && (hasConversation || hasExpectedTail)) {
     context.addIssue({
       code: "custom",
       path: ["conversationId"],
-      message: "Only a follow-up may continue an existing conversation."
+      message: "Only a follow-up or file picker may continue an existing conversation."
     });
   }
   if (request.scope && fileInput) {
