@@ -20,6 +20,7 @@ import {
   isMatchingAgentPageUpdateUndo,
   readAgentPageUpdateOperationBinding
 } from "./agent-page-update-service";
+import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
 
 export interface KnowledgeActivityVaultPort {
   current(): VaultSummary | undefined;
@@ -1652,8 +1653,4 @@ function stableStringify(value: unknown): string {
       .join(",")}}`;
   }
   return JSON.stringify(value);
-}
-
-function isErrno(value: unknown, code: string): value is NodeJS.ErrnoException {
-  return value instanceof Error && "code" in value && value.code === code;
 }
