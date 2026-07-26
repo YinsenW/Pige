@@ -158,7 +158,11 @@ describe("Conversation scroll rail", () => {
     const rail = dom.window.document.querySelector<HTMLElement>(".conversation-scroll-rail");
     expect(rail?.style.getPropertyValue("--conversation-rail-height")).toBe("119px");
     expect(rail?.style.getPropertyValue("--conversation-rail-top")).toBe("260px");
-    expect(rail?.querySelectorAll(".conversation-scroll-anchor")).toHaveLength(64);
+    const anchors = Array.from(rail?.querySelectorAll<HTMLElement>(".conversation-scroll-anchor") ?? []);
+    expect(anchors).toHaveLength(64);
+    expect(anchors[0]?.style.getPropertyValue("--conversation-anchor-opacity")).toBe("0.12");
+    expect(anchors[32]?.style.getPropertyValue("--conversation-anchor-opacity")).toBe("0.42");
+    expect(anchors[63]?.style.getPropertyValue("--conversation-anchor-opacity")).toBe("0.12");
 
     await act(async () => root.unmount());
     dom.window.close();

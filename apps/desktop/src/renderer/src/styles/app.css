@@ -4010,7 +4010,7 @@ dd {
   height: 1px;
   transform: translateY(-50%);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--text-tertiary) 54%, transparent);
+  background: color-mix(in srgb, var(--text-tertiary) 44%, transparent);
   opacity: var(--conversation-anchor-opacity);
   transition:
     width var(--duration-fast) var(--ease-standard),

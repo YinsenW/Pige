@@ -271,5 +271,5 @@ function clamp(value: number, minimum: number, maximum: number): number {
 
 function anchorEdgeOpacity(position: number): number {
   const edgeDistance = Math.min(position, 1 - position);
-  return Number(clamp(0.18 + edgeDistance / 0.13, 0.18, 1).toFixed(3));
+  return Number(clamp(0.12 + edgeDistance / 0.8, 0.12, 0.42).toFixed(3));
 }
