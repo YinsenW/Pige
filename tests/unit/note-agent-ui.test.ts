@@ -60,6 +60,22 @@ describe("Note Agent production UI", () => {
     await unmount(dom, mount.root);
   });
 
+  it("hides the attachment action without an owner and binds an explicit owner when supplied", async () => {
+    const unavailableDom = createDom();
+    const unavailable = await mountPanel(unavailableDom);
+    expect(unavailable.container.querySelector(".attach-button")).toBeNull();
+    await unmount(unavailableDom, unavailable.root);
+
+    const availableDom = createDom();
+    const onAttach = vi.fn();
+    const available = await mountPanel(availableDom, { onAttach });
+    const attachButton = required(available.container.querySelector<HTMLButtonElement>(".attach-button"));
+    expect(attachButton.disabled).toBe(false);
+    await click(availableDom, attachButton);
+    expect(onAttach).toHaveBeenCalledTimes(1);
+    await unmount(availableDom, available.root);
+  });
+
   it("renders contract-conformant answer and proposal fixtures without binding them as product truth", async () => {
     const dom = createDom();
     const opened: string[] = [];
@@ -548,7 +564,7 @@ describe("Note Agent production UI", () => {
     expect(container.querySelector('[data-provisional="true"]')).toBeNull();
     expect(buttonNamed(container, "Current note · quote")).toBeDefined();
     expect(container.querySelector(".proposal-panel")).toBeNull();
-    expect(container.querySelector(".attach-button")?.hasAttribute("disabled")).toBe(true);
+    expect(container.querySelector(".attach-button")).toBeNull();
 
     await unmount(dom, root);
   });

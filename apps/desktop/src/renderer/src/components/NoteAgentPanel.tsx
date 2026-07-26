@@ -443,15 +443,17 @@ export function NoteAgentPanel(props: {
               }}
             />
             <div className="note-composer-toolbar">
-              <button
-                className="attach-button"
-                type="button"
-                aria-label={props.t("home.attachFile")}
-                disabled={!props.onAttach || props.availability !== "ready"}
-                onClick={props.onAttach}
-              >
-                <PigeIcon name="attach" size={18} />
-              </button>
+              {props.onAttach ? (
+                <button
+                  className="attach-button"
+                  type="button"
+                  aria-label={props.t("home.attachFile")}
+                  disabled={props.availability !== "ready"}
+                  onClick={props.onAttach}
+                >
+                  <PigeIcon name="attach" size={18} />
+                </button>
+              ) : null}
               <div className="model-switcher-wrap note-agent-model-switcher-wrap">
                 <button
                   ref={modelSwitcherRef}
