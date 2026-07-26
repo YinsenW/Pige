@@ -50,7 +50,6 @@ import {
   DocumentParseJobExecutor,
   type ActiveDocumentParseJob,
   type ProcessQueuedParsesRequest,
-  type ProcessQueuedParsesResult,
   type QueuedDocumentParseJob
 } from "./document-parse-job-executor";
 import type { DatasetMaterializerPort } from "./dataset-service";
@@ -1704,10 +1703,6 @@ export class JobsService {
     };
   }
 
-  async processQueuedParses(request: ProcessQueuedParsesRequest = {}): Promise<ProcessQueuedParsesResult> {
-    return this.#documentParseExecutor.process(request);
-  }
-
   async processQueuedOcr(request: ProcessQueuedOcrRequest = {}): Promise<ProcessQueuedOcrResult> {
     const vaultPath = this.#requireActiveVaultPath();
     const jobFiles = findQueuedOcrJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
@@ -2462,7 +2457,7 @@ export class JobsService {
       child = this.#readJobSnapshot(vaultPath, child.id)?.job ?? child;
     }
     parentControl.markDurableCheckpoint("agent_parse_child_publication_started");
-    await this.processQueuedParses({
+    await this.#documentParseExecutor.process({
       jobIds: [child.id],
       limit: 1,
       abortSignal: request.signal

@@ -476,7 +476,7 @@ describe("desktop shell build contract", () => {
     expect(jobsSource).not.toContain("processQueuedIndexRebuild(");
     expect(mainSource).toContain("getJobsService().documentParseExecutor()");
     expect(mainSource).toContain("getDocumentParseJobExecutor().process({ limit: 20 })");
-    expect(jobsSource).toContain("this.#documentParseExecutor.process(request)");
+    expect(jobsSource).not.toContain("processQueuedParses(");
     expect(mainSource).not.toContain("getJobsService().processQueuedParses({ limit: 20 })");
     expect(mainSource).toContain("getJobsService().datasetImportExecutor()");
     expect(mainSource).toContain("getDatasetImportJobExecutor().process({ limit: 20 })");

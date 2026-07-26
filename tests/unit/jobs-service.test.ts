@@ -950,7 +950,7 @@ describe("jobs service", () => {
     seedExplicitPdfParseJob(vaultPath, sourceId);
     expect(jobs.list({ classes: ["parse"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
 
-    const parseResult = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    const parseResult = await jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
     const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
     const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
       knowledgePagePath: string;
@@ -1008,7 +1008,7 @@ describe("jobs service", () => {
 
     jobs.processQueuedCaptures({ jobIds: captureResult.jobIds });
     seedExplicitPdfParseJob(vaultPath, sourceId);
-    const parseResult = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    const parseResult = await jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
     const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
     const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
       artifacts: { kind: string; path: string }[];
@@ -1063,7 +1063,7 @@ describe("jobs service", () => {
 
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     for (const sourceId of captured.sourceIds) seedExplicitPdfParseJob(vaultPath, sourceId);
-    await jobs.processQueuedParses({ sourceIds: captured.sourceIds, limit: 10 });
+    await jobs.documentParseExecutor().process({ sourceIds: captured.sourceIds, limit: 10 });
 
     const queued = jobs.list({ classes: ["ocr"], states: ["queued"], limit: 10 }).jobs;
     const waiting = jobs.list({ classes: ["ocr"], states: ["waiting_dependency"], limit: 10 }).jobs;
@@ -1110,7 +1110,7 @@ describe("jobs service", () => {
 
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(vaultPath, sourceId);
-    const parsed = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    const parsed = await jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
     expect(parsed.ocrWaitingSourceIds).toEqual([sourceId]);
     expect(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
 
@@ -1207,7 +1207,7 @@ describe("jobs service", () => {
 
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(vaultPath, sourceId);
-    const parsed = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    const parsed = await jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
 
     expect(parsed).toMatchObject({
       processed: 1,
@@ -1305,7 +1305,7 @@ describe("jobs service", () => {
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(vaultPath, sourceId);
-    const parsed = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    const parsed = await jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
 
     expect(parsed.agentReadySourceIds).toEqual([sourceId]);
     expect(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
@@ -1369,7 +1369,7 @@ describe("jobs service", () => {
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(vaultPath, sourceId);
-    expect((await jobs.processQueuedParses({ sourceIds: [sourceId] })).agentReadySourceIds).toEqual([]);
+    expect((await jobs.documentParseExecutor().process({ sourceIds: [sourceId] })).agentReadySourceIds).toEqual([]);
     expect(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]?.sourceId)
       .toBe(sourceId);
 
@@ -1451,7 +1451,7 @@ describe("jobs service", () => {
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(vaultPath, sourceId);
-    await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    await jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
 
     expect(await jobs.processQueuedAgentIngest({ sourceIds: [sourceId] })).toEqual({
       processed: 1,
@@ -1501,7 +1501,7 @@ describe("jobs service", () => {
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(vaultPath, sourceId);
-    await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    await jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
     const sourceRecordPath = findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`);
     const sourceRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as {
       artifacts: { id: string; path: string }[];
@@ -1557,7 +1557,7 @@ describe("jobs service", () => {
 
     let parseResult;
     try {
-      parseResult = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+      parseResult = await jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
     } finally {
       terminalObservation.restore();
     }
@@ -1608,7 +1608,7 @@ describe("jobs service", () => {
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(vaultPath, sourceId);
-    await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    await jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
     const queuedOcr = requireValue(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]);
     const terminalObservation = observeRequiredChildBeforeParentTerminal(
       vaultPath,
@@ -1666,7 +1666,7 @@ describe("jobs service", () => {
     const sourceId = requireFirst(captured.sourceIds);
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(vaultPath, sourceId);
-    await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    await jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
 
     const result = await jobs.processQueuedOcr({ sourceIds: [sourceId] });
 
@@ -1698,7 +1698,7 @@ describe("jobs service", () => {
     const sourcePagePath = path.join(vaultPath, beforeRecord.knowledgePagePath);
     fs.appendFileSync(sourcePagePath, "\nUser-authored source-page note.\n", "utf8");
 
-    const parseResult = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    const parseResult = await jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
     const afterRecord = JSON.parse(fs.readFileSync(beforeRecordPath, "utf8")) as {
       artifacts: { kind: string; path: string }[];
       metadata: Record<string, unknown>;
@@ -1978,7 +1978,7 @@ describe("jobs service", () => {
     for (const sourceId of captureResult.sourceIds) seedExplicitPdfParseJob(vaultPath, sourceId);
     expect(jobs.list({ classes: ["parse"], states: ["queued"], limit: 10 }).jobs).toHaveLength(2);
 
-    const parseResult = await jobs.processQueuedParses({ sourceIds: captureResult.sourceIds, limit: 10 });
+    const parseResult = await jobs.documentParseExecutor().process({ sourceIds: captureResult.sourceIds, limit: 10 });
 
     expect(parseResult).toMatchObject({ processed: 2, completed: 2, failed: 0 });
     expect([...parseResult.agentReadySourceIds].sort()).toEqual([...captureResult.sourceIds].sort());
@@ -2059,7 +2059,7 @@ describe("jobs service", () => {
     jobs.processQueuedCaptures({ jobIds: captured.jobIds });
     seedExplicitPdfParseJob(vaultPath, sourceId);
 
-    const parsed = await jobs.processQueuedParses({ sourceIds: [sourceId] });
+    const parsed = await jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
     expect(parsed).toMatchObject({ completed: 1, agentReadySourceIds: [], ocrWaitingSourceIds: [sourceId] });
     expect(jobs.list({ classes: ["ocr"], states: ["queued"] }).jobs[0]?.sourceId).toBe(sourceId);
     expect(jobs.list({ classes: ["agent_ingest"], states: ["waiting_dependency"] }).jobs[0]?.sourceId).toBe(sourceId);
