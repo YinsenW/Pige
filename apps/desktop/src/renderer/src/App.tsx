@@ -20,6 +20,14 @@ import { ConversationScrollRail } from "./components/ConversationScrollRail";
 import { ConversationEarlierControl, projectCompletedConversation, useConversationPagination } from "./components/ConversationPagination";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
+import {
+  homeConversationStateForJob,
+  isTerminalConversationTurn,
+  selectCurrentNoSourceTurn,
+  terminalTurnOwnsComposerSubmission,
+  type HomeComposerSubmissionBinding,
+  type HomeConversationTurnState
+} from "./components/HomeConversationTurnState";
 import { WindowModeToggle } from "./components/WindowModeToggle";
 import { useWindowControls } from "./components/useWindowControls";
 import type { ReaderInlineReferenceActivation } from "./components/ReaderInlineReferenceSurface";
@@ -149,7 +157,7 @@ export type DevelopmentNotice = {
   readonly capability: DevelopmentCapability;
   readonly state: "development" | "unavailable";
 };
-type HomeAgentUiState = "idle" | "accepted" | "running" | "waiting" | "failed" | "completed";
+type HomeAgentUiState = HomeConversationTurnState;
 type ConversationCopyState = {
   readonly messageId: string;
   readonly state: "copying" | "copied" | "failed";
@@ -3071,7 +3079,7 @@ function HomeComposer(props: {
   });
   const conversationCopySequenceRef = useRef(0);
   const conversationCopyResetTimerRef = useRef<number | undefined>(undefined);
-  const composerSubmitInFlightRef = useRef(false);
+  const composerSubmissionRef = useRef<HomeComposerSubmissionBinding | null>(null);
   const composerCompositionActiveRef = useRef(false);
   const composerCompositionRaceRef = useRef(false);
   const composerCompositionTimerRef = useRef<number | undefined>(undefined);
@@ -3523,33 +3531,19 @@ function HomeComposer(props: {
     )
     .slice(0, 5);
   const proposalReviewPending = props.recentJobs.some((job) => job.state === "awaiting_review");
-  const latestTurnJob = latestTurn
-    ? props.recentJobs.find((job) => job.id === latestTurn.jobId)
-    : undefined;
-  const newestNoSourceActiveTurn = props.recentJobs.find((job) =>
-    job.class === "agent_turn" &&
-    !job.sourceDisplayName &&
-    !job.sourceId &&
-    (job.state === "running" || job.state === "cancel_requested")
-  );
-  const exactNoSourceCurrentTurn = latestTurnJob &&
-    latestTurnJob.class === "agent_turn" &&
-    !latestTurnJob.sourceDisplayName &&
-    !latestTurnJob.sourceId &&
-    (
-      !activeAgentDraftRef.current ||
-      activeAgentDraftRef.current.jobId === latestTurnJob.id
-    )
-    ? latestTurnJob
-    : undefined;
-  const noSourceCurrentTurn = exactNoSourceCurrentTurn ??
-    (latestTurn ? undefined : newestNoSourceActiveTurn);
+  const noSourceCurrentTurn = selectCurrentNoSourceTurn({
+    latestTurn,
+    recentJobs: props.recentJobs,
+    ...(activeAgentDraftRef.current?.jobId
+      ? { activeDraftJobId: activeAgentDraftRef.current.jobId }
+      : {})
+  });
   const noSourceCancellableLatestTurn = noSourceCurrentTurn &&
     (noSourceCurrentTurn.state === "running" || noSourceCurrentTurn.state === "cancel_requested")
     ? noSourceCurrentTurn
     : undefined;
   const effectiveAgentRunState = noSourceCurrentTurn
-    ? homeUiStateForJobState(noSourceCurrentTurn.state) ?? agentRunState
+    ? homeConversationStateForJob(noSourceCurrentTurn.state) ?? agentRunState
     : agentRunState;
   const effectiveAgentError = noSourceCurrentTurn
     ? noSourceCurrentTurn.error ?? agentError
@@ -3679,6 +3673,20 @@ function HomeComposer(props: {
     setAgentDraft(null);
   };
 
+  const beginComposerSubmission = (clientTurnId: string): boolean => {
+    const vaultId = activeVaultIdRef.current;
+    if (!vaultId || composerSubmissionRef.current) return false;
+    composerSubmissionRef.current = { vaultId, clientTurnId };
+    setComposerSubmitActive(true);
+    return true;
+  };
+
+  const finishComposerSubmission = (clientTurnId: string): void => {
+    if (composerSubmissionRef.current?.clientTurnId !== clientTurnId) return;
+    composerSubmissionRef.current = null;
+    setComposerSubmitActive(false);
+  };
+
   const refreshConversation = async (): Promise<AgentConversationInitialTimeline | undefined> => {
     const vaultId = props.activeVault?.vaultId;
     if (!vaultId) {
@@ -3745,6 +3753,10 @@ function HomeComposer(props: {
   }, []);
 
   useEffect(() => {
+    if (composerSubmissionRef.current?.vaultId !== props.activeVault?.vaultId) {
+      composerSubmissionRef.current = null;
+      setComposerSubmitActive(false);
+    }
     conversationLoadSequence.current += 1;
     noteOpenSequence.current += 1;
     inlineReferenceSequence.current += 1;
@@ -3780,13 +3792,13 @@ function HomeComposer(props: {
     ) {
       return;
     }
-    const nextState = homeUiStateForJobState(latestTurn.state);
+    const nextState = homeConversationStateForJob(latestTurn.state);
     if (nextState) setAgentRunState(nextState);
     setAgentError(latestTurn.error ?? null);
     if (
       latestTurn.state !== "queued" &&
       latestTurn.state !== "running" &&
-      !composerSubmitInFlightRef.current
+      !composerSubmissionRef.current
     ) {
       clearAgentDraft();
     }
@@ -3795,6 +3807,28 @@ function HomeComposer(props: {
     latestTurn?.jobId,
     latestTurn?.state,
     latestTurn?.error?.code
+  ]);
+
+  useEffect(() => {
+    if (!latestTurn || !isTerminalConversationTurn(latestTurn.state)) return;
+    const submission = composerSubmissionRef.current;
+    if (submission && conversationTimeline && terminalTurnOwnsComposerSubmission({
+      conversationId: conversationTimeline.conversationId,
+      latestTurn,
+      ...(activeAgentDraftRef.current ? { activeDraft: activeAgentDraftRef.current } : {}),
+      submission,
+      activeVaultId: activeVaultIdRef.current
+    })) {
+      finishComposerSubmission(submission.clientTurnId);
+      clearAgentDraft();
+    }
+    void props.onHomeStateChanged().catch(() => undefined);
+  }, [
+    agentDraft?.conversationId,
+    agentDraft?.jobId,
+    composerSubmitActive,
+    latestTurn?.jobId,
+    latestTurn?.state
   ]);
 
   useEffect(() => {
@@ -3811,7 +3845,7 @@ function HomeComposer(props: {
       (!hasText && !hasAttachments) ||
       (!homeModelSendAvailable && !hasAttachments) ||
       modelSwitching ||
-      composerSubmitInFlightRef.current
+      composerSubmissionRef.current
     ) return;
     if (hasRejectedPaste) {
       setCaptureError(props.t("home.largePasteRejectedSubmissionBlocked"));
@@ -3833,8 +3867,7 @@ function HomeComposer(props: {
         ? stagedComposerAttemptRef.current.clientTurnId : createAgentClientTurnId();
       stagedComposerAttemptRef.current = { key: attemptKey, clientTurnId };
       followConversationRef.current = true;
-      composerSubmitInFlightRef.current = true;
-      setComposerSubmitActive(true);
+      if (!beginComposerSubmission(clientTurnId)) return;
       setCaptureError(null);
       setAttachmentSubmissionNotice(null);
       setAgentError(null);
@@ -3857,7 +3890,6 @@ function HomeComposer(props: {
             : props.t("home.pastedText"))
         }
       ]);
-      const followUpConversation = canFollowUpToConversation(conversationTimeline) ? conversationTimeline : undefined;
       beginAgentDraft(clientTurnId);
       try {
         const outcome = await window.pige.agent.submitTurn({
@@ -3866,11 +3898,7 @@ function HomeComposer(props: {
           inputKind: "file_picker",
           locale: props.locale,
           stagedItems,
-          clientTurnId,
-          ...(followUpConversation ? {
-            conversationId: followUpConversation.conversationId,
-            expectedTailEventId: followUpConversation.tailEventId
-          } : {})
+          clientTurnId
         }, submittedFiles);
         if (outcome.state !== "accepted") {
           clearAgentDraft();
@@ -3932,14 +3960,11 @@ function HomeComposer(props: {
         setAgentRunState("failed");
         void refreshConversation();
       } finally {
-        composerSubmitInFlightRef.current = false;
-        setComposerSubmitActive(false);
+        finishComposerSubmission(clientTurnId);
       }
       return;
     }
     followConversationRef.current = true;
-    composerSubmitInFlightRef.current = true;
-    setComposerSubmitActive(true);
     setCaptureError(null);
     setAttachmentSubmissionNotice(null);
     setAgentError(null);
@@ -3959,6 +3984,7 @@ function HomeComposer(props: {
     const clientTurnId = stagedComposerAttemptRef.current?.key === attemptKey
       ? stagedComposerAttemptRef.current.clientTurnId
       : createAgentClientTurnId();
+    if (!beginComposerSubmission(clientTurnId)) return;
     stagedComposerAttemptRef.current = { key: attemptKey, clientTurnId };
     draftRevisionRef.current = clearedDraftRevision;
     props.onDraftChange("");
@@ -4075,8 +4101,7 @@ function HomeComposer(props: {
       setAgentRunState("failed");
       void refreshConversation();
     } finally {
-      composerSubmitInFlightRef.current = false;
-      setComposerSubmitActive(false);
+      finishComposerSubmission(clientTurnId);
     }
   };
 
@@ -4095,7 +4120,7 @@ function HomeComposer(props: {
     event.preventDefault();
     if (
       event.repeat ||
-      composerSubmitInFlightRef.current ||
+      composerSubmissionRef.current ||
       (!homeModelSendAvailable && stagedComposerItems.length === 0) ||
       modelSwitching ||
       agentRunState === "accepted" ||
@@ -4165,17 +4190,15 @@ function HomeComposer(props: {
     const request = props.fileDropRequest;
     if (
       !request ||
-      composerSubmitInFlightRef.current ||
+      composerSubmissionRef.current ||
       handledFileDropClientTurnIdRef.current === request.clientTurnId
     ) return;
     handledFileDropClientTurnIdRef.current = request.clientTurnId;
-    composerSubmitInFlightRef.current = true;
-    setComposerSubmitActive(true);
+    if (!beginComposerSubmission(request.clientTurnId)) return;
     props.onFileDropRequestConsumed(request.clientTurnId);
     void submitHomeFiles(request.files, "file_drop", request.text, request.clientTurnId)
       .finally(() => {
-        composerSubmitInFlightRef.current = false;
-        setComposerSubmitActive(false);
+        finishComposerSubmission(request.clientTurnId);
       });
   }, [props.fileDropRequest?.clientTurnId, composerSubmitActive]);
 
@@ -4185,7 +4208,7 @@ function HomeComposer(props: {
     setAgentRunState("accepted");
     await props.onRetryJob(retryableLatestTurn.jobId);
     const nextTimeline = await refreshConversation();
-    const nextState = homeUiStateForJobState(nextTimeline?.latestTurn?.state);
+    const nextState = homeConversationStateForJob(nextTimeline?.latestTurn?.state);
     setAgentRunState(nextState ?? "failed");
     setAgentError(nextTimeline?.latestTurn?.error ?? null);
   };
@@ -4978,18 +5001,6 @@ function jobStateMessageKey(job: JobSummary): string {
   if (job.state === "waiting_dependency") return "home.jobWaiting";
   if (job.state === "awaiting_review") return "home.jobReview";
   return "home.jobFailed";
-}
-
-function homeUiStateForJobState(state: JobState | undefined): HomeAgentUiState | undefined {
-  if (state === "queued") return "accepted";
-  if (state === "running" || state === "cancel_requested") return "running";
-  if (
-    state === "waiting_dependency" ||
-    state === "awaiting_review"
-  ) return "waiting";
-  if (state === "completed" || state === "completed_with_warnings" || state === "compacted") return "completed";
-  if (state === "failed_retryable" || state === "failed_final" || state === "cancelled") return "failed";
-  return undefined;
 }
 
 function isConversationPollingState(state: JobState | undefined): boolean {

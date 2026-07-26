@@ -37,7 +37,7 @@
     "scope": "Independent Product Planning review of exact external-root reconnect: Jobs projects only required body-free reconnect eligibility, Main owns the chooser and private dependency identity, BackupRestoreService proves and persists the same stable binding, BackupCoordinator resumes only the same reread Job from current truth, generic retry cannot bypass repair, and statuses remain unchanged.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 26,
-    "reviewedSha256": "e20e0d2887ec5406eb450b4901346ec1d8acea450314e9c4523eb5dc8f0c8627"
+    "reviewedSha256": "4dde25f17b8a3a6680bd48b3bedc12ebea9c392f428acd1fc1a0b26b3fa548c5"
   },
   "reviewers": [{
     "reviewerId": "backup-reconnect-planning-review",

@@ -1343,21 +1343,28 @@ References:
 
 Status: Accepted
 Date: 2026-07-09
+Revised: 2026-07-26
 
 Decision:
 
-PRD P0 defines the `v0.1 Public Alpha` release acceptance scope. It is not the implementation scope for a single task, pull request, AI session, or milestone. Implementation follows `docs/MILESTONES.md` and `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md` as vertical slices with explicit "Do not build yet" boundaries.
+PRD P0 is `v0.1 Public Alpha` acceptance, not one task or PR. Under unchanged P0-P9/M0-M7
+assignments, core journeys outrank rare-edge completeness. The first selection after
+reconnect PR #170 is the production file-ingestion loop on sole main: handoff/drop/attachment,
+one Pi turn, preserved source, selected tools, final cited answer and restart recovery,
+proven in Electron.
 
 Rationale:
 
-The first public alpha should be highly usable, so the P0 list is intentionally broad. If future AI agents interpret that list as one work item, they will overbuild, mix unrelated concerns, skip foundations, or create impressive features that do not compose into a reliable local product.
+An alpha becomes usable through composed journeys, not isolated breadth or document status.
 
 Consequences:
 
-- Every implementation task should name a milestone/phase or a smaller vertical slice inside a phase.
-- Later-phase items should not be pulled forward merely because the design context is nearby.
-- Small enabling contracts for future phases are allowed when they protect architecture or data safety, but full feature implementation should wait for the scheduled phase.
-- Any P0/P1/P2 priority change must update PRD, Milestones, Implementation Playbook, Spec Traceability, and Decision Log together.
+- Core paths target best implementation, common support reliable use, and rare edges may
+  fail closed/planned. Settings/Backup/recovery breadth stays normal unless it blocks the
+  core loop or presents P0 data-loss/security risk.
+- Tasks retain Requirement/Build/Exit assignments; scope/assignment changes update all owners.
+- The AI Development Guide's early-Draft rule exposes the first coherent green slice for
+  Planning/UI review without weakening Ready/merge gates.
 
 References:
 
@@ -1365,6 +1372,7 @@ References:
 - `docs/MILESTONES.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 - `docs/SPEC_TRACEABILITY.md`
+- `docs/AI_DEVELOPMENT_GUIDE.md`
 
 ### D-20260709-Public-Alpha-Requires-Usability-Scenario
 
