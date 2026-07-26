@@ -542,7 +542,8 @@ scores. Other DTOs follow
 Schema-v1 `agent.submitTurn` binds optional client/conversation/tail IDs and strict
 `current_note` scope; preload projects no path. `agent.conversation` returns at most 100
 bounded messages, tail, `canFollowUp` and safe latest Job; Home asks for 24. Results omit
-bodies, paths, prompts, credentials, endpoints and raw errors.
+private bodies, paths, Provider data and raw errors. Source citations reuse
+`AgentTurnAnswer.citations`; no IPC/DTO changes.
 
 `AgentSubmitTurnRequestSchema.superRefine` requires `conversationId` and
 `expectedTailEventId` together: `follow_up` requires them, `file_picker` may carry them,
