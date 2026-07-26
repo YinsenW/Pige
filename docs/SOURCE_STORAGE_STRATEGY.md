@@ -45,34 +45,29 @@ Services refer to `knowledgeRoot`, `managedCopyRoot`, and `artifactRoot`. Existi
 
 ### 3.1 Root Identity And Resolution
 
-An absolute external path is a machine binding, not durable source identity. Machine-local `vault-bindings.json` assigns every external managed-copy root a stable `root_` ID:
+An absolute external path is a machine binding, not durable identity.
+`VaultBindingsFileSchema`, `ExternalManagedCopyRootBindingSchema`, and
+`DefaultManagedCopyRootSelectionSchema` own its machine-local root/vault/purpose/path/
+availability/time fields and optional per-vault default. Root IDs are unique within the registry;
+the default must reference that vault. No selection means no usable external default.
 
-```ts
-type ExternalRootBinding = {
-  rootId: string;
-  vaultId: string;
-  purpose: "managed_copy";
-  absolutePath: string;
-  availability: "available" | "missing" | "permission_needed";
-  createdAt: string;
-  updatedAt: string;
-};
+New records use `managedCopy.rootId/pathBasis/path`: `root_vault_managed` pairs only
+with `vault_relative`, while external roots pair only with `root_relative`; an external root cannot claim `vault_relative`.
+Changing a default never retargets records. A missing
+binding waits with `external_source`/`reconnect_path`, never a guessed display path.
 
-type DefaultManagedCopyRootSelection = {
-  vaultId: string;
-  rootId: string;
-};
-```
+### 3.2 Exact External-Root Reconnect
 
-`VaultBindingsFileSchema`, `ExternalManagedCopyRootBindingSchema`, and `DefaultManagedCopyRootSelectionSchema` in `packages/schemas/src/index.ts` are the executable registry contract. Root IDs are unique within the registry. Its `defaults` list selects at most one external managed-copy root per vault, and that `rootId` must belong to the same vault. No selection means no usable external default; callers must not silently choose the newest binding.
-
-New source records locate managed copies with `managedCopy.rootId`, `managedCopy.pathBasis`, and `managedCopy.path`:
-
-- `root_vault_managed` plus `vault_relative` resolves a validated path such as `raw/files/...` under the current vault.
-- An external `root_...` binding plus `root_relative` resolves a validated relative path under the bound absolute root.
-- The executable Source Record schema rejects the inverse pairings: an external root cannot claim `vault_relative`, and `root_vault_managed` cannot claim `root_relative`.
-- Switching the default external root creates/selects another root ID. It never retargets existing source records implicitly.
-- A missing binding moves dependent jobs to `waiting_dependency` with `external_source`/`reconnect_path`; it does not guess from a display path.
+Main's chooser passes its private result to `BackupRestoreService`, sole validator and
+atomic `vault-bindings.json` writer; renderer never supplies a path. `vault_binding`
+means `dependencyId=rootId` and derives current records for that vault/root;
+`external_source` means `dependencyId=sourceId` and rereads that record to derive current
+root, revision, `root_relative` locator, checksum and size. IDs are not interchangeable.
+The service accepts only a canonical real non-symlink directory, revalidates ancestry,
+confinement and no-follow file identity, then atomically persists and rereads the same
+machine-local `vaultId`/`rootId` binding and evidence. Empty/wrong/changed selections do
+nothing. No private field crosses preload or enters durable/exported projections;
+referenced-original repair is excluded.
 
 Compatibility rule: existing schema-v1 records without `rootId` contain vault-relative managed-copy paths. They continue to resolve under `knowledgeRoot` and must not be reinterpreted against a newly selected external root. A later additive migration may attach `root_vault_managed` after verifying the checksum.
 
@@ -257,39 +252,23 @@ The complete backup include/exclude matrix and visible options are owned by
 `docs/DATA_ARCHITECTURE.md#11-backup-policy`. This section adds only the source-root
 consequences below.
 
-External managed-copy rule:
+External managed-copy roots hold Pige-owned evidence. Backup includes every reachable
+record-selected copy only after stable ID, checksum/size, archive mapping, binding,
+ancestry/file identity and streamed checksum fences; missing/rebound roots keep the same
+Job in `waiting_dependency`/`reconnect_path`. An explicitly incomplete backup remains
+unimplemented. Safe projections omit bindings; referenced originals stay excluded.
 
-- An external managed-copy root contains Pige-owned evidence, not merely a reference to user-owned originals. Backup preflight therefore attempts to include every reachable managed copy selected by the source records.
-- Backup includes every reachable selected copy. Stable IDs, checksum, size, archive mapping,
-  binding, ancestry, file identity, and streamed checksum fence each payload before publish.
-- Missing, blocked, or rebound roots put the same Job in `waiting_dependency` with
-  `reconnect_path`. An explicitly incomplete backup remains unimplemented.
-- Archive/UI projections exclude raw bindings and carry stable IDs plus redacted facts.
-- Externally referenced originals remain excluded by default and are listed separately from external managed-copy roots.
-
-Restore behavior:
-
-- Restored Markdown knowledge works without external originals.
-- In-vault managed source copies restore under their portable managed-copy root.
-- Included external copies restore under `raw/` as validated, binding-free
-  `root_vault_managed` SourceRecords.
-- Future reconnect/migration preserves IDs and never infers authority from labels/paths.
-- Referenced originals are marked available, missing, or changed after restore scan.
-- The user can relink missing originals later.
+Restore keeps Markdown usable without originals, restores in-vault and included external
+copies as validated binding-free `root_vault_managed` records under `raw/`, and reports
+referenced originals available/missing/changed. Reconnect/migration preserves IDs and
+never infers authority from labels or paths.
 
 ## 8. Settings Requirements
 
-Settings > Knowledge Base > Vault & Note Storage should expose only necessary controls in v0.1. In Chinese UI, label it plainly as "仓库与笔记存储". The page should feel like an Obsidian-style vault location page, not an implementation dashboard:
-
-- Current vault name and active vault path.
-- Note/knowledge root path.
-- Managed source-copy location (the v1 UI/DTO may label this “Source asset root”).
-- Default source storage strategy.
-- Managed source copy inclusion in backups.
-- Reveal knowledge root.
-- Reveal managed-copy root.
-- Open/create vault.
-- Backup and restore entry points.
+Settings > Knowledge Base > Vault & Note Storage (“仓库与笔记存储”) is a location page,
+not an implementation dashboard. It exposes vault identity/path, knowledge and managed-copy
+locations (v1 may say “Source asset root”), default strategy, backup inclusion, safe reveal,
+open/create, and Backup/Restore entry points only.
 
 Avoid showing low-level path internals, symlink mechanics, checksum details, database paths, cache folders, or parser artifact folders by default.
 

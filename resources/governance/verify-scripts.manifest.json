@@ -3,7 +3,7 @@
   "algorithm": "sha256",
   "files": [
     { "path": "scripts/verify/architecture-reset.mjs", "sha256": "0c7115a235f1f028064451d1a71991e0e0bcd330ca8b40f61c8c0d011416d803" },
-    { "path": "scripts/verify/contract-consistency.mjs", "sha256": "2f3a11114b77728e31f8d989ca48ee3d2e4e127a8ff25fea43c769091d7c4434" },
+    { "path": "scripts/verify/contract-consistency.mjs", "sha256": "f448dc44c2ebcc2b3f0f3950bb2b9893f60227f3533298b909792ecb395621e1" },
     { "path": "scripts/verify/contract-job-recovery.mjs", "sha256": "1b1787cc50f3dbf085783c030e0a439e4d8ff25d7f5fdf217aa91239183218d0" },
     { "path": "scripts/verify/contract-security-egress.mjs", "sha256": "f27b2c61c60cb8588739f7d81a2141ec019de8028d318747401ec8a02eaf7e37" },
     { "path": "scripts/verify/contract-source-lifecycle.mjs", "sha256": "a8ecc9d0d3e92be6cf8d265675dc26febd0331e6dc6448cca23a45d4bdc3678c" },

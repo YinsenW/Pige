@@ -383,34 +383,13 @@ Rules:
 - `code`, `domain`, `messageKey`, `retryable`, and `userAction` must match the API/diagnostic error for the same failure.
 - UI status cards should use `userAction` to choose the primary action, such as retry, repair tool, configure model, grant permission, or choose path.
 
-```ts
-type WaitingDependencySummary = {
-  dependencyKind:
-    | "model_provider"
-    | "local_tool"
-    | "local_model"
-    | "runtime_capability"
-    | "vault_binding"
-    | "external_source";
-  dependencyId?: string;
-  requiredAction:
-    | "configure_model"
-    | "repair_tool"
-    | "download_model"
-    | "enable_capability"
-    | "reconnect_path";
-  messageKey: string;
-};
-```
-
-Rules:
-
-- `inputRefs` and `outputRefs` are references, not duplicated content.
-- `actor.runtimeKind` and `actor.clientCapabilityTier` keep the record portable enough for a future remote Agent backend without storing desktop paths or credentials.
-- `policyContextId` and `policyHash` record which Agent Runtime Policy Context shaped model-dependent work; they must not store full settings files or secrets.
-- Full orchestration writers include `waitingDependency` when `state` is `waiting_dependency`. Existing bridge records without it remain compatible and must be augmented before an automated resume decision.
-- `privacy` records whether cloud model calls, network, shell, external files, or sensitive permissions were involved.
-- Unknown fields must be preserved during migrations.
+`WaitingDependencySummary` uses kind `model_provider | local_tool | local_model |
+runtime_capability | vault_binding | external_source`, optional private `dependencyId`,
+action `configure_model | repair_tool | download_model | enable_capability |
+reconnect_path`, and `messageKey`. Full writers include it for `waiting_dependency`;
+legacy omissions require augmentation before resume. Refs never duplicate content;
+actor/client, policy/hash and privacy fields remain body/secret-free and portable, and
+migrations preserve unknown fields.
 
 ## 7. Idempotency Rules
 
@@ -500,6 +479,10 @@ Rules:
 - Retry must not re-run a cloud model call unnecessarily if a durable proposal/output already exists.
 - Retry must explain whether it continues from a checkpoint or restarts a phase.
 - Job coordination never selects Pi's next semantic action.
+- Waiting metadata is not repair proof. Generic/Backup retry returns `not_allowed` for
+  Backup `reconnect_path`; only Main's private proof may resume that same Job.
+  `BackupCoordinatorService` re-proves current binding, evidence and Job/dependency for
+  reconnect/recovery, never clears the wait from metadata, and leaves `failed_retryable` unchanged.
 
 ## 9. Cancellation
 

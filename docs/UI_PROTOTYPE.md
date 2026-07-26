@@ -904,16 +904,26 @@ backup/restore protect the vault without displacing storage ownership.
 
 Required controls:
 
-- Show current vault name/path first, then note and source roots separately even when colocated.
-- Let users choose copy-to-Pige or reference-original for new sources; defer advanced link strategies until proven safe.
-- Offer separate platform-neutral Show note storage and Show source storage actions; unavailable external source storage reads “not connected” and has no fallback reveal.
-- One local busy/status surface owns reveal; disable conflicting storage controls in flight, show only localized pathless results, and restore focus to the invoking action.
-- Open or create vaults; recent-vault removal never deletes files.
-- Own restarted user Backup here with localized valid actions and no raw Job/path/error or rollback child; latest completion derives Last backup.
-- Show schema and note/source/copy/reference/artifact counts when available.
-- Warn against nested/system locations; never hide storage controls inside backup, export, diagnostics, or maintenance.
-- Do not expose database file paths, cache folders, parser artifact internals, checksums, or symlink mechanics on the default page.
-- No one-click vault move in v0.1; any future move requires preflight, backup, verified copy, and rollback.
+- Show vault name/path, then separate note/source roots; offer copy/reference for new
+  sources, safe root reveals, open/create, and non-deleting recent-vault removal.
+- Unavailable external storage says “not connected” without fallback reveal. One busy,
+  pathless localized surface fences storage actions and restores invoking focus.
+- This page alone owns restarted user Backup, valid actions and latest completion; never
+  expose raw Job/path/error or rollback children.
+- A `reconnect_path` Backup offers one focus-owned Reconnect action. Main completes
+  chooser→proof→persistence→same-Job resume; renderer sends only vault/Job/request identity,
+  never calls `jobs.retry`, and polls. Cancel restores focus with no notice or mutation;
+  `not_found` uses stale copy, and no state exposes a path/reason/modal/permission:
+  - `backup.reconnectManagedSourceChecking`: “Checking source location…”
+  - `backup.reconnectManagedSourceResolved`: “Source location reconnected. This backup is continuing.”
+  - `backup.reconnectManagedSourceFailed`: “Pige could not reconnect this source location. Choose the folder again.”
+  - `backup.reconnectManagedSourceStale`: “This backup changed before reconnection finished. Review its current status.”
+  Retain `backup.reconnectManagedSource`/`backup.waitingManagedSourceReconnect`; retire
+  `backup.reconnectManagedSourceUnavailable`. Extract only this presentation/fencing to
+  `components/VaultBackupSettingsPanel.tsx`; preserve layout and unrelated behavior.
+- Show available schema/content counts and warn on nested/system locations. Keep storage
+  controls here; hide database/cache/parser/checksum/symlink internals. Vault move remains
+  unavailable until preflight, backup, verified copy and rollback exist.
 
 Reset Local Search Database is a repair action under Index & Maintenance. It deletes only
 rebuildable `.pige` indexes/caches and recreates them from Markdown, Dataset Bundles,
@@ -1224,39 +1234,9 @@ Package details should show:
 
 ### Backup And Restore
 
-```txt
-Backup and Restore
-
-Create Backup
-Last backup: Never
-
-Restore Backup
-
-Options
-[x] Include Agent memory
-[x] Include conversation history
-[x] Include confirmation proposals and operation summaries
-[ ] Include fast-restore database cache
-[ ] Include encrypted model settings
-```
-
-Restore preview:
-
-```txt
-Restore Pige Backup
-
-Created: 2026-07-09 12:00
-Notes: 42
-Sources: 18
-Conversations: 9
-Memories: 12
-Includes secrets: No
-
-Restore into:
-/Users/name/Documents/Pige Vault Restored
-
-Restore
-```
+The Vault section above owns current Backup presentation. Restore preview shows only the
+typed archive summary and explicit identity mode owned by the API/Data contracts; no raw
+path, secret, entry detail, or fixed include-option mock is UI authority.
 
 ### Appearance And Language
 
