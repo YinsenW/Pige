@@ -479,7 +479,7 @@ describe("Note Agent production UI", () => {
     });
     expect(conversation).toHaveBeenCalledWith({
       scope: { kind: "current_note", pageId: "page_current_note_1" },
-      limit: 24
+      limit: 100
     });
 
     const textarea = required(container.querySelector<HTMLTextAreaElement>("textarea"));
@@ -612,7 +612,7 @@ describe("Note Agent production UI", () => {
     for (const [request] of conversation.mock.calls) {
       expect(request).toEqual({
         scope: { kind: "current_note", pageId: "page_current_note_recovery" },
-        limit: 24
+        limit: 100
       });
     }
 
@@ -651,8 +651,8 @@ describe("Note Agent production UI", () => {
     });
     expect(container.textContent).toContain("New page answer");
     expect(container.textContent).not.toContain("Stale old page answer");
-    expect(conversation).toHaveBeenCalledWith({ scope: { kind: "current_note", pageId: "page_old" }, limit: 24 });
-    expect(conversation).toHaveBeenCalledWith({ scope: { kind: "current_note", pageId: "page_new" }, limit: 24 });
+    expect(conversation).toHaveBeenCalledWith({ scope: { kind: "current_note", pageId: "page_old" }, limit: 100 });
+    expect(conversation).toHaveBeenCalledWith({ scope: { kind: "current_note", pageId: "page_new" }, limit: 100 });
 
     await unmount(dom, root);
   });

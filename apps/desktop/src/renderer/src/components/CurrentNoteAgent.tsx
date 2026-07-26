@@ -72,7 +72,7 @@ export function CurrentNoteAgent(props: {
     try {
       const next = await window.pige.agent.conversation({
         scope: { kind: "current_note", pageId },
-        limit: 24
+        limit: 100
       });
       if (
         sequence === loadSequenceRef.current &&
