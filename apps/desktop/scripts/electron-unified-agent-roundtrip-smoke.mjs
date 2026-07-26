@@ -127,6 +127,17 @@ async function runOrchestrator() {
     assert.equal(connect.datasetCitationVisible, true);
     assert.equal(connect.datasetImportJobCount, 1);
     assert.deepEqual(connect.failedRetryableJobs, []);
+    assert.equal(connect.durableSnapshot.messageIdentities.length, 12);
+    assert.equal(connect.durableSnapshot.relevantJobs.filter((job) => job.class === "agent_turn").length, 6);
+    assert.equal(connect.durableSnapshot.relevantJobs.filter((job) => job.class === "dataset_import").length, 1);
+    assert.equal(connect.durableSnapshot.sourceIds.length, 4);
+    assert.equal(connect.durableSnapshot.datasetIds.length, 1);
+    assertUniqueIdentities(connect.durableSnapshot.messageIdentities.map((message) => message.id), "conversation event");
+    assertUniqueIdentities(connect.durableSnapshot.relevantJobs.map((job) => job.id), "Job");
+    assertUniqueIdentities(connect.durableSnapshot.pageIdentities.map((page) => page.pageId), "page");
+    assertUniqueIdentities(connect.durableSnapshot.sourceIds, "source");
+    assertUniqueIdentities(connect.durableSnapshot.datasetIds, "Dataset");
+    assertUniqueIdentities(connect.durableSnapshot.activities.map((activity) => activity.operationId), "Activity");
     assert.ok(requests.filter((request) => request.method === "GET" && request.path === "/v1/models").length >= 2);
     assert.ok(requests.filter((request) => request.method === "POST" && request.path === "/v1/responses").length >= 7);
     assert.ok(requests.every((request) => request.authorization === `Bearer ${syntheticToken}`));
@@ -226,10 +237,11 @@ async function runChild(phase, values) {
   assert.equal(stderr.includes(values.syntheticToken), false);
   if (exitCode !== 0) {
     const marker = stderr.split(/\r?\n/u).find((line) => line.startsWith("PIGE_ROUNDTRIP_ERROR "));
+    const state = stderr.split(/\r?\n/u).find((line) => line.startsWith("PIGE_ROUNDTRIP_STATE "));
     const stagePath = path.join(values.rootPath, `stage-${phase}.txt`);
     const stage = fs.existsSync(stagePath) ? fs.readFileSync(stagePath, "utf8").trim() : "unknown";
     const jobs = readSafeJobFailureSummary(values.rootPath);
-    throw new Error(`${marker ?? `Electron unified Agent ${phase} phase failed at ${stage}.`} jobs=${JSON.stringify(jobs)}`);
+    throw new Error(`${marker ?? `Electron unified Agent ${phase} phase failed at ${stage}.`} ${state ?? ""} jobs=${JSON.stringify(jobs)}`);
   }
   const marker = stdout.split(/\r?\n/u).find((line) => line.startsWith(CHILD_RESULT_PREFIX));
   if (!marker) throw new Error(`Electron unified Agent ${phase} phase returned no result.`);
@@ -271,6 +283,10 @@ function readRoundtripRecord(vaultPath, area, recordId) {
 
 function sha256Digest(value) {
   return `sha256:${crypto.createHash("sha256").update(value, "utf8").digest("hex")}`;
+}
+
+function assertUniqueIdentities(values, label) {
+  assert.equal(new Set(values).size, values.length, `Unified roundtrip contains duplicate ${label} identities.`);
 }
 
 function readUniqueJsonByName(rootPath, expectedName) {
@@ -385,6 +401,7 @@ async function runElectronPhase() {
     app.quit();
   } catch (caught) {
     let rendererStage = "";
+    let rendererState = "";
     if (browserWindow && !browserWindow.isDestroyed()) {
       try {
         rendererStage = await browserWindow.webContents.executeJavaScript(
@@ -394,11 +411,22 @@ async function runElectronPhase() {
       } catch {
         rendererStage = "";
       }
+      try {
+        rendererState = await browserWindow.webContents.executeJavaScript(
+          "JSON.stringify(globalThis.__pigeRoundtripWaitState ?? {})",
+          true
+        );
+      } catch {
+        rendererState = "";
+      }
     }
     const safeRendererStage = /^[a-z0-9_]+$/u.test(rendererStage) ? rendererStage : "unknown";
     const safeErrorName = caught && typeof caught === "object" && typeof caught.name === "string" && /^[A-Za-z]+Error$/u.test(caught.name)
       ? caught.name
       : "Error";
+    if (/^\{[\x20-\x7e]{0,1000}\}$/u.test(rendererState)) {
+      console.error(`PIGE_ROUNDTRIP_STATE ${rendererState}`);
+    }
     console.error(`PIGE_ROUNDTRIP_ERROR phase=${phase ?? "unknown"} stage=${stage} renderer=${safeRendererStage} error=${safeErrorName}`);
     app.exit(1);
   }
@@ -1065,31 +1093,64 @@ async function stageAndSubmitSourceRenderer(browserWindow, attachmentPath, markS
   markStage(`${stagePrefix}_side_effect_check`);
   const staged = await browserWindow.webContents.executeJavaScript(`
     (async () => {
-      globalThis.__pigeRoundtripStage = 'source_stage_chip_wait';
-      const waitFor = async (predicate, label, timeoutMs = 10000) => {
-        const startedAt = Date.now();
-        while (Date.now() - startedAt < timeoutMs) {
-          const value = await predicate();
-          if (value) return value;
-          await new Promise((resolve) => setTimeout(resolve, 50));
-        }
-        throw new Error("Timed out waiting for " + label);
-      };
-      await waitFor(() => document.querySelector('.attachment-chip'), 'staged attachment chip');
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      globalThis.__pigeRoundtripStage = 'source_stage_snapshot';
-      const jobs = await window.pige.jobs.list({ limit: 100 });
-      const timeline = await window.pige.agent.conversation({ limit: 24 });
       globalThis.__pigeRoundtripStage = 'source_stage_send_ready';
-      await waitFor(
-        () => document.querySelector('button.composer-send:not(:disabled)'),
-        'enabled Home Send for staged source turn'
-      );
-      return {
-        agentTurnCount: jobs.jobs.filter((job) => job.class === 'agent_turn').length,
-        conversationTailEventId: timeline?.tailEventId ?? '',
-        conversationMessageCount: timeline?.messages.length ?? 0
-      };
+      const expectedDisplayName = ${JSON.stringify(path.basename(attachmentPath))};
+      const expected = ${JSON.stringify(baseline)};
+      const deadline = Date.now() + 45000;
+      let stagedChip;
+      while (Date.now() < deadline) {
+        const currentJobs = await window.pige.jobs.list({ limit: 100 });
+        const currentTimeline = await window.pige.agent.conversation({ limit: 24 });
+        const chips = Array.from(document.querySelectorAll('.attachment-chip'));
+        if (!stagedChip && chips.length === 1 && chips[0]?.querySelector('strong')?.textContent === expectedDisplayName) {
+          stagedChip = chips[0];
+        }
+        const chipMatches = Boolean(stagedChip) && chips.length === 1 &&
+          chips[0] === stagedChip &&
+          chips[0]?.querySelector('strong')?.textContent === expectedDisplayName;
+        const send = document.querySelector('section.home .composer button.composer-send');
+        const tail = currentTimeline?.messages.find((message) => message.id === currentTimeline.tailEventId);
+        const latestTurnState = currentTimeline?.latestTurn?.state ?? 'none';
+        const terminalTail = currentTimeline?.canFollowUp === true &&
+          tail?.role === 'assistant' &&
+          (latestTurnState === 'none' || latestTurnState === 'completed' || latestTurnState === 'completed_with_warnings');
+        const activeVaultMatches = currentJobs.activeVaultId === expected.activeVaultId;
+        const conversationMatches = currentTimeline?.conversationId === expected.conversationId;
+        const tailMatches = currentTimeline?.tailEventId === expected.conversationTailEventId;
+        globalThis.__pigeRoundtripWaitState = {
+          chipCount: chips.length,
+          chipMatches,
+          sendPresent: Boolean(send),
+          sendEnabled: Boolean(send && !send.disabled),
+          canFollowUp: currentTimeline?.canFollowUp === true,
+          tailRoleAssistant: tail?.role === 'assistant',
+          latestTurnState,
+          activeVaultMatches,
+          conversationMatches,
+          tailMatches,
+          agentTurnCount: currentJobs.jobs.filter((job) => job.class === 'agent_turn').length
+        };
+        if (!activeVaultMatches || !conversationMatches || !tailMatches || (stagedChip && !chipMatches)) {
+          throw new Error('Staged source submission identity changed before Send.');
+        }
+        if (chipMatches && terminalTail && send && !send.disabled) {
+          const agentTurnCount = currentJobs.jobs.filter((job) => job.class === 'agent_turn').length;
+          const conversationTailEventId = currentTimeline?.tailEventId ?? '';
+          const conversationMessageCount = currentTimeline?.messages.length ?? 0;
+          if (
+            agentTurnCount !== expected.agentTurnCount ||
+            conversationTailEventId !== expected.conversationTailEventId ||
+            conversationMessageCount !== expected.conversationMessageCount
+          ) {
+            throw new Error('Picker staging created a durable Agent side effect before Send.');
+          }
+          const submittedAt = Date.now();
+          send.click();
+          return { agentTurnCount, conversationTailEventId, conversationMessageCount, submittedAt };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for exact staged Home Send authority.');
     })()
   `, true);
   if (
@@ -1099,17 +1160,8 @@ async function stageAndSubmitSourceRenderer(browserWindow, attachmentPath, markS
   ) {
     throw new Error("Picker staging created a durable Agent side effect before Send.");
   }
-  const submittedAt = Date.now();
   markStage(`${stagePrefix}_send`);
-  await browserWindow.webContents.executeJavaScript(`
-    (() => {
-      const send = document.querySelector('button.composer-send:not(:disabled)');
-      if (!send) throw new Error('Home Send is unavailable for the staged source turn.');
-      send.click();
-      return true;
-    })()
-  `, true);
-  return { stagedAt, submittedAt };
+  return { stagedAt, submittedAt: staged.submittedAt };
 }
 
 async function readSourceSubmissionState(browserWindow) {
@@ -1118,6 +1170,8 @@ async function readSourceSubmissionState(browserWindow) {
       const jobs = await window.pige.jobs.list({ limit: 100 });
       const timeline = await window.pige.agent.conversation({ limit: 24 });
       return {
+        activeVaultId: jobs.activeVaultId,
+        conversationId: timeline?.conversationId ?? '',
         agentTurnCount: jobs.jobs.filter((job) => job.class === 'agent_turn').length,
         conversationTailEventId: timeline?.tailEventId ?? '',
         conversationMessageCount: timeline?.messages.length ?? 0
@@ -1130,10 +1184,27 @@ async function readSourceRendererResult(browserWindow, expectedAnswer, resultKey
   return browserWindow.webContents.executeJavaScript(`
     (async () => {
       const startedAt = Date.now();
+      globalThis.__pigeRoundtripStage = 'source_result_wait';
       while (Date.now() - startedAt < 45000) {
         const answer = Array.from(document.querySelectorAll('.conversation-message.role-assistant:not(.provisional)'))
           .find((message) => message.textContent?.includes(${JSON.stringify(expectedAnswer)}));
         const provisional = document.querySelector('[data-agent-draft="true"]');
+        const timeline = await window.pige.agent.conversation({ limit: 24 });
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const timelineAnswerVisible = timeline?.messages.some((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(expectedAnswer)})
+        ) === true;
+        globalThis.__pigeRoundtripWaitState = {
+          timelineAnswerVisible,
+          domAnswerVisible: Boolean(answer),
+          provisionalVisible: Boolean(provisional),
+          failedVisible: Boolean(document.querySelector('.conversation-status-message.state-failed')),
+          canFollowUp: timeline?.canFollowUp === true,
+          latestTurnState: timeline?.latestTurn?.state ?? 'none',
+          timelineMessageCount: timeline?.messages.length ?? 0,
+          domAssistantCount: document.querySelectorAll('.conversation-message.role-assistant:not(.provisional)').length,
+          agentTurnCount: jobs.jobs.filter((job) => job.class === 'agent_turn').length
+        };
         if (answer && !provisional) {
           return { [${JSON.stringify(resultKey)}]: true };
         }
