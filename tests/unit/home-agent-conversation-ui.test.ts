@@ -91,7 +91,11 @@ describe("Home durable Agent conversation UI", () => {
   it("lets a terminal timeline supersede only its stale same-Job running projection", () => {
     const timeline = completedTimeline();
     const staleJob = { ...runningAgentJob(), id: timeline.latestTurn!.jobId };
-    expect(selectCurrentNoSourceTurn({ latestTurn: timeline.latestTurn, recentJobs: [staleJob] }))
+    expect(selectCurrentNoSourceTurn({
+      latestTurn: timeline.latestTurn,
+      recentJobs: [staleJob],
+      activeDraftJobId: staleJob.id
+    }))
       .toBeUndefined();
 
     const currentJob = { ...runningAgentJob(), id: "job_20260726_currentdraft" };

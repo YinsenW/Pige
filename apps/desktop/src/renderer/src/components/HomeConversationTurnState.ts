@@ -13,7 +13,14 @@ export function selectCurrentNoSourceTurn(input: {
   const activeDraftJob = input.activeDraftJobId
     ? input.recentJobs.find((job) => job.id === input.activeDraftJobId)
     : undefined;
-  if (isActiveNoSourceTurn(activeDraftJob)) return activeDraftJob;
+  if (
+    isActiveNoSourceTurn(activeDraftJob) &&
+    (
+      !input.latestTurn ||
+      activeDraftJob.id !== input.latestTurn.jobId ||
+      !isTerminalConversationTurn(input.latestTurn.state)
+    )
+  ) return activeDraftJob;
 
   if (input.latestTurn) {
     if (isTerminalConversationTurn(input.latestTurn.state)) return undefined;
