@@ -36,14 +36,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review of one inspected-URL citation: durable current source/page truth yields citation_17, Pi selects explicitly, shared collision guards fail closed, restart avoids refetch/Provider replay, and statuses remain unchanged.",
+    "scope": "Independent Product Planning review of one native-PDF current-source citation: successful inspect yields conditional citation_11, mutation requires reinspection, retrieval shifts within 11-16, restart avoids parser/Provider replay, and statuses remain unchanged.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 28,
-    "reviewedSha256": "07e6c14aa0929524932e66ae2606e0e86385ede6ad38165ce17dfd5a453f8424"
+    "reviewedSha256": "4dd763103ce95ff66e129cadf4eb2a750a65adb4874aa546dff069385ce2f352"
   },
   "reviewers": [{
-    "reviewerId": "inspected-url-citation-review",
-    "task": "Inspected URL citation candidate contract review",
+    "reviewerId": "pdf-current-source-citation-review",
+    "task": "Native-PDF current-source citation candidate contract review",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -51,32 +51,32 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Product Planning reviews existing URL, context, API, data, decision and trace owners; Development owns four internal service/test paths, while UI reuses its unchanged citation consumer."
+    "independence": "Product Planning reviews existing source-session, PDF, context, data, decision and trace owners; Development owns four internal service/test paths, while UI reuses its unchanged citation consumer."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"inspected-url-citation-review","blockerCount":0,"summary":"Fetch/preserve/inspect/readCurrent owns candidate lifecycle; drift stays uncited and collision blocks publication without judging prose."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"inspected-url-citation-review","blockerCount":0,"summary":"URL, context, API and data reuse RetrievalAnswerCitation as citation_17 with no new DTO, IPC or renderer shape."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"inspected-url-citation-review","blockerCount":0,"summary":"URL ingest and context gaps name citation currentness plus assembled restart evidence while all statuses remain unchanged."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"inspected-url-citation-review","blockerCount":0,"summary":"The internal citationCandidate method, URL readCurrent proof and shared Home registry define a four-path implementation boundary."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"inspected-url-citation-review","blockerCount":0,"summary":"Existing owners carry URL projection and restart facts; no new DTO, document, UI owner or architecture phase was added."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"pdf-current-source-citation-review","blockerCount":0,"summary":"Inspect owns current-source candidate lifecycle; parse/OCR/source drift clears eligibility until reinspection, without judging prose."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"pdf-current-source-citation-review","blockerCount":0,"summary":"Source-session, PDF, context and data reuse RetrievalAnswerCitation within citation_11-16 with no new DTO, IPC or renderer shape."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"pdf-current-source-citation-review","blockerCount":0,"summary":"PDF ingest and context gaps name conditional allocation, reinspection and assembled restart while every status stays unchanged."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"pdf-current-source-citation-review","blockerCount":0,"summary":"AgentSourceToolSession candidate lifecycle and shared Home registry define the approved four-path implementation boundary."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"pdf-current-source-citation-review","blockerCount":0,"summary":"Existing owners carry current-source projection and restart facts; no DTO, document, UI owner or architecture phase was added."}
   ],
   "verification": [
     {"command":"npm run verify:verify-scripts-integrity && npm run verify:contracts","status":"passed","evidence":"Existing RetrievalAnswerCitation and answer channel remain canonical; no IPC, preload, schema or renderer vocabulary is added."},
     {"command":"npm run verify:docs && npm run verify:decisions && npm run verify:documentation-leanness","status":"passed","evidence":"Owner links, amended decision and governed byte limits pass without a new document."},
-    {"command":"npm run verify:traceability","status":"passed","evidence":"Inspected-URL citation and assembled restart remain open work and every status is unchanged."}
+    {"command":"npm run verify:traceability","status":"passed","evidence":"Native-PDF current-source citation and assembled restart remain open work and every status is unchanged."}
   ],
   "coordination": {
-    "taskId": "inspected-url-citation-candidate-20260727",
-    "taskTitle": "Inspected URL citation candidate contract",
+    "taskId": "pdf-current-source-citation-candidate-20260727",
+    "taskTitle": "Native-PDF current-source citation candidate contract",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing refs remain current-note 1, Home search 2..9, Dataset 10 and source-session 11..16; one inspected URL owns 17 and the selector remains unchanged.",
-    "acknowledgement": "Planning freezes internal URL candidate semantics only; four implementation/test paths, assembled evidence and status promotion remain outside this candidate."
+    "compatibility": "Existing refs remain current-note 1, Home search 2..9, Dataset 10, source-session 11..16 and inspected URL 17; current source conditionally reserves 11 and the selector remains unchanged.",
+    "acknowledgement": "Planning freezes internal source-session candidate semantics only; four implementation/test paths, assembled #179 evidence and status promotion remain outside this candidate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Development must prove inspect-only citation_17, readCurrent drift rejection, equal dedupe, unequal collision failure and restart without refetch or Provider replay.",
-    "Assembled URL evidence follows after product freeze and must not weaken SSRF/network policy; UI/locale/selector remain unchanged."
+    "Development must prove inspect-only current-source citation_11, post-mutation reinspection, conditional retrieval shift, collision guard and restart without parse or Provider replay.",
+    "Draft #179 evidence stays unchanged until product composition; UI/public DTO/locale/selector and network policy remain unchanged."
   ]
 }

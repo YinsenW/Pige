@@ -347,11 +347,12 @@ One submission owns one durable Job and may contain multiple Pi turns/tool calls
 - Registered tool input/result, evidence identity, authority, and resource bounds validate
   at each tool boundary. Durable mutations still require their owner service's schema,
   revision, conflict, permission, idempotency, and commit checks.
-- `AgentSourceToolSession.citationCandidates()` maps revalidated `retrievalSelection`
-  order to `citation_11`–`16`; Pi sees each ref with safe `related_NN` facts. Home dedupes
-  only complete identity; same-ref mismatch fails body-free `agent_runtime.turn_conflict`
-  before publication; invalid or stale refs are removed or marked unavailable.
-  unknown/unselected refs stay uncited without answer review.
+- `AgentSourceToolSession.citationCandidates()` returns current revalidated source/retrieval
+  refs only. Inspect may reserve `citation_11`; five retrieval results then take `12`–`16`,
+  or six take `11`–`16` if absent. Mutation clears it until inspect re-proves Source Record,
+  catalog, vault, revision and page. Home compares complete safe identity: mismatch fails
+  body-free before the assistant event; invalid or stale refs are removed or marked unavailable.
+  Unknown/unselected refs stay uncited without answer review.
 - Denied high-risk authority, Provider/source identity drift, cancellation, unavailable required runtime, and
   irreconcilable conflict or evidence drift remain hard Host boundaries. Pi may choose a
   different already-authorized route, but it cannot reinterpret or override the denial.

@@ -305,11 +305,10 @@ Grounded answers and generated knowledge must preserve provenance.
 
 Rules:
 
-- Only a Pi-emitted known ref becomes a citation. Current-note owns `citation_1`, Home
-  search `citation_2`–`9`, Dataset `citation_10`, source order `citation_11`–`16`, and one
-  inspected current URL `citation_17`.
-  Drift/unknown refs stay uncited; equal refs dedupe only on complete identity, while an
-  unequal collision fails before durable publication rather than choosing an entry.
+- Known Pi refs: current note `citation_1`; search `citation_2`–`9`; Dataset `citation_10`;
+  source `citation_11`–`16`; URL `citation_17`. An inspected current source takes `11` and
+  retrieval `citation_12`–`16`; otherwise retrieval takes `citation_11`–`16`. Drift/unknown stays uncited;
+  equal complete identity dedupes, unequal ref identity stops durable publication.
 - Ranked results must include snippets and match reasons.
 - Ingest outputs should cite source pages, source artifacts, or original locators.
 - Dataset claims cite exact Dataset revision/table/schema plus row ID, primary key, range,
