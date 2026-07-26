@@ -465,13 +465,23 @@ async function runRestartRenderer(browserWindow) {
 async function readDurableRestartSnapshot(browserWindow) {
   return browserWindow.webContents.executeJavaScript(`
     (async () => {
+      const mark = (stage) => {
+        globalThis.__pigeRoundtripStage = stage;
+        console.info("PIGE_ROUNDTRIP_STAGE " + stage);
+      };
+      mark("durable_snapshot_conversation");
       const timeline = await window.pige.agent.conversation({ limit: 100 });
+      mark("durable_snapshot_jobs");
       const jobs = await window.pige.jobs.list({ limit: 100 });
+      mark("durable_snapshot_library");
       const library = await window.pige.library.list({ limit: 100 });
+      mark("durable_snapshot_activity");
       const activity = await window.pige.activity.list({ limit: 100 });
+      mark("durable_snapshot_models");
       const models = await window.pige.models.summary();
       if (!timeline) throw new Error("Durable conversation is unavailable.");
 
+      mark("durable_snapshot_projection");
       const relevantJobs = jobs.jobs
         .filter((job) => job.class === "agent_turn" || job.class === "dataset_import")
         .map((job) => ({
