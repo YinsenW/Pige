@@ -469,7 +469,7 @@ describe("Restore identity UI", () => {
     dom.window.close();
   });
 
-  it("keeps a managed-source dependency body-free and does not invent a reconnect action", async () => {
+  it("reconnects only an eligible managed-source dependency and resumes through polling without retry", async () => {
     const dom = createDom();
     const harness = createHarness(readyOnboarding(), bothModesPreview());
     harness.jobs = [backupJob("waiting_dependency")];
@@ -487,17 +487,82 @@ describe("Restore identity UI", () => {
     expect(container.textContent).not.toContain("root_external_private_20260717");
     expect(container.textContent).not.toContain("The backup could not continue safely");
     expect(container.querySelectorAll(".backup-job-status")).toHaveLength(1);
-    expect(button(container, "Reconnect source location").disabled).toBe(true);
-    expect(container.textContent).toContain("Reconnecting this managed source location is not available yet.");
-    expect(button(container, "Reconnect source location").getAttribute("aria-describedby"))
-      .toBe("backup-reconnect-managed-source-unavailable");
+    const reconnect = button(container, "Reconnect source location");
+    expect(reconnect.disabled).toBe(false);
     expect(Array.from(container.querySelectorAll("button")).some((item) => item.textContent === "Retry")).toBe(false);
+    await click(dom, reconnect);
+    await waitFor(dom, () => container.textContent?.includes("Source location reconnected") ?? false);
+    expect(harness.reconnectRequests).toEqual([{
+      activeVaultId: "vault_restore_ui",
+      waitingJobId: "job_20260714_backupui1"
+    }]);
     expect(harness.retryJobIds).toEqual([]);
 
     await click(dom, button(container, "View memory"));
     await waitFor(dom, () => container.querySelector(".memory-settings-page") !== null);
     expect(container.textContent).toContain("Agent & Memory");
 
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps a cancelled reconnect actionable, single-flight, and focus-owned without a notice", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    harness.jobs = [backupJob("waiting_dependency")];
+    let resolveReconnect: ((status: "cancelled") => void) | undefined;
+    harness.reconnectDependency = async (request) => {
+      harness.reconnectRequests.push({ activeVaultId: request.activeVaultId, waitingJobId: request.waitingJobId });
+      const status = await new Promise<"cancelled">((resolve) => { resolveReconnect = resolve; });
+      return { apiVersion: 1, ...request, status };
+    };
+    const { container, root } = await mountApp(dom, makePigeApi(harness, true));
+    await openVaultSettings(dom, container);
+    const reconnect = button(container, "Reconnect source location");
+    await act(async () => {
+      reconnect.click();
+      reconnect.click();
+      await settle(dom);
+    });
+    expect(harness.reconnectRequests).toHaveLength(1);
+    expect(container.textContent).toContain("Checking source location…");
+    await act(async () => {
+      resolveReconnect?.("cancelled");
+      await settle(dom);
+    });
+    await waitFor(dom, () => !reconnect.disabled && dom.window.document.activeElement === reconnect);
+    expect(container.textContent).not.toContain("Checking source location…");
+    expect(container.textContent).not.toContain("could not reconnect");
+    expect(harness.retryJobIds).toEqual([]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("projects a not-found reconnect as the settled body-free stale state", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    harness.jobs = [backupJob("waiting_dependency")];
+    harness.reconnectDependency = async (request) => ({ apiVersion: 1, ...request, status: "not_found" });
+    const { container, root } = await mountApp(dom, makePigeApi(harness, true));
+    await openVaultSettings(dom, container);
+    await click(dom, button(container, "Reconnect source location"));
+    await waitFor(dom, () => container.textContent?.includes("This backup changed before reconnection finished") ?? false);
+    expect(container.textContent).not.toContain("root_external_private_20260717");
+    expect(container.textContent).not.toContain("RAW_BACKUP_SENTINEL");
+    expect(harness.retryJobIds).toEqual([]);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("does not infer reconnect eligibility from the visible waiting state", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    harness.jobs = [{ ...backupJob("waiting_dependency"), canReconnectDependency: false }];
+    const { container, root } = await mountApp(dom, makePigeApi(harness, true));
+    await openVaultSettings(dom, container);
+    await waitFor(dom, () => container.textContent?.includes("A managed source location needs to be reconnected") ?? false);
+    expect(Array.from(container.querySelectorAll("button")).some((item) => item.textContent === "Reconnect source location")).toBe(false);
     await act(async () => root.unmount());
     dom.window.close();
   });
@@ -697,6 +762,14 @@ interface RestoreHarness {
   jobs: JobSummary[];
   readonly retryJobIds: string[];
   readonly cancelJobIds: string[];
+  readonly reconnectRequests: Array<{ readonly activeVaultId: string; readonly waitingJobId: string }>;
+  reconnectDependency: (request: { readonly requestId: string; readonly activeVaultId: string; readonly waitingJobId: string }) => Promise<{
+    readonly apiVersion: 1;
+    readonly requestId: string;
+    readonly activeVaultId: string;
+    readonly waitingJobId: string;
+    readonly status: "resolved" | "cancelled" | "stale" | "not_found" | "failed";
+  }>;
   readonly revealRequests: VaultRevealTarget[];
   lastBackupAt?: string;
   localDatabaseStatus: LocalDatabaseStatus | null;
@@ -719,6 +792,11 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
     jobs: [],
     retryJobIds: [],
     cancelJobIds: [],
+    reconnectRequests: [],
+    reconnectDependency: async (request) => {
+      harness.reconnectRequests.push({ activeVaultId: request.activeVaultId, waitingJobId: request.waitingJobId });
+      return { apiVersion: 1, ...request, status: "resolved" };
+    },
     revealRequests: [],
     localDatabaseStatus: null,
     applyRestore: async (request) => {
@@ -850,7 +928,9 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
       }),
       previewRestore: async () => harness.preview,
       applyRestore: (request: RestoreApplyRequest) => harness.applyRestore(request),
-      create: async () => ({ status: "canceled" })
+      create: async () => ({ status: "canceled" }),
+      reconnectDependency: (request: { readonly requestId: string; readonly activeVaultId: string; readonly waitingJobId: string }) =>
+        harness.reconnectDependency(request)
     },
     confirmations: {
       pending: async () => ({ apiVersion: 1 as const, status: "none" as const, revision: 0 }),
@@ -1005,6 +1085,7 @@ function backupJob(
     state,
     stage: "backing_up",
     backupKind: "user_backup",
+    canReconnectDependency: state === "waiting_dependency",
     ...(state === "waiting_dependency" ? {
       waitingDependency: {
         dependencyKind: "external_source" as const,

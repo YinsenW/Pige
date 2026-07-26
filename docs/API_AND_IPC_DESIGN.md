@@ -371,6 +371,7 @@ type JobSummary = {
   sourceDisplayName?: string;
   sourceKind?: SourceKind;
   backupKind?: "user_backup" | "restore_rollback";
+  canReconnectDependency: boolean;
   error?: PigeErrorSummary;
   stage?: JobStage;
   progress?: JobProgress;
@@ -404,6 +405,9 @@ Rules:
 - Summaries may include source display name/kind and Backup ownership/error types, never
   record/copy/original/destination paths, bodies, prompts, responses, secrets, raw error
   detail or archive internals. Settings filters rollback children.
+- Required `canReconnectDependency` is true only for parsed durable
+  `backup + waiting_dependency + reconnect_path + (vault_binding | external_source)`;
+  otherwise false/skipped, exposing no private wait field.
 - Invalid job JSON is counted and skipped so Home can still open.
 - `jobs.cancel` directly cancels eligible queued/waiting/retryable work only with a
   false/absent action-safety guard; active process-local parse/OCR/`agent_turn`/Agent
@@ -847,6 +851,7 @@ Commands:
 
 - `backup.status`
 - `backup.create`
+- `backup.reconnectDependency`
 - `restore.preview`
 - `restore.apply`
 
@@ -860,31 +865,45 @@ type RestoreApplyRequest = {
 type RestoreApplyResult =
   | { status: "restored"; jobId: string }
   | { status: "canceled" };
+
+type BackupReconnectDependencyRequest = {
+  apiVersion: 1; requestId: string; activeVaultId: string; waitingJobId: string;
+};
+type BackupReconnectDependencyResult = BackupReconnectDependencyRequest & {
+  status: "resolved" | "cancelled" | "stale" | "not_found" | "failed";
+};
 ```
+
+`BackupReconnectDependencyRequestSchema` and
+`BackupReconnectDependencyResultSchema` in `@pige/schemas` are the canonical strict
+runtime owner; contracts export their inferred types rather than restating them.
 
 Rules:
 
 - `backup.create` uses a trusted main-process save dialog, persists one durable Backup Job
   before scan, and returns only after cancellation or exact terminal completion.
 - Missing/rebound roots return body-free `backup.dependency_waiting`; no path is exposed.
-- `backup.status` derives `lastBackupAt` from the newest completed user Backup Job, never
-  from rollback children or ephemeral renderer state.
-- Main-picker preview validates manifest/entries, paths/sizes/checksums, schema ranges,
-  legacy input and redacted dependencies, then returns modes, archive-bound ID,
-  app/schema versions and typed warning counts—never raw warning/entry/name/path detail.
-- Apply requires that current ID plus explicit mode: `replace_existing` preserves
-  `vault_id`; `clone_as_new` mints one and records lineage. A folder is not a mode.
-- Main retains archive checksum; renderer sees a random sender/generation token. One apply
-  lease blocks replay: cancel/retryable failure releases, success/invalidation/destruction consumes.
-- Apply reopens the descriptor-bound archive and validates owned 0700 staging;
-  Data Architecture owns its reserved, no-replace, manifest-last publication.
-- `restore.apply` returns only cancel or machine-local Restore Job ID, never vault,
-  manifest, rebuild or path DTO; renderer refreshes normal vault state.
-- Main owns six-locale picker and irreversible replace confirmation; Cancel is default and
-  copy states rollback backup, fresh destination, binding switch and no Undo.
-- The machine-local Restore Job and vault-scoped `restore_applied` Operation link by ID.
-  Versioned dependency/schema migration matrices, generic cross-file transactionality,
-  final syscall TOCTOU, complete platform proof, and broader progress remain open.
+- Reconnect accepts four fields and fences the exact active-vault eligible Job before the
+  chooser. Private `dependencyId` is `rootId` for `vault_binding`, or `sourceId` for
+  `external_source` (derive current record/root); it is never exposed. Cancel writes nothing.
+- `BackupRestoreService` repairs/rereads exact binding/evidence; Main and
+  `BackupCoordinatorService` reread/re-prove the same Job/dependency before resuming it.
+  No duplicate is created; the five-field result has no Job summary, and UI only polls.
+- Echo identity; changed/absent/other failure is body-free `stale`/`not_found`/`failed`
+  and keeps the wait. Chooser owns the action—no Permission Broker; generic/Backup retry
+  is `not_allowed` without private proof.
+- `backup.status` derives last completion from user Backup Jobs, never rollback/renderer state.
+- Restore picker/preview binds and validates archive, entries, bounds, checksums, schemas,
+  legacy input and dependency counts without raw detail. Apply requires that ID plus
+  `replace_existing` (preserve vault ID) or `clone_as_new` (mint ID/lineage), one replay-safe
+  lease, descriptor reread and owned staging; a folder is not a mode.
+- Main owns picker and replace confirmation. Apply returns only cancel or its machine-local
+  Restore Job ID; its vault-scoped `restore_applied` Operation links by ID and renderer
+  refreshes normal state. Data Architecture owns no-replace/manifest-last/rollback rules;
+  migration breadth, cross-file atomicity, final syscall TOCTOU and platform proof remain open.
+- The coherent five-channel block moves from `main/index.ts` to
+  `apps/desktop/src/main/register-backup-restore-ipc.ts`; Main remains composition root,
+  protected contract scanning includes the registrar, and behavior otherwise stays fixed.
 
 ### 6.11 Window And Layout
 

@@ -1452,6 +1452,22 @@ export const VaultActionResultSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("canceled") }).strict()
 ]);
 
+export const BackupReconnectDependencyRequestIdSchema = z.string()
+  .regex(/^backupreconnectreq_[a-z0-9]{8,64}$/);
+export const BackupReconnectDependencyRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: BackupReconnectDependencyRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  waitingJobId: JobIdSchema
+}).strict();
+export const BackupReconnectDependencyResultSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: BackupReconnectDependencyRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  waitingJobId: JobIdSchema,
+  status: z.enum(["resolved", "cancelled", "stale", "not_found", "failed"])
+}).strict();
+
 export const ExternalManagedCopyRootBindingSchema = z.object({
   rootId: RootBindingIdSchema,
   vaultId: VaultIdSchema,
@@ -3542,6 +3558,8 @@ export type JobRef = z.infer<typeof JobRefSchema>;
 export type JobRecord = z.infer<typeof JobRecordSchema>;
 export type JobStage = z.infer<typeof JobStageSchema>;
 export type JobState = z.infer<typeof JobStateSchema>;
+export type BackupReconnectDependencyRequest = z.infer<typeof BackupReconnectDependencyRequestSchema>;
+export type BackupReconnectDependencyResult = z.infer<typeof BackupReconnectDependencyResultSchema>;
 export type MachineLocalSettings = z.infer<typeof MachineLocalSettingsSchema>;
 export type UpdateCapability = z.infer<typeof UpdateCapabilitySchema>;
 export type UpdateChannel = z.infer<typeof UpdateChannelSchema>;

@@ -36,6 +36,14 @@ import {
   type SourceRecord,
   type VaultManifest
 } from "@pige/schemas";
+import {
+  assertDistinctBindingPaths,
+  captureCanonicalBindingDirectory,
+  proveManagedCopyDependency,
+  repairManagedCopyDependency,
+  type BackupManagedCopyDependencyIdentity,
+  type BackupManagedCopyRepairProof
+} from "./backup-managed-copy-binding";
 import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
 import {
   PIGE_DURABLE_ROOTS,
@@ -266,37 +274,6 @@ function captureExternalDirectoryChain(
     }
     return { path: entryPath, device: identity.dev, inode: identity.ino };
   });
-}
-
-function assertDistinctBindingPaths(roots: readonly ExternalManagedCopyRootBinding[]): void {
-  const seen = new Set<string>();
-  for (const root of roots) {
-    if (!path.isAbsolute(root.absolutePath)) {
-      throw new PigeDomainError("backup.root_binding_invalid", "An external root binding path is not absolute.");
-    }
-    const normalized = path.resolve(root.absolutePath);
-    const key = process.platform === "win32" ? normalized.toLocaleLowerCase("en-US") : normalized;
-    if (seen.has(key)) {
-      throw new PigeDomainError(
-        "backup.root_binding_conflict",
-        "Multiple external managed-copy root IDs resolve to the same machine path."
-      );
-    }
-    seen.add(key);
-  }
-}
-
-function captureCanonicalBindingDirectory(directoryPathInput: string): string {
-  const directoryPath = path.resolve(directoryPathInput);
-  const identity = fs.lstatSync(directoryPath);
-  if (!identity.isDirectory() || identity.isSymbolicLink()) {
-    throw new PigeDomainError("backup.root_binding_registry_invalid", "Machine app-data storage is unsafe.");
-  }
-  const canonical = fs.realpathSync.native(directoryPath);
-  if (canonical !== directoryPath) {
-    throw new PigeDomainError("backup.root_binding_registry_invalid", "Machine app-data storage is not canonical.");
-  }
-  return canonical;
 }
 
 function missingExternalManagedCopyRoot(rootId: string): BackupManagedCopyDependencyError {
@@ -581,6 +558,29 @@ export class BackupRestoreService {
       messageKey: activeVault ? "backup.statusReady" : "backup.statusNoVault",
       defaultIncludes: DEFAULT_INCLUDES
     };
+  }
+
+  proveManagedCopyDependency(
+    vaultPathInput: string,
+    vaultId: string,
+    dependency: BackupManagedCopyDependencyIdentity
+  ): BackupManagedCopyRepairProof | undefined {
+    return proveManagedCopyDependency(this.#userDataPath, vaultPathInput, vaultId, dependency);
+  }
+
+  repairManagedCopyDependency(
+    vaultPathInput: string,
+    vaultId: string,
+    dependency: BackupManagedCopyDependencyIdentity,
+    selectedDirectoryInput: string
+  ): BackupManagedCopyRepairProof {
+    return repairManagedCopyDependency(
+      this.#userDataPath,
+      vaultPathInput,
+      vaultId,
+      dependency,
+      selectedDirectoryInput
+    );
   }
 
   async createBackup(

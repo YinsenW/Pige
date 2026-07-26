@@ -348,7 +348,12 @@ for (const field of diagnosticDeltaFields) {
 
 const apiDocument = read("docs/API_AND_IPC_DESIGN.md");
 const readerIpcRegistrarPath = "apps/desktop/src/main/register-reader-ipc.ts";
-const ipcChannelOwnerPaths = ["apps/desktop/src/main/index.ts", readerIpcRegistrarPath];
+const backupIpcRegistrarPath = "apps/desktop/src/main/register-backup-restore-ipc.ts";
+const ipcChannelOwnerPaths = [
+  "apps/desktop/src/main/index.ts",
+  readerIpcRegistrarPath,
+  backupIpcRegistrarPath
+];
 const ipcChannelSources = ipcChannelOwnerPaths
   .filter((relativePath) => fs.existsSync(path.join(root, relativePath)))
   .map((relativePath) => read(relativePath));
@@ -356,6 +361,17 @@ const readerIpcRegistrarExists = fs.existsSync(path.join(root, readerIpcRegistra
 const readerIpcRegistrarSource = readerIpcRegistrarExists
   ? read(readerIpcRegistrarPath)
   : "";
+const backupIpcRegistrarExists = fs.existsSync(path.join(root, backupIpcRegistrarPath));
+const backupIpcRegistrarSource = backupIpcRegistrarExists
+  ? read(backupIpcRegistrarPath)
+  : "";
+const requiredBackupIpcChannels = [
+  "backup.status",
+  "backup.create",
+  "backup.reconnectDependency",
+  "restore.preview",
+  "restore.apply"
+];
 const resetLegacyChannels = new Set([
   "modelEgress.pending", "modelEgress.resolve", "permissions.pending", "permissions.resolve"
 ]);
@@ -381,6 +397,14 @@ if (
   !ipcHandleChannels(readerIpcRegistrarSource).includes("notes.openSourceReference")
 ) {
   failures.push(`${readerIpcRegistrarPath} is missing required IPC channel notes.openSourceReference.`);
+}
+if (backupIpcRegistrarExists) {
+  const implementedBackupChannels = new Set(ipcHandleChannels(backupIpcRegistrarSource));
+  for (const channel of requiredBackupIpcChannels) {
+    if (!implementedBackupChannels.has(channel)) {
+      failures.push(`${backupIpcRegistrarPath} is missing required IPC channel ${channel}.`);
+    }
+  }
 }
 
 const staleChannelAliases = [
@@ -453,6 +477,15 @@ const ownerOnlyNegativeFixtures = [
     label: "missing saved-source registrar channel",
     rejected: !ipcHandleChannels('ipcMain.handle("notes.render", () => undefined);')
       .includes("notes.openSourceReference")
+  },
+  {
+    label: "missing Backup reconnect registrar channel",
+    rejected: requiredBackupIpcChannels.some((channel) => !ipcHandleChannels([
+      'ipcMain.handle("backup.status", () => undefined);',
+      'ipcMain.handle("backup.create", () => undefined);',
+      'ipcMain.handle("restore.preview", () => undefined);',
+      'ipcMain.handle("restore.apply", () => undefined);'
+    ].join("\n")).includes(channel))
   },
   {
     label: "incomplete diagnostic error delta",

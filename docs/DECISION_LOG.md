@@ -1983,23 +1983,26 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
-Revised: 2026-07-14
+Revised: 2026-07-26
 Supersedes: D-20260709-Phase-1-Window-And-Backup-Entry-Points
 
 Decision:
 
-Window layout preferences remain machine-local and are owned by Window Mode Service. Backup and restore controls must reflect real Backup Service capability rather than a fixed phase placeholder; the current local ZIP, explicit restore identity, and durable recovery path is governed by `D-20260714-Explicit-Restore-Identity-And-Durable-Recovery`.
+Window preferences remain machine-local. Backup/Restore controls reflect typed capability,
+with local ZIP, restore identity and recovery owned by
+`D-20260714-Explicit-Restore-Identity-And-Durable-Recovery`.
 
 Rationale:
 
-The original Phase 1 decision correctly established machine-local window behavior and honest disabled backup entry points, but its statement that backup actions belonged to Phase 9 became stale once the first Backup Service slice shipped. Separating persistent window policy from capability-driven backup availability keeps both contracts current without erasing the historical rollout.
+The first Backup slice made the Phase-only placeholder stale; capability truth must drive UI.
 
 Consequences:
 
-- Compact, expanded, full-screen, always-on-top, and sidebar preferences stay in machine-local settings and remain outside vault backup.
-- Backup and restore actions may be enabled only when their typed service commands and safety checks are implemented.
-- UI copy and status must describe the available Backup Service slice, not a historical phase number.
-- Additional backup options remain separately scoped and do not weaken the first slice's path, checksum, staging, and no-overwrite protections.
+- Window layout/sidebar/pin preferences stay machine-local and backup-excluded.
+- Backup actions require their typed service and safety checks; copy/status reflects capability.
+- Later options cannot weaken path, checksum, staging or no-overwrite protections.
+- External-root reconnect is chooser-owned and resumes the same Backup only after exact
+  binding/evidence reread; waiting metadata or generic retry is not repair proof.
 
 References:
 

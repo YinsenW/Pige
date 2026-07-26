@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-23T06:30:00Z",
+  "reviewedAt": "2026-07-26T11:00:39Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -34,14 +34,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review of PT3 post-effect continuation: Pi may continue model and inspect/search/parse/OCR work after a durable effect, exact effect owners retain incompatible/concurrent mutation rejection, multi-effect aggregation stays AR3, and statuses remain unchanged.",
+    "scope": "Independent Product Planning review of exact external-root reconnect: Jobs projects only required body-free reconnect eligibility, Main owns the chooser and private dependency identity, BackupRestoreService proves and persists the same stable binding, BackupCoordinator resumes only the same reread Job from current truth, generic retry cannot bypass repair, and statuses remain unchanged.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 26,
-    "reviewedSha256": "c0f6a6148fdc9acb532b6e9f7de88ff5c08f69cf3a899e7b66ca77cc305bb080"
+    "reviewedSha256": "e20e0d2887ec5406eb450b4901346ec1d8acea450314e9c4523eb5dc8f0c8627"
   },
   "reviewers": [{
-    "reviewerId": "architecture-reset-planning-review",
-    "task": "PT3 post-effect continuation contract review",
+    "reviewerId": "backup-reconnect-planning-review",
+    "task": "Backup external-root reconnect contract review",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -49,32 +49,32 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Product Planning reviews only contracts and executable governance; Development still owns every implementation deletion, rewrite, security test, package and runtime artifact."
+    "independence": "Product Planning reviews only contracts, trace and protected verifier coverage; Development owns schemas, services, IPC, renderer, locale, tests and runtime evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"The Agent turn remains one Pi-owned run; a durable effect no longer creates a hidden completion mode."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Pi owner, Playbook, Decision Log, acceptance, and no-growth budgets agree on continuation, exact-owner conflicts, and AR3 deferral."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"PIGE-PI-001 and E3.08/E3.09 retain their statuses while open work and deletion budgets become exact."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"Seven zero-target residue markers and one retained mutation-serialization marker define the next reviewable Development slice."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"architecture-reset-planning-review","blockerCount":0,"summary":"The Pi owner defines semantics once; Playbook and trace project only delivery and open-work facts within the byte budget."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"One waiting Backup owns one chooser, exact binding repair and same-Job continuation; cancel and failure create no second durable work."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"Job, API and UI owners agree that a closed boolean offers the action while current private truth—not the projection—authorizes resume."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"Backup and waiting-dependency open work becomes exact while every Requirement/Exit/Phase status remains unchanged."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"One required safe boolean, canonical reconnect schemas, two service owners, one registrar and one bounded UI component give exact handoff boundaries."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"backup-reconnect-planning-review","blockerCount":0,"summary":"Existing owner documents carry request, storage, retry and visible-state facts; no new design document or architecture phase was added."}
   ],
   "verification": [
-    {"command":"npm run verify:architecture-reset","status":"passed","evidence":"Current residue stays within exact source/path budgets; post-combined targets require its removal without status promotion."},
-    {"command":"npm run verify:docs && npm run verify:decisions && npm run verify:documentation-leanness","status":"passed","evidence":"Owner links, PRD/Playbook claims, durable decision structure, and governed byte limits pass."},
-    {"command":"npm run verify:traceability","status":"passed","evidence":"Requirement/Exit status stays unchanged and semantic claims match the reviewed contract."}
+    {"command":"npm run verify:verify-scripts-integrity && npm run verify:contracts","status":"passed","evidence":"The protected explicit registrar list still rejects missing or undocumented channels and binds the future Backup/Restore registrar."},
+    {"command":"npm run verify:docs && npm run verify:decisions && npm run verify:documentation-leanness","status":"passed","evidence":"Owner links, durable decision structure and governed byte limits pass without a new document."},
+    {"command":"npm run verify:traceability","status":"passed","evidence":"Backup reconnect remains open work and every Requirement/Exit/Phase status is unchanged."}
   ],
   "coordination": {
-    "taskId": "pt3-post-effect-continuation-20260723",
-    "taskTitle": "PT3 post-effect continuation contract",
+    "taskId": "backup-external-root-reconnect-20260726",
+    "taskTitle": "Backup external-root reconnect contract",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Exact effect-owner conflict, CAS, idempotency, and commit validation remain; this contract neither enables nor aggregates multiple durable effects.",
-    "acknowledgement": "Product Planning binds the next Development deletion slice; implementation, renderer, executable evidence, and status promotion remain outside this candidate."
+    "compatibility": "Failed-retryable Backup behavior and referenced-original handling are unchanged; this contract repairs only an external managed-copy dependency for one waiting Backup.",
+    "acknowledgement": "Product Planning freezes the contract; implementation, UI, locales, tests, runtime evidence and status promotion remain outside this candidate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Development must replace the existing no-op test with post-effect continuation and exact-owner conflict acceptance before evidence may be attached.",
-    "AR3 must define ordered multi-effect recovery before more than one durable effect is claimed for a turn."
+    "Development must prove chooser cancel, stale/not-found/failed, wrong/empty/symlink directory, source drift, binding write/reread, metadata-only retry denial and restart recovery.",
+    "UI Design must prove focus return, pathless localized settled states and polling convergence without a renderer jobs.retry call."
   ]
 }

@@ -563,7 +563,12 @@ describe("BackupCoordinatorService", () => {
       "utf8"
     );
     const core = new BackupRestoreService({ userDataPath });
-    const options = { ...fixture.options, backupService: core as BackupServicePort };
+    const scheduled: Array<() => Promise<void>> = [];
+    const options = {
+      ...fixture.options,
+      backupService: core as BackupServicePort,
+      schedule: (task: () => Promise<void>) => { scheduled.push(task); }
+    };
     const waiting = await new BackupCoordinatorService(options).create(fixture.destination);
 
     expect(waiting.error).toBeUndefined();
@@ -587,27 +592,28 @@ describe("BackupCoordinatorService", () => {
 
     const restarted = new BackupCoordinatorService(options);
     expect(await restarted.recoverInterrupted()).toEqual({ recovered: 0, failed: 1 });
+    expect(await restarted.retry(waiting.id)).toMatchObject({ status: "not_allowed" });
     expect(readJob(fixture.vaultPath, waiting.id)).toMatchObject({
       id: waiting.id,
       state: "waiting_dependency"
     });
 
     const vaultId = loadVaultSummary(fixture.vaultPath).vaultId;
-    fs.writeFileSync(path.join(userDataPath, "vault-bindings.json"), `${JSON.stringify({
-      schemaVersion: 1,
-      roots: [{
-        rootId: "root_externalwait01",
-        vaultId,
-        purpose: "managed_copy",
-        absolutePath: externalRoot,
-        availability: "available",
-        createdAt: FIXED_NOW,
-        updatedAt: FIXED_NOW
-      }],
-      defaults: [{ vaultId, rootId: "root_externalwait01" }]
-    }, null, 2)}\n`, "utf8");
-
-    expect(await restarted.recoverInterrupted()).toEqual({ recovered: 1, failed: 0 });
+    const inspected = restarted.inspectReconnectCandidate(vaultId, waiting.id);
+    expect(inspected.status).toBe("ready");
+    if (inspected.status !== "ready") throw new Error("Expected a reconnect candidate.");
+    const sourceRecordPath = path.join(fixture.vaultPath, ".pige", "source-records", `${sourceId}.json`);
+    const heldSourceRecordPath = `${sourceRecordPath}.held`;
+    fs.renameSync(sourceRecordPath, heldSourceRecordPath);
+    expect(restarted.reconnectDependency(inspected.candidate, externalRoot)).toBe("not_found");
+    fs.renameSync(heldSourceRecordPath, sourceRecordPath);
+    const wrongRoot = path.join(fixture.root, "wrong-reconnect-root");
+    fs.mkdirSync(wrongRoot, { recursive: true });
+    expect(restarted.reconnectDependency(inspected.candidate, wrongRoot)).toBe("failed");
+    expect(restarted.reconnectDependency(inspected.candidate, externalRoot)).toBe("resolved");
+    expect(readJob(fixture.vaultPath, waiting.id)).toMatchObject({ id: waiting.id, state: "queued" });
+    expect(scheduled).toHaveLength(1);
+    await scheduled[0]!();
     const completed = readJob(fixture.vaultPath, waiting.id);
     expect(completed).toMatchObject({ id: waiting.id, state: "completed" });
     expect(completed.waitingDependency).toBeUndefined();

@@ -128,7 +128,8 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain("window.pige.updates.summary()");
     expect(appSource).toContain("window.pige.updates.check({ apiVersion: 1, requestId })");
     expect(appSource).toContain('{ id: "diagnostics", icon: "wrench", status: "real" }');
-    expect(appSource).toContain('settingsSection === "vault" || settingsSection === "maintenance"');
+    expect(appSource).toContain('settingsSection === "vault"');
+    expect(appSource).toContain("<VaultBackupSettingsPanel");
     expect(appSource).toContain('settingsSection === "updates" || settingsSection === "diagnostics"');
   });
 
