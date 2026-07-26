@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AgentSubmitTurnRequest } from "@pige/contracts";
+import type { AgentSubmitTurnRequest, RetrievalAnswerCitation } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
   CaptureService,
@@ -90,6 +90,18 @@ export class HomeAgentUrlService {
     });
     const link = this.#jobs.readAgentTurnUrlSourceLink(request.jobId, request.sourceId);
     return toHomeAgentUrlEvidence(preserved, link.pageId, link.pagePath, link.title, request.inputHash);
+  }
+
+  citationCandidate(request: ReadHomeAgentUrlRequest): RetrievalAnswerCitation {
+    const current = this.readCurrent(request);
+    return Object.freeze({
+      refId: "citation_17",
+      label: "[17]",
+      pageId: current.pageId,
+      title: current.title,
+      pageType: "source",
+      locator: "source_page"
+    });
   }
 }
 

@@ -82,7 +82,7 @@ describe("Agent-selected URL ingress", () => {
         fauxResponses: [
           fetchUrl("url_call_primary"),
           inspectUrl("url_inspect_primary"),
-          finishHome("The preserved article says the launch phrase is heliotrope seven.", "source")
+          finishHome("The preserved article says the launch phrase is heliotrope seven. [citation_17]", "source")
         ]
       }));
 
@@ -98,7 +98,17 @@ describe("Agent-selected URL ingress", () => {
         state: "completed",
         modelUsage: "cloud",
         sourceIds: [expect.stringMatching(/^src_/u)],
-        answer: { grounding: "general", citations: [] }
+        answer: {
+          grounding: "local_knowledge",
+          citations: [{
+            refId: "citation_17",
+            label: "[17]",
+            pageId: expect.any(String),
+            title: "Agent URL article",
+            pageType: "source",
+            locator: "source_page"
+          }]
+        }
       });
       expect(fetchCalls).toBe(1);
       const jobs = readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"));
@@ -134,6 +144,7 @@ describe("Agent-selected URL ingress", () => {
           agentTurnJobId: jobs[0]?.id
         }
       });
+      expect(outcome.answer?.citations[0]?.pageId).toBe(sources[0]?.knowledgePageId);
       expect(sources[0]?.metadata).not.toHaveProperty("rawToolCallId");
       expect(findFiles(path.join(fixture.vaultPath, "sources"), ".md")).toHaveLength(1);
       const operations = readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"));
@@ -146,6 +157,27 @@ describe("Agent-selected URL ingress", () => {
           ])
         })
       ]);
+      if (outcome.state !== "completed") throw new Error("Expected the URL citation turn to complete.");
+      let restartFetchCalls = 0;
+      let restartProviderCalls = 0;
+      const restarted = makeHome(fixture, {
+        fetchSnapshot: async () => {
+          restartFetchCalls += 1;
+          throw new Error("Reading a durable URL citation must not refetch the source.");
+        }
+      }, {
+        run: async () => {
+          restartProviderCalls += 1;
+          throw new Error("Reading a durable URL citation must not replay the Provider.");
+        }
+      }).home;
+      expect(restarted.conversation({ conversationId: outcome.conversationId }).messages.at(-1)).toMatchObject({
+        role: "assistant",
+        answer: {
+          citations: [{ refId: "citation_17", pageId: sources[0]?.knowledgePageId }]
+        }
+      });
+      expect({ restartFetchCalls, restartProviderCalls }).toEqual({ restartFetchCalls: 0, restartProviderCalls: 0 });
     }
   );
 
@@ -399,6 +431,18 @@ describe("Agent-selected URL ingress", () => {
       toolCallId: "url_provenance_call",
       signal: new AbortController().signal
     });
+    expect(urls.citationCandidate({
+      jobId: created.id,
+      sourceId: evidence.sourceId,
+      inputHash
+    })).toEqual({
+      refId: "citation_17",
+      label: "[17]",
+      pageId: evidence.pageId,
+      title: evidence.title,
+      pageType: "source",
+      locator: "source_page"
+    });
     const sourceRecordPath = findFiles(path.join(fixture.vaultPath, ".pige", "source-records"), ".json")[0];
     if (!sourceRecordPath) throw new Error("Expected URL SourceRecord.");
     const originalRecord = JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")) as SourceRecord;
@@ -410,6 +454,11 @@ describe("Agent-selected URL ingress", () => {
     fs.writeFileSync(sourceRecordPath, `${JSON.stringify(changedOriginal, null, 2)}\n`, "utf8");
 
     expect(() => capture.readAgentTurnUrlSource({
+      jobId: created.id,
+      sourceId: evidence.sourceId,
+      inputHash
+    })).toThrow(expect.objectContaining({ code: "agent_runtime.url_source_changed" }));
+    expect(() => urls.citationCandidate({
       jobId: created.id,
       sourceId: evidence.sourceId,
       inputHash
@@ -437,7 +486,7 @@ describe("Agent-selected URL ingress", () => {
         const fetchContext = toolContext("same_response_fetch");
         expect(await fetchTool.authorize?.({ candidateIndex: 1 }, fetchContext)).not.toBe(false);
         await fetchTool.execute({ candidateIndex: 1 }, fetchContext.signal, fetchContext);
-        return runtimeResult(request, [fetchTool.name], "The URL was fetched for this turn.");
+        return runtimeResult(request, [fetchTool.name], "The URL was fetched for this turn. [citation_17]");
       }
     };
     const { home } = makeHome(fixture, { fetchSnapshot: async () => makeSnapshot() }, runtime);
@@ -451,7 +500,11 @@ describe("Agent-selected URL ingress", () => {
     expect(outcome).toMatchObject({
       state: "completed",
       sourceIds: [],
-      answer: { answer: "The URL was fetched for this turn." }
+      answer: {
+        answer: "The URL was fetched for this turn. [citation_17]",
+        grounding: "general",
+        citations: []
+      }
     });
   });
 

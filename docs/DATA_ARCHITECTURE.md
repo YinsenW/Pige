@@ -471,7 +471,7 @@ Rules:
   source records.
 - Assistant answers that become wiki pages are stored once as the page content and referenced from the conversation.
 - Conversation events may store unsaved assistant text and safe page/ref citations;
-  private evidence identity stays elsewhere and restart never calls the Provider for it.
+  private evidence identity stays elsewhere and restart neither refetches nor calls Provider.
 - Prompts/raw responses are not stored by default. Selection events add only strict action
   presentation; body/path/span/hash/Provider data stay out, while Jobs/proposals/Operations
   own selection/review/apply.

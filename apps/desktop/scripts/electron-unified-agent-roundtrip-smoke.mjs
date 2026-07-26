@@ -5,6 +5,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -32,6 +33,8 @@ const LARGE_PASTE_BODY = `The pasted source confirms the roundtrip launch phrase
 const LARGE_PASTE_ANSWER = "The pasted source agrees with the local roundtrip note on heliotrope seven. [citation_11]";
 const DROP_DRAFT = "Keep this exact draft local while the dropped file submits.";
 const DROP_ATTACHMENT_NAME = "whole-window-drop.txt";
+const URL_PROMPT = "Read and cite https://example.com/roundtrip-url-citation";
+const URL_ANSWER = "The inspected URL confirms the roundtrip web citation. [citation_17]";
 const CHILD_RESULT_PREFIX = "PIGE_ROUNDTRIP_RESULT ";
 const MAX_CHILD_MS = 90_000;
 const highRiskOnly = process.argv.includes("--high-risk-only");
@@ -348,6 +351,42 @@ async function runOrchestrator() {
     assert.equal(dropRestart.durableSnapshot.failedRetryableJobIds.length, 0);
     assert.equal(requests.length, requestCountBeforeDropRestart);
 
+    const requestCountBeforeUrl = requests.length;
+    const url = await runChild("url", {
+      rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
+      activityAttachmentPath, datasetAttachmentPath, dropAttachmentPath, deniedCommandSentinelPath,
+      highRiskOnly: false
+    });
+    assert.equal(url.urlTransportCalls, 1);
+    assert.equal(url.urlCitationVisible, true);
+    assert.equal(url.urlCitationIdentityExact, true);
+    assert.equal(url.urlCitationOpenedReader, true);
+    assert.equal(url.agentTurnDelta, 1);
+    assert.equal(url.sourceDelta, 1);
+    assert.equal(url.durableSnapshot.sourceIds.length, dropRestart.durableSnapshot.sourceIds.length + 1);
+    assert.equal(url.durableSnapshot.nonterminalJobIds.length, 0);
+    assert.equal(url.durableSnapshot.failedRetryableJobIds.length, 0);
+    assertUniqueIdentities(url.durableSnapshot.messageIdentities.map((message) => message.id), "conversation event after URL");
+    assertUniqueIdentities(url.durableSnapshot.relevantJobs.map((job) => job.id), "Job after URL");
+    assertUniqueIdentities(url.durableSnapshot.sourceIds, "source after URL");
+    const urlProviderRequests = requests.slice(requestCountBeforeUrl)
+      .filter((request) => request.method === "POST" && request.path === "/v1/responses");
+    assert.equal(urlProviderRequests.length, 3);
+    assert.ok(urlProviderRequests[0]?.body.includes('"name":"pige_fetch_url"'));
+    assert.ok(urlProviderRequests[1]?.body.includes('"call_id":"call_url_fetch"'));
+    assert.ok(urlProviderRequests[2]?.body.includes('"call_id":"call_url_inspect"'));
+
+    const requestCountBeforeUrlRestart = requests.length;
+    const urlRestart = await runChild("url_restart", {
+      rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
+      activityAttachmentPath, datasetAttachmentPath, dropAttachmentPath, deniedCommandSentinelPath,
+      highRiskOnly: false
+    });
+    assert.equal(urlRestart.urlCitationVisible, true);
+    assert.equal(urlRestart.urlCitationIdentityExact, true);
+    assert.deepEqual(urlRestart.durableSnapshot, url.durableSnapshot);
+    assert.equal(requests.length, requestCountBeforeUrlRestart);
+
     const secretsPath = path.join(userDataPath, "secrets.json");
     const secrets = JSON.parse(fs.readFileSync(secretsPath, "utf8"));
     const providers = JSON.parse(fs.readFileSync(path.join(userDataPath, "provider-profiles.json"), "utf8"));
@@ -371,7 +410,7 @@ async function runOrchestrator() {
       `visible direct/cited Home, preserved-source, ` +
       `TXT/Markdown ingress, Dataset continuation, ordinary provider sends without a second approval, zero retryable Jobs, ` +
       `reversible Activity/Undo results, one exact large paste, one identity-free whole-window drop, ` +
-      `and exact restart retention without another Provider call.`
+      `one inspected URL citation with stable Reader navigation, and exact restart retention without another Provider call.`
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));
@@ -527,6 +566,7 @@ async function runElectronPhase() {
   const stagePath = requireEnv("PIGE_ROUNDTRIP_STAGE_PATH");
   const { app, BrowserWindow, clipboard, dialog } = await import("electron");
   if (phase !== "connect") installSyntheticOpenAiRedirect(baseUrl);
+  const syntheticUrlTransport = phase === "url" ? installSyntheticUrlTransport() : undefined;
   fs.mkdirSync(userDataPath, { recursive: true });
   app.setPath("userData", userDataPath);
   app.setPath("sessionData", path.join(userDataPath, "session"));
@@ -549,7 +589,9 @@ async function runElectronPhase() {
       phase !== "large_paste" &&
       phase !== "large_paste_restart" &&
       phase !== "drop" &&
-      phase !== "drop_restart"
+      phase !== "drop_restart" &&
+      phase !== "url" &&
+      phase !== "url_restart"
     ) {
       throw new Error("Unknown unified Agent roundtrip phase.");
     }
@@ -610,9 +652,18 @@ async function runElectronPhase() {
       const prepared = await prepareWholeWindowDropRenderer(browserWindow);
       const dropOverlayVisible = await dispatchWholeWindowFileDrop(browserWindow, dropAttachmentPath);
       result = await readWholeWindowDropRendererResult(browserWindow, prepared, dropOverlayVisible);
-    } else {
+    } else if (phase === "drop_restart") {
       markStage("renderer_whole_window_drop_restart");
       result = await runWholeWindowDropRestartRenderer(browserWindow);
+    } else if (phase === "url") {
+      markStage("renderer_url_citation");
+      result = {
+        ...(await runUrlCitationRenderer(browserWindow, clipboard)),
+        urlTransportCalls: syntheticUrlTransport?.calls() ?? 0
+      };
+    } else {
+      markStage("renderer_url_citation_restart");
+      result = await runUrlCitationRestartRenderer(browserWindow);
     }
     if (phase === "connect" && runHighRiskOnly) {
       markStage("renderer_high_risk_deny");
@@ -1784,6 +1835,134 @@ function installSyntheticOpenAiRedirect(baseUrl) {
   };
 }
 
+function installSyntheticUrlTransport() {
+  const require = createRequire(import.meta.url);
+  const dns = require("node:dns/promises");
+  const undici = require("undici");
+  let transportCalls = 0;
+  dns.lookup = async (hostname, options) => {
+    if (hostname !== "example.com") throw new Error("Synthetic URL lookup escaped its exact host.");
+    return options?.all ? [{ address: "93.184.216.34", family: 4 }] : { address: "93.184.216.34", family: 4 };
+  };
+  undici.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.href !== "https://example.com/roundtrip-url-citation") {
+      throw new Error("Synthetic URL transport escaped its exact target.");
+    }
+    transportCalls += 1;
+    return new Response(
+      "<!doctype html><html><head><title>Roundtrip URL citation</title></head><body>The roundtrip web citation is durable.</body></html>",
+      { status: 200, headers: { "content-type": "text/html; charset=utf-8" } }
+    );
+  };
+  return { calls: () => transportCalls };
+}
+
+async function runUrlCitationRenderer(browserWindow, clipboard) {
+  await browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'url_citation_focus_wait';
+      console.info('PIGE_ROUNDTRIP_STAGE url_citation_focus_wait');
+      const deadline = Date.now() + 45000;
+      let composer;
+      while (Date.now() < deadline) {
+        composer = document.querySelector('section.home .composer textarea');
+        globalThis.__pigeRoundtripWaitState = { composerPresent: Boolean(composer) };
+        if (composer) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      if (!composer) throw new Error('Home composer is unavailable before URL paste.');
+      composer.focus();
+      return true;
+    })()
+  `, true);
+  const previousClipboardText = clipboard.readText();
+  try {
+    clipboard.writeText(URL_PROMPT);
+    browserWindow.webContents.focus();
+    browserWindow.webContents.paste();
+    const result = await browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'url_citation_submit';
+      console.info('PIGE_ROUNDTRIP_STAGE url_citation_submit');
+      const deadline = Date.now() + 45000;
+      const baselineJobs = await window.pige.jobs.list({ limit: 100 });
+      const baselineLibrary = await window.pige.library.list({ limit: 100 });
+      const baselineJobIds = new Set(baselineJobs.jobs.filter((job) => job.class === 'agent_turn').map((job) => job.id));
+      const baselineSourceIds = new Set(baselineLibrary.pages.flatMap((page) => page.sourceIds));
+      const composer = document.querySelector('section.home .composer textarea');
+      if (!composer || composer.value !== ${JSON.stringify(URL_PROMPT)}) throw new Error('URL clipboard paste did not reach the Home composer.');
+      if (document.querySelectorAll('.attachment-chip').length !== 0) throw new Error('Ordinary URL paste became a staged attachment.');
+      const send = document.querySelector('section.home button[aria-label="Send"]:not(:disabled)');
+      if (!send) throw new Error('URL Send is unavailable.');
+      send.click();
+      while (Date.now() < deadline) {
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const library = await window.pige.library.list({ limit: 100 });
+        const newJobs = jobs.jobs.filter((job) => job.class === 'agent_turn' && !baselineJobIds.has(job.id));
+        const newSources = [...new Set(library.pages.flatMap((page) => page.sourceIds).filter((id) => !baselineSourceIds.has(id)))];
+        const assistant = timeline?.messages.find((message) => message.role === 'assistant' && message.text.includes(${JSON.stringify(URL_ANSWER)}));
+        const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_17');
+        globalThis.__pigeRoundtripWaitState = {
+          agentTurnDelta: newJobs.length,
+          sourceDelta: newSources.length,
+          completed: newJobs[0]?.state === 'completed',
+          answerVisible: Boolean(assistant),
+          citationVisible: Boolean(citation),
+          citationPagePresent: Boolean(citation?.pageId)
+        };
+        if (newJobs.length === 1 && newSources.length === 1 && newJobs[0]?.state === 'completed' && citation?.pageId) {
+          const button = Array.from(document.querySelectorAll('.conversation-citations .citation-row:not(:disabled)'))
+            .find((item) => item.textContent?.includes('[17]'));
+          if (!button) throw new Error('URL citation navigation action is unavailable.');
+          button.click();
+          while (Date.now() < deadline && !document.querySelector('.note-reader')) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          if (!document.querySelector('.note-reader')) throw new Error('URL citation did not open the Reader.');
+          return {
+            urlCitationVisible: true,
+            urlCitationIdentityExact: citation.pageId.length > 0,
+            urlCitationOpenedReader: true,
+            urlCitationPageId: citation.pageId,
+            agentTurnDelta: 1,
+            sourceDelta: 1
+          };
+        }
+        if (newJobs.some((job) => job.state === 'failed_retryable' || job.state === 'failed_final')) {
+          throw new Error('URL citation turn reached a durable failure state.');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for URL citation convergence.');
+    })()
+    `, true);
+    return { ...result, durableSnapshot: await readDurableRestartSnapshot(browserWindow) };
+  } finally {
+    clipboard.writeText(previousClipboardText);
+  }
+}
+
+async function runUrlCitationRestartRenderer(browserWindow) {
+  const result = await browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'url_citation_restart_wait';
+      console.info('PIGE_ROUNDTRIP_STAGE url_citation_restart_wait');
+      const deadline = Date.now() + 45000;
+      while (Date.now() < deadline) {
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const assistant = timeline?.messages.find((message) => message.role === 'assistant' && message.text.includes(${JSON.stringify(URL_ANSWER)}));
+        const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_17');
+        if (citation?.pageId) return { urlCitationVisible: true, urlCitationIdentityExact: true, urlCitationPageId: citation.pageId };
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for restarted URL citation.');
+    })()
+  `, true);
+  return { ...result, durableSnapshot: await readDurableRestartSnapshot(browserWindow) };
+}
+
 async function prepareSourceRenderer(browserWindow, prompt) {
   return browserWindow.webContents.executeJavaScript(`
     (() => {
@@ -2261,6 +2440,18 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
     }
     if (serializedInput.includes('"call_id":"call_large_paste_search"') && serializedInput.includes("function_call_output")) {
       writeTextResponse(response, LARGE_PASTE_ANSWER, "large-paste-final-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_url_inspect"') && serializedInput.includes("function_call_output")) {
+      writeTextResponse(response, URL_ANSWER, "url-final-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_url_fetch"') && serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_inspect_url_source", "call_url_inspect", "url-inspect-1");
+      return;
+    }
+    if (latestUserText.includes(URL_PROMPT) && serializedTools.includes("pige_fetch_url")) {
+      writeToolCallResponse(response, "pige_fetch_url", "call_url_fetch", "url-fetch-1", { candidateIndex: 1 });
       return;
     }
     if (serializedInput.includes('"call_id":"call_large_paste_inspect"') && serializedInput.includes("function_call_output")) {

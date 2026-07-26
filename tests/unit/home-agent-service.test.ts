@@ -97,7 +97,7 @@ afterEach(() => {
 });
 
 describe("Home Pi Agent service", () => {
-  it("keeps all four citation namespaces disjoint and rejects conflicting legacy identities", () => {
+  it("keeps all five citation namespaces disjoint and rejects conflicting identities", () => {
     const currentNote: RetrievalAnswerCitation = {
       refId: "citation_1",
       label: "[1]",
@@ -122,18 +122,33 @@ describe("Home Pi Agent service", () => {
       pageType: "source",
       locator: "snippet:1"
     };
+    const inspectedUrl: RetrievalAnswerCitation = {
+      refId: "citation_17",
+      label: "[17]",
+      pageId: "page_20260727_urlcandidate",
+      title: "Inspected URL",
+      pageType: "source",
+      locator: "source_page"
+    };
 
     expect(mergeHomeCitationCandidates(
       [currentNote],
       [homeSearch],
       [DATASET_CITATION],
-      [sourceSession]
+      [sourceSession],
+      [inspectedUrl]
     ).map(({ refId }) => refId)).toEqual([
       "citation_1",
       "citation_2",
       "citation_10",
-      "citation_11"
+      "citation_11",
+      "citation_17"
     ]);
+    expect(mergeHomeCitationCandidates([inspectedUrl], [{ ...inspectedUrl }])).toEqual([inspectedUrl]);
+    expect(() => mergeHomeCitationCandidates([inspectedUrl], [{
+      ...inspectedUrl,
+      pageId: "page_20260727_changedurl"
+    }])).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_conflict" }));
     expect(mergeHomeCitationCandidates([currentNote], [{ ...currentNote }])).toEqual([currentNote]);
     expect(() => mergeHomeCitationCandidates([currentNote], [{
       ...homeSearch,
