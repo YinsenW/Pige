@@ -24,6 +24,8 @@ import {
   homeConversationStateForJob,
   isTerminalConversationTurn,
   selectCurrentNoSourceTurn,
+  terminalTurnOwnsComposerSubmission,
+  type HomeComposerSubmissionBinding,
   type HomeConversationTurnState
 } from "./components/HomeConversationTurnState";
 import { WindowModeToggle } from "./components/WindowModeToggle";
@@ -3077,7 +3079,7 @@ function HomeComposer(props: {
   });
   const conversationCopySequenceRef = useRef(0);
   const conversationCopyResetTimerRef = useRef<number | undefined>(undefined);
-  const composerSubmitInFlightRef = useRef(false);
+  const composerSubmissionRef = useRef<HomeComposerSubmissionBinding | null>(null);
   const composerCompositionActiveRef = useRef(false);
   const composerCompositionRaceRef = useRef(false);
   const composerCompositionTimerRef = useRef<number | undefined>(undefined);
@@ -3671,6 +3673,20 @@ function HomeComposer(props: {
     setAgentDraft(null);
   };
 
+  const beginComposerSubmission = (clientTurnId: string): boolean => {
+    const vaultId = activeVaultIdRef.current;
+    if (!vaultId || composerSubmissionRef.current) return false;
+    composerSubmissionRef.current = { vaultId, clientTurnId };
+    setComposerSubmitActive(true);
+    return true;
+  };
+
+  const finishComposerSubmission = (clientTurnId: string): void => {
+    if (composerSubmissionRef.current?.clientTurnId !== clientTurnId) return;
+    composerSubmissionRef.current = null;
+    setComposerSubmitActive(false);
+  };
+
   const refreshConversation = async (): Promise<AgentConversationInitialTimeline | undefined> => {
     const vaultId = props.activeVault?.vaultId;
     if (!vaultId) {
@@ -3737,6 +3753,10 @@ function HomeComposer(props: {
   }, []);
 
   useEffect(() => {
+    if (composerSubmissionRef.current?.vaultId !== props.activeVault?.vaultId) {
+      composerSubmissionRef.current = null;
+      setComposerSubmitActive(false);
+    }
     conversationLoadSequence.current += 1;
     noteOpenSequence.current += 1;
     inlineReferenceSequence.current += 1;
@@ -3778,7 +3798,7 @@ function HomeComposer(props: {
     if (
       latestTurn.state !== "queued" &&
       latestTurn.state !== "running" &&
-      !composerSubmitInFlightRef.current
+      !composerSubmissionRef.current
     ) {
       clearAgentDraft();
     }
@@ -3791,8 +3811,25 @@ function HomeComposer(props: {
 
   useEffect(() => {
     if (!latestTurn || !isTerminalConversationTurn(latestTurn.state)) return;
+    const submission = composerSubmissionRef.current;
+    if (submission && conversationTimeline && terminalTurnOwnsComposerSubmission({
+      conversationId: conversationTimeline.conversationId,
+      latestTurn,
+      ...(activeAgentDraftRef.current ? { activeDraft: activeAgentDraftRef.current } : {}),
+      submission,
+      activeVaultId: activeVaultIdRef.current
+    })) {
+      finishComposerSubmission(submission.clientTurnId);
+      clearAgentDraft();
+    }
     void props.onHomeStateChanged().catch(() => undefined);
-  }, [latestTurn?.jobId, latestTurn?.state]);
+  }, [
+    agentDraft?.conversationId,
+    agentDraft?.jobId,
+    composerSubmitActive,
+    latestTurn?.jobId,
+    latestTurn?.state
+  ]);
 
   useEffect(() => {
     if (!props.activeVault?.vaultId || !isConversationPollingState(latestTurn?.state)) return;
@@ -3808,7 +3845,7 @@ function HomeComposer(props: {
       (!hasText && !hasAttachments) ||
       (!homeModelSendAvailable && !hasAttachments) ||
       modelSwitching ||
-      composerSubmitInFlightRef.current
+      composerSubmissionRef.current
     ) return;
     if (hasRejectedPaste) {
       setCaptureError(props.t("home.largePasteRejectedSubmissionBlocked"));
@@ -3830,8 +3867,7 @@ function HomeComposer(props: {
         ? stagedComposerAttemptRef.current.clientTurnId : createAgentClientTurnId();
       stagedComposerAttemptRef.current = { key: attemptKey, clientTurnId };
       followConversationRef.current = true;
-      composerSubmitInFlightRef.current = true;
-      setComposerSubmitActive(true);
+      if (!beginComposerSubmission(clientTurnId)) return;
       setCaptureError(null);
       setAttachmentSubmissionNotice(null);
       setAgentError(null);
@@ -3854,7 +3890,6 @@ function HomeComposer(props: {
             : props.t("home.pastedText"))
         }
       ]);
-      const followUpConversation = canFollowUpToConversation(conversationTimeline) ? conversationTimeline : undefined;
       beginAgentDraft(clientTurnId);
       try {
         const outcome = await window.pige.agent.submitTurn({
@@ -3863,11 +3898,7 @@ function HomeComposer(props: {
           inputKind: "file_picker",
           locale: props.locale,
           stagedItems,
-          clientTurnId,
-          ...(followUpConversation ? {
-            conversationId: followUpConversation.conversationId,
-            expectedTailEventId: followUpConversation.tailEventId
-          } : {})
+          clientTurnId
         }, submittedFiles);
         if (outcome.state !== "accepted") {
           clearAgentDraft();
@@ -3929,14 +3960,11 @@ function HomeComposer(props: {
         setAgentRunState("failed");
         void refreshConversation();
       } finally {
-        composerSubmitInFlightRef.current = false;
-        setComposerSubmitActive(false);
+        finishComposerSubmission(clientTurnId);
       }
       return;
     }
     followConversationRef.current = true;
-    composerSubmitInFlightRef.current = true;
-    setComposerSubmitActive(true);
     setCaptureError(null);
     setAttachmentSubmissionNotice(null);
     setAgentError(null);
@@ -3956,6 +3984,7 @@ function HomeComposer(props: {
     const clientTurnId = stagedComposerAttemptRef.current?.key === attemptKey
       ? stagedComposerAttemptRef.current.clientTurnId
       : createAgentClientTurnId();
+    if (!beginComposerSubmission(clientTurnId)) return;
     stagedComposerAttemptRef.current = { key: attemptKey, clientTurnId };
     draftRevisionRef.current = clearedDraftRevision;
     props.onDraftChange("");
@@ -4072,8 +4101,7 @@ function HomeComposer(props: {
       setAgentRunState("failed");
       void refreshConversation();
     } finally {
-      composerSubmitInFlightRef.current = false;
-      setComposerSubmitActive(false);
+      finishComposerSubmission(clientTurnId);
     }
   };
 
@@ -4092,7 +4120,7 @@ function HomeComposer(props: {
     event.preventDefault();
     if (
       event.repeat ||
-      composerSubmitInFlightRef.current ||
+      composerSubmissionRef.current ||
       (!homeModelSendAvailable && stagedComposerItems.length === 0) ||
       modelSwitching ||
       agentRunState === "accepted" ||
@@ -4162,17 +4190,15 @@ function HomeComposer(props: {
     const request = props.fileDropRequest;
     if (
       !request ||
-      composerSubmitInFlightRef.current ||
+      composerSubmissionRef.current ||
       handledFileDropClientTurnIdRef.current === request.clientTurnId
     ) return;
     handledFileDropClientTurnIdRef.current = request.clientTurnId;
-    composerSubmitInFlightRef.current = true;
-    setComposerSubmitActive(true);
+    if (!beginComposerSubmission(request.clientTurnId)) return;
     props.onFileDropRequestConsumed(request.clientTurnId);
     void submitHomeFiles(request.files, "file_drop", request.text, request.clientTurnId)
       .finally(() => {
-        composerSubmitInFlightRef.current = false;
-        setComposerSubmitActive(false);
+        finishComposerSubmission(request.clientTurnId);
       });
   }, [props.fileDropRequest?.clientTurnId, composerSubmitActive]);
 

@@ -53,7 +53,10 @@ import frMessages from "../../apps/desktop/src/renderer/src/locales/fr/messages.
 import jaMessages from "../../apps/desktop/src/renderer/src/locales/ja/messages.json";
 import koMessages from "../../apps/desktop/src/renderer/src/locales/ko/messages.json";
 import zhHansMessages from "../../apps/desktop/src/renderer/src/locales/zh-Hans/messages.json";
-import { selectCurrentNoSourceTurn } from "../../apps/desktop/src/renderer/src/components/HomeConversationTurnState";
+import {
+  selectCurrentNoSourceTurn,
+  terminalTurnOwnsComposerSubmission
+} from "../../apps/desktop/src/renderer/src/components/HomeConversationTurnState";
 
 const globalKeys = [
   "window",
@@ -104,6 +107,37 @@ describe("Home durable Agent conversation UI", () => {
       recentJobs: [staleJob, currentJob],
       activeDraftJobId: currentJob.id
     })).toBe(currentJob);
+  });
+
+  it("releases a composer submission only for its exact durable terminal turn", () => {
+    const timeline = completedTimeline();
+    const latestTurn = timeline.latestTurn!;
+    const input = {
+      conversationId: timeline.conversationId,
+      latestTurn,
+      activeDraft: {
+        clientTurnId: "client_turn_exact",
+        conversationId: timeline.conversationId,
+        jobId: latestTurn.jobId
+      },
+      submission: { vaultId: "vault_exact", clientTurnId: "client_turn_exact" },
+      activeVaultId: "vault_exact"
+    } as const;
+
+    expect(terminalTurnOwnsComposerSubmission(input)).toBe(true);
+    expect(terminalTurnOwnsComposerSubmission({ ...input, activeVaultId: "vault_other" })).toBe(false);
+    expect(terminalTurnOwnsComposerSubmission({
+      ...input,
+      activeDraft: { ...input.activeDraft, jobId: "job_other" }
+    })).toBe(false);
+    expect(terminalTurnOwnsComposerSubmission({
+      ...input,
+      activeDraft: { ...input.activeDraft, conversationId: "conversation_other" }
+    })).toBe(false);
+    expect(terminalTurnOwnsComposerSubmission({
+      ...input,
+      submission: { ...input.submission, clientTurnId: "client_turn_other" }
+    })).toBe(false);
   });
 
   it("probes unsupported voice on demand without starting a session", async () => {
@@ -3170,6 +3204,8 @@ describe("Home durable Agent conversation UI", () => {
       inputKind: "file_picker",
       stagedItems: [{ kind: "file", ordinal: 0, displayName: "follow-up.txt" }]
     });
+    expect(harness.submitRequests[0]).not.toHaveProperty("conversationId");
+    expect(harness.submitRequests[0]).not.toHaveProperty("expectedTailEventId");
     expect(harness.submittedFileNames).toEqual([["follow-up.txt"]]);
 
     await act(async () => mount.root.unmount());

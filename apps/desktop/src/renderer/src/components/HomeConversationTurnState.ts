@@ -4,6 +4,31 @@ import type { JobState } from "@pige/schemas";
 type ConversationTurn = AgentConversationInitialTimeline["latestTurn"];
 
 export type HomeConversationTurnState = "idle" | "accepted" | "running" | "waiting" | "failed" | "completed";
+export type HomeComposerSubmissionBinding = {
+  readonly vaultId: string;
+  readonly clientTurnId: string;
+};
+
+export function terminalTurnOwnsComposerSubmission(input: {
+  readonly conversationId: string;
+  readonly latestTurn: ConversationTurn;
+  readonly activeDraft?: {
+    readonly clientTurnId: string;
+    readonly conversationId?: string;
+    readonly jobId?: string;
+  };
+  readonly submission: HomeComposerSubmissionBinding | null;
+  readonly activeVaultId: string | undefined;
+}): boolean {
+  const activeDraft = input.activeDraft;
+  const submission = input.submission;
+  if (!input.latestTurn || !activeDraft || !submission || !input.activeVaultId) return false;
+  return isTerminalConversationTurn(input.latestTurn.state) &&
+    activeDraft.jobId === input.latestTurn.jobId &&
+    activeDraft.conversationId === input.conversationId &&
+    submission.clientTurnId === activeDraft.clientTurnId &&
+    submission.vaultId === input.activeVaultId;
+}
 
 export function selectCurrentNoSourceTurn(input: {
   readonly latestTurn: ConversationTurn;
