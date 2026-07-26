@@ -3,7 +3,7 @@
   "baseline": "fd869668bb7d53cb1946b3b70e2127de1e1959af",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 132,
-  "baselineLines": 71116,
+  "baselineLines": 71111,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -78,7 +78,7 @@
       ["secret-store.ts", 142, "pd"],
       ["single-writer-file-commit.ts", 13, "d"],
       ["skill-registry-service.ts", 455, "pd"],
-      ["source-page-service.ts", 1052, "rdf"],
+      ["source-page-service.ts", 1047, "rdf"],
       ["vault-service.ts", 450, "rd"]
     ],
     "capability_executor": [
@@ -171,7 +171,7 @@
       "writeJsonAtomicDefinitions": 9,
       "writeFileAtomicDefinitions": 4,
       "isErrnoDefinitions": 1,
-      "resolveVaultRelativePathFiles": 3
+      "resolveVaultRelativePathFiles": 2
     },
     "oversizedServiceBranchAndFunctionProxies": {
       "jobs-service.ts": [536, 221],
