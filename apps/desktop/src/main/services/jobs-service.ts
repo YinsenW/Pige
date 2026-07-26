@@ -3989,11 +3989,19 @@ function toJobSummary(vaultPath: string, job: JobRecord): JobSummary {
     ...(sourceRecord?.kind ? { sourceKind: sourceRecord.kind } : {}),
     ...(sourceRecord ? { sourceDisplayName: sourceRecord.original?.displayName ?? sourceRecord.kind } : {}),
     ...(backupKind ? { backupKind } : {}),
+    canReconnectDependency: canReconnectDependency(job),
     ...(job.error ? { error: job.error } : {}),
     message: job.message,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt
   };
+}
+
+function canReconnectDependency(job: JobRecord): boolean {
+  const waiting = job.waitingDependency;
+  return job.class === "backup" && job.state === "waiting_dependency" &&
+    waiting?.requiredAction === "reconnect_path" &&
+    (waiting.dependencyKind === "vault_binding" || waiting.dependencyKind === "external_source");
 }
 
 function readSourceRecord(vaultPath: string, sourceId: string): SourceRecord | undefined {

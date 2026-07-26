@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   AppearanceSettingsSummarySchema,
   AppearanceThemeMutationResultSchema,
+  BackupReconnectDependencyRequestSchema,
+  BackupReconnectDependencyResultSchema,
   ConfirmationProposalSchema,
   ConversationEventSchema,
   FixtureManifestSchema,
@@ -24,6 +26,27 @@ import {
 } from "@pige/schemas";
 
 describe("schemas", () => {
+  it("keeps Backup reconnect identity strict and body-free", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "backupreconnectreq_abcdefgh",
+      activeVaultId: "vault_20260709_abcdefgh",
+      waitingJobId: "job_20260709_abcdefgh"
+    } as const;
+    expect(BackupReconnectDependencyRequestSchema.parse(request)).toEqual(request);
+    expect(() => BackupReconnectDependencyRequestSchema.parse({ ...request, dependencyId: "root_private" }))
+      .toThrow();
+    for (const status of ["resolved", "cancelled", "stale", "not_found", "failed"] as const) {
+      expect(BackupReconnectDependencyResultSchema.parse({ ...request, status })).toEqual({ ...request, status });
+    }
+    expect(() => BackupReconnectDependencyResultSchema.parse({
+      ...request,
+      status: "failed",
+      path: "/private/source-root",
+      error: { code: "raw" }
+    })).toThrow();
+  });
+
   it("keeps saved-source Reader navigation strict and body-free", () => {
     const request = {
       apiVersion: 1,

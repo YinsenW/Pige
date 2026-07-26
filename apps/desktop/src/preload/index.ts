@@ -12,6 +12,8 @@ import type {
   AppHealth,
   BackupManifestSummary,
   BackupCreateResult,
+  BackupReconnectDependencyRequest,
+  BackupReconnectDependencyResult,
   AppearanceSettingsSummary,
   AppearanceThemeMutationResult,
   BackupRestoreStatus,
@@ -128,6 +130,8 @@ import {
   AgentSubmitTurnIpcResultSchema,
   AppearanceSettingsSummarySchema,
   AppearanceThemeMutationResultSchema,
+  BackupReconnectDependencyRequestSchema,
+  BackupReconnectDependencyResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   HighRiskConfirmationChangedEventSchema,
@@ -748,6 +752,14 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("backup.status") as Promise<BackupRestoreStatus>,
     create: async (): Promise<BackupCreateResult> =>
       ipcRenderer.invoke("backup.create") as Promise<BackupCreateResult>,
+    reconnectDependency: async (
+      request: BackupReconnectDependencyRequest
+    ): Promise<BackupReconnectDependencyResult> => {
+      const parsedRequest = BackupReconnectDependencyRequestSchema.parse(request);
+      return BackupReconnectDependencyResultSchema.parse(
+        await ipcRenderer.invoke("backup.reconnectDependency", parsedRequest)
+      );
+    },
     previewRestore: async (): Promise<RestorePreviewResult> => {
       const result = await ipcRenderer.invoke("restore.preview") as RestorePreviewResult;
       return projectRestorePreviewResult(result);

@@ -269,13 +269,50 @@ describe("jobs service", () => {
         id: record.id
       }, null, 2)}\n`, "utf8");
     }
+    const waitingBase = {
+      schemaVersion: 1,
+      class: "backup",
+      state: "waiting_dependency",
+      stage: "backing_up",
+      scope: "vault",
+      createdAt: "2026-07-10T01:00:00.000Z",
+      updatedAt: "2026-07-10T01:02:00.000Z",
+      activeVaultId: vault.vaultId,
+      inputRefs: [{ kind: "external_uri", path: "/private/hidden-wait.zip", role: "backup_destination" }],
+      outputRefs: [],
+      message: "A body-free Backup wait."
+    } as const;
+    writeJob(vaultPath, JobRecordSchema.parse({
+      ...waitingBase,
+      id: "job_20260710_backupwait1",
+      waitingDependency: {
+        dependencyKind: "external_source",
+        dependencyId: "src_20260710_hiddenwait01",
+        requiredAction: "reconnect_path",
+        messageKey: "errors.backup.external_managed_copy_root_missing"
+      }
+    }));
+    writeJob(vaultPath, JobRecordSchema.parse({
+      ...waitingBase,
+      id: "job_20260710_backupother1",
+      waitingDependency: {
+        dependencyKind: "model_provider",
+        requiredAction: "configure_model",
+        messageKey: "errors.model_provider.missing"
+      }
+    }));
 
     const summaries = jobs.list({ classes: ["backup"], limit: 10 }).jobs;
 
     expect(new Map(summaries.map((job) => [job.id, job.backupKind]))).toEqual(new Map([
       ["job_20260710_backupuser1", "user_backup"],
-      ["job_20260710_backuproll1", "restore_rollback"]
+      ["job_20260710_backuproll1", "restore_rollback"],
+      ["job_20260710_backupwait1", "user_backup"],
+      ["job_20260710_backupother1", "user_backup"]
     ]));
+    expect(summaries.find((job) => job.id === "job_20260710_backupwait1")?.canReconnectDependency).toBe(true);
+    expect(summaries.filter((job) => job.id !== "job_20260710_backupwait1")
+      .every((job) => job.canReconnectDependency === false)).toBe(true);
     expect(summaries.find((job) => job.id === "job_20260710_backupuser1")?.error).toEqual(expect.objectContaining({
       code: "backup.destination_changed",
       userAction: "choose_path"

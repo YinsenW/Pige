@@ -355,6 +355,10 @@ describe("desktop shell build contract", () => {
   it("binds restore apply to the exact preview token across renderer, preload, and main", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const backupRestoreIpcSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-backup-restore-ipc.ts"),
+      "utf8"
+    );
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
     const previewContract = contractsSource.slice(
@@ -421,17 +425,19 @@ describe("desktop shell build contract", () => {
     expect(rendererSource).not.toContain("restorePreview.backupPath");
     expect(rendererSource).not.toContain("restorePreview.previewToken");
     expect(rendererSource).not.toContain("restoredVaultPath");
-    expect(mainSource).toContain('ipcMain.handle("restore.preview"');
-    expect(mainSource).toContain('ipcMain.handle("restore.apply"');
-    expect(mainSource).toContain("getRestoreCoordinatorService().apply({");
+    expect(mainSource).toContain("registerBackupRestoreIpc({");
+    expect(mainSource).not.toContain('ipcMain.handle("restore.preview"');
+    expect(mainSource).not.toContain('ipcMain.handle("restore.apply"');
+    expect(backupRestoreIpcSource).toContain('options.ipcMain.handle("restore.preview"');
+    expect(backupRestoreIpcSource).toContain('options.ipcMain.handle("restore.apply"');
+    expect(backupRestoreIpcSource).toContain("options.getRestoreCoordinator().apply({");
     expect(mainSource).toContain("getRestoreCoordinatorService().recoverInterrupted()");
-    expect(mainSource).toContain("RESTORE_NATIVE_COPY[getAppearanceService().summary().locale]");
+    expect(backupRestoreIpcSource).toContain("RESTORE_NATIVE_COPY[options.getLocale()]");
     for (const locale of ["de", "en", "fr", "ja", "ko", "zh-Hans"]) {
-      expect(mainSource).toContain(`${JSON.stringify(locale)}:`);
+      expect(backupRestoreIpcSource).toContain(`${JSON.stringify(locale)}:`);
     }
-    const nativeRestoreCopy = mainSource.slice(
-      mainSource.indexOf("const RESTORE_NATIVE_COPY"),
-      mainSource.indexOf("async function confirmSettingAction")
+    const nativeRestoreCopy = backupRestoreIpcSource.slice(
+      backupRestoreIpcSource.indexOf("const RESTORE_NATIVE_COPY")
     );
     expect(nativeRestoreCopy.match(/destinationPickerTitle: "/gu)).toHaveLength(6);
     for (const phrase of [
@@ -444,14 +450,13 @@ describe("desktop shell build contract", () => {
     ]) {
       expect(nativeRestoreCopy).toContain(phrase);
     }
-    expect(mainSource).toContain("buttons: [restoreNativeCopy.cancel, restoreNativeCopy.confirm]");
-    expect(mainSource).toContain("defaultId: 0");
-    expect(mainSource).toContain("cancelId: 0");
-    expect(mainSource).toContain("title: restoreNativeCopy.destinationPickerTitle");
-    expect(mainSource).not.toContain('title: "Choose where to create the restored vault"');
-    const restoreApplyHandler = mainSource.slice(
-      mainSource.indexOf('ipcMain.handle("restore.apply"'),
-      mainSource.indexOf('ipcMain.handle("system.toolchainHealth"')
+    expect(backupRestoreIpcSource).toContain("buttons: [copy.cancel, copy.confirm]");
+    expect(backupRestoreIpcSource).toContain("defaultId: 0");
+    expect(backupRestoreIpcSource).toContain("cancelId: 0");
+    expect(backupRestoreIpcSource).toContain("title: copy.destinationPickerTitle");
+    expect(backupRestoreIpcSource).not.toContain('title: "Choose where to create the restored vault"');
+    const restoreApplyHandler = backupRestoreIpcSource.slice(
+      backupRestoreIpcSource.indexOf('options.ipcMain.handle("restore.apply"')
     );
     expect(restoreApplyHandler).not.toContain("openPath(");
     expect(restoreApplyHandler).not.toContain("restoredVaultPath");
@@ -459,9 +464,13 @@ describe("desktop shell build contract", () => {
 
   it("routes user backup creation and recovery through the durable Backup coordinator", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
-    const createHandler = mainSource.slice(
-      mainSource.indexOf('ipcMain.handle("backup.create"'),
-      mainSource.indexOf('ipcMain.handle("restore.preview"')
+    const backupRestoreIpcSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-backup-restore-ipc.ts"),
+      "utf8"
+    );
+    const createHandler = backupRestoreIpcSource.slice(
+      backupRestoreIpcSource.indexOf('options.ipcMain.handle("backup.create"'),
+      backupRestoreIpcSource.indexOf('options.ipcMain.handle("backup.reconnectDependency"')
     );
     const cancelHandler = mainSource.slice(
       mainSource.indexOf('ipcMain.handle("jobs.cancel"'),
@@ -469,10 +478,10 @@ describe("desktop shell build contract", () => {
     );
 
     expect(mainSource).toContain("new BackupCoordinatorService({");
-    expect(createHandler).toContain("getBackupCoordinatorService().create(selection.filePath)");
-    expect(createHandler).not.toContain("getBackupRestoreService().createBackup(");
+    expect(createHandler).toContain("options.getBackupCoordinator().create(selection.filePath)");
+    expect(createHandler).not.toContain("options.getBackupService().createBackup(");
     expect(mainSource).toContain('job.backupKind === "user_backup"');
-    expect(mainSource).toContain("lastBackupAt: lastBackup.updatedAt");
+    expect(mainSource).toContain("?.updatedAt");
     expect(cancelHandler).toContain("getJobClassExecutorRegistry().require(jobClass)");
     expect(cancelHandler).not.toContain("getBackupCoordinatorService().cancel(request)");
     expect(mainSource).toContain("backup: {");

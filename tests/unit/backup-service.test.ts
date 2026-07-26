@@ -793,6 +793,80 @@ describe("backup restore service", () => {
     expect(listBackupStagingFiles(managedBackup)).toEqual([]);
   });
 
+  it("repairs and rereads one exact external managed-copy binding without changing source identity", () => {
+    const { root, vaultPath } = makeVault();
+    const userDataPath = path.join(root, "app-data");
+    const externalRoot = path.join(root, "reconnected-root");
+    const sourceId = "src_20260726_reconnectsource01";
+    const source = writeExternalManagedCopySource(vaultPath, externalRoot, {
+      sourceId,
+      rootId: "root_reconnect01",
+      relativePath: "private/source.pdf",
+      body: "exact reconnect body"
+    });
+    const sourceRecordName = `${sourceId}.json`;
+    const nestedRecordDirectory = path.join(vaultPath, ".pige", "source-records", "2026", "07");
+    fs.mkdirSync(nestedRecordDirectory, { recursive: true });
+    fs.renameSync(
+      path.join(vaultPath, ".pige", "source-records", sourceRecordName),
+      path.join(nestedRecordDirectory, sourceRecordName)
+    );
+    fs.mkdirSync(userDataPath, { recursive: true });
+    const vaultId = loadVaultSummary(vaultPath).vaultId;
+    const service = new BackupRestoreService({ userDataPath });
+
+    const proof = service.repairManagedCopyDependency(
+      vaultPath,
+      vaultId,
+      { dependencyKind: "external_source", dependencyId: sourceId },
+      externalRoot
+    );
+
+    expect(proof).toMatchObject({
+      vaultId,
+      rootId: "root_reconnect01",
+      dependencyKind: "external_source",
+      dependencyId: sourceId
+    });
+    expect(service.proveManagedCopyDependency(vaultPath, vaultId, {
+      dependencyKind: "external_source",
+      dependencyId: sourceId
+    })).toEqual(proof);
+    expect(JSON.parse(fs.readFileSync(path.join(userDataPath, "vault-bindings.json"), "utf8")))
+      .toMatchObject({ roots: [{ vaultId, rootId: "root_reconnect01", absolutePath: externalRoot }] });
+
+    fs.writeFileSync(source.absolutePath, "changed reconnect body", "utf8");
+    expect(service.proveManagedCopyDependency(vaultPath, vaultId, {
+      dependencyKind: "external_source",
+      dependencyId: sourceId
+    })).toBeUndefined();
+  });
+
+  it("rejects a wrong reconnect directory before persisting a stable root binding", () => {
+    const { root, vaultPath } = makeVault();
+    const userDataPath = path.join(root, "app-data");
+    const expectedRoot = path.join(root, "expected-root");
+    const wrongRoot = path.join(root, "wrong-root");
+    writeExternalManagedCopySource(vaultPath, expectedRoot, {
+      sourceId: "src_20260726_reconnectwrong01",
+      rootId: "root_reconnectwrong01",
+      relativePath: "source.pdf",
+      body: "expected exact bytes"
+    });
+    fs.mkdirSync(wrongRoot, { recursive: true });
+    fs.writeFileSync(path.join(wrongRoot, "source.pdf"), "different bytes", "utf8");
+    fs.mkdirSync(userDataPath, { recursive: true });
+    const service = new BackupRestoreService({ userDataPath });
+
+    expect(() => service.repairManagedCopyDependency(
+      vaultPath,
+      loadVaultSummary(vaultPath).vaultId,
+      { dependencyKind: "vault_binding", dependencyId: "root_reconnectwrong01" },
+      wrongRoot
+    )).toThrow();
+    expect(fs.existsSync(path.join(userDataPath, "vault-bindings.json"))).toBe(false);
+  });
+
   it("rejects duplicate external root IDs and duplicate machine paths", async () => {
     const duplicateId = makeVault();
     const duplicateIdUserData = path.join(duplicateId.root, "app-data");

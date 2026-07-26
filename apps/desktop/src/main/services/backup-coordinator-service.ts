@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { BackupCreateResult } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import { hasObjectErrorCode as isErrno } from "./object-error-code";
 import {
@@ -23,9 +22,22 @@ import {
   type BackupDestinationFence,
   type RestoreCorePreviewResult
 } from "./backup-service";
+import {
+  inspectBackupReconnectCandidate,
+  prepareBackupForDurableCompletion,
+  prepareReconnectedJob,
+  proveWaitingDependency,
+  repairBackupReconnectCandidate,
+  startBackupJob,
+  type BackupReconnectCandidate,
+  type BackupReconnectCandidateResult,
+  type BackupJobRequest,
+  type BackupRecoveryResult,
+  type BackupRetryResult,
+  type BackupServicePort
+} from "./backup-reconnect-coordinator";
 import { JobExecutionCoordinator } from "./job-execution-coordinator";
 import { JobRecordStore, type JobRecordSnapshot } from "./job-record-store";
-
 export const BACKUP_CHECKPOINT_IDS = [
   "preflight",
   "manifest_written",
@@ -36,15 +48,7 @@ export const BACKUP_CHECKPOINT_IDS = [
 
 export type BackupCheckpointId = typeof BACKUP_CHECKPOINT_IDS[number];
 
-export interface BackupServicePort {
-  createBackup(
-    vaultPath: string,
-    destinationPath: string,
-    appVersion: string,
-    options: BackupCreateOptions
-  ): Promise<BackupCreateResult>;
-  inspectRestoreArchive(backupPath: string): Promise<RestoreCorePreviewResult>;
-}
+export type { BackupServicePort } from "./backup-reconnect-coordinator";
 
 export interface BackupVaultPort {
   current(): { readonly vaultId: string } | undefined;
@@ -72,21 +76,16 @@ export interface BackupCoordinatorOptions {
   readonly writeBackupCreatedOperation: BackupCreatedOperationWriter;
   readonly now?: () => Date;
   readonly randomId?: () => string;
+  readonly schedule?: (task: () => Promise<void>) => void;
 }
 
-export interface BackupJobRequest {
-  readonly jobId: string;
-}
-
-export interface BackupRecoveryResult {
-  readonly recovered: number;
-  readonly failed: number;
-}
-
-export interface BackupRetryResult {
-  readonly status: "requeued" | "not_allowed";
-  readonly job: JobRecord;
-}
+export type {
+  BackupJobRequest,
+  BackupReconnectCandidate,
+  BackupReconnectCandidateResult,
+  BackupRecoveryResult,
+  BackupRetryResult
+} from "./backup-reconnect-coordinator";
 
 interface BackupBinding {
   readonly jobId: string;
@@ -121,6 +120,7 @@ export class BackupCoordinatorService {
   readonly #writeOperation: BackupCreatedOperationWriter;
   readonly #now: () => Date;
   readonly #randomId: () => string;
+  readonly #schedule: (task: () => Promise<void>) => void;
   readonly #controllers = new Map<string, AbortController>();
 
   constructor(options: BackupCoordinatorOptions) {
@@ -130,6 +130,42 @@ export class BackupCoordinatorService {
     this.#writeOperation = options.writeBackupCreatedOperation;
     this.#now = options.now ?? (() => new Date());
     this.#randomId = options.randomId ?? (() => randomUUID().replaceAll("-", ""));
+    this.#schedule = options.schedule ?? ((task) => { setTimeout(() => { void task(); }, 0); });
+  }
+
+  inspectReconnectCandidate(activeVaultId: string, jobIdInput: string): BackupReconnectCandidateResult {
+    const active = this.#captureActiveVault();
+    const jobId = parseRequestedJobId(jobIdInput);
+    const store = this.#store(active.vaultPath);
+    const snapshot = readJobIfPresent(store, jobFilePath(active.vaultPath, jobId));
+    return inspectBackupReconnectCandidate(active.vaultId, activeVaultId, jobId, snapshot);
+  }
+
+  reconnectDependency(
+    candidate: BackupReconnectCandidate,
+    selectedDirectory: string
+  ): "resolved" | "stale" | "not_found" | "failed" {
+    const active = this.#captureActiveVault();
+    return repairBackupReconnectCandidate({
+      candidate,
+      selectedDirectory,
+      vaultPath: active.vaultPath,
+      vaultId: active.vaultId,
+      service: this.#backup,
+      inspect: () => this.inspectReconnectCandidate(candidate.vaultId, candidate.jobId),
+      prepareSameJob: () => this.#prepareReconnectedJob(active.vaultPath, candidate.jobId)
+    });
+  }
+
+  #prepareReconnectedJob(vaultPath: string, jobId: string): "queued" | "stale" | "not_found" {
+    const store = this.#store(vaultPath);
+    const snapshot = readJobIfPresent(store, jobFilePath(vaultPath, jobId));
+    return prepareReconnectedJob(store, snapshot, this.#now(), (queued) => {
+      const binding = readBackupBinding(queued.job, vaultPath);
+      this.#schedule(async () => {
+        await this.#run(store, queued, binding).then(() => undefined, () => undefined);
+      });
+    });
   }
 
   async create(destinationPathInput: string): Promise<JobRecord> {
@@ -193,7 +229,15 @@ export class BackupCoordinatorService {
     if (!snapshot || snapshot.job.class !== "backup") return undefined;
     const binding = readBackupBinding(snapshot.job, active.vaultPath);
     assertActiveBinding(active, binding);
-    if (snapshot.job.state === "failed_retryable" || snapshot.job.state === "waiting_dependency") {
+    if (snapshot.job.state === "waiting_dependency") {
+      const waiting = snapshot.job.waitingDependency;
+      if (!proveWaitingDependency(this.#backup, active.vaultPath, active.vaultId, waiting)) {
+        return { status: "not_allowed", job: snapshot.job };
+      }
+      snapshot = coordinator(store, this.#now()).prepareRetry(snapshot, {
+        message: "Backup retry is queued with its original identity."
+      });
+    } else if (snapshot.job.state === "failed_retryable") {
       snapshot = coordinator(store, this.#now()).prepareRetry(snapshot, {
         message: "Backup retry is queued with its original identity."
       });
@@ -216,7 +260,7 @@ export class BackupCoordinatorService {
     let failed = 0;
     for (const initialSnapshot of listRecoverableBackupJobs(store, active.vaultPath)) {
       try {
-        const snapshot = initialSnapshot.job.state === "running"
+        let snapshot = initialSnapshot.job.state === "running"
           ? coordinator(store, this.#now()).recoverInterrupted(initialSnapshot, {
               canResumeIdempotently: true,
               queuedMessage: "Interrupted Backup recovery is queued with its exact checkpoint identity.",
@@ -225,6 +269,16 @@ export class BackupCoordinatorService {
           : initialSnapshot;
         const binding = readBackupBinding(snapshot.job, active.vaultPath);
         assertActiveBinding(active, binding);
+        if (snapshot.job.state === "waiting_dependency") {
+          const waiting = snapshot.job.waitingDependency;
+          if (!proveWaitingDependency(this.#backup, active.vaultPath, active.vaultId, waiting)) {
+            failed += 1;
+            continue;
+          }
+          snapshot = coordinator(store, this.#now()).prepareRetry(snapshot, {
+            message: "Repaired Backup recovery is queued with its original identity."
+          });
+        }
         const result = await this.#run(store, snapshot, binding);
         if (RECOVERABLE_STATES.has(result.job.state)) {
           failed += 1;
@@ -276,7 +330,7 @@ export class BackupCoordinatorService {
         return markCancelled(store, refreshSnapshot(store, snapshot), this.#now());
       }
 
-      snapshot = startJob(store, snapshot, this.#now());
+      snapshot = startBackupJob(store, snapshot, this.#now());
       await this.#backup.createBackup(
         binding.vaultPath,
         binding.destinationPath,
@@ -348,7 +402,7 @@ export class BackupCoordinatorService {
       assertCompletedJob(snapshot.job, binding, inspected);
       return snapshot;
     }
-    snapshot = prepareForDurableCompletion(store, snapshot, this.#now());
+    snapshot = prepareBackupForDurableCompletion(store, snapshot, this.#now());
     snapshot = completeMissingCheckpoints(store, snapshot, binding, inspected, this.#now());
     this.#assertBinding(binding);
     const operation = OperationRecordSchema.parse(await this.#writeOperation({
@@ -527,28 +581,6 @@ function readBackupBinding(job: JobRecord, vaultPath: string): BackupBinding {
   };
 }
 
-function startJob(store: JobRecordStore, snapshot: JobRecordSnapshot, nowSource: Date): JobRecordSnapshot {
-  if (snapshot.job.state === "running") return snapshot;
-  const owner = coordinator(store, nowSource);
-  if (snapshot.job.state === "waiting_dependency" && snapshot.job.waitingDependency) {
-    return owner.resume(snapshot, {
-      stage: "backing_up",
-      message: "Backup is running.",
-      proof: {
-        kind: "dependency_repaired",
-        dependency: snapshot.job.waitingDependency
-      }
-    });
-  }
-  if (snapshot.job.state === "queued" || snapshot.job.state === "failed_retryable") {
-    return owner.begin(snapshot, {
-      stage: "backing_up",
-      message: "Backup is running."
-    });
-  }
-  throw new PigeDomainError("backup.job_conflict", "The Backup Job cannot start from its durable state.");
-}
-
 function recordCheckpoint(
   store: JobRecordStore,
   snapshot: JobRecordSnapshot,
@@ -669,7 +701,7 @@ function markFailed(
     snapshot = coordinator(store, nowSource).prepareRetry(snapshot, {
       message: "Backup recovery is retrying the same durable Job."
     });
-    snapshot = startJob(store, snapshot, nowSource);
+    snapshot = startBackupJob(store, snapshot, nowSource);
   }
   if (caught instanceof BackupManagedCopyDependencyError) {
     return coordinator(store, nowSource).settle(snapshot, {
@@ -714,15 +746,6 @@ function markFailed(
     },
     message: "Backup stopped because its durable binding or output conflicted."
   });
-}
-
-function prepareForDurableCompletion(
-  store: JobRecordStore,
-  snapshot: JobRecordSnapshot,
-  nowSource: Date
-): JobRecordSnapshot {
-  if (snapshot.job.state === "running" || snapshot.job.state === "cancel_requested") return snapshot;
-  return startJob(store, snapshot, nowSource);
 }
 
 function coordinator(store: JobRecordStore, nowSource: Date): JobExecutionCoordinator {
