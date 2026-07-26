@@ -6,6 +6,7 @@ import {
   OperationRecordSchema,
   SourceRecordSchema,
   type JobRecord,
+  type JobRef,
   type OperationRecord,
   type SourceRecord
 } from "@pige/schemas";
@@ -24,6 +25,12 @@ export interface OcrSourceResult {
   readonly warnings: readonly string[];
   readonly sourcePageUpdated: boolean;
   readonly sourcePageConflict: boolean;
+  readonly durableEffect: OcrDurableEffect;
+}
+
+export interface OcrDurableEffect {
+  readonly outputRefs: readonly JobRef[];
+  readonly operationIds: readonly string[];
 }
 
 interface FileIntegrity {
@@ -65,7 +72,7 @@ export class OcrArtifactService {
     const page = this.#sourcePages.refreshForSource(vaultPath, sourceRecord, sourceRecordPath, job.id);
     const storedWarnings = stringArray(sidecar.warnings);
     const warnings = page.conflict ? [...storedWarnings, sourcePageConflictWarning()] : storedWarnings;
-    writeOcrOperation(vaultPath, sourceRecord, job, warnings);
+    const operation = writeOcrOperation(vaultPath, sourceRecord, job, warnings);
     const confidence = normalizedNumber(sidecar.confidence);
     return {
       sourceId: sourceRecord.id,
@@ -77,7 +84,8 @@ export class OcrArtifactService {
       agentTextReady: Boolean(textArtifact && sidecar.agentTextReady === true),
       warnings,
       sourcePageUpdated: page.updated,
-      sourcePageConflict: page.conflict
+      sourcePageConflict: page.conflict,
+      durableEffect: createOcrDurableEffect(sourceRecord, operation)
     };
   }
 
@@ -165,7 +173,7 @@ export class OcrArtifactService {
       parsedSource
     );
     const warnings = page.conflict ? [...result.warnings, sourcePageConflictWarning()] : result.warnings;
-    writeOcrOperation(vaultPath, updatedSource, job, warnings);
+    const operation = writeOcrOperation(vaultPath, updatedSource, job, warnings);
     return {
       sourceId: parsedSource.id,
       created: true,
@@ -176,9 +184,32 @@ export class OcrArtifactService {
       agentTextReady: Boolean(textArtifactPath),
       warnings,
       sourcePageUpdated: page.updated,
-      sourcePageConflict: page.conflict
+      sourcePageConflict: page.conflict,
+      durableEffect: createOcrDurableEffect(updatedSource, operation)
     };
   }
+}
+
+export function createOcrDurableEffect(
+  sourceRecord: SourceRecord,
+  operation: OperationRecord
+): OcrDurableEffect {
+  const targetIds = new Set(operation.targetRefs
+    .filter((ref) => ref.kind === "artifact")
+    .flatMap((ref) => ref.id ? [ref.id] : []));
+  const outputRefs = sourceRecord.artifacts
+    .filter((artifact) => targetIds.has(artifact.id))
+    .map((artifact): JobRef => ({
+      kind: "artifact",
+      id: artifact.id,
+      path: artifact.path,
+      ...(artifact.checksum ? { checksum: artifact.checksum } : {}),
+      role: artifact.kind === "ocr" ? "ocr_text" : "ocr_metadata"
+    }));
+  if (outputRefs.length === 0 || operation.targetRefs.length !== outputRefs.length) {
+    throw new PigeDomainError("ocr.durable_effect_invalid", "The OCR durable effect receipt is incomplete.");
+  }
+  return { outputRefs, operationIds: [operation.id] };
 }
 
 function createUnits(result: NativeOcrResult): readonly Record<string, unknown>[] {

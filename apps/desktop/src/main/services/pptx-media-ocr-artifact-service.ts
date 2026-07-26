@@ -9,7 +9,7 @@ import {
   type OperationRecord,
   type SourceRecord
 } from "@pige/schemas";
-import type { OcrSourceResult } from "./ocr-artifact-service";
+import { createOcrDurableEffect, type OcrSourceResult } from "./ocr-artifact-service";
 import {
   OFFICE_MEDIA_MATERIALIZER_MAX_BYTES_PER_ITEM,
   OFFICE_MEDIA_MATERIALIZER_MAX_TARGETS,
@@ -204,7 +204,7 @@ export class PptxMediaOcrArtifactService {
     const page = this.#sourcePages.refreshForSource(vaultPath, sourceRecord, sourceRecordPath, job.id);
     const storedWarnings = stringArray(sidecar.warnings);
     const warnings = page.conflict ? [...storedWarnings, sourcePageConflictWarning()] : storedWarnings;
-    writePptxOcrOperation(vaultPath, sourceRecord, job, warnings);
+    const operation = writePptxOcrOperation(vaultPath, sourceRecord, job, warnings);
     const confidence = normalizedNumber(sidecar.confidence);
     return {
       sourceId: sourceRecord.id,
@@ -216,7 +216,7 @@ export class PptxMediaOcrArtifactService {
       agentTextReady: sidecar.agentTextReady === true,
       warnings,
       sourcePageUpdated: page.updated,
-      sourcePageConflict: page.conflict
+      sourcePageConflict: page.conflict, durableEffect: createOcrDurableEffect(sourceRecord, operation)
     };
   }
 
@@ -328,7 +328,7 @@ export class PptxMediaOcrArtifactService {
     writeSourceRecordAtomic(vaultPath, sourceRecordPath, updatedSource, currentSource.fileChecksum);
     const page = this.#sourcePages.refreshForSource(vaultPath, updatedSource, sourceRecordPath, job.id);
     const resultWarnings = page.conflict ? [...warnings, sourcePageConflictWarning()] : warnings;
-    writePptxOcrOperation(vaultPath, updatedSource, job, resultWarnings);
+    const operation = writePptxOcrOperation(vaultPath, updatedSource, job, resultWarnings);
     return {
       sourceId: parsedSource.id,
       created: true,
@@ -339,7 +339,7 @@ export class PptxMediaOcrArtifactService {
       agentTextReady,
       warnings: resultWarnings,
       sourcePageUpdated: page.updated,
-      sourcePageConflict: page.conflict
+      sourcePageConflict: page.conflict, durableEffect: createOcrDurableEffect(updatedSource, operation)
     };
   }
 }

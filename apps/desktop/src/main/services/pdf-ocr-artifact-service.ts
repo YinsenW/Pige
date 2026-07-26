@@ -9,7 +9,7 @@ import {
   type OperationRecord,
   type SourceRecord
 } from "@pige/schemas";
-import type { OcrSourceResult } from "./ocr-artifact-service";
+import { createOcrDurableEffect, type OcrSourceResult } from "./ocr-artifact-service";
 import {
   PDF_PAGE_RENDERER_ID,
   PDF_PAGE_RENDERER_MAX_EDGE,
@@ -272,7 +272,7 @@ export class PdfOcrArtifactService {
     const storedWarnings = stringArray(sidecar.warnings);
     const warnings = page.conflict ? [...storedWarnings, sourcePageConflictWarning()] : storedWarnings;
     writeRenderOperation(vaultPath, sourceRecord, job, storedWarnings);
-    writePdfOcrOperation(vaultPath, sourceRecord, job, warnings);
+    const operation = writePdfOcrOperation(vaultPath, sourceRecord, job, warnings);
     const confidence = normalizedNumber(sidecar.confidence);
     return {
       sourceId: sourceRecord.id,
@@ -284,7 +284,7 @@ export class PdfOcrArtifactService {
       agentTextReady: sidecar.agentTextReady === true,
       warnings,
       sourcePageUpdated: page.updated,
-      sourcePageConflict: page.conflict
+      sourcePageConflict: page.conflict, durableEffect: createOcrDurableEffect(sourceRecord, operation)
     };
   }
 
@@ -555,7 +555,7 @@ export class PdfOcrArtifactService {
     await writeSourceRecordAtomic(vaultPath, sourceRecordPath, updatedSource, currentSource.fileChecksum);
     const page = this.#sourcePages.refreshForSource(vaultPath, updatedSource, sourceRecordPath, job.id);
     const resultWarnings = page.conflict ? [...warnings, sourcePageConflictWarning()] : warnings;
-    writePdfOcrOperation(vaultPath, updatedSource, job, resultWarnings);
+    const operation = writePdfOcrOperation(vaultPath, updatedSource, job, resultWarnings);
     return {
       sourceId: parsedSource.id,
       created: true,
@@ -566,7 +566,7 @@ export class PdfOcrArtifactService {
       agentTextReady,
       warnings: resultWarnings,
       sourcePageUpdated: page.updated,
-      sourcePageConflict: page.conflict
+      sourcePageConflict: page.conflict, durableEffect: createOcrDurableEffect(updatedSource, operation)
     };
   }
 }

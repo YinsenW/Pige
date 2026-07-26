@@ -460,7 +460,7 @@ describe("desktop shell build contract", () => {
     expect(resumeBackgroundJobs).not.toContain("scheduleDatasetImportProcessing();");
   });
 
-  it("routes production index rebuild, document parse and Dataset import through concrete class executors", () => {
+  it("routes production index rebuild, parse, OCR and Dataset import through concrete class executors", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const jobsSource = fs.readFileSync(
       path.resolve("apps/desktop/src/main/services/jobs-service.ts"),
@@ -478,6 +478,10 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("getDocumentParseJobExecutor().process({ limit: 20 })");
     expect(jobsSource).not.toContain("processQueuedParses(");
     expect(mainSource).not.toContain("getJobsService().processQueuedParses({ limit: 20 })");
+    expect(mainSource).toContain("getJobsService().ocrExecutor()");
+    expect(mainSource).toContain("getOcrJobExecutor().process({ limit: 20 })");
+    expect(mainSource).not.toContain("getJobsService().processQueuedOcr(");
+    expect(jobsSource).not.toContain("processQueuedOcr(");
     expect(mainSource).toContain("getJobsService().datasetImportExecutor()");
     expect(mainSource).toContain("getDatasetImportJobExecutor().process({ limit: 20 })");
     expect(jobsSource).toContain("this.#datasetImportExecutor.process({");
