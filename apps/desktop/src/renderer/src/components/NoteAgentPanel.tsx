@@ -328,15 +328,6 @@ export function NoteAgentPanel(props: {
                           {copyLabel}
                         </span>
                       ) : null}
-                      <button type="button" aria-label={props.t("note.agentHelpful")} disabled>
-                        <PigeIcon name="thumbsUp" size={16} />
-                      </button>
-                      <button type="button" aria-label={props.t("note.agentNotHelpful")} disabled>
-                        <PigeIcon name="thumbsDown" size={16} />
-                      </button>
-                      <button type="button" aria-label={props.t("note.agentMore")} disabled>
-                        <PigeIcon name="more" size={16} />
-                      </button>
                     </div>
                   ) : null}
                 </article>

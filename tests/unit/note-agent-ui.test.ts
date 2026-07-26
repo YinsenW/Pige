@@ -215,6 +215,7 @@ describe("Note Agent production UI", () => {
     });
 
     const copyButton = required(buttonAriaNamed(mount.container, t("note.agentCopy")));
+    expect(mount.container.querySelectorAll(".message-actions button")).toHaveLength(1);
     copyButton.focus();
     await click(dom, copyButton);
     expect(onCopyMessage).toHaveBeenCalledTimes(1);
