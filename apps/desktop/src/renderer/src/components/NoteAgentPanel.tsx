@@ -3,10 +3,15 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type KeyboardEvent as ReactKeyboardEvent
+  type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject
 } from "react";
 import { PigeIcon } from "./PigeIcon";
 import { ConversationMarkdown } from "./ConversationMarkdown";
+import {
+  ConversationEarlierControl,
+  type ConversationPaginationController
+} from "./ConversationPagination";
 import pigeMarkUrl from "../../../../../../resources/brand/pige-icon/master/pige-icon-1024.png";
 
 export type NoteAgentAvailability = "unavailable" | "ready" | "running" | "failed";
@@ -49,6 +54,8 @@ export function NoteAgentPanel(props: {
   readonly availability: NoteAgentAvailability;
   readonly composerDisabled?: boolean;
   readonly messages: readonly NoteAgentMessage[];
+  readonly threadRef?: RefObject<HTMLDivElement | null>;
+  readonly pagination?: ConversationPaginationController;
   readonly proposal: NoteAgentProposal | null;
   readonly draft: string;
   readonly models: readonly NoteAgentModelOption[];
@@ -68,7 +75,8 @@ export function NoteAgentPanel(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const paneRef = useRef<HTMLElement | null>(null);
-  const threadRef = useRef<HTMLDivElement | null>(null);
+  const localThreadRef = useRef<HTMLDivElement | null>(null);
+  const threadRef = props.threadRef ?? localThreadRef;
   const followThreadRef = useRef(true);
   const modelSwitcherRef = useRef<HTMLButtonElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
@@ -247,6 +255,7 @@ export function NoteAgentPanel(props: {
         <div
           ref={threadRef}
           className="note-agent-thread"
+          tabIndex={-1}
           aria-busy={props.availability === "running"}
           onScroll={(event) => {
             const thread = event.currentTarget;
@@ -269,6 +278,7 @@ export function NoteAgentPanel(props: {
             ) : null
           ) : (
             <div className="note-agent-messages" aria-label={props.t("note.agentTitle")}>
+              {props.pagination ? <ConversationEarlierControl {...props.pagination} onLoadEarlier={props.pagination.loadEarlier} t={props.t} /> : null}
               {props.messages.map((message) => {
                 const messageCopyStatus = copyFeedback?.messageId === message.id ? copyFeedback.status : null;
                 const copyLabel = messageCopyStatus === "copying"
@@ -282,6 +292,8 @@ export function NoteAgentPanel(props: {
                 <article
                   className={`agent-message-card role-${message.role}${message.provisional ? " provisional" : ""}`}
                   key={message.id}
+                  data-message-id={message.id}
+                  tabIndex={-1}
                   data-provisional={message.provisional ? "true" : undefined}
                   aria-busy={message.provisional ? "true" : undefined}
                 >

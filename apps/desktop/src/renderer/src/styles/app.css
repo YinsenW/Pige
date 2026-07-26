@@ -3961,6 +3961,23 @@ dd {
   gap: 18px;
 }
 
+.conversation-earlier-control {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.conversation-earlier-control .quiet-button {
+  min-height: 28px;
+  padding: 4px 10px;
+}
+
+.conversation-earlier-control [role="alert"] { color: var(--danger); }
+
 .conversation-timeline.has-conversation-scroll-rail {
   padding-right: 16px;
   scrollbar-width: none;

@@ -6,6 +6,8 @@ import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
   AgentConversationRequest,
+  AgentConversationEarlierPage,
+  AgentConversationInitialTimeline,
   AgentConversationTimeline,
   AppearanceSettingsSummary,
   AgentRuntimeStatus,
@@ -2566,6 +2568,46 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("loads earlier Home messages through the typed cursor without replacing tail authority", async () => {
+    const dom = createDom();
+    const initial = paginatedHomeTimeline();
+    const harness = createHarness(initial);
+    harness.loadConversation = async (request) => {
+      harness.conversationRequests.push(request);
+      if ("earlierCursor" in request) {
+        return {
+          kind: "earlier",
+          conversationId: initial.conversationId,
+          snapshotTailEventId: initial.snapshotTailEventId,
+          messages: [{
+            id: "event_20260712_older01",
+            role: "assistant",
+            createdAt: "2026-07-12T07:59:00.000Z",
+            text: "Earlier durable answer."
+          }],
+          hasEarlier: false
+        };
+      }
+      return initial;
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await waitFor(dom, () => buttons(container, enMessages["conversation.loadEarlier"]).length === 1);
+    await clickButton(dom, container, enMessages["conversation.loadEarlier"]);
+    await waitFor(dom, () => container.textContent?.includes("Earlier durable answer.") === true);
+
+    expect(harness.conversationRequests.at(-1)).toEqual({
+      conversationId: initial.conversationId,
+      snapshotTailEventId: initial.snapshotTailEventId,
+      earlierCursor: initial.nextEarlierCursor,
+      limit: 100
+    });
+    expect(Array.from(container.querySelectorAll<HTMLElement>("[data-message-id]")).map((node) => node.dataset.messageId))
+      .toEqual(["event_20260712_older01", "event_20260712_user01", "event_20260712_assistant01"]);
+    expect(buttons(container, enMessages["conversation.loadEarlier"])).toHaveLength(0);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps following the recovered conversation when its obsolete Job metadata is safely omitted", async () => {
     const dom = createDom();
     const { latestTurn: _obsoleteJob, ...recoveredTimeline } = completedTimeline();
@@ -3774,7 +3816,7 @@ interface ConversationHarness {
   speechStopResult: SpeechStopResult;
   startSpeech: (request: SpeechStartRequest) => Promise<SpeechStartResult>;
   installSpeechAsset: (request: SpeechAssetInstallRequest) => Promise<SpeechAssetInstallResult>;
-  loadConversation: (request: AgentConversationRequest) => Promise<AgentConversationTimeline | undefined>;
+  loadConversation: (request: AgentConversationRequest) => Promise<AgentConversationTimeline | AgentConversationEarlierPage | undefined>;
   submitTurn: (
     request: AgentSubmitTurnRequest,
     files?: readonly File[]
@@ -4495,6 +4537,17 @@ function completedTimeline(): AgentConversationTimeline {
       userEventId: "event_20260712_user01",
       state: "completed"
     }
+  };
+}
+
+function paginatedHomeTimeline(): AgentConversationInitialTimeline {
+  const timeline = completedTimeline();
+  return {
+    ...timeline,
+    kind: "initial",
+    snapshotTailEventId: timeline.tailEventId,
+    hasEarlier: true,
+    nextEarlierCursor: "timeline_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   };
 }
 
