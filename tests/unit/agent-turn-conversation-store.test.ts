@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { AgentTurnAnswer } from "@pige/contracts";
 import type { ConversationEvent } from "@pige/schemas";
 import { AgentTurnConversationStore } from "../../apps/desktop/src/main/services/agent-turn-conversation-store";
+import { selectConversationTimelineMessages } from "../../apps/desktop/src/main/services/agent-conversation-pagination";
 import { readDurableAgentTurnAnswer } from "../../apps/desktop/src/main/services/durable-agent-turn-answer";
 
 const tempRoots: string[] = [];
@@ -735,6 +736,231 @@ describe("Agent turn conversation store", () => {
     });
     expect(exact?.messages).toHaveLength(5);
     expect(JSON.stringify(exact)).not.toContain(".pige/conversations");
+  });
+
+  it("pages an immutable durable conversation backward without gaps or duplicate event ids", () => {
+    const vaultPath = makeVault();
+    const service = new AgentTurnConversationStore();
+    const scope = { kind: "current_note" as const, pageId: "page_20260726_pagination01" };
+    const metadata = { inputKind: "typed_text" as const, locale: "en" as const, scope };
+    let current = service.appendUserTurn(vaultPath, "Paged user turn 0.", metadata, {
+      clientTurnId: "turn_20260726_page00000000"
+    });
+    for (let index = 0; index < 61; index += 1) {
+      const assistant = service.appendAssistantTurn(
+        vaultPath,
+        current,
+        `job_20260726_${index.toString(36).padStart(12, "0")}`,
+        `Paged assistant turn ${index}.`
+      );
+      if (index < 60) {
+        current = service.appendUserTurn(vaultPath, `Paged user turn ${index + 1}.`, metadata, {
+          clientTurnId: `turn_20260726_${(index + 1).toString(36).padStart(12, "0")}`,
+          conversationId: current.event.conversationId,
+          expectedTailEventId: assistant.id
+        });
+      }
+    }
+    const allMessageIds = readEvents(vaultPath, current.locator)
+      .filter((event) => event.type === "user_message" || event.type === "assistant_message")
+      .map((event) => String(event.id));
+    const initial = service.readConversationTimeline(vaultPath, current.event.conversationId, 20, scope);
+    if (!initial?.nextEarlierCursor) throw new Error("Expected a bounded initial timeline cursor.");
+
+    let collected = [...initial.messages];
+    let cursor: string | undefined = initial.nextEarlierCursor;
+    while (cursor) {
+      const page = service.readEarlierConversationPage(
+        vaultPath,
+        initial.conversationId,
+        initial.snapshotTailEventId,
+        cursor,
+        20,
+        scope
+      );
+      expect(page).not.toHaveProperty("tailEventId");
+      expect(page).not.toHaveProperty("canFollowUp");
+      expect(page).not.toHaveProperty("latestTurn");
+      collected = [...page.messages, ...collected];
+      cursor = page.nextEarlierCursor;
+    }
+
+    expect(collected.map((message) => message.id)).toEqual(allMessageIds);
+    expect(new Set(collected.map((message) => message.id)).size).toBe(collected.length);
+    expect(initial.messages).toHaveLength(20);
+    expect(initial.hasEarlier).toBe(true);
+    expect(JSON.stringify(collected)).not.toContain(".pige/conversations");
+  });
+
+  it("fails closed for stale, tampered, restarted, cross-vault, cross-scope, and evicted cursors", () => {
+    const vaultPath = makeVault();
+    const otherVaultPath = makeVault();
+    const service = new AgentTurnConversationStore(1);
+    const first = service.appendUserTurn(vaultPath, "First cursor user turn.", undefined, {
+      clientTurnId: "turn_20260726_cursorfirst01"
+    });
+    const firstAssistant = service.appendAssistantTurn(
+      vaultPath,
+      first,
+      "job_20260726_cursorfirst01",
+      "First cursor assistant turn."
+    );
+    const firstTimeline = service.readConversationTimeline(vaultPath, first.event.conversationId, 1);
+    if (!firstTimeline?.nextEarlierCursor) throw new Error("Expected first timeline cursor.");
+    const firstCursor = firstTimeline.nextEarlierCursor;
+    const tamperedCursor = `${firstCursor.slice(0, -1)}${firstCursor.endsWith("0") ? "1" : "0"}`;
+
+    expect(captureError(() => service.readEarlierConversationPage(
+      vaultPath,
+      firstTimeline.conversationId,
+      firstTimeline.snapshotTailEventId,
+      tamperedCursor,
+      1
+    ))).toMatchObject({ code: "agent_runtime.turn_binding_invalid" });
+    expect(captureError(() => new AgentTurnConversationStore().readEarlierConversationPage(
+      vaultPath,
+      firstTimeline.conversationId,
+      firstTimeline.snapshotTailEventId,
+      firstCursor,
+      1
+    ))).toMatchObject({ code: "agent_runtime.turn_binding_invalid" });
+    expect(captureError(() => service.readEarlierConversationPage(
+      otherVaultPath,
+      firstTimeline.conversationId,
+      firstTimeline.snapshotTailEventId,
+      firstCursor,
+      1
+    ))).toMatchObject({ code: "agent_runtime.turn_binding_invalid" });
+    expect(captureError(() => service.readEarlierConversationPage(
+      vaultPath,
+      "conv_20260726_crossconvo01",
+      firstTimeline.snapshotTailEventId,
+      firstCursor,
+      1
+    ))).toMatchObject({ code: "agent_runtime.turn_binding_invalid" });
+    expect(captureError(() => service.readEarlierConversationPage(
+      vaultPath,
+      firstTimeline.conversationId,
+      firstTimeline.snapshotTailEventId,
+      firstCursor,
+      1,
+      { kind: "current_note", pageId: "page_20260726_cursorcross1" }
+    ))).toMatchObject({ code: "agent_runtime.turn_binding_invalid" });
+
+    service.appendUserTurn(vaultPath, "Tail changed after cursor issue.", undefined, {
+      clientTurnId: "turn_20260726_cursorsecond1",
+      conversationId: first.event.conversationId,
+      expectedTailEventId: firstAssistant.id
+    });
+    expect(captureError(() => service.readEarlierConversationPage(
+      vaultPath,
+      firstTimeline.conversationId,
+      firstTimeline.snapshotTailEventId,
+      firstCursor,
+      1
+    ))).toMatchObject({ code: "agent_runtime.turn_binding_invalid" });
+
+    const evictingService = new AgentTurnConversationStore(1);
+    const evicted = evictingService.appendUserTurn(vaultPath, "Evicted cursor user turn.", undefined, {
+      clientTurnId: "turn_20260726_cursorevict00"
+    });
+    evictingService.appendAssistantTurn(vaultPath, evicted, "job_20260726_cursorevict00", "Evicted cursor answer.");
+    const evictedTimeline = evictingService.readConversationTimeline(vaultPath, evicted.event.conversationId, 1);
+    if (!evictedTimeline?.nextEarlierCursor) throw new Error("Expected cursor selected for eviction.");
+    const second = evictingService.appendUserTurn(vaultPath, "Second cursor user turn.", undefined, {
+      clientTurnId: "turn_20260726_cursorevict01"
+    });
+    evictingService.appendAssistantTurn(vaultPath, second, "job_20260726_cursorevict01", "Second cursor answer.");
+    expect(evictingService.readConversationTimeline(vaultPath, second.event.conversationId, 1)?.nextEarlierCursor).toBeDefined();
+    expect(captureError(() => evictingService.readEarlierConversationPage(
+      vaultPath,
+      evictedTimeline.conversationId,
+      evictedTimeline.snapshotTailEventId,
+      evictedTimeline.nextEarlierCursor,
+      1
+    ))).toMatchObject({ code: "agent_runtime.turn_binding_invalid" });
+  });
+
+  it("rejects an ambiguous duplicate cursor boundary", () => {
+    const duplicateBoundary = {
+      schemaVersion: 1,
+      id: "evt_20260726_duplicate01",
+      conversationId: "conv_20260726_duplicate01",
+      type: "user_message",
+      createdAt: "2026-07-26T00:00:00.000Z",
+      text: "Synthetic duplicate boundary."
+    } as const;
+
+    expect(captureError(() => selectConversationTimelineMessages(
+      [duplicateBoundary, duplicateBoundary] as readonly ConversationEvent[],
+      1,
+      1024,
+      duplicateBoundary.id
+    ))).toMatchObject({ code: "agent_runtime.turn_binding_invalid" });
+  });
+
+  it("invalidates old cursors on tail refresh while exact accumulated messages remain mergeable", () => {
+    const vaultPath = makeVault();
+    const service = new AgentTurnConversationStore();
+    let current = service.appendUserTurn(vaultPath, "Refresh user 0.", undefined, {
+      clientTurnId: "turn_20260726_refresh000001"
+    });
+    for (let index = 0; index < 4; index += 1) {
+      const assistant = service.appendAssistantTurn(
+        vaultPath,
+        current,
+        `job_20260726_refresh${String(index).padStart(6, "0")}`,
+        `Refresh assistant ${index}.`
+      );
+      if (index < 3) {
+        current = service.appendUserTurn(vaultPath, `Refresh user ${index + 1}.`, undefined, {
+          clientTurnId: `turn_20260726_refresh${String(index + 2).padStart(6, "0")}`,
+          conversationId: current.event.conversationId,
+          expectedTailEventId: assistant.id
+        });
+      }
+    }
+    const initial = service.readConversationTimeline(vaultPath, current.event.conversationId, 2);
+    if (!initial?.nextEarlierCursor) throw new Error("Expected initial refresh cursor.");
+    const older = service.readEarlierConversationPage(
+      vaultPath,
+      initial.conversationId,
+      initial.snapshotTailEventId,
+      initial.nextEarlierCursor,
+      100
+    );
+    const accumulated = [...older.messages, ...initial.messages];
+    const latestAssistant = initial.messages.at(-1);
+    if (!latestAssistant) throw new Error("Expected latest assistant message.");
+    const nextUser = service.appendUserTurn(vaultPath, "Refresh user after polling.", undefined, {
+      clientTurnId: "turn_20260726_refreshtail01",
+      conversationId: initial.conversationId,
+      expectedTailEventId: latestAssistant.id
+    });
+    service.appendAssistantTurn(
+      vaultPath,
+      nextUser,
+      "job_20260726_refreshtail01",
+      "Refresh assistant after polling."
+    );
+
+    expect(captureError(() => service.readEarlierConversationPage(
+      vaultPath,
+      initial.conversationId,
+      initial.snapshotTailEventId,
+      initial.nextEarlierCursor,
+      2
+    ))).toMatchObject({ code: "agent_runtime.turn_binding_invalid" });
+    const refreshed = service.readConversationTimeline(vaultPath, initial.conversationId, 2);
+    if (!refreshed) throw new Error("Expected refreshed initial timeline.");
+    const merged = [...accumulated, ...refreshed.messages].filter(
+      (message, index, messages) => messages.findIndex((candidate) => candidate.id === message.id) === index
+    );
+    expect(refreshed.snapshotTailEventId).not.toBe(initial.snapshotTailEventId);
+    expect(merged.slice(0, accumulated.length).map((message) => message.id))
+      .toEqual(accumulated.map((message) => message.id));
+    expect(new Set(merged.map((message) => message.id)).size).toBe(merged.length);
+    expect(merged.at(-1)?.text).toBe("Refresh assistant after polling.");
   });
 
   it("reads legacy daily records without exposing error details in timelines", () => {

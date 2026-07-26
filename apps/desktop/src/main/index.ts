@@ -61,6 +61,8 @@ import type {
   WindowLayoutRequest
 } from "@pige/contracts";
 import {
+  AgentConversationRequestSchema,
+  AgentConversationResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   AppearanceSettingsSummarySchema,
@@ -1542,9 +1544,12 @@ ipcMain.handle("speech.cancel", (event, request: SpeechCancelRequest) =>
 );
 ipcMain.handle("speech.openSystemSettings", () => getSpeechService().openSystemSettings());
 ipcMain.handle("agent.runtimeStatus", () => getAgentRuntimeService().runtimeStatus());
-ipcMain.handle("agent.conversation", (_event, request?: AgentConversationRequest) =>
-  getHomeAgentService().conversation(request)
-);
+ipcMain.handle("agent.conversation", (_event, request?: AgentConversationRequest) => {
+  const parsedRequest = AgentConversationRequestSchema.parse(request ?? {});
+  return AgentConversationResultSchema.optional().parse(
+    getHomeAgentService().conversation(parsedRequest as AgentConversationRequest)
+  );
+});
 ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
   const parsedPayload = AgentSubmitTurnIpcPayloadSchema.parse(payload);
   const attachments = parsedPayload.attachments;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
-  AgentConversationTimeline,
+  AgentConversationInitialTimeline,
+  AgentConversationMessage,
   AgentSubmitTurnResult,
   AgentTurnDraftEvent,
   PigeErrorSummary,
@@ -13,6 +14,7 @@ import {
   type NoteAgentMessage,
   type NoteAgentModelOption
 } from "./NoteAgentPanel";
+import { useConversationPagination } from "./ConversationPagination";
 
 type ActiveDraftBinding = {
   readonly clientTurnId: string;
@@ -39,7 +41,7 @@ export function CurrentNoteAgent(props: {
   readonly onOpenCitation: (pageId: string) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
-  const [timeline, setTimeline] = useState<AgentConversationTimeline | undefined>();
+  const [timeline, setTimeline] = useState<AgentConversationInitialTimeline | undefined>();
   const [timelineReadState, setTimelineReadState] = useState<"loading" | "ready" | "failed">("loading");
   const [draft, setDraft] = useState("");
   const [liveDraft, setLiveDraft] = useState<AgentTurnDraftEvent | null>(null);
@@ -54,6 +56,7 @@ export function CurrentNoteAgent(props: {
   const currentOutcomeRef = useRef<AgentSubmitTurnResult | null>(null);
   const submitInFlightRef = useRef(false);
   const modelSwitchInFlightRef = useRef(false);
+  const threadRef = useRef<HTMLDivElement | null>(null);
   activePageIdRef.current = props.pageId;
   activeVaultIdRef.current = props.vaultId;
   currentOutcomeRef.current = currentOutcome;
@@ -65,7 +68,14 @@ export function CurrentNoteAgent(props: {
   const effectiveError = latestTurn?.error ?? outcomeError ?? error;
   const currentJobId = latestTurn?.jobId ?? currentOutcome?.jobId;
 
-  const refreshTimeline = async (): Promise<AgentConversationTimeline | undefined> => {
+  const pagination = useConversationPagination({
+    ownerKey: `${props.vaultId}:current_note:${props.pageId}`,
+    initial: timeline,
+    scope: { kind: "current_note", pageId: props.pageId },
+    scrollRef: threadRef
+  });
+
+  const refreshTimeline = async (): Promise<AgentConversationInitialTimeline | undefined> => {
     const pageId = props.pageId;
     const vaultId = props.vaultId;
     const sequence = ++loadSequenceRef.current;
@@ -152,8 +162,8 @@ export function CurrentNoteAgent(props: {
   }, [props.pageId, latestTurn?.jobId, latestTurn?.state]);
 
   const messages = useMemo(
-    () => timelineMessages(timeline, liveDraft, currentOutcome, props.t),
-    [timeline, liveDraft, currentOutcome, props.t]
+    () => timelineMessages(pagination.messages, liveDraft, currentOutcome, props.t),
+    [pagination.messages, liveDraft, currentOutcome, props.t]
   );
   const availability = noteAgentAvailability(
     latestTurn?.state,
@@ -260,6 +270,8 @@ export function CurrentNoteAgent(props: {
       availability={availability}
       composerDisabled={timelineReadState !== "ready"}
       messages={messages}
+      threadRef={threadRef}
+      pagination={pagination}
       proposal={props.proposal ? {
         id: props.proposal.proposalId,
         action: props.proposal.action,
@@ -299,12 +311,12 @@ export function CurrentNoteAgent(props: {
 }
 
 function timelineMessages(
-  timeline: AgentConversationTimeline | undefined,
+  timelineMessages: readonly AgentConversationMessage[],
   liveDraft: AgentTurnDraftEvent | null,
   currentOutcome: AgentSubmitTurnResult | null,
   t: (key: string) => string
 ): readonly NoteAgentMessage[] {
-  const messages: NoteAgentMessage[] = (timeline?.messages ?? []).map((message) => {
+  const messages: NoteAgentMessage[] = timelineMessages.map((message) => {
     const timestamp = formatMessageTime(message.createdAt);
     return {
       id: message.id,
@@ -396,7 +408,7 @@ function isDraftState(state: JobState | undefined): boolean {
   return state === "queued" || state === "running" || state === "cancel_requested";
 }
 
-function canFollowUp(timeline: AgentConversationTimeline | undefined): timeline is AgentConversationTimeline {
+function canFollowUp(timeline: AgentConversationInitialTimeline | undefined): timeline is AgentConversationInitialTimeline {
   return timeline?.canFollowUp === true && (
     timeline.latestTurn?.state === "completed" || timeline.latestTurn?.state === "completed_with_warnings"
   );

@@ -17,6 +17,7 @@ import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ConversationMarkdown } from "./components/ConversationMarkdown";
 import { ConversationScrollRail } from "./components/ConversationScrollRail";
+import { ConversationEarlierControl, projectCompletedConversation, useConversationPagination } from "./components/ConversationPagination";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
 import { WindowModeToggle } from "./components/WindowModeToggle";
@@ -30,7 +31,7 @@ import jaMessages from "./locales/ja/messages.json";
 import koMessages from "./locales/ko/messages.json";
 import zhHansMessages from "./locales/zh-Hans/messages.json";
 import type {
-  AgentConversationTimeline,
+  AgentConversationInitialTimeline,
   AppearanceSettingsSummary,
   AppearanceThemePreference,
   AgentTurnAnswer,
@@ -4144,7 +4145,7 @@ function HomeComposer(props: {
   const [agentError, setAgentError] = useState<PigeErrorSummary | null>(null);
   const [agentModelUsage, setAgentModelUsage] = useState<HomeAgentModelUsage>("none");
   const [activeSourceTurn, setActiveSourceTurn] = useState<ActiveSourceTurnBinding | null>(null);
-  const [conversationTimeline, setConversationTimeline] = useState<AgentConversationTimeline | undefined>();
+  const [conversationTimeline, setConversationTimeline] = useState<AgentConversationInitialTimeline | undefined>();
   const [optimisticConversationTurns, setOptimisticConversationTurns] = useState<readonly OptimisticConversationTurn[]>([]);
   const [liveAnswerEventId, setLiveAnswerEventId] = useState<string | null>(null);
   const [conversationCopyState, setConversationCopyState] = useState<ConversationCopyState | null>(null);
@@ -4173,6 +4174,11 @@ function HomeComposer(props: {
   const homeSectionRef = useRef<HTMLElement | null>(null);
   const processingPanelRef = useRef<HTMLElement | null>(null);
   const followConversationRef = useRef(true);
+  const conversationPagination = useConversationPagination({
+    ownerKey: props.activeVault ? `${props.activeVault.vaultId}:home` : "home:none",
+    initial: conversationTimeline,
+    scrollRef: conversationTimelineRef
+  });
   const conversationCopySequenceRef = useRef(0);
   const conversationCopyResetTimerRef = useRef<number | undefined>(undefined);
   const composerSubmitInFlightRef = useRef(false);
@@ -4690,18 +4696,18 @@ function HomeComposer(props: {
     effectiveAgentRunState !== "idle" &&
     effectiveAgentRunState !== "completed";
   const conversationMessageMarkdown = (
-    message: AgentConversationTimeline["messages"][number]
+    message: AgentConversationInitialTimeline["messages"][number]
   ): string => message.inputPresentation
     ? props.t(message.inputPresentation.kind === "reader_selection_action"
       ? `note.selection.${message.inputPresentation.action}`
       : `note.proposal.action.${message.inputPresentation.action}`)
     : message.text;
-  const visibleConversationMessages = (conversationTimeline?.messages ?? []).filter((message) => {
+  const visibleConversationMessages = conversationPagination.messages.filter((message) => {
     if (agentAnswer && message.role === "assistant" && message.id === liveAnswerEventId) return false;
     return message.answer?.datasetResult !== undefined || conversationMessageMarkdown(message).trim().length > 0;
   });
   const visibleOptimisticConversationTurns = optimisticConversationTurns.filter((turn) =>
-    !(conversationTimeline?.messages.some((message) =>
+    !(conversationPagination.messages.some((message) =>
       message.role === "user" && (
         (turn.conversationEventId !== undefined && message.id === turn.conversationEventId) ||
         (turn.jobId !== undefined && message.jobId === turn.jobId)
@@ -4783,7 +4789,7 @@ function HomeComposer(props: {
     setAgentDraft(null);
   };
 
-  const refreshConversation = async (): Promise<AgentConversationTimeline | undefined> => {
+  const refreshConversation = async (): Promise<AgentConversationInitialTimeline | undefined> => {
     const vaultId = props.activeVault?.vaultId;
     if (!vaultId) {
       setConversationTimeline(undefined);
@@ -5125,41 +5131,7 @@ function HomeComposer(props: {
             conversationId: outcome.conversationId,
             tailEventId: outcome.tailEventId
           };
-          setConversationTimeline((current) => {
-            const currentMessages = current?.conversationId === outcome.conversationId
-              ? current.messages
-              : [];
-            return {
-              conversationId: outcome.conversationId,
-              tailEventId: outcome.tailEventId,
-              canFollowUp: true,
-              messages: [
-                ...currentMessages.filter((message) =>
-                  message.id !== outcome.conversationEventId && message.id !== outcome.tailEventId
-                ),
-                {
-                  id: outcome.conversationEventId,
-                  role: "user",
-                  createdAt: completedAt,
-                  text: turnText,
-                  jobId: outcome.jobId
-                },
-                {
-                  id: outcome.tailEventId,
-                  role: "assistant",
-                  createdAt: completedAt,
-                  text: outcome.answer.answer,
-                  jobId: outcome.jobId,
-                  answer: outcome.answer
-                }
-              ],
-              latestTurn: {
-                jobId: outcome.jobId,
-                userEventId: outcome.conversationEventId,
-                state: "completed"
-              }
-            };
-          });
+          setConversationTimeline((current) => projectCompletedConversation(current, outcome, completedAt, turnText));
         }
         clearAgentDraft();
         setAgentAnswer(outcome.answer);
@@ -5584,6 +5556,7 @@ function HomeComposer(props: {
         <section
           ref={conversationTimelineRef}
           className="conversation-timeline"
+          tabIndex={-1}
           aria-label={props.t("home.conversation")}
           aria-busy={agentDraft !== null || effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running"}
           onScroll={(event) => {
@@ -5592,6 +5565,13 @@ function HomeComposer(props: {
           }}
         >
           <div className="conversation-timeline-content">
+            <ConversationEarlierControl
+              hasEarlier={conversationPagination.hasEarlier}
+              loading={conversationPagination.loading}
+              failed={conversationPagination.failed}
+              onLoadEarlier={conversationPagination.loadEarlier}
+              t={props.t}
+            />
             {visibleConversationMessages.map((message) => {
             const markdown = conversationMessageMarkdown(message);
             return (
@@ -5600,6 +5580,7 @@ function HomeComposer(props: {
                 data-message-id={message.id}
                 data-input-presentation={message.inputPresentation?.kind}
                 key={message.id}
+                tabIndex={-1}
               >
                 <span className="conversation-message-role visually-hidden">
                   {props.t(message.role === "user" ? "home.userMessage" : "home.assistantMessage")}
@@ -6126,7 +6107,7 @@ function isConversationPollingState(state: JobState | undefined): boolean {
     state === "cancel_requested";
 }
 
-function canFollowUpToConversation(timeline: AgentConversationTimeline | undefined): timeline is AgentConversationTimeline {
+function canFollowUpToConversation(timeline: AgentConversationInitialTimeline | undefined): timeline is AgentConversationInitialTimeline {
   return timeline?.canFollowUp === true && (
     timeline.latestTurn === undefined ||
     timeline.latestTurn.state === "completed" ||

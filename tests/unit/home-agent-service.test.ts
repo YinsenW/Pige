@@ -1062,6 +1062,26 @@ describe("Home Pi Agent service", () => {
       ]
     });
     expect(service.conversation()).not.toHaveProperty("latestTurn");
+    const initialPage = service.conversation({
+      conversationId: user.event.conversationId,
+      limit: 1
+    });
+    if (!initialPage?.nextEarlierCursor) throw new Error("Expected an earlier conversation page.");
+    const earlierPage = service.conversation({
+      conversationId: initialPage.conversationId,
+      snapshotTailEventId: initialPage.snapshotTailEventId,
+      earlierCursor: initialPage.nextEarlierCursor,
+      limit: 1
+    });
+    expect(earlierPage).toMatchObject({
+      kind: "earlier",
+      conversationId: user.event.conversationId,
+      messages: [{ role: "user", text: "Keep this durable turn visible." }],
+      hasEarlier: false
+    });
+    expect(earlierPage).not.toHaveProperty("tailEventId");
+    expect(earlierPage).not.toHaveProperty("canFollowUp");
+    expect(earlierPage).not.toHaveProperty("latestTurn");
     expect(fs.readFileSync(obsoleteJobPath, "utf8")).toBe(obsoleteJobBytes);
   });
 

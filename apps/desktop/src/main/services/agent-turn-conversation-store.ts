@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
+  AgentConversationEarlierPage,
   AgentConversationMessage,
   AgentConversationInputPresentation,
   AgentTurnAnswer,
@@ -20,6 +21,11 @@ import {
   assertDurableAssistantIntegrity,
   normalizeDurableAssistantEvent
 } from "./durable-agent-turn-answer";
+import {
+  AgentConversationCursorRegistry,
+  invalidConversationTimelineCursor,
+  selectConversationTimelineMessages
+} from "./agent-conversation-pagination";
 
 const MAX_TURN_TEXT_BYTES = 64 * 1024;
 const MAX_CONVERSATION_FILE_BYTES = 8 * 1024 * 1024;
@@ -65,8 +71,11 @@ export interface AgentTurnConversationContextMessage {
 
 export interface AgentTurnConversationTimeline {
   readonly conversationId: string;
+  readonly snapshotTailEventId: string;
   readonly tailEventId: string;
   readonly messages: readonly AgentConversationMessage[];
+  readonly hasEarlier: boolean;
+  readonly nextEarlierCursor?: string;
 }
 
 interface ResolvedTurnBinding {
@@ -92,6 +101,12 @@ interface DiscoveryBudget {
 }
 
 export class AgentTurnConversationStore {
+  readonly #timelineCursors: AgentConversationCursorRegistry;
+
+  constructor(timelineCursorCapacity?: number) {
+    this.#timelineCursors = new AgentConversationCursorRegistry(timelineCursorCapacity);
+  }
+
   appendUserTurn(
     vaultPath: string,
     text: string,
@@ -270,7 +285,7 @@ export class AgentTurnConversationStore {
     if (!events || events.length === 0) return undefined;
     assertConversationEventsBelong(events, conversationId);
     assertConversationScope(events, scope);
-    return createTimeline(events, boundedLimit);
+    return this.#createInitialTimeline(vaultPath, events, boundedLimit, scope);
   }
 
   readLatestConversationTimeline(
@@ -299,7 +314,65 @@ export class AgentTurnConversationStore {
       const sortKey = `${latestMessage.createdAt}\0${latestMessage.id}\0${latestMessage.conversationId}`;
       if (!latest || sortKey > latest.sortKey) latest = { events, sortKey };
     }
-    return latest ? createTimeline(latest.events, boundedLimit) : undefined;
+    return latest ? this.#createInitialTimeline(vaultPath, latest.events, boundedLimit, scope) : undefined;
+  }
+
+  readEarlierConversationPage(
+    vaultPath: string,
+    conversationId: string,
+    snapshotTailEventId: string,
+    earlierCursor: string,
+    limit = DEFAULT_TIMELINE_MESSAGES,
+    scope?: AgentTurnScope
+  ): AgentConversationEarlierPage {
+    const boundedLimit = validateTimelineLimit(limit);
+    const binding = this.#timelineCursors.require(earlierCursor, {
+      vaultPath,
+      conversationId,
+      snapshotTailEventId,
+      ...(scope ? { scope } : {})
+    });
+    const events = readConversationEventsIfExists(vaultPath, conversationLocator(conversationId));
+    if (!events || events.length === 0) throw invalidConversationTimelineCursor();
+    assertConversationEventsBelong(events, conversationId);
+    assertConversationScope(events, scope);
+    if (events.at(-1)?.id !== snapshotTailEventId) throw invalidConversationTimelineCursor();
+    const selected = selectConversationTimelineMessages(events, boundedLimit, MAX_TIMELINE_TEXT_BYTES, binding.beforeEventId);
+    const nextEarlierCursor = selected.hasEarlier && selected.messages[0]
+      ? this.#timelineCursors.remember(vaultPath, conversationId, scope, snapshotTailEventId, selected.messages[0].id)
+      : undefined;
+    return {
+      kind: "earlier",
+      conversationId,
+      snapshotTailEventId,
+      messages: selected.messages,
+      hasEarlier: selected.hasEarlier,
+      ...(nextEarlierCursor ? { nextEarlierCursor } : {})
+    };
+  }
+
+  #createInitialTimeline(
+    vaultPath: string,
+    events: readonly ConversationEvent[],
+    limit: number,
+    scope?: AgentTurnScope
+  ): AgentTurnConversationTimeline {
+    const tail = events.at(-1);
+    if (!tail) {
+      throw new PigeDomainError("agent_runtime.turn_unavailable", "The Agent conversation is empty.");
+    }
+    const selected = selectConversationTimelineMessages(events, limit, MAX_TIMELINE_TEXT_BYTES);
+    const nextEarlierCursor = selected.hasEarlier && selected.messages[0]
+      ? this.#timelineCursors.remember(vaultPath, tail.conversationId, scope, tail.id, selected.messages[0].id)
+      : undefined;
+    return {
+      conversationId: tail.conversationId,
+      snapshotTailEventId: tail.id,
+      tailEventId: tail.id,
+      messages: selected.messages,
+      hasEarlier: selected.hasEarlier,
+      ...(nextEarlierCursor ? { nextEarlierCursor } : {})
+    };
   }
 
   #appendInputTurn(
@@ -753,63 +826,6 @@ function selectRecentContextMessages(
     textBytes += bytes;
   }
   return selected.reverse();
-}
-
-function selectRecentMessages(
-  events: readonly ConversationEvent[],
-  limit: number,
-  maxTextBytes: number
-): AgentConversationMessage[] {
-  const selected: AgentConversationMessage[] = [];
-  let textBytes = 0;
-  for (let index = events.length - 1; index >= 0 && selected.length < limit; index -= 1) {
-    const event = events[index];
-    if (
-      !event ||
-      (event.type !== "user_message" && event.type !== "assistant_message") ||
-      typeof event.text !== "string"
-    ) {
-      continue;
-    }
-    const bytes = Buffer.byteLength(event.text, "utf8");
-    if (textBytes + bytes > maxTextBytes) break;
-    const inputPresentation = event.type === "user_message"
-      ? readInputPresentation(event.inputPresentation)
-      : undefined;
-    selected.push({
-      id: event.id,
-      role: event.type === "user_message" ? "user" : "assistant",
-      createdAt: event.createdAt,
-      text: inputPresentation?.kind === "reader_selection_transform" ? "" : event.text,
-      ...(event.jobId === undefined ? {} : { jobId: event.jobId }),
-      ...(inputPresentation ? { inputPresentation } : {}),
-      ...(event.type === "assistant_message" && event.answerGrounding !== undefined ? {
-        answer: {
-          answer: event.text,
-          grounding: event.answerGrounding,
-          citations: event.answerCitations ?? [],
-          ...(event.answerDatasetResult === undefined ? {} : { datasetResult: event.answerDatasetResult })
-        }
-      } : {})
-    });
-    textBytes += bytes;
-  }
-  return selected.reverse();
-}
-
-function createTimeline(
-  events: readonly ConversationEvent[],
-  limit: number
-): AgentTurnConversationTimeline {
-  const tail = events.at(-1);
-  if (!tail) {
-    throw new PigeDomainError("agent_runtime.turn_unavailable", "The Agent conversation is empty.");
-  }
-  return {
-    conversationId: tail.conversationId,
-    tailEventId: tail.id,
-    messages: selectRecentMessages(events, limit, MAX_TIMELINE_TEXT_BYTES)
-  };
 }
 
 function validateTimelineLimit(limit: number): number {

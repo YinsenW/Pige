@@ -1,11 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import { createElement, useState } from "react";
+import { createElement, useRef, useState } from "react";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CurrentNoteAgent } from "../../apps/desktop/src/renderer/src/components/CurrentNoteAgent";
+import {
+  ConversationEarlierControl,
+  useConversationPagination
+} from "../../apps/desktop/src/renderer/src/components/ConversationPagination";
 import {
   NoteAgentPanel,
   type NoteAgentMessage,
@@ -13,6 +17,7 @@ import {
   type NoteAgentProposal
 } from "../../apps/desktop/src/renderer/src/components/NoteAgentPanel";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
+import type { AgentConversationInitialTimeline } from "@pige/contracts";
 
 const rendererRoot = path.resolve("apps/desktop/src/renderer/src");
 const appSource = fs.readFileSync(path.join(rendererRoot, "App.tsx"), "utf8");
@@ -46,6 +51,185 @@ afterEach(() => {
 });
 
 describe("Note Agent production UI", () => {
+  it("prepends exact earlier messages once, preserves scroll position, and restores focus", async () => {
+    const dom = createDom();
+    let resolveEarlier!: (value: unknown) => void;
+    const conversation = vi.fn().mockReturnValue(new Promise((resolve) => { resolveEarlier = resolve; }));
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: noteAgentApi(conversation) });
+    const mount = await mountPaginationHarness(dom, paginationTimeline("event_tail_1", "timeline_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+    const scroller = required(mount.container.querySelector<HTMLElement>(".pagination-test-scroll"));
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: () => scroller.querySelectorAll("[data-message-id]").length * 100
+    });
+    scroller.scrollTop = 24;
+    const load = required(buttonNamed(mount.container, t("conversation.loadEarlier")));
+
+    await act(async () => {
+      load.click();
+      load.click();
+      await settle(dom);
+    });
+    expect(conversation).toHaveBeenCalledTimes(1);
+    expect(conversation).toHaveBeenCalledWith({
+      conversationId: "conversation_pagination",
+      snapshotTailEventId: "event_tail_1",
+      earlierCursor: "timeline_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      limit: 100
+    });
+    await act(async () => {
+      resolveEarlier({
+        kind: "earlier",
+        conversationId: "conversation_pagination",
+        snapshotTailEventId: "event_tail_1",
+        messages: [paginationMessage("event_older_1"), paginationMessage("event_visible_1")],
+        hasEarlier: true,
+        nextEarlierCursor: "timeline_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      });
+      await settle(dom);
+    });
+    await waitFor(dom, () => mount.container.querySelectorAll("[data-message-id]").length === 2);
+    expect(Array.from(mount.container.querySelectorAll<HTMLElement>("[data-message-id]")).map((node) => node.dataset.messageId))
+      .toEqual(["event_older_1", "event_visible_1"]);
+    expect(scroller.scrollTop).toBe(124);
+    await waitFor(dom, () => dom.window.document.activeElement === load);
+    await act(async () => {
+      mount.render(paginationTimeline("event_tail_1", "timeline_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+      await settle(dom);
+    });
+    conversation.mockResolvedValueOnce({
+      kind: "earlier",
+      conversationId: "conversation_pagination",
+      snapshotTailEventId: "event_tail_1",
+      messages: [paginationMessage("event_older_0")],
+      hasEarlier: false
+    });
+    await click(dom, load);
+    expect(conversation.mock.calls[1]?.[0]).toMatchObject({
+      earlierCursor: "timeline_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    });
+    await waitFor(dom, () => buttonNamed(mount.container, t("conversation.loadEarlier")) === undefined);
+    await waitFor(dom, () => (dom.window.document.activeElement as HTMLElement | null)?.dataset.messageId === "event_older_0");
+    expect(scroller.scrollTop).toBe(224);
+    await unmount(dom, mount.root);
+  });
+
+  it("fences a replaced snapshot cursor while retaining same-scope messages and resets only on identity change", async () => {
+    const dom = createDom();
+    let resolveOldCursor!: (value: unknown) => void;
+    const conversation = vi.fn()
+      .mockResolvedValueOnce({
+        kind: "earlier",
+        conversationId: "conversation_pagination",
+        snapshotTailEventId: "event_tail_1",
+        messages: [paginationMessage("event_loaded_older")],
+        hasEarlier: true,
+        nextEarlierCursor: "timeline_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      })
+      .mockImplementation(() => new Promise((resolve) => { resolveOldCursor = resolve; }));
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: noteAgentApi(conversation) });
+    const initial = paginationTimeline("event_tail_1", "timeline_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    const mount = await mountPaginationHarness(dom, initial);
+    await click(dom, required(buttonNamed(mount.container, t("conversation.loadEarlier"))));
+    await waitFor(dom, () => mount.container.textContent?.includes("event_loaded_older") === true);
+    await click(dom, required(buttonNamed(mount.container, t("conversation.loadEarlier"))));
+    await waitFor(dom, () => conversation.mock.calls.length === 2);
+    await act(async () => {
+      mount.render(paginationTimeline("event_tail_2", "timeline_cccccccccccccccccccccccccccccccc", [
+        paginationMessage("event_visible_1"),
+        paginationMessage("event_tail_2")
+      ]));
+      await settle(dom);
+    });
+    await act(async () => {
+      resolveOldCursor({
+        kind: "earlier",
+        conversationId: "conversation_pagination",
+        snapshotTailEventId: "event_tail_1",
+        messages: [paginationMessage("event_stale_older")],
+        hasEarlier: false
+      });
+      await settle(dom);
+    });
+    await waitFor(dom, () => mount.container.textContent?.includes("event_tail_2") === true);
+    expect(mount.container.textContent).toContain("event_visible_1");
+    expect(mount.container.querySelectorAll('[data-message-id="event_loaded_older"]')).toHaveLength(1);
+    expect(mount.container.textContent).toContain("event_tail_2");
+    expect(mount.container.textContent).not.toContain("event_stale_older");
+
+    await act(async () => {
+      mount.render(paginationTimeline("event_other_tail", undefined, [paginationMessage("event_other")]), "vault_other:home");
+      await settle(dom);
+    });
+    expect(mount.container.textContent).toContain("event_other");
+    expect(mount.container.textContent).not.toContain("event_visible_1");
+    await unmount(dom, mount.root);
+  });
+
+  it("keeps every accumulated message when an older-page request fails and permits retry", async () => {
+    const dom = createDom();
+    const conversation = vi.fn()
+      .mockRejectedValueOnce(new Error("private pagination failure"))
+      .mockResolvedValueOnce({
+        kind: "earlier",
+        conversationId: "conversation_pagination",
+        snapshotTailEventId: "event_tail_1",
+        messages: [paginationMessage("event_retry_older")],
+        hasEarlier: false
+      });
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: noteAgentApi(conversation) });
+    const mount = await mountPaginationHarness(
+      dom,
+      paginationTimeline("event_tail_1", "timeline_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    );
+    await click(dom, required(buttonNamed(mount.container, t("conversation.loadEarlier"))));
+    await waitFor(dom, () => mount.container.querySelector('[role="alert"]') !== null);
+    expect(mount.container.textContent).toContain("event_visible_1");
+    expect(mount.container.textContent).not.toContain("private pagination failure");
+    await click(dom, required(buttonNamed(mount.container, t("conversation.loadEarlier"))));
+    await waitFor(dom, () => mount.container.textContent?.includes("event_retry_older") === true);
+    expect(mount.container.textContent).toContain("event_visible_1");
+    expect(conversation).toHaveBeenCalledTimes(2);
+    await unmount(dom, mount.root);
+  });
+
+  it("binds Note Agent pagination to the exact current-note scope", async () => {
+    const dom = createDom();
+    const initial = {
+      ...paginationTimeline("event_note_tail", "timeline_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+      conversationId: "conversation_note_pagination"
+    };
+    const conversation = vi.fn()
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce({
+        kind: "earlier",
+        conversationId: initial.conversationId,
+        snapshotTailEventId: initial.snapshotTailEventId,
+        messages: [paginationMessage("event_note_older")],
+        hasEarlier: false
+      });
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: noteAgentApi(conversation) });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, currentNoteAgentProps("page_note_pagination")));
+      await settle(dom);
+    });
+    await waitFor(dom, () => buttonNamed(container, t("conversation.loadEarlier")) !== undefined);
+    await click(dom, required(buttonNamed(container, t("conversation.loadEarlier"))));
+    await waitFor(dom, () => container.textContent?.includes("event_note_older") === true);
+    expect(conversation.mock.calls[1]?.[0]).toEqual({
+      scope: { kind: "current_note", pageId: "page_note_pagination" },
+      conversationId: "conversation_note_pagination",
+      snapshotTailEventId: "event_note_tail",
+      earlierCursor: "timeline_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      limit: 100
+    });
+    await unmount(dom, root);
+  });
+
   it("keeps the real product fail-closed without fake answers, proposals, or actions", async () => {
     const dom = createDom();
     const mount = await mountPanel(dom, { availability: "unavailable" });
@@ -1345,6 +1529,68 @@ function completedNoteOutcome(pageId: string, answer: string): Record<string, un
     sourceIds: [],
     answer: { answer, grounding: "local_knowledge", citations: [] }
   };
+}
+
+async function mountPaginationHarness(
+  dom: JSDOM,
+  initial: AgentConversationInitialTimeline,
+  ownerKey = "vault_current:home"
+): Promise<{
+  readonly container: HTMLDivElement;
+  readonly root: Root;
+  readonly render: (next: AgentConversationInitialTimeline, nextOwnerKey?: string) => void;
+}> {
+  const container = dom.window.document.createElement("div");
+  dom.window.document.body.append(container);
+  const { createRoot } = await import("react-dom/client");
+  const root = createRoot(container);
+  function Harness(props: { readonly timeline: AgentConversationInitialTimeline; readonly identity: string }): React.JSX.Element {
+    const scrollRef = useRef<HTMLDivElement | null>(null);
+    const pagination = useConversationPagination({ ownerKey: props.identity, initial: props.timeline, scrollRef });
+    return createElement("div", { ref: scrollRef, className: "pagination-test-scroll", tabIndex: -1 },
+      createElement(ConversationEarlierControl, {
+        hasEarlier: pagination.hasEarlier,
+        loading: pagination.loading,
+        failed: pagination.failed,
+        onLoadEarlier: pagination.loadEarlier,
+        t
+      }),
+      ...pagination.messages.map((message) => createElement("article", {
+        key: message.id,
+        "data-message-id": message.id,
+        tabIndex: -1
+      }, message.id))
+    );
+  }
+  const render = (next: AgentConversationInitialTimeline, nextOwnerKey = ownerKey): void => {
+    root.render(createElement(Harness, { timeline: next, identity: nextOwnerKey }));
+  };
+  await act(async () => {
+    render(initial);
+    await settle(dom);
+  });
+  return { container, root, render };
+}
+
+function paginationTimeline(
+  snapshotTailEventId: string,
+  nextEarlierCursor?: string,
+  messages = [paginationMessage("event_visible_1")]
+): AgentConversationInitialTimeline {
+  return {
+    kind: "initial",
+    conversationId: "conversation_pagination",
+    snapshotTailEventId,
+    tailEventId: snapshotTailEventId,
+    canFollowUp: false,
+    messages,
+    hasEarlier: nextEarlierCursor !== undefined,
+    ...(nextEarlierCursor ? { nextEarlierCursor } : {})
+  };
+}
+
+function paginationMessage(id: string): AgentConversationInitialTimeline["messages"][number] {
+  return { id, role: "assistant", createdAt: "2026-07-26T08:00:00.000Z", text: id };
 }
 
 function noteAgentApi(conversation: ReturnType<typeof vi.fn>): Record<string, unknown> {

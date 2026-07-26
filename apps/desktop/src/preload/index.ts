@@ -4,7 +4,7 @@ import type {
   AddManualProviderRequest,
   AddManualModelRequest,
   AgentConversationRequest,
-  AgentConversationTimeline,
+  AgentConversationResult,
   AgentSubmitTurnRequest,
   AgentSubmitTurnIpcResult,
   AgentTurnDraftEvent,
@@ -120,6 +120,8 @@ import type {
   VaultSummary
 } from "@pige/contracts";
 import {
+  AgentConversationRequestSchema,
+  AgentConversationResultSchema,
   AgentSubmitTurnIpcPayloadSchema,
   AgentSubmitTurnIpcResultSchema,
   AppearanceSettingsSummarySchema,
@@ -400,14 +402,16 @@ const api: PigeDesktopApi = {
   agent: {
     runtimeStatus: async (): Promise<AgentRuntimeStatus> =>
       ipcRenderer.invoke("agent.runtimeStatus") as Promise<AgentRuntimeStatus>,
-    conversation: async (
+    conversation: (async (
       request?: AgentConversationRequest
-    ): Promise<AgentConversationTimeline | undefined> => {
+    ): Promise<AgentConversationResult | undefined> => {
       const normalizedRequest = request?.scope
         ? { ...request, scope: { kind: "current_note" as const, pageId: request.scope.pageId } }
         : request;
-      return ipcRenderer.invoke("agent.conversation", normalizedRequest) as Promise<AgentConversationTimeline | undefined>;
-    },
+      const parsedRequest = AgentConversationRequestSchema.parse(normalizedRequest ?? {});
+      const result = await ipcRenderer.invoke("agent.conversation", parsedRequest) as unknown;
+      return AgentConversationResultSchema.optional().parse(result) as AgentConversationResult | undefined;
+    }) as PigeDesktopApi["agent"]["conversation"],
     submitTurn: (async (
       request: AgentSubmitTurnRequest,
       files: readonly File[] = []

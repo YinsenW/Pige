@@ -17,6 +17,16 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("strictly parses durable conversation pagination on both IPC sides", () => {
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+
+    expect(preloadSource).toContain("AgentConversationRequestSchema.parse(normalizedRequest ?? {})");
+    expect(preloadSource).toContain("AgentConversationResultSchema.optional().parse(result)");
+    expect(mainSource).toContain("AgentConversationRequestSchema.parse(request ?? {})");
+    expect(mainSource).toContain("AgentConversationResultSchema.optional().parse(");
+  });
+
   it("uses a CommonJS preload entry compatible with Electron sandboxed preload execution", () => {
     expect(PRELOAD_ENTRY_FILENAME).toBe("index.cjs");
 
