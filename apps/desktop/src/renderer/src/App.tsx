@@ -20,10 +20,8 @@ import { ConversationScrollRail } from "./components/ConversationScrollRail";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
 import { WindowModeToggle } from "./components/WindowModeToggle";
-import {
-  ReaderInlineReferenceSurface,
-  type ReaderInlineReferenceActivation
-} from "./components/ReaderInlineReferenceSurface";
+import { useWindowControls } from "./components/useWindowControls";
+import { ReaderInlineReferenceSurface, type ReaderInlineReferenceActivation } from "./components/ReaderInlineReferenceSurface";
 import pigeMarkUrl from "../../../../../resources/brand/pige-icon/master/pige-icon-1024.png";
 import deMessages from "./locales/de/messages.json";
 import enMessages from "./locales/en/messages.json";
@@ -252,8 +250,6 @@ export function App(): React.JSX.Element {
   const [recentVaults, setRecentVaults] = useState<readonly RecentVaultSummary[]>([]);
   const [vaultName, setVaultName] = useState(initialVaultName);
   const [windowState, setWindowState] = useState<WindowState | null>(null);
-  const [windowStateBusy, setWindowStateBusy] = useState(false);
-  const windowStateBusyRef = useRef(false);
   const [windowLayoutState, setWindowLayoutState] = useState<WindowLayoutState | null>(null);
   const [view, setView] = useState<View>("home");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -569,8 +565,8 @@ export function App(): React.JSX.Element {
     void refreshSpeechAvailability();
   }, [locale, settingsOpen, settingsSection]);
 
-  const t = useCallback((key: string): string =>
-    messageCatalogs[locale][key] ?? messageCatalogs.en[key] ?? key, [locale]);
+  const t = useCallback((key: string): string => messageCatalogs[locale][key] ?? messageCatalogs.en[key] ?? key, [locale]);
+  const windowControls = useWindowControls(windowState, setWindowState, () => setCaptureToast({ kind: "error", message: t("error.generic") }));
 
   const refreshVaultState = async (): Promise<void> => {
     const refreshId = ++vaultRefreshSequence.current;
@@ -972,33 +968,6 @@ export function App(): React.JSX.Element {
       noteAgentOpen: false
     });
     setLibrarySearchFocusRequest((current) => current + 1);
-  };
-  const toggleAlwaysOnTop = async (): Promise<void> => {
-    if (!windowState || windowStateBusyRef.current) return;
-    windowStateBusyRef.current = true;
-    setWindowStateBusy(true);
-    try {
-      setWindowState(await window.pige.window.setAlwaysOnTop({ alwaysOnTop: !windowState.alwaysOnTop }));
-    } catch {
-      setCaptureToast({ kind: "error", message: t("error.generic") });
-    } finally {
-      windowStateBusyRef.current = false;
-      setWindowStateBusy(false);
-    }
-  };
-  const toggleWindowMode = async (): Promise<void> => {
-    if (!windowState || windowStateBusyRef.current) return;
-    windowStateBusyRef.current = true;
-    setWindowStateBusy(true);
-    try {
-      const mode = windowState.mode === "compact" ? "expanded" : "compact";
-      setWindowState(await window.pige.window.setMode({ mode }));
-    } catch {
-      setCaptureToast({ kind: "error", message: t("error.generic") });
-    } finally {
-      windowStateBusyRef.current = false;
-      setWindowStateBusy(false);
-    }
   };
   const updateLocale = async (nextLocale: Locale): Promise<void> => {
     if (voiceAssetInstallActiveRef.current) return;
@@ -1452,18 +1421,17 @@ export function App(): React.JSX.Element {
         </div>
         <span className="topbar-title" aria-hidden="true">{currentTitle}</span>
         <div className="topbar-actions">
-          <WindowModeToggle state={windowState} compactLabel={t("topbar.compact")} expandedLabel={t("topbar.expanded")}
-            tabIndex={sidebarModal ? -1 : undefined} busy={windowStateBusy} onToggle={() => void toggleWindowMode()} />
+          <WindowModeToggle state={windowState} compactLabel={t("topbar.compact")} expandedLabel={t("topbar.expanded")} tabIndex={sidebarModal ? -1 : undefined} busy={windowControls.busy} onToggle={() => void windowControls.toggleWindowMode()} />
           <button
             type="button"
             className={windowState?.alwaysOnTop ? "icon-button pin-button active" : "icon-button pin-button"}
             aria-label={t("topbar.pin")}
             title={t("topbar.pin")}
             aria-pressed={windowState?.alwaysOnTop ?? false}
-            aria-busy={windowStateBusy || undefined}
-            disabled={windowState === null || windowStateBusy}
+            aria-busy={windowControls.busy || undefined}
+            disabled={windowState === null || windowControls.busy}
             tabIndex={sidebarModal ? -1 : undefined}
-            onClick={() => void toggleAlwaysOnTop()}
+            onClick={() => void windowControls.toggleAlwaysOnTop()}
           >
             <PigeIcon name="pin" />
           </button>
@@ -1773,7 +1741,6 @@ export function App(): React.JSX.Element {
           macosWindowShell={macosWindowShell}
           locale={locale}
           availableLocales={availableLocales}
-          alwaysOnTop={windowState?.alwaysOnTop ?? false}
           developmentNotice={developmentNotice?.surface === "settings" ? developmentNotice : null}
           onSectionChange={(section) => {
             setSettingsSection(section);
@@ -1781,7 +1748,6 @@ export function App(): React.JSX.Element {
           }}
           onClose={closeSettings}
           onLocaleChange={updateLocale}
-          onAlwaysOnTopChange={toggleAlwaysOnTop}
           onDevelopment={(capability) => showDevelopmentCapability("settings", capability)}
           t={t}
         >
@@ -1823,8 +1789,8 @@ export function App(): React.JSX.Element {
           ) : settingsSection === "general" ? (
             <GeneralSettingsPanel
               alwaysOnTop={windowState?.alwaysOnTop ?? null}
-              alwaysOnTopBusy={windowStateBusy}
-              onAlwaysOnTopChange={toggleAlwaysOnTop}
+              alwaysOnTopBusy={windowControls.busy}
+              onAlwaysOnTopChange={windowControls.toggleAlwaysOnTop}
               onOpenAppearance={() => {
                 setSettingsSection("appearance");
                 setDevelopmentNotice(null);
@@ -6616,12 +6582,10 @@ export function SettingsSurface(props: {
   readonly macosWindowShell?: boolean;
   readonly locale: Locale;
   readonly availableLocales: readonly Locale[];
-  readonly alwaysOnTop: boolean;
   readonly developmentNotice: DevelopmentNotice | null;
   readonly onSectionChange: (section: SettingsSection) => void;
   readonly onClose: () => void;
   readonly onLocaleChange: (locale: Locale) => Promise<void>;
-  readonly onAlwaysOnTopChange: () => Promise<void>;
   readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
   readonly children: ReactNode;
