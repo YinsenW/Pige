@@ -81,6 +81,11 @@ function makeStore(): LocalSettingsStore {
   return new LocalSettingsStore(root);
 }
 
+function applyCompactState(service: WindowModeService, fakeWindow: FakeWindow): void {
+  service.applyStoredState(fakeWindow);
+  service.setMode(fakeWindow, { mode: "compact" });
+}
+
 afterEach(() => {
   for (const root of tempRoots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
@@ -88,16 +93,16 @@ afterEach(() => {
 });
 
 describe("window mode service", () => {
-  it("applies compact capture defaults on first launch", () => {
+  it("applies the wide daily layout on first launch", () => {
     const service = new WindowModeService(makeStore());
     const fakeWindow = new FakeWindow();
 
     const state = service.applyStoredState(fakeWindow);
 
-    expect(state.mode).toBe("compact");
+    expect(state.mode).toBe("expanded");
     expect(state.alwaysOnTop).toBe(false);
     expect(state.isFullScreen).toBe(false);
-    expect(state.size).toEqual(DEFAULT_COMPACT_WINDOW_SIZE);
+    expect(state.size).toEqual(DEFAULT_EXPANDED_WINDOW_SIZE);
   });
 
   it("persists layout mode and remembered non-fullscreen sizes in machine-local settings", () => {
@@ -105,7 +110,7 @@ describe("window mode service", () => {
     const service = new WindowModeService(store);
     const fakeWindow = new FakeWindow();
 
-    service.applyStoredState(fakeWindow);
+    applyCompactState(service, fakeWindow);
     fakeWindow.setSize(500, 700);
     const expanded = service.setMode(fakeWindow, { mode: "expanded" });
 
@@ -139,7 +144,7 @@ describe("window mode service", () => {
     const service = new WindowModeService(store, () => ({ x: 0, y: 0, width: 1440, height: 900 }));
     const fakeWindow = new FakeWindow();
 
-    service.applyStoredState(fakeWindow);
+    applyCompactState(service, fakeWindow);
     const open = service.setLayout(fakeWindow, {
       apiVersion: 1,
       surface: "home",
@@ -173,7 +178,7 @@ describe("window mode service", () => {
   it("keeps Library resident and falls back to an Agent overlay when work area is constrained", () => {
     const service = new WindowModeService(makeStore(), () => ({ x: 0, y: 0, width: 1000, height: 900 }));
     const fakeWindow = new FakeWindow();
-    service.applyStoredState(fakeWindow);
+    applyCompactState(service, fakeWindow);
 
     const state = service.setLayout(fakeWindow, {
       apiVersion: 1,
@@ -195,7 +200,7 @@ describe("window mode service", () => {
     const run = (firstClosed: "sidebar" | "agent"): number[] => {
       const service = new WindowModeService(makeStore(), workArea);
       const fakeWindow = new FakeWindow();
-      service.applyStoredState(fakeWindow);
+      applyCompactState(service, fakeWindow);
       service.setLayout(fakeWindow, {
         apiVersion: 1,
         surface: "reader",
@@ -225,7 +230,7 @@ describe("window mode service", () => {
   it("does not resize a maximized window and restores pending auto expansion after unmaximize", () => {
     const service = new WindowModeService(makeStore(), () => ({ x: 0, y: 0, width: 1440, height: 900 }));
     const fakeWindow = new FakeWindow();
-    service.applyStoredState(fakeWindow);
+    applyCompactState(service, fakeWindow);
     service.setLayout(fakeWindow, {
       apiVersion: 1,
       surface: "home",
@@ -252,7 +257,7 @@ describe("window mode service", () => {
   it("defers an open-pane expansion until a maximized window returns to normal", () => {
     const service = new WindowModeService(makeStore(), () => ({ x: 0, y: 0, width: 1440, height: 900 }));
     const fakeWindow = new FakeWindow();
-    service.applyStoredState(fakeWindow);
+    applyCompactState(service, fakeWindow);
     fakeWindow.setMaximized(true);
     service.handleNativeLayoutChanged(fakeWindow);
 
@@ -312,7 +317,7 @@ describe("window mode service", () => {
   it("preserves a user move and height change without treating pane width as the new base", () => {
     const service = new WindowModeService(makeStore(), () => ({ x: 0, y: 0, width: 1440, height: 900 }));
     const fakeWindow = new FakeWindow();
-    service.applyStoredState(fakeWindow);
+    applyCompactState(service, fakeWindow);
     service.setLayout(fakeWindow, {
       apiVersion: 1,
       surface: "home",
