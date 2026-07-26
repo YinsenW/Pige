@@ -90,6 +90,7 @@ import {
   JobRecordStore,
   type JobRecordSnapshot
 } from "./job-record-store";
+import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
 import {
   JobExecutionCoordinator,
   type BeginJobInput,
@@ -4104,10 +4105,6 @@ function sameDurableFileRevision(left: fs.Stats, right: fs.Stats): boolean {
     left.size === right.size &&
     left.mtimeMs === right.mtimeMs &&
     left.ctimeMs === right.ctimeMs;
-}
-
-function isErrno(value: unknown, code: string): value is NodeJS.ErrnoException {
-  return value instanceof Error && "code" in value && value.code === code;
 }
 
 function readProposalForDecision(

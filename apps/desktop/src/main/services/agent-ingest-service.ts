@@ -89,6 +89,7 @@ import {
   readGeneratedNoteExact,
   readGeneratedNoteHeader
 } from "./generated-note-file";
+import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
 import {
   bindRetrievalEvidenceToCurrentMarkdown,
   createRetrievalEvidencePrivacyHash,
@@ -3690,10 +3691,6 @@ function proposalOperationConflict(message: string): PigeDomainError {
 
 function proposalOperationUnavailable(message: string): PigeDomainError {
   return new PigeDomainError("proposal.operation_unavailable", message);
-}
-
-function isErrno(value: unknown, code: string): value is NodeJS.ErrnoException {
-  return value instanceof Error && "code" in value && value.code === code;
 }
 
 function writeRecoveredCreatePageOperation(input: {
