@@ -156,8 +156,8 @@ describe("Conversation scroll rail", () => {
     });
 
     const rail = dom.window.document.querySelector<HTMLElement>(".conversation-scroll-rail");
-    expect(rail?.style.getPropertyValue("--conversation-rail-height")).toBe("164px");
-    expect(rail?.style.getPropertyValue("--conversation-rail-top")).toBe("238px");
+    expect(rail?.style.getPropertyValue("--conversation-rail-height")).toBe("119px");
+    expect(rail?.style.getPropertyValue("--conversation-rail-top")).toBe("260px");
     expect(rail?.querySelectorAll(".conversation-scroll-anchor")).toHaveLength(64);
 
     await act(async () => root.unmount());
