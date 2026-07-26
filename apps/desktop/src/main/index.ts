@@ -128,6 +128,7 @@ import { BackupCoordinatorService } from "./services/backup-coordinator-service"
 import { BackupRestoreService } from "./services/backup-service";
 import { CoalescedBatchDrainer } from "./services/background-job-drainer";
 import { CaptureService } from "./services/capture-service";
+import { type CaptureJobExecutor } from "./services/capture-job-executor";
 import { HomeAgentAttachmentService } from "./services/home-agent-attachment-service";
 import { DiagnosticsService } from "./services/diagnostics-service";
 import { DatasetIngestWorkerService } from "./services/dataset-ingest-worker-service";
@@ -1149,6 +1150,9 @@ const getLocalDatabaseService = (): LocalDatabaseService => {
 const getIndexRebuildJobExecutor = (): IndexRebuildJobExecutor =>
   getJobsService().indexRebuildExecutor();
 
+const getCaptureJobExecutor = (): CaptureJobExecutor =>
+  getJobsService().captureExecutor();
+
 const getDatasetImportJobExecutor = (): DatasetImportJobExecutor =>
   getJobsService().datasetImportExecutor();
 
@@ -1210,7 +1214,7 @@ const initializeActiveDatabase = (): void => {
 
 const scheduleCaptureProcessing = (): void => {
   captureDrainer ??= new CoalescedBatchDrainer({
-    runBatch: () => getJobsService().processQueuedCaptures({ limit: 20 }),
+    runBatch: () => getCaptureJobExecutor().process({ limit: 20 }),
     onBatch: () => {
       scheduleParseProcessing();
       scheduleOcrProcessing();

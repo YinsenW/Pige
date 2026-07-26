@@ -45,6 +45,14 @@ import {
   createAttachmentSetToolSession,
   createAttachmentSourceId
 } from "./home-agent-attachment-service";
+import {
+  CaptureJobExecutor,
+  type ActiveCaptureJob,
+  type CapturePublishedResult,
+  type ProcessQueuedCapturesRequest,
+  type ProcessQueuedCapturesResult,
+  type QueuedCaptureJob
+} from "./capture-job-executor";
 import type { DocumentParserPort } from "./document-parser-service";
 import {
   DocumentParseJobExecutor,
@@ -60,6 +68,7 @@ import {
   type QueuedDatasetImportJob
 } from "./dataset-import-job-executor";
 import { SourcePageService } from "./source-page-service";
+import type { SourcePageResult } from "./source-page-service";
 import type { LocalDatabaseService } from "./local-database-service";
 import type { OcrPort, OcrSourceCapability } from "./ocr-service";
 import {
@@ -114,17 +123,6 @@ export interface JobsVaultPort {
   current(): VaultSummary | undefined;
   activeVaultPath(): string | undefined;
   assertWriterLease?(vaultPath: string): void;
-}
-
-export interface ProcessQueuedCapturesRequest {
-  readonly jobIds?: readonly string[];
-  readonly limit?: number;
-}
-
-export interface ProcessQueuedCapturesResult {
-  readonly processed: number;
-  readonly completed: number;
-  readonly failed: number;
 }
 
 export interface ProcessQueuedAgentIngestRequest {
@@ -202,6 +200,7 @@ export interface AgentTurnUrlSourceLink {
 }
 
 export type { ProcessQueuedOcrRequest, ProcessQueuedOcrResult } from "./ocr-job-executor";
+export type { ProcessQueuedCapturesRequest, ProcessQueuedCapturesResult } from "./capture-job-executor";
 
 const DEFAULT_JOB_LIST_LIMIT = 20;
 const MAX_JOB_LIST_LIMIT = 100;
@@ -220,6 +219,7 @@ export class JobsService {
   readonly #ocr: OcrPort | undefined;
   readonly #datasets: DatasetMaterializerPort | undefined;
   readonly #executors: JobClassExecutorRegistry;
+  readonly #captureExecutor: CaptureJobExecutor;
   readonly #datasetImportExecutor: DatasetImportJobExecutor;
   readonly #documentParseExecutor: DocumentParseJobExecutor;
   readonly #indexRebuildExecutor: IndexRebuildJobExecutor;
@@ -235,16 +235,25 @@ export class JobsService {
     documentParser?: DocumentParserPort,
     ocr?: OcrPort,
     datasets?: DatasetMaterializerPort,
-    executors: JobClassExecutorRegistry = createJobClassExecutorRegistry()
+    executors: JobClassExecutorRegistry = createJobClassExecutorRegistry(),
+    sourcePages: SourcePageService = new SourcePageService()
   ) {
     this.#vaults = vaults;
-    this.#sourcePages = new SourcePageService();
+    this.#sourcePages = sourcePages;
     this.#agentIngest = agentIngest;
     this.#database = database;
     this.#documentParser = documentParser;
     this.#ocr = ocr;
     this.#datasets = datasets;
     this.#executors = executors;
+    this.#captureExecutor = new CaptureJobExecutor(this.#sourcePages, {
+      queued: (request) => {
+        const vaultPath = this.#requireActiveVaultPath();
+        this.#assertWriterLease(vaultPath);
+        return findQueuedCaptureJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request)
+          .map((snapshot) => this.#queuedCaptureJob(vaultPath, snapshot));
+      }
+    });
     this.#documentParseExecutor = new DocumentParseJobExecutor(documentParser, {
       queued: (request) => {
         const vaultPath = this.#requireActiveVaultPath();
@@ -289,6 +298,10 @@ export class JobsService {
 
   indexRebuildExecutor(): IndexRebuildJobExecutor {
     return this.#indexRebuildExecutor;
+  }
+
+  captureExecutor(): CaptureJobExecutor {
+    return this.#captureExecutor;
   }
 
   datasetImportExecutor(): DatasetImportJobExecutor {
@@ -1628,89 +1641,7 @@ export class JobsService {
   }
 
   processQueuedCaptures(request: ProcessQueuedCapturesRequest = {}): ProcessQueuedCapturesResult {
-    const vaultPath = this.#requireActiveVaultPath();
-    const jobFiles = findQueuedCaptureJobFiles(this.#jobRecordStore(vaultPath), vaultPath, request);
-    let completed = 0;
-    let failed = 0;
-
-    for (const jobFile of jobFiles) {
-      let execution: { readonly job: JobRecord; readonly control: JobExecutionControl } | undefined;
-      try {
-        const sourceRecordFile = jobFile.job.sourceId ? readSourceRecordFile(vaultPath, jobFile.job.sourceId) : undefined;
-        if (!sourceRecordFile) {
-          this.#markJobFailedRetryable(jobFile.path, jobFile.job, "Source record is missing. Preserved job remains retryable.");
-          failed += 1;
-          continue;
-        }
-
-        const captureExecution = this.#beginNonCooperativeExecution(
-          jobFile,
-          "capturing_source",
-          "Publishing the preserved source into the local knowledge vault."
-        );
-        execution = captureExecution;
-        const page = this.#sourcePages.createForSource(
-          vaultPath,
-          sourceRecordFile.sourceRecord,
-          sourceRecordFile.path,
-          captureExecution.job.id,
-          sourceRecordFile.sourceRecord,
-          {
-            onPublicationStart: () => captureExecution.control.markDurableCheckpoint(
-              "capture_source_page_publication_started"
-            )
-          }
-        );
-        if (isLegacyAgentIngestSource(sourceRecordFile.sourceRecord)) {
-          ensureAgentIngestJob(
-            this.#jobRecordStore(vaultPath),
-            vaultPath,
-            captureExecution.job,
-            sourceRecordFile.sourceRecord.id,
-            canRunAgentIngest(this.#agentIngest),
-            this.#requireActiveVaultId(vaultPath)
-          );
-        }
-        appendLog(
-          vaultPath,
-          `${new Date().toISOString()} Created source page [${page.title}](${page.pagePath}) for source \`${jobFile.job.sourceId}\`.`
-        );
-        this.#completeCooperativeExecution(
-          jobFile.path,
-          captureExecution.job,
-          "completed",
-          page.created
-            ? "Source page created from preserved source."
-            : "Source page already exists for preserved source.",
-          "source",
-          captureExecution.control.durableWriteState()
-        );
-        completed += 1;
-      } catch (caught) {
-        if (isJobMutationContention(caught)) {
-          failed += 1;
-          continue;
-        }
-        const cancellation = execution ? resolveCancellation(execution.control, caught) : undefined;
-        if (cancellation) {
-          this.#markJobCancellationOutcome(jobFile.path, execution?.job ?? jobFile.job, cancellation);
-        } else {
-          this.#markJobFailedRetryable(
-            jobFile.path,
-            execution?.job ?? jobFile.job,
-            "Source page creation failed. Preserved source remains retryable.",
-            execution?.control.durableWriteState()
-          );
-        }
-        failed += 1;
-      }
-    }
-
-    return {
-      processed: jobFiles.length,
-      completed,
-      failed
-    };
+    return this.#captureExecutor.process(request);
   }
 
   async processQueuedAgentIngest(request: ProcessQueuedAgentIngestRequest = {}): Promise<ProcessQueuedAgentIngestResult> {
@@ -2584,6 +2515,194 @@ export class JobsService {
       throw new PigeDomainError("ocr.tool_failed_final", "The durable source OCR child failed validation.");
     }
     throw new PigeDomainError("ocr.tool_failed_retryable", "The durable source OCR child remains retryable.");
+  }
+
+  #queuedCaptureJob(vaultPath: string, snapshot: JobRecordSnapshot): QueuedCaptureJob {
+    const sourceRecordFile = snapshot.job.sourceId
+      ? readSourceRecordFile(vaultPath, snapshot.job.sourceId)
+      : undefined;
+    return {
+      job: snapshot.job,
+      vaultPath,
+      ...(sourceRecordFile ? {
+        source: { path: sourceRecordFile.path, record: sourceRecordFile.sourceRecord }
+      } : {}),
+      failMissingSource: (message) => {
+        this.#assertWriterLease(vaultPath);
+        this.#markJobFailedRetryable(snapshot.path, snapshot.job, message);
+      },
+      begin: () => {
+        this.#assertWriterLease(vaultPath);
+        return this.#activeCaptureJob(vaultPath, snapshot);
+      }
+    };
+  }
+
+  #activeCaptureJob(vaultPath: string, snapshot: JobRecordSnapshot): ActiveCaptureJob {
+    const sourceRecordFile = snapshot.job.sourceId
+      ? readSourceRecordFile(vaultPath, snapshot.job.sourceId)
+      : undefined;
+    if (!sourceRecordFile) {
+      throw new PigeDomainError("capture.source_unavailable", "The preserved Capture source is unavailable.");
+    }
+    const execution = this.#beginNonCooperativeExecution(
+      snapshot,
+      "capturing_source",
+      "Publishing the preserved source into the local knowledge vault."
+    );
+    const runningJob = execution.job;
+    return {
+      job: runningJob,
+      control: execution.control,
+      bindDurableEffect: (page) => this.#capturePublishedResult(
+        vaultPath,
+        sourceRecordFile.path,
+        sourceRecordFile.sourceRecord,
+        page
+      ),
+      prepareFollowUp: (result) => {
+        this.#assertWriterLease(vaultPath);
+        const refreshedSource = readSourceRecord(vaultPath, result.sourceId);
+        if (!refreshedSource) {
+          throw new PigeDomainError(
+            "capture.durable_effect_invalid",
+            "The Capture Source Record is unavailable after source-page publication."
+          );
+        }
+        if (isLegacyAgentIngestSource(refreshedSource)) {
+          ensureAgentIngestJob(
+            this.#jobRecordStore(vaultPath),
+            vaultPath,
+            runningJob,
+            refreshedSource.id,
+            canRunAgentIngest(this.#agentIngest),
+            this.#requireActiveVaultId(vaultPath)
+          );
+        }
+      },
+      complete: (result) => {
+        this.#assertWriterLease(vaultPath);
+        const refreshedSource = readSourceRecord(vaultPath, result.sourceId);
+        const pageRef = result.durableEffect.outputRefs.find((ref) => ref.kind === "page");
+        if (
+          !refreshedSource ||
+          refreshedSource.id !== sourceRecordFile.sourceRecord.id ||
+          refreshedSource.knowledgePageId !== result.pageId ||
+          refreshedSource.knowledgePagePath !== result.pagePath ||
+          !pageRef?.checksum ||
+          (
+            refreshedSource.metadata.knowledgePageChecksum !== pageRef.checksum &&
+            !(result.conflict && refreshedSource.metadata.sourcePageRefreshConflict === true)
+          )
+        ) {
+          throw new PigeDomainError(
+            "capture.durable_effect_invalid",
+            "The Capture durable source-page identity could not be verified."
+          );
+        }
+        appendLog(
+          vaultPath,
+          `${new Date().toISOString()} Created source page [${result.title}](${result.pagePath}) for source \`${result.sourceId}\`.`
+        );
+        const coordinator = this.#jobExecutionCoordinator(vaultPath);
+        const outputRefs = result.durableEffect.outputRefs;
+        const current = this.#jobRecordStore(vaultPath).read(snapshot.path);
+        return coordinator.convergeLatest(current, {
+          read: () => this.#readJobSnapshot(vaultPath, runningJob.id),
+          acceptTerminal: (job) =>
+            job.state === "completed" &&
+            outputRefs.every((expected) => job.outputRefs?.some((actual) =>
+              actual.kind === expected.kind &&
+              actual.id === expected.id &&
+              actual.path === expected.path &&
+              actual.checksum === expected.checksum &&
+              actual.role === expected.role
+            )) === true,
+          apply: (latest) => {
+            const adoptable = latest.job.state === "failed_retryable" || latest.job.state === "waiting_dependency"
+              ? coordinator.prepareRetry(latest, {
+                  reason: "capture_durable_output_adoption",
+                  message: "Adopting the existing durable source page into its original Job."
+                })
+              : latest;
+            return coordinator.adoptDurableCompletion(adoptable, {
+              checkpointId: "capture_source_page_committed",
+              result: "completed",
+              message: result.created
+                ? "Source page created from preserved source."
+                : "Source page already exists for preserved source.",
+              facts: {
+                outputRefs,
+                progress: { completedUnits: 1, totalUnits: 1, unit: "source" }
+              }
+            });
+          },
+          missingMessage: "The Capture Job disappeared after its durable source page committed.",
+          conflictMessage: "The Capture Job could not converge after its durable source page committed."
+        }).job;
+      },
+      fail: (caught, message) => {
+        this.#assertWriterLease(vaultPath);
+        const cancellation = resolveCancellation(execution.control, caught);
+        if (cancellation) {
+          this.#markJobCancellationOutcome(snapshot.path, runningJob, cancellation);
+        } else if (!isJobMutationContention(caught)) {
+          this.#markJobFailedRetryable(
+            snapshot.path,
+            runningJob,
+            message,
+            execution.control.durableWriteState()
+          );
+        }
+      }
+    };
+  }
+
+  #capturePublishedResult(
+    vaultPath: string,
+    sourceRecordPath: string,
+    expectedSource: SourceRecord,
+    page: SourcePageResult
+  ): CapturePublishedResult {
+    this.#assertWriterLease(vaultPath);
+    const refreshed = readSourceRecordFile(vaultPath, expectedSource.id);
+    const sourceChecksum = readCheckpointFileHash(vaultPath, sourceRecordPath, 2 * 1024 * 1024);
+    const pageChecksum = readCheckpointFileHash(vaultPath, page.pagePath, 16 * 1024 * 1024);
+    const conflict = refreshed?.sourceRecord.metadata.sourcePageRefreshConflict === true;
+    if (
+      !refreshed ||
+      refreshed.sourceRecord.id !== expectedSource.id ||
+      refreshed.sourceRecord.knowledgePageId !== page.pageId ||
+      refreshed.sourceRecord.knowledgePagePath !== page.pagePath ||
+      !sourceChecksum ||
+      !pageChecksum ||
+      (!conflict && refreshed.sourceRecord.metadata.knowledgePageChecksum !== pageChecksum)
+    ) {
+      throw new PigeDomainError(
+        "capture.durable_effect_invalid",
+        "The Capture durable source-page identity could not be verified."
+      );
+    }
+    return {
+      ...page,
+      sourceId: expectedSource.id,
+      conflict,
+      durableEffect: {
+        outputRefs: [{
+          kind: "source",
+          id: expectedSource.id,
+          path: sourceRecordPath,
+          checksum: sourceChecksum,
+          role: "capture_source_record"
+        }, {
+          kind: "page",
+          id: page.pageId,
+          path: page.pagePath,
+          checksum: pageChecksum,
+          role: "capture_source_page"
+        }]
+      }
+    };
   }
 
   #queuedOcrJob(vaultPath: string, snapshot: JobRecordSnapshot): QueuedOcrJob {
