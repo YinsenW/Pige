@@ -342,7 +342,7 @@ export function createAttachmentSetToolSession(
   if (entries.length < 2 || entries.length > HOME_AGENT_ATTACHMENT_POLICY.maxFiles) {
     throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The attachment tool set is invalid.");
   }
-  let selected = 0;
+  let selected: number | undefined;
   const toolsByName = new Map<string, PigeAgentToolDefinition[]>();
   for (const entry of entries) {
     for (const tool of entry.session.tools) {
@@ -422,11 +422,24 @@ export function createAttachmentSetToolSession(
       ...exemplar,
       execution: "sequential" as const,
       authorize: async (args, context) => {
+        if (selected === undefined) {
+          throw new PigeDomainError(
+            "agent_runtime.inspect_required",
+            "Select one submitted attachment before using its source tools."
+          );
+        }
         const delegate = tools[selected]!;
         return delegate.authorize ? delegate.authorize(args, context) : true;
       },
-      execute: async (args, signal, context, onUpdate) =>
-        tools[selected]!.execute(args, signal, context, onUpdate)
+      execute: async (args, signal, context, onUpdate) => {
+        if (selected === undefined) {
+          throw new PigeDomainError(
+            "agent_runtime.inspect_required",
+            "Select one submitted attachment before using its source tools."
+          );
+        }
+        return tools[selected]!.execute(args, signal, context, onUpdate);
+      }
     } satisfies PigeAgentToolDefinition];
   });
   return {
@@ -437,6 +450,9 @@ export function createAttachmentSetToolSession(
     beforeModelTurn: async () => {
       for (const entry of entries) await entry.session.beforeModelTurn();
     },
+    citationCandidates: () => selected === undefined
+      ? []
+      : entries[selected]!.session.citationCandidates(),
     result: () => entries.map((entry) => entry.session.result()).findLast((result) => result !== undefined)
   };
 }

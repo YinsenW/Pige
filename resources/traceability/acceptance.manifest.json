@@ -441,7 +441,7 @@
     },
     "PIGE-CAP-002": {
       "status": "planned",
-      "plannedTarget": "Implement the canonical large-paste manifest: exact over-limit clipboard payloads stage with files, remain side-effect free until atomic Send, preserve once as managed sources, and retry by reference without reviving capture-only submission."
+      "plannedTarget": "Implement the canonical large-paste manifest: exact over-limit payloads stage side-effect free, preserve once on atomic Send, and restart by reference with an explicitly selected current inspected-source citation and no Provider replay."
     },
     "PIGE-CAP-003": {
       "status": "planned",
@@ -662,7 +662,7 @@
     },
     "PIGE-PROMPT-001":{"status":"partial","evidence":["EV-AGENT-INGEST","EV-HOME-AGENT","EV-PI-INGEST-RETRIEVAL","EV-UNTRUSTED-SOURCE-BOUNDARY","EV-UNTRUSTED-OUTPUT-SCHEMA"],"open":{"id":"OPEN-REQ-PIGE-PROMPT-001","description":"Public ingest, Home retrieval, and bounded ingest related-evidence envelopes are executable; remaining tool adversarial and persisted Broker coverage stays open.","targetBuilds":["B5.11"],"targetExits":["E5.03"]}},
     "PIGE-PROMPT-002":{"status":"partial","evidence":["EV-POLICY"],"open":{"id":"OPEN-REQ-PIGE-PROMPT-002","description":"Complete owning-service enforcement for every Agent-affecting policy field remains open.","targetBuilds":["B1.12"],"targetExits":["E1.06"]}},
-    "PIGE-CONTEXT-001":{"status":"partial","evidence":["EV-CONTEXT","EV-AGENT-EVIDENCE-REVISION","EV-HOME-AGENT","EV-PI-INGEST-RETRIEVAL","EV-DATASET-QUERY-SERVICE","EV-DATASET-QUERY-DRIFT-AUDIT","EV-NOTE-AGENT-SERVICE","EV-NOTE-AGENT-EGRESS","EV-READER-ACTIONS-UI"],"open":{"id":"OPEN-REQ-PIGE-CONTEXT-001","description":"Exact selection works; mixed selection, memory and compaction remain.","targetBuilds":["B6.04"],"targetExits":["E6.03"]}},
+    "PIGE-CONTEXT-001":{"status":"partial","evidence":["EV-CONTEXT","EV-AGENT-EVIDENCE-REVISION","EV-HOME-AGENT","EV-PI-INGEST-RETRIEVAL","EV-DATASET-QUERY-SERVICE","EV-DATASET-QUERY-DRIFT-AUDIT","EV-NOTE-AGENT-SERVICE","EV-NOTE-AGENT-EGRESS","EV-READER-ACTIONS-UI"],"open":{"id":"OPEN-REQ-PIGE-CONTEXT-001","description":"Exact selection works; source-session namespace/collision/restart, mixed selection, memory and compaction remain.","targetBuilds":["B6.04"],"targetExits":["E6.03"]}},
     "PIGE-CONTEXT-002":{"status":"partial","evidence":["EV-CONTEXT","EV-HOME-AGENT","EV-PI-INGEST-RETRIEVAL","EV-DATASET-QUERY-SERVICE","EV-DATASET-QUERY-DURABILITY","EV-DATASET-QUERY-INTEGRITY","EV-NOTE-AGENT-JOB","EV-NOTE-AGENT-SERVICE","EV-READER-ACTIONS-UI"],"open":{"id":"OPEN-REQ-PIGE-CONTEXT-002","description":"Exact refs work; mixed selection, memory and compaction remain.","targetBuilds":["B6.04"],"targetExits":["E6.03"]}},
     "PIGE-EVAL-001":{"status":"verified","evidence":["EV-AGENT-INGEST-EVAL","EV-FIXTURE-MANIFEST","EV-UNTRUSTED-SOURCE-BOUNDARY","EV-UNTRUSTED-OUTPUT-SCHEMA"]},
     "PIGE-EVAL-002":{"status":"partial","evidence":["EV-LOW-CONFIDENCE","EV-PROPOSAL"],"open":{"id":"OPEN-REQ-PIGE-EVAL-002","description":"Prove Pi-final pass-through while invalid tool inputs and durable mutations remain blocked at their owners; broader uncertainty and true-exception fixtures remain open.","targetBuilds":["B3.07","B3.11"],"targetExits":["E3.05","E3.06"]}},

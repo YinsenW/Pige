@@ -467,10 +467,11 @@ Rules:
   bind multiple ordered file/paste refs. Preservation and aggregate bounds are owned by
   `resources/large-paste-boundary.manifest.json`; an exact idempotent retry adopts the same
   source IDs rather than rewriting bytes.
-- Files are referenced by source ID and display name in conversation events; path and checksum metadata belong in the source record.
-- Phase 2 file capture conversation events store source ID, display name, and source kind. File bodies are never duplicated in conversation JSONL, and renderer-visible results do not include absolute source paths.
+- Conversation file refs carry source ID/name/kind; bodies, paths and checksums stay in
+  source records.
 - Assistant answers that become wiki pages are stored once as the page content and referenced from the conversation.
-- Assistant answers that are not saved as pages may be stored in the conversation event.
+- Conversation events may store unsaved assistant text and safe page/ref citations;
+  private evidence identity stays elsewhere and restart never calls the Provider for it.
 - Prompts/raw responses are not stored by default. Selection events add only strict action
   presentation; body/path/span/hash/Provider data stay out, while Jobs/proposals/Operations
   own selection/review/apply.

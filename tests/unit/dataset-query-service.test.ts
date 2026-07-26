@@ -310,7 +310,7 @@ describe("Dataset Query Service", () => {
               limit: 2
             }
           },
-          { kind: "text", text: "The bounded Dataset contains two rows; the largest amount is 7. [citation_9]" }
+          { kind: "text", text: "The bounded Dataset contains two rows; the largest amount is 7. [citation_10]" }
         ]
       }),
       undefined,
@@ -332,7 +332,7 @@ describe("Dataset Query Service", () => {
       sourceIds: [fixture.sourceId],
       answer: {
         grounding: "local_knowledge",
-        citations: [{ kind: "dataset", refId: "citation_9" }],
+        citations: [{ kind: "dataset", refId: "citation_10" }],
         datasetResult: {
           datasetId: fixture.manifest.datasetId,
           revisionId: fixture.manifest.activeRevision,
@@ -385,7 +385,7 @@ describe("Dataset Query Service", () => {
             limit: 2
           }
         },
-        { kind: "text", text: "This response must not be reached after Dataset privacy drift. [citation_9]" }
+        { kind: "text", text: "This response must not be reached after Dataset privacy drift. [citation_10]" }
       ]
     });
     const outcome = await new HomeAgentService(

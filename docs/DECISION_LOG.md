@@ -3139,7 +3139,8 @@ rewrite, or block the payload. Stored Provider credentials remain isolated in th
 store/authentication layer and are never injected into content.
 
 Host owns turn/transport, typed tools, high-risk authority, durable recovery, mutation
-commit, and safe projection. Exact owners validate effects; bad citation refs do not reject prose.
+commit, and safe projection. Source sessions register only current retrieval-selected
+refs; Pi selects them explicitly, and bad refs disappear without rejecting prose.
 
 Rationale:
 

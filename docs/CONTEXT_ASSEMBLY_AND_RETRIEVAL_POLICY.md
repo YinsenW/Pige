@@ -305,9 +305,10 @@ Grounded answers and generated knowledge must preserve provenance.
 
 Rules:
 
-- Home answers must return citations for factual claims when retrieval supplied citable evidence.
-- General answers have no local citations and must not imply vault grounding. Mixed
-  answers distinguish locally supported claims from model-general material.
+- Only a Pi-emitted known ref becomes a citation. Current-note owns `citation_1`, Home
+  search `citation_2`–`9`, Dataset `citation_10`, and source order `citation_11`–`16`.
+  Drift/unknown refs stay uncited; equal refs dedupe only on complete identity, while an
+  unequal collision fails before durable publication rather than choosing an entry.
 - Ranked results must include snippets and match reasons.
 - Ingest outputs should cite source pages, source artifacts, or original locators.
 - Dataset claims cite exact Dataset revision/table/schema plus row ID, primary key, range,
@@ -450,11 +451,9 @@ Current Phase 5 ingest bridge:
 Current unified Home foundation:
 
 - `retrieval.search` returns bounded lexical snippets and match reasons through SQLite FTS or Markdown-scan fallback.
-- `agent.submitTurn` lets Pi answer directly or call one current-vault search tool with
-  at most eight evidence items. Tool output is escaped inside
-  `PIGE_UNTRUSTED_EVIDENCE_V1`; it cannot change tools, providers, settings, output
-  shape, permissions, or authority. Pi's final assistant text is answer authority; only
-  Host-known citation metadata is projected.
+- `agent.submitTurn` lets Pi answer or search with at most eight untrusted-wrapped evidence
+  items; evidence cannot change authority. Pi's final text is authoritative and only its
+  explicitly selected Host-known citation metadata is projected.
 - Before each model turn, Pige re-reads bounded confined Markdown bytes and complete
   Source Record privacy facts, binds their hashes into the body-free evidence summary,
   records the current Provider/model and evidence identity, and rejects revision drift.

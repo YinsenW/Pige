@@ -303,6 +303,14 @@ describe("HomeAgentAttachmentService", () => {
       }],
       bindCatalog: vi.fn(),
       beforeModelTurn: vi.fn(async () => undefined),
+      citationCandidates: () => [{
+        refId: "citation_11",
+        label: "[11]",
+        pageId: `page_20260727_${name}citation`,
+        title: `${name} citation`,
+        pageType: "note" as const,
+        locator: "snippet:1"
+      }],
       result: () => undefined
     });
     const toolSession = createAttachmentSetToolSession([
@@ -314,8 +322,19 @@ describe("HomeAgentAttachmentService", () => {
     const inspect = toolSession.tools.find((tool) => tool.name === "pige_inspect_source")!;
 
     expect(createPigeAgentToolCatalogHash(toolSession.tools)).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(toolSession.citationCandidates()).toEqual([]);
+    await expect(inspect.execute({}, context.signal, context)).rejects.toMatchObject({
+      code: "agent_runtime.inspect_required"
+    });
+    await select.execute({ attachmentRef: "attachment_1" }, context.signal, context);
+    expect(toolSession.citationCandidates()).toEqual([
+      expect.objectContaining({ refId: "citation_11", title: "one citation" })
+    ]);
     await inspect.execute({}, context.signal, context);
     await select.execute({ attachmentRef: "attachment_2" }, context.signal, context);
+    expect(toolSession.citationCandidates()).toEqual([
+      expect.objectContaining({ refId: "citation_11", title: "two citation" })
+    ]);
     await inspect.execute({}, context.signal, context);
 
     expect(calls).toEqual(["one", "two"]);

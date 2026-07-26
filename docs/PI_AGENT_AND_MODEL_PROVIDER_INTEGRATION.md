@@ -339,9 +339,7 @@ results require revision before another effect.
 
 ### 11.1 Pi Final Authority And Tool Validation
 
-One user submission owns one durable Pige Agent Job and may contain multiple upstream Pi
-model turns and tool calls. Upstream Pi's final assistant message is authoritative for
-ordinary Agent completion, whether or not tools ran.
+One submission owns one durable Job and may contain multiple Pi turns/tool calls. Upstream Pi's final assistant message is authoritative whether or not tools ran.
 
 - No `pige_finish_home_turn`, `HomeAgentOutput`, grounding label, evidence-quote count, or
   citation shape is mandatory for an ordinary/current-note/Dataset/source answer. Host
@@ -349,9 +347,11 @@ ordinary Agent completion, whether or not tools ran.
 - Registered tool input/result, evidence identity, authority, and resource bounds validate
   at each tool boundary. Durable mutations still require their owner service's schema,
   revision, conflict, permission, idempotency, and commit checks.
-- Citations are optional answer metadata. The Host may project only known current evidence
-  refs; invalid or stale refs are removed or marked unavailable without rejecting the
-  remaining assistant answer.
+- `AgentSourceToolSession.citationCandidates()` maps revalidated `retrievalSelection`
+  order to `citation_11`–`16`; Pi sees each ref with safe `related_NN` facts. Home dedupes
+  only complete identity; same-ref mismatch fails body-free `agent_runtime.turn_conflict`
+  before publication; invalid or stale refs are removed or marked unavailable.
+  unknown/unselected refs stay uncited without answer review.
 - Denied high-risk authority, Provider/source identity drift, cancellation, unavailable required runtime, and
   irreconcilable conflict or evidence drift remain hard Host boundaries. Pi may choose a
   different already-authorized route, but it cannot reinterpret or override the denial.
