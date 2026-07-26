@@ -102,7 +102,7 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(identityCheck).toBeGreaterThan(restart);
     expect(providerCheck).toBeGreaterThan(identityCheck);
     expect(cleanup).toBeGreaterThan(providerCheck);
-    expect(source).toContain('} else if (phase !== "restart") {');
+    expect(source).toContain('phase !== "restart" && phase !== "drop" && phase !== "drop_restart"');
     expect(source).toContain('throw new Error("Unknown unified Agent roundtrip phase.");');
     expect(source).toContain('job.class === "agent_turn" || job.class === "dataset_import"');
     expect(source).toContain("messageIdentities");
@@ -115,5 +115,39 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain("assertUniqueIdentities(connect.durableSnapshot.messageIdentities");
     expect(source).toContain('filter((job) => job.class === "agent_turn").length, 7');
     expect(source).toContain("PIGE_ROUNDTRIP_STATE");
+  });
+
+  it("drives one identity-free whole-window drop through the real renderer event path and restart", () => {
+    const pickerRestart = source.indexOf('await runChild("restart"');
+    const drop = source.indexOf('await runChild("drop"', pickerRestart);
+    const dropRestart = source.indexOf('await runChild("drop_restart"', drop);
+    const cleanup = source.indexOf("fs.rmSync(rootPath, { recursive: true, force: true });", dropRestart);
+    const dispatcher = source.indexOf("async function dispatchWholeWindowFileDrop");
+    const dispatcherEnd = source.indexOf("async function readWholeWindowDropRendererResult", dispatcher);
+    const dispatcherSource = source.slice(dispatcher, dispatcherEnd);
+
+    expect(drop).toBeGreaterThan(pickerRestart);
+    expect(dropRestart).toBeGreaterThan(drop);
+    expect(cleanup).toBeGreaterThan(dropRestart);
+    expect(dispatcherSource).toContain('document.querySelector(\'.app-window\')');
+    expect(dispatcherSource).toContain('"Input.dispatchDragEvent"');
+    expect(dispatcherSource).toContain('type: "dragEnter"');
+    expect(dispatcherSource).toContain('type: "dragOver"');
+    expect(dispatcherSource).toContain('type: "drop"');
+    expect(dispatcherSource).toContain("files: [attachmentPath]");
+    expect(dispatcherSource).not.toContain("setRendererFileInput");
+    expect(source).toContain("draftPreserved");
+    expect(source).toContain("draftExcludedFromTurn");
+    expect(source).toContain("noStagedChips");
+    expect(source).toContain("identityFreeConversation");
+    expect(source).toContain("assert.equal(drop.agentTurnDelta, 1)");
+    expect(source).toContain("assert.equal(drop.sourceDelta, 1)");
+    expect(source).toContain("restart.durableSnapshot.relevantJobs.length + 1");
+    expect(source).toContain("restart.durableSnapshot.sourceIds.length + 1");
+    expect(source).toContain("assert.deepEqual(drop.durableSnapshot.activities, restart.durableSnapshot.activities)");
+    expect(source).toContain('assertUniqueIdentities(drop.durableSnapshot.relevantJobs.map((job) => job.id), "Job after drop")');
+    expect(source).toContain("assert.equal(dropProviderRequests.length, 2)");
+    expect(source).toContain("assert.deepEqual(dropRestart.durableSnapshot, drop.durableSnapshot)");
+    expect(source).toContain("assert.equal(requests.length, requestCountBeforeDropRestart)");
   });
 });

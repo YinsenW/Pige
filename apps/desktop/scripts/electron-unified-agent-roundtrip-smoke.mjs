@@ -27,6 +27,8 @@ const ACTIVITY_TITLE = "Unified Agent activity note";
 const DATASET_PROMPT = "Which person has the largest count in this attached Dataset?";
 const DATASET_ANSWER = "Grace has the largest count in the attached Dataset. [citation_9]";
 const DATASET_CITATION_REF = "citation_9";
+const DROP_DRAFT = "Keep this exact draft local while the dropped file submits.";
+const DROP_ATTACHMENT_NAME = "whole-window-drop.txt";
 const CHILD_RESULT_PREFIX = "PIGE_ROUNDTRIP_RESULT ";
 const MAX_CHILD_MS = 90_000;
 const highRiskOnly = process.argv.includes("--high-risk-only");
@@ -46,11 +48,13 @@ async function runOrchestrator() {
   const markdownAttachmentPath = path.join(rootPath, "unified-agent-source.md");
   const activityAttachmentPath = path.join(rootPath, "unified-agent-activity.txt");
   const datasetAttachmentPath = path.join(rootPath, "unified-agent-dataset.csv");
+  const dropAttachmentPath = path.join(rootPath, DROP_ATTACHMENT_NAME);
   const deniedCommandSentinelPath = path.join(rootPath, "denied-command-must-not-exist.txt");
   fs.writeFileSync(attachmentPath, "Synthetic unified Agent attachment evidence.\n", "utf8");
   fs.writeFileSync(markdownAttachmentPath, "# Synthetic Markdown evidence\n\nThe Markdown source crosses the real file ingress.\n", "utf8");
   fs.writeFileSync(activityAttachmentPath, "Synthetic reversible knowledge for Activity and Undo.\n", "utf8");
   fs.writeFileSync(datasetAttachmentPath, "name,count\nAda,3\nGrace,5\n", "utf8");
+  fs.writeFileSync(dropAttachmentPath, "Synthetic whole-window drop evidence.\n", "utf8");
   const syntheticToken = `synthetic-${crypto.randomBytes(24).toString("hex")}`;
   const requests = [];
   const streamTiming = {};
@@ -69,6 +73,7 @@ async function runOrchestrator() {
       markdownAttachmentPath,
       activityAttachmentPath,
       datasetAttachmentPath,
+      dropAttachmentPath,
       deniedCommandSentinelPath,
       highRiskOnly
     });
@@ -161,6 +166,7 @@ async function runOrchestrator() {
       markdownAttachmentPath,
       activityAttachmentPath,
       datasetAttachmentPath,
+      dropAttachmentPath,
       deniedCommandSentinelPath,
       highRiskOnly: false
     });
@@ -174,6 +180,70 @@ async function runOrchestrator() {
     assert.equal(restart.durableSnapshot.nonterminalJobIds.length, 0);
     assert.equal(restart.durableSnapshot.failedRetryableJobIds.length, 0);
     assert.equal(requests.length, requestCountBeforeRestart);
+
+    const requestCountBeforeDrop = requests.length;
+    const drop = await runChild("drop", {
+      rootPath,
+      userDataPath,
+      baseUrl,
+      syntheticToken,
+      attachmentPath,
+      markdownAttachmentPath,
+      activityAttachmentPath,
+      datasetAttachmentPath,
+      dropAttachmentPath,
+      deniedCommandSentinelPath,
+      highRiskOnly: false
+    });
+    assert.equal(drop.draftPreserved, true);
+    assert.equal(drop.draftExcludedFromTurn, true);
+    assert.equal(drop.noStagedChips, true);
+    assert.equal(drop.dropOverlayVisible, true);
+    assert.equal(drop.identityFreeConversation, true);
+    assert.equal(drop.agentTurnDelta, 1);
+    assert.equal(drop.sourceDelta, 1);
+    assert.equal(drop.dropMessageCount, 2);
+    assert.equal(drop.dropJobCompleted, true);
+    assert.equal(drop.dropSourceBound, true);
+    assert.equal(drop.dropCitationCount, 0);
+    assert.equal(drop.dropAnswerVisible, true);
+    assert.equal(drop.durableSnapshot.nonterminalJobIds.length, 0);
+    assert.equal(drop.durableSnapshot.failedRetryableJobIds.length, 0);
+    assert.equal(drop.durableSnapshot.relevantJobs.length, restart.durableSnapshot.relevantJobs.length + 1);
+    assert.equal(drop.durableSnapshot.sourceIds.length, restart.durableSnapshot.sourceIds.length + 1);
+    assert.deepEqual(drop.durableSnapshot.datasetIds, restart.durableSnapshot.datasetIds);
+    assert.deepEqual(drop.durableSnapshot.activities, restart.durableSnapshot.activities);
+    assertUniqueIdentities(drop.durableSnapshot.messageIdentities.map((message) => message.id), "conversation event after drop");
+    assertUniqueIdentities(drop.durableSnapshot.relevantJobs.map((job) => job.id), "Job after drop");
+    assertUniqueIdentities(drop.durableSnapshot.sourceIds, "source after drop");
+    const dropProviderRequests = requests.slice(requestCountBeforeDrop)
+      .filter((request) => request.method === "POST" && request.path === "/v1/responses");
+    assert.equal(dropProviderRequests.length, 2);
+    assert.ok(dropProviderRequests[0]?.body.includes('"name":"pige_inspect_source"'));
+    assert.ok(dropProviderRequests[1]?.body.includes('"call_id":"call_source_inspect"'));
+    assert.ok(dropProviderRequests[1]?.body.includes("function_call_output"));
+
+    const requestCountBeforeDropRestart = requests.length;
+    const dropRestart = await runChild("drop_restart", {
+      rootPath,
+      userDataPath,
+      baseUrl,
+      syntheticToken,
+      attachmentPath,
+      markdownAttachmentPath,
+      activityAttachmentPath,
+      datasetAttachmentPath,
+      dropAttachmentPath,
+      deniedCommandSentinelPath,
+      highRiskOnly: false
+    });
+    assert.equal(dropRestart.dropAnswerVisible, true);
+    assert.equal(dropRestart.dropMessageCount, 2);
+    assert.equal(dropRestart.dropCitationCount, 0);
+    assert.deepEqual(dropRestart.durableSnapshot, drop.durableSnapshot);
+    assert.equal(dropRestart.durableSnapshot.nonterminalJobIds.length, 0);
+    assert.equal(dropRestart.durableSnapshot.failedRetryableJobIds.length, 0);
+    assert.equal(requests.length, requestCountBeforeDropRestart);
 
     const secretsPath = path.join(userDataPath, "secrets.json");
     const secrets = JSON.parse(fs.readFileSync(secretsPath, "utf8"));
@@ -197,7 +267,7 @@ async function runOrchestrator() {
       `${connect.directDraftEventCount} final-answer replacement(s) with no presentation-only provider turn plus Enter submission, ` +
       `visible direct/cited Home, preserved-source, ` +
       `TXT/Markdown ingress, Dataset continuation, ordinary provider sends without a second approval, zero retryable Jobs, ` +
-      `reversible Activity/Undo results, and exact restart retention without another Provider call.`
+      `reversible Activity/Undo results, one identity-free whole-window drop, and exact restart retention without another Provider call.`
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));
@@ -218,6 +288,7 @@ async function runChild(phase, values) {
       PIGE_ROUNDTRIP_MARKDOWN_ATTACHMENT_PATH: values.markdownAttachmentPath,
       PIGE_ROUNDTRIP_ACTIVITY_ATTACHMENT_PATH: values.activityAttachmentPath,
       PIGE_ROUNDTRIP_DATASET_ATTACHMENT_PATH: values.datasetAttachmentPath,
+      PIGE_ROUNDTRIP_DROP_ATTACHMENT_PATH: values.dropAttachmentPath,
       PIGE_ROUNDTRIP_DENY_SENTINEL_PATH: values.deniedCommandSentinelPath,
       PIGE_ROUNDTRIP_HIGH_RISK_ONLY: values.highRiskOnly ? "1" : "0",
       PIGE_ROUNDTRIP_STAGE_PATH: path.join(values.rootPath, `stage-${phase}.txt`)
@@ -315,6 +386,7 @@ async function runElectronPhase() {
   const markdownAttachmentPath = requireEnv("PIGE_ROUNDTRIP_MARKDOWN_ATTACHMENT_PATH");
   const activityAttachmentPath = requireEnv("PIGE_ROUNDTRIP_ACTIVITY_ATTACHMENT_PATH");
   const datasetAttachmentPath = requireEnv("PIGE_ROUNDTRIP_DATASET_ATTACHMENT_PATH");
+  const dropAttachmentPath = requireEnv("PIGE_ROUNDTRIP_DROP_ATTACHMENT_PATH");
   const deniedCommandSentinelPath = requireEnv("PIGE_ROUNDTRIP_DENY_SENTINEL_PATH");
   const runHighRiskOnly = requireEnv("PIGE_ROUNDTRIP_HIGH_RISK_ONLY") === "1";
   const stagePath = requireEnv("PIGE_ROUNDTRIP_STAGE_PATH");
@@ -337,7 +409,7 @@ async function runElectronPhase() {
     if (phase === "connect") {
       const helper = await import("../out/main/unified-agent-roundtrip-smoke.js");
       helper.prepareUnifiedAgentRoundtripSmoke({ rootPath, userDataPath });
-    } else if (phase !== "restart") {
+    } else if (phase !== "restart" && phase !== "drop" && phase !== "drop_restart") {
       throw new Error("Unknown unified Agent roundtrip phase.");
     }
 
@@ -362,9 +434,17 @@ async function runElectronPhase() {
     let result;
     if (phase === "connect") {
       result = await runConnectRenderer(browserWindow, { baseUrl, syntheticToken });
-    } else {
+    } else if (phase === "restart") {
       markStage("renderer_restart_retention");
       result = await runRestartRenderer(browserWindow);
+    } else if (phase === "drop") {
+      markStage("renderer_whole_window_drop");
+      const prepared = await prepareWholeWindowDropRenderer(browserWindow);
+      const dropOverlayVisible = await dispatchWholeWindowFileDrop(browserWindow, dropAttachmentPath);
+      result = await readWholeWindowDropRendererResult(browserWindow, prepared, dropOverlayVisible);
+    } else {
+      markStage("renderer_whole_window_drop_restart");
+      result = await runWholeWindowDropRestartRenderer(browserWindow);
     }
     if (phase === "connect" && runHighRiskOnly) {
       markStage("renderer_high_risk_deny");
@@ -430,6 +510,203 @@ async function runElectronPhase() {
     console.error(`PIGE_ROUNDTRIP_ERROR phase=${phase ?? "unknown"} stage=${stage} renderer=${safeRendererStage} error=${safeErrorName}`);
     app.exit(1);
   }
+}
+
+async function prepareWholeWindowDropRenderer(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      const deadline = Date.now() + 45000;
+      let composer;
+      while (Date.now() < deadline) {
+        composer = document.querySelector('section.home .composer textarea');
+        if (window.pige && composer) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      if (!window.pige || !composer) throw new Error('Home composer is unavailable before whole-window drop.');
+      const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(composer), 'value');
+      descriptor.set.call(composer, ${JSON.stringify(DROP_DRAFT)});
+      composer.dispatchEvent(new Event('input', { bubbles: true }));
+      composer.dispatchEvent(new Event('change', { bubbles: true }));
+      const jobs = await window.pige.jobs.list({ limit: 100 });
+      const timeline = await window.pige.agent.conversation({ limit: 100 });
+      if (!timeline || composer.value !== ${JSON.stringify(DROP_DRAFT)}) {
+        throw new Error('Whole-window drop fixture could not establish its local draft authority.');
+      }
+      globalThis.__pigeRoundtripStage = 'whole_window_drop_ready';
+      console.info('PIGE_ROUNDTRIP_STAGE whole_window_drop_ready');
+      return {
+        activeVaultId: jobs.activeVaultId,
+        conversationId: timeline.conversationId,
+        tailEventId: timeline.tailEventId,
+        agentTurnJobIds: jobs.jobs.filter((job) => job.class === 'agent_turn').map((job) => job.id),
+        sourceIds: jobs.jobs.filter((job) => job.class === 'agent_turn' && job.sourceId).map((job) => job.sourceId)
+      };
+    })()
+  `, true);
+}
+
+async function dispatchWholeWindowFileDrop(browserWindow, attachmentPath) {
+  const target = await browserWindow.webContents.executeJavaScript(`
+    (() => {
+      const shell = document.querySelector('.app-window');
+      if (!shell) throw new Error('Application drop surface is unavailable.');
+      const rect = shell.getBoundingClientRect();
+      return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+    })()
+  `, true);
+  const debuggerApi = browserWindow.webContents.debugger;
+  debuggerApi.attach("1.3");
+  const data = {
+    items: [{ mimeType: "text/plain", data: "" }],
+    files: [attachmentPath],
+    dragOperationsMask: 1
+  };
+  try {
+    await debuggerApi.sendCommand("Input.dispatchDragEvent", { type: "dragEnter", ...target, data });
+    const overlayVisible = await browserWindow.webContents.executeJavaScript(`
+      (async () => {
+        const deadline = Date.now() + 5000;
+        while (Date.now() < deadline) {
+          if (document.querySelector('.drop-overlay')) return true;
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        throw new Error('Whole-window drop overlay did not become visible.');
+      })()
+    `, true);
+    await debuggerApi.sendCommand("Input.dispatchDragEvent", { type: "dragOver", ...target, data });
+    await debuggerApi.sendCommand("Input.dispatchDragEvent", { type: "drop", ...target, data });
+    return overlayVisible;
+  } finally {
+    debuggerApi.detach();
+  }
+}
+
+async function readWholeWindowDropRendererResult(browserWindow, expected, dropOverlayVisible) {
+  const result = await browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'whole_window_drop_result_wait';
+      console.info('PIGE_ROUNDTRIP_STAGE whole_window_drop_result_wait');
+      const expected = ${JSON.stringify(expected)};
+      const baselineJobIds = new Set(expected.agentTurnJobIds);
+      const baselineSourceIds = new Set(expected.sourceIds);
+      const deadline = Date.now() + 45000;
+      while (Date.now() < deadline) {
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const composer = document.querySelector('section.home .composer textarea');
+        const chips = document.querySelectorAll('.attachment-chip');
+        const agentJobs = jobs.jobs.filter((job) => job.class === 'agent_turn');
+        const newJobs = agentJobs.filter((job) => !baselineJobIds.has(job.id));
+        const sourceIds = agentJobs.filter((job) => job.sourceId).map((job) => job.sourceId);
+        const newSourceIds = [...new Set(sourceIds.filter((sourceId) => !baselineSourceIds.has(sourceId)))];
+        const assistant = timeline?.messages.find((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(SOURCE_ANSWER)})
+        );
+        const identityFreeConversation = Boolean(timeline && timeline.conversationId !== expected.conversationId);
+        const draftPreserved = composer?.value === ${JSON.stringify(DROP_DRAFT)};
+        const noStagedChips = chips.length === 0;
+        const dropJob = newJobs.length === 1 ? newJobs[0] : undefined;
+        const dropSourceBound = Boolean(dropJob?.sourceId && newSourceIds.length === 1 && dropJob.sourceId === newSourceIds[0]);
+        const dropMessageCount = timeline?.messages.length ?? 0;
+        const dropCitationCount = assistant?.answer?.citations.length ?? -1;
+        globalThis.__pigeRoundtripWaitState = {
+          activeVaultMatches: jobs.activeVaultId === expected.activeVaultId,
+          identityFreeConversation,
+          draftPreserved,
+          noStagedChips,
+          agentTurnDelta: newJobs.length,
+          sourceDelta: newSourceIds.length,
+          dropMessageCount,
+          dropJobCompleted: dropJob?.state === 'completed',
+          dropSourceBound,
+          dropAnswerVisible: Boolean(assistant),
+          dropCitationCount
+        };
+        if (jobs.activeVaultId !== expected.activeVaultId) {
+          throw new Error('Active vault changed during whole-window drop.');
+        }
+        if (
+          identityFreeConversation &&
+          draftPreserved &&
+          noStagedChips &&
+          newJobs.length === 1 &&
+          newSourceIds.length === 1 &&
+          dropJob?.state === 'completed' &&
+          dropSourceBound &&
+          dropMessageCount === 2 &&
+          assistant &&
+          dropCitationCount === 0
+        ) {
+          const draftExcludedFromTurn = timeline.messages.every(
+            (message) => !message.text.includes(${JSON.stringify(DROP_DRAFT)})
+          );
+          return {
+            draftPreserved,
+            draftExcludedFromTurn,
+            noStagedChips,
+            identityFreeConversation,
+            agentTurnDelta: newJobs.length,
+            sourceDelta: newSourceIds.length,
+            dropMessageCount,
+            dropJobCompleted: true,
+            dropSourceBound,
+            dropCitationCount,
+            dropAnswerVisible: true
+          };
+        }
+        if (newJobs.some((job) => job.state === 'failed_retryable' || job.state === 'failed_final')) {
+          throw new Error('Whole-window drop reached a durable failure state.');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for whole-window drop convergence.');
+    })()
+  `, true);
+  return {
+    ...result,
+    dropOverlayVisible,
+    durableSnapshot: await readDurableRestartSnapshot(browserWindow)
+  };
+}
+
+async function runWholeWindowDropRestartRenderer(browserWindow) {
+  const result = await browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'whole_window_drop_restart_wait';
+      console.info('PIGE_ROUNDTRIP_STAGE whole_window_drop_restart_wait');
+      const deadline = Date.now() + 45000;
+      while (Date.now() < deadline) {
+        if (!window.pige) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          continue;
+        }
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const assistant = timeline?.messages.find((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(SOURCE_ANSWER)})
+        );
+        const dropCitationCount = assistant?.answer?.citations.length ?? -1;
+        globalThis.__pigeRoundtripWaitState = {
+          dropAnswerVisible: Boolean(assistant),
+          dropMessageCount: timeline?.messages.length ?? 0,
+          dropCitationCount,
+          nonterminalJobCount: jobs.jobs.filter((job) =>
+            ['queued', 'running', 'waiting_dependency', 'awaiting_review', 'cancel_requested'].includes(job.state)
+          ).length,
+          failedRetryableJobCount: jobs.jobs.filter((job) => job.state === 'failed_retryable').length
+        };
+        if (assistant && timeline?.messages.length === 2 && dropCitationCount === 0) {
+          return { dropAnswerVisible: true, dropMessageCount: 2, dropCitationCount };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for restarted whole-window drop result.');
+    })()
+  `, true);
+  return {
+    ...result,
+    durableSnapshot: await readDurableRestartSnapshot(browserWindow)
+  };
 }
 
 async function runRestartRenderer(browserWindow) {
