@@ -17,7 +17,7 @@ const DIRECT_PROMPT = "Reply directly with the roundtrip greeting.";
 const GROUNDING_PROMPT = "What is the roundtrip launch phrase in my local knowledge?";
 const HIGH_RISK_DENY_PROMPT = "Run the harmless synthetic command requested by this test.";
 const DIRECT_ANSWER = "The real Pi roundtrip is ready, and this longer answer arrives through several safe visible replacements before completion.";
-const GROUNDED_ANSWER = "The roundtrip launch phrase is heliotrope seven. [citation_1]";
+const GROUNDED_ANSWER = "The roundtrip launch phrase is heliotrope seven. [citation_2]";
 const SOURCE_PROMPT = "Inspect this attachment and answer without creating a note.";
 const SOURCE_ANSWER = "The preserved attachment is available to the unified Agent.";
 const MARKDOWN_PROMPT = "Inspect this Markdown attachment and answer without creating a note.";
@@ -25,11 +25,11 @@ const MARKDOWN_ANSWER = "The preserved Markdown attachment is available to the u
 const ACTIVITY_PROMPT = "Create a grounded knowledge note from this attachment.";
 const ACTIVITY_TITLE = "Unified Agent activity note";
 const DATASET_PROMPT = "Which person has the largest count in this attached Dataset?";
-const DATASET_ANSWER = "Grace has the largest count in the attached Dataset. [citation_9]";
-const DATASET_CITATION_REF = "citation_9";
+const DATASET_ANSWER = "Grace has the largest count in the attached Dataset. [citation_10]";
+const DATASET_CITATION_REF = "citation_10";
 const LARGE_PASTE_DRAFT = "Compare this pasted source with local knowledge and cite the matching note.";
 const LARGE_PASTE_BODY = `The pasted source confirms the roundtrip launch phrase is heliotrope seven.\n${"界".repeat(8_001)}`;
-const LARGE_PASTE_ANSWER = "The pasted source agrees with the local roundtrip note on heliotrope seven. [citation_1]";
+const LARGE_PASTE_ANSWER = "The pasted source agrees with the local roundtrip note on heliotrope seven. [citation_11]";
 const DROP_DRAFT = "Keep this exact draft local while the dropped file submits.";
 const DROP_ATTACHMENT_NAME = "whole-window-drop.txt";
 const CHILD_RESULT_PREFIX = "PIGE_ROUNDTRIP_RESULT ";
@@ -214,6 +214,7 @@ async function runOrchestrator() {
     assert.equal(largePaste.largePasteSourceBound, true);
     assert.equal(largePaste.largePasteAnswerVisible, true);
     assert.equal(largePaste.largePasteCitationVisible, true);
+    assert.equal(largePaste.largePasteCitationIdentityExact, true);
     assert.equal(largePaste.rawBodyAbsentFromConversation, true);
     assert.equal(largePaste.durableSnapshot.nonterminalJobIds.length, 0);
     assert.equal(largePaste.durableSnapshot.failedRetryableJobIds.length, 0);
@@ -239,7 +240,7 @@ async function runOrchestrator() {
     assert.ok(largePasteProviderRequests[2]?.body.includes("function_call_output"));
 
     const vaultPath = path.join(rootPath, "vaults", "Roundtrip Vault");
-    const pastedSource = readRoundtripRecord(vaultPath, "sources", largePaste.largePasteSourceId);
+    const pastedSource = readRoundtripRecord(vaultPath, "source-records", largePaste.largePasteSourceId);
     assert.equal(pastedSource.kind, "text");
     assert.equal(pastedSource.semanticOrchestration, "agent_turn");
     assert.equal(pastedSource.original?.uri, `pige://pasted-text/${largePaste.largePasteSourceId}`);
@@ -250,7 +251,7 @@ async function runOrchestrator() {
     assert.equal(pastedSource.managedCopy?.checksum, sha256Digest(LARGE_PASTE_BODY));
     const pastedManagedPath = path.resolve(vaultPath, pastedSource.managedCopy.path);
     assert.equal(fs.readFileSync(pastedManagedPath, "utf8"), LARGE_PASTE_BODY);
-    assert.deepEqual(findPlaintextFiles(path.join(vaultPath, ".pige"), LARGE_PASTE_BODY), [pastedManagedPath]);
+    assert.deepEqual(findPlaintextFiles(vaultPath, LARGE_PASTE_BODY), [pastedManagedPath]);
     const pastedJob = readRoundtripRecord(vaultPath, "jobs", largePaste.largePasteJobId);
     assert.equal(pastedJob.conversationEventId, largePaste.largePasteUserEventId);
     assert.equal(JSON.stringify(pastedJob).includes(LARGE_PASTE_BODY), false);
@@ -276,6 +277,7 @@ async function runOrchestrator() {
     });
     assert.equal(largePasteRestart.largePasteAnswerVisible, true);
     assert.equal(largePasteRestart.largePasteCitationVisible, true);
+    assert.equal(largePasteRestart.largePasteCitationIdentityExact, true);
     assert.equal(largePasteRestart.rawBodyAbsentFromConversation, true);
     assert.deepEqual(largePasteRestart.durableSnapshot, largePaste.durableSnapshot);
     assert.equal(largePasteRestart.durableSnapshot.nonterminalJobIds.length, 0);
@@ -466,7 +468,7 @@ function readRoundtripConversationEvents(vaultPath, conversationId) {
 }
 
 function countRoundtripSourceRecords(rootPath) {
-  const sourcesPath = path.join(rootPath, "vaults", "Roundtrip Vault", ".pige", "sources");
+  const sourcesPath = path.join(rootPath, "vaults", "Roundtrip Vault", ".pige", "source-records");
   if (!fs.existsSync(sourcesPath)) return 0;
   const pending = [sourcesPath];
   let count = 0;
@@ -701,6 +703,13 @@ async function prepareLargePasteRenderer(browserWindow) {
       if (!composer || !jobs || !timeline) {
         throw new Error('Large-paste composer authority is unavailable.');
       }
+      const groundedAssistant = timeline.messages.find((message) =>
+        message.role === 'assistant' && message.text.includes(${JSON.stringify(GROUNDED_ANSWER)})
+      );
+      const groundedCitation = groundedAssistant?.answer?.citations.find((item) => item.refId === 'citation_2');
+      if (!groundedCitation?.pageId) {
+        throw new Error('Large-paste stable source-page identity is unavailable.');
+      }
       const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(composer), 'value');
       descriptor.set.call(composer, ${JSON.stringify(LARGE_PASTE_DRAFT)});
       composer.dispatchEvent(new Event('input', { bubbles: true }));
@@ -720,6 +729,7 @@ async function prepareLargePasteRenderer(browserWindow) {
         conversationId: timeline.conversationId,
         baselineTailEventId: timeline.tailEventId,
         baselineMessageCount: timeline.messages.length,
+        sourceCitationPageId: groundedCitation.pageId,
         agentTurnJobIds: jobs.jobs.filter((job) => job.class === 'agent_turn').map((job) => job.id),
         sourceIds: jobs.jobs.filter((job) => job.class === 'agent_turn' && job.sourceId).map((job) => job.sourceId)
       };
@@ -832,10 +842,11 @@ async function submitLargePasteRenderer(browserWindow, expected) {
         const assistant = timeline?.messages.find((message) =>
           message.role === 'assistant' && message.text.includes(${JSON.stringify(LARGE_PASTE_ANSWER)})
         );
-        const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_1');
+        const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_11');
+        const citationIdentityExact = citation?.pageId === expected.sourceCitationPageId;
         const domAnswer = Array.from(document.querySelectorAll('.conversation-message.role-assistant:not(.provisional)'))
           .find((message) => message.textContent?.includes(${JSON.stringify(LARGE_PASTE_ANSWER)}));
-        const domCitation = document.querySelector('.retrieval-citations button:not(:disabled)');
+        const domCitation = document.querySelector('.conversation-citations .citation-row:not(:disabled)');
         const composer = document.querySelector('section.home .composer textarea');
         const rawBodyAbsentFromConversation = timeline?.messages.every((message) => !message.text.includes(pastedBody)) === true;
         const largePasteSourceBound = Boolean(
@@ -849,6 +860,7 @@ async function submitLargePasteRenderer(browserWindow, expected) {
         globalThis.__pigeRoundtripWaitState = {
           assistantVisible: Boolean(assistant && domAnswer),
           citationVisible: Boolean(citation && domCitation),
+          citationIdentityExact,
           rawBodyAbsentFromConversation,
           continuedExactConversation,
           continuedExactTail,
@@ -861,7 +873,7 @@ async function submitLargePasteRenderer(browserWindow, expected) {
           composerCleared: composer?.value === ''
         };
         if (
-          assistant && domAnswer && citation && domCitation &&
+          assistant && domAnswer && citation && domCitation && citationIdentityExact &&
           rawBodyAbsentFromConversation &&
           continuedExactConversation && continuedExactTail &&
           newJobs.length === 1 && newSourceIds.length === 1 &&
@@ -880,6 +892,7 @@ async function submitLargePasteRenderer(browserWindow, expected) {
             largePasteSourceBound,
             largePasteAnswerVisible: true,
             largePasteCitationVisible: true,
+            largePasteCitationIdentityExact: true,
             rawBodyAbsentFromConversation,
             largePasteJobId: newJob.id,
             largePasteUserEventId: newJob.conversationEventId,
@@ -910,10 +923,17 @@ async function runLargePasteRestartRenderer(browserWindow) {
         const assistant = timeline?.messages.find((message) =>
           message.role === 'assistant' && message.text.includes(${JSON.stringify(LARGE_PASTE_ANSWER)})
         );
-        const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_1');
+        const groundedAssistant = timeline?.messages.find((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(GROUNDED_ANSWER)})
+        );
+        const groundedCitation = groundedAssistant?.answer?.citations.find((item) => item.refId === 'citation_2');
+        const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_11');
+        const citationIdentityExact = Boolean(
+          citation?.pageId && groundedCitation?.pageId && citation.pageId === groundedCitation.pageId
+        );
         const domAnswer = Array.from(document.querySelectorAll('.conversation-message.role-assistant:not(.provisional)'))
           .find((message) => message.textContent?.includes(${JSON.stringify(LARGE_PASTE_ANSWER)}));
-        const domCitation = document.querySelector('.retrieval-citations button:not(:disabled)');
+        const domCitation = document.querySelector('.conversation-citations .citation-row:not(:disabled)');
         const rawBodyAbsentFromConversation = timeline?.messages.every((message) => !message.text.includes(pastedBody)) === true;
         const activeJobs = jobs.jobs.filter((job) =>
           job.state === 'queued' || job.state === 'running' || job.state === 'waiting_dependency' ||
@@ -922,14 +942,19 @@ async function runLargePasteRestartRenderer(browserWindow) {
         globalThis.__pigeRoundtripWaitState = {
           answerVisible: Boolean(assistant && domAnswer),
           citationVisible: Boolean(citation && domCitation),
+          citationIdentityExact,
           rawBodyAbsentFromConversation,
           activeJobCount: activeJobs.length,
           messageCount: timeline?.messages.length ?? 0
         };
-        if (assistant && domAnswer && citation && domCitation && rawBodyAbsentFromConversation && activeJobs.length === 0) {
+        if (
+          assistant && domAnswer && citation && domCitation && citationIdentityExact &&
+          rawBodyAbsentFromConversation && activeJobs.length === 0
+        ) {
           return {
             largePasteAnswerVisible: true,
             largePasteCitationVisible: true,
+            largePasteCitationIdentityExact: true,
             rawBodyAbsentFromConversation
           };
         }

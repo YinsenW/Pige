@@ -133,6 +133,12 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(pasteRestart).toBeGreaterThan(paste);
     expect(drop).toBeGreaterThan(pasteRestart);
     expect(source).toContain("clipboard.writeText(LARGE_PASTE_BODY)");
+    expect(source).toContain("[citation_11]");
+    expect(source).toContain("item.refId === 'citation_11'");
+    expect(source).toContain("citation?.pageId === expected.sourceCitationPageId");
+    expect(source).toContain("citation.pageId === groundedCitation.pageId");
+    expect(source).toContain(".conversation-citations .citation-row:not(:disabled)");
+    expect(source).toContain('readRoundtripRecord(vaultPath, "source-records", largePaste.largePasteSourceId)');
     expect(source.indexOf("const stagedAt = Date.now()")).toBeLessThan(source.indexOf("browserWindow.webContents.paste()"));
     expect(source).toContain("browserWindow.webContents.paste()");
     expect(source).toContain("clipboard.writeText(previousClipboardText)");
@@ -151,7 +157,7 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain('request.receivedAt < largePaste.stagedAt || request.receivedAt >= largePaste.submittedAt');
     expect(source).toContain("assert.equal(pastedSource.kind, \"text\")");
     expect(source).toContain("assert.equal(fs.readFileSync(pastedManagedPath, \"utf8\"), LARGE_PASTE_BODY)");
-    expect(source).toContain("findPlaintextFiles(path.join(vaultPath, \".pige\"), LARGE_PASTE_BODY)");
+    expect(source).toContain("findPlaintextFiles(vaultPath, LARGE_PASTE_BODY)");
     expect(source).toContain("assert.equal(JSON.stringify(pastedEvents).includes(LARGE_PASTE_BODY), false)");
     expect(source).toContain("assert.equal(pastedUserEvent?.parentEventId, largePaste.baselineTailEventId)");
     expect(source).toContain("assert.deepEqual(largePasteRestart.durableSnapshot, largePaste.durableSnapshot)");
