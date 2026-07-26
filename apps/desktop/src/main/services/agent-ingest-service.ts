@@ -67,6 +67,10 @@ import {
 } from "./agent-ingest-tool-registry";
 import { buildAgentRuntimePolicyContext } from "./agent-policy-context";
 import {
+  writeSingleWriterFileAtomic as writeFileAtomic,
+  writeSingleWriterJsonAtomic as writeJsonAtomic
+} from "./single-writer-file-commit";
+import {
   assertApprovedModelProviderBinding,
   assertApprovedRuntimeBinding,
   assertModelProviderPair,
@@ -4292,15 +4296,4 @@ function resolveVaultRelativePath(vaultPath: string, relativePath: string): stri
     throw new Error("Path escapes the active vault.");
   }
   return resolvedPath;
-}
-
-function writeJsonAtomic(filePath: string, value: unknown): void {
-  writeFileAtomic(filePath, `${JSON.stringify(value, null, 2)}\n`);
-}
-
-function writeFileAtomic(filePath: string, value: string): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const temporaryPath = `${filePath}.${process.pid}.tmp`;
-  fs.writeFileSync(temporaryPath, value, "utf8");
-  fs.renameSync(temporaryPath, filePath);
 }

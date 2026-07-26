@@ -19,6 +19,10 @@ import {
   type SourceKind,
   type SourceRecord
 } from "@pige/schemas";
+import {
+  writeSingleWriterFileAtomic as writeFileAtomic,
+  writeSingleWriterJsonAtomic as writeJsonAtomic
+} from "./single-writer-file-commit";
 import { redactSensitiveUrl, SourceFetchService, type SourceFetchSnapshot } from "./source-fetch-service";
 
 export interface CaptureVaultPort {
@@ -840,17 +844,6 @@ function inspectRegularFile(filePath: string): "ok" | "missing" | "not_regular_f
   }
 
   return "ok";
-}
-
-function writeJsonAtomic(filePath: string, value: unknown): void {
-  writeFileAtomic(filePath, `${JSON.stringify(value, null, 2)}\n`);
-}
-
-function writeFileAtomic(filePath: string, value: string | Buffer): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const temporaryPath = `${filePath}.${process.pid}.tmp`;
-  fs.writeFileSync(temporaryPath, value);
-  fs.renameSync(temporaryPath, filePath);
 }
 
 function resolveConfinedVaultWritePath(vaultPath: string, relativePath: string): string {
