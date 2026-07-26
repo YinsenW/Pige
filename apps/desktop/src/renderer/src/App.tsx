@@ -3519,6 +3519,11 @@ function HomeComposer(props: {
   }, [modelMenuOpen]);
 
   const latestTurn = conversationTimeline?.latestTurn;
+  const followableTailJobId = canFollowUpToConversation(conversationTimeline)
+    ? conversationTimeline.messages.find((message) =>
+        message.id === conversationTimeline.tailEventId && message.role === "assistant"
+      )?.jobId
+    : undefined;
   const visibleRecentJobs = props.recentJobs
     .filter((job) =>
       isActiveProcessingFileJob(job) &&
@@ -3533,7 +3538,9 @@ function HomeComposer(props: {
   const proposalReviewPending = props.recentJobs.some((job) => job.state === "awaiting_review");
   const noSourceCurrentTurn = selectCurrentNoSourceTurn({
     latestTurn,
-    recentJobs: props.recentJobs,
+    recentJobs: followableTailJobId
+      ? props.recentJobs.filter((job) => job.id !== followableTailJobId)
+      : props.recentJobs,
     ...(activeAgentDraftRef.current?.jobId
       ? { activeDraftJobId: activeAgentDraftRef.current.jobId }
       : {})
@@ -3544,6 +3551,10 @@ function HomeComposer(props: {
     : undefined;
   const effectiveAgentRunState = noSourceCurrentTurn
     ? homeConversationStateForJob(noSourceCurrentTurn.state) ?? agentRunState
+    : followableTailJobId &&
+        !composerSubmitActive &&
+        (!agentDraft?.jobId || agentDraft.jobId === followableTailJobId)
+      ? "completed"
     : agentRunState;
   const effectiveAgentError = noSourceCurrentTurn
     ? noSourceCurrentTurn.error ?? agentError

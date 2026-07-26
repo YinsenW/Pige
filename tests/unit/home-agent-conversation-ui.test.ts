@@ -3189,14 +3189,28 @@ describe("Home durable Agent conversation UI", () => {
 
   it("enables one staged source turn after a completed grounded Reader roundtrip despite a stale running Job", async () => {
     const dom = createDom();
-    const timeline = completedGroundedTimeline();
-    const harness = createHarness(timeline);
+    const completed = completedGroundedTimeline();
+    const timeline = { ...completed, latestTurn: undefined };
+    const harness = createHarness({
+      ...completed,
+      canFollowUp: false,
+      latestTurn: {
+        ...completed.latestTurn!,
+        state: "running"
+      }
+    });
     harness.jobs = [{
       ...runningAgentJob(),
-      id: timeline.latestTurn!.jobId,
+      id: completed.latestTurn!.jobId,
       updatedAt: "2026-07-12T08:00:00.500Z"
     }];
     const mount = await mountHome(dom, makePigeApi(harness));
+
+    harness.timeline = timeline;
+    await act(async () => {
+      await new Promise((resolve) => dom.window.setTimeout(resolve, 1_300));
+      await settle(dom);
+    });
 
     const citation = requireElement(mount.container.querySelector<HTMLButtonElement>(".conversation-citations .citation-row"));
     await clickElement(dom, citation);
