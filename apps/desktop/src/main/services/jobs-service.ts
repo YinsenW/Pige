@@ -45,6 +45,7 @@ import {
   createAttachmentSetToolSession,
   createAttachmentSourceId
 } from "./home-agent-attachment-service";
+import { flushDirectoryWhereSupported } from "./durable-directory-sync";
 import {
   CaptureJobExecutor,
   type ActiveCaptureJob,
@@ -6160,29 +6161,4 @@ function writeJsonAtomic(filePath: string, value: unknown): void {
       // Preserve the authoritative write result.
     }
   }
-}
-
-function flushDirectoryWhereSupported(directoryPath: string): void {
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(directoryPath, fs.constants.O_RDONLY);
-    fs.fsyncSync(descriptor);
-  } catch (caught) {
-    if (!isUnsupportedDirectoryFlush(caught)) throw caught;
-  } finally {
-    if (descriptor !== undefined) {
-      try {
-        fs.closeSync(descriptor);
-      } catch {
-        // A directory-handle cleanup failure must not replace the durable write result.
-      }
-    }
-  }
-}
-
-function isUnsupportedDirectoryFlush(value: unknown): boolean {
-  if (!(value instanceof Error) || !("code" in value)) return false;
-  const code = String(value.code);
-  if (new Set(["EBADF", "EINVAL", "ENOSYS", "ENOTSUP"]).has(code)) return true;
-  return process.platform === "win32" && new Set(["EACCES", "EISDIR", "EPERM"]).has(code);
 }
