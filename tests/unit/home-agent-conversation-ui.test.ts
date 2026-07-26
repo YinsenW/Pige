@@ -1068,6 +1068,55 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("serializes pin writes and keeps IPC failures body-free", async () => {
+    const dom = createDom(960);
+    const harness = createHarness(undefined);
+    harness.windowMode = "expanded";
+    let pinRequests = 0;
+    let resolvePinWrite: ((state: WindowState) => void) | undefined;
+    const api = makePigeApi(harness) as ReturnType<typeof makePigeApi> & {
+      window: {
+        setAlwaysOnTop: (request: { readonly alwaysOnTop: boolean }) => Promise<WindowState>;
+      };
+    };
+    api.window.setAlwaysOnTop = () => {
+      pinRequests += 1;
+      return new Promise((resolve) => { resolvePinWrite = resolve; });
+    };
+    const { container, root } = await mountHome(dom, api);
+    const pinToggle = buttonsByAriaLabel(container, "Pin on top")[0]!;
+
+    await act(async () => {
+      pinToggle.click();
+      pinToggle.click();
+      await settle(dom);
+    });
+    expect(pinRequests).toBe(1);
+    expect(pinToggle.disabled).toBe(true);
+    expect(pinToggle.getAttribute("aria-busy")).toBe("true");
+
+    await act(async () => {
+      resolvePinWrite?.({ ...windowState(harness), alwaysOnTop: true });
+      await settle(dom);
+    });
+    await waitFor(dom, () => pinToggle.disabled === false);
+    expect(pinToggle.getAttribute("aria-pressed")).toBe("true");
+
+    api.window.setAlwaysOnTop = async () => {
+      throw new Error("raw private path /Users/example/secret");
+    };
+    await clickElement(dom, pinToggle);
+    await waitFor(dom, () => container.querySelector(".capture-toast.error") !== null);
+    const errorToast = container.querySelector<HTMLElement>(".capture-toast.error")!;
+    expect(errorToast.textContent).toContain(enMessages["error.generic"]);
+    expect(errorToast.textContent).not.toContain("/Users/example/secret");
+    expect(pinToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(pinToggle.disabled).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("expands resident panes through 720, 840, and 1240 then restores the exact user base", async () => {
     const dom = createDom(420);
     const harness = createHarness(undefined);

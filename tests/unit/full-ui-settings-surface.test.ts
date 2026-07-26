@@ -48,6 +48,7 @@ describe("full UI Settings surface", () => {
     await act(async () => {
       root.render(createElement(GeneralSettingsPanel, {
         alwaysOnTop: null,
+        alwaysOnTopBusy: false,
         onAlwaysOnTopChange,
         onOpenAppearance: vi.fn(),
         t
@@ -60,6 +61,22 @@ describe("full UI Settings surface", () => {
     ));
     expect(alwaysOnTop.disabled).toBe(true);
     expect(alwaysOnTop.getAttribute("aria-checked")).toBe("false");
+    alwaysOnTop.click();
+    expect(onAlwaysOnTopChange).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.render(createElement(GeneralSettingsPanel, {
+        alwaysOnTop: true,
+        alwaysOnTopBusy: true,
+        onAlwaysOnTopChange,
+        onOpenAppearance: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+    expect(alwaysOnTop.disabled).toBe(true);
+    expect(alwaysOnTop.getAttribute("aria-checked")).toBe("true");
+    expect(alwaysOnTop.getAttribute("aria-busy")).toBe("true");
     alwaysOnTop.click();
     expect(onAlwaysOnTopChange).not.toHaveBeenCalled();
 
@@ -85,6 +102,7 @@ describe("full UI Settings surface", () => {
     await act(async () => {
       root.render(createElement(GeneralSettingsPanel, {
         alwaysOnTop: false,
+        alwaysOnTopBusy: false,
         onAlwaysOnTopChange,
         onOpenAppearance,
         onDevelopment,

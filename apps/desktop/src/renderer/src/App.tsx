@@ -252,6 +252,8 @@ export function App(): React.JSX.Element {
   const [recentVaults, setRecentVaults] = useState<readonly RecentVaultSummary[]>([]);
   const [vaultName, setVaultName] = useState(initialVaultName);
   const [windowState, setWindowState] = useState<WindowState | null>(null);
+  const [windowStateBusy, setWindowStateBusy] = useState(false);
+  const windowStateBusyRef = useRef(false);
   const [windowLayoutState, setWindowLayoutState] = useState<WindowLayoutState | null>(null);
   const [view, setView] = useState<View>("home");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -972,8 +974,17 @@ export function App(): React.JSX.Element {
     setLibrarySearchFocusRequest((current) => current + 1);
   };
   const toggleAlwaysOnTop = async (): Promise<void> => {
-    if (!windowState) return;
-    setWindowState(await window.pige.window.setAlwaysOnTop({ alwaysOnTop: !windowState.alwaysOnTop }));
+    if (!windowState || windowStateBusyRef.current) return;
+    windowStateBusyRef.current = true;
+    setWindowStateBusy(true);
+    try {
+      setWindowState(await window.pige.window.setAlwaysOnTop({ alwaysOnTop: !windowState.alwaysOnTop }));
+    } catch {
+      setCaptureToast({ kind: "error", message: t("error.generic") });
+    } finally {
+      windowStateBusyRef.current = false;
+      setWindowStateBusy(false);
+    }
   };
   const toggleWindowMode = async (): Promise<void> => {
     if (!windowState || windowStateBusyRef.current) return;
@@ -1449,7 +1460,8 @@ export function App(): React.JSX.Element {
             aria-label={t("topbar.pin")}
             title={t("topbar.pin")}
             aria-pressed={windowState?.alwaysOnTop ?? false}
-            disabled={windowState === null}
+            aria-busy={windowStateBusy || undefined}
+            disabled={windowState === null || windowStateBusy}
             tabIndex={sidebarModal ? -1 : undefined}
             onClick={() => void toggleAlwaysOnTop()}
           >
@@ -1811,6 +1823,7 @@ export function App(): React.JSX.Element {
           ) : settingsSection === "general" ? (
             <GeneralSettingsPanel
               alwaysOnTop={windowState?.alwaysOnTop ?? null}
+              alwaysOnTopBusy={windowStateBusy}
               onAlwaysOnTopChange={toggleAlwaysOnTop}
               onOpenAppearance={() => {
                 setSettingsSection("appearance");
@@ -6800,6 +6813,7 @@ export function SettingsSurface(props: {
 
 export function GeneralSettingsPanel(props: {
   readonly alwaysOnTop: boolean | null;
+  readonly alwaysOnTopBusy: boolean;
   readonly onAlwaysOnTopChange: () => Promise<void>;
   readonly onOpenAppearance: () => void;
   readonly onDevelopment: () => void;
@@ -6859,7 +6873,8 @@ export function GeneralSettingsPanel(props: {
               aria-label={props.t("settings.general.alwaysOnTop")}
               aria-describedby="settings-general-always-on-top-description"
               aria-checked={props.alwaysOnTop ?? false}
-              disabled={props.alwaysOnTop === null}
+              aria-busy={props.alwaysOnTopBusy || undefined}
+              disabled={props.alwaysOnTop === null || props.alwaysOnTopBusy}
               onClick={() => void props.onAlwaysOnTopChange()}
             />
           </div>
