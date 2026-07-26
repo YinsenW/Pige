@@ -694,7 +694,6 @@
   "note.readerLink.stale": "확인하는 동안 노트가 변경되었습니다. 다시 시도하세요.",
   "note.readerLinkReady": "연결된 로컬 노트 또는 출처를 엽니다.",
   "note.readerLinkUnavailable": "연결된 노트와 출처를 여는 기능은 일시적으로 사용할 수 없습니다. 변경된 내용은 없습니다.",
-  "note.sourceReferenceUnavailable": "출처 미리보기는 개발 중입니다.",
   "note.sources": "출처",
   "noteAgent.hide": "노트 대화 숨기기",
   "noteAgent.modelUnavailable": "모델을 사용할 수 없음",
