@@ -25,6 +25,7 @@ import {
 import { MACOS_VISION_OCR_ADAPTER_VERSION, type NativeOcrResult } from "./ocr-types";
 import { SourcePageService } from "./source-page-service";
 import { tryVerifyReadableSourceFileAsync, verifyReadableSourceFileAsync } from "./source-file-access";
+import { createVaultRelativePathResolver } from "./vault-layout";
 
 export interface PptxMediaOcrTargetReady {
   readonly ready: true;
@@ -911,14 +912,9 @@ function resolveSourceRecordPath(vaultPath: string, sourceRecordPath: string): s
   return resolvedPath;
 }
 
-function resolveVaultRelativePath(vaultPath: string, relativePath: string): string {
-  const resolvedVault = path.resolve(vaultPath);
-  const resolvedPath = path.resolve(vaultPath, ...relativePath.split("/"));
-  if (resolvedPath !== resolvedVault && !resolvedPath.startsWith(`${resolvedVault}${path.sep}`)) {
-    throw new PigeDomainError("ocr.path_outside_vault", "The PPTX OCR path escapes the active vault.");
-  }
-  return resolvedPath;
-}
+const resolveVaultRelativePath = createVaultRelativePathResolver(
+  () => new PigeDomainError("ocr.path_outside_vault", "The PPTX OCR path escapes the active vault.")
+);
 
 async function assertSafeWriteParent(vaultPath: string, filePath: string): Promise<void> {
   assertLexicalPathContained(vaultPath, filePath);

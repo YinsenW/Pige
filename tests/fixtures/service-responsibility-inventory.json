@@ -3,7 +3,7 @@
   "baseline": "fd869668bb7d53cb1946b3b70e2127de1e1959af",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 132,
-  "baselineLines": 71124,
+  "baselineLines": 71116,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -70,8 +70,8 @@
       ["object-error-code.ts", 11, "d"],
       ["ocr-artifact-service.ts", 403, "rd"],
       ["parser-artifact-service.ts", 498, "rd"],
-      ["pdf-ocr-artifact-service.ts", 1524, "rd"],
-      ["pptx-media-ocr-artifact-service.ts", 1057, "rd"],
+      ["pdf-ocr-artifact-service.ts", 1520, "rd"],
+      ["pptx-media-ocr-artifact-service.ts", 1053, "rd"],
       ["proposal-service.ts", 914, "rd"],
       ["restore-job-store.ts", 1002, "jrd"],
       ["restore-preview-registry.ts", 148, "r"],
@@ -171,7 +171,7 @@
       "writeJsonAtomicDefinitions": 9,
       "writeFileAtomicDefinitions": 4,
       "isErrnoDefinitions": 1,
-      "resolveVaultRelativePathFiles": 5
+      "resolveVaultRelativePathFiles": 3
     },
     "oversizedServiceBranchAndFunctionProxies": {
       "jobs-service.ts": [536, 221],
