@@ -112,8 +112,7 @@ describe("Home durable Agent conversation UI", () => {
         id: binding.conversationEventId,
         role: "user" as const,
         createdAt: "2026-07-26T08:00:00.000Z",
-        text: "Inspect the PDF.",
-        jobId: binding.jobId
+        text: "Inspect the PDF."
       }],
       latestTurn: {
         jobId: binding.jobId,
@@ -3321,8 +3320,7 @@ describe("Home durable Agent conversation UI", () => {
             id: "event_20260726_picker_user",
             role: "user",
             createdAt: completedAt,
-            text: "Continue with this exact attachment.",
-            jobId: "job_20260723_stagedturn"
+            text: "Continue with this exact attachment."
           }
         ],
         latestTurn: {

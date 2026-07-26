@@ -57,12 +57,15 @@ export function homeAcceptedTurnProjectionStatus(input: {
   if (timeline.conversationId !== binding.conversationId) return "identity_changed";
 
   const acceptedUser = timeline.messages.find((message) => message.id === binding.conversationEventId);
-  if (acceptedUser && (acceptedUser.role !== "user" || acceptedUser.jobId !== binding.jobId)) {
+  if (acceptedUser && (
+    acceptedUser.role !== "user" ||
+    (acceptedUser.jobId !== undefined && acceptedUser.jobId !== binding.jobId)
+  )) {
     return "identity_changed";
   }
   const tail = timeline.messages.find((message) => message.id === timeline.tailEventId);
   if (
-    acceptedUser?.jobId === binding.jobId &&
+    acceptedUser?.role === "user" &&
     tail?.role === "assistant" &&
     tail.jobId === binding.jobId &&
     timeline.canFollowUp
@@ -162,6 +165,7 @@ export function useHomeAcceptedTurnProjection(input: {
         refreshActive = false;
       }
     };
+    void poll();
     const timer = window.setInterval(() => void poll(), HOME_ACCEPTED_TURN_REFRESH_INTERVAL_MS);
     return () => {
       disposed = true;
