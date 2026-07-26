@@ -59,6 +59,7 @@ describe("Conversation scroll rail", () => {
     expect(anchors).toHaveLength(3);
     expect(anchors[0]?.getAttribute("aria-current")).toBe("true");
     expect(anchors.map((anchor) => anchor.tabIndex)).toEqual([0, -1, -1]);
+    Object.defineProperty(messages[1], "offsetTop", { configurable: true, value: 9_999 });
 
     rail!.getBoundingClientRect = () => ({
       x: 394, y: 62, top: 62, right: 410, bottom: 78, left: 394,
@@ -203,6 +204,17 @@ function createTimeline(dom: JSDOM, texts: readonly string[]): {
     Object.defineProperties(message, {
       offsetTop: { configurable: true, value: index * 280 },
       offsetHeight: { configurable: true, value: 40 }
+    });
+    message.getBoundingClientRect = () => ({
+      x: 10,
+      y: 20 + index * 280 - timeline.scrollTop,
+      top: 20 + index * 280 - timeline.scrollTop,
+      right: 410,
+      bottom: 60 + index * 280 - timeline.scrollTop,
+      left: 10,
+      width: 400,
+      height: 40,
+      toJSON: () => ({})
     });
     content.append(message);
     return message;

@@ -129,8 +129,8 @@ export function ConversationScrollRail({ timelineRef, t }: ConversationScrollRai
       ? 0
       : index === anchors.length - 1
         ? timeline.scrollHeight - timeline.clientHeight
-        : anchor.element.offsetTop -
-          Math.max(0, (timeline.clientHeight - anchor.element.offsetHeight) / 2);
+        : elementTopWithinTimeline(anchor.element, timeline) -
+          Math.max(0, (timeline.clientHeight - anchor.element.getBoundingClientRect().height) / 2);
     timeline.scrollTo({
       top: Math.max(0, targetTop),
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
@@ -229,7 +229,8 @@ function currentAnchorIndex(
   let closestIndex = 0;
   let closestDistance = Number.POSITIVE_INFINITY;
   anchors.forEach((anchor, index) => {
-    const center = anchor.element.offsetTop + anchor.element.offsetHeight / 2;
+    const rect = anchor.element.getBoundingClientRect();
+    const center = elementTopWithinTimeline(anchor.element, timeline) + rect.height / 2;
     const distance = Math.abs(center - viewportTarget);
     if (distance < closestDistance) {
       closestIndex = index;
@@ -237,6 +238,12 @@ function currentAnchorIndex(
     }
   });
   return closestIndex;
+}
+
+function elementTopWithinTimeline(element: HTMLElement, timeline: HTMLElement): number {
+  return timeline.scrollTop +
+    element.getBoundingClientRect().top -
+    timeline.getBoundingClientRect().top;
 }
 
 function currentAnchorIndexFromElements(timeline: HTMLElement): number {
