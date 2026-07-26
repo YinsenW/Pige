@@ -113,7 +113,7 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain("nonterminalJobIds");
     expect(source).toContain("failedRetryableJobIds");
     expect(source).toContain("assertUniqueIdentities(connect.durableSnapshot.messageIdentities");
-    expect(source).toContain('filter((job) => job.class === "agent_turn").length, 6');
+    expect(source).toContain('filter((job) => job.class === "agent_turn").length, 7');
     expect(source).toContain("PIGE_ROUNDTRIP_STATE");
   });
 });

@@ -128,7 +128,7 @@ async function runOrchestrator() {
     assert.equal(connect.datasetImportJobCount, 1);
     assert.deepEqual(connect.failedRetryableJobs, []);
     assert.equal(connect.durableSnapshot.messageIdentities.length, 12);
-    assert.equal(connect.durableSnapshot.relevantJobs.filter((job) => job.class === "agent_turn").length, 6);
+    assert.equal(connect.durableSnapshot.relevantJobs.filter((job) => job.class === "agent_turn").length, 7);
     assert.equal(connect.durableSnapshot.relevantJobs.filter((job) => job.class === "dataset_import").length, 1);
     assert.equal(connect.durableSnapshot.sourceIds.length, 4);
     assert.equal(connect.durableSnapshot.datasetIds.length, 1);
