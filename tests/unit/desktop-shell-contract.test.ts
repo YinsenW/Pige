@@ -494,6 +494,8 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("getLegacyAgentIngestJobExecutor().process({ limit: 20 })");
     expect(mainSource).not.toContain("getJobsService().processQueuedAgentIngest({ limit: 20 })");
     expect(jobsSource).toContain("return this.#legacyAgentIngestExecutor.process(request);");
+    expect(jobsSource).not.toContain("createRetrievalQueryJob(");
+    expect(jobsSource).not.toContain("writeRetrievalQueryJob(");
   });
 
   it("wires Home questions through Pi with visible typed outcomes and no raw provider error surface", () => {
