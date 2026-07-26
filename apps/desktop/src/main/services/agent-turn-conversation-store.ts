@@ -21,6 +21,11 @@ import {
   assertDurableAssistantIntegrity,
   normalizeDurableAssistantEvent
 } from "./durable-agent-turn-answer";
+import {
+  AgentConversationCursorRegistry,
+  invalidConversationTimelineCursor,
+  selectConversationTimelineMessages
+} from "./agent-conversation-pagination";
 
 const MAX_TURN_TEXT_BYTES = 64 * 1024;
 const MAX_CONVERSATION_FILE_BYTES = 8 * 1024 * 1024;
@@ -29,7 +34,6 @@ const MAX_CONTEXT_TEXT_BYTES = 64 * 1024;
 const DEFAULT_TIMELINE_MESSAGES = 50;
 const MAX_TIMELINE_MESSAGES = 100;
 const MAX_TIMELINE_TEXT_BYTES = 256 * 1024;
-const DEFAULT_TIMELINE_CURSOR_CAPACITY = 256;
 const MAX_DISCOVERY_CANDIDATE_FILES = 256;
 const MAX_DISCOVERY_DIRECTORY_ENTRIES = 4_096;
 const MAX_DISCOVERY_BYTES = 32 * 1024 * 1024;
@@ -74,14 +78,6 @@ export interface AgentTurnConversationTimeline {
   readonly nextEarlierCursor?: string;
 }
 
-interface TimelineCursorBinding {
-  readonly vaultPath: string;
-  readonly conversationId: string;
-  readonly scopeKey: string;
-  readonly snapshotTailEventId: string;
-  readonly beforeEventId: string;
-}
-
 interface ResolvedTurnBinding {
   readonly clientTurnId: string;
   readonly conversationId: string;
@@ -105,13 +101,10 @@ interface DiscoveryBudget {
 }
 
 export class AgentTurnConversationStore {
-  readonly #timelineCursors = new Map<string, TimelineCursorBinding>();
-  readonly #timelineCursorByBinding = new Map<string, string>();
+  readonly #timelineCursors: AgentConversationCursorRegistry;
 
-  constructor(private readonly timelineCursorCapacity = DEFAULT_TIMELINE_CURSOR_CAPACITY) {
-    if (!Number.isInteger(timelineCursorCapacity) || timelineCursorCapacity < 1) {
-      throw new Error("Timeline cursor capacity must be a positive integer.");
-    }
+  constructor(timelineCursorCapacity?: number) {
+    this.#timelineCursors = new AgentConversationCursorRegistry(timelineCursorCapacity);
   }
 
   appendUserTurn(
@@ -333,24 +326,20 @@ export class AgentTurnConversationStore {
     scope?: AgentTurnScope
   ): AgentConversationEarlierPage {
     const boundedLimit = validateTimelineLimit(limit);
-    const binding = this.#timelineCursors.get(earlierCursor);
-    if (
-      !binding ||
-      binding.vaultPath !== path.resolve(vaultPath) ||
-      binding.conversationId !== conversationId ||
-      binding.scopeKey !== timelineScopeKey(scope) ||
-      binding.snapshotTailEventId !== snapshotTailEventId
-    ) {
-      throw invalidTimelineCursor();
-    }
+    const binding = this.#timelineCursors.require(earlierCursor, {
+      vaultPath,
+      conversationId,
+      snapshotTailEventId,
+      ...(scope ? { scope } : {})
+    });
     const events = readConversationEventsIfExists(vaultPath, conversationLocator(conversationId));
-    if (!events || events.length === 0) throw invalidTimelineCursor();
+    if (!events || events.length === 0) throw invalidConversationTimelineCursor();
     assertConversationEventsBelong(events, conversationId);
     assertConversationScope(events, scope);
-    if (events.at(-1)?.id !== snapshotTailEventId) throw invalidTimelineCursor();
-    const selected = selectTimelineMessages(events, boundedLimit, MAX_TIMELINE_TEXT_BYTES, binding.beforeEventId);
+    if (events.at(-1)?.id !== snapshotTailEventId) throw invalidConversationTimelineCursor();
+    const selected = selectConversationTimelineMessages(events, boundedLimit, MAX_TIMELINE_TEXT_BYTES, binding.beforeEventId);
     const nextEarlierCursor = selected.hasEarlier && selected.messages[0]
-      ? this.#rememberTimelineCursor(vaultPath, conversationId, scope, snapshotTailEventId, selected.messages[0].id)
+      ? this.#timelineCursors.remember(vaultPath, conversationId, scope, snapshotTailEventId, selected.messages[0].id)
       : undefined;
     return {
       kind: "earlier",
@@ -372,9 +361,9 @@ export class AgentTurnConversationStore {
     if (!tail) {
       throw new PigeDomainError("agent_runtime.turn_unavailable", "The Agent conversation is empty.");
     }
-    const selected = selectTimelineMessages(events, limit, MAX_TIMELINE_TEXT_BYTES);
+    const selected = selectConversationTimelineMessages(events, limit, MAX_TIMELINE_TEXT_BYTES);
     const nextEarlierCursor = selected.hasEarlier && selected.messages[0]
-      ? this.#rememberTimelineCursor(vaultPath, tail.conversationId, scope, tail.id, selected.messages[0].id)
+      ? this.#timelineCursors.remember(vaultPath, tail.conversationId, scope, tail.id, selected.messages[0].id)
       : undefined;
     return {
       conversationId: tail.conversationId,
@@ -384,35 +373,6 @@ export class AgentTurnConversationStore {
       hasEarlier: selected.hasEarlier,
       ...(nextEarlierCursor ? { nextEarlierCursor } : {})
     };
-  }
-
-  #rememberTimelineCursor(
-    vaultPath: string,
-    conversationId: string,
-    scope: AgentTurnScope | undefined,
-    snapshotTailEventId: string,
-    beforeEventId: string
-  ): string {
-    const binding: TimelineCursorBinding = {
-      vaultPath: path.resolve(vaultPath),
-      conversationId,
-      scopeKey: timelineScopeKey(scope),
-      snapshotTailEventId,
-      beforeEventId
-    };
-    const bindingKey = JSON.stringify(binding);
-    const existing = this.#timelineCursorByBinding.get(bindingKey);
-    if (existing && this.#timelineCursors.has(existing)) return existing;
-    const cursor = `timeline_${randomUUID().replaceAll("-", "")}`;
-    this.#timelineCursors.set(cursor, binding);
-    this.#timelineCursorByBinding.set(bindingKey, cursor);
-    while (this.#timelineCursors.size > this.timelineCursorCapacity) {
-      const oldest = this.#timelineCursors.entries().next().value as [string, TimelineCursorBinding] | undefined;
-      if (!oldest) break;
-      this.#timelineCursors.delete(oldest[0]);
-      this.#timelineCursorByBinding.delete(JSON.stringify(oldest[1]));
-    }
-    return cursor;
   }
 
   #appendInputTurn(
@@ -866,63 +826,6 @@ function selectRecentContextMessages(
     textBytes += bytes;
   }
   return selected.reverse();
-}
-
-function selectTimelineMessages(
-  events: readonly ConversationEvent[],
-  limit: number,
-  maxTextBytes: number,
-  beforeEventId?: string
-): { readonly messages: AgentConversationMessage[]; readonly hasEarlier: boolean } {
-  const messageEvents = events.filter((event) =>
-    (event.type === "user_message" || event.type === "assistant_message") && typeof event.text === "string"
-  );
-  const boundaryIndex = beforeEventId === undefined
-    ? messageEvents.length
-    : messageEvents.findIndex((event) => event.id === beforeEventId);
-  if (boundaryIndex < 0) throw invalidTimelineCursor();
-  const selected: AgentConversationMessage[] = [];
-  let textBytes = 0;
-  let earliestSelectedIndex = boundaryIndex;
-  for (let index = boundaryIndex - 1; index >= 0 && selected.length < limit; index -= 1) {
-    const event = messageEvents[index];
-    if (!event || typeof event.text !== "string") continue;
-    const bytes = Buffer.byteLength(event.text, "utf8");
-    if (textBytes + bytes > maxTextBytes) break;
-    const inputPresentation = event.type === "user_message"
-      ? readInputPresentation(event.inputPresentation)
-      : undefined;
-    selected.push({
-      id: event.id,
-      role: event.type === "user_message" ? "user" : "assistant",
-      createdAt: event.createdAt,
-      text: inputPresentation?.kind === "reader_selection_transform" ? "" : event.text,
-      ...(event.jobId === undefined ? {} : { jobId: event.jobId }),
-      ...(inputPresentation ? { inputPresentation } : {}),
-      ...(event.type === "assistant_message" && event.answerGrounding !== undefined ? {
-        answer: {
-          answer: event.text,
-          grounding: event.answerGrounding,
-          citations: event.answerCitations ?? [],
-          ...(event.answerDatasetResult === undefined ? {} : { datasetResult: event.answerDatasetResult })
-        }
-      } : {})
-    });
-    textBytes += bytes;
-    earliestSelectedIndex = index;
-  }
-  return {
-    messages: selected.reverse(),
-    hasEarlier: earliestSelectedIndex > 0
-  };
-}
-
-function timelineScopeKey(scope: AgentTurnScope | undefined): string {
-  return scope ? `current_note:${scope.pageId}` : "home";
-}
-
-function invalidTimelineCursor(): PigeDomainError {
-  return new PigeDomainError("agent_runtime.turn_binding_invalid", "The conversation pagination cursor is invalid.");
 }
 
 function validateTimelineLimit(limit: number): number {
