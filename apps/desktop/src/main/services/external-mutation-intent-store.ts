@@ -3,6 +3,7 @@ import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
 import { ExternalMutationIntentSchema, type ExternalMutationIntent } from "@pige/schemas";
 import { hashExternalTarget } from "./external-file-publication-protocol";
+import { hasErrorInstanceCode as isErrno } from "./object-error-code";
 
 const DIRECTORY = "external-mutation-intents";
 const MAX_RECORD_BYTES = 64 * 1_024;
@@ -219,8 +220,4 @@ function intentInvalid(): PigeDomainError {
 
 function intentConflict(): PigeDomainError {
   return new PigeDomainError("external_mutation.intent_conflict", "The external mutation intent changed concurrently.");
-}
-
-function isErrno(value: unknown, code: string): boolean {
-  return value instanceof Error && "code" in value && value.code === code;
 }

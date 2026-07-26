@@ -3,7 +3,7 @@
   "baseline": "fd869668bb7d53cb1946b3b70e2127de1e1959af",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 132,
-  "baselineLines": 71159,
+  "baselineLines": 71157,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -59,15 +59,15 @@
       ["dataset-service.ts", 1204, "rd"],
       ["diagnostics-service.ts", 807, "d"],
       ["durable-directory-sync.ts", 31, "d"],
-      ["external-mutation-intent-store.ts", 230, "rd"],
-      ["external-operation-record-store.ts", 147, "rd"],
+      ["external-mutation-intent-store.ts", 227, "rd"],
+      ["external-operation-record-store.ts", 144, "rd"],
       ["job-record-store.ts", 1184, "jrd"],
       ["local-database-service.ts", 1284, "rd"],
       ["local-settings.ts", 351, "d"],
       ["local-tool-lifecycle-store.ts", 696, "rd"],
       ["markdown-page-index.ts", 434, "f"],
       ["model-provider-registry.ts", 1083, "prd"],
-      ["object-error-code.ts", 3, "d"],
+      ["object-error-code.ts", 7, "d"],
       ["ocr-artifact-service.ts", 407, "rd"],
       ["parser-artifact-service.ts", 502, "rd"],
       ["pdf-ocr-artifact-service.ts", 1524, "rd"],
@@ -170,7 +170,7 @@
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,
       "writeFileAtomicDefinitions": 4,
-      "isErrnoDefinitions": 12,
+      "isErrnoDefinitions": 10,
       "resolveVaultRelativePathFiles": 11
     },
     "oversizedServiceBranchAndFunctionProxies": {

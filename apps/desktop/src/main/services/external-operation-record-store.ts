@@ -2,6 +2,7 @@ import fs, { constants as fsConstants, type Stats } from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
 import { OperationRecordSchema, type OperationRecord } from "@pige/schemas";
+import { hasErrorInstanceCode as isErrno } from "./object-error-code";
 
 const MAX_OPERATION_BYTES = 256 * 1_024;
 
@@ -140,8 +141,4 @@ function operationInvalid(): PigeDomainError {
 
 function operationConflict(): PigeDomainError {
   return new PigeDomainError("external_mutation.operation_conflict", "The external mutation Operation changed concurrently.");
-}
-
-function isErrno(value: unknown, code: string): boolean {
-  return value instanceof Error && "code" in value && value.code === code;
 }
