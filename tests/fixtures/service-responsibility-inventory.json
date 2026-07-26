@@ -3,7 +3,7 @@
   "baseline": "fd869668bb7d53cb1946b3b70e2127de1e1959af",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 132,
-  "baselineLines": 71111,
+  "baselineLines": 71110,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -56,7 +56,7 @@
       ["appearance-service.ts", 40, ""],
       ["artifact-file-commit.ts", 29, "d"],
       ["contained-file-commit.ts", 62, "d"],
-      ["dataset-service.ts", 1204, "rd"],
+      ["dataset-service.ts", 1199, "rd"],
       ["diagnostics-service.ts", 807, "d"],
       ["durable-directory-sync.ts", 31, "d"],
       ["external-mutation-intent-store.ts", 227, "rd"],
@@ -152,7 +152,7 @@
       ["provider-base-url.ts", 20, "p"],
       ["retrieval-search-ipc.ts", 37, ""],
       ["settings-registry.ts", 182, "p"],
-      ["vault-layout.ts", 528, "f"],
+      ["vault-layout.ts", 532, "f"],
       ["web-content-extractor-types.ts", 59, ""]
     ]
   },
@@ -171,7 +171,7 @@
       "writeJsonAtomicDefinitions": 9,
       "writeFileAtomicDefinitions": 4,
       "isErrnoDefinitions": 1,
-      "resolveVaultRelativePathFiles": 2
+      "resolveVaultRelativePathFiles": 1
     },
     "oversizedServiceBranchAndFunctionProxies": {
       "jobs-service.ts": [536, 221],

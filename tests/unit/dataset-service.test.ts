@@ -259,6 +259,23 @@ describe("Dataset Service", () => {
     expect(findJsonFiles(path.join(fixture.vaultPath, ".pige/operations"))).toEqual([]);
   });
 
+  it("preserves the Dataset-owned rejection when a relative path resolves to the vault root", async () => {
+    const fixture = await makeCsvFixture();
+    const planner: DatasetImportPlanner = { plan: vi.fn(async () => csvPlan(fixture.sourceBytes)) };
+
+    await expect(new DatasetService(planner).materializeSource(
+      fixture.vaultPath,
+      fixture.sourceRecord,
+      ".",
+      fixture.job
+    )).rejects.toMatchObject({
+      code: "dataset.path_invalid",
+      message: "Dataset path escapes the active vault."
+    });
+    expect(planner.plan).not.toHaveBeenCalled();
+    expect(findJsonFiles(path.join(fixture.vaultPath, ".pige/operations"))).toEqual([]);
+  });
+
   it("rejects a payload replacement that is not bound by the immutable revision", async () => {
     const fixture = await makeCsvFixture();
     const planner: DatasetImportPlanner = {
