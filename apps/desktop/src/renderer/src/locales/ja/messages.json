@@ -694,7 +694,6 @@
   "note.readerLink.stale": "確認中にノートが変更されました。もう一度お試しください。",
   "note.readerLinkReady": "リンク先のローカルノートまたはソースを開きます。",
   "note.readerLinkUnavailable": "リンク先のノートやソースを開く機能は一時的に利用できません。変更はありません。",
-  "note.sourceReferenceUnavailable": "ソースのプレビューは開発中です。",
   "note.sources": "ソース",
   "noteAgent.hide": "ノート会話を隠す",
   "noteAgent.modelUnavailable": "モデルは利用できません",

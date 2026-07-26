@@ -5,6 +5,8 @@ import type {
   LibraryPageSummary,
   NoteDocument,
   NoteGetRequest,
+  NoteOpenSourceReferenceRequest,
+  NoteOpenSourceReferenceResult,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
   NoteRenderRequest,
@@ -86,6 +88,7 @@ interface NoteRenderContext {
   readonly bodyStartOffset: number;
   readonly selectionSegments: ReadonlyMap<string, PigeMarkdownSelectionSegment>;
   readonly hrefs: ReadonlySet<string>;
+  readonly sourceIds: ReadonlySet<string>;
   readonly referenceIndexRevision?: string;
   readonly ownerEpoch: number;
   readonly expiresAt: number;
@@ -105,6 +108,18 @@ interface SourceRecordSnapshot {
   readonly record: SourceRecord;
   readonly identity: FileIdentity;
 }
+
+type SourceReferenceResolution =
+  | { readonly status: "resolved"; readonly pageId: string }
+  | {
+      readonly status:
+        | "source_unresolved"
+        | "index_unavailable"
+        | "not_found"
+        | "target_not_found"
+        | "mismatch"
+        | "changed";
+    };
 
 export class NotesService {
   readonly #vaults: NotesVaultPort;
@@ -160,6 +175,7 @@ export class NotesService {
             (rendered.selectionSegments ?? []).map((segment) => [segment.segmentId, segment])
           ),
           hrefs: hrefs ?? new Set<string>(),
+          sourceIds: new Set(stable.document.summary.sourceIds),
           ownerEpoch: ownerEpoch!,
           ...(referenceIndexRevision ? { referenceIndexRevision } : {})
         });
@@ -215,6 +231,60 @@ export class NotesService {
       return result;
     } catch {
       return failedInlineReference(request.requestId);
+    }
+  }
+
+  openSourceReference(
+    ownerId: string,
+    request: NoteOpenSourceReferenceRequest
+  ): NoteOpenSourceReferenceResult {
+    const initialVault = this.#vaults.current();
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!initialVault || !vaultPath || initialVault.vaultId !== request.activeVaultId) {
+      return sourceReferenceResult(request.requestId, "stale");
+    }
+
+    const context = this.#readRenderContext(ownerId, request.renderContextId);
+    if (
+      !context ||
+      context.vaultId !== request.activeVaultId ||
+      context.vaultPath !== vaultPath ||
+      context.pageId !== request.currentPageId ||
+      this.#ownerEpochs.get(ownerId) !== context.ownerEpoch
+    ) {
+      return sourceReferenceResult(request.requestId, "stale");
+    }
+    if (!context.sourceIds.has(request.sourceId)) {
+      return sourceReferenceResult(request.requestId, "mismatch");
+    }
+    if (!this.#matchesCurrentPage(context)) {
+      return sourceReferenceResult(request.requestId, "changed");
+    }
+    if (!this.#referenceIndex || !context.referenceIndexRevision) {
+      return sourceReferenceResult(request.requestId, "unresolved");
+    }
+
+    try {
+      const result = this.#resolveSourceReferenceTarget(context, request.sourceId);
+      if (!this.#matchesCurrentScope(context)) {
+        return sourceReferenceResult(request.requestId, "stale");
+      }
+      if (
+        this.#ownerEpochs.get(ownerId) !== context.ownerEpoch ||
+        !this.#matchesCurrentPage(context)
+      ) {
+        return sourceReferenceResult(request.requestId, "changed");
+      }
+      return result.status === "resolved"
+        ? {
+            apiVersion: 1,
+            requestId: request.requestId,
+            status: "resolved",
+            target: { pageId: result.pageId }
+          }
+        : sourceReferenceResult(request.requestId, projectSourceReferenceStatus(result.status));
+    } catch {
+      return sourceReferenceResult(request.requestId, "unresolved");
     }
   }
 
@@ -329,30 +399,11 @@ export class NotesService {
     sourceId: string,
     locator: string | undefined
   ): NoteResolveInlineReferenceResult {
-    const source = readSourceRecordSnapshot(context.vaultPath, sourceId);
-    const pageId = source?.record.knowledgePageId;
-    if (!source || !pageId) return notFoundInlineReference(requestId);
-    const candidates = this.#referenceIndex?.inlineReferenceCandidates(context.vaultPath, {
-      normalizedKey: normalizeMarkdownPageReferenceKey(pageId),
-      expectedRevision: context.referenceIndexRevision!,
-      exactPageId: pageId
-    });
-    if (!candidates) return failedInlineReference(requestId);
-    if (candidates.length !== 1) return notFoundInlineReference(requestId);
-    const candidate = candidates[0]!;
-    const current = readMarkdownPageByRelativePath(context.vaultPath, candidate.pagePath);
-    if (
-      !current ||
-      current.summary.pageId !== pageId ||
-      current.summary.pageType !== "source" ||
-      !current.summary.sourceIds.includes(sourceId) ||
-      (source.record.knowledgePagePath !== undefined && source.record.knowledgePagePath !== candidate.pagePath)
-    ) {
-      return failedInlineReference(requestId);
-    }
-    const after = readSourceRecordSnapshot(context.vaultPath, sourceId);
-    if (!after || !sameFileIdentity(source.identity, after.identity)) {
-      return failedInlineReference(requestId);
+    const result = this.#resolveSourceReferenceTarget(context, sourceId);
+    if (result.status !== "resolved") {
+      return result.status === "source_unresolved" || result.status === "not_found"
+        ? notFoundInlineReference(requestId)
+        : failedInlineReference(requestId);
     }
     return {
       apiVersion: 1,
@@ -361,10 +412,42 @@ export class NotesService {
       target: {
         kind: "source",
         sourceId,
-        pageId,
+        pageId: result.pageId,
         ...(locator ? { locator } : {})
       }
     };
+  }
+
+  #resolveSourceReferenceTarget(
+    context: NoteRenderContext,
+    sourceId: string
+  ): SourceReferenceResolution {
+    const source = readSourceRecordSnapshot(context.vaultPath, sourceId);
+    const pageId = source?.record.knowledgePageId;
+    if (!source || !pageId) return { status: "source_unresolved" };
+    const candidates = this.#referenceIndex?.inlineReferenceCandidates(context.vaultPath, {
+      normalizedKey: normalizeMarkdownPageReferenceKey(pageId),
+      expectedRevision: context.referenceIndexRevision!,
+      exactPageId: pageId
+    });
+    if (!candidates) return { status: "index_unavailable" };
+    if (candidates.length !== 1) return { status: "not_found" };
+    const candidate = candidates[0]!;
+    const current = readMarkdownPageByRelativePath(context.vaultPath, candidate.pagePath);
+    if (!current) return { status: "target_not_found" };
+    if (
+      current.summary.pageId !== pageId ||
+      current.summary.pageType !== "source" ||
+      !current.summary.sourceIds.includes(sourceId) ||
+      (source.record.knowledgePagePath !== undefined && source.record.knowledgePagePath !== candidate.pagePath)
+    ) {
+      return { status: "mismatch" };
+    }
+    const after = readSourceRecordSnapshot(context.vaultPath, sourceId);
+    if (!after || !sameFileIdentity(source.identity, after.identity)) {
+      return { status: "changed" };
+    }
+    return { status: "resolved", pageId };
   }
 
   #readStableDocument(pageId: string): StableNoteDocument {
@@ -724,4 +807,27 @@ function staleInlineReference(
 
 function failedInlineReference(requestId: string): NoteResolveInlineReferenceResult {
   return { apiVersion: 1, requestId, status: "failed" };
+}
+
+function sourceReferenceResult(
+  requestId: string,
+  status: "unresolved" | "not_found" | "stale" | "mismatch" | "changed"
+): NoteOpenSourceReferenceResult {
+  return { apiVersion: 1, requestId, status };
+}
+
+function projectSourceReferenceStatus(
+  status: Exclude<SourceReferenceResolution["status"], "resolved">
+): "unresolved" | "not_found" | "mismatch" | "changed" {
+  switch (status) {
+    case "source_unresolved":
+    case "index_unavailable":
+      return "unresolved";
+    case "not_found":
+    case "target_not_found":
+      return "not_found";
+    case "mismatch":
+    case "changed":
+      return status;
+  }
 }

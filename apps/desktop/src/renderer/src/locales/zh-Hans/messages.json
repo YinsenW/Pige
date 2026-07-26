@@ -694,7 +694,6 @@
   "note.readerLink.stale": "核对期间笔记已发生变化，请重试。",
   "note.readerLinkReady": "打开关联的本地笔记或来源。",
   "note.readerLinkUnavailable": "暂时无法打开关联笔记或来源，未做任何更改。",
-  "note.sourceReferenceUnavailable": "来源预览正在开发中。",
   "note.sources": "来源",
   "noteAgent.hide": "隐藏笔记对话",
   "noteAgent.modelUnavailable": "模型不可用",

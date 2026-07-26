@@ -44,6 +44,8 @@ import type {
   ProviderConnectResult,
   NoteDocument,
   NoteGetRequest,
+  NoteOpenSourceReferenceRequest,
+  NoteOpenSourceReferenceResult,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
   NoteRenderRequest,
@@ -134,6 +136,8 @@ import {
   HighRiskConfirmationResolveResultSchema,
   RetrievalSearchRequestSchema,
   RetrievalSearchResultSchema,
+  NoteOpenSourceReferenceRequestSchema,
+  NoteOpenSourceReferenceResultSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
   ReaderSelectionActionRequestSchema,
@@ -529,6 +533,15 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke(
           "notes.resolveInlineReference",
           NoteResolveInlineReferenceRequestSchema.parse(request)
+        )
+      ),
+    openSourceReference: async (
+      request: NoteOpenSourceReferenceRequest
+    ): Promise<NoteOpenSourceReferenceResult> =>
+      NoteOpenSourceReferenceResultSchema.parse(
+        await ipcRenderer.invoke(
+          "notes.openSourceReference",
+          NoteOpenSourceReferenceRequestSchema.parse(request)
         )
       )
   },

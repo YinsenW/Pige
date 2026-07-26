@@ -25,6 +25,8 @@ import type {
   LibraryListResult,
   LibraryRelatedResult,
   ModelProviderSettingsSummary,
+  NoteOpenSourceReferenceRequest,
+  NoteOpenSourceReferenceResult,
   NoteRenderResult,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
@@ -798,6 +800,63 @@ describe("Home durable Agent conversation UI", () => {
       renderContextId: `notectx_${"a".repeat(32)}`,
       href: "#wiki:note-b"
     });
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("opens a saved source from the Home Reader and keeps closed results on the current page", async () => {
+    const dom = createDom(720);
+    const harness = createHarness(undefined);
+    const sourceId = "src_20260715_source001";
+    let sourceStatus: "not_found" | "resolved" = "not_found";
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      return retrievalCompletedResult();
+    };
+    harness.renderNote = async (pageId) => {
+      const note = testRenderedNote(pageId);
+      return pageId.endsWith("1")
+        ? { ...note, summary: { ...note.summary, sourceIds: [sourceId] } }
+        : note;
+    };
+    harness.openSourceReference = async (request) => sourceStatus === "resolved"
+      ? {
+          apiVersion: 1,
+          requestId: request.requestId,
+          status: "resolved",
+          target: { pageId: "page_20260715_note0002" }
+        }
+      : { apiVersion: 1, requestId: request.requestId, status: "not_found" };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await setTextareaValue(dom, container, "Open the approved Reader fixture.");
+    await clickButtonByAriaLabel(dom, container, "Send");
+    await waitFor(dom, () => container.textContent?.includes("Local Reader result") === true);
+    await clickElement(dom, buttons(container, "Open")[0]!);
+    await waitFor(dom, () => container.querySelector(".note-reader h1")?.textContent === "Note A");
+
+    const source = requireElement(container.querySelector<HTMLButtonElement>(".reader-source"));
+    await clickElement(dom, source);
+    await waitFor(dom, () => container.textContent?.includes("The linked local item could not be found.") === true);
+    expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
+    expect(source.disabled).toBe(false);
+
+    sourceStatus = "resolved";
+    await clickElement(dom, source);
+    await waitFor(dom, () => container.querySelector(".note-reader h1")?.textContent === "Note B");
+    expect(harness.sourceReferenceRequests).toHaveLength(2);
+    expect(harness.sourceReferenceRequests[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_home_conversation",
+      currentPageId: "page_20260715_note0001",
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      sourceId
+    });
+    expect(harness.noteRenderRequests).toEqual([
+      "page_20260715_note0001",
+      "page_20260715_note0002"
+    ]);
+    expect(container.textContent).not.toContain(sourceId);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -3803,8 +3862,10 @@ interface ConversationHarness {
   readonly appearanceListeners: Set<(settings: AppearanceSettingsSummary) => void>;
   failNextWindowLayout: boolean;
   readonly noteRenderRequests: string[];
+  readonly sourceReferenceRequests: NoteOpenSourceReferenceRequest[];
   readonly inlineReferenceRequests: NoteResolveInlineReferenceRequest[];
   renderNote: (pageId: string) => Promise<NoteRenderResult>;
+  openSourceReference: (request: NoteOpenSourceReferenceRequest) => Promise<NoteOpenSourceReferenceResult>;
   resolveInlineReference: (request: NoteResolveInlineReferenceRequest) => Promise<NoteResolveInlineReferenceResult>;
   loadAppearance: () => Promise<AppearanceSettingsSummary>;
   loadOnboarding: () => Promise<OnboardingStatus>;
@@ -3881,8 +3942,14 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     appearanceListeners: new Set(),
     failNextWindowLayout: false,
     noteRenderRequests: [],
+    sourceReferenceRequests: [],
     inlineReferenceRequests: [],
     renderNote: async (pageId) => testRenderedNote(pageId),
+    openSourceReference: async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "not_found"
+    }),
     resolveInlineReference: async (request) => ({
       apiVersion: 1,
       requestId: request.requestId,
@@ -4350,6 +4417,10 @@ function makePigeApi(harness: ConversationHarness): object {
       resolveInlineReference: async (request: NoteResolveInlineReferenceRequest) => {
         harness.inlineReferenceRequests.push(request);
         return harness.resolveInlineReference(request);
+      },
+      openSourceReference: async (request: NoteOpenSourceReferenceRequest) => {
+        harness.sourceReferenceRequests.push(request);
+        return harness.openSourceReference(request);
       }
     }
   };

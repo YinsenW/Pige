@@ -146,7 +146,7 @@ Critical accepted decisions below are bound to an owner statement, executable co
       "decisionId": "D-20260717-Reader-Inline-Reference-Resolution",
       "owner": {
         "path": "docs/API_AND_IPC_DESIGN.md",
-        "markers": ["Reader inline-reference query contract:", "`ambiguous`, `not_found`, and `failed`", "add nothing; `stale` adds only"]
+        "markers": ["Reader reference query contract:", "`notes.openSourceReference` accepts", "body-free `unresolved | not_found |"]
       },
       "code": [
         {

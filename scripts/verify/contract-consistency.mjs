@@ -347,15 +347,40 @@ for (const field of diagnosticDeltaFields) {
 }
 
 const apiDocument = read("docs/API_AND_IPC_DESIGN.md");
-const mainProcessSource = read("apps/desktop/src/main/index.ts");
+const readerIpcRegistrarPath = "apps/desktop/src/main/register-reader-ipc.ts";
+const ipcChannelOwnerPaths = ["apps/desktop/src/main/index.ts", readerIpcRegistrarPath];
+const ipcChannelSources = ipcChannelOwnerPaths
+  .filter((relativePath) => fs.existsSync(path.join(root, relativePath)))
+  .map((relativePath) => read(relativePath));
+const readerIpcRegistrarExists = fs.existsSync(path.join(root, readerIpcRegistrarPath));
+const readerIpcRegistrarSource = readerIpcRegistrarExists
+  ? read(readerIpcRegistrarPath)
+  : "";
 const resetLegacyChannels = new Set([
   "modelEgress.pending", "modelEgress.resolve", "permissions.pending", "permissions.resolve"
 ]);
-for (const match of mainProcessSource.matchAll(/ipcMain\.handle\("([a-z][A-Za-z0-9]*\.[A-Za-z][A-Za-z0-9]*)"/gu)) {
-  const channel = match[1];
-  if (!apiDocument.includes(`\`${channel}\``) && !resetLegacyChannels.has(channel)) {
+
+function ipcHandleChannels(source) {
+  return [...source.matchAll(/ipcMain\.handle\("([a-z][A-Za-z0-9]*\.[A-Za-z][A-Za-z0-9]*)"/gu)]
+    .map((match) => match[1]);
+}
+
+function undocumentedIpcChannels(source, document) {
+  return ipcHandleChannels(source).filter(
+    (channel) => !document.includes(`\`${channel}\``) && !resetLegacyChannels.has(channel)
+  );
+}
+
+for (const channel of undocumentedIpcChannels(ipcChannelSources.join("\n"), apiDocument)) {
+  if (channel) {
     failures.push(`docs/API_AND_IPC_DESIGN.md does not own implemented IPC channel ${channel}.`);
   }
+}
+if (
+  readerIpcRegistrarExists &&
+  !ipcHandleChannels(readerIpcRegistrarSource).includes("notes.openSourceReference")
+) {
+  failures.push(`${readerIpcRegistrarPath} is missing required IPC channel notes.openSourceReference.`);
 }
 
 const staleChannelAliases = [
@@ -418,6 +443,16 @@ const ownerOnlyNegativeFixtures = [
   {
     label: "stale IPC channel",
     rejected: staleChannelAliases.some((alias) => `Use \`${alias}\``.includes("`models.setDefault`"))
+  },
+  {
+    label: "unowned registrar IPC channel",
+    rejected: undocumentedIpcChannels('ipcMain.handle("notes.unowned", () => undefined);', apiDocument)
+      .includes("notes.unowned")
+  },
+  {
+    label: "missing saved-source registrar channel",
+    rejected: !ipcHandleChannels('ipcMain.handle("notes.render", () => undefined);')
+      .includes("notes.openSourceReference")
   },
   {
     label: "incomplete diagnostic error delta",

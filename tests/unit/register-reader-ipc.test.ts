@@ -1,0 +1,165 @@
+import { EventEmitter } from "node:events";
+import { describe, expect, it, vi } from "vitest";
+import type { IpcMain, IpcMainInvokeEvent, WebContents } from "electron";
+import { registerReaderIpc } from "../../apps/desktop/src/main/register-reader-ipc";
+import type { NotesService } from "../../apps/desktop/src/main/services/notes-service";
+
+type IpcHandler = (event: IpcMainInvokeEvent, request?: unknown) => unknown;
+
+function makeSender(id: number): WebContents {
+  const events = new EventEmitter();
+  return {
+    id,
+    isDestroyed: () => false,
+    once: events.once.bind(events),
+    send: vi.fn()
+  } as unknown as WebContents;
+}
+
+function makeHarness(notes: Partial<NotesService>) {
+  const handlers = new Map<string, IpcHandler>();
+  registerReaderIpc({
+    ipcMain: {
+      handle: (channel, handler) => {
+        handlers.set(channel, handler as IpcHandler);
+      }
+    } as Pick<IpcMain, "handle">,
+    getNotesService: () => notes as NotesService,
+    getReaderSelectionActionService: () => {
+      throw new Error("Reader action service was not expected.");
+    },
+    getReaderSelectionProposalService: () => {
+      throw new Error("Reader proposal service was not expected.");
+    }
+  });
+  return handlers;
+}
+
+describe("registerReaderIpc", () => {
+  it("registers the bounded Notes and ReaderSelection channel owner", () => {
+    const handlers = makeHarness({});
+    expect([...handlers.keys()]).toEqual([
+      "notes.get",
+      "notes.render",
+      "notes.resolveInlineReference",
+      "notes.openSourceReference",
+      "readerSelection.resolve",
+      "readerSelection.submitAction",
+      "readerSelection.submitTransform",
+      "readerSelection.currentProposal",
+      "readerSelection.decideProposal"
+    ]);
+  });
+
+  it("returns body-free stale before a renderer owns a render context", () => {
+    const openSourceReference = vi.fn();
+    const handlers = makeHarness({ openSourceReference } as Partial<NotesService>);
+    const handler = handlers.get("notes.openSourceReference")!;
+
+    expect(handler({ sender: makeSender(1) } as IpcMainInvokeEvent, {
+      apiVersion: 1,
+      requestId: "noteref_abcdefghijklmnop",
+      activeVaultId: "vault_20260709_abcdefgh",
+      currentPageId: "page_20260709_current1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      sourceId: "src_20260709_source1234"
+    })).toEqual({
+      apiVersion: 1,
+      requestId: "noteref_abcdefghijklmnop",
+      status: "stale"
+    });
+    expect(openSourceReference).not.toHaveBeenCalled();
+  });
+
+  it("parses both sides of the owned saved-source request", async () => {
+    const render = vi.fn().mockResolvedValue({
+      summary: {
+        pageId: "page_20260709_current1234",
+        title: "Current",
+        pageType: "note",
+        pagePath: "wiki/current.md",
+        tags: [],
+        aliases: [],
+        sourceIds: [],
+        status: "active",
+        updatedAt: "2026-07-09T12:00:00.000Z"
+      },
+      html: "<p>Current</p>",
+      byteSize: 7,
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef"
+    });
+    const openSourceReference = vi.fn().mockReturnValue({
+      apiVersion: 1,
+      requestId: "noteref_abcdefghijklmnop",
+      status: "resolved",
+      target: { pageId: "page_20260709_source1234" }
+    });
+    const handlers = makeHarness({ render, openSourceReference } as Partial<NotesService>);
+    const sender = makeSender(2);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, {
+      pageId: "page_20260709_current1234"
+    });
+    const request = {
+      apiVersion: 1,
+      requestId: "noteref_abcdefghijklmnop",
+      activeVaultId: "vault_20260709_abcdefgh",
+      currentPageId: "page_20260709_current1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      sourceId: "src_20260709_source1234"
+    } as const;
+
+    expect(handlers.get("notes.openSourceReference")!({ sender } as IpcMainInvokeEvent, request))
+      .toEqual({
+        apiVersion: 1,
+        requestId: request.requestId,
+        status: "resolved",
+        target: { pageId: "page_20260709_source1234" }
+      });
+    expect(openSourceReference).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
+    expect(() => handlers.get("notes.openSourceReference")!({ sender } as IpcMainInvokeEvent, {
+      ...request,
+      path: "/private/source.md"
+    })).toThrow();
+  });
+
+  it("rejects unsafe service output at the IPC result boundary", async () => {
+    const render = vi.fn().mockResolvedValue({
+      summary: {
+        pageId: "page_20260709_current1234",
+        title: "Current",
+        pageType: "note",
+        pagePath: "wiki/current.md",
+        tags: [],
+        aliases: [],
+        sourceIds: [],
+        status: "active",
+        updatedAt: "2026-07-09T12:00:00.000Z"
+      },
+      html: "<p>Current</p>",
+      byteSize: 7,
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef"
+    });
+    const handlers = makeHarness({
+      render,
+      openSourceReference: vi.fn().mockReturnValue({
+        apiVersion: 1,
+        requestId: "noteref_abcdefghijklmnop",
+        status: "not_found",
+        path: "/private/source.md"
+      })
+    } as Partial<NotesService>);
+    const sender = makeSender(3);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, {
+      pageId: "page_20260709_current1234"
+    });
+
+    expect(() => handlers.get("notes.openSourceReference")!({ sender } as IpcMainInvokeEvent, {
+      apiVersion: 1,
+      requestId: "noteref_abcdefghijklmnop",
+      activeVaultId: "vault_20260709_abcdefgh",
+      currentPageId: "page_20260709_current1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      sourceId: "src_20260709_source1234"
+    })).toThrow();
+  });
+});

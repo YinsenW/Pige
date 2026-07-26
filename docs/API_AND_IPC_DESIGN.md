@@ -447,6 +447,7 @@ Queries:
 - `notes.get`
 - `notes.render`
 - `notes.resolveInlineReference`
+- `notes.openSourceReference`
 
 Current bridge queries:
 
@@ -457,12 +458,17 @@ Current bridge queries:
 - Main owns Markdown/filesystem access; arbitrary paths, private source locations, prompts,
   responses, secrets, raw frontmatter/HTML/script and unsafe links never cross.
 
-Reader inline-reference query contract:
+Reader reference query contract:
 
-- Version/request/vault/page/render-context plus <=1,024-byte href may return a stable page/source
-  target. `ambiguous`, `not_found`, and `failed` add nothing; `stale` adds only scope. Renderer
-  consumes correlated page ID; paths, bodies, candidates, errors, source ID and locator never
-  authorize action.
+- Inline resolution keeps its bounded href. `notes.openSourceReference` accepts
+  strict `{apiVersion:1,requestId,activeVaultId,currentPageId,renderContextId,sourceId}`; no fake href.
+- `NotesService` proves sender scope, note source membership, stable Source Record,
+  `knowledgePageId`/path, and reread `source`-page binding, then rechecks scope/identity.
+- `resolved` exposes only version/request/status/`target.pageId`; body-free `unresolved | not_found |
+  stale | mismatch | changed` exposes only version/request/status; others retain Reader.
+- Main stays composition-only; `apps/desktop/src/main/register-reader-ipc.ts` owns typed Notes
+  registration/tests. No path/body/record/locator/hash/candidates/error crosses; no
+  reveal/edit/reconnect, filesystem-open, Agent, or permission authority.
 
 Reader selection uses queries `readerSelection.resolve`, `readerSelection.currentProposal`
 and commands `readerSelection.submitAction`, `readerSelection.submitTransform`,

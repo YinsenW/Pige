@@ -694,7 +694,6 @@
   "note.readerLink.stale": "The note changed while this reference was checked. Try again.",
   "note.readerLinkReady": "Open this linked local note or source.",
   "note.readerLinkUnavailable": "Opening linked notes and sources is temporarily unavailable. Nothing was changed.",
-  "note.sourceReferenceUnavailable": "Source preview is in development.",
   "note.sources": "Sources",
   "noteAgent.hide": "Hide note conversation",
   "noteAgent.modelUnavailable": "Model unavailable",

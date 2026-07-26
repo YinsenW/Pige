@@ -115,6 +115,30 @@ export const NoteResolveInlineReferenceResultSchema = z.discriminatedUnion("stat
     status: z.literal("failed")
   }).strict()
 ]);
+export const NoteSourceReferenceRequestIdSchema = NoteInlineReferenceRequestIdSchema;
+export const NoteOpenSourceReferenceRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteSourceReferenceRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  sourceId: SourceIdSchema
+}).strict();
+export const NoteOpenSourceReferenceResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: NoteSourceReferenceRequestIdSchema,
+    status: z.literal("resolved"),
+    target: z.object({ pageId: PageIdSchema }).strict()
+  }).strict(),
+  ...(["unresolved", "not_found", "stale", "mismatch", "changed"] as const).map((status) =>
+    z.object({
+      apiVersion: z.literal(1),
+      requestId: NoteSourceReferenceRequestIdSchema,
+      status: z.literal(status)
+    }).strict()
+  )
+]);
 export const ReaderSelectionRequestIdSchema = z.string().regex(/^readerselreq_[a-z0-9]{8,64}$/);
 export const ReaderSelectionSegmentIdSchema = z.string().regex(/^readerseg_[a-f0-9]{16}$/);
 export const ReaderSelectionEndpointSchema = z.object({
@@ -3541,6 +3565,9 @@ export type NoteInlineReferenceRequestId = z.infer<typeof NoteInlineReferenceReq
 export type NoteRenderContextId = z.infer<typeof NoteRenderContextIdSchema>;
 export type NoteResolveInlineReferenceRequest = z.infer<typeof NoteResolveInlineReferenceRequestSchema>;
 export type NoteResolveInlineReferenceResult = z.infer<typeof NoteResolveInlineReferenceResultSchema>;
+export type NoteSourceReferenceRequestId = z.infer<typeof NoteSourceReferenceRequestIdSchema>;
+export type NoteOpenSourceReferenceRequest = z.infer<typeof NoteOpenSourceReferenceRequestSchema>;
+export type NoteOpenSourceReferenceResult = z.infer<typeof NoteOpenSourceReferenceResultSchema>;
 export type ReaderSelectionEndpoint = z.infer<typeof ReaderSelectionEndpointSchema>;
 export type ReaderSelectionActionRequestId = z.infer<typeof ReaderSelectionActionRequestIdSchema>;
 export type ReaderSelectionActionRequest = z.infer<typeof ReaderSelectionActionRequestSchema>;

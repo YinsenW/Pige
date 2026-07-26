@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const rendererRoot = path.resolve("apps/desktop/src/renderer/src");
 const appSource = fs.readFileSync(path.join(rendererRoot, "App.tsx"), "utf8");
+const noteReaderSource = fs.readFileSync(path.join(rendererRoot, "components/NoteReader.tsx"), "utf8");
 const cssSource = fs.readFileSync(path.join(rendererRoot, "styles/app.css"), "utf8");
 const iconSource = fs.readFileSync(path.join(rendererRoot, "components/PigeIcon.tsx"), "utf8");
 const windowModeToggleSource = fs.readFileSync(path.join(rendererRoot, "components/WindowModeToggle.tsx"), "utf8");
@@ -162,27 +163,29 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain("onKeyDown={handleComposerKeyDown}");
   });
 
-  it("binds the approved Reader actions without inventing edit, selection, or source services", () => {
+  it("binds approved Reader actions and the typed saved-source owner", () => {
     expect(appSource).toContain("const copyNoteMarkdown = async (pageId: string): Promise<boolean>");
     expect(appSource).toContain("window.pige.notes.get({ pageId })");
     expect(appSource).toContain("navigator.clipboard.writeText(note.markdownBody)");
     expect(appSource).toContain('data-reader-action="edit"');
     expect(appSource).toContain('data-reader-action="copy"');
     expect(appSource).toContain('data-reader-action="more"');
-    expect(appSource).toContain('props.onDevelopment("selection_actions")');
-    expect(appSource).toContain('props.onDevelopment("source_reference")');
-    expect(appSource).toContain('event.key === "ArrowRight"');
-    expect(appSource).toContain('event.key === "ArrowLeft"');
-    expect(appSource).toContain('event.key === "Home"');
-    expect(appSource).toContain('event.key === "End"');
-    expect(appSource).toContain("event.preventDefault()");
-    expect(appSource).toContain("const toolbarRect = toolbar.getBoundingClientRect()");
-    expect(appSource).toContain('window.addEventListener("scroll", dismissOnScroll, true)');
-    expect(appSource).toContain("priorOwner?.isConnected ? priorOwner : readerRef.current");
-    expect(appSource).toContain('!firstBlock || firstBlock.tagName !== "H1"');
-    expect(appSource).toContain('"reader-duplicate-title"');
-    expect(appSource).not.toContain("const toolbarWidth = 244");
-    expect(appSource).not.toContain("const toolbarHeight = 42");
+    expect(noteReaderSource).toContain('props.onDevelopment("selection_actions")');
+    expect(noteReaderSource).toContain("props.onOpenSourceReference");
+    expect(noteReaderSource).toContain('data-reader-source-action="open"');
+    expect(noteReaderSource).not.toContain('props.onDevelopment("source_reference")');
+    expect(noteReaderSource).toContain('event.key === "ArrowRight"');
+    expect(noteReaderSource).toContain('event.key === "ArrowLeft"');
+    expect(noteReaderSource).toContain('event.key === "Home"');
+    expect(noteReaderSource).toContain('event.key === "End"');
+    expect(noteReaderSource).toContain("event.preventDefault()");
+    expect(noteReaderSource).toContain("const toolbarRect = toolbar.getBoundingClientRect()");
+    expect(noteReaderSource).toContain('window.addEventListener("scroll", dismissOnScroll, true)');
+    expect(noteReaderSource).toContain("priorOwner?.isConnected ? priorOwner : readerRef.current");
+    expect(noteReaderSource).toContain('!firstBlock || firstBlock.tagName !== "H1"');
+    expect(noteReaderSource).toContain('"reader-duplicate-title"');
+    expect(noteReaderSource).not.toContain("const toolbarWidth = 244");
+    expect(noteReaderSource).not.toContain("const toolbarHeight = 42");
     expect(appSource).not.toContain("sourceId}</");
     expect(cssSource).toContain("max-width: calc(100vw - 24px);");
     expect(cssSource).toContain("max-height: calc(100vh - 24px);");
@@ -241,7 +244,6 @@ describe("full production UI renderer contract", () => {
       "note.selection.more",
       "note.selection.summarize",
       "note.selectionActions",
-      "note.sourceReferenceUnavailable",
       "note.sources",
       "settings.close",
       "settings.navigation",

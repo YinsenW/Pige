@@ -25,14 +25,6 @@ import type {
   KnowledgeActivityUndoRequest,
   LibraryListRequest,
   LibraryRelatedRequest,
-  NoteGetRequest,
-  NoteResolveInlineReferenceRequest,
-  NoteRenderRequest,
-  ReaderSelectionActionRequest,
-  ReaderSelectionProposalDecisionRequest,
-  ReaderSelectionProposalGetRequest,
-  ReaderSelectionTransformRequest,
-  ReaderSelectionResolveRequest,
   OpenRecentVaultRequest,
   ProviderConnectResult,
   RestoreApplyRequest,
@@ -80,18 +72,6 @@ import {
   AgentStagedSubmitTurnResultSchema,
   UpdateProviderCredentialRequestSchema,
   DeleteProviderRequestSchema,
-  NoteResolveInlineReferenceRequestSchema,
-  NoteResolveInlineReferenceResultSchema,
-  ReaderSelectionActionRequestSchema,
-  ReaderSelectionActionResultSchema,
-  ReaderSelectionProposalDecisionRequestSchema,
-  ReaderSelectionProposalDecisionResultSchema,
-  ReaderSelectionProposalGetRequestSchema,
-  ReaderSelectionProposalGetResultSchema,
-  ReaderSelectionTransformRequestSchema,
-  ReaderSelectionTransformResultSchema,
-  ReaderSelectionResolveRequestSchema,
-  ReaderSelectionResolveResultSchema,
   OpenRecentVaultRequestSchema,
   type Locale,
   UpdateModelRequestSchema,
@@ -117,6 +97,7 @@ import {
   VaultActionResultSchema
 } from "@pige/schemas";
 import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
+import { registerReaderIpc } from "./register-reader-ipc";
 import {
   AgentIngestService,
   type AgentIngestCapabilitySnapshot,
@@ -1748,105 +1729,11 @@ ipcMain.handle("activity.undo", (_event, request: KnowledgeActivityUndoRequest) 
 ipcMain.handle("library.list", (_event, request?: LibraryListRequest) => getLibraryService().list(request));
 ipcMain.handle("library.tree", () => getLibraryService().tree());
 ipcMain.handle("library.related", (_event, request: LibraryRelatedRequest) => getLibraryService().related(request));
-const notesTrackedSenders = new Map<number, string>();
-
-function trackNotesSender(sender: WebContents): string {
-  const existing = notesTrackedSenders.get(sender.id);
-  if (existing) return existing;
-  const ownerId = `notes_owner_${randomUUID()}`;
-  notesTrackedSenders.set(sender.id, ownerId);
-  sender.once("destroyed", () => {
-    notesTrackedSenders.delete(sender.id);
-    getNotesService().releaseOwner(ownerId);
-  });
-  return ownerId;
-}
-
-ipcMain.handle("notes.get", (_event, request: NoteGetRequest) => getNotesService().get(request));
-ipcMain.handle("notes.render", (event, request: NoteRenderRequest) => {
-  const sender = event.sender;
-  const ownerId = trackNotesSender(sender);
-  return getNotesService().render(request, ownerId).then((result) => {
-    if (sender.isDestroyed() || notesTrackedSenders.get(sender.id) !== ownerId) {
-      getNotesService().releaseOwner(ownerId);
-      throw new PigeDomainError("note_render_stale", "The Reader owner changed while the page was rendered.");
-    }
-    return result;
-  });
-});
-ipcMain.handle("notes.resolveInlineReference", (event, request: NoteResolveInlineReferenceRequest) => {
-  const parsed = NoteResolveInlineReferenceRequestSchema.parse(request);
-  const ownerId = notesTrackedSenders.get(event.sender.id);
-  return NoteResolveInlineReferenceResultSchema.parse(
-    ownerId === undefined
-      ? { apiVersion: 1, requestId: parsed.requestId, status: "stale", scope: "render_context" }
-      : getNotesService().resolveInlineReference(ownerId, parsed)
-  );
-});
-ipcMain.handle("readerSelection.resolve", (event, request: ReaderSelectionResolveRequest) => {
-  const parsed = ReaderSelectionResolveRequestSchema.parse(request);
-  const ownerId = notesTrackedSenders.get(event.sender.id);
-  return ReaderSelectionResolveResultSchema.parse(
-    ownerId === undefined
-      ? { apiVersion: 1, requestId: parsed.requestId, status: "stale", scope: "render_context" }
-      : getNotesService().resolveSelection(ownerId, parsed)
-  );
-});
-ipcMain.handle("readerSelection.submitAction", async (event, request: ReaderSelectionActionRequest) => {
-  const parsed = ReaderSelectionActionRequestSchema.parse(request);
-  const draftPublisher = new AgentTurnDraftPublisher({
-    clientTurnId: parsed.clientTurnId,
-    send: (draft) => {
-      if (!event.sender.isDestroyed()) event.sender.send("agent.turnDraft", draft);
-    }
-  });
-  try {
-    return ReaderSelectionActionResultSchema.parse(
-      await getReaderSelectionActionService().submit(parsed, {
-        onDraft: (draft) => draftPublisher.publish(draft)
-      })
-    );
-  } finally {
-    draftPublisher.close();
-  }
-});
-ipcMain.handle("readerSelection.submitTransform", async (event, request: ReaderSelectionTransformRequest) => {
-  const parsed = ReaderSelectionTransformRequestSchema.parse(request);
-  const draftPublisher = new AgentTurnDraftPublisher({
-    clientTurnId: parsed.clientTurnId,
-    send: (draft) => {
-      if (!event.sender.isDestroyed()) event.sender.send("agent.turnDraft", draft);
-    }
-  });
-  try {
-    return ReaderSelectionTransformResultSchema.parse(
-      await getReaderSelectionActionService().submitTransform(parsed, {
-        onDraft: (draft) => draftPublisher.publish(draft)
-      })
-    );
-  } finally {
-    draftPublisher.close();
-  }
-});
-
-ipcMain.handle("readerSelection.currentProposal", (event, request: ReaderSelectionProposalGetRequest) => {
-  const parsed = ReaderSelectionProposalGetRequestSchema.parse(request);
-  if (!notesTrackedSenders.has(event.sender.id)) {
-    throw new PigeDomainError("desktop.ipc_sender_invalid", "Reader proposal access requires the active renderer.");
-  }
-  return ReaderSelectionProposalGetResultSchema.parse(
-    getReaderSelectionProposalService().get(parsed)
-  );
-});
-
-ipcMain.handle("readerSelection.decideProposal", (event, request: ReaderSelectionProposalDecisionRequest) => {
-  const parsed = ReaderSelectionProposalDecisionRequestSchema.parse(request);
-  if (!notesTrackedSenders.has(event.sender.id)) {
-    throw new PigeDomainError("desktop.ipc_sender_invalid", "Reader proposal decisions require the active renderer.");
-  }
-  return ReaderSelectionProposalDecisionResultSchema.parse(
-    getReaderSelectionProposalService().decide(parsed)
-  );
+registerReaderIpc({
+  ipcMain,
+  getNotesService,
+  getReaderSelectionActionService,
+  getReaderSelectionProposalService
 });
 
 function proposalRendererBoundaryUnavailable(): never {

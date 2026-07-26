@@ -10,6 +10,8 @@ import {
   MachineLocalSettingsSchema,
   MarkdownPageStatusSchema,
   MarkdownPageTypeSchema,
+  NoteOpenSourceReferenceRequestSchema,
+  NoteOpenSourceReferenceResultSchema,
   RequirementIdSchema,
   SetThemeRequestSchema,
   SourceRecordSchema,
@@ -22,6 +24,44 @@ import {
 } from "@pige/schemas";
 
 describe("schemas", () => {
+  it("keeps saved-source Reader navigation strict and body-free", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "noteref_abcdefghijklmnop",
+      activeVaultId: "vault_20260709_abcdefgh",
+      currentPageId: "page_20260709_current1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      sourceId: "src_20260709_source1234"
+    } as const;
+
+    expect(NoteOpenSourceReferenceRequestSchema.parse(request)).toEqual(request);
+    expect(() => NoteOpenSourceReferenceRequestSchema.parse({ ...request, path: "/private/note.md" })).toThrow();
+    expect(NoteOpenSourceReferenceResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "resolved",
+      target: { pageId: "page_20260709_source1234" }
+    })).toEqual({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "resolved",
+      target: { pageId: "page_20260709_source1234" }
+    });
+    for (const status of ["unresolved", "not_found", "stale", "mismatch", "changed"] as const) {
+      expect(NoteOpenSourceReferenceResultSchema.parse({
+        apiVersion: 1,
+        requestId: request.requestId,
+        status
+      })).toEqual({ apiVersion: 1, requestId: request.requestId, status });
+    }
+    expect(() => NoteOpenSourceReferenceResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "not_found",
+      sourceRecord: { path: "/private/source.json" }
+    })).toThrow();
+  });
+
   it("accepts only the bounded Reader transform input presentation", () => {
     const event = {
       schemaVersion: 1,

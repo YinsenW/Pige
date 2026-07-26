@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type {
   LibraryListResult,
   NoteRenderResult,
+  NoteOpenSourceReferenceRequest,
+  NoteOpenSourceReferenceResult,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
   ReaderSelectionResolveRequest,
@@ -17,7 +19,8 @@ import type {
   RetrievalSearchRequest,
   RetrievalSearchResult
 } from "@pige/contracts";
-import { filterLibraryPages, LibraryPanel, NoteReader } from "../../apps/desktop/src/renderer/src/App";
+import { filterLibraryPages, LibraryPanel } from "../../apps/desktop/src/renderer/src/App";
+import { NoteReader } from "../../apps/desktop/src/renderer/src/components/NoteReader";
 import type { ReaderInlineReferenceActivation } from "../../apps/desktop/src/renderer/src/components/ReaderInlineReferenceSurface";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 
@@ -338,6 +341,8 @@ describe("full UI Library", () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
     const copied: string[] = [];
+    const opened: string[] = [];
+    const sourceRequests: NoteOpenSourceReferenceRequest[] = [];
     const unavailable: string[] = [];
     let cleared = 0;
     const note = readerNote();
@@ -352,7 +357,7 @@ describe("full UI Library", () => {
         onRefresh: async () => undefined,
         onSearch: async () => searchResult("unused", []),
         searchFocusRequest: 0,
-        onOpenNote: async () => undefined,
+        onOpenNote: async (pageId) => { opened.push(pageId); },
         onCloseNote: () => undefined,
         noteAgentOpen: false,
         onToggleNoteAgent: () => undefined,
@@ -360,6 +365,16 @@ describe("full UI Library", () => {
         developmentNotice: null,
         onClearDevelopment: () => { cleared += 1; },
         onCopyNote: async (pageId) => { copied.push(pageId); return true; },
+        activeVaultId: "vault_20260715_fullui01",
+        onOpenSourceReference: async (request) => {
+          sourceRequests.push(request);
+          return {
+            apiVersion: 1,
+            requestId: request.requestId,
+            status: "resolved",
+            target: { pageId: "page_20260715_source111" }
+          };
+        },
         onDevelopment: (capability) => unavailable.push(capability),
         t
       }));
@@ -392,7 +407,16 @@ describe("full UI Library", () => {
       sourceButtons[0]!.click();
       await settle(dom);
     });
-    expect(unavailable.at(-1)).toBe("source_reference");
+    expect(sourceRequests).toHaveLength(1);
+    expect(sourceRequests[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_20260715_fullui01",
+      currentPageId: note.summary.pageId,
+      renderContextId: note.renderContextId,
+      sourceId: note.summary.sourceIds[0]
+    });
+    expect(opened).toEqual(["page_20260715_source111"]);
+    expect(unavailable).toEqual(["document_actions"]);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -451,6 +475,182 @@ describe("full UI Library", () => {
     expect(container.querySelector(".markdown-body > h1")?.classList.contains("reader-duplicate-title")).toBe(false);
     expect(container.querySelector(".markdown-body > h1")?.textContent).toBe("Implementation details");
 
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps every saved-source closed result body-free in the current Reader", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const opened: string[] = [];
+    const outcomes = [
+      ["unresolved", "This reference could not be opened. Try again."],
+      ["not_found", "The linked local item could not be found."],
+      ["stale", "The note changed while this reference was checked. Try again."],
+      ["mismatch", "This reference could not be opened. Try again."],
+      ["changed", "The note changed while this reference was checked. Try again."]
+    ] as const;
+    let status: NoteOpenSourceReferenceResult["status"] = "unresolved";
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: readerNote(),
+        activeVaultId: "vault_20260715_fullui01",
+        onOpenSourceReference: async (request): Promise<NoteOpenSourceReferenceResult> => status === "resolved"
+          ? { apiVersion: 1, requestId: request.requestId, status, target: { pageId: "page_20260715_source111" } }
+          : { apiVersion: 1, requestId: request.requestId, status },
+        onOpenSourcePage: async (pageId) => { opened.push(pageId); },
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const source = requireElement(container.querySelector<HTMLButtonElement>(".reader-source"));
+    for (const [nextStatus, message] of outcomes) {
+      status = nextStatus;
+      source.focus();
+      await act(async () => {
+        source.click();
+        await settle(dom);
+      });
+      expect(container.textContent).toContain(message);
+      expect(container.textContent).toContain("Reader actions");
+      expect(dom.window.document.activeElement).toBe(source);
+      expect(opened).toEqual([]);
+    }
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("restores saved-source actions when resolved navigation leaves the current Reader", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    let rejectNavigation = false;
+    let resolveCount = 0;
+    let navigationCount = 0;
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: readerNote(),
+        activeVaultId: "vault_20260715_fullui01",
+        onOpenSourceReference: async (request): Promise<NoteOpenSourceReferenceResult> => {
+          resolveCount += 1;
+          return {
+            apiVersion: 1,
+            requestId: request.requestId,
+            status: "resolved",
+            target: { pageId: "page_20260715_source111" }
+          };
+        },
+        onOpenSourcePage: async () => {
+          navigationCount += 1;
+          if (rejectNavigation) throw new Error("synthetic body must remain private");
+        },
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const source = requireElement(container.querySelector<HTMLButtonElement>(".reader-source"));
+
+    await act(async () => {
+      source.click();
+      await settle(dom);
+    });
+    expect(resolveCount).toBe(1);
+    expect(navigationCount).toBe(1);
+    expect(source.disabled).toBe(false);
+    expect(container.textContent).toContain("Open this linked local note or source.");
+    expect(container.textContent).toContain("Reader actions");
+
+    rejectNavigation = true;
+    await act(async () => {
+      source.click();
+      await settle(dom);
+    });
+    expect(resolveCount).toBe(2);
+    expect(navigationCount).toBe(2);
+    expect(source.disabled).toBe(false);
+    expect(container.textContent).toContain("This reference could not be opened. Try again.");
+    expect(container.textContent).not.toContain("synthetic body must remain private");
+
+    rejectNavigation = false;
+    await act(async () => {
+      source.click();
+      await settle(dom);
+    });
+    expect(resolveCount).toBe(3);
+    expect(navigationCount).toBe(3);
+    expect(source.disabled).toBe(false);
+    expect(container.textContent).toContain("Open this linked local note or source.");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("fences an old saved-source result after the render context changes", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    let resolveOld!: (result: NoteOpenSourceReferenceResult) => void;
+    let oldRequestId = "";
+    const opened: string[] = [];
+    const first = readerNote();
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: first,
+        activeVaultId: "vault_20260715_fullui01",
+        onOpenSourceReference: (request) => new Promise((resolve) => {
+          oldRequestId = request.requestId;
+          resolveOld = resolve;
+        }),
+        onOpenSourcePage: async (pageId) => { opened.push(pageId); },
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await act(async () => {
+      requireElement(container.querySelector<HTMLButtonElement>(".reader-source")).click();
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Checking this local reference…");
+
+    const next = { ...first, renderContextId: `notectx_${"d".repeat(32)}` };
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: next,
+        activeVaultId: "vault_20260715_fullui01",
+        onOpenSourceReference: () => Promise.reject(new Error("unused")),
+        onOpenSourcePage: async (pageId) => { opened.push(pageId); },
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    await act(async () => {
+      resolveOld({
+        apiVersion: 1,
+        requestId: oldRequestId,
+        status: "resolved",
+        target: { pageId: "page_20260715_source111" }
+      });
+      await settle(dom);
+    });
+    expect(opened).toEqual([]);
+    expect(container.textContent).toContain("Open this linked local note or source.");
     await act(async () => root.unmount());
     dom.window.close();
   });

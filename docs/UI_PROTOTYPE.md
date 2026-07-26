@@ -608,16 +608,11 @@ Current Phase 4 reader context foundation:
 - Related pages open by stable ID; the renderer gets neither arbitrary paths nor note bodies.
 - The context rail is right-side when wide and below Markdown when narrow.
 - The metadata title is the sole primary H1; hide only an equal normalized leading body H1.
-- Internal wiki/source links stay focusable and activate one typed Main-owned resolver
-  request bound to the active vault, current page, current render context, href, and a new
-  request ID. A resolved page or source opens the existing Reader only through
-  `target.pageId`; the renderer does not infer identity from href text or consume paths,
-  bodies, candidates, `sourceId`, `locator`, or raw errors.
-- `ambiguous`, `not_found`, `stale`, `failed`, missing-context, delayed, or mismatched
-  results leave the current Reader in place and expose one body-free localized status at
-  the fixed top surface for the activated link. Vault, route, page, and render-context changes invalidate pending
-  activation; no inline-reference event or parallel navigation owner exists.
-- Current-note Agent and Reader copy are real; edit/selection/reveal remain unavailable.
+- Internal links keep their typed href resolver; saved-source rows retain appearance and call
+  `notes.openSourceReference` with request/vault/page/render/source IDs, never a fake href.
+- Only `resolved.target.pageId` navigates; others retain Reader with one localized body-free status.
+- Extract `NoteReader` source UI/tests without restyle/redesign; reveal/reconnect/edit,
+  filesystem-open, Agent, permission, event, and parallel navigation remain absent.
 
 ### 8.2 Note Agent Panel
 
