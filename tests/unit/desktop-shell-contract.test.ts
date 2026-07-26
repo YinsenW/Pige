@@ -85,15 +85,28 @@ describe("desktop shell build contract", () => {
   it("keeps Reader inline-reference resolution main-owned, validated, and pathless", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const readerIpcSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-reader-ipc.ts"),
+      "utf8"
+    );
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
 
     expect(contractsSource).toContain("readonly resolveInlineReference:");
-    expect(mainSource).toContain('ipcMain.handle("notes.resolveInlineReference"');
-    expect(mainSource).toContain("NoteResolveInlineReferenceRequestSchema.parse(request)");
-    expect(mainSource).toContain("NoteResolveInlineReferenceResultSchema.parse(");
+    expect(contractsSource).toContain("readonly openSourceReference:");
+    expect(mainSource).toContain("registerReaderIpc({");
+    expect(mainSource).not.toContain('ipcMain.handle("notes.resolveInlineReference"');
+    expect(readerIpcSource).toContain('ipcMain.handle("notes.resolveInlineReference"');
+    expect(readerIpcSource).toContain("NoteResolveInlineReferenceRequestSchema.parse(request)");
+    expect(readerIpcSource).toContain("NoteResolveInlineReferenceResultSchema.parse(");
+    expect(readerIpcSource).toContain('ipcMain.handle("notes.openSourceReference"');
+    expect(readerIpcSource).toContain("NoteOpenSourceReferenceRequestSchema.parse(request)");
+    expect(readerIpcSource).toContain("NoteOpenSourceReferenceResultSchema.parse(");
     expect(preloadSource).toContain('ipcRenderer.invoke(\n          "notes.resolveInlineReference"');
     expect(preloadSource).toContain("NoteResolveInlineReferenceRequestSchema.parse(request)");
     expect(preloadSource).toContain("NoteResolveInlineReferenceResultSchema.parse(");
+    expect(preloadSource).toContain('ipcRenderer.invoke(\n          "notes.openSourceReference"');
+    expect(preloadSource).toContain("NoteOpenSourceReferenceRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteOpenSourceReferenceResultSchema.parse(");
     expect(contractsSource).not.toContain("InlineReferencePath");
     expect(contractsSource).not.toContain("candidatePageIds");
   });
@@ -101,6 +114,10 @@ describe("desktop shell build contract", () => {
   it("keeps Reader selection identity resolution main-owned and schema-validated", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const readerIpcSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-reader-ipc.ts"),
+      "utf8"
+    );
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
 
     expect(contractsSource).toContain("readonly readerSelection: {");
@@ -109,17 +126,19 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly submitTransform: (");
     expect(contractsSource).toContain("readonly currentProposal: (");
     expect(contractsSource).toContain("readonly decideProposal: (");
-    expect(mainSource).toContain('ipcMain.handle("readerSelection.resolve"');
-    expect(mainSource).toContain("ReaderSelectionResolveRequestSchema.parse(request)");
-    expect(mainSource).toContain("ReaderSelectionResolveResultSchema.parse(");
-    expect(mainSource).toContain('ipcMain.handle("readerSelection.submitAction"');
-    expect(mainSource).toContain("ReaderSelectionActionRequestSchema.parse(request)");
-    expect(mainSource).toContain("ReaderSelectionActionResultSchema.parse(");
-    expect(mainSource).toContain('ipcMain.handle("readerSelection.submitTransform"');
-    expect(mainSource).toContain("ReaderSelectionTransformRequestSchema.parse(request)");
-    expect(mainSource).toContain("ReaderSelectionTransformResultSchema.parse(");
-    expect(mainSource).toContain('ipcMain.handle("readerSelection.currentProposal"');
-    expect(mainSource).toContain('ipcMain.handle("readerSelection.decideProposal"');
+    expect(mainSource).toContain("registerReaderIpc({");
+    expect(mainSource).not.toContain('ipcMain.handle("readerSelection.resolve"');
+    expect(readerIpcSource).toContain('ipcMain.handle("readerSelection.resolve"');
+    expect(readerIpcSource).toContain("ReaderSelectionResolveRequestSchema.parse(request)");
+    expect(readerIpcSource).toContain("ReaderSelectionResolveResultSchema.parse(");
+    expect(readerIpcSource).toContain('ipcMain.handle("readerSelection.submitAction"');
+    expect(readerIpcSource).toContain("ReaderSelectionActionRequestSchema.parse(request)");
+    expect(readerIpcSource).toContain("ReaderSelectionActionResultSchema.parse(");
+    expect(readerIpcSource).toContain('ipcMain.handle("readerSelection.submitTransform"');
+    expect(readerIpcSource).toContain("ReaderSelectionTransformRequestSchema.parse(request)");
+    expect(readerIpcSource).toContain("ReaderSelectionTransformResultSchema.parse(");
+    expect(readerIpcSource).toContain('ipcMain.handle("readerSelection.currentProposal"');
+    expect(readerIpcSource).toContain('ipcMain.handle("readerSelection.decideProposal"');
     expect(preloadSource).toContain('"readerSelection.resolve"');
     expect(preloadSource).toContain("ReaderSelectionResolveRequestSchema.parse(request)");
     expect(preloadSource).toContain("ReaderSelectionResolveResultSchema.parse(");

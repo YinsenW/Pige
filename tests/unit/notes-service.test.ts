@@ -594,6 +594,138 @@ status: "active"
     });
   });
 
+  it("opens a saved-source row only through the rendered page and durable source owners", async () => {
+    const { vaultPath, vault } = makeVault();
+    const sourceId = "src_20260709_saved1234";
+    writePage({
+      vaultPath,
+      fileName: "current.md",
+      pageId: "page_20260709_current1234",
+      title: "Current",
+      sourceIds: [sourceId]
+    });
+    writePage({
+      vaultPath,
+      fileName: "source.md",
+      pageId: "page_20260709_saved1234",
+      title: "Source",
+      pageType: "source",
+      sourceIds: [sourceId]
+    });
+    writeSourceRecord({
+      vaultPath,
+      sourceId,
+      pageId: "page_20260709_saved1234",
+      pagePath: "sources/source.md"
+    });
+    const notes = makeIndexedNotes(vaultPath, vault);
+    const rendered = await notes.render({ pageId: "page_20260709_current1234" }, OWNER_ID);
+
+    expect(notes.openSourceReference(OWNER_ID, {
+      apiVersion: 1,
+      requestId: REQUEST_ID,
+      activeVaultId: vault.vaultId,
+      currentPageId: "page_20260709_current1234",
+      renderContextId: rendered.renderContextId!,
+      sourceId
+    })).toEqual({
+      apiVersion: 1,
+      requestId: REQUEST_ID,
+      status: "resolved",
+      target: { pageId: "page_20260709_saved1234" }
+    });
+  });
+
+  it("fails saved-source rows closed across page ownership and currentness fences", async () => {
+    const { vaultPath, vault } = makeVault();
+    const sourceId = "src_20260709_fenced123";
+    writePage({
+      vaultPath,
+      fileName: "current.md",
+      pageId: "page_20260709_current1234",
+      title: "Current",
+      sourceIds: [sourceId]
+    });
+    writePage({
+      vaultPath,
+      fileName: "source.md",
+      pageId: "page_20260709_fenced123",
+      title: "Source",
+      pageType: "source",
+      sourceIds: [sourceId]
+    });
+    writeSourceRecord({
+      vaultPath,
+      sourceId,
+      pageId: "page_20260709_fenced123",
+      pagePath: "sources/source.md"
+    });
+    const notes = makeIndexedNotes(vaultPath, vault);
+    const rendered = await notes.render({ pageId: "page_20260709_current1234" }, OWNER_ID);
+    const request = {
+      apiVersion: 1 as const,
+      requestId: REQUEST_ID,
+      activeVaultId: vault.vaultId,
+      currentPageId: "page_20260709_current1234",
+      renderContextId: rendered.renderContextId!,
+      sourceId
+    };
+
+    expect(notes.openSourceReference(OWNER_ID, {
+      ...request,
+      sourceId: "src_20260709_other1234"
+    })).toEqual({
+      apiVersion: 1,
+      requestId: REQUEST_ID,
+      status: "mismatch"
+    });
+    expect(notes.openSourceReference(`${OWNER_ID}_other`, request)).toEqual({
+      apiVersion: 1,
+      requestId: REQUEST_ID,
+      status: "stale"
+    });
+
+    writePage({
+      vaultPath,
+      fileName: "current.md",
+      pageId: "page_20260709_current1234",
+      title: "Changed",
+      sourceIds: [sourceId]
+    });
+    expect(notes.openSourceReference(OWNER_ID, request)).toEqual({
+      apiVersion: 1,
+      requestId: REQUEST_ID,
+      status: "changed"
+    });
+  });
+
+  it("does not resolve saved-source rows without the bounded reference index", async () => {
+    const { vaultPath, vault } = makeVault();
+    const sourceId = "src_20260709_noindex12";
+    writePage({
+      vaultPath,
+      fileName: "current.md",
+      pageId: "page_20260709_current1234",
+      title: "Current",
+      sourceIds: [sourceId]
+    });
+    const notes = makeNotes(vaultPath, vault);
+    const rendered = await notes.render({ pageId: "page_20260709_current1234" }, OWNER_ID);
+
+    expect(notes.openSourceReference(OWNER_ID, {
+      apiVersion: 1,
+      requestId: REQUEST_ID,
+      activeVaultId: vault.vaultId,
+      currentPageId: "page_20260709_current1234",
+      renderContextId: rendered.renderContextId!,
+      sourceId
+    })).toEqual({
+      apiVersion: 1,
+      requestId: REQUEST_ID,
+      status: "unresolved"
+    });
+  });
+
   it("resolves a source reference without inventing a locator", async () => {
     const { vaultPath, vault } = makeVault();
     const sourceId = "src_20260709_plain1234";

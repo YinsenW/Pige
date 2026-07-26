@@ -35,6 +35,8 @@ import type {
   MarkdownPageType,
   ModelListStrategy,
   NoteRenderContextId,
+  NoteOpenSourceReferenceRequest,
+  NoteOpenSourceReferenceResult,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
   PigeErrorSummary,
@@ -137,6 +139,9 @@ export type {
   NoteInlineReferenceTarget,
   NoteInlineReferenceRequestId,
   NoteRenderContextId,
+  NoteOpenSourceReferenceRequest,
+  NoteOpenSourceReferenceResult,
+  NoteSourceReferenceRequestId,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
   ReaderSelectionEndpoint,
@@ -1347,6 +1352,9 @@ export interface PigeDesktopApi {
     readonly resolveInlineReference: (
       request: NoteResolveInlineReferenceRequest
     ) => Promise<NoteResolveInlineReferenceResult>;
+    readonly openSourceReference: (
+      request: NoteOpenSourceReferenceRequest
+    ) => Promise<NoteOpenSourceReferenceResult>;
   };
   readonly retrieval: {
     readonly search: (request: RetrievalSearchRequest) => Promise<RetrievalSearchResult>;
