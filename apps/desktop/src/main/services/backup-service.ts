@@ -36,6 +36,7 @@ import {
   type SourceRecord,
   type VaultManifest
 } from "@pige/schemas";
+import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
 import {
   PIGE_DURABLE_ROOTS,
   PIGE_REBUILDABLE_ROOTS,
@@ -4166,10 +4167,6 @@ function isSameOrInside(candidateInput: string, parentInput: string): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function isErrno(value: unknown, code: string): value is NodeJS.ErrnoException {
-  return value instanceof Error && "code" in value && value.code === code;
 }
 
 function isAtomicLinkUnsupported(value: unknown): boolean {
