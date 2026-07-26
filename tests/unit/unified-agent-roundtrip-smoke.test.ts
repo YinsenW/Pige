@@ -198,4 +198,24 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain("assert.deepEqual(dropRestart.durableSnapshot, drop.durableSnapshot)");
     expect(source).toContain("assert.equal(requests.length, requestCountBeforeDropRestart)");
   });
+
+  it("pastes one URL through the real composer, cites its stable page, and restarts without refetch", () => {
+    const url = source.indexOf('await runChild("url"');
+    const restart = source.indexOf('await runChild("url_restart"', url);
+    expect(url).toBeGreaterThan(-1);
+    expect(restart).toBeGreaterThan(url);
+    expect(source).toContain("installSyntheticUrlTransport()");
+    expect(source).toContain('hostname !== "example.com"');
+    expect(source).toContain('"93.184.216.34"');
+    expect(source).toContain("clipboard.writeText(URL_PROMPT)");
+    expect(source).toContain("browserWindow.webContents.paste()");
+    expect(source).toContain("document.querySelectorAll('.attachment-chip').length !== 0");
+    expect(source).toContain("[citation_17]");
+    expect(source).toContain("item.refId === 'citation_17'");
+    expect(source).toContain(".conversation-citations .citation-row:not(:disabled)");
+    expect(source).toContain("assert.equal(url.urlTransportCalls, 1)");
+    expect(source).toContain("dropRestart.durableSnapshot.sourceIds.length + 1");
+    expect(source).toContain("assert.deepEqual(urlRestart.durableSnapshot, url.durableSnapshot)");
+    expect(source).toContain("assert.equal(requests.length, requestCountBeforeUrlRestart)");
+  });
 });
