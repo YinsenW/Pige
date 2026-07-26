@@ -193,6 +193,49 @@ describe("Conversation scroll rail", () => {
     await act(async () => root.unmount());
     dom.window.close();
   });
+
+  it("does not remeasure the turn rail for every nested streaming text frame", async () => {
+    const dom = createDom();
+    const { timeline, messages } = createTimeline(dom, ["Prompt", "Streaming answer"]);
+    messages[0]?.classList.add("role-user");
+    messages[1]?.classList.add("role-assistant");
+    const timelineRect = vi.fn(() => ({
+      x: 10,
+      y: 20,
+      top: 20,
+      right: 410,
+      bottom: 120,
+      left: 10,
+      width: 400,
+      height: 100,
+      toJSON: () => ({})
+    }));
+    timeline.getBoundingClientRect = timelineRect;
+    const root = createRoot(dom.window.document.getElementById("root")!);
+
+    await act(async () => {
+      root.render(createElement(ConversationScrollRail, {
+        timelineRef: { current: timeline } as RefObject<HTMLElement>,
+        t: translate
+      }));
+    });
+    const initialMeasurements = timelineRect.mock.calls.length;
+
+    messages[1]!.textContent = "Streaming answer next frame";
+    await act(async () => Promise.resolve());
+    expect(timelineRect).toHaveBeenCalledTimes(initialMeasurements);
+
+    const nextTurn = dom.window.document.createElement("article");
+    nextTurn.className = "conversation-message role-user";
+    nextTurn.dataset.messageId = "message-next";
+    nextTurn.textContent = "Next prompt";
+    timeline.querySelector(".conversation-timeline-content")?.append(nextTurn);
+    await act(async () => Promise.resolve());
+    expect(timelineRect.mock.calls.length).toBeGreaterThan(initialMeasurements);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
 });
 
 function createTimeline(dom: JSDOM, texts: readonly string[]): {

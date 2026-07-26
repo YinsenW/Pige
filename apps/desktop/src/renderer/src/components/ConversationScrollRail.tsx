@@ -92,13 +92,15 @@ export function ConversationScrollRail({ timelineRef, t }: ConversationScrollRai
     measure();
     timeline.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("resize", scheduleMeasure);
+    const content = timeline.querySelector<HTMLElement>(".conversation-timeline-content");
     const mutationObserver = new window.MutationObserver(scheduleMeasure);
-    mutationObserver.observe(timeline, { childList: true, subtree: true, characterData: true });
+    mutationObserver.observe(content ?? timeline, content
+      ? { childList: true }
+      : { childList: true, subtree: true });
     const resizeObserver = typeof window.ResizeObserver === "function"
       ? new window.ResizeObserver(scheduleMeasure)
       : null;
     resizeObserver?.observe(timeline);
-    const content = timeline.querySelector<HTMLElement>(".conversation-timeline-content");
     if (content) resizeObserver?.observe(content);
 
     return () => {
