@@ -18,6 +18,7 @@ import {
 } from "./artifact-file-commit";
 import { SourcePageService } from "./source-page-service";
 import { tryVerifyReadableSourceFileAsync, verifyReadableSourceFileAsync } from "./source-file-access";
+import { createVaultRelativePathResolver } from "./vault-layout";
 
 export interface OcrSourceResult {
   readonly sourceId: string;
@@ -406,11 +407,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function resolveVaultRelativePath(vaultPath: string, relativePath: string): string {
-  const resolvedVault = path.resolve(vaultPath);
-  const resolvedPath = path.resolve(vaultPath, ...relativePath.split("/"));
-  if (resolvedPath !== resolvedVault && !resolvedPath.startsWith(`${resolvedVault}${path.sep}`)) {
-    throw new PigeDomainError("ocr.path_outside_vault", "The OCR path escapes the active vault.");
-  }
-  return resolvedPath;
-}
+const resolveVaultRelativePath = createVaultRelativePathResolver(
+  () => new PigeDomainError("ocr.path_outside_vault", "The OCR path escapes the active vault.")
+);

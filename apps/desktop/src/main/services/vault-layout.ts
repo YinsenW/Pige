@@ -61,6 +61,19 @@ export interface VaultStorageRevealBinding {
   release(): void;
 }
 
+export function createVaultRelativePathResolver(
+  outsideVaultError: () => Error
+): (vaultPath: string, relativePath: string) => string {
+  return (vaultPath, relativePath) => {
+    const resolvedVault = path.resolve(vaultPath);
+    const resolvedPath = path.resolve(vaultPath, ...relativePath.split("/"));
+    if (resolvedPath !== resolvedVault && !resolvedPath.startsWith(`${resolvedVault}${path.sep}`)) {
+      throw outsideVaultError();
+    }
+    return resolvedPath;
+  };
+}
+
 export function normalizeVaultName(input: string): string {
   const cleaned = input
     .trim()
