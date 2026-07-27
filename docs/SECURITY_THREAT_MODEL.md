@@ -234,6 +234,9 @@ Mitigations:
 
 - Staging executes nothing. External code uses reviewed adapters/scoped handles, brokered
   writes, and one-action authorization; it inherits no first-party authority or raw secret.
+- The first URL slice admits clean HTTPS into one bounded private
+  expiring stage; redirect/content/digest/registry-CAS drift fails closed. Renderer receives
+  safe metadata/digests/warnings, never staged bytes or paths.
 - Public npm install binds SHA-512/same-origin redirects, rejects hooks, dependencies,
   links and executable/native input, and atomically publishes `installed_disabled` only.
 

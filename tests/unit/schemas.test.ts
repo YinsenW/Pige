@@ -17,6 +17,12 @@ import {
   NoteOpenSourceReferenceResultSchema,
   RequirementIdSchema,
   SetThemeRequestSchema,
+  SkillDiscardStagedRequestSchema,
+  SkillDiscardStagedResultSchema,
+  SkillInstallStagedRequestSchema,
+  SkillInstallStagedResultSchema,
+  SkillStageFromUrlRequestSchema,
+  SkillStageFromUrlResultSchema,
   SourceRecordSchema,
   TaskExecutionPlanSchema,
   TaskExecutionPlanSummarySchema,
@@ -659,5 +665,63 @@ describe("schemas", () => {
 
     expect(proposal.state).toBe("ready");
     expect(proposal.futureRemoteAgentField).toBe("preserved");
+  });
+
+  it("keeps URL Skill staging explicit, immutable, and renderer-safe", () => {
+    const requestId = "skillreq_abcdefghijklmnop";
+    const stagingId = `skillstage_${"a".repeat(32)}`;
+    const manifestSha256 = `sha256:${"b".repeat(64)}`;
+    const sourceUrl = "https://example.com/skills/paper-reading/SKILL.md";
+    const stageRequest = { apiVersion: 1, requestId, sourceUrl } as const;
+    expect(SkillStageFromUrlRequestSchema.parse(stageRequest)).toEqual(stageRequest);
+    for (const unsafeUrl of [
+      "http://example.com/SKILL.md",
+      "https://user:secret@example.com/SKILL.md",
+      "https://example.com/SKILL.md?token=secret",
+      "https://example.com/SKILL.md#private"
+    ]) {
+      expect(() => SkillStageFromUrlRequestSchema.parse({ ...stageRequest, sourceUrl: unsafeUrl })).toThrow();
+    }
+
+    const staged = {
+      stagingId,
+      manifestSha256,
+      registryRevision: 4,
+      expiresAt: "2026-07-27T12:00:00.000Z",
+      sourceUrl,
+      id: "paper-reading",
+      name: "Paper Reading",
+      version: "1.0.0",
+      description: "Review papers with source-aware prompts.",
+      scope: "machine_local",
+      kind: "pure",
+      capabilities: ["read_current_source"],
+      dataBoundaries: ["local"],
+      files: [{ relativePath: "SKILL.md", utf8ByteSize: 1024, sha256: manifestSha256 }],
+      warnings: ["untrusted_remote_source"]
+    } as const;
+    const stageResult = { status: "ready", requestId, staged } as const;
+    expect(SkillStageFromUrlResultSchema.parse(stageResult)).toEqual(stageResult);
+    for (const unsafe of [{ body: "private" }, { path: "/tmp/staged" }, { sourceBytes: "private" }]) {
+      expect(() => SkillStageFromUrlResultSchema.parse({ ...stageResult, ...unsafe })).toThrow();
+    }
+
+    const installRequest = {
+      apiVersion: 1,
+      requestId,
+      stagingId,
+      manifestSha256,
+      expectedRegistryRevision: 4,
+      enabled: true
+    } as const;
+    expect(SkillInstallStagedRequestSchema.parse(installRequest)).toEqual(installRequest);
+    const registry = { apiVersion: 1, revision: 5, invalidManifestCount: 0, skills: [] } as const;
+    expect(SkillInstallStagedResultSchema.parse({ status: "committed", requestId, registry }))
+      .toEqual({ status: "committed", requestId, registry });
+
+    const discardRequest = { apiVersion: 1, requestId, stagingId, manifestSha256 } as const;
+    expect(SkillDiscardStagedRequestSchema.parse(discardRequest)).toEqual(discardRequest);
+    expect(SkillDiscardStagedResultSchema.parse({ status: "discarded", requestId }))
+      .toEqual({ status: "discarded", requestId });
   });
 });

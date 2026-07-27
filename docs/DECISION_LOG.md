@@ -3384,6 +3384,30 @@ References:
 - `docs/DATA_ARCHITECTURE.md`
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 
+### D-20260727-Pure-Skill-URL-Install
+
+Status: Accepted
+Date: 2026-07-27
+
+Decision:
+
+Ship explicit Settings review and exact stage/digest/registry-CAS install or discard for one
+bounded HTTPS machine-local pure `SKILL.md`.
+
+Rationale:
+
+Deliver links without admitting ZIP, executable, runtime or chat scope.
+
+Consequences:
+
+- Staging executes nothing, exposes no body/path and fails drift closed; broader lifecycle and
+  PIGE-SKILL-001 status remain open.
+
+References:
+
+- `docs/SKILL_EXTENSION_DESIGN.md`
+- `docs/API_AND_IPC_DESIGN.md`; `docs/SECURITY_THREAT_MODEL.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

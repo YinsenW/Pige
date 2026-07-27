@@ -349,10 +349,12 @@ for (const field of diagnosticDeltaFields) {
 const apiDocument = read("docs/API_AND_IPC_DESIGN.md");
 const readerIpcRegistrarPath = "apps/desktop/src/main/register-reader-ipc.ts";
 const backupIpcRegistrarPath = "apps/desktop/src/main/register-backup-restore-ipc.ts";
+const skillsIpcRegistrarPath = "apps/desktop/src/main/register-skills-ipc.ts";
 const ipcChannelOwnerPaths = [
   "apps/desktop/src/main/index.ts",
   readerIpcRegistrarPath,
-  backupIpcRegistrarPath
+  backupIpcRegistrarPath,
+  skillsIpcRegistrarPath
 ];
 const ipcChannelSources = ipcChannelOwnerPaths
   .filter((relativePath) => fs.existsSync(path.join(root, relativePath)))
@@ -365,12 +367,23 @@ const backupIpcRegistrarExists = fs.existsSync(path.join(root, backupIpcRegistra
 const backupIpcRegistrarSource = backupIpcRegistrarExists
   ? read(backupIpcRegistrarPath)
   : "";
+const skillsIpcRegistrarExists = fs.existsSync(path.join(root, skillsIpcRegistrarPath));
+const skillsIpcRegistrarSource = skillsIpcRegistrarExists
+  ? read(skillsIpcRegistrarPath)
+  : "";
 const requiredBackupIpcChannels = [
   "backup.status",
   "backup.create",
   "backup.reconnectDependency",
   "restore.preview",
   "restore.apply"
+];
+const requiredSkillsIpcChannels = [
+  "skills.summary",
+  "skills.stageFromUrl",
+  "skills.installStaged",
+  "skills.discardStaged",
+  "skills.disable"
 ];
 const resetLegacyChannels = new Set([
   "modelEgress.pending", "modelEgress.resolve", "permissions.pending", "permissions.resolve"
@@ -403,6 +416,14 @@ if (backupIpcRegistrarExists) {
   for (const channel of requiredBackupIpcChannels) {
     if (!implementedBackupChannels.has(channel)) {
       failures.push(`${backupIpcRegistrarPath} is missing required IPC channel ${channel}.`);
+    }
+  }
+}
+if (skillsIpcRegistrarExists) {
+  const implementedSkillsChannels = new Set(ipcHandleChannels(skillsIpcRegistrarSource));
+  for (const channel of requiredSkillsIpcChannels) {
+    if (!implementedSkillsChannels.has(channel)) {
+      failures.push(`${skillsIpcRegistrarPath} is missing required IPC channel ${channel}.`);
     }
   }
 }
@@ -485,6 +506,15 @@ const ownerOnlyNegativeFixtures = [
       'ipcMain.handle("backup.create", () => undefined);',
       'ipcMain.handle("restore.preview", () => undefined);',
       'ipcMain.handle("restore.apply", () => undefined);'
+    ].join("\n")).includes(channel))
+  },
+  {
+    label: "missing Skill lifecycle registrar channel",
+    rejected: requiredSkillsIpcChannels.some((channel) => !ipcHandleChannels([
+      'ipcMain.handle("skills.summary", () => undefined);',
+      'ipcMain.handle("skills.stageFromUrl", () => undefined);',
+      'ipcMain.handle("skills.installStaged", () => undefined);',
+      'ipcMain.handle("skills.disable", () => undefined);'
     ].join("\n")).includes(channel))
   },
   {

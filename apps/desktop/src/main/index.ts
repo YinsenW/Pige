@@ -36,7 +36,6 @@ import type {
   SetThemeRequest,
   SetSidebarOpenRequest,
   SetWindowModeRequest,
-  SkillDisableRequest,
   MemoryDisableRequest,
   MemoryListRequest,
   SpeechAvailabilityRequest,
@@ -84,13 +83,10 @@ import {
   UpdateCheckResultSchema,
   UpdateStatusEventSchema,
   UpdateSummarySchema,
-  SkillDisableRequestSchema,
-  SkillRegistryMutationResultSchema,
   MemoryDisableRequestSchema,
   MemoryListRequestSchema,
   MemoryMutationResultSchema,
   MemorySummarySchema,
-  SkillRegistryQueryResultSchema,
   SetLocaleRequestSchema,
   SetThemeRequestSchema,
   WindowLayoutRequestSchema,
@@ -102,6 +98,7 @@ import { registerReaderIpc } from "./register-reader-ipc";
 import { registerBackupRestoreIpc } from "./register-backup-restore-ipc";
 import { registerTaskExecutionIpc } from "./register-task-execution-ipc";
 import { registerManagedCollectionIpc } from "./register-managed-collection-ipc";
+import { registerSkillsIpc } from "./register-skills-ipc";
 import {
   AgentIngestService,
   type AgentIngestCapabilitySnapshot,
@@ -214,6 +211,7 @@ import {
 } from "./services/task-execution-recipe-service";
 import { NoNetworkUpdateCheckAdapter, UpdateService } from "./services/update-service";
 import { SkillRegistryService } from "./services/skill-registry-service";
+import { SkillUrlInstallService } from "./services/skill-url-install-service";
 import { AgentMemoryService } from "./services/agent-memory-service";
 import { VaultService } from "./services/vault-service";
 import { WindowModeService } from "./services/window-mode-service";
@@ -261,6 +259,7 @@ let ocrService: OcrService | undefined;
 let speechService: SpeechService | undefined;
 let updateService: UpdateService | undefined;
 let skillRegistryService: SkillRegistryService | undefined;
+let skillUrlInstallService: SkillUrlInstallService | undefined;
 let agentMemoryService: AgentMemoryService | undefined;
 let taskProcessSessionService: TaskProcessSessionService | undefined;
 let taskExecutionPlanService: TaskExecutionPlanService | undefined;
@@ -517,6 +516,14 @@ const getSkillRegistryService = (): SkillRegistryService => {
     });
   }
   return skillRegistryService;
+};
+
+const getSkillUrlInstallService = (): SkillUrlInstallService => {
+  skillUrlInstallService ??= new SkillUrlInstallService({
+    appDataRoot: app.getPath("userData"),
+    registry: getSkillRegistryService()
+  });
+  return skillUrlInstallService;
 };
 
 const getAgentMemoryService = (): AgentMemoryService => {
@@ -1824,18 +1831,19 @@ registerManagedCollectionIpc({
   openCollection: (request) => getManagedCollectionService().open(request),
   editCollectionCell: (request) => getManagedCollectionService().editCell(request)
 });
-ipcMain.handle("skills.summary", () =>
-  SkillRegistryQueryResultSchema.parse(getSkillRegistryService().summary())
-);
-ipcMain.handle("skills.disable", (_event, request: SkillDisableRequest) => {
-  const parsed = SkillDisableRequestSchema.parse(request);
-  const result = SkillRegistryMutationResultSchema.parse(getSkillRegistryService().disable(parsed));
-  if (result.status === "committed") {
+registerSkillsIpc({
+  ipcMain,
+  summary: () => getSkillRegistryService().summary(),
+  stageFromUrl: (request) => getSkillUrlInstallService().stageFromUrl(request),
+  installStaged: (request) => getSkillUrlInstallService().installStaged(request),
+  discardStaged: (request) => getSkillUrlInstallService().discardStaged(request),
+  disable: (request) => getSkillRegistryService().disable(request),
+  publishRegistryChanged: (result) => {
+    if (!("registry" in result)) return;
     for (const window of mainWindows) {
       if (!window.isDestroyed()) window.webContents.send("skills.changed", result.registry);
     }
   }
-  return result;
 });
 ipcMain.handle("memory.list", (_event, request: MemoryListRequest) => {
   const parsed = MemoryListRequestSchema.parse(request);

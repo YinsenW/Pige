@@ -39,14 +39,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review of the first PIGE-DATA-003 Managed Collection interface: one imported Dataset opens under the same identity; one non-formula scalar edit and Activity Undo create immutable CAS-fenced revisions/Operations; originals, SourceRecord import evidence and historical previews remain unchanged; statuses remain unchanged.",
+    "scope": "Independent Product Planning review of the first PIGE-SKILL-001 URL-install slice: Settings stages one bounded pure machine-local Skill from an explicit safe HTTPS URL, projects only reviewed metadata, and installs or discards the exact private stage under digest and registry CAS; statuses remain unchanged.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 30,
-    "reviewedSha256": "637c478d0481cc7f2f8c2d7a4aa9ff8d3849ae814647e4664c9ddf2786f5d253"
+    "reviewedSha256": "6a81e009164fec113bd054e50de93a0380d034ae64a3b3110c9c848272517bb6"
   },
   "reviewers": [{
-    "reviewerId": "managed-collection-interface-review",
-    "task": "Managed Collection cell revision interface",
+    "reviewerId": "pure-skill-url-install-review",
+    "task": "Pure Skill URL stage and install contract",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -54,33 +54,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Product Planning reviewed Dataset durability, IPC, Activity/Undo, UI and phase owners against the existing import/query implementation; Development and UI own the separate service, preload, renderer and focused-test implementation."
+    "independence": "Product Planning reviewed Skill lifecycle, IPC, security, Decision and trace owners against the combined service/registrar/Settings implementation; Development and UI own those product and focused-test bytes."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"managed-collection-interface-review","blockerCount":0,"summary":"One Dataset identity and manifest select immutable revision payloads; source evidence, prior revisions and historical previews remain intact."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"managed-collection-interface-review","blockerCount":0,"summary":"Data, API, Job and UI agree on exact revision CAS, scalar edit bounds, manifest-switch-last and forward-only Undo."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"managed-collection-interface-review","blockerCount":0,"summary":"B7.10 records only the bounded foundation while E7.06 and PIGE-DATA-003 remain open without status promotion."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"managed-collection-interface-review","blockerCount":0,"summary":"Canonical schemas name the two channels, safe projections, result states, revision changes and Activity target needed for parallel Development/UI work."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"managed-collection-interface-review","blockerCount":0,"summary":"Existing Dataset, API, recovery, UI, phase and decision owners bind one vertical slice without a new document or broader Collection framework."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"pure-skill-url-install-review","blockerCount":0,"summary":"One explicit URL creates a private expiring stage; exact install or discard consumes that identity without exposing stage bytes or paths."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"pure-skill-url-install-review","blockerCount":0,"summary":"Skill, API, security and Decision owners agree on pure-content bounds, safe projection, digest binding, registry CAS and body-free failure."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"pure-skill-url-install-review","blockerCount":0,"summary":"PIGE-SKILL-001 and E8.01 record the usable URL slice while broader lifecycle acceptance remains planned without status promotion."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"pure-skill-url-install-review","blockerCount":0,"summary":"Canonical schemas, five registrar channels and safe Settings states give Development and UI one bounded lifecycle surface."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"pure-skill-url-install-review","blockerCount":0,"summary":"Existing Skill, API, security, Decision and trace owners bind the slice without a new document or generic package-install framework."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Collection open/edit schemas, revision-fenced Activity/Undo vocabulary and body/path/SQL-free ownership remain canonical."},
-    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Dataset, API, recovery, UI, phase and accepted-decision owners pass without a new document."},
-    {"command":"npm run typecheck","status":"passed","evidence":"Canonical schemas/contracts compile while preload and implementation remain a separate parallel slice."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Skill lifecycle schemas, exact registrar channels and body/path-free ownership remain canonical."},
+    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Skill, API, security and accepted-decision owners pass without a new document."},
+    {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Planned Skill acceptance stays synchronized and the protected registrar/service inventory covers the final combined source."}
   ],
   "coordination": {
-    "taskId": "managed-collection-cell-revision-20260727",
-    "taskTitle": "Managed Collection cell revision interface",
+    "taskId": "pure-skill-url-install-20260727",
+    "taskTitle": "Pure Skill URL stage and install contract",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Legacy initial payloads remain readable; new mutations use unique revision payloads and leave SourceRecord initial-import evidence, originals and historical previews unchanged.",
-    "acknowledgement": "Planning binds open, one scalar-cell edit and forward-only Activity Undo only; formulas, views, relations, CRUD and remaining PIGE-DATA-003 acceptance stay planned."
+    "compatibility": "Existing installed Skill registry records remain readable; the URL flow adds an exact staged install path without changing direct built-in or prior registry entries.",
+    "acknowledgement": "Planning binds explicit pure URL stage, review, install and discard only; local-file, ZIP, chat, vault, external-web, update, uninstall, export and runtime permission acceptance stay planned."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Development must prove manifest-last recovery, exact request adoption, stale CAS and Operation repair with focused synthetic Dataset fixtures.",
-    "UI must prove keyboard editing, stale reload, read-only formula/unsupported cells and Activity Undo without changing historical previews.",
-    "Fields, rows, formulas, views, relations, bulk edits, redo and external-source writes remain outside this slice."
+    "Development must retain exact stage expiry, digest/currentness adoption, redirect policy and registry CAS with synthetic network fixtures.",
+    "UI must keep URL input and reviewed metadata body/path-free and must not imply install before exact commit.",
+    "Local-file, ZIP, chat, vault, external-web, update, uninstall, export and runtime permission flows remain outside this slice."
   ]
 }

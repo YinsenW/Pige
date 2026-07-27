@@ -107,7 +107,13 @@ import type {
   TaskInteractionOpenRequest,
   TaskInteractionOpenResult,
   TaskInteractionPendingResult,
+  SkillDiscardStagedRequest,
+  SkillDiscardStagedResult,
   SkillDisableRequest,
+  SkillInstallStagedRequest,
+  SkillInstallStagedResult,
+  SkillStageFromUrlRequest,
+  SkillStageFromUrlResult,
   MemoryDisableRequest,
   MemoryListRequest,
   MemoryMutationResult,
@@ -188,7 +194,11 @@ import {
   UpdateCheckResultSchema,
   UpdateStatusEventSchema,
   UpdateSummarySchema,
+  SkillDiscardStagedRequestSchema,
+  SkillDiscardStagedResultSchema,
   SkillDisableRequestSchema,
+  SkillInstallStagedRequestSchema,
+  SkillInstallStagedResultSchema,
   SkillRegistryMutationResultSchema,
   MemoryDisableRequestSchema,
   MemoryListRequestSchema,
@@ -196,6 +206,8 @@ import {
   MemorySummarySchema,
   SkillRegistryQueryResultSchema,
   SkillRegistrySummarySchema,
+  SkillStageFromUrlRequestSchema,
+  SkillStageFromUrlResultSchema,
   SetLocaleRequestSchema,
   SetThemeRequestSchema,
   WindowLayoutRequestSchema,
@@ -572,6 +584,21 @@ const api: PigeDesktopApi = {
   skills: {
     summary: async (): Promise<SkillRegistryQueryResult> =>
       SkillRegistryQueryResultSchema.parse(await ipcRenderer.invoke("skills.summary")),
+    stageFromUrl: async (request: SkillStageFromUrlRequest): Promise<SkillStageFromUrlResult> =>
+      SkillStageFromUrlResultSchema.parse(await ipcRenderer.invoke(
+        "skills.stageFromUrl",
+        SkillStageFromUrlRequestSchema.parse(request)
+      )),
+    installStaged: async (request: SkillInstallStagedRequest): Promise<SkillInstallStagedResult> =>
+      SkillInstallStagedResultSchema.parse(await ipcRenderer.invoke(
+        "skills.installStaged",
+        SkillInstallStagedRequestSchema.parse(request)
+      )),
+    discardStaged: async (request: SkillDiscardStagedRequest): Promise<SkillDiscardStagedResult> =>
+      SkillDiscardStagedResultSchema.parse(await ipcRenderer.invoke(
+        "skills.discardStaged",
+        SkillDiscardStagedRequestSchema.parse(request)
+      )),
     disable: async (request: SkillDisableRequest): Promise<SkillRegistryMutationResult> =>
       SkillRegistryMutationResultSchema.parse(await ipcRenderer.invoke(
         "skills.disable",
