@@ -31,7 +31,6 @@ import {
   readMarkdownPageContentAtSignature,
   type MarkdownFileSignatureRecord
 } from "./markdown-page-index";
-
 export const MAX_NOTE_MARKDOWN_EDITOR_BYTES = 4 * 1024 * 1024;
 const MAX_RENDER_BINDINGS = 64;
 const MAX_REQUEST_ID_LENGTH = 128;
@@ -39,12 +38,10 @@ const MAX_REFERENCE_LENGTH = 256;
 const MAX_OPERATION_BYTES = 256 * 1024;
 const UNSAFE_TEXT_PATTERN = /[\u0000\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
 const SOURCE_CITATION_PATTERN = /^source:src_\d{8}_[a-z0-9]{8,}(?:#[^\s\]\u0000-\u001f\u007f-\u009f]{1,256})?$/u;
-
 export interface NoteMarkdownEditorVaultPort {
   current(): VaultSummary | undefined;
   activeVaultPath(): string | undefined;
 }
-
 export interface NoteMarkdownEditorActivityPort {
   recordPageUpdate(input: {
     readonly vaultPath: string;
@@ -53,12 +50,10 @@ export interface NoteMarkdownEditorActivityPort {
     readonly afterMarkdown: string;
   }): void;
 }
-
 export interface NoteMarkdownEditorOpenRequest {
   readonly activeVaultId: string;
   readonly pageId: string;
 }
-
 export type NoteMarkdownEditorOpenResult =
   | {
       readonly status: "opened";
@@ -69,7 +64,6 @@ export type NoteMarkdownEditorOpenResult =
       readonly renderIdentity: string;
     }
   | { readonly status: "invalid" | "not_found" | "failed" };
-
 export interface NoteMarkdownEditorSaveRequest {
   readonly requestId: string;
   readonly activeVaultId: string;
@@ -78,7 +72,6 @@ export interface NoteMarkdownEditorSaveRequest {
   readonly renderIdentity: string;
   readonly markdown: string;
 }
-
 export type NoteMarkdownEditorSaveResult =
   | {
       readonly status: "committed";
@@ -95,7 +88,6 @@ export type NoteMarkdownEditorSaveResult =
       readonly activeVaultId: string;
       readonly pageId: string;
     };
-
 interface RenderBinding {
   readonly activeVaultId: string;
   readonly vaultPath: string;
@@ -105,24 +97,20 @@ interface RenderBinding {
   readonly revisionId: string;
   readonly renderIdentity: string;
 }
-
 interface NoteMarkdownEditorDependencies {
   readonly now?: () => Date;
   readonly randomId?: () => string;
 }
-
 export interface NoteMarkdownEditorActivityRecoveryResult {
   readonly recovered: number;
   readonly failed: number;
 }
-
 export class NoteMarkdownEditorService {
   readonly #vaults: NoteMarkdownEditorVaultPort;
   readonly #activity: NoteMarkdownEditorActivityPort;
   readonly #now: () => Date;
   readonly #randomId: () => string;
   readonly #bindings = new Map<string, RenderBinding>();
-
   constructor(
     vaults: NoteMarkdownEditorVaultPort,
     activity: NoteMarkdownEditorActivityPort,
@@ -133,14 +121,12 @@ export class NoteMarkdownEditorService {
     this.#now = dependencies.now ?? (() => new Date());
     this.#randomId = dependencies.randomId ?? randomUUID;
   }
-
   open(request: NoteMarkdownEditorOpenRequest): NoteMarkdownEditorOpenResult {
     if (!isNonemptyBoundedString(request?.activeVaultId, 256) || !PageIdSchema.safeParse(request?.pageId).success) {
       return { status: "invalid" };
     }
     const scope = this.#currentScope(request.activeVaultId);
     if (!scope) return { status: "not_found" };
-
     try {
       const located = findMarkdownPageByIdAtSignature(scope.vaultPath, request.pageId);
       if (!located) return { status: "not_found" };
@@ -151,7 +137,6 @@ export class NoteMarkdownEditorService {
       );
       if (!validatePortableMarkdown(content.markdown, request.pageId)) return { status: "failed" };
       if (!this.#scopeMatches(scope.activeVaultId, scope.vaultPath)) return { status: "failed" };
-
       const revisionId = hashMarkdown(content.markdown);
       const renderIdentity = createRenderIdentity({
         activeVaultId: scope.activeVaultId,
@@ -180,14 +165,12 @@ export class NoteMarkdownEditorService {
       return { status: "failed" };
     }
   }
-
   save(request: NoteMarkdownEditorSaveRequest): NoteMarkdownEditorSaveResult {
     const identity = saveIdentity(request);
     if (!isValidSaveRequest(request)) return { status: "invalid", ...identity };
     if (!validatePortableMarkdown(request.markdown, request.pageId)) {
       return { status: "invalid", ...identity };
     }
-
     const binding = this.#bindings.get(request.renderIdentity);
     if (
       !binding ||
@@ -200,7 +183,6 @@ export class NoteMarkdownEditorService {
     if (!this.#scopeMatches(binding.activeVaultId, binding.vaultPath)) {
       return { status: "stale", ...identity };
     }
-
     let beforeMarkdown: string;
     try {
       beforeMarkdown = readMarkdownPageContentAtSignature(
@@ -217,7 +199,6 @@ export class NoteMarkdownEditorService {
     if (request.markdown === beforeMarkdown) {
       return { status: "invalid", ...identity };
     }
-
     const afterRevisionId = hashMarkdown(request.markdown);
     const operationId = createOperationId(this.#now(), this.#randomId(), request, afterRevisionId);
     const operation = createUpdateOperation({
@@ -228,7 +209,6 @@ export class NoteMarkdownEditorService {
       beforeRevisionId: binding.revisionId,
       afterRevisionId
     });
-
     let committedSignature: MarkdownFileSignatureRecord;
     try {
       committedSignature = this.#replaceExact(binding, beforeMarkdown, request.markdown);
@@ -244,7 +224,6 @@ export class NoteMarkdownEditorService {
         ...identity
       };
     }
-
     const renderIdentity = createRenderIdentity({
       activeVaultId: binding.activeVaultId,
       pageId: binding.pageId,
@@ -266,7 +245,6 @@ export class NoteMarkdownEditorService {
       operationId
     };
   }
-
   #replaceExact(binding: RenderBinding, beforeMarkdown: string, afterMarkdown: string): MarkdownFileSignatureRecord {
     assertMarkdownPagePathConfined(binding.vaultPath, binding.signature.absolutePath);
     const parentPath = path.dirname(binding.signature.absolutePath);
@@ -294,7 +272,6 @@ export class NoteMarkdownEditorService {
       }
       fs.closeSync(descriptor);
       descriptor = undefined;
-
       if (!this.#scopeMatches(binding.activeVaultId, binding.vaultPath)) throw new StaleMarkdownPageError();
       assertSameDirectoryIdentity(binding.vaultPath, parentPath, parentBefore);
       const current = readMarkdownPageContentAtSignature(
@@ -312,7 +289,6 @@ export class NoteMarkdownEditorService {
       assertSameDirectoryIdentity(binding.vaultPath, parentPath, parentBefore);
       fs.renameSync(temporaryPath, binding.signature.absolutePath);
       flushDirectoryWhereSupported(parentPath);
-
       const stat = fs.lstatSync(binding.signature.absolutePath);
       if (stat.isSymbolicLink() || !stat.isFile() || stat.nlink !== 1) {
         throw new Error("The committed Markdown page is not a private regular file.");
@@ -338,7 +314,6 @@ export class NoteMarkdownEditorService {
       try { fs.unlinkSync(temporaryPath); } catch { /* The temporary may already be committed or absent. */ }
     }
   }
-
   #currentScope(activeVaultId: string): { readonly activeVaultId: string; readonly vaultPath: string } | undefined {
     const vault = this.#vaults.current();
     const vaultPath = this.#vaults.activeVaultPath();
@@ -346,13 +321,11 @@ export class NoteMarkdownEditorService {
       ? { activeVaultId, vaultPath: path.resolve(vaultPath) }
       : undefined;
   }
-
   #scopeMatches(activeVaultId: string, vaultPath: string): boolean {
     const vault = this.#vaults.current();
     const currentPath = this.#vaults.activeVaultPath();
     return vault?.vaultId === activeVaultId && !!currentPath && path.resolve(currentPath) === vaultPath;
   }
-
   #registerBinding(binding: RenderBinding): void {
     this.#bindings.delete(binding.renderIdentity);
     this.#bindings.set(binding.renderIdentity, binding);
@@ -363,7 +336,6 @@ export class NoteMarkdownEditorService {
     }
   }
 }
-
 interface UserPageUpdateBinding {
   readonly pageId: string;
   readonly pagePath: string;
@@ -371,18 +343,15 @@ interface UserPageUpdateBinding {
   readonly beforePath: string;
   readonly afterHash: string;
 }
-
 /**
  * Private Activity adapter for direct user Markdown edits. Main can compose this
  * behind the shared Activity owner without exposing paths or content to the renderer.
  */
 export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActivityPort {
   readonly #vaults: NoteMarkdownEditorVaultPort;
-
   constructor(vaults: NoteMarkdownEditorVaultPort) {
     this.#vaults = vaults;
   }
-
   recordPageUpdate(input: {
     readonly vaultPath: string;
     readonly operation: OperationRecord;
@@ -408,11 +377,9 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
     if (live === undefined || hashMarkdown(live) !== binding.afterHash) {
       throw new Error("The Markdown Activity target does not match its committed revision.");
     }
-
     persistExactPrivateFile(active, binding.beforePath, input.beforeMarkdown, MAX_NOTE_MARKDOWN_EDITOR_BYTES);
     persistExactOperation(active, input.operation);
   }
-
   activitySummary(
     operation: OperationRecord,
     undoOperation?: OperationRecord
@@ -444,7 +411,6 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
             : {})
     };
   }
-
   findUndoOperation(
     operation: OperationRecord,
     operations: readonly OperationRecord[]
@@ -453,7 +419,6 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
     const candidate = operations.find((entry) => entry.id === createUserPageUpdateUndoOperationId(operation.id));
     return candidate && isMatchingUserPageUpdateUndo(operation, candidate) ? candidate : undefined;
   }
-
   undo(operation: OperationRecord, expectedRevisionId?: string): KnowledgeActivityUndoResult {
     const binding = readUserPageUpdateBinding(operation);
     if (!binding) return { status: "not_found", operationId: operation.id };
@@ -467,7 +432,6 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
         ...(current ? { currentRevisionId: hashMarkdown(current) } : {})
       };
     }
-
     const existing = readOperationOrUndefined(vaultPath, createUserPageUpdateUndoOperationId(operation.id));
     if (existing) {
       if (!isMatchingUserPageUpdateUndo(operation, existing)) {
@@ -480,7 +444,6 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
         revisionId: binding.beforeHash
       };
     }
-
     const live = readPrivateTextOrUndefined(vaultPath, binding.pagePath, MAX_NOTE_MARKDOWN_EDITOR_BYTES);
     if (live === undefined) return { status: "not_found", operationId: operation.id };
     const currentRevisionId = hashMarkdown(live);
@@ -496,7 +459,6 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
     if (!validatePortableMarkdown(before, binding.pageId)) {
       throw new Error("The Markdown Activity before-image is invalid.");
     }
-
     const undo = createUserPageUpdateUndoOperation(operation, binding);
     const undoBinding = readUserPageUpdateUndoBinding(undo);
     if (!undoBinding) throw new Error("The Markdown Undo operation is invalid.");
@@ -520,7 +482,6 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
       revisionId: binding.beforeHash
     };
   }
-
   recoverIncompleteOperations(): NoteMarkdownEditorActivityRecoveryResult {
     const vaultPath = this.#activeVaultPath();
     if (!vaultPath) return { recovered: 0, failed: 0 };
@@ -560,16 +521,13 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
     }
     return { recovered, failed };
   }
-
   #activeVaultPath(): string | undefined {
     const vault = this.#vaults.current();
     const vaultPath = this.#vaults.activeVaultPath();
     return vault && vaultPath ? path.resolve(vaultPath) : undefined;
   }
 }
-
 class StaleMarkdownPageError extends Error {}
-
 function isValidSaveRequest(request: NoteMarkdownEditorSaveRequest): boolean {
   return !!request &&
     isNonemptyBoundedString(request.requestId, MAX_REQUEST_ID_LENGTH) &&
@@ -580,7 +538,6 @@ function isValidSaveRequest(request: NoteMarkdownEditorSaveRequest): boolean {
     typeof request.markdown === "string" &&
     Buffer.byteLength(request.markdown, "utf8") <= MAX_NOTE_MARKDOWN_EDITOR_BYTES;
 }
-
 function validatePortableMarkdown(markdown: string, expectedPageId: string): boolean {
   if (
     typeof markdown !== "string" ||
@@ -607,12 +564,10 @@ function validatePortableMarkdown(markdown: string, expectedPageId: string): boo
     (reference) => reference.target.length <= MAX_REFERENCE_LENGTH && !UNSAFE_TEXT_PATTERN.test(reference.target)
   );
 }
-
 function hasExactlyOneRequiredFrontmatterField(raw: string): boolean {
   const required = ["id", "schema_version", "title", "type", "created_at", "updated_at", "status"];
   return required.every((key) => raw.split(/\r?\n/u).filter((line) => line.startsWith(`${key}:`)).length === 1);
 }
-
 function validFrontmatterArrays(
   raw: string,
   frontmatter: ReturnType<typeof parsePigeFrontmatter> extends infer _T ? NonNullable<ReturnType<typeof parsePigeFrontmatter>>["frontmatter"] : never
@@ -628,7 +583,6 @@ function validFrontmatterArrays(
   }
   return true;
 }
-
 function validWikiLinks(markdown: string): boolean {
   const body = stripCode(markdown.slice(parsePigeFrontmatter(markdown)?.bodyStartOffset ?? 0));
   let cursor = 0;
@@ -647,7 +601,6 @@ function validWikiLinks(markdown: string): boolean {
   }
   return true;
 }
-
 function validSourceCitations(markdown: string): boolean {
   const body = stripCode(markdown.slice(parsePigeFrontmatter(markdown)?.bodyStartOffset ?? 0));
   for (let cursor = 0; cursor < body.length;) {
@@ -659,17 +612,14 @@ function validSourceCitations(markdown: string): boolean {
   }
   return true;
 }
-
 function stripCode(markdown: string): string {
   return markdown.replace(/```[\s\S]*?```/gu, " ").replace(/`[^`\n]*`/gu, " ");
 }
-
 function validReferencePart(value: string | undefined): boolean {
   if (!value) return false;
   const normalized = value.normalize("NFKC").replace(/\s+/gu, " ").trim();
   return normalized.length > 0 && normalized.length <= MAX_REFERENCE_LENGTH && !UNSAFE_TEXT_PATTERN.test(normalized);
 }
-
 function createUpdateOperation(input: {
   readonly operationId: string;
   readonly createdAt: string;
@@ -696,7 +646,6 @@ function createUpdateOperation(input: {
     warnings: []
   });
 }
-
 function readUserPageUpdateBinding(operation: OperationRecord): UserPageUpdateBinding | undefined {
   const target = operation.targetRefs[0];
   const before = operation.before;
@@ -732,7 +681,6 @@ function readUserPageUpdateBinding(operation: OperationRecord): UserPageUpdateBi
     afterHash: after.id
   };
 }
-
 function readUserPageUpdateUndoBinding(operation: OperationRecord): {
   readonly originalOperationId: string;
   readonly pageId: string;
@@ -776,7 +724,6 @@ function readUserPageUpdateUndoBinding(operation: OperationRecord): {
     stagedPath: createUserPageUpdateStagedPath(operation.id)
   };
 }
-
 function createUserPageUpdateUndoOperation(
   original: OperationRecord,
   binding: UserPageUpdateBinding
@@ -798,7 +745,6 @@ function createUserPageUpdateUndoOperation(
     warnings: []
   });
 }
-
 function isMatchingUserPageUpdateUndo(original: OperationRecord, candidate: OperationRecord): boolean {
   const originalBinding = readUserPageUpdateBinding(original);
   const undoBinding = readUserPageUpdateUndoBinding(candidate);
@@ -809,7 +755,6 @@ function isMatchingUserPageUpdateUndo(original: OperationRecord, candidate: Oper
     undoBinding.beforeHash === originalBinding.afterHash &&
     undoBinding.afterHash === originalBinding.beforeHash;
 }
-
 function createUserPageUpdateUndoOperationId(operationId: string): string {
   const dateKey = /^op_(\d{8})_[a-z0-9]{8,}$/u.exec(operationId)?.[1];
   if (!dateKey) throw new Error("The Markdown Activity operation identity is invalid.");
@@ -819,19 +764,16 @@ function createUserPageUpdateUndoOperationId(operationId: string): string {
     .slice(0, 16);
   return `op_${dateKey}_${suffix}`;
 }
-
 function createUserPageUpdateBeforePath(operationId: string): string {
   const dateKey = /^op_(\d{8})_[a-z0-9]{8,}$/u.exec(operationId)?.[1];
   if (!dateKey) throw new Error("The Markdown Activity operation identity is invalid.");
   return `.pige/operations/${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}/${operationId}.before.md`;
 }
-
 function createUserPageUpdateStagedPath(operationId: string): string {
   const dateKey = /^op_(\d{8})_[a-z0-9]{8,}$/u.exec(operationId)?.[1];
   if (!dateKey) throw new Error("The Markdown Activity operation identity is invalid.");
   return `.pige/operations/${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}/${operationId}.after.pending.md`;
 }
-
 function persistExactPrivateFile(
   vaultPath: string,
   relativePath: string,
@@ -848,7 +790,6 @@ function persistExactPrivateFile(
     if (existing !== content) throw new Error("The Markdown Activity private identity is occupied.");
   }
 }
-
 function requireExactPrivateFile(
   vaultPath: string,
   relativePath: string,
@@ -861,7 +802,6 @@ function requireExactPrivateFile(
   }
   return content;
 }
-
 function persistExactOperation(vaultPath: string, operation: OperationRecord): void {
   const serialized = `${JSON.stringify(OperationRecordSchema.parse(operation), null, 2)}\n`;
   persistExactPrivateFile(vaultPath, operationRelativePath(operation.id), serialized, MAX_OPERATION_BYTES);
@@ -870,7 +810,6 @@ function persistExactOperation(vaultPath: string, operation: OperationRecord): v
     throw new Error("The Markdown Activity Operation could not be adopted exactly.");
   }
 }
-
 function readOperationOrUndefined(vaultPath: string, operationId: string): OperationRecord | undefined {
   const content = readPrivateTextOrUndefined(vaultPath, operationRelativePath(operationId), MAX_OPERATION_BYTES);
   if (content === undefined) return undefined;
@@ -880,7 +819,6 @@ function readOperationOrUndefined(vaultPath: string, operationId: string): Opera
     throw new Error("The Markdown Activity Operation is malformed.");
   }
 }
-
 function readUserPageUpdateOperations(vaultPath: string): readonly OperationRecord[] {
   const root = resolvePrivateVaultPath(vaultPath, ".pige/operations");
   if (!pathStillExists(root)) return [];
@@ -901,7 +839,6 @@ function readUserPageUpdateOperations(vaultPath: string): readonly OperationReco
   }
   return operations;
 }
-
 function readSafeDirectories(root: string, namePattern: RegExp): readonly string[] {
   const rootStat = fs.lstatSync(root);
   if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) throw new Error("Unsafe Activity directory.");
@@ -910,7 +847,6 @@ function readSafeDirectories(root: string, namePattern: RegExp): readonly string
     .map((entry) => entry.name)
     .sort((left, right) => left.localeCompare(right, "en-US"));
 }
-
 function readPrivateTextOrUndefined(
   vaultPath: string,
   relativePath: string,
@@ -922,13 +858,11 @@ function readPrivateTextOrUndefined(
     return undefined;
   }
 }
-
 function operationRelativePath(operationId: string): string {
   const dateKey = /^op_(\d{8})_[a-z0-9]{8,}$/u.exec(operationId)?.[1];
   if (!dateKey) throw new Error("The Markdown Activity operation identity is invalid.");
   return `.pige/operations/${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}/${operationId}.json`;
 }
-
 function resolvePrivateVaultPath(vaultPath: string, relativePath: string): string {
   if (
     path.isAbsolute(relativePath) ||
@@ -940,24 +874,20 @@ function resolvePrivateVaultPath(vaultPath: string, relativePath: string): strin
   if (!resolved.startsWith(`${root}${path.sep}`)) throw new Error("The Markdown Activity path escaped its vault.");
   return resolved;
 }
-
 function isSafePagePath(value: string | undefined, pageId: string): value is string {
   if (!value || !/^(?:wiki|sources)\/.+\.md$/u.test(value)) return false;
   if (value.includes("\\") || value.split("/").some((part) => !part || part === "." || part === "..")) return false;
   return path.posix.basename(value).length > 3 && PageIdSchema.safeParse(pageId).success;
 }
-
 function safePageTitle(markdown: string, pageId: string): string | undefined {
   const frontmatter = parsePigeFrontmatter(markdown)?.frontmatter;
   return frontmatter?.id === pageId && isNonemptyBoundedString(frontmatter.title, 256)
     ? frontmatter.title.replace(/\s+/gu, " ").trim()
     : undefined;
 }
-
 function isSha256(value: string): boolean {
   return /^sha256:[a-f0-9]{64}$/u.test(value);
 }
-
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
   if (value && typeof value === "object") {
@@ -968,7 +898,6 @@ function stableJson(value: unknown): string {
   }
   return JSON.stringify(value);
 }
-
 function createOperationId(
   now: Date,
   randomId: string,
@@ -982,7 +911,6 @@ function createOperationId(
     .slice(0, 16);
   return `op_${dateKey}_${suffix}`;
 }
-
 function createRenderIdentity(input: {
   readonly activeVaultId: string;
   readonly pageId: string;
@@ -991,11 +919,9 @@ function createRenderIdentity(input: {
 }): string {
   return hashMarkdown(`pige.note-markdown-editor.render.v1\0${input.activeVaultId}\0${input.pageId}\0${input.pagePath}\0${input.revisionId}`);
 }
-
 function hashMarkdown(markdown: string): string {
   return `sha256:${createHash("sha256").update(markdown, "utf8").digest("hex")}`;
 }
-
 function saveIdentity(request: NoteMarkdownEditorSaveRequest): {
   readonly requestId: string;
   readonly activeVaultId: string;
@@ -1007,7 +933,6 @@ function saveIdentity(request: NoteMarkdownEditorSaveRequest): {
     pageId: typeof request?.pageId === "string" ? request.pageId : "invalid"
   };
 }
-
 function readRealDirectoryIdentity(vaultPath: string, directoryPath: string): fs.Stats {
   const stat = fs.lstatSync(directoryPath);
   if (stat.isSymbolicLink() || !stat.isDirectory()) throw new StaleMarkdownPageError();
@@ -1016,12 +941,10 @@ function readRealDirectoryIdentity(vaultPath: string, directoryPath: string): fs
   if (!isWithin(realVault, realDirectory)) throw new StaleMarkdownPageError();
   return stat;
 }
-
 function assertSameDirectoryIdentity(vaultPath: string, directoryPath: string, expected: fs.Stats): void {
   const current = readRealDirectoryIdentity(vaultPath, directoryPath);
   if (!sameInode(expected, current)) throw new StaleMarkdownPageError();
 }
-
 function signatureFromStat(previous: MarkdownFileSignatureRecord, stat: fs.Stats): MarkdownFileSignatureRecord {
   return {
     ...previous,
@@ -1032,24 +955,19 @@ function signatureFromStat(previous: MarkdownFileSignatureRecord, stat: fs.Stats
     fileId: String(stat.ino)
   };
 }
-
 function sameInode(left: fs.Stats, right: fs.Stats): boolean {
   return left.dev === right.dev && left.ino === right.ino;
 }
-
 function isWithin(root: string, candidate: string): boolean {
   const relative = path.relative(root, candidate);
   return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
 }
-
 function pathStillExists(filePath: string): boolean {
   try { fs.lstatSync(filePath); return true; } catch { return false; }
 }
-
 function isIsoDateTime(value: unknown): value is string {
   return typeof value === "string" && value.length <= 64 && !Number.isNaN(Date.parse(value));
 }
-
 function isNonemptyBoundedString(value: unknown, maximum: number): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= maximum && !UNSAFE_TEXT_PATTERN.test(value);
 }
