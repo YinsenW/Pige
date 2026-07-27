@@ -145,6 +145,7 @@ import { LibraryService } from "./services/library-service";
 import { KnowledgeActivityService } from "./services/knowledge-activity-service";
 import { KnowledgeHealthService } from "./services/knowledge-health-service";
 import { ManagedCollectionService } from "./services/managed-collection-service";
+import { ManagedCollectionViewService } from "./services/managed-collection-view-service";
 import {
   HomeAgentService,
   scheduleAcceptedAgentTurn,
@@ -259,6 +260,7 @@ let jobClassExecutorRegistry: JobClassExecutorRegistry | undefined;
 let knowledgeActivityService: KnowledgeActivityService | undefined;
 let knowledgeHealthService: KnowledgeHealthService | undefined;
 let managedCollectionService: ManagedCollectionService | undefined;
+let managedCollectionViewService: ManagedCollectionViewService | undefined;
 let libraryService: LibraryService | undefined;
 let notesService: NotesService | undefined;
 let noteMarkdownEditorActivityAdapter: NoteMarkdownEditorActivityAdapter | undefined;
@@ -1252,7 +1254,7 @@ const getKnowledgeActivityService = (): KnowledgeActivityService => {
   if (!knowledgeActivityService) {
     knowledgeActivityService = new KnowledgeActivityService(
       getVaultService(),
-      getManagedCollectionService(),
+      getManagedCollectionViewService(),
       getNoteMarkdownEditorActivityAdapter(),
       getAgentMemoryService()
     );
@@ -1265,6 +1267,16 @@ const getManagedCollectionService = (): ManagedCollectionService => {
     managedCollectionService = new ManagedCollectionService(getVaultService());
   }
   return managedCollectionService;
+};
+
+const getManagedCollectionViewService = (): ManagedCollectionViewService => {
+  if (!managedCollectionViewService) {
+    managedCollectionViewService = new ManagedCollectionViewService(
+      getVaultService(),
+      getManagedCollectionService()
+    );
+  }
+  return managedCollectionViewService;
 };
 
 const getRetrievalService = (): RetrievalService => {
@@ -1929,11 +1941,12 @@ registerManagedCollectionIpc({
     return !!window && mainWindows.has(window);
   },
   getActiveVaultId: () => getVaultService().current()?.vaultId,
-  openCollection: (request) => getManagedCollectionService().open(request),
+  openCollection: (request) => getManagedCollectionViewService().open(request),
   editCollectionCell: (request) => getManagedCollectionService().editCell(request),
   appendDefaultCollectionRow: (request) => getManagedCollectionService().appendDefaultRow(request),
   addNullableCollectionColumn: (request) => getManagedCollectionService().addNullableColumn(request),
   renameCollectionColumn: (request) => getManagedCollectionService().renameColumn(request),
+  createCollectionView: (request) => getManagedCollectionViewService().createView(request),
   trashCollectionColumn: (request) => getManagedCollectionService().trashColumn(request),
   trashCollectionRow: (request) => getManagedCollectionService().trashRow(request)
 });
@@ -2363,6 +2376,10 @@ app.whenReady().then(async () => {
   );
   proposalService = new ProposalService(getVaultService());
   managedCollectionService = new ManagedCollectionService(getVaultService());
+  managedCollectionViewService = new ManagedCollectionViewService(
+    getVaultService(),
+    managedCollectionService
+  );
   noteMarkdownEditorActivityAdapter = new NoteMarkdownEditorActivityAdapter(getVaultService());
   noteMarkdownEditorService = new NoteMarkdownEditorService(
     getVaultService(),
@@ -2370,7 +2387,7 @@ app.whenReady().then(async () => {
   );
   knowledgeActivityService = new KnowledgeActivityService(
     getVaultService(),
-    managedCollectionService,
+    managedCollectionViewService,
     noteMarkdownEditorActivityAdapter,
     getAgentMemoryService()
   );

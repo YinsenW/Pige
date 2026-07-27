@@ -24,39 +24,39 @@ afterEach(() => {
 });
 
 describe("Knowledge Activity and Undo", () => {
-  it("routes body-free Collection column-trash Activity and forward Undo only through its owner", async () => {
+  it("routes body-free Collection saved-view Activity and forward Undo only through its owner", async () => {
     const fixture = createFixture();
     const operation = OperationRecordSchema.parse({
-      id: "op_20260728_columntrashactivity",
+      id: "op_20260728_createviewactivity",
       schemaVersion: 1,
       createdAt: "2026-07-28T12:00:00.000Z",
       actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
-      kind: "trash_collection_column",
+      kind: "create_collection_view",
       targetRefs: [
         { kind: "dataset", id: "dataset_20260728_activity123456" },
         { kind: "table", id: "table_activity123456" },
-        { kind: "column", id: "column_activity123456" }
+        { kind: "view", id: "view_activity123456" }
       ],
       sourceRefs: [{ kind: "dataset_revision", id: "dataset_rev_20260728_before123456" }],
-      summary: "Moved one Collection field to recoverable trash.",
+      summary: "Created one saved Collection view.",
       reversible: "yes",
-      rollbackHint: "Restore the exact trashed Collection field in a new revision.",
+      rollbackHint: "Move the exact saved Collection view to recoverable trash.",
       warnings: []
     });
     writeOperation(fixture.vaultPath, operation);
     const undo = vi.fn(async () => ({
       status: "undone" as const,
       operationId: operation.id,
-      undoOperationId: "op_20260728_columntrashundo",
-      revisionId: "dataset_rev_20260728_restored123456"
+      undoOperationId: "op_20260728_createviewundo",
+      revisionId: "dataset_rev_20260728_viewundo123456"
     }));
     const collections: KnowledgeActivityCollectionPort = {
       activitySummary: (candidate) => candidate.id === operation.id &&
         candidate.targetRefs.some((ref) => ref.kind === "dataset" && ref.id === "dataset_20260728_activity123456") &&
         candidate.targetRefs.some((ref) => ref.kind === "table" && ref.id === "table_activity123456") &&
-        candidate.targetRefs.some((ref) => ref.kind === "column" && ref.id === "column_activity123456") ? {
+        candidate.targetRefs.some((ref) => ref.kind === "view" && ref.id === "view_activity123456") ? {
         operationId: candidate.id,
-        kind: "trash_collection_column",
+        kind: "create_collection_view",
         createdAt: candidate.createdAt,
         targetLabel: "Reading list",
         target: {
@@ -77,7 +77,7 @@ describe("Knowledge Activity and Undo", () => {
     const listed = service.list({ limit: 20 });
     expect(listed.activities).toContainEqual(expect.objectContaining({
       operationId: operation.id,
-      kind: "trash_collection_column",
+      kind: "create_collection_view",
       targetLabel: "Reading list",
       target: {
         kind: "collection",
@@ -87,19 +87,19 @@ describe("Knowledge Activity and Undo", () => {
       },
       canUndo: true
     }));
-    expect(JSON.stringify(listed)).not.toMatch(/column_activity|before123456|rollbackHint|sourceRefs|targetRefs/u);
+    expect(JSON.stringify(listed)).not.toMatch(/view_activity|before123456|rollbackHint|sourceRefs|targetRefs/u);
     await expect(service.undo({
       operationId: operation.id,
       expectedRevisionId: "dataset_rev_20260728_after123456"
     })).resolves.toEqual({
       status: "undone",
       operationId: operation.id,
-      undoOperationId: "op_20260728_columntrashundo",
-      revisionId: "dataset_rev_20260728_restored123456"
+      undoOperationId: "op_20260728_createviewundo",
+      revisionId: "dataset_rev_20260728_viewundo123456"
     });
     expect(undo).toHaveBeenCalledWith(operation, "dataset_rev_20260728_after123456");
 
-    const tampered = { ...operation, targetRefs: [{ kind: "column", id: "column_attacker123456" }] } as OperationRecord;
+    const tampered = { ...operation, targetRefs: [{ kind: "view", id: "view_attacker123456" }] } as OperationRecord;
     expect(collections.activitySummary(tampered)).toBeUndefined();
     expect(undo).toHaveBeenCalledTimes(1);
   });
