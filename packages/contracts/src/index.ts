@@ -29,6 +29,11 @@ import type {
   HighRiskConfirmationResolveRequest,
   HighRiskConfirmationResolveResult,
   Locale,
+  MemoryDisableRequest,
+  MemoryListRequest,
+  MemoryMutationResult,
+  MemoryRecordSummary,
+  MemorySummary,
   JobClass,
   JobRecord,
   JobStage,
@@ -195,6 +200,11 @@ export type {
   TaskInteractionOpenRequest,
   TaskInteractionOpenResult,
   TaskInteractionPendingResult,
+  MemoryDisableRequest,
+  MemoryListRequest,
+  MemoryMutationResult,
+  MemoryRecordSummary,
+  MemorySummary,
   SkillCapability,
   SkillDataBoundary,
   SkillDisableRequest,
@@ -1336,6 +1346,11 @@ export interface PigeDesktopApi {
     readonly summary: () => Promise<SkillRegistryQueryResult>;
     readonly disable: (request: SkillDisableRequest) => Promise<SkillRegistryMutationResult>;
     readonly onChanged: (listener: (summary: SkillRegistrySummary) => void) => () => void;
+  };
+  readonly memory: {
+    readonly list: (request: MemoryListRequest) => Promise<MemorySummary>;
+    readonly disable: (request: MemoryDisableRequest) => Promise<MemoryMutationResult>;
+    readonly onChanged: (listener: (summary: MemorySummary) => void) => () => void;
   };
   readonly activity: {
     readonly list: (request?: KnowledgeActivityListRequest) => Promise<KnowledgeActivityListResult>;

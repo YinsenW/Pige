@@ -1170,6 +1170,50 @@ export const SkillRegistryMutationResultSchema = z.discriminatedUnion("status", 
   z.object({ status: z.literal("failed"), error: SkillRegistryErrorSummarySchema }).strict()
 ]);
 
+export const MemoryRecordIdSchema = z.string().regex(/^memory_\d{8}_[a-z0-9]{12,}$/);
+export const MemoryKindSchema = z.enum(["preference", "correction", "workflow_lesson", "profile"]);
+export const MemoryStatusSchema = z.enum(["active", "disabled"]);
+
+export const MemoryRecordSummarySchema = z.object({
+  id: MemoryRecordIdSchema,
+  kind: MemoryKindSchema,
+  title: z.string().trim().min(1).max(120),
+  body: z.string().trim().min(1).max(2_000),
+  status: MemoryStatusSchema,
+  provenance: z.object({
+    kind: z.literal("explicit_user_request"),
+    occurredAt: z.string().datetime({ offset: true })
+  }).strict(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true })
+}).strict();
+
+export const MemorySummarySchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  records: z.array(MemoryRecordSummarySchema).max(1_000)
+}).strict();
+
+export const MemoryListRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema
+}).strict();
+
+export const MemoryDisableRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: z.string().regex(/^memory_request_[a-z0-9]{16,64}$/),
+  activeVaultId: VaultIdSchema,
+  memoryId: MemoryRecordIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+
+export const MemoryMutationResultSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("committed"), summary: MemorySummarySchema }).strict(),
+  z.object({ status: z.literal("stale"), summary: MemorySummarySchema }).strict(),
+  z.object({ status: z.literal("not_found"), summary: MemorySummarySchema }).strict()
+]);
+
 export const PermissionResourceScopeSchema = z.enum([
   "current_action",
   "current_source",
@@ -3831,6 +3875,13 @@ export type SkillRegistrySummary = z.infer<typeof SkillRegistrySummarySchema>;
 export type SkillRegistryQueryResult = z.infer<typeof SkillRegistryQueryResultSchema>;
 export type SkillDisableRequest = z.infer<typeof SkillDisableRequestSchema>;
 export type SkillRegistryMutationResult = z.infer<typeof SkillRegistryMutationResultSchema>;
+export type MemoryKind = z.infer<typeof MemoryKindSchema>;
+export type MemoryStatus = z.infer<typeof MemoryStatusSchema>;
+export type MemoryRecordSummary = z.infer<typeof MemoryRecordSummarySchema>;
+export type MemorySummary = z.infer<typeof MemorySummarySchema>;
+export type MemoryListRequest = z.infer<typeof MemoryListRequestSchema>;
+export type MemoryDisableRequest = z.infer<typeof MemoryDisableRequestSchema>;
+export type MemoryMutationResult = z.infer<typeof MemoryMutationResultSchema>;
 export type PermissionDataBoundary = z.infer<typeof PermissionDataBoundarySchema>;
 export type PermissionResourceScope = z.infer<typeof PermissionResourceScopeSchema>;
 export type ExternalMutationIntent = z.infer<typeof ExternalMutationIntentSchema>;

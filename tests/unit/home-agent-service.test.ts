@@ -467,6 +467,72 @@ describe("Home Pi Agent service", () => {
     expect(jobs.readAgentTurnJob(outcome.requestId)?.privacy?.usedShell).toBe(true);
   });
 
+  it("registers explicit memory, persists exact private provenance, and recalls active preferences", async () => {
+    const fixture = makeFixture();
+    const jobs = new JobsService(fixture.vaults);
+    const remembered: Array<Record<string, string>> = [];
+    const memory = {
+      recall: () => [{ title: "Concise summaries", body: "Prefer concise summaries." }],
+      rememberPreference: (request: Record<string, string>) => {
+        remembered.push(request);
+        return { id: "memory_20260727_abcdefabcdefabcd" };
+      }
+    };
+    let observedSystemPrompt = "";
+    const runtime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        observedSystemPrompt = request.systemPrompt;
+        await request.beforeModelTurn?.();
+        const tool = request.tools.find((candidate) => candidate.name === "pige_remember_preference");
+        if (!tool) throw new Error("Missing explicit memory tool.");
+        const signal = new AbortController().signal;
+        await tool.execute({ title: "Concise summaries", body: "Prefer concise summaries." }, signal, {
+          toolCallId: "pi_tool_remember_preference",
+          signal
+        });
+        await request.beforeModelTurn?.();
+        return makeRuntimeResult(request, tool.name, {
+          answer: "I will remember that preference.",
+          citationRefs: [],
+          grounding: "general"
+        });
+      }
+    };
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      memory
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Remember that I prefer concise summaries.",
+      inputKind: "typed_text",
+      locale: "en",
+      clientTurnId: "turn_20260727_memoryexplicit"
+    });
+
+    expect(outcome).toMatchObject({ state: "completed" });
+    expect(remembered).toEqual([expect.objectContaining({
+      vaultPath: fixture.vaultPath,
+      activeVaultId: fixture.vault.vaultId,
+      parentJobId: expect.stringMatching(/^job_/u),
+      sourceConversationId: expect.stringMatching(/^conv_/u),
+      sourceEventId: expect.stringMatching(/^evt_/u)
+    })]);
+    expect(observedSystemPrompt).toContain("Memory 1: Concise summaries: Prefer concise summaries.");
+    expect(observedSystemPrompt).toContain("current user instruction always wins");
+  });
+
   it("omits reviewed task plans from neutral attachment turns", async () => {
     const fixture = makeFixture();
     const models = makeModels();

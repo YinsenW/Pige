@@ -21,6 +21,7 @@ import { ConversationEarlierControl, projectCompletedConversation, useConversati
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
 import { TaskExecutionInteractionStatus } from "./components/TaskExecutionInteraction";
+import { AgentMemorySettingsPanel } from "./components/AgentMemorySettingsPanel";
 import {
   homeConversationStateForJob,
   isTerminalConversationTurn,
@@ -114,6 +115,7 @@ import {
   type Locale,
   type ProviderEndpointProtocol,
 } from "@pige/schemas";
+export { AgentMemorySettingsPanel } from "./components/AgentMemorySettingsPanel";
 type View = "home" | "library" | "knowledgeTree";
 export type SettingsSection =
   | "general"
@@ -1841,7 +1843,7 @@ export function App(): React.JSX.Element {
             />
           ) : settingsSection === "memory" ? (
             <AgentMemorySettingsPanel
-              onDevelopment={() => showDevelopmentCapability("settings", "agent_memory")}
+              activeVaultId={activeVault?.vaultId ?? null}
               t={t}
             />
           ) : settingsSection === "privacy" ? (
@@ -6308,137 +6310,6 @@ export function LocalCapabilitiesSettingsPanel(props: {
       </section>
 
       <p className="settings-note" id="capabilities-partial-note">{props.t("capabilities.partialNote")}</p>
-    </section>
-  );
-}
-
-export function AgentMemorySettingsPanel(props: {
-  readonly onDevelopment: () => void;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  const memoryScopes = [
-    "summaries",
-    "naming",
-    "organization",
-    "mistakes"
-  ] as const;
-
-  return (
-    <section className="settings-page memory-settings-page" aria-labelledby="settings-memory-title">
-      <header className="settings-panel-header">
-        <h1 id="settings-memory-title">{props.t("memory.title")}</h1>
-        <p>{props.t("memory.subtitle")}</p>
-      </header>
-
-      <section className="settings-section" aria-labelledby="memory-policy-title">
-        <h2 className="settings-section-title" id="memory-policy-title">{props.t("memory.agentPolicy")}</h2>
-        <div className="settings-card">
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>PIGE.md</strong>
-              <span>{props.t("memory.pigeDescription")}</span>
-            </div>
-            <button
-              className="settings-button"
-              type="button"
-              data-memory-control="pige-policy"
-              aria-describedby="memory-partial-note"
-              onClick={props.onDevelopment}
-            >
-              {props.t("settings.status.development")}
-            </button>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("memory.highImpactTitle")}</strong>
-              <span id="memory-high-impact-description">{props.t("memory.highImpactDescription")}</span>
-            </div>
-            <button
-              className="settings-button"
-              type="button"
-              data-memory-control="high-impact-policy"
-              aria-label={props.t("memory.highImpactTitle")}
-              aria-describedby="memory-high-impact-description memory-partial-note"
-              onClick={props.onDevelopment}
-            >
-              {props.t("settings.status.development")}
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="settings-section" aria-labelledby="memory-vault-title">
-        <h2 className="settings-section-title" id="memory-vault-title">{props.t("memory.memorySection")}</h2>
-        <div className="settings-card">
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("memory.vaultMemoryTitle")}</strong>
-              <span>{props.t("memory.vaultMemoryDescription")}</span>
-            </div>
-            <button
-              className="settings-button"
-              type="button"
-              data-memory-control="vault-memory"
-              aria-label={props.t("memory.vaultMemoryTitle")}
-              aria-describedby="memory-partial-note"
-              onClick={props.onDevelopment}
-            >
-              {props.t("settings.status.development")}
-            </button>
-          </div>
-          <div className="settings-row tall">
-            <div className="settings-row-copy">
-              <strong>{props.t("memory.useMemoryFor")}</strong>
-              <span>{props.t("memory.useMemoryDescription")}</span>
-              <div className="memory-scope-list" role="group" aria-label={props.t("memory.useMemoryFor") }>
-                {memoryScopes.map((scope) => (
-                  <button
-                    className="memory-scope-option"
-                    type="button"
-                    data-memory-scope={scope}
-                    aria-describedby="memory-partial-note"
-                    key={scope}
-                    onClick={props.onDevelopment}
-                  >
-                    <PigeIcon name="memory" size={14} aria-hidden="true" />
-                    {props.t(`memory.scope.${scope}`)}
-                    <small>{props.t("settings.status.development")}</small>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="settings-section" aria-labelledby="memory-records-title">
-        <h2 className="settings-section-title" id="memory-records-title">{props.t("memory.savedMemories")}</h2>
-        <div className="memory-empty-card">
-          <PigeIcon name="memory" size={22} />
-          <div>
-            <strong>{props.t("memory.emptyTitle")}</strong>
-            <span>{props.t("memory.emptyDescription")}</span>
-          </div>
-        </div>
-        <div className="settings-inline-actions">
-          <button className="settings-button" type="button" onClick={props.onDevelopment}>
-            {props.t("memory.inspect")}
-          </button>
-          <button className="settings-button" type="button" onClick={props.onDevelopment}>
-            {props.t("memory.export")}
-          </button>
-          <button
-            className="settings-button danger"
-            type="button"
-            disabled
-            title={props.t("memory.resetUnavailable")}
-          >
-            {props.t("memory.reset")}
-          </button>
-        </div>
-      </section>
-
-      <p className="settings-note" id="memory-partial-note">{props.t("memory.partialNote")}</p>
     </section>
   );
 }

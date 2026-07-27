@@ -37,6 +37,8 @@ import type {
   SetSidebarOpenRequest,
   SetWindowModeRequest,
   SkillDisableRequest,
+  MemoryDisableRequest,
+  MemoryListRequest,
   SpeechAvailabilityRequest,
   SpeechAssetInstallRequest,
   SpeechCancelRequest,
@@ -84,6 +86,10 @@ import {
   UpdateSummarySchema,
   SkillDisableRequestSchema,
   SkillRegistryMutationResultSchema,
+  MemoryDisableRequestSchema,
+  MemoryListRequestSchema,
+  MemoryMutationResultSchema,
+  MemorySummarySchema,
   SkillRegistryQueryResultSchema,
   SetLocaleRequestSchema,
   SetThemeRequestSchema,
@@ -206,6 +212,7 @@ import {
 } from "./services/task-execution-recipe-service";
 import { NoNetworkUpdateCheckAdapter, UpdateService } from "./services/update-service";
 import { SkillRegistryService } from "./services/skill-registry-service";
+import { AgentMemoryService } from "./services/agent-memory-service";
 import { VaultService } from "./services/vault-service";
 import { WindowModeService } from "./services/window-mode-service";
 import { getWindowShellOptions } from "./window-shell-options";
@@ -251,6 +258,7 @@ let ocrService: OcrService | undefined;
 let speechService: SpeechService | undefined;
 let updateService: UpdateService | undefined;
 let skillRegistryService: SkillRegistryService | undefined;
+let agentMemoryService: AgentMemoryService | undefined;
 let taskProcessSessionService: TaskProcessSessionService | undefined;
 let taskExecutionPlanService: TaskExecutionPlanService | undefined;
 let taskExecutionPlanRunner: TaskExecutionPlanRunner | undefined;
@@ -506,6 +514,11 @@ const getSkillRegistryService = (): SkillRegistryService => {
     });
   }
   return skillRegistryService;
+};
+
+const getAgentMemoryService = (): AgentMemoryService => {
+  agentMemoryService ??= new AgentMemoryService();
+  return agentMemoryService;
 };
 
 const getVaultService = (): VaultService => {
@@ -1077,7 +1090,8 @@ const getHomeAgentService = (): HomeAgentService => {
           ...turn,
           readToolCatalogHash: turn.readToolCatalogHash
         })]
-      }
+      },
+      getAgentMemoryService()
     );
   }
   return homeAgentService;
@@ -1800,6 +1814,30 @@ ipcMain.handle("skills.disable", (_event, request: SkillDisableRequest) => {
   if (result.status === "committed") {
     for (const window of mainWindows) {
       if (!window.isDestroyed()) window.webContents.send("skills.changed", result.registry);
+    }
+  }
+  return result;
+});
+ipcMain.handle("memory.list", (_event, request: MemoryListRequest) => {
+  const parsed = MemoryListRequestSchema.parse(request);
+  const vault = getVaultService().current();
+  const vaultPath = getVaultService().activeVaultPath();
+  if (!vault || !vaultPath || vault.vaultId !== parsed.activeVaultId) {
+    throw new PigeDomainError("vault.binding_changed", "The active vault changed before memory inspection.");
+  }
+  return MemorySummarySchema.parse(getAgentMemoryService().list(vaultPath, vault.vaultId));
+});
+ipcMain.handle("memory.disable", (_event, request: MemoryDisableRequest) => {
+  const parsed = MemoryDisableRequestSchema.parse(request);
+  const vault = getVaultService().current();
+  const vaultPath = getVaultService().activeVaultPath();
+  if (!vault || !vaultPath || vault.vaultId !== parsed.activeVaultId) {
+    throw new PigeDomainError("vault.binding_changed", "The active vault changed before memory mutation.");
+  }
+  const result = MemoryMutationResultSchema.parse(getAgentMemoryService().disable(vaultPath, parsed));
+  if (result.status === "committed") {
+    for (const window of mainWindows) {
+      if (!window.isDestroyed()) window.webContents.send("memory.changed", result.summary);
     }
   }
   return result;
