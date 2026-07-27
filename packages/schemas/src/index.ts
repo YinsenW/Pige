@@ -842,6 +842,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "update_collection_cell",
     "add_collection_row",
     "add_collection_column",
+    "rename_collection_column",
     "trash_collection_row",
     "update_memory",
     "trash_memory",
@@ -2604,6 +2605,17 @@ export const DatasetRevisionSchema = z.object({
       undoOfOperationId: OperationIdSchema
     }).strict(),
     z.object({
+      kind: z.literal("collection_column_rename"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_column_rename_undo"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
       kind: z.literal("collection_row_trash"),
       tableId: TableIdSchema,
       rowId: RowIdSchema
@@ -2691,7 +2703,8 @@ export const CollectionNewColumnLabelSchema = z.string().trim().min(1).max(120).
 export const CollectionColumnSummarySchema = z.object({
   columnId: DatasetQueryColumnIdSchema,
   label: z.string().min(1).max(512),
-  logicalType: DatasetLogicalTypeSchema
+  logicalType: DatasetLogicalTypeSchema,
+  canRename: z.boolean()
 }).strict();
 
 export const CollectionCellSchema = z.object({
@@ -2834,6 +2847,17 @@ export const CollectionAddNullableColumnRequestSchema = z.object({
   logicalType: CollectionEditableLogicalTypeSchema
 }).strict();
 
+export const CollectionRenameColumnRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  columnId: DatasetQueryColumnIdSchema,
+  label: CollectionNewColumnLabelSchema
+}).strict();
+
 const CollectionEditResultIdentitySchema = z.object({
   apiVersion: z.literal(1),
   requestId: CollectionRequestIdSchema,
@@ -2922,6 +2946,56 @@ export const CollectionAddNullableColumnResultSchema = z.discriminatedUnion("sta
       code: "custom",
       path: ["columnId"],
       message: "Committed Collection columns must appear in the authoritative snapshot."
+    });
+  }
+});
+
+const CollectionRenameColumnResultIdentitySchema = CollectionResultIdentitySchema.extend({
+  columnId: DatasetQueryColumnIdSchema
+}).strict();
+
+export const CollectionRenameColumnResultSchema = z.discriminatedUnion("status", [
+  CollectionRenameColumnResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionRenameColumnResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionRenameColumnResultIdentitySchema.extend({
+    status: z.literal("duplicate"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionRenameColumnResultIdentitySchema.extend({
+    status: z.literal("ineligible"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionRenameColumnResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionRenameColumnResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (!("snapshot" in result)) return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({
+      code: "custom",
+      path: ["snapshot"],
+      message: "Collection column-rename snapshots must match the request identity."
+    });
+  }
+  if (!result.snapshot.columns.some((column) => column.columnId === result.columnId)) {
+    context.addIssue({
+      code: "custom",
+      path: ["columnId"],
+      message: "Collection column-rename snapshots must retain the stable column identity."
+    });
+  }
+  const column = result.snapshot.columns.find((candidate) => candidate.columnId === result.columnId);
+  if (result.status === "ineligible" && column?.canRename !== false) {
+    context.addIssue({
+      code: "custom",
+      path: ["snapshot", "columns"],
+      message: "Ineligible Collection column renames must fail closed in the authoritative snapshot."
     });
   }
 });
@@ -4349,6 +4423,7 @@ export const OperationRecordSchema = z.object({
     "update_collection_cell",
     "add_collection_row",
     "add_collection_column",
+    "rename_collection_column",
     "trash_collection_row",
     "trash_artifact",
     "restore_artifact",
@@ -4826,6 +4901,8 @@ export type CollectionAppendDefaultRowRequest = z.infer<typeof CollectionAppendD
 export type CollectionAppendDefaultRowResult = z.infer<typeof CollectionAppendDefaultRowResultSchema>;
 export type CollectionAddNullableColumnRequest = z.infer<typeof CollectionAddNullableColumnRequestSchema>;
 export type CollectionAddNullableColumnResult = z.infer<typeof CollectionAddNullableColumnResultSchema>;
+export type CollectionRenameColumnRequest = z.infer<typeof CollectionRenameColumnRequestSchema>;
+export type CollectionRenameColumnResult = z.infer<typeof CollectionRenameColumnResultSchema>;
 export type CollectionTrashRowRequest = z.infer<typeof CollectionTrashRowRequestSchema>;
 export type CollectionTrashRowResult = z.infer<typeof CollectionTrashRowResultSchema>;
 export type CollectionCellReadOnlyReason = z.infer<typeof CollectionCellReadOnlyReasonSchema>;
