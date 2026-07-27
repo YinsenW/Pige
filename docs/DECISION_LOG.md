@@ -3391,17 +3391,18 @@ Date: 2026-07-27
 
 Decision:
 
-Ship exact URL stage/install/discard plus CAS enable, trash uninstall and pathless export for
-verified machine-local pure Skills.
+Ship exact URL stage/install/discard, source-aware staged update, CAS enable, trash uninstall and
+pathless export for verified machine-local pure Skills.
 
 Rationale:
 
-Deliver a safe first pure-Skill lifecycle without broader source/class/runtime scope.
+Deliver a safe pure-Skill lifecycle without broader source/class/runtime scope.
 
 Consequences:
 
-- Stage executes nothing; Main-derived eligibility fences installed actions, uninstall trashes
-  before removal and export is body/path-free. Other sources, update and public restore stay open.
+- Stage executes nothing. Eligibility fences actions; update binds the same strict HTTPS source and
+  installed base/revision, preserves enablement, trashes old bytes and CAS-adopts once. Other
+  sources and public restore stay open.
 
 References:
 

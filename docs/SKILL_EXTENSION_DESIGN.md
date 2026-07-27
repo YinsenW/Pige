@@ -59,12 +59,12 @@ accepts one credential/query/fragment-free HTTPS `SKILL.md` up to 256 KiB in a p
 stage. Only safe metadata/digest/expiry crosses IPC. Install binds request/stage/digest/registry
 revision with receipt adoption; discard removes that exact stage and drift fails closed.
 
-Installed actions cover only verified `user_confirmed` machine-local pure Skills. Required
-`canEnable`/`canUninstall`/`canExport` alone expose UI; Main rechecks vault/revision/manifest.
-Enable restores disabled state. Uninstall trashes bytes before registry removal and restart-adopts
-its receipt, with no permanent delete or public Restore/Undo. Main-dialog export atomically writes
-portable bytes without path/body/raw error. Built-in, package, invalid or drifted entries stay
-ineligible; URL disable is unchanged and source update/other input-scope-kind lifecycle stays open.
+Only verified `user_confirmed` machine-local pure Skills expose required
+`canEnable`/`canUninstall`/`canExport`/`canUpdate`; Main reproves registry/manifest. Enable restores;
+uninstall trash-adopts; export is pathless. Update re-fetches only the strict HTTPS source, staging
+a safe preview bound to installed digest/version/`updatedAt` and revision. `installStaged` preserves
+enablement, trashes prior bytes and CAS/restart-adopts once. Same bytes are `current`; drift is
+`stale` or closed. No background, cross-source, local-file/ZIP/chat update or public restore.
 
 ## 5. Skill Format
 

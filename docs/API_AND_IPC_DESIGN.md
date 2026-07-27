@@ -707,6 +707,7 @@ Commands:
 - `memory.export`
 - `memory.reset`
 - `skills.stageFromUrl`
+- `skills.stageUpdate`
 - `skills.installStaged`
 - `skills.discardStaged`
 - `skills.disable`
@@ -730,11 +731,11 @@ Events:
 - `settings.appearanceChanged`
 - `memory.changed`
 
-Skill URL stage/install/discard stay body/path-free and digest/revision-bound. Installed lifecycle
-binds request/vault/Skill/registry revision and Main-reproved `user_confirmed` machine-local pure
-bytes; only required `canEnable`/`canUninstall`/`canExport` authorize UI. Enable/uninstall return
-`committed | stale | not_found | failed` and registry where defined; Main-dialog export returns
-pathless `exported | cancelled | stale | not_found | failed`; summary/disable/events stay unchanged.
+Skill IPC is body/path-free. Required `canEnable`/`canUninstall`/`canExport`/`canUpdate` gate UI;
+Main rechecks request/vault/Skill/registry/manifest. `stageUpdate` re-fetches the strict HTTPS source
+and returns `ready { staged } | current | stale | not_found | failed`; its private stage binds
+source/base/revision. `installStaged` preserves enablement, trashes prior bytes and CAS-adopts once;
+drift fails closed. Other lifecycle vocabularies remain.
 
 Memory list returns vault/revision and at most 1,000 safe records; private conversation/event/Job
 IDs stay in Main. Disable remains compatible. Enable/delete bind exact record/revision; reset binds
