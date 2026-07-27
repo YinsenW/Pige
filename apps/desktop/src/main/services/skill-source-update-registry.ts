@@ -38,7 +38,7 @@ export type SkillUpdateResolution =
 export interface SkillStagedInstallCandidate {
   readonly stagingId: string;
   readonly requestId: string;
-  readonly sourceUrl: string;
+  readonly sourceUrl?: string;
   readonly manifestSha256: string;
   readonly expiresAt: string;
   readonly manifest: SkillManifest;

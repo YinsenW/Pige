@@ -15,6 +15,33 @@ afterEach(() => {
 });
 
 describe("SkillUrlInstallService", () => {
+  it("stages one exact local Markdown file without projecting its path or remote update authority", async () => {
+    const root = createRoot();
+    const selectedPath = path.join(root, "local-skill.md");
+    fs.writeFileSync(selectedPath, skillMarkdown(), { encoding: "utf8", mode: 0o600 });
+    const registry = new SkillRegistryService(root);
+    const service = new SkillUrlInstallService({ appDataRoot: root, registry });
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "skillreq_local0123456789ab",
+      activeVaultId: "vault_20260728_localskill"
+    };
+    const staged = await service.stageFromMarkdown(request, selectedPath);
+    expect(staged).toMatchObject({ ...request, status: "ready", staged: { id: "paper-reading", warnings: [] } });
+    expect(JSON.stringify(staged)).not.toContain(selectedPath);
+    expect(JSON.stringify(staged)).not.toContain("sourceUrl");
+    if (staged.status !== "ready") throw new Error("Expected local Markdown stage.");
+    expect(service.installStaged({
+      apiVersion: 1, requestId: request.requestId, stagingId: staged.staged.stagingId,
+      manifestSha256: staged.staged.manifestSha256, expectedRegistryRevision: staged.staged.registryRevision, enabled: true
+    })).toMatchObject({ status: "committed", registry: { skills: [{ id: "paper-reading", canUpdate: false }] } });
+
+    const linkedPath = path.join(root, "linked.md");
+    fs.symlinkSync(selectedPath, linkedPath);
+    expect(await service.stageFromMarkdown({ ...request, requestId: "skillreq_unsafe0123456789a" }, linkedPath))
+      .toMatchObject({ status: "failed" });
+  });
+
   it("stages a bounded pure Markdown Skill without execution and installs it once through registry CAS", async () => {
     const root = createRoot();
     const sentinel = path.join(root, "sibling-sentinel.txt");

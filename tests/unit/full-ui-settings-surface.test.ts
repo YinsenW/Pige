@@ -1035,7 +1035,7 @@ describe("full UI Settings surface", () => {
       buttonNamed(page, "Install from link").click();
       await settle(dom);
     });
-    expect(buttonNamed(page, "Choose Markdown or ZIP").disabled).toBe(true);
+    expect(buttonNamed(page, "Import Markdown Skill").disabled).toBe(true);
     expect(requireElement(page.querySelector<HTMLInputElement>("#skill-install-url"))).toBe(dom.window.document.activeElement);
 
     await act(async () => root.unmount());
@@ -1357,6 +1357,128 @@ describe("full UI Settings surface", () => {
     expect(page.textContent).toContain("This Skill is no longer available for update.");
     expect(page.textContent).toContain("No Skills installed");
     expect(stageUpdate).toHaveBeenCalledTimes(3);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("stages one Main-picked Markdown Skill for the existing safe review and install flow", async () => {
+    const dom = createDom();
+    const vaultId = "vault_20260728_markdownskill";
+    const initialRegistry = skillRegistry(40, false, 0, []);
+    const installedRegistry = skillRegistry(41, true);
+    const staged = {
+      stagingId: "skillstage_89abcdef0123456789abcdef01234567" as const,
+      manifestSha256: `sha256:${"e".repeat(64)}` as const,
+      registryRevision: 40,
+      expiresAt: "2026-07-28T14:00:00.000Z",
+      id: "local-review",
+      name: "Local review",
+      version: "1.0.0",
+      description: "Reviews the current source from one local Markdown Skill.",
+      scope: "machine_local" as const,
+      kind: "pure" as const,
+      capabilities: ["read_current_source" as const],
+      dataBoundaries: ["local" as const],
+      files: [{ relativePath: "SKILL.md" as const, utf8ByteSize: 1536, sha256: `sha256:${"f".repeat(64)}` as const }],
+      warnings: []
+    };
+    let stageAttempt = 0;
+    const stageFromMarkdown = vi.fn(async (request: {
+      requestId: `skillreq_${string}`;
+      activeVaultId: string;
+    }) => {
+      const identity = {
+        apiVersion: 1 as const,
+        requestId: request.requestId,
+        activeVaultId: request.activeVaultId
+      };
+      if (stageAttempt++ === 0) return { ...identity, status: "cancelled" as const };
+      if (stageAttempt === 2) return { ...identity, status: "ready" as const, staged };
+      return { ...identity, status: "failed" as const };
+    });
+    const installStaged = vi.fn(async (request: { requestId: string }) => ({
+      status: "committed" as const,
+      requestId: request.requestId,
+      registry: installedRegistry
+    }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        skills: {
+          summary: async () => ({ status: "ready" as const, registry: initialRegistry }),
+          stageFromMarkdown,
+          installStaged,
+          discardStaged: vi.fn(),
+          disable: vi.fn(),
+          onChanged: () => () => undefined
+        },
+        vault: { current: async () => ({ vaultId }) }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(SkillsSettingsPanel, { t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-skills"));
+    const importMarkdown = (): HTMLButtonElement => buttonNamed(page, "Import Markdown Skill");
+
+    await act(async () => {
+      const action = importMarkdown();
+      action.click();
+      action.click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(stageFromMarkdown).toHaveBeenCalledOnce();
+    expect(stageFromMarkdown).toHaveBeenLastCalledWith({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
+      activeVaultId: vaultId
+    });
+    expect(page.textContent).not.toContain("Pige could not review this Markdown Skill safely.");
+    expect(dom.window.document.activeElement).toBe(importMarkdown());
+
+    await act(async () => {
+      importMarkdown().click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(stageFromMarkdown).toHaveBeenCalledTimes(2);
+    expect(page.textContent).toContain("Local review");
+    expect(page.textContent).toContain("SKILL.md · 2 KB");
+    expect(page.textContent).not.toContain(staged.stagingId);
+    expect(page.textContent).not.toContain(staged.manifestSha256);
+    expect(page.textContent).not.toContain("file://");
+    const install = buttonNamed(page, "Install Skill");
+    expect(dom.window.document.activeElement).toBe(install);
+
+    await act(async () => {
+      install.click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(installStaged).toHaveBeenCalledWith({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
+      stagingId: staged.stagingId,
+      manifestSha256: staged.manifestSha256,
+      expectedRegistryRevision: 40,
+      enabled: true
+    });
+    expect(page.textContent).toContain("The reviewed Skill is installed and enabled.");
+    expect(page.querySelector("#skill-url-install")).toBeNull();
+    expect(dom.window.document.activeElement).toBe(importMarkdown());
+
+    await act(async () => {
+      importMarkdown().click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(stageFromMarkdown).toHaveBeenCalledTimes(3);
+    expect(page.textContent).toContain("Pige could not review this Markdown Skill safely.");
+    expect(dom.window.document.activeElement).toBe(importMarkdown());
 
     await act(async () => root.unmount());
     dom.window.close();

@@ -24,7 +24,11 @@ interface UninstallConfirmation {
 }
 
 type StagedSkillReview =
-  | { readonly kind: "install"; readonly staged: SkillStagedSummary }
+  | {
+    readonly kind: "install";
+    readonly source: "url" | "markdown";
+    readonly staged: SkillStagedSummary;
+  }
   | {
     readonly kind: "update";
     readonly staged: SkillStagedSummary;
@@ -51,30 +55,37 @@ export function SkillsSettingsPanel(props: {
   const lifecycleActiveRef = useRef(false);
   const uninstallConfirmationActiveRef = useRef(false);
   const installOperationRef = useRef(0);
-  const pendingFocusRef = useRef<"trigger" | "url" | null>(null);
+  const pendingFocusRef = useRef<"trigger" | "url" | "markdown" | null>(null);
   const pendingInstalledFocusRef = useRef<{
     readonly skillId: string | null;
     readonly action?: InstalledLifecycleKind;
   } | undefined>(undefined);
   const installTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const markdownTriggerRef = useRef<HTMLButtonElement | null>(null);
   const installUrlRef = useRef<HTMLInputElement | null>(null);
+  const markdownStageActiveRef = useRef(false);
   const stagedPrimaryActionRef = useRef<HTMLButtonElement | null>(null);
   const uninstallTriggerRef = useRef<HTMLButtonElement | null>(null);
   const uninstallCancelRef = useRef<HTMLButtonElement | null>(null);
   const pageRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (pendingFocusRef.current === "trigger" && !installOpen) {
+    if (pendingFocusRef.current === "trigger" && !installOpen && installBusy === null) {
       pendingFocusRef.current = null;
       installTriggerRef.current?.focus();
-    } else if (pendingFocusRef.current === "url" && installOpen && !stagedReview) {
+    } else if (pendingFocusRef.current === "url" && installOpen && !stagedReview && installBusy === null) {
       pendingFocusRef.current = null;
       installUrlRef.current?.focus();
+    } else if (pendingFocusRef.current === "markdown" && !installOpen && installBusy === null) {
+      pendingFocusRef.current = null;
+      markdownTriggerRef.current?.focus();
     }
-  }, [installOpen, stagedReview]);
+  }, [installBusy, installOpen, stagedReview]);
 
   useEffect(() => {
-    if (stagedReview?.kind === "update") stagedPrimaryActionRef.current?.focus();
+    if (stagedReview?.kind === "update" || stagedReview?.source === "markdown") {
+      stagedPrimaryActionRef.current?.focus();
+    }
   }, [stagedReview]);
 
   useEffect(() => {
@@ -413,7 +424,7 @@ export function SkillsSettingsPanel(props: {
         return;
       }
       if (result.status === "ready") {
-        setStagedReview({ kind: "install", staged: result.staged });
+        setStagedReview({ kind: "install", source: "url", staged: result.staged });
         return;
       }
       setStatusKey(result.status === "invalid"
@@ -422,6 +433,55 @@ export function SkillsSettingsPanel(props: {
     } catch {
       if (finishInstallOperation(operation)) setStatusKey("skills.stageFailed");
     } finally {
+      if (finishInstallOperation(operation)) setInstallBusy(null);
+    }
+  };
+
+  const stageFromMarkdown = async (): Promise<void> => {
+    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current ||
+        stagedReview || installOpen || markdownStageActiveRef.current) return;
+    markdownStageActiveRef.current = true;
+    const operation = installOperationRef.current + 1;
+    installOperationRef.current = operation;
+    setInstallBusy("stage");
+    setStatusKey(null);
+    try {
+      const requestedVault = await window.pige.vault.current();
+      if (!finishInstallOperation(operation)) return;
+      if (!requestedVault) {
+        setStatusKey("skills.stageMarkdownFailed");
+        pendingFocusRef.current = "markdown";
+        return;
+      }
+      const requestId = createSkillInstallRequestId();
+      const result = await window.pige.skills.stageFromMarkdown({
+        apiVersion: 1,
+        requestId,
+        activeVaultId: requestedVault.vaultId
+      });
+      if (!finishInstallOperation(operation)) return;
+      const currentVault = await window.pige.vault.current();
+      if (!finishInstallOperation(operation)) return;
+      if (result.requestId !== requestId || result.activeVaultId !== requestedVault.vaultId ||
+          currentVault?.vaultId !== requestedVault.vaultId) {
+        setStatusKey("skills.stageMarkdownFailed");
+        pendingFocusRef.current = "markdown";
+        return;
+      }
+      if (result.status === "ready") {
+        setInstallOpen(true);
+        setStagedReview({ kind: "install", source: "markdown", staged: result.staged });
+      } else {
+        if (result.status === "failed") setStatusKey("skills.stageMarkdownFailed");
+        pendingFocusRef.current = "markdown";
+      }
+    } catch {
+      if (finishInstallOperation(operation)) {
+        setStatusKey("skills.stageMarkdownFailed");
+        pendingFocusRef.current = "markdown";
+      }
+    } finally {
+      markdownStageActiveRef.current = false;
       if (finishInstallOperation(operation)) setInstallBusy(null);
     }
   };
@@ -460,20 +520,30 @@ export function SkillsSettingsPanel(props: {
         setInstallOpen(false);
         setStatusKey(review.kind === "update" ? "skills.updateCompleted" : "skills.installCompleted");
         if (review.kind === "update") queueInstalledFocus(review.skillId, "update");
-        else pendingFocusRef.current = "trigger";
+        else pendingFocusRef.current = review.source === "markdown" ? "markdown" : "trigger";
       } else if (result.status === "stale") {
         setStagedReview(null);
-        setStatusKey(review.kind === "update" ? "skills.updateStale" : "skills.installReviewExpired");
+        setStatusKey(review.kind === "update"
+          ? "skills.updateStale"
+          : review.source === "markdown" ? "skills.installMarkdownReviewExpired" : "skills.installReviewExpired");
         if (review.kind === "update") {
           setInstallOpen(false);
           queueInstalledFocus(review.skillId, "update");
+        } else if (review.source === "markdown") {
+          setInstallOpen(false);
+          pendingFocusRef.current = "markdown";
         } else pendingFocusRef.current = "url";
       } else if (result.status === "not_found") {
         setStagedReview(null);
-        setStatusKey(review.kind === "update" ? "skills.updateUnavailable" : "skills.installReviewUnavailable");
+        setStatusKey(review.kind === "update"
+          ? "skills.updateUnavailable"
+          : review.source === "markdown" ? "skills.installMarkdownReviewUnavailable" : "skills.installReviewUnavailable");
         if (review.kind === "update") {
           setInstallOpen(false);
           queueInstalledFocus(review.skillId, "update");
+        } else if (review.source === "markdown") {
+          setInstallOpen(false);
+          pendingFocusRef.current = "markdown";
         } else pendingFocusRef.current = "url";
       } else {
         setStatusKey(review.kind === "update" ? "skills.updateFailed" : "skills.installFailed");
@@ -515,10 +585,15 @@ export function SkillsSettingsPanel(props: {
       setStagedReview(null);
       setStatusKey(result.status === "discarded"
         ? null
-        : review.kind === "update" ? "skills.updateUnavailable" : "skills.installReviewUnavailable");
+        : review.kind === "update"
+          ? "skills.updateUnavailable"
+          : review.source === "markdown" ? "skills.installMarkdownReviewUnavailable" : "skills.installReviewUnavailable");
       if (review.kind === "update") {
         setInstallOpen(false);
         queueInstalledFocus(review.skillId, "update");
+      } else if (review.source === "markdown") {
+        setInstallOpen(false);
+        pendingFocusRef.current = "markdown";
       } else pendingFocusRef.current = "url";
     } catch {
       if (finishInstallOperation(operation)) setStatusKey("skills.discardFailed");
@@ -713,7 +788,7 @@ export function SkillsSettingsPanel(props: {
             type="button"
             aria-expanded={installOpen}
             aria-controls="skill-url-install"
-            disabled={lifecycleAction !== null || uninstallConfirmation !== null}
+            disabled={lifecycleAction !== null || installBusy !== null || uninstallConfirmation !== null}
             onClick={() => {
               setInstallOpen(true);
               setStatusKey(null);
@@ -723,9 +798,16 @@ export function SkillsSettingsPanel(props: {
             <PigeIcon name="link" size={15} aria-hidden="true" />
             {props.t("skills.installFromLink")}
           </button>
-          <button className="settings-button settings-action" type="button" disabled title={props.t("skills.chooseFileUnavailable")}>
+          <button
+            ref={markdownTriggerRef}
+            className="settings-button settings-action"
+            type="button"
+            disabled={lifecycleAction !== null || installBusy !== null || uninstallConfirmation !== null || installOpen}
+            onClick={() => void stageFromMarkdown()}
+          >
             <PigeIcon name="fileText" size={15} aria-hidden="true" />
-            {props.t("skills.chooseFile")}
+            {props.t(installBusy === "stage" && markdownStageActiveRef.current
+              ? "skills.reviewing" : "skills.importMarkdown")}
           </button>
         </div>
         {installOpen ? (
@@ -743,7 +825,7 @@ export function SkillsSettingsPanel(props: {
                     <span>{props.t("skills.scope.machine_local")}</span>
                     <span>{props.t("skills.boundary.local")}</span>
                   </div>
-                  <span>{stagedReview.staged.sourceUrl}</span>
+                  {stagedReview.staged.sourceUrl ? <span>{stagedReview.staged.sourceUrl}</span> : null}
                   <span>{`${stagedReview.staged.files[0].relativePath} · ${formatByteSize(stagedReview.staged.files[0].utf8ByteSize)}`}</span>
                   {stagedReview.staged.capabilities.map((capability) => (
                     <span key={capability}>{props.t(`skills.capability.${capability}`)}</span>

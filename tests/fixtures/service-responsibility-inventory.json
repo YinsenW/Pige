@@ -3,7 +3,7 @@
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 157,
-  "baselineLines": 84487,
+  "baselineLines": 84695,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -55,7 +55,7 @@
       ["retrieval-evidence-boundary.ts", 470, "prf"],
       ["setting-action-guard.ts", 36, "p"],
       ["skill-source-update-registry.ts", 236, "rd"],
-      ["skill-url-install-service.ts", 447, "prd"],
+      ["skill-url-install-service.ts", 655, "prd"],
       ["source-file-access.ts", 217, "pr"],
       ["speech-service.ts", 541, "pr"],
       ["task-execution-plan-runner.ts", 500, "japr"],

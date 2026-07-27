@@ -9,6 +9,8 @@ import {
   SkillInstallStagedRequestSchema,
   SkillInstallStagedResultSchema,
   SkillInstallUrlSchema,
+  SkillStageFromMarkdownRequestSchema,
+  SkillStageFromMarkdownResultSchema,
   SkillStageFromUrlRequestSchema,
   SkillStageFromUrlResultSchema,
   SkillStageUpdateRequestSchema,
@@ -19,6 +21,8 @@ import {
   type SkillInstallStagedRequest,
   type SkillInstallStagedResult,
   type SkillManifest,
+  type SkillStageFromMarkdownRequest,
+  type SkillStageFromMarkdownResult,
   type SkillStageFromUrlRequest,
   type SkillStageFromUrlResult,
   type SkillStageUpdateRequest,
@@ -47,17 +51,26 @@ const MAX_STAGED_DIRECTORIES = 32;
 const STAGE_RECORD_NAME = ".pige-stage.json";
 const STAGED_MANIFEST_NAME = "SKILL.md";
 
-interface SkillStageRecord {
+interface SkillStageRecordBase {
   readonly schemaVersion: 1;
   readonly requestId: string;
   readonly stagingId: string;
-  readonly requestSourceUrl: string;
-  readonly finalSourceUrl: string;
   readonly manifestSha256: `sha256:${string}`;
   readonly createdAt: string;
   readonly expiresAt: string;
+}
+
+interface SkillUrlStageRecord extends SkillStageRecordBase {
+  readonly requestSourceUrl: string;
+  readonly finalSourceUrl: string;
   readonly update?: SkillUpdateTarget;
 }
+
+interface SkillLocalMarkdownStageRecord extends SkillStageRecordBase {
+  readonly sourceKind: "local_markdown";
+}
+
+type SkillStageRecord = SkillUrlStageRecord | SkillLocalMarkdownStageRecord;
 
 export interface SkillUrlFetchPort {
   fetchSnapshot(url: string, signal?: AbortSignal): Promise<SourceFetchSnapshot>;
@@ -98,7 +111,8 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       signal.throwIfAborted();
       const existing = this.#readCandidate(stagingId);
       if (existing) {
-        if (existing.record.requestId !== request.requestId || existing.record.requestSourceUrl !== request.sourceUrl) {
+        if (existing.record.requestId !== request.requestId || isLocalMarkdownRecord(existing.record) ||
+          existing.record.requestSourceUrl !== request.sourceUrl) {
           return stageFailed(request.requestId);
         }
         if (!isExpired(existing.record.expiresAt, this.#now())) {
@@ -165,6 +179,54 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
     }
   }
 
+  async stageFromMarkdown(
+    requestInput: SkillStageFromMarkdownRequest,
+    sourcePath: string
+  ): Promise<SkillStageFromMarkdownResult> {
+    const request = SkillStageFromMarkdownRequestSchema.parse(requestInput);
+    const identity = markdownIdentity(request);
+    const stagingId = createStagingId(request.requestId);
+    try {
+      const existing = this.#readCandidate(stagingId);
+      if (existing) {
+        if (existing.record.requestId !== request.requestId || !isLocalMarkdownRecord(existing.record)) {
+          return markdownFailed(identity);
+        }
+        if (!isExpired(existing.record.expiresAt, this.#now())) {
+          return SkillStageFromMarkdownResultSchema.parse({ ...identity, status: "ready", staged: this.#project(existing) });
+        }
+        this.#removeStage(stagingId, existing.record.manifestSha256);
+      }
+
+      const bytes = readSelectedMarkdown(sourcePath);
+      const source = decodeUtf8(bytes);
+      if (containsRestrictedModelContent(source)) return markdownFailed(identity);
+      const manifest = parseSkillManifest(source);
+      if (manifest.scope !== "machine_local" || manifest.kind !== "pure" || manifest.sourceUrl !== undefined) {
+        return markdownFailed(identity);
+      }
+      assertSkillManifestRendererSafe(manifest);
+      const now = this.#now();
+      const record: SkillLocalMarkdownStageRecord = {
+        schemaVersion: STAGE_SCHEMA_VERSION,
+        requestId: request.requestId,
+        stagingId,
+        sourceKind: "local_markdown",
+        manifestSha256: digest(bytes),
+        createdAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + STAGE_TTL_MS).toISOString()
+      };
+      this.#publishStage(record, bytes);
+      const staged = this.#readCandidate(stagingId);
+      if (!staged || !isLocalMarkdownRecord(staged.record) || staged.record.manifestSha256 !== record.manifestSha256) {
+        return markdownFailed(identity);
+      }
+      return SkillStageFromMarkdownResultSchema.parse({ ...identity, status: "ready", staged: this.#project(staged) });
+    } catch {
+      return markdownFailed(identity);
+    }
+  }
+
   async stageUpdate(
     requestInput: SkillStageUpdateRequest,
     signal: AbortSignal = new AbortController().signal
@@ -179,7 +241,8 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       signal.throwIfAborted();
       const existing = this.#readCandidate(stagingId);
       if (existing) {
-        if (!existing.record.update || !sameUpdateBinding(existing.record.update, target)) return updateFailed(identity);
+        if (isLocalMarkdownRecord(existing.record) || !existing.record.update ||
+          !sameUpdateBinding(existing.record.update, target)) return updateFailed(identity);
         if (!isExpired(existing.record.expiresAt, this.#now())) {
           return SkillStageUpdateResultSchema.parse({ ...identity, status: "ready", staged: this.#project(existing) });
         }
@@ -225,7 +288,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       };
       this.#publishStage(record, bytes);
       const staged = this.#readCandidate(stagingId);
-      if (!staged || staged.record.manifestSha256 !== manifestSha256 ||
+      if (!staged || isLocalMarkdownRecord(staged.record) || staged.record.manifestSha256 !== manifestSha256 ||
         !staged.record.update || !sameUpdateBinding(staged.record.update, target)) return updateFailed(identity);
       return SkillStageUpdateResultSchema.parse({ ...identity, status: "ready", staged: this.#project(staged) });
     } catch {
@@ -252,12 +315,12 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
     return {
       stagingId: parsedId,
       requestId: current.record.requestId,
-      sourceUrl: current.record.finalSourceUrl,
+      ...(!isLocalMarkdownRecord(current.record) ? { sourceUrl: current.record.finalSourceUrl } : {}),
       manifestSha256: current.record.manifestSha256,
       expiresAt: current.record.expiresAt,
       manifest: current.manifest,
       bytes: current.bytes,
-      ...(current.record.update ? { update: current.record.update } : {})
+      ...(!isLocalMarkdownRecord(current.record) && current.record.update ? { update: current.record.update } : {})
     };
   }
 
@@ -268,15 +331,16 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
   #project(candidate: ReadStageCandidate): SkillStagedSummary {
     const manifest = candidate.manifest;
     const warnings = [
-      "untrusted_remote_source" as const,
+      ...(!isLocalMarkdownRecord(candidate.record) ? ["untrusted_remote_source" as const] : []),
       ...(this.#registry.hasTriggerOverlap(manifest) ? ["trigger_overlap" as const] : [])
     ];
     return {
       stagingId: candidate.record.stagingId,
       manifestSha256: candidate.record.manifestSha256,
-      registryRevision: candidate.record.update?.expectedRegistryRevision ?? this.#registry.currentRevision(),
+      registryRevision: (!isLocalMarkdownRecord(candidate.record) ? candidate.record.update?.expectedRegistryRevision : undefined) ??
+        this.#registry.currentRevision(),
       expiresAt: candidate.record.expiresAt,
-      sourceUrl: candidate.record.finalSourceUrl,
+      ...(!isLocalMarkdownRecord(candidate.record) ? { sourceUrl: candidate.record.finalSourceUrl } : {}),
       id: manifest.id,
       name: manifest.name,
       version: manifest.version,
@@ -398,21 +462,29 @@ function parseStageRecord(bytes: Buffer): SkillStageRecord {
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) throw stageInvalid();
   const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort().join(",");
+  const isLocal = keys === "createdAt,expiresAt,manifestSha256,requestId,schemaVersion,sourceKind,stagingId" &&
+    record.sourceKind === "local_markdown" && typeof record.requestId === "string" &&
+    /^skillreq_[a-z0-9]{16,64}$/u.test(record.requestId);
+  const isUrl = [
+    "createdAt,expiresAt,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId",
+    "createdAt,expiresAt,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId,update"
+  ].includes(keys) &&
+    (SkillStageFromUrlRequestSchema.safeParse({ apiVersion: 1, requestId: record.requestId, sourceUrl: record.requestSourceUrl }).success ||
+      isUpdateRecord(record)) && SkillInstallUrlSchema.safeParse(record.finalSourceUrl).success;
   if (
-    ![
-      "createdAt,expiresAt,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId",
-      "createdAt,expiresAt,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId,update"
-    ].includes(Object.keys(record).sort().join(",")) ||
+    (!isLocal && !isUrl) ||
     record.schemaVersion !== STAGE_SCHEMA_VERSION ||
-    !(SkillStageFromUrlRequestSchema.safeParse({ apiVersion: 1, requestId: record.requestId, sourceUrl: record.requestSourceUrl }).success ||
-      isUpdateRecord(record)) ||
     !SkillStagingIdSchema.safeParse(record.stagingId).success ||
-    !SkillInstallUrlSchema.safeParse(record.finalSourceUrl).success ||
     typeof record.manifestSha256 !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(record.manifestSha256) ||
     typeof record.createdAt !== "string" || !Number.isFinite(Date.parse(record.createdAt)) ||
     typeof record.expiresAt !== "string" || !Number.isFinite(Date.parse(record.expiresAt))
   ) throw stageInvalid();
   return record as unknown as SkillStageRecord;
+}
+
+function isLocalMarkdownRecord(record: SkillStageRecord): record is SkillLocalMarkdownStageRecord {
+  return "sourceKind" in record && record.sourceKind === "local_markdown";
 }
 
 function canonicalPrivateRoot(rootInput: string): string {
@@ -424,7 +496,7 @@ function canonicalPrivateRoot(rootInput: string): string {
   return root;
 }
 
-function readPrivateFile(filePath: string, maximumBytes: number): Buffer {
+function readPrivateFile(filePath: string, maximumBytes: number, expected?: fs.Stats): Buffer {
   let descriptor: number | undefined;
   try {
     descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
@@ -432,6 +504,8 @@ function readPrivateFile(filePath: string, maximumBytes: number): Buffer {
     if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1 || before.size <= 0 || before.size > maximumBytes) {
       throw stageInvalid();
     }
+    if (expected && (before.dev !== expected.dev || before.ino !== expected.ino || before.size !== expected.size ||
+      before.mtimeMs !== expected.mtimeMs)) throw stageInvalid();
     const bytes = fs.readFileSync(descriptor);
     const after = fs.fstatSync(descriptor);
     if (!sameIdentity(before, after)) throw stageInvalid();
@@ -439,6 +513,16 @@ function readPrivateFile(filePath: string, maximumBytes: number): Buffer {
   } finally {
     if (descriptor !== undefined) fs.closeSync(descriptor);
   }
+}
+
+function readSelectedMarkdown(filePath: string): Buffer {
+  if (!path.isAbsolute(filePath) || path.extname(filePath).toLocaleLowerCase("en-US") !== ".md") throw stageInvalid();
+  const selected = fs.lstatSync(filePath);
+  if (!selected.isFile() || selected.isSymbolicLink()) throw stageInvalid();
+  const canonicalPath = fs.realpathSync.native(filePath);
+  const canonical = fs.lstatSync(canonicalPath);
+  if (selected.dev !== canonical.dev || selected.ino !== canonical.ino) throw stageInvalid();
+  return readPrivateFile(canonicalPath, SKILL_URL_STAGE_MAX_UTF8_BYTES, selected);
 }
 
 function writePrivateFile(filePath: string, bytes: Buffer): void {
@@ -518,6 +602,14 @@ function stageFailed(requestId: string): SkillStageFromUrlResult {
       userAction: "retry"
     }
   });
+}
+
+function markdownIdentity(request: SkillStageFromMarkdownRequest) {
+  return { apiVersion: 1 as const, requestId: request.requestId, activeVaultId: request.activeVaultId };
+}
+
+function markdownFailed(identity: ReturnType<typeof markdownIdentity>): SkillStageFromMarkdownResult {
+  return SkillStageFromMarkdownResultSchema.parse({ ...identity, status: "failed" });
 }
 
 function updateIdentity(request: SkillStageUpdateRequest) {

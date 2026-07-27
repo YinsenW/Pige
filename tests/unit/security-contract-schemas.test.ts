@@ -26,6 +26,8 @@ import {
   SkillRegistryMutationResultSchema,
   SkillRegistryQueryResultSchema,
   SkillRegistrySummarySchema,
+  SkillStageFromMarkdownRequestSchema,
+  SkillStageFromMarkdownResultSchema,
   SkillStageUpdateRequestSchema,
   SkillStageUpdateResultSchema,
   UpdateProviderCredentialRequestSchema
@@ -252,6 +254,18 @@ describe("security-sensitive shared contracts", () => {
       skillId: updateRequest.skillId,
       status: "failed",
       error: { path: "/private/source" }
+    })).toThrow();
+    const markdownRequest = {
+      apiVersion: 1 as const,
+      requestId: "skillreq_markdownabcdefghijkl",
+      activeVaultId: "vault_20260728_markdownskill"
+    };
+    expect(SkillStageFromMarkdownRequestSchema.parse(markdownRequest)).toEqual(markdownRequest);
+    expect(() => SkillStageFromMarkdownRequestSchema.parse({ ...markdownRequest, path: "/private/SKILL.md" })).toThrow();
+    expect(() => SkillStageFromMarkdownResultSchema.parse({
+      ...markdownRequest,
+      status: "failed",
+      selectedPath: "/private/SKILL.md"
     })).toThrow();
     const failed = {
       status: "failed" as const,

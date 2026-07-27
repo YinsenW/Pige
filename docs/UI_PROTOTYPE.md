@@ -1009,10 +1009,10 @@ Install: Paste Skill Link | Choose Markdown | Choose ZIP
 Staged: review identity, files, capabilities, boundary and warnings
 ```
 
-Explicit chat install joins the same staged confirmation. Skills are workflows, not apps.
-Installed actions require exact `canEnable`/`canUninstall`/`canExport`/`canUpdate === true`.
-Update binds vault/Skill/revision, reuses staged review and labels `Update`; uninstall confirms,
-export is pathless and closed results replace state. Renderer never infers eligibility.
+`Choose Markdown` opens Main's `.md` picker; cancel is quiet and `ready` reuses staged review plus
+explicit `Install`. No selected path/body appears. Explicit chat remains later. Installed actions
+require exact eligibility booleans; Update binds vault/Skill/revision and labels `Update`.
+Uninstall confirms, export is pathless and closed results replace state; no UI inference.
 
 Focused high-risk dialog target:
 

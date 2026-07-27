@@ -55,6 +55,8 @@ import {
   SkillLifecycleMutationResultSchema,
   SkillStageFromUrlRequestSchema,
   SkillStageFromUrlResultSchema,
+  SkillStageFromMarkdownRequestSchema,
+  SkillStageFromMarkdownResultSchema,
   SkillStageUpdateRequestSchema,
   SkillStageUpdateResultSchema,
   SkillUninstallRequestSchema,
@@ -1213,6 +1215,53 @@ describe("schemas", () => {
     expect(SkillDiscardStagedRequestSchema.parse(discardRequest)).toEqual(discardRequest);
     expect(SkillDiscardStagedResultSchema.parse({ status: "discarded", requestId }))
       .toEqual({ status: "discarded", requestId });
+  });
+
+  it("keeps local Markdown Skill picking Main-owned, bounded, and pathless", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "skillreq_markdownabcdefghijkl",
+      activeVaultId: "vault_20260728_markdownskill"
+    } as const;
+    expect(SkillStageFromMarkdownRequestSchema.parse(request)).toEqual(request);
+    for (const unsafe of [{ path: "/private/SKILL.md" }, { body: "private" }, { sourceUrl: "file:///private/SKILL.md" }]) {
+      expect(() => SkillStageFromMarkdownRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+    }
+
+    const staged = {
+      stagingId: `skillstage_${"d".repeat(32)}`,
+      manifestSha256: `sha256:${"e".repeat(64)}`,
+      registryRevision: 4,
+      expiresAt: "2026-07-28T12:00:00.000Z",
+      id: "local-review",
+      name: "Local Review",
+      version: "1.0.0",
+      description: "Review one local Markdown Skill before install.",
+      scope: "machine_local",
+      kind: "pure",
+      capabilities: ["read_current_source"],
+      dataBoundaries: ["local"],
+      files: [{ relativePath: "SKILL.md", utf8ByteSize: 1024, sha256: `sha256:${"e".repeat(64)}` }],
+      warnings: []
+    } as const;
+    const identity = { ...request, status: "ready" as const };
+    expect(SkillStageFromMarkdownResultSchema.parse({ ...identity, staged }))
+      .toEqual({ ...identity, staged });
+    for (const status of ["cancelled", "failed"] as const) {
+      expect(SkillStageFromMarkdownResultSchema.parse({ ...request, status }))
+        .toEqual({ ...request, status });
+    }
+    for (const unsafe of [
+      { path: "/private/SKILL.md" },
+      { body: "private" },
+      { error: { code: "raw_fs_error" } }
+    ]) {
+      expect(() => SkillStageFromMarkdownResultSchema.parse({ ...request, status: "failed", ...unsafe })).toThrow();
+    }
+    expect(() => SkillStageFromMarkdownResultSchema.parse({
+      ...identity,
+      staged: { ...staged, sourceUrl: "https://example.com/SKILL.md", warnings: ["untrusted_remote_source"] }
+    })).toThrow();
   });
 
   it("keeps installed Skill lifecycle vault-bound, CAS-fenced, and pathless", () => {
