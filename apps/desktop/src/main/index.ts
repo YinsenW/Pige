@@ -101,6 +101,7 @@ import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
 import { registerReaderIpc } from "./register-reader-ipc";
 import { registerBackupRestoreIpc } from "./register-backup-restore-ipc";
 import { registerTaskExecutionIpc } from "./register-task-execution-ipc";
+import { registerManagedCollectionIpc } from "./register-managed-collection-ipc";
 import {
   AgentIngestService,
   type AgentIngestCapabilitySnapshot,
@@ -148,6 +149,7 @@ import {
 } from "./services/job-class-executor-registry";
 import { LibraryService } from "./services/library-service";
 import { KnowledgeActivityService } from "./services/knowledge-activity-service";
+import { ManagedCollectionService } from "./services/managed-collection-service";
 import {
   HomeAgentService,
   scheduleAcceptedAgentTurn,
@@ -245,6 +247,7 @@ let homeAgentAttachmentService: HomeAgentAttachmentService | undefined;
 let jobsService: JobsService | undefined;
 let jobClassExecutorRegistry: JobClassExecutorRegistry | undefined;
 let knowledgeActivityService: KnowledgeActivityService | undefined;
+let managedCollectionService: ManagedCollectionService | undefined;
 let libraryService: LibraryService | undefined;
 let notesService: NotesService | undefined;
 let readerSelectionActionService: ReaderSelectionActionService | undefined;
@@ -1193,9 +1196,19 @@ const getProposalService = (): ProposalService => {
 
 const getKnowledgeActivityService = (): KnowledgeActivityService => {
   if (!knowledgeActivityService) {
-    knowledgeActivityService = new KnowledgeActivityService(getVaultService());
+    knowledgeActivityService = new KnowledgeActivityService(
+      getVaultService(),
+      getManagedCollectionService()
+    );
   }
   return knowledgeActivityService;
+};
+
+const getManagedCollectionService = (): ManagedCollectionService => {
+  if (!managedCollectionService) {
+    managedCollectionService = new ManagedCollectionService(getVaultService());
+  }
+  return managedCollectionService;
 };
 
 const getRetrievalService = (): RetrievalService => {
@@ -1805,6 +1818,12 @@ taskExecutionIpcUnsubscribe = registerTaskExecutionIpc({
   openInteraction: (request) => getTaskProcessSessionService().openInteraction(request),
   subscribeInteractionChanged: (listener) => getTaskProcessSessionService().onInteractionChanged(listener)
 });
+registerManagedCollectionIpc({
+  ipcMain,
+  getActiveVaultId: () => getVaultService().current()?.vaultId,
+  openCollection: (request) => getManagedCollectionService().open(request),
+  editCollectionCell: (request) => getManagedCollectionService().editCell(request)
+});
 ipcMain.handle("skills.summary", () =>
   SkillRegistryQueryResultSchema.parse(getSkillRegistryService().summary())
 );
@@ -1850,8 +1869,8 @@ ipcMain.handle("activity.list", (_event, request?: KnowledgeActivityListRequest)
     );
   })()
 );
-ipcMain.handle("activity.undo", (_event, request: KnowledgeActivityUndoRequest) => {
-  const result = getKnowledgeActivityService().undo(request);
+ipcMain.handle("activity.undo", async (_event, request: KnowledgeActivityUndoRequest) => {
+  const result = await getKnowledgeActivityService().undo(request);
   scheduleActivityIndexRebuild();
   return result;
 });
@@ -2194,7 +2213,11 @@ app.whenReady().then(async () => {
     { snapshot: getAgentCapabilitySnapshot }
   );
   proposalService = new ProposalService(getVaultService());
-  knowledgeActivityService = new KnowledgeActivityService(getVaultService());
+  managedCollectionService = new ManagedCollectionService(getVaultService());
+  knowledgeActivityService = new KnowledgeActivityService(
+    getVaultService(),
+    managedCollectionService
+  );
   agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
     snapshot: getAgentCapabilitySnapshot
   }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort());

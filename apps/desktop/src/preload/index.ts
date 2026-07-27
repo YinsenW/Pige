@@ -208,14 +208,6 @@ import type {
   CollectionOpenRequest,
   CollectionOpenResult
 } from "@pige/schemas";
-
-interface ManagedCollectionDesktopApi {
-  readonly collections: {
-    readonly open: (request: CollectionOpenRequest) => Promise<CollectionOpenResult>;
-    readonly editCell: (request: CollectionCellEditRequest) => Promise<CollectionCellEditResult>;
-  };
-}
-
 function isRestoreMode(value: unknown): value is RestoreMode {
   return value === "clone_as_new" || value === "replace_existing";
 }
@@ -451,7 +443,7 @@ function projectVaultRevealResult(
   };
 }
 
-const api: PigeDesktopApi & ManagedCollectionDesktopApi = {
+const api: PigeDesktopApi = {
   getHealth: async (): Promise<AppHealth> => ipcRenderer.invoke("pige:getHealth") as Promise<AppHealth>,
   window: {
     current: async (): Promise<WindowState> => ipcRenderer.invoke("window.current") as Promise<WindowState>,
