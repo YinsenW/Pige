@@ -409,8 +409,8 @@ describe("Restore identity UI", () => {
     await waitFor(dom, () => container.querySelector(".maintenance-settings-page") !== null);
     const page = requireElement(container.querySelector(".maintenance-settings-page"));
     expect(page.querySelector(".settings-panel-header")).not.toBeNull();
-    expect(page.querySelectorAll(".settings-section")).toHaveLength(2);
-    expect(page.querySelectorAll(".settings-card")).toHaveLength(2);
+    expect(page.querySelectorAll(".settings-section")).toHaveLength(3);
+    expect(page.querySelectorAll(".settings-card")).toHaveLength(3);
     expect(page.textContent).toContain("Knowledge Index");
     expect(page.textContent).toContain("Healthy");
     expect(page.textContent).toContain("Repair");
