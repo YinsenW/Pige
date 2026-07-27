@@ -1,4 +1,4 @@
-import type { IpcMain } from "electron";
+import type { IpcMain, WebContents } from "electron";
 import {
   CollectionAddNullableColumnRequestSchema,
   CollectionAddNullableColumnResultSchema,
@@ -8,6 +8,8 @@ import {
   CollectionCellEditResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
+  CollectionRenameColumnRequestSchema,
+  CollectionRenameColumnResultSchema,
   CollectionTrashRowRequestSchema,
   CollectionTrashRowResultSchema,
   type CollectionAddNullableColumnRequest,
@@ -18,12 +20,15 @@ import {
   type CollectionAppendDefaultRowResult,
   type CollectionOpenRequest,
   type CollectionOpenResult,
+  type CollectionRenameColumnRequest,
+  type CollectionRenameColumnResult,
   type CollectionTrashRowRequest,
   type CollectionTrashRowResult
 } from "@pige/schemas";
 
 interface RegisterManagedCollectionIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
+  readonly isTrustedSender: (sender: WebContents) => boolean;
   readonly getActiveVaultId: () => string | undefined;
   readonly openCollection: (
     request: CollectionOpenRequest
@@ -37,6 +42,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly addNullableCollectionColumn: (
     request: CollectionAddNullableColumnRequest
   ) => CollectionAddNullableColumnResult | Promise<CollectionAddNullableColumnResult>;
+  readonly renameCollectionColumn: (
+    request: CollectionRenameColumnRequest
+  ) => CollectionRenameColumnResult | Promise<CollectionRenameColumnResult>;
   readonly trashCollectionRow: (
     request: CollectionTrashRowRequest
   ) => CollectionTrashRowResult | Promise<CollectionTrashRowResult>;
@@ -99,6 +107,18 @@ function notFoundTrashRow(request: CollectionTrashRowRequest): CollectionTrashRo
     tableId: request.tableId,
     rowId: request.rowId,
     status: "not_found"
+  });
+}
+
+function failedRenameColumn(request: CollectionRenameColumnRequest): CollectionRenameColumnResult {
+  return CollectionRenameColumnResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    columnId: request.columnId,
+    status: "failed"
   });
 }
 
@@ -199,6 +219,30 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
       result.tableId !== parsed.tableId
     ) throw new Error("Managed Collection add-column response identity did not match the request.");
     return options.getActiveVaultId() === parsed.activeVaultId ? result : notFoundAddColumn(parsed);
+  });
+
+  options.ipcMain.handle("collections.renameColumn", async (event, request: unknown) => {
+    const parsed = CollectionRenameColumnRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId) {
+      return failedRenameColumn(parsed);
+    }
+    let rawResult: CollectionRenameColumnResult;
+    try {
+      rawResult = await options.renameCollectionColumn(parsed);
+    } catch {
+      return failedRenameColumn(parsed);
+    }
+    const result = CollectionRenameColumnResultSchema.parse(rawResult);
+    if (
+      result.requestId !== parsed.requestId ||
+      result.activeVaultId !== parsed.activeVaultId ||
+      result.datasetId !== parsed.datasetId ||
+      result.tableId !== parsed.tableId ||
+      result.columnId !== parsed.columnId
+    ) throw new Error("Managed Collection column-rename response identity did not match the request.");
+    return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
+      ? result
+      : failedRenameColumn(parsed);
   });
 
   options.ipcMain.handle("collections.trashRow", async (_event, request: unknown) => {

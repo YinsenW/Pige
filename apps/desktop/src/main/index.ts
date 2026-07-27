@@ -1924,11 +1924,16 @@ taskExecutionIpcUnsubscribe = registerTaskExecutionIpc({
 });
 registerManagedCollectionIpc({
   ipcMain,
+  isTrustedSender: (sender) => {
+    const window = BrowserWindow.fromWebContents(sender);
+    return !!window && mainWindows.has(window);
+  },
   getActiveVaultId: () => getVaultService().current()?.vaultId,
   openCollection: (request) => getManagedCollectionService().open(request),
   editCollectionCell: (request) => getManagedCollectionService().editCell(request),
   appendDefaultCollectionRow: (request) => getManagedCollectionService().appendDefaultRow(request),
   addNullableCollectionColumn: (request) => getManagedCollectionService().addNullableColumn(request),
+  renameCollectionColumn: (request) => getManagedCollectionService().renameColumn(request),
   trashCollectionRow: (request) => getManagedCollectionService().trashRow(request)
 });
 registerKnowledgeHealthIpc({
