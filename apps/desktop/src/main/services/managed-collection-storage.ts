@@ -10,6 +10,8 @@ import {
   DatasetSchemaRecordSchema,
   OperationRecordSchema,
   type CollectionCell,
+  type CollectionAddNullableColumnRequest,
+  type CollectionAddNullableColumnResult,
   type CollectionScalarValue,
   type DatasetColumn,
   type DatasetLogicalType,
@@ -97,7 +99,7 @@ export function readCollectionSnapshot(binding: BundleBinding, tableId: string) 
           ...(reason ? { readOnlyReason: reason } : {})
         };
       });
-      return { rowId, cells };
+      return { rowId, canTrash: true, cells };
     });
     return CollectionSnapshotSchema.parse({
       datasetId: binding.manifest.datasetId,
@@ -235,6 +237,60 @@ export function createNullableColumnId(tableId: string, requestId: string): stri
     .update("pige:collection-column:v1").update("\0")
     .update(tableId).update("\0")
     .update(requestId).digest("hex").slice(0, 16)}`;
+}
+
+export function adoptNullableColumnMutation(input: {
+  readonly binding: BundleBinding;
+  readonly request: CollectionAddNullableColumnRequest;
+  readonly identity: CollectionColumnMutationIdentity;
+  readonly columnId: string;
+  readonly createOperation: (binding: BundleBinding, revision: DatasetRevision) => OperationRecord;
+}): Partial<CollectionAddNullableColumnResult> | undefined {
+  const revisionPath = resolveBundleRelativePath(input.binding.bundlePath, `revisions/${input.identity.revisionId}.json`);
+  const operationPath = operationPathFor(input.binding.vaultPath, input.identity.operationId);
+  if (!fs.existsSync(revisionPath) && !fs.existsSync(operationPath)) return undefined;
+  if (!fs.existsSync(revisionPath)) throw requestConflict();
+  const revision = DatasetRevisionSchema.parse(readJsonBounded(revisionPath, MAX_COLLECTION_JSON_BYTES));
+  if (revision.id !== input.identity.revisionId || revision.operationId !== input.identity.operationId ||
+      revision.parentRevisionId !== input.request.expectedRevisionId || revision.change?.kind !== "collection_column_add" ||
+      revision.change.tableId !== input.request.tableId || revision.change.columnId !== input.columnId) throw requestConflict();
+  const schema = DatasetSchemaRecordSchema.parse(readJsonRef(input.binding.bundlePath, revision.schema));
+  const column = schema.tables.find((table) => table.id === input.request.tableId)
+    ?.columns.find((candidate) => candidate.id === input.columnId);
+  if (!column || column.name !== input.request.label || column.logicalType !== input.request.logicalType || !column.nullable) {
+    throw requestConflict();
+  }
+  let committed = input.binding;
+  if (input.binding.manifest.activeRevision !== revision.id) {
+    if (input.binding.manifest.activeRevision !== input.request.expectedRevisionId) {
+      const snapshot = readCollectionSnapshot(input.binding, input.request.tableId);
+      return snapshot ? { status: "stale", snapshot } : { status: "not_found" };
+    }
+    replaceManifestCas(input.binding, DatasetManifestSchema.parse({
+      ...input.binding.manifest,
+      initialRevision: input.binding.manifest.initialRevision ?? input.binding.manifest.activeRevision,
+      activeRevision: revision.id,
+      revision: fileRef(input.binding.bundlePath, `revisions/${revision.id}.json`),
+      schema: revision.schema,
+      payload: revision.payload,
+      updatedAt: revision.createdAt
+    }));
+    const adopted = readBundle(input.binding.vaultPath, input.binding.manifest.datasetId);
+    if (!adopted || adopted.manifest.activeRevision !== revision.id) {
+      throw new PigeDomainError("collection.commit_uncertain", "The Collection replay could not be adopted.");
+    }
+    committed = adopted;
+  }
+  const expectedOperation = input.createOperation(committed, revision);
+  const operation = fs.existsSync(operationPath)
+    ? OperationRecordSchema.parse(readJsonBounded(operationPath, MAX_COLLECTION_JSON_BYTES))
+    : expectedOperation;
+  if (hashCanonical(operation) !== hashCanonical(expectedOperation)) throw requestConflict();
+  if (!fs.existsSync(operationPath)) writeJsonExclusive(operationPath, operation);
+  const snapshot = readCollectionSnapshot(committed, input.request.tableId);
+  return snapshot
+    ? { status: "committed", columnId: input.columnId, operationId: operation.id, snapshot }
+    : { status: "not_found" };
 }
 
 export function commitNullableColumnAdd(input: {

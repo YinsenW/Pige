@@ -196,7 +196,7 @@ export class KnowledgeActivityService {
     return vaultPath;
   }
 }
-function isCollectionActivityOperation(operation: OperationRecord): boolean { return operation.kind === "update_collection_cell" || operation.kind === "add_collection_row" || operation.kind === "add_collection_column"; }
+function isCollectionActivityOperation(operation: OperationRecord): boolean { return ["update_collection_cell", "add_collection_row", "add_collection_column", "trash_collection_row"].includes(operation.kind); }
 function toActivitySummary(
   vaultPath: string,
   operation: OperationRecord,
