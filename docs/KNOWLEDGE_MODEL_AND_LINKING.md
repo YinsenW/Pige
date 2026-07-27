@@ -435,11 +435,12 @@ Rebuild indexes Markdown pages, facets, relations, citations, aliases and backli
 resolve unique-or-ambiguous; unresolved targets grant no renderer access. Reader navigation
 binds the generation and returns one stable target or body-free failure.
 
-Report-only Knowledge Health reads one current generation: missing/ambiguous links, active
-non-source wiki orphans, active topics sharing a normalized title/alias, and active claims
-with zero `sourceIds`. Invalid Markdown makes coverage partial; capped page-ID/title rows
-retain complete counts. Reports are ephemeral/body-free; repair, Operation/Undo,
-contradictions and missing concepts remain open.
+Derived/body-free Health treats invalid Markdown as partial. Complete coverage plus one
+missing safe local reference may expose
+`unlink_broken_reference`:
+`[[target]]` -> `target`, `[[target|label]]` -> `label`, or `[label](missing.md)` -> `label`.
+Main re-proves revision/render/occurrence and uses reversible `update_page`. Images,
+frontmatter, complex/multiple/ambiguous references and other repairs stay open.
 
 B6.12: rev2 rebuilds on first query. Body-free tree resolves ID/title/alias; root topic→domain; `has_topic`>`links_to`; primary=stable, others=related, cycles=cut, depth=iterative; Unassigned. weight=structural+fragment+unique-source; leaf=fragment-ref+source-leaf; sourcePages≠fragments. No public DTO/IPC/UI.
 

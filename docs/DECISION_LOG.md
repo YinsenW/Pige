@@ -3482,7 +3482,8 @@ Date: 2026-07-27
 
 Decision:
 
-Knowledge Health first ships as a body-free current-generation maintenance report.
+Knowledge Health is a body-free report; its first repair only unlinks one rebound missing
+local reference through reversible `update_page`.
 
 Rationale:
 
@@ -3490,8 +3491,7 @@ Expose deterministic gaps without new durable truth.
 
 Consequences:
 
-- Initial: broken links, orphans, duplicate topics and unsourced claims; invalid
-  pages are partial. Repair and Operation/Undo stay open.
+- Partial or choice-requiring repairs expose no action; other repairs remain open.
 
 References:
 

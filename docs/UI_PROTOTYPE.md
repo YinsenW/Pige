@@ -820,9 +820,9 @@ Main trunk: Local-first
 
 ## 12. Knowledge Health
 
-Settings > Index & Maintenance owns the `MaintenanceSettingsPanel` report. Run Check keeps
-zero/issues, partial/truncated and failure distinct; safe page IDs open Reader. Results
-contain no body, path, repair, Activity or Undo.
+Settings > Index & Maintenance owns the report and sole Remove broken link action. Only
+opaque-context rows offer it; commit reruns, other states preserve report/Reader. No other
+repair, body, path or raw error.
 
 ## 13. Settings
 
