@@ -32,6 +32,8 @@ import type {
   HighRiskConfirmationPendingResult,
   HighRiskConfirmationResolveRequest,
   HighRiskConfirmationResolveResult,
+  KnowledgeHealthRunRequest,
+  KnowledgeHealthRunResult,
   Locale,
   LocalSemanticRetrievalDisableRequest,
   LocalSemanticRetrievalDisableResult,
@@ -180,6 +182,14 @@ export type {
   HighRiskConfirmationSubject,
   HighRiskConfirmationTarget,
   HighRiskEffect,
+  KnowledgeHealthCounts,
+  KnowledgeHealthIndexGeneration,
+  KnowledgeHealthIssueKind,
+  KnowledgeHealthIssueSummary,
+  KnowledgeHealthPageRef,
+  KnowledgeHealthRequestId,
+  KnowledgeHealthRunRequest,
+  KnowledgeHealthRunResult,
   RendererSafeSubjectLabel,
   SetLocaleRequest,
   SetThemeRequest,
@@ -1540,6 +1550,9 @@ export interface PigeDesktopApi {
     readonly rebuildLocalDatabase: () => Promise<LocalDatabaseRebuildResult>;
     readonly resetLocalDatabase: () => Promise<LocalDatabaseResetResult>;
     readonly localDatabaseStatus: () => Promise<LocalDatabaseStatus>;
+    readonly runKnowledgeHealth: (
+      request: KnowledgeHealthRunRequest
+    ) => Promise<KnowledgeHealthRunResult>;
   };
   readonly diagnostics: {
     readonly health: () => Promise<DiagnosticsHealth>;

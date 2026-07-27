@@ -13,7 +13,7 @@ import type {
   RetrievalSearchResultItem
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import { createPigeTagKey, extractPigeMarkdownLinkRefs, type PigeMarkdownLinkRef } from "@pige/markdown";
+import { createPigeTagKey, extractPigeMarkdownLinkRefs } from "@pige/markdown";
 import {
   LocalDatabaseSchemaStateSchema,
   RetrievalSearchResultItemSchema,
@@ -40,6 +40,14 @@ import {
   type LocalDatabaseRebuildPort,
   type LocalDatabaseRebuildProgress
 } from "./local-database-rebuild-types";
+import {
+  createAmbiguityAwarePageLookup,
+  normalizeLocalReference,
+  readKnowledgeHealthIndexGeneration,
+  readKnowledgeHealthSnapshot,
+  resolveAmbiguityAwareLinkedPageId,
+  type LocalDatabaseKnowledgeHealthSnapshot
+} from "./local-database-knowledge-health";
 import { createMarkdownRagChunks } from "./rag-chunker";
 import {
   readSemanticChunkBatch,
@@ -79,6 +87,7 @@ export interface LocalDatabaseDriver {
   readonly relatedPages: (vaultPath: string, request: LibraryRelatedRequest) => LocalDatabaseRelatedPages | undefined;
   readonly searchPages: (vaultPath: string, request: RetrievalSearchRequest) => LocalDatabaseSearchResult | undefined;
   readonly knowledgeTree: (vaultPath: string) => KnowledgeTreeSnapshot | undefined;
+  readonly knowledgeHealth: (vaultPath: string) => LocalDatabaseKnowledgeHealthSnapshot | undefined;
   readonly chunkIndexStatus: (vaultPath: string) => LocalDatabaseChunkIndexStatus | undefined;
   readonly semanticChunkBatch: (
     vaultPath: string,
@@ -123,6 +132,7 @@ export class PendingSqliteDriver implements LocalDatabaseDriver {
   searchPages(): undefined { return undefined; }
   relatedPages(): undefined { return undefined; }
   knowledgeTree(): undefined { return undefined; }
+  knowledgeHealth(): undefined { return undefined; }
   chunkIndexStatus(): undefined { return undefined; }
   semanticChunkBatch(): undefined { return undefined; }
   semanticChunksById(): undefined { return undefined; }
@@ -418,6 +428,29 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
     }
   }
 
+  knowledgeHealth(vaultPath: string): LocalDatabaseKnowledgeHealthSnapshot | undefined {
+    const schemaState = readSchemaState(vaultPath);
+    if (!schemaState || !isCurrentNodeSqliteSchemaState(schemaState) ||
+      !fs.existsSync(getDatabasePath(vaultPath))) return undefined;
+    const db = openVaultDatabase(vaultPath);
+    try {
+      if (readUserVersion(db) !== CURRENT_INDEX_REVISION) return undefined;
+      const snapshot = readKnowledgeHealthSnapshot(db);
+      if (!snapshot) return undefined;
+      try {
+        if (this.needsRebuild(vaultPath, false)) return undefined;
+      } catch {
+        return undefined;
+      }
+      return readKnowledgeHealthIndexGeneration(db) === snapshot.indexGeneration ? snapshot : undefined;
+    } catch (caught) {
+      if (isTransientDatabaseReadFailure(caught)) return undefined;
+      throw caught;
+    } finally {
+      db.close();
+    }
+  }
+
   searchPages(vaultPath: string, request: RetrievalSearchRequest): LocalDatabaseSearchResult | undefined {
     if (!this.ensureReady(vaultPath)) return undefined;
     const terms = createQueryTerms(request.query);
@@ -538,11 +571,11 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
     }
   }
 
-  private needsRebuild(vaultPath: string): boolean {
+  private needsRebuild(vaultPath: string, prepareDatabase = true): boolean {
     const files = scanMarkdownFileSignatures(vaultPath);
     const db = openVaultDatabase(vaultPath);
     try {
-      migrate(db);
+      if (prepareDatabase) migrate(db);
       const indexRevision = toNumber(db.prepare("PRAGMA user_version").all()[0]?.user_version);
       if (indexRevision !== CURRENT_INDEX_REVISION) return true;
       const stateRows = db.prepare("SELECT invalid_page_count FROM index_state WHERE id = 1").all();
@@ -700,6 +733,9 @@ export class LocalDatabaseService {
     return this.#driver.relatedPages(vaultPath, request);
   }
   knowledgeTree(vaultPath: string): KnowledgeTreeSnapshot | undefined { return this.#driver.knowledgeTree(vaultPath); }
+  knowledgeHealth(vaultPath: string): LocalDatabaseKnowledgeHealthSnapshot | undefined {
+    return this.#driver.knowledgeHealth(vaultPath);
+  }
   chunkIndexStatus(vaultPath: string): LocalDatabaseChunkIndexStatus | undefined {
     return this.#driver.chunkIndexStatus(vaultPath);
   }
@@ -1118,7 +1154,7 @@ function readInlineReferenceRevisionFromDatabase(db: DatabaseSync): string | und
 
 function indexPageKnowledge(db: DatabaseSync, pages: readonly MarkdownPageRecord[]): void {
   const pageById = new Map(pages.map((page) => [page.summary.pageId, page]));
-  const lookup = createPageLookup(pages);
+  const lookup = createAmbiguityAwarePageLookup(pages);
   const insertTag = db.prepare("INSERT OR IGNORE INTO tags(tag) VALUES (?)");
   const insertPageTag = db.prepare("INSERT OR IGNORE INTO page_tags(page_id, tag) VALUES (?, ?)");
   const insertTopic = db.prepare(`
@@ -1144,7 +1180,7 @@ function indexPageKnowledge(db: DatabaseSync, pages: readonly MarkdownPageRecord
 
   for (const page of pages) {
     for (const topicRef of page.knowledge.topics) {
-      const targetId = lookup.get(normalizeLinkTarget(topicRef));
+      const targetId = lookup.get(normalizeLocalReference(topicRef));
       const target = targetId ? pageById.get(targetId) : undefined;
       if (!target || target.summary.pageType !== "topic" || target.summary.pageId === page.summary.pageId) continue;
       insertRelation.run(
@@ -1164,7 +1200,7 @@ function indexPageLinks(
   expectedSignatures: ReadonlyMap<string, PageSignature>,
   onPageIndexed: () => void
 ): void {
-  const lookup = createPageLookup(pages);
+  const lookup = createAmbiguityAwarePageLookup(pages);
   const insertLink = db.prepare("INSERT OR IGNORE INTO links(from_page_id, to_page_id, target) VALUES (?, ?, ?)");
   const insertBacklink = db.prepare("INSERT OR IGNORE INTO backlinks(to_page_id, from_page_id) VALUES (?, ?)");
   const insertRelation = db.prepare(`
@@ -1177,7 +1213,7 @@ function indexPageLinks(
     if (!expectedSignature) throw new Error("Indexed page signature is missing during link rebuild.");
     const body = readStableIndexedBody(vaultPath, page, expectedSignature).searchBody;
     for (const link of extractPigeMarkdownLinkRefs(body)) {
-      const resolvedPageId = resolveLinkedPageId(lookup, page.summary.pagePath, link);
+      const resolvedPageId = resolveAmbiguityAwareLinkedPageId(lookup, page.summary.pagePath, link);
       insertLink.run(page.summary.pageId, resolvedPageId, link.target);
       if (resolvedPageId) {
         insertBacklink.run(resolvedPageId, page.summary.pageId);
@@ -1191,56 +1227,6 @@ function indexPageLinks(
     }
     onPageIndexed();
   }
-}
-
-function createPageLookup(pages: readonly MarkdownPageRecord[]): Map<string, string> {
-  const lookup = new Map<string, string>();
-  const sortedPages = [...pages].sort((left, right) => {
-    const leftPath = left.summary.pagePath.normalize("NFKC").toLocaleLowerCase("en-US");
-    const rightPath = right.summary.pagePath.normalize("NFKC").toLocaleLowerCase("en-US");
-    if (leftPath !== rightPath) return leftPath < rightPath ? -1 : 1;
-    return left.summary.pageId < right.summary.pageId ? -1 : left.summary.pageId > right.summary.pageId ? 1 : 0;
-  });
-  for (const page of sortedPages) {
-    const keys = [
-      page.summary.pageId,
-      page.summary.title,
-      ...page.knowledge.aliases,
-      page.summary.pagePath,
-      page.summary.pagePath.replace(/\.md$/iu, ""),
-      path.basename(page.summary.pagePath),
-      path.basename(page.summary.pagePath).replace(/\.md$/iu, "")
-    ];
-    for (const key of keys) {
-      const normalized = normalizeLinkTarget(key);
-      if (normalized && !lookup.has(normalized)) lookup.set(normalized, page.summary.pageId);
-    }
-  }
-  return lookup;
-}
-
-function resolveLinkedPageId(
-  lookup: ReadonlyMap<string, string>,
-  fromPagePath: string,
-  link: PigeMarkdownLinkRef
-): string | null {
-  for (const target of createLinkTargetCandidates(fromPagePath, link)) {
-    const pageId = lookup.get(normalizeLinkTarget(target));
-    if (pageId) return pageId;
-  }
-  return null;
-}
-
-function createLinkTargetCandidates(fromPagePath: string, link: PigeMarkdownLinkRef): readonly string[] {
-  const candidates = new Set<string>([link.target]);
-  if (link.kind === "markdown_link") {
-    const targetPath = link.target.split("#", 1)[0]?.replace(/\\/gu, "/") ?? "";
-    if (targetPath.endsWith(".md")) {
-      const fromDirectory = path.posix.dirname(fromPagePath.replace(/\\/gu, "/"));
-      candidates.add(path.posix.normalize(path.posix.join(fromDirectory, targetPath)));
-    }
-  }
-  return Array.from(candidates);
 }
 
 function hasInitialMigration(vaultPath: string): boolean {
@@ -1469,18 +1455,6 @@ function stableHash(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function normalizeLinkTarget(value: string): string {
-  const withoutAnchor = value.split("#", 1)[0] ?? value;
-  return withoutAnchor
-    .replace(/\\/gu, "/")
-    .replace(/^\.?\//u, "")
-    .replace(/\.md$/iu, "")
-    .normalize("NFKC")
-    .toLocaleLowerCase()
-    .replace(/\s+/gu, " ")
-    .trim();
-}
-
 function clampLimit(limit: number | undefined, fallback: number, max: number): number {
   if (!limit) return fallback;
   return Math.max(1, Math.min(max, Math.floor(limit)));
@@ -1488,4 +1462,9 @@ function clampLimit(limit: number | undefined, fallback: number, max: number): n
 
 function toNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function isTransientDatabaseReadFailure(caught: unknown): boolean {
+  return caught instanceof Error && "code" in caught &&
+    ["SQLITE_BUSY", "SQLITE_LOCKED"].includes(String(caught.code));
 }

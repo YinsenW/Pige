@@ -10,6 +10,9 @@ import {
   HighRiskConfirmationSummarySchema,
   JobRecordSchema,
   KnowledgeActivityListResultSchema,
+  KNOWLEDGE_HEALTH_MAX_ISSUE_SUMMARIES,
+  KnowledgeHealthRunRequestSchema,
+  KnowledgeHealthRunResultSchema,
   LOCAL_SEMANTIC_RETRIEVAL_ASSET_BYTES,
   LOCAL_SEMANTIC_RETRIEVAL_ASSET_ID,
   LocalSemanticRetrievalDisableRequestSchema,
@@ -61,6 +64,95 @@ import {
 } from "@pige/schemas";
 
 describe("schemas", () => {
+  it("keeps Knowledge Health report-only, generation-bound, bounded, ordered, and renderer-safe", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "knowledge_health_request_abcdefghijklmnop",
+      activeVaultId: "vault_20260727_abcdefgh"
+    } as const;
+    expect(KnowledgeHealthRunRequestSchema.parse(request)).toEqual(request);
+
+    const ready = {
+      ...request,
+      status: "ready",
+      checkedAt: "2026-07-27T12:00:00.000Z",
+      indexGeneration: "2026-07-27T11:59:00.000Z#0123456789abcdef0123456789abcdef",
+      coverage: "complete",
+      invalidPageCount: 0,
+      counts: {
+        totalIssueCount: 4,
+        brokenLinkPageCount: 1,
+        unresolvedLinkCount: 2,
+        orphanPageCount: 1,
+        duplicateTopicGroupCount: 1,
+        unsourcedClaimCount: 1
+      },
+      issues: [
+        {
+          kind: "broken_link",
+          page: { pageId: "page_20260727_broken01", title: "Broken links" },
+          unresolvedLinkCount: 2
+        },
+        {
+          kind: "orphan_page",
+          page: { pageId: "page_20260727_orphan01", title: "Orphan note" }
+        },
+        {
+          kind: "duplicate_topic",
+          candidatePageCount: 2,
+          pages: [
+            { pageId: "page_20260727_topic001", title: "Local RAG" },
+            { pageId: "page_20260727_topic002", title: "Local Rag" }
+          ]
+        },
+        {
+          kind: "unsourced_claim",
+          page: { pageId: "page_20260727_claim001", title: "A claim" }
+        }
+      ],
+      truncated: false
+    } as const;
+    expect(KnowledgeHealthRunResultSchema.parse(ready)).toEqual(ready);
+    expect(KNOWLEDGE_HEALTH_MAX_ISSUE_SUMMARIES).toBe(100);
+    expect(KnowledgeHealthRunResultSchema.parse({ ...request, status: "unavailable" }))
+      .toEqual({ ...request, status: "unavailable" });
+    expect(KnowledgeHealthRunResultSchema.parse({
+      ...ready,
+      coverage: "partial",
+      invalidPageCount: 2
+    })).toMatchObject({ coverage: "partial", invalidPageCount: 2 });
+
+    for (const unsafe of [
+      { path: "/private/vault/wiki/note.md" },
+      { body: "private note body" },
+      { sql: "SELECT * FROM pages" },
+      { rawLinkTarget: "../secret.md" },
+      { hash: "sha256:private" }
+    ]) {
+      expect(() => KnowledgeHealthRunResultSchema.parse({ ...ready, ...unsafe })).toThrow();
+    }
+    expect(() => KnowledgeHealthRunResultSchema.parse({
+      ...ready,
+      issues: [...ready.issues].reverse()
+    })).toThrow();
+    expect(() => KnowledgeHealthRunResultSchema.parse({
+      ...ready,
+      counts: { ...ready.counts, totalIssueCount: 5 },
+      truncated: true
+    })).toThrow();
+    expect(() => KnowledgeHealthRunResultSchema.parse({
+      ...ready,
+      issues: [{
+        kind: "duplicate_topic",
+        candidatePageCount: 2,
+        pages: [
+          { pageId: "page_20260727_topic002", title: "Local Rag" },
+          { pageId: "page_20260727_topic001", title: "Local RAG" }
+        ]
+      }]
+    })).toThrow();
+  });
+
   it("keeps the single local semantic asset lifecycle strict, revision-fenced, and renderer-safe", () => {
     const request = {
       apiVersion: 1,

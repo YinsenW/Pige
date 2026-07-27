@@ -16,6 +16,7 @@
       "docs/TECH_ARCHITECTURE.md",
       "docs/SECURITY_THREAT_MODEL.md",
       "docs/LOCAL_DATABASE_DESIGN.md",
+      "docs/KNOWLEDGE_MODEL_AND_LINKING.md",
       "docs/RELEASE_ENGINEERING.md",
       "docs/PRD.md",
       "docs/PARSER_INGEST_SPEC.md",
@@ -42,14 +43,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review of B6.06: pinned prebuilt embedding runtime, exact sqlite-vec authority, current derived vector generation, semantic_hybrid projection and lexical fallback.",
+    "scope": "Independent Product Planning review of report-only Knowledge Health: current-generation issue semantics, body-free navigation, partial/truncated coverage and Settings maintenance ownership.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
-    "minimumFileCount": 33,
-    "reviewedSha256": "184d5e423fcded22432ef51999b44c777dbb11a3dfdd498f94c5f2208762486c"
+    "minimumFileCount": 34,
+    "reviewedSha256": "d2db2743533ac15f7c2867b4b9fc12bfa10a91cdd2ca8b828d37c6d2c85941a6"
   },
   "reviewers": [{
-    "reviewerId": "local-rag-runtime-review",
-    "task": "Pinned local semantic hybrid runtime",
+    "reviewerId": "knowledge-health-report-review",
+    "task": "Derived Knowledge Health report",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -57,33 +58,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Product Planning reviewed API, architecture, database, security, release, dependency and trace owners; Development independently owns runtime/index/search implementation and packaged evidence."
+    "independence": "Product Planning reviewed API, knowledge-model, UI, Decision and trace owners; Development and UI Design independently own index analysis, IPC, maintenance presentation and evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"local-rag-runtime-review","blockerCount":0,"summary":"The existing Local Capabilities asset surface remains unchanged; runtime/index readiness stays private."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"local-rag-runtime-review","blockerCount":0,"summary":"API, architecture, database, security, release and dependency owners agree on exact native authority and lexical fallback."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"local-rag-runtime-review","blockerCount":0,"summary":"PIGE-SEARCH-003 and E6.02 remain partial while implementation, reranking and packaged-platform proof remain open."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"local-rag-runtime-review","blockerCount":0,"summary":"One mode addition plus named private owners, constants, fences and bounded fallback give Development an exact slice."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"local-rag-runtime-review","blockerCount":0,"summary":"Existing owners and the dependency manifest hold B6.06 without a new Settings surface or framework document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"knowledge-health-report-review","blockerCount":0,"summary":"Settings > Index & Maintenance owns one report action; safe page identities reuse Reader navigation without a new destination."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"knowledge-health-report-review","blockerCount":0,"summary":"API, knowledge-model, UI and Decision owners agree on current-generation derived facts and body-free output."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"knowledge-health-report-review","blockerCount":0,"summary":"PIGE-KNOW-005 and E9.05 stay planned while report-only detection exists and repair/Undo acceptance remains open."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"knowledge-health-report-review","blockerCount":0,"summary":"Closed issue classes, caps, ordering, coverage and unavailable/failed states give Development exact boundaries."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"knowledge-health-report-review","blockerCount":0,"summary":"Existing API, knowledge-model and UI owners replace the speculative prototype without a new document or report authority."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Retrieval mode remains closed and adds only semantic_hybrid; asset/runtime internals stay out of DTOs."},
-    {"command":"npm run verify:docs && npm run verify:decisions && npm run verify:dependencies","status":"passed","evidence":"Runtime, vector authority, packaging, Decision and exact dependency pins agree."},
-    {"command":"npm run verify:traceability","status":"passed","evidence":"Partial Search/RAG acceptance keeps B6.06 implementation and packaged proof open."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict maintenance request/result and closed issue/status values are documented without body/path authority."},
+    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"API, knowledge-model, UI and Decision owners agree on the report-only boundary."},
+    {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Planned acceptance remains open and both new service responsibilities are inventoried."}
   ],
   "coordination": {
-    "taskId": "local-rag-runtime-20260727",
-    "taskTitle": "Pinned local semantic hybrid runtime",
+    "taskId": "knowledge-health-report-20260727",
+    "taskTitle": "Derived Knowledge Health report",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing asset lifecycle and lexical modes remain; semantic_hybrid is additive and private readiness never changes Settings.",
-    "acknowledgement": "Planning binds B6.06 runtime/vector/search contracts; implementation, reranking and packaged acceptance stay open."
+    "compatibility": "The report is ephemeral and read-only; durable Markdown, rebuild ownership, Reader navigation and maintenance actions remain compatible.",
+    "acknowledgement": "Planning binds report-only Knowledge Health; repair, Operation/Undo, broader analysis and release evidence stay open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Windows x64 and macOS x64 native/package proof remains acceptance work.",
-    "Runtime/index implementation and 100k hybrid performance remain Development work.",
-    "Any pin/model/chunker change requires reviewed identity and derived-index rebuild evidence."
+    "Repair and deterministic Operation/Undo remain a later slice.",
+    "Invalid Markdown keeps coverage partial and never produces a false clean report.",
+    "Broader contradiction, missing-concept and sentence-level provenance analysis remain out of scope."
   ]
 }

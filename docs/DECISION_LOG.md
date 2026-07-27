@@ -3475,6 +3475,28 @@ References:
 - `docs/API_AND_IPC_DESIGN.md`; `docs/TECH_ARCHITECTURE.md`;
   `docs/LOCAL_DATABASE_DESIGN.md`
 
+### D-20260727-Derived-Knowledge-Health-Report
+
+Status: Accepted
+Date: 2026-07-27
+
+Decision:
+
+Knowledge Health first ships as a body-free current-generation maintenance report.
+
+Rationale:
+
+Expose deterministic gaps without new durable truth.
+
+Consequences:
+
+- Initial: broken links, orphans, duplicate topics and unsourced claims; invalid
+  pages are partial. Repair and Operation/Undo stay open.
+
+References:
+
+- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
