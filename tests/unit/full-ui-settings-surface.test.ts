@@ -20,12 +20,28 @@ import {
 } from "../../apps/desktop/src/renderer/src/App";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 import type {
+  LocalSemanticRetrievalDisableRequest,
+  LocalSemanticRetrievalDisableResult,
+  LocalSemanticRetrievalEnableRequest,
+  LocalSemanticRetrievalEnableResult,
+  LocalSemanticRetrievalInstallRequest,
+  LocalSemanticRetrievalInstallResult,
+  LocalSemanticRetrievalRemoveRequest,
+  LocalSemanticRetrievalRemoveResult,
+  LocalSemanticRetrievalStatus,
   SkillRegistryMutationResult,
   SkillRegistryQueryResult,
   SkillRegistrySummary,
   SpeechAvailabilityResult
 } from "@pige/contracts";
-import type {
+import {
+  LocalSemanticRetrievalSettingsPanel,
+  type LocalSemanticRetrievalApi
+} from "../../apps/desktop/src/renderer/src/components/LocalSemanticRetrievalSettingsPanel";
+import {
+  LOCAL_SEMANTIC_RETRIEVAL_ASSET_BYTES,
+  LOCAL_SEMANTIC_RETRIEVAL_ASSET_ID,
+  type LocalSemanticRetrievalAssetState,
   MemoryDeleteRequest,
   MemoryEnableRequest,
   MemoryExportRequest,
@@ -1253,9 +1269,11 @@ describe("full UI Settings surface", () => {
     });
     const onRefresh = vi.fn(async () => undefined);
     const onDevelopment = vi.fn();
+    const semanticRetrievalApi = semanticAssetApi("ready");
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
       root.render(createElement(LocalCapabilitiesSettingsPanel, {
+        semanticRetrievalApi,
         toolchainHealth: {
           status: "needs_repair",
           checkedAt: "2026-07-16T01:00:00.000Z",
@@ -1309,7 +1327,8 @@ describe("full UI Settings surface", () => {
     expect(container.querySelector('[aria-label="PDF tools: Missing"]')).not.toBeNull();
     expect(container.textContent).not.toContain("/private/hidden/bin/git");
     expect(container.textContent).not.toContain("Install a private dependency");
-    expect(container.textContent).toContain("Not reported");
+    expect(container.textContent).toContain("Enabled");
+    expect(container.textContent).toContain("Lexical search always remains available.");
 
     const ocrEngine = requireElement(container.querySelector<HTMLButtonElement>('[data-capability-control="ocr-engine"]'));
     const imageOcr = requireElement(container.querySelector<HTMLButtonElement>('[data-capability-control="image-ocr"]'));
@@ -1326,13 +1345,12 @@ describe("full UI Settings surface", () => {
     await act(async () => {
       buttonNamed(container, "Check again").click();
       buttonNamed(container, "Repair...").click();
-      buttonNamed(container, "Manage").click();
       ocrEngine.click();
       imageOcr.click();
       await settle(dom);
     });
     expect(onRefresh).toHaveBeenCalledOnce();
-    expect(onDevelopment).toHaveBeenCalledTimes(4);
+    expect(onDevelopment).toHaveBeenCalledTimes(3);
     expect(ocrEngine.textContent).toBe("In development");
     expect(imageOcr.textContent).toBe("In development");
     expect(voice.textContent).toBe("Language resource needed");
@@ -1340,6 +1358,7 @@ describe("full UI Settings surface", () => {
 
     await act(async () => {
       root.render(createElement(LocalCapabilitiesSettingsPanel, {
+        semanticRetrievalApi,
         toolchainHealth: {
           status: "ready",
           checkedAt: "2026-07-16T01:01:00.000Z",
@@ -1370,7 +1389,7 @@ describe("full UI Settings surface", () => {
     expect(
       Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Repair...")
     ).toBe(false);
-    expect(onDevelopment).toHaveBeenCalledTimes(4);
+    expect(onDevelopment).toHaveBeenCalledTimes(3);
     expect(ipcRead).toBe(false);
 
     await act(async () => root.unmount());
@@ -1393,9 +1412,11 @@ describe("full UI Settings surface", () => {
     const dom = createDom();
     const onOpenSpeechSettings = vi.fn(async () => undefined);
     const root = createRoot(dom.window.document.querySelector("#root")!);
+    const semanticRetrievalApi = semanticAssetApi("ready");
     const renderPanel = async (speechAvailability: SpeechAvailabilityResult): Promise<void> => {
       await act(async () => {
         root.render(createElement(LocalCapabilitiesSettingsPanel, {
+          semanticRetrievalApi,
           toolchainHealth: null,
           speechAvailability,
           speechAvailabilityLoading: false,
@@ -1432,6 +1453,79 @@ describe("full UI Settings surface", () => {
       await settle(dom);
     });
     expect(onOpenSpeechSettings).toHaveBeenCalledOnce();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps install, enable, disable, and remove as distinct revision-fenced semantic asset actions", async () => {
+    const dom = createDom();
+    let current = semanticAssetStatus(1, "not_installed");
+    const status = vi.fn(async () => current);
+    const install = vi.fn(async (request: LocalSemanticRetrievalInstallRequest): Promise<LocalSemanticRetrievalInstallResult> => {
+      current = semanticAssetStatus(3, "disabled");
+      return { apiVersion: 1, requestId: request.requestId, revision: 2, status: "accepted", jobId: "job_20260727_semanticasset" };
+    });
+    const enable = vi.fn(async (request: LocalSemanticRetrievalEnableRequest): Promise<LocalSemanticRetrievalEnableResult> => {
+      current = semanticAssetStatus(4, "ready");
+      return { apiVersion: 1, requestId: request.requestId, revision: 4, status: "committed" };
+    });
+    const disable = vi.fn(async (request: LocalSemanticRetrievalDisableRequest): Promise<LocalSemanticRetrievalDisableResult> => {
+      current = semanticAssetStatus(5, "disabled");
+      return { apiVersion: 1, requestId: request.requestId, revision: 5, status: "committed" };
+    });
+    const remove = vi.fn(async (request: LocalSemanticRetrievalRemoveRequest): Promise<LocalSemanticRetrievalRemoveResult> => {
+      current = semanticAssetStatus(6, "not_installed");
+      return { apiVersion: 1, requestId: request.requestId, revision: 6, status: "committed" };
+    });
+    const api: LocalSemanticRetrievalApi = {
+      localSemanticStatus: status,
+      installLocalSemanticAsset: install,
+      enableLocalSemanticAsset: enable,
+      disableLocalSemanticAsset: disable,
+      removeLocalSemanticAsset: remove
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(LocalSemanticRetrievalSettingsPanel, { api, t }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    expect(container.textContent).toContain("Not installed");
+    expect(container.textContent).toContain("Lexical search always remains available.");
+
+    await act(async () => {
+      buttonNamed(container, "Install").click();
+      await settle(dom);
+    });
+    expect(install).toHaveBeenCalledWith(expect.objectContaining({ apiVersion: 1, expectedRevision: 1 }));
+    expect(install.mock.calls[0]?.[0].requestId).toMatch(/^ragasset_[a-z0-9]{16,64}$/u);
+    expect(enable).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Disabled");
+    expect(buttonNamed(container, "Enable")).not.toBeNull();
+
+    await act(async () => {
+      buttonNamed(container, "Enable").click();
+      await settle(dom);
+    });
+    expect(enable).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 3 }));
+    expect(container.textContent).toContain("Enabled");
+
+    await act(async () => {
+      buttonNamed(container, "Disable").click();
+      await settle(dom);
+    });
+    expect(disable).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 4 }));
+    expect(container.textContent).toContain("Disabled");
+
+    await act(async () => {
+      buttonNamed(container, "Remove").click();
+      await settle(dom);
+    });
+    expect(remove).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 5 }));
+    expect(container.textContent).toContain("Not installed");
+    expect(container.textContent).not.toContain("qwen3_embedding_0_6b_q8_0");
+    expect(container.textContent).not.toContain("provider");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -1807,6 +1901,36 @@ function memoryEmptySummary(revision: number): MemorySummary {
     activeVaultId: "vault_20260727_memoryfixture",
     revision,
     records: []
+  };
+}
+
+function semanticAssetStatus(
+  revision: number,
+  assetState: LocalSemanticRetrievalAssetState
+): LocalSemanticRetrievalStatus {
+  return {
+    apiVersion: 1,
+    revision,
+    assetId: LOCAL_SEMANTIC_RETRIEVAL_ASSET_ID,
+    assetState,
+    downloadSizeBytes: LOCAL_SEMANTIC_RETRIEVAL_ASSET_BYTES,
+    lexicalSearchRemainsAvailable: true,
+    ...(assetState === "installing" || assetState === "verifying"
+      ? { activeJobId: "job_20260727_semanticasset" }
+      : {})
+  };
+}
+
+function semanticAssetApi(assetState: LocalSemanticRetrievalAssetState): LocalSemanticRetrievalApi {
+  const unavailable = async (): Promise<never> => {
+    throw new Error("Mutation is not used by this fixture.");
+  };
+  return {
+    localSemanticStatus: async () => semanticAssetStatus(1, assetState),
+    installLocalSemanticAsset: unavailable,
+    enableLocalSemanticAsset: unavailable,
+    disableLocalSemanticAsset: unavailable,
+    removeLocalSemanticAsset: unavailable
   };
 }
 
