@@ -638,7 +638,7 @@ async function readSourceEvidenceFact(
     sourceAssetChecksum !== revision.source.sourceAssetChecksum ||
     sourceAssetSize !== revision.source.sourceAssetSize ||
     source.metadata.datasetId !== manifest.datasetId ||
-    source.metadata.datasetRevisionId !== manifest.activeRevision ||
+    source.metadata.datasetRevisionId !== (manifest.initialRevision ?? manifest.activeRevision) ||
     source.metadata.datasetBundlePath !== bundleRelativePath ||
     source.metadata.datasetProfile !== "managed_collection"
   ) throw sourceStaleError();
