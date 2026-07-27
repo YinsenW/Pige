@@ -10,6 +10,8 @@ import type {
   CollectionAppendDefaultRowResult,
   CollectionCellEditRequest,
   CollectionCellEditResult,
+  CollectionRenameColumnRequest,
+  CollectionRenameColumnResult,
   CollectionSnapshot,
   CollectionTrashRowRequest,
   CollectionTrashRowResult
@@ -60,6 +62,7 @@ describe("ManagedCollectionPanel", () => {
         snapshot: collectionSnapshot("dataset_rev_20260727_revision0001", "Alpha"),
         onClose: () => undefined,
         onAddNullableColumn: notFoundColumnResult,
+        onRenameColumn: notFoundRenameResult,
         onAppendDefaultRow: notFoundAppendResult,
         onTrashRow: notFoundTrashResult,
         onAdoptSnapshot: () => false,
@@ -118,6 +121,7 @@ describe("ManagedCollectionPanel", () => {
         snapshot: collectionSnapshot("dataset_rev_20260727_revision0001", "Alpha"),
         onClose: () => undefined,
         onAddNullableColumn: notFoundColumnResult,
+        onRenameColumn: notFoundRenameResult,
         onAppendDefaultRow: notFoundAppendResult,
         onTrashRow: notFoundTrashResult,
         onAdoptSnapshot: () => false,
@@ -255,6 +259,130 @@ describe("ManagedCollectionPanel", () => {
     expect(container.textContent).toContain("A field with this name already exists.");
     expect(duplicate.value).toBe("Priority");
     expect(dom.window.document.activeElement).toBe(duplicate);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("preserves a stale rename draft, sends a trimmed label, and focuses the stable committed column", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: CollectionRenameColumnRequest[] = [];
+    const staleSnapshot = renameColumnSnapshot(
+      collectionSnapshot("dataset_rev_20260728_revision0002", "Alpha", false, false, false, true),
+      "column_name000001",
+      "Server name"
+    );
+    const committedSnapshot = renameColumnSnapshot(
+      collectionSnapshot("dataset_rev_20260728_revision0003", "Alpha", false, false, false, true),
+      "column_name000001",
+      "Priority"
+    );
+    await act(async () => {
+      root.render(createElement(CollectionRenameHarness, {
+        onRename: async (request) => {
+          requests.push(request);
+          const identity = renameIdentity(request);
+          return requests.length === 1
+            ? { ...identity, status: "stale", snapshot: staleSnapshot }
+            : {
+              ...identity,
+              status: "committed",
+              operationId: "op_20260728_collectionrename01",
+              snapshot: committedSnapshot
+            };
+        }
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Rename field: Name"));
+    const input = requireElement(container.querySelector<HTMLInputElement>('input[aria-label="Field name: Name"]'));
+    await inputText(dom, input, "  Priority  ");
+
+    await act(async () => {
+      const save = buttonNamed(container, "Save");
+      save.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      save.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(requests).toEqual([{
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^collection_request_[a-z0-9]{16,64}$/u),
+      activeVaultId: "vault_20260727_collection01",
+      datasetId: "dataset_20260727_collection01",
+      tableId: "table_collection01",
+      expectedRevisionId: "dataset_rev_20260728_revision0001",
+      columnId: "column_name000001",
+      label: "Priority"
+    }]);
+    expect(container.textContent).toContain("The collection changed. Your field name is preserved against the latest revision.");
+    expect(input.value).toBe("  Priority  ");
+    expect(dom.window.document.activeElement).toBe(input);
+
+    await click(dom, buttonNamed(container, "Save"));
+    expect(requests.map((request) => request.expectedRevisionId)).toEqual([
+      "dataset_rev_20260728_revision0001",
+      "dataset_rev_20260728_revision0002"
+    ]);
+    expect(container.textContent).toContain("Field renamed as a new revision.");
+    const header = requireElement(container.querySelector<HTMLTableCellElement>(
+      '[data-collection-column-id="column_name000001"]'
+    ));
+    expect(header.textContent).toBe("Priority");
+    expect(dom.window.document.activeElement).toBe(header);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps failed, duplicate, and ineligible rename drafts without widening authority", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: CollectionRenameColumnRequest[] = [];
+    const duplicateSnapshot = collectionSnapshot(
+      "dataset_rev_20260728_revision0002", "Alpha", false, false, false, true
+    );
+    const ineligibleSnapshot = collectionSnapshot(
+      "dataset_rev_20260728_revision0003", "Alpha", false, false, false, false
+    );
+    await act(async () => {
+      root.render(createElement(CollectionRenameHarness, {
+        onRename: async (request) => {
+          requests.push(request);
+          const identity = renameIdentity(request);
+          if (requests.length === 1) return { ...identity, status: "failed" };
+          if (requests.length === 2) return { ...identity, status: "duplicate", snapshot: duplicateSnapshot };
+          return { ...identity, status: "ineligible", snapshot: ineligibleSnapshot };
+        }
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Rename field: Name"));
+    const input = requireElement(container.querySelector<HTMLInputElement>('input[aria-label="Field name: Name"]'));
+    await inputText(dom, input, "Priority");
+
+    await click(dom, buttonNamed(container, "Save"));
+    expect(container.textContent).toContain("Pige could not rename the field. Nothing was changed.");
+    expect(input.value).toBe("Priority");
+    expect(dom.window.document.activeElement).toBe(input);
+
+    await click(dom, buttonNamed(container, "Save"));
+    expect(container.textContent).toContain("A field with this name already exists.");
+    expect(input.value).toBe("Priority");
+
+    await click(dom, buttonNamed(container, "Save"));
+    expect(requests.map((request) => request.expectedRevisionId)).toEqual([
+      "dataset_rev_20260728_revision0001",
+      "dataset_rev_20260728_revision0001",
+      "dataset_rev_20260728_revision0002"
+    ]);
+    expect(container.textContent).toContain("This field can no longer be renamed.");
+    expect(input.value).toBe("Priority");
+    expect(buttonNamed(container, "Save").disabled).toBe(true);
+    expect(dom.window.document.activeElement).toBe(input);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -550,6 +678,7 @@ function CollectionAppendHarness(props: {
     snapshot,
     onClose: () => undefined,
     onAddNullableColumn: notFoundColumnResult,
+    onRenameColumn: notFoundRenameResult,
     onAppendDefaultRow: props.onAppend,
     onTrashRow: notFoundTrashResult,
     onAdoptSnapshot: (next, expectedRevisionId) => {
@@ -574,6 +703,7 @@ function CollectionTrashHarness(props: {
     snapshot,
     onClose: () => undefined,
     onAddNullableColumn: notFoundColumnResult,
+    onRenameColumn: notFoundRenameResult,
     onAppendDefaultRow: notFoundAppendResult,
     onTrashRow: props.onTrash,
     onAdoptSnapshot: (next, expectedRevisionId) => {
@@ -600,6 +730,34 @@ function CollectionColumnHarness(props: {
     snapshot,
     onClose: () => undefined,
     onAddNullableColumn: props.onAddColumn,
+    onRenameColumn: notFoundRenameResult,
+    onAppendDefaultRow: notFoundAppendResult,
+    onTrashRow: notFoundTrashResult,
+    onAdoptSnapshot: (next, expectedRevisionId) => {
+      if (snapshot.revisionId !== expectedRevisionId) return false;
+      setSnapshot(next);
+      return true;
+    },
+    onEditCell: async (request) => ({ ...editIdentity(request), status: "failed" }),
+    onReload: async () => snapshot,
+    t
+  });
+}
+
+function CollectionRenameHarness(props: {
+  readonly onRename: (
+    request: CollectionRenameColumnRequest
+  ) => Promise<CollectionRenameColumnResult>;
+}): React.JSX.Element {
+  const [snapshot, setSnapshot] = useState(() => (
+    collectionSnapshot("dataset_rev_20260728_revision0001", "Alpha", false, false, false, true)
+  ));
+  return createElement(ManagedCollectionPanel, {
+    activeVaultId: "vault_20260727_collection01",
+    snapshot,
+    onClose: () => undefined,
+    onAddNullableColumn: notFoundColumnResult,
+    onRenameColumn: props.onRename,
     onAppendDefaultRow: notFoundAppendResult,
     onTrashRow: notFoundTrashResult,
     onAdoptSnapshot: (next, expectedRevisionId) => {
@@ -618,7 +776,8 @@ function collectionSnapshot(
   name: string,
   canAppendDefaultRow = false,
   canAddColumn = false,
-  canTrash = false
+  canTrash = false,
+  canRename = false
 ): CollectionSnapshot {
   return {
     datasetId: "dataset_20260727_collection01",
@@ -627,8 +786,8 @@ function collectionSnapshot(
     tableId: "table_collection01",
     tableName: "Customers",
     columns: [
-      { columnId: "column_name000001", label: "Name", logicalType: "string" },
-      { columnId: "column_total00001", label: "Total", logicalType: "number" }
+      { columnId: "column_name000001", label: "Name", logicalType: "string", canRename },
+      { columnId: "column_total00001", label: "Total", logicalType: "number", canRename: false }
     ],
     rows: [{
       rowId: "row_customer0001",
@@ -654,11 +813,22 @@ function withNullableColumn(
 ): CollectionSnapshot {
   return {
     ...snapshot,
-    columns: [...snapshot.columns, { columnId, label, logicalType }],
+    columns: [...snapshot.columns, { columnId, label, logicalType, canRename: false }],
     rows: snapshot.rows.map((row) => ({
       ...row,
       cells: [...row.cells, { columnId, value: null, editable: true }]
     }))
+  };
+}
+
+function renameColumnSnapshot(
+  snapshot: CollectionSnapshot,
+  columnId: string,
+  label: string
+): CollectionSnapshot {
+  return {
+    ...snapshot,
+    columns: snapshot.columns.map((column) => column.columnId === columnId ? { ...column, label } : column)
   };
 }
 
@@ -721,6 +891,17 @@ function columnIdentity(request: CollectionAddNullableColumnRequest) {
   };
 }
 
+function renameIdentity(request: CollectionRenameColumnRequest) {
+  return {
+    apiVersion: 1 as const,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    columnId: request.columnId
+  };
+}
+
 async function notFoundAppendResult(
   request: CollectionAppendDefaultRowRequest
 ): Promise<CollectionAppendDefaultRowResult> {
@@ -748,6 +929,12 @@ async function notFoundColumnResult(
   request: CollectionAddNullableColumnRequest
 ): Promise<CollectionAddNullableColumnResult> {
   return { ...columnIdentity(request), status: "not_found" };
+}
+
+async function notFoundRenameResult(
+  request: CollectionRenameColumnRequest
+): Promise<CollectionRenameColumnResult> {
+  return { ...renameIdentity(request), status: "not_found" };
 }
 
 function committedResult(

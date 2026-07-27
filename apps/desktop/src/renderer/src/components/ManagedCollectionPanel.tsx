@@ -6,6 +6,8 @@ import type {
   CollectionAppendDefaultRowResult,
   CollectionCellEditRequest,
   CollectionCellEditResult,
+  CollectionRenameColumnRequest,
+  CollectionRenameColumnResult,
   CollectionScalarValue,
   CollectionSnapshot,
   CollectionTrashRowRequest,
@@ -32,6 +34,13 @@ type ColumnDraft = {
   readonly logicalType: CollectionAddNullableColumnRequest["logicalType"];
 };
 
+type ColumnRenameDraft = {
+  readonly columnId: string;
+  readonly expectedRevisionId: string;
+  readonly originalLabel: string;
+  readonly label: string;
+};
+
 const COLLECTION_EDITABLE_TYPES = ["string", "integer", "number", "boolean", "date", "datetime"] as const;
 
 type EditNotice =
@@ -52,6 +61,12 @@ type EditNotice =
   | { readonly kind: "column_duplicate_label" }
   | { readonly kind: "column_limit" }
   | { readonly kind: "column_type_mismatch" }
+  | { readonly kind: "column_renamed" }
+  | { readonly kind: "rename_stale" }
+  | { readonly kind: "rename_duplicate" }
+  | { readonly kind: "rename_ineligible" }
+  | { readonly kind: "rename_not_found" }
+  | { readonly kind: "rename_failed" }
   | { readonly kind: "stale" }
   | { readonly kind: "invalid" }
   | { readonly kind: "not_editable" }
@@ -68,6 +83,9 @@ export function ManagedCollectionPanel(props: {
   readonly onAddNullableColumn: (
     request: CollectionAddNullableColumnRequest
   ) => Promise<CollectionAddNullableColumnResult>;
+  readonly onRenameColumn: (
+    request: CollectionRenameColumnRequest
+  ) => Promise<CollectionRenameColumnResult>;
   readonly onAdoptSnapshot: (snapshot: CollectionSnapshot, expectedRevisionId: string) => boolean;
   readonly onEditCell: (request: CollectionCellEditRequest) => Promise<CollectionCellEditResult>;
   readonly onReload: () => Promise<CollectionSnapshot | null>;
@@ -75,6 +93,7 @@ export function ManagedCollectionPanel(props: {
 }): React.JSX.Element {
   const [edit, setEdit] = useState<CellEdit | null>(null);
   const [columnDraft, setColumnDraft] = useState<ColumnDraft | null>(null);
+  const [renameDraft, setRenameDraft] = useState<ColumnRenameDraft | null>(null);
   const [notice, setNotice] = useState<EditNotice | null>(null);
   const [busy, setBusy] = useState(false);
   const requestSequence = useRef(0);
@@ -86,6 +105,9 @@ export function ManagedCollectionPanel(props: {
   const columnTriggerRef = useRef<HTMLButtonElement | null>(null);
   const columnLabelRef = useRef<HTMLInputElement | null>(null);
   const columnHeaderRefs = useRef(new Map<string, HTMLTableCellElement>());
+  const renameActiveRef = useRef<{ readonly sequence: number; readonly columnId: string } | null>(null);
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingRenameEditorFocusRef = useRef(false);
   const editTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
   const pendingFocusRef = useRef<CellIdentity | null>(null);
@@ -111,6 +133,7 @@ export function ManagedCollectionPanel(props: {
     appendActiveRef.current = null;
     trashActiveRef.current = null;
     columnActiveRef.current = null;
+    renameActiveRef.current = null;
     pendingFocusRef.current = null;
     pendingAppendFocusRef.current = false;
     pendingRowFocusRef.current = null;
@@ -118,8 +141,10 @@ export function ManagedCollectionPanel(props: {
     pendingColumnFocusRef.current = null;
     pendingColumnTriggerFocusRef.current = false;
     pendingColumnEditorFocusRef.current = false;
+    pendingRenameEditorFocusRef.current = false;
     setEdit(null);
     setColumnDraft(null);
+    setRenameDraft(null);
     setNotice(null);
     setBusy(false);
   }, [ownerKey]);
@@ -131,6 +156,10 @@ export function ManagedCollectionPanel(props: {
   useEffect(() => {
     if (columnDraft && !busy) columnLabelRef.current?.focus();
   }, [columnDraft?.expectedRevisionId]);
+
+  useEffect(() => {
+    if (renameDraft && !busy) renameInputRef.current?.focus();
+  }, [renameDraft?.columnId, renameDraft?.expectedRevisionId]);
 
   useLayoutEffect(() => {
     if (edit || !pendingFocusRef.current) return;
@@ -186,6 +215,12 @@ export function ManagedCollectionPanel(props: {
     (columnTriggerRef.current ?? panelRef.current)?.focus();
   }, [busy, columnDraft, notice, props.snapshot.revisionId]);
 
+  useLayoutEffect(() => {
+    if (busy || !pendingRenameEditorFocusRef.current || !renameDraft) return;
+    pendingRenameEditorFocusRef.current = false;
+    renameInputRef.current?.focus();
+  }, [busy, notice, renameDraft, props.snapshot.revisionId]);
+
   const restoreCellFocus = (identity: CellIdentity): void => {
     pendingFocusRef.current = identity;
   };
@@ -198,7 +233,7 @@ export function ManagedCollectionPanel(props: {
   };
 
   const submitEdit = async (): Promise<void> => {
-    if (!edit || busy) return;
+    if (!edit || busy || renameDraft) return;
     const value = parseCollectionScalar(edit.draft, edit.logicalType, edit.originalValue);
     if (value === undefined) {
       setNotice({ kind: "invalid" });
@@ -293,7 +328,7 @@ export function ManagedCollectionPanel(props: {
   };
 
   const appendDefaultRow = async (): Promise<void> => {
-    if (!props.snapshot.canAppendDefaultRow || busy || edit || columnDraft || appendActiveRef.current !== null || trashActiveRef.current) return;
+    if (!props.snapshot.canAppendDefaultRow || busy || edit || columnDraft || renameDraft || appendActiveRef.current !== null || trashActiveRef.current) return;
     const sequence = requestSequence.current + 1;
     requestSequence.current = sequence;
     appendActiveRef.current = sequence;
@@ -314,7 +349,7 @@ export function ManagedCollectionPanel(props: {
         sequence !== requestSequence.current ||
         ownerKeyRef.current !== expectedOwnerKey ||
         snapshotRevisionRef.current !== request.expectedRevisionId ||
-        !collectionAppendIdentityMatches(request, result)
+        !collectionIdentityMatches(request, result)
       ) return;
       if (result.status !== "not_found" && !props.onAdoptSnapshot(result.snapshot, request.expectedRevisionId)) return;
       if (result.status === "committed") {
@@ -337,7 +372,7 @@ export function ManagedCollectionPanel(props: {
 
   const trashRow = async (rowId: string, rowIndex: number): Promise<void> => {
     const row = props.snapshot.rows.find((candidate) => candidate.rowId === rowId);
-    if (!row?.canTrash || busy || edit || columnDraft || trashActiveRef.current) return;
+    if (!row?.canTrash || busy || edit || columnDraft || renameDraft || trashActiveRef.current) return;
     const sequence = requestSequence.current + 1;
     requestSequence.current = sequence;
     trashActiveRef.current = { sequence, rowId };
@@ -359,7 +394,7 @@ export function ManagedCollectionPanel(props: {
         sequence !== requestSequence.current ||
         ownerKeyRef.current !== expectedOwnerKey ||
         snapshotRevisionRef.current !== request.expectedRevisionId ||
-        !collectionTrashIdentityMatches(request, result)
+        (!collectionIdentityMatches(request, result) || result.rowId !== request.rowId)
       ) return;
       if ((result.status === "committed" || result.status === "stale") &&
           !props.onAdoptSnapshot(result.snapshot, request.expectedRevisionId)) return;
@@ -395,7 +430,7 @@ export function ManagedCollectionPanel(props: {
   const hasTrashActions = props.snapshot.rows.some((row) => row.canTrash);
 
   const addNullableColumn = async (): Promise<void> => {
-    if (!columnDraft || busy || columnActiveRef.current !== null) return;
+    if (!columnDraft || busy || renameDraft || columnActiveRef.current !== null) return;
     const sequence = requestSequence.current + 1;
     requestSequence.current = sequence;
     columnActiveRef.current = sequence;
@@ -418,7 +453,7 @@ export function ManagedCollectionPanel(props: {
         sequence !== requestSequence.current ||
         ownerKeyRef.current !== expectedOwnerKey ||
         snapshotRevisionRef.current !== request.expectedRevisionId ||
-        !collectionColumnIdentityMatches(request, result)
+        !collectionIdentityMatches(request, result)
       ) return;
       if ((result.status === "committed" || result.status === "stale") &&
           !props.onAdoptSnapshot(result.snapshot, request.expectedRevisionId)) return;
@@ -465,6 +500,80 @@ export function ManagedCollectionPanel(props: {
     setNotice(null);
   };
 
+  const renameColumn = async (): Promise<void> => {
+    if (!renameDraft || busy || renameActiveRef.current) return;
+    const column = props.snapshot.columns.find((candidate) => candidate.columnId === renameDraft.columnId);
+    const label = renameDraft.label.trim();
+    if (!column?.canRename || label.length === 0 || label === renameDraft.originalLabel) return;
+    const sequence = requestSequence.current + 1;
+    requestSequence.current = sequence;
+    renameActiveRef.current = { sequence, columnId: renameDraft.columnId };
+    const request: CollectionRenameColumnRequest = {
+      apiVersion: 1,
+      requestId: createCollectionRequestId(),
+      activeVaultId: props.activeVaultId,
+      datasetId: props.snapshot.datasetId,
+      tableId: props.snapshot.tableId,
+      expectedRevisionId: renameDraft.expectedRevisionId,
+      columnId: renameDraft.columnId,
+      label
+    };
+    const expectedOwnerKey = ownerKey;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await props.onRenameColumn(request);
+      if (
+        sequence !== requestSequence.current ||
+        ownerKeyRef.current !== expectedOwnerKey ||
+        snapshotRevisionRef.current !== request.expectedRevisionId ||
+        (!collectionIdentityMatches(request, result) || result.columnId !== request.columnId)
+      ) return;
+      if ("snapshot" in result && !props.onAdoptSnapshot(result.snapshot, request.expectedRevisionId)) return;
+      if (result.status === "committed") {
+        pendingColumnFocusRef.current = result.columnId;
+        setRenameDraft(null);
+        setNotice({ kind: "column_renamed" });
+        return;
+      }
+      pendingRenameEditorFocusRef.current = true;
+      if ("snapshot" in result) {
+        const currentColumn = result.snapshot.columns.find((candidate) => candidate.columnId === result.columnId);
+        setRenameDraft((current) => current ? {
+          ...current,
+          expectedRevisionId: result.snapshot.revisionId,
+          originalLabel: currentColumn?.label ?? current.originalLabel
+        } : current);
+      }
+      setNotice({
+        kind: result.status === "stale"
+          ? "rename_stale"
+          : result.status === "duplicate"
+            ? "rename_duplicate"
+            : result.status === "ineligible"
+              ? "rename_ineligible"
+              : result.status === "not_found"
+                ? "rename_not_found"
+                : "rename_failed"
+      });
+    } catch {
+      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) {
+        pendingRenameEditorFocusRef.current = true;
+        setNotice({ kind: "rename_failed" });
+      }
+    } finally {
+      if (renameActiveRef.current?.sequence === sequence) renameActiveRef.current = null;
+      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) setBusy(false);
+    }
+  };
+
+  const cancelRename = (): void => {
+    if (busy || !renameDraft) return;
+    pendingColumnFocusRef.current = renameDraft.columnId;
+    setRenameDraft(null);
+    setNotice(null);
+  };
+
   return (
     <section
       ref={panelRef}
@@ -492,20 +601,20 @@ export function ManagedCollectionPanel(props: {
               ref={appendTriggerRef}
               type="button"
               className="settings-button"
-              disabled={busy || edit !== null || columnDraft !== null}
+              disabled={busy || edit !== null || columnDraft !== null || renameDraft !== null}
               onClick={() => void appendDefaultRow()}
             >
               {props.t(busy && appendActiveRef.current !== null ? "collection.addingRow" : "collection.addRow")}
             </button>
           ) : null}
-          {props.snapshot.canAddColumn && !columnDraft ? (
+          {props.snapshot.canAddColumn && !columnDraft && !renameDraft ? (
             <button
               ref={columnTriggerRef}
               type="button"
               className="settings-button"
               disabled={busy || edit !== null || appendActiveRef.current !== null}
               onClick={() => {
-                if (busy || edit || appendActiveRef.current !== null || columnActiveRef.current !== null) return;
+                if (busy || edit || appendActiveRef.current !== null || columnActiveRef.current !== null || renameActiveRef.current) return;
                 setNotice(null);
                 setColumnDraft({
                   expectedRevisionId: props.snapshot.revisionId,
@@ -587,7 +696,7 @@ export function ManagedCollectionPanel(props: {
         </form>
       ) : null}
       {notice ? (
-        <div className={`settings-inline-status ${notice.kind === "saved" || notice.kind === "row_added" || notice.kind === "column_added" || notice.kind === "row_trashed" ? "success" : "error"}`} role="status" aria-live="polite">
+        <div className={`settings-inline-status ${notice.kind === "saved" || notice.kind === "row_added" || notice.kind === "column_added" || notice.kind === "row_trashed" || notice.kind === "column_renamed" ? "success" : "error"}`} role="status" aria-live="polite">
           <span>{props.t(`collection.${notice.kind}`)}</span>
           {notice.kind === "stale" ? (
             <button type="button" className="settings-button" disabled={busy} onClick={() => void reloadAfterStale()}>
@@ -611,7 +720,64 @@ export function ManagedCollectionPanel(props: {
                 tabIndex={-1}
                 data-collection-column-id={column.columnId}
               >
-                {column.label}
+                {renameDraft?.columnId === column.columnId ? (
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void renameColumn();
+                    }}
+                  >
+                    <input
+                      ref={renameInputRef}
+                      className="settings-input"
+                      value={renameDraft.label}
+                      maxLength={120}
+                      disabled={busy}
+                      aria-label={`${props.t("collection.fieldName")}: ${column.label}`}
+                      onChange={(event) => {
+                        setRenameDraft((current) => current ? { ...current, label: event.target.value } : current);
+                        setNotice(null);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          cancelRename();
+                        }
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      className="settings-button"
+                      disabled={busy || !column.canRename || renameDraft.label.trim().length === 0 || renameDraft.label.trim() === renameDraft.originalLabel}
+                    >
+                      {props.t(busy && renameActiveRef.current?.columnId === column.columnId
+                        ? "collection.renamingField"
+                        : "collection.save")}
+                    </button>
+                    <button type="button" className="ghost" disabled={busy} onClick={cancelRename}>
+                      {props.t("collection.cancel")}
+                    </button>
+                  </form>
+                ) : column.canRename && !renameDraft ? (
+                  <button
+                    type="button"
+                    className="ghost"
+                    aria-label={`${props.t("collection.renameField")}: ${column.label}`}
+                    disabled={busy || edit !== null || columnDraft !== null}
+                    onClick={() => {
+                      if (busy || edit || columnDraft || appendActiveRef.current !== null || trashActiveRef.current || columnActiveRef.current !== null || renameActiveRef.current) return;
+                      setNotice(null);
+                      setRenameDraft({
+                        columnId: column.columnId,
+                        expectedRevisionId: props.snapshot.revisionId,
+                        originalLabel: column.label,
+                        label: column.label
+                      });
+                    }}
+                  >
+                    {column.label}
+                  </button>
+                ) : column.label}
               </th>
             ))}{hasTrashActions ? <th scope="col">{props.t("collection.actions")}</th> : null}</tr>
           </thead>
@@ -669,14 +835,14 @@ export function ManagedCollectionPanel(props: {
                         <button
                           type="button"
                           className="ghost"
-                          disabled={busy || columnDraft !== null}
+                          disabled={busy || columnDraft !== null || renameDraft !== null}
                           ref={(element) => {
                             if (element) editTriggerRefs.current.set(cellKey(identity), element);
                             else editTriggerRefs.current.delete(cellKey(identity));
                           }}
                           aria-label={`${props.t("collection.edit")}: ${column.label}, ${props.t("collection.row")} ${rowIndex + 1}`}
                           onClick={() => {
-                            if (busy || columnDraft || appendActiveRef.current !== null || columnActiveRef.current !== null || trashActiveRef.current) return;
+                            if (busy || columnDraft || renameDraft || appendActiveRef.current !== null || columnActiveRef.current !== null || trashActiveRef.current) return;
                             setNotice(null);
                             setEdit({
                               ...identity,
@@ -701,7 +867,7 @@ export function ManagedCollectionPanel(props: {
                       <button
                         type="button"
                         className="ghost"
-                        disabled={busy || edit !== null}
+                        disabled={busy || edit !== null || columnDraft !== null || renameDraft !== null}
                         ref={(element) => {
                           if (element) trashTriggerRefs.current.set(row.rowId, element);
                           else trashTriggerRefs.current.delete(row.rowId);
@@ -818,33 +984,12 @@ function collectionEditIdentityMatches(
     result.columnId === request.columnId;
 }
 
-function collectionAppendIdentityMatches(
-  request: CollectionAppendDefaultRowRequest,
-  result: CollectionAppendDefaultRowResult
+function collectionIdentityMatches(
+  request: { readonly requestId: string; readonly activeVaultId: string; readonly datasetId: string; readonly tableId: string },
+  result: { readonly requestId: string; readonly activeVaultId: string; readonly datasetId: string; readonly tableId: string }
 ): boolean {
   return result.requestId === request.requestId &&
     result.activeVaultId === request.activeVaultId &&
     result.datasetId === request.datasetId &&
     result.tableId === request.tableId;
-}
-
-function collectionColumnIdentityMatches(
-  request: CollectionAddNullableColumnRequest,
-  result: CollectionAddNullableColumnResult
-): boolean {
-  return result.requestId === request.requestId &&
-    result.activeVaultId === request.activeVaultId &&
-    result.datasetId === request.datasetId &&
-    result.tableId === request.tableId;
-}
-
-function collectionTrashIdentityMatches(
-  request: CollectionTrashRowRequest,
-  result: CollectionTrashRowResult
-): boolean {
-  return result.requestId === request.requestId &&
-    result.activeVaultId === request.activeVaultId &&
-    result.datasetId === request.datasetId &&
-    result.tableId === request.tableId &&
-    result.rowId === request.rowId;
 }
