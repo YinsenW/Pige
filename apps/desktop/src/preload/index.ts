@@ -128,10 +128,15 @@ import type {
   SkillDiscardStagedRequest,
   SkillDiscardStagedResult,
   SkillDisableRequest,
+  SkillEnableRequest,
+  SkillExportRequest,
+  SkillExportResult,
   SkillInstallStagedRequest,
   SkillInstallStagedResult,
+  SkillLifecycleMutationResult,
   SkillStageFromUrlRequest,
   SkillStageFromUrlResult,
+  SkillUninstallRequest,
   MemoryDeleteRequest,
   MemoryDisableRequest,
   MemoryEnableRequest,
@@ -239,8 +244,12 @@ import {
   SkillDiscardStagedRequestSchema,
   SkillDiscardStagedResultSchema,
   SkillDisableRequestSchema,
+  SkillEnableRequestSchema,
+  SkillExportRequestSchema,
+  SkillExportResultSchema,
   SkillInstallStagedRequestSchema,
   SkillInstallStagedResultSchema,
+  SkillLifecycleMutationResultSchema,
   SkillRegistryMutationResultSchema,
   MemoryDeleteRequestSchema,
   MemoryDisableRequestSchema,
@@ -256,6 +265,7 @@ import {
   SkillRegistrySummarySchema,
   SkillStageFromUrlRequestSchema,
   SkillStageFromUrlResultSchema,
+  SkillUninstallRequestSchema,
   SetLocaleRequestSchema,
   SetThemeRequestSchema,
   WindowLayoutRequestSchema,
@@ -651,6 +661,21 @@ const api: PigeDesktopApi = {
       SkillRegistryMutationResultSchema.parse(await ipcRenderer.invoke(
         "skills.disable",
         SkillDisableRequestSchema.parse(request)
+      )),
+    enable: async (request: SkillEnableRequest): Promise<SkillLifecycleMutationResult> =>
+      SkillLifecycleMutationResultSchema.parse(await ipcRenderer.invoke(
+        "skills.enable",
+        SkillEnableRequestSchema.parse(request)
+      )),
+    uninstall: async (request: SkillUninstallRequest): Promise<SkillLifecycleMutationResult> =>
+      SkillLifecycleMutationResultSchema.parse(await ipcRenderer.invoke(
+        "skills.uninstall",
+        SkillUninstallRequestSchema.parse(request)
+      )),
+    export: async (request: SkillExportRequest): Promise<SkillExportResult> =>
+      SkillExportResultSchema.parse(await ipcRenderer.invoke(
+        "skills.export",
+        SkillExportRequestSchema.parse(request)
       )),
     onChanged: (listener: (summary: SkillRegistrySummary) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, value: unknown): void => {

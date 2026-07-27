@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type {
+  SkillExportResult,
+  SkillLifecycleMutationResult,
   SkillStageInvalidReason,
   SkillStagedSummary,
   SkillRegistryQueryResult,
@@ -8,13 +10,26 @@ import type {
 } from "@pige/contracts";
 import { PigeIcon } from "./PigeIcon";
 
+type InstalledLifecycleKind = "disable" | "enable" | "export" | "uninstall";
+
+interface InstalledLifecycleAction {
+  readonly kind: InstalledLifecycleKind;
+  readonly skillId: string;
+}
+
+interface UninstallConfirmation {
+  readonly skill: SkillSummary;
+  readonly expectedRevision: number;
+}
+
 export function SkillsSettingsPanel(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const [registry, setRegistry] = useState<SkillRegistrySummary | null>(null);
   const [readState, setReadState] = useState<"loading" | "ready" | "failed">("loading");
   const [reloadSequence, setReloadSequence] = useState(0);
-  const [disablingSkillId, setDisablingSkillId] = useState<string | null>(null);
+  const [lifecycleAction, setLifecycleAction] = useState<InstalledLifecycleAction | null>(null);
+  const [uninstallConfirmation, setUninstallConfirmation] = useState<UninstallConfirmation | null>(null);
   const [statusKey, setStatusKey] = useState<string | null>(null);
   const [installOpen, setInstallOpen] = useState(false);
   const [installUrl, setInstallUrl] = useState("");
@@ -22,10 +37,17 @@ export function SkillsSettingsPanel(props: {
   const [installBusy, setInstallBusy] = useState<"stage" | "install" | "discard" | null>(null);
   const latestRevisionRef = useRef(-1);
   const mountedRef = useRef(true);
+  const lifecycleSequenceRef = useRef(0);
+  const lifecycleActiveRef = useRef(false);
+  const uninstallConfirmationActiveRef = useRef(false);
   const installOperationRef = useRef(0);
   const pendingFocusRef = useRef<"trigger" | "url" | null>(null);
+  const pendingInstalledFocusRef = useRef<string | null | undefined>(undefined);
   const installTriggerRef = useRef<HTMLButtonElement | null>(null);
   const installUrlRef = useRef<HTMLInputElement | null>(null);
+  const uninstallTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const uninstallCancelRef = useRef<HTMLButtonElement | null>(null);
+  const pageRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (pendingFocusRef.current === "trigger" && !installOpen) {
@@ -36,6 +58,23 @@ export function SkillsSettingsPanel(props: {
       installUrlRef.current?.focus();
     }
   }, [installOpen, stagedSkill]);
+
+  useEffect(() => {
+    if (uninstallConfirmation) uninstallCancelRef.current?.focus();
+  }, [uninstallConfirmation]);
+
+  useEffect(() => {
+    if (pendingInstalledFocusRef.current === undefined || lifecycleAction !== null || uninstallConfirmation !== null) {
+      return;
+    }
+    const skillId = pendingInstalledFocusRef.current;
+    pendingInstalledFocusRef.current = undefined;
+    const selector = skillId
+      ? `[data-skill-id="${skillId}"] button:not(:disabled)`
+      : undefined;
+    const action = selector ? pageRef.current?.querySelector<HTMLButtonElement>(selector) : null;
+    (action ?? installTriggerRef.current)?.focus();
+  }, [lifecycleAction, registry, uninstallConfirmation]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -67,38 +106,210 @@ export function SkillsSettingsPanel(props: {
     };
   }, [reloadSequence]);
 
-  const disableSkill = async (skill: SkillSummary): Promise<void> => {
-    if (!registry || disablingSkillId || !skill.enabled) return;
-    setDisablingSkillId(skill.id);
+  const beginLifecycleAction = (kind: InstalledLifecycleKind, skillId: string): number | null => {
+    if (lifecycleActiveRef.current || installBusy !== null ||
+        (uninstallConfirmationActiveRef.current && kind !== "uninstall")) {
+      return null;
+    }
+    lifecycleActiveRef.current = true;
+    const sequence = lifecycleSequenceRef.current + 1;
+    lifecycleSequenceRef.current = sequence;
+    setLifecycleAction({ kind, skillId });
     setStatusKey(null);
+    return sequence;
+  };
+
+  const isCurrentLifecycleAction = (sequence: number): boolean => (
+    mountedRef.current && lifecycleSequenceRef.current === sequence
+  );
+
+  const finishLifecycleAction = (sequence: number): void => {
+    if (!isCurrentLifecycleAction(sequence)) return;
+    lifecycleActiveRef.current = false;
+    setLifecycleAction(null);
+  };
+
+  const adoptRegistry = (next: SkillRegistrySummary): void => {
+    if (next.revision < latestRevisionRef.current) return;
+    latestRevisionRef.current = next.revision;
+    setRegistry(next);
+    setReadState("ready");
+  };
+
+  const reloadAuthoritativeRegistry = async (sequence: number): Promise<void> => {
+    try {
+      const result = await window.pige.skills.summary();
+      if (isCurrentLifecycleAction(sequence) && result.status === "ready") adoptRegistry(result.registry);
+    } catch {
+      // The body-free lifecycle status remains authoritative even if refresh is unavailable.
+    }
+  };
+
+  const queueInstalledFocus = (skillId?: string): void => {
+    pendingInstalledFocusRef.current = skillId ?? null;
+  };
+
+  const closeUninstallConfirmation = (): void => {
+    const trigger = uninstallTriggerRef.current;
+    uninstallConfirmationActiveRef.current = false;
+    setUninstallConfirmation(null);
+    deferFocus(() => trigger?.isConnected && trigger.focus());
+  };
+
+  const disableSkill = async (skill: SkillSummary): Promise<void> => {
+    if (!registry || !skill.enabled) return;
+    const sequence = beginLifecycleAction("disable", skill.id);
+    if (sequence === null) return;
     try {
       const result = await window.pige.skills.disable({
         apiVersion: 1,
         skillId: skill.id,
         expectedRevision: registry.revision
       });
-      if (!mountedRef.current) return;
+      if (!isCurrentLifecycleAction(sequence)) return;
       if (result.status === "failed") {
         setStatusKey(result.error.code === "skill.registry_busy"
           ? "skills.registryBusy"
           : "skills.registryUnavailable");
         return;
       }
-      if (result.registry.revision >= latestRevisionRef.current) {
-        latestRevisionRef.current = result.registry.revision;
-        setRegistry(result.registry);
-        setReadState("ready");
-      }
+      adoptRegistry(result.registry);
       setStatusKey(result.status === "committed"
         ? "skills.disableCompleted"
         : result.status === "stale"
           ? "skills.registryChanged"
           : "skills.skillUnavailable");
     } catch {
-      if (mountedRef.current) setStatusKey("skills.disableFailed");
+      if (isCurrentLifecycleAction(sequence)) setStatusKey("skills.disableFailed");
     } finally {
-      if (mountedRef.current) setDisablingSkillId(null);
+      finishLifecycleAction(sequence);
     }
+  };
+
+  const mutateInstalledSkill = async (
+    kind: "enable" | "uninstall",
+    skill: SkillSummary,
+    expectedRevision: number
+  ): Promise<void> => {
+    if ((kind === "enable" && !skill.canEnable) || (kind === "uninstall" && !skill.canUninstall)) return;
+    const sequence = beginLifecycleAction(kind, skill.id);
+    if (sequence === null) return;
+    const requestId = createSkillLifecycleRequestId();
+    try {
+      const requestedVault = await window.pige.vault.current();
+      if (!isCurrentLifecycleAction(sequence)) return;
+      if (!requestedVault) {
+        setStatusKey("skills.lifecycleFailed");
+        return;
+      }
+      const result = await window.pige.skills[kind]({
+        apiVersion: 1,
+        requestId,
+        activeVaultId: requestedVault.vaultId,
+        skillId: skill.id,
+        expectedRegistryRevision: expectedRevision
+      });
+      if (!isCurrentLifecycleAction(sequence)) return;
+      const currentVault = await window.pige.vault.current();
+      if (!isCurrentLifecycleAction(sequence)) return;
+      if (!matchesLifecycleIdentity(result, requestId, requestedVault.vaultId, skill.id) ||
+          currentVault?.vaultId !== requestedVault.vaultId) {
+        setStatusKey("skills.lifecycleFailed");
+        return;
+      }
+      if (result.status === "failed") {
+        setStatusKey("skills.lifecycleFailed");
+        if (kind === "uninstall") {
+          uninstallConfirmationActiveRef.current = false;
+          setUninstallConfirmation(null);
+          queueInstalledFocus(skill.id);
+        }
+        return;
+      }
+      adoptRegistry(result.registry);
+      setStatusKey(result.status === "committed"
+        ? kind === "enable" ? "skills.enableCompleted" : "skills.uninstallCompleted"
+        : result.status === "stale" ? "skills.registryChanged" : "skills.skillUnavailable");
+      if (kind === "uninstall") {
+        const previous = registry;
+        const removedIndex = previous?.skills.findIndex((candidate) => candidate.id === skill.id) ?? -1;
+        const focusSkill = result.registry.skills[removedIndex]?.id ?? result.registry.skills.at(-1)?.id;
+        uninstallConfirmationActiveRef.current = false;
+        setUninstallConfirmation(null);
+        queueInstalledFocus(focusSkill);
+      } else {
+        queueInstalledFocus(skill.id);
+      }
+    } catch {
+      if (isCurrentLifecycleAction(sequence)) {
+        setStatusKey("skills.lifecycleFailed");
+        if (kind === "uninstall") {
+          uninstallConfirmationActiveRef.current = false;
+          setUninstallConfirmation(null);
+          queueInstalledFocus(skill.id);
+        }
+      }
+    } finally {
+      finishLifecycleAction(sequence);
+    }
+  };
+
+  const exportInstalledSkill = async (skill: SkillSummary): Promise<void> => {
+    if (!registry || !skill.canExport) return;
+    const expectedRevision = registry.revision;
+    const sequence = beginLifecycleAction("export", skill.id);
+    if (sequence === null) return;
+    const requestId = createSkillLifecycleRequestId();
+    try {
+      const requestedVault = await window.pige.vault.current();
+      if (!isCurrentLifecycleAction(sequence)) return;
+      if (!requestedVault) {
+        setStatusKey("skills.exportFailed");
+        return;
+      }
+      const result = await window.pige.skills.export({
+        apiVersion: 1,
+        requestId,
+        activeVaultId: requestedVault.vaultId,
+        skillId: skill.id,
+        expectedRegistryRevision: expectedRevision
+      });
+      if (!isCurrentLifecycleAction(sequence)) return;
+      const currentVault = await window.pige.vault.current();
+      if (!isCurrentLifecycleAction(sequence)) return;
+      if (!matchesLifecycleIdentity(result, requestId, requestedVault.vaultId, skill.id) ||
+          currentVault?.vaultId !== requestedVault.vaultId ||
+          (result.status === "exported" || result.status === "cancelled") &&
+            result.registryRevision !== expectedRevision) {
+        setStatusKey("skills.exportFailed");
+        return;
+      }
+      if (result.status === "cancelled") return;
+      if (result.status === "stale" || result.status === "not_found") {
+        await reloadAuthoritativeRegistry(sequence);
+        setStatusKey(result.status === "stale" ? "skills.registryChanged" : "skills.skillUnavailable");
+        return;
+      }
+      setStatusKey(result.status === "exported" ? "skills.exportCompleted" : "skills.exportFailed");
+    } catch {
+      if (isCurrentLifecycleAction(sequence)) setStatusKey("skills.exportFailed");
+    } finally {
+      finishLifecycleAction(sequence);
+      queueInstalledFocus(skill.id);
+    }
+  };
+
+  const openUninstallConfirmation = (skill: SkillSummary): void => {
+    if (!registry || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || !skill.canUninstall) return;
+    uninstallConfirmationActiveRef.current = true;
+    uninstallTriggerRef.current = pageRef.current?.querySelector<HTMLButtonElement>(
+      `[data-skill-id="${skill.id}"] [data-skill-uninstall="true"]`
+    ) ?? null;
+    setStatusKey(null);
+    setUninstallConfirmation({
+      skill,
+      expectedRevision: registry.revision
+    });
   };
 
   const finishInstallOperation = (operation: number): boolean => (
@@ -106,7 +317,7 @@ export function SkillsSettingsPanel(props: {
   );
 
   const stageFromUrl = async (): Promise<void> => {
-    if (installBusy || stagedSkill || installUrl.length === 0) return;
+    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || stagedSkill || installUrl.length === 0) return;
     const operation = installOperationRef.current + 1;
     installOperationRef.current = operation;
     setInstallBusy("stage");
@@ -138,7 +349,7 @@ export function SkillsSettingsPanel(props: {
   };
 
   const installStaged = async (): Promise<void> => {
-    if (installBusy || !stagedSkill) return;
+    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || !stagedSkill) return;
     const staged = stagedSkill;
     const operation = installOperationRef.current + 1;
     installOperationRef.current = operation;
@@ -189,7 +400,7 @@ export function SkillsSettingsPanel(props: {
   };
 
   const discardStaged = async (): Promise<void> => {
-    if (installBusy || !stagedSkill) return;
+    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || !stagedSkill) return;
     const staged = stagedSkill;
     const operation = installOperationRef.current + 1;
     installOperationRef.current = operation;
@@ -223,7 +434,7 @@ export function SkillsSettingsPanel(props: {
   };
 
   const closeInstall = (): void => {
-    if (installBusy || stagedSkill) return;
+    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || stagedSkill) return;
     installOperationRef.current += 1;
     setInstallOpen(false);
     setInstallUrl("");
@@ -232,7 +443,7 @@ export function SkillsSettingsPanel(props: {
   };
 
   return (
-    <section className="settings-page settings-skills" aria-labelledby="settings-skills-title">
+    <section ref={pageRef} className="settings-page settings-skills" aria-labelledby="settings-skills-title">
       <header className="settings-panel-header">
         <h1 id="settings-skills-title">{props.t("skills.title")}</h1>
         <p>{props.t("skills.subtitle")}</p>
@@ -282,18 +493,48 @@ export function SkillsSettingsPanel(props: {
                   <span className={`settings-status ${skill.enabled ? "is-enabled" : "neutral"}`}>
                     {props.t(skill.enabled ? "skills.statusEnabled" : "skills.statusDisabled")}
                   </span>
-                  <button
+                  {skill.enabled ? <button
                     className="settings-button"
                     type="button"
-                    aria-label={`${props.t(skill.enabled ? "skills.disable" : "skills.enableUnavailable")}: ${skill.name}`}
-                    disabled={!skill.enabled || disablingSkillId !== null}
-                    title={skill.enabled ? props.t("skills.disableDescription") : props.t("skills.enableUnavailableDescription")}
+                    aria-label={`${props.t("skills.disable")}: ${skill.name}`}
+                    disabled={lifecycleAction !== null || installBusy !== null || uninstallConfirmation !== null}
+                    title={props.t("skills.disableDescription")}
                     onClick={() => void disableSkill(skill)}
                   >
-                    {disablingSkillId === skill.id
-                      ? props.t("skills.disabling")
-                      : props.t(skill.enabled ? "skills.disable" : "skills.enableUnavailable")}
-                  </button>
+                    {lifecycleAction?.kind === "disable" && lifecycleAction.skillId === skill.id
+                      ? props.t("skills.disabling") : props.t("skills.disable")}
+                  </button> : skill.canEnable ? <button
+                    className="settings-button"
+                    type="button"
+                    aria-label={`${props.t("skills.enable")}: ${skill.name}`}
+                    disabled={lifecycleAction !== null || installBusy !== null || uninstallConfirmation !== null}
+                    title={props.t("skills.enableDescription")}
+                    onClick={() => void mutateInstalledSkill("enable", skill, registry.revision)}
+                  >
+                    {lifecycleAction?.kind === "enable" && lifecycleAction.skillId === skill.id
+                      ? props.t("skills.enabling") : props.t("skills.enable")}
+                  </button> : null}
+                  {skill.canExport ? <button
+                    className="settings-button"
+                    type="button"
+                    aria-label={`${props.t("skills.export")}: ${skill.name}`}
+                    disabled={lifecycleAction !== null || installBusy !== null || uninstallConfirmation !== null}
+                    onClick={() => void exportInstalledSkill(skill)}
+                  >
+                    {lifecycleAction?.kind === "export" && lifecycleAction.skillId === skill.id
+                      ? props.t("skills.exporting") : props.t("skills.export")}
+                  </button> : null}
+                  {skill.canUninstall ? <button
+                    className="settings-button danger"
+                    type="button"
+                    data-skill-uninstall="true"
+                    aria-label={`${props.t("skills.uninstall")}: ${skill.name}`}
+                    disabled={lifecycleAction !== null || installBusy !== null || uninstallConfirmation !== null}
+                    onClick={() => openUninstallConfirmation(skill)}
+                  >
+                    {lifecycleAction?.kind === "uninstall" && lifecycleAction.skillId === skill.id
+                      ? props.t("skills.uninstalling") : props.t("skills.uninstall")}
+                  </button> : null}
                 </div>
               </div>
             ))}
@@ -307,6 +548,53 @@ export function SkillsSettingsPanel(props: {
             </div>
           </div>
         )}
+        {uninstallConfirmation ? (
+          <div
+            className="settings-card"
+            role="alertdialog"
+            aria-labelledby="skill-uninstall-title"
+            aria-describedby="skill-uninstall-description"
+            aria-busy={lifecycleAction?.kind === "uninstall" || undefined}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && lifecycleAction === null) closeUninstallConfirmation();
+            }}
+          >
+            <div className="settings-row tall">
+              <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="trash" size={17} /></span>
+              <div className="settings-row-copy">
+                <strong id="skill-uninstall-title">{props.t("skills.uninstallConfirmTitle")}</strong>
+                <span id="skill-uninstall-description">{props.t("skills.uninstallConfirmDescription")}</span>
+                <span>{uninstallConfirmation.skill.name}</span>
+              </div>
+              <div className="settings-row-control">
+                <button
+                  ref={uninstallCancelRef}
+                  className="settings-button"
+                  type="button"
+                  disabled={lifecycleAction !== null}
+                  onClick={closeUninstallConfirmation}
+                >
+                  {props.t("skills.uninstallCancel")}
+                </button>
+                <button
+                  className="settings-button danger"
+                  type="button"
+                  disabled={lifecycleAction !== null}
+                  onClick={() => {
+                    void mutateInstalledSkill(
+                      "uninstall",
+                      uninstallConfirmation.skill,
+                      uninstallConfirmation.expectedRevision
+                    );
+                  }}
+                >
+                  {lifecycleAction?.kind === "uninstall"
+                    ? props.t("skills.uninstalling") : props.t("skills.uninstallConfirm")}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
         {registry && registry.invalidManifestCount > 0 ? (
           <p className="settings-note skill-registry-warning" role="status" data-invalid-skill-count={registry.invalidManifestCount}>
             {props.t("skills.invalidManifestWarning")}
@@ -320,6 +608,7 @@ export function SkillsSettingsPanel(props: {
             type="button"
             aria-expanded={installOpen}
             aria-controls="skill-url-install"
+            disabled={lifecycleAction !== null || uninstallConfirmation !== null}
             onClick={() => {
               setInstallOpen(true);
               setStatusKey(null);
@@ -359,10 +648,10 @@ export function SkillsSettingsPanel(props: {
                   ))}
                 </div>
                 <div className="settings-row-control skill-registry-control">
-                  <button className="settings-button primary" type="button" disabled={installBusy !== null} onClick={() => void installStaged()}>
+                  <button className="settings-button primary" type="button" disabled={installBusy !== null || lifecycleAction !== null || uninstallConfirmation !== null} onClick={() => void installStaged()}>
                     {props.t(installBusy === "install" ? "skills.installing" : "skills.installReviewed")}
                   </button>
-                  <button className="settings-button" type="button" disabled={installBusy !== null} onClick={() => void discardStaged()}>
+                  <button className="settings-button" type="button" disabled={installBusy !== null || lifecycleAction !== null || uninstallConfirmation !== null} onClick={() => void discardStaged()}>
                     {props.t(installBusy === "discard" ? "skills.discarding" : "skills.discardReview")}
                   </button>
                 </div>
@@ -389,17 +678,17 @@ export function SkillsSettingsPanel(props: {
                   spellCheck={false}
                   value={installUrl}
                   placeholder={props.t("skills.installUrlPlaceholder")}
-                  disabled={installBusy !== null}
+                  disabled={installBusy !== null || lifecycleAction !== null || uninstallConfirmation !== null}
                   onInput={(event) => {
                     setInstallUrl(event.currentTarget.value);
                     setStatusKey(null);
                   }}
                 />
                 <div className="settings-row-control skill-registry-control">
-                  <button className="settings-button primary" type="submit" disabled={installBusy !== null || installUrl.length === 0}>
+                  <button className="settings-button primary" type="submit" disabled={installBusy !== null || lifecycleAction !== null || uninstallConfirmation !== null || installUrl.length === 0}>
                     {props.t(installBusy === "stage" ? "skills.reviewing" : "skills.reviewLink")}
                   </button>
-                  <button className="settings-button" type="button" disabled={installBusy !== null} onClick={closeInstall}>
+                  <button className="settings-button" type="button" disabled={installBusy !== null || lifecycleAction !== null || uninstallConfirmation !== null} onClick={closeInstall}>
                     {props.t("skills.cancelInstall")}
                   </button>
                 </div>
@@ -441,6 +730,27 @@ export function SkillsSettingsPanel(props: {
 
 function createSkillInstallRequestId(): `skillreq_${string}` {
   return `skillreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function createSkillLifecycleRequestId(): `skill_lifecycle_request_${string}` {
+  return `skill_lifecycle_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function matchesLifecycleIdentity(
+  result: SkillLifecycleMutationResult | SkillExportResult,
+  requestId: string,
+  activeVaultId: string,
+  skillId: string
+): boolean {
+  return result.requestId === requestId && result.activeVaultId === activeVaultId && result.skillId === skillId;
+}
+
+function deferFocus(callback: () => void): void {
+  if (typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(callback);
+  } else {
+    window.setTimeout(callback, 0);
+  }
 }
 
 function invalidStageStatusKey(reason: SkillStageInvalidReason): string {

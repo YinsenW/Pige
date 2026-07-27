@@ -1948,11 +1948,17 @@ registerLocalSemanticRetrievalIpc({
 });
 registerSkillsIpc({
   ipcMain,
+  getActiveVaultId: () => getVaultService().current()?.vaultId,
+  getWindow: (sender) => BrowserWindow.fromWebContents(sender) ?? undefined,
+  showSaveDialog: (window, options) => dialog.showSaveDialog(window, options),
   summary: () => getSkillRegistryService().summary(),
   stageFromUrl: (request) => getSkillUrlInstallService().stageFromUrl(request),
   installStaged: (request) => getSkillUrlInstallService().installStaged(request),
   discardStaged: (request) => getSkillUrlInstallService().discardStaged(request),
   disable: (request) => getSkillRegistryService().disable(request),
+  enable: (request) => getSkillRegistryService().enable(request),
+  uninstall: (request) => getSkillRegistryService().uninstall(request),
+  exportSkill: (request, destinationPath) => getSkillRegistryService().export(request, destinationPath),
   publishRegistryChanged: (result) => {
     if (!("registry" in result)) return;
     for (const window of mainWindows) {

@@ -125,13 +125,18 @@ import type {
   SkillDiscardStagedRequest,
   SkillDiscardStagedResult,
   SkillDisableRequest,
+  SkillEnableRequest,
+  SkillExportRequest,
+  SkillExportResult,
   SkillInstallStagedRequest,
   SkillInstallStagedResult,
+  SkillLifecycleMutationResult,
   SkillRegistryQueryResult,
   SkillRegistryMutationResult,
   SkillRegistrySummary,
   SkillStageFromUrlRequest,
   SkillStageFromUrlResult,
+  SkillUninstallRequest,
   SettingApplyBehavior,
   SettingPermissionRequirement,
   SettingScope,
@@ -292,10 +297,15 @@ export type {
   SkillDiscardStagedRequest,
   SkillDiscardStagedResult,
   SkillDisableRequest,
+  SkillEnableRequest,
+  SkillExportRequest,
+  SkillExportResult,
   SkillInstallRequestId,
   SkillInstallStagedRequest,
   SkillInstallStagedResult,
   SkillInstallUrl,
+  SkillLifecycleMutationResult,
+  SkillLifecycleRequestId,
   SkillRegistryQueryResult,
   SkillKind,
   SkillRegistryMutationResult,
@@ -310,6 +320,7 @@ export type {
   SkillStagingId,
   SkillSummary,
   SkillTrust,
+  SkillUninstallRequest,
   WindowLayoutRequest,
   WindowLayoutState
 } from "@pige/schemas";
@@ -1463,6 +1474,9 @@ export interface PigeDesktopApi {
     readonly installStaged: (request: SkillInstallStagedRequest) => Promise<SkillInstallStagedResult>;
     readonly discardStaged: (request: SkillDiscardStagedRequest) => Promise<SkillDiscardStagedResult>;
     readonly disable: (request: SkillDisableRequest) => Promise<SkillRegistryMutationResult>;
+    readonly enable: (request: SkillEnableRequest) => Promise<SkillLifecycleMutationResult>;
+    readonly uninstall: (request: SkillUninstallRequest) => Promise<SkillLifecycleMutationResult>;
+    readonly export: (request: SkillExportRequest) => Promise<SkillExportResult>;
     readonly onChanged: (listener: (summary: SkillRegistrySummary) => void) => () => void;
   };
   readonly memory: {

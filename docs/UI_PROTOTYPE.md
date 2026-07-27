@@ -1004,47 +1004,15 @@ pathless. No edit, permanent erase, autonomous/global memory or new permission c
 
 ```txt
 Skills
-
-Built in
-Paper Reading
-  Enabled
-
-Vault Skills
-Meeting Note Cleanup
-  Enabled
-  Last used: yesterday
-  Disable
-
-External / Web Skills
-Source Research
-  Enabled
-  Permissions: network allowed for this version
-  Inspect
-
-Install Skill
-Paste Skill Link
-Choose Markdown
-Choose ZIP
-
-Staged
-No staged Skills
+Built in / Vault / External-Web / Installed on this device
+Install: Paste Skill Link | Choose Markdown | Choose ZIP
+Staged: review identity, files, capabilities, boundary and warnings
 ```
 
-Skill install from chat should land in this same staged confirmation flow. The user can paste a link or drop a `.md`/`.zip` into the main input and say "install this Skill"; Pige stages the Skill, shows metadata and warnings, and asks for confirmation before enabling it.
-
-Skill details should show:
-
-- Name, description, version, author, license, and source.
-- Scope: built-in, vault, or machine.
-- Files included.
-- Requested capabilities.
-- Data boundary.
-- Declared capabilities and whether they are first-party or third-party.
-- Trigger phrases.
-- Last used.
-- Enable, disable, uninstall, export, and update actions.
-
-Skills should feel like small knowledge workflows, not apps. Pure Skills are Markdown instruction packs. External/Web Skills declare capabilities before enabling and run in their reviewed isolation boundary; they do not inherit first-party turn authority.
+Explicit chat install joins the same staged confirmation. Skills are workflows, not apps.
+Installed actions require exact `canEnable`/`canUninstall`/`canExport === true`; uninstall has
+accessible confirmation/recoverable trash and export is pathless. Closed failures retain
+authoritative state; renderer never infers eligibility.
 
 Focused high-risk dialog target:
 

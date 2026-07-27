@@ -30,9 +30,13 @@ import type {
   LocalSemanticRetrievalRemoveRequest,
   LocalSemanticRetrievalRemoveResult,
   LocalSemanticRetrievalStatus,
+  SkillEnableRequest,
+  SkillExportRequest,
+  SkillLifecycleMutationResult,
   SkillRegistryMutationResult,
   SkillRegistryQueryResult,
   SkillRegistrySummary,
+  SkillUninstallRequest,
   SpeechAvailabilityResult
 } from "@pige/contracts";
 import {
@@ -925,28 +929,39 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("renders verified Skills, disables with exact CAS, and ignores stale registry events", async () => {
+  it("renders verified Skills, disables and re-enables with exact CAS, and ignores stale registry events", async () => {
     const dom = createDom();
     let resolveSummary!: (result: SkillRegistryQueryResult) => void;
     let registryListener: ((summary: SkillRegistrySummary) => void) | undefined;
     const unsubscribe = vi.fn();
     const enabledRegistry = skillRegistry(7, true, 1);
     const disabledRegistry = skillRegistry(8, false, 1);
+    const reenabledRegistry = skillRegistry(9, true, 1);
     const summary = vi.fn(() => new Promise<SkillRegistryQueryResult>((resolve) => {
       resolveSummary = resolve;
     }));
     const disable = vi.fn(async () => ({ status: "committed" as const, registry: disabledRegistry }));
+    const enable = vi.fn(async (request: SkillEnableRequest): Promise<SkillLifecycleMutationResult> => ({
+      apiVersion: 1 as const,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      skillId: request.skillId,
+      status: "committed" as const,
+      registry: reenabledRegistry
+    }));
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
       value: {
         skills: {
           summary,
           disable,
+          enable,
           onChanged: (listener: (next: SkillRegistrySummary) => void) => {
             registryListener = listener;
             return unsubscribe;
           }
-        }
+        },
+        vault: { current: async () => ({ vaultId: "vault_20260728_skilllifecycle" }) }
       }
     });
     const root = createRoot(dom.window.document.querySelector("#root")!);
@@ -988,18 +1003,33 @@ describe("full UI Settings surface", () => {
     });
     expect(disable).toHaveBeenCalledWith({ apiVersion: 1, skillId: "review-notes", expectedRevision: 7 });
     expect(row.textContent).toContain("Disabled");
-    expect(row.textContent).toContain("Enable unavailable");
+    expect(row.textContent).toContain("Enable");
     const disabledStatus = requireElement(row.querySelector<HTMLElement>(".settings-status"));
     expect(disabledStatus.classList.contains("neutral")).toBe(true);
     expect(disabledStatus.classList.contains("is-enabled")).toBe(false);
-    expect(buttonNamed(row, "Enable unavailable: Review notes").disabled).toBe(true);
+    expect(buttonNamed(row, "Enable: Review notes").disabled).toBe(false);
     expect(page.textContent).toContain("The Skill is disabled for new Agent runs.");
+
+    await act(async () => {
+      buttonNamed(row, "Enable: Review notes").click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(enable).toHaveBeenCalledWith({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^skill_lifecycle_request_[a-z0-9]{16,64}$/u),
+      activeVaultId: "vault_20260728_skilllifecycle",
+      skillId: "review-notes",
+      expectedRegistryRevision: 8
+    });
+    expect(row.textContent).toContain("Enabled");
+    expect(page.textContent).toContain("The Skill is enabled for new Agent runs.");
 
     await act(async () => {
       registryListener?.(enabledRegistry);
       await settle(dom);
     });
-    expect(row.textContent).toContain("Disabled");
+    expect(row.textContent).toContain("Enabled");
 
     await act(async () => {
       buttonNamed(page, "Install from link").click();
@@ -1010,6 +1040,121 @@ describe("full UI Settings surface", () => {
 
     await act(async () => root.unmount());
     expect(unsubscribe).toHaveBeenCalledOnce();
+    dom.window.close();
+  });
+
+  it("exports without paths and confirms one trash-first uninstall with focus and identity fences", async () => {
+    const dom = createDom();
+    const vaultId = "vault_20260728_skilllifecycle";
+    const first = skillRegistry(12, true).skills[0]!;
+    const second = {
+      ...first,
+      id: "organize-notes",
+      name: "Organize notes",
+      description: "Organizes selected notes."
+    };
+    const initialRegistry = skillRegistry(12, true, 0, [first, second]);
+    const afterUninstall = skillRegistry(13, true, 0, [second]);
+    let resolveUninstall!: (result: SkillLifecycleMutationResult) => void;
+    const exportSkill = vi.fn(async (request: SkillExportRequest) => ({
+      apiVersion: 1 as const,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      skillId: request.skillId,
+      registryRevision: request.expectedRegistryRevision,
+      status: "cancelled" as const
+    }));
+    const uninstall = vi.fn((_request: SkillUninstallRequest) =>
+      new Promise<SkillLifecycleMutationResult>((resolve) => { resolveUninstall = resolve; }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        skills: {
+          summary: async () => ({ status: "ready" as const, registry: initialRegistry }),
+          disable: vi.fn(),
+          enable: vi.fn(),
+          export: exportSkill,
+          uninstall,
+          onChanged: () => () => undefined
+        },
+        vault: { current: async () => ({ vaultId }) }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(SkillsSettingsPanel, { t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-skills"));
+    const firstRow = requireElement(page.querySelector<HTMLElement>('[data-skill-id="review-notes"]'));
+
+    await act(async () => {
+      buttonNamed(firstRow, "Export: Review notes").click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(exportSkill).toHaveBeenCalledWith({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^skill_lifecycle_request_[a-z0-9]{16,64}$/u),
+      activeVaultId: vaultId,
+      skillId: "review-notes",
+      expectedRegistryRevision: 12
+    });
+    expect(page.querySelector('.settings-note[role="status"]')).toBeNull();
+    expect(page.textContent).not.toContain("/Users/");
+
+    const uninstallTrigger = buttonNamed(firstRow, "Uninstall: Review notes");
+    await act(async () => {
+      uninstallTrigger.click();
+      await settle(dom);
+    });
+    let confirmation = requireElement(page.querySelector<HTMLElement>('[role="alertdialog"]'));
+    expect(confirmation.textContent).toContain("move its installed files to Trash");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(confirmation, "Cancel"));
+    await act(async () => {
+      confirmation.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle(dom);
+    });
+    expect(page.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(dom.window.document.activeElement).toBe(uninstallTrigger);
+
+    await act(async () => {
+      uninstallTrigger.click();
+      await settle(dom);
+    });
+    confirmation = requireElement(page.querySelector<HTMLElement>('[role="alertdialog"]'));
+    const confirm = buttonNamed(confirmation, "Move to Trash");
+    await act(async () => {
+      confirm.click();
+      confirm.click();
+      await settle(dom);
+    });
+    expect(uninstall).toHaveBeenCalledOnce();
+    const request = uninstall.mock.calls[0]![0];
+    expect(request).toEqual({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^skill_lifecycle_request_[a-z0-9]{16,64}$/u),
+      activeVaultId: vaultId,
+      skillId: "review-notes",
+      expectedRegistryRevision: 12
+    });
+    await act(async () => {
+      resolveUninstall({
+        apiVersion: 1,
+        requestId: request.requestId,
+        activeVaultId: vaultId,
+        skillId: "review-notes",
+        status: "committed",
+        registry: afterUninstall
+      });
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(page.querySelector('[data-skill-id="review-notes"]')).toBeNull();
+    expect(page.textContent).toContain("The Skill was uninstalled and moved to Trash.");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(page, "Disable: Organize notes"));
+
+    await act(async () => root.unmount());
     dom.window.close();
   });
 
@@ -2326,7 +2471,10 @@ function skillRegistry(
     enabled,
     trust: "user_confirmed",
     capabilities: ["read_current_source"],
-    dataBoundaries: ["local"]
+    dataBoundaries: ["local"],
+    canEnable: !enabled,
+    canUninstall: true,
+    canExport: true
   }]
 ): SkillRegistrySummary {
   return { apiVersion: 1, revision, invalidManifestCount, skills };

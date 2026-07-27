@@ -780,7 +780,7 @@
     "PIGE-UI-004":{"status":"planned","plannedTarget":"Remaining Knowledge Tree density/scale, compact-platform, assistive-technology, and signed packaged visual acceptance."},
     "PIGE-UI-005":{"status":"planned","plannedTarget":"Reader selection works; broader mutation, Activity/Undo and platform proof remains."},
     "PIGE-UI-006":{"status":"partial","evidence":["EV-READER-RELATED","EV-READER-UI","EV-FULL-UI-LIBRARY","EV-FULL-UI-RESPONSIVE","EV-READER-ACTIONS-UI","EV-READER-INLINE"],"open":{"id":"OPEN-REQ-PIGE-UI-006","description":"Reader/related/copy/typed links work; source UI, edit/reveal and graph degradation open.","targetBuilds":["B6.08","B6.09"],"targetExits":["E6.05","E6.07"]}},
-    "PIGE-SKILL-001":{"status":"planned","plannedTarget":"Settings now reviews and installs one bounded machine-local pure HTTPS SKILL.md; file/ZIP/chat/vault/External-Web lifecycle, runtime permissions, update, uninstall and export remain."},
+    "PIGE-SKILL-001":{"status":"planned","plannedTarget":"Settings reviews and installs one bounded machine-local pure HTTPS SKILL.md, then re-enables, trash-uninstalls or pathlessly exports verified installed bytes. File/ZIP/chat/vault/External-Web lifecycle, runtime permissions, source-aware update and public restore remain."},
     "PIGE-SKILL-002":{"status":"planned","plannedTarget":"Catalog/lifecycle plus no-hidden-install and official Feishu recipe fixture: resolve CLI npm SRI, native binary checksum/origins, skills package/Skill source, fixed steps/destinations and browser auth before confirmation."}
   },
   "exits": {
@@ -1215,7 +1215,7 @@
     "EV-NOTE-MARKDOWN-EDITOR":{"kind":"test","path":"tests/unit/note-markdown-editor-service.test.ts","selector":"opens and atomically saves exact portable Markdown with one update_page Activity record"},
     "EV-NOTE-MARKDOWN-EDITOR-UI":{"kind":"test","path":"tests/unit/note-markdown-editor-ui.test.ts","selector":"preserves the exact stale draft, reloads only the base, and retries with the refreshed revision"},
     "EV-READER-SELECTION-PROPOSAL":{"kind":"test","path":"tests/unit/reader-selection-proposal-service.test.ts","selector":"projects only bounded safe preview lines and keeps private mutation identity out of the DTO"},
-    "EV-SKILLS-SHELL-UI":{"kind":"test","path":"tests/unit/full-ui-settings-surface.test.ts","selector":"renders verified Skills, disables with exact CAS, and ignores stale registry events"},
+    "EV-SKILLS-SHELL-UI":{"kind":"test","path":"tests/unit/full-ui-settings-surface.test.ts","selector":"renders verified Skills, disables and re-enables with exact CAS, and ignores stale registry events"},
     "EV-DIAGNOSTICS-SETTINGS-UI":{"kind":"test","path":"tests/unit/full-ui-settings-surface.test.ts","selector":"binds real redacted diagnostics and support preview on its own page"},
     "EV-PROCESSING-FILES-UI":{"kind":"test","path":"tests/unit/home-agent-conversation-ui.test.ts","selector":"docks processing files to the composer and removes terminal or non-source Jobs"},
     "EV-ACTIVITY-UI":{"kind":"test","path":"tests/unit/home-agent-conversation-ui.test.ts","selector":"opens an exact stable Activity target and closes Settings only after Reader render succeeds"},
