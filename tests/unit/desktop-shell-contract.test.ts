@@ -1122,6 +1122,28 @@ describe("desktop shell build contract", () => {
     expect(queryWorkerSource).toContain('from "../services/dataset-query-core"');
   });
 
+  it("strictly validates the Managed Collection IPC and preload boundaries", () => {
+    const registrarSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-managed-collection-ipc.ts"),
+      "utf8"
+    );
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+
+    expect(registrarSource).toContain('ipcMain.handle("collections.open"');
+    expect(registrarSource).toContain('ipcMain.handle("collections.editCell"');
+    expect(registrarSource).toContain("CollectionOpenRequestSchema.parse(request)");
+    expect(registrarSource).toContain("CollectionOpenResultSchema.parse(rawResult)");
+    expect(registrarSource).toContain("CollectionCellEditRequestSchema.parse(request)");
+    expect(registrarSource).toContain("CollectionCellEditResultSchema.parse(rawResult)");
+    expect(registrarSource).toContain("options.getActiveVaultId() !== parsed.activeVaultId");
+    expect(preloadSource).toContain('ipcRenderer.invoke("collections.open", parsedRequest)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("collections.editCell", parsedRequest)');
+    expect(preloadSource).toContain("CollectionOpenRequestSchema.parse(request)");
+    expect(preloadSource).toContain("CollectionOpenResultSchema.parse(");
+    expect(preloadSource).toContain("CollectionCellEditRequestSchema.parse(request)");
+    expect(preloadSource).toContain("CollectionCellEditResultSchema.parse(");
+  });
+
   it("wires onboarding readiness to the non-secret provider runtime binding check", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
