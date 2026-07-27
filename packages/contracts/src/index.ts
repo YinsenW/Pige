@@ -136,6 +136,8 @@ import type {
   SkillRegistrySummary,
   SkillStageFromUrlRequest,
   SkillStageFromUrlResult,
+  SkillStageUpdateRequest,
+  SkillStageUpdateResult,
   SkillUninstallRequest,
   SettingApplyBehavior,
   SettingPermissionRequirement,
@@ -313,6 +315,8 @@ export type {
   SkillScope,
   SkillStageFromUrlRequest,
   SkillStageFromUrlResult,
+  SkillStageUpdateRequest,
+  SkillStageUpdateResult,
   SkillStageInvalidReason,
   SkillStagedFileSummary,
   SkillStagedSummary,
@@ -1471,6 +1475,7 @@ export interface PigeDesktopApi {
   readonly skills: {
     readonly summary: () => Promise<SkillRegistryQueryResult>;
     readonly stageFromUrl: (request: SkillStageFromUrlRequest) => Promise<SkillStageFromUrlResult>;
+    readonly stageUpdate: (request: SkillStageUpdateRequest) => Promise<SkillStageUpdateResult>;
     readonly installStaged: (request: SkillInstallStagedRequest) => Promise<SkillInstallStagedResult>;
     readonly discardStaged: (request: SkillDiscardStagedRequest) => Promise<SkillDiscardStagedResult>;
     readonly disable: (request: SkillDisableRequest) => Promise<SkillRegistryMutationResult>;

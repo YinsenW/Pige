@@ -26,6 +26,8 @@ import {
   SkillRegistryMutationResultSchema,
   SkillRegistryQueryResultSchema,
   SkillRegistrySummarySchema,
+  SkillStageUpdateRequestSchema,
+  SkillStageUpdateResultSchema,
   UpdateProviderCredentialRequestSchema
 } from "@pige/schemas";
 
@@ -197,7 +199,8 @@ describe("security-sensitive shared contracts", () => {
         dataBoundaries: ["local" as const],
         canEnable: false,
         canUninstall: true,
-        canExport: true
+        canExport: true,
+        canUpdate: true
       }]
     };
     expect(SkillRegistrySummarySchema.parse(summary)).toEqual(summary);
@@ -230,6 +233,26 @@ describe("security-sensitive shared contracts", () => {
     for (const skillId of ["con", "nul.logs", "com1", "portable."]) {
       expect(() => SkillDisableRequestSchema.parse({ apiVersion: 1, skillId, expectedRevision: 4 })).toThrow();
     }
+    const updateRequest = {
+      apiVersion: 1 as const,
+      requestId: "skill_lifecycle_request_abcdefghijklmnop",
+      activeVaultId: "vault_20260728_abcdefgh",
+      skillId: "paper-reading",
+      expectedRegistryRevision: 4
+    };
+    expect(SkillStageUpdateRequestSchema.parse(updateRequest)).toEqual(updateRequest);
+    expect(() => SkillStageUpdateRequestSchema.parse({
+      ...updateRequest,
+      sourceUrl: "https://example.com/private/SKILL.md"
+    })).toThrow();
+    expect(() => SkillStageUpdateResultSchema.parse({
+      apiVersion: 1,
+      requestId: updateRequest.requestId,
+      activeVaultId: updateRequest.activeVaultId,
+      skillId: updateRequest.skillId,
+      status: "failed",
+      error: { path: "/private/source" }
+    })).toThrow();
     const failed = {
       status: "failed" as const,
       error: {
