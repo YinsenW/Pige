@@ -1343,6 +1343,12 @@ const scheduleAgentIngestProcessing = (): void => {
 const scheduleAgentTurnProcessing = (): void => {
   agentTurnDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getHomeAgentService().resumeWaitingTurns(20),
+    onBatch: () => {
+      void getJobsService().reapIngressSnapshots().catch(() => recordBackgroundFailure(
+        "ingress_snapshot.reap_incomplete",
+        "Completed private ingress snapshots could not be reconciled safely."
+      ));
+    },
     onError: () => recordBackgroundFailure(
       "agent_runtime.turn_resume_failed",
       "Waiting Agent turns could not be resumed."
@@ -1495,6 +1501,10 @@ const resumeBackgroundJobs = (): void => {
       });
     });
     getJobClassExecutorRegistry().scheduleAll();
+    void getJobsService().reapIngressSnapshots().catch(() => recordBackgroundFailure(
+      "ingress_snapshot.reap_incomplete",
+      "Private ingress snapshot startup reconciliation could not complete safely."
+    ));
   } catch {
     getDiagnosticsService().recordEvent({
       level: "warning",

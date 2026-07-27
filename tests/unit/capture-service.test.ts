@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CaptureService,
   type AgentTurnFilePreservationBinding,
@@ -18,12 +18,13 @@ import { verifyReadableSourceFile } from "../../apps/desktop/src/main/services/s
 import type { SourceRecord } from "@pige/schemas";
 import type { VaultSummary } from "@pige/contracts";
 import { HomeAgentAttachmentService } from "../../apps/desktop/src/main/services/home-agent-attachment-service";
+import { ingressSnapshotService } from "../../apps/desktop/src/main/services/ingress-snapshot-service";
 
 const tempRoots: string[] = [];
 let bindingSequence = 0;
 
 function makeVault(): { vaultPath: string; vault: VaultSummary } {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-capture-test-"));
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-capture-test-")));
   tempRoots.push(root);
   createVaultOnDisk({
     parentDirectory: root,
@@ -62,6 +63,7 @@ function urlBinding(url: string): AgentTurnUrlPreservationBinding {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of tempRoots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -142,6 +144,90 @@ describe("Agent-turn source preservation", () => {
     expect(findFileOptional(path.join(vaultPath, ".pige/conversations"), ".jsonl")).toBeUndefined();
   });
 
+  it("creates snapshots only after Send for accepted staged ordinals and never for rejected ordinals", async () => {
+    const { vaultPath, vault } = makeVault();
+    const inputRoot = path.dirname(vaultPath);
+    const acceptedPath = path.join(inputRoot, "accepted.md");
+    const rejectedPath = path.join(inputRoot, "rejected.exe");
+    fs.writeFileSync(acceptedPath, "accepted source", "utf8");
+    fs.writeFileSync(rejectedPath, "rejected source", "utf8");
+    const attachments = new HomeAgentAttachmentService(makeService(vaultPath, vault));
+    const stagedItems = [
+      { kind: "file" as const, ordinal: 0, displayName: "rejected.exe" },
+      { kind: "file" as const, ordinal: 1, displayName: "accepted.md" }
+    ];
+    const prepared = await attachments.prepare([
+      { ordinal: 0, displayName: "rejected.exe", internalPath: rejectedPath },
+      { ordinal: 1, displayName: "accepted.md", internalPath: acceptedPath }
+    ], stagedItems);
+    const binding = {
+      jobId: "job_20260727_partition01",
+      firstSourceId: "src_20260727_partition01"
+    };
+
+    expect(findFileOptional(path.join(vaultPath, ".pige/private/ingress-snapshots"), "descriptor.json"))
+      .toBeUndefined();
+
+    const preserved = await attachments.preserve({
+      prepared,
+      turn: { schemaVersion: 1, inputKind: "file_picker", locale: "en", stagedItems },
+      ...binding
+    });
+
+    expect(preserved).toMatchObject({
+      status: "preserved",
+      sourceIds: [binding.firstSourceId]
+    });
+    expect(prepared.rejectedItems).toEqual([
+      { ordinal: 0, kind: "file", displayName: "rejected.exe", reason: "unsupported_type" }
+    ]);
+    expect(findFiles(path.join(vaultPath, ".pige/private/ingress-snapshots"), "descriptor.json")).toHaveLength(1);
+    expect(ingressSnapshotService.read(vaultPath, {
+      vaultId: vault.vaultId,
+      parentJobId: binding.jobId,
+      sourceId: binding.firstSourceId,
+      ordinal: 1
+    })).toMatchObject({ sourceId: binding.firstSourceId, ordinal: 1 });
+    expect(ingressSnapshotService.read(vaultPath, {
+      vaultId: vault.vaultId,
+      parentJobId: binding.jobId,
+      sourceId: binding.firstSourceId,
+      ordinal: 0
+    })).toBeUndefined();
+    expect(readSourceRecord(vaultPath, binding.firstSourceId).metadata.agentTurnAttachmentOrdinal).toBe(1);
+  });
+
+  it("removes an exact unpublished snapshot when a handled managed-copy publication fails", async () => {
+    const { vaultPath, vault } = makeVault();
+    const sourcePath = path.join(path.dirname(vaultPath), "rejected-after-snapshot.md");
+    fs.writeFileSync(sourcePath, "snapshot must not survive rejection", "utf8");
+    const binding = {
+      ...nextFileBinding(),
+      ordinal: 0,
+      attachmentSetHash: `sha256:${"c".repeat(64)}`
+    };
+    const promote = ingressSnapshotService.promoteManagedCopy.bind(ingressSnapshotService);
+    vi.spyOn(ingressSnapshotService, "promoteManagedCopy").mockImplementationOnce(async (input) => {
+      await promote(input);
+      throw new Error("simulated post-promotion publication failure");
+    });
+
+    const result = await makeService(vaultPath, vault).preserveFilesForAgentTurn({
+      filePaths: [sourcePath],
+      inputKind: "file_picker",
+      userIntent: "unknown",
+      locale: "en"
+    }, binding);
+
+    expect(result).toMatchObject({ status: "rejected", sourceIds: [], rejectedFiles: [{ reason: "copy_failed" }] });
+    expect(findFileOptional(path.join(vaultPath, ".pige/private/ingress-snapshots"), "descriptor.json"))
+      .toBeUndefined();
+    expect(findFileOptional(path.join(vaultPath, ".pige/source-records"), `${binding.sourceId}.json`))
+      .toBeUndefined();
+    expect(findFileOptional(path.join(vaultPath, "raw/files"), `${binding.sourceId}.md`))
+      .toBeUndefined();
+  });
+
   it("preserves a bound Markdown source without creating a shadow Job or conversation event", async () => {
     const { vaultPath, vault } = makeVault();
     const sourcePath = path.join(path.dirname(vaultPath), "research-note.md");
@@ -212,6 +298,75 @@ describe("Agent-turn source preservation", () => {
       location: "referenced_original",
       size: Buffer.byteLength(body)
     });
+  });
+
+  it("keeps reference-original provenance currentness separate from immutable snapshot reads", async () => {
+    const { vaultPath } = makeVault();
+    const vault = updateVaultSourceStorageStrategy(vaultPath, "reference_original");
+    const sourcePath = path.join(path.dirname(vaultPath), "mutable-reference.md");
+    const original = "# Original snapshot\n";
+    fs.writeFileSync(sourcePath, original, "utf8");
+    const binding = {
+      jobId: "job_20260727_reference01",
+      sourceId: "src_20260727_reference01",
+      inputChecksum: digest(original),
+      ordinal: 0,
+      attachmentSetHash: `sha256:${"b".repeat(64)}`
+    };
+
+    await makeService(vaultPath, vault).preserveFilesForAgentTurn({
+      filePaths: [sourcePath],
+      inputKind: "file_picker",
+      userIntent: "capture",
+      locale: "en"
+    }, binding);
+    const snapshotBinding = {
+      vaultId: vault.vaultId,
+      parentJobId: binding.jobId,
+      sourceId: binding.sourceId,
+      ordinal: binding.ordinal
+    };
+    const lease = ingressSnapshotService.acquireRead(vaultPath, snapshotBinding);
+    fs.writeFileSync(sourcePath, "# Mutated live original\n", "utf8");
+
+    expect(fs.readFileSync(lease.absolutePath, "utf8")).toBe(original);
+    await expect(ingressSnapshotService.proveReferencedOriginalCurrent(vaultPath, snapshotBinding))
+      .rejects.toMatchObject({ code: "ingress_snapshot.source_changed" });
+    const record = readSourceRecord(vaultPath, binding.sourceId);
+    expect(record).toMatchObject({
+      storageStrategy: "reference_original",
+      original: { checksum: digest(original), lastKnownSize: Buffer.byteLength(original) }
+    });
+    expect(record.managedCopy).toBeUndefined();
+    lease.release();
+  });
+
+  it("rejects retry adoption after the exact local file identity is replaced without duplicating durable state", async () => {
+    const { vaultPath, vault } = makeVault();
+    const sourcePath = path.join(path.dirname(vaultPath), "identity-bound.md");
+    const displacedPath = path.join(path.dirname(vaultPath), "identity-bound-original.md");
+    const body = "identity-bound bytes";
+    fs.writeFileSync(sourcePath, body, "utf8");
+    const binding = {
+      jobId: "job_20260727_identity01",
+      sourceId: "src_20260727_identity01",
+      inputChecksum: digest(body),
+      ordinal: 0,
+      attachmentSetHash: `sha256:${"c".repeat(64)}`
+    };
+    const service = makeService(vaultPath, vault);
+    const request = { filePaths: [sourcePath], inputKind: "file_picker" as const, userIntent: "capture" as const, locale: "en" as const };
+    const first = await service.preserveFilesForAgentTurn(request, binding);
+    fs.renameSync(sourcePath, displacedPath);
+    fs.writeFileSync(sourcePath, body, "utf8");
+
+    const retry = await service.preserveFilesForAgentTurn(request, binding);
+
+    expect(first.sourceIds).toEqual([binding.sourceId]);
+    expect(retry).toMatchObject({ status: "rejected", sourceIds: [], rejectedFiles: [{ reason: "copy_failed" }] });
+    expect(findFiles(path.join(vaultPath, ".pige/private/ingress-snapshots"), "descriptor.json")).toHaveLength(1);
+    expect(findFiles(path.join(vaultPath, ".pige/source-records"), `${binding.sourceId}.json`)).toHaveLength(1);
+    expect(findFiles(path.join(vaultPath, "raw/files"), `${binding.sourceId}.md`)).toHaveLength(1);
   });
 
   it.each([
@@ -346,4 +501,17 @@ function findFileOptional(root: string, suffix: string): string | undefined {
     if (entry.isFile() && entry.name.endsWith(suffix)) return fullPath;
   }
   return undefined;
+}
+
+function findFiles(root: string, suffix: string): string[] {
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+    const fullPath = path.join(root, entry.name);
+    if (entry.isDirectory()) return findFiles(fullPath, suffix);
+    return entry.isFile() && entry.name.endsWith(suffix) ? [fullPath] : [];
+  });
+}
+
+function digest(value: string): `sha256:${string}` {
+  return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
 }

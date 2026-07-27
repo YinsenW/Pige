@@ -254,7 +254,8 @@ closed high-risk gate. Permanent loss/protected policy never inherits standing a
 and raw secret bytes are not grantable (reviewed adapters use refs only).
 
 Standing Markdown authority comes from managed ownership, not `.md`. Attachments grant
-only exact SourceRecords; fallback/model/source text cannot widen them. A separate explicit
+only exact SourceRecords whose body tools resolve exact ingress/managed bytes, never live
+original paths; fallback/model/source text cannot widen them. A separate explicit
 user-authored task may request ambient scope under its precise confirmation/reviewed plan.
 Main persists `authoredTaskIntent = neutral_attachment | explicit_user_task` from request
 text presence before fallback; recovery reads it, and missing/legacy fails neutral. Main

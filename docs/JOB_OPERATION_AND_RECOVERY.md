@@ -408,7 +408,8 @@ Required techniques:
 
 Examples:
 
-- If a file drop copied the source and the app crashed before parsing, retry should reuse the existing source record and managed copy.
+- If accepted-file ingress stopped before parsing, retry adopts the same descriptor,
+  snapshot, SourceRecord, and managed copy by parent/source/ordinal/checksum identity.
 - If an operation created a source page but indexing failed, retry should not create a duplicate source page.
 - If a model call completed but the write did not apply, retry may call the model again only when no durable proposal or operation exists. A committed compatible Operation is
   reconciled before model-readiness checks; recovery must not require credentials or a
@@ -422,26 +423,15 @@ Retry can be automatic only for safe, bounded failures.
 
 ### 8.1 Pi Turn Recovery Is Reliability, Not Semantic Dispatch
 
-A durable `agent_turn` or historical `agent_ingest` may contain multiple Pi turns/tools.
-Jobs recover the same Pi turn, tool/effect identities, checkpoints and cancellation; they
-do not choose a semantic next step, require a terminal tool, or repair assistant prose.
+A durable Agent Job may span Pi turns/tools. Recovery keeps the same turn, tool/effect
+identity, checkpoint and cancellation; it never selects semantics, requires a terminal
+tool, repairs prose, or treats grounding/citation/answer shape as Job failure.
 
-- Pi may gather more evidence, revisit a read-only/idempotent tool, correct a rejected
-  tool input, or finish naturally. The Job coordinator observes events and owns durable
-  reliability only.
-- Tool/effect validation failures may return typed boundary feedback. Missing grounding,
-  citation shape, answer schema or Pige terminal call is not a Job failure or retry cause.
-- Service-owned wall-time, model/tool-work, byte, and non-progress bounds prevent runaway
-  cost or loops without prescribing a fixed semantic route or one-correction limit.
-- Reaching one internal execution slice checkpoints a body-free PlanSummary/failure
-  fingerprint and autonomously resumes or replans the same Job when doing so cannot repeat
-  an uncommitted destructive effect. It does not ask the user to resubmit the prompt.
-- A persistent provider/tool-protocol incompatibility, unavailable capability, authority
-  denial, cancellation, or irreconcilable conflict transitions to its distinct typed
-  blocked/failed state. Recoverable validation alone never owns a user-visible failure.
-- No intermediate candidate becomes a conversation event, Job output, proposal, or
-  Operation. Deterministic call/effect identity and existing claim/CAS rules still guard
-  every accepted durable effect.
+Pi may revisit evidence or typed tools and finish naturally. Service time/work/byte/
+non-progress bounds limit cost without prescribing a route. A body-free execution-slice
+checkpoint may resume/replan only when it cannot repeat an uncommitted destructive effect.
+Persistent protocol/capability/authority/conflict/cancel failures retain their exact typed
+state; intermediate candidates are not durable outputs and claim/CAS still guard effects.
 
 Automatic retry allowed:
 
@@ -494,6 +484,8 @@ Rules:
 - Canceling capture before execution keeps its source; once capture is running, its source-page guard prevents a false clean-cancel claim, but cooperative running cancellation remains open.
 - Canceling parse/OCR/`index_rebuild` preserves completed artifacts and marks incomplete artifacts stale or temporary.
 - Canceling `agent_turn` or Agent ingest durably requests cancellation before aborting Pi/provider and active tools; clean pre-publication cancellation writes no assistant/partial response and remains distinct from timeout.
+- Canceling a source-bound parent retains each ingress snapshot until every child is
+  terminal/adopted and no retry/recovery reader remains; cancellation is not cleanup proof.
 - Canceling backup removes incomplete temp archives when safe.
 - Canceling restore before apply leaves the original vault untouched. Canceling during apply must finish a safe checkpoint or stop with a recovery report.
 - Canceling a job with applied operations does not roll back automatically; Undo/repair is a separate operation flow.
@@ -632,8 +624,9 @@ Startup recovery flow:
    directory identity, current mtime/freshness, and the sentinel generation, bounded
    content hash and named-path metadata twice around the cleanup commit boundary before
    mutable services start. Same-name inode reuse is not accepted as identity.
-3. Scan durable Jobs/proposals/Operations/source records/conversations/log, rebuilding dirty
-   SQLite projections and reconciling checkpoint refs/hashes.
+3. Scan durable Jobs/proposals/Operations/source records/private ingress snapshots/
+   conversations/log, rebuilding dirty SQLite projections and reconciling checkpoint
+   refs/hashes.
 4. Reclassify running/cancel/waiting/partial or legacy states as proven resumable,
    retryable, warning-complete, or body-free `failed_retryable`/repair; unpublished approval
    states may be cleared rather than migrated.
@@ -658,7 +651,7 @@ Recovery decisions:
 | Proposal ready, app crashed before display | Reconcile in Main; renderer review stays unavailable pending a bounded projection. |
 | Operation record says page updated, index missing | Rebuild index. |
 | Action-safety guard is true after restart | Keep it monotonic; use provenance/checksums to retry, adopt same-job output, or repair a missing derived index. Missing output never proves clean cancellation. |
-| Temp file exists without operation | Validate and delete or quarantine temp file. |
+| Ingress snapshot or other temp exists | Retain a live/retryable exact Job binding; delete only revalidated terminal/orphan ownership, otherwise quarantine/fail closed. |
 | Target page changed after proposal | Mark proposal conflicted. |
 | Dataset revision or schema changed after query/write plan | Reject stale evidence or preserve a new revision; never replay against a different base. |
 | Dataset payload exists but manifest/revision/Operation is incomplete | Adopt only when every planned ID/hash matches; otherwise quarantine/preserve and fail closed. |
@@ -792,7 +785,8 @@ Required tests:
 - Job state transition validation.
 - Durable Job warnings/errors reject arbitrary records and use the shared API/diagnostic error taxonomy.
 - Durable job creation before parser/model work.
-- Capture crash after source preservation.
+- Capture crash around ingress snapshot creation/promotion/source publication; exact retry
+  adopts without duplicates, and startup reaps only proven terminal/orphan ownership.
 - Parser crash after artifact creation.
 - Retry without duplicate source/page creation.
 - Cancellation after partial artifacts.

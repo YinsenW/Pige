@@ -3294,14 +3294,39 @@ Consequences:
 
 - No saved grant/YOLO/mode; drift fails closed or exact probes adopt.
 - Feishu is a recipe fixture; statuses stay unchanged.
-- Ingress snapshot `b1b136db` remains HOLD and must drop its blanket ambient exclusion
-  before implementation; exact-file snapshot authority remains unchanged.
+- Private ingress snapshots retain this authored-intent rule: attachments grant no ambient
+  authority, but their presence does not veto a separately explicit reviewed task.
 
 References:
 
 - `docs/SECURITY_THREAT_MODEL.md`
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 - `resources/task-execution-plan.manifest.json`
+
+### D-20260727-Private-Ingress-Snapshot-Lifecycle
+
+Status: Accepted
+Date: 2026-07-27
+
+Decision:
+
+After Send, each accepted local file gets one private descriptor snapshot. Body tools
+read it; managed copy adopts it, reference-original keeps private provenance, and Job
+recovery retains it until the parent/children are terminal or adopted and no reader remains.
+
+Rationale:
+
+Per-tool temporary snapshots still reread the live original and cannot survive crash/retry.
+
+Consequences:
+
+- No pre-Send or public locator, no authority from attachment presence, and no status
+  change; explicit authored ambient intent remains separately reviewed and drift fails closed.
+
+References:
+
+- `docs/SOURCE_STORAGE_STRATEGY.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
 
 ## 4. Deferred Decisions
 

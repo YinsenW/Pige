@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "fd869668bb7d53cb1946b3b70e2127de1e1959af",
+  "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 135,
-  "baselineLines": 71766,
+  "baselineFileCount": 141,
+  "baselineLines": 75693,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -50,6 +50,9 @@
       ["setting-action-guard.ts", 36, "p"],
       ["source-file-access.ts", 217, "pr"],
       ["speech-service.ts", 541, "pr"],
+      ["task-execution-plan-runner.ts", 500, "japr"],
+      ["task-execution-plan-service.ts", 863, "jpr"],
+      ["task-process-session-service.ts", 611, "jpr"],
       ["vault-writer-lease.ts", 894, "rd"],
       ["verified-file-snapshot.ts", 152, "rd"]
     ],
@@ -64,6 +67,7 @@
       ["durable-directory-sync.ts", 31, "d"],
       ["external-mutation-intent-store.ts", 227, "rd"],
       ["external-operation-record-store.ts", 144, "rd"],
+      ["ingress-snapshot-service.ts", 764, "pr"],
       ["job-record-store.ts", 1184, "jrd"],
       ["local-database-service.ts", 1284, "rd"],
       ["local-settings.ts", 351, "d"],
@@ -125,6 +129,8 @@
       ["retrieval-service.ts", 420, "f"],
       ["search-text-utils.ts", 110, "f"],
       ["source-fetch-service.ts", 656, "pr"],
+      ["task-execution-plan-capability-adapter.ts", 208, "ap"],
+      ["task-execution-recipe-service.ts", 981, "pf"],
       ["toolchain-service.ts", 58, ""],
       ["update-service.ts", 201, ""],
       ["web-content-extractor-core.ts", 223, "f"],
@@ -168,7 +174,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 135,
+    "serviceOwnerCount": 141,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

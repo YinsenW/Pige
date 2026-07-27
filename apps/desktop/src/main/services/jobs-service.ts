@@ -93,6 +93,7 @@ import {
 import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
 import {
   JobExecutionCoordinator,
+  isTerminalJobState,
   type BeginJobInput,
   type AdoptDurableCompletionInput,
   type JobExecutionFactsPatch,
@@ -101,6 +102,12 @@ import {
   type ResolveJobReviewInput,
   type ResumeJobInput
 } from "./job-execution-coordinator";
+import {
+  IngressSnapshotService,
+  ingressSnapshotService,
+  type IngressSnapshotDescriptor,
+  type IngressSnapshotReleaseProof
+} from "./ingress-snapshot-service";
 import {
   createJobClassExecutorRegistry,
   type JobClassExecutorRegistry
@@ -229,6 +236,7 @@ export class JobsService {
   readonly #jobRecordStores = new Map<string, JobRecordStore>();
   readonly #jobExecutionCoordinators = new Map<string, JobExecutionCoordinator>();
   readonly #activeExecutions = new Map<string, AbortController>();
+  readonly #ingressSnapshots: IngressSnapshotService;
 
   constructor(
     vaults: JobsVaultPort,
@@ -238,7 +246,8 @@ export class JobsService {
     ocr?: OcrPort,
     datasets?: DatasetMaterializerPort,
     executors: JobClassExecutorRegistry = createJobClassExecutorRegistry(),
-    sourcePages: SourcePageService = new SourcePageService()
+    sourcePages: SourcePageService = new SourcePageService(),
+    ingressSnapshots: IngressSnapshotService = ingressSnapshotService
   ) {
     this.#vaults = vaults;
     this.#sourcePages = sourcePages;
@@ -248,6 +257,7 @@ export class JobsService {
     this.#ocr = ocr;
     this.#datasets = datasets;
     this.#executors = executors;
+    this.#ingressSnapshots = ingressSnapshots;
     this.#captureExecutor = new CaptureJobExecutor(this.#sourcePages, {
       queued: (request) => {
         const vaultPath = this.#requireActiveVaultPath();
@@ -1512,6 +1522,39 @@ export class JobsService {
       else if (recovered.state === "failed_retryable") failedRetryable += 1;
     }
     return { requeued, failedRetryable };
+  }
+
+  async reapIngressSnapshots(): Promise<{
+    readonly scanned: number;
+    readonly released: number;
+    readonly retained: number;
+  }> {
+    const vaultPath = this.#requireActiveVaultPath();
+    const activeVault = this.#vaults.current();
+    if (!activeVault) throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
+    return await this.#ingressSnapshots.reap(vaultPath, ({ descriptor }) => {
+      if (descriptor.vaultId !== activeVault.vaultId) return undefined;
+      const parent = this.#readJobSnapshot(vaultPath, descriptor.parentJobId)?.job;
+      const source = readSourceRecordFile(vaultPath, descriptor.sourceId)?.sourceRecord;
+      if (!parent) {
+        return source ? undefined : ingressSnapshotReleaseProof(descriptor, "proven_orphan");
+      }
+      if (
+        parent.class !== "agent_turn" ||
+        parent.activeVaultId !== descriptor.vaultId ||
+        !isTerminalJobState(parent.state) ||
+        this.#activeExecutions.has(parent.id) ||
+        !collectAgentTurnSourceIds(parent).includes(descriptor.sourceId) ||
+        !source ||
+        source.metadata.agentTurnJobId !== parent.id ||
+        source.metadata.agentTurnAttachmentOrdinal !== descriptor.ordinal
+      ) return undefined;
+      for (const childId of parent.childJobIds ?? []) {
+        const child = this.#readJobSnapshot(vaultPath, childId)?.job;
+        if (!child || !isTerminalJobState(child.state) || this.#activeExecutions.has(child.id)) return undefined;
+      }
+      return ingressSnapshotReleaseProof(descriptor, "terminal");
+    });
   }
 
   requeueWaitingAgentIngest(): RequeueWaitingAgentIngestResult {
@@ -5304,6 +5347,22 @@ function assertAgentOcrToolRequest(parentJob: JobRecord, request: AgentIngestOcr
   ) {
     throw new PigeDomainError("agent_runtime.tool_binding_invalid", "The Agent OCR tool binding is invalid.");
   }
+}
+
+function ingressSnapshotReleaseProof(
+  descriptor: IngressSnapshotDescriptor,
+  parentDisposition: IngressSnapshotReleaseProof["parentDisposition"]
+): IngressSnapshotReleaseProof {
+  return {
+    vaultId: descriptor.vaultId,
+    parentJobId: descriptor.parentJobId,
+    sourceId: descriptor.sourceId,
+    ordinal: descriptor.ordinal,
+    expectedDescriptorDigest: descriptor.descriptorDigest,
+    parentDisposition,
+    childOwnershipComplete: true,
+    recoveryOwnerIds: []
+  };
 }
 
 function collectAgentTurnSourceIds(job: JobRecord): readonly string[] {

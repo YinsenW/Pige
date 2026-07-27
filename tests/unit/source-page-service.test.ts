@@ -5,9 +5,14 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SourceRecordSchema, type SourceRecord } from "@pige/schemas";
 import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
+import { ingressSnapshotService } from "../../apps/desktop/src/main/services/ingress-snapshot-service";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { SourcePageService } from "../../apps/desktop/src/main/services/source-page-service";
-import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
+import {
+  createVaultOnDisk,
+  loadVaultSummary,
+  readVaultManifest
+} from "../../apps/desktop/src/main/services/vault-layout";
 
 const tempRoots: string[] = [];
 
@@ -293,6 +298,62 @@ describe("source page service", () => {
     expect(page).not.toContain("PRIVATE OUTSIDE TEXT");
   });
 
+  it("renders managed local-file preview from snapshot authority and fails closed when it is missing or tampered", async () => {
+    const fixture = await makeAgentFileFixture("snapshot preview authority");
+    fs.chmodSync(fixture.managedPath, 0o600);
+    fs.writeFileSync(fixture.managedPath, "tampered managed copy", "utf8");
+
+    const created = new SourcePageService().createForSource(
+      fixture.vaultPath,
+      fixture.sourceRecord,
+      fixture.sourceRecordPath,
+      fixture.jobId
+    );
+    const page = fs.readFileSync(path.join(fixture.vaultPath, created.pagePath), "utf8");
+    expect(page).toContain("snapshot preview authority");
+    expect(page).not.toContain("tampered managed copy");
+
+    const missing = await makeAgentFileFixture("missing descriptor");
+    fs.rmSync(path.join(missing.vaultPath, ".pige", "private", "ingress-snapshots"), { recursive: true });
+    expect(captureError(() => new SourcePageService().createForSource(
+      missing.vaultPath,
+      missing.sourceRecord,
+      missing.sourceRecordPath,
+      missing.jobId
+    ))).toMatchObject({ code: "ingress_snapshot.not_found" });
+
+    const tampered = await makeAgentFileFixture("tampered descriptor");
+    const snapshotFile = findFile(
+      path.join(tampered.vaultPath, ".pige", "private", "ingress-snapshots"),
+      "snapshot.txt"
+    );
+    fs.chmodSync(snapshotFile, 0o600);
+    fs.writeFileSync(snapshotFile, "descriptor mismatch", "utf8");
+    expect(captureError(() => new SourcePageService().createForSource(
+      tampered.vaultPath,
+      tampered.sourceRecord,
+      tampered.sourceRecordPath,
+      tampered.jobId
+    ))).toMatchObject({ code: "ingress_snapshot.descriptor_mismatch" });
+  });
+
+  it("keeps extracted-text artifact preview independent from a missing ingress descriptor", async () => {
+    const fixture = await makeAgentFileFixture("managed body must not win");
+    const artifactRecord = addExtractedText(fixture, "artifact preview remains authoritative\n");
+    fs.rmSync(path.join(fixture.vaultPath, ".pige", "private", "ingress-snapshots"), { recursive: true });
+
+    const created = new SourcePageService().createForSource(
+      fixture.vaultPath,
+      artifactRecord,
+      fixture.sourceRecordPath,
+      fixture.jobId,
+      fixture.sourceRecord
+    );
+    const page = fs.readFileSync(path.join(fixture.vaultPath, created.pagePath), "utf8");
+    expect(page).toContain("artifact preview remains authoritative");
+    expect(page).not.toContain("managed body must not win");
+  });
+
   it("preserves a pre-existing Markdown page and marks the projection conflicted", () => {
     const fixture = makeTextFixture(false);
     const pagePath = path.join(
@@ -472,6 +533,93 @@ function addExtractedText(
     metadata: { ...fixture.sourceRecord.metadata, parserStatus: "parsed" },
     updatedAt: "2026-07-10T12:05:00.000Z"
   });
+}
+
+async function makeAgentFileFixture(body: string): Promise<{
+  readonly vaultPath: string;
+  readonly sourceRecord: SourceRecord;
+  readonly sourceRecordPath: string;
+  readonly sourceRecordFile: string;
+  readonly jobId: string;
+  readonly managedPath: string;
+}> {
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-source-page-ingress-")));
+  tempRoots.push(root);
+  createVaultOnDisk({
+    parentDirectory: root,
+    vaultName: "Ingress Page Vault",
+    appDataPath: path.join(root, "app-data"),
+    tempPath: path.join(root, "temp"),
+    now: new Date("2026-07-27T10:00:00.000Z")
+  });
+  const vaultPath = path.join(root, "Ingress Page Vault");
+  const originalPath = path.join(root, "accepted.txt");
+  fs.writeFileSync(originalPath, body, "utf8");
+  const stat = fs.lstatSync(originalPath);
+  const jobId = "job_20260727_sourcepage01";
+  const sourceId = "src_20260727_sourcepage01";
+  const binding = {
+    vaultId: readVaultManifest(vaultPath).vault_id,
+    parentJobId: jobId,
+    sourceId,
+    ordinal: 0
+  } as const;
+  const descriptor = await ingressSnapshotService.createOrAdopt({
+    vaultPath,
+    ...binding,
+    sourcePath: originalPath,
+    checksum: checksum(body) as `sha256:${string}`,
+    size: stat.size,
+    noFollowIdentity: {
+      device: stat.dev,
+      inode: stat.ino,
+      size: stat.size,
+      modifiedAtMs: stat.mtimeMs,
+      changedAtMs: stat.ctimeMs
+    }
+  });
+  const managedRoot = path.join(vaultPath, "raw", "files");
+  fs.mkdirSync(managedRoot, { recursive: true });
+  const managedPath = path.join(managedRoot, `${sourceId}.txt`);
+  const adopted = await ingressSnapshotService.promoteManagedCopy({
+    vaultPath,
+    binding,
+    managedRoot,
+    destinationPath: managedPath
+  });
+  const sourceRecordPath = `.pige/source-records/2026/07/${sourceId}.json`;
+  const sourceRecordFile = path.join(vaultPath, ...sourceRecordPath.split("/"));
+  const sourceRecord = SourceRecordSchema.parse({
+    id: sourceId,
+    kind: "plain_text_file",
+    storageStrategy: "copy_to_source_library",
+    semanticOrchestration: "agent_turn",
+    original: {
+      uri: `file://${originalPath}`,
+      path: originalPath,
+      displayName: "accepted.txt",
+      lastKnownMtime: new Date(stat.mtimeMs).toISOString(),
+      lastKnownSize: adopted.size,
+      checksum: adopted.checksum
+    },
+    managedCopy: {
+      path: path.relative(vaultPath, managedPath).split(path.sep).join("/"),
+      checksum: adopted.checksum,
+      size: adopted.size
+    },
+    artifacts: [],
+    metadata: {
+      agentTurnJobId: jobId,
+      agentTurnAttachmentOrdinal: 0,
+      parserStatus: "text_ready"
+    },
+    createdAt: "2026-07-27T10:00:00.000Z",
+    updatedAt: "2026-07-27T10:00:00.000Z"
+  });
+  fs.mkdirSync(path.dirname(sourceRecordFile), { recursive: true });
+  fs.writeFileSync(sourceRecordFile, `${JSON.stringify(sourceRecord, null, 2)}\n`, "utf8");
+  expect(descriptor.sourceId).toBe(sourceId);
+  return { vaultPath, sourceRecord, sourceRecordPath, sourceRecordFile, jobId, managedPath };
 }
 
 function captureError(action: () => unknown): unknown {

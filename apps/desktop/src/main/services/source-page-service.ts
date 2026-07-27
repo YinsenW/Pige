@@ -4,6 +4,7 @@ import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { PigeDomainError } from "@pige/domain";
 import { SourceRecordSchema, type SourceRecord } from "@pige/schemas";
+import { readVerifiedSourceTextPrefix } from "./source-file-access";
 import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
 import { createVaultRelativePathResolver } from "./vault-layout";
 
@@ -481,15 +482,15 @@ function readManagedSourceText(vaultPath: string, sourceRecord: SourceRecord): S
   const extractedTextPath = sourceRecord.artifacts.find((artifact) =>
     artifact.kind === "extracted_text" || artifact.kind === "ocr"
   )?.path;
-  const managedCopyPath = extractedTextPath ?? sourceRecord.managedCopy?.path;
-  if (!managedCopyPath) return undefined;
-  const absolutePath = resolveVaultRelativePath(vaultPath, managedCopyPath);
+  if (!extractedTextPath) {
+    if (!sourceRecord.managedCopy) return undefined;
+    const preview = readVerifiedSourceTextPrefix(vaultPath, sourceRecord, SOURCE_READ_LIMIT_BYTES);
+    return preview ? { ...preview, origin: "managed_copy" } : undefined;
+  }
+  const absolutePath = resolveVaultRelativePath(vaultPath, extractedTextPath);
   const preview = readOptionalRegularTextPrefix(vaultPath, absolutePath, SOURCE_READ_LIMIT_BYTES);
   if (!preview) return undefined;
-  return {
-    ...preview,
-    origin: extractedTextPath ? "artifact" : "managed_copy"
-  };
+  return { ...preview, origin: "artifact" };
 }
 
 function hasReadableTextPreview(sourceRecord: SourceRecord): boolean {
