@@ -25,7 +25,17 @@ import type {
   SkillRegistrySummary,
   SpeechAvailabilityResult
 } from "@pige/contracts";
-import type { MemoryMutationResult, MemorySummary } from "@pige/schemas";
+import type {
+  MemoryDeleteRequest,
+  MemoryEnableRequest,
+  MemoryExportRequest,
+  MemoryExportResult,
+  MemoryLifecycleMutationResult,
+  MemoryListRequest,
+  MemoryMutationResult,
+  MemoryResetRequest,
+  MemorySummary
+} from "@pige/schemas";
 
 const globalKeys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLSelectElement", "Event", "KeyboardEvent", "MouseEvent"] as const;
 const originalDescriptors = new Map<PropertyKey, PropertyDescriptor | undefined>();
@@ -1427,10 +1437,14 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("loads vault memory and disables an active record with exact CAS", async () => {
+  it("manages the reversible vault memory lifecycle with exact CAS and quiet cancellation", async () => {
     const dom = createDom();
     const activeSummary = memorySummary(4, "active");
     const disabledSummary = memorySummary(5, "disabled");
+    const enabledSummary = memorySummary(6, "active");
+    const staleSummary = memorySummary(7, "active");
+    const emptySummary = memoryEmptySummary(8);
+    const resetSummary = memoryEmptySummary(9);
     let resolveList!: (summary: MemorySummary) => void;
     const list = vi.fn(() => new Promise<MemorySummary>((resolve) => {
       resolveList = resolve;
@@ -1439,9 +1453,43 @@ describe("full UI Settings surface", () => {
       status: "committed",
       summary: disabledSummary
     }));
+    const enable = vi.fn(async (request: MemoryEnableRequest): Promise<MemoryLifecycleMutationResult> => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      status: "committed",
+      operationId: "op_20260727_memoryenable",
+      summary: enabledSummary
+    }));
+    let deleteAttempt = 0;
+    const deleteMemory = vi.fn(async (request: MemoryDeleteRequest): Promise<MemoryLifecycleMutationResult> => {
+      deleteAttempt += 1;
+      return deleteAttempt === 1
+        ? { apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId, status: "stale", summary: staleSummary }
+        : { apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId, status: "committed", operationId: "op_20260727_memorydelete", summary: emptySummary };
+    });
+    let exportAttempt = 0;
+    const exportMemory = vi.fn(async (request: MemoryExportRequest): Promise<MemoryExportResult> => {
+      exportAttempt += 1;
+      return {
+        apiVersion: 1,
+        requestId: request.requestId,
+        activeVaultId: request.activeVaultId,
+        revision: request.expectedRevision,
+        status: exportAttempt === 1 ? "cancelled" : "exported"
+      };
+    });
+    const reset = vi.fn(async (request: MemoryResetRequest): Promise<MemoryLifecycleMutationResult> => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      status: "committed",
+      operationId: "op_20260727_memoryreset",
+      summary: resetSummary
+    }));
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
-      value: { memory: { list, disable } }
+      value: { memory: { list, disable, enable, delete: deleteMemory, export: exportMemory, reset } }
     });
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -1471,8 +1519,8 @@ describe("full UI Settings surface", () => {
     expect(row.textContent).toContain("Explicit request");
     expect(row.textContent).not.toContain("conv_20260727_memorysource");
     expect(row.textContent).not.toContain("evt_20260727_memorysourceevent");
-    expect(container.textContent).not.toContain("Export");
-    expect(container.textContent).not.toContain("Reset memory");
+    expect(container.textContent).toContain("Export");
+    expect(container.textContent).toContain("Reset memory");
 
     await act(async () => {
       buttonNamed(row, "Disable: Concise source summaries").click();
@@ -1486,8 +1534,154 @@ describe("full UI Settings surface", () => {
     }));
     expect(disable.mock.calls[0]?.[0].requestId).toMatch(/^memory_request_[a-z0-9]{16,64}$/u);
     expect(row.textContent).toContain("Disabled");
-    expect(buttonNamed(row, "Disable: Concise source summaries").disabled).toBe(true);
+    expect(buttonNamed(row, "Enable: Concise source summaries").disabled).toBe(false);
     expect(container.textContent).toContain("The memory is disabled for future Agent turns.");
+
+    await act(async () => {
+      buttonNamed(row, "Enable: Concise source summaries").click();
+      await settle(dom);
+    });
+    expect(enable).toHaveBeenCalledWith(expect.objectContaining({
+      apiVersion: 1,
+      activeVaultId: "vault_20260727_memoryfixture",
+      memoryId: "memory_20260727_concisestyle",
+      expectedRevision: 5
+    }));
+    expect(enable.mock.calls[0]?.[0].requestId).toMatch(/^memory_request_[a-z0-9]{16,64}$/u);
+    expect(container.textContent).toContain("The memory is enabled for future Agent turns.");
+
+    await act(async () => {
+      buttonNamed(container, "Export").click();
+      await settle(dom);
+    });
+    expect(exportMemory).toHaveBeenLastCalledWith(expect.objectContaining({
+      apiVersion: 1,
+      activeVaultId: "vault_20260727_memoryfixture",
+      expectedRevision: 6
+    }));
+    expect(container.querySelector('.settings-note[role="status"]')).toBeNull();
+
+    await act(async () => {
+      buttonNamed(container, "Export").click();
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Memory was exported safely.");
+
+    await act(async () => {
+      buttonNamed(container, "Delete: Concise source summaries").click();
+      await settle(dom);
+    });
+    expect(deleteMemory).toHaveBeenLastCalledWith(expect.objectContaining({
+      memoryId: "memory_20260727_concisestyle",
+      expectedRevision: 6
+    }));
+    expect(container.querySelector("[data-memory-revision]")?.getAttribute("data-memory-revision")).toBe("7");
+    expect(container.textContent).toContain("Memory changed. The latest list is shown.");
+
+    await act(async () => {
+      buttonNamed(container, "Delete: Concise source summaries").click();
+      await settle(dom);
+    });
+    expect(deleteMemory).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: 7 }));
+    expect(container.textContent).toContain("No saved memories");
+    expect(container.textContent).toContain("The memory was removed. You can undo this from Activity.");
+
+    const resetTrigger = buttonNamed(container, "Reset memory...");
+    await act(async () => {
+      resetTrigger.click();
+      await settle(dom);
+    });
+    let dialog = requireElement(container.querySelector<HTMLElement>('[role="alertdialog"]'));
+    expect(dialog.textContent).toContain("Reset vault memory?");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(dialog, "Reset memory"));
+    await act(async () => {
+      buttonNamed(dialog, "Cancel").click();
+      await settle(dom);
+    });
+    expect(reset).not.toHaveBeenCalled();
+    expect(dom.window.document.activeElement).toBe(resetTrigger);
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+
+    await act(async () => {
+      resetTrigger.click();
+      await settle(dom);
+    });
+    dialog = requireElement(container.querySelector<HTMLElement>('[role="alertdialog"]'));
+    await act(async () => {
+      buttonNamed(dialog, "Reset memory").click();
+      await settle(dom);
+    });
+    expect(reset).toHaveBeenCalledWith(expect.objectContaining({
+      apiVersion: 1,
+      activeVaultId: "vault_20260727_memoryfixture",
+      expectedRevision: 8
+    }));
+    expect(container.textContent).toContain("Memory was reset. You can undo this from Activity.");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("fences an in-flight memory mutation when the active vault changes", async () => {
+    const dom = createDom();
+    let resolveEnable!: (result: MemoryLifecycleMutationResult) => void;
+    const list = vi.fn(async (request: MemoryListRequest): Promise<MemorySummary> => memorySummary(
+      request.activeVaultId === "vault_20260727_memoryfixture" ? 4 : 20,
+      "disabled",
+      request.activeVaultId
+    ));
+    const enable = vi.fn((_request: MemoryEnableRequest) => new Promise<MemoryLifecycleMutationResult>((resolve) => {
+      resolveEnable = resolve;
+    }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        memory: {
+          list,
+          disable: vi.fn(),
+          enable,
+          delete: vi.fn(),
+          export: vi.fn(),
+          reset: vi.fn()
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(AgentMemorySettingsPanel, {
+        activeVaultId: "vault_20260727_memoryfixture",
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await act(async () => {
+      buttonNamed(container, "Enable: Concise source summaries").click();
+      await settle(dom);
+    });
+
+    await act(async () => {
+      root.render(createElement(AgentMemorySettingsPanel, {
+        activeVaultId: "vault_20260727_memorysecond",
+        t
+      }));
+      await settle(dom);
+    });
+    expect(container.querySelector("[data-memory-revision]")?.getAttribute("data-memory-revision")).toBe("20");
+
+    await act(async () => {
+      resolveEnable({
+        apiVersion: 1,
+        requestId: enable.mock.calls[0]?.[0].requestId,
+        activeVaultId: "vault_20260727_memoryfixture",
+        status: "committed",
+        operationId: "op_20260727_memoryfenced",
+        summary: memorySummary(10, "active")
+      });
+      await settle(dom);
+    });
+    expect(container.querySelector("[data-memory-revision]")?.getAttribute("data-memory-revision")).toBe("20");
+    expect(container.textContent).not.toContain("The memory is enabled for future Agent turns.");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -1585,10 +1779,14 @@ function skillRegistry(
   return { apiVersion: 1, revision, invalidManifestCount, skills };
 }
 
-function memorySummary(revision: number, status: "active" | "disabled"): MemorySummary {
+function memorySummary(
+  revision: number,
+  status: "active" | "disabled",
+  activeVaultId = "vault_20260727_memoryfixture"
+): MemorySummary {
   return {
     apiVersion: 1,
-    activeVaultId: "vault_20260727_memoryfixture",
+    activeVaultId,
     revision,
     records: [{
       id: "memory_20260727_concisestyle",
@@ -1600,6 +1798,15 @@ function memorySummary(revision: number, status: "active" | "disabled"): MemoryS
       createdAt: "2026-07-27T08:00:00.000Z",
       updatedAt: status === "active" ? "2026-07-27T08:00:00.000Z" : "2026-07-27T09:00:00.000Z"
     }]
+  };
+}
+
+function memoryEmptySummary(revision: number): MemorySummary {
+  return {
+    apiVersion: 1,
+    activeVaultId: "vault_20260727_memoryfixture",
+    revision,
+    records: []
   };
 }
 
