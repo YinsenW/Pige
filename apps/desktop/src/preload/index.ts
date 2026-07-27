@@ -136,6 +136,8 @@ import type {
   SkillLifecycleMutationResult,
   SkillStageFromUrlRequest,
   SkillStageFromUrlResult,
+  SkillStageFromMarkdownRequest,
+  SkillStageFromMarkdownResult,
   SkillStageUpdateRequest,
   SkillStageUpdateResult,
   SkillUninstallRequest,
@@ -267,6 +269,8 @@ import {
   SkillRegistrySummarySchema,
   SkillStageFromUrlRequestSchema,
   SkillStageFromUrlResultSchema,
+  SkillStageFromMarkdownRequestSchema,
+  SkillStageFromMarkdownResultSchema,
   SkillStageUpdateRequestSchema,
   SkillStageUpdateResultSchema,
   SkillUninstallRequestSchema,
@@ -650,6 +654,11 @@ const api: PigeDesktopApi = {
       SkillStageFromUrlResultSchema.parse(await ipcRenderer.invoke(
         "skills.stageFromUrl",
         SkillStageFromUrlRequestSchema.parse(request)
+      )),
+    stageFromMarkdown: async (request: SkillStageFromMarkdownRequest): Promise<SkillStageFromMarkdownResult> =>
+      SkillStageFromMarkdownResultSchema.parse(await ipcRenderer.invoke(
+        "skills.stageFromMarkdown",
+        SkillStageFromMarkdownRequestSchema.parse(request)
       )),
     stageUpdate: async (request: SkillStageUpdateRequest): Promise<SkillStageUpdateResult> =>
       SkillStageUpdateResultSchema.parse(await ipcRenderer.invoke(

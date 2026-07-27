@@ -1463,6 +1463,7 @@ export const SkillDisableRequestSchema = z.object({
 }).strict();
 
 export const SKILL_URL_STAGE_MAX_UTF8_BYTES = 256 * 1024;
+export const SKILL_MARKDOWN_STAGE_MAX_UTF8_BYTES = SKILL_URL_STAGE_MAX_UTF8_BYTES;
 export const SkillInstallRequestIdSchema = z.string()
   .regex(/^skillreq_[a-z0-9]{16,64}$/u);
 export const SkillLifecycleRequestIdSchema = z.string()
@@ -1505,7 +1506,7 @@ export const SkillStagedSummarySchema = z.object({
   manifestSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
   registryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   expiresAt: z.string().datetime({ offset: true }),
-  sourceUrl: SkillInstallUrlSchema,
+  sourceUrl: SkillInstallUrlSchema.optional(),
   id: SkillIdSchema,
   name: z.string().min(1).max(120),
   version: z.string().min(1).max(80),
@@ -1517,13 +1518,27 @@ export const SkillStagedSummarySchema = z.object({
   author: z.string().min(1).max(120).optional(),
   license: z.string().min(1).max(120).optional(),
   files: z.tuple([SkillStagedFileSummarySchema]),
-  warnings: z.array(SkillStageWarningSchema).min(1).max(2)
+  warnings: z.array(SkillStageWarningSchema).max(2)
     .refine((values) => new Set(values).size === values.length, "Skill stage warnings must be unique.")
-}).strict();
+}).strict().superRefine((staged, context) => {
+  const hasRemoteWarning = staged.warnings.includes("untrusted_remote_source");
+  if (Boolean(staged.sourceUrl) !== hasRemoteWarning) {
+    context.addIssue({
+      code: "custom",
+      path: ["warnings"],
+      message: "Remote Skill stages require one matching remote-source warning."
+    });
+  }
+});
 export const SkillStageFromUrlRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: SkillInstallRequestIdSchema,
   sourceUrl: SkillInstallUrlSchema
+}).strict();
+export const SkillStageFromMarkdownRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SkillInstallRequestIdSchema,
+  activeVaultId: VaultIdSchema
 }).strict();
 export const SkillInstallStagedRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -1579,7 +1594,33 @@ export const SkillStageFromUrlResultSchema = z.discriminatedUnion("status", [
     status: z.literal("failed"),
     error: SkillRegistryErrorSummarySchema
   }).strict()
-]);
+]).superRefine((result, context) => {
+  if (result.status === "ready" && !result.staged.sourceUrl) {
+    context.addIssue({ code: "custom", path: ["staged", "sourceUrl"], message: "URL stages require a source URL." });
+  }
+});
+
+const SkillStageFromMarkdownResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SkillInstallRequestIdSchema,
+  activeVaultId: VaultIdSchema
+}).strict();
+export const SkillStageFromMarkdownResultSchema = z.discriminatedUnion("status", [
+  SkillStageFromMarkdownResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    staged: SkillStagedSummarySchema
+  }).strict(),
+  SkillStageFromMarkdownResultIdentitySchema.extend({ status: z.literal("cancelled") }).strict(),
+  SkillStageFromMarkdownResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status === "ready" && result.staged.sourceUrl !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["staged", "sourceUrl"],
+      message: "Local Markdown stages cannot expose a source URL."
+    });
+  }
+});
 
 export const SkillStageUpdateResultSchema = z.discriminatedUnion("status", [
   SkillInstalledLifecycleResultIdentitySchema.extend({
@@ -4772,6 +4813,8 @@ export type SkillStagedFileSummary = z.infer<typeof SkillStagedFileSummarySchema
 export type SkillStagedSummary = z.infer<typeof SkillStagedSummarySchema>;
 export type SkillStageFromUrlRequest = z.infer<typeof SkillStageFromUrlRequestSchema>;
 export type SkillStageFromUrlResult = z.infer<typeof SkillStageFromUrlResultSchema>;
+export type SkillStageFromMarkdownRequest = z.infer<typeof SkillStageFromMarkdownRequestSchema>;
+export type SkillStageFromMarkdownResult = z.infer<typeof SkillStageFromMarkdownResultSchema>;
 export type SkillInstallStagedRequest = z.infer<typeof SkillInstallStagedRequestSchema>;
 export type SkillInstallStagedResult = z.infer<typeof SkillInstallStagedResultSchema>;
 export type SkillDiscardStagedRequest = z.infer<typeof SkillDiscardStagedRequestSchema>;
