@@ -666,7 +666,7 @@ describe("schemas", () => {
     expect(settings.updates).toMatchObject({ revision: 2, channel: "alpha", lastCheck: { phase: "failed" } });
   });
 
-  it("validates a pathless Activity page target projection", () => {
+  it("validates pathless Activity page and Memory target projections", () => {
     const result = KnowledgeActivityListResultSchema.parse({
       scannedAt: "2026-07-18T00:00:00.000Z",
       activeVaultId: "vault_20260718_activitysafe",
@@ -689,6 +689,51 @@ describe("schemas", () => {
     expect(() => KnowledgeActivityListResultSchema.parse({
       ...result,
       activities: [{ ...result.activities[0], path: "/private/vault/page.md" }]
+    })).toThrow();
+
+    for (const activity of [
+      {
+        operationId: "op_20260727_memoryupdate",
+        kind: "update_memory",
+        target: { kind: "memory", memoryId: "memory_20260727_abcdefghijkl" }
+      },
+      {
+        operationId: "op_20260727_memorytrash",
+        kind: "trash_memory",
+        target: { kind: "memory", memoryId: "memory_20260727_abcdefghijkl" }
+      },
+      {
+        operationId: "op_20260727_memoryreset",
+        kind: "restore_memory",
+        target: { kind: "memory" }
+      }
+    ] as const) {
+      expect(KnowledgeActivityListResultSchema.parse({
+        scannedAt: "2026-07-27T00:00:00.000Z",
+        activeVaultId: "vault_20260727_activitysafe",
+        total: 1,
+        invalidOperationCount: 0,
+        activities: [{
+          ...activity,
+          createdAt: "2026-07-27T00:00:00.000Z",
+          status: "applied",
+          canUndo: true
+        }]
+      }).activities[0]?.target).toEqual(activity.target);
+    }
+    expect(() => KnowledgeActivityListResultSchema.parse({
+      scannedAt: "2026-07-27T00:00:00.000Z",
+      activeVaultId: "vault_20260727_activitysafe",
+      total: 1,
+      invalidOperationCount: 0,
+      activities: [{
+        operationId: "op_20260727_memorytrash",
+        kind: "trash_memory",
+        createdAt: "2026-07-27T00:00:00.000Z",
+        target: { kind: "memory", memoryId: "memory_20260727_abcdefghijkl", path: "/private/atom.md" },
+        status: "applied",
+        canUndo: true
+      }]
     })).toThrow();
   });
 

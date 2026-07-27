@@ -41,6 +41,7 @@ import type {
   MemoryLifecycleMutationResult,
   MemoryListRequest,
   MemoryMutationResult,
+  MemoryRecordId,
   MemoryRecordSummary,
   MemoryResetRequest,
   MemorySummary,
@@ -242,6 +243,7 @@ export type {
   MemoryLifecycleMutationResult,
   MemoryListRequest,
   MemoryMutationResult,
+  MemoryRecordId,
   MemoryRecordSummary,
   MemoryResetRequest,
   MemorySummary,
@@ -728,11 +730,25 @@ export interface KnowledgeActivityCollectionTarget {
   readonly revisionId: string;
 }
 
-export type KnowledgeActivityTarget = KnowledgeActivityPageTarget | KnowledgeActivityCollectionTarget;
+export interface KnowledgeActivityMemoryTarget {
+  readonly kind: "memory";
+  readonly memoryId?: MemoryRecordId;
+}
+
+export type KnowledgeActivityTarget =
+  | KnowledgeActivityPageTarget
+  | KnowledgeActivityCollectionTarget
+  | KnowledgeActivityMemoryTarget;
 
 export interface KnowledgeActivitySummary {
   readonly operationId: string;
-  readonly kind: "create_page" | "update_page" | "update_collection_cell";
+  readonly kind:
+    | "create_page"
+    | "update_page"
+    | "update_collection_cell"
+    | "update_memory"
+    | "trash_memory"
+    | "restore_memory";
   readonly createdAt: string;
   readonly targetLabel?: string;
   readonly target?: KnowledgeActivityTarget;

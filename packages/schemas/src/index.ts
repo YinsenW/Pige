@@ -818,9 +818,16 @@ export const KnowledgeActivityCollectionTargetSchema = z.object({
   revisionId: z.string().regex(/^dataset_rev_\d{8}_[a-z0-9]{12,}$/)
 }).strict();
 
+export const MemoryRecordIdSchema = z.string().regex(/^memory_\d{8}_[a-z0-9]{12,}$/);
+export const KnowledgeActivityMemoryTargetSchema = z.object({
+  kind: z.literal("memory"),
+  memoryId: MemoryRecordIdSchema.optional()
+}).strict();
+
 export const KnowledgeActivityTargetSchema = z.union([
   KnowledgeActivityPageTargetSchema,
-  KnowledgeActivityCollectionTargetSchema
+  KnowledgeActivityCollectionTargetSchema,
+  KnowledgeActivityMemoryTargetSchema
 ]);
 
 export const KnowledgeActivityListRequestSchema = z.object({
@@ -829,7 +836,14 @@ export const KnowledgeActivityListRequestSchema = z.object({
 
 export const KnowledgeActivitySummarySchema = z.object({
   operationId: OperationIdSchema,
-  kind: z.enum(["create_page", "update_page", "update_collection_cell"]),
+  kind: z.enum([
+    "create_page",
+    "update_page",
+    "update_collection_cell",
+    "update_memory",
+    "trash_memory",
+    "restore_memory"
+  ]),
   createdAt: z.string().datetime({ offset: true }),
   targetLabel: z.string().min(1).max(120).optional(),
   target: KnowledgeActivityTargetSchema.optional(),
@@ -1390,7 +1404,6 @@ export const SkillRegistryMutationResultSchema = z.discriminatedUnion("status", 
   z.object({ status: z.literal("failed"), error: SkillRegistryErrorSummarySchema }).strict()
 ]);
 
-export const MemoryRecordIdSchema = z.string().regex(/^memory_\d{8}_[a-z0-9]{12,}$/);
 export const MemoryKindSchema = z.enum(["preference", "correction", "workflow_lesson", "profile"]);
 export const MemoryStatusSchema = z.enum(["active", "disabled"]);
 
@@ -4368,6 +4381,7 @@ export type SkillInstallStagedResult = z.infer<typeof SkillInstallStagedResultSc
 export type SkillDiscardStagedRequest = z.infer<typeof SkillDiscardStagedRequestSchema>;
 export type SkillDiscardStagedResult = z.infer<typeof SkillDiscardStagedResultSchema>;
 export type MemoryKind = z.infer<typeof MemoryKindSchema>;
+export type MemoryRecordId = z.infer<typeof MemoryRecordIdSchema>;
 export type MemoryStatus = z.infer<typeof MemoryStatusSchema>;
 export type MemoryRecordSummary = z.infer<typeof MemoryRecordSummarySchema>;
 export type MemorySummary = z.infer<typeof MemorySummarySchema>;
