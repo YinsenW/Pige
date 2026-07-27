@@ -600,6 +600,9 @@ Lifecycle coverage:
 
 Reader save records one `update_page` with private before/after bytes; Undo requires the after
 revision and writes prior bytes forward. Drift or missing recovery evidence preserves the live page.
+Memory enable/delete/reset commit exact revision-bound private receipts before `update_memory` or
+`trash_memory`; deterministic Undo writes `restore_memory`. Restart adopts matching receipt/
+Operation pairs, while drift preserves current memory and later atoms rather than replaying removal.
 
 Rules:
 
@@ -609,12 +612,11 @@ Rules:
 - `create_external_file` uses one opaque checksummed `external_resource`; paths stay in
   a machine-local journal binding parent/leaf and rejecting v1. Receipts prove no effect;
   other effects are `failed_uncertain`; completion prevents replay.
-- An operation affected by Agent Runtime Policy Context records `policyAudit` with the context ID/hash and enforcing service names. Permissioned operations also retain permission decision IDs. Neither field contains full settings, grant bodies, paths, prompts, or secrets.
-- Provider sends do not create a content-class, allow/block, payload-digest, or approval
-  Operation. Durable Agent work may retain Provider/model and
-  selected-evidence identity needed for recovery, but never stored credentials or raw
-  payload bodies.
-- Source relink/root change, settings change, trash/restore, backup/restore, migration, Skill/package lifecycle, and memory trash/restore must not fall through to a generic page-update record.
+- Policy-affected Operations retain context/hash/enforcer and permission-decision IDs, never full
+  settings, grants, paths, prompts or secrets. Provider sends create no content/approval Operation;
+  recovery may retain Provider/model/evidence identity, never credentials or payload bodies.
+- Relink/root, settings, trash/restore, backup/migration, Skill/package and memory lifecycle never
+  fall through to generic page updates.
 - `create_page.after` binds result hash/path; `trash_page` binds unchanged live `before`
   and private-trash `after`; later edits are never signed retroactively.
 - Rollback is best effort and must check current file hashes before applying.
