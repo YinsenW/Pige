@@ -210,9 +210,64 @@ describe("SqliteVectorIndexDriver", () => {
     expect(() => driver.search({ metadata, queryVector: unitVector(0), k: 65 }))
       .toThrow("between 1 and 64");
   });
+
+  it("streams multiple bounded batches with stable sequential BigInt rowids", () => {
+    const rowids: bigint[] = [];
+    const operations: SqliteVectorOperations = {
+      ...testVectorOperations,
+      insert: (database, rowid, vector) => {
+        rowids.push(rowid);
+        testVectorOperations.insert(database, rowid, vector);
+      }
+    };
+    const { driver } = harness(operations);
+    const session = driver.beginRebuild(metadata);
+    session.append([
+      { chunkId: "chunk:a", vector: unitVector(0) },
+      { chunkId: "chunk:b", vector: unitVector(1) }
+    ]);
+    session.append([{ chunkId: "chunk:c", vector: unitVector(2) }]);
+
+    expect(session.commit()).toEqual({ status: "ready", count: 3 });
+    expect(rowids).toEqual([1n, 2n, 3n]);
+    expect(driver.search({ metadata, queryVector: unitVector(1), k: 3 })).toEqual({
+      status: "ready",
+      matches: [
+        { chunkId: "chunk:b", distance: 0 },
+        { chunkId: "chunk:a", distance: Math.SQRT2 },
+        { chunkId: "chunk:c", distance: Math.SQRT2 }
+      ]
+    });
+  });
+
+  it("rejects duplicate streamed chunks and abort or dispose preserves the current index", () => {
+    const { driver, root } = harness();
+    expect(driver.rebuild({ metadata, entries: [{ chunkId: "chunk:current", vector: unitVector(0) }] }))
+      .toEqual({ status: "ready", count: 1 });
+
+    const duplicate = driver.beginRebuild({ ...metadata, sourceIndexGeneration: "index_generation_duplicate" });
+    duplicate.append([{ chunkId: "chunk:new", vector: unitVector(1) }]);
+    expect(() => duplicate.append([{ chunkId: "chunk:new", vector: unitVector(2) }]))
+      .toThrow("unique");
+    expect(() => duplicate.commit()).toThrow("no longer active");
+    expect(driver.readCurrent(metadata)).toEqual({ status: "ready", count: 1 });
+
+    const aborted = driver.beginRebuild({ ...metadata, sourceIndexGeneration: "index_generation_abort" });
+    expect(() => aborted.append(Array.from({ length: 17 }, (_, index) => ({
+      chunkId: `chunk:batch:${index}`,
+      vector: unitVector(index)
+    })))).toThrow("between 1 and 16");
+    aborted.append([{ chunkId: "chunk:discarded", vector: unitVector(3) }]);
+    aborted.dispose();
+    aborted.abort();
+    expect(driver.readCurrent(metadata)).toEqual({ status: "ready", count: 1 });
+    expect(fs.readdirSync(root).filter((name) => name.includes(".staging."))).toEqual([]);
+  });
 });
 
-function harness(): { driver: SqliteVectorIndexDriver; root: string } {
+function harness(
+  operations: SqliteVectorOperations = testVectorOperations
+): { driver: SqliteVectorIndexDriver; root: string } {
   const { vaultRoot, vectorRoot: root } = tempPaths();
   const extensionPath = path.join(vaultRoot, "sqlite-vec-0.1.9.dylib");
   fs.writeFileSync(extensionPath, "test seam");
@@ -221,7 +276,7 @@ function harness(): { driver: SqliteVectorIndexDriver; root: string } {
     driver: new SqliteVectorIndexDriver({
       rootPath: root,
       exactExtensionPath: extensionPath,
-      loadExtension: () => testVectorOperations
+      loadExtension: () => operations
     })
   };
 }

@@ -8,6 +8,7 @@ const VECTOR_INDEX_SCHEMA_VERSION = 1 as const;
 const DATABASE_NAME = "semantic-vectors.sqlite";
 const VECTOR_ROOT_SEGMENTS = [".pige", "indexes", "vectors"] as const;
 const SQLITE_VEC_PACKAGE_NAME: string = "sqlite-vec";
+const MAX_REBUILD_BATCH_SIZE = 16;
 const MAX_CHUNK_ID_LENGTH = 192;
 const MAX_ROWID = 9_007_199_254_740_991n;
 
@@ -117,14 +118,24 @@ export class SqliteVectorIndexDriver {
     readonly metadata: SqliteVectorIndexMetadata;
     readonly entries: readonly SqliteVectorIndexEntry[];
   }): SqliteVectorIndexReadResult {
-    const metadata = validateMetadata(input.metadata);
-    const entries = validateEntries(input.entries);
+    validateCompatibilityEntries(input.entries);
+    let session: SqliteVectorRebuildSession | undefined;
     try {
-      assertCanonicalVectorRoot(this.#rootPath);
-      assertCurrentDatabaseSafe(this.#databasePath, this.#rootPath);
+      session = this.beginRebuild(input.metadata);
+      for (let index = 0; index < input.entries.length; index += MAX_REBUILD_BATCH_SIZE) {
+        session.append(input.entries.slice(index, index + MAX_REBUILD_BATCH_SIZE));
+      }
+      return session.commit();
     } catch {
+      session?.abort();
       return { status: "unavailable" };
     }
+  }
+
+  beginRebuild(metadataInput: SqliteVectorIndexMetadata): SqliteVectorRebuildSession {
+    const metadata = validateMetadata(metadataInput);
+    assertCanonicalVectorRoot(this.#rootPath);
+    assertCurrentDatabaseSafe(this.#databasePath, this.#rootPath);
     const stagingPath = path.join(this.#rootPath, `.${DATABASE_NAME}.staging.${randomUUID()}`);
     let database: DatabaseSync | undefined;
     try {
@@ -134,33 +145,23 @@ export class SqliteVectorIndexDriver {
       const operations = vectorOperations(database);
       operations.create(database);
       database.exec("BEGIN IMMEDIATE");
-      try {
-        writeMetadata(database, metadata);
-        const insertMapping = database.prepare(
-          "INSERT INTO vector_chunk_map(rowid, chunk_id) VALUES (?, ?)"
-        );
-        for (const [index, entry] of entries.entries()) {
-          const rowid = BigInt(index + 1);
-          if (rowid > MAX_ROWID) throw new Error("Vector row mapping exceeded its bound.");
-          insertMapping.run(rowid, entry.chunkId);
-          operations.insert(database, rowid, entry.vector);
-        }
-        database.exec("COMMIT");
-      } catch (error) {
-        try { database.exec("ROLLBACK"); } catch { /* already rolled back */ }
-        throw error;
-      }
-      validateOpenIndex(database, metadata, entries.length, entries[0]);
-      database.close();
+      writeMetadata(database, metadata);
+      const session = new SqliteVectorRebuildSession({
+        database,
+        operations,
+        metadata,
+        stagingPath,
+        currentPath: this.#databasePath,
+        rootPath: this.#rootPath,
+        readPublished: () => this.readCurrent(metadata)
+      });
       database = undefined;
-      assertRegularFileInRoot(stagingPath, this.#rootPath);
-      fsyncFile(stagingPath);
-      replaceCurrentDatabase(stagingPath, this.#databasePath, this.#rootPath);
-      return this.readCurrent(metadata);
-    } catch {
+      return session;
+    } catch (error) {
+      try { database?.exec("ROLLBACK"); } catch { /* transaction may not have started */ }
       try { database?.close(); } catch { /* best-effort close */ }
       try { fs.rmSync(stagingPath, { force: true }); } catch { /* best-effort cleanup */ }
-      return { status: "unavailable" };
+      throw error;
     }
   }
 
@@ -227,6 +228,114 @@ export class SqliteVectorIndexDriver {
     }
     Object.defineProperty(database, VECTOR_OPERATIONS, { value: operations });
     return database;
+  }
+}
+
+interface SqliteVectorRebuildSessionOptions {
+  readonly database: DatabaseSync;
+  readonly operations: SqliteVectorOperations;
+  readonly metadata: SqliteVectorIndexMetadata;
+  readonly stagingPath: string;
+  readonly currentPath: string;
+  readonly rootPath: string;
+  readonly readPublished: () => SqliteVectorIndexReadResult;
+}
+
+export class SqliteVectorRebuildSession {
+  readonly #database: DatabaseSync;
+  readonly #operations: SqliteVectorOperations;
+  readonly #metadata: SqliteVectorIndexMetadata;
+  readonly #stagingPath: string;
+  readonly #currentPath: string;
+  readonly #rootPath: string;
+  readonly #readPublished: () => SqliteVectorIndexReadResult;
+  readonly #chunkIds = new Set<string>();
+  #nextRowid = 1n;
+  #count = 0;
+  #probe: SqliteVectorIndexEntry | undefined;
+  #active = true;
+
+  constructor(options: SqliteVectorRebuildSessionOptions) {
+    this.#database = options.database;
+    this.#operations = options.operations;
+    this.#metadata = options.metadata;
+    this.#stagingPath = options.stagingPath;
+    this.#currentPath = options.currentPath;
+    this.#rootPath = options.rootPath;
+    this.#readPublished = options.readPublished;
+  }
+
+  append(entries: readonly SqliteVectorIndexEntry[]): void {
+    this.#assertActive();
+    if (entries.length < 1 || entries.length > MAX_REBUILD_BATCH_SIZE) {
+      throw new Error("Vector rebuild batches must contain between 1 and 16 entries.");
+    }
+    const batch = entries.map(validateEntry);
+    const batchIds = new Set<string>();
+    for (const entry of batch) {
+      if (batchIds.has(entry.chunkId) || this.#chunkIds.has(entry.chunkId)) {
+        this.abort();
+        throw new Error("Vector chunk identities must be unique.");
+      }
+      batchIds.add(entry.chunkId);
+    }
+
+    try {
+      const insertMapping = this.#database.prepare(
+        "INSERT INTO vector_chunk_map(rowid, chunk_id) VALUES (?, ?)"
+      );
+      for (const entry of batch) {
+        const rowid = this.#nextRowid;
+        if (rowid > MAX_ROWID) throw new Error("Vector row mapping exceeded its bound.");
+        insertMapping.run(rowid, entry.chunkId);
+        this.#operations.insert(this.#database, rowid, entry.vector);
+        this.#chunkIds.add(entry.chunkId);
+        this.#probe ??= entry;
+        this.#nextRowid += 1n;
+        this.#count += 1;
+      }
+    } catch (error) {
+      this.abort();
+      throw error;
+    }
+  }
+
+  commit(): SqliteVectorIndexReadResult {
+    this.#assertActive();
+    try {
+      this.#database.exec("COMMIT");
+      validateOpenIndex(this.#database, this.#metadata, this.#count, this.#probe);
+      this.#database.close();
+      assertRegularFileInRoot(this.#stagingPath, this.#rootPath);
+      fsyncFile(this.#stagingPath);
+      replaceCurrentDatabase(this.#stagingPath, this.#currentPath, this.#rootPath);
+      this.#active = false;
+      return this.#readPublished();
+    } catch (error) {
+      this.#cleanup();
+      throw error;
+    }
+  }
+
+  abort(): void {
+    if (!this.#active) return;
+    this.#cleanup();
+  }
+
+  dispose(): void {
+    this.abort();
+  }
+
+  #assertActive(): void {
+    if (!this.#active) throw new Error("Vector rebuild session is no longer active.");
+  }
+
+  #cleanup(): void {
+    if (!this.#active) return;
+    this.#active = false;
+    try { this.#database.exec("ROLLBACK"); } catch { /* committed or already rolled back */ }
+    try { this.#database.close(); } catch { /* best-effort close */ }
+    try { fs.rmSync(this.#stagingPath, { force: true }); } catch { /* best-effort cleanup */ }
   }
 }
 
@@ -382,17 +491,21 @@ function readCount(database: DatabaseSync, sql: string): number {
   return value;
 }
 
-function validateEntries(entries: readonly SqliteVectorIndexEntry[]): readonly SqliteVectorIndexEntry[] {
-  const sorted = entries.map((entry) => ({
+function validateCompatibilityEntries(entries: readonly SqliteVectorIndexEntry[]): void {
+  const chunkIds = new Set<string>();
+  for (const entry of entries) {
+    const chunkId = validateChunkId(entry.chunkId);
+    validateVector(entry.vector, false, false);
+    if (chunkIds.has(chunkId)) throw new Error("Vector chunk identities must be unique.");
+    chunkIds.add(chunkId);
+  }
+}
+
+function validateEntry(entry: SqliteVectorIndexEntry): SqliteVectorIndexEntry {
+  return {
     chunkId: validateChunkId(entry.chunkId),
     vector: validateVector(entry.vector, false)
-  })).sort((left, right) => left.chunkId.localeCompare(right.chunkId));
-  for (let index = 1; index < sorted.length; index += 1) {
-    if (sorted[index - 1]?.chunkId === sorted[index]?.chunkId) {
-      throw new Error("Vector chunk identities must be unique.");
-    }
-  }
-  return sorted;
+  };
 }
 
 function validateMetadata(metadata: SqliteVectorIndexMetadata): SqliteVectorIndexMetadata {
@@ -406,19 +519,23 @@ function validateMetadata(metadata: SqliteVectorIndexMetadata): SqliteVectorInde
   return { ...metadata };
 }
 
-function validateVector(vector: readonly number[], normalized: boolean): readonly number[] {
+function validateVector(
+  vector: readonly number[],
+  normalized: boolean,
+  copy = true
+): readonly number[] {
   if (vector.length !== SQLITE_VECTOR_DIMENSION ||
     vector.some((value) => !Number.isFinite(value) || !Number.isFinite(Math.fround(value)))) {
     throw new Error("Vectors must contain exactly 1024 finite values.");
   }
-  const copy = [...vector];
+  const validated = copy ? [...vector] : vector;
   if (normalized) {
-    const magnitude = Math.sqrt(copy.reduce((sum, value) => sum + value * value, 0));
+    const magnitude = Math.sqrt(validated.reduce((sum, value) => sum + value * value, 0));
     if (!Number.isFinite(magnitude) || Math.abs(magnitude - 1) > 1e-5) {
       throw new Error("Query vector must be normalized.");
     }
   }
-  return copy;
+  return validated;
 }
 
 function validateChunkId(chunkId: string): string {
