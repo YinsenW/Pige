@@ -248,10 +248,10 @@ export class HomeAgentAttachmentService {
 
   async #preserve(request: PreserveHomeAgentAttachmentsRequest): Promise<PreservedHomeAgentAttachments> {
     const sourceIds: string[] = [];
-    for (const [ordinal, entry] of request.prepared.entries.entries()) {
-      const sourceId = ordinal === 0
+    for (const [acceptedIndex, entry] of request.prepared.entries.entries()) {
+      const sourceId = acceptedIndex === 0
         ? request.firstSourceId
-        : createAttachmentSourceId(request.jobId, ordinal);
+        : createAttachmentSourceId(request.jobId, acceptedIndex);
       if (entry.kind === "large_paste") {
         try {
           const preserved = this.#capture.preserveTextForAgentTurn({
@@ -261,7 +261,7 @@ export class HomeAgentAttachmentService {
             jobId: request.jobId,
             sourceId,
             inputChecksum: entry.inputChecksum,
-            ordinal,
+            ordinal: entry.ordinal,
             attachmentSetHash: request.prepared.attachmentSetHash
           });
           if (preserved.sourceId !== sourceId || preserved.inputChecksum !== entry.inputChecksum) {
@@ -290,7 +290,7 @@ export class HomeAgentAttachmentService {
           jobId: request.jobId,
           sourceId,
           inputChecksum: entry.inputChecksum,
-          ordinal,
+          ordinal: entry.ordinal,
           attachmentSetHash: request.prepared.attachmentSetHash
         });
       } catch {

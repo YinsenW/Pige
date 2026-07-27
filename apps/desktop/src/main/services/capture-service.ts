@@ -1,8 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { Transform, type TransformCallback } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { pathToFileURL } from "node:url";
 import type {
   AgentSubmitTurnRequest,
@@ -24,6 +22,10 @@ import {
   writeSingleWriterJsonAtomic as writeJsonAtomic
 } from "./single-writer-file-commit";
 import { hasErrorInstanceCode as isErrnoCode } from "./object-error-code";
+import {
+  ingressSnapshotService,
+  type IngressSnapshotDescriptor
+} from "./ingress-snapshot-service";
 import { redactSensitiveUrl, SourceFetchService, type SourceFetchSnapshot } from "./source-fetch-service";
 
 export interface CaptureVaultPort {
@@ -307,6 +309,7 @@ export class CaptureService {
     if (!vault || !vaultPath) {
       throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
     }
+    this.#vaults.assertWriterLease?.(vaultPath);
     const storageStrategy = vault.defaultSourceStorageStrategy;
 
     const uniqueFilePaths = Array.from(new Set(request.filePaths.map((filePath) => filePath.trim()))).filter(Boolean);
@@ -346,21 +349,54 @@ export class CaptureService {
       const sourceId = agentTurnBinding.sourceId;
       const managedCopyPath = vaultRelativePath("raw", "files", monthKey, `${sourceId}${extension}`);
       const sourceRecordPath = vaultRelativePath(".pige", "source-records", monthKey, `${sourceId}.json`);
+      let unpublishedSnapshot: IngressSnapshotDescriptor | undefined;
 
       try {
-        if (adoptExistingAgentTurnFileSource(vaultPath, filePath, displayName, sourceKind, agentTurnBinding)) {
+        const sourceStat = fs.lstatSync(filePath);
+        const checksum = agentTurnBinding.inputChecksum
+          ? agentTurnBinding.inputChecksum as `sha256:${string}`
+          : (await checksumFileWithSize(filePath)).checksum;
+        const snapshot = await ingressSnapshotService.createOrAdopt({
+          vaultPath,
+          vaultId: vault.vaultId,
+          parentJobId: agentTurnBinding.jobId,
+          sourceId,
+          ordinal: agentTurnBinding.ordinal ?? 0,
+          sourcePath: filePath,
+          checksum,
+          size: sourceStat.size,
+          noFollowIdentity: {
+            device: sourceStat.dev,
+            inode: sourceStat.ino,
+            size: sourceStat.size,
+            modifiedAtMs: sourceStat.mtimeMs,
+            changedAtMs: sourceStat.ctimeMs
+          }
+        });
+        unpublishedSnapshot = snapshot;
+        const managedRoot = resolveVaultPath(vaultPath, vaultRelativePath("raw", "files"));
+        if (storageStrategy === "copy_to_source_library") {
+          fs.mkdirSync(managedRoot, { recursive: true, mode: 0o700 });
+        }
+        const adoptedSnapshot = storageStrategy === "copy_to_source_library"
+          ? await ingressSnapshotService.promoteManagedCopy({
+            vaultPath,
+            binding: snapshot,
+            managedRoot,
+            destinationPath: resolveVaultPath(vaultPath, managedCopyPath)
+          })
+          : snapshot;
+        unpublishedSnapshot = adoptedSnapshot;
+        if (adoptExistingAgentTurnFileSource(
+          vaultPath,
+          filePath,
+          displayName,
+          sourceKind,
+          agentTurnBinding,
+          adoptedSnapshot
+        )) {
           sourceIds.push(sourceId);
           continue;
-        }
-        const sourceStat = fs.statSync(filePath);
-        const preserved = storageStrategy === "copy_to_source_library"
-          ? await copyFileAtomicWithChecksum(filePath, resolveVaultPath(vaultPath, managedCopyPath))
-          : await checksumFileWithSize(filePath);
-        if (agentTurnBinding.inputChecksum && preserved.checksum !== agentTurnBinding.inputChecksum) {
-          throw new PigeDomainError(
-            "agent_runtime.turn_binding_invalid",
-            "The selected attachment changed during source preservation."
-          );
         }
         const sourceRecord: SourceRecord = CurrentSourceRecordSchema.parse({
           id: sourceId,
@@ -371,15 +407,15 @@ export class CaptureService {
             uri: pathToFileURL(filePath).href,
             path: filePath,
             displayName,
-            lastKnownMtime: sourceStat.mtime.toISOString(),
-            lastKnownSize: sourceStat.size,
-            checksum: preserved.checksum
+            lastKnownMtime: new Date(adoptedSnapshot.sourceProvenance.identity.modifiedAtMs).toISOString(),
+            lastKnownSize: adoptedSnapshot.size,
+            checksum: adoptedSnapshot.checksum
           },
           ...(storageStrategy === "copy_to_source_library" ? {
             managedCopy: {
               path: managedCopyPath,
-              checksum: preserved.checksum,
-              size: preserved.size
+              checksum: adoptedSnapshot.checksum,
+              size: adoptedSnapshot.size
             }
           } : {}),
           artifacts: [],
@@ -407,9 +443,19 @@ export class CaptureService {
           updatedAt: timestamp
         });
         writeJsonAtomic(resolveVaultPath(vaultPath, sourceRecordPath), sourceRecord);
+        unpublishedSnapshot = undefined;
 
         sourceIds.push(sourceId);
-      } catch {
+      } catch (caught) {
+        if (unpublishedSnapshot && !fs.existsSync(resolveVaultPath(vaultPath, sourceRecordPath))) {
+          const currentSnapshot = ingressSnapshotService.read(vaultPath, unpublishedSnapshot) ?? unpublishedSnapshot;
+          const discarded = ingressSnapshotService.discardUnpublished(
+            vaultPath,
+            currentSnapshot,
+            currentSnapshot.descriptorDigest
+          );
+          if (discarded.status !== "released" && discarded.status !== "not_found") throw caught;
+        }
         rejectedFiles.push({ displayName, reason: "copy_failed" });
       }
     }
@@ -432,7 +478,8 @@ function adoptExistingAgentTurnFileSource(
   filePath: string,
   displayName: string,
   sourceKind: SourceKind,
-  binding: AgentTurnFilePreservationBinding
+  binding: AgentTurnFilePreservationBinding,
+  snapshot: IngressSnapshotDescriptor
 ): boolean {
   const dateKey = binding.sourceId.slice(4, 12);
   const sourceRecordPath = resolveVaultPath(
@@ -458,7 +505,14 @@ function adoptExistingAgentTurnFileSource(
     !existing.original ||
     existing.original.path !== filePath ||
     existing.original.displayName !== displayName ||
-    (binding.inputChecksum !== undefined && existing.original.checksum !== binding.inputChecksum)
+    existing.original.checksum !== snapshot.checksum ||
+    existing.original.lastKnownSize !== snapshot.size ||
+    existing.original.lastKnownMtime !== new Date(snapshot.sourceProvenance.identity.modifiedAtMs).toISOString() ||
+    existing.storageStrategy !== (snapshot.managedCopy ? "copy_to_source_library" : "reference_original") ||
+    Boolean(existing.managedCopy) !== Boolean(snapshot.managedCopy) ||
+    snapshot.parentJobId !== binding.jobId ||
+    snapshot.sourceId !== binding.sourceId ||
+    snapshot.ordinal !== (binding.ordinal ?? 0)
   ) {
     throw new PigeDomainError(
       "agent_runtime.turn_binding_invalid",
@@ -467,7 +521,12 @@ function adoptExistingAgentTurnFileSource(
   }
   if (existing.managedCopy) {
     const managedCopyPath = resolveVaultPath(vaultPath, existing.managedCopy.path);
-    if (!fs.existsSync(managedCopyPath)) {
+    if (
+      !fs.existsSync(managedCopyPath) ||
+      existing.managedCopy.checksum !== snapshot.checksum ||
+      existing.managedCopy.size !== snapshot.size ||
+      snapshot.managedCopy?.destinationPath !== fs.realpathSync(managedCopyPath)
+    ) {
       throw new PigeDomainError(
         "agent_runtime.turn_binding_invalid",
         "The existing managed attachment copy is unavailable."
@@ -963,37 +1022,7 @@ function writeConfinedVaultFileAtomic(vaultPath: string, filePath: string, value
   }
 }
 
-async function copyFileAtomicWithChecksum(sourcePath: string, destinationPath: string): Promise<{ checksum: string; size: number }> {
-  const hash = createHash("sha256");
-  let size = 0;
-  await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
-  const temporaryPath = `${destinationPath}.${process.pid}.${randomUUID()}.tmp`;
-
-  try {
-    await pipeline(
-      fs.createReadStream(sourcePath),
-      new Transform({
-        transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
-          size += chunk.byteLength;
-          hash.update(chunk);
-          callback(null, chunk);
-        }
-      }),
-      fs.createWriteStream(temporaryPath, { flags: "wx" })
-    );
-    await fs.promises.rename(temporaryPath, destinationPath);
-  } catch (error) {
-    await fs.promises.rm(temporaryPath, { force: true });
-    throw error;
-  }
-
-  return {
-    checksum: `sha256:${hash.digest("hex")}`,
-    size
-  };
-}
-
-async function checksumFileWithSize(sourcePath: string): Promise<{ checksum: string; size: number }> {
+async function checksumFileWithSize(sourcePath: string): Promise<{ checksum: `sha256:${string}`; size: number }> {
   const hash = createHash("sha256");
   let size = 0;
   for await (const chunk of fs.createReadStream(sourcePath, { highWaterMark: 1024 * 1024 })) {

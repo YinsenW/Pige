@@ -44,6 +44,7 @@ export interface IngressSnapshotDescriptor extends IngressSnapshotBinding {
     readonly identity: IngressSnapshotFileIdentity;
   };
   readonly managedCopy?: {
+    readonly rootPath: string;
     readonly destinationPath: string;
     readonly checksum: `sha256:${string}`;
     readonly size: number;
@@ -74,6 +75,8 @@ export type IngressSnapshotReleaseResult =
   | { readonly status: "busy"; readonly readerCount: number }
   | { readonly status: "not_found" }
   | { readonly status: "stale" };
+
+export type IngressSnapshotDiscardResult = IngressSnapshotReleaseResult;
 
 export interface IngressSnapshotReapCandidate {
   readonly descriptor: IngressSnapshotDescriptor;
@@ -182,7 +185,15 @@ export class IngressSnapshotService {
     if (!descriptor) throw snapshotError("ingress_snapshot.not_found", "The private ingress snapshot is unavailable.");
     const directory = await descriptorDirectory(input.vaultPath, input.binding);
     const snapshotPath = path.join(directory, descriptor.snapshotFileName);
-    const destination = await validateManagedDestination(input.managedRoot, input.destinationPath);
+    const lexicalManagedRoot = path.resolve(input.managedRoot);
+    const lexicalDestination = path.resolve(input.destinationPath);
+    if (!isContained(lexicalDestination, lexicalManagedRoot)) throw descriptorMismatch();
+    const managedRoot = await fs.promises.realpath(lexicalManagedRoot).catch(() => undefined);
+    if (!managedRoot) throw descriptorMismatch();
+    const destination = await validateManagedDestination(
+      managedRoot,
+      path.join(managedRoot, path.relative(lexicalManagedRoot, lexicalDestination))
+    );
     const existing = await fileIntegrityOptional(destination);
     if (existing) {
       if (existing.checksum !== descriptor.checksum || existing.size !== descriptor.size) throw descriptorMismatch();
@@ -193,11 +204,67 @@ export class IngressSnapshotService {
     const { descriptorDigest: _previousDigest, ...unsignedDescriptor } = descriptor;
     const updated = withDigest({
       ...unsignedDescriptor,
-      managedCopy: { destinationPath: destination, checksum: descriptor.checksum, size: descriptor.size, adoptedAt: timestamp },
+      managedCopy: {
+        rootPath: managedRoot,
+        destinationPath: destination,
+        checksum: descriptor.checksum,
+        size: descriptor.size,
+        adoptedAt: timestamp
+      },
       updatedAt: timestamp
     });
-    await writeDescriptorAtomic(directory, updated);
+    try {
+      await writeDescriptorAtomic(directory, updated);
+    } catch (caught) {
+      if (!existing) await removeExactManagedCopy(destination, descriptor).catch(() => undefined);
+      throw caught;
+    }
     return await readDescriptor(directory);
+  }
+
+  discardUnpublished(
+    vaultPath: string,
+    binding: IngressSnapshotBinding,
+    expectedDescriptorDigest: `sha256:${string}`
+  ): IngressSnapshotDiscardResult {
+    validateBinding(binding);
+    if (!SHA256_PATTERN.test(expectedDescriptorDigest)) throw descriptorMismatch();
+    const count = this.readerCount(binding);
+    if (count > 0) return { status: "busy", readerCount: count };
+    const directory = descriptorDirectoryOptionalSync(vaultPath, binding);
+    if (!directory) return { status: "not_found" };
+    const descriptor = readDescriptorOptionalSync(directory);
+    if (!descriptor) return { status: "not_found" };
+    try { assertBinding(descriptor, binding); } catch { return { status: "stale" }; }
+    if (descriptor.descriptorDigest !== expectedDescriptorDigest) return { status: "stale" };
+    verifySnapshotSync(directory, descriptor);
+    if (descriptor.managedCopy) {
+      let managedRootStat: fs.Stats;
+      let managedRootReal: string;
+      try {
+        managedRootStat = fs.lstatSync(descriptor.managedCopy.rootPath);
+        managedRootReal = fs.realpathSync(descriptor.managedCopy.rootPath);
+      } catch {
+        return { status: "stale" };
+      }
+      if (
+        !managedRootStat.isDirectory() ||
+        managedRootStat.isSymbolicLink() ||
+        managedRootReal !== descriptor.managedCopy.rootPath ||
+        !isContained(descriptor.managedCopy.destinationPath, managedRootReal)
+      ) {
+        return { status: "stale" };
+      }
+      const integrity = fileIntegrityOptionalSync(descriptor.managedCopy.destinationPath);
+      if (
+        !integrity ||
+        integrity.checksum !== descriptor.managedCopy.checksum ||
+        integrity.size !== descriptor.managedCopy.size
+      ) return { status: "stale" };
+      fs.rmSync(descriptor.managedCopy.destinationPath, { force: false });
+    }
+    fs.rmSync(directory, { recursive: true, force: false });
+    return { status: "released" };
   }
 
   release(vaultPath: string, proof: IngressSnapshotReleaseProof): IngressSnapshotReleaseResult {
@@ -307,7 +374,7 @@ async function copyExactSourceToSnapshot(input: CreateIngressSnapshotInput, dest
   const sourcePath = path.resolve(input.sourcePath);
   const pathBefore = await fs.promises.lstat(sourcePath).catch(() => undefined);
   const realBefore = await fs.promises.realpath(sourcePath).catch(() => undefined);
-  if (!pathBefore?.isFile() || pathBefore.isSymbolicLink() || !realBefore || realBefore !== sourcePath) throw sourceUnavailable();
+  if (!pathBefore?.isFile() || pathBefore.isSymbolicLink() || !realBefore) throw sourceUnavailable();
   assertIdentity(pathBefore, input.noFollowIdentity);
   const source = await fs.promises.open(sourcePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0)).catch(() => undefined);
   if (!source) throw sourceUnavailable();
@@ -351,7 +418,7 @@ async function verifyOriginalCurrent(descriptor: IngressSnapshotDescriptor): Pro
   const sourcePath = descriptor.sourceProvenance.originalPath;
   const stat = await fs.promises.lstat(sourcePath).catch(() => undefined);
   const real = await fs.promises.realpath(sourcePath).catch(() => undefined);
-  if (!stat?.isFile() || stat.isSymbolicLink() || real !== sourcePath) throw sourceUnavailable();
+  if (!stat?.isFile() || stat.isSymbolicLink() || !real) throw sourceUnavailable();
   assertIdentity(stat, descriptor.sourceProvenance.identity);
   const integrity = await fileIntegrity(sourcePath);
   if (integrity.checksum !== descriptor.checksum || integrity.size !== descriptor.size) throw sourceChanged();
@@ -366,6 +433,7 @@ async function copySnapshotToManagedDestination(
   await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true, mode: 0o700 });
   try {
     await fs.promises.copyFile(snapshotPath, temporary, fs.constants.COPYFILE_EXCL | (fs.constants.COPYFILE_FICLONE ?? 0));
+    if (process.platform !== "win32") await fs.promises.chmod(temporary, 0o600);
     const integrity = await fileIntegrity(temporary);
     if (integrity.checksum !== descriptor.checksum || integrity.size !== descriptor.size) throw descriptorMismatch();
     await fs.promises.rename(temporary, destinationPath);
@@ -511,6 +579,17 @@ function parseDescriptor(value: unknown): IngressSnapshotDescriptor {
     typeof descriptor.createdAt !== "string" || typeof descriptor.updatedAt !== "string"
   ) throw descriptorMismatch();
   validateIdentity(descriptor.sourceProvenance.identity);
+  if (descriptor.managedCopy !== undefined && (
+    typeof descriptor.managedCopy.rootPath !== "string" ||
+    !path.isAbsolute(descriptor.managedCopy.rootPath) ||
+    typeof descriptor.managedCopy.destinationPath !== "string" ||
+    !path.isAbsolute(descriptor.managedCopy.destinationPath) ||
+    !SHA256_PATTERN.test(descriptor.managedCopy.checksum) ||
+    !Number.isInteger(descriptor.managedCopy.size) ||
+    descriptor.managedCopy.size < 0 ||
+    descriptor.managedCopy.size > MAX_SOURCE_BYTES ||
+    typeof descriptor.managedCopy.adoptedAt !== "string"
+  )) throw descriptorMismatch();
   const { descriptorDigest: _digest, ...unsigned } = descriptor;
   if (hashCanonical("pige.ingress_snapshot.descriptor.v1", unsigned) !== descriptor.descriptorDigest) throw descriptorMismatch();
   return Object.freeze(descriptor);
@@ -610,6 +689,22 @@ function fileIntegritySync(filePath: string): { readonly checksum: `sha256:${str
 
 async function fileIntegrityOptional(filePath: string): Promise<{ readonly checksum: `sha256:${string}`; readonly size: number } | undefined> {
   try { return await fileIntegrity(filePath); } catch (caught) { if (isNotFound(caught)) return undefined; throw caught; }
+}
+
+function fileIntegrityOptionalSync(
+  filePath: string
+): { readonly checksum: `sha256:${string}`; readonly size: number } | undefined {
+  try { return fileIntegritySync(filePath); } catch (caught) { if (isNotFound(caught)) return undefined; throw caught; }
+}
+
+async function removeExactManagedCopy(
+  filePath: string,
+  descriptor: IngressSnapshotDescriptor
+): Promise<void> {
+  const integrity = await fileIntegrityOptional(filePath);
+  if (!integrity) return;
+  if (integrity.checksum !== descriptor.checksum || integrity.size !== descriptor.size) throw descriptorMismatch();
+  await fs.promises.rm(filePath, { force: false });
 }
 
 async function syncDirectory(directory: string): Promise<void> {

@@ -156,6 +156,58 @@ describe("HomeAgentAttachmentService", () => {
     expect(preserve).not.toHaveBeenCalled();
   });
 
+  it("preserves sparse accepted entries with their original staged ordinals and deterministic bindings", async () => {
+    const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-attachment-sparse-")));
+    roots.push(root);
+    const firstPath = path.join(root, "first.md");
+    const secondPath = path.join(root, "second.md");
+    const rejectedPath = path.join(root, "blocked.exe");
+    fs.writeFileSync(firstPath, "first", "utf8");
+    fs.writeFileSync(secondPath, "second", "utf8");
+    fs.writeFileSync(rejectedPath, "blocked", "utf8");
+    const preserve = vi.fn(async (_request, binding: { readonly sourceId: string }) => ({
+      status: "queued" as const,
+      captureId: "cap_20260727_sparse0001",
+      sourceIds: [binding.sourceId],
+      jobIds: [],
+      conversationEventIds: [],
+      rejectedFiles: [],
+      preservedAt: "2026-07-27T00:00:00.000Z"
+    }));
+    const service = new HomeAgentAttachmentService({
+      preserveFilesForAgentTurn: preserve,
+      preserveTextForAgentTurn: vi.fn()
+    });
+    const stagedItems = [
+      { kind: "file" as const, ordinal: 0, displayName: "blocked.exe" },
+      { kind: "file" as const, ordinal: 1, displayName: "first.md" },
+      { kind: "file" as const, ordinal: 3, displayName: "second.md" }
+    ];
+    const prepared = await service.prepare([
+      { ordinal: 0, displayName: "blocked.exe", internalPath: rejectedPath },
+      { ordinal: 1, displayName: "first.md", internalPath: firstPath },
+      { ordinal: 3, displayName: "second.md", internalPath: secondPath }
+    ], stagedItems);
+    const jobId = "job_20260727_sparse0001";
+    const firstSourceId = "src_20260727_sparse0001";
+
+    const result = await service.preserve({
+      prepared,
+      turn: { schemaVersion: 1, inputKind: "file_picker", locale: "en", stagedItems },
+      jobId,
+      firstSourceId
+    });
+
+    expect(result.sourceIds).toEqual([firstSourceId, createAttachmentSourceId(jobId, 1)]);
+    expect(preserve.mock.calls.map((call) => call[1])).toEqual([
+      expect.objectContaining({ sourceId: firstSourceId, ordinal: 1 }),
+      expect.objectContaining({ sourceId: createAttachmentSourceId(jobId, 1), ordinal: 3 })
+    ]);
+    expect(prepared.rejectedItems).toEqual([
+      { ordinal: 0, kind: "file", displayName: "blocked.exe", reason: "unsupported_type" }
+    ]);
+  });
+
   it("preserves an exact mixed file and pasted-text order under one source-set identity", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-mixed-source-owner-"));
     roots.push(root);

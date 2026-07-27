@@ -182,6 +182,29 @@ describe("IngressSnapshotService", () => {
     expect(await service.readAsync(firstFixture.vaultPath, secondInput)).toBeUndefined();
     expect(second.descriptorDigest).toMatch(/^sha256:/u);
   });
+
+  it("discards only the exact unpublished descriptor and its integrity-matching managed copy", async () => {
+    const fixture = makeFixture("unpublished managed bytes");
+    const managedRoot = path.join(fixture.root, "managed");
+    const destinationPath = path.join(managedRoot, "accepted.bin");
+    fs.mkdirSync(managedRoot, { recursive: true });
+    const service = new IngressSnapshotService();
+    const descriptor = await service.createOrAdopt(fixture.input);
+    const promoted = await service.promoteManagedCopy({
+      vaultPath: fixture.vaultPath,
+      binding: fixture.input,
+      managedRoot,
+      destinationPath
+    });
+
+    expect(service.discardUnpublished(fixture.vaultPath, fixture.input, descriptor.descriptorDigest))
+      .toEqual({ status: "stale" });
+    expect(service.discardUnpublished(fixture.vaultPath, fixture.input, promoted.descriptorDigest))
+      .toEqual({ status: "released" });
+    expect(fs.existsSync(destinationPath)).toBe(false);
+    expect(service.discardUnpublished(fixture.vaultPath, fixture.input, promoted.descriptorDigest))
+      .toEqual({ status: "not_found" });
+  });
 });
 
 function makeFixture(body: string) {

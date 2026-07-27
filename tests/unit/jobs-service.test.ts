@@ -11,6 +11,7 @@ import { CaptureService, type SourceFetchPort } from "../../apps/desktop/src/mai
 import { DocumentParserService, type DocumentParserPort } from "../../apps/desktop/src/main/services/document-parser-service";
 import { JobCancellationError } from "../../apps/desktop/src/main/services/job-execution-control";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
+import { ingressSnapshotService } from "../../apps/desktop/src/main/services/ingress-snapshot-service";
 import { KnowledgeActivityService } from "../../apps/desktop/src/main/services/knowledge-activity-service";
 import type { LocalDatabaseRebuildPort } from "../../apps/desktop/src/main/services/local-database-rebuild-types";
 import {
@@ -54,7 +55,7 @@ import { ScriptedAgentIngestRuntime } from "../helpers/scripted-agent-ingest-run
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import type { VaultSummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import { JobRecordSchema, type JobRecord } from "@pige/schemas";
+import { JobRecordSchema, SourceRecordSchema, type JobRecord } from "@pige/schemas";
 import { createTestDocx, createTestPptx, TINY_PNG } from "./helpers/office-fixture";
 import { createTestPdf } from "./helpers/pdf-fixture";
 import { createJpegScanPdf } from "./helpers/pdf-image-fixture";
@@ -554,6 +555,58 @@ describe("jobs service", () => {
     });
     expect(listFiles(path.join(vaultPath, ".pige", "source-records")))
       .toHaveLength(2);
+  });
+
+  it("retains private ingress snapshots until the exact parent is durably terminal", async () => {
+    const { vaultPath, vault } = makeVault();
+    const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
+    const jobs = new JobsService(vaults);
+    const capture = new CaptureService(vaults);
+    const sourcePath = path.join(path.dirname(vaultPath), "terminal-snapshot.txt");
+    fs.writeFileSync(sourcePath, "terminal snapshot bytes", "utf8");
+    const checksum = `sha256:${createHash("sha256").update(fs.readFileSync(sourcePath)).digest("hex")}`;
+    const attachmentSetHash = `sha256:${"a".repeat(64)}`;
+    const created = jobs.createAgentTurnJob({
+      conversationEventId: "evt_20260727_snapshotreap1",
+      conversationLocator: ".pige/conversations/2026/07/conv_20260727_snapshotreap.jsonl",
+      inputHash: `sha256:${"b".repeat(64)}`,
+      sourceExpected: true,
+      attachmentCount: 1,
+      attachmentSetHash,
+      sourceChecksums: [checksum]
+    });
+    const sourceId = requireValue(created.sourceId);
+    await capture.preserveFilesForAgentTurn({
+      filePaths: [sourcePath],
+      inputKind: "file_picker",
+      userIntent: "unknown",
+      locale: "en"
+    }, {
+      jobId: created.id,
+      sourceId,
+      inputChecksum: checksum,
+      ordinal: 0,
+      attachmentSetHash
+    });
+    const queued = jobs.attachAgentTurnSources(created.id, [sourceId], attachmentSetHash);
+    const binding = { vaultId: vault.vaultId, parentJobId: created.id, sourceId, ordinal: 0 } as const;
+    expect(ingressSnapshotService.read(vaultPath, binding)).toBeDefined();
+    expect(await jobs.reapIngressSnapshots()).toEqual({ scanned: 1, released: 0, retained: 1 });
+
+    jobs.testOnlyWriteAgentTurnJob(queued, JobRecordSchema.parse({
+      ...queued,
+      state: "completed",
+      stage: undefined,
+      finishedAt: new Date(Date.parse(queued.updatedAt) + 1).toISOString(),
+      updatedAt: new Date(Date.parse(queued.updatedAt) + 1).toISOString(),
+      message: "The source-bearing turn completed durably."
+    }));
+    expect(await jobs.reapIngressSnapshots()).toEqual({ scanned: 1, released: 1, retained: 0 });
+    expect(ingressSnapshotService.read(vaultPath, binding)).toBeUndefined();
+    expect(SourceRecordSchema.parse(JSON.parse(fs.readFileSync(
+      findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`),
+      "utf8"
+    ))).id).toBe(sourceId);
   });
 
   it("adopts one Source Page per accepted attachment before source tools and reuses them on same-Job retry", async () => {
