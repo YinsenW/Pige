@@ -13,6 +13,8 @@ import {
   SkillRegistryQueryResultSchema,
   SkillStageFromUrlRequestSchema,
   SkillStageFromUrlResultSchema,
+  SkillStageUpdateRequestSchema,
+  SkillStageUpdateResultSchema,
   SkillUninstallRequestSchema,
   type SkillDiscardStagedRequest,
   type SkillDiscardStagedResult,
@@ -27,6 +29,8 @@ import {
   type SkillRegistryQueryResult,
   type SkillStageFromUrlRequest,
   type SkillStageFromUrlResult,
+  type SkillStageUpdateRequest,
+  type SkillStageUpdateResult,
   type SkillUninstallRequest
 } from "@pige/schemas";
 
@@ -42,6 +46,9 @@ interface RegisterSkillsIpcOptions {
   readonly stageFromUrl: (
     request: SkillStageFromUrlRequest
   ) => SkillStageFromUrlResult | Promise<SkillStageFromUrlResult>;
+  readonly stageUpdate: (
+    request: SkillStageUpdateRequest
+  ) => SkillStageUpdateResult | Promise<SkillStageUpdateResult>;
   readonly installStaged: (
     request: SkillInstallStagedRequest
   ) => SkillInstallStagedResult | Promise<SkillInstallStagedResult>;
@@ -81,6 +88,13 @@ export function registerSkillsIpc(options: RegisterSkillsIpcOptions): void {
     const parsed = SkillStageFromUrlRequestSchema.parse(request);
     const result = SkillStageFromUrlResultSchema.parse(await options.stageFromUrl(parsed));
     assertRequestIdentity(parsed, result);
+    return result;
+  });
+  options.ipcMain.handle("skills.stageUpdate", async (_event, request: unknown) => {
+    const parsed = SkillStageUpdateRequestSchema.parse(request);
+    if (!hasActiveVault(options, parsed.activeVaultId)) return stageUpdateFailed(parsed);
+    const result = SkillStageUpdateResultSchema.parse(await options.stageUpdate(parsed));
+    assertInstalledIdentity(parsed, result);
     return result;
   });
   options.ipcMain.handle("skills.installStaged", async (_event, request: unknown) => {
@@ -162,13 +176,23 @@ function hasActiveVault(options: RegisterSkillsIpcOptions, activeVaultId: string
 }
 
 function assertInstalledIdentity(
-  request: SkillEnableRequest | SkillUninstallRequest | SkillExportRequest,
-  result: SkillLifecycleMutationResult | SkillExportResult
+  request: SkillEnableRequest | SkillUninstallRequest | SkillExportRequest | SkillStageUpdateRequest,
+  result: SkillLifecycleMutationResult | SkillExportResult | SkillStageUpdateResult
 ): void {
   if (result.apiVersion !== request.apiVersion || result.requestId !== request.requestId ||
     result.activeVaultId !== request.activeVaultId || result.skillId !== request.skillId) {
     throw new Error("Skill lifecycle response identity did not match the request.");
   }
+}
+
+function stageUpdateFailed(request: SkillStageUpdateRequest): SkillStageUpdateResult {
+  return SkillStageUpdateResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    skillId: request.skillId,
+    status: "failed"
+  });
 }
 
 function exportStatus(request: SkillExportRequest, status: "cancelled" | "failed"): SkillExportResult {

@@ -11,6 +11,8 @@ import {
   SkillInstallUrlSchema,
   SkillStageFromUrlRequestSchema,
   SkillStageFromUrlResultSchema,
+  SkillStageUpdateRequestSchema,
+  SkillStageUpdateResultSchema,
   SkillStagingIdSchema,
   type SkillDiscardStagedRequest,
   type SkillDiscardStagedResult,
@@ -19,16 +21,22 @@ import {
   type SkillManifest,
   type SkillStageFromUrlRequest,
   type SkillStageFromUrlResult,
+  type SkillStageUpdateRequest,
+  type SkillStageUpdateResult,
   type SkillStagedSummary
 } from "@pige/schemas";
 import { containsRestrictedModelContent } from "./model-egress-content";
 import {
   assertSkillManifestRendererSafe,
   parseSkillManifest,
-  type SkillStagedInstallCandidate,
-  type SkillStagingStorePort,
   SkillRegistryService
 } from "./skill-registry-service";
+import {
+  type SkillStagedInstallCandidate,
+  type SkillStagedUpdateBinding,
+  type SkillUpdateTarget,
+  type SkillStagingStorePort
+} from "./skill-source-update-registry";
 import { SourceFetchService, type SourceFetchSnapshot } from "./source-fetch-service";
 import { hasObjectErrorCode as isErrno } from "./object-error-code";
 
@@ -48,6 +56,7 @@ interface SkillStageRecord {
   readonly manifestSha256: `sha256:${string}`;
   readonly createdAt: string;
   readonly expiresAt: string;
+  readonly update?: SkillUpdateTarget;
 }
 
 export interface SkillUrlFetchPort {
@@ -156,6 +165,74 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
     }
   }
 
+  async stageUpdate(
+    requestInput: SkillStageUpdateRequest,
+    signal: AbortSignal = new AbortController().signal
+  ): Promise<SkillStageUpdateResult> {
+    const request = SkillStageUpdateRequestSchema.parse(requestInput);
+    const identity = updateIdentity(request);
+    const resolution = this.#registry.resolveUpdateTarget(request);
+    if (resolution.status === "result") return resolution.result;
+    const target = resolution.target;
+    const stagingId = createStagingId(request.requestId);
+    try {
+      signal.throwIfAborted();
+      const existing = this.#readCandidate(stagingId);
+      if (existing) {
+        if (!existing.record.update || !sameUpdateBinding(existing.record.update, target)) return updateFailed(identity);
+        if (!isExpired(existing.record.expiresAt, this.#now())) {
+          return SkillStageUpdateResultSchema.parse({ ...identity, status: "ready", staged: this.#project(existing) });
+        }
+        this.#removeStage(stagingId, existing.record.manifestSha256);
+      }
+
+      const snapshot = await this.#fetcher.fetchSnapshot(target.sourceUrl, signal);
+      signal.throwIfAborted();
+      const finalSourceUrl = SkillInstallUrlSchema.safeParse(snapshot.finalUrl);
+      if (!finalSourceUrl.success || finalSourceUrl.data !== target.sourceUrl || !isMarkdownContentType(snapshot.contentType)) {
+        return updateFailed(identity);
+      }
+      const bytes = Buffer.from(snapshot.rawContent, "utf8");
+      if (bytes.length === 0 || bytes.length > SKILL_URL_STAGE_MAX_UTF8_BYTES ||
+        snapshot.rawContent.includes("\uFFFD") || containsRestrictedModelContent(snapshot.rawContent)) {
+        return updateFailed(identity);
+      }
+      const manifest = parseSkillManifest(snapshot.rawContent);
+      assertSkillManifestRendererSafe(manifest);
+      if (manifest.id !== target.skillId || manifest.scope !== "machine_local" || manifest.kind !== "pure" ||
+        manifest.sourceUrl !== target.sourceUrl || !manifest.updatedAt) return updateFailed(identity);
+      const manifestSha256 = digest(bytes);
+      const refreshed = this.#registry.resolveUpdateTarget(request);
+      if (refreshed.status === "result") return refreshed.result;
+      if (!sameUpdateTarget(refreshed.target, target)) return updateFailed(identity);
+      if (manifestSha256 === target.installedManifestSha256) {
+        return this.#registry.stageUpdateResult(request, "current");
+      }
+      if (manifest.version === target.installedVersion ||
+        Date.parse(manifest.updatedAt) <= Date.parse(target.installedUpdatedAt)) return updateFailed(identity);
+
+      const now = this.#now();
+      const record: SkillStageRecord = {
+        schemaVersion: STAGE_SCHEMA_VERSION,
+        requestId: request.requestId,
+        stagingId,
+        requestSourceUrl: target.sourceUrl,
+        finalSourceUrl: target.sourceUrl,
+        manifestSha256,
+        createdAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + STAGE_TTL_MS).toISOString(),
+        update: target
+      };
+      this.#publishStage(record, bytes);
+      const staged = this.#readCandidate(stagingId);
+      if (!staged || staged.record.manifestSha256 !== manifestSha256 ||
+        !staged.record.update || !sameUpdateBinding(staged.record.update, target)) return updateFailed(identity);
+      return SkillStageUpdateResultSchema.parse({ ...identity, status: "ready", staged: this.#project(staged) });
+    } catch {
+      return updateFailed(identity);
+    }
+  }
+
   installStaged(requestInput: SkillInstallStagedRequest): SkillInstallStagedResult {
     const request = SkillInstallStagedRequestSchema.parse(requestInput);
     return SkillInstallStagedResultSchema.parse(this.#registry.installStaged(request, this));
@@ -179,7 +256,8 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       manifestSha256: current.record.manifestSha256,
       expiresAt: current.record.expiresAt,
       manifest: current.manifest,
-      bytes: current.bytes
+      bytes: current.bytes,
+      ...(current.record.update ? { update: current.record.update } : {})
     };
   }
 
@@ -196,7 +274,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
     return {
       stagingId: candidate.record.stagingId,
       manifestSha256: candidate.record.manifestSha256,
-      registryRevision: this.#registry.currentRevision(),
+      registryRevision: candidate.record.update?.expectedRegistryRevision ?? this.#registry.currentRevision(),
       expiresAt: candidate.record.expiresAt,
       sourceUrl: candidate.record.finalSourceUrl,
       id: manifest.id,
@@ -321,9 +399,13 @@ function parseStageRecord(bytes: Buffer): SkillStageRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw stageInvalid();
   const record = value as Record<string, unknown>;
   if (
-    Object.keys(record).sort().join(",") !== "createdAt,expiresAt,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId" ||
+    ![
+      "createdAt,expiresAt,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId",
+      "createdAt,expiresAt,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId,update"
+    ].includes(Object.keys(record).sort().join(",")) ||
     record.schemaVersion !== STAGE_SCHEMA_VERSION ||
-    !SkillStageFromUrlRequestSchema.safeParse({ apiVersion: 1, requestId: record.requestId, sourceUrl: record.requestSourceUrl }).success ||
+    !(SkillStageFromUrlRequestSchema.safeParse({ apiVersion: 1, requestId: record.requestId, sourceUrl: record.requestSourceUrl }).success ||
+      isUpdateRecord(record)) ||
     !SkillStagingIdSchema.safeParse(record.stagingId).success ||
     !SkillInstallUrlSchema.safeParse(record.finalSourceUrl).success ||
     typeof record.manifestSha256 !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(record.manifestSha256) ||
@@ -436,6 +518,40 @@ function stageFailed(requestId: string): SkillStageFromUrlResult {
       userAction: "retry"
     }
   });
+}
+
+function updateIdentity(request: SkillStageUpdateRequest) {
+  return { apiVersion: 1 as const, requestId: request.requestId, activeVaultId: request.activeVaultId, skillId: request.skillId };
+}
+
+function updateFailed(identity: ReturnType<typeof updateIdentity>): SkillStageUpdateResult {
+  return SkillStageUpdateResultSchema.parse({ ...identity, status: "failed" });
+}
+
+function sameUpdateBinding(left: SkillStagedUpdateBinding, right: SkillStagedUpdateBinding): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function sameUpdateTarget(left: SkillUpdateTarget, right: SkillUpdateTarget): boolean {
+  return left.sourceUrl === right.sourceUrl && sameUpdateBinding(left, right);
+}
+
+function isUpdateRecord(record: Record<string, unknown>): boolean {
+  if (!record.update || typeof record.update !== "object" || Array.isArray(record.update)) return false;
+  const update = record.update as Record<string, unknown>;
+  return Object.keys(update).sort().join(",") ===
+      "activeVaultId,enabled,expectedRegistryRevision,installedManifestSha256,installedUpdatedAt,installedVersion,skillId,sourceUrl" &&
+    SkillStageUpdateRequestSchema.safeParse({
+      apiVersion: 1,
+      requestId: record.requestId,
+      activeVaultId: update.activeVaultId,
+      skillId: update.skillId,
+      expectedRegistryRevision: update.expectedRegistryRevision
+    }).success && update.sourceUrl === record.requestSourceUrl && update.sourceUrl === record.finalSourceUrl &&
+    SkillInstallUrlSchema.safeParse(update.sourceUrl).success && typeof update.enabled === "boolean" &&
+    typeof update.installedManifestSha256 === "string" && /^sha256:[a-f0-9]{64}$/u.test(update.installedManifestSha256) &&
+    typeof update.installedVersion === "string" && typeof update.installedUpdatedAt === "string" &&
+    Number.isFinite(Date.parse(update.installedUpdatedAt));
 }
 
 function stageError(code: string, message: string): PigeDomainError {

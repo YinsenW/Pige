@@ -1953,6 +1953,7 @@ registerSkillsIpc({
   showSaveDialog: (window, options) => dialog.showSaveDialog(window, options),
   summary: () => getSkillRegistryService().summary(),
   stageFromUrl: (request) => getSkillUrlInstallService().stageFromUrl(request),
+  stageUpdate: (request) => getSkillUrlInstallService().stageUpdate(request),
   installStaged: (request) => getSkillUrlInstallService().installStaged(request),
   discardStaged: (request) => getSkillUrlInstallService().discardStaged(request),
   disable: (request) => getSkillRegistryService().disable(request),

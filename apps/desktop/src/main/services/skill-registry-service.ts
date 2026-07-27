@@ -34,6 +34,8 @@ import {
   type SkillRegistryRecord,
   type SkillRegistrySummary,
   type SkillSummary,
+  type SkillStageUpdateRequest,
+  type SkillStageUpdateResult,
   type SkillUninstallRequest
 } from "@pige/schemas";
 import { containsRestrictedModelContent } from "./model-egress-content";
@@ -45,6 +47,13 @@ import {
   type SkillInstallReceipt,
   type SkillUninstallReceipt
 } from "./skill-registry-lifecycle-store";
+import {
+  canUpdateSkill,
+  SkillSourceUpdateRegistry,
+  type SkillStagedInstallCandidate,
+  type SkillStagingStorePort,
+  type SkillUpdateResolution
+} from "./skill-source-update-registry";
 
 const MAX_REGISTRY_BYTES = 1024 * 1024;
 const MAX_MANIFEST_BYTES = 256 * 1024;
@@ -53,44 +62,12 @@ const MAX_REGISTRY_LOCK_BYTES = 512;
 const ACTIVE_SKILL_REGISTRY_LOCK_PATHS = new Set<string>();
 const ARRAY_FIELDS = new Set(["capabilities", "triggers", "dataBoundary"]);
 const MANIFEST_FIELDS = new Set([
-  "id",
-  "name",
-  "version",
-  "description",
-  "scope",
-  "kind",
-  "capabilities",
-  "triggers",
-  "author",
-  "sourceUrl",
-  "license",
-  "updatedAt",
-  "dataBoundary",
-  "permissionSummary"
+  "id", "name", "version", "description", "scope", "kind", "capabilities", "triggers", "author", "sourceUrl",
+  "license", "updatedAt", "dataBoundary", "permissionSummary"
 ]);
 const DATA_BOUNDARY_ORDER: readonly SkillDataBoundary[] = [
-  "local",
-  "filesystem",
-  "network",
-  "cloud",
-  "brokered_credential",
-  "destructive"
+  "local", "filesystem", "network", "cloud", "brokered_credential", "destructive"
 ];
-
-export interface SkillStagedInstallCandidate {
-  readonly stagingId: string;
-  readonly requestId: string;
-  readonly sourceUrl: string;
-  readonly manifestSha256: string;
-  readonly expiresAt: string;
-  readonly manifest: SkillManifest;
-  readonly bytes: Buffer;
-}
-
-export interface SkillStagingStorePort {
-  readForInstall(stagingId: string, manifestSha256: string): SkillStagedInstallCandidate | "stale" | undefined;
-  discardExact(stagingId: string, manifestSha256: string): "discarded" | "stale" | "not_found";
-}
 
 export class SkillRegistryService {
   readonly #appDataRoot: string;
@@ -98,6 +75,7 @@ export class SkillRegistryService {
   readonly #registryPath: string;
   readonly #registryLockPath: string;
   readonly #lifecycleStore: SkillRegistryLifecycleStore;
+  readonly #sourceUpdate: SkillSourceUpdateRegistry;
 
   constructor(appDataRoot: string, options: { readonly recoverOrphanedMutationLock?: boolean } = {}) {
     if (!path.isAbsolute(appDataRoot)) {
@@ -120,13 +98,23 @@ export class SkillRegistryService {
     this.#registryPath = path.join(this.#rootPath, "registry.json");
     this.#registryLockPath = path.join(this.#rootPath, ".registry.lock");
     this.#lifecycleStore = new SkillRegistryLifecycleStore(canonicalRoot);
+    this.#sourceUpdate = new SkillSourceUpdateRegistry({
+      readRegistry: () => this.#readRegistry(), readManifest: (skillId) => this.#readManifest(skillId),
+      isLifecycleEligible: (record) => this.#isLifecycleEligible(record), project: (registry) => this.#project(registry),
+      nextRegistry: (current, skills) => this.#nextRegistry(current, skills), writeRegistry: (registry) => this.#writeRegistry(registry),
+      lifecycleStore: this.#lifecycleStore
+    });
     if (options.recoverOrphanedMutationLock) {
       try {
         this.#recoverOrphanedMutationLock();
         const pending = this.#lifecycleStore.listPreparedUninstalls();
-        if (pending.length > 0) {
+        const pendingUpdates = this.#lifecycleStore.listPreparedUpdates();
+        if (pending.length > 0 || pendingUpdates.length > 0) {
           const mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
-          try { this.#recoverPreparedUninstalls(pending, mutationLock); } finally { mutationLock.release(); }
+          try {
+            this.#sourceUpdate.recover(pendingUpdates, mutationLock.assertOwned);
+            this.#recoverPreparedUninstalls(pending, mutationLock);
+          } finally { mutationLock.release(); }
         }
       } catch {
         // An unsafe lock blocks mutation but must not prevent the desktop from opening.
@@ -156,11 +144,21 @@ export class SkillRegistryService {
     return false;
   }
 
+  resolveUpdateTarget(requestInput: SkillStageUpdateRequest): SkillUpdateResolution { return this.#sourceUpdate.resolveTarget(requestInput); }
+
+  stageUpdateResult(
+    requestInput: SkillStageUpdateRequest,
+    status: "current" | "stale" | "not_found" | "failed"
+  ): SkillStageUpdateResult {
+    return this.#sourceUpdate.result(requestInput, status);
+  }
+
   installStaged(request: SkillInstallStagedRequest, staging: SkillStagingStorePort): SkillInstallStagedResult {
     let mutationLock: SkillRegistryMutationLock | undefined;
     try {
       this.#prepare();
       mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
+      this.#sourceUpdate.recover(this.#lifecycleStore.listPreparedUpdates(), mutationLock.assertOwned);
       this.#recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock);
       const current = this.#readRegistry();
       const replay = this.#findInstallReplay(request, current);
@@ -185,7 +183,12 @@ export class SkillRegistryService {
         parsed.id !== candidate.manifest.id || parsed.version !== candidate.manifest.version ||
         digestBytes(candidate.bytes) !== request.manifestSha256
       ) return skillInstallFailed(request.requestId, "unavailable");
-      if (current.skills.some((skill) => skill.id === parsed.id)) return skillInstallFailed(request.requestId, "unavailable");
+      const update = candidate.update;
+      const existingIndex = current.skills.findIndex((skill) => skill.id === parsed.id);
+      if (!update && existingIndex >= 0) return skillInstallFailed(request.requestId, "unavailable");
+      if (update) {
+        return this.#sourceUpdate.commit(request, candidate, parsed, current, staging, mutationLock.assertOwned);
+      }
 
       const receipt: SkillInstallReceipt = {
         schemaVersion: 1,
@@ -467,7 +470,8 @@ export class SkillRegistryService {
       ...(loaded.manifest.license ? { license: loaded.manifest.license } : {}),
       canEnable: !record.enabled && loaded.manifest.kind === "pure",
       canUninstall: loaded.manifest.kind === "pure",
-      canExport: loaded.manifest.kind === "pure"
+      canExport: loaded.manifest.kind === "pure",
+      canUpdate: canUpdateSkill(loaded.manifest)
     };
   }
 
