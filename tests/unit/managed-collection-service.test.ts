@@ -112,6 +112,15 @@ describe("ManagedCollectionService", () => {
       expectedRevisionId: editedManifest.activeRevision
     });
     expect(undone).toMatchObject({ status: "undone" });
+    const afterUndoActivity = activity.list({ limit: 20 }).activities.find(
+      (entry) => entry.operationId === required(editActivity).operationId
+    );
+    expect(afterUndoActivity).toMatchObject({
+      status: "undone",
+      canUndo: false,
+      undoUnavailableReason: "already_undone",
+      target: { kind: "collection", revisionId: undone.revisionId }
+    });
 
     const afterUndo = await service.open({
       apiVersion: 1,

@@ -133,11 +133,17 @@ export class ManagedCollectionService {
   ): KnowledgeActivitySummary | undefined {
     const binding = readCollectionOperationBinding(operation);
     if (!binding) return undefined;
+    const undoBinding = undoOperation
+      ? readCollectionOperationBinding(undoOperation)
+      : undefined;
+    if (undoOperation && !undoBinding) return undefined;
+    const currentRevisionId = this.#readCurrentRevision(binding.datasetId);
+    const revisionChanged = !undoOperation && currentRevisionId !== binding.afterRevisionId;
     const target = {
       kind: "collection" as const,
       datasetId: binding.datasetId,
       tableId: binding.tableId,
-      revisionId: undoOperation ? binding.beforeRevisionId : binding.afterRevisionId
+      revisionId: undoBinding?.afterRevisionId ?? binding.afterRevisionId
     };
     return {
       operationId: operation.id,
@@ -146,8 +152,12 @@ export class ManagedCollectionService {
       targetLabel: "Collection cell",
       target,
       status: undoOperation ? "undone" : "applied",
-      canUndo: undoOperation === undefined,
-      ...(undoOperation ? { undoUnavailableReason: "already_undone" as const } : {})
+      canUndo: !undoOperation && !revisionChanged,
+      ...(undoOperation
+        ? { undoUnavailableReason: "already_undone" as const }
+        : revisionChanged
+          ? { undoUnavailableReason: "revision_changed" as const }
+          : {})
     };
   }
 
