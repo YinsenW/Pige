@@ -5,38 +5,26 @@ import { DatabaseSync } from "node:sqlite";
 import type { KnowledgeActivitySummary, KnowledgeActivityUndoResult, VaultSummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
-  CollectionAppendDefaultRowRequestSchema,
-  CollectionAppendDefaultRowResultSchema,
-  CollectionCellEditRequestSchema,
-  CollectionCellEditResultSchema,
-  CollectionOpenRequestSchema,
-  CollectionOpenResultSchema,
-  CollectionSnapshotSchema,
-  DatasetManifestSchema,
-  DatasetRevisionSchema,
-  DatasetSchemaRecordSchema,
-  OperationRecordSchema,
-  type CollectionCell,
-  type CollectionAppendDefaultRowRequest,
-  type CollectionAppendDefaultRowResult,
-  type CollectionCellEditRequest,
-  type CollectionCellEditResult,
-  type CollectionOpenRequest,
-  type CollectionOpenResult,
-  type CollectionScalarValue,
-  type DatasetColumn,
-  type DatasetLogicalType,
-  type DatasetRevision,
-  type DatasetSchemaRecord,
-  type OperationRecord
+  CollectionAddNullableColumnRequestSchema, CollectionAddNullableColumnResultSchema,
+  CollectionAppendDefaultRowRequestSchema, CollectionAppendDefaultRowResultSchema,
+  CollectionCellEditRequestSchema, CollectionCellEditResultSchema,
+  CollectionOpenRequestSchema, CollectionOpenResultSchema, DatasetManifestSchema,
+  DatasetRevisionSchema, DatasetSchemaRecordSchema, OperationRecordSchema,
+  type CollectionAddNullableColumnRequest, type CollectionAddNullableColumnResult,
+  type CollectionAppendDefaultRowRequest, type CollectionAppendDefaultRowResult,
+  type CollectionCellEditRequest, type CollectionCellEditResult,
+  type CollectionOpenRequest, type CollectionOpenResult, type CollectionScalarValue,
+  type DatasetLogicalType, type DatasetRevision, type DatasetSchemaRecord, type OperationRecord
 } from "@pige/schemas";
 import {
-  MAX_COLLECTION_JSON_BYTES, assertFileRef, assertSafeVaultRoot, fileRef, hashCanonical,
+  MAX_COLLECTION_JSON_BYTES, assertSafeVaultRoot, collectionCellReadOnlyReason, commitNullableColumnAdd,
+  commitNullableColumnUndo, createNullableColumnId, fileRef, hashCanonical,
   openReadOnlyPayload, operationConflict, operationPathFor, payloadInvalid, publishImmutableFile,
-  readAllBundles, readBundle, readJsonBounded, readJsonRef, readOperationRecords, readRevisionById,
+  parseCollectionCellValue, readAllBundles, readBundle, readCollectionCell, readCollectionCellFromRevision,
+  readCollectionSnapshot, readJsonBounded, readJsonRef, readOperationRecords, readRevisionById,
   replaceManifestCas, requestConflict, resolveBundleRelativePath, syncFile, validatePayloadMeta,
   writeJsonExclusive, writeJsonImmutable,
-  type BundleBinding
+  type BundleBinding, type CollectionCellBinding
 } from "./managed-collection-storage";
 import {
   adoptDefaultRowAppend,
@@ -56,15 +44,6 @@ export interface ManagedCollectionRecoveryResult {
   readonly failed: number;
 }
 
-interface CellBinding {
-  readonly tableName: string;
-  readonly column: DatasetColumn;
-  readonly state: string;
-  readonly projectionKind: string;
-  readonly projectionJson: string | null;
-  readonly formulaJson: string | null;
-}
-
 interface MutationIdentity {
   readonly revisionId: string;
   readonly operationId: string;
@@ -73,7 +52,7 @@ interface MutationIdentity {
 interface CollectionOperationBinding {
   readonly datasetId: string;
   readonly tableId: string;
-  readonly rowId: string;
+  readonly rowId?: string;
   readonly columnId?: string;
   readonly beforeRevisionId: string;
   readonly afterRevisionId: string;
@@ -81,10 +60,11 @@ interface CollectionOperationBinding {
     | "collection_cell_edit"
     | "collection_cell_undo"
     | "collection_row_add"
-    | "collection_row_add_undo";
+    | "collection_row_add_undo"
+    | "collection_column_add"
+    | "collection_column_add_undo";
 }
 
-const MAX_OPEN_ROWS = 50;
 const MAX_OPEN_COLUMNS = 32;
 const MAX_STRING_BYTES = 4 * 1024;
 const OPERATION_ID = /^op_(\d{8})_[a-z0-9]{8,}$/u;
@@ -110,7 +90,7 @@ export class ManagedCollectionService {
       const binding = readBundle(active.vaultPath, parsed.datasetId);
       if (!binding) return CollectionOpenResultSchema.parse({ ...identity, status: "not_found" });
       this.#recoverActiveOperation(binding);
-      const snapshot = readSnapshot(binding, parsed.tableId);
+      const snapshot = readCollectionSnapshot(binding, parsed.tableId);
       if (!snapshot) return CollectionOpenResultSchema.parse({ ...identity, status: "not_found" });
       if (!this.#activeVault(parsed.activeVaultId)) {
         return CollectionOpenResultSchema.parse({ ...identity, status: "stale" });
@@ -133,6 +113,13 @@ export class ManagedCollectionService {
     return this.#serialize(() => this.#appendDefaultRow(parsed));
   }
 
+  async addNullableColumn(
+    request: CollectionAddNullableColumnRequest
+  ): Promise<CollectionAddNullableColumnResult> {
+    const parsed = CollectionAddNullableColumnRequestSchema.parse(request);
+    return this.#serialize(() => this.#addNullableColumn(parsed));
+  }
+
   activitySummary(operation: OperationRecord, undoOperation?: OperationRecord): KnowledgeActivitySummary | undefined {
     const binding = readOperationBinding(operation);
     if (!binding) return undefined;
@@ -146,7 +133,9 @@ export class ManagedCollectionService {
       operationId: operation.id,
       kind: binding.changeKind.startsWith("collection_row_add")
         ? "add_collection_row"
-        : "update_collection_cell",
+        : binding.changeKind.startsWith("collection_column_add")
+          ? "add_collection_column"
+          : "update_collection_cell",
       createdAt: operation.createdAt,
       ...(current?.manifest.title ? { targetLabel: current.manifest.title } : {}),
       target: {
@@ -208,12 +197,14 @@ export class ManagedCollectionService {
           binding: current,
           identity: createUndoIdentity(operation.id, binding.afterRevisionId),
           tableId: binding.tableId,
-          rowId: binding.rowId,
+          rowId: requireRowId(binding),
           expectedRevisionId: binding.afterRevisionId,
           beforeRevisionId: binding.beforeRevisionId,
           undoOfOperationId: operation.id
         })
-        : commitCellUndo(current, binding, operation.id);
+        : binding.changeKind === "collection_column_add"
+          ? commitColumnAddUndo(current, binding, operation.id)
+          : commitCellUndo(current, binding, operation.id);
       return {
         status: "undone",
         operationId: operation.id,
@@ -261,9 +252,9 @@ export class ManagedCollectionService {
           currentRevisionId: binding.manifest.activeRevision
         });
       }
-      const cell = readCell(binding, request.tableId, request.rowId, request.columnId);
+      const cell = readCollectionCell(binding, request.tableId, request.rowId, request.columnId);
       if (!cell) return CollectionCellEditResultSchema.parse({ ...identity, status: "not_found" });
-      const readOnlyReason = cellReadOnlyReason(cell);
+      const readOnlyReason = collectionCellReadOnlyReason(cell);
       if (readOnlyReason) {
         return CollectionCellEditResultSchema.parse({ ...identity, status: "not_editable", reason: readOnlyReason });
       }
@@ -310,11 +301,11 @@ export class ManagedCollectionService {
         binding,
         request,
         identity: mutationIdentity,
-        readSnapshot,
+        readSnapshot: readCollectionSnapshot,
         createOperation: createOperationForRevision
       });
       if (adopted) return CollectionAppendDefaultRowResultSchema.parse({ ...identity, ...adopted });
-      const currentSnapshot = readSnapshot(binding, request.tableId);
+      const currentSnapshot = readCollectionSnapshot(binding, request.tableId);
       if (!currentSnapshot) {
         return CollectionAppendDefaultRowResultSchema.parse({ ...identity, status: "not_found" });
       }
@@ -339,7 +330,7 @@ export class ManagedCollectionService {
       if (!this.#activeVault(request.activeVaultId)) {
         return CollectionAppendDefaultRowResultSchema.parse({ ...identity, status: "not_found" });
       }
-      const snapshot = readSnapshot(committed.binding, request.tableId);
+      const snapshot = readCollectionSnapshot(committed.binding, request.tableId);
       if (!snapshot || snapshot.revisionId !== committed.revision.id) throw operationConflict();
       return CollectionAppendDefaultRowResultSchema.parse({
         ...identity,
@@ -351,10 +342,71 @@ export class ManagedCollectionService {
     } catch (caught) {
       if (caught instanceof PigeDomainError && caught.code === "collection.request_conflict") throw caught;
       const latest = readBundle(active.vaultPath, request.datasetId);
-      const snapshot = latest ? readSnapshot(latest, request.tableId) : undefined;
+      const snapshot = latest ? readCollectionSnapshot(latest, request.tableId) : undefined;
       return snapshot
         ? CollectionAppendDefaultRowResultSchema.parse({ ...identity, status: "stale", snapshot })
         : CollectionAppendDefaultRowResultSchema.parse({ ...identity, status: "not_found" });
+    }
+  }
+
+  async #addNullableColumn(
+    request: CollectionAddNullableColumnRequest
+  ): Promise<CollectionAddNullableColumnResult> {
+    const identity = openIdentity(request);
+    const active = this.#activeVault(request.activeVaultId);
+    if (!active) return CollectionAddNullableColumnResultSchema.parse({ ...identity, status: "not_found" });
+    try {
+      const binding = readBundle(active.vaultPath, request.datasetId);
+      if (!binding) return CollectionAddNullableColumnResultSchema.parse({ ...identity, status: "not_found" });
+      const mutationIdentity = createColumnMutationIdentity(request);
+      const columnId = createNullableColumnId(request.tableId, request.requestId);
+      const adopted = adoptColumnMutation(binding, request, mutationIdentity, columnId);
+      if (adopted) return CollectionAddNullableColumnResultSchema.parse({ ...identity, ...adopted });
+      const snapshot = readCollectionSnapshot(binding, request.tableId);
+      if (!snapshot) return CollectionAddNullableColumnResultSchema.parse({ ...identity, status: "not_found" });
+      if (binding.manifest.activeRevision !== request.expectedRevisionId) {
+        return CollectionAddNullableColumnResultSchema.parse({ ...identity, status: "stale", snapshot });
+      }
+      if (!snapshot.canAddColumn) {
+        return CollectionAddNullableColumnResultSchema.parse({ ...identity, status: "invalid", reason: "column_limit" });
+      }
+      const table = binding.schema.tables.find((candidate) => candidate.id === request.tableId);
+      if (!table) return CollectionAddNullableColumnResultSchema.parse({ ...identity, status: "not_found" });
+      const normalizedLabel = normalizeColumnLabel(request.label);
+      if (table.columns.some((column) => normalizeColumnLabel(column.name) === normalizedLabel)) {
+        return CollectionAddNullableColumnResultSchema.parse({ ...identity, status: "invalid", reason: "duplicate_label" });
+      }
+      const committed = commitNullableColumnAdd({
+        binding,
+        identity: mutationIdentity,
+        tableId: request.tableId,
+        columnId,
+        label: request.label,
+        logicalType: request.logicalType,
+        expectedRevisionId: request.expectedRevisionId
+      });
+      const operation = createOperationForRevision(committed.binding, committed.revision);
+      writeJsonExclusive(operationPathFor(committed.binding.vaultPath, operation.id), operation);
+      if (!this.#activeVault(request.activeVaultId)) {
+        return CollectionAddNullableColumnResultSchema.parse({ ...identity, status: "not_found" });
+      }
+      const nextSnapshot = readCollectionSnapshot(committed.binding, request.tableId);
+      if (!nextSnapshot || nextSnapshot.revisionId !== committed.revision.id ||
+          !nextSnapshot.columns.some((column) => column.columnId === columnId)) throw operationConflict();
+      return CollectionAddNullableColumnResultSchema.parse({
+        ...identity,
+        status: "committed",
+        columnId,
+        operationId: operation.id,
+        snapshot: nextSnapshot
+      });
+    } catch (caught) {
+      if (caught instanceof PigeDomainError && caught.code === "collection.request_conflict") throw caught;
+      const latest = readBundle(active.vaultPath, request.datasetId);
+      const snapshot = latest ? readCollectionSnapshot(latest, request.tableId) : undefined;
+      return snapshot
+        ? CollectionAddNullableColumnResultSchema.parse({ ...identity, status: "stale", snapshot })
+        : CollectionAddNullableColumnResultSchema.parse({ ...identity, status: "not_found" });
     }
   }
 
@@ -420,7 +472,7 @@ function commitMutation(input: CommitMutationInput): { readonly revision: Datase
   if (!current || current.manifest.activeRevision !== input.expectedRevisionId) {
     throw new PigeDomainError("collection.revision_changed", "The Collection revision changed before commit.");
   }
-  const currentCell = readCell(current, input.tableId, input.rowId, input.columnId);
+  const currentCell = readCollectionCell(current, input.tableId, input.rowId, input.columnId);
   if (!currentCell) throw new PigeDomainError("collection.cell_not_found", "The Collection cell is unavailable.");
   const stagedRoot = path.join(current.bundlePath, ".staging", `${input.identity.revisionId}.${randomUUID()}`);
   const payloadRelativePath = `data/revisions/${input.identity.revisionId}.sqlite`;
@@ -502,180 +554,45 @@ function commitCellUndo(
   operationId: string
 ): { readonly revision: DatasetRevision; readonly operation: OperationRecord } {
   if (!binding.columnId) throw operationConflict();
+  const rowId = requireRowId(binding);
   const beforeRevision = readRevisionById(current, binding.beforeRevisionId);
-  const beforeCell = readCellFromRevision(current, beforeRevision, binding.rowId, binding.columnId);
+  const beforeCell = readCollectionCellFromRevision(current, beforeRevision, rowId, binding.columnId);
   if (!beforeCell) throw operationConflict();
   return commitMutation({
     binding: current,
     identity: createUndoIdentity(operationId, binding.afterRevisionId),
     tableId: binding.tableId,
-    rowId: binding.rowId,
+    rowId,
     columnId: binding.columnId,
-    value: parseCellValue(beforeCell, beforeCell.column.logicalType),
+    value: parseCollectionCellValue(beforeCell, beforeCell.column.logicalType),
     expectedRevisionId: binding.afterRevisionId,
     change: { kind: "collection_cell_undo", undoOfOperationId: operationId }
   });
 }
 
-function readSnapshot(binding: BundleBinding, tableId: string) {
-  const table = binding.schema.tables.find((candidate) => candidate.id === tableId);
-  if (!table) return undefined;
-  const columns = table.columns.slice(0, MAX_OPEN_COLUMNS);
-  if (columns.length === 0) return undefined;
-  const database = openReadOnlyPayload(binding.payloadPath);
-  try {
-    validatePayloadMeta(database, binding.manifest.datasetId, binding.revision.id);
-    const formulaCount = database.prepare([
-      "SELECT COUNT(*) AS count FROM pige_dataset_cells AS c",
-      "JOIN pige_dataset_rows AS r ON r.row_id = c.row_id",
-      "WHERE r.table_id = ? AND c.formula_json IS NOT NULL"
-    ].join(" ")).get(tableId) as { count?: unknown } | undefined;
-    const rows = database.prepare(
-      `SELECT row_id FROM pige_dataset_rows WHERE table_id = ? ORDER BY ordinal ASC LIMIT ${MAX_OPEN_ROWS}`
-    ).all(tableId) as Array<{ row_id?: unknown }>;
-    const statement = database.prepare(
-      "SELECT state, projection_kind, projection_json, formula_json FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
-    );
-    const projectedRows = rows.map((row) => {
-      if (typeof row.row_id !== "string") throw payloadInvalid();
-      const rowId = row.row_id;
-      const cells = columns.map((column): CollectionCell => {
-        const raw = statement.get(rowId, column.id) as Record<string, unknown> | undefined;
-        if (!raw) throw payloadInvalid();
-        const cell = parseCellRecord(column, raw);
-        const reason = cellReadOnlyReason(cell);
-        return {
-          columnId: column.id,
-          value: parseCellValue(cell, column.logicalType),
-          editable: !reason,
-          ...(reason ? { readOnlyReason: reason } : {})
-        };
-      });
-      return { rowId, cells };
-    });
-    return CollectionSnapshotSchema.parse({
-      datasetId: binding.manifest.datasetId,
-      revisionId: binding.revision.id,
-      title: binding.manifest.title,
-      tableId,
-      tableName: table.name,
-      columns: columns.map((column) => ({
-        columnId: column.id,
-        label: column.name,
-        logicalType: column.logicalType
-      })),
-      rows: projectedRows,
-      totalRowCount: table.rowCount,
-      returnedRowCount: projectedRows.length,
-      truncated: table.rowCount > projectedRows.length,
-      canAppendDefaultRow: table.columns.length <= MAX_OPEN_COLUMNS &&
-        table.columns.every((column) => column.nullable && !columnUsesFormula(column)) &&
-        formulaCount?.count === 0
-    });
-  } finally {
-    database.close();
-  }
+function commitColumnAddUndo(
+  current: BundleBinding,
+  binding: CollectionOperationBinding,
+  operationId: string
+): { readonly revision: DatasetRevision; readonly operation: OperationRecord } {
+  if (!binding.columnId) throw operationConflict();
+  const committed = commitNullableColumnUndo({
+    binding: current,
+    identity: createUndoIdentity(operationId, binding.afterRevisionId),
+    tableId: binding.tableId,
+    columnId: binding.columnId,
+    expectedRevisionId: binding.afterRevisionId,
+    beforeRevisionId: binding.beforeRevisionId,
+    undoOfOperationId: operationId
+  });
+  const operation = createOperationForRevision(committed.binding, committed.revision);
+  writeJsonExclusive(operationPathFor(committed.binding.vaultPath, operation.id), operation);
+  return { revision: committed.revision, operation };
 }
 
-function columnUsesFormula(column: DatasetColumn): boolean {
-  return [column.sourceType, ...(column.sourceTypes ?? [])]
-    .some((sourceType) => sourceType.toLowerCase().includes("formula"));
-}
-
-function readCell(binding: BundleBinding, tableId: string, rowId: string, columnId: string): CellBinding | undefined {
-  const table = binding.schema.tables.find((candidate) => candidate.id === tableId);
-  const column = table?.columns.find((candidate) => candidate.id === columnId);
-  if (!table || !column) return undefined;
-  const database = openReadOnlyPayload(binding.payloadPath);
-  try {
-    validatePayloadMeta(database, binding.manifest.datasetId, binding.revision.id);
-    const row = database.prepare("SELECT table_id FROM pige_dataset_rows WHERE row_id = ?").get(rowId) as {
-      table_id?: unknown;
-    } | undefined;
-    if (row?.table_id !== tableId) return undefined;
-    const raw = database.prepare(
-      "SELECT state, projection_kind, projection_json, formula_json FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
-    ).get(rowId, columnId) as Record<string, unknown> | undefined;
-    return raw ? { tableName: table.name, ...parseCellRecord(column, raw) } : undefined;
-  } finally {
-    database.close();
-  }
-}
-
-function readCellFromRevision(
-  binding: BundleBinding,
-  revision: DatasetRevision,
-  rowId: string,
-  columnId: string
-): CellBinding | undefined {
-  const schema = DatasetSchemaRecordSchema.parse(readJsonRef(binding.bundlePath, revision.schema));
-  const table = schema.tables.find((candidate) => candidate.columns.some((column) => column.id === columnId));
-  const column = table?.columns.find((candidate) => candidate.id === columnId);
-  if (!table || !column) return undefined;
-  assertFileRef(binding.bundlePath, revision.payload);
-  const database = openReadOnlyPayload(resolveBundleRelativePath(binding.bundlePath, revision.payload.path));
-  try {
-    validatePayloadMeta(database, revision.datasetId, revision.id);
-    const raw = database.prepare([
-      "SELECT c.state, c.projection_kind, c.projection_json, c.formula_json",
-      "FROM pige_dataset_cells AS c JOIN pige_dataset_rows AS r ON r.row_id = c.row_id",
-      "WHERE c.row_id = ? AND c.column_id = ? AND r.table_id = ?"
-    ].join(" ")).get(rowId, columnId, table.id) as Record<string, unknown> | undefined;
-    return raw ? { tableName: table.name, ...parseCellRecord(column, raw) } : undefined;
-  } finally {
-    database.close();
-  }
-}
-
-function parseCellRecord(column: DatasetColumn, raw: Record<string, unknown>): Omit<CellBinding, "tableName"> {
-  if (
-    typeof raw.state !== "string" ||
-    typeof raw.projection_kind !== "string" ||
-    !(typeof raw.projection_json === "string" || raw.projection_json === null) ||
-    !(typeof raw.formula_json === "string" || raw.formula_json === null)
-  ) throw payloadInvalid();
-  return {
-    column,
-    state: raw.state,
-    projectionKind: raw.projection_kind,
-    projectionJson: raw.projection_json,
-    formulaJson: raw.formula_json
-  };
-}
-
-function parseCellValue(cell: Omit<CellBinding, "tableName">, logicalType: DatasetLogicalType): CollectionScalarValue {
-  if (cell.state === "missing" || cell.state === "null") return null;
-  if (cell.state === "empty") return "";
-  if (cell.state !== "value" || cell.projectionJson === null) throw payloadInvalid();
-  const projection = JSON.parse(cell.projectionJson) as Record<string, unknown>;
-  switch (logicalType) {
-    case "string":
-    case "date":
-    case "datetime":
-      if (typeof projection.value !== "string") throw payloadInvalid();
-      return projection.value;
-    case "integer": {
-      const value = typeof projection.value === "number" ? projection.value : Number(projection.value);
-      if (!Number.isSafeInteger(value)) throw payloadInvalid();
-      return value;
-    }
-    case "number": {
-      const value = typeof projection.value === "number" ? projection.value : Number(projection.value);
-      if (!Number.isFinite(value)) throw payloadInvalid();
-      return value;
-    }
-    case "boolean":
-      if (typeof projection.value !== "boolean") throw payloadInvalid();
-      return projection.value;
-    case "binary":
-    case "unknown":
-      throw payloadInvalid();
-  }
-}
-
-function cellReadOnlyReason(cell: Omit<CellBinding, "tableName">): "formula" | "unsupported_type" | undefined {
-  if (cell.formulaJson !== null) return "formula";
-  return EDITABLE_TYPES.has(cell.column.logicalType) ? undefined : "unsupported_type";
+function requireRowId(binding: CollectionOperationBinding): string {
+  if (!binding.rowId) throw operationConflict();
+  return binding.rowId;
 }
 
 function validateScalar(value: CollectionScalarValue, logicalType: DatasetLogicalType): string | undefined {
@@ -699,7 +616,7 @@ function mutatePayload(
   payloadPath: string,
   revisionId: string,
   rowId: string,
-  cell: CellBinding,
+  cell: CollectionCellBinding,
   value: CollectionScalarValue
 ): void {
   const database = new DatabaseSync(payloadPath);
@@ -759,7 +676,7 @@ function encodeCellValue(value: CollectionScalarValue, logicalType: DatasetLogic
 function createNextSchema(
   current: DatasetSchemaRecord,
   revisionId: string,
-  cell: CellBinding,
+  cell: CollectionCellBinding,
   value: CollectionScalarValue
 ): DatasetSchemaRecord {
   const oldState = normalizedState(cell.state);
@@ -809,8 +726,8 @@ function adoptExistingMutation(
     revision.change.rowId !== request.rowId ||
     revision.change.columnId !== request.columnId
   ) throw requestConflict();
-  const cell = readCellFromRevision(binding, revision, request.rowId, request.columnId);
-  if (!cell || hashCanonical(parseCellValue(cell, cell.column.logicalType)) !== hashCanonical(request.value)) {
+  const cell = readCollectionCellFromRevision(binding, revision, request.rowId, request.columnId);
+  if (!cell || hashCanonical(parseCollectionCellValue(cell, cell.column.logicalType)) !== hashCanonical(request.value)) {
     throw requestConflict();
   }
   let committedBinding = binding;
@@ -841,6 +758,61 @@ function adoptExistingMutation(
   return { status: "committed", revisionId: revision.id, operationId: operation.id };
 }
 
+function adoptColumnMutation(
+  binding: BundleBinding,
+  request: CollectionAddNullableColumnRequest,
+  identity: MutationIdentity,
+  columnId: string
+): Partial<CollectionAddNullableColumnResult> | undefined {
+  const revisionPath = resolveBundleRelativePath(binding.bundlePath, `revisions/${identity.revisionId}.json`);
+  const operationPath = operationPathFor(binding.vaultPath, identity.operationId);
+  if (!fs.existsSync(revisionPath) && !fs.existsSync(operationPath)) return undefined;
+  if (!fs.existsSync(revisionPath)) throw requestConflict();
+  const revision = DatasetRevisionSchema.parse(readJsonBounded(revisionPath, MAX_COLLECTION_JSON_BYTES));
+  if (
+    revision.id !== identity.revisionId || revision.operationId !== identity.operationId ||
+    revision.parentRevisionId !== request.expectedRevisionId || revision.change?.kind !== "collection_column_add" ||
+    revision.change.tableId !== request.tableId || revision.change.columnId !== columnId
+  ) throw requestConflict();
+  const schema = DatasetSchemaRecordSchema.parse(readJsonRef(binding.bundlePath, revision.schema));
+  const column = schema.tables.find((table) => table.id === request.tableId)
+    ?.columns.find((candidate) => candidate.id === columnId);
+  if (!column || column.name !== request.label || column.logicalType !== request.logicalType || !column.nullable) {
+    throw requestConflict();
+  }
+  let committed = binding;
+  if (binding.manifest.activeRevision !== revision.id) {
+    if (binding.manifest.activeRevision !== request.expectedRevisionId) {
+      const snapshot = readCollectionSnapshot(binding, request.tableId);
+      return snapshot ? { status: "stale", snapshot } : { status: "not_found" };
+    }
+    replaceManifestCas(binding, DatasetManifestSchema.parse({
+      ...binding.manifest,
+      initialRevision: binding.manifest.initialRevision ?? binding.manifest.activeRevision,
+      activeRevision: revision.id,
+      revision: fileRef(binding.bundlePath, `revisions/${revision.id}.json`),
+      schema: revision.schema,
+      payload: revision.payload,
+      updatedAt: revision.createdAt
+    }));
+    const adopted = readBundle(binding.vaultPath, binding.manifest.datasetId);
+    if (!adopted || adopted.manifest.activeRevision !== revision.id) {
+      throw new PigeDomainError("collection.commit_uncertain", "The Collection replay could not be adopted.");
+    }
+    committed = adopted;
+  }
+  const expectedOperation = createOperationForRevision(committed, revision);
+  const operation = fs.existsSync(operationPath)
+    ? OperationRecordSchema.parse(readJsonBounded(operationPath, MAX_COLLECTION_JSON_BYTES))
+    : expectedOperation;
+  if (hashCanonical(operation) !== hashCanonical(expectedOperation)) throw requestConflict();
+  if (!fs.existsSync(operationPath)) writeJsonExclusive(operationPath, operation);
+  const snapshot = readCollectionSnapshot(committed, request.tableId);
+  return snapshot
+    ? { status: "committed", columnId, operationId: operation.id, snapshot }
+    : { status: "not_found" };
+}
+
 function createEditMutationIdentity(request: CollectionCellEditRequest): MutationIdentity {
   const dateKey = REVISION_ID.exec(request.expectedRevisionId)?.[1];
   if (!dateKey) throw requestConflict();
@@ -848,6 +820,19 @@ function createEditMutationIdentity(request: CollectionCellEditRequest): Mutatio
     revisionId: `dataset_rev_${dateKey}_${digest("pige:collection-edit:v1", request.requestId).slice(0, 20)}`,
     operationId: `op_${dateKey}_${digest("pige:collection-edit-operation:v1", request.requestId).slice(0, 20)}`
   };
+}
+
+function createColumnMutationIdentity(request: CollectionAddNullableColumnRequest): MutationIdentity {
+  const dateKey = REVISION_ID.exec(request.expectedRevisionId)?.[1];
+  if (!dateKey) throw requestConflict();
+  return {
+    revisionId: `dataset_rev_${dateKey}_${digest("pige:collection-column:v1", request.requestId).slice(0, 20)}`,
+    operationId: `op_${dateKey}_${digest("pige:collection-column-operation:v1", request.requestId).slice(0, 20)}`
+  };
+}
+
+function normalizeColumnLabel(label: string): string {
+  return label.normalize("NFKC").toLocaleLowerCase("en-US");
 }
 
 function createUndoIdentity(operationId: string, revisionId: string): MutationIdentity {
@@ -871,6 +856,7 @@ function createOperationForRevision(binding: BundleBinding, revision: DatasetRev
   const beforeRevision = readRevisionById(binding, revision.parentRevisionId);
   const schema = DatasetSchemaRecordSchema.parse(readJsonRef(binding.bundlePath, revision.schema));
   const table = schema.tables.find((candidate) => candidate.id === change.tableId);
+  const rowId = "rowId" in change ? change.rowId : undefined;
   const columnId = "columnId" in change ? change.columnId : undefined;
   const column = columnId ? table?.columns.find((candidate) => candidate.id === columnId) : undefined;
   if (!table || (columnId && !column)) throw operationConflict();
@@ -885,7 +871,7 @@ function createOperationForRevision(binding: BundleBinding, revision: DatasetRev
       checksum: fileRef(binding.bundlePath, revisionRelativePath).checksum
     },
     { kind: "table" as const, id: change.tableId },
-    { kind: "row" as const, id: change.rowId },
+    ...(rowId ? [{ kind: "row" as const, id: rowId }] : []),
     ...(columnId ? [{ kind: "column" as const, id: columnId }] : [])
   ];
   const sourceRefs = [
@@ -895,7 +881,8 @@ function createOperationForRevision(binding: BundleBinding, revision: DatasetRev
       path: `${binding.bundleRelativePath}/${beforeRelativePath}`,
       checksum: fileRef(binding.bundlePath, beforeRelativePath).checksum
     },
-    ...((change.kind === "collection_cell_undo" || change.kind === "collection_row_add_undo")
+    ...((change.kind === "collection_cell_undo" || change.kind === "collection_row_add_undo" ||
+        change.kind === "collection_column_add_undo")
       ? [{ kind: "operation" as const, id: change.undoOfOperationId }]
       : [])
   ];
@@ -904,7 +891,11 @@ function createOperationForRevision(binding: BundleBinding, revision: DatasetRev
     schemaVersion: 1,
     createdAt: revision.createdAt,
     actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
-    kind: change.kind.startsWith("collection_row_add") ? "add_collection_row" : "update_collection_cell",
+    kind: change.kind.startsWith("collection_row_add")
+      ? "add_collection_row"
+      : change.kind.startsWith("collection_column_add")
+        ? "add_collection_column"
+        : "update_collection_cell",
     targetRefs,
     sourceRefs,
     before: sourceRefs[0],
@@ -913,6 +904,10 @@ function createOperationForRevision(binding: BundleBinding, revision: DatasetRev
       ? `Restored one Collection cell through forward revision ${revision.id}.`
       : change.kind === "collection_row_add_undo"
         ? `Removed one appended Collection row through forward revision ${revision.id}.`
+        : change.kind === "collection_column_add_undo"
+          ? `Removed one added Collection column through forward revision ${revision.id}.`
+          : change.kind === "collection_column_add"
+            ? `Added one nullable Collection column through immutable revision ${revision.id}.`
         : change.kind === "collection_row_add"
           ? `Added one Collection row through immutable revision ${revision.id}.`
           : `Updated one Collection cell through immutable revision ${revision.id}.`,
@@ -923,26 +918,30 @@ function createOperationForRevision(binding: BundleBinding, revision: DatasetRev
 }
 
 function readOperationBinding(operation: OperationRecord): CollectionOperationBinding | undefined {
-  if (operation.kind !== "update_collection_cell" && operation.kind !== "add_collection_row") return undefined;
+  if (operation.kind !== "update_collection_cell" && operation.kind !== "add_collection_row" &&
+      operation.kind !== "add_collection_column") return undefined;
   const dataset = operation.targetRefs.find((ref) => ref.kind === "dataset");
   const after = operation.after?.kind === "dataset_revision" ? operation.after : undefined;
   const before = operation.before?.kind === "dataset_revision" ? operation.before : undefined;
   const table = operation.targetRefs.find((ref) => ref.kind === "table");
   const row = operation.targetRefs.find((ref) => ref.kind === "row");
   const column = operation.targetRefs.find((ref) => ref.kind === "column");
-  if (!dataset || !before || !after || !table || !row || !REVISION_ID.test(after.id)) return undefined;
-  if (operation.kind === "update_collection_cell" && !column) return undefined;
+  if (!dataset || !before || !after || !table || !REVISION_ID.test(after.id)) return undefined;
+  if (operation.kind !== "add_collection_column" && !row) return undefined;
+  if (operation.kind !== "add_collection_row" && !column) return undefined;
   const undo = operation.sourceRefs.some((ref) => ref.kind === "operation");
   return {
     datasetId: dataset.id,
     tableId: table.id,
-    rowId: row.id,
+    ...(row ? { rowId: row.id } : {}),
     ...(column ? { columnId: column.id } : {}),
     beforeRevisionId: before.id,
     afterRevisionId: after.id,
     changeKind: operation.kind === "add_collection_row"
       ? (undo ? "collection_row_add_undo" : "collection_row_add")
-      : (undo ? "collection_cell_undo" : "collection_cell_edit")
+      : operation.kind === "add_collection_column"
+        ? (undo ? "collection_column_add_undo" : "collection_column_add")
+        : (undo ? "collection_cell_undo" : "collection_cell_edit")
   };
 }
 
@@ -953,7 +952,9 @@ function isMatchingUndoOperation(original: OperationRecord, candidate: Operation
     candidate.id === createUndoOperationId(original.id) &&
     candidateBinding.changeKind === (originalBinding.changeKind === "collection_row_add"
       ? "collection_row_add_undo"
-      : "collection_cell_undo") &&
+      : originalBinding.changeKind === "collection_column_add"
+        ? "collection_column_add_undo"
+        : "collection_cell_undo") &&
     candidateBinding.datasetId === originalBinding.datasetId &&
     candidateBinding.tableId === originalBinding.tableId &&
     candidateBinding.rowId === originalBinding.rowId &&
@@ -963,7 +964,8 @@ function isMatchingUndoOperation(original: OperationRecord, candidate: Operation
 }
 
 function isUndoableCollectionChange(changeKind: CollectionOperationBinding["changeKind"]): boolean {
-  return changeKind === "collection_cell_edit" || changeKind === "collection_row_add";
+  return changeKind === "collection_cell_edit" || changeKind === "collection_row_add" ||
+    changeKind === "collection_column_add";
 }
 
 function assertOperationMatchesRevision(binding: BundleBinding, operation: OperationRecord): void {
