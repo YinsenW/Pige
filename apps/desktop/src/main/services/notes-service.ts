@@ -85,6 +85,7 @@ interface NoteRenderContext {
   readonly vaultId: string;
   readonly vaultPath: string;
   readonly pageId: string;
+  readonly pageType: NoteDocument["summary"]["pageType"];
   readonly pagePath: string;
   readonly absolutePath: string;
   readonly pageIdentity: FileIdentity;
@@ -179,6 +180,7 @@ export class NotesService {
           vaultId: vault.vaultId,
           vaultPath,
           pageId: stable.document.summary.pageId,
+          pageType: stable.document.summary.pageType,
           pagePath: stable.pagePath,
           absolutePath: stable.absolutePath,
           pageIdentity: stable.identity,
@@ -210,6 +212,7 @@ export class NotesService {
     if (!this.#editor || !context || !this.#matchesEditorContext(ownerId, context, request)) {
       return { ...identity, status: "stale" };
     }
+    if (context.pageType !== "note") return { ...identity, status: "failed" };
     const opened = this.#editor.open({ activeVaultId: request.activeVaultId, pageId: request.pageId });
     if (opened.status === "not_found") return { ...identity, status: "not_found" };
     if (
@@ -239,6 +242,9 @@ export class NotesService {
     if (!this.#editor || !context || !binding || !this.#matchesEditorContext(ownerId, context, request)) {
       return { ...identity, status: "stale", revision: request.expectedRevision };
     }
+    if (context.pageType !== "note") {
+      return { ...identity, status: "invalid", reason: "unsupported_page_type" };
+    }
     if (publicEditorRevision(binding.privateRevision) !== request.expectedRevision) {
       return { ...identity, status: "stale", revision: publicEditorRevision(binding.privateRevision) };
     }
@@ -251,7 +257,13 @@ export class NotesService {
       markdown: request.markdown
     });
     if (saved.status === "not_found") return { ...identity, status: "not_found" };
-    if (saved.status === "invalid") return { ...identity, status: "invalid", reason: "invalid_frontmatter" };
+    if (saved.status === "invalid") {
+      return {
+        ...identity,
+        status: "invalid",
+        reason: saved.invalidReason ?? "invalid_frontmatter"
+      };
+    }
     if (saved.status === "failed") return { ...identity, status: "failed" };
     if (saved.status === "stale") {
       return { ...identity, status: "stale", revision: request.expectedRevision };
