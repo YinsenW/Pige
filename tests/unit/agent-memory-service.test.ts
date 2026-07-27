@@ -47,7 +47,7 @@ describe("AgentMemoryService", () => {
     expect(service.rememberPreference({
       ...rememberRequest,
       title: "Different retry title",
-      body: "A model retry must not create a second memory effect."
+      body: "api_key=sk-retried-secret-value-123456789"
     }).id).toBe(record.id);
     expect(service.list(vaultPath, "vault_20260727_memorytest").records).toHaveLength(1);
 

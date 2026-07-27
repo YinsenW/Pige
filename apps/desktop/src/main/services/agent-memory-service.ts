@@ -60,16 +60,8 @@ export class AgentMemoryService {
   }
 
   rememberPreference(request: RememberVaultPreferenceRequest): MemoryRecordSummary {
-    const title = request.title.trim();
-    const body = request.body.trim();
-    if (!title || !body) {
-      throw new PigeDomainError("memory.input_invalid", "A remembered preference requires bounded text.");
-    }
-    if (containsRestrictedModelContent(`${title}\n${body}`)) {
-      throw new PigeDomainError("memory.secret_blocked", "Secret-like content cannot be saved as Agent memory.");
-    }
-    const registry = this.#readRegistry(request.vaultPath);
     const id = createMemoryId(request.sourceEventId);
+    const registry = this.#readRegistry(request.vaultPath);
     const existing = registry.records.find((record) => record.id === id);
     if (existing) {
       if (
@@ -81,6 +73,14 @@ export class AgentMemoryService {
       }
       this.#writeInspectableRecord(request.vaultPath, existing);
       return existing;
+    }
+    const title = request.title.trim();
+    const body = request.body.trim();
+    if (!title || !body) {
+      throw new PigeDomainError("memory.input_invalid", "A remembered preference requires bounded text.");
+    }
+    if (containsRestrictedModelContent(`${title}\n${body}`)) {
+      throw new PigeDomainError("memory.secret_blocked", "Secret-like content cannot be saved as Agent memory.");
     }
     if (registry.revision === Number.MAX_SAFE_INTEGER || registry.records.length >= 1_000) {
       throw new PigeDomainError("memory.capacity_exhausted", "The vault memory registry is full.");
