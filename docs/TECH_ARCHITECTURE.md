@@ -264,7 +264,8 @@ Responsibilities:
 - Apply the canonical [storage-root model](SOURCE_STORAGE_STRATEGY.md#3-storage-roots) and [storage strategies](SOURCE_STORAGE_STRATEGY.md#4-storage-strategies) without inventing architecture-local aliases.
 - Validate external original paths selected by the user.
 - Check whether referenced originals are available, missing, moved, or changed.
-- Provide parser/OCR workers scoped access to source assets without exposing arbitrary filesystem access to the renderer.
+- Create/adopt accepted-file ingress snapshots and make shared source-file access resolve
+  those Job-bound bytes for every parser/OCR/Dataset/evidence reader without public paths.
 - Record checksums, size, mtime, display name, original URI/path, managed copy path, and artifact references when available.
 - Never delete, move, or rewrite original referenced files during ordinary Pige jobs.
 
@@ -504,7 +505,7 @@ Parser rules:
 Current document-parser implementation:
 
 - `DocumentParserService` exposes one PDF/Office port; bounded workers cannot write the
-  vault and receive only disposable verified source snapshots.
+  vault and receive only verified views of the Job-bound ingress snapshot.
 - Main-process owners validate and atomically publish checksummed text/metadata/rendered
   Artifacts, Source Record/Page projections, and body-free Operation provenance.
 - Exact adapters, limits, locators, reuse, OCR-candidate, conflict, and recovery behavior

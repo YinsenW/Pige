@@ -240,6 +240,8 @@ Rule:
 - Never treat `.pige/runtime/` as durable vault truth; backup, restore, sync, trash,
   migration, and durable-data scans exclude it and recreate it empty when needed.
 - Promote important state to a durable job record before expensive work starts.
+- Job-bound ingress snapshots are not disposable runtime state: Source Storage retains
+  them under `.pige/private/` across restart until the Job owner proves safe release.
 
 ## 4. Vault Layout
 
@@ -265,6 +267,7 @@ Pige Vault/
     proposals/
     operations/
     private/
+      ingress-snapshots/
       reader-selection-publications/
     memory/
     skills/
@@ -286,27 +289,22 @@ Rules:
 - `.pige/db/`, `.pige/indexes/`, `.pige/cache/`, and `.pige/runtime/` are rebuildable;
   runtime owns only temporary leases/claims and is never restored as ownership truth.
 - `.pige/source-records/`, `.pige/conversations/`, `.pige/jobs/`, `.pige/proposals/`, `.pige/operations/`, `.pige/memory/`, and `.pige/skills/` are durable vault data unless explicitly excluded by the user.
-- `.pige/private/reader-selection-publications/` is a Main-only short-lived exact
-  Job/action/selection/replacement checkpoint from tool call through reconciliation, not
-  durable/sync truth. Backup/restore/sync/renderer/diagnostics/support export exclude it;
-  cancel, no-final retry, or convergence removes it.
+- `.pige/private/` is Main-only and nonportable; backup/sync/renderer/model/diagnostics/
+  export exclude it. Reader checkpoints end at cancel/retry/convergence; ingress files
+  survive restart only until exact terminal/adoption/no-reader proof.
 
 Storage roots:
 
-Root identity, compatibility names, resolution, and external-binding semantics are owned
-by [`SOURCE_STORAGE_STRATEGY.md`](SOURCE_STORAGE_STRATEGY.md#3-storage-roots). This data
-layout only requires durable knowledge/artifacts to remain portable with the vault and
-keeps machine-specific external bindings out of portable truth.
+[`SOURCE_STORAGE_STRATEGY.md`](SOURCE_STORAGE_STRATEGY.md#3-storage-roots) owns root
+identity/resolution; durable knowledge stays portable and machine bindings stay private.
 
 Local note storage control model:
 
-- The active vault path and recent vault list are machine-local settings stored outside the vault.
-- `.pige/manifest.json` stores stable vault identity and schema metadata; it must not store "the current path on this computer".
-- In v0.1, changing the note storage location means opening an existing vault or creating a new vault. Pige should not silently mutate the active vault path as a text preference.
-- If `managedCopyRoot` is inside the vault, store it as a relative vault preference in `.pige/config.json`.
-- If `managedCopyRoot` points outside the vault, assign it a stable `root_` ID in machine-local `vault-bindings.json`, keyed by `vault_id`, and record the one selected default in `VaultBindingsFileSchema.defaults`. Source records keep the root ID plus a root-relative path; raw absolute paths stay machine-local.
-- Changing the default binding affects new captures only. Existing source records keep their prior `rootId`, so a preference change cannot silently retarget evidence.
-- An unavailable root binding is an external dependency and makes affected jobs `waiting_dependency`; Pige must not guess or reveal a substitute path.
+- Vault paths are machine-local; the manifest stores identity/schema only. Location
+  changes open/create a vault. In-vault roots are relative config; external roots use
+  machine-local `root_` bindings and records keep only root ID plus relative path.
+- Defaults affect new captures only. Existing source records keep their prior `rootId`;
+  unavailable bindings wait for exact repair and never retarget evidence.
 
 Initial `.pige/config.json` shape:
 
@@ -366,6 +364,7 @@ Source locator compatibility:
 | Vault config | `.pige/config.json` | Yes | Yes | No | Yes |
 | Vault manifest | `.pige/manifest.json` | Yes | Yes | Regenerable in parts | Yes |
 | Source record | `.pige/source-records/**/*.json` | Canonical operational source evidence metadata | Yes | No; Markdown can only seed explicit repair | Yes |
+| Private ingress snapshot | `.pige/private/ingress-snapshots/` | Restart-scoped exact Job input, not source truth | No | No; release only after lifecycle proof | No |
 | In-vault managed-copy root policy | `.pige/config.json` v1 compatibility fields | Vault preference | Yes | No | Yes |
 | Active vault path | OS app data | Machine-local preference | No | No | No |
 | Recent vault list | OS app data | Machine-local preference | No | No | No |
@@ -416,7 +415,7 @@ Lifecycle rules:
 | SQLite, FTS, vector indexes, caches | Reset/rebuild repair action | May request rebuild job | Yes when stale or user resets | Job record, no tombstone | Excluded; rebuildable |
 | Diagnostics | Clear local diagnostics explicitly | Never clear to hide failure | Retention rotation after limits | Diagnostic clear event | Excluded |
 | Secrets | Revoke/delete through provider/settings flow | Never expose/delete directly | No | Secret metadata event without raw secret | Excluded |
-| Temporary runtime files | Not user-facing | Worker-owned | Yes after job/checkpoint validation | Job warning if cleanup affects recovery | Excluded |
+| Private ingress snapshots and runtime files | Not user-facing | Main/worker-owned | Snapshot only after exact terminal/adoption/no-reader proof; other temp after checkpoint validation | Job warning if cleanup affects recovery | Excluded |
 
 Trash rules:
 

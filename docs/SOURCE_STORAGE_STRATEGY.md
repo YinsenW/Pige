@@ -88,70 +88,38 @@ not authorize duplicating the body into conversation, Job, index or Provider rec
 
 ### 4.1 Copy To Source Library
 
-Pige copies the source into the configured managed-copy root.
-
-Recommended default for:
-
-- Pasted text.
-- Web captures.
-- Screenshots created inside Pige.
-- Files dropped into Pige when the original location is temporary or unclear.
-- Small-to-medium documents where backup completeness matters.
-
-Benefits:
-
-- Backup and restore are self-contained.
-- Parser and OCR jobs can rely on stable paths.
-- Future sync can transfer source assets explicitly.
-
-Tradeoffs:
-
-- Uses more disk space.
-- Large files can make backups heavy.
+Pige copies the source into the configured managed-copy root. This is the default for
+pasted text, web/Pige-created captures, temporary file locations, and ordinary documents
+where stable parsing and self-contained backup matter; the tradeoff is copy and backup size.
 
 ### 4.2 Reference Original
 
-Pige records the original file path, metadata, checksum when possible, and access state without copying the file.
-
-Recommended for:
-
-- Large video/audio files.
-- Existing organized folders the user wants to keep in place.
-- Cloud-drive folders managed outside Pige.
-- Git repositories and large project directories.
-
-Benefits:
-
-- Preserves the user's filesystem organization.
-- Avoids duplicate large files.
-
-Tradeoffs:
-
-- Backup may not include the original file.
-- The file may move, be renamed, become unavailable, or change outside Pige.
-- Pige needs clear missing-file and changed-file behavior.
+Pige privately records the original path, metadata, checksum and access state without a
+durable managed copy. It suits large or externally organized material and avoids a second
+long-term copy, but backup excludes the original and missing/change handling remains required.
 
 ### 4.3 Link To Original
 
-Pige may later create a filesystem link, alias, or symlink from a managed location to the original file when platform support and permissions are acceptable.
+`link_to_original` remains future/optional, is not a v0.1 schema value, and is never
+created silently or required for correctness. Adoption requires macOS/Windows link,
+backup and path-traversal proof.
 
-v0.1 stance:
+### 4.4 Accepted Local-File Ingress Snapshot
 
-- `link_to_original` is not a valid `SourceStorageStrategySchema` value in v0.1.
-- Treat as advanced/optional.
-- Do not rely on symlinks for core correctness.
-- Do not use links silently.
-- Validate behavior on macOS and Windows before exposing broadly.
+After Send—never staging—Source Storage creates/adopts one private immutable file and
+`IngressSnapshotDescriptor` per accepted local-file ordinal. It binds vault/parent Job/
+source/ordinal, private path, checksum, size and no-follow identity under
+`.pige/private/ingress-snapshots/`; no public SourceRecord locator, renderer, model,
+backup, sync, diagnostics or export receives it.
 
-Benefits:
+Managed copy promotes atomically or verifies one copy before release. Reference-original
+keeps private provenance/currentness; body readers use the snapshot, never the live path.
 
-- Can provide a stable Pige-visible path without copying data.
-
-Tradeoffs:
-
-- Cross-platform behavior differs.
-- Backup tools may follow links unexpectedly or omit linked content.
-- Security and path traversal behavior needs careful testing.
+Retry/restart retains it until parent/children are terminal or adopted and no reader
+remains; cancellation, rejection, drift and crash fail closed, and startup reaps only
+proven terminal/orphan ownership. Pre-Send/rejected items create none. It grants exact
+source access only; attachments grant no ambient authority but do not veto a separately
+explicit confirmed/reviewed task.
 
 ## 5. Source Record Contract
 
@@ -216,7 +184,7 @@ Rules:
 - The sidecar under `.pige/source-records/` is the sole operational source-record authority.
 - A Markdown source page is user-editable bounded sidecar projection, not owner of paths, copy resolution, checksums, or artifact locators. After accepted Agent-turn preservation, `SourcePageService` ensures one current page per accepted record before inspect citation; rejected items get none, and parent retry/restart adopts rather than duplicates it.
 - Source records must be enough to locate, verify, repair, or explain a source.
-- Agent/model/tools use Pige-owned handles, never raw paths. `reference_original` records are mutually exclusive with `managedCopy`; original identity stays private. `copy_to_source_library` requires `managedCopy`; readers branch on strategy. Always-staging is future defense-in-depth; if adopted, Job/recovery owns crash-safe cleanup, never immediate deletion.
+- Agent/model/tools use Pige-owned handles, never raw paths. `reference_original` records are mutually exclusive with `managedCopy`; original identity stays private. `copy_to_source_library` requires `managedCopy`; new accepted local files follow section 4.4 rather than strategy-specific live-path body reads.
 - Missing referenced originals should not break Markdown knowledge.
 - If an original referenced file changes, Pige records the change and may re-ingest through a normal job.
 - A source mutation writes the sidecar atomically first, then refreshes the Markdown projection using a recorded before/target hash. A crash between the writes is recovered from the sidecar and job checkpoint.
