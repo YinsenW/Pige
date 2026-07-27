@@ -40,7 +40,24 @@ import {
   type LocalDatabaseRebuildPort,
   type LocalDatabaseRebuildProgress
 } from "./local-database-rebuild-types";
-import { createMarkdownRagChunks, RAG_CHUNKER_VERSION } from "./rag-chunker";
+import { createMarkdownRagChunks } from "./rag-chunker";
+import {
+  readSemanticChunkBatch,
+  readSemanticChunkIndexStatus,
+  readSemanticChunksById,
+  type LocalDatabaseChunkIndexStatus,
+  type LocalDatabaseSemanticChunkBatch,
+  type LocalDatabaseSemanticChunkBatchRequest,
+  type LocalDatabaseSemanticChunksByIdRequest,
+  type LocalDatabaseSemanticReadPort
+} from "./local-database-semantic-chunks";
+export type {
+  LocalDatabaseChunkIndexStatus,
+  LocalDatabaseSemanticChunk,
+  LocalDatabaseSemanticChunkBatch,
+  LocalDatabaseSemanticChunkBatchRequest,
+  LocalDatabaseSemanticChunksByIdRequest
+} from "./local-database-semantic-chunks";
 import {
   createCjkSearchAugmentation,
   createQueryTerms,
@@ -63,6 +80,14 @@ export interface LocalDatabaseDriver {
   readonly searchPages: (vaultPath: string, request: RetrievalSearchRequest) => LocalDatabaseSearchResult | undefined;
   readonly knowledgeTree: (vaultPath: string) => KnowledgeTreeSnapshot | undefined;
   readonly chunkIndexStatus: (vaultPath: string) => LocalDatabaseChunkIndexStatus | undefined;
+  readonly semanticChunkBatch: (
+    vaultPath: string,
+    request: LocalDatabaseSemanticChunkBatchRequest
+  ) => LocalDatabaseSemanticChunkBatch | undefined;
+  readonly semanticChunksById: (
+    vaultPath: string,
+    request: LocalDatabaseSemanticChunksByIdRequest
+  ) => LocalDatabaseSemanticChunkBatch | undefined;
   readonly inlineReferenceRevision: (vaultPath: string) => string | undefined;
   readonly inlineReferenceCandidates: (
     vaultPath: string,
@@ -73,7 +98,6 @@ export interface LocalDatabaseDriver {
 export interface LocalDatabaseRebuildCallbacks {
   readonly onProgress?: (progress: LocalDatabaseRebuildProgress) => void;
 }
-
 export class PendingSqliteDriver implements LocalDatabaseDriver {
   readonly id = "pending_sqlite_driver";
 
@@ -94,37 +118,16 @@ export class PendingSqliteDriver implements LocalDatabaseDriver {
     };
   }
 
-  rebuild(): undefined {
-    return undefined;
-  }
-
-  listPages(): undefined {
-    return undefined;
-  }
-
-  searchPages(): undefined {
-    return undefined;
-  }
-
-  relatedPages(): undefined {
-    return undefined;
-  }
-
-  knowledgeTree(): undefined {
-    return undefined;
-  }
-
-  chunkIndexStatus(): undefined {
-    return undefined;
-  }
-
-  inlineReferenceRevision(): undefined {
-    return undefined;
-  }
-
-  inlineReferenceCandidates(): undefined {
-    return undefined;
-  }
+  rebuild(): undefined { return undefined; }
+  listPages(): undefined { return undefined; }
+  searchPages(): undefined { return undefined; }
+  relatedPages(): undefined { return undefined; }
+  knowledgeTree(): undefined { return undefined; }
+  chunkIndexStatus(): undefined { return undefined; }
+  semanticChunkBatch(): undefined { return undefined; }
+  semanticChunksById(): undefined { return undefined; }
+  inlineReferenceRevision(): undefined { return undefined; }
+  inlineReferenceCandidates(): undefined { return undefined; }
 }
 
 export interface LocalDatabasePageList {
@@ -145,13 +148,6 @@ export interface LocalDatabaseRelatedPages {
   readonly invalidPageCount: number;
   readonly outgoing: readonly LibraryRelatedPage[];
   readonly backlinks: readonly LibraryRelatedPage[];
-}
-
-export interface LocalDatabaseChunkIndexStatus {
-  readonly indexedPageCount: number;
-  readonly chunkCount: number;
-  readonly chunkerVersion: string;
-  readonly indexRevision: number;
 }
 
 export interface LocalDatabaseInlineReferenceLookup {
@@ -470,26 +466,30 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
   }
 
   chunkIndexStatus(vaultPath: string): LocalDatabaseChunkIndexStatus | undefined {
-    if (!this.ensureReady(vaultPath)) return undefined;
-    const db = openVaultDatabase(vaultPath);
-    try {
-      const row = db.prepare(`
-        SELECT COUNT(*) AS chunk_count, COUNT(DISTINCT owner_id) AS page_count,
-          MIN(chunker_version) AS min_version, MAX(chunker_version) AS max_version
-        FROM chunks
-      `).get();
-      const minimumVersion = String(row?.min_version ?? RAG_CHUNKER_VERSION);
-      const maximumVersion = String(row?.max_version ?? RAG_CHUNKER_VERSION);
-      if (minimumVersion !== maximumVersion || maximumVersion !== RAG_CHUNKER_VERSION) return undefined;
-      return {
-        indexedPageCount: toNumber(row?.page_count),
-        chunkCount: toNumber(row?.chunk_count),
-        chunkerVersion: maximumVersion,
-        indexRevision: readUserVersion(db)
-      };
-    } finally {
-      db.close();
-    }
+    return readSemanticChunkIndexStatus(this.#semanticReadPort(), vaultPath);
+  }
+
+  semanticChunkBatch(
+    vaultPath: string,
+    request: LocalDatabaseSemanticChunkBatchRequest
+  ): LocalDatabaseSemanticChunkBatch | undefined {
+    return readSemanticChunkBatch(this.#semanticReadPort(), vaultPath, request);
+  }
+
+  semanticChunksById(
+    vaultPath: string,
+    request: LocalDatabaseSemanticChunksByIdRequest
+  ): LocalDatabaseSemanticChunkBatch | undefined {
+    return readSemanticChunksById(this.#semanticReadPort(), vaultPath, request);
+  }
+
+  #semanticReadPort(): LocalDatabaseSemanticReadPort {
+    return {
+      openDatabase: openVaultDatabase,
+      ensureReady: (vaultPath) => this.ensureReady(vaultPath),
+      needsRebuild: (vaultPath) => this.needsRebuild(vaultPath),
+      rowToSummary
+    };
   }
 
   inlineReferenceRevision(vaultPath: string): string | undefined {
@@ -661,7 +661,6 @@ interface InlineReferenceWatchState {
 export class LocalDatabaseService {
   readonly #backgroundRebuilder: LocalDatabaseRebuildPort | undefined;
   readonly #driver: LocalDatabaseDriver;
-
   constructor(
     driver: LocalDatabaseDriver = new NodeSqliteDriver(),
     backgroundRebuilder?: LocalDatabaseRebuildPort
@@ -675,13 +674,8 @@ export class LocalDatabaseService {
     return this.#driver.status(vaultPath);
   }
 
-  status(vaultPath: string): LocalDatabaseStatus {
-    return this.#driver.status(vaultPath);
-  }
-
-  rebuild(vaultPath: string): LocalDatabaseRebuildResult | undefined {
-    return this.#driver.rebuild(vaultPath);
-  }
+  status(vaultPath: string): LocalDatabaseStatus { return this.#driver.status(vaultPath); }
+  rebuild(vaultPath: string): LocalDatabaseRebuildResult | undefined { return this.#driver.rebuild(vaultPath); }
 
   rebuildInWorker(
     vaultPath: string,
@@ -699,26 +693,32 @@ export class LocalDatabaseService {
   listPages(vaultPath: string, request?: LibraryListRequest): LocalDatabasePageList | undefined {
     return this.#driver.listPages(vaultPath, request);
   }
-
   searchPages(vaultPath: string, request: RetrievalSearchRequest): LocalDatabaseSearchResult | undefined {
     return this.#driver.searchPages(vaultPath, request);
   }
-
   relatedPages(vaultPath: string, request: LibraryRelatedRequest): LocalDatabaseRelatedPages | undefined {
     return this.#driver.relatedPages(vaultPath, request);
   }
-
-  knowledgeTree(vaultPath: string): KnowledgeTreeSnapshot | undefined {
-    return this.#driver.knowledgeTree(vaultPath);
-  }
-
+  knowledgeTree(vaultPath: string): KnowledgeTreeSnapshot | undefined { return this.#driver.knowledgeTree(vaultPath); }
   chunkIndexStatus(vaultPath: string): LocalDatabaseChunkIndexStatus | undefined {
     return this.#driver.chunkIndexStatus(vaultPath);
   }
 
-  inlineReferenceRevision(vaultPath: string): string | undefined {
-    return this.#driver.inlineReferenceRevision(vaultPath);
+  semanticChunkBatch(
+    vaultPath: string,
+    request: LocalDatabaseSemanticChunkBatchRequest
+  ): LocalDatabaseSemanticChunkBatch | undefined {
+    return this.#driver.semanticChunkBatch(vaultPath, request);
   }
+
+  semanticChunksById(
+    vaultPath: string,
+    request: LocalDatabaseSemanticChunksByIdRequest
+  ): LocalDatabaseSemanticChunkBatch | undefined {
+    return this.#driver.semanticChunksById(vaultPath, request);
+  }
+
+  inlineReferenceRevision(vaultPath: string): string | undefined { return this.#driver.inlineReferenceRevision(vaultPath); }
 
   inlineReferenceCandidates(
     vaultPath: string,

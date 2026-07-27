@@ -1,4 +1,5 @@
 import path from "node:path";
+import { nativeSemanticRuntimeTarget } from "./native-semantic-runtime-targets.mjs";
 
 const definitions = {
   "macos-arm64": {
@@ -24,7 +25,8 @@ const definitions = {
     nativeSmokeScripts: [
       "scripts/verify/macos-vision-ocr-helper-smoke.mjs",
       "scripts/verify/macos-speech-helper-smoke.mjs"
-    ]
+    ],
+    nativeSemantic: nativeSemanticRuntimeTarget("macos", "arm64")
   },
   "windows-x64": {
     platform: "windows",
@@ -41,7 +43,8 @@ const definitions = {
     packagedRuntimeSmokeTimeoutMs: 120_000,
     requiredResourceFiles: [],
     requiredSbomComponents: [],
-    nativeSmokeScripts: []
+    nativeSmokeScripts: [],
+    nativeSemantic: nativeSemanticRuntimeTarget("windows", "x64")
   }
 };
 

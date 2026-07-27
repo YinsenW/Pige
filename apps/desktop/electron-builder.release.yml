@@ -4,6 +4,8 @@ forceCodeSigning: true
 asar: true
 asarUnpack:
   - "**/*.node"
+  - "**/node_modules/@node-llama-cpp/*/bins/**"
+  - "**/node_modules/sqlite-vec-*/**"
 files:
   - out/**
   - package.json

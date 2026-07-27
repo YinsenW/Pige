@@ -2578,7 +2578,7 @@ export const RetrievalSearchResultSchema = z.object({
     (value) => Array.from(value).length <= 320,
     "Retrieval queries must contain at most 320 Unicode characters."
   ),
-  mode: z.enum(["lexical_markdown_scan", "lexical_sqlite_fts"]),
+  mode: z.enum(["lexical_markdown_scan", "lexical_sqlite_fts", "semantic_hybrid"]),
   total: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   invalidPageCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   degraded: z.boolean(),

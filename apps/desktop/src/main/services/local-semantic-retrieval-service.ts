@@ -21,6 +21,7 @@ import {
   type LocalSemanticRetrievalAssetStorePort,
   type VerifiedLocalSemanticAsset
 } from "./local-semantic-retrieval-asset-store";
+import type { LocalSemanticAssetLease } from "./local-semantic-embedding-runtime";
 
 const ASSET_URL = "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/" +
   "c2602621d50895a7b8277ddd4a8c31e699c9d002/Qwen3-Embedding-0.6B-Q8_0.gguf";
@@ -39,6 +40,7 @@ interface LocalSemanticRetrievalServiceOptions {
   readonly store?: LocalSemanticRetrievalAssetStorePort;
   readonly transport?: LocalSemanticAssetTransport;
   readonly now?: () => Date;
+  readonly onAssetRevoked?: () => void | Promise<void>;
 }
 
 type MutationRequest = LocalSemanticRetrievalInstallRequest;
@@ -47,12 +49,14 @@ export class LocalSemanticRetrievalService {
   readonly #store: LocalSemanticRetrievalAssetStorePort;
   readonly #transport: LocalSemanticAssetTransport;
   readonly #now: () => Date;
+  readonly #onAssetRevoked: () => void | Promise<void>;
   #verifiedBinding: VerifiedLocalSemanticAsset | undefined;
 
   constructor(options: LocalSemanticRetrievalServiceOptions) {
     this.#store = options.store ?? new LocalSemanticRetrievalAssetStore(options.appDataRoot);
     this.#transport = options.transport ?? createFetchLocalSemanticAssetTransport();
     this.#now = options.now ?? (() => new Date());
+    this.#onAssetRevoked = options.onAssetRevoked ?? (() => undefined);
   }
 
   status(_request: LocalSemanticRetrievalStatusRequest): LocalSemanticRetrievalStatus {
@@ -85,6 +89,7 @@ export class LocalSemanticRetrievalService {
       })
     });
     try {
+      this.#revokeVerifiedBinding();
       this.#store.discardStaging();
       this.#store.write(accepted);
     } catch {
@@ -110,7 +115,7 @@ export class LocalSemanticRetrievalService {
       this.#verifiedBinding = await this.#store.verify();
       return this.#recordMutation(record, request, "enable", "committed", "ready");
     } catch {
-      this.#verifiedBinding = undefined;
+      this.#revokeVerifiedBinding();
       const repaired = this.#writeRepairState(record);
       return mutationResult(request, repaired.revision, "failed");
     }
@@ -128,6 +133,7 @@ export class LocalSemanticRetrievalService {
       return mutationResult(request, record.revision, "stale");
     }
     if (record.state === "disabled") return mutationResult(request, record.revision, "committed");
+    this.#revokeVerifiedBinding();
     return this.#recordMutation(record, request, "disable", "committed", "disabled");
   }
 
@@ -141,7 +147,7 @@ export class LocalSemanticRetrievalService {
       return mutationResult(request, record.revision, "stale");
     }
     try {
-      this.#verifiedBinding = undefined;
+      this.#revokeVerifiedBinding();
       const withdrawn = nextRecord(record, this.#now(), { state: "not_installed", receipts: record.receipts });
       this.#store.write(withdrawn);
       this.#store.removeAsset();
@@ -158,15 +164,35 @@ export class LocalSemanticRetrievalService {
     return record.state === "ready" && this.#store.stillMatches(this.#verifiedBinding);
   }
 
+  createEmbeddingAssetLease(): LocalSemanticAssetLease | undefined {
+    let record: LocalSemanticAssetRecord;
+    try { record = this.#read(); } catch { return undefined; }
+    const binding = this.#verifiedBinding;
+    if (record.state !== "ready" || !binding || !this.#store.stillMatches(binding)) return undefined;
+    const identity = [record.revision, binding.dev, binding.ino, binding.size, binding.mtimeMs].join(":");
+    return {
+      path: binding.path,
+      identity,
+      stillCurrent: () => {
+        try {
+          return this.#verifiedBinding === binding && this.#read().state === "ready" &&
+            this.#store.stillMatches(binding);
+        } catch {
+          return false;
+        }
+      }
+    };
+  }
+
   async recover(): Promise<void> {
     let record: LocalSemanticAssetRecord;
     try { record = this.#read(); } catch {
-      this.#verifiedBinding = undefined;
+      this.#revokeVerifiedBinding();
       return;
     }
     try {
       if (record.state === "not_installed") {
-        this.#verifiedBinding = undefined;
+        this.#revokeVerifiedBinding();
         this.#store.removeAsset();
         this.#store.discardStaging();
         return;
@@ -178,7 +204,7 @@ export class LocalSemanticRetrievalService {
       }
       this.#store.discardStaging();
     } catch {
-      this.#verifiedBinding = undefined;
+      this.#revokeVerifiedBinding();
       this.#store.discardStaging();
       this.#writeRepairState(record);
     }
@@ -199,7 +225,7 @@ export class LocalSemanticRetrievalService {
       this.#store.write(nextRecord(current, this.#now(), { state: "disabled", receipts: current.receipts }));
       this.#store.discardStaging();
     } catch {
-      this.#verifiedBinding = undefined;
+      this.#revokeVerifiedBinding();
       try {
         const current = this.#read();
         if (sameActiveInstall(current, requestId, jobId)) this.#writeRepairState(current);
@@ -234,6 +260,11 @@ export class LocalSemanticRetrievalService {
 
   #read(): LocalSemanticAssetRecord {
     return this.#store.read(this.#now().toISOString());
+  }
+
+  #revokeVerifiedBinding(): void {
+    this.#verifiedBinding = undefined;
+    void Promise.resolve(this.#onAssetRevoked()).catch(() => undefined);
   }
 }
 

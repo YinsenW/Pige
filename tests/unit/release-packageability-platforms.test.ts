@@ -17,6 +17,12 @@ import {
   parseMacCodeSignatureDescription,
   sanitizeElectronBuilderEnvironment
 } from "../../scripts/release/packageability-security.mjs";
+import {
+  allNativeSemanticPackageNames,
+  isAllowedNativeSemanticOptionalPackage,
+  nativeSemanticRuntimeTarget,
+  pruneNativeSemanticRuntimePackages
+} from "../../scripts/release/native-semantic-runtime-targets.mjs";
 import { isUnsupportedDirectoryFsync } from "../../apps/desktop/src/main/services/local-settings";
 
 const root = process.cwd();
@@ -38,6 +44,12 @@ describe("release packageability platforms", () => {
       "scripts/verify/macos-vision-ocr-helper-smoke.mjs",
       "scripts/verify/macos-speech-helper-smoke.mjs"
     ]);
+    expect(target.nativeSemantic).toEqual(nativeSemanticRuntimeTarget("macos", "arm64"));
+    expect(target.nativeSemantic).toMatchObject({
+      llamaPackage: "@node-llama-cpp/mac-arm64-metal",
+      sqlitePackage: "sqlite-vec-darwin-arm64",
+      embeddingBackend: "metal"
+    });
     expect(findDistributableNames(["Pige-0.0.0-arm64.zip", "latest-mac.yml"], target)).toEqual([
       "Pige-0.0.0-arm64.zip"
     ]);
@@ -59,6 +71,11 @@ describe("release packageability platforms", () => {
     expect(target.requiredResourceFiles).toEqual([]);
     expect(target.requiredSbomComponents).toEqual([]);
     expect(target.nativeSmokeScripts).toEqual([]);
+    expect(target.nativeSemantic).toMatchObject({
+      llamaPackage: "@node-llama-cpp/win-x64",
+      sqlitePackage: "sqlite-vec-windows-x64",
+      embeddingBackend: "cpu"
+    });
     expect(findDistributableNames([
       "Pige-0.0.0-x64-setup.exe",
       "Pige-0.0.0-x64-setup.exe.blockmap",
@@ -69,6 +86,29 @@ describe("release packageability platforms", () => {
     expect(paths.executablePath).toBe(path.join("/repo", "artifacts/release-packageability/windows-x64/win-unpacked/Pige.exe"));
     expect(paths.reportPath).toBe(path.join("/repo", "artifacts/test-reports/packageability/windows-x64/build-1/report.json"));
     expect(() => assertPackageabilityHost(target, "darwin")).toThrow(/requires host win32/u);
+  });
+
+  it("prunes every native semantic backend except the exact reviewed target pair", () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pige-native-semantic-prune-"));
+    try {
+      const target = nativeSemanticRuntimeTarget("macos", "arm64");
+      for (const packageName of allNativeSemanticPackageNames()) {
+        const packageRoot = path.join(tempRoot, "node_modules", ...packageName.split("/"));
+        fs.mkdirSync(packageRoot, { recursive: true });
+        fs.writeFileSync(path.join(packageRoot, "package.json"), "{}\n", "utf8");
+      }
+
+      expect(pruneNativeSemanticRuntimePackages(tempRoot, "macos", "arm64")).toBe(target);
+      for (const packageName of allNativeSemanticPackageNames()) {
+        expect(fs.existsSync(path.join(tempRoot, "node_modules", ...packageName.split("/"))))
+          .toBe(packageName === target.llamaPackage || packageName === target.sqlitePackage);
+      }
+      expect(isAllowedNativeSemanticOptionalPackage(target.llamaPackage, "macos", "arm64")).toBe(true);
+      expect(isAllowedNativeSemanticOptionalPackage("@node-llama-cpp/win-x64", "macos", "arm64")).toBe(false);
+      expect(isAllowedNativeSemanticOptionalPackage("ordinary-runtime", "macos", "arm64")).toBe(true);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it("rejects unsupported platform and architecture combinations", () => {
@@ -120,6 +160,7 @@ describe("release packageability platforms", () => {
     const builderConfig = fs.readFileSync(path.join(root, "apps/desktop/electron-builder.yml"), "utf8");
     const builderRunner = fs.readFileSync(path.join(root, "scripts/release/run-electron-builder.mjs"), "utf8");
     const packagedSmoke = fs.readFileSync(path.join(root, "scripts/release/packaged-electron-smoke.mjs"), "utf8");
+    const packageResources = fs.readFileSync(path.join(root, "scripts/release/prepare-package-resources.mjs"), "utf8");
     const macosHelperBuild = fs.readFileSync(path.join(root, "scripts/build/macos-vision-ocr-helper.mjs"), "utf8");
     const macosSpeechBuild = fs.readFileSync(path.join(root, "scripts/build/macos-speech-helper.mjs"), "utf8");
     const macosAdHocSigner = fs.readFileSync(path.join(root, "scripts/release/sign-macos-ad-hoc.mjs"), "utf8");
@@ -150,6 +191,14 @@ describe("release packageability platforms", () => {
     expect(builderConfig).toContain("entitlements: null");
     expect(builderConfig).toContain("entitlementsInherit: null");
     expect(builderConfig).toContain("preAutoEntitlements: false");
+    expect(builderConfig).toContain('"**/node_modules/@node-llama-cpp/*/bins/**"');
+    expect(builderConfig).toContain('"**/node_modules/sqlite-vec-*/**"');
+    expect(packageResources).toContain("pruneNativeSemanticRuntimePackages");
+    expect(packageResources).not.toContain("packageJson.peerDependencies");
+    expect(packageResources).toContain('const llamaCppRef = "pkg:generic/llama.cpp@b8390"');
+    expect(packagedSmoke).toContain("verifyNativeSemanticRuntimeFiles(unpackedRoot, target)");
+    expect(packagedSmoke).toContain('report.semanticRuntime?.embedding?.buildType !== "prebuilt"');
+    expect(packagedSmoke).toContain('report.semanticRuntime?.sqliteVec !== true');
     expect(packagedSmoke).toContain("runtimeIdentity?.isPackaged !== true");
     expect(packagedSmoke).toContain('["-x", "-k", distributablePath, distributionRoot]');
     expect(packagedSmoke).toContain('["--verify", "--deep", "--strict", "--verbose=2"');

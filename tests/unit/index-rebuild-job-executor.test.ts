@@ -59,6 +59,39 @@ describe("IndexRebuildJobExecutor", () => {
     });
   });
 
+  it("rebuilds semantic vectors in the same Job and preserves lexical completion on semantic failure", async () => {
+    const readyFixture = makeQueuedJob("job_20260723_indexsemantic1", "/vault-semantic");
+    const failedFixture = makeQueuedJob("job_20260723_indexsemantic2", "/vault-semantic");
+    const semanticRebuild = vi.fn()
+      .mockResolvedValueOnce("ready")
+      .mockResolvedValueOnce("failed");
+    let queuedCall = 0;
+    const fixtures = [readyFixture, failedFixture];
+    const executor = new IndexRebuildJobExecutor({
+      rebuildInWorker: async () => ({
+        rebuiltAt: "2026-07-23T03:00:00.000Z",
+        pageCount: 2,
+        invalidPageCount: 0
+      })
+    }, {
+      bind: () => ({ vaultPath: "/vault-semantic" }),
+      createJob: () => readyFixture.job,
+      queued: () => [fixtures[queuedCall++]!.candidate],
+      appendActivity: vi.fn()
+    }, { rebuild: semanticRebuild });
+
+    await expect(executor.process()).resolves.toMatchObject({ completed: 1, failed: 0 });
+    await expect(executor.process()).resolves.toMatchObject({ completed: 1, failed: 0 });
+
+    expect(semanticRebuild).toHaveBeenNthCalledWith(1, "/vault-semantic", readyFixture.control.signal);
+    expect(semanticRebuild).toHaveBeenNthCalledWith(2, "/vault-semantic", failedFixture.control.signal);
+    expect(readyFixture.complete).toHaveBeenCalledWith("completed", expect.stringContaining("2 pages"));
+    expect(failedFixture.complete).toHaveBeenCalledWith(
+      "completed_with_warnings",
+      expect.stringContaining("lexical search is available")
+    );
+  });
+
   it("keeps a queued job waiting when the local database capability is unavailable", async () => {
     const fixture = makeQueuedJob("job_20260723_index0002", "/vault-b");
     const executor = new IndexRebuildJobExecutor(undefined, {

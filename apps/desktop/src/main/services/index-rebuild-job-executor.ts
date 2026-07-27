@@ -55,14 +55,24 @@ export interface IndexRebuildDatabasePort {
   ): Promise<LocalDatabaseRebuildResult>;
 }
 
+export interface IndexRebuildSemanticPort {
+  rebuild(vaultPath: string, signal?: AbortSignal): Promise<"ready" | "skipped" | "failed">;
+}
+
 export class IndexRebuildJobExecutor {
   readonly #database: IndexRebuildDatabasePort | undefined;
+  readonly #semantic: IndexRebuildSemanticPort | undefined;
   readonly #port: IndexRebuildJobExecutorPort;
   #tail: Promise<void> = Promise.resolve();
 
-  constructor(database: IndexRebuildDatabasePort | undefined, port: IndexRebuildJobExecutorPort) {
+  constructor(
+    database: IndexRebuildDatabasePort | undefined,
+    port: IndexRebuildJobExecutorPort,
+    semantic?: IndexRebuildSemanticPort
+  ) {
     this.#database = database;
     this.#port = port;
+    this.#semantic = semantic;
   }
 
   async request(): Promise<LocalDatabaseRebuildResult> {
@@ -116,6 +126,12 @@ export class IndexRebuildJobExecutor {
         execution.control.throwIfCancellationRequested();
         let completionState: Extract<JobState, "completed" | "completed_with_warnings"> = "completed";
         let message = `Index rebuilt from Markdown: ${rebuild.pageCount} pages, ${rebuild.invalidPageCount} invalid pages skipped.`;
+        const semantic = await this.#semantic?.rebuild(candidate.vaultPath, execution.control.signal);
+        execution.control.throwIfCancellationRequested();
+        if (semantic === "failed") {
+          completionState = "completed_with_warnings";
+          message = `${message} Semantic vectors remain on the previous generation; lexical search is available.`;
+        }
         try {
           this.#port.appendActivity(
             candidate.vaultPath,

@@ -4,6 +4,8 @@ forceCodeSigning: false
 asar: true
 asarUnpack:
   - "**/*.node"
+  - "**/node_modules/@node-llama-cpp/*/bins/**"
+  - "**/node_modules/sqlite-vec-*/**"
 directories:
   output: ../../artifacts/release-packageability/macos-arm64
 files:

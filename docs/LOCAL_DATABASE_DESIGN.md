@@ -203,13 +203,10 @@ Rules:
 
 ## 7. Vector And FTS Strategy
 
-v0.1:
-
-- Use SQLite FTS5 for lexical search; store chunk metadata and embedding refs in SQLite.
-- Keep vectors in a controlled local index/table. Adopt `sqlite-vec` only after package,
-  performance and extension-loading safety proof.
-
-The vector store is a derived cache. It can be rebuilt from Markdown, source pages, artifacts, memory text, and local embedding model output.
+FTS5 remains fallback; B6.07 owns body-free chunks. B6.06 keeps 1,024-float vectors in a
+separate derived `.pige/indexes/vectors/` DB, loads one packaged `sqlite-vec@0.1.9` file,
+immediately revokes extension loading and uses BigInt row IDs. Model/dimension/chunker/
+database/generation drift requires atomic rebuild; deletion never deletes knowledge.
 
 ## 8. Schema Areas
 

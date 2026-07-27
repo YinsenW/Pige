@@ -54,6 +54,10 @@ const requiredEntries = [
   "/out/renderer/index.html",
   "/node_modules/@earendil-works/pi-agent-core/package.json",
   "/node_modules/@earendil-works/pi-ai/package.json",
+  "/node_modules/node-llama-cpp/package.json",
+  `/node_modules/${target.nativeSemantic.llamaPackage}/package.json`,
+  "/node_modules/sqlite-vec/package.json",
+  `/node_modules/${target.nativeSemantic.sqlitePackage}/package.json`,
   "/package.json"
 ];
 
@@ -89,6 +93,7 @@ try {
   const extractedRoot = path.join(tempRoot, "app");
   extractAll(distributedApplication.asarPath, extractedRoot);
   const unpackedRoot = `${distributedApplication.asarPath}.unpacked`;
+  verifyNativeSemanticRuntimeFiles(unpackedRoot, target);
   if (fs.existsSync(unpackedRoot)) fs.cpSync(unpackedRoot, extractedRoot, { recursive: true, force: true });
 
   const macSigning = target.platform === "macos"
@@ -158,6 +163,7 @@ try {
     checks: {
       mainPreloadRenderer,
       embeddedPi: packagedRuntimeResult.pi,
+      nativeSemanticRuntime: packagedRuntimeResult.semanticRuntime,
       parserWorkers: true,
       indexWorker: true,
       platformNativeOcr: target.platform === "macos",
@@ -432,6 +438,9 @@ function runPackagedPiSmoke({ executablePath, tempRoot, target }) {
     report.runtimeIdentity?.appName !== "Pige" ||
     report.runtimeIdentity?.appVersion !== "0.0.0" ||
     report.runtimeIdentity?.isPackaged !== true ||
+    report.semanticRuntime?.embedding?.buildType !== "prebuilt" ||
+    report.semanticRuntime?.embedding?.backend !== target.nativeSemantic.embeddingBackend ||
+    report.semanticRuntime?.sqliteVec !== true ||
     report.pi?.adapterMode !== "embedded_pi_sdk" ||
     report.pi?.modelId !== "pi-smoke-model" ||
     report.pi?.publicationCount !== 1 ||
@@ -451,6 +460,7 @@ function runPackagedPiSmoke({ executablePath, tempRoot, target }) {
   }
   return {
     runtimeIdentity: report.runtimeIdentity,
+    semanticRuntime: report.semanticRuntime,
     pi: {
       adapterMode: report.pi.adapterMode,
       modelId: report.pi.modelId,
@@ -474,7 +484,7 @@ function readPackagedRuntimeSmokeReport(reportPath) {
 
 function isPackagedRuntimeSmokeFailure(failure) {
   const allowedStages = new Set([
-    "runtime_import", "pi_runtime", "home_runtime", "renderer_window",
+    "runtime_import", "native_semantic_runtime", "pi_runtime", "home_runtime", "renderer_window",
     "renderer_load", "renderer_probe", "report_write"
   ]);
   if (!failure || typeof failure !== "object" || !allowedStages.has(failure.stage)) return false;
@@ -486,6 +496,15 @@ function isPackagedRuntimeSmokeFailure(failure) {
   return booleanKeys.every((key) => typeof checks[key] === "boolean") &&
     Array.isArray(checks.missingRequiredRuntimeModuleIds) &&
     checks.missingRequiredRuntimeModuleIds.every((id) => typeof id === "string" && id.length <= 80);
+}
+
+function verifyNativeSemanticRuntimeFiles(unpackedRoot, target) {
+  for (const relativePath of target.nativeSemantic.nativeFiles) {
+    const filePath = path.join(unpackedRoot, ...relativePath.split("/"));
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+      throw new Error(`Packaged native semantic runtime is missing ${path.basename(relativePath)}.`);
+    }
+  }
 }
 
 function runNodeSmoke(scriptPath, extraEnvironment) {
@@ -598,6 +617,8 @@ function verifyPackageResources(releaseResourcesPath, target) {
   for (const name of [
     "electron", "@earendil-works/pi-agent-core", "@earendil-works/pi-ai", "pdfjs-dist",
     "@napi-rs/canvas", "mammoth", "fast-xml-parser", "@mozilla/readability", "jsdom", "undici",
+    "node-llama-cpp", target.nativeSemantic.llamaPackage, "sqlite-vec",
+    target.nativeSemantic.sqlitePackage, "llama.cpp",
     ...target.requiredSbomComponents
   ]) {
     if (!componentNames.has(name)) throw new Error(`Packaged SBOM is missing ${name}.`);

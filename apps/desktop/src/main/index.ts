@@ -193,7 +193,16 @@ import { writeBackupCreatedOperation } from "./services/restore-job-store";
 import { handleRetrievalSearchIpc } from "./services/retrieval-search-ipc";
 import { RetrievalService } from "./services/retrieval-service";
 import { JsonSecretStore } from "./services/secret-store";
+import { LocalRagEngineService } from "./services/local-rag-engine-service";
+import {
+  LocalSemanticEmbeddingRuntime,
+  probePackagedLocalSemanticRuntime
+} from "./services/local-semantic-embedding-runtime";
 import { LocalSemanticRetrievalService } from "./services/local-semantic-retrieval-service";
+import {
+  createPackagedSqliteVectorIndexDriver,
+  probePackagedSqliteVectorRuntime
+} from "./services/sqlite-vector-index-driver";
 import { guardSettingAction, type SettingActionConfirmation } from "./services/setting-action-guard";
 import { getSettingsRegistry } from "./services/settings-registry";
 import { ToolchainService } from "./services/toolchain-service";
@@ -256,6 +265,8 @@ let readerSelectionProposalService: ReaderSelectionProposalService | undefined;
 let proposalService: ProposalService | undefined;
 let retrievalService: RetrievalService | undefined;
 let localSemanticRetrievalService: LocalSemanticRetrievalService | undefined;
+let localSemanticEmbeddingRuntime: LocalSemanticEmbeddingRuntime | undefined;
+let localRagEngineService: LocalRagEngineService | undefined;
 let documentParserService: DocumentParserService | undefined;
 let datasetQueryService: DatasetQueryService | undefined;
 let datasetService: DatasetService | undefined;
@@ -321,6 +332,7 @@ let indexRebuildDrainer: CoalescedBatchDrainer<ProcessQueuedIndexRebuildResult> 
 
 type PackagedRuntimeSmokeStage =
   | "runtime_import"
+  | "native_semantic_runtime"
   | "pi_runtime"
   | "home_runtime"
   | "renderer_window"
@@ -829,7 +841,10 @@ const getJobsService = (): JobsService => {
       getDocumentParserService(),
       getOcrService(),
       getDatasetService(),
-      getJobClassExecutorRegistry()
+      getJobClassExecutorRegistry(),
+      undefined,
+      undefined,
+      getLocalRagEngineService()
     );
   }
   return jobsService;
@@ -957,14 +972,14 @@ const getAgentIngestService = (): AgentIngestService => {
 };
 
 const createAgentIngestRetrievalPort = (): AgentIngestRetrievalPort => ({
-  search: (vaultPath, request) => {
+  search: async (vaultPath, request) => {
     if (getVaultService().activeVaultPath() !== vaultPath) {
       throw new PigeDomainError(
         "vault.binding_changed",
         "The active vault changed before Agent-selected retrieval."
       );
     }
-    const result = getRetrievalService().search(request);
+    const result = await getRetrievalService().searchCurrent(request);
     if (getVaultService().activeVaultPath() !== vaultPath) {
       throw new PigeDomainError(
         "vault.binding_changed",
@@ -1020,7 +1035,10 @@ const getHomeAgentService = (): HomeAgentService => {
     homeAgentService = new HomeAgentService(
       getVaultService(),
       getModelProviderRegistry(),
-      getRetrievalService(),
+      {
+        search: (request) => getRetrievalService().searchCurrent(request),
+        readExactSelectedEvidence: (result) => getRetrievalService().readExactSelectedEvidence(result)
+      },
       getJobsService(),
       undefined,
       { snapshot: getAgentCapabilitySnapshot },
@@ -1135,7 +1153,7 @@ const getAgentCapabilitySnapshot = (): AgentIngestCapabilitySnapshot => {
     speechInputAvailable: false,
     embeddingModelInstalled: getLocalSemanticRetrievalService().embeddingModelInstalled(),
     lexicalSearchAvailable: localDatabaseStatus === "ready",
-    vectorSearchAvailable: false,
+    vectorSearchAvailable: vaultPath ? getLocalRagEngineService().availableNow(vaultPath) : false,
     rerankerAvailable: false
   };
 };
@@ -1248,15 +1266,42 @@ const getManagedCollectionService = (): ManagedCollectionService => {
 
 const getRetrievalService = (): RetrievalService => {
   if (!retrievalService) {
-    retrievalService = new RetrievalService(getVaultService(), getLocalDatabaseService());
+    retrievalService = new RetrievalService(
+      getVaultService(),
+      getLocalDatabaseService(),
+      getLocalRagEngineService()
+    );
   }
   return retrievalService;
+};
+
+const getLocalSemanticEmbeddingRuntime = (): LocalSemanticEmbeddingRuntime => {
+  if (!localSemanticEmbeddingRuntime) {
+    localSemanticEmbeddingRuntime = new LocalSemanticEmbeddingRuntime({
+      createAssetLease: () => getLocalSemanticRetrievalService().createEmbeddingAssetLease()
+    });
+  }
+  return localSemanticEmbeddingRuntime;
+};
+
+const getLocalRagEngineService = (): LocalRagEngineService => {
+  if (!localRagEngineService) {
+    localRagEngineService = new LocalRagEngineService({
+      database: getLocalDatabaseService(),
+      embeddings: getLocalSemanticEmbeddingRuntime(),
+      createVectorPort: (vaultPath) => createPackagedSqliteVectorIndexDriver({
+        rootPath: join(vaultPath, ".pige", "indexes", "vectors")
+      })
+    });
+  }
+  return localRagEngineService;
 };
 
 const getLocalSemanticRetrievalService = (): LocalSemanticRetrievalService => {
   if (!localSemanticRetrievalService) {
     localSemanticRetrievalService = new LocalSemanticRetrievalService({
-      appDataRoot: app.getPath("userData")
+      appDataRoot: app.getPath("userData"),
+      onAssetRevoked: () => localSemanticEmbeddingRuntime?.dispose()
     });
     void localSemanticRetrievalService.recover();
   }
@@ -1967,7 +2012,9 @@ ipcMain.handle("proposals.get", proposalRendererBoundaryUnavailable);
 ipcMain.handle("proposals.approve", proposalRendererBoundaryUnavailable);
 ipcMain.handle("proposals.reject", proposalRendererBoundaryUnavailable);
 ipcMain.handle("retrieval.search", (_event, request: unknown) =>
-  handleRetrievalSearchIpc(request, getRetrievalService())
+  handleRetrievalSearchIpc(request, {
+    search: (parsed) => getRetrievalService().searchCurrent(parsed)
+  })
 );
 ipcMain.handle("vault.current", () => getVaultService().current());
 ipcMain.handle("vault.recent", () => getVaultService().recent());
@@ -2183,6 +2230,13 @@ app.whenReady().then(async () => {
     let smokeWindow: BrowserWindow | undefined;
     let smokeStage: PackagedRuntimeSmokeStage = "runtime_import";
     try {
+      smokeStage = "native_semantic_runtime";
+      const semanticRuntime = {
+        embedding: await probePackagedLocalSemanticRuntime(),
+        sqliteVec: await probePackagedSqliteVectorRuntime()
+      };
+      if (!semanticRuntime.sqliteVec) throw new Error("The packaged sqlite-vec runtime is unavailable.");
+      smokeStage = "runtime_import";
       const smoke = await import(pathToFileURL(join(__dirname, "pi-agent-runtime-smoke.js")).href);
       smokeStage = "pi_runtime";
       const pi = await smoke.runPiAgentRuntimeSmoke();
@@ -2202,6 +2256,7 @@ app.whenReady().then(async () => {
         schemaVersion: 1,
         status: "passed",
         runtimeIdentity,
+        semanticRuntime,
         pi,
         home,
         renderer
@@ -2293,7 +2348,10 @@ app.whenReady().then(async () => {
     getDocumentParserService(),
     getOcrService(),
     getDatasetService(),
-    getJobClassExecutorRegistry()
+    getJobClassExecutorRegistry(),
+    undefined,
+    undefined,
+    getLocalRagEngineService()
   );
   diagnosticsService = new DiagnosticsService(app.getPath("userData"));
   const restoreRecovery = await getRestoreCoordinatorService().recoverInterrupted();

@@ -452,7 +452,8 @@ Current Phase 5 ingest bridge:
 
 Current unified Home foundation:
 
-- `retrieval.search` returns bounded lexical snippets and match reasons through SQLite FTS or Markdown-scan fallback.
+- `retrieval.search` adds `semantic_hybrid` only from a current private 1,024-dimension
+  runtime/index and re-read exact spans; lexical FTS/Markdown fallback remains bounded.
 - `agent.submitTurn` lets Pi answer or search with at most eight untrusted-wrapped evidence
   items; evidence cannot change authority. Pi's final text is authoritative and only its
   explicitly selected Host-known citation metadata is projected.
@@ -466,7 +467,7 @@ Current unified Home foundation:
   private path, credential, provider error, or evidence body is exposed.
 - One attached file is preserve-first and shares the turn/draft; bounded URL
   fetch/preserve is Pi-selected. Legacy `agent.ask`/retrieval records remain readable.
-- Vector retrieval and reranking improve ranking when installed but are not required for basic answers.
+- Runtime/index failure stays lexical; reranking remains optional.
 - Citation refs survive prompt assembly, model output validation, conversation compaction, and job retry.
 - When enabled, vault memory contributes at most eight recent active, secret-scanned
   preferences as bounded lower-authority user context, never system policy. Disabled atoms

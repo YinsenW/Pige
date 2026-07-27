@@ -5,12 +5,22 @@ import {
   assertPackageabilityHost,
   resolvePackageabilityPlatform
 } from "./packageability-platforms.mjs";
+import {
+  allNativeSemanticPackageNames,
+  isAllowedNativeSemanticOptionalPackage,
+  pruneNativeSemanticRuntimePackages
+} from "./native-semantic-runtime-targets.mjs";
 
 const root = process.cwd();
 const options = parseOptions(process.argv.slice(2));
 if (!options.platform || !options.arch) throw new Error("Package resource preparation requires --platform and --arch.");
 const target = resolvePackageabilityPlatform(options.platform, options.arch);
 assertPackageabilityHost(target);
+const nativeSemanticTarget = pruneNativeSemanticRuntimePackages(
+  root,
+  target.platform,
+  target.arch
+);
 
 const desktopRoot = path.join(root, "apps/desktop");
 const desktopPackage = readJson(path.join(desktopRoot, "package.json"));
@@ -114,6 +124,33 @@ for (const entry of packages) {
   });
 }
 
+const llamaCppRef = "pkg:generic/llama.cpp@b8390";
+const llamaCppLicenseRoot = path.join(licenseRoot, "llama.cpp@b8390");
+const llamaCppLicensePath = path.join(llamaCppLicenseRoot, "LICENSE");
+fs.mkdirSync(llamaCppLicenseRoot, { recursive: true });
+fs.copyFileSync(path.join(root, "resources/licenses/llama.cpp-MIT.txt"), llamaCppLicensePath);
+attributions.push({
+  name: "llama.cpp",
+  version: "b8390",
+  license: "MIT",
+  purl: llamaCppRef,
+  licenseFiles: [{
+    path: toPosix(path.relative(outputRoot, llamaCppLicensePath)),
+    sha256: checksumFile(llamaCppLicensePath),
+    source: "reviewed_upstream_release_license"
+  }]
+});
+components.push({
+  type: "library",
+  "bom-ref": llamaCppRef,
+  name: "llama.cpp",
+  version: "b8390",
+  purl: llamaCppRef,
+  licenses: [{ expression: "MIT" }],
+  hashes: [{ alg: "SHA-256", content: checksumFile(llamaCppLicensePath).replace("sha256:", "") }]
+});
+dependencyEdges.get(npmPurl(nativeSemanticTarget.llamaPackage, "3.18.1"))?.add(llamaCppRef);
+
 const nativeComponentRefs = [];
 if (target.platform === "macos") {
   for (const helperName of ["pige-speech", "pige-vision-ocr"]) {
@@ -166,6 +203,7 @@ const sbom = {
       ref: entry.bomRef,
       dependsOn: [...(dependencyEdges.get(entry.bomRef) ?? [])].sort()
     })),
+    { ref: llamaCppRef, dependsOn: [] },
     ...nativeComponentRefs.map((ref) => ({ ref, dependsOn: [] }))
   ].sort((left, right) => left.ref.localeCompare(right.ref))
 };
@@ -211,6 +249,25 @@ for (const requiredName of [
     throw new Error(`Artifact SBOM is missing required component ${requiredName}.`);
   }
 }
+for (const requiredName of [
+  "node-llama-cpp",
+  nativeSemanticTarget.llamaPackage,
+  "sqlite-vec",
+  nativeSemanticTarget.sqlitePackage
+]) {
+  if (!packages.some((entry) => entry.packageJson.name === requiredName)) {
+    throw new Error(`Artifact SBOM is missing required native semantic component ${requiredName}.`);
+  }
+}
+for (const packageName of allNativeSemanticPackageNames()) {
+  if (
+    packageName !== nativeSemanticTarget.llamaPackage &&
+    packageName !== nativeSemanticTarget.sqlitePackage &&
+    packages.some((entry) => entry.packageJson.name === packageName)
+  ) {
+    throw new Error(`Artifact SBOM contains an unreviewed target backend: ${packageName}.`);
+  }
+}
 for (const buildOnlyName of ["@electron/asar", "electron-builder", "typescript", "vite", "vitest"]) {
   if (packages.some((entry) => entry.packageJson.name === buildOnlyName)) {
     throw new Error(`Artifact SBOM must exclude build-only dependency ${buildOnlyName}.`);
@@ -241,10 +298,10 @@ function resolvePackagedVersion(defaultVersion, releaseVersion, releaseTag) {
 function enqueueDependencies(packageJson, packageRoot, ownerRef, rootOwned = false) {
   const requiredNames = Object.keys(packageJson.dependencies ?? {});
   const optionalNames = Object.keys(packageJson.optionalDependencies ?? {});
-  const peerNames = Object.keys(packageJson.peerDependencies ?? {});
   const childRefs = dependencyEdges.get(ownerRef) ?? new Set();
   if (ownerRef) dependencyEdges.set(ownerRef, childRefs);
-  for (const name of [...new Set([...requiredNames, ...optionalNames, ...peerNames])]) {
+  for (const name of [...new Set([...requiredNames, ...optionalNames])]) {
+    if (!isAllowedNativeSemanticOptionalPackage(name, target.platform, target.arch)) continue;
     const required = requiredNames.includes(name) && !optionalNames.includes(name);
     const childRoot = resolveInstalledPackage(packageRoot, name);
     if (!childRoot) {
@@ -300,10 +357,17 @@ function integrityHashes(packageRoot) {
 function normalizeLicense(license) {
   const expression = typeof license === "string" ? license : license?.type;
   if (!expression || typeof expression !== "string") throw new Error("Every packaged npm component needs license metadata.");
-  return expression;
+  return expression === "MIT OR Apache" ? "MIT OR Apache-2.0" : expression;
 }
 
 function createFallbackLicenseSource(packageJson, expression) {
+  if (packageJson.name === "sqlite-vec" || packageJson.name?.startsWith("sqlite-vec-")) {
+    return {
+      fileName: "LICENSE-MIT",
+      content: mitLicense("Alex Garcia and sqlite-vec contributors"),
+      source: "generated_spdx_with_package_attribution"
+    };
+  }
   if (packageJson.name === "@earendil-works/pi-agent-core" || packageJson.name === "@earendil-works/pi-ai") {
     return {
       fileName: "LICENSE",

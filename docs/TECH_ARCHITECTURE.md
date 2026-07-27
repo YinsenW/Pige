@@ -933,26 +933,27 @@ type RankedResult = {
 
 ### 5.6.1 Local RAG Engine Service
 
-The engine keeps embedding/reranking local, exposes only an internal embedding API, and
-builds rebuildable chunk/vector indexes for Search, Home, Note Agent and ingest. Chunks
-bind page/source/heading/range/citation identity; restore, schema, model or parser changes
-can rebuild them. Lexical retrieval remains available without model files.
+The B6.05 owner leases only its enabled, reverified Qwen3 descriptor to
+`LocalSemanticEmbeddingRuntime`; `ready` is not runtime readiness. The dependency
+manifest owns B6.06's exact prebuilt platforms, no-download/build rule, last-token
+pooling, constant query instruction, raw-chunk rule, batch bound and 1,024 finite
+L2-normalized output. Binding/descriptor drift unloads and stays lexical.
 
-The Main-owned Local RAG Asset Service—not ordinary Local Tool limits—owns the pinned
-`rag.qwen3-embedding-0.6b-q8_0` lifecycle and dimension 1024. B6.05 Install
-verifies/atomically publishes; Enable re-verifies;
-Disable retains bytes; Remove withdraws then quarantines/deletes them. Descriptor,
-revision, size and checksum fence restart adoption. `ready` means enabled verified bytes,
-not a working vector runtime; every other state stays lexical. B6.06 separately owns a
-proven GGUF runtime/vector path. Reranking stays optional and uninstalled by default.
+`SqliteVectorIndexDriver` owns a separate derived `.pige/indexes/vectors/` DB. It loads
+only the manifest-pinned platform file, revokes extension loading immediately and uses
+BigInt `vec0` row IDs. Model, dimension, chunker, Local Database revision and generation
+fence an atomic swap under the existing `index_rebuild` Job; no arbitrary extension.
 
-Derived `.pige/indexes/{fts,vectors,chunks}` and `rag-manifest.json` record versions,
-model identity/dimension, counts, warnings and lifecycle status.
+`LocalRagEngineService` equal-weight reciprocal-rank fuses current lexical pages/vector
+chunks, then re-reads selected Markdown spans under current signatures. Only that path
+returns `semantic_hybrid`; absent, rebuilding, timed-out, stale or failed runtime/index
+returns the unchanged lexical result. Async search never waits for download/rebuild or
+exposes internals. `vectorSearchAvailable` requires both current runtime and index.
+Reranking remains optional.
 
-`pige-markdown-v1` stores no body: only stable owner/page/source/heading/range identity,
-redacted digest, token estimate and chunker version, using 1,200 characters/120 overlap.
-Embedding/reranking stays local; cloud synthesis receives only selected cited snippets
-and summaries, never the full vault.
+Derived indexes/`rag-manifest.json` record generations and model/chunker identity.
+`pige-markdown-v1` keeps body-free owner/range/digest metadata at 1,200/120 overlap;
+cloud synthesis receives only selected cited snippets, never the vault.
 
 ### 5.6.2 Agent Memory Service
 
@@ -1796,7 +1797,7 @@ Waiver rules:
 | Apache Parquet (`data.parquet`) | candidate | Open columnar payload for immutable Dataset analytical snapshots. | https://parquet.apache.org/ | Select and pin a concrete writer/reader only after compatibility, fuzz, license, package-size, and platform review. | Durable Dataset format; no model or renderer direct file access. |
 | Apache Arrow (`data.arrow`) | candidate | Bounded in-memory/IPC batches between Dataset adapters/query engine and owning services. | https://arrow.apache.org/docs/format/Columnar.html | Select a concrete implementation only with memory, IPC, package, and platform gates. | Runtime representation only; never the sole durable truth. |
 | DuckDB (`data.duckdb`) | candidate | Local typed analytical query over Parquet and imported snapshots behind `DatasetQueryEngine`. | https://duckdb.org/docs/stable/data/parquet/overview | Pin a current supported client only after Electron/macOS/Windows, memory, package, license, extension, and no-network tests. | No arbitrary SQL/extensions/downloads; query results are bounded and hash-bound. |
-| sqlite-vec | recommended | SQLite-backed vector search for v0.1 local RAG, behind a `VectorIndexDriver`. | https://github.com/asg017/sqlite-vec | Pin exact release/binary if adopted; because upstream is pre-v1, run packaging, extension-loading, and 100k-chunk performance tests before alpha. | Derived vector cache only; bundle only Pige-approved extension files and do not allow arbitrary SQLite extensions. |
+| sqlite-vec (`db.sqlite-vec`) | required | B6.06 vector cache behind `SqliteVectorIndexDriver`. | https://github.com/asg017/sqlite-vec/tree/v0.1.9 | Exact `0.1.9`; package/extension/100k checks on every target. | Load one resolved packaged file, revoke extension loading, BigInt row IDs; derived cache only. |
 | yazl (`backup.yazl`; types `types.yazl`) | recommended | Streaming ZIP creation for `.pige-backup.zip`. | https://github.com/thejoshwolfe/yazl | Pin npm version; test large vault backups and cancellation. | Backup worker only; avoids buffering whole vault in memory. |
 | yauzl (`backup.yauzl`; types `types.yauzl`) | required | ZIP restore preview/extraction plus bounded OpenXML package preflight and selected-entry reads. | https://github.com/thejoshwolfe/yauzl | Pin `3.4.0`; test malformed/truncated archives, traversal, duplicate parts, entry/size/compression bounds, large-vault restore, and Office fixtures. | Restore/parser workers only; stream selected entries and never extract outside trusted staging. |
 
@@ -1821,10 +1822,9 @@ Waiver rules:
 
 | Dependency | Status | Pige usage | Upstream source | Pin/update policy | Data boundary and notes |
 | --- | --- | --- | --- | --- | --- |
-| Qwen3 Embedding 0.6B Q8_0 GGUF (`rag.qwen3-embedding-0.6b-q8_0`) | optional | Single v0.1 local embedding asset. | https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/tree/c2602621d50895a7b8277ddd4a8c31e699c9d002 | Explicit download only; dependency manifest pins file, revision, 639,150,592 bytes and SHA-256. | Machine-local asset outside vault; renderer receives no URL, checksum or path; B6.06 runtime remains open. |
+| Qwen3 Embedding 0.6B Q8_0 GGUF (`rag.qwen3-embedding-0.6b-q8_0`) | optional | Single v0.1 local embedding asset. | https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/tree/c2602621d50895a7b8277ddd4a8c31e699c9d002 | Explicit exact manifest download. | Private machine asset; only its verified lease reaches B6.06. |
 | Qwen3 Reranker 0.6B | optional | Advanced local reranking after large vault threshold or explicit settings action. | https://huggingface.co/Qwen/Qwen3-Reranker-0.6B | Do not auto-download in v0.1. | Local model asset outside vault. |
-| llama.cpp | recommended | GGUF-capable local inference runtime candidate for embeddings/reranking. | https://github.com/ggml-org/llama.cpp | Bundle/pin binary or library version if adopted. | Runs locally; constrain model paths to app data. |
-| node-llama-cpp | candidate | Node/Electron integration layer for llama.cpp. | https://node-llama-cpp.withcat.ai/guide/electron | Use only after Electron packaging validation. | Main/worker process only. |
+| node-llama-cpp (`runtime.node-llama-cpp`) | required | Private Qwen3 embedding runtime. | https://github.com/withcatai/node-llama-cpp/tree/v3.18.1 | Exact `3.18.1`; reviewed prebuilt targets only, no download/build fallback. | Main/worker local-only; verified asset path never crosses its adapter. |
 
 ### 16.5 Platform APIs
 

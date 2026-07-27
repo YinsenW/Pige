@@ -33,41 +33,41 @@ function validResult() {
 }
 
 describe("retrieval.search IPC boundary", () => {
-  it("accepts a 320-character query and rejects a 321-character query before retrieval", () => {
+  it("accepts a 320-character query and rejects a 321-character query before retrieval", async () => {
     let searchCalls = 0;
     const search = (request: RetrievalSearchRequest) => {
       searchCalls += 1;
       return { ...validResult(), query: request.query };
     };
 
-    expect(handleRetrievalSearchIpc({
+    await expect(handleRetrievalSearchIpc({
       scope: { kind: "active_vault", vaultId },
       query: "a".repeat(320)
-    }, { search })).toMatchObject({ query: "a".repeat(320) });
+    }, { search })).resolves.toMatchObject({ query: "a".repeat(320) });
     expect(searchCalls).toBe(1);
 
-    expect(handleRetrievalSearchIpc({
+    await expect(handleRetrievalSearchIpc({
       scope: { kind: "active_vault", vaultId },
       query: "😀".repeat(320)
-    }, { search })).toMatchObject({ query: "😀".repeat(320) });
+    }, { search })).resolves.toMatchObject({ query: "😀".repeat(320) });
     expect(searchCalls).toBe(2);
 
-    expect(() => handleRetrievalSearchIpc({
+    await expect(handleRetrievalSearchIpc({
       scope: { kind: "active_vault", vaultId },
       query: "a".repeat(321)
-    }, { search })).toThrowError(expect.objectContaining({ code: "rag.search_request_invalid" }));
-    expect(() => handleRetrievalSearchIpc({
+    }, { search })).rejects.toMatchObject({ code: "rag.search_request_invalid" });
+    await expect(handleRetrievalSearchIpc({
       scope: { kind: "active_vault", vaultId },
       query: "😀".repeat(321)
-    }, { search })).toThrowError(expect.objectContaining({ code: "rag.search_request_invalid" }));
+    }, { search })).rejects.toMatchObject({ code: "rag.search_request_invalid" });
     expect(searchCalls).toBe(2);
   });
 
-  it("rejects malformed requests without invoking local retrieval or echoing the query", () => {
+  it("rejects malformed requests without invoking local retrieval or echoing the query", async () => {
     let searchCalls = 0;
     let caught: unknown;
     try {
-      handleRetrievalSearchIpc({ query: "PRIVATE_QUERY_BODY", limit: 200 }, {
+      await handleRetrievalSearchIpc({ query: "PRIVATE_QUERY_BODY", limit: 200 }, {
         search: () => {
           searchCalls += 1;
           return validResult();
@@ -85,9 +85,9 @@ describe("retrieval.search IPC boundary", () => {
     expect(caught instanceof Error ? caught.message : "").not.toContain("PRIVATE_QUERY_BODY");
   });
 
-  it("bounds request identities before invoking retrieval", () => {
+  it("bounds request identities before invoking retrieval", async () => {
     let searchCalls = 0;
-    expect(() => handleRetrievalSearchIpc({
+    await expect(handleRetrievalSearchIpc({
       scope: { kind: "active_vault", vaultId: `vault_20260709_${"a".repeat(200)}` },
       query: "bounded local search"
     }, {
@@ -95,15 +95,15 @@ describe("retrieval.search IPC boundary", () => {
         searchCalls += 1;
         return validResult();
       }
-    })).toThrowError(expect.objectContaining({ code: "rag.search_request_invalid" }));
+    })).rejects.toMatchObject({ code: "rag.search_request_invalid" });
     expect(searchCalls).toBe(0);
   });
 
-  it("replaces thrown retrieval details with one fixed body-free error", () => {
+  it("replaces thrown retrieval details with one fixed body-free error", async () => {
     const privateDetail = "ENOENT /Users/alice/private-vault/wiki/secret.md PRIVATE_BODY";
     let caught: unknown;
     try {
-      handleRetrievalSearchIpc({
+      await handleRetrievalSearchIpc({
         scope: { kind: "active_vault", vaultId },
         query: "bounded local search"
       }, {
@@ -122,11 +122,11 @@ describe("retrieval.search IPC boundary", () => {
     expect(caught instanceof Error ? caught.message : "").not.toContain(privateDetail);
   });
 
-  it("rejects malformed service responses without exposing paths or bodies", () => {
+  it("rejects malformed service responses without exposing paths or bodies", async () => {
     const privatePath = "/Users/alice/private-vault/wiki/secret.md";
     let caught: unknown;
     try {
-      handleRetrievalSearchIpc({
+      await handleRetrievalSearchIpc({
         scope: { kind: "active_vault", vaultId },
         query: "bounded local search",
         limit: 8
@@ -153,7 +153,7 @@ describe("retrieval.search IPC boundary", () => {
     expect(message).not.toContain("PRIVATE_FULL_BODY");
   });
 
-  it("rejects operational and non-Markdown paths from service responses", () => {
+  it("rejects operational and non-Markdown paths from service responses", async () => {
     for (const pagePath of [
       ".pige/source-records/private.json",
       "raw/files/private.pdf",
@@ -161,7 +161,7 @@ describe("retrieval.search IPC boundary", () => {
       "wiki/private.txt",
       "wiki/../private.md"
     ]) {
-      expect(() => handleRetrievalSearchIpc({
+      await expect(handleRetrievalSearchIpc({
         scope: { kind: "active_vault", vaultId },
         query: "bounded local search"
       }, {
@@ -172,16 +172,16 @@ describe("retrieval.search IPC boundary", () => {
             summary: { ...validResult().results[0]?.summary, pagePath }
           }]
         })
-      })).toThrowError(expect.objectContaining({ code: "rag.search_response_invalid" }));
+      })).rejects.toMatchObject({ code: "rag.search_response_invalid" });
     }
   });
 
-  it("bounds response identities before returning them to the renderer", () => {
+  it("bounds response identities before returning them to the renderer", async () => {
     for (const summaryPatch of [
       { pageId: `page_20260709_${"a".repeat(200)}` },
       { sourceIds: [`src_20260709_${"a".repeat(200)}`] }
     ]) {
-      expect(() => handleRetrievalSearchIpc({
+      await expect(handleRetrievalSearchIpc({
         scope: { kind: "active_vault", vaultId },
         query: "bounded local search"
       }, {
@@ -192,21 +192,21 @@ describe("retrieval.search IPC boundary", () => {
             summary: { ...validResult().results[0]?.summary, ...summaryPatch }
           }]
         })
-      })).toThrowError(expect.objectContaining({ code: "rag.search_response_invalid" }));
+      })).rejects.toMatchObject({ code: "rag.search_response_invalid" });
     }
   });
 
-  it("rejects a schema-valid response bound to a stale vault", () => {
-    expect(() => handleRetrievalSearchIpc({
+  it("rejects a schema-valid response bound to a stale vault", async () => {
+    await expect(handleRetrievalSearchIpc({
       scope: { kind: "active_vault", vaultId },
       query: "bounded local search"
     }, {
       search: () => ({ ...validResult(), activeVaultId: "vault_20260709_staleresult" })
-    })).toThrowError(expect.objectContaining({ code: "rag.search_response_invalid" }));
+    })).rejects.toMatchObject({ code: "rag.search_response_invalid" });
   });
 
-  it("returns a validated bounded local result with stable page identity", () => {
-    const result = handleRetrievalSearchIpc({
+  it("returns a validated bounded local result with stable page identity", async () => {
+    const result = await handleRetrievalSearchIpc({
       scope: { kind: "active_vault", vaultId },
       query: " bounded local search ",
       limit: 8,
