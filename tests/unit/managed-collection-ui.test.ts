@@ -4,6 +4,8 @@ import { createRoot } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
+  CollectionAddNullableColumnRequest,
+  CollectionAddNullableColumnResult,
   CollectionAppendDefaultRowRequest,
   CollectionAppendDefaultRowResult,
   CollectionCellEditRequest,
@@ -55,6 +57,7 @@ describe("ManagedCollectionPanel", () => {
         activeVaultId: "vault_20260727_collection01",
         snapshot: collectionSnapshot("dataset_rev_20260727_revision0001", "Alpha"),
         onClose: () => undefined,
+        onAddNullableColumn: notFoundColumnResult,
         onAppendDefaultRow: notFoundAppendResult,
         onAdoptSnapshot: () => false,
         onEditCell: async (request: CollectionCellEditRequest): Promise<CollectionCellEditResult> => {
@@ -71,6 +74,7 @@ describe("ManagedCollectionPanel", () => {
     });
     const container = dom.window.document.querySelector("#root")!;
     expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Add row")).toBe(false);
+    expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Add field")).toBe(false);
     const editButton = buttonNamed(container, "Edit cell: Name, row 1");
     await click(dom, editButton);
     const input = requireElement(container.querySelector<HTMLInputElement>('input[aria-label="Edit value: Name, row 1"]'));
@@ -107,6 +111,7 @@ describe("ManagedCollectionPanel", () => {
         activeVaultId: "vault_20260727_collection01",
         snapshot: collectionSnapshot("dataset_rev_20260727_revision0001", "Alpha"),
         onClose: () => undefined,
+        onAddNullableColumn: notFoundColumnResult,
         onAppendDefaultRow: notFoundAppendResult,
         onAdoptSnapshot: () => false,
         onEditCell: async (request: CollectionCellEditRequest): Promise<CollectionCellEditResult> => {
@@ -139,6 +144,110 @@ describe("ManagedCollectionPanel", () => {
       "dataset_rev_20260727_revision0001",
       "dataset_rev_20260727_revision0002"
     ]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("preserves a stale field draft, retries its authoritative revision, and focuses the committed column", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: CollectionAddNullableColumnRequest[] = [];
+    const staleSnapshot = collectionSnapshot("dataset_rev_20260728_revision0002", "Alpha", false, true);
+    const committedSnapshot = withNullableColumn(
+      collectionSnapshot("dataset_rev_20260728_revision0003", "Alpha", false, true),
+      "column_priority001",
+      "Priority",
+      "number"
+    );
+    const addColumn = async (
+      request: CollectionAddNullableColumnRequest
+    ): Promise<CollectionAddNullableColumnResult> => {
+      requests.push(request);
+      const identity = columnIdentity(request);
+      if (requests.length === 1) return { ...identity, status: "stale", snapshot: staleSnapshot };
+      if (requests.length === 2) return {
+        ...identity,
+        status: "committed",
+        columnId: "column_priority001",
+        operationId: "op_20260728_collectioncolumn01",
+        snapshot: committedSnapshot
+      };
+      return { ...identity, status: "invalid", reason: "duplicate_label" };
+    };
+    await act(async () => {
+      root.render(createElement(CollectionColumnHarness, { onAddColumn: addColumn }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Add field"));
+    const label = requireElement(container.querySelector<HTMLInputElement>("#collection-new-field-name"));
+    const logicalType = requireElement(container.querySelector<HTMLSelectElement>("#collection-new-field-type"));
+    expect(dom.window.document.activeElement).toBe(label);
+    await inputText(dom, label, "Priority");
+    await selectValue(dom, logicalType, "number");
+
+    await act(async () => {
+      const save = buttonNamed(container, "Save");
+      save.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      save.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(requests).toEqual([{
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^collection_request_[a-z0-9]{16,64}$/u),
+      activeVaultId: "vault_20260727_collection01",
+      datasetId: "dataset_20260727_collection01",
+      tableId: "table_collection01",
+      expectedRevisionId: "dataset_rev_20260728_revision0001",
+      label: "Priority",
+      logicalType: "number"
+    }]);
+    expect(container.textContent).toContain("The collection changed. Your field draft is preserved against the latest revision.");
+    expect(label.value).toBe("Priority");
+    expect(logicalType.value).toBe("number");
+    expect(dom.window.document.activeElement).toBe(label);
+
+    await click(dom, buttonNamed(container, "Save"));
+    expect(requests.map((request) => request.expectedRevisionId)).toEqual([
+      "dataset_rev_20260728_revision0001",
+      "dataset_rev_20260728_revision0002"
+    ]);
+    expect(container.textContent).toContain("Field added as a new revision.");
+    const header = requireElement(container.querySelector<HTMLTableCellElement>(
+      '[data-collection-column-id="column_priority001"]'
+    ));
+    expect(header.textContent).toBe("Priority");
+    expect(dom.window.document.activeElement).toBe(header);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps an invalid duplicate field draft actionable", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: CollectionAddNullableColumnRequest[] = [];
+    await act(async () => {
+      root.render(createElement(CollectionColumnHarness, {
+        onAddColumn: async (request) => {
+          requests.push(request);
+          return { ...columnIdentity(request), status: "invalid", reason: "duplicate_label" };
+        }
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Add field"));
+    const duplicate = requireElement(container.querySelector<HTMLInputElement>("#collection-new-field-name"));
+    await inputText(dom, duplicate, "Priority");
+    await click(dom, buttonNamed(container, "Save"));
+
+    expect(requests).toHaveLength(1);
+    expect(container.textContent).toContain("A field with this name already exists.");
+    expect(duplicate.value).toBe("Priority");
+    expect(dom.window.document.activeElement).toBe(duplicate);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -305,6 +414,7 @@ function CollectionAppendHarness(props: {
     activeVaultId: "vault_20260727_collection01",
     snapshot,
     onClose: () => undefined,
+    onAddNullableColumn: notFoundColumnResult,
     onAppendDefaultRow: props.onAppend,
     onAdoptSnapshot: (next, expectedRevisionId) => {
       if (snapshot.revisionId !== expectedRevisionId) return false;
@@ -317,7 +427,37 @@ function CollectionAppendHarness(props: {
   });
 }
 
-function collectionSnapshot(revisionId: string, name: string, canAppendDefaultRow = false): CollectionSnapshot {
+function CollectionColumnHarness(props: {
+  readonly onAddColumn: (
+    request: CollectionAddNullableColumnRequest
+  ) => Promise<CollectionAddNullableColumnResult>;
+}): React.JSX.Element {
+  const [snapshot, setSnapshot] = useState(() => (
+    collectionSnapshot("dataset_rev_20260728_revision0001", "Alpha", false, true)
+  ));
+  return createElement(ManagedCollectionPanel, {
+    activeVaultId: "vault_20260727_collection01",
+    snapshot,
+    onClose: () => undefined,
+    onAddNullableColumn: props.onAddColumn,
+    onAppendDefaultRow: notFoundAppendResult,
+    onAdoptSnapshot: (next, expectedRevisionId) => {
+      if (snapshot.revisionId !== expectedRevisionId) return false;
+      setSnapshot(next);
+      return true;
+    },
+    onEditCell: async (request) => ({ ...editIdentity(request), status: "failed" }),
+    onReload: async () => snapshot,
+    t
+  });
+}
+
+function collectionSnapshot(
+  revisionId: string,
+  name: string,
+  canAppendDefaultRow = false,
+  canAddColumn = false
+): CollectionSnapshot {
   return {
     datasetId: "dataset_20260727_collection01",
     revisionId,
@@ -338,7 +478,24 @@ function collectionSnapshot(revisionId: string, name: string, canAppendDefaultRo
     totalRowCount: 1,
     returnedRowCount: 1,
     truncated: false,
-    canAppendDefaultRow
+    canAppendDefaultRow,
+    canAddColumn
+  };
+}
+
+function withNullableColumn(
+  snapshot: CollectionSnapshot,
+  columnId: string,
+  label: string,
+  logicalType: "string" | "integer" | "number" | "boolean" | "date" | "datetime"
+): CollectionSnapshot {
+  return {
+    ...snapshot,
+    columns: [...snapshot.columns, { columnId, label, logicalType }],
+    rows: snapshot.rows.map((row) => ({
+      ...row,
+      cells: [...row.cells, { columnId, value: null, editable: true }]
+    }))
   };
 }
 
@@ -391,10 +548,26 @@ function appendIdentity(request: CollectionAppendDefaultRowRequest) {
   };
 }
 
+function columnIdentity(request: CollectionAddNullableColumnRequest) {
+  return {
+    apiVersion: 1 as const,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId
+  };
+}
+
 async function notFoundAppendResult(
   request: CollectionAppendDefaultRowRequest
 ): Promise<CollectionAppendDefaultRowResult> {
   return { ...appendIdentity(request), status: "not_found" };
+}
+
+async function notFoundColumnResult(
+  request: CollectionAddNullableColumnRequest
+): Promise<CollectionAddNullableColumnResult> {
+  return { ...columnIdentity(request), status: "not_found" };
 }
 
 function committedResult(
@@ -462,6 +635,15 @@ async function inputText(dom: JSDOM, input: HTMLInputElement, value: string): Pr
       inputType: "insertText"
     }));
     input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    await settle(dom);
+  });
+}
+
+async function selectValue(dom: JSDOM, select: HTMLSelectElement, value: string): Promise<void> {
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, "value")?.set;
+    setter?.call(select, value);
+    select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
     await settle(dom);
   });
 }

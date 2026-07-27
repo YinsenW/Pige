@@ -124,6 +124,8 @@ import {
   type AgentStagedItem,
   type AgentStagedItemRejectionReason,
   type AgentStagedLargePasteItem,
+  type CollectionAddNullableColumnRequest,
+  type CollectionAddNullableColumnResult,
   type CollectionAppendDefaultRowRequest,
   type CollectionAppendDefaultRowResult,
   type CollectionCellEditRequest,
@@ -1010,6 +1012,14 @@ export function App(): React.JSX.Element {
     return result;
   };
 
+  const addCollectionNullableColumn = async (
+    request: CollectionAddNullableColumnRequest
+  ): Promise<CollectionAddNullableColumnResult> => {
+    const result = await window.pige.collections.addNullableColumn(request);
+    if (collectionColumnIdentityMatches(request, result) && result.status === "committed") void refreshVaultState();
+    return result;
+  };
+
   const adoptCollectionSnapshot = (snapshot: CollectionSnapshot, expectedRevisionId: string): boolean => {
     const active = selectedCollectionRef.current;
     if (
@@ -1783,6 +1793,7 @@ export function App(): React.JSX.Element {
                 setView(returnView);
               }
             }}
+            onAddNullableColumn={addCollectionNullableColumn}
             onAppendDefaultRow={appendCollectionDefaultRow}
             onAdoptSnapshot={adoptCollectionSnapshot}
             onEditCell={editCollectionCell}
@@ -5675,6 +5686,16 @@ function collectionOpenIdentityMatches(
 function collectionAppendIdentityMatches(
   request: CollectionAppendDefaultRowRequest,
   result: CollectionAppendDefaultRowResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.datasetId === request.datasetId &&
+    result.tableId === request.tableId;
+}
+
+function collectionColumnIdentityMatches(
+  request: CollectionAddNullableColumnRequest,
+  result: CollectionAddNullableColumnResult
 ): boolean {
   return result.requestId === request.requestId &&
     result.activeVaultId === request.activeVaultId &&
