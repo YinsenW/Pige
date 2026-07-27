@@ -134,12 +134,15 @@ export class ManagedCollectionService {
     if (!binding) return undefined;
     const undoBinding = undoOperation ? readOperationBinding(undoOperation) : undefined;
     if (undoOperation && !undoBinding) return undefined;
-    const revisionChanged = !undoOperation && this.#readCurrentRevision(binding.datasetId) !== binding.afterRevisionId;
+    const active = this.#activeVault();
+    const current = active ? readBundle(active.vaultPath, binding.datasetId) : undefined;
+    const targetMissing = !undoOperation && !current;
+    const revisionChanged = !undoOperation && !!current && current.manifest.activeRevision !== binding.afterRevisionId;
     return {
       operationId: operation.id,
       kind: "update_collection_cell",
       createdAt: operation.createdAt,
-      targetLabel: "Collection cell",
+      ...(current?.manifest.title ? { targetLabel: current.manifest.title } : {}),
       target: {
         kind: "collection",
         datasetId: binding.datasetId,
@@ -147,9 +150,11 @@ export class ManagedCollectionService {
         revisionId: undoBinding?.afterRevisionId ?? binding.afterRevisionId
       },
       status: undoOperation ? "undone" : "applied",
-      canUndo: !undoOperation && !revisionChanged,
+      canUndo: !undoOperation && !targetMissing && !revisionChanged,
       ...(undoOperation
         ? { undoUnavailableReason: "already_undone" as const }
+        : targetMissing
+          ? { undoUnavailableReason: "target_missing" as const }
         : revisionChanged
           ? { undoUnavailableReason: "revision_changed" as const }
           : {})
