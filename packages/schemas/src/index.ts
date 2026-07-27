@@ -843,6 +843,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "add_collection_row",
     "add_collection_column",
     "rename_collection_column",
+    "trash_collection_column",
     "trash_collection_row",
     "update_memory",
     "trash_memory",
@@ -2616,6 +2617,17 @@ export const DatasetRevisionSchema = z.object({
       undoOfOperationId: OperationIdSchema
     }).strict(),
     z.object({
+      kind: z.literal("collection_column_trash"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_column_trash_undo"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
       kind: z.literal("collection_row_trash"),
       tableId: TableIdSchema,
       rowId: RowIdSchema
@@ -2704,7 +2716,8 @@ export const CollectionColumnSummarySchema = z.object({
   columnId: DatasetQueryColumnIdSchema,
   label: z.string().min(1).max(512),
   logicalType: DatasetLogicalTypeSchema,
-  canRename: z.boolean()
+  canRename: z.boolean(),
+  canTrash: z.boolean()
 }).strict();
 
 export const CollectionCellSchema = z.object({
@@ -2858,6 +2871,16 @@ export const CollectionRenameColumnRequestSchema = z.object({
   label: CollectionNewColumnLabelSchema
 }).strict();
 
+export const CollectionTrashColumnRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  columnId: DatasetQueryColumnIdSchema
+}).strict();
+
 const CollectionEditResultIdentitySchema = z.object({
   apiVersion: z.literal(1),
   requestId: CollectionRequestIdSchema,
@@ -2996,6 +3019,59 @@ export const CollectionRenameColumnResultSchema = z.discriminatedUnion("status",
       code: "custom",
       path: ["snapshot", "columns"],
       message: "Ineligible Collection column renames must fail closed in the authoritative snapshot."
+    });
+  }
+});
+
+const CollectionTrashColumnResultIdentitySchema = CollectionResultIdentitySchema.extend({
+  columnId: DatasetQueryColumnIdSchema
+}).strict();
+
+export const CollectionTrashColumnResultSchema = z.discriminatedUnion("status", [
+  CollectionTrashColumnResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionTrashColumnResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionTrashColumnResultIdentitySchema.extend({
+    status: z.literal("ineligible"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionTrashColumnResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionTrashColumnResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (!("snapshot" in result)) return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({
+      code: "custom",
+      path: ["snapshot"],
+      message: "Collection column-trash snapshots must match the request identity."
+    });
+  }
+  const column = result.snapshot.columns.find((candidate) => candidate.columnId === result.columnId);
+  if (result.status === "committed" && column !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["columnId"],
+      message: "A committed Collection column trash must remove the column from the current snapshot."
+    });
+  }
+  if (result.status === "stale" && column === undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["columnId"],
+      message: "A stale Collection column-trash snapshot must retain the stable column identity."
+    });
+  }
+  if (result.status === "ineligible" && column?.canTrash !== false) {
+    context.addIssue({
+      code: "custom",
+      path: ["snapshot", "columns"],
+      message: "Ineligible Collection column trash must fail closed in the authoritative snapshot."
     });
   }
 });
@@ -4424,6 +4500,7 @@ export const OperationRecordSchema = z.object({
     "add_collection_row",
     "add_collection_column",
     "rename_collection_column",
+    "trash_collection_column",
     "trash_collection_row",
     "trash_artifact",
     "restore_artifact",
@@ -4903,6 +4980,8 @@ export type CollectionAddNullableColumnRequest = z.infer<typeof CollectionAddNul
 export type CollectionAddNullableColumnResult = z.infer<typeof CollectionAddNullableColumnResultSchema>;
 export type CollectionRenameColumnRequest = z.infer<typeof CollectionRenameColumnRequestSchema>;
 export type CollectionRenameColumnResult = z.infer<typeof CollectionRenameColumnResultSchema>;
+export type CollectionTrashColumnRequest = z.infer<typeof CollectionTrashColumnRequestSchema>;
+export type CollectionTrashColumnResult = z.infer<typeof CollectionTrashColumnResultSchema>;
 export type CollectionTrashRowRequest = z.infer<typeof CollectionTrashRowRequestSchema>;
 export type CollectionTrashRowResult = z.infer<typeof CollectionTrashRowResultSchema>;
 export type CollectionCellReadOnlyReason = z.infer<typeof CollectionCellReadOnlyReasonSchema>;

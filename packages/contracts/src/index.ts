@@ -31,6 +31,8 @@ import type {
   CollectionAppendDefaultRowResult,
   CollectionRenameColumnRequest,
   CollectionRenameColumnResult,
+  CollectionTrashColumnRequest,
+  CollectionTrashColumnResult,
   CollectionTrashRowRequest,
   CollectionTrashRowResult,
   ConfirmationProposal,
@@ -816,6 +818,7 @@ export interface KnowledgeActivitySummary {
     | "add_collection_row"
     | "add_collection_column"
     | "rename_collection_column"
+    | "trash_collection_column"
     | "trash_collection_row"
     | "update_memory"
     | "trash_memory"
@@ -1522,6 +1525,9 @@ export interface PigeDesktopApi {
     readonly renameColumn: (
       request: CollectionRenameColumnRequest
     ) => Promise<CollectionRenameColumnResult>;
+    readonly trashColumn: (
+      request: CollectionTrashColumnRequest
+    ) => Promise<CollectionTrashColumnResult>;
     readonly trashRow: (request: CollectionTrashRowRequest) => Promise<CollectionTrashRowResult>;
   };
   readonly activity: {

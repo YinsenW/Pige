@@ -12,6 +12,8 @@ import {
   CollectionAppendDefaultRowResultSchema,
   CollectionRenameColumnRequestSchema,
   CollectionRenameColumnResultSchema,
+  CollectionTrashColumnRequestSchema,
+  CollectionTrashColumnResultSchema,
   CollectionTrashRowRequestSchema,
   CollectionTrashRowResultSchema,
   ConversationEventSchema,
@@ -100,7 +102,7 @@ describe("schemas", () => {
       title: "Reading list",
       tableId: request.tableId,
       tableName: "Items",
-      columns: [{ columnId: "column_abcdef123456", label: "Notes", logicalType: "string", canRename: true }],
+      columns: [{ columnId: "column_abcdef123456", label: "Notes", logicalType: "string", canRename: true, canTrash: true }],
       rows: [],
       totalRowCount: 0,
       returnedRowCount: 0,
@@ -185,7 +187,7 @@ describe("schemas", () => {
       title: "Reading list",
       tableId: request.tableId,
       tableName: "Items",
-      columns: [{ columnId: "column_abcdef123456", label: "Title", logicalType: "string", canRename: true }],
+      columns: [{ columnId: "column_abcdef123456", label: "Title", logicalType: "string", canRename: true, canTrash: true }],
       rows: [],
       totalRowCount: 0,
       returnedRowCount: 0,
@@ -209,7 +211,7 @@ describe("schemas", () => {
         ...snapshot,
         columns: [
           ...snapshot.columns,
-          { columnId: "column_bcdefa123456", label: "Notes", logicalType: "string" as const, canRename: true }
+          { columnId: "column_bcdefa123456", label: "Notes", logicalType: "string" as const, canRename: true, canTrash: true }
         ],
         canAddColumn: false
       }
@@ -273,7 +275,7 @@ describe("schemas", () => {
       title: "Reading list",
       tableId: request.tableId,
       tableName: "Items",
-      columns: [{ columnId: request.columnId, label: "Renamed notes", logicalType: "string", canRename: true }],
+      columns: [{ columnId: request.columnId, label: "Renamed notes", logicalType: "string", canRename: true, canTrash: true }],
       rows: [],
       totalRowCount: 0,
       returnedRowCount: 0,
@@ -335,6 +337,97 @@ describe("schemas", () => {
     }).kind).toBe("rename_collection_column");
   });
 
+  it("keeps Collection column trash explicit, reversible, CAS-bound, and body-free", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "collection_request_defghijklmnopqrs",
+      activeVaultId: "vault_20260728_abcdefgh",
+      datasetId: "dataset_20260728_abcdef123456",
+      tableId: "table_abcdef123456",
+      expectedRevisionId: "dataset_rev_20260728_abcdef123456",
+      columnId: "column_abcdef123456"
+    } as const;
+    const identity = {
+      apiVersion: request.apiVersion,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      datasetId: request.datasetId,
+      tableId: request.tableId,
+      columnId: request.columnId
+    } as const;
+    const column = {
+      columnId: request.columnId,
+      label: "Notes",
+      logicalType: "string" as const,
+      canRename: true,
+      canTrash: true
+    };
+    const snapshot = {
+      datasetId: request.datasetId,
+      revisionId: "dataset_rev_20260728_bcdefa123456",
+      title: "Reading list",
+      tableId: request.tableId,
+      tableName: "Items",
+      columns: [column],
+      rows: [],
+      totalRowCount: 0,
+      returnedRowCount: 0,
+      truncated: false,
+      canAppendDefaultRow: true,
+      canAddColumn: true
+    } as const;
+    expect(CollectionTrashColumnRequestSchema.parse(request)).toEqual(request);
+    expect(CollectionTrashColumnResultSchema.parse({
+      ...identity,
+      status: "committed",
+      operationId: "op_20260728_defabc12",
+      snapshot: {
+        ...snapshot,
+        columns: [{ ...column, columnId: "column_bcdefa123456" }]
+      }
+    }).status).toBe("committed");
+    expect(CollectionTrashColumnResultSchema.parse({ ...identity, status: "stale", snapshot }).status)
+      .toBe("stale");
+    expect(CollectionTrashColumnResultSchema.parse({
+      ...identity,
+      status: "ineligible",
+      snapshot: { ...snapshot, columns: [{ ...column, canTrash: false }] }
+    }).status).toBe("ineligible");
+    for (const status of ["not_found", "failed"] as const) {
+      expect(CollectionTrashColumnResultSchema.parse({ ...identity, status }).status).toBe(status);
+    }
+    for (const unsafe of [
+      { path: "/private/collection.sqlite" },
+      { body: "private" },
+      { values: ["private"] },
+      { permanent: true }
+    ]) {
+      expect(() => CollectionTrashColumnRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+    }
+    expect(() => CollectionTrashColumnResultSchema.parse({
+      ...identity,
+      status: "committed",
+      operationId: "op_20260728_defabc12",
+      snapshot
+    })).toThrow("remove the column");
+    expect(OperationRecordSchema.parse({
+      id: "op_20260728_defabc12",
+      schemaVersion: 1,
+      createdAt: "2026-07-28T00:00:00.000Z",
+      actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+      kind: "trash_collection_column",
+      targetRefs: [
+        { kind: "dataset", id: request.datasetId },
+        { kind: "table", id: request.tableId },
+        { kind: "column", id: request.columnId }
+      ],
+      sourceRefs: [{ kind: "dataset", id: request.datasetId }],
+      summary: "Moved one Managed Collection column out of the current revision.",
+      reversible: "yes",
+      warnings: []
+    }).kind).toBe("trash_collection_column");
+  });
+
   it("keeps Collection row trash explicit, reversible, revision-bound, and body-free", () => {
     const request = {
       apiVersion: 1,
@@ -364,7 +457,7 @@ describe("schemas", () => {
       title: "Reading list",
       tableId: request.tableId,
       tableName: "Items",
-      columns: [{ columnId: "column_abcdef123456", label: "Notes", logicalType: "string", canRename: true }],
+      columns: [{ columnId: "column_abcdef123456", label: "Notes", logicalType: "string", canRename: true, canTrash: true }],
       rows: [currentRow],
       totalRowCount: 1,
       returnedRowCount: 1,
@@ -1365,6 +1458,25 @@ describe("schemas", () => {
         canUndo: true
       }]
     }).activities[0]?.kind).toBe("rename_collection_column");
+    expect(KnowledgeActivityListResultSchema.parse({
+      scannedAt: "2026-07-28T00:00:00.000Z",
+      activeVaultId: "vault_20260728_activitysafe",
+      total: 1,
+      invalidOperationCount: 0,
+      activities: [{
+        operationId: "op_20260728_columntrash",
+        kind: "trash_collection_column",
+        createdAt: "2026-07-28T00:00:00.000Z",
+        target: {
+          kind: "collection",
+          datasetId: "dataset_20260728_abcdef123456",
+          tableId: "table_abcdef123456",
+          revisionId: "dataset_rev_20260728_defabc123456"
+        },
+        status: "applied",
+        canUndo: true
+      }]
+    }).activities[0]?.kind).toBe("trash_collection_column");
     expect(KnowledgeActivityListResultSchema.parse({
       scannedAt: "2026-07-28T00:00:00.000Z",
       activeVaultId: "vault_20260728_activitysafe",
