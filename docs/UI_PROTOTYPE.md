@@ -674,10 +674,10 @@ cached value plus a quiet formula/stale-cache indicator. Warnings are localized 
 never raw adapter errors. The original remains separately revealable. Do not flatten
 rows into Markdown or expose storage/query-engine terminology.
 
-Editable managed Collections, fields, views, relations, and formulas are P1. When
-delivered, validated reversible changes auto-apply and appear in Activity with Undo;
-destructive/external/conflicted boundaries remain exceptional. Do not render those
-controls in the v0.1 read-only surface.
+The first P1 slice opens the imported Dataset and keyboard-edits one non-formula scalar
+against its displayed revision. Commit refreshes; stale keeps the local attempt and offers
+Reload; unsupported is read-only. Undo requires the current after-revision.
+Pane/table/previews stay; other edits remain planned
 
 ## 9. Sources View
 

@@ -935,7 +935,11 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('"activity.list",');
     expect(preloadSource).toContain("KnowledgeActivityListResultSchema.parse");
     expect(preloadSource).toContain('ipcRenderer.invoke("activity.undo", request)');
-    expect(contractsSource).toContain('readonly kind: "create_page" | "update_page";');
+    expect(contractsSource).toContain(
+      'readonly kind: "create_page" | "update_page" | "update_collection_cell";'
+    );
+    expect(contractsSource).toContain("export interface KnowledgeActivityCollectionTarget");
+    expect(contractsSource).toContain("readonly expectedRevisionId?: string;");
     expect(rendererSource).toContain('window.pige.activity.list({ limit: 20 })');
     expect(rendererSource).toContain('className="settings-page settings-history-page"');
     expect(rendererSource).toContain('activity.kind === "update_page"');
@@ -1116,6 +1120,28 @@ describe("desktop shell build contract", () => {
     expect(queryServiceSource).not.toContain("node:sqlite");
     expect(queryServiceSource).not.toContain('from "./dataset-query-core"');
     expect(queryWorkerSource).toContain('from "../services/dataset-query-core"');
+  });
+
+  it("strictly validates the Managed Collection IPC and preload boundaries", () => {
+    const registrarSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-managed-collection-ipc.ts"),
+      "utf8"
+    );
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+
+    expect(registrarSource).toContain('ipcMain.handle("collections.open"');
+    expect(registrarSource).toContain('ipcMain.handle("collections.editCell"');
+    expect(registrarSource).toContain("CollectionOpenRequestSchema.parse(request)");
+    expect(registrarSource).toContain("CollectionOpenResultSchema.parse(rawResult)");
+    expect(registrarSource).toContain("CollectionCellEditRequestSchema.parse(request)");
+    expect(registrarSource).toContain("CollectionCellEditResultSchema.parse(rawResult)");
+    expect(registrarSource).toContain("options.getActiveVaultId() !== parsed.activeVaultId");
+    expect(preloadSource).toContain('ipcRenderer.invoke("collections.open", parsedRequest)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("collections.editCell", parsedRequest)');
+    expect(preloadSource).toContain("CollectionOpenRequestSchema.parse(request)");
+    expect(preloadSource).toContain("CollectionOpenResultSchema.parse(");
+    expect(preloadSource).toContain("CollectionCellEditRequestSchema.parse(request)");
+    expect(preloadSource).toContain("CollectionCellEditResultSchema.parse(");
   });
 
   it("wires onboarding readiness to the non-secret provider runtime binding check", () => {

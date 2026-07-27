@@ -3360,6 +3360,30 @@ References:
 - `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
 - `docs/UI_PROTOTYPE.md`
 
+### D-20260727-Managed-Collection-Cell-Revision
+
+Status: Accepted
+Date: 2026-07-27
+
+Decision:
+
+One imported Collection keeps its Dataset ID. Scalar edit CAS-writes immutable revision/
+Operation and switches manifest last; Undo advances from its after-revision.
+
+Rationale:
+
+Enable reversible value without rewriting history or exposing internals.
+
+Consequences:
+
+- Manifest owns current truth; evidence/originals/history stay immutable.
+- Bounded `collections.open/editCell` fails closed; broader editing stays open.
+
+References:
+
+- `docs/DATA_ARCHITECTURE.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

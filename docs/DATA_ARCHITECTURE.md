@@ -61,7 +61,8 @@ datasets/<slug>--<dataset_id>/
   dataset.json
   schemas/
   data/
-    collection.sqlite
+    collection.sqlite                 # initial payload
+    revisions/<dataset_rev_id>.sqlite # immutable revisions
     part-*.parquet
   revisions/
   changes/*.jsonl
@@ -77,10 +78,12 @@ Two storage profiles share this envelope:
   plus versioned schema and provenance. It is read-only until a derived Dataset is
   created.
 
-`dataset.json` selects exactly one profile and active revision. It binds Dataset/source
-IDs and source revision, table/schema IDs, payload paths/hashes/row counts, format and
-writer versions, created/updated times, and compatibility range. A profile does not
-create both payload types unless an explicit derived revision declares both roles.
+`dataset.json` binds one profile, initial/active revision, stable IDs, payload integrity,
+versions and compatibility. An imported `managed_collection` stays one Dataset; new
+edit/Undo writes declare change kind, immutable revision SQLite/schema/Operation, then
+CAS-switch the manifest last. The manifest alone owns current truth; SourceRecord import
+evidence, originals, prior revisions and previews never change. Missing new fields are
+legacy-read only; dual payload roles require an explicit derived revision.
 
 ```ts
 type DatasetEvidenceRef = {
@@ -352,7 +355,7 @@ Source locator compatibility:
 | Source page | `sources/` | Yes for user-readable knowledge; bounded projection only for source metadata | Yes | No | Yes |
 | Wiki page | `wiki/` | Yes | Yes | No | Yes |
 | Dataset Bundle | `datasets/<slug>--<dataset_id>/` | Yes for structured knowledge | Yes | No | Yes |
-| Dataset managed collection | Dataset `data/collection.sqlite` plus revisions/change log | Yes; Pige-owned application-file profile | Yes | No | Yes |
+| Dataset managed collection | Initial SQLite plus immutable revisions | Yes; manifest selects active revision | Yes | No | Yes |
 | Dataset analytical parts | Dataset `data/part-*.parquet` plus manifest/schema | Yes; immutable snapshot profile | Yes | No | Yes |
 | Asset referenced by Markdown | `assets/` | Yes | Yes | No | Yes |
 | Conversation event | `.pige/conversations/` | Yes for chat history | Yes | No | Yes |

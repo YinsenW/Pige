@@ -22,6 +22,7 @@ import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoice
 import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
 import { TaskExecutionInteractionStatus } from "./components/TaskExecutionInteraction";
 import { AgentMemorySettingsPanel } from "./components/AgentMemorySettingsPanel";
+import { ManagedCollectionPanel } from "./components/ManagedCollectionPanel";
 import {
   homeConversationStateForJob,
   isTerminalConversationTurn,
@@ -111,12 +112,22 @@ import {
   type AgentStagedItem,
   type AgentStagedItemRejectionReason,
   type AgentStagedLargePasteItem,
+  type CollectionCellEditRequest,
+  type CollectionCellEditResult,
+  type CollectionOpenRequest,
+  type CollectionOpenResult,
+  type CollectionSnapshot,
   type JobState,
   type Locale,
   type ProviderEndpointProtocol,
 } from "@pige/schemas";
 export { AgentMemorySettingsPanel } from "./components/AgentMemorySettingsPanel";
 type View = "home" | "library" | "knowledgeTree";
+type ActiveCollection = {
+  readonly vaultId: string;
+  readonly snapshot: CollectionSnapshot;
+  readonly returnView: View;
+};
 export type SettingsSection =
   | "general"
   | "appearance"
@@ -311,7 +322,9 @@ export function App(): React.JSX.Element {
   const [selectedNoteVaultId, setSelectedNoteVaultId] = useState<string | null>(null);
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
+  const [selectedCollection, setSelectedCollection] = useState<ActiveCollection | null>(null);
   const noteOpenSequence = useRef(0);
+  const collectionOpenSequence = useRef(0);
   const inlineReferenceSequence = useRef(0);
   const activityOpenSequence = useRef(0);
   const activityOpenInFlightRef = useRef<string | null>(null);
@@ -319,6 +332,7 @@ export function App(): React.JSX.Element {
   const readerSelectionProposalDecisionInFlight = useRef(false);
   const selectedNoteRef = useRef<NoteRenderResult | null>(selectedNote);
   const selectedNoteVaultIdRef = useRef<string | null>(selectedNoteVaultId);
+  const selectedCollectionRef = useRef<ActiveCollection | null>(selectedCollection);
   const noteAgentDisclosureInitialized = useRef(false);
   const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const settingsOpenerRef = useRef<HTMLButtonElement | null>(null);
@@ -344,6 +358,7 @@ export function App(): React.JSX.Element {
   activeVaultIdRef.current = onboarding?.activeVault?.vaultId;
   selectedNoteRef.current = selectedNote;
   selectedNoteVaultIdRef.current = selectedNoteVaultId;
+  selectedCollectionRef.current = selectedCollection;
 
   useEffect(() => {
     setReaderSelectionProposal((current) => {
@@ -399,7 +414,7 @@ export function App(): React.JSX.Element {
     };
   }, [readerSelectionProposal?.preview.proposalId, readerSelectionProposal?.preview.state]);
   const sidebarOpen = windowLayoutState?.sidebarOpen ?? windowState?.sidebarOpen ?? false;
-  const homeSurface = view === "home" && !selectedNote;
+  const homeSurface = view === "home" && !selectedNote && !selectedCollection;
   const windowLayoutSurface = homeSurface ? "home" : "reader";
   const layoutSurfaceCurrent = windowLayoutState?.surface === windowLayoutSurface;
   const sidebarOverlayLayout = layoutSurfaceCurrent && windowLayoutState?.sidebarOpen
@@ -861,6 +876,7 @@ export function App(): React.JSX.Element {
       ) return false;
       setSelectedNoteVaultId(vaultId);
       setSelectedNote(note);
+      setSelectedCollection(null);
       void loadNoteRelated(pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
       return true;
     } catch {
@@ -874,6 +890,99 @@ export function App(): React.JSX.Element {
 
   const openNote = async (pageId: string): Promise<void> => {
     await openNoteTarget(pageId);
+  };
+
+  const readCollection = async (
+    datasetId: string,
+    tableId: string,
+    originVaultId: string,
+    sequence: number
+  ): Promise<CollectionSnapshot | null> => {
+    const request: CollectionOpenRequest = {
+      apiVersion: 1,
+      requestId: createCollectionRequestId(),
+      activeVaultId: originVaultId,
+      datasetId,
+      tableId
+    };
+    try {
+      const result = await window.pige.collections.open(request);
+      if (
+        sequence !== collectionOpenSequence.current ||
+        activeVaultIdRef.current !== originVaultId ||
+        !collectionOpenIdentityMatches(request, result) ||
+        result.status !== "ready" ||
+        result.snapshot.datasetId !== request.datasetId ||
+        result.snapshot.tableId !== request.tableId
+      ) return null;
+      return result.snapshot;
+    } catch {
+      return null;
+    }
+  };
+
+  const openCollection = async (
+    datasetId: string,
+    tableId: string,
+    returnView: View
+  ): Promise<boolean> => {
+    const vaultId = activeVaultIdRef.current;
+    if (!vaultId) return false;
+    const sequence = collectionOpenSequence.current + 1;
+    collectionOpenSequence.current = sequence;
+    setLibraryError(null);
+    const snapshot = await readCollection(datasetId, tableId, vaultId, sequence);
+    if (!snapshot) {
+      if (sequence === collectionOpenSequence.current) setLibraryError(t("collection.failed"));
+      return false;
+    }
+    const nextLayout = await requestWindowLayout({
+      apiVersion: 1,
+      surface: "reader",
+      sidebarOpen,
+      noteAgentOpen: false
+    });
+    if (
+      !nextLayout ||
+      sequence !== collectionOpenSequence.current ||
+      activeVaultIdRef.current !== vaultId
+    ) return false;
+    noteOpenSequence.current += 1;
+    inlineReferenceSequence.current += 1;
+    setSelectedNote(null);
+    setSelectedNoteRelated(null);
+    setNoteAgentOpen(false);
+    setSelectedCollection({ vaultId, snapshot, returnView });
+    window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".managed-collection-panel")?.focus());
+    return true;
+  };
+
+  const reloadSelectedCollection = async (): Promise<CollectionSnapshot | null> => {
+    const current = selectedCollectionRef.current;
+    if (!current || current.vaultId !== activeVaultIdRef.current) return null;
+    const sequence = collectionOpenSequence.current + 1;
+    collectionOpenSequence.current = sequence;
+    const snapshot = await readCollection(
+      current.snapshot.datasetId,
+      current.snapshot.tableId,
+      current.vaultId,
+      sequence
+    );
+    if (!snapshot) return null;
+    setSelectedCollection((active) => active?.vaultId === current.vaultId &&
+      active.snapshot.datasetId === current.snapshot.datasetId &&
+      active.snapshot.tableId === current.snapshot.tableId
+      ? { ...active, snapshot }
+      : active);
+    return snapshot;
+  };
+
+  const editCollectionCell = async (
+    request: CollectionCellEditRequest
+  ): Promise<CollectionCellEditResult> => {
+    const result = await window.pige.collections.editCell(request);
+    if (result.status === "committed") void refreshVaultState();
+    return result;
   };
 
   const activateInlineReference = async (href: string): Promise<ReaderInlineReferenceActivation> => {
@@ -941,9 +1050,11 @@ export function App(): React.JSX.Element {
   const navigateHome = (): void => {
     noteOpenSequence.current += 1;
     inlineReferenceSequence.current += 1;
+    collectionOpenSequence.current += 1;
     knowledgeTreeReturnFocusKey.current = null;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
+    setSelectedCollection(null);
     setNoteAgentOpen(false);
     setView("home");
     void requestWindowLayout({
@@ -1073,15 +1184,30 @@ export function App(): React.JSX.Element {
       !activityList ||
       activityList.activeVaultId !== activeVaultIdRef.current
     ) return;
+    const activity = activityList.activities.find((candidate) => candidate.operationId === operationId);
     setActivityUndoingId(operationId);
     try {
-      const result = await window.pige.activity.undo({ operationId });
+      const result = await window.pige.activity.undo({
+        operationId,
+        ...(activity?.target?.kind === "collection"
+          ? { expectedRevisionId: activity.target.revisionId }
+          : {})
+      });
+      if (result.status === "stale" || result.status === "not_found") {
+        setCaptureToast({ kind: "error", message: t("activity.undoFailed") });
+        return;
+      }
       setActivityBlockedIds((blocked) => blocked.filter((id) => id !== operationId));
       setCaptureToast({
         kind: "success",
         message: t(result.status === "already_undone" ? "activity.alreadyUndone" : "activity.undoCompleted")
       });
       await refreshVaultState();
+      if (
+        activity?.target?.kind === "collection" &&
+        selectedCollectionRef.current?.snapshot.datasetId === activity.target.datasetId &&
+        selectedCollectionRef.current.snapshot.tableId === activity.target.tableId
+      ) void reloadSelectedCollection();
     } catch {
       try {
         const current = await window.pige.activity.list({ limit: 20 });
@@ -1117,13 +1243,15 @@ export function App(): React.JSX.Element {
       activityOpenInFlightRef.current ||
       !originVaultId ||
       originVaultId !== activeVaultIdRef.current ||
-      target?.kind !== "page"
+      !target
     ) return;
     const requestId = activityOpenSequence.current + 1;
     activityOpenSequence.current = requestId;
     activityOpenInFlightRef.current = activity.operationId;
     setActivityOpeningId(activity.operationId);
-    const opened = await openNoteTarget(target.pageId, false);
+    const opened = target.kind === "page"
+      ? await openNoteTarget(target.pageId, false)
+      : await openCollection(target.datasetId, target.tableId, "library");
     if (
       !opened ||
       requestId !== activityOpenSequence.current ||
@@ -1198,6 +1326,12 @@ export function App(): React.JSX.Element {
     setNoteLoadingPageId(null);
     setNoteAgentOpen(false);
   }, [activeVault?.vaultId, selectedNote?.summary.pageId, selectedNoteVaultId]);
+
+  useEffect(() => {
+    if (!selectedCollection || selectedCollection.vaultId === activeVault?.vaultId) return;
+    collectionOpenSequence.current += 1;
+    setSelectedCollection(null);
+  }, [activeVault?.vaultId, selectedCollection?.vaultId]);
 
   useEffect(() => {
     if (!windowLayoutState) return;
@@ -1392,7 +1526,7 @@ export function App(): React.JSX.Element {
 
   return (
     <div
-      className={`shell app-window mode-${windowState?.mode ?? "expanded"}${macosWindowShell ? " platform-macos" : ""}${homeSurface ? " home-surface" : ""}${sidebarOpen ? " sidebar-expanded" : ""}${selectedNote ? " note-mode" : ""}${dropActive ? " drop-active" : ""}`}
+      className={`shell app-window mode-${windowState?.mode ?? "expanded"}${macosWindowShell ? " platform-macos" : ""}${homeSurface ? " home-surface" : ""}${sidebarOpen ? " sidebar-expanded" : ""}${selectedNote || selectedCollection ? " note-mode" : ""}${dropActive ? " drop-active" : ""}`}
       aria-label="Pige"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
@@ -1446,7 +1580,7 @@ export function App(): React.JSX.Element {
       </header>
 
       <div
-        className={`main-layout${sidebarOpen ? " sidebar-open" : ""}${selectedNote ? " note-open" : ""}${selectedNote && noteAgentOpen ? " agent-open" : ""}`}
+        className={`main-layout${sidebarOpen ? " sidebar-open" : ""}${selectedNote || selectedCollection ? " note-open" : ""}${selectedNote && noteAgentOpen ? " agent-open" : ""}`}
         inert={highRiskConfirmationOpen}
       >
         {sidebarOpen ? (
@@ -1576,6 +1710,23 @@ export function App(): React.JSX.Element {
             onError={setError}
             t={t}
           />
+        ) : selectedCollection && activeVault && selectedCollection.vaultId === activeVault.vaultId ? (
+          <ManagedCollectionPanel
+            activeVaultId={activeVault.vaultId}
+            snapshot={selectedCollection.snapshot}
+            onClose={() => {
+              collectionOpenSequence.current += 1;
+              const returnView = selectedCollection.returnView;
+              if (returnView === "home") navigateHome();
+              else {
+                setSelectedCollection(null);
+                setView(returnView);
+              }
+            }}
+            onEditCell={editCollectionCell}
+            onReload={reloadSelectedCollection}
+            t={t}
+          />
         ) : view === "library" && activeVault ? (
           <LibraryPanel
             libraryList={libraryList}
@@ -1679,6 +1830,7 @@ export function App(): React.JSX.Element {
             recentJobs={recentJobs}
             locale={locale}
             onReaderSelectionAction={revealReaderSelectionAction}
+            onOpenCollection={(datasetId, tableId) => openCollection(datasetId, tableId, "home")}
             draftText={homeDraftText}
             onDraftChange={setHomeDraftText}
             showFirstHomeGuide={onboarding?.showFirstHomeGuide === true}
@@ -3017,6 +3169,7 @@ function HomeComposer(props: {
   readonly recentJobs: readonly JobSummary[];
   readonly locale: Locale;
   readonly onReaderSelectionAction: (result: ReaderSelectionActionResult) => void;
+  readonly onOpenCollection: (datasetId: string, tableId: string) => Promise<boolean>;
   readonly draftText: string;
   readonly onDraftChange: (text: string) => void;
   readonly showFirstHomeGuide: boolean;
@@ -4596,7 +4749,12 @@ function HomeComposer(props: {
                   {props.t(message.role === "user" ? "home.userMessage" : "home.assistantMessage")}
                 </span>
                 {message.answer?.datasetResult ? (
-                  <DatasetAnswerResult answer={message.answer} modelUsage="none" t={props.t} />
+                  <DatasetAnswerResult
+                    answer={message.answer}
+                    modelUsage="none"
+                    onOpenCollection={props.onOpenCollection}
+                    t={props.t}
+                  />
                 ) : (
                   <>
                     <ConversationMarkdown markdown={markdown} t={props.t} />
@@ -4749,6 +4907,7 @@ function HomeComposer(props: {
         <DatasetAnswerResult
           answer={agentAnswer}
           modelUsage={agentModelUsage}
+          onOpenCollection={props.onOpenCollection}
           t={props.t}
         />
       ) : agentAnswer?.retrieval ? (
@@ -5219,6 +5378,20 @@ function createNoteReferenceRequestId(): string {
   return `noteref_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
 }
 
+function createCollectionRequestId(): `collection_request_${string}` {
+  return `collection_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function collectionOpenIdentityMatches(
+  request: CollectionOpenRequest,
+  result: CollectionOpenResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.datasetId === request.datasetId &&
+    result.tableId === request.tableId;
+}
+
 async function resolveAndOpenInlineReference(
   request: NoteResolveInlineReferenceRequest,
   isCurrent: () => boolean,
@@ -5279,9 +5452,10 @@ function joinVoiceTranscript(draft: string, transcript: string): string {
     : `${draft} ${transcript}`;
 }
 
-function DatasetAnswerResult(props: {
+export function DatasetAnswerResult(props: {
   readonly answer: AgentTurnAnswer;
   readonly modelUsage: HomeAgentModelUsage;
+  readonly onOpenCollection?: (datasetId: string, tableId: string) => Promise<boolean>;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const result = props.answer.datasetResult;
@@ -5302,6 +5476,15 @@ function DatasetAnswerResult(props: {
         <p className="muted dataset-answer-count">
           {props.t("dataset.rows")}: {result.returnedRowCount}/{result.matchedRowCount}
         </p>
+        {props.onOpenCollection ? (
+          <button
+            type="button"
+            className="settings-button"
+            onClick={() => void props.onOpenCollection?.(result.datasetId, result.tableId)}
+          >
+            {props.t("collection.open")}
+          </button>
+        ) : null}
       </header>
       <div className="dataset-table-scroll" tabIndex={0} aria-label={props.t("dataset.table")}>
         <table className="dataset-table">
@@ -6694,9 +6877,11 @@ export function ActivityHistorySettingsPanel(props: {
         ) : (
           <div className="settings-card activity-history-list">
             {props.activities.map((activity, index) => {
-              const activityMessageKey = activity.kind === "update_page"
-                ? "activity.updatedPage"
-                : "activity.createdPage";
+              const activityMessageKey = activity.kind === "update_collection_cell"
+                ? "activity.updatedCollection"
+                : activity.kind === "update_page"
+                  ? "activity.updatedPage"
+                  : "activity.createdPage";
               const activityLabel = `${props.t(activityMessageKey)}${activity.targetLabel ? `: ${activity.targetLabel}` : ""} (${index + 1})`;
               const createdAt = new Date(activity.createdAt);
               const createdAtLabel = Number.isNaN(createdAt.getTime())
@@ -6716,7 +6901,7 @@ export function ActivityHistorySettingsPanel(props: {
                     <span>{createdAtLabel} · {props.t(activity.status === "undone" ? "activity.statusUndone" : "activity.statusApplied")}</span>
                   </div>
                   <div className="settings-row-control">
-                    {activity.status === "applied" && activity.target?.kind === "page" ? (
+                    {activity.status === "applied" && activity.target ? (
                       <button
                         type="button"
                         className="settings-button"

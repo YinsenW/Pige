@@ -140,6 +140,10 @@ import {
   AppearanceThemeMutationResultSchema,
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
+  CollectionCellEditRequestSchema,
+  CollectionCellEditResultSchema,
+  CollectionOpenRequestSchema,
+  CollectionOpenResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   HighRiskConfirmationChangedEventSchema,
@@ -198,7 +202,12 @@ import {
   WindowLayoutStateSchema,
   VaultActionResultSchema
 } from "@pige/schemas";
-
+import type {
+  CollectionCellEditRequest,
+  CollectionCellEditResult,
+  CollectionOpenRequest,
+  CollectionOpenResult
+} from "@pige/schemas";
 function isRestoreMode(value: unknown): value is RestoreMode {
   return value === "clone_as_new" || value === "replace_existing";
 }
@@ -245,6 +254,42 @@ async function invokeKnowledgeActivityList(
         : { undoUnavailableReason: activity.undoUnavailableReason })
     }))
   };
+}
+
+async function invokeCollectionOpen(request: CollectionOpenRequest): Promise<CollectionOpenResult> {
+  const parsedRequest = CollectionOpenRequestSchema.parse(request);
+  const result = CollectionOpenResultSchema.parse(
+    await ipcRenderer.invoke("collections.open", parsedRequest)
+  );
+  if (
+    result.requestId !== parsedRequest.requestId ||
+    result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.datasetId !== parsedRequest.datasetId ||
+    result.tableId !== parsedRequest.tableId
+  ) {
+    throw new Error("Invalid Managed Collection open response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionCellEdit(
+  request: CollectionCellEditRequest
+): Promise<CollectionCellEditResult> {
+  const parsedRequest = CollectionCellEditRequestSchema.parse(request);
+  const result = CollectionCellEditResultSchema.parse(
+    await ipcRenderer.invoke("collections.editCell", parsedRequest)
+  );
+  if (
+    result.requestId !== parsedRequest.requestId ||
+    result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.datasetId !== parsedRequest.datasetId ||
+    result.tableId !== parsedRequest.tableId ||
+    result.rowId !== parsedRequest.rowId ||
+    result.columnId !== parsedRequest.columnId
+  ) {
+    throw new Error("Invalid Managed Collection edit response identity.");
+  }
+  return result;
 }
 
 function projectBackupManifestSummary(manifest: BackupManifestSummary): BackupManifestSummary {
@@ -562,6 +607,10 @@ const api: PigeDesktopApi = {
     list: invokeKnowledgeActivityList,
     undo: async (request: KnowledgeActivityUndoRequest): Promise<KnowledgeActivityUndoResult> =>
       ipcRenderer.invoke("activity.undo", request) as Promise<KnowledgeActivityUndoResult>
+  },
+  collections: {
+    open: invokeCollectionOpen,
+    editCell: invokeCollectionCellEdit
   },
   proposals: {
     list: async (request?: ProposalsListRequest): Promise<ProposalsListResult> =>

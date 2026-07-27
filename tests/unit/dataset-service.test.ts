@@ -102,11 +102,13 @@ describe("Dataset Service", () => {
     const schema = DatasetSchemaRecordSchema.parse(readJson(path.join(bundlePath, manifest.schema.path)));
     expect(manifest).toMatchObject({
       datasetId: first.datasetId,
+      initialRevision: first.revisionId,
       activeRevision: first.revisionId,
       profile: "managed_collection"
     });
     expect(revision).toMatchObject({
       id: first.revisionId,
+      change: { kind: "initial_import" },
       stats: { tableCount: 1, rowCount: 2, columnCount: 2, cellCount: 4 }
     });
     expect(schema.tables[0]).toMatchObject({ name: "records", rowCount: 2, columnCount: 2 });

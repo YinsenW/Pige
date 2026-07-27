@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
   ModelProfileSummary,
@@ -10,6 +11,7 @@ import type {
 } from "@pige/contracts";
 import {
   DatasetManifestSchema,
+  DatasetRevisionSchema,
   JobRecordSchema,
   SourceRecordSchema,
   type OperationRecord
@@ -58,6 +60,42 @@ afterEach(() => {
 });
 
 describe("Dataset Query Service", () => {
+  it("keeps immutable source evidence bound to the initial revision after the active revision changes", async () => {
+    const fixture = await createManagedFixture();
+    const sourceBefore = SourceRecordSchema.parse(readJson(fixture.sourceRecordPath));
+    const currentRevisionId = "dataset_rev_20260713_cccccccccccc";
+    publishCollectionEditRevision(fixture, currentRevisionId);
+
+    const service = new DatasetQueryService(directExecutor);
+    const catalog = await service.createCatalog(fixture.vaultPath);
+    const result = await service.execute(fixture.vaultPath, catalog, {
+      action: "query",
+      datasetRef: "dataset_1",
+      tableRef: "table_1",
+      select: ["column_1"],
+      filters: [],
+      orderBy: [],
+      limit: 10
+    });
+
+    expect(result.preview.revisionId).toBe(currentRevisionId);
+    expect(SourceRecordSchema.parse(readJson(fixture.sourceRecordPath))).toEqual(sourceBefore);
+    expect(sourceBefore.metadata.datasetRevisionId).toBe(fixture.manifest.initialRevision);
+  });
+
+  it("uses the active revision as legacy source evidence when initialRevision is absent", async () => {
+    const fixture = await createManagedFixture();
+    const { initialRevision: _initialRevision, ...legacyManifest } = fixture.manifest;
+    writeJson(fixture.manifestPath, legacyManifest);
+
+    const service = new DatasetQueryService(directExecutor);
+    const catalog = await service.createCatalog(fixture.vaultPath);
+
+    await expect(service.revalidateCatalog(fixture.vaultPath, catalog)).resolves.toMatchObject({
+      drifted: false
+    });
+  });
+
   it("exposes an opaque Home catalog and returns bounded preview, citation, and escaped evidence", async () => {
     const fixture = await createManagedFixture();
     const service = new DatasetQueryService(directExecutor);
@@ -639,6 +677,72 @@ async function materializeAdditionalDataset(
   return {
     sourceId,
     manifest: DatasetManifestSchema.parse(readJson(path.join(bundlePath, "dataset.json")))
+  };
+}
+
+function publishCollectionEditRevision(fixture: ManagedFixture, revisionId: string): void {
+  const previousRevision = JSON.parse(fs.readFileSync(
+    path.join(fixture.bundlePath, fixture.manifest.revision.path),
+    "utf8"
+  )) as Record<string, unknown>;
+  const previousSchema = JSON.parse(fs.readFileSync(fixture.schemaPath, "utf8")) as {
+    readonly tables: readonly [{ readonly id: string; readonly columns: readonly [{ readonly id: string }] }];
+    readonly [key: string]: unknown;
+  };
+  const payloadRelativePath = `data/revisions/${revisionId}.sqlite`;
+  const schemaRelativePath = `schemas/${revisionId}.json`;
+  const revisionRelativePath = `revisions/${revisionId}.json`;
+  const payloadPath = path.join(fixture.bundlePath, ...payloadRelativePath.split("/"));
+  const schemaPath = path.join(fixture.bundlePath, ...schemaRelativePath.split("/"));
+  const revisionPath = path.join(fixture.bundlePath, ...revisionRelativePath.split("/"));
+  fs.mkdirSync(path.dirname(payloadPath), { recursive: true });
+  fs.copyFileSync(fixture.payloadPath, payloadPath);
+  const database = new DatabaseSync(payloadPath);
+  try {
+    database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'").run(revisionId);
+  } finally {
+    database.close();
+  }
+  writeJson(schemaPath, { ...previousSchema, revisionId });
+  const payload = fileRef(payloadPath, payloadRelativePath, { format: "sqlite" });
+  const schema = fileRef(schemaPath, schemaRelativePath);
+  const revision = DatasetRevisionSchema.parse({
+    ...previousRevision,
+    id: revisionId,
+    parentRevisionId: fixture.manifest.activeRevision,
+    schema,
+    payload,
+    operationId: "op_20260713_cccccccccccc",
+    change: {
+      kind: "collection_cell_edit",
+      tableId: previousSchema.tables[0].id,
+      rowId: "row_cccccccccccc",
+      columnId: previousSchema.tables[0].columns[0].id
+    },
+    createdAt: "2026-07-13T01:00:00.000Z"
+  });
+  writeJson(revisionPath, revision);
+  writeJson(fixture.manifestPath, {
+    ...fixture.manifest,
+    activeRevision: revisionId,
+    revision: fileRef(revisionPath, revisionRelativePath),
+    schema,
+    payload,
+    updatedAt: "2026-07-13T01:00:00.000Z"
+  });
+}
+
+function fileRef(
+  absolutePath: string,
+  relativePath: string,
+  extra: Readonly<Record<string, unknown>> = {}
+): Readonly<Record<string, unknown>> {
+  const bytes = fs.readFileSync(absolutePath);
+  return {
+    path: relativePath,
+    checksum: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+    size: bytes.length,
+    ...extra
   };
 }
 

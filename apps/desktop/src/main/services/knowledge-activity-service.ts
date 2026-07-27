@@ -21,17 +21,15 @@ import {
   readAgentPageUpdateOperationBinding
 } from "./agent-page-update-service";
 import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
-
 export interface KnowledgeActivityVaultPort {
   current(): VaultSummary | undefined;
   activeVaultPath(): string | undefined;
 }
-
+export interface KnowledgeActivityCollectionPort { activitySummary(operation: OperationRecord, undo?: OperationRecord): KnowledgeActivitySummary | undefined; findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined; undo(operation: OperationRecord, expectedRevisionId?: string): Promise<KnowledgeActivityUndoResult>; recoverIncompleteOperations(): KnowledgeActivityRecoveryResult; }
 export interface KnowledgeActivityRecoveryResult {
   readonly recovered: number;
   readonly failed: number;
 }
-
 interface OperationScanResult {
   readonly operations: readonly OperationRecord[];
   readonly invalidOperationCount: number;
@@ -64,11 +62,10 @@ const CONTENT_HASH = /^sha256:[a-f0-9]{64}$/u;
 
 export class KnowledgeActivityService {
   readonly #vaults: KnowledgeActivityVaultPort;
-
-  constructor(vaults: KnowledgeActivityVaultPort) {
-    this.#vaults = vaults;
+  readonly #collections: KnowledgeActivityCollectionPort | undefined;
+  constructor(vaults: KnowledgeActivityVaultPort, collections?: KnowledgeActivityCollectionPort) {
+    this.#vaults = vaults; this.#collections = collections;
   }
-
   list(request: KnowledgeActivityListRequest = {}): KnowledgeActivityListResult {
     if (!request || typeof request !== "object") {
       throw new PigeDomainError("activity.invalid_request", "The Activity list request is invalid.");
@@ -78,7 +75,10 @@ export class KnowledgeActivityService {
     const scan = readOperationRecords(vaultPath);
     const undoByOperationId = createUndoOperationMap(scan.operations);
     const activities = scan.operations
-      .filter(isKnowledgeActivityOperation)
+      .filter((operation) => isKnowledgeActivityOperation(operation) || (
+        operation.kind === "update_collection_cell" && !!this.#collections?.activitySummary(
+          operation, this.#collections.findUndoOperation(operation, scan.operations)
+        )))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id));
 
     return {
@@ -88,11 +88,15 @@ export class KnowledgeActivityService {
       invalidOperationCount: scan.invalidOperationCount,
       activities: activities
         .slice(0, clampLimit(request.limit))
-        .map((operation) => toActivitySummary(vaultPath, operation, undoByOperationId.get(operation.id)))
+        .map((operation) => {
+          if (operation.kind === "update_collection_cell" && this.#collections) {
+            return this.#collections.activitySummary(operation, this.#collections.findUndoOperation(operation, scan.operations))!;
+          }
+          return toActivitySummary(vaultPath, operation, undoByOperationId.get(operation.id));
+        })
     };
   }
-
-  undo(request: KnowledgeActivityUndoRequest): KnowledgeActivityUndoResult {
+  undo(request: KnowledgeActivityUndoRequest): KnowledgeActivityUndoResult | Promise<KnowledgeActivityUndoResult> {
     if (
       !request ||
       typeof request !== "object" ||
@@ -104,8 +108,12 @@ export class KnowledgeActivityService {
     const vaultPath = this.#requireActiveVaultPath();
     const scan = readOperationRecords(vaultPath);
     const operation = scan.operations.find((candidate) => candidate.id === request.operationId);
-    if (!operation || !isKnowledgeActivityOperation(operation)) {
+    if (!operation || (!isKnowledgeActivityOperation(operation) && operation.kind !== "update_collection_cell")) {
       throw new PigeDomainError("activity.not_allowed", "This Activity cannot be undone by the current bounded path.");
+    }
+    if (operation.kind === "update_collection_cell") {
+      if (!this.#collections) throw new PigeDomainError("activity.not_allowed", "Collection Activity is unavailable.");
+      return this.#collections.undo(operation, request.expectedRevisionId);
     }
     const existingUndo = createUndoOperationMap(scan.operations).get(operation.id);
     if (existingUndo) {
@@ -130,7 +138,6 @@ export class KnowledgeActivityService {
       undoOperationId: undoOperation.id
     };
   }
-
   recoverIncompleteUndos(): KnowledgeActivityRecoveryResult {
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vaultPath) return { recovered: 0, failed: 0 };
@@ -176,15 +183,13 @@ export class KnowledgeActivityService {
         failed += 1;
       }
     }
-    return { recovered, failed };
+    const collections = this.#collections?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; return { recovered: recovered + collections.recovered, failed: failed + collections.failed };
   }
-
   #requireActiveVault(): VaultSummary {
     const activeVault = this.#vaults.current();
     if (!activeVault) throw new PigeDomainError("vault.not_open", "Open a vault before reading Activity.");
     return activeVault;
   }
-
   #requireActiveVaultPath(): string {
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vaultPath) throw new PigeDomainError("vault.not_open", "Open a vault before changing Activity.");

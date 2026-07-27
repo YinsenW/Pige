@@ -203,6 +203,7 @@ export class DatasetService implements DatasetMaterializerPort {
         stats: plan.stats,
         warnings: plan.warnings.map((warning) => warning.code).slice(0, 64),
         operationId,
+        change: { kind: "initial_import" },
         createdAt: now
       });
       writeJsonAtomic(path.join(stagingBundle, ...revisionRelativePath.split("/")), revisionRecord);
@@ -214,6 +215,7 @@ export class DatasetService implements DatasetMaterializerPort {
         profile: "managed_collection",
         title: datasetTitle(parsedSource),
         sourceId: parsedSource.id,
+        initialRevision: identities.revisionId,
         activeRevision: identities.revisionId,
         revision: revisionRef,
         schema: schemaRef,
