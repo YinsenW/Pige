@@ -183,6 +183,8 @@ import {
   CollectionCellEditResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
+  CollectionAppendDefaultRowRequestSchema,
+  CollectionAppendDefaultRowResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   KnowledgeHealthRunRequestSchema,
@@ -284,7 +286,9 @@ import type {
   CollectionCellEditRequest,
   CollectionCellEditResult,
   CollectionOpenRequest,
-  CollectionOpenResult
+  CollectionOpenResult,
+  CollectionAppendDefaultRowRequest,
+  CollectionAppendDefaultRowResult
 } from "@pige/schemas";
 function isRestoreMode(value: unknown): value is RestoreMode {
   return value === "clone_as_new" || value === "replace_existing";
@@ -366,6 +370,24 @@ async function invokeCollectionCellEdit(
     result.columnId !== parsedRequest.columnId
   ) {
     throw new Error("Invalid Managed Collection edit response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionAppendDefaultRow(
+  request: CollectionAppendDefaultRowRequest
+): Promise<CollectionAppendDefaultRowResult> {
+  const parsedRequest = CollectionAppendDefaultRowRequestSchema.parse(request);
+  const result = CollectionAppendDefaultRowResultSchema.parse(
+    await ipcRenderer.invoke("collections.appendDefaultRow", parsedRequest)
+  );
+  if (
+    result.requestId !== parsedRequest.requestId ||
+    result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.datasetId !== parsedRequest.datasetId ||
+    result.tableId !== parsedRequest.tableId
+  ) {
+    throw new Error("Invalid Managed Collection default-row append response identity.");
   }
   return result;
 }
@@ -748,7 +770,8 @@ const api: PigeDesktopApi = {
   },
   collections: {
     open: invokeCollectionOpen,
-    editCell: invokeCollectionCellEdit
+    editCell: invokeCollectionCellEdit,
+    appendDefaultRow: invokeCollectionAppendDefaultRow
   },
   proposals: {
     list: async (request?: ProposalsListRequest): Promise<ProposalsListResult> =>

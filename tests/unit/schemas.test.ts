@@ -5,6 +5,8 @@ import {
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
   ConfirmationProposalSchema,
+  CollectionAppendDefaultRowRequestSchema,
+  CollectionAppendDefaultRowResultSchema,
   ConversationEventSchema,
   FixtureManifestSchema,
   HighRiskConfirmationSummarySchema,
@@ -75,6 +77,81 @@ import {
 } from "@pige/schemas";
 
 describe("schemas", () => {
+  it("keeps default-row append Main-owned, CAS-bound, and renderer-safe", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "collection_request_abcdefghijklmnop",
+      activeVaultId: "vault_20260728_abcdefgh",
+      datasetId: "dataset_20260728_abcdef123456",
+      tableId: "table_abcdef123456",
+      expectedRevisionId: "dataset_rev_20260728_abcdef123456"
+    } as const;
+    const snapshot = {
+      datasetId: request.datasetId,
+      revisionId: "dataset_rev_20260728_bcdefa123456",
+      title: "Reading list",
+      tableId: request.tableId,
+      tableName: "Items",
+      columns: [{ columnId: "column_abcdef123456", label: "Notes", logicalType: "string" }],
+      rows: [],
+      totalRowCount: 0,
+      returnedRowCount: 0,
+      truncated: false,
+      canAppendDefaultRow: true
+    } as const;
+    const identity = {
+      apiVersion: request.apiVersion,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      datasetId: request.datasetId,
+      tableId: request.tableId
+    } as const;
+
+    expect(CollectionAppendDefaultRowRequestSchema.parse(request)).toEqual(request);
+    expect(CollectionAppendDefaultRowResultSchema.parse({
+      ...identity,
+      status: "committed",
+      rowId: "row_abcdef123456",
+      operationId: "op_20260728_abcdef12",
+      snapshot: { ...snapshot, totalRowCount: 1, truncated: true }
+    })).toMatchObject({ status: "committed", rowId: "row_abcdef123456" });
+    expect(CollectionAppendDefaultRowResultSchema.parse({
+      ...identity,
+      status: "stale",
+      snapshot: { ...snapshot, canAppendDefaultRow: false }
+    })).toMatchObject({ status: "stale", snapshot: { canAppendDefaultRow: false } });
+    expect(CollectionAppendDefaultRowResultSchema.parse({ ...identity, status: "not_found" }))
+      .toEqual({ ...identity, status: "not_found" });
+    const missingEligibility: Record<string, unknown> = { ...snapshot };
+    delete missingEligibility.canAppendDefaultRow;
+    expect(() => CollectionAppendDefaultRowResultSchema.parse({
+      ...identity,
+      status: "stale",
+      snapshot: missingEligibility
+    })).toThrow();
+
+    for (const unsafe of [
+      { values: { column_abcdef123456: "renderer guessed" } },
+      { rowId: "row_abcdef123456" },
+      { path: "/private/collection.sqlite" },
+      { sql: "INSERT INTO rows" }
+    ]) {
+      expect(() => CollectionAppendDefaultRowRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+    }
+    expect(() => CollectionAppendDefaultRowResultSchema.parse({
+      ...identity,
+      status: "stale",
+      snapshot: { ...snapshot, datasetId: "dataset_20260728_bcdefa123456" }
+    })).toThrow();
+    for (const unsafe of [{ path: "/private" }, { body: "private" }, { rawError: "SQLITE_BUSY" }]) {
+      expect(() => CollectionAppendDefaultRowResultSchema.parse({
+        ...identity,
+        status: "not_found",
+        ...unsafe
+      })).toThrow();
+    }
+  });
+
   it("keeps Knowledge Health report-only, generation-bound, bounded, ordered, and renderer-safe", () => {
     const request = {
       apiVersion: 1,
@@ -975,6 +1052,25 @@ describe("schemas", () => {
       kind: "page",
       pageId: "page_20260718_activitysafe"
     });
+    expect(KnowledgeActivityListResultSchema.parse({
+      scannedAt: "2026-07-28T00:00:00.000Z",
+      activeVaultId: "vault_20260728_activitysafe",
+      total: 1,
+      invalidOperationCount: 0,
+      activities: [{
+        operationId: "op_20260728_rowappend",
+        kind: "add_collection_row",
+        createdAt: "2026-07-28T00:00:00.000Z",
+        target: {
+          kind: "collection",
+          datasetId: "dataset_20260728_abcdef123456",
+          tableId: "table_abcdef123456",
+          revisionId: "dataset_rev_20260728_bcdefa123456"
+        },
+        status: "applied",
+        canUndo: true
+      }]
+    }).activities[0]?.kind).toBe("add_collection_row");
     expect(() => KnowledgeActivityListResultSchema.parse({
       ...result,
       activities: [{ ...result.activities[0], path: "/private/vault/page.md" }]

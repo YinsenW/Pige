@@ -27,6 +27,76 @@ afterEach(() => {
 });
 
 describe("ManagedCollectionService", () => {
+  it("appends one authoritative default row, adopts replay, and undoes the exact revision", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionService(port);
+    const initialManifest = readManifest(fixture.bundlePath);
+    const schema = DatasetSchemaRecordSchema.parse(readJson(path.join(fixture.bundlePath, initialManifest.schema.path)));
+    const table = required(schema.tables[0]);
+    const opened = await service.open({
+      apiVersion: 1,
+      requestId: "collection_request_appendopenabcdef",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id
+    });
+    expect(opened).toMatchObject({ status: "ready", snapshot: { canAppendDefaultRow: true } });
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "collection_request_appendrowabcdefg",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id,
+      expectedRevisionId: initialManifest.activeRevision
+    };
+    const committed = await service.appendDefaultRow(request);
+    expect(committed).toMatchObject({
+      status: "committed",
+      snapshot: { totalRowCount: 3, returnedRowCount: 3, canAppendDefaultRow: true }
+    });
+    if (committed.status !== "committed") throw new Error("Collection row append did not commit");
+    expect(committed.snapshot.rows.find((row) => row.rowId === committed.rowId)?.cells)
+      .toEqual(table.columns.map((column) => ({ columnId: column.id, value: null, editable: true })));
+    await expect(service.appendDefaultRow(request)).resolves.toEqual(committed);
+    const operationPath = findFile(
+      path.join(fixture.vaultPath, ".pige/operations"),
+      `${committed.operationId}.json`
+    );
+    const operationBytes = fs.readFileSync(operationPath);
+    const tamperedOperation = readJson(operationPath) as Record<string, unknown>;
+    fs.writeFileSync(operationPath, `${JSON.stringify({ ...tamperedOperation, summary: "tampered" }, null, 2)}\n`);
+    await expect(service.appendDefaultRow(request)).rejects.toMatchObject({
+      code: "collection.request_conflict"
+    });
+    fs.writeFileSync(operationPath, operationBytes);
+    await expect(service.appendDefaultRow({
+      ...request,
+      requestId: "collection_request_appendstaleabcdef"
+    })).resolves.toMatchObject({
+      status: "stale",
+      snapshot: { revisionId: committed.snapshot.revisionId, totalRowCount: 3 }
+    });
+
+    const activity = new KnowledgeActivityService(port, service);
+    const rowActivity = activity.list({ limit: 20 }).activities.find((entry) => entry.kind === "add_collection_row");
+    expect(rowActivity).toMatchObject({ status: "applied", canUndo: true });
+    const undone = await activity.undo({
+      operationId: required(rowActivity).operationId,
+      expectedRevisionId: committed.snapshot.revisionId
+    });
+    expect(undone).toMatchObject({ status: "undone" });
+    const afterUndo = await service.open({
+      apiVersion: 1,
+      requestId: "collection_request_appendundoabcdef",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id
+    });
+    expect(afterUndo).toMatchObject({ status: "ready", snapshot: { totalRowCount: 2 } });
+  });
+
   it("commits one immutable cell revision, adopts replay, and undoes through Activity", async () => {
     const fixture = await makeCollectionFixture();
     const vault = loadVaultSummary(fixture.vaultPath);
@@ -240,9 +310,16 @@ function csvPlan(sourceBytes: Buffer): DatasetIngestPlan {
     lexical: { raw: text, text, quoted: false },
     projection
   });
+  const nullCell = (columnOrdinal: number, sourceType: string) => ({
+    columnOrdinal,
+    state: "null" as const,
+    sourceType,
+    lexical: { raw: "NULL", text: "NULL", quoted: false },
+    projection: { kind: "null" as const }
+  });
   const rows = [
     [valueCell(0, "Ada", "text", { kind: "text", value: "Ada" }), valueCell(1, "3", "integer", { kind: "integer", value: "3" })],
-    [valueCell(0, "Grace", "text", { kind: "text", value: "Grace" }), valueCell(1, "5", "integer", { kind: "integer", value: "5" })]
+    [nullCell(0, "text"), nullCell(1, "integer")]
   ];
   return {
     schemaVersion: 1,
@@ -291,8 +368,8 @@ function csvPlan(sourceBytes: Buffer): DatasetIngestPlan {
         }
       },
       columns: [
-        { ordinal: 0, sourceName: "name", suggestedName: "name", projectedType: "text", sourceTypes: ["text"], stats: { missing: 0, empty: 0, null: 0, value: 2 } },
-        { ordinal: 1, sourceName: "count", suggestedName: "count", projectedType: "integer", sourceTypes: ["integer"], stats: { missing: 0, empty: 0, null: 0, value: 2 } }
+        { ordinal: 0, sourceName: "name", suggestedName: "name", projectedType: "text", sourceTypes: ["text"], stats: { missing: 0, empty: 0, null: 1, value: 1 } },
+        { ordinal: 1, sourceName: "count", suggestedName: "count", projectedType: "integer", sourceTypes: ["integer"], stats: { missing: 0, empty: 0, null: 1, value: 1 } }
       ],
       rows: rows.map((cells, index) => ({ ordinal: index, sourceRow: index + 2, cells }))
     }],

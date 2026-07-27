@@ -20,11 +20,17 @@ const editRequest = {
   columnId: "column_abcdefghijkl",
   value: "updated"
 } as const;
+const appendRequest = {
+  ...openRequest,
+  requestId: "collection_request_appendabcdefghij",
+  expectedRevisionId: "dataset_rev_20260727_abcdefghijkl"
+} as const;
 
 function makeHarness(options: {
   readonly getActiveVaultId?: () => string | undefined;
   readonly openCollection?: (request: typeof openRequest) => unknown;
   readonly editCollectionCell?: (request: typeof editRequest) => unknown;
+  readonly appendDefaultCollectionRow?: (request: typeof appendRequest) => unknown;
 } = {}) {
   const handlers = new Map<string, IpcHandler>();
   const openCollection = vi.fn(options.openCollection ?? ((request) => ({
@@ -43,8 +49,17 @@ function makeHarness(options: {
       }],
       totalRowCount: 1,
       returnedRowCount: 1,
-      truncated: false
+      truncated: false,
+      canAppendDefaultRow: true
     }
+  })));
+  const appendDefaultCollectionRow = vi.fn(options.appendDefaultCollectionRow ?? ((request) => ({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    status: "not_found"
   })));
   const editCollectionCell = vi.fn(options.editCollectionCell ?? ((request) => ({
     apiVersion: request.apiVersion,
@@ -65,21 +80,23 @@ function makeHarness(options: {
     } as Pick<IpcMain, "handle">,
     getActiveVaultId: options.getActiveVaultId ?? (() => activeVaultId),
     openCollection,
-    editCollectionCell
+    editCollectionCell,
+    appendDefaultCollectionRow
   });
-  return { handlers, openCollection, editCollectionCell };
+  return { handlers, openCollection, editCollectionCell, appendDefaultCollectionRow };
 }
 
 describe("registerManagedCollectionIpc", () => {
-  it("registers only collection open and cell-edit channels", () => {
+  it("registers the bounded collection channels", () => {
     expect([...makeHarness().handlers.keys()]).toEqual([
       "collections.open",
-      "collections.editCell"
+      "collections.editCell",
+      "collections.appendDefaultRow"
     ]);
   });
 
   it("strictly parses and returns bounded open and edit results", async () => {
-    const { handlers, openCollection, editCollectionCell } = makeHarness();
+    const { handlers, openCollection, editCollectionCell, appendDefaultCollectionRow } = makeHarness();
 
     await expect(handlers.get("collections.open")!({} as IpcMainInvokeEvent, openRequest))
       .resolves.toMatchObject({ status: "ready", requestId: openRequest.requestId });
@@ -89,12 +106,15 @@ describe("registerManagedCollectionIpc", () => {
         requestId: editRequest.requestId,
         revisionId: "dataset_rev_20260727_qrstuvwxyzab"
       });
+    await expect(handlers.get("collections.appendDefaultRow")!({} as IpcMainInvokeEvent, appendRequest))
+      .resolves.toMatchObject({ status: "not_found", requestId: appendRequest.requestId });
     expect(openCollection).toHaveBeenCalledWith(openRequest);
     expect(editCollectionCell).toHaveBeenCalledWith(editRequest);
+    expect(appendDefaultCollectionRow).toHaveBeenCalledWith(appendRequest);
   });
 
   it("fails closed before service access when the active vault does not match", async () => {
-    const { handlers, openCollection, editCollectionCell } = makeHarness({
+    const { handlers, openCollection, editCollectionCell, appendDefaultCollectionRow } = makeHarness({
       getActiveVaultId: () => "vault_20260727_elsewhere"
     });
 
@@ -111,8 +131,18 @@ describe("registerManagedCollectionIpc", () => {
         columnId: editRequest.columnId,
         status: "failed"
       });
+    await expect(handlers.get("collections.appendDefaultRow")!({} as IpcMainInvokeEvent, appendRequest))
+      .resolves.toEqual({
+        apiVersion: 1,
+        requestId: appendRequest.requestId,
+        activeVaultId: appendRequest.activeVaultId,
+        datasetId: appendRequest.datasetId,
+        tableId: appendRequest.tableId,
+        status: "not_found"
+      });
     expect(openCollection).not.toHaveBeenCalled();
     expect(editCollectionCell).not.toHaveBeenCalled();
+    expect(appendDefaultCollectionRow).not.toHaveBeenCalled();
   });
 
   it("rejects malformed or identity-swapped service responses", async () => {

@@ -124,6 +124,8 @@ import {
   type AgentStagedItem,
   type AgentStagedItemRejectionReason,
   type AgentStagedLargePasteItem,
+  type CollectionAppendDefaultRowRequest,
+  type CollectionAppendDefaultRowResult,
   type CollectionCellEditRequest,
   type CollectionCellEditResult,
   type CollectionOpenRequest,
@@ -1000,6 +1002,27 @@ export function App(): React.JSX.Element {
     return result;
   };
 
+  const appendCollectionDefaultRow = async (
+    request: CollectionAppendDefaultRowRequest
+  ): Promise<CollectionAppendDefaultRowResult> => {
+    const result = await window.pige.collections.appendDefaultRow(request);
+    if (collectionAppendIdentityMatches(request, result) && result.status === "committed") void refreshVaultState();
+    return result;
+  };
+
+  const adoptCollectionSnapshot = (snapshot: CollectionSnapshot, expectedRevisionId: string): boolean => {
+    const active = selectedCollectionRef.current;
+    if (
+      !active ||
+      active.vaultId !== activeVaultIdRef.current ||
+      active.snapshot.datasetId !== snapshot.datasetId ||
+      active.snapshot.tableId !== snapshot.tableId ||
+      active.snapshot.revisionId !== expectedRevisionId
+    ) return false;
+    setSelectedCollection({ ...active, snapshot });
+    return true;
+  };
+
   const activateInlineReference = async (href: string): Promise<ReaderInlineReferenceActivation> => {
     const vaultId = activeVaultIdRef.current;
     const note = selectedNoteRef.current;
@@ -1760,6 +1783,8 @@ export function App(): React.JSX.Element {
                 setView(returnView);
               }
             }}
+            onAppendDefaultRow={appendCollectionDefaultRow}
+            onAdoptSnapshot={adoptCollectionSnapshot}
             onEditCell={editCollectionCell}
             onReload={reloadSelectedCollection}
             t={t}
@@ -5640,6 +5665,16 @@ function createCollectionRequestId(): `collection_request_${string}` {
 function collectionOpenIdentityMatches(
   request: CollectionOpenRequest,
   result: CollectionOpenResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.datasetId === request.datasetId &&
+    result.tableId === request.tableId;
+}
+
+function collectionAppendIdentityMatches(
+  request: CollectionAppendDefaultRowRequest,
+  result: CollectionAppendDefaultRowResult
 ): boolean {
   return result.requestId === request.requestId &&
     result.activeVaultId === request.activeVaultId &&

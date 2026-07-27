@@ -1926,7 +1926,8 @@ registerManagedCollectionIpc({
   ipcMain,
   getActiveVaultId: () => getVaultService().current()?.vaultId,
   openCollection: (request) => getManagedCollectionService().open(request),
-  editCollectionCell: (request) => getManagedCollectionService().editCell(request)
+  editCollectionCell: (request) => getManagedCollectionService().editCell(request),
+  appendDefaultCollectionRow: (request) => getManagedCollectionService().appendDefaultRow(request)
 });
 registerKnowledgeHealthIpc({
   ipcMain,

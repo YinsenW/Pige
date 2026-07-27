@@ -1,9 +1,11 @@
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
+  CollectionAppendDefaultRowRequest,
+  CollectionAppendDefaultRowResult,
   CollectionCellEditRequest,
   CollectionCellEditResult,
   CollectionSnapshot
@@ -53,6 +55,8 @@ describe("ManagedCollectionPanel", () => {
         activeVaultId: "vault_20260727_collection01",
         snapshot: collectionSnapshot("dataset_rev_20260727_revision0001", "Alpha"),
         onClose: () => undefined,
+        onAppendDefaultRow: notFoundAppendResult,
+        onAdoptSnapshot: () => false,
         onEditCell: async (request: CollectionCellEditRequest): Promise<CollectionCellEditResult> => {
           requests.push(request);
           return committedResult(request, "dataset_rev_20260727_revision0002");
@@ -66,6 +70,7 @@ describe("ManagedCollectionPanel", () => {
       await settle(dom);
     });
     const container = dom.window.document.querySelector("#root")!;
+    expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Add row")).toBe(false);
     const editButton = buttonNamed(container, "Edit cell: Name, row 1");
     await click(dom, editButton);
     const input = requireElement(container.querySelector<HTMLInputElement>('input[aria-label="Edit value: Name, row 1"]'));
@@ -102,6 +107,8 @@ describe("ManagedCollectionPanel", () => {
         activeVaultId: "vault_20260727_collection01",
         snapshot: collectionSnapshot("dataset_rev_20260727_revision0001", "Alpha"),
         onClose: () => undefined,
+        onAppendDefaultRow: notFoundAppendResult,
+        onAdoptSnapshot: () => false,
         onEditCell: async (request: CollectionCellEditRequest): Promise<CollectionCellEditResult> => {
           requests.push(request);
           return requests.length === 1
@@ -132,6 +139,85 @@ describe("ManagedCollectionPanel", () => {
       "dataset_rev_20260727_revision0001",
       "dataset_rev_20260727_revision0002"
     ]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("adopts a stale append snapshot, retries its exact revision, and focuses the authoritative new row", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: CollectionAppendDefaultRowRequest[] = [];
+    const staleSnapshot = collectionSnapshot("dataset_rev_20260727_revision0002", "Alpha", true);
+    const committedSnapshot: CollectionSnapshot = {
+      ...collectionSnapshot("dataset_rev_20260727_revision0003", "Alpha", true),
+      rows: [
+        ...collectionSnapshot("dataset_rev_20260727_revision0003", "Alpha", true).rows,
+        {
+          rowId: "row_customer0002",
+          cells: [
+            { columnId: "column_name000001", value: "Server default", editable: true },
+            { columnId: "column_total00001", value: 0, editable: false, readOnlyReason: "formula" }
+          ]
+        }
+      ],
+      totalRowCount: 2,
+      returnedRowCount: 2
+    };
+    const append = async (
+      request: CollectionAppendDefaultRowRequest
+    ): Promise<CollectionAppendDefaultRowResult> => {
+      requests.push(request);
+      const identity = appendIdentity(request);
+      return requests.length === 1
+        ? { ...identity, status: "stale", snapshot: staleSnapshot }
+        : {
+          ...identity,
+          status: "committed",
+          rowId: "row_customer0002",
+          operationId: "op_20260728_collectionappend01",
+          snapshot: committedSnapshot
+        };
+    };
+    await act(async () => {
+      root.render(createElement(CollectionAppendHarness, { onAppend: append }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Add row")).toBe(true);
+
+    await act(async () => {
+      const add = buttonNamed(container, "Add row");
+      add.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      add.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(requests).toEqual([{
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^collection_request_[a-z0-9]{16,64}$/u),
+      activeVaultId: "vault_20260727_collection01",
+      datasetId: "dataset_20260727_collection01",
+      tableId: "table_collection01",
+      expectedRevisionId: "dataset_rev_20260727_revision0001"
+    }]);
+    expect(container.textContent).toContain("The collection changed. Latest rows loaded; add the row again.");
+    expect(container.querySelector(".managed-collection-panel")?.getAttribute("data-collection-revision-id"))
+      .toBe("dataset_rev_20260727_revision0002");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Add row"));
+
+    await click(dom, buttonNamed(container, "Add row"));
+    expect(requests.map((request) => request.expectedRevisionId)).toEqual([
+      "dataset_rev_20260727_revision0001",
+      "dataset_rev_20260727_revision0002"
+    ]);
+    expect(container.textContent).toContain("Row added as a new revision.");
+    expect(container.textContent).toContain("Server default");
+    expect(container.textContent).toContain("2/2");
+    const appendedRow = requireElement(container.querySelector<HTMLTableRowElement>(
+      '[data-collection-row-id="row_customer0002"]'
+    ));
+    expect(dom.window.document.activeElement).toBe(appendedRow);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -207,7 +293,31 @@ describe("ManagedCollectionPanel", () => {
   });
 });
 
-function collectionSnapshot(revisionId: string, name: string): CollectionSnapshot {
+function CollectionAppendHarness(props: {
+  readonly onAppend: (
+    request: CollectionAppendDefaultRowRequest
+  ) => Promise<CollectionAppendDefaultRowResult>;
+}): React.JSX.Element {
+  const [snapshot, setSnapshot] = useState(() => (
+    collectionSnapshot("dataset_rev_20260727_revision0001", "Alpha", true)
+  ));
+  return createElement(ManagedCollectionPanel, {
+    activeVaultId: "vault_20260727_collection01",
+    snapshot,
+    onClose: () => undefined,
+    onAppendDefaultRow: props.onAppend,
+    onAdoptSnapshot: (next, expectedRevisionId) => {
+      if (snapshot.revisionId !== expectedRevisionId) return false;
+      setSnapshot(next);
+      return true;
+    },
+    onEditCell: async (request) => ({ ...editIdentity(request), status: "failed" }),
+    onReload: async () => snapshot,
+    t
+  });
+}
+
+function collectionSnapshot(revisionId: string, name: string, canAppendDefaultRow = false): CollectionSnapshot {
   return {
     datasetId: "dataset_20260727_collection01",
     revisionId,
@@ -227,7 +337,8 @@ function collectionSnapshot(revisionId: string, name: string): CollectionSnapsho
     }],
     totalRowCount: 1,
     returnedRowCount: 1,
-    truncated: false
+    truncated: false,
+    canAppendDefaultRow
   };
 }
 
@@ -268,6 +379,22 @@ function editIdentity(request: CollectionCellEditRequest) {
     rowId: request.rowId,
     columnId: request.columnId
   };
+}
+
+function appendIdentity(request: CollectionAppendDefaultRowRequest) {
+  return {
+    apiVersion: 1 as const,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId
+  };
+}
+
+async function notFoundAppendResult(
+  request: CollectionAppendDefaultRowRequest
+): Promise<CollectionAppendDefaultRowResult> {
+  return { ...appendIdentity(request), status: "not_found" };
 }
 
 function committedResult(

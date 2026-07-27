@@ -442,9 +442,9 @@ base hash or Operation internals.
 
 #### 6.4.1 Knowledge Activity And Undo
 
-`activity.list` may project `{kind:"collection",datasetId,tableId,revisionId}` for
-`update_collection_cell`; `activity.undo` requires its exact `expectedRevisionId` and
-creates a forward revision/Operation or stale. Page Undo and the body/path/hash ban remain.
+`activity.list` may project `{kind:"collection",datasetId,tableId,revisionId}` for cell/row
+updates. `activity.undo` binds its exact revision and writes forward or returns stale; page
+Undo and the body/path/hash ban remain.
 
 ### 6.5 Library And Notes
 
@@ -518,18 +518,17 @@ Current Home Dataset read boundary:
   restores that checksum-bound result after restart. Renderer receives display columns,
   bounded typed rows, counts, truncation, and citations—not paths, database handles, SQL,
   query-engine metadata, payload bytes, or whole tables.
-- The main process binds the active vault, manifest/revision/schema/payload and Source
-  Record privacy revision. Stale evidence writes the current body-free replacement audit
-  and fails before another model turn; corrupt or unsafe evidence fails closed.
-- `collections.open` strictly binds version/request/vault/Dataset/table; statuses are
-  `ready | stale | not_found | failed`. Ready is the current revision, <=32 columns,
-  50 rows, 4 KiB/string and 64 KiB total.
-- `collections.editCell` adds expected revision/row/column/scalar; outcomes are
-  `committed(revision,Operation) | stale(currentRevision) | not_found |
-  not_editable(formula|unsupported_type) | invalid(type_mismatch|value_too_large) | failed`.
-- Main fences manifest/revision/schema/payload and stable IDs. DTO/results expose no
-  source/path/hash/payload/formula/SQL/engine/query-plan/raw error or echoed value. CRUD,
-  formulas/views/relations, query builder, external writes and conversion stay open.
+- Main binds vault, manifest/revision/schema/payload and source privacy revision; corrupt,
+  unsafe or stale evidence fails closed before another model turn.
+- `collections.open` binds request/vault/Dataset/table and returns `ready | stale |
+  not_found | failed`; ready is current, <=32 columns, 50 rows, 4 KiB/string and 64 KiB total.
+- `collections.editCell` binds expected revision/row/column/scalar; committed returns revision/
+  Operation, while stale, missing, formula/type/value and failure outcomes are closed.
+- `collections.appendDefaultRow` binds only expected revision. Main sets
+  `canAppendDefaultRow` when the full table accepts deterministic nulls, creates row ID,
+  and returns committed row/Operation/snapshot, stale snapshot or `not_found`.
+- Renderer sends no default values/row ID. Results expose no source/path/hash/payload/formula/
+  SQL/engine/query plan/raw error/value; deletion, schema, formulas, views and relations stay open.
 
 ### 6.6 Retrieval
 

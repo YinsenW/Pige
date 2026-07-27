@@ -353,6 +353,35 @@ describe("durable contract schemas", () => {
     expect(schema.tables[0]?.rowCount).toBe(2);
     expect(revision.source.sourceKind).toBe("csv_file");
     expect(manifest.activeRevision).toBe(revisionId);
+    expect(DatasetRevisionSchema.parse({
+      ...revision,
+      id: "dataset_rev_20260713_bcdefa123456",
+      parentRevisionId: revision.id,
+      payload: { ...revision.payload, path: "data/revisions/dataset_rev_20260713_bcdefa123456.sqlite" },
+      operationId: "op_20260713_bcdefa12",
+      change: {
+        kind: "collection_row_add",
+        tableId: schema.tables[0]!.id,
+        rowId: "row_abcdef123456"
+      }
+    }).change).toEqual({
+      kind: "collection_row_add",
+      tableId: schema.tables[0]!.id,
+      rowId: "row_abcdef123456"
+    });
+    expect(DatasetRevisionSchema.parse({
+      ...revision,
+      id: "dataset_rev_20260713_cdefab123456",
+      parentRevisionId: "dataset_rev_20260713_bcdefa123456",
+      payload: { ...revision.payload, path: "data/revisions/dataset_rev_20260713_cdefab123456.sqlite" },
+      operationId: "op_20260713_cdefab12",
+      change: {
+        kind: "collection_row_add_undo",
+        tableId: schema.tables[0]!.id,
+        rowId: "row_abcdef123456",
+        undoOfOperationId: "op_20260713_bcdefa12"
+      }
+    }).change?.kind).toBe("collection_row_add_undo");
     expect(() => DatasetSchemaRecordSchema.parse({
       ...schema,
       tables: [{ ...schema.tables[0], columnCount: 2 }]
@@ -612,6 +641,28 @@ describe("durable contract schemas", () => {
       ...operation,
       rawPrompt: "PRIVATE PROMPT"
     })).toThrow("Unrecognized key");
+  });
+
+  it("binds Managed Collection row append Operations to dataset, table, and Main-owned row identities", () => {
+    const operation = OperationRecordSchema.parse({
+      id: "op_20260728_abcdef12",
+      schemaVersion: 1,
+      jobId: "job_20260728_abcdef12",
+      createdAt: timestamp,
+      actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+      kind: "add_collection_row",
+      targetRefs: [
+        { kind: "dataset", id: "dataset_20260728_abcdef123456" },
+        { kind: "table", id: "table_abcdef123456" },
+        { kind: "row", id: "row_abcdef123456" }
+      ],
+      sourceRefs: [{ kind: "dataset", id: "dataset_20260728_abcdef123456" }],
+      summary: "Added one default Managed Collection row.",
+      reversible: "yes",
+      warnings: []
+    });
+    expect(operation.kind).toBe("add_collection_row");
+    expect(operation.targetRefs.map((reference) => reference.kind)).toEqual(["dataset", "table", "row"]);
   });
 
   it("rejects unknown Operation kinds and fields", () => {

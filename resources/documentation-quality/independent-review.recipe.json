@@ -43,14 +43,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of local Markdown Skill staging: Main picker, bounded no-follow read, pathless receipt, reviewed install and Settings ownership.",
+    "scope": "Independent Planning review of Managed Collection default-row append: Main eligibility and row identity, immutable CAS revision, Activity/Undo and bounded UI adoption.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 34,
-    "reviewedSha256": "e1a8f5dd28276a9eddc190f7afa65a9446d128c3e5ef6a2d5d54c7f80b46a8f0"
+    "reviewedSha256": "ded7a040ec54ac6e1187877caec1f679e080d1110a2d70c7e0556ccd5d68e5dc"
   },
   "reviewers": [{
-    "reviewerId": "skill-local-markdown-review",
-    "task": "Local Markdown pure-Skill staging",
+    "reviewerId": "managed-collection-row-review",
+    "task": "Managed Collection default-row append",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -58,33 +58,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed Skill/API/UI/Decision/trace; Development and UI independently own picker/file reproving, staging, presentation and evidence."
+    "independence": "Planning reviewed Dataset/API/recovery/UI/Decision/trace owners; Development and UI independently own row publication, Activity/Undo, presentation and evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"skill-local-markdown-review","blockerCount":0,"summary":"Main alone selects and reads one .md; cancel is inert and no path/body reaches renderer."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"skill-local-markdown-review","blockerCount":0,"summary":"Skill/API/UI/Decision owners agree on exact vault/file receipt, safe preview and shared install."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"skill-local-markdown-review","blockerCount":0,"summary":"PIGE-SKILL-001 and B8.06 stay planned while ZIP/chat/vault/External-Web and restore remain."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"skill-local-markdown-review","blockerCount":0,"summary":"Closed picker results and descriptor/hash/vault fences fix implementation boundaries."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"skill-local-markdown-review","blockerCount":0,"summary":"Existing owners bind one .md slice without another document or importer framework."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"managed-collection-row-review","blockerCount":0,"summary":"One Dataset keeps immutable revision history; Main creates the row and manifest switches last."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"managed-collection-row-review","blockerCount":0,"summary":"Data/API/recovery/UI agree on Main eligibility, identity-only request, snapshot adoption and forward Undo."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"managed-collection-row-review","blockerCount":0,"summary":"PIGE-DATA-003 and E7.06 stay planned while broader Collection lifecycle remains open."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"managed-collection-row-review","blockerCount":0,"summary":"Exact append, replay, stale, Activity and UI focus tests bind the vertical slice."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"managed-collection-row-review","blockerCount":0,"summary":"Existing Collection owners and one prior decision absorb the slice without a new document."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict picker/result identity exposes no path, body or local-source authority."},
-    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Skill/API/UI/Decision owners agree on local Markdown staging."},
-    {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Planned acceptance remains open and final service LOC is inventoried."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict append identity and authoritative snapshots expose no values, row authority or storage internals."},
+    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Dataset/API/recovery/UI and the existing Collection decision agree on default-row append."},
+    {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Planned acceptance stays open and final service ownership/LOC are inventoried."}
   ],
   "coordination": {
-    "taskId": "skill-local-markdown-20260728",
-    "taskTitle": "Local Markdown pure-Skill staging",
+    "taskId": "managed-collection-default-row-20260728",
+    "taskTitle": "Managed Collection default-row append",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "URL/update/lifecycle stay; local Markdown adds one Main-owned picker and reuses staged review/install.",
-    "acknowledgement": "Planning binds local Markdown staging; ZIP/chat/vault/External-Web, restore and completion stay open."
+    "compatibility": "Existing open/edit stays; append adds one Main-owned nullable default row under the same revision and Activity boundaries.",
+    "acknowledgement": "Planning binds default-row append only; value entry, deletion, schema, formulas, views, relations and completion stay open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Only one bounded UTF-8 pure machine-local SKILL.md is eligible.",
-    "Vault, descriptor, file identity, digest or registry drift fails closed.",
-    "Directory, ZIP, chat, remote update authority and public restore stay out of scope."
+    "Only a bounded current table whose complete columns accept deterministic null cells is eligible.",
+    "Vault, Dataset, table, revision, replay or Operation drift fails closed.",
+    "Value entry, deletion, schema, formulas, views, relations and broad CRUD stay out of scope."
   ]
 }

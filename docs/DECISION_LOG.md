@@ -3367,17 +3367,17 @@ Date: 2026-07-27
 
 Decision:
 
-One imported Collection keeps its ID. Scalar edit CAS-writes immutable revision/Operation,
-switches manifest last and Undo advances from its after-revision.
+A Collection keeps its imported ID. Cell edit or eligible Main-owned default-row append
+writes immutable CAS revision/Operation; manifest switches last; Undo advances.
 
 Rationale:
 
-Enable reversible value without rewriting history or exposing internals.
+Enable reversible growth without rewriting history or exposing internals.
 
 Consequences:
 
-- Manifest owns current truth; evidence/history stay immutable. Bounded open/edit fails closed;
-  broader editing stays open.
+- Manifest is current; evidence/history stay immutable. Renderer supplies no default values/row
+  ID; channels fail closed and broader editing stays open.
 
 References:
 

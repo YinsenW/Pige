@@ -1064,6 +1064,7 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain("KnowledgeActivityListResultSchema.parse");
     expect(preloadSource).toContain('ipcRenderer.invoke("activity.undo", request)');
     expect(contractsSource).toContain('| "update_collection_cell"');
+    expect(contractsSource).toContain('| "add_collection_row"');
     expect(contractsSource).toContain('| "update_memory"');
     expect(contractsSource).toContain('| "trash_memory"');
     expect(contractsSource).toContain('| "restore_memory"');
@@ -1252,6 +1253,7 @@ describe("desktop shell build contract", () => {
   });
 
   it("strictly validates the Managed Collection IPC and preload boundaries", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const registrarSource = fs.readFileSync(
       path.resolve("apps/desktop/src/main/register-managed-collection-ipc.ts"),
       "utf8"
@@ -1267,10 +1269,15 @@ describe("desktop shell build contract", () => {
     expect(registrarSource).toContain("options.getActiveVaultId() !== parsed.activeVaultId");
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.open", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.editCell", parsedRequest)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("collections.appendDefaultRow", parsedRequest)');
     expect(preloadSource).toContain("CollectionOpenRequestSchema.parse(request)");
     expect(preloadSource).toContain("CollectionOpenResultSchema.parse(");
     expect(preloadSource).toContain("CollectionCellEditRequestSchema.parse(request)");
     expect(preloadSource).toContain("CollectionCellEditResultSchema.parse(");
+    expect(preloadSource).toContain("CollectionAppendDefaultRowRequestSchema.parse(request)");
+    expect(preloadSource).toContain("CollectionAppendDefaultRowResultSchema.parse(");
+    expect(contractsSource).toContain("readonly appendDefaultRow:");
+    expect(contractsSource).toContain("CollectionAppendDefaultRowRequest");
   });
 
   it("wires onboarding readiness to the non-secret provider runtime binding check", () => {

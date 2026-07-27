@@ -25,6 +25,8 @@ import type {
   CollectionCellEditResult,
   CollectionOpenRequest,
   CollectionOpenResult,
+  CollectionAppendDefaultRowRequest,
+  CollectionAppendDefaultRowResult,
   ConfirmationProposal,
   DatasetLogicalType,
   EffectiveAppearanceTheme,
@@ -805,6 +807,7 @@ export interface KnowledgeActivitySummary {
     | "create_page"
     | "update_page"
     | "update_collection_cell"
+    | "add_collection_row"
     | "update_memory"
     | "trash_memory"
     | "restore_memory";
@@ -1501,6 +1504,9 @@ export interface PigeDesktopApi {
   readonly collections: {
     readonly open: (request: CollectionOpenRequest) => Promise<CollectionOpenResult>;
     readonly editCell: (request: CollectionCellEditRequest) => Promise<CollectionCellEditResult>;
+    readonly appendDefaultRow: (
+      request: CollectionAppendDefaultRowRequest
+    ) => Promise<CollectionAppendDefaultRowResult>;
   };
   readonly activity: {
     readonly list: (request?: KnowledgeActivityListRequest) => Promise<KnowledgeActivityListResult>;
