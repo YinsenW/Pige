@@ -738,7 +738,13 @@ const getTaskExecutionPlanRunner = (): TaskExecutionPlanRunner => {
             dataBoundary: "filesystem" as const,
             resourceScope: "current_action" as const,
             readOnlyProbe: process.ordinal === recipe.processes.length,
-            process: { ...process, revision: 1 }
+            ...(process.proveCompleted ? { proveCompleted: process.proveCompleted } : {}),
+            process: {
+              revision: 1,
+              command: process.command,
+              environment: process.environment,
+              ...(process.interaction ? { interaction: process.interaction } : {})
+            }
           }))
         };
       }
@@ -748,6 +754,12 @@ const getTaskExecutionPlanRunner = (): TaskExecutionPlanRunner => {
 };
 
 function taskExecutionRecipeRoots(): TaskExecutionRecipeToolRoots {
+  if (process.platform !== "darwin" && process.platform !== "linux" && process.platform !== "win32") {
+    throw new PigeDomainError("task_execution.recipe_unavailable", "The reviewed task recipe is unavailable on this platform.");
+  }
+  if (process.arch !== "arm64" && process.arch !== "x64" && process.arch !== "riscv64") {
+    throw new PigeDomainError("task_execution.recipe_unavailable", "The reviewed task recipe is unavailable on this architecture.");
+  }
   const root = join(app.getPath("userData"), "task-execution");
   const roots = {
     controlledHomeRoot: join(root, "home"),
@@ -769,8 +781,8 @@ function taskExecutionRecipeRoots(): TaskExecutionRecipeToolRoots {
     npmExecutable: process.execPath,
     nodeExecutable: process.execPath,
     archiveExtractorExecutable: process.execPath,
-    platform: process.platform === "win32" ? "win32" : process.platform === "linux" ? "linux" : "darwin",
-    arch: process.arch === "x64" ? "x64" : process.arch === "riscv64" ? "riscv64" : "arm64"
+    platform: process.platform,
+    arch: process.arch
   };
 }
 

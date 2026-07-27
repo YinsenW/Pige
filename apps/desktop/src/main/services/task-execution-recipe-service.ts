@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -86,6 +87,7 @@ export interface ResolvedTaskExecutionRecipeProcess {
   readonly actionId: string;
   readonly command: NormalizedCommandExecutionRequest;
   readonly environment: Readonly<NodeJS.ProcessEnv>;
+  readonly proveCompleted?: () => boolean | Promise<boolean>;
   readonly interaction?: {
     readonly kind: "browser_oauth";
     readonly allowedOrigins: readonly string[];
@@ -196,8 +198,8 @@ export class TaskExecutionRecipeService {
       nodeIdentity,
       timeoutMs: this.#recipe.maxTimeoutMs
     });
-    const processes = Object.freeze(processDefinitions.map(({ ordinal, actionId, command, environment: processEnv, interaction }) =>
-      Object.freeze({ ordinal, actionId, command, environment: Object.freeze(processEnv), ...(interaction ? { interaction } : {}) })));
+    const processes = Object.freeze(processDefinitions.map(({ ordinal, actionId, command, environment: processEnv, interaction, proveCompleted }) =>
+      Object.freeze({ ordinal, actionId, command, environment: Object.freeze(processEnv), ...(interaction ? { interaction } : {}), ...(proveCompleted ? { proveCompleted } : {}) })));
     const planInput: ResolveTaskExecutionPlanInput = Object.freeze({
       vaultId: request.vaultId,
       jobId: request.jobId,
@@ -342,7 +344,7 @@ export class TaskExecutionRecipeService {
     if (identities.length !== this.#recipe.fileCount || new Set(identities.map(({ skillId, relativePath }) => `${skillId}/${relativePath}`)).size !== identities.length) {
       throw recipeDrift();
     }
-    const files = await Promise.all(identities.map(async ({ skillId, relativePath }): Promise<ResolvedSkillFile> => {
+    const files = await mapConcurrent(identities, 8, async ({ skillId, relativePath }): Promise<ResolvedSkillFile> => {
       const sourceUrl = `${SKILLS_ORIGIN}/.well-known/skills/${encodeURIComponent(skillId)}/${encodePath(relativePath)}`;
       const body = await this.#fetchBody(sourceUrl, new Set([SKILLS_ORIGIN]), MAX_SKILL_FILE_BYTES, signal);
       const sha256 = digest(body.body);
@@ -352,7 +354,7 @@ export class TaskExecutionRecipeService {
         body.body
       );
       return Object.freeze({ skillId, relativePath, sourceUrl, sha256, stagedPath });
-    }));
+    });
     const installManifest = Buffer.from(canonicalJson({
       schemaVersion: 1,
       files: files.map(({ skillId, relativePath, sha256, stagedPath }) => ({ skillId, relativePath, sha256, stagedPath })),
@@ -478,7 +480,7 @@ function processDefinitionsFor(input: {
   readonly cli: ResolvedNpmArtifact;
   readonly skills: ResolvedNpmArtifact;
   readonly native: ResolvedNativeArtifact;
-  readonly skillSnapshot: { readonly installManifestPath: string; readonly indexDigest: string };
+  readonly skillSnapshot: { readonly installManifestPath: string; readonly indexDigest: string; readonly files: readonly ResolvedSkillFile[] };
   readonly nodeIdentity: TaskExecutionRecipeExecutableIdentity;
   readonly timeoutMs: number;
 }): readonly ResolvedTaskExecutionRecipeProcess[] {
@@ -507,12 +509,12 @@ function processDefinitionsFor(input: {
     "-e", FILE_PROMOTER_SOURCE, "--", roots.managedToolRoot, source, sha256, destination, mode
   ];
   const definitions: Array<ResolvedTaskExecutionRecipeProcess> = [
-    definition(1, "install_cli_package", command(input.nodeIdentity, promote(input.cli.stagedPath, input.cli.sha256, cliPackageDestination, "600")), environment),
-    definition(2, "install_cli_native_asset", command(input.nodeIdentity, promote(input.native.executablePath, input.native.executableSha256, cliBinaryDestination, "700")), environment),
-    definition(3, "install_official_skill", command(input.nodeIdentity, ["-e", SKILL_INSTALLER_SOURCE, "--", input.skillSnapshot.installManifestPath]), environment),
+    definition(1, "install_cli_package", command(input.nodeIdentity, promote(input.cli.stagedPath, input.cli.sha256, cliPackageDestination, "600")), environment, undefined, () => proveFileDigest(roots.managedToolRoot, cliPackageDestination, input.cli.sha256)),
+    definition(2, "install_cli_native_asset", command(input.nodeIdentity, promote(input.native.executablePath, input.native.executableSha256, cliBinaryDestination, "700")), environment, undefined, () => proveFileDigest(roots.managedToolRoot, cliBinaryDestination, input.native.executableSha256)),
+    definition(3, "install_official_skill", command(input.nodeIdentity, ["-e", SKILL_INSTALLER_SOURCE, "--", input.skillSnapshot.installManifestPath]), environment, undefined, () => proveSkillSnapshot(input.skillSnapshot.files, roots.targetAgentRoots)),
     definition(4, "config_init", command(input.nodeIdentity, ["-e", OAUTH_WRAPPER_SOURCE, "--", "config_init", input.native.executablePath]), environment, configInteraction()),
     definition(5, "auth_login", command(input.nodeIdentity, ["-e", OAUTH_WRAPPER_SOURCE, "--", "auth_login", input.native.executablePath]), environment, oauthInteraction()),
-    definition(6, "auth_status", command(input.native.executableIdentity, ["auth", "status", "--json"]), environment)
+    definition(6, "auth_status", command(input.nodeIdentity, ["-e", OAUTH_WRAPPER_SOURCE, "--", "auth_status", input.native.executablePath]), environment)
   ];
   return Object.freeze(definitions);
 }
@@ -522,9 +524,17 @@ function definition(
   actionId: string,
   command: NormalizedCommandExecutionRequest,
   environment: NodeJS.ProcessEnv,
-  interaction?: ResolvedTaskExecutionRecipeProcess["interaction"]
+  interaction?: ResolvedTaskExecutionRecipeProcess["interaction"],
+  proveCompleted?: ResolvedTaskExecutionRecipeProcess["proveCompleted"]
 ): ResolvedTaskExecutionRecipeProcess {
-  return Object.freeze({ ordinal, actionId, command, environment: Object.freeze({ ...environment }), ...(interaction ? { interaction } : {}) });
+  return Object.freeze({
+    ordinal,
+    actionId,
+    command,
+    environment: Object.freeze({ ...environment }),
+    ...(interaction ? { interaction } : {}),
+    ...(proveCompleted ? { proveCompleted } : {})
+  });
 }
 
 function oauthInteraction(): ResolvedTaskExecutionRecipeProcess["interaction"] {
@@ -578,10 +588,10 @@ function processEnvironment(
     XDG_CONFIG_HOME: roots.configRoot,
     PATH: executableDirectories.join(path.delimiter),
     TMPDIR: roots.artifactRoot,
-    npm_config_registry: NPM_ORIGIN,
-    npm_config_prefix: roots.npmPrefix,
-    npm_config_cache: roots.npmCache,
-    npm_config_userconfig: roots.npmrcPath,
+    NPM_CONFIG_REGISTRY: NPM_ORIGIN,
+    NPM_CONFIG_PREFIX: roots.npmPrefix,
+    NPM_CONFIG_CACHE: roots.npmCache,
+    NPM_CONFIG_USERCONFIG: roots.npmrcPath,
     ELECTRON_RUN_AS_NODE: "1",
     DISABLE_TELEMETRY: "1",
     DO_NOT_TRACK: "1",
@@ -622,6 +632,63 @@ function artifactBindingsFor(
 async function readStaged(fileSystem: TaskExecutionRecipeFileSystem, root: string, stagedPath: string): Promise<Uint8Array> {
   if (fileSystem.readPrivateFile) return await fileSystem.readPrivateFile(root, stagedPath);
   return new Uint8Array(await fs.readFile(stagedPath));
+}
+
+async function proveFileDigest(rootPath: string, filePath: string, expected: string): Promise<boolean> {
+  let descriptor: fs.FileHandle | undefined;
+  try {
+    const root = await fs.realpath(rootPath);
+    const parent = await fs.realpath(path.dirname(filePath));
+    if (!isWithin(root, parent) || path.join(parent, path.basename(filePath)) !== filePath) throw recipeDrift();
+    descriptor = await fs.open(filePath, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+    const before = await descriptor.stat();
+    if (!before.isFile()) throw recipeDrift();
+    const body = new Uint8Array(await descriptor.readFile());
+    const after = await descriptor.stat();
+    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
+      throw recipeDrift();
+    }
+    if (digest(body) !== expected) throw recipeDrift();
+    return true;
+  } catch (caught) {
+    if ((caught as NodeJS.ErrnoException).code === "ENOENT") return false;
+    if (caught instanceof PigeDomainError) throw caught;
+    throw recipeDrift();
+  } finally {
+    await descriptor?.close().catch(() => undefined);
+  }
+}
+
+async function proveSkillSnapshot(
+  files: readonly ResolvedSkillFile[],
+  targetAgentRoots: Readonly<Record<string, string>>
+): Promise<boolean> {
+  for (const rootPath of Object.values(targetAgentRoots)) {
+    const root = await fs.realpath(rootPath);
+    for (const file of files) {
+      const candidate = confinedPath(root, `skills/${file.skillId}/${file.relativePath}`);
+      const present = await proveFileDigest(root, candidate, file.sha256);
+      if (!present) return false;
+    }
+  }
+  return true;
+}
+
+async function mapConcurrent<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  visit: (value: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await visit(values[index]!, index);
+    }
+  }));
+  return results;
 }
 
 function readNativeTarExecutable(archive: Uint8Array): Uint8Array {
@@ -909,5 +976,6 @@ const OAUTH_WRAPPER_SOURCE = [
   "const run=(args,onData)=>new Promise((resolve,reject)=>{const child=spawn(bin,args,{stdio:['ignore','pipe','pipe'],env:process.env});let out='',err='';const add=(key,chunk)=>{const text=chunk.toString('utf8');if(key==='out')out+=text;else err+=text;if(out.length+err.length>131072){child.kill();reject(new Error('oauth output too large'));return;}onData?.(text);};child.stdout.on('data',c=>add('out',c));child.stderr.on('data',c=>add('err',c));child.on('error',reject);child.on('close',code=>code===0?resolve({out,err}):reject(new Error('oauth command failed')));process.once('SIGTERM',()=>child.kill('SIGTERM'));});",
   "const find=(value,keys)=>{if(!value||typeof value!=='object')return undefined;for(const key of keys){if(typeof value[key]==='string')return value[key];}for(const child of Object.values(value)){const found=find(child,keys);if(found)return found;}return undefined;};",
   "(async()=>{if(mode==='config_init'){let pending='',sent=false;await run(['config','init','--new'],chunk=>{pending=(pending+chunk).slice(-65536);const match=pending.match(/https:\\/\\/open\\.feishu\\.cn\\/page\\/cli\\?[^\\s]+/u);if(match&&!sent){sent=true;emit(match[0]);}});if(!sent)throw new Error('config interaction missing');process.stdout.write('configuration completed\\n');return;}",
-  "if(mode==='auth_login'){const first=await run(['auth','login','--recommend','--no-wait','--json']);let payload;try{payload=JSON.parse(first.out);}catch{throw new Error('login protocol invalid');}const url=find(payload,['verification_uri_complete','verification_url','verificationUriComplete','url']);const code=find(payload,['device_code','deviceCode']);if(!url||!code||!/^https:\\/\\/(accounts\\.feishu\\.cn|accounts\\.larksuite\\.com)\\//u.test(url))throw new Error('login interaction invalid');emit(url,code);await run(['auth','login','--device-code',code,'--json']);process.stdout.write('authorization completed\\n');return;}throw new Error('oauth mode invalid');})().catch(()=>process.exit(1));"
+  "if(mode==='auth_login'){const first=await run(['auth','login','--recommend','--no-wait','--json']);let payload;try{payload=JSON.parse(first.out);}catch{throw new Error('login protocol invalid');}const url=find(payload,['verification_uri_complete','verification_url','verificationUriComplete','url']);const code=find(payload,['device_code','deviceCode']);if(!url||!code||!/^https:\\/\\/(accounts\\.feishu\\.cn|accounts\\.larksuite\\.com)\\//u.test(url))throw new Error('login interaction invalid');emit(url,code);await run(['auth','login','--device-code',code,'--json']);process.stdout.write('authorization completed\\n');return;}",
+  "if(mode==='auth_status'){const status=await run(['auth','status','--json']);let payload;try{payload=JSON.parse(status.out);}catch{throw new Error('status protocol invalid');}if(payload.ok===false||payload.authenticated===false)throw new Error('not authenticated');process.stdout.write(JSON.stringify({authenticated:true})+'\\n');return;}throw new Error('oauth mode invalid');})().catch(()=>process.exit(1));"
 ].join("");

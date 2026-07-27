@@ -1,13 +1,19 @@
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { gzipSync } from "node:zlib";
 import { describe, expect, it, vi } from "vitest";
 import {
   TaskExecutionRecipeService,
+  createNodeTaskExecutionRecipeFileSystem,
   type TaskExecutionRecipeFetchResponse,
   type TaskExecutionRecipeFileSystem,
   type TaskExecutionRecipeToolRoots
 } from "../../apps/desktop/src/main/services/task-execution-recipe-service";
 import { TaskExecutionPlanService } from "../../apps/desktop/src/main/services/task-execution-plan-service";
+import { TaskProcessSessionService } from "../../apps/desktop/src/main/services/task-process-session-service";
 
 const INDEX_URL = "https://open.feishu.cn/.well-known/skills/index.json";
 const CLI_METADATA_URL = "https://registry.npmjs.org/%40larksuite%2Fcli/latest";
@@ -16,6 +22,21 @@ const CLI_TARBALL_URL = "https://registry.npmjs.org/@larksuite/cli/-/cli-1.2.3.t
 const SKILLS_TARBALL_URL = "https://registry.npmjs.org/skills/-/skills-2.3.4.tgz";
 const NATIVE_URL = "https://github.com/larksuite/cli/releases/download/v1.2.3/lark-cli-1.2.3-darwin-arm64.tar.gz";
 const NATIVE_FINAL_URL = "https://objects.githubusercontent.com/releases/lark-cli-1.2.3-darwin-arm64.tar.gz";
+const SYNTHETIC_LARK_CLI = `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === "config" && args[1] === "init") {
+  console.log("https://open.feishu.cn/page/cli?user_code=ABCD-1234");
+  setTimeout(() => process.exit(0), 300);
+} else if (args.includes("--no-wait")) {
+  console.log(JSON.stringify({ verification_uri_complete: "https://accounts.feishu.cn/device", device_code: "private-device-code" }));
+} else if (args.includes("--device-code")) {
+  setTimeout(() => process.exit(0), 300);
+} else if (args[0] === "auth" && args[1] === "status") {
+  console.log(JSON.stringify({ ok: true }));
+} else {
+  process.exit(1);
+}
+`;
 
 describe("TaskExecutionRecipeService", () => {
   it("resolves and stages every moving Feishu artifact before producing an exact six-step plan", async () => {
@@ -45,6 +66,8 @@ describe("TaskExecutionRecipeService", () => {
         { ordinal: 6, actionId: "auth_status", interactionProtocol: "none" }
       ]);
     expect(resolved.processes).toHaveLength(6);
+    expect(resolved.processes.slice(0, 3).every((process) => typeof process.proveCompleted === "function")).toBe(true);
+    expect(resolved.processes.slice(3).every((process) => process.proveCompleted === undefined)).toBe(true);
     expect(resolved.processes[0]?.command.args).toContain(resolved.artifacts.cli.stagedPath);
     expect(resolved.processes[1]?.command.args).toContain(resolved.artifacts.native.executablePath);
     expect(resolved.processes[3]?.command.args).toEqual(expect.arrayContaining(["config_init", resolved.artifacts.native.executablePath]));
@@ -52,8 +75,7 @@ describe("TaskExecutionRecipeService", () => {
       "https://accounts.feishu.cn",
       "https://accounts.larksuite.com"
     ]);
-    expect(resolved.processes[5]?.command.executable).toBe(resolved.artifacts.native.executablePath);
-    expect(resolved.processes[5]?.command.args).toEqual(["auth", "status", "--json"]);
+    expect(resolved.processes[5]?.command.args).toEqual(expect.arrayContaining(["auth_status", resolved.artifacts.native.executablePath]));
     expect(resolved.artifacts.native).toMatchObject({
       url: NATIVE_FINAL_URL,
       redirectOrigins: ["https://objects.githubusercontent.com"],
@@ -164,13 +186,131 @@ describe("TaskExecutionRecipeService", () => {
     });
     expect(fixture.fetch.mock.calls.some(([url]) => String(url).includes("sibling-secret"))).toBe(false);
   });
+
+  it("executes the fixed install adapters atomically and proves their exact postconditions", async () => {
+    const fixture = createFixture();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-reviewed-recipe-"));
+    try {
+      const toolRoots = realRoots(root);
+      for (const directory of [
+        toolRoots.controlledHomeRoot,
+        toolRoots.configRoot,
+        toolRoots.workingDirectory,
+        toolRoots.artifactRoot,
+        toolRoots.managedToolRoot,
+        toolRoots.npmPrefix,
+        toolRoots.npmCache,
+        ...Object.values(toolRoots.targetAgentRoots)
+      ]) fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(toolRoots.npmrcPath, "registry=https://registry.npmjs.org/\n", { mode: 0o600 });
+      const service = new TaskExecutionRecipeService({
+        fetch: fixture.fetch,
+        fileSystem: createNodeTaskExecutionRecipeFileSystem(),
+        manifest: fixture.manifest
+      });
+      const resolved = await service.resolveOfficialFeishuRecipe({ ...request(), roots: toolRoots });
+
+      for (const process of resolved.processes.slice(0, 3)) {
+        const result = spawnSync(process.command.executable, process.command.args, {
+          cwd: process.command.workingDirectory,
+          env: { ...process.environment, NO_COLOR: "1", PIGE_TASK_PLAN: "1" },
+          shell: false,
+          encoding: "utf8"
+        });
+        expect({ status: result.status, signal: result.signal, stderr: result.stderr }).toEqual({
+          status: 0,
+          signal: null,
+          stderr: ""
+        });
+        await expect(process.proveCompleted?.()).resolves.toBe(true);
+      }
+      expect(fs.readFileSync(path.join(toolRoots.managedToolRoot, "bin", "lark-cli"), "utf8"))
+        .toBe(SYNTHETIC_LARK_CLI);
+      expect(fs.readFileSync(path.join(toolRoots.targetAgentRoots.pige!, "skills", "lark-a", "SKILL.md"), "utf8"))
+        .toBe("a-skill");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps config and login URLs private while each reviewed OAuth process resumes once", async () => {
+    const fixture = createFixture();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-reviewed-oauth-"));
+    try {
+      const toolRoots = realRoots(root);
+      for (const directory of [
+        toolRoots.controlledHomeRoot,
+        toolRoots.configRoot,
+        toolRoots.workingDirectory,
+        toolRoots.artifactRoot,
+        toolRoots.managedToolRoot,
+        toolRoots.npmPrefix,
+        toolRoots.npmCache,
+        ...Object.values(toolRoots.targetAgentRoots)
+      ]) fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(toolRoots.npmrcPath, "registry=https://registry.npmjs.org/\n", { mode: 0o600 });
+      const recipe = await new TaskExecutionRecipeService({
+        fetch: fixture.fetch,
+        fileSystem: createNodeTaskExecutionRecipeFileSystem(),
+        manifest: fixture.manifest
+      }).resolveOfficialFeishuRecipe({ ...request(), roots: toolRoots });
+      const plan = new TaskExecutionPlanService({ confirmPlan: async () => "allow", manifest: fixture.manifest })
+        .resolvePlan(recipe.planInput);
+      const opened: string[] = [];
+      const sessions = new TaskProcessSessionService({
+        openBrowserOAuth: ({ url, deviceCode }) => {
+          opened.push(`${new URL(url).origin}:${deviceCode ? "device" : "config"}`);
+        }
+      });
+
+      for (const process of recipe.processes.slice(3, 5)) {
+        const running = sessions.run({
+          planId: plan.planId,
+          jobId: plan.jobId,
+          stepOrdinal: process.ordinal,
+          revision: 1,
+          command: process.command,
+          environment: process.environment,
+          interaction: process.interaction,
+          assertCurrent: () => undefined
+        }, new AbortController().signal);
+        await vi.waitFor(() => expect(sessions.interaction().status).toBe("browser_oauth"));
+        const pending = sessions.interaction();
+        expect(JSON.stringify(pending)).not.toMatch(/page\/cli|device_code|ABCD-1234|private-device-code/iu);
+        if (pending.status !== "browser_oauth") throw new Error("missing OAuth handoff");
+        await expect(sessions.openInteraction({
+          interactionId: pending.interactionId,
+          planId: pending.planId,
+          jobId: pending.jobId,
+          stepOrdinal: pending.stepOrdinal,
+          expectedRevision: pending.revision
+        })).resolves.toMatchObject({ status: "opened" });
+        await expect(running).resolves.toMatchObject({ status: "completed", exitCode: 0 });
+      }
+      expect(opened).toEqual(["https://open.feishu.cn:config", "https://accounts.feishu.cn:device"]);
+      const statusProcess = recipe.processes[5]!;
+      const status = spawnSync(statusProcess.command.executable, statusProcess.command.args, {
+        cwd: statusProcess.command.workingDirectory,
+        env: statusProcess.environment,
+        shell: false,
+        encoding: "utf8"
+      });
+      expect({ status: status.status, stdout: status.stdout, stderr: status.stderr }).toEqual({
+        status: 0,
+        stdout: "{\"authenticated\":true}\n",
+        stderr: ""
+      });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 function createFixture(options: {
   readonly overrides?: ReadonlyMap<string, TaskExecutionRecipeFetchResponse>;
   readonly mutateManifest?: (manifest: FixtureManifest) => void;
 } = {}) {
-  const nativeBody = tarGzip({ "lark-cli": "verified-native-executable" });
+  const nativeBody = tarGzip({ "lark-cli": SYNTHETIC_LARK_CLI });
   const archiveName = "lark-cli-1.2.3-darwin-arm64.tar.gz";
   const cliTarball = tarGzip({
     "package/checksums.txt": `${rawDigest(nativeBody)}  ${archiveName}\n`,
@@ -300,6 +440,25 @@ function roots(): TaskExecutionRecipeToolRoots {
     npmExecutable: "/private/bin/npm",
     nodeExecutable: "/private/bin/node",
     archiveExtractorExecutable: "/private/bin/tar",
+    platform: "darwin",
+    arch: "arm64"
+  };
+}
+
+function realRoots(root: string): TaskExecutionRecipeToolRoots {
+  return {
+    controlledHomeRoot: path.join(root, "home"),
+    configRoot: path.join(root, "config"),
+    workingDirectory: path.join(root, "work"),
+    artifactRoot: path.join(root, "artifacts"),
+    managedToolRoot: path.join(root, "tools"),
+    npmPrefix: path.join(root, "npm-prefix"),
+    npmCache: path.join(root, "npm-cache"),
+    npmrcPath: path.join(root, "config", "npmrc"),
+    targetAgentRoots: { pige: path.join(root, "agents", "pige") },
+    npmExecutable: process.execPath,
+    nodeExecutable: process.execPath,
+    archiveExtractorExecutable: process.execPath,
     platform: "darwin",
     arch: "arm64"
   };
