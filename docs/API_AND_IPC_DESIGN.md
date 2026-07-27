@@ -637,19 +637,19 @@ credential, provider payload, or raw error. Resolution is `allow | deny`; the ef
 Job/Operation owner revalidates and owns commit/idempotency/recovery. No saved grant,
 YOLO, request/decision/consume/completion chain, or waiting Job state exists.
 
-Ordinary first-party reads, parse/OCR/retrieval, user-specified fetch, and bounded local
-tools have no renderer permission API. Provider calls have no model-egress approval API:
+Ordinary tools have no renderer permission API. Source-bound Home exposes exact accepted-
+source tools only; excluded ambient calls fail before confirmation/effect, and typed URL
+ingress stays separate. Provider calls have no model-egress approval API:
 Connect/select plus Send authorizes exact user-authored and explicitly selected bounded
 context; main preserves that payload unchanged, keeps stored credentials out of it, and
 rejects Provider/model identity drift.
 
 Whitespace inspection is permitted only to decide whether an authored field is empty.
-For non-empty text, the original string—including leading/trailing whitespace, line
-breaks, punctuation and secret/path-like text—is the durable conversation input and the
-input identity/hash used by history, retry/restart and Provider payload. Text-only
-whitespace creates no turn; attachments plus whitespace-only text use the minimal
-“organize these files” intent. Context selection/bounding happens before assembly and
-does not trim or rewrite the selected text.
+Non-empty original text—including outer whitespace, line breaks, punctuation and secret/
+path-like text—owns durable input and the input identity/hash used by history, retry/restart and Provider payload.
+Text-only whitespace creates no turn; attachments plus whitespace-only text use the minimal
+“Use only the attached file(s) as source material.” intent in six locales. Context bounding
+precedes assembly and never rewrites selected text.
 
 ### 6.8 Settings, Providers, Tools
 

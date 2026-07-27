@@ -1265,7 +1265,7 @@ export class HomeAgentService {
         evidenceLedger.assertVisible("dataset_catalog", modelTurnSequence);
       }
     };
-    const registeredExternalTools = currentNoteScope ? [] : this.#externalCapabilities?.toolsForTurn({
+    const registeredExternalTools = currentNoteScope || sourceSession ? [] : this.#externalCapabilities?.toolsForTurn({
       vaultPath,
       vaultId: activeVault.vaultId,
       jobId,
@@ -2747,12 +2747,12 @@ function toHomeAgentFailure(caught: unknown): HomeAgentFailure {
 
 function defaultAttachmentUserIntent(locale: AgentSubmitTurnRequest["locale"]): string {
   switch (locale) {
-    case "zh-Hans": return "整理这些文件。";
-    case "ja": return "これらのファイルを整理してください。";
-    case "ko": return "이 파일들을 정리해 주세요.";
-    case "fr": return "Organisez ces fichiers.";
-    case "de": return "Organisiere diese Dateien.";
-    default: return "Organize these files.";
+    case "zh-Hans": return "仅使用所附文件作为来源材料。";
+    case "ja": return "添付されたファイルのみを資料として使用する。";
+    case "ko": return "첨부된 파일만 소스 자료로 사용하세요.";
+    case "fr": return "Utiliser uniquement les fichiers joints comme documents sources.";
+    case "de": return "Nur die angehängten Dateien als Quellmaterial verwenden.";
+    default: return "Use only the attached file(s) as source material.";
   }
 }
 

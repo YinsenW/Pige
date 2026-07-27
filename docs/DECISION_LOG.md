@@ -682,7 +682,6 @@ Consequences:
 References:
 
 - `docs/PRD.md`
-- `docs/SECURITY_THREAT_MODEL.md`
 - `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
 
 ### D-20260709-Home-Composer-Unified-Entry
@@ -3245,6 +3244,31 @@ References:
 
 - `docs/DATA_ARCHITECTURE.md`
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
+
+### D-20260727-Source-Bound-Exact-Authority
+
+Status: Accepted
+Date: 2026-07-27
+
+Decision:
+
+Source-bound Home authorizes exact accepted SourceRecords. Its catalog omits ambient
+command/filesystem/package/fetch; no parent/sibling/cwd or text/confirmation widening.
+Excluded calls fail before effect; exact-source/URL remain and text-only is unchanged.
+Six locales say “Use only the attached file(s) as source material.”
+
+Rationale:
+
+Ambient tools turn one file into system authority; copying cannot confine it.
+
+Consequences:
+
+- Registration—not UI—enforces it; statuses stay unchanged.
+
+References:
+
+- `docs/SECURITY_THREAT_MODEL.md`
+- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
 
 ## 4. Deferred Decisions
 

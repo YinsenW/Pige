@@ -558,7 +558,7 @@
     "PIGE-DATA-003":{"status":"planned","plannedTarget":"Managed Collection field/view/relation/formula lifecycle with stable IDs, revision conflicts, Activity/Undo, backup, and safe exceptional boundaries."},
     "PIGE-SEC-001":{"status":"partial","evidence":["EV-PROVIDER"],"open":{"id":"OPEN-REQ-PIGE-SEC-001","description":"OS-keychain integration, portable-mode warning, and release backup secret scans remain open.","targetBuilds":["B3.02"],"targetExits":["E3.02"]}},
     "PIGE-SEC-002":{"status":"planned","plannedTarget":"AR1 closed-list high-risk confirmation with denial/no-effect, redacted UI, effect-owner recovery, and real macOS proof."},
-    "PIGE-SEC-003":{"status":"planned","plannedTarget":"AR1 submitted-turn authority with zero ordinary permission records, third-party isolation, and no saved-grant/YOLO controls."},
+    "PIGE-SEC-003":{"status":"planned","plannedTarget":"Prove source-bound exact-SourceRecord authority with zero ambient tool registration or confirmation widening; text-only authority, third-party isolation and no saved-grant/YOLO remain."},
     "PIGE-SEC-004":{"status":"partial","evidence":["EV-SECURITY-POLICY"],"open":{"id":"OPEN-REQ-PIGE-SEC-004","description":"Live private-reporting availability and release-time public-surface review remain open.","targetBuilds":["B9.17"],"targetExits":["E9.11"]}},
     "PIGE-SEC-005":{"status":"planned","plannedTarget":"Exact connected Provider/model plus Send preserves the user-authored and selected bounded payload unchanged, isolates stored credentials, rejects identity drift, and has no content policy, egress audit, approval UI or waiting state."},
     "PIGE-SEC-006":{"status":"partial","evidence":["EV-PROVIDER"],"open":{"id":"OPEN-REQ-PIGE-SEC-006","description":"OS-keychain integration and explicit portable-mode warning remain open.","targetBuilds":["B1.19"],"targetExits":["E1.15"]}},
@@ -567,7 +567,7 @@
     "PIGE-PI-002":{"status":"partial","evidence":["EV-PROVIDER","EV-PI-PROVIDER-BINDING","EV-HOME-MODEL-SWITCHER"],"open":{"id":"OPEN-REQ-PIGE-PI-002","description":"Full catalog/help, Provider delete, DeepSeek Anthropic, and packaged model matrix remain; Advanced/Fast stays hidden.","targetBuilds":["B3.04"],"targetExits":["E3.01"]}},
     "PIGE-PI-003": {
       "status": "planned",
-      "plannedTarget": "Prove submitted-turn first-party authority, third-party isolation, closed-list confirmation, retained network/path controls, and no ambient authority."
+      "plannedTarget": "Prove source-bound exact-source catalogs reject ambient/stale calls before confirmation or effect, while text-only first-party authority and third-party isolation remain."
     },
     "PIGE-PI-004":{"status":"partial","evidence":["EV-PROVIDER","EV-PROVIDER-CONNECTION","EV-MODELS-ERROR-OWNER","EV-MODELS-PROGRESSIVE-UI"],"open":{"id":"OPEN-REQ-PIGE-PI-004","description":"Progressive Models owns repair; catalog/help, deletion, DeepSeek Anthropic and packaged BYOK remain.","targetBuilds":["B3.01","B3.03","B3.04"],"targetExits":["E3.01"]}},
     "PIGE-PI-005": {
@@ -1040,11 +1040,11 @@
     },
     "E8.02": {
       "status": "planned",
-      "plannedTarget": "AR1 ordinary first-party turn flow plus concrete high-risk deny/allow, third-party isolation, effect-owner recovery, and macOS evidence."
+      "plannedTarget": "Text-only ordinary authority plus source-bound exact-source catalog exclusion, concrete high-risk deny/allow, third-party isolation, effect-owner recovery, and macOS evidence."
     },
     "E8.03": {
       "status": "planned",
-      "plannedTarget": "No saved-grant/YOLO modes; prove the closed high-risk list, redacted confirmation, Operations where effects require them, and macOS evidence."
+      "plannedTarget": "No saved-grant/YOLO; source-bound ambient calls fail before confirmation/effect, and closed high-risk text-only effects retain redacted confirmation, Operations, and macOS evidence."
     },
     "E8.04": {
       "status": "planned",

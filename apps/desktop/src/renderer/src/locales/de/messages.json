@@ -203,7 +203,7 @@
   "home.largePasteRejectedItemTooLarge": "Dieser eingefügte Text ist für eine Nachricht zu groß. Er bleibt lokal erhalten.",
   "home.largePasteRejectedAggregateLimit": "Die Grenze für eingefügten Text ist erreicht. Dieses Element bleibt lokal erhalten.",
   "home.largePasteRejectedSubmissionBlocked": "Entferne oder passe abgelehnten eingefügten Text vor dem Senden an. Nachricht und Elemente bleiben unverändert erhalten.",
-  "home.organizeAttachedFilesIntent": "Diese Dateien organisieren",
+  "home.useAttachedFilesAsSourceIntent": "Nur die angehängten Dateien als Quellmaterial verwenden.",
   "home.captureQueued": "Erfassung eingereiht",
   "home.cancelJob": "Abbrechen",
   "home.composerAria": "Erfassen oder fragen",

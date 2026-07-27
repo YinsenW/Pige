@@ -3933,7 +3933,7 @@ function HomeComposer(props: {
       const submittedFiles = submittedItems
         .filter((item): item is Extract<StagedComposerItem, { kind: "file" }> => item.kind === "file")
         .map((item) => item.file);
-      const turnText = hasText ? submittedText : props.t("home.organizeAttachedFilesIntent");
+      const turnText = hasText ? submittedText : props.t("home.useAttachedFilesAsSourceIntent");
       const sourceDisplayName = submittedItems[0]?.kind === "file" ? submittedItems[0].file.name : props.t("home.pastedText");
       const attemptKey = composerAttemptKey(submittedText, submittedItems);
       const clientTurnId = stagedComposerAttemptRef.current?.key === attemptKey

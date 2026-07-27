@@ -41,6 +41,8 @@ import { SourcePageService } from "../../apps/desktop/src/main/services/source-p
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
 import { PermissionedExternalCapabilityRegistry } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
 import { createFirstPartyCommandCapabilityAdapter } from "../../apps/desktop/src/main/services/command-capability-adapter";
+import { createPiPackageInstallCapabilityAdapter } from "../../apps/desktop/src/main/services/pi-package-capability-adapter";
+import { PiPackageManagerService } from "../../apps/desktop/src/main/services/pi-package-manager-service";
 import { createFirstPartyReadonlyNodeOsCapabilityAdapters } from "../../apps/desktop/src/main/services/readonly-node-os/first-party-readonly-node-os-capability-adapters";
 import { readMarkdownPageByRelativePath } from "../../apps/desktop/src/main/services/markdown-page-index";
 import {
@@ -233,6 +235,168 @@ describe("Home Pi Agent service", () => {
     expect(jobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
       class: "agent_turn",
       state: "completed"
+    });
+  });
+
+  it("keeps every ambient permissioned capability out of a source-bound turn", async () => {
+    const fixture = makeFixture();
+    const models = makeModels();
+    const permissionRoot = path.join(path.dirname(fixture.vaultPath), "source-bound-permissions");
+    const packageRoot = path.join(path.dirname(fixture.vaultPath), "source-bound-packages");
+    fs.mkdirSync(permissionRoot, { recursive: true, mode: 0o700 });
+    const confirmations = new HighRiskConfirmationService();
+    const registry = new PermissionedExternalCapabilityRegistry([
+      ...createFirstPartyReadonlyNodeOsCapabilityAdapters({ protectedRoots: [permissionRoot] }),
+      createPiPackageInstallCapabilityAdapter(new PiPackageManagerService({ appDataRoot: packageRoot })),
+      createFirstPartyCommandCapabilityAdapter()
+    ], new PermissionBrokerService({
+      rootPath: permissionRoot,
+      unsafeAllowUnfenced: true,
+      confirmations
+    }));
+    const ambientToolNames = registry.toolNames();
+    expect(ambientToolNames).toEqual([
+      "pige_external_filesystem_list",
+      "pige_external_filesystem_read_text",
+      "pige_external_network_fetch_text",
+      "pige_install_pi_package",
+      "pige_run_command"
+    ]);
+    let observedToolNames: readonly string[] = [];
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+        { kind: "text", text: "The exact submitted source was inspected without ambient authority." }
+      ]
+    });
+    const jobs = new JobsService(fixture.vaults, new AgentIngestService(models, adapter));
+    const runtime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        observedToolNames = request.tools.map((tool) => tool.name);
+        return adapter.run(request);
+      }
+    };
+    const service = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      registry
+    );
+    const parentDirectory = path.dirname(fixture.vaultPath);
+    const sourcePath = path.join(parentDirectory, "submitted-only.txt");
+    const siblingPath = path.join(parentDirectory, "sibling-sentinel.txt");
+    fs.writeFileSync(sourcePath, "Only this exact file is submitted.\n", "utf8");
+    fs.writeFileSync(siblingPath, "sibling-must-remain-private", "utf8");
+    const prepared = service.prepareSourceTurn({
+      text: "Use only this submitted source.",
+      inputKind: "file_picker",
+      locale: "en",
+      clientTurnId: "turn_20260727_sourceboundcatalog"
+    });
+    await new CaptureService(fixture.vaults).preserveFilesForAgentTurn({
+      filePaths: [sourcePath],
+      inputKind: "file_picker",
+      userIntent: "Use only this submitted source.",
+      locale: "en"
+    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+
+    const outcome = await service.submitPreparedSourceTurn(prepared);
+
+    expect(outcome.state, outcome.state === "completed" ? undefined : JSON.stringify(outcome.error)).toBe("completed");
+    expect(outcome).toMatchObject({ jobId: prepared.jobId, sourceIds: [prepared.sourceId] });
+    expect(observedToolNames).toContain("pige_inspect_source");
+    expect(observedToolNames.filter((name) => ambientToolNames.includes(name))).toEqual([]);
+    expect(confirmations.pending()).toMatchObject({ status: "none" });
+    expect(fs.readFileSync(siblingPath, "utf8")).toBe("sibling-must-remain-private");
+    expect(readRecords<SourceRecord>(path.join(fixture.vaultPath, ".pige", "source-records"))).toEqual([
+      expect.objectContaining({
+        id: prepared.sourceId,
+        original: expect.objectContaining({ path: sourcePath, displayName: path.basename(sourcePath) })
+      })
+    ]);
+  });
+
+  it("rejects an invented ambient command in a source-bound turn before confirmation or execution", async () => {
+    const fixture = makeFixture();
+    const models = makeModels();
+    const parentDirectory = path.dirname(fixture.vaultPath);
+    const permissionRoot = path.join(parentDirectory, "invented-command-permissions");
+    fs.mkdirSync(permissionRoot, { recursive: true, mode: 0o700 });
+    const confirmations = new HighRiskConfirmationService();
+    const registry = new PermissionedExternalCapabilityRegistry(
+      [createFirstPartyCommandCapabilityAdapter()],
+      new PermissionBrokerService({
+        rootPath: permissionRoot,
+        unsafeAllowUnfenced: true,
+        confirmations
+      })
+    );
+    const sourcePath = path.join(parentDirectory, "submitted-command-source.txt");
+    const siblingPath = path.join(parentDirectory, "command-sibling-sentinel.txt");
+    const createdByCommandPath = path.join(parentDirectory, "must-not-be-created.txt");
+    fs.writeFileSync(sourcePath, "The model must not widen this file authority.\n", "utf8");
+    fs.writeFileSync(siblingPath, "sibling-before", "utf8");
+    let runtimeCalls = 0;
+    const runtime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        await request.beforeModelTurn?.();
+        runtimeCalls += 1;
+        expect(request.tools.some((tool) => tool.name === "pige_run_command")).toBe(false);
+        return makeRuntimeResult(request, "pige_run_command", {
+          answer: "The excluded ambient command must not be accepted.",
+          citationRefs: [],
+          grounding: "general"
+        });
+      }
+    };
+    const jobs = new JobsService(fixture.vaults, new AgentIngestService(models, runtime));
+    const service = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      registry
+    );
+    const prepared = service.prepareSourceTurn({
+      text: "Organize the submitted file.",
+      inputKind: "file_picker",
+      locale: "en",
+      clientTurnId: "turn_20260727_inventedambient"
+    });
+    await new CaptureService(fixture.vaults).preserveFilesForAgentTurn({
+      filePaths: [sourcePath],
+      inputKind: "file_picker",
+      userIntent: "Organize the submitted file.",
+      locale: "en"
+    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+
+    const outcome = await service.submitPreparedSourceTurn(prepared);
+
+    expect(outcome).toMatchObject({ state: "failed", error: { code: "agent_runtime.tool_not_registered" } });
+    expect(runtimeCalls).toBe(1);
+    expect(confirmations.pending()).toMatchObject({ status: "none" });
+    expect(fs.existsSync(createdByCommandPath)).toBe(false);
+    expect(fs.readFileSync(siblingPath, "utf8")).toBe("sibling-before");
+    expect(readRecords<SourceRecord>(path.join(fixture.vaultPath, ".pige", "source-records"))).toEqual([
+      expect.objectContaining({ id: prepared.sourceId })
+    ]);
+    expect(readRecords<OperationRecord>(path.join(fixture.vaultPath, ".pige", "operations"))).toEqual([]);
+    expect(jobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
+      privacy: {
+        usedShell: false,
+        accessedExternalFiles: false
+      }
     });
   });
 

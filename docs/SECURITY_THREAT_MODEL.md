@@ -271,71 +271,56 @@ Shell policy:
 
 - Shell execution is denied by default.
 - Pige-owned bundled tool commands may run only through the Local Tool Service with fixed argv construction, path validation, timeout, and output limits.
-- Pige's first-party command capability is standing product capability. A submitted user
-  task authorizes its ordinary desktop-local command, network, filesystem, and package
-  effects once and records one audit without another prompt. Third-party actors and
-  destructive, credential, or changed-boundary effects still require their own authority.
+- Text-only explicit tasks retain the reviewed first-party command boundary and its
+  current high-risk rules. Source-bound turns do not register command, ambient filesystem,
+  package or generic network adapters; no confirmation can add them.
 - Source content, model output, or package metadata cannot grant shell access.
 
 Authorization dialog requirements:
 
-- Clear title: action and actor.
-- Short plain-language reason.
-- Capability list with scope.
-- Data boundary label: local, network, cloud, filesystem, secret, destructive.
-- Buttons: Deny and Allow This Action.
-- The authorization binds the exact Skill/package identity, version, capability, and
-  current scope only; another action or changed identity requires a new decision.
-- Destructive actions use stronger copy and do not default to Allow.
-- Dialog style should be calm, compact, and polished, similar in spirit to modern ChatGPT/Codex permission prompts.
-- No global mode can let third-party code inherit first-party turn authority or bypass a
-  closed-list high-risk confirmation.
+- Show actor/action, plain reason, scoped capabilities/data boundary, Deny and Allow This
+  Action. Bind exact actor/version/capability/scope; changed identity needs a new decision.
+  Destructive actions use stronger non-default-Allow copy. Copy is presentation, not
+  authority: it cannot widen resources, source-bound catalogs cannot produce Bash
+  confirmation, and no global mode bypasses closed-list or third-party isolation.
 
 Acceptance:
 
-- An Agent, Skill, or package requesting non-default shell, filesystem, network,
-  brokered credential use, delete, commit, or settings authority cannot proceed without
-  their reviewed third-party capability boundary. Closed-list high-risk effects retain
-  their stronger exact confirmation.
-- Package-install tests prove deny-before-network and fail-closed identity, integrity,
-  archive, cancellation, locking, recovery and disabled-only behavior.
-- Denying a permission leaves the app stable and records the denial in operation history.
+- Non-default third-party shell/filesystem/network/credential/delete/commit/settings use
+  requires its reviewed boundary; closed-list high risk retains exact confirmation.
+- Package-install tests cover deny-before-network, identity/integrity/archive, cancellation,
+  locking, recovery and disabled-only behavior. Denial is stable and recorded.
 
 ### 6.6.1 Pi Capability And Filesystem Authority
 
-Pi may be offered arbitrary path, filesystem, command, and commit capabilities, but the
-catalog is not blanket authority. The governing matrix is:
+Pi receives capability only through its turn catalog. The governing matrix is:
 
 | Requested action | Default authority | Gate |
 | --- | --- | --- |
 | Schema-valid recoverable knowledge Markdown inside the active vault | Standing Pige authority; no prompt | Confined writer, schema/evidence/base hash, Operation/Undo |
-| Read/preserve the exact drop/file-picker source for this Job | Current user gesture; no duplicate prompt | Source/path validation |
-| First-party path/file/folder/repository/command/package action requested by the current user task | Current task authority; no duplicate prompt | Exact executable/resource binding, bounded execution, one-use audit |
+| Source-bound accepted SourceRecord set | Exact accepted files only; no duplicate prompt | Exact identity/currentness; no parent/sibling/cwd or ambient adapters |
+| First-party path/folder/repository/command/package action in an explicit text-only task | Current task authority; no duplicate prompt | Exact executable/resource binding, bounded execution, one-use audit |
 | Third-party path/file/folder/repository/command/commit action | Available, not pre-authorized | Reviewed adapter/capability boundary plus exact high-risk confirmation where the effect qualifies |
 | Permanent deletion, source-original overwrite, protected policy/settings, other always-confirmed effect | Never covered by ordinary standing/grant authority | Strong current-action confirmation |
 | Raw secret bytes | Not grantable | Block; reviewed adapters may use secret refs only |
 
-Standing Markdown authority is defined by managed root and semantic owner, not `.md`
-suffix; external Markdown and user-owned originals remain outside it. Main executes only
-the bound approved action and returns a bounded result to the same Job. Source/model/tool
-text cannot approve itself.
+Standing Markdown authority comes from managed root/owner, not `.md`; external Markdown
+and originals stay outside. Main executes only the bound action for the same Job; text
+cannot approve itself.
 
-Current-action authority is exact and one-use. Production ships only bounded no-follow
-folder/text reads and SSRF-safe fetch. The create-only foundation remains unregistered:
-it binds parent/leaf/resource/tool/content, rechecks authority, and records receipts/completion.
-Unknown effects remain uncertain; no-follow parent handles remain required.
+Current-action authority is exact and one-use. A source-bound turn admits only its exact
+accepted Source Records; source/prompt/model/tool text and confirmation cannot add a
+directory, sibling, cwd or ambient adapter. Stale/invented calls fail before confirmation,
+execution or persistence. Text-only explicit tasks retain existing high-risk semantics.
 
 ### 6.7 Arbitrary Shell Execution
 
 Threat: tool or Skill runs dangerous commands.
 
-Pige exposes a first-party OS command adapter with exact executable identity, argv/cwd,
-`shell:false` spawning, a reduced environment, bounded output/time, cancellation, and
-process-tree termination. Shell syntax remains available by explicitly choosing a shell
-executable; it is not silently interpolated by the Host. The current user task is the
-single ordinary-action authority. Third-party code cannot inherit that identity, source
-or model text cannot self-authorize, and destructive or credential effects remain
-separate boundaries.
+For eligible text-only tasks, `pige_run_command` binds executable, argv/cwd, `shell:false`,
+reduced environment, limits, cancellation and process-tree termination; explicit shell
+syntax requires a shell executable. Source-bound catalogs omit it. Third-party, destructive
+and credential effects retain separate authority.
 
 ### 6.8 Destructive Writes
 

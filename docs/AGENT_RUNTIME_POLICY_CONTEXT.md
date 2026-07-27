@@ -94,9 +94,10 @@ ledger, renderer action, or waiting Job. Only verified loopback is local. The mo
 receives credentials, secret refs, permission internals, arbitrary paths, or the whole
 vault by default.
 
-Text-only whitespace is rejected locally and creates no turn. Attachments plus
-whitespace-only text use the single localized minimal “organize these files” intent and
-otherwise preserve the same exact attachment identities.
+Text-only whitespace creates no turn. Attachment-only preserves exact identities and uses
+the six-locale “Use only the attached file(s) as source material.” Its exact-source catalog
+excludes parent/sibling/cwd and ambient tools; confirmation cannot add them. Text-only
+tasks retain the closed high-risk boundary.
 
 ### 4.3 Submitted-Turn Authority
 

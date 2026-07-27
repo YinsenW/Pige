@@ -659,9 +659,9 @@ Responsibilities:
 - Build workflow prompts.
 - Select an internal model call profile from app defaults.
 - Run the embedded Pi Agent loop through the one approved adapter.
-- Present a typed Pige tool catalog. One submitted turn authorizes registered first-party
-  reads, parse/OCR/retrieval, user-directed fetch, and bounded local tools; each call is
-  still scope/resource validated but does not create an approval lifecycle.
+- Present a typed catalog. One submitted turn authorizes registered first-party tools only
+  when its scoped catalog contains them: text-only retains ordinary authority; source-bound
+  registers exact-source inspect/parse/OCR/retrieval/write only, with typed URL separate.
 - Keep recoverable schema/tool/citation/evidence rejection inside that Pi loop as typed
   feedback until an accepted result, grounded abstention, or true external boundary.
 - Run Pi as the owner of wiki-change planning and bounded Markdown authorship.
@@ -1200,9 +1200,9 @@ Service-level constraints:
 - Renderer surfaces receive safe request/decision summaries, not permission-store internals.
 - A denial leaves prior safe durable outputs intact and produces an explainable turn or
   operation result.
-- Main registers read-only folder/text/fetch plus current-action `pige_install_pi_package`
-  (`install_package`) for exact-package `installed_disabled` install only. No
-  enable/runtime/shell/catalog/update/uninstall adapter is registered.
+- Eligible text-only tasks may register folder/text/fetch plus current-action
+  `pige_install_pi_package` for exact `installed_disabled` packages. Source-bound catalogs
+  exclude them and confirmation cannot add them. No other package/runtime adapter exists.
 - The unregistered create foundation owns local revision intents, publication/recovery
   sequencing and path-free Operations through an async identity/tool/content, receipt,
   permission and lease protocol. No-follow/process helpers required.

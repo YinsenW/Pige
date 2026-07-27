@@ -54,15 +54,16 @@ names it for rationale or package curation.
 
 - Simplicity is a product invariant: default UI should minimize decisions, labels, modes, and visible technical metadata.
 - **Host provides capabilities, authority and reliability; Pi decides semantic work.**
-  Every text, URL, file and Agent surface uses one Pi turn. Attachment plus query is one
-  turn; no-text attachment adds only “organize these files.” Host may preserve evidence
-  and validate selected tools/effects, but never selects or requires a semantic route,
-  tool order, terminal, answer schema, correction prompt or fallback pipeline.
+  Text, URL, file and Agent surfaces use one Pi turn. Attachment plus query is one; no-text
+  attachment says “Use only the attached file(s) as source material.” Source-bound turns
+  authorize exact accepted Source Records only: no parent/sibling/cwd, ambient tool, or
+  text/confirmation widening. Host validates
+  tools/effects but never selects route, order, terminal or repair.
 - Upstream Pi's final assistant message is authoritative. Host does not reject or rewrite it for
   missing grounding/citation shape; it only omits or marks unknown refs unavailable.
-- One explicit user submit authorizes that Agent turn to use registered first-party
-  read, parse, OCR, retrieval, user-directed fetch, and bounded local-tool capabilities.
-  These ordinary actions do not create per-tool permission records or prompts.
+- One explicit user submit authorizes that Agent turn only through its scoped catalog.
+  Text-only tasks retain ordinary authority; source-bound turns get exact-source inspect/
+  parse/OCR/retrieval/write only. Typed URL ingress stays separate; no per-tool approval.
 - Permission confirmation is exceptional: irreversible deletion, overwriting user-owned
   files, writes outside authorized roots, arbitrary shell or unknown-package install,
   credential export/display, risky Agent edits already requiring confirmation, or an
