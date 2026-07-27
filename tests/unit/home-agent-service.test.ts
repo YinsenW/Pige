@@ -238,7 +238,7 @@ describe("Home Pi Agent service", () => {
     });
   });
 
-  it("keeps every ambient permissioned capability out of a source-bound turn", async () => {
+  it("keeps every ambient permissioned capability out of a neutral source-bound turn", async () => {
     const fixture = makeFixture();
     const models = makeModels();
     const permissionRoot = path.join(path.dirname(fixture.vaultPath), "source-bound-permissions");
@@ -294,7 +294,6 @@ describe("Home Pi Agent service", () => {
     fs.writeFileSync(sourcePath, "Only this exact file is submitted.\n", "utf8");
     fs.writeFileSync(siblingPath, "sibling-must-remain-private", "utf8");
     const prepared = service.prepareSourceTurn({
-      text: "Use only this submitted source.",
       inputKind: "file_picker",
       locale: "en",
       clientTurnId: "turn_20260727_sourceboundcatalog"
@@ -322,7 +321,94 @@ describe("Home Pi Agent service", () => {
     ]);
   });
 
-  it("rejects an invented ambient command in a source-bound turn before confirmation or execution", async () => {
+  it("restores explicit authored source intent and its scoped ambient catalog after restart", async () => {
+    const fixture = makeFixture();
+    const models = makeMutableHomeModels(false);
+    const jobs = new JobsService(fixture.vaults);
+    const permissionRoot = path.join(path.dirname(fixture.vaultPath), "authored-source-restart-permissions");
+    fs.mkdirSync(permissionRoot, { recursive: true, mode: 0o700 });
+    const confirmations = new HighRiskConfirmationService();
+    const registry = new PermissionedExternalCapabilityRegistry(
+      [createFirstPartyCommandCapabilityAdapter()],
+      new PermissionBrokerService({
+        rootPath: permissionRoot,
+        unsafeAllowUnfenced: true,
+        confirmations
+      })
+    );
+    const unavailable = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      { run: async () => { throw new Error("An unavailable model must not run."); } },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      registry
+    );
+    const sourcePath = path.join(path.dirname(fixture.vaultPath), "authored-source-restart.txt");
+    fs.writeFileSync(sourcePath, "The exact submitted source survives restart.\n", "utf8");
+    const prepared = unavailable.prepareSourceTurn({
+      text: "Inspect this file, then run the command I explicitly requested.",
+      inputKind: "file_picker",
+      locale: "en",
+      clientTurnId: "turn_20260727_authoredrestart"
+    });
+    await new CaptureService(fixture.vaults).preserveFilesForAgentTurn({
+      filePaths: [sourcePath],
+      inputKind: "file_picker",
+      userIntent: prepared.request.text ?? "",
+      locale: "en"
+    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+
+    await expect(unavailable.submitPreparedSourceTurn(prepared)).resolves.toMatchObject({
+      state: "waiting",
+      error: { code: "model_provider.default_model_missing" }
+    });
+
+    models.setReady(true);
+    let observedToolNames: readonly string[] = [];
+    const runtime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        observedToolNames = request.tools.map((tool) => tool.name);
+        return new PiAgentRuntimeAdapter({
+          fauxResponses: [
+            { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+            { kind: "text", text: "The explicit source task resumed with its reviewed capabilities." }
+          ]
+        }).run(request);
+      }
+    };
+    const restarted = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults, new AgentIngestService(models, runtime)),
+      runtime,
+      undefined,
+      new AgentTurnConversationStore(),
+      undefined,
+      undefined,
+      registry
+    );
+
+    expect(await restarted.resumeWaitingTurns()).toEqual({
+      requeued: 1,
+      processed: 1,
+      completed: 1,
+      waiting: 0,
+      failed: 0
+    });
+    expect(observedToolNames).toEqual(expect.arrayContaining([
+      "pige_inspect_source",
+      "pige_run_command"
+    ]));
+    expect(confirmations.pending()).toMatchObject({ status: "none" });
+  });
+
+  it("rejects an invented ambient command in a neutral source-bound turn before confirmation or execution", async () => {
     const fixture = makeFixture();
     const models = makeModels();
     const parentDirectory = path.dirname(fixture.vaultPath);
@@ -369,7 +455,6 @@ describe("Home Pi Agent service", () => {
       registry
     );
     const prepared = service.prepareSourceTurn({
-      text: "Organize the submitted file.",
       inputKind: "file_picker",
       locale: "en",
       clientTurnId: "turn_20260727_inventedambient"

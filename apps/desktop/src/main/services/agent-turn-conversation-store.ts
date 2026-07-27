@@ -53,9 +53,12 @@ export interface PreservedAgentTurn {
 export interface AgentTurnConversationMetadata {
   readonly inputKind: AgentTurnInputKind;
   readonly locale: Locale;
+  readonly authoredTaskIntent?: AgentTurnAuthoredTaskIntent;
   readonly scope?: AgentTurnScope;
   readonly inputPresentation?: AgentConversationInputPresentation;
 }
+
+export type AgentTurnAuthoredTaskIntent = "neutral_attachment" | "explicit_user_task";
 
 export interface AgentTurnConversationBinding {
   readonly clientTurnId?: string;
@@ -396,7 +399,8 @@ export class AgentTurnConversationStore {
       return adoptMatchingInputTurn(existing, kind, expectedText, metadata, resolved);
     }
 
-    const event = ConversationEventSchema.parse({
+    const { authoredTaskIntent, ...schemaMetadata } = metadata ?? {};
+    const parsedEvent = ConversationEventSchema.parse({
       id: clientTurnEventId(resolved.clientTurnId),
       conversationId: resolved.conversationId,
       type: kind === "user" ? "user_message" : "error",
@@ -405,8 +409,9 @@ export class AgentTurnConversationStore {
       ...(resolved.parentEventId === undefined ? {} : { parentEventId: resolved.parentEventId }),
       inputHash,
       text: expectedText,
-      ...metadata
+      ...schemaMetadata
     });
+    const event = { ...parsedEvent, ...(authoredTaskIntent ? { authoredTaskIntent } : {}) } as ConversationEvent;
     const persisted = appendEvent(vaultPath, locator, event, !resolved.isFollowUp, (events) => {
       assertConversationEventsBelong(events, resolved.conversationId);
       const localMatches = events.filter((candidate) => candidate.clientTurnId === resolved.clientTurnId);
@@ -661,7 +666,10 @@ function parseConversationText(text: string): ConversationEvent[] {
   for (const line of text.split("\n").filter(Boolean)) {
     let event: ConversationEvent;
     try {
-      event = ConversationEventSchema.parse(JSON.parse(line));
+      const raw = JSON.parse(line) as Record<string, unknown>;
+      const authoredTaskIntent = readStoredAuthoredTaskIntent(raw.authoredTaskIntent);
+      delete raw.authoredTaskIntent;
+      event = { ...ConversationEventSchema.parse(raw), ...(authoredTaskIntent ? { authoredTaskIntent } : {}) } as ConversationEvent;
     } catch {
       throw new PigeDomainError("agent_runtime.turn_unavailable", "The Agent conversation history is invalid.");
     }
@@ -698,14 +706,19 @@ function readTurnMetadata(event: ConversationEvent): AgentTurnConversationMetada
   }
   const scope = readTurnScope(value.scope);
   const inputPresentation = readInputPresentation(value.inputPresentation);
+  const authoredTaskIntent = readStoredAuthoredTaskIntent(value.authoredTaskIntent);
   return {
     inputKind: value.inputKind as AgentTurnInputKind,
     locale: value.locale as Locale,
+    ...(authoredTaskIntent ? { authoredTaskIntent } : {}),
     ...(scope ? { scope } : {}),
     ...(inputPresentation ? { inputPresentation } : {})
   };
 }
 
+function readStoredAuthoredTaskIntent(value: unknown): AgentTurnAuthoredTaskIntent | undefined {
+  return value === "neutral_attachment" || value === "explicit_user_task" ? value : undefined;
+}
 type LegacyAgentTurnObjective = "auto" | "capture" | "vault_only";
 
 function readLegacyObjective(event: ConversationEvent): LegacyAgentTurnObjective | undefined {
@@ -772,8 +785,16 @@ function hasExactTurnMetadata(
   }
   return value.inputKind === metadata.inputKind &&
     value.locale === metadata.locale &&
+    resolveAuthoredTaskIntent(value.inputKind as AgentTurnInputKind, value.authoredTaskIntent) ===
+      resolveAuthoredTaskIntent(metadata.inputKind, metadata.authoredTaskIntent) &&
     scopesEqual(readTurnScope(value.scope), metadata.scope) &&
     JSON.stringify(readInputPresentation(value.inputPresentation)) === JSON.stringify(metadata.inputPresentation);
+}
+
+function resolveAuthoredTaskIntent(inputKind: AgentTurnInputKind, value: unknown): AgentTurnAuthoredTaskIntent {
+  const stored = readStoredAuthoredTaskIntent(value);
+  if (stored) return stored;
+  return inputKind === "file_drop" || inputKind === "file_picker" ? "neutral_attachment" : "explicit_user_task";
 }
 
 function conversationHasScope(events: readonly ConversationEvent[], scope: AgentTurnScope | undefined): boolean {
@@ -1089,6 +1110,7 @@ function createTurnInputHash(
     inputKind: metadata.inputKind,
     ...(legacyObjective ? { objective: legacyObjective } : {}),
     locale: metadata.locale,
+    ...(metadata.authoredTaskIntent ? { authoredTaskIntent: metadata.authoredTaskIntent } : {}),
     ...(metadata.scope ? { scope: metadata.scope } : {}),
     ...(metadata.inputPresentation ? { inputPresentation: metadata.inputPresentation } : {})
   } : null;
