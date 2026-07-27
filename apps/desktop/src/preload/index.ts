@@ -187,6 +187,8 @@ import {
   CollectionOpenResultSchema,
   CollectionAppendDefaultRowRequestSchema,
   CollectionAppendDefaultRowResultSchema,
+  CollectionTrashRowRequestSchema,
+  CollectionTrashRowResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   KnowledgeHealthRunRequestSchema,
@@ -292,7 +294,9 @@ import type {
   CollectionOpenRequest,
   CollectionOpenResult,
   CollectionAppendDefaultRowRequest,
-  CollectionAppendDefaultRowResult
+  CollectionAppendDefaultRowResult,
+  CollectionTrashRowRequest,
+  CollectionTrashRowResult
 } from "@pige/schemas";
 function isRestoreMode(value: unknown): value is RestoreMode {
   return value === "clone_as_new" || value === "replace_existing";
@@ -410,6 +414,25 @@ async function invokeCollectionAddNullableColumn(
     result.tableId !== parsedRequest.tableId
   ) {
     throw new Error("Invalid Managed Collection nullable-column response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionTrashRow(
+  request: CollectionTrashRowRequest
+): Promise<CollectionTrashRowResult> {
+  const parsedRequest = CollectionTrashRowRequestSchema.parse(request);
+  const result = CollectionTrashRowResultSchema.parse(
+    await ipcRenderer.invoke("collections.trashRow", parsedRequest)
+  );
+  if (
+    result.requestId !== parsedRequest.requestId ||
+    result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.datasetId !== parsedRequest.datasetId ||
+    result.tableId !== parsedRequest.tableId ||
+    result.rowId !== parsedRequest.rowId
+  ) {
+    throw new Error("Invalid Managed Collection row-trash response identity.");
   }
   return result;
 }
@@ -794,7 +817,8 @@ const api: PigeDesktopApi = {
     open: invokeCollectionOpen,
     editCell: invokeCollectionCellEdit,
     appendDefaultRow: invokeCollectionAppendDefaultRow,
-    addNullableColumn: invokeCollectionAddNullableColumn
+    addNullableColumn: invokeCollectionAddNullableColumn,
+    trashRow: invokeCollectionTrashRow
   },
   proposals: {
     list: async (request?: ProposalsListRequest): Promise<ProposalsListResult> =>

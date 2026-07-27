@@ -5,6 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  CollectionTrashRowResultSchema,
   DatasetManifestSchema,
   DatasetRevisionSchema,
   DatasetSchemaRecordSchema,
@@ -29,6 +30,203 @@ afterEach(() => {
 });
 
 describe("ManagedCollectionService", () => {
+  it("trashes one row immutably, adopts replay, fails closed, and restores it through Activity", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionService(port);
+    const initialManifest = readManifest(fixture.bundlePath);
+    const initialRevision = DatasetRevisionSchema.parse(
+      readJson(path.join(fixture.bundlePath, initialManifest.revision.path))
+    );
+    const schema = DatasetSchemaRecordSchema.parse(
+      readJson(path.join(fixture.bundlePath, initialManifest.schema.path))
+    );
+    const table = required(schema.tables[0]);
+    const opened = await service.open({
+      apiVersion: 1,
+      requestId: "collection_request_trashopenabcdefg",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id
+    });
+    expect(opened).toMatchObject({
+      status: "ready",
+      snapshot: { rows: [{ canTrash: true }, { canTrash: true }] }
+    });
+    if (opened.status !== "ready") throw new Error("Collection did not open");
+    const trashedRow = required(opened.snapshot.rows[0]);
+    const priorPayloadBytes = fs.readFileSync(path.join(fixture.bundlePath, initialRevision.payload.path));
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "collection_request_trashrowabcdefgh",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id,
+      expectedRevisionId: initialManifest.activeRevision,
+      rowId: trashedRow.rowId
+    };
+
+    const committed = await service.trashRow(request);
+    expect(committed).toMatchObject({
+      status: "committed",
+      rowId: trashedRow.rowId,
+      snapshot: {
+        revisionId: expect.any(String),
+        totalRowCount: 1,
+        returnedRowCount: 1,
+        rows: [expect.objectContaining({ canTrash: true })]
+      }
+    });
+    if (committed.status !== "committed") throw new Error("Collection row trash did not commit");
+    expect(committed.snapshot.rows.some((row) => row.rowId === trashedRow.rowId)).toBe(false);
+    expect(readRowIds(path.join(fixture.bundlePath, initialRevision.payload.path)))
+      .toContain(trashedRow.rowId);
+    expect(fs.readFileSync(path.join(fixture.bundlePath, initialRevision.payload.path)))
+      .toEqual(priorPayloadBytes);
+
+    const committedManifest = readManifest(fixture.bundlePath);
+    const committedRevision = DatasetRevisionSchema.parse(
+      readJson(path.join(fixture.bundlePath, committedManifest.revision.path))
+    );
+    expect(committedRevision).toMatchObject({
+      id: committed.snapshot.revisionId,
+      parentRevisionId: initialManifest.activeRevision,
+      operationId: committed.operationId,
+      change: {
+        kind: "collection_row_trash",
+        tableId: table.id,
+        rowId: trashedRow.rowId
+      }
+    });
+    expect(readRowIds(path.join(fixture.bundlePath, committedRevision.payload.path)))
+      .not.toContain(trashedRow.rowId);
+
+    const operationPath = findFile(
+      path.join(fixture.vaultPath, ".pige/operations"),
+      `${committed.operationId}.json`
+    );
+    const operationBytes = fs.readFileSync(operationPath);
+    expect(OperationRecordSchema.parse(readJson(operationPath))).toMatchObject({
+      id: committed.operationId,
+      kind: "trash_collection_row",
+      reversible: "yes",
+      targetRefs: expect.arrayContaining([
+        expect.objectContaining({ kind: "dataset", id: initialManifest.datasetId }),
+        expect.objectContaining({ kind: "table", id: table.id }),
+        expect.objectContaining({ kind: "row", id: trashedRow.rowId })
+      ])
+    });
+    await expect(service.trashRow(request)).resolves.toEqual(committed);
+
+    const tampered = readJson(operationPath) as Record<string, unknown>;
+    fs.writeFileSync(operationPath, `${JSON.stringify({ ...tampered, summary: "tampered" }, null, 2)}\n`);
+    await expect(service.trashRow(request)).rejects.toMatchObject({ code: "collection.request_conflict" });
+    expect(readManifest(fixture.bundlePath).activeRevision).toBe(committed.snapshot.revisionId);
+    fs.writeFileSync(operationPath, operationBytes);
+
+    await expect(service.trashRow({
+      ...request,
+      requestId: "collection_request_trashstaleabcdef"
+    })).resolves.toMatchObject({
+      status: "stale",
+      snapshot: { revisionId: committed.snapshot.revisionId }
+    });
+    const removed = await service.trashRow({
+      ...request,
+      requestId: "collection_request_trashineligiblea",
+      expectedRevisionId: committed.snapshot.revisionId
+    });
+    expect(removed).toEqual({
+      apiVersion: 1,
+      requestId: "collection_request_trashineligiblea",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id,
+      rowId: trashedRow.rowId,
+      status: "not_found"
+    });
+    const ineligible = CollectionTrashRowResultSchema.parse({
+      apiVersion: 1,
+      requestId: "collection_request_trashblockedabcdef",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id,
+      rowId: trashedRow.rowId,
+      status: "ineligible"
+    });
+    const notFound = await service.trashRow({
+      ...request,
+      requestId: "collection_request_trashnotfoundabc",
+      datasetId: "dataset_20260728_missing123456",
+      expectedRevisionId: committed.snapshot.revisionId
+    });
+    expect(notFound).toEqual({
+      apiVersion: 1,
+      requestId: "collection_request_trashnotfoundabc",
+      activeVaultId: vault.vaultId,
+      datasetId: "dataset_20260728_missing123456",
+      tableId: table.id,
+      rowId: trashedRow.rowId,
+      status: "not_found"
+    });
+    expect(JSON.stringify([removed, ineligible, notFound]))
+      .not.toMatch(/Ada|Grace|private|sqlite|path|body|sql/u);
+
+    const activity = new KnowledgeActivityService(port, service);
+    const rowActivity = activity.list({ limit: 20 }).activities.find(
+      (entry) => entry.kind === "trash_collection_row"
+    );
+    expect(rowActivity).toMatchObject({
+      operationId: committed.operationId,
+      status: "applied",
+      canUndo: true,
+      target: {
+        kind: "collection",
+        datasetId: initialManifest.datasetId,
+        tableId: table.id,
+        revisionId: committed.snapshot.revisionId
+      }
+    });
+    const undone = await activity.undo({
+      operationId: required(rowActivity).operationId,
+      expectedRevisionId: committed.snapshot.revisionId
+    });
+    expect(undone).toMatchObject({ status: "undone" });
+    if (undone.status !== "undone") throw new Error("Collection row trash was not undone");
+    const restored = await service.open({
+      apiVersion: 1,
+      requestId: "collection_request_trashundoabcdefg",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id
+    });
+    expect(restored).toMatchObject({
+      status: "ready",
+      snapshot: {
+        revisionId: undone.revisionId,
+        totalRowCount: 2,
+        returnedRowCount: 2
+      }
+    });
+    if (restored.status !== "ready") throw new Error("Collection did not reopen after Undo");
+    expect(restored.snapshot.rows.find((row) => row.rowId === trashedRow.rowId)).toEqual(trashedRow);
+    const undoManifest = readManifest(fixture.bundlePath);
+    const undoRevision = DatasetRevisionSchema.parse(
+      readJson(path.join(fixture.bundlePath, undoManifest.revision.path))
+    );
+    expect(undoRevision).toMatchObject({
+      id: undone.revisionId,
+      parentRevisionId: committed.snapshot.revisionId,
+      change: {
+        kind: "collection_row_trash_undo",
+        tableId: table.id,
+        rowId: trashedRow.rowId,
+        undoOfOperationId: committed.operationId
+      }
+    });
+  });
+
   it("adds nullable columns across all editable types, adopts replay, and restores the prior schema through Activity", async () => {
     const fixture = await makeCollectionFixture();
     const vault = loadVaultSummary(fixture.vaultPath);
@@ -635,6 +833,20 @@ function readFirstRowId(payloadPath: string): string {
     } | undefined;
     if (typeof row?.row_id !== "string") throw new Error("Missing Dataset row");
     return row.row_id;
+  } finally {
+    database.close();
+  }
+}
+
+function readRowIds(payloadPath: string): string[] {
+  const database = new DatabaseSync(payloadPath, { readOnly: true });
+  try {
+    return (database.prepare("SELECT row_id FROM pige_dataset_rows ORDER BY ordinal").all() as Array<{
+      row_id?: unknown;
+    }>).map((row) => {
+      if (typeof row.row_id !== "string") throw new Error("Missing Dataset row");
+      return row.row_id;
+    });
   } finally {
     database.close();
   }

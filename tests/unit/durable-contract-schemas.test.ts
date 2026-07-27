@@ -407,6 +407,31 @@ describe("durable contract schemas", () => {
         undoOfOperationId: "op_20260713_defabc12"
       }
     }).change?.kind).toBe("collection_column_add_undo");
+    expect(DatasetRevisionSchema.parse({
+      ...revision,
+      id: "dataset_rev_20260713_fabcde123456",
+      parentRevisionId: "dataset_rev_20260713_efabcd123456",
+      payload: { ...revision.payload, path: "data/revisions/dataset_rev_20260713_fabcde123456.sqlite" },
+      operationId: "op_20260713_fabcde12",
+      change: {
+        kind: "collection_row_trash",
+        tableId: schema.tables[0]!.id,
+        rowId: "row_abcdef123456"
+      }
+    }).change?.kind).toBe("collection_row_trash");
+    expect(DatasetRevisionSchema.parse({
+      ...revision,
+      id: "dataset_rev_20260713_abcdef234567",
+      parentRevisionId: "dataset_rev_20260713_fabcde123456",
+      payload: { ...revision.payload, path: "data/revisions/dataset_rev_20260713_abcdef234567.sqlite" },
+      operationId: "op_20260713_abcdef23",
+      change: {
+        kind: "collection_row_trash_undo",
+        tableId: schema.tables[0]!.id,
+        rowId: "row_abcdef123456",
+        undoOfOperationId: "op_20260713_fabcde12"
+      }
+    }).change?.kind).toBe("collection_row_trash_undo");
     expect(() => DatasetSchemaRecordSchema.parse({
       ...schema,
       tables: [{ ...schema.tables[0], columnCount: 2 }]
@@ -668,7 +693,7 @@ describe("durable contract schemas", () => {
     })).toThrow("Unrecognized key");
   });
 
-  it("binds Managed Collection row/column additions to Main-owned stable identities", () => {
+  it("binds Managed Collection row and column lifecycle Operations to stable identities", () => {
     const operation = OperationRecordSchema.parse({
       id: "op_20260728_abcdef12",
       schemaVersion: 1,
@@ -701,6 +726,14 @@ describe("durable contract schemas", () => {
     });
     expect(columnOperation.kind).toBe("add_collection_column");
     expect(columnOperation.targetRefs.map((reference) => reference.kind)).toEqual(["dataset", "table", "column"]);
+    const trashOperation = OperationRecordSchema.parse({
+      ...operation,
+      id: "op_20260728_cdefab12",
+      kind: "trash_collection_row",
+      summary: "Moved one Managed Collection row out of the current revision."
+    });
+    expect(trashOperation.kind).toBe("trash_collection_row");
+    expect(trashOperation.reversible).toBe("yes");
   });
 
   it("rejects unknown Operation kinds and fields", () => {

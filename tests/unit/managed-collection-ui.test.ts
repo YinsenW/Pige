@@ -10,7 +10,9 @@ import type {
   CollectionAppendDefaultRowResult,
   CollectionCellEditRequest,
   CollectionCellEditResult,
-  CollectionSnapshot
+  CollectionSnapshot,
+  CollectionTrashRowRequest,
+  CollectionTrashRowResult
 } from "@pige/schemas";
 import type { AgentTurnAnswer } from "@pige/contracts";
 import { ManagedCollectionPanel } from "../../apps/desktop/src/renderer/src/components/ManagedCollectionPanel";
@@ -59,6 +61,7 @@ describe("ManagedCollectionPanel", () => {
         onClose: () => undefined,
         onAddNullableColumn: notFoundColumnResult,
         onAppendDefaultRow: notFoundAppendResult,
+        onTrashRow: notFoundTrashResult,
         onAdoptSnapshot: () => false,
         onEditCell: async (request: CollectionCellEditRequest): Promise<CollectionCellEditResult> => {
           requests.push(request);
@@ -75,6 +78,9 @@ describe("ManagedCollectionPanel", () => {
     const container = dom.window.document.querySelector("#root")!;
     expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Add row")).toBe(false);
     expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Add field")).toBe(false);
+    expect(Array.from(container.querySelectorAll("button")).some((button) =>
+      button.getAttribute("aria-label")?.startsWith("Move row to trash")
+    )).toBe(false);
     const editButton = buttonNamed(container, "Edit cell: Name, row 1");
     await click(dom, editButton);
     const input = requireElement(container.querySelector<HTMLInputElement>('input[aria-label="Edit value: Name, row 1"]'));
@@ -113,6 +119,7 @@ describe("ManagedCollectionPanel", () => {
         onClose: () => undefined,
         onAddNullableColumn: notFoundColumnResult,
         onAppendDefaultRow: notFoundAppendResult,
+        onTrashRow: notFoundTrashResult,
         onAdoptSnapshot: () => false,
         onEditCell: async (request: CollectionCellEditRequest): Promise<CollectionCellEditResult> => {
           requests.push(request);
@@ -264,6 +271,7 @@ describe("ManagedCollectionPanel", () => {
         ...collectionSnapshot("dataset_rev_20260727_revision0003", "Alpha", true).rows,
         {
           rowId: "row_customer0002",
+          canTrash: true,
           cells: [
             { columnId: "column_name000001", value: "Server default", editable: true },
             { columnId: "column_total00001", value: 0, editable: false, readOnlyReason: "formula" }
@@ -327,6 +335,94 @@ describe("ManagedCollectionPanel", () => {
       '[data-collection-row-id="row_customer0002"]'
     ));
     expect(dom.window.document.activeElement).toBe(appendedRow);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("trashes one eligible row with revision CAS, adopts stale truth, and restores focus", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: CollectionTrashRowRequest[] = [];
+    const staleSnapshot = collectionSnapshot("dataset_rev_20260728_revision0002", "Alpha", false, false, true);
+    const committedSnapshot: CollectionSnapshot = {
+      ...staleSnapshot,
+      revisionId: "dataset_rev_20260728_revision0003",
+      rows: [],
+      totalRowCount: 0,
+      returnedRowCount: 0
+    };
+    const trash = async (request: CollectionTrashRowRequest): Promise<CollectionTrashRowResult> => {
+      requests.push(request);
+      const identity = trashIdentity(request);
+      return requests.length === 1
+        ? { ...identity, status: "stale", snapshot: staleSnapshot }
+        : {
+          ...identity,
+          status: "committed",
+          operationId: "op_20260728_collectiontrash01",
+          snapshot: committedSnapshot
+        };
+    };
+    await act(async () => {
+      root.render(createElement(CollectionTrashHarness, { onTrash: trash }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const action = buttonNamed(container, "Move row to trash: row 1");
+
+    await act(async () => {
+      action.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      action.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(requests).toEqual([{
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^collection_request_[a-z0-9]{16,64}$/u),
+      activeVaultId: "vault_20260727_collection01",
+      datasetId: "dataset_20260727_collection01",
+      tableId: "table_collection01",
+      expectedRevisionId: "dataset_rev_20260728_revision0001",
+      rowId: "row_customer0001"
+    }]);
+    expect(container.textContent).toContain("The collection changed. Latest rows loaded; move the row again.");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Move row to trash: row 1"));
+
+    await click(dom, buttonNamed(container, "Move row to trash: row 1"));
+    expect(requests.map((request) => request.expectedRevisionId)).toEqual([
+      "dataset_rev_20260728_revision0001",
+      "dataset_rev_20260728_revision0002"
+    ]);
+    expect(container.textContent).toContain("Row moved to trash. Undo is available in Activity.");
+    expect(container.textContent).toContain("This collection has no rows.");
+    expect(container.querySelector('[data-collection-row-id="row_customer0001"]')).toBeNull();
+    expect(dom.window.document.activeElement).toBe(container.querySelector(".managed-collection-panel"));
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps an ineligible row visible and actionable state body-free", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    let callCount = 0;
+    await act(async () => {
+      root.render(createElement(CollectionTrashHarness, {
+        onTrash: async (request) => {
+          callCount += 1;
+          return { ...trashIdentity(request), status: "ineligible" };
+        }
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Move row to trash: row 1"));
+
+    expect(callCount).toBe(1);
+    expect(container.textContent).toContain("This row can no longer be moved to trash.");
+    expect(container.querySelector('[data-collection-row-id="row_customer0001"]')).not.toBeNull();
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Move row to trash: row 1"));
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -400,6 +496,45 @@ describe("ManagedCollectionPanel", () => {
     await act(async () => root.unmount());
     dom.window.close();
   });
+
+  it("labels a trashed collection row and keeps forward Undo available through Activity", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const undone: string[] = [];
+    await act(async () => {
+      root.render(createElement(ActivityHistorySettingsPanel, {
+        activities: [{
+          operationId: "op_20260728_collectiontrash01",
+          kind: "trash_collection_row",
+          createdAt: "2026-07-28T08:00:00.000Z",
+          targetLabel: "Customers",
+          target: {
+            kind: "collection",
+            datasetId: "dataset_20260727_collection01",
+            tableId: "table_collection01",
+            revisionId: "dataset_rev_20260728_revision0002"
+          },
+          status: "applied",
+          canUndo: true
+        }],
+        undoingId: null,
+        openingId: null,
+        blockedIds: [],
+        locale: "en",
+        onOpen: async () => undefined,
+        onUndo: async (operationId) => { undone.push(operationId); },
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    expect(container.textContent).toContain("Collection row moved to trash: Customers");
+    await click(dom, buttonNamed(container, "Undo"));
+    expect(undone).toEqual(["op_20260728_collectiontrash01"]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
 });
 
 function CollectionAppendHarness(props: {
@@ -416,6 +551,31 @@ function CollectionAppendHarness(props: {
     onClose: () => undefined,
     onAddNullableColumn: notFoundColumnResult,
     onAppendDefaultRow: props.onAppend,
+    onTrashRow: notFoundTrashResult,
+    onAdoptSnapshot: (next, expectedRevisionId) => {
+      if (snapshot.revisionId !== expectedRevisionId) return false;
+      setSnapshot(next);
+      return true;
+    },
+    onEditCell: async (request) => ({ ...editIdentity(request), status: "failed" }),
+    onReload: async () => snapshot,
+    t
+  });
+}
+
+function CollectionTrashHarness(props: {
+  readonly onTrash: (request: CollectionTrashRowRequest) => Promise<CollectionTrashRowResult>;
+}): React.JSX.Element {
+  const [snapshot, setSnapshot] = useState(() => (
+    collectionSnapshot("dataset_rev_20260728_revision0001", "Alpha", false, false, true)
+  ));
+  return createElement(ManagedCollectionPanel, {
+    activeVaultId: "vault_20260727_collection01",
+    snapshot,
+    onClose: () => undefined,
+    onAddNullableColumn: notFoundColumnResult,
+    onAppendDefaultRow: notFoundAppendResult,
+    onTrashRow: props.onTrash,
     onAdoptSnapshot: (next, expectedRevisionId) => {
       if (snapshot.revisionId !== expectedRevisionId) return false;
       setSnapshot(next);
@@ -441,6 +601,7 @@ function CollectionColumnHarness(props: {
     onClose: () => undefined,
     onAddNullableColumn: props.onAddColumn,
     onAppendDefaultRow: notFoundAppendResult,
+    onTrashRow: notFoundTrashResult,
     onAdoptSnapshot: (next, expectedRevisionId) => {
       if (snapshot.revisionId !== expectedRevisionId) return false;
       setSnapshot(next);
@@ -456,7 +617,8 @@ function collectionSnapshot(
   revisionId: string,
   name: string,
   canAppendDefaultRow = false,
-  canAddColumn = false
+  canAddColumn = false,
+  canTrash = false
 ): CollectionSnapshot {
   return {
     datasetId: "dataset_20260727_collection01",
@@ -470,6 +632,7 @@ function collectionSnapshot(
     ],
     rows: [{
       rowId: "row_customer0001",
+      canTrash,
       cells: [
         { columnId: "column_name000001", value: name, editable: true },
         { columnId: "column_total00001", value: 42, editable: false, readOnlyReason: "formula" }
@@ -562,6 +725,23 @@ async function notFoundAppendResult(
   request: CollectionAppendDefaultRowRequest
 ): Promise<CollectionAppendDefaultRowResult> {
   return { ...appendIdentity(request), status: "not_found" };
+}
+
+function trashIdentity(request: CollectionTrashRowRequest) {
+  return {
+    apiVersion: 1 as const,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    rowId: request.rowId
+  };
+}
+
+async function notFoundTrashResult(
+  request: CollectionTrashRowRequest
+): Promise<CollectionTrashRowResult> {
+  return { ...trashIdentity(request), status: "not_found" };
 }
 
 async function notFoundColumnResult(

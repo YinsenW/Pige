@@ -1928,7 +1928,8 @@ registerManagedCollectionIpc({
   openCollection: (request) => getManagedCollectionService().open(request),
   editCollectionCell: (request) => getManagedCollectionService().editCell(request),
   appendDefaultCollectionRow: (request) => getManagedCollectionService().appendDefaultRow(request),
-  addNullableCollectionColumn: (request) => getManagedCollectionService().addNullableColumn(request)
+  addNullableCollectionColumn: (request) => getManagedCollectionService().addNullableColumn(request),
+  trashCollectionRow: (request) => getManagedCollectionService().trashRow(request)
 });
 registerKnowledgeHealthIpc({
   ipcMain,
