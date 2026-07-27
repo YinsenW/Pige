@@ -92,10 +92,16 @@ import type {
   TaskInteractionOpenRequest,
   TaskInteractionOpenResult,
   TaskInteractionPendingResult,
+  SkillDiscardStagedRequest,
+  SkillDiscardStagedResult,
   SkillDisableRequest,
+  SkillInstallStagedRequest,
+  SkillInstallStagedResult,
   SkillRegistryQueryResult,
   SkillRegistryMutationResult,
   SkillRegistrySummary,
+  SkillStageFromUrlRequest,
+  SkillStageFromUrlResult,
   SettingApplyBehavior,
   SettingPermissionRequirement,
   SettingScope,
@@ -211,12 +217,25 @@ export type {
   MemorySummary,
   SkillCapability,
   SkillDataBoundary,
+  SkillDiscardStagedRequest,
+  SkillDiscardStagedResult,
   SkillDisableRequest,
+  SkillInstallRequestId,
+  SkillInstallStagedRequest,
+  SkillInstallStagedResult,
+  SkillInstallUrl,
   SkillRegistryQueryResult,
   SkillKind,
   SkillRegistryMutationResult,
   SkillRegistrySummary,
   SkillScope,
+  SkillStageFromUrlRequest,
+  SkillStageFromUrlResult,
+  SkillStageInvalidReason,
+  SkillStagedFileSummary,
+  SkillStagedSummary,
+  SkillStageWarning,
+  SkillStagingId,
   SkillSummary,
   SkillTrust,
   WindowLayoutRequest,
@@ -1361,6 +1380,9 @@ export interface PigeDesktopApi {
   };
   readonly skills: {
     readonly summary: () => Promise<SkillRegistryQueryResult>;
+    readonly stageFromUrl: (request: SkillStageFromUrlRequest) => Promise<SkillStageFromUrlResult>;
+    readonly installStaged: (request: SkillInstallStagedRequest) => Promise<SkillInstallStagedResult>;
+    readonly discardStaged: (request: SkillDiscardStagedRequest) => Promise<SkillDiscardStagedResult>;
     readonly disable: (request: SkillDisableRequest) => Promise<SkillRegistryMutationResult>;
     readonly onChanged: (listener: (summary: SkillRegistrySummary) => void) => () => void;
   };
