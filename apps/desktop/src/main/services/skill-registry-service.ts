@@ -5,6 +5,8 @@ import { PigeDomainError } from "@pige/domain";
 import {
   PermissionCapabilitySchema,
   SkillManifestSchema,
+  SkillDiscardStagedResultSchema,
+  SkillInstallStagedResultSchema,
   SkillRegistryFileSchema,
   SkillRegistryMutationResultSchema,
   SkillRegistryQueryResultSchema,
@@ -12,6 +14,10 @@ import {
   type SkillCapability,
   type SkillDataBoundary,
   type SkillDisableRequest,
+  type SkillDiscardStagedRequest,
+  type SkillDiscardStagedResult,
+  type SkillInstallStagedRequest,
+  type SkillInstallStagedResult,
   type SkillManifest,
   type SkillRegistryFile,
   type SkillRegistryMutationResult,
@@ -27,6 +33,8 @@ const MAX_REGISTRY_BYTES = 1024 * 1024;
 const MAX_MANIFEST_BYTES = 256 * 1024;
 const MAX_FRONTMATTER_BYTES = 32 * 1024;
 const MAX_REGISTRY_LOCK_BYTES = 512;
+const MAX_INSTALL_RECEIPT_BYTES = 4096;
+const INSTALL_RECEIPT_NAME = ".pige-install.json";
 const ACTIVE_SKILL_REGISTRY_LOCK_PATHS = new Set<string>();
 const ARRAY_FIELDS = new Set(["capabilities", "triggers", "dataBoundary"]);
 const MANIFEST_FIELDS = new Set([
@@ -53,6 +61,29 @@ const DATA_BOUNDARY_ORDER: readonly SkillDataBoundary[] = [
   "brokered_credential",
   "destructive"
 ];
+
+export interface SkillStagedInstallCandidate {
+  readonly stagingId: string;
+  readonly requestId: string;
+  readonly sourceUrl: string;
+  readonly manifestSha256: string;
+  readonly expiresAt: string;
+  readonly manifest: SkillManifest;
+  readonly bytes: Buffer;
+}
+
+export interface SkillStagingStorePort {
+  readForInstall(stagingId: string, manifestSha256: string): SkillStagedInstallCandidate | "stale" | undefined;
+  discardExact(stagingId: string, manifestSha256: string): "discarded" | "stale" | "not_found";
+}
+
+interface SkillInstallReceipt {
+  readonly schemaVersion: 1;
+  readonly requestId: string;
+  readonly stagingId: string;
+  readonly manifestSha256: string;
+  readonly enabled: boolean;
+}
 
 export class SkillRegistryService {
   readonly #appDataRoot: string;
@@ -96,6 +127,98 @@ export class SkillRegistryService {
       return SkillRegistryQueryResultSchema.parse({ status: "ready", registry: this.#project(this.#readRegistry()) });
     } catch {
       return skillQueryFailed();
+    }
+  }
+
+  currentRevision(): number {
+    return this.#readRegistry().revision;
+  }
+
+  hasTriggerOverlap(manifest: SkillManifest): boolean {
+    const requested = new Set((manifest.triggers ?? []).map(normalizeTrigger));
+    if (requested.size === 0) return false;
+    for (const record of this.#readRegistry().skills) {
+      const installed = this.#readManifest(record.id).manifest;
+      if ((installed.triggers ?? []).some((trigger) => requested.has(normalizeTrigger(trigger)))) return true;
+    }
+    return false;
+  }
+
+  installStaged(request: SkillInstallStagedRequest, staging: SkillStagingStorePort): SkillInstallStagedResult {
+    let mutationLock: SkillRegistryMutationLock | undefined;
+    try {
+      this.#prepare();
+      mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
+      const current = this.#readRegistry();
+      const replay = this.#findInstallReplay(request, current);
+      if (replay === "conflict") return skillInstallFailed(request.requestId, "unavailable");
+      if (replay) {
+        return SkillInstallStagedResultSchema.parse({ status: "committed", requestId: request.requestId, registry: this.#project(current) });
+      }
+      if (request.expectedRegistryRevision !== current.revision) {
+        return SkillInstallStagedResultSchema.parse({ status: "stale", requestId: request.requestId, registry: this.#project(current) });
+      }
+      const candidate = staging.readForInstall(request.stagingId, request.manifestSha256);
+      if (!candidate || candidate === "stale") {
+        return SkillInstallStagedResultSchema.parse({ status: "not_found", requestId: request.requestId });
+      }
+      if (candidate.stagingId !== request.stagingId || candidate.manifestSha256 !== request.manifestSha256) {
+        return skillInstallFailed(request.requestId, "unavailable");
+      }
+      const parsed = parseSkillManifest(candidate.bytes.toString("utf8"));
+      assertSkillManifestRendererSafe(parsed);
+      if (
+        parsed.scope !== "machine_local" || parsed.kind !== "pure" ||
+        parsed.id !== candidate.manifest.id || parsed.version !== candidate.manifest.version ||
+        digestBytes(candidate.bytes) !== request.manifestSha256
+      ) return skillInstallFailed(request.requestId, "unavailable");
+      if (current.skills.some((skill) => skill.id === parsed.id)) return skillInstallFailed(request.requestId, "unavailable");
+
+      const receipt: SkillInstallReceipt = {
+        schemaVersion: 1,
+        requestId: request.requestId,
+        stagingId: request.stagingId,
+        manifestSha256: request.manifestSha256,
+        enabled: request.enabled
+      };
+      this.#publishInstalledDirectory(parsed.id, candidate.bytes, receipt);
+      if (current.revision === Number.MAX_SAFE_INTEGER) throw skillError("skill.registry_revision_exhausted", "Skill Registry revision is exhausted.");
+      const now = new Date().toISOString();
+      const next = SkillRegistryFileSchema.parse({
+        schemaVersion: 1,
+        revision: current.revision + 1,
+        skills: [...current.skills, {
+          id: parsed.id,
+          version: parsed.version,
+          manifestSha256: request.manifestSha256,
+          enabled: request.enabled,
+          trust: "user_confirmed",
+          installedAt: now,
+          updatedAt: now
+        }]
+      });
+      mutationLock.assertOwned();
+      this.#writeRegistry(next);
+      try { staging.discardExact(request.stagingId, request.manifestSha256); } catch { /* committed install owns cleanup retry */ }
+      return SkillInstallStagedResultSchema.parse({ status: "committed", requestId: request.requestId, registry: this.#project(next) });
+    } catch (caught) {
+      return skillInstallFailed(request.requestId, isErrno(caught, "EEXIST") ? "busy" : "unavailable");
+    } finally {
+      mutationLock?.release();
+    }
+  }
+
+  discardStaged(request: SkillDiscardStagedRequest, staging: SkillStagingStorePort): SkillDiscardStagedResult {
+    let mutationLock: SkillRegistryMutationLock | undefined;
+    try {
+      this.#prepare();
+      mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
+      const status = staging.discardExact(request.stagingId, request.manifestSha256);
+      return SkillDiscardStagedResultSchema.parse({ status, requestId: request.requestId });
+    } catch (caught) {
+      return skillDiscardFailed(request.requestId, isErrno(caught, "EEXIST") ? "busy" : "unavailable");
+    } finally {
+      mutationLock?.release();
     }
   }
 
@@ -290,6 +413,50 @@ export class SkillRegistryService {
     } finally {
       if (descriptor !== undefined) fs.closeSync(descriptor);
     }
+  }
+
+  #findInstallReplay(request: SkillInstallStagedRequest, registry: SkillRegistryFile): boolean | "conflict" {
+    for (const record of registry.skills) {
+      const receipt = this.#readInstallReceipt(record.id);
+      if (!receipt || receipt.requestId !== request.requestId) continue;
+      return receipt.stagingId === request.stagingId && receipt.manifestSha256 === request.manifestSha256 &&
+        receipt.enabled === request.enabled && record.manifestSha256 === request.manifestSha256 ? true : "conflict";
+    }
+    return false;
+  }
+
+  #publishInstalledDirectory(skillId: string, bytes: Buffer, receipt: SkillInstallReceipt): void {
+    const destination = path.join(this.#installedRoot, skillId);
+    if (fs.existsSync(destination)) {
+      const existing = this.#readInstallReceipt(skillId);
+      const loaded = this.#readManifest(skillId);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(receipt) || loaded.sha256 !== receipt.manifestSha256) {
+        throw skillError("skill.install_collision", "Installed Skill destination has unequal ownership.");
+      }
+      return;
+    }
+    const temporaryPath = path.join(this.#installedRoot, `.install.${skillId}.${randomUUID()}.tmp`);
+    let renamed = false;
+    try {
+      fs.mkdirSync(temporaryPath, { mode: 0o700 });
+      writePrivateFile(path.join(temporaryPath, "SKILL.md"), bytes);
+      writePrivateFile(path.join(temporaryPath, INSTALL_RECEIPT_NAME), Buffer.from(`${JSON.stringify(receipt)}\n`, "utf8"));
+      fsyncDirectory(temporaryPath);
+      fs.renameSync(temporaryPath, destination);
+      renamed = true;
+      fsyncDirectory(this.#installedRoot);
+    } finally {
+      if (!renamed) fs.rmSync(temporaryPath, { recursive: true, force: true });
+    }
+  }
+
+  #readInstallReceipt(skillId: string): SkillInstallReceipt | undefined {
+    const directory = path.join(this.#installedRoot, skillId);
+    if (!fs.existsSync(directory)) return undefined;
+    assertOwnedDirectory(this.#installedRoot, directory);
+    const source = readBoundedNoFollow(path.join(directory, INSTALL_RECEIPT_NAME), MAX_INSTALL_RECEIPT_BYTES);
+    if (source === undefined) return undefined;
+    return parseInstallReceipt(source);
   }
 
   #prepare(): void {
@@ -526,6 +693,38 @@ function assertRendererSafeDisplayText(value: string): void {
   }
 }
 
+export function assertSkillManifestRendererSafe(manifest: SkillManifest): void {
+  for (const value of [manifest.name, manifest.description, manifest.author, manifest.license]) {
+    if (value) assertRendererSafeDisplayText(value);
+  }
+}
+
+function normalizeTrigger(value: string): string {
+  return value.trim().toLocaleLowerCase("en-US");
+}
+
+function digestBytes(bytes: Buffer): string {
+  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+function writePrivateFile(filePath: string, bytes: Buffer): void {
+  const descriptor = fs.openSync(filePath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0), 0o600);
+  try { fs.writeFileSync(descriptor, bytes); fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+}
+
+function parseInstallReceipt(source: string): SkillInstallReceipt {
+  let value: unknown;
+  try { value = JSON.parse(source); } catch { throw skillError("skill.install_receipt_invalid", "Skill install receipt is invalid."); }
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw skillError("skill.install_receipt_invalid", "Skill install receipt is invalid.");
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).sort().join(",") !== "enabled,manifestSha256,requestId,schemaVersion,stagingId" ||
+    record.schemaVersion !== 1 || typeof record.requestId !== "string" || typeof record.stagingId !== "string" ||
+    typeof record.manifestSha256 !== "string" || typeof record.enabled !== "boolean") {
+    throw skillError("skill.install_receipt_invalid", "Skill install receipt is invalid.");
+  }
+  return record as unknown as SkillInstallReceipt;
+}
+
 function skillErrorSummary(reason: "busy" | "unavailable") {
   return {
     code: reason === "busy" ? "skill.registry_busy" : "skill.registry_unavailable",
@@ -543,6 +742,14 @@ function skillQueryFailed(): SkillRegistryQueryResult {
 
 function skillMutationFailed(reason: "busy" | "unavailable"): SkillRegistryMutationResult {
   return SkillRegistryMutationResultSchema.parse({ status: "failed", error: skillErrorSummary(reason) });
+}
+
+function skillInstallFailed(requestId: string, reason: "busy" | "unavailable"): SkillInstallStagedResult {
+  return SkillInstallStagedResultSchema.parse({ status: "failed", requestId, error: skillErrorSummary(reason) });
+}
+
+function skillDiscardFailed(requestId: string, reason: "busy" | "unavailable"): SkillDiscardStagedResult {
+  return SkillDiscardStagedResultSchema.parse({ status: "failed", requestId, error: skillErrorSummary(reason) });
 }
 
 interface SkillRegistryLockRecord {
