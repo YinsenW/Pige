@@ -25,12 +25,20 @@ const appendRequest = {
   requestId: "collection_request_appendabcdefghij",
   expectedRevisionId: "dataset_rev_20260727_abcdefghijkl"
 } as const;
+const addColumnRequest = {
+  ...openRequest,
+  requestId: "collection_request_columnabcdefghij",
+  expectedRevisionId: "dataset_rev_20260727_abcdefghijkl",
+  label: "Owner",
+  logicalType: "string"
+} as const;
 
 function makeHarness(options: {
   readonly getActiveVaultId?: () => string | undefined;
   readonly openCollection?: (request: typeof openRequest) => unknown;
   readonly editCollectionCell?: (request: typeof editRequest) => unknown;
   readonly appendDefaultCollectionRow?: (request: typeof appendRequest) => unknown;
+  readonly addNullableCollectionColumn?: (request: typeof addColumnRequest) => unknown;
 } = {}) {
   const handlers = new Map<string, IpcHandler>();
   const openCollection = vi.fn(options.openCollection ?? ((request) => ({
@@ -50,7 +58,8 @@ function makeHarness(options: {
       totalRowCount: 1,
       returnedRowCount: 1,
       truncated: false,
-      canAppendDefaultRow: true
+      canAppendDefaultRow: true,
+      canAddColumn: true
     }
   })));
   const appendDefaultCollectionRow = vi.fn(options.appendDefaultCollectionRow ?? ((request) => ({
@@ -73,6 +82,14 @@ function makeHarness(options: {
     revisionId: "dataset_rev_20260727_qrstuvwxyzab",
     operationId: "op_20260727_abcdefghijkl"
   })));
+  const addNullableCollectionColumn = vi.fn(options.addNullableCollectionColumn ?? ((request) => ({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    status: "not_found"
+  })));
 
   registerManagedCollectionIpc({
     ipcMain: {
@@ -81,9 +98,16 @@ function makeHarness(options: {
     getActiveVaultId: options.getActiveVaultId ?? (() => activeVaultId),
     openCollection,
     editCollectionCell,
-    appendDefaultCollectionRow
+    appendDefaultCollectionRow,
+    addNullableCollectionColumn
   });
-  return { handlers, openCollection, editCollectionCell, appendDefaultCollectionRow };
+  return {
+    handlers,
+    openCollection,
+    editCollectionCell,
+    appendDefaultCollectionRow,
+    addNullableCollectionColumn
+  };
 }
 
 describe("registerManagedCollectionIpc", () => {
@@ -91,12 +115,47 @@ describe("registerManagedCollectionIpc", () => {
     expect([...makeHarness().handlers.keys()]).toEqual([
       "collections.open",
       "collections.editCell",
-      "collections.appendDefaultRow"
+      "collections.appendDefaultRow",
+      "collections.addNullableColumn"
     ]);
   });
 
   it("strictly parses and returns bounded open and edit results", async () => {
-    const { handlers, openCollection, editCollectionCell, appendDefaultCollectionRow } = makeHarness();
+    const {
+      handlers,
+      openCollection,
+      editCollectionCell,
+      appendDefaultCollectionRow,
+      addNullableCollectionColumn
+    } = makeHarness({
+      addNullableCollectionColumn: (request) => ({
+        apiVersion: request.apiVersion,
+        requestId: request.requestId,
+        activeVaultId: request.activeVaultId,
+        datasetId: request.datasetId,
+        tableId: request.tableId,
+        status: "committed",
+        columnId: "column_ownerabcdefghijkl",
+        operationId: "op_20260727_columnabcdefgh",
+        snapshot: {
+          datasetId: request.datasetId,
+          revisionId: "dataset_rev_20260727_columnabcdefghij",
+          title: "Tasks",
+          tableId: request.tableId,
+          tableName: "Tasks",
+          columns: [{ columnId: "column_ownerabcdefghijkl", label: "Owner", logicalType: "string" }],
+          rows: [{
+            rowId: "row_abcdefghijkl",
+            cells: [{ columnId: "column_ownerabcdefghijkl", value: null, editable: true }]
+          }],
+          totalRowCount: 1,
+          returnedRowCount: 1,
+          truncated: false,
+          canAppendDefaultRow: true,
+          canAddColumn: true
+        }
+      })
+    });
 
     await expect(handlers.get("collections.open")!({} as IpcMainInvokeEvent, openRequest))
       .resolves.toMatchObject({ status: "ready", requestId: openRequest.requestId });
@@ -108,13 +167,26 @@ describe("registerManagedCollectionIpc", () => {
       });
     await expect(handlers.get("collections.appendDefaultRow")!({} as IpcMainInvokeEvent, appendRequest))
       .resolves.toMatchObject({ status: "not_found", requestId: appendRequest.requestId });
+    await expect(handlers.get("collections.addNullableColumn")!({} as IpcMainInvokeEvent, addColumnRequest))
+      .resolves.toMatchObject({
+        status: "committed",
+        requestId: addColumnRequest.requestId,
+        columnId: "column_ownerabcdefghijkl"
+      });
     expect(openCollection).toHaveBeenCalledWith(openRequest);
     expect(editCollectionCell).toHaveBeenCalledWith(editRequest);
     expect(appendDefaultCollectionRow).toHaveBeenCalledWith(appendRequest);
+    expect(addNullableCollectionColumn).toHaveBeenCalledWith(addColumnRequest);
   });
 
   it("fails closed before service access when the active vault does not match", async () => {
-    const { handlers, openCollection, editCollectionCell, appendDefaultCollectionRow } = makeHarness({
+    const {
+      handlers,
+      openCollection,
+      editCollectionCell,
+      appendDefaultCollectionRow,
+      addNullableCollectionColumn
+    } = makeHarness({
       getActiveVaultId: () => "vault_20260727_elsewhere"
     });
 
@@ -140,9 +212,19 @@ describe("registerManagedCollectionIpc", () => {
         tableId: appendRequest.tableId,
         status: "not_found"
       });
+    await expect(handlers.get("collections.addNullableColumn")!({} as IpcMainInvokeEvent, addColumnRequest))
+      .resolves.toEqual({
+        apiVersion: 1,
+        requestId: addColumnRequest.requestId,
+        activeVaultId: addColumnRequest.activeVaultId,
+        datasetId: addColumnRequest.datasetId,
+        tableId: addColumnRequest.tableId,
+        status: "not_found"
+      });
     expect(openCollection).not.toHaveBeenCalled();
     expect(editCollectionCell).not.toHaveBeenCalled();
     expect(appendDefaultCollectionRow).not.toHaveBeenCalled();
+    expect(addNullableCollectionColumn).not.toHaveBeenCalled();
   });
 
   it("rejects malformed or identity-swapped service responses", async () => {
@@ -167,11 +249,34 @@ describe("registerManagedCollectionIpc", () => {
   });
 
   it("rejects unknown request fields before service access", async () => {
-    const { handlers, openCollection } = makeHarness();
+    const { handlers, openCollection, addNullableCollectionColumn } = makeHarness();
     await expect(handlers.get("collections.open")!({} as IpcMainInvokeEvent, {
       ...openRequest,
       path: "/private/data.sqlite"
     })).rejects.toThrow();
     expect(openCollection).not.toHaveBeenCalled();
+    await expect(handlers.get("collections.addNullableColumn")!({} as IpcMainInvokeEvent, {
+      ...addColumnRequest,
+      path: "/private/data.sqlite"
+    })).rejects.toThrow();
+    expect(addNullableCollectionColumn).not.toHaveBeenCalled();
+  });
+
+  it("rejects an identity-swapped add-column result", async () => {
+    const { handlers } = makeHarness({
+      addNullableCollectionColumn: (request) => ({
+        apiVersion: request.apiVersion,
+        requestId: "collection_request_wrongwrongwrong2",
+        activeVaultId: request.activeVaultId,
+        datasetId: request.datasetId,
+        tableId: request.tableId,
+        status: "not_found"
+      })
+    });
+
+    await expect(handlers.get("collections.addNullableColumn")!(
+      {} as IpcMainInvokeEvent,
+      addColumnRequest
+    )).rejects.toThrow("add-column response identity did not match");
   });
 });
