@@ -1,4 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
 import taskExecutionPlanManifest from "../../../../../resources/task-execution-plan.manifest.json";
 import type { HighRiskConfirmationService } from "./high-risk-confirmation-service";
@@ -120,6 +122,74 @@ export type TaskExecutionPlanConfirmation = (
 
 export type TaskExecutionPlanBindingReader = () => TaskExecutionPlanBinding;
 
+export interface TaskExecutionPlanProgress {
+  readonly planId: string;
+  readonly planDigest: string;
+  readonly confirmed: boolean;
+  readonly nextOrdinal: number;
+  readonly startedOrdinal?: number;
+}
+
+export interface TaskExecutionPlanProgressStore {
+  read(planId: string): TaskExecutionPlanProgress | undefined;
+  write(progress: TaskExecutionPlanProgress): void;
+}
+
+export function createNodeTaskExecutionPlanProgressStore(rootPath: string): TaskExecutionPlanProgressStore {
+  if (!path.isAbsolute(rootPath)) throw planInvalid();
+  fs.mkdirSync(rootPath, { recursive: true, mode: 0o700 });
+  const root = fs.realpathSync.native(rootPath);
+  const stats = fs.lstatSync(root);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) throw planInvalid();
+  const fileFor = (planId: string): string => {
+    if (!PLAN_ID_PATTERN.test(planId)) throw planInvalid();
+    return path.join(root, `${planId}.json`);
+  };
+  const read = (planId: string): TaskExecutionPlanProgress | undefined => {
+      const filePath = fileFor(planId);
+      let descriptor: number | undefined;
+      try {
+        descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+        const before = fs.fstatSync(descriptor);
+        if (!before.isFile() || before.size < 2 || before.size > 16_384) throw planInvalid();
+        const parsed = parseProgress(JSON.parse(fs.readFileSync(descriptor, "utf8")));
+        const after = fs.fstatSync(descriptor);
+        if (!sameFileIdentity(before, after) || parsed.planId !== planId) throw planInvalid();
+        return parsed;
+      } catch (caught) {
+        if ((caught as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+        if (caught instanceof PigeDomainError) throw caught;
+        throw planInvalid();
+      } finally {
+        if (descriptor !== undefined) fs.closeSync(descriptor);
+      }
+    };
+  const store: TaskExecutionPlanProgressStore = {
+    read,
+    write: (progress) => {
+      const parsed = parseProgress(progress);
+      const filePath = fileFor(parsed.planId);
+      const temporary = path.join(root, `.${parsed.planId}.${randomUUID()}.tmp`);
+      let descriptor: number | undefined;
+      try {
+        descriptor = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0), 0o600);
+        fs.writeFileSync(descriptor, `${canonicalJson(parsed)}\n`, "utf8");
+        fs.fsyncSync(descriptor);
+        fs.closeSync(descriptor);
+        descriptor = undefined;
+        fs.renameSync(temporary, filePath);
+        fsyncDirectory(root);
+      } finally {
+        if (descriptor !== undefined) fs.closeSync(descriptor);
+        fs.rmSync(temporary, { force: true });
+      }
+      const reread = read(parsed.planId);
+      if (canonicalJson(reread) !== canonicalJson(parsed)) throw planInvalid();
+    }
+  };
+  return Object.freeze(store);
+}
+
 export function createTaskExecutionPlanConfirmation(
   confirmations: HighRiskConfirmationService
 ): TaskExecutionPlanConfirmation {
@@ -200,6 +270,7 @@ interface PlanState {
   status: "unconfirmed" | "confirming" | "confirmed" | "denied" | "invalid";
   confirmation: Promise<void> | undefined;
   nextOrdinal: number;
+  startedOrdinal: number | undefined;
   activeAuthority: TaskExecutionStepAuthority | undefined;
 }
 
@@ -216,17 +287,20 @@ export class TaskExecutionPlanService {
   readonly #confirmation: TaskExecutionPlanConfirmation;
   readonly #limits: ServiceLimits;
   readonly #recipes: ReadonlyMap<string, RegisteredRecipe>;
+  readonly #progressStore: TaskExecutionPlanProgressStore | undefined;
   readonly #plans = new Map<string, PlanState>();
 
   constructor(options: {
     readonly confirmPlan: TaskExecutionPlanConfirmation;
     readonly manifest?: unknown;
+    readonly progressStore?: TaskExecutionPlanProgressStore;
   }) {
     if (!options || typeof options.confirmPlan !== "function") throw planInvalid();
     const parsed = parseManifest(options.manifest ?? taskExecutionPlanManifest);
     this.#confirmation = options.confirmPlan;
     this.#limits = parsed.limits;
     this.#recipes = new Map(parsed.recipes.map((recipe) => [recipe.recipeId, recipe]));
+    this.#progressStore = options.progressStore;
   }
 
   registeredRecipeIdentity(recipeId: string): {
@@ -294,11 +368,14 @@ export class TaskExecutionPlanService {
       if (canonicalJson(existing.plan) !== canonicalJson(plan)) throw planInvalid();
       return existing.plan;
     }
+    const progress = this.#progressStore?.read(planId);
+    if (progress && progress.planDigest !== planDigest) throw planInvalid();
     this.#plans.set(planId, {
       plan,
-      status: "unconfirmed",
+      status: progress?.confirmed ? "confirmed" : "unconfirmed",
       confirmation: undefined,
-      nextOrdinal: recipe.steps[0]?.ordinal ?? 1,
+      nextOrdinal: progress?.nextOrdinal ?? recipe.steps[0]?.ordinal ?? 1,
+      startedOrdinal: progress?.startedOrdinal,
       activeAuthority: undefined
     });
     return plan;
@@ -358,6 +435,7 @@ export class TaskExecutionPlanService {
         throw confirmationDenied();
       }
       state.status = "confirmed";
+      this.#persist(state);
     })();
     state.confirmation = confirmation;
     try {
@@ -375,6 +453,7 @@ export class TaskExecutionPlanService {
     const state = this.#requirePlan(plan);
     this.#assertCurrent(state, readCurrent);
     if (state.status !== "confirmed") throw authorityInvalid();
+    if (state.startedOrdinal !== undefined) throw authorityInvalid();
     if (expectedOrdinal !== state.nextOrdinal || !state.plan.steps.some((step) => step.ordinal === expectedOrdinal)) {
       this.#invalidate(state);
       throw authorityInvalid();
@@ -419,8 +498,34 @@ export class TaskExecutionPlanService {
     }
     authorityState.consumed = true;
     state.activeAuthority = undefined;
-    state.nextOrdinal = expectedOrdinal + 1;
+    state.startedOrdinal = expectedOrdinal;
+    this.#persist(state);
     return step;
+  }
+
+  stepDisposition(plan: TaskExecutionPlan, ordinal: number): "pending" | "started" | "completed" {
+    const state = this.#requirePlan(plan);
+    if (!Number.isInteger(ordinal) || ordinal < 1 || !state.plan.steps.some((step) => step.ordinal === ordinal)) throw planInvalid();
+    if (ordinal < state.nextOrdinal) return "completed";
+    if (ordinal === state.startedOrdinal) return "started";
+    if (ordinal === state.nextOrdinal) return "pending";
+    throw authorityInvalid();
+  }
+
+  completeStep(
+    plan: TaskExecutionPlan,
+    expectedOrdinal: number,
+    readCurrent: TaskExecutionPlanBindingReader
+  ): void {
+    const state = this.#requirePlan(plan);
+    this.#assertCurrent(state, readCurrent);
+    if (state.startedOrdinal !== expectedOrdinal || state.nextOrdinal !== expectedOrdinal) {
+      this.#invalidate(state);
+      throw authorityInvalid();
+    }
+    state.startedOrdinal = undefined;
+    state.nextOrdinal = expectedOrdinal + 1;
+    this.#persist(state);
   }
 
   #requirePlan(plan: TaskExecutionPlan): PlanState {
@@ -458,6 +563,16 @@ export class TaskExecutionPlanService {
       if (record) record.consumed = true;
       state.activeAuthority = undefined;
     }
+  }
+
+  #persist(state: PlanState): void {
+    this.#progressStore?.write(Object.freeze({
+      planId: state.plan.planId,
+      planDigest: state.plan.planDigest,
+      confirmed: state.status === "confirmed",
+      nextOrdinal: state.nextOrdinal,
+      ...(state.startedOrdinal === undefined ? {} : { startedOrdinal: state.startedOrdinal })
+    }));
   }
 }
 
@@ -637,6 +752,41 @@ function requireSafeLabel(value: unknown): string {
   const text = asString(value);
   if (!SAFE_LABEL_PATTERN.test(text)) throw planInvalid();
   return text;
+}
+
+function parseProgress(value: unknown): TaskExecutionPlanProgress {
+  const record = asRecord(value);
+  if (
+    !PLAN_ID_PATTERN.test(asString(record.planId)) ||
+    !SHA256_PATTERN.test(asString(record.planDigest)) ||
+    typeof record.confirmed !== "boolean" ||
+    !Number.isInteger(record.nextOrdinal) || (record.nextOrdinal as number) < 1 || (record.nextOrdinal as number) > 9 ||
+    (record.startedOrdinal !== undefined &&
+      (!Number.isInteger(record.startedOrdinal) || (record.startedOrdinal as number) < 1 || (record.startedOrdinal as number) > 8)) ||
+    (record.startedOrdinal !== undefined && record.startedOrdinal !== record.nextOrdinal) ||
+    Object.keys(record).some((key) => !["planId", "planDigest", "confirmed", "nextOrdinal", "startedOrdinal"].includes(key))
+  ) throw planInvalid();
+  return Object.freeze({
+    planId: record.planId as string,
+    planDigest: record.planDigest as string,
+    confirmed: record.confirmed,
+    nextOrdinal: record.nextOrdinal as number,
+    ...(record.startedOrdinal === undefined ? {} : { startedOrdinal: record.startedOrdinal as number })
+  });
+}
+
+function sameFileIdentity(left: fs.Stats, right: fs.Stats): boolean {
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size && left.mtimeMs === right.mtimeMs;
+}
+
+function fsyncDirectory(directory: string): void {
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(directory, fs.constants.O_RDONLY);
+    fs.fsyncSync(descriptor);
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
 }
 
 function boundedInteger(value: unknown, min: number, max: number): number {

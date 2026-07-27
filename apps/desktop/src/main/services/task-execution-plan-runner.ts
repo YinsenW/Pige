@@ -15,6 +15,7 @@ import {
   createTaskExecutionPlanCapabilityAdapter,
   type TaskExecutionPlanCapabilityMetadata
 } from "./task-execution-plan-capability-adapter";
+import { createPigeTextToolResult } from "./pi-agent-tool-boundary";
 import {
   TaskExecutionPlanService,
   type TaskExecutionPlan,
@@ -49,6 +50,7 @@ export interface TaskExecutionPlanRunnerStep {
   readonly dataBoundary: PermissionDataBoundary;
   readonly resourceScope: PermissionResourceScope;
   readonly readOnlyProbe: boolean;
+  readonly proveCompleted?: () => boolean | Promise<boolean>;
   readonly process: Omit<TaskProcessSessionRequest, "planId" | "jobId" | "stepOrdinal" | "assertCurrent">;
 }
 
@@ -198,8 +200,8 @@ export class TaskExecutionPlanRunner {
     const resolved = await this.#resolveOnce(turn, toolCatalogHash, state, assertCurrent, signal);
     signal.throwIfAborted();
     assertCurrent();
-    const registration = resolved.steps[state.nextIndex];
-    const planStep = resolved.plan.steps[state.nextIndex];
+    let registration = resolved.steps[state.nextIndex];
+    let planStep = resolved.plan.steps[state.nextIndex];
     if (!registration || !planStep || registration.ordinal !== planStep.ordinal) {
       throw runnerError("task_execution.runner_plan_invalid");
     }
@@ -210,6 +212,30 @@ export class TaskExecutionPlanRunner {
     await this.#plans.confirmPlan(resolved.plan, planBinding, signal);
     signal.throwIfAborted();
     assertCurrent();
+    while (this.#plans.stepDisposition(resolved.plan, planStep.ordinal) === "completed") {
+      state.nextIndex += 1;
+      if (state.nextIndex === resolved.steps.length) {
+        const adopted = completedResult("The reviewed task plan was already completed.");
+        state.terminalResult = adopted;
+        return adopted;
+      }
+      registration = resolved.steps[state.nextIndex];
+      planStep = resolved.plan.steps[state.nextIndex];
+      if (!registration || !planStep || registration.ordinal !== planStep.ordinal) {
+        throw runnerError("task_execution.runner_plan_invalid");
+      }
+    }
+    if (this.#plans.stepDisposition(resolved.plan, planStep.ordinal) === "started") {
+      const adopted = await registration.proveCompleted?.();
+      signal.throwIfAborted();
+      assertCurrent();
+      if (!adopted) throw runnerError("task_execution.runner_adoption_unavailable");
+      this.#plans.completeStep(resolved.plan, planStep.ordinal, planBinding);
+      state.nextIndex += 1;
+      const result = completedResult("The exact reviewed task step was already completed.");
+      if (state.nextIndex === resolved.steps.length) state.terminalResult = result;
+      return result;
+    }
     const metadata: TaskExecutionPlanCapabilityMetadata = {
       planId: resolved.plan.planId,
       jobId: resolved.plan.jobId,
@@ -269,6 +295,11 @@ export class TaskExecutionPlanRunner {
       throw runnerError("task_execution.runner_step_failed");
     }
     if (status === "interaction_pending") return result;
+    if (registration.proveCompleted && !await registration.proveCompleted()) {
+      throw runnerError("task_execution.runner_postcondition_failed");
+    }
+    assertCurrent();
+    this.#plans.completeStep(resolved.plan, planStep.ordinal, planBinding);
     state.nextIndex += 1;
     if (state.nextIndex === resolved.steps.length) {
       if (!registration.readOnlyProbe || status !== "completed") {
@@ -305,6 +336,19 @@ export class TaskExecutionPlanRunner {
     }
     return state.resolving;
   }
+}
+
+function completedResult(text: string): PigeAgentToolResult {
+  const details = Object.freeze({
+    status: "completed",
+    stdout: "",
+    stderr: "",
+    exitCode: 0,
+    signal: null,
+    outputBytes: 0,
+    truncated: false
+  });
+  return createPigeTextToolResult(text, details);
 }
 
 function assertResolvedPlan(

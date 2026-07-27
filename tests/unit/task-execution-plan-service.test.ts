@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   createTaskExecutionPlanConfirmation,
+  createNodeTaskExecutionPlanProgressStore,
   TaskExecutionPlanService,
   type ResolveTaskExecutionPlanInput,
   type TaskExecutionPlanBinding
@@ -168,6 +172,37 @@ describe("TaskExecutionPlanService", () => {
     expect(confirmations.pending().status).toBe("none");
     expect(() => service.issueNextAuthority(plan, 1, current(service, plan)))
       .toThrowError(expect.objectContaining({ code: "task_execution.binding_changed" }));
+  });
+
+  it("durably retains one confirmation and fails closed on an interrupted exact ordinal until adoption", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-task-plan-progress-"));
+    try {
+      const progressStore = createNodeTaskExecutionPlanProgressStore(root);
+      const firstConfirmation = vi.fn(async () => "allow" as const);
+      const first = new TaskExecutionPlanService({ confirmPlan: firstConfirmation, progressStore });
+      const firstPlan = first.resolvePlan(feishuResolution());
+      await first.confirmPlan(firstPlan, current(first, firstPlan));
+      const authority = first.issueNextAuthority(firstPlan, 1, current(first, firstPlan));
+      first.consumeAuthority(authority, firstPlan, 1, current(first, firstPlan));
+      expect(first.stepDisposition(firstPlan, 1)).toBe("started");
+
+      const restartedConfirmation = vi.fn(async () => "allow" as const);
+      const restarted = new TaskExecutionPlanService({ confirmPlan: restartedConfirmation, progressStore });
+      const restartedPlan = restarted.resolvePlan(feishuResolution());
+      await restarted.confirmPlan(restartedPlan, current(restarted, restartedPlan));
+      expect(restartedConfirmation).not.toHaveBeenCalled();
+      expect(restarted.stepDisposition(restartedPlan, 1)).toBe("started");
+      expect(() => restarted.issueNextAuthority(restartedPlan, 1, current(restarted, restartedPlan)))
+        .toThrowError(expect.objectContaining({ code: "task_execution.authority_invalid" }));
+
+      restarted.completeStep(restartedPlan, 1, current(restarted, restartedPlan));
+      const adopted = new TaskExecutionPlanService({ confirmPlan: restartedConfirmation, progressStore });
+      const adoptedPlan = adopted.resolvePlan(feishuResolution());
+      expect(adopted.stepDisposition(adoptedPlan, 1)).toBe("completed");
+      expect(adopted.stepDisposition(adoptedPlan, 2)).toBe("pending");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
