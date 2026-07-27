@@ -1265,7 +1265,7 @@ export class HomeAgentService {
         evidenceLedger.assertVisible("dataset_catalog", modelTurnSequence);
       }
     };
-    const registeredExternalTools = currentNoteScope ? [] : this.#externalCapabilities?.toolsForTurn({
+    const registeredExternalTools = currentNoteScope || sourceSession ? [] : this.#externalCapabilities?.toolsForTurn({
       vaultPath,
       vaultId: activeVault.vaultId,
       jobId,
