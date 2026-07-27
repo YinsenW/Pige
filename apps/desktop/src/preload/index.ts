@@ -118,9 +118,15 @@ import type {
   SkillInstallStagedResult,
   SkillStageFromUrlRequest,
   SkillStageFromUrlResult,
+  MemoryDeleteRequest,
   MemoryDisableRequest,
+  MemoryEnableRequest,
+  MemoryExportRequest,
+  MemoryExportResult,
+  MemoryLifecycleMutationResult,
   MemoryListRequest,
   MemoryMutationResult,
+  MemoryResetRequest,
   MemorySummary,
   SkillRegistryMutationResult,
   SkillRegistryQueryResult,
@@ -208,9 +214,15 @@ import {
   SkillInstallStagedRequestSchema,
   SkillInstallStagedResultSchema,
   SkillRegistryMutationResultSchema,
+  MemoryDeleteRequestSchema,
   MemoryDisableRequestSchema,
+  MemoryEnableRequestSchema,
+  MemoryExportRequestSchema,
+  MemoryExportResultSchema,
+  MemoryLifecycleMutationResultSchema,
   MemoryListRequestSchema,
   MemoryMutationResultSchema,
+  MemoryResetRequestSchema,
   MemorySummarySchema,
   SkillRegistryQueryResultSchema,
   SkillRegistrySummarySchema,
@@ -628,6 +640,26 @@ const api: PigeDesktopApi = {
       MemoryMutationResultSchema.parse(await ipcRenderer.invoke(
         "memory.disable",
         MemoryDisableRequestSchema.parse(request)
+      )),
+    enable: async (request: MemoryEnableRequest): Promise<MemoryLifecycleMutationResult> =>
+      MemoryLifecycleMutationResultSchema.parse(await ipcRenderer.invoke(
+        "memory.enable",
+        MemoryEnableRequestSchema.parse(request)
+      )),
+    delete: async (request: MemoryDeleteRequest): Promise<MemoryLifecycleMutationResult> =>
+      MemoryLifecycleMutationResultSchema.parse(await ipcRenderer.invoke(
+        "memory.delete",
+        MemoryDeleteRequestSchema.parse(request)
+      )),
+    export: async (request: MemoryExportRequest): Promise<MemoryExportResult> =>
+      MemoryExportResultSchema.parse(await ipcRenderer.invoke(
+        "memory.export",
+        MemoryExportRequestSchema.parse(request)
+      )),
+    reset: async (request: MemoryResetRequest): Promise<MemoryLifecycleMutationResult> =>
+      MemoryLifecycleMutationResultSchema.parse(await ipcRenderer.invoke(
+        "memory.reset",
+        MemoryResetRequestSchema.parse(request)
       )),
     onChanged: (listener: (summary: MemorySummary) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, value: unknown): void => {
