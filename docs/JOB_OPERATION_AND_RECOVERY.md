@@ -122,17 +122,14 @@ Required v0.1 job classes:
 exact values. Aliases such as `capture_preserve`, `parse_source`, `backup_create`, or
 `restore_validate` are forbidden.
 
-`agent_turn` atomically binds the exact authored user event, one parent Job and ordered
-source/current-note refs. Its ordered mixed staged items may preserve files and large
-pastes, with every accepted paste committed exactly once to a managed source. Picker or
-paste staging is not Job state; `resources/large-paste-boundary.manifest.json` owns the
-shared limits. Main acknowledges durable acceptance before renderer clearing; rejection
-leaves the composer unchanged. Exact client-turn retry adopts the parent/event/source refs
-and cannot duplicate preservation; validation, IPC, vault or preservation failure keeps
-exact text, items, order and client-turn identity. Rejected items are never silently
-cleared by partial acceptance.
-Short chat creates no Source Record. Multi-attachment preservation checkpoints or child
-executors are reliability ownership only and never a Host-selected semantic ingest chain.
+`agent_turn` binds the exact user event, one parent Job and ordered source/note refs. Its
+ordered mixed staged items preserve each accepted file/paste exactly once; staging is not
+Job state and `resources/large-paste-boundary.manifest.json` owns limits. Main accepts before renderer clearing. Failure keeps
+exact text/items/order/client-turn ID; retry adopts event/source refs without duplication.
+Short chat creates no Source Record. After accepted preservation, JobsService ensures one
+current Source Page per accepted record before inspect citation; rejected items get none.
+Parent progress binds source/revision/page; retry/restart adopts without duplicate
+Source/Page/Job. Child checkpoints are reliability, not Host semantic routing.
 
 Reader selection binds checksummed page/span/content/action refs; Job/instruction omit body
 and UI localizes presentation. Only Pi's explicit typed replacement call may persist the
