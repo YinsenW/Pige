@@ -45,7 +45,16 @@ import type {
   MarkdownPageStatus,
   MarkdownPageType,
   ModelListStrategy,
+  NoteEditorInvalidReason,
+  NoteEditorOpenRequest,
+  NoteEditorOpenResult,
+  NoteEditorPortableMarkdown,
+  NoteEditorRequestId,
+  NoteEditorRevision,
+  NoteEditorSaveRequest,
+  NoteEditorSaveResult,
   NoteRenderContextId,
+  NoteRenderResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
   NoteResolveInlineReferenceRequest,
@@ -162,6 +171,15 @@ export type {
   NoteInlineReferenceTarget,
   NoteInlineReferenceRequestId,
   NoteRenderContextId,
+  NoteEditorInvalidReason,
+  NoteEditorOpenRequest,
+  NoteEditorOpenResult,
+  NoteEditorPortableMarkdown,
+  NoteEditorRequestId,
+  NoteEditorRevision,
+  NoteEditorSaveRequest,
+  NoteEditorSaveResult,
+  NoteRenderResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
   NoteSourceReferenceRequestId,
@@ -916,13 +934,6 @@ export interface NoteDocument {
   readonly byteSize: number;
 }
 
-export interface NoteRenderResult {
-  readonly summary: LibraryPageSummary;
-  readonly html: string;
-  readonly byteSize: number;
-  readonly renderContextId?: NoteRenderContextId;
-}
-
 export type RetrievalAnswerWarning =
   | "insufficient_evidence"
   | "limited_evidence"
@@ -1430,6 +1441,8 @@ export interface PigeDesktopApi {
   readonly notes: {
     readonly get: (request: NoteGetRequest) => Promise<NoteDocument>;
     readonly render: (request: NoteRenderRequest) => Promise<NoteRenderResult>;
+    readonly openEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
+    readonly saveEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
     readonly resolveInlineReference: (
       request: NoteResolveInlineReferenceRequest
     ) => Promise<NoteResolveInlineReferenceResult>;
