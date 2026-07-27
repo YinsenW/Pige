@@ -21,6 +21,10 @@ import type {
   CloudBoundary,
   CloudSendPolicy,
   ChangeOperation,
+  CollectionCellEditRequest,
+  CollectionCellEditResult,
+  CollectionOpenRequest,
+  CollectionOpenResult,
   ConfirmationProposal,
   DatasetLogicalType,
   EffectiveAppearanceTheme,
@@ -1364,6 +1368,10 @@ export interface PigeDesktopApi {
     readonly list: (request: MemoryListRequest) => Promise<MemorySummary>;
     readonly disable: (request: MemoryDisableRequest) => Promise<MemoryMutationResult>;
     readonly onChanged: (listener: (summary: MemorySummary) => void) => () => void;
+  };
+  readonly collections: {
+    readonly open: (request: CollectionOpenRequest) => Promise<CollectionOpenResult>;
+    readonly editCell: (request: CollectionCellEditRequest) => Promise<CollectionCellEditResult>;
   };
   readonly activity: {
     readonly list: (request?: KnowledgeActivityListRequest) => Promise<KnowledgeActivityListResult>;
