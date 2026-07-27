@@ -39,6 +39,16 @@ import type {
   LibraryListResult,
   LibraryRelatedRequest,
   LibraryRelatedResult,
+  LocalSemanticRetrievalDisableRequest,
+  LocalSemanticRetrievalDisableResult,
+  LocalSemanticRetrievalEnableRequest,
+  LocalSemanticRetrievalEnableResult,
+  LocalSemanticRetrievalInstallRequest,
+  LocalSemanticRetrievalInstallResult,
+  LocalSemanticRetrievalRemoveRequest,
+  LocalSemanticRetrievalRemoveResult,
+  LocalSemanticRetrievalStatus,
+  LocalSemanticRetrievalStatusRequest,
   LocalDatabaseRebuildResult,
   LocalDatabaseStatus,
   LocalDatabaseResetResult,
@@ -166,6 +176,16 @@ import {
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
   HighRiskConfirmationResolveResultSchema,
+  LocalSemanticRetrievalDisableRequestSchema,
+  LocalSemanticRetrievalDisableResultSchema,
+  LocalSemanticRetrievalEnableRequestSchema,
+  LocalSemanticRetrievalEnableResultSchema,
+  LocalSemanticRetrievalInstallRequestSchema,
+  LocalSemanticRetrievalInstallResultSchema,
+  LocalSemanticRetrievalRemoveRequestSchema,
+  LocalSemanticRetrievalRemoveResultSchema,
+  LocalSemanticRetrievalStatusRequestSchema,
+  LocalSemanticRetrievalStatusSchema,
   RetrievalSearchRequestSchema,
   RetrievalSearchResultSchema,
   NoteEditorOpenRequestSchema,
@@ -783,7 +803,52 @@ const api: PigeDesktopApi = {
       )
   },
   retrieval: {
-    search: invokeRetrievalSearch
+    search: invokeRetrievalSearch,
+    localSemanticStatus: async (
+      request: LocalSemanticRetrievalStatusRequest
+    ): Promise<LocalSemanticRetrievalStatus> =>
+      LocalSemanticRetrievalStatusSchema.parse(
+        await ipcRenderer.invoke(
+          "retrieval.localSemanticStatus",
+          LocalSemanticRetrievalStatusRequestSchema.parse(request)
+        )
+      ),
+    installLocalSemanticAsset: async (
+      request: LocalSemanticRetrievalInstallRequest
+    ): Promise<LocalSemanticRetrievalInstallResult> =>
+      LocalSemanticRetrievalInstallResultSchema.parse(
+        await ipcRenderer.invoke(
+          "retrieval.installLocalSemanticAsset",
+          LocalSemanticRetrievalInstallRequestSchema.parse(request)
+        )
+      ),
+    enableLocalSemanticAsset: async (
+      request: LocalSemanticRetrievalEnableRequest
+    ): Promise<LocalSemanticRetrievalEnableResult> =>
+      LocalSemanticRetrievalEnableResultSchema.parse(
+        await ipcRenderer.invoke(
+          "retrieval.enableLocalSemanticAsset",
+          LocalSemanticRetrievalEnableRequestSchema.parse(request)
+        )
+      ),
+    disableLocalSemanticAsset: async (
+      request: LocalSemanticRetrievalDisableRequest
+    ): Promise<LocalSemanticRetrievalDisableResult> =>
+      LocalSemanticRetrievalDisableResultSchema.parse(
+        await ipcRenderer.invoke(
+          "retrieval.disableLocalSemanticAsset",
+          LocalSemanticRetrievalDisableRequestSchema.parse(request)
+        )
+      ),
+    removeLocalSemanticAsset: async (
+      request: LocalSemanticRetrievalRemoveRequest
+    ): Promise<LocalSemanticRetrievalRemoveResult> =>
+      LocalSemanticRetrievalRemoveResultSchema.parse(
+        await ipcRenderer.invoke(
+          "retrieval.removeLocalSemanticAsset",
+          LocalSemanticRetrievalRemoveRequestSchema.parse(request)
+        )
+      )
   },
   vault: {
     current: async (): Promise<VaultSummary | undefined> =>

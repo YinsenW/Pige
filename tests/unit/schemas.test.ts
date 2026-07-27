@@ -10,6 +10,16 @@ import {
   HighRiskConfirmationSummarySchema,
   JobRecordSchema,
   KnowledgeActivityListResultSchema,
+  LOCAL_SEMANTIC_RETRIEVAL_ASSET_BYTES,
+  LOCAL_SEMANTIC_RETRIEVAL_ASSET_ID,
+  LocalSemanticRetrievalDisableRequestSchema,
+  LocalSemanticRetrievalEnableRequestSchema,
+  LocalSemanticRetrievalEnableResultSchema,
+  LocalSemanticRetrievalInstallRequestSchema,
+  LocalSemanticRetrievalInstallResultSchema,
+  LocalSemanticRetrievalRemoveRequestSchema,
+  LocalSemanticRetrievalStatusRequestSchema,
+  LocalSemanticRetrievalStatusSchema,
   MachineLocalSettingsSchema,
   MarkdownPageStatusSchema,
   MarkdownPageTypeSchema,
@@ -50,6 +60,64 @@ import {
 } from "@pige/schemas";
 
 describe("schemas", () => {
+  it("keeps the single local semantic asset lifecycle strict, revision-fenced, and renderer-safe", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "ragasset_abcdefghijklmnop",
+      expectedRevision: 4
+    } as const;
+    expect(LocalSemanticRetrievalStatusRequestSchema.parse({ apiVersion: 1 }))
+      .toEqual({ apiVersion: 1 });
+    expect(LocalSemanticRetrievalInstallRequestSchema.parse(request)).toEqual(request);
+    expect(LocalSemanticRetrievalEnableRequestSchema.parse(request)).toEqual(request);
+    expect(LocalSemanticRetrievalDisableRequestSchema.parse(request)).toEqual(request);
+    expect(LocalSemanticRetrievalRemoveRequestSchema.parse(request)).toEqual(request);
+
+    const ready = {
+      apiVersion: 1,
+      revision: 5,
+      assetId: LOCAL_SEMANTIC_RETRIEVAL_ASSET_ID,
+      assetState: "ready",
+      downloadSizeBytes: LOCAL_SEMANTIC_RETRIEVAL_ASSET_BYTES,
+      lexicalSearchRemainsAvailable: true
+    } as const;
+    expect(LocalSemanticRetrievalStatusSchema.parse(ready)).toEqual(ready);
+    expect(LocalSemanticRetrievalInstallResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      revision: 5,
+      status: "accepted",
+      jobId: "job_20260727_abcdefgh"
+    })).toMatchObject({ status: "accepted" });
+    expect(LocalSemanticRetrievalEnableResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      revision: 6,
+      status: "already_enabled"
+    })).toMatchObject({ status: "already_enabled", revision: 6 });
+
+    expect(LocalSemanticRetrievalStatusSchema.parse({
+      ...ready,
+      assetState: "disabled"
+    })).toMatchObject({ assetState: "disabled", lexicalSearchRemainsAvailable: true });
+    expect(() => LocalSemanticRetrievalStatusSchema.parse({
+      ...ready,
+      activeJobId: "job_20260727_abcdefgh"
+    })).toThrow();
+    for (const unsafe of [
+      { path: "/private/model.gguf" },
+      { downloadUrl: "https://example.invalid/model.gguf" },
+      { sha256: "secret-or-internal" },
+      { providerId: "custom-provider" }
+    ]) {
+      expect(() => LocalSemanticRetrievalStatusSchema.parse({ ...ready, ...unsafe })).toThrow();
+    }
+    expect(() => LocalSemanticRetrievalInstallRequestSchema.parse({
+      ...request,
+      assetId: "another-model"
+    })).toThrow();
+  });
+
   it("keeps reviewed task plans private and browser interactions renderer-safe", () => {
     const digest = `sha256:${"a".repeat(64)}`;
     const planId = "plan_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
