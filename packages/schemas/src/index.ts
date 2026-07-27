@@ -843,6 +843,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "add_collection_row",
     "add_collection_column",
     "rename_collection_column",
+    "create_collection_view",
     "trash_collection_column",
     "trash_collection_row",
     "update_memory",
@@ -2699,6 +2700,7 @@ export const CollectionRequestIdSchema = z.string().regex(/^collection_request_[
 export const CollectionScalarValueSchema = DatasetQueryScalarSchema;
 export const CollectionCellReadOnlyReasonSchema = z.enum(["formula", "unsupported_type"]);
 export const COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES = 256;
+export const COLLECTION_VIEW_NAME_MAX_UTF8_BYTES = 256;
 export const CollectionEditableLogicalTypeSchema = z.enum([
   "string",
   "integer",
@@ -2711,6 +2713,42 @@ export const CollectionNewColumnLabelSchema = z.string().trim().min(1).max(120).
   (value) => new TextEncoder().encode(value).byteLength <= COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES,
   `Collection column labels must not exceed ${COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES} UTF-8 bytes.`
 );
+
+export const CollectionViewNameSchema = z.string().trim().min(1).max(120).refine(
+  (value) => new TextEncoder().encode(value).byteLength <= COLLECTION_VIEW_NAME_MAX_UTF8_BYTES,
+  `Collection view names must not exceed ${COLLECTION_VIEW_NAME_MAX_UTF8_BYTES} UTF-8 bytes.`
+);
+
+const CollectionViewEqualityValueSchema = z.union([
+  DatasetQueryTextSchema,
+  z.number().finite(),
+  z.boolean()
+]);
+
+export const CollectionViewFilterSchema = z.discriminatedUnion("operator", [
+  z.object({
+    operator: z.literal("eq"),
+    columnId: DatasetQueryColumnIdSchema,
+    value: CollectionViewEqualityValueSchema
+  }).strict(),
+  z.object({
+    operator: z.literal("is_null"),
+    columnId: DatasetQueryColumnIdSchema
+  }).strict()
+]);
+
+export const CollectionViewSortSchema = z.object({
+  columnId: DatasetQueryColumnIdSchema,
+  direction: z.enum(["asc", "desc"])
+}).strict();
+
+export const CollectionViewSummarySchema = z.object({
+  viewId: ViewIdSchema,
+  viewRevision: z.number().int().positive(),
+  name: CollectionViewNameSchema,
+  filter: CollectionViewFilterSchema.optional(),
+  sort: CollectionViewSortSchema.optional()
+}).strict();
 
 export const CollectionColumnSummarySchema = z.object({
   columnId: DatasetQueryColumnIdSchema,
@@ -2753,7 +2791,9 @@ export const CollectionSnapshotSchema = z.object({
   returnedRowCount: DatasetQueryCountSchema,
   truncated: z.boolean(),
   canAppendDefaultRow: z.boolean(),
-  canAddColumn: z.boolean()
+  canAddColumn: z.boolean(),
+  views: z.array(CollectionViewSummarySchema).max(32),
+  activeViewId: ViewIdSchema.optional()
 }).strict().superRefine((snapshot, context) => {
   if (snapshot.returnedRowCount !== snapshot.rows.length) {
     context.addIssue({
@@ -2776,6 +2816,37 @@ export const CollectionSnapshotSchema = z.object({
       message: "Collection truncation must agree with total and returned row counts."
     });
   }
+  const columnIds = new Set(snapshot.columns.map(({ columnId }) => columnId));
+  const viewIds = new Set<string>();
+  for (const [index, view] of snapshot.views.entries()) {
+    if (viewIds.has(view.viewId)) {
+      context.addIssue({
+        code: "custom",
+        path: ["views", index, "viewId"],
+        message: "Collection view summaries must have unique stable IDs."
+      });
+    }
+    viewIds.add(view.viewId);
+    for (const [owner, columnId] of [
+      ["filter", view.filter?.columnId],
+      ["sort", view.sort?.columnId]
+    ] as const) {
+      if (columnId !== undefined && !columnIds.has(columnId)) {
+        context.addIssue({
+          code: "custom",
+          path: ["views", index, owner, "columnId"],
+          message: "Collection views may reference only current stable columns."
+        });
+      }
+    }
+  }
+  if (snapshot.activeViewId !== undefined && !viewIds.has(snapshot.activeViewId)) {
+    context.addIssue({
+      code: "custom",
+      path: ["activeViewId"],
+      message: "The active Collection view must appear in the authoritative view summaries."
+    });
+  }
   if (new TextEncoder().encode(JSON.stringify(snapshot)).byteLength > 64 * 1024) {
     context.addIssue({
       code: "custom",
@@ -2789,7 +2860,8 @@ export const CollectionOpenRequestSchema = z.object({
   requestId: CollectionRequestIdSchema,
   activeVaultId: VaultIdSchema,
   datasetId: DatasetQueryDatasetIdSchema,
-  tableId: DatasetQueryTableIdSchema
+  tableId: DatasetQueryTableIdSchema,
+  viewId: ViewIdSchema.optional()
 }).strict();
 
 const CollectionResultIdentitySchema = CollectionOpenRequestSchema.pick({
@@ -2879,6 +2951,18 @@ export const CollectionTrashColumnRequestSchema = z.object({
   tableId: DatasetQueryTableIdSchema,
   expectedRevisionId: DatasetQueryRevisionIdSchema,
   columnId: DatasetQueryColumnIdSchema
+}).strict();
+
+export const CollectionCreateViewRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  name: CollectionViewNameSchema,
+  filter: CollectionViewFilterSchema.optional(),
+  sort: CollectionViewSortSchema.optional()
 }).strict();
 
 const CollectionEditResultIdentitySchema = z.object({
@@ -3073,6 +3157,48 @@ export const CollectionTrashColumnResultSchema = z.discriminatedUnion("status", 
       path: ["snapshot", "columns"],
       message: "Ineligible Collection column trash must fail closed in the authoritative snapshot."
     });
+  }
+});
+
+export const CollectionCreateViewResultSchema = z.discriminatedUnion("status", [
+  CollectionResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    viewId: ViewIdSchema,
+    operationId: OperationIdSchema,
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionResultIdentitySchema.extend({
+    status: z.literal("duplicate"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionResultIdentitySchema.extend({
+    status: z.literal("ineligible"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (!("snapshot" in result)) return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({
+      code: "custom",
+      path: ["snapshot"],
+      message: "Collection view-creation snapshots must match the request identity."
+    });
+  }
+  if (result.status === "committed") {
+    const created = result.snapshot.views.find(({ viewId }) => viewId === result.viewId);
+    if (created === undefined || result.snapshot.activeViewId !== result.viewId) {
+      context.addIssue({
+        code: "custom",
+        path: ["viewId"],
+        message: "Committed Collection views must be present and active in the authoritative snapshot."
+      });
+    }
   }
 });
 
@@ -4385,6 +4511,7 @@ export const OperationRefSchema = z.object({
     "table",
     "row",
     "column",
+    "view",
     "asset",
     "memory",
     "skill",
@@ -4500,6 +4627,7 @@ export const OperationRecordSchema = z.object({
     "add_collection_row",
     "add_collection_column",
     "rename_collection_column",
+    "create_collection_view",
     "trash_collection_column",
     "trash_collection_row",
     "trash_artifact",
@@ -4980,6 +5108,8 @@ export type CollectionAddNullableColumnRequest = z.infer<typeof CollectionAddNul
 export type CollectionAddNullableColumnResult = z.infer<typeof CollectionAddNullableColumnResultSchema>;
 export type CollectionRenameColumnRequest = z.infer<typeof CollectionRenameColumnRequestSchema>;
 export type CollectionRenameColumnResult = z.infer<typeof CollectionRenameColumnResultSchema>;
+export type CollectionCreateViewRequest = z.infer<typeof CollectionCreateViewRequestSchema>;
+export type CollectionCreateViewResult = z.infer<typeof CollectionCreateViewResultSchema>;
 export type CollectionTrashColumnRequest = z.infer<typeof CollectionTrashColumnRequestSchema>;
 export type CollectionTrashColumnResult = z.infer<typeof CollectionTrashColumnResultSchema>;
 export type CollectionTrashRowRequest = z.infer<typeof CollectionTrashRowRequestSchema>;
@@ -4992,6 +5122,9 @@ export type CollectionRequestId = z.infer<typeof CollectionRequestIdSchema>;
 export type CollectionRow = z.infer<typeof CollectionRowSchema>;
 export type CollectionScalarValue = z.infer<typeof CollectionScalarValueSchema>;
 export type CollectionSnapshot = z.infer<typeof CollectionSnapshotSchema>;
+export type CollectionViewFilter = z.infer<typeof CollectionViewFilterSchema>;
+export type CollectionViewSort = z.infer<typeof CollectionViewSortSchema>;
+export type CollectionViewSummary = z.infer<typeof CollectionViewSummarySchema>;
 export type DatasetEvidenceRef = z.infer<typeof DatasetEvidenceRefSchema>;
 export type DatasetLogicalType = z.infer<typeof DatasetLogicalTypeSchema>;
 export type DatasetManifest = z.infer<typeof DatasetManifestSchema>;

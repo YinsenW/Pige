@@ -25,6 +25,8 @@ import type {
   CollectionAddNullableColumnResult,
   CollectionCellEditRequest,
   CollectionCellEditResult,
+  CollectionCreateViewRequest,
+  CollectionCreateViewResult,
   CollectionOpenRequest,
   CollectionOpenResult,
   CollectionAppendDefaultRowRequest,
@@ -818,6 +820,7 @@ export interface KnowledgeActivitySummary {
     | "add_collection_row"
     | "add_collection_column"
     | "rename_collection_column"
+    | "create_collection_view"
     | "trash_collection_column"
     | "trash_collection_row"
     | "update_memory"
@@ -1525,6 +1528,9 @@ export interface PigeDesktopApi {
     readonly renameColumn: (
       request: CollectionRenameColumnRequest
     ) => Promise<CollectionRenameColumnResult>;
+    readonly createView: (
+      request: CollectionCreateViewRequest
+    ) => Promise<CollectionCreateViewResult>;
     readonly trashColumn: (
       request: CollectionTrashColumnRequest
     ) => Promise<CollectionTrashColumnResult>;
