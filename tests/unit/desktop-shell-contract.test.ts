@@ -154,13 +154,20 @@ describe("desktop shell build contract", () => {
 
     expect(mainSource).toContain("registerKnowledgeHealthIpc({");
     expect(mainSource).not.toContain('ipcMain.handle("maintenance.runKnowledgeHealth"');
+    expect(mainSource).not.toContain('ipcMain.handle("maintenance.repairKnowledgeHealth"');
     expect(registrarSource).toContain('ipcMain.handle("maintenance.runKnowledgeHealth"');
+    expect(registrarSource).toContain('ipcMain.handle("maintenance.repairKnowledgeHealth"');
     expect(registrarSource).toContain("KnowledgeHealthRunRequestSchema.parse(request)");
     expect(registrarSource).toContain("KnowledgeHealthRunResultSchema.parse(");
+    expect(registrarSource).toContain("KnowledgeHealthRepairRequestSchema.parse(request)");
+    expect(registrarSource).toContain("KnowledgeHealthRepairResultSchema.parse(");
     expect(registrarSource).toContain("getActiveVaultBinding");
     expect(preloadSource).toContain('ipcRenderer.invoke("maintenance.runKnowledgeHealth"');
     expect(preloadSource).toContain("KnowledgeHealthRunRequestSchema.parse(request)");
     expect(preloadSource).toContain("KnowledgeHealthRunResultSchema.parse(");
+    expect(preloadSource).toContain('ipcRenderer.invoke("maintenance.repairKnowledgeHealth"');
+    expect(preloadSource).toContain("KnowledgeHealthRepairRequestSchema.parse(request)");
+    expect(preloadSource).toContain("KnowledgeHealthRepairResultSchema.parse(");
     for (const privateField of ["pagePath", "target", "sourceIds", "error", "body"]) {
       expect(registrarSource).not.toContain(`${privateField}:`);
     }

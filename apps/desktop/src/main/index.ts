@@ -1326,7 +1326,13 @@ const getLocalDatabaseService = (): LocalDatabaseService => {
 };
 
 const getKnowledgeHealthService = (): KnowledgeHealthService => {
-  if (!knowledgeHealthService) knowledgeHealthService = new KnowledgeHealthService(getLocalDatabaseService());
+  if (!knowledgeHealthService) {
+    knowledgeHealthService = new KnowledgeHealthService(
+      getLocalDatabaseService(),
+      undefined,
+      getNoteMarkdownEditorService()
+    );
+  }
   return knowledgeHealthService;
 };
 
@@ -1929,7 +1935,8 @@ registerKnowledgeHealthIpc({
     const vaultPath = getVaultService().activeVaultPath();
     return vault && vaultPath ? { vaultId: vault.vaultId, vaultPath } : undefined;
   },
-  runKnowledgeHealth: (vaultPath, request) => getKnowledgeHealthService().run(vaultPath, request)
+  runKnowledgeHealth: (vaultPath, request) => getKnowledgeHealthService().run(vaultPath, request),
+  repairKnowledgeHealth: (vaultPath, request) => getKnowledgeHealthService().repair(vaultPath, request)
 });
 registerLocalSemanticRetrievalIpc({
   ipcMain,
