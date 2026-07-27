@@ -282,8 +282,8 @@ export function assertFileRef(bundlePath: string, ref: FileRef): void {
 
 export function fileRef(bundlePath: string, relativePath: string): FileRef {
   const filePath = resolveBundleRelativePath(bundlePath, relativePath);
-  const stat = fs.lstatSync(filePath);
-  return { path: relativePath, checksum: checksumFile(filePath), size: stat.size };
+  const file = readRegularFile(filePath, MAX_PAYLOAD_BYTES, bundlePath);
+  return { path: relativePath, checksum: hashBytes(file.bytes), size: file.stat.size };
 }
 
 function readRegularFile(
