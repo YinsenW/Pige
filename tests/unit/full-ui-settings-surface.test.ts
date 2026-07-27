@@ -442,7 +442,6 @@ describe("full UI Settings surface", () => {
 
   it("renders verified Skills, disables with exact CAS, and ignores stale registry events", async () => {
     const dom = createDom();
-    const onDevelopment = vi.fn();
     let resolveSummary!: (result: SkillRegistryQueryResult) => void;
     let registryListener: ((summary: SkillRegistrySummary) => void) | undefined;
     const unsubscribe = vi.fn();
@@ -468,7 +467,7 @@ describe("full UI Settings surface", () => {
     const root = createRoot(dom.window.document.querySelector("#root")!);
 
     await act(async () => {
-      root.render(createElement(SkillsSettingsPanel, { onDevelopment, t }));
+      root.render(createElement(SkillsSettingsPanel, { t }));
       await settle(dom);
     });
 
@@ -519,13 +518,143 @@ describe("full UI Settings surface", () => {
 
     await act(async () => {
       buttonNamed(page, "Install from link").click();
-      buttonNamed(page, "Choose Markdown or ZIP").click();
       await settle(dom);
     });
-    expect(onDevelopment).toHaveBeenCalledTimes(2);
+    expect(buttonNamed(page, "Choose Markdown or ZIP").disabled).toBe(true);
+    expect(requireElement(page.querySelector<HTMLInputElement>("#skill-install-url"))).toBe(dom.window.document.activeElement);
 
     await act(async () => root.unmount());
     expect(unsubscribe).toHaveBeenCalledOnce();
+    dom.window.close();
+  });
+
+  it("stages one exact Skill URL for review, installs with the frozen identity, and discards without installing", async () => {
+    const dom = createDom();
+    const initialRegistry = skillRegistry(3, false, 0, []);
+    const installedRegistry = skillRegistry(4, true, 0);
+    const staged = {
+      stagingId: "skillstage_0123456789abcdef0123456789abcdef" as const,
+      manifestSha256: `sha256:${"a".repeat(64)}` as const,
+      registryRevision: 3,
+      expiresAt: "2026-07-27T12:00:00.000Z",
+      sourceUrl: "https://example.com/SKILL.md" as const,
+      id: "review-notes",
+      name: "Review notes",
+      version: "1.2.0",
+      description: "Summarizes the current source for review.",
+      scope: "machine_local" as const,
+      kind: "pure" as const,
+      capabilities: ["read_current_source" as const],
+      dataBoundaries: ["local" as const],
+      author: "Pige Labs",
+      license: "MIT",
+      files: [{ relativePath: "SKILL.md" as const, utf8ByteSize: 2048, sha256: `sha256:${"b".repeat(64)}` as const }],
+      warnings: ["untrusted_remote_source" as const]
+    };
+    let stageCall = 0;
+    const stageFromUrl = vi.fn(async (request: { requestId: string }) => ({
+      status: "ready" as const,
+      requestId: request.requestId,
+      staged: { ...staged, registryRevision: stageCall++ === 0 ? 3 : 4 }
+    }));
+    const installStaged = vi.fn(async (request: { requestId: string }) => ({
+      status: "committed" as const,
+      requestId: request.requestId,
+      registry: installedRegistry
+    }));
+    const discardStaged = vi.fn(async (request: { requestId: string }) => ({
+      status: "discarded" as const,
+      requestId: request.requestId
+    }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        skills: {
+          summary: async () => ({ status: "ready" as const, registry: initialRegistry }),
+          stageFromUrl,
+          installStaged,
+          discardStaged,
+          disable: vi.fn(),
+          onChanged: () => () => undefined
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+
+    await act(async () => {
+      root.render(createElement(SkillsSettingsPanel, { t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-skills"));
+    await act(async () => {
+      buttonNamed(page, "Install from link").click();
+      await settle(dom);
+    });
+    const input = requireElement(page.querySelector<HTMLInputElement>("#skill-install-url"));
+    await act(async () => {
+      input.blur();
+      inputValue(dom, input, staged.sourceUrl);
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(page, "Review Skill").click();
+      await settle(dom);
+    });
+    expect(stageFromUrl).toHaveBeenCalledOnce();
+    expect(stageFromUrl.mock.calls[0]?.[0]).toMatchObject({ apiVersion: 1, sourceUrl: staged.sourceUrl });
+    expect(stageFromUrl.mock.calls[0]?.[0].requestId).toMatch(/^skillreq_[a-z0-9]{16,64}$/u);
+    expect(page.textContent).toContain("Review notes");
+    expect(page.textContent).toContain("Read the current source");
+    expect(page.textContent).toContain("This Skill comes from a remote source you must review.");
+    expect(page.textContent).not.toContain(staged.stagingId);
+    expect(page.textContent).not.toContain(staged.manifestSha256);
+
+    await act(async () => {
+      buttonNamed(page, "Install Skill").click();
+      await settle(dom);
+    });
+    expect(installStaged).toHaveBeenCalledWith({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
+      stagingId: staged.stagingId,
+      manifestSha256: staged.manifestSha256,
+      expectedRegistryRevision: 3,
+      enabled: true
+    });
+    expect(page.textContent).toContain("The reviewed Skill is installed and enabled.");
+    expect(page.querySelector("#skill-install-url")).toBeNull();
+    expect(dom.window.document.activeElement).toBe(buttonNamed(page, "Install from link"));
+
+    await act(async () => {
+      buttonNamed(page, "Install from link").click();
+      await settle(dom);
+    });
+    const secondInput = requireElement(page.querySelector<HTMLInputElement>("#skill-install-url"));
+    await act(async () => {
+      secondInput.blur();
+      inputValue(dom, secondInput, staged.sourceUrl);
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(page, "Review Skill").click();
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(page, "Discard").click();
+      await settle(dom);
+    });
+    expect(discardStaged).toHaveBeenCalledWith({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
+      stagingId: staged.stagingId,
+      manifestSha256: staged.manifestSha256
+    });
+    expect(Array.from(page.querySelectorAll("button")).some((button) => button.textContent?.trim() === "Discard")).toBe(false);
+    const restoredInput = requireElement(page.querySelector<HTMLInputElement>("#skill-install-url"));
+    expect(restoredInput.value).toBe(staged.sourceUrl);
+    expect(dom.window.document.activeElement).toBe(restoredInput);
+
+    await act(async () => root.unmount());
     dom.window.close();
   });
 
@@ -558,7 +687,7 @@ describe("full UI Settings surface", () => {
     const root = createRoot(dom.window.document.querySelector("#root")!);
 
     await act(async () => {
-      root.render(createElement(SkillsSettingsPanel, { onDevelopment: vi.fn(), t }));
+      root.render(createElement(SkillsSettingsPanel, { t }));
       await settle(dom);
       await settle(dom);
     });
@@ -610,7 +739,7 @@ describe("full UI Settings surface", () => {
     const root = createRoot(dom.window.document.querySelector("#root")!);
 
     await act(async () => {
-      root.render(createElement(SkillsSettingsPanel, { onDevelopment: vi.fn(), t }));
+      root.render(createElement(SkillsSettingsPanel, { t }));
       await settle(dom);
     });
     const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-skills"));
@@ -1372,6 +1501,18 @@ function createDom(): JSDOM {
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: dom.window[key] });
   }
   Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true });
+  Object.defineProperty(dom.window.HTMLElement.prototype, "attachEvent", {
+    configurable: true,
+    value(this: HTMLElement, name: string, listener: EventListener) {
+      this.addEventListener(name.replace(/^on/u, ""), listener);
+    }
+  });
+  Object.defineProperty(dom.window.HTMLElement.prototype, "detachEvent", {
+    configurable: true,
+    value(this: HTMLElement, name: string, listener: EventListener) {
+      this.removeEventListener(name.replace(/^on/u, ""), listener);
+    }
+  });
   return dom;
 }
 
@@ -1412,6 +1553,12 @@ function selectValue(dom: JSDOM, select: HTMLSelectElement, value: string): void
   const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, "value")?.set;
   setter?.call(select, value);
   select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+}
+
+function inputValue(dom: JSDOM, input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
 }
 
 async function settle(dom: JSDOM): Promise<void> {

@@ -1,0 +1,452 @@
+import { useEffect, useRef, useState } from "react";
+import type {
+  SkillStageInvalidReason,
+  SkillStagedSummary,
+  SkillRegistryQueryResult,
+  SkillRegistrySummary,
+  SkillSummary
+} from "@pige/contracts";
+import { PigeIcon } from "./PigeIcon";
+
+export function SkillsSettingsPanel(props: {
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const [registry, setRegistry] = useState<SkillRegistrySummary | null>(null);
+  const [readState, setReadState] = useState<"loading" | "ready" | "failed">("loading");
+  const [reloadSequence, setReloadSequence] = useState(0);
+  const [disablingSkillId, setDisablingSkillId] = useState<string | null>(null);
+  const [statusKey, setStatusKey] = useState<string | null>(null);
+  const [installOpen, setInstallOpen] = useState(false);
+  const [installUrl, setInstallUrl] = useState("");
+  const [stagedSkill, setStagedSkill] = useState<SkillStagedSummary | null>(null);
+  const [installBusy, setInstallBusy] = useState<"stage" | "install" | "discard" | null>(null);
+  const latestRevisionRef = useRef(-1);
+  const mountedRef = useRef(true);
+  const installOperationRef = useRef(0);
+  const pendingFocusRef = useRef<"trigger" | "url" | null>(null);
+  const installTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const installUrlRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (pendingFocusRef.current === "trigger" && !installOpen) {
+      pendingFocusRef.current = null;
+      installTriggerRef.current?.focus();
+    } else if (pendingFocusRef.current === "url" && installOpen && !stagedSkill) {
+      pendingFocusRef.current = null;
+      installUrlRef.current?.focus();
+    }
+  }, [installOpen, stagedSkill]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    let active = true;
+    let requestCurrent = true;
+    const adoptRegistry = (next: SkillRegistrySummary): void => {
+      if (!active || next.revision < latestRevisionRef.current) return;
+      latestRevisionRef.current = next.revision;
+      setRegistry(next);
+      setReadState("ready");
+    };
+    const unsubscribe = window.pige.skills.onChanged(adoptRegistry);
+    if (registry === null) setReadState("loading");
+    void window.pige.skills.summary().then((result: SkillRegistryQueryResult) => {
+      if (!requestCurrent) return;
+      if (result.status === "failed") {
+        if (active && latestRevisionRef.current < 0) setReadState("failed");
+        return;
+      }
+      adoptRegistry(result.registry);
+    }).catch(() => {
+      if (active && requestCurrent && latestRevisionRef.current < 0) setReadState("failed");
+    });
+    return () => {
+      active = false;
+      requestCurrent = false;
+      mountedRef.current = false;
+      unsubscribe();
+    };
+  }, [reloadSequence]);
+
+  const disableSkill = async (skill: SkillSummary): Promise<void> => {
+    if (!registry || disablingSkillId || !skill.enabled) return;
+    setDisablingSkillId(skill.id);
+    setStatusKey(null);
+    try {
+      const result = await window.pige.skills.disable({
+        apiVersion: 1,
+        skillId: skill.id,
+        expectedRevision: registry.revision
+      });
+      if (!mountedRef.current) return;
+      if (result.status === "failed") {
+        setStatusKey(result.error.code === "skill.registry_busy"
+          ? "skills.registryBusy"
+          : "skills.registryUnavailable");
+        return;
+      }
+      if (result.registry.revision >= latestRevisionRef.current) {
+        latestRevisionRef.current = result.registry.revision;
+        setRegistry(result.registry);
+        setReadState("ready");
+      }
+      setStatusKey(result.status === "committed"
+        ? "skills.disableCompleted"
+        : result.status === "stale"
+          ? "skills.registryChanged"
+          : "skills.skillUnavailable");
+    } catch {
+      if (mountedRef.current) setStatusKey("skills.disableFailed");
+    } finally {
+      if (mountedRef.current) setDisablingSkillId(null);
+    }
+  };
+
+  const finishInstallOperation = (operation: number): boolean => (
+    mountedRef.current && installOperationRef.current === operation
+  );
+
+  const stageFromUrl = async (): Promise<void> => {
+    if (installBusy || stagedSkill || installUrl.length === 0) return;
+    const operation = installOperationRef.current + 1;
+    installOperationRef.current = operation;
+    setInstallBusy("stage");
+    setStatusKey(null);
+    try {
+      const requestId = createSkillInstallRequestId();
+      const result = await window.pige.skills.stageFromUrl({
+        apiVersion: 1,
+        requestId,
+        sourceUrl: installUrl
+      });
+      if (!finishInstallOperation(operation)) return;
+      if (result.requestId !== requestId) {
+        setStatusKey("skills.stageFailed");
+        return;
+      }
+      if (result.status === "ready") {
+        setStagedSkill(result.staged);
+        return;
+      }
+      setStatusKey(result.status === "invalid"
+        ? invalidStageStatusKey(result.reason)
+        : "skills.stageFailed");
+    } catch {
+      if (finishInstallOperation(operation)) setStatusKey("skills.stageFailed");
+    } finally {
+      if (finishInstallOperation(operation)) setInstallBusy(null);
+    }
+  };
+
+  const installStaged = async (): Promise<void> => {
+    if (installBusy || !stagedSkill) return;
+    const staged = stagedSkill;
+    const operation = installOperationRef.current + 1;
+    installOperationRef.current = operation;
+    setInstallBusy("install");
+    setStatusKey(null);
+    try {
+      const requestId = createSkillInstallRequestId();
+      const result = await window.pige.skills.installStaged({
+        apiVersion: 1,
+        requestId,
+        stagingId: staged.stagingId,
+        manifestSha256: staged.manifestSha256,
+        expectedRegistryRevision: staged.registryRevision,
+        enabled: true
+      });
+      if (!finishInstallOperation(operation)) return;
+      if (result.requestId !== requestId) {
+        setStatusKey("skills.installFailed");
+        return;
+      }
+      if (result.status === "committed" || result.status === "stale") {
+        latestRevisionRef.current = Math.max(latestRevisionRef.current, result.registry.revision);
+        setRegistry(result.registry);
+        setReadState("ready");
+      }
+      if (result.status === "committed") {
+        setStagedSkill(null);
+        setInstallUrl("");
+        setInstallOpen(false);
+        setStatusKey("skills.installCompleted");
+        pendingFocusRef.current = "trigger";
+      } else if (result.status === "stale") {
+        setStagedSkill(null);
+        setStatusKey("skills.installReviewExpired");
+        pendingFocusRef.current = "url";
+      } else if (result.status === "not_found") {
+        setStagedSkill(null);
+        setStatusKey("skills.installReviewUnavailable");
+        pendingFocusRef.current = "url";
+      } else {
+        setStatusKey("skills.installFailed");
+      }
+    } catch {
+      if (finishInstallOperation(operation)) setStatusKey("skills.installFailed");
+    } finally {
+      if (finishInstallOperation(operation)) setInstallBusy(null);
+    }
+  };
+
+  const discardStaged = async (): Promise<void> => {
+    if (installBusy || !stagedSkill) return;
+    const staged = stagedSkill;
+    const operation = installOperationRef.current + 1;
+    installOperationRef.current = operation;
+    setInstallBusy("discard");
+    setStatusKey(null);
+    try {
+      const requestId = createSkillInstallRequestId();
+      const result = await window.pige.skills.discardStaged({
+        apiVersion: 1,
+        requestId,
+        stagingId: staged.stagingId,
+        manifestSha256: staged.manifestSha256
+      });
+      if (!finishInstallOperation(operation)) return;
+      if (result.requestId !== requestId) {
+        setStatusKey("skills.discardFailed");
+        return;
+      }
+      if (result.status === "failed") {
+        setStatusKey("skills.discardFailed");
+        return;
+      }
+      setStagedSkill(null);
+      setStatusKey(result.status === "discarded" ? null : "skills.installReviewUnavailable");
+      pendingFocusRef.current = "url";
+    } catch {
+      if (finishInstallOperation(operation)) setStatusKey("skills.discardFailed");
+    } finally {
+      if (finishInstallOperation(operation)) setInstallBusy(null);
+    }
+  };
+
+  const closeInstall = (): void => {
+    if (installBusy || stagedSkill) return;
+    installOperationRef.current += 1;
+    setInstallOpen(false);
+    setInstallUrl("");
+    setStatusKey(null);
+    pendingFocusRef.current = "trigger";
+  };
+
+  return (
+    <section className="settings-page settings-skills" aria-labelledby="settings-skills-title">
+      <header className="settings-panel-header">
+        <h1 id="settings-skills-title">{props.t("skills.title")}</h1>
+        <p>{props.t("skills.subtitle")}</p>
+      </header>
+
+      <section className="settings-section" role="group" aria-labelledby="skills-installed-title">
+        <h2 className="settings-section-title" id="skills-installed-title">{props.t("skills.installedTitle")}</h2>
+        {readState === "loading" ? (
+          <div className="settings-card skills-empty-card" role="status" aria-live="polite">
+            <span className="skills-empty-icon" aria-hidden="true"><PigeIcon name="loading" size={19} className="spinning" /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("skills.loadingTitle")}</strong>
+              <span>{props.t("skills.loadingDescription")}</span>
+            </div>
+          </div>
+        ) : readState === "failed" ? (
+          <div className="settings-card skills-empty-card" role="status" aria-live="polite">
+            <span className="skills-empty-icon" aria-hidden="true"><PigeIcon name="shield" size={19} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("skills.loadFailedTitle")}</strong>
+              <span>{props.t("skills.loadFailedDescription")}</span>
+            </div>
+            <button className="settings-button" type="button" onClick={() => setReloadSequence((current) => current + 1)}>
+              {props.t("skills.retryLoad")}
+            </button>
+          </div>
+        ) : registry && registry.skills.length > 0 ? (
+          <div className="settings-card skills-registry-list" data-skill-registry-revision={registry.revision}>
+            {registry.skills.map((skill) => (
+              <div className="settings-row tall skill-registry-row" data-skill-id={skill.id} key={skill.id}>
+                <span className={`skills-empty-icon${skill.enabled ? " is-enabled" : ""}`} aria-hidden="true">
+                  <PigeIcon name="skill" size={18} />
+                </span>
+                <div className="settings-row-copy skill-registry-copy">
+                  <strong>{skill.name}</strong>
+                  <span>{skill.description}</span>
+                  <div className="skill-registry-meta" aria-label={props.t("skills.skillDetails")}>
+                    <span>{`v${skill.version}`}</span>
+                    <span>{props.t(`skills.kind.${skill.kind}`)}</span>
+                    <span>{props.t(`skills.scope.${skill.scope}`)}</span>
+                    {skill.dataBoundaries.map((boundary) => (
+                      <span key={boundary}>{props.t(`skills.boundary.${boundary}`)}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="settings-row-control skill-registry-control">
+                  <span className={`settings-status ${skill.enabled ? "is-enabled" : "neutral"}`}>
+                    {props.t(skill.enabled ? "skills.statusEnabled" : "skills.statusDisabled")}
+                  </span>
+                  <button
+                    className="settings-button"
+                    type="button"
+                    aria-label={`${props.t(skill.enabled ? "skills.disable" : "skills.enableUnavailable")}: ${skill.name}`}
+                    disabled={!skill.enabled || disablingSkillId !== null}
+                    title={skill.enabled ? props.t("skills.disableDescription") : props.t("skills.enableUnavailableDescription")}
+                    onClick={() => void disableSkill(skill)}
+                  >
+                    {disablingSkillId === skill.id
+                      ? props.t("skills.disabling")
+                      : props.t(skill.enabled ? "skills.disable" : "skills.enableUnavailable")}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="settings-card skills-empty-card">
+            <span className="skills-empty-icon" aria-hidden="true"><PigeIcon name="skill" size={19} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("skills.emptyTitle")}</strong>
+              <span>{props.t("skills.emptyDescription")}</span>
+            </div>
+          </div>
+        )}
+        {registry && registry.invalidManifestCount > 0 ? (
+          <p className="settings-note skill-registry-warning" role="status" data-invalid-skill-count={registry.invalidManifestCount}>
+            {props.t("skills.invalidManifestWarning")}
+          </p>
+        ) : null}
+        {statusKey ? <p className="settings-note" role="status" aria-live="polite">{props.t(statusKey)}</p> : null}
+        <div className="settings-inline-actions">
+          <button
+            ref={installTriggerRef}
+            className="settings-button primary settings-action"
+            type="button"
+            aria-expanded={installOpen}
+            aria-controls="skill-url-install"
+            onClick={() => {
+              setInstallOpen(true);
+              setStatusKey(null);
+              pendingFocusRef.current = "url";
+            }}
+          >
+            <PigeIcon name="link" size={15} aria-hidden="true" />
+            {props.t("skills.installFromLink")}
+          </button>
+          <button className="settings-button settings-action" type="button" disabled title={props.t("skills.chooseFileUnavailable")}>
+            <PigeIcon name="fileText" size={15} aria-hidden="true" />
+            {props.t("skills.chooseFile")}
+          </button>
+        </div>
+        {installOpen ? (
+          <div className="settings-card" id="skill-url-install">
+            {stagedSkill ? (
+              <div className="settings-row tall">
+                <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="skill" size={17} /></span>
+                <div className="settings-row-copy">
+                  <strong>{stagedSkill.name}</strong>
+                  <span>{stagedSkill.description}</span>
+                  <div className="skill-registry-meta" aria-label={props.t("skills.reviewDetails")}>
+                    <span>{`v${stagedSkill.version}`}</span>
+                    {stagedSkill.author ? <span>{stagedSkill.author}</span> : null}
+                    {stagedSkill.license ? <span>{stagedSkill.license}</span> : null}
+                    <span>{props.t("skills.scope.machine_local")}</span>
+                    <span>{props.t("skills.boundary.local")}</span>
+                  </div>
+                  <span>{stagedSkill.sourceUrl}</span>
+                  <span>{`${stagedSkill.files[0].relativePath} · ${formatByteSize(stagedSkill.files[0].utf8ByteSize)}`}</span>
+                  {stagedSkill.capabilities.map((capability) => (
+                    <span key={capability}>{props.t(`skills.capability.${capability}`)}</span>
+                  ))}
+                  {stagedSkill.warnings.map((warning) => (
+                    <span role="status" key={warning}>{props.t(`skills.warning.${warning}`)}</span>
+                  ))}
+                </div>
+                <div className="settings-row-control skill-registry-control">
+                  <button className="settings-button primary" type="button" disabled={installBusy !== null} onClick={() => void installStaged()}>
+                    {props.t(installBusy === "install" ? "skills.installing" : "skills.installReviewed")}
+                  </button>
+                  <button className="settings-button" type="button" disabled={installBusy !== null} onClick={() => void discardStaged()}>
+                    {props.t(installBusy === "discard" ? "skills.discarding" : "skills.discardReview")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form
+                className="settings-row tall"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void stageFromUrl();
+                }}
+              >
+                <div className="settings-row-copy">
+                  <label htmlFor="skill-install-url"><strong>{props.t("skills.installUrlLabel")}</strong></label>
+                  <span>{props.t("skills.installUrlDescription")}</span>
+                </div>
+                <input
+                  ref={installUrlRef}
+                  className="settings-input"
+                  id="skill-install-url"
+                  inputMode="url"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  value={installUrl}
+                  placeholder={props.t("skills.installUrlPlaceholder")}
+                  disabled={installBusy !== null}
+                  onInput={(event) => {
+                    setInstallUrl(event.currentTarget.value);
+                    setStatusKey(null);
+                  }}
+                />
+                <div className="settings-row-control skill-registry-control">
+                  <button className="settings-button primary" type="submit" disabled={installBusy !== null || installUrl.length === 0}>
+                    {props.t(installBusy === "stage" ? "skills.reviewing" : "skills.reviewLink")}
+                  </button>
+                  <button className="settings-button" type="button" disabled={installBusy !== null} onClick={closeInstall}>
+                    {props.t("skills.cancelInstall")}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="settings-section" role="group" aria-labelledby="skills-review-title">
+        <h2 className="settings-section-title" id="skills-review-title">{props.t("skills.reviewTitle")}</h2>
+        <div className="settings-card">
+          <div className="settings-row tall skills-information-row">
+            <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="fileText" size={17} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("skills.reviewMetadata")}</strong>
+              <span>{props.t("skills.reviewMetadataDescription")}</span>
+            </div>
+          </div>
+          <div className="settings-row tall skills-information-row">
+            <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="shield" size={17} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("skills.reviewPermissions")}</strong>
+              <span>{props.t("skills.reviewPermissionsDescription")}</span>
+            </div>
+          </div>
+          <div className="settings-row tall skills-information-row">
+            <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="folder" size={17} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("skills.scopeTitle")}</strong>
+              <span>{props.t("skills.scopeDescription")}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function createSkillInstallRequestId(): `skillreq_${string}` {
+  return `skillreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function invalidStageStatusKey(reason: SkillStageInvalidReason): string {
+  return `skills.invalid.${reason}`;
+}
+
+function formatByteSize(bytes: number): string {
+  return bytes < 1024 ? `${bytes} B` : `${Math.ceil(bytes / 1024)} KB`;
+}
