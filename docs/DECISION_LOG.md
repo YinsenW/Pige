@@ -3367,7 +3367,7 @@ Date: 2026-07-27
 
 Decision:
 
-A Collection keeps its imported ID. Cell edit, eligible row add/trash or nullable-column add/rename
+A Collection keeps its imported ID. Cell edit, eligible row add/trash or nullable-column add/rename/trash
 writes immutable CAS revision/Operation; manifest switches last; Undo advances.
 
 Rationale:
@@ -3376,7 +3376,7 @@ Enable reversible value and schema growth without rewriting history or exposing 
 
 Consequences:
 
-- Manifest is current; evidence/history stay immutable, including a trashed row. Main owns
+- Manifest is current; evidence/history stay immutable, including trashed rows/columns. Main owns
   IDs/defaults/eligibility; channels fail closed and broader editing stays open.
 
 References:

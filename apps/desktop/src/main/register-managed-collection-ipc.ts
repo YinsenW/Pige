@@ -10,6 +10,8 @@ import {
   CollectionOpenResultSchema,
   CollectionRenameColumnRequestSchema,
   CollectionRenameColumnResultSchema,
+  CollectionTrashColumnRequestSchema,
+  CollectionTrashColumnResultSchema,
   CollectionTrashRowRequestSchema,
   CollectionTrashRowResultSchema,
   type CollectionAddNullableColumnRequest,
@@ -22,6 +24,8 @@ import {
   type CollectionOpenResult,
   type CollectionRenameColumnRequest,
   type CollectionRenameColumnResult,
+  type CollectionTrashColumnRequest,
+  type CollectionTrashColumnResult,
   type CollectionTrashRowRequest,
   type CollectionTrashRowResult
 } from "@pige/schemas";
@@ -45,6 +49,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly renameCollectionColumn: (
     request: CollectionRenameColumnRequest
   ) => CollectionRenameColumnResult | Promise<CollectionRenameColumnResult>;
+  readonly trashCollectionColumn: (
+    request: CollectionTrashColumnRequest
+  ) => CollectionTrashColumnResult | Promise<CollectionTrashColumnResult>;
   readonly trashCollectionRow: (
     request: CollectionTrashRowRequest
   ) => CollectionTrashRowResult | Promise<CollectionTrashRowResult>;
@@ -112,6 +119,18 @@ function notFoundTrashRow(request: CollectionTrashRowRequest): CollectionTrashRo
 
 function failedRenameColumn(request: CollectionRenameColumnRequest): CollectionRenameColumnResult {
   return CollectionRenameColumnResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    columnId: request.columnId,
+    status: "failed"
+  });
+}
+
+function failedTrashColumn(request: CollectionTrashColumnRequest): CollectionTrashColumnResult {
+  return CollectionTrashColumnResultSchema.parse({
     apiVersion: request.apiVersion,
     requestId: request.requestId,
     activeVaultId: request.activeVaultId,
@@ -243,6 +262,30 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
     return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
       ? result
       : failedRenameColumn(parsed);
+  });
+
+  options.ipcMain.handle("collections.trashColumn", async (event, request: unknown) => {
+    const parsed = CollectionTrashColumnRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId) {
+      return failedTrashColumn(parsed);
+    }
+    let rawResult: CollectionTrashColumnResult;
+    try {
+      rawResult = await options.trashCollectionColumn(parsed);
+    } catch {
+      return failedTrashColumn(parsed);
+    }
+    const result = CollectionTrashColumnResultSchema.parse(rawResult);
+    if (
+      result.requestId !== parsed.requestId ||
+      result.activeVaultId !== parsed.activeVaultId ||
+      result.datasetId !== parsed.datasetId ||
+      result.tableId !== parsed.tableId ||
+      result.columnId !== parsed.columnId
+    ) throw new Error("Managed Collection column-trash response identity did not match the request.");
+    return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
+      ? result
+      : failedTrashColumn(parsed);
   });
 
   options.ipcMain.handle("collections.trashRow", async (_event, request: unknown) => {

@@ -521,8 +521,8 @@ Current Home Dataset read boundary:
 - `editCell` binds revision/row/column/scalar; `appendDefaultRow` lets Main create the row ID;
   `trashRow` requires exact `canTrash`. Old revisions retain a trashed row for Undo.
 - `addNullableColumn` binds revision/label/type and lets Main create the ID/null cells.
-  `renameColumn` binds revision/stable column/bounded label and requires exact `canRename`.
-  Closed authoritative snapshots expose duplicate/ineligible/stale truth without internals.
+  `renameColumn` binds stable column/label; `trashColumn` binds stable column only. Exact
+  `canRename`/`canTrash` gates them; closed snapshots expose duplicate/ineligible/stale truth.
 - Main fences vault/manifest/revision/schema/payload. Renderer sends no generated ID, default,
   formula or row body; results expose no source/storage/query/error/value internals.
 

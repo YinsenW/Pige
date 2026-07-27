@@ -39,6 +39,12 @@ const renameColumnRequest = {
   columnId: "column_abcdefghijkl",
   label: "Work item"
 } as const;
+const trashColumnRequest = {
+  ...openRequest,
+  requestId: "collection_request_trashcolumnabcde",
+  expectedRevisionId: "dataset_rev_20260727_abcdefghijkl",
+  columnId: "column_abcdefghijkl"
+} as const;
 const trashRowRequest = {
   ...openRequest,
   requestId: "collection_request_trashabcdefghijk",
@@ -54,6 +60,7 @@ function makeHarness(options: {
   readonly appendDefaultCollectionRow?: (request: typeof appendRequest) => unknown;
   readonly addNullableCollectionColumn?: (request: typeof addColumnRequest) => unknown;
   readonly renameCollectionColumn?: (request: typeof renameColumnRequest) => unknown;
+  readonly trashCollectionColumn?: (request: typeof trashColumnRequest) => unknown;
   readonly trashCollectionRow?: (request: typeof trashRowRequest) => unknown;
 } = {}) {
   const handlers = new Map<string, IpcHandler>();
@@ -66,7 +73,7 @@ function makeHarness(options: {
       title: "Tasks",
       tableId: request.tableId,
       tableName: "Tasks",
-      columns: [{ columnId: "column_abcdefghijkl", label: "Task", logicalType: "string", canRename: true }],
+      columns: [{ columnId: "column_abcdefghijkl", label: "Task", logicalType: "string", canRename: true, canTrash: true }],
       rows: [{
         rowId: "row_abcdefghijkl",
         cells: [{ columnId: "column_abcdefghijkl", value: "Draft", editable: true }],
@@ -125,6 +132,15 @@ function makeHarness(options: {
     columnId: request.columnId,
     status: "not_found"
   })));
+  const trashCollectionColumn = vi.fn(options.trashCollectionColumn ?? ((request) => ({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    columnId: request.columnId,
+    status: "not_found"
+  })));
 
   registerManagedCollectionIpc({
     ipcMain: {
@@ -137,6 +153,7 @@ function makeHarness(options: {
     appendDefaultCollectionRow,
     addNullableCollectionColumn,
     renameCollectionColumn,
+    trashCollectionColumn,
     trashCollectionRow
   });
   return {
@@ -146,6 +163,7 @@ function makeHarness(options: {
     appendDefaultCollectionRow,
     addNullableCollectionColumn,
     renameCollectionColumn,
+    trashCollectionColumn,
     trashCollectionRow
   };
 }
@@ -158,6 +176,7 @@ describe("registerManagedCollectionIpc", () => {
       "collections.appendDefaultRow",
       "collections.addNullableColumn",
       "collections.renameColumn",
+      "collections.trashColumn",
       "collections.trashRow"
     ]);
   });
@@ -170,6 +189,7 @@ describe("registerManagedCollectionIpc", () => {
       appendDefaultCollectionRow,
       addNullableCollectionColumn,
       renameCollectionColumn,
+      trashCollectionColumn,
       trashCollectionRow
     } = makeHarness({
       addNullableCollectionColumn: (request) => ({
@@ -187,7 +207,7 @@ describe("registerManagedCollectionIpc", () => {
           title: "Tasks",
           tableId: request.tableId,
           tableName: "Tasks",
-          columns: [{ columnId: "column_ownerabcdefghijkl", label: "Owner", logicalType: "string", canRename: true }],
+          columns: [{ columnId: "column_ownerabcdefghijkl", label: "Owner", logicalType: "string", canRename: true, canTrash: true }],
           rows: [{
             rowId: "row_abcdefghijkl",
             cells: [{ columnId: "column_ownerabcdefghijkl", value: null, editable: true }],
@@ -229,6 +249,8 @@ describe("registerManagedCollectionIpc", () => {
       });
     await expect(handlers.get("collections.renameColumn")!({ sender: {} } as IpcMainInvokeEvent, renameColumnRequest))
       .resolves.toMatchObject({ status: "not_found", requestId: renameColumnRequest.requestId });
+    await expect(handlers.get("collections.trashColumn")!({ sender: {} } as IpcMainInvokeEvent, trashColumnRequest))
+      .resolves.toMatchObject({ status: "not_found", requestId: trashColumnRequest.requestId });
     await expect(handlers.get("collections.trashRow")!({} as IpcMainInvokeEvent, trashRowRequest))
       .resolves.toMatchObject({ status: "not_found", requestId: trashRowRequest.requestId });
     expect(openCollection).toHaveBeenCalledWith(openRequest);
@@ -236,6 +258,7 @@ describe("registerManagedCollectionIpc", () => {
     expect(appendDefaultCollectionRow).toHaveBeenCalledWith(appendRequest);
     expect(addNullableCollectionColumn).toHaveBeenCalledWith(addColumnRequest);
     expect(renameCollectionColumn).toHaveBeenCalledWith(renameColumnRequest);
+    expect(trashCollectionColumn).toHaveBeenCalledWith(trashColumnRequest);
     expect(trashCollectionRow).toHaveBeenCalledWith(trashRowRequest);
   });
 
@@ -247,6 +270,7 @@ describe("registerManagedCollectionIpc", () => {
       appendDefaultCollectionRow,
       addNullableCollectionColumn,
       renameCollectionColumn,
+      trashCollectionColumn,
       trashCollectionRow
     } = makeHarness({
       getActiveVaultId: () => "vault_20260727_elsewhere"
@@ -293,6 +317,16 @@ describe("registerManagedCollectionIpc", () => {
         columnId: renameColumnRequest.columnId,
         status: "failed"
       });
+    await expect(handlers.get("collections.trashColumn")!({ sender: {} } as IpcMainInvokeEvent, trashColumnRequest))
+      .resolves.toEqual({
+        apiVersion: 1,
+        requestId: trashColumnRequest.requestId,
+        activeVaultId: trashColumnRequest.activeVaultId,
+        datasetId: trashColumnRequest.datasetId,
+        tableId: trashColumnRequest.tableId,
+        columnId: trashColumnRequest.columnId,
+        status: "failed"
+      });
     await expect(handlers.get("collections.trashRow")!({} as IpcMainInvokeEvent, trashRowRequest))
       .resolves.toEqual({
         apiVersion: 1,
@@ -308,6 +342,7 @@ describe("registerManagedCollectionIpc", () => {
     expect(appendDefaultCollectionRow).not.toHaveBeenCalled();
     expect(addNullableCollectionColumn).not.toHaveBeenCalled();
     expect(renameCollectionColumn).not.toHaveBeenCalled();
+    expect(trashCollectionColumn).not.toHaveBeenCalled();
     expect(trashCollectionRow).not.toHaveBeenCalled();
   });
 
@@ -333,7 +368,7 @@ describe("registerManagedCollectionIpc", () => {
   });
 
   it("rejects unknown request fields before service access", async () => {
-    const { handlers, openCollection, addNullableCollectionColumn, renameCollectionColumn, trashCollectionRow } = makeHarness();
+    const { handlers, openCollection, addNullableCollectionColumn, renameCollectionColumn, trashCollectionColumn, trashCollectionRow } = makeHarness();
     await expect(handlers.get("collections.open")!({} as IpcMainInvokeEvent, {
       ...openRequest,
       path: "/private/data.sqlite"
@@ -349,6 +384,11 @@ describe("registerManagedCollectionIpc", () => {
       path: "/private/data.sqlite"
     })).rejects.toThrow();
     expect(renameCollectionColumn).not.toHaveBeenCalled();
+    await expect(handlers.get("collections.trashColumn")!({ sender: {} } as IpcMainInvokeEvent, {
+      ...trashColumnRequest,
+      path: "/private/data.sqlite"
+    })).rejects.toThrow();
+    expect(trashCollectionColumn).not.toHaveBeenCalled();
     await expect(handlers.get("collections.trashRow")!({} as IpcMainInvokeEvent, {
       ...trashRowRequest,
       path: "/private/data.sqlite"
@@ -416,5 +456,30 @@ describe("registerManagedCollectionIpc", () => {
       { sender: {} } as IpcMainInvokeEvent,
       renameColumnRequest
     )).rejects.toThrow("column-rename response identity did not match");
+  });
+
+  it("fails closed for an untrusted sender and rejects a swapped column-trash identity", async () => {
+    const untrusted = makeHarness({ isTrustedSender: () => false });
+    await expect(untrusted.handlers.get("collections.trashColumn")!(
+      { sender: {} } as IpcMainInvokeEvent,
+      trashColumnRequest
+    )).resolves.toMatchObject({ status: "failed", columnId: trashColumnRequest.columnId });
+    expect(untrusted.trashCollectionColumn).not.toHaveBeenCalled();
+
+    const swapped = makeHarness({
+      trashCollectionColumn: (request) => ({
+        apiVersion: request.apiVersion,
+        requestId: request.requestId,
+        activeVaultId: request.activeVaultId,
+        datasetId: request.datasetId,
+        tableId: request.tableId,
+        columnId: "column_wrongwrongwrong",
+        status: "not_found"
+      })
+    });
+    await expect(swapped.handlers.get("collections.trashColumn")!(
+      { sender: {} } as IpcMainInvokeEvent,
+      trashColumnRequest
+    )).rejects.toThrow("column-trash response identity did not match");
   });
 });

@@ -270,7 +270,7 @@ describe("ManagedCollectionService", () => {
       snapshot: {
         revisionId: expect.any(String),
         columns: expect.arrayContaining([
-          { columnId: expect.any(String), label: "Notes", logicalType: "string", canRename: true }
+          { columnId: expect.any(String), label: "Notes", logicalType: "string", canRename: true, canTrash: true }
         ]),
         totalRowCount: initialRows.length,
         returnedRowCount: initialRows.length,
@@ -421,7 +421,7 @@ describe("ManagedCollectionService", () => {
       expect(added).toMatchObject({ status: "committed", snapshot: { canAddColumn: true } });
       if (added.status !== "committed") throw new Error(`Collection ${logicalType} column did not commit`);
       expect(added.snapshot.columns).toEqual(expect.arrayContaining([
-        { columnId: expect.any(String), label: `${logicalType} value`, logicalType, canRename: true }
+        { columnId: expect.any(String), label: `${logicalType} value`, logicalType, canRename: true, canTrash: true }
       ]));
       for (const row of added.snapshot.rows) {
         expect(row.cells.find((cell) => cell.columnId === added.columnId)).toEqual({
@@ -515,7 +515,8 @@ describe("ManagedCollectionService", () => {
           columnId: column.id,
           label: "Display name",
           logicalType: column.logicalType,
-          canRename: true
+          canRename: true,
+          canTrash: true
         }]),
         rows: initialRows
       }
@@ -613,6 +614,141 @@ describe("ManagedCollectionService", () => {
         undoOfOperationId: committed.operationId
       }
     });
+  });
+
+  it("trashes one eligible column immutably, adopts exact replay, and restores its definition and cells through forward Undo", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionService(port);
+    const manifestPath = path.join(fixture.bundlePath, "dataset.json");
+    const initialManifestBytes = fs.readFileSync(manifestPath);
+    const initialManifest = readManifest(fixture.bundlePath);
+    const initialSchemaPath = path.join(fixture.bundlePath, initialManifest.schema.path);
+    const initialPayloadPath = path.join(fixture.bundlePath, initialManifest.payload.path);
+    const initialSchemaBytes = fs.readFileSync(initialSchemaPath);
+    const initialPayloadBytes = fs.readFileSync(initialPayloadPath);
+    const initialSchema = DatasetSchemaRecordSchema.parse(readJson(initialSchemaPath));
+    const table = required(initialSchema.tables[0]);
+    const trashedColumn = required(table.columns[0]);
+    const retainedColumn = required(table.columns[1]);
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "collection_request_trashcolumnabcdefgh",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id,
+      expectedRevisionId: initialManifest.activeRevision,
+      columnId: trashedColumn.id
+    };
+
+    const committed = await service.trashColumn(request);
+    expect(committed).toMatchObject({
+      status: "committed",
+      columnId: trashedColumn.id,
+      snapshot: {
+        revisionId: expect.any(String),
+        columns: [{ columnId: retainedColumn.id, label: retainedColumn.name, canTrash: false }],
+        rows: expect.arrayContaining([expect.objectContaining({ cells: [expect.objectContaining({ columnId: retainedColumn.id })] })])
+      }
+    });
+    if (committed.status !== "committed") throw new Error("Collection column trash did not commit");
+    expect(fs.readFileSync(initialSchemaPath)).toEqual(initialSchemaBytes);
+    expect(fs.readFileSync(initialPayloadPath)).toEqual(initialPayloadBytes);
+    const committedManifest = readManifest(fixture.bundlePath);
+    const committedRevision = DatasetRevisionSchema.parse(readJson(path.join(fixture.bundlePath, committedManifest.revision.path)));
+    expect(committedRevision).toMatchObject({
+      parentRevisionId: initialManifest.activeRevision,
+      operationId: committed.operationId,
+      stats: { columnCount: 1, cellCount: table.rowCount },
+      change: { kind: "collection_column_trash", tableId: table.id, columnId: trashedColumn.id }
+    });
+    const committedSchema = DatasetSchemaRecordSchema.parse(readJson(path.join(fixture.bundlePath, committedManifest.schema.path)));
+    expect(required(committedSchema.tables[0])).toMatchObject({
+      columnCount: 1,
+      columns: [{ ...retainedColumn, ordinal: 0 }]
+    });
+    const database = new DatabaseSync(path.join(fixture.bundlePath, committedManifest.payload.path), { readOnly: true });
+    try {
+      expect(database.prepare("SELECT COUNT(*) AS count FROM pige_dataset_columns WHERE column_id = ?")
+        .get(trashedColumn.id)).toEqual({ count: 0 });
+      expect(database.prepare("SELECT COUNT(*) AS count FROM pige_dataset_cells WHERE column_id = ?")
+        .get(trashedColumn.id)).toEqual({ count: 0 });
+      expect(database.prepare("SELECT ordinal FROM pige_dataset_columns WHERE column_id = ?")
+        .get(retainedColumn.id)).toEqual({ ordinal: 0 });
+    } finally {
+      database.close();
+    }
+    const operationPath = findFile(path.join(fixture.vaultPath, ".pige/operations"), `${committed.operationId}.json`);
+    const operationBytes = fs.readFileSync(operationPath);
+    const operation = OperationRecordSchema.parse(readJson(operationPath));
+    expect(operation).toMatchObject({
+      id: committed.operationId,
+      kind: "trash_collection_column",
+      reversible: "yes",
+      targetRefs: expect.arrayContaining([expect.objectContaining({ kind: "column", id: trashedColumn.id })])
+    });
+
+    fs.writeFileSync(manifestPath, initialManifestBytes);
+    fs.rmSync(operationPath);
+    await expect(new ManagedCollectionService(port).trashColumn(request)).resolves.toEqual(committed);
+    const revisionCount = fs.readdirSync(path.join(fixture.bundlePath, "revisions")).length;
+    await expect(service.trashColumn(request)).resolves.toEqual(committed);
+    expect(fs.readdirSync(path.join(fixture.bundlePath, "revisions"))).toHaveLength(revisionCount);
+    fs.writeFileSync(operationPath, `${JSON.stringify({ ...readJson(operationPath) as object, summary: "tampered" }, null, 2)}\n`);
+    await expect(service.trashColumn(request)).rejects.toMatchObject({ code: "collection.request_conflict" });
+    fs.writeFileSync(operationPath, operationBytes);
+
+    await expect(service.trashColumn({
+      ...request,
+      requestId: "collection_request_trashcolstaleabcdefgh",
+      columnId: retainedColumn.id
+    })).resolves.toMatchObject({ status: "stale", snapshot: { revisionId: committed.snapshot.revisionId } });
+    await expect(service.trashColumn({
+      ...request,
+      requestId: "collection_request_trashcolineligibleabc",
+      expectedRevisionId: committed.snapshot.revisionId,
+      columnId: retainedColumn.id
+    })).resolves.toMatchObject({ status: "ineligible", snapshot: { columns: [{ canTrash: false }] } });
+    await expect(service.trashColumn({
+      ...request,
+      requestId: "collection_request_trashcolmissingabcdef",
+      expectedRevisionId: committed.snapshot.revisionId,
+      columnId: "column_missing123456"
+    })).resolves.toMatchObject({ status: "not_found" });
+
+    const undone = await service.undo(operation, committed.snapshot.revisionId);
+    expect(undone).toMatchObject({ status: "undone", revisionId: expect.any(String) });
+    if (undone.status !== "undone") throw new Error("Collection column trash was not undone");
+    const restored = await service.open({
+      apiVersion: 1,
+      requestId: "collection_request_trashcolundoabcdefgh",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id
+    });
+    expect(restored).toMatchObject({
+      status: "ready",
+      snapshot: { revisionId: undone.revisionId, columns: expect.arrayContaining([
+        expect.objectContaining({ columnId: trashedColumn.id, label: trashedColumn.name })
+      ]) }
+    });
+    const undoManifest = readManifest(fixture.bundlePath);
+    const undoRevision = DatasetRevisionSchema.parse(readJson(path.join(fixture.bundlePath, undoManifest.revision.path)));
+    expect(undoRevision).toMatchObject({
+      parentRevisionId: committed.snapshot.revisionId,
+      stats: { columnCount: table.columnCount, cellCount: table.rowCount * table.columnCount },
+      change: {
+        kind: "collection_column_trash_undo",
+        tableId: table.id,
+        columnId: trashedColumn.id,
+        undoOfOperationId: committed.operationId
+      }
+    });
+    expect(fs.readFileSync(path.join(fixture.bundlePath, undoRevision.payload.path))).not.toEqual(initialPayloadBytes);
+    expect(readCollectionColumnIds(path.join(fixture.bundlePath, undoRevision.payload.path))).toEqual(
+      table.columns.map((column) => column.id)
+    );
   });
 
   it("appends one authoritative default row, adopts replay, and undoes the exact revision", async () => {
@@ -990,6 +1126,20 @@ function readRowIds(payloadPath: string): string[] {
     }>).map((row) => {
       if (typeof row.row_id !== "string") throw new Error("Missing Dataset row");
       return row.row_id;
+    });
+  } finally {
+    database.close();
+  }
+}
+
+function readCollectionColumnIds(payloadPath: string): string[] {
+  const database = new DatabaseSync(payloadPath, { readOnly: true });
+  try {
+    return (database.prepare("SELECT column_id FROM pige_dataset_columns ORDER BY ordinal").all() as Array<{
+      column_id?: unknown;
+    }>).map((row) => {
+      if (typeof row.column_id !== "string") throw new Error("Missing Dataset column");
+      return row.column_id;
     });
   } finally {
     database.close();

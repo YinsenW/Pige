@@ -189,6 +189,8 @@ import {
   CollectionAppendDefaultRowResultSchema,
   CollectionRenameColumnRequestSchema,
   CollectionRenameColumnResultSchema,
+  CollectionTrashColumnRequestSchema,
+  CollectionTrashColumnResultSchema,
   CollectionTrashRowRequestSchema,
   CollectionTrashRowResultSchema,
   KnowledgeActivityListRequestSchema,
@@ -299,6 +301,8 @@ import type {
   CollectionAppendDefaultRowResult,
   CollectionRenameColumnRequest,
   CollectionRenameColumnResult,
+  CollectionTrashColumnRequest,
+  CollectionTrashColumnResult,
   CollectionTrashRowRequest,
   CollectionTrashRowResult
 } from "@pige/schemas";
@@ -437,6 +441,25 @@ async function invokeCollectionRenameColumn(
     result.columnId !== parsedRequest.columnId
   ) {
     throw new Error("Invalid Managed Collection column-rename response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionTrashColumn(
+  request: CollectionTrashColumnRequest
+): Promise<CollectionTrashColumnResult> {
+  const parsedRequest = CollectionTrashColumnRequestSchema.parse(request);
+  const result = CollectionTrashColumnResultSchema.parse(
+    await ipcRenderer.invoke("collections.trashColumn", parsedRequest)
+  );
+  if (
+    result.requestId !== parsedRequest.requestId ||
+    result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.datasetId !== parsedRequest.datasetId ||
+    result.tableId !== parsedRequest.tableId ||
+    result.columnId !== parsedRequest.columnId
+  ) {
+    throw new Error("Invalid Managed Collection column-trash response identity.");
   }
   return result;
 }
@@ -842,6 +865,7 @@ const api: PigeDesktopApi = {
     appendDefaultRow: invokeCollectionAppendDefaultRow,
     addNullableColumn: invokeCollectionAddNullableColumn,
     renameColumn: invokeCollectionRenameColumn,
+    trashColumn: invokeCollectionTrashColumn,
     trashRow: invokeCollectionTrashRow
   },
   proposals: {

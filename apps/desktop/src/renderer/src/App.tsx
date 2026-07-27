@@ -132,6 +132,8 @@ import {
   type CollectionCellEditResult,
   type CollectionRenameColumnRequest,
   type CollectionRenameColumnResult,
+  type CollectionTrashColumnRequest,
+  type CollectionTrashColumnResult,
   type CollectionOpenRequest,
   type CollectionOpenResult,
   type CollectionSnapshot,
@@ -1032,6 +1034,14 @@ export function App(): React.JSX.Element {
     return result;
   };
 
+  const trashCollectionColumn = async (
+    request: CollectionTrashColumnRequest
+  ): Promise<CollectionTrashColumnResult> => {
+    const result = await window.pige.collections.trashColumn(request);
+    if (collectionTrashColumnIdentityMatches(request, result) && result.status === "committed") void refreshVaultState();
+    return result;
+  };
+
   const trashCollectionRow = async (
     request: CollectionTrashRowRequest
   ): Promise<CollectionTrashRowResult> => {
@@ -1815,6 +1825,7 @@ export function App(): React.JSX.Element {
             }}
             onAddNullableColumn={addCollectionNullableColumn}
             onRenameColumn={renameCollectionColumn}
+            onTrashColumn={trashCollectionColumn}
             onAppendDefaultRow={appendCollectionDefaultRow}
             onTrashRow={trashCollectionRow}
             onAdoptSnapshot={adoptCollectionSnapshot}
@@ -5736,6 +5747,17 @@ function collectionRenameIdentityMatches(
     result.columnId === request.columnId;
 }
 
+function collectionTrashColumnIdentityMatches(
+  request: CollectionTrashColumnRequest,
+  result: CollectionTrashColumnResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.datasetId === request.datasetId &&
+    result.tableId === request.tableId &&
+    result.columnId === request.columnId;
+}
+
 function collectionTrashIdentityMatches(
   request: CollectionTrashRowRequest,
   result: CollectionTrashRowResult
@@ -7015,6 +7037,8 @@ export function ActivityHistorySettingsPanel(props: {
                 ? "activity.updatedCollection"
                 : activity.kind === "trash_collection_row"
                   ? "activity.trashedCollectionRow"
+                : activity.kind === "trash_collection_column"
+                  ? "activity.trashedCollectionColumn"
                 : activity.kind === "update_page"
                   ? "activity.updatedPage"
                   : "activity.createdPage";

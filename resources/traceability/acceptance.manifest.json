@@ -555,7 +555,7 @@
       "plannedTarget": "Lossless preserve-first CSV/XLSX/SQLite Dataset import, manifest/schema/revision, no-execution, recovery, and backup fixtures."
     },
     "PIGE-DATA-002":{"status":"planned","plannedTarget":"Bounded typed local Dataset query/table-view integration with deterministic result hashes, exact citations, stale-revision rejection, and no whole-payload egress."},
-    "PIGE-DATA-003":{"status":"planned","plannedTarget":"Cell edit, eligible row add/trash and nullable-field add/rename preserve stable IDs, revision CAS and Activity/Undo; other schema changes, views, relations/formulas, backup and exceptional boundaries remain."},
+    "PIGE-DATA-003":{"status":"planned","plannedTarget":"Cell edit, eligible row add/trash and nullable-field add/rename/trash preserve stable IDs, revision CAS and Activity/Undo; other schema changes, views, relations/formulas, backup and exceptional boundaries remain."},
     "PIGE-SEC-001":{"status":"partial","evidence":["EV-PROVIDER"],"open":{"id":"OPEN-REQ-PIGE-SEC-001","description":"OS-keychain integration, portable-mode warning, and release backup secret scans remain open.","targetBuilds":["B3.02"],"targetExits":["E3.02"]}},
     "PIGE-SEC-002":{"status":"planned","plannedTarget":"Raw Shell stays per-effect; prove one immutable registered plan confirmation, exact ordinal authority, read-only probes, OAuth continuation, denial/drift/no-effect, recovery and real macOS behavior."},
     "PIGE-SEC-003":{"status":"planned","plannedTarget":"Prove private durable authoredTaskIntent and Job-bound ingress snapshots survive restart: neutral/legacy attachments grant exact-source snapshot tools only, explicit authored attachment turns may request precise ambient confirmation/plans, and live paths/fallback/model/source cannot widen authority."},
@@ -1033,7 +1033,7 @@
     },
     "E7.04":{"status":"planned","plannedTarget":"Conversation compaction identity/reference preservation tests."},
     "E7.05":{"status":"planned","plannedTarget":"Memory lifecycle, provenance, backup, and secret-scan integration report."},
-    "E7.06":{"status":"planned","plannedTarget":"Cell edit, row add/trash and nullable-column add/rename work; other schema changes, views, relations/formulas, conflict and exception-boundary integration remain."},
+    "E7.06":{"status":"planned","plannedTarget":"Cell edit, row add/trash and nullable-column add/rename/trash work; other schema changes, views, relations/formulas, conflict and exception-boundary integration remain."},
     "E8.01": {
       "status": "planned",
       "plannedTarget": "One reviewed machine-local pure HTTPS SKILL.md installs from Settings; file/ZIP/chat/vault/External-Web lifecycle, runtime permissions, update, uninstall and export remain."
