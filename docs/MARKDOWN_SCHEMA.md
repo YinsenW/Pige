@@ -136,17 +136,18 @@ note:
 
 `note_kind` can be `general`, `memo`, `summary`, `research`, `meeting`, `draft`, or `imported`.
 
+The Reader editor round-trips one exact <=4 MiB UTF-8 note without trim/normalization, preserving
+stable `id`, required frontmatter and valid wiki links/citations. Main no-follow CAS-replaces it and
+records reversible `update_page`; drift preserves live file/draft. Source pages are ineligible.
+
 Phase 3 bridge generated notes:
 
-- Basic Agent ingest can auto-create simple `type: "note"` pages under `wiki/generated/YYYY/`.
-- These notes use `note_kind: "summary"` and cite one preserved `source_id`.
-- The page ID and path are deterministic from the source ID so retry cannot create duplicates.
-- Frontmatter includes `provenance.last_job_id`, `provenance.model_profile_id`, and `provenance.confidence`.
-- Low-confidence/warning output uses `needs_review` as a non-blocking quality marker, not approval authority.
-- The page body contains a concise summary, key points, inline source citations resolved from the validated Evidence Pack, and optional warnings.
-- Each generated summary and key point carries one or more canonical `[source:<source-id>#<locator>]` citations when the model selected valid evidence refs. Model-authored citation tokens are not trusted or copied through.
-- Unknown evidence refs fail before the page write. Missing refs add a warning and force `needs_review`; Pige does not invent a `#summary` or other fallback locator for an uncited claim.
-- Raw prompts, raw model responses, API keys, managed source paths, original absolute paths, and large source bodies must not be written into the generated note.
+- Agent ingest creates retry-safe `note`/`summary` pages under `wiki/generated/YYYY/`, citing the
+  source and recording Job, model profile and confidence provenance.
+- Low-confidence/warning output marks `needs_review`; it is not approval authority.
+- Summary/key points use validated evidence as canonical `[source:<source-id>#<locator>]`, never
+  copied model tokens. Unknown refs fail; missing refs warn/mark review without invented locators.
+- Generated notes exclude prompts, responses, keys, paths and large source bodies.
 
 ### 5.3 Concept Page
 

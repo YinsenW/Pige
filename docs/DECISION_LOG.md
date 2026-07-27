@@ -3408,6 +3408,28 @@ References:
 - `docs/SKILL_EXTENSION_DESIGN.md`
 - `docs/API_AND_IPC_DESIGN.md`; `docs/SECURITY_THREAT_MODEL.md`
 
+### D-20260727-Reader-Markdown-Revision-Edit
+
+Status: Accepted
+Date: 2026-07-27
+
+Decision:
+
+Ship a note Reader editor: render/revision-fenced drafts CAS-write atomically, return canonical
+render and record reversible `update_page`.
+
+Rationale:
+
+Make Markdown usable without silent overwrite or merge machinery.
+
+Consequences:
+
+- Stale preserves page/draft; source pages and broader lifecycle stay open.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`; `docs/MARKDOWN_SCHEMA.md`; `docs/SYNC_CONFLICT_AND_MIGRATION.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

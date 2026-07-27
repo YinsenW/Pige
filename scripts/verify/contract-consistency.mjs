@@ -371,6 +371,11 @@ const skillsIpcRegistrarExists = fs.existsSync(path.join(root, skillsIpcRegistra
 const skillsIpcRegistrarSource = skillsIpcRegistrarExists
   ? read(skillsIpcRegistrarPath)
   : "";
+const requiredReaderIpcChannels = [
+  "notes.openSourceReference",
+  "notes.openEditor",
+  "notes.saveEditor"
+];
 const requiredBackupIpcChannels = [
   "backup.status",
   "backup.create",
@@ -405,11 +410,13 @@ for (const channel of undocumentedIpcChannels(ipcChannelSources.join("\n"), apiD
     failures.push(`docs/API_AND_IPC_DESIGN.md does not own implemented IPC channel ${channel}.`);
   }
 }
-if (
-  readerIpcRegistrarExists &&
-  !ipcHandleChannels(readerIpcRegistrarSource).includes("notes.openSourceReference")
-) {
-  failures.push(`${readerIpcRegistrarPath} is missing required IPC channel notes.openSourceReference.`);
+if (readerIpcRegistrarExists) {
+  const implementedReaderChannels = new Set(ipcHandleChannels(readerIpcRegistrarSource));
+  for (const channel of requiredReaderIpcChannels) {
+    if (!implementedReaderChannels.has(channel)) {
+      failures.push(`${readerIpcRegistrarPath} is missing required IPC channel ${channel}.`);
+    }
+  }
 }
 if (backupIpcRegistrarExists) {
   const implementedBackupChannels = new Set(ipcHandleChannels(backupIpcRegistrarSource));
@@ -495,9 +502,11 @@ const ownerOnlyNegativeFixtures = [
       .includes("notes.unowned")
   },
   {
-    label: "missing saved-source registrar channel",
-    rejected: !ipcHandleChannels('ipcMain.handle("notes.render", () => undefined);')
-      .includes("notes.openSourceReference")
+    label: "missing Reader lifecycle registrar channel",
+    rejected: requiredReaderIpcChannels.some((channel) => !ipcHandleChannels([
+      'ipcMain.handle("notes.openSourceReference", () => undefined);',
+      'ipcMain.handle("notes.openEditor", () => undefined);'
+    ].join("\n")).includes(channel))
   },
   {
     label: "missing Backup reconnect registrar channel",

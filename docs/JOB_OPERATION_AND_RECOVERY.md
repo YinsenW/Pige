@@ -598,12 +598,14 @@ Lifecycle coverage:
 | Index/job maintenance | update index, compact job, repair record |
 | Backup/restore/migration | backup created, restore applied, migration applied |
 
+Reader save records one `update_page` with private before/after bytes; Undo requires the after
+revision and writes prior bytes forward. Drift or missing recovery evidence preserves the live page.
+
 Rules:
 
 - Store patches, hashes, paths, and summaries rather than full duplicated page/source bodies.
-- Operation records must be understandable without the database.
-- Operation records are included in backup by default.
-- Operation records must not contain API keys, raw prompts, full provider responses, or large source bodies.
+- Records remain database-independent/backup-included and exclude keys, prompts, provider responses
+  and large source bodies.
 - `create_external_file` uses one opaque checksummed `external_resource`; paths stay in
   a machine-local journal binding parent/leaf and rejecting v1. Receipts prove no effect;
   other effects are `failed_uncertain`; completion prevents replay.
