@@ -902,6 +902,92 @@ export const MarkdownPageStatusSchema = z.enum([
   "conflict"
 ]);
 
+export const NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES = 4 * 1024 * 1024;
+export const NOTE_EDITOR_MAX_RENDERED_HTML_UTF8_BYTES = 8 * 1024 * 1024;
+export const NoteEditorRequestIdSchema = z.string().regex(/^noteeditreq_[a-z0-9]{8,64}$/);
+export const NoteEditorRevisionSchema = z.string().regex(/^noteeditrev_[a-z0-9]{32,64}$/);
+export const NoteEditorPortableMarkdownSchema = z.string()
+  .max(NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES)
+  .refine(
+    (value) => new TextEncoder().encode(value).byteLength <= NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES,
+    "Editable Markdown exceeds the UTF-8 byte limit."
+  )
+  .refine((value) => !value.includes("\0"), "Editable Markdown must not contain null bytes.");
+const NoteRenderedHtmlSchema = z.string()
+  .max(NOTE_EDITOR_MAX_RENDERED_HTML_UTF8_BYTES)
+  .refine(
+    (value) => new TextEncoder().encode(value).byteLength <= NOTE_EDITOR_MAX_RENDERED_HTML_UTF8_BYTES,
+    "Rendered note HTML exceeds the UTF-8 byte limit."
+  );
+export const NoteRenderPageSummarySchema = z.object({
+  pageId: PageIdSchema,
+  title: z.string().min(1).max(512),
+  pageType: MarkdownPageTypeSchema,
+  status: MarkdownPageStatusSchema,
+  pagePath: z.string().min(1).max(4_096).refine((value) => !value.includes("\0")),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+  language: z.string().min(1).max(64).optional(),
+  sourceIds: z.array(SourceIdSchema).max(1_000)
+}).strict();
+export const NoteRenderResultSchema = z.object({
+  summary: NoteRenderPageSummarySchema,
+  html: NoteRenderedHtmlSchema,
+  byteSize: z.number().int().nonnegative().max(NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES),
+  renderContextId: NoteRenderContextIdSchema.optional()
+}).strict();
+const NoteEditorResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteEditorRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  pageId: PageIdSchema
+});
+export const NoteEditorOpenRequestSchema = NoteEditorResultIdentitySchema.extend({
+  renderContextId: NoteRenderContextIdSchema
+}).strict();
+export const NoteEditorOpenResultSchema = z.discriminatedUnion("status", [
+  NoteEditorResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    renderContextId: NoteRenderContextIdSchema,
+    revision: NoteEditorRevisionSchema,
+    markdown: NoteEditorPortableMarkdownSchema
+  }).strict(),
+  NoteEditorResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  NoteEditorResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  NoteEditorResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const NoteEditorInvalidReasonSchema = z.enum([
+  "markdown_too_large",
+  "invalid_frontmatter",
+  "page_id_changed",
+  "unsupported_page_type",
+  "invalid_wiki_link",
+  "invalid_citation"
+]);
+export const NoteEditorSaveRequestSchema = NoteEditorResultIdentitySchema.extend({
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema,
+  markdown: NoteEditorPortableMarkdownSchema
+}).strict();
+export const NoteEditorSaveResultSchema = z.discriminatedUnion("status", [
+  NoteEditorResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    revision: NoteEditorRevisionSchema,
+    operationId: OperationIdSchema,
+    render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict()
+  }).strict(),
+  NoteEditorResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    revision: NoteEditorRevisionSchema
+  }).strict(),
+  NoteEditorResultIdentitySchema.extend({
+    status: z.literal("invalid"),
+    reason: NoteEditorInvalidReasonSchema
+  }).strict(),
+  NoteEditorResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  NoteEditorResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+
 export const ProviderKindSchema = z.enum([
   "openai",
   "anthropic",
@@ -4146,6 +4232,16 @@ export type MarkdownPageType = z.infer<typeof MarkdownPageTypeSchema>;
 export type NoteInlineReferenceTarget = z.infer<typeof NoteInlineReferenceTargetSchema>;
 export type NoteInlineReferenceRequestId = z.infer<typeof NoteInlineReferenceRequestIdSchema>;
 export type NoteRenderContextId = z.infer<typeof NoteRenderContextIdSchema>;
+export type NoteRenderPageSummary = z.infer<typeof NoteRenderPageSummarySchema>;
+export type NoteRenderResult = z.infer<typeof NoteRenderResultSchema>;
+export type NoteEditorRequestId = z.infer<typeof NoteEditorRequestIdSchema>;
+export type NoteEditorRevision = z.infer<typeof NoteEditorRevisionSchema>;
+export type NoteEditorPortableMarkdown = z.infer<typeof NoteEditorPortableMarkdownSchema>;
+export type NoteEditorInvalidReason = z.infer<typeof NoteEditorInvalidReasonSchema>;
+export type NoteEditorOpenRequest = z.infer<typeof NoteEditorOpenRequestSchema>;
+export type NoteEditorOpenResult = z.infer<typeof NoteEditorOpenResultSchema>;
+export type NoteEditorSaveRequest = z.infer<typeof NoteEditorSaveRequestSchema>;
+export type NoteEditorSaveResult = z.infer<typeof NoteEditorSaveResultSchema>;
 export type NoteResolveInlineReferenceRequest = z.infer<typeof NoteResolveInlineReferenceRequestSchema>;
 export type NoteResolveInlineReferenceResult = z.infer<typeof NoteResolveInlineReferenceResultSchema>;
 export type NoteSourceReferenceRequestId = z.infer<typeof NoteSourceReferenceRequestIdSchema>;

@@ -13,6 +13,12 @@ import {
   MachineLocalSettingsSchema,
   MarkdownPageStatusSchema,
   MarkdownPageTypeSchema,
+  NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES,
+  NoteEditorOpenRequestSchema,
+  NoteEditorOpenResultSchema,
+  NoteEditorPortableMarkdownSchema,
+  NoteEditorSaveRequestSchema,
+  NoteEditorSaveResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   RequirementIdSchema,
@@ -242,6 +248,87 @@ describe("schemas", () => {
       status: "not_found",
       sourceRecord: { path: "/private/source.json" }
     })).toThrow();
+  });
+
+  it("keeps Markdown editor identity revision-fenced and drafts exact", () => {
+    const identity = {
+      apiVersion: 1,
+      requestId: "noteeditreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260727_abcdefgh",
+      pageId: "page_20260727_editor1234"
+    } as const;
+    const renderContextId = "notectx_0123456789abcdef0123456789abcdef";
+    const revision = `noteeditrev_${"a".repeat(32)}`;
+    const markdown = "---\nid: page_20260727_editor1234\ntitle: Exact draft\ntype: note\n---\n\n  First line  \nSecond line\n";
+    const openRequest = { ...identity, renderContextId } as const;
+    const ready = {
+      ...identity,
+      status: "ready",
+      renderContextId,
+      revision,
+      markdown
+    } as const;
+
+    expect(NoteEditorOpenRequestSchema.parse(openRequest)).toEqual(openRequest);
+    expect(NoteEditorOpenResultSchema.parse(ready)).toEqual(ready);
+    expect(NoteEditorPortableMarkdownSchema.parse(markdown)).toBe(markdown);
+    expect(() => NoteEditorOpenRequestSchema.parse({ ...openRequest, path: "/private/note.md" })).toThrow();
+
+    const saveRequest = {
+      ...identity,
+      renderContextId,
+      expectedRevision: revision,
+      markdown
+    } as const;
+    expect(NoteEditorSaveRequestSchema.parse(saveRequest)).toEqual(saveRequest);
+    expect(NoteEditorSaveResultSchema.parse({
+      ...identity,
+      status: "committed",
+      revision: `noteeditrev_${"b".repeat(32)}`,
+      operationId: "op_20260727_editor1234",
+      render: {
+        summary: {
+          pageId: identity.pageId,
+          title: "Exact draft",
+          pageType: "note",
+          status: "active",
+          pagePath: "notes/exact-draft.md",
+          createdAt: "2026-07-27T10:00:00.000Z",
+          updatedAt: "2026-07-27T10:01:00.000Z",
+          language: "en",
+          sourceIds: []
+        },
+        renderContextId: "notectx_fedcba9876543210fedcba9876543210",
+        html: "<h1>Exact draft</h1>",
+        byteSize: 20
+      }
+    })).toMatchObject({ status: "committed", operationId: "op_20260727_editor1234" });
+    expect(NoteEditorSaveResultSchema.parse({
+      ...identity,
+      status: "stale",
+      revision: `noteeditrev_${"c".repeat(32)}`
+    })).toEqual({ ...identity, status: "stale", revision: `noteeditrev_${"c".repeat(32)}` });
+    for (const reason of [
+      "markdown_too_large",
+      "invalid_frontmatter",
+      "page_id_changed",
+      "unsupported_page_type",
+      "invalid_wiki_link",
+      "invalid_citation"
+    ] as const) {
+      expect(NoteEditorSaveResultSchema.parse({ ...identity, status: "invalid", reason }))
+        .toEqual({ ...identity, status: "invalid", reason });
+    }
+    for (const unsafe of [
+      { path: "/private/note.md" },
+      { hash: `sha256:${"d".repeat(64)}` },
+      { error: { code: "raw_fs_error" } }
+    ]) {
+      expect(() => NoteEditorSaveResultSchema.parse({ ...identity, status: "failed", ...unsafe })).toThrow();
+    }
+    expect(() => NoteEditorPortableMarkdownSchema.parse(
+      "😀".repeat(Math.floor(NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES / 4) + 1)
+    )).toThrow();
   });
 
   it("accepts only the bounded Reader transform input presentation", () => {
