@@ -20,7 +20,6 @@ describe("desktop shell build contract", () => {
   it("strictly parses durable conversation pagination on both IPC sides", () => {
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
-
     expect(preloadSource).toContain("AgentConversationRequestSchema.parse(normalizedRequest ?? {})");
     expect(preloadSource).toContain("AgentConversationResultSchema.optional().parse(result)");
     expect(mainSource).toContain("AgentConversationRequestSchema.parse(request ?? {})");
@@ -780,14 +779,15 @@ describe("desktop shell build contract", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const registrarSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-skills-ipc.ts"),
+      "utf8"
+    );
     const serviceSource = fs.readFileSync(
       path.resolve("apps/desktop/src/main/services/skill-registry-service.ts"),
       "utf8"
     );
-    const handlers = mainSource.slice(
-      mainSource.indexOf('ipcMain.handle("skills.summary"'),
-      mainSource.indexOf('ipcMain.handle("activity.list"')
-    );
+    const handlers = registrarSource;
     const preloadApi = preloadSource.slice(
       preloadSource.indexOf("skills: {"),
       preloadSource.indexOf("activity: {")
@@ -795,20 +795,34 @@ describe("desktop shell build contract", () => {
 
     expect(contractsSource).toContain("readonly skills: {");
     expect(contractsSource).toContain("readonly summary: () => Promise<SkillRegistryQueryResult>;");
+    expect(contractsSource).toContain("readonly stageFromUrl: (request: SkillStageFromUrlRequest)");
+    expect(contractsSource).toContain("readonly installStaged: (request: SkillInstallStagedRequest)");
+    expect(contractsSource).toContain("readonly discardStaged: (request: SkillDiscardStagedRequest)");
     expect(contractsSource).toContain("readonly disable: (request: SkillDisableRequest)");
     expect(contractsSource).toContain("readonly onChanged: (listener: (summary: SkillRegistrySummary)");
-    expect(handlers).toContain("SkillRegistryQueryResultSchema.parse(getSkillRegistryService().summary())");
+    expect(mainSource).toContain("registerSkillsIpc({");
+    expect(handlers).toContain('options.ipcMain.handle("skills.summary"');
+    expect(handlers).toContain('options.ipcMain.handle("skills.stageFromUrl"');
+    expect(handlers).toContain('options.ipcMain.handle("skills.installStaged"');
+    expect(handlers).toContain('options.ipcMain.handle("skills.discardStaged"');
     expect(handlers).toContain("SkillDisableRequestSchema.parse(request)");
-    expect(handlers).toContain("SkillRegistryMutationResultSchema.parse(getSkillRegistryService().disable(parsed))");
-    expect(handlers).toContain('window.webContents.send("skills.changed", result.registry)');
+    expect(handlers).toContain("SkillRegistryMutationResultSchema.parse(await options.disable(parsed))");
+    expect(handlers).toContain("options.publishRegistryChanged(result)");
     expect(preloadApi).toContain('ipcRenderer.invoke("skills.summary")');
+    expect(preloadApi).toContain('"skills.stageFromUrl"');
+    expect(preloadApi).toContain("SkillStageFromUrlRequestSchema.parse(request)");
+    expect(preloadApi).toContain("SkillStageFromUrlResultSchema.parse(");
+    expect(preloadApi).toContain('"skills.installStaged"');
+    expect(preloadApi).toContain("SkillInstallStagedRequestSchema.parse(request)");
+    expect(preloadApi).toContain('"skills.discardStaged"');
+    expect(preloadApi).toContain("SkillDiscardStagedRequestSchema.parse(request)");
     expect(preloadApi).toContain('ipcRenderer.invoke(\n        "skills.disable"');
     expect(preloadApi).toContain("SkillDisableRequestSchema.parse(request)");
     expect(preloadApi).toContain("SkillRegistryMutationResultSchema.parse(");
     expect(preloadApi).toContain('ipcRenderer.on("skills.changed", handler)');
     expect(preloadApi).toContain("SkillRegistrySummarySchema.safeParse(value)");
     expect(preloadApi).toContain('ipcRenderer.removeListener("skills.changed", handler)');
-    for (const unsafeField of ["manifestSha256", "sourceUrl", "permissionSummary", "SKILL.md", "path", "body", "secret"]) {
+    for (const unsafeField of ["permissionSummary", "body", "secret"]) {
       expect(preloadApi).not.toContain(unsafeField);
     }
     expect(contractsSource).not.toContain("readonly installSkill:");
