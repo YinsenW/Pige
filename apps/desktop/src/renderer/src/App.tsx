@@ -20,6 +20,7 @@ import { ConversationScrollRail } from "./components/ConversationScrollRail";
 import { ConversationEarlierControl, projectCompletedConversation, useConversationPagination } from "./components/ConversationPagination";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
+import { TaskExecutionInteractionStatus } from "./components/TaskExecutionInteraction";
 import {
   homeConversationStateForJob,
   isTerminalConversationTurn,
@@ -4578,6 +4579,7 @@ function HomeComposer(props: {
               onLoadEarlier={conversationPagination.loadEarlier}
               t={props.t}
             />
+            <TaskExecutionInteractionStatus t={props.t} />
             {visibleConversationMessages.map((message) => {
             const markdown = conversationMessageMarkdown(message);
             return (
