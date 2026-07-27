@@ -2586,6 +2586,115 @@ export const RetrievalSearchResultSchema = z.object({
   results: z.array(RetrievalSearchResultItemSchema).max(20).readonly()
 }).strict();
 
+export const LOCAL_SEMANTIC_RETRIEVAL_ASSET_ID = "qwen3_embedding_0_6b_q8_0" as const;
+export const LOCAL_SEMANTIC_RETRIEVAL_ASSET_REVISION =
+  "c2602621d50895a7b8277ddd4a8c31e699c9d002" as const;
+export const LOCAL_SEMANTIC_RETRIEVAL_ASSET_SHA256 =
+  "sha256:06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439" as const;
+export const LOCAL_SEMANTIC_RETRIEVAL_ASSET_BYTES = 639_150_592 as const;
+
+export const LocalSemanticRetrievalRequestIdSchema = z.string()
+  .regex(/^ragasset_[a-z0-9]{16,64}$/u);
+export const LocalSemanticRetrievalAssetStateSchema = z.enum([
+  "not_installed",
+  "installing",
+  "verifying",
+  "ready",
+  "disabled",
+  "needs_repair"
+]);
+export const LocalSemanticRetrievalStatusRequestSchema = z.object({
+  apiVersion: z.literal(1)
+}).strict();
+export const LocalSemanticRetrievalStatusSchema = z.object({
+  apiVersion: z.literal(1),
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  assetId: z.literal(LOCAL_SEMANTIC_RETRIEVAL_ASSET_ID),
+  assetState: LocalSemanticRetrievalAssetStateSchema,
+  downloadSizeBytes: z.literal(LOCAL_SEMANTIC_RETRIEVAL_ASSET_BYTES),
+  lexicalSearchRemainsAvailable: z.literal(true),
+  activeJobId: JobIdSchema.optional()
+}).strict().superRefine((status, context) => {
+  const jobActive = status.assetState === "installing" || status.assetState === "verifying";
+  if (jobActive !== (status.activeJobId !== undefined)) {
+    context.addIssue({
+      code: "custom",
+      message: "Only an active install or verification may expose an active Job identity.",
+      path: ["activeJobId"]
+    });
+  }
+});
+
+const LocalSemanticRetrievalMutationRequestIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: LocalSemanticRetrievalRequestIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+export const LocalSemanticRetrievalInstallRequestSchema =
+  LocalSemanticRetrievalMutationRequestIdentitySchema;
+export const LocalSemanticRetrievalEnableRequestSchema =
+  LocalSemanticRetrievalMutationRequestIdentitySchema;
+export const LocalSemanticRetrievalDisableRequestSchema =
+  LocalSemanticRetrievalMutationRequestIdentitySchema;
+export const LocalSemanticRetrievalRemoveRequestSchema =
+  LocalSemanticRetrievalMutationRequestIdentitySchema;
+
+const LocalSemanticRetrievalMutationResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: LocalSemanticRetrievalRequestIdSchema,
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+export const LocalSemanticRetrievalInstallResultSchema = z.discriminatedUnion("status", [
+  LocalSemanticRetrievalMutationResultIdentitySchema.extend({
+    status: z.literal("accepted"),
+    jobId: JobIdSchema
+  }).strict(),
+  LocalSemanticRetrievalMutationResultIdentitySchema.extend({
+    status: z.literal("already_installed")
+  }).strict(),
+  LocalSemanticRetrievalMutationResultIdentitySchema.extend({
+    status: z.literal("stale")
+  }).strict(),
+  LocalSemanticRetrievalMutationResultIdentitySchema.extend({
+    status: z.literal("failed")
+  }).strict()
+]);
+export const LocalSemanticRetrievalEnableResultSchema = z.discriminatedUnion("status", [
+  LocalSemanticRetrievalMutationResultIdentitySchema.extend({
+    status: z.literal("committed")
+  }).strict(),
+  LocalSemanticRetrievalMutationResultIdentitySchema.extend({
+    status: z.literal("already_enabled")
+  }).strict(),
+  LocalSemanticRetrievalMutationResultIdentitySchema.extend({
+    status: z.literal("stale")
+  }).strict(),
+  LocalSemanticRetrievalMutationResultIdentitySchema.extend({
+    status: z.literal("not_found")
+  }).strict(),
+  LocalSemanticRetrievalMutationResultIdentitySchema.extend({
+    status: z.literal("failed")
+  }).strict()
+]);
+export const LocalSemanticRetrievalMutationResultSchema = z.discriminatedUnion("status", [
+  LocalSemanticRetrievalMutationResultIdentitySchema.extend({
+    status: z.literal("committed")
+  }).strict(),
+  LocalSemanticRetrievalMutationResultIdentitySchema.extend({
+    status: z.literal("stale")
+  }).strict(),
+  LocalSemanticRetrievalMutationResultIdentitySchema.extend({
+    status: z.literal("not_found")
+  }).strict(),
+  LocalSemanticRetrievalMutationResultIdentitySchema.extend({
+    status: z.literal("failed")
+  }).strict()
+]);
+export const LocalSemanticRetrievalDisableResultSchema =
+  LocalSemanticRetrievalMutationResultSchema;
+export const LocalSemanticRetrievalRemoveResultSchema =
+  LocalSemanticRetrievalMutationResultSchema;
+
 export const RetrievalAnswerCitationSchema = z.object({
   refId: z.string().min(1).max(64),
   label: z.string().min(1).max(160),
@@ -4411,6 +4520,19 @@ export type RetrievalSearchRequest = z.infer<typeof RetrievalSearchRequestSchema
 export type RetrievalSearchResult = z.infer<typeof RetrievalSearchResultSchema>;
 export type RetrievalSearchResultItem = z.infer<typeof RetrievalSearchResultItemSchema>;
 export type RetrievalSearchScope = z.infer<typeof RetrievalSearchScopeSchema>;
+export type LocalSemanticRetrievalRequestId = z.infer<typeof LocalSemanticRetrievalRequestIdSchema>;
+export type LocalSemanticRetrievalAssetState = z.infer<typeof LocalSemanticRetrievalAssetStateSchema>;
+export type LocalSemanticRetrievalStatusRequest = z.infer<typeof LocalSemanticRetrievalStatusRequestSchema>;
+export type LocalSemanticRetrievalStatus = z.infer<typeof LocalSemanticRetrievalStatusSchema>;
+export type LocalSemanticRetrievalInstallRequest = z.infer<typeof LocalSemanticRetrievalInstallRequestSchema>;
+export type LocalSemanticRetrievalEnableRequest = z.infer<typeof LocalSemanticRetrievalEnableRequestSchema>;
+export type LocalSemanticRetrievalDisableRequest = z.infer<typeof LocalSemanticRetrievalDisableRequestSchema>;
+export type LocalSemanticRetrievalRemoveRequest = z.infer<typeof LocalSemanticRetrievalRemoveRequestSchema>;
+export type LocalSemanticRetrievalInstallResult = z.infer<typeof LocalSemanticRetrievalInstallResultSchema>;
+export type LocalSemanticRetrievalEnableResult = z.infer<typeof LocalSemanticRetrievalEnableResultSchema>;
+export type LocalSemanticRetrievalMutationResult = z.infer<typeof LocalSemanticRetrievalMutationResultSchema>;
+export type LocalSemanticRetrievalDisableResult = z.infer<typeof LocalSemanticRetrievalDisableResultSchema>;
+export type LocalSemanticRetrievalRemoveResult = z.infer<typeof LocalSemanticRetrievalRemoveResultSchema>;
 export type SpeechAvailabilityRequest = z.infer<typeof SpeechAvailabilityRequestSchema>;
 export type SpeechAvailabilityResult = z.infer<typeof SpeechAvailabilityResultSchema>;
 export type SpeechAssetInstallationId = z.infer<typeof SpeechAssetInstallationIdSchema>;
