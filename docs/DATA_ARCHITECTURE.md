@@ -79,10 +79,11 @@ Two storage profiles share this envelope:
   created.
 
 `dataset.json` binds profile, initial/active revision, stable IDs, integrity, versions and
-compatibility. An imported `managed_collection` keeps its Dataset ID. Cell, row add/trash or
-nullable-column add/rename/trash/Undo writes an immutable SQLite/schema/Operation revision, then switches
-the manifest last. Source evidence, originals, old revisions and previews stay immutable.
-Missing new fields are legacy-read only; dual payload roles require a derived revision.
+compatibility. A `managed_collection` keeps its Dataset ID. Row/field changes write immutable
+SQLite/schema/Operation revisions and switch manifest last. A saved view instead advances its
+own revision; rows/Dataset revision stay unchanged and Undo trashes it forward. Evidence,
+originals, old revisions and previews stay immutable; missing fields are legacy-read only and
+dual payload roles require a derived revision.
 
 ```ts
 type DatasetEvidenceRef = {

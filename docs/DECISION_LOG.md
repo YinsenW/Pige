@@ -3367,17 +3367,18 @@ Date: 2026-07-27
 
 Decision:
 
-A Collection keeps its imported ID. Cell edit, eligible row add/trash or nullable-column add/rename/trash
-writes immutable CAS revision/Operation; manifest switches last; Undo advances.
+A Collection keeps its imported ID. Row/field changes use immutable CAS revision/Operation and
+manifest-last; Undo advances. A saved view keeps a stable ID/private revisions; its optional one
+filter/sort leaves Dataset rows/revision unchanged.
 
 Rationale:
 
-Enable reversible value and schema growth without rewriting history or exposing internals.
+Enable reversible value, schema and view growth without rewriting history or exposing internals.
 
 Consequences:
 
-- Manifest is current; evidence/history stay immutable, including trashed rows/columns. Main owns
-  IDs/defaults/eligibility; channels fail closed and broader editing stays open.
+- Evidence/history stay immutable, including trashed rows/columns/views. Main owns IDs and
+  eligibility; channels fail closed and broader editing stays open.
 
 References:
 

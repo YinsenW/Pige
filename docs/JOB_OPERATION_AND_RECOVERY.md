@@ -174,11 +174,11 @@ successful materialization records the Dataset/revision refs and requeues the sa
 Dataset query tool. That continuation catalog is limited to the exact current source,
 Dataset, and revision refs; unrelated historical Datasets cannot block or enter the
 answer context. Restart adopts that continuation without another source loop or Dataset
-revision. Dataset query stays read-only. Collection cell, row add/trash or column add/rename/trash mutation
-revalidates current manifest/revision/schema/payload/target, publishes an immutable revision, then
-switches manifest last. Operation binds the stable cell/row/column or Main-generated row/column and before/
-after revisions. Replay adopts only exact identity; recovery repairs only a missing Operation.
-Undo requires the after-revision and writes forward; earlier drift is inert.
+revision. Dataset query stays read-only. Collection row/field mutation revalidates current
+manifest/revision/schema/payload/target, publishes immutable revision, then switches manifest last.
+Saved-view create binds stable view/revision but leaves rows/Dataset revision unchanged. Operation
+binds exact before/after identity; replay adopts exact effect, recovery only a missing Operation,
+and Undo writes forward (a created view advances to trashed). Drift is inert.
 
 ## 5. Job State Machine
 
@@ -572,7 +572,7 @@ Executable operation-kind vocabulary (machine checked):
 - `create_source_record`, `update_source_record`, `relink_source`.
 - `copy_source_asset`, `move_source_asset`, `trash_source_asset`, `restore_source_asset`.
 - `create_artifact`, `trash_artifact`, `restore_artifact`.
-- `create_dataset_revision`, `update_collection_cell`, `add_collection_row`, `add_collection_column`, `rename_collection_column`, `trash_collection_row`, `trash_collection_column`.
+- `create_dataset_revision`, `update_collection_cell`, `add_collection_row`, `add_collection_column`, `rename_collection_column`, `trash_collection_row`, `trash_collection_column`, `create_collection_view`.
 - `create_page`, `update_page`, `rename_page`, `archive_page`, `trash_page`, `restore_page`.
 - `update_index`.
 - `create_memory`, `update_memory`, `trash_memory`, `restore_memory`.

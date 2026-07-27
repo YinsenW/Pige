@@ -43,14 +43,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of reversible Managed Collection column trash: Main eligibility, immutable CAS revision, Activity/Undo and bounded UI adoption.",
+    "scope": "Independent Planning review of the first Managed Collection saved view: stable identity, bounded filter/sort, immutable view revision and Activity/Undo.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 34,
-    "reviewedSha256": "a7d7b79d6faddb66d6c8f98465c07f9ed02eb6e2de497e24bd1fcc5182c98388"
+    "reviewedSha256": "a059ed6ac90153d8221a4cb21f608816dcd082ba57e435226b19b7610e7a781f"
   },
   "reviewers": [{
-    "reviewerId": "managed-collection-column-trash-review",
-    "task": "Managed Collection reversible column trash",
+    "reviewerId": "managed-collection-saved-view-review",
+    "task": "Managed Collection first saved view",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -58,33 +58,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed Dataset/API/recovery/UI/Decision/trace owners; Development and UI independently own column-trash publication, Activity/Undo, presentation and evidence."
+    "independence": "Planning reviewed Dataset/API/recovery/UI/Decision/trace owners; Development and UI independently own saved-view publication, Activity/Undo, presentation and evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"managed-collection-column-trash-review","blockerCount":0,"summary":"One Dataset keeps immutable revision history; Main removes the column only from the current revision."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"managed-collection-column-trash-review","blockerCount":0,"summary":"Data/API/recovery/UI agree on Main eligibility, body-free request, snapshot adoption and forward Undo."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"managed-collection-column-trash-review","blockerCount":0,"summary":"PIGE-DATA-003 and E7.06 stay planned while broader Collection lifecycle remains open."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"managed-collection-column-trash-review","blockerCount":0,"summary":"Exact trash, replay, stale/ineligible, Activity and UI tests bind the vertical slice."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"managed-collection-column-trash-review","blockerCount":0,"summary":"Existing Collection owners and one decision absorb the slice without a new document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"managed-collection-saved-view-review","blockerCount":0,"summary":"One Dataset keeps rows/revision stable while its view advances through private revisions."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"managed-collection-saved-view-review","blockerCount":0,"summary":"Data/API/recovery/UI agree on one bounded filter/sort, authoritative snapshot and forward Undo."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"managed-collection-saved-view-review","blockerCount":0,"summary":"PIGE-DATA-003 and E7.06 stay planned while broader view/schema lifecycle remains open."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"managed-collection-saved-view-review","blockerCount":0,"summary":"Exact create/open/replay/stale/duplicate/ineligible, Activity and UI tests bind the slice."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"managed-collection-saved-view-review","blockerCount":0,"summary":"Existing Collection owners and one decision absorb the slice without a new document."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict column identity and authoritative snapshots expose no cell values or storage internals."},
-    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Dataset/API/recovery/UI and the existing Collection decision agree on reversible column trash."},
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict view identity and authoritative snapshots expose no row values or storage internals."},
+    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Dataset/API/recovery/UI and the existing Collection decision agree on reversible saved views."},
     {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Planned acceptance stays open and final service ownership/LOC are inventoried."}
   ],
   "coordination": {
-    "taskId": "managed-collection-column-trash-20260728",
-    "taskTitle": "Managed Collection reversible column trash",
+    "taskId": "managed-collection-saved-view-20260728",
+    "taskTitle": "Managed Collection first saved view",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing open/edit/add/rename/row-trash stays; column trash removes one eligible field from the current revision.",
-    "acknowledgement": "Planning binds reversible column trash only; permanent deletion/type change, formulas, views, relations and completion stay open."
+    "compatibility": "Existing row/field mutations stay; saved view adds one optional filter/sort without changing Dataset rows/revision.",
+    "acknowledgement": "Planning binds first saved-view create/open/Undo only; rename/delete, multi-filter/group, formulas, relations and completion stay open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Only an exact eligible current column can be trashed; prior immutable revision retains it and its cells.",
-    "Vault, Dataset, table, revision, column, replay or Operation drift fails closed.",
-    "Permanent deletion/type change, formulas, views, relations and broad CRUD stay out of scope."
+    "Only current stable columns may enter the single filter/sort; Main owns view identity.",
+    "Vault, Dataset, table, revision, view, replay or Operation drift fails closed.",
+    "View rename/delete, grouping, formulas, relations and broad CRUD stay out of scope."
   ]
 }
