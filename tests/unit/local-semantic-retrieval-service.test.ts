@@ -56,6 +56,29 @@ class FakeAssetStore implements LocalSemanticRetrievalAssetStorePort {
 }
 
 describe("LocalSemanticRetrievalService", () => {
+  it("issues a descriptor-bound private runtime lease and revokes it on disable", async () => {
+    const store = new FakeAssetStore();
+    store.record = { ...store.record, revision: 4, state: "disabled" };
+    store.assetPresent = true;
+    store.bindingMatches = true;
+    let revoked = 0;
+    const service = new LocalSemanticRetrievalService({
+      appDataRoot: "/unused",
+      store,
+      transport: { download: async () => undefined },
+      onAssetRevoked: () => { revoked += 1; }
+    });
+    await service.recover();
+    await service.enable({ apiVersion: 1, requestId: "ragasset_enablelease0001", expectedRevision: 4 });
+
+    const lease = service.createEmbeddingAssetLease();
+    expect(lease?.path).toBe(store.binding.path);
+    expect(lease?.stillCurrent()).toBe(true);
+    service.disable({ apiVersion: 1, requestId: "ragasset_disablelease001", expectedRevision: 5 });
+    expect(lease?.stillCurrent()).toBe(false);
+    expect(revoked).toBe(1);
+  });
+
   it("installs the pinned asset once and exposes only lifecycle truth", async () => {
     const store = new FakeAssetStore();
     let downloads = 0;

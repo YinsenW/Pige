@@ -247,7 +247,8 @@ export class JobsService {
     datasets?: DatasetMaterializerPort,
     executors: JobClassExecutorRegistry = createJobClassExecutorRegistry(),
     sourcePages: SourcePageService = new SourcePageService(),
-    ingressSnapshots: IngressSnapshotService = ingressSnapshotService
+    ingressSnapshots: IngressSnapshotService = ingressSnapshotService,
+    semanticIndex?: ConstructorParameters<typeof IndexRebuildJobExecutor>[2]
   ) {
     this.#vaults = vaults;
     this.#sourcePages = sourcePages;
@@ -305,7 +306,7 @@ export class JobsService {
         this.#assertWriterLease(vaultPath);
         appendLog(vaultPath, message);
       }
-    });
+    }, semanticIndex);
     this.#legacyAgentIngestExecutor = new LegacyAgentIngestJobExecutor(agentIngest, ocr, {
       queued: (request) => {
         const vaultPath = this.#requireActiveVaultPath();

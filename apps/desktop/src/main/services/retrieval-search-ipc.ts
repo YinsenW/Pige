@@ -6,13 +6,13 @@ import {
 } from "@pige/schemas";
 
 export interface RetrievalSearchIpcPort {
-  search(request: RetrievalSearchRequest): unknown;
+  search(request: RetrievalSearchRequest): unknown | Promise<unknown>;
 }
 
-export function handleRetrievalSearchIpc(
+export async function handleRetrievalSearchIpc(
   request: unknown,
   retrieval: RetrievalSearchIpcPort
-): RetrievalSearchResult {
+): Promise<RetrievalSearchResult> {
   const parsedRequest = RetrievalSearchRequestSchema.safeParse(request);
   if (!parsedRequest.success) {
     throw new PigeDomainError("rag.search_request_invalid", "The local search request is invalid.");
@@ -20,7 +20,7 @@ export function handleRetrievalSearchIpc(
 
   let rawResult: unknown;
   try {
-    rawResult = retrieval.search(parsedRequest.data);
+    rawResult = await retrieval.search(parsedRequest.data);
   } catch {
     throw new PigeDomainError("rag.search_unavailable", "Local search is temporarily unavailable.");
   }

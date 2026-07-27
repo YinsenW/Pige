@@ -211,6 +211,47 @@ Beta conclusion.`
     expect(readChunkIds(vaultPath)).toEqual(firstIds);
   });
 
+  it("reads bounded current chunk bodies under one exact index generation", () => {
+    const vaultPath = makeVaultRoot();
+    const service = new LocalDatabaseService();
+    writePage(vaultPath, "wiki/semantic-a.md", {
+      id: "page_20260727_semantica",
+      title: "Semantic A",
+      body: "First exact semantic passage."
+    });
+    writePage(vaultPath, "wiki/semantic-b.md", {
+      id: "page_20260727_semanticb",
+      title: "Semantic B",
+      body: "Second exact semantic passage."
+    });
+    service.rebuild(vaultPath);
+
+    const first = service.semanticChunkBatch(vaultPath, { limit: 1 });
+    expect(first?.chunks).toHaveLength(1);
+    expect(first?.chunks[0]?.text).toMatch(/exact semantic passage/u);
+    expect(first?.nextAfterChunkId).toBe(first?.chunks[0]?.chunkId);
+    const second = service.semanticChunkBatch(vaultPath, {
+      limit: 1,
+      afterChunkId: first?.nextAfterChunkId,
+      expectedGeneration: first?.indexGeneration
+    });
+    expect(second?.chunks).toHaveLength(1);
+    expect(second?.indexGeneration).toBe(first?.indexGeneration);
+    const selected = service.semanticChunksById(vaultPath, {
+      expectedGeneration: first!.indexGeneration,
+      chunkIds: [second!.chunks[0]!.chunkId, first!.chunks[0]!.chunkId]
+    });
+    expect(selected?.chunks.map(({ chunkId }) => chunkId).sort()).toEqual(
+      [first!.chunks[0]!.chunkId, second!.chunks[0]!.chunkId].sort()
+    );
+
+    fs.appendFileSync(path.join(vaultPath, "wiki/semantic-a.md"), "\nChanged after indexing.\n", "utf8");
+    expect(service.semanticChunkBatch(vaultPath, {
+      limit: 1,
+      expectedGeneration: first?.indexGeneration
+    })).toBeUndefined();
+  });
+
   it("replaces the skeletal derived chunk schema without preserving stale rows", () => {
     const vaultPath = makeVaultRoot();
     const service = new LocalDatabaseService();

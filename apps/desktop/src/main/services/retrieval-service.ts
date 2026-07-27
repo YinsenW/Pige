@@ -11,8 +11,13 @@ import type {
   VaultSummary
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import { RetrievalSearchResultItemSchema, type MarkdownPageType } from "@pige/schemas";
+import {
+  RetrievalSearchResultItemSchema,
+  RetrievalSearchResultSchema,
+  type MarkdownPageType
+} from "@pige/schemas";
 import type { LocalDatabaseService } from "./local-database-service";
+import type { LocalRagEngineService } from "./local-rag-engine-service";
 import {
   MARKDOWN_FRONTMATTER_READ_LIMIT_BYTES,
   readMarkdownPageBodyAtSignature,
@@ -96,11 +101,37 @@ export interface BuiltHomeQueryContext {
 export class RetrievalService {
   readonly #vaults: RetrievalVaultPort;
   readonly #database: LocalDatabaseService | undefined;
+  readonly #localRag: Pick<LocalRagEngineService, "search"> | undefined;
   readonly #exactEvidenceBindings = new WeakMap<RetrievalSearchResult, string>();
 
-  constructor(vaults: RetrievalVaultPort, database?: LocalDatabaseService) {
+  constructor(
+    vaults: RetrievalVaultPort,
+    database?: LocalDatabaseService,
+    localRag?: Pick<LocalRagEngineService, "search">
+  ) {
     this.#vaults = vaults;
     this.#database = database;
+    this.#localRag = localRag;
+  }
+
+  async searchCurrent(request: RetrievalSearchRequest): Promise<RetrievalSearchResult> {
+    const binding = this.#captureActiveVaultBinding(request.scope);
+    const lexical = this.search(request);
+    if (!this.#localRag) return lexical;
+    const result = await this.#localRag.search(binding.vaultPath, request, lexical);
+    this.#assertActiveVaultBinding(request.scope, binding);
+    if (result === lexical) return lexical;
+    const parsed = RetrievalSearchResultSchema.safeParse(result);
+    if (
+      !parsed.success ||
+      parsed.data.mode !== "semantic_hybrid" ||
+      parsed.data.activeVaultId !== binding.vaultId ||
+      parsed.data.query !== lexical.query
+    ) {
+      return lexical;
+    }
+    this.#bindExactEvidenceIdentity(binding.vaultPath, parsed.data);
+    return parsed.data;
   }
 
   search(request: RetrievalSearchRequest): RetrievalSearchResult {

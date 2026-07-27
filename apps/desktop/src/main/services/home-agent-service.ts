@@ -153,7 +153,7 @@ export interface HomeAgentModelPort {
 }
 
 export interface HomeAgentRetrievalPort {
-  search(request: RetrievalSearchRequest): RetrievalSearchResult;
+  search(request: RetrievalSearchRequest): RetrievalSearchResult | Promise<RetrievalSearchResult>;
   readExactSelectedEvidence(searchResult: RetrievalSearchResult): {
     readonly items: readonly RetrievalSearchResult["results"][number][];
   };
@@ -1553,7 +1553,7 @@ export class HomeAgentService {
         authorize: assertCurrentBindingAndVault,
         search: async () => {
           searchToolUsed = true;
-          const result = this.#retrieval.search({
+          const result = await this.#retrieval.search({
             scope: { kind: "active_vault", vaultId: activeVault.vaultId },
             query: retrievalQuery,
             limit: 8

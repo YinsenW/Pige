@@ -119,7 +119,10 @@ export interface AgentIngestRuntimePort {
 }
 
 export interface AgentIngestRetrievalPort {
-  search(vaultPath: string, request: RetrievalSearchRequest): RetrievalSearchResult;
+  search(
+    vaultPath: string,
+    request: RetrievalSearchRequest
+  ): RetrievalSearchResult | Promise<RetrievalSearchResult>;
   listTags?(vaultPath: string): readonly string[];
 }
 
@@ -1613,7 +1616,7 @@ export class AgentIngestService {
               }
               const normalizedQuery = normalizeAgentRetrievalQuery(query);
               retrievalAttempted = true;
-              const searchResult = retrieval.search(vaultPath, {
+              const searchResult = await retrieval.search(vaultPath, {
                 scope: { kind: "active_vault", vaultId: policy.vaultId },
                 query: normalizedQuery,
                 limit: MAX_AGENT_RETRIEVAL_RESULTS,
