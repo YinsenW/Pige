@@ -544,15 +544,16 @@ Events:
 `retrieval.search` accepts active vault, <=320 Unicode code points and optional limit/page
 types. Preload/Main fence the vault; results contain bound IDs, relative Markdown paths,
 snippets/reasons, never bodies, absolute paths, vector/policy internals or uncalibrated
-scores. Other DTOs follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`.
+scores. Closed modes add `semantic_hybrid` only after private runtime/index/span
+revalidation; async failure returns the unchanged lexical result. No new runtime/UI DTO.
+Other DTOs follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`.
 
 `LocalSemanticRetrieval*Schema` owns one literal asset. Status is `{apiVersion:1}`;
 mutations add request ID/revision and accept no URL/checksum/path/provider/model. It
 returns asset state/fixed bytes, lexical availability and only an install/verify Job.
 Install is `accepted|already_installed|stale|failed`; Enable adds
-`already_enabled|not_found`; Disable/Remove are `committed|stale|not_found|failed`.
-Main verifies/publishes privately; Enable re-verifies, Disable keeps bytes, Remove
-withdraws/deletes. `ready` is asset-only, not B6.06 runtime; drift stays lexical.
+`already_enabled|not_found`; Disable/Remove use `committed|stale|not_found|failed`.
+`ready` remains asset-only; B6.06 consumes only a private reverified lease.
 
 Schema-v1 `agent.submitTurn` binds optional client/conversation/tail IDs and strict
 `current_note` scope; preload projects no path. `agent.conversation` returns at most 100

@@ -38,6 +38,7 @@ import {
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   RequirementIdSchema,
+  RetrievalSearchResultSchema,
   SetThemeRequestSchema,
   SkillDiscardStagedRequestSchema,
   SkillDiscardStagedResultSchema,
@@ -116,6 +117,21 @@ describe("schemas", () => {
       ...request,
       assetId: "another-model"
     })).toThrow();
+  });
+
+  it("admits only the frozen local semantic hybrid retrieval mode", () => {
+    const result = {
+      searchedAt: "2026-07-27T00:00:00.000Z",
+      activeVaultId: "vault_20260727_abcdefgh",
+      query: "local evidence",
+      mode: "semantic_hybrid",
+      total: 0,
+      invalidPageCount: 0,
+      degraded: false,
+      results: []
+    } as const;
+    expect(RetrievalSearchResultSchema.parse(result)).toEqual(result);
+    expect(() => RetrievalSearchResultSchema.parse({ ...result, mode: "semantic_only" })).toThrow();
   });
 
   it("keeps reviewed task plans private and browser interactions renderer-safe", () => {

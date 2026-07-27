@@ -546,10 +546,11 @@ Build:
 
 Current Home has durable chat, optional cited retrieval, wait/resume, bounded transcript,
 follow-up/retry/cancel, IME-safe Enter and safe draft replacement. Pi final pass-through
-and optional known-ref citation projection replace terminal/citation repair. B6.07 now has deterministic metadata-only chunking, worker rebuild
-and 10,000-page/100,000-chunk warm lexical evidence. Embeddings, vectors, semantic
-retrieval/reranking, model lifecycle, full RAG, mid-repair recovery, Note Agent mutation,
-production Broker callers and packaged cross-platform proof remain open; E6.02 is partial.
+and optional known-ref citation projection replace terminal/citation repair. B6.05 has the
+single verified Qwen3 asset lifecycle; B6.07 has deterministic body-free chunks, rebuild
+and 10,000-page/100,000-chunk warm lexical evidence. B6.06 freezes one prebuilt local
+runtime, derived vector DB and fail-lexical `semantic_hybrid` path; implementation,
+reranking, packaged platforms and broader recovery remain open, so E6.02 stays partial.
 
 B6.10 current-note timeline/citations/wait/egress and one B6.11 Reader
 read/transform/review/recovery slice work. Broader mutation, Activity/Undo, platforms and

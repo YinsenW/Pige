@@ -245,6 +245,8 @@ Special cases:
 
 - Electron update requires app startup, renderer isolation, native module, packaging, and auto-update tests.
 - better-sqlite3 update requires Electron ABI packaging tests.
+- B6.06 native updates require lock/notices, no-build/download, prebuilt ABI/backend,
+  extension/vector/100k fallback and package checks.
 - Parser tool updates require ingest regression tests.
 - `pdfjs-dist` or `@napi-rs/canvas` updates require malformed/encrypted/multilingual/image-only PDF fixtures, worker timeout/heap checks, source-page crash recovery, and packaged native-module startup on each supported macOS/Windows architecture.
 - `mammoth`, `fast-xml-parser`, or `yauzl` updates require real semantic DOCX fixtures; relationship-ordered PPTX/notes/media fixtures; malformed ZIP/XML, DOCTYPE, duplicate/traversal, expansion-ratio, external-target, output-bound, timeout/heap, artifact-integrity, restart-recovery, and packaged Office-worker startup checks on supported macOS/Windows targets.

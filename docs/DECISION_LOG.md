@@ -3451,28 +3451,29 @@ References:
 
 - `docs/AGENT_MEMORY_DESIGN.md`; `docs/API_AND_IPC_DESIGN.md`
 
-### D-20260727-Pinned-Local-Semantic-Asset-Lifecycle
+### D-20260727-Pinned-Local-Semantic-Retrieval-Pack
 
 Status: Accepted
 Date: 2026-07-27
 
 Decision:
 
-B6.05 gives one pinned Qwen3 asset revision-CAS Install/Enable/Disable/Remove, without
-provider UI or B6.06 runtime claims.
+B6.05 gives one pinned Qwen3 lifecycle; B6.06 uses exact prebuilt
+`node-llama-cpp@3.18.1` plus `sqlite-vec@0.1.9` behind private owners and adds only
+`semantic_hybrid` to search.
 
 Rationale:
 
-Keep local setup simple and lexical retrieval dependable.
+Make local semantics usable without provider setup or arbitrary native loading.
 
 Consequences:
 
-- Main verifies/publishes privately; Enable re-verifies, Disable keeps bytes, Remove
-  withdraws/deletes, and failures stay lexical.
+- A current 1,024-dimension runtime/index is required; every failure stays lexical.
 
 References:
 
-- `docs/API_AND_IPC_DESIGN.md`; `docs/TECH_ARCHITECTURE.md`
+- `docs/API_AND_IPC_DESIGN.md`; `docs/TECH_ARCHITECTURE.md`;
+  `docs/LOCAL_DATABASE_DESIGN.md`
 
 ## 4. Deferred Decisions
 

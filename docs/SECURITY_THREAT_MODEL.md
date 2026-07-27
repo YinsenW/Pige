@@ -331,7 +331,7 @@ Mitigations:
 Acceptance:
 
 - Deleting DB does not delete knowledge.
-- DB cannot load extension code from packages or source content.
+- DB cannot load extension code from source content or any unregistered package/path.
 
 ### 6.10 Update Supply Chain
 
