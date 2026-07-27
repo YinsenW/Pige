@@ -732,7 +732,7 @@ export interface KnowledgeActivityCollectionTarget {
 
 export interface KnowledgeActivityMemoryTarget {
   readonly kind: "memory";
-  readonly memoryId?: MemoryRecordId;
+  readonly memoryId?: MemoryRecordId | undefined;
 }
 
 export type KnowledgeActivityTarget =
