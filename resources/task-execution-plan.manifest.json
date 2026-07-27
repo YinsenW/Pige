@@ -204,6 +204,7 @@
       "crossOriginSkillArtifacts": "reject_unless_exact_origin_and_digest_were_reviewed"
     },
     "browserOAuthProfiles": {
+      "configInitAllowedOrigins": ["https://open.feishu.cn"],
       "allowedAccountOrigins": [
         "https://accounts.feishu.cn",
         "https://accounts.larksuite.com"
