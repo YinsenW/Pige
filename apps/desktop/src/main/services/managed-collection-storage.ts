@@ -15,6 +15,7 @@ import {
   type CollectionRenameColumnRequest,
   type CollectionRenameColumnResult,
   type CollectionScalarValue,
+  type CollectionViewSummary,
   type DatasetColumn,
   type DatasetLogicalType,
   type DatasetManifest,
@@ -57,6 +58,13 @@ export interface CollectionColumnMutationIdentity {
   readonly operationId: string;
 }
 
+export interface CollectionSnapshotProjection {
+  readonly rowIds?: readonly string[];
+  readonly totalRowCount?: number;
+  readonly views?: readonly CollectionViewSummary[];
+  readonly activeViewId?: string;
+}
+
 export const MAX_COLLECTION_JSON_BYTES = 512 * 1024;
 const MAX_OPEN_ROWS = 50;
 const MAX_OPEN_COLUMNS = 32;
@@ -67,7 +75,11 @@ const EDITABLE_TYPES = new Set<DatasetLogicalType>([
   "string", "integer", "number", "boolean", "date", "datetime"
 ]);
 
-export function readCollectionSnapshot(binding: BundleBinding, tableId: string) {
+export function readCollectionSnapshot(
+  binding: BundleBinding,
+  tableId: string,
+  projection: CollectionSnapshotProjection = {}
+) {
   const table = binding.schema.tables.find((candidate) => candidate.id === tableId);
   if (!table) return undefined;
   const columns = table.columns.slice(0, MAX_OPEN_COLUMNS);
@@ -80,9 +92,18 @@ export function readCollectionSnapshot(binding: BundleBinding, tableId: string) 
       "JOIN pige_dataset_rows AS r ON r.row_id = c.row_id",
       "WHERE r.table_id = ? AND c.formula_json IS NOT NULL"
     ].join(" ")).get(tableId) as { count?: unknown } | undefined;
-    const rows = database.prepare(
-      `SELECT row_id FROM pige_dataset_rows WHERE table_id = ? ORDER BY ordinal ASC LIMIT ${MAX_OPEN_ROWS}`
-    ).all(tableId) as Array<{ row_id?: unknown }>;
+    if (projection.rowIds && projection.rowIds.length > MAX_OPEN_ROWS) throw payloadInvalid();
+    const rows = projection.rowIds
+      ? projection.rowIds.map((rowId) => {
+        const row = database.prepare(
+          "SELECT row_id FROM pige_dataset_rows WHERE table_id = ? AND row_id = ?"
+        ).get(tableId, rowId) as { row_id?: unknown } | undefined;
+        if (row?.row_id !== rowId) throw payloadInvalid();
+        return row;
+      })
+      : database.prepare(
+        `SELECT row_id FROM pige_dataset_rows WHERE table_id = ? ORDER BY ordinal ASC LIMIT ${MAX_OPEN_ROWS}`
+      ).all(tableId) as Array<{ row_id?: unknown }>;
     const statement = database.prepare(
       "SELECT state, projection_kind, projection_json, formula_json FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
     );
@@ -103,6 +124,8 @@ export function readCollectionSnapshot(binding: BundleBinding, tableId: string) 
       });
       return { rowId, canTrash: true, cells };
     });
+    const totalRowCount = projection.totalRowCount ?? table.rowCount;
+    if (!Number.isSafeInteger(totalRowCount) || totalRowCount < projectedRows.length) throw payloadInvalid();
     return CollectionSnapshotSchema.parse({
       datasetId: binding.manifest.datasetId,
       revisionId: binding.revision.id,
@@ -117,13 +140,15 @@ export function readCollectionSnapshot(binding: BundleBinding, tableId: string) 
         canTrash: columns.length > 1 && !columnUsesFormula(column)
       })),
       rows: projectedRows,
-      totalRowCount: table.rowCount,
+      totalRowCount,
       returnedRowCount: projectedRows.length,
-      truncated: table.rowCount > projectedRows.length,
+      truncated: totalRowCount > projectedRows.length,
       canAppendDefaultRow: table.columns.length <= MAX_OPEN_COLUMNS &&
         table.columns.every((column) => column.nullable && !columnUsesFormula(column)) &&
         formulaCount?.count === 0,
-      canAddColumn: table.columns.length < MAX_OPEN_COLUMNS
+      canAddColumn: table.columns.length < MAX_OPEN_COLUMNS,
+      views: projection.views ?? [],
+      ...(projection.activeViewId ? { activeViewId: projection.activeViewId } : {})
     });
   } finally {
     database.close();
