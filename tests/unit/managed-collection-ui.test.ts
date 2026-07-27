@@ -13,6 +13,8 @@ import type {
   CollectionRenameColumnRequest,
   CollectionRenameColumnResult,
   CollectionSnapshot,
+  CollectionTrashColumnRequest,
+  CollectionTrashColumnResult,
   CollectionTrashRowRequest,
   CollectionTrashRowResult
 } from "@pige/schemas";
@@ -63,6 +65,7 @@ describe("ManagedCollectionPanel", () => {
         onClose: () => undefined,
         onAddNullableColumn: notFoundColumnResult,
         onRenameColumn: notFoundRenameResult,
+        onTrashColumn: notFoundTrashColumnResult,
         onAppendDefaultRow: notFoundAppendResult,
         onTrashRow: notFoundTrashResult,
         onAdoptSnapshot: () => false,
@@ -122,6 +125,7 @@ describe("ManagedCollectionPanel", () => {
         onClose: () => undefined,
         onAddNullableColumn: notFoundColumnResult,
         onRenameColumn: notFoundRenameResult,
+        onTrashColumn: notFoundTrashColumnResult,
         onAppendDefaultRow: notFoundAppendResult,
         onTrashRow: notFoundTrashResult,
         onAdoptSnapshot: () => false,
@@ -383,6 +387,175 @@ describe("ManagedCollectionPanel", () => {
     expect(input.value).toBe("Priority");
     expect(buttonNamed(container, "Save").disabled).toBe(true);
     expect(dom.window.document.activeElement).toBe(input);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("trashes one eligible field with revision CAS, no optimistic removal, and stable fallback focus", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: CollectionTrashColumnRequest[] = [];
+    const staleSnapshot = collectionSnapshot(
+      "dataset_rev_20260728_revision0002", "Alpha", false, false, false, true, true
+    );
+    const committedSnapshot = withoutColumn(
+      collectionSnapshot("dataset_rev_20260728_revision0003", "Alpha"),
+      "column_name000001"
+    );
+    let resolveResult: ((result: CollectionTrashColumnResult) => void) | null = null;
+    await act(async () => {
+      root.render(createElement(CollectionTrashColumnHarness, {
+        onTrashColumn: (request) => {
+          requests.push(request);
+          return new Promise((resolve) => { resolveResult = resolve; });
+        }
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const trigger = buttonNamed(container, "Move field to trash: Name");
+    await act(async () => {
+      trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      await settle(dom);
+    });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      activeVaultId: "vault_20260727_collection01",
+      datasetId: "dataset_20260727_collection01",
+      tableId: "table_collection01",
+      expectedRevisionId: "dataset_rev_20260728_revision0001",
+      columnId: "column_name000001"
+    });
+    expect(container.querySelector('[data-collection-column-id="column_name000001"]')).not.toBeNull();
+
+    await act(async () => {
+      resolveResult?.({ ...trashColumnIdentity(requests[0]), status: "stale", snapshot: staleSnapshot });
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("The collection changed. The field was not moved.");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Move field to trash: Name"));
+
+    await click(dom, buttonNamed(container, "Move field to trash: Name"));
+    expect(requests.map((request) => request.expectedRevisionId)).toEqual([
+      "dataset_rev_20260728_revision0001",
+      "dataset_rev_20260728_revision0002"
+    ]);
+    expect(container.querySelector('[data-collection-column-id="column_name000001"]')).not.toBeNull();
+    await act(async () => {
+      resolveResult?.({
+        ...trashColumnIdentity(requests[1]),
+        status: "committed",
+        operationId: "op_20260728_collectiontrashcolumn01",
+        snapshot: committedSnapshot
+      });
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Field moved to trash. You can undo this from Activity.");
+    expect(container.querySelector('[data-collection-column-id="column_name000001"]')).toBeNull();
+    const fallback = requireElement(container.querySelector<HTMLTableCellElement>(
+      '[data-collection-column-id="column_total00001"]'
+    ));
+    expect(dom.window.document.activeElement).toBe(fallback);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps failed and ineligible field trash attempts body-free without optimistic removal", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    let callCount = 0;
+    const ineligibleSnapshot = collectionSnapshot(
+      "dataset_rev_20260728_revision0002", "Alpha", false, false, false, true, false
+    );
+    await act(async () => {
+      root.render(createElement(CollectionTrashColumnHarness, {
+        onTrashColumn: async (request) => {
+          callCount += 1;
+          return callCount === 1
+            ? { ...trashColumnIdentity(request), status: "failed" }
+            : { ...trashColumnIdentity(request), status: "ineligible", snapshot: ineligibleSnapshot };
+        }
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Move field to trash: Name"));
+    expect(container.textContent).toContain("Pige could not move the field to trash. Nothing was changed.");
+    expect(container.querySelector('[data-collection-column-id="column_name000001"]')).not.toBeNull();
+
+    await click(dom, buttonNamed(container, "Move field to trash: Name"));
+    expect(container.textContent).toContain("This field can no longer be moved to trash.");
+    expect(container.querySelector('[data-collection-column-id="column_name000001"]')).not.toBeNull();
+    expect(Array.from(container.querySelectorAll("button")).some((button) =>
+      button.getAttribute("aria-label") === "Move field to trash: Name"
+    )).toBe(false);
+    expect(dom.window.document.activeElement).toBe(container.querySelector('[data-collection-column-id="column_name000001"]'));
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("fences a late field-trash result after vault and revision identity change", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const initial = collectionSnapshot(
+      "dataset_rev_20260728_revision0001", "Alpha", false, false, false, true, true
+    );
+    const replacement = collectionSnapshot(
+      "dataset_rev_20260728_revision0002", "Replacement", false, false, false, true, true
+    );
+    let adoptCount = 0;
+    let request: CollectionTrashColumnRequest | null = null;
+    let resolveResult: ((result: CollectionTrashColumnResult) => void) | null = null;
+    const render = (activeVaultId: string, snapshot: CollectionSnapshot): React.JSX.Element =>
+      createElement(ManagedCollectionPanel, {
+        activeVaultId,
+        snapshot,
+        onClose: () => undefined,
+        onAddNullableColumn: notFoundColumnResult,
+        onRenameColumn: notFoundRenameResult,
+        onTrashColumn: (nextRequest) => {
+          request = nextRequest;
+          return new Promise((resolve) => { resolveResult = resolve; });
+        },
+        onAppendDefaultRow: notFoundAppendResult,
+        onTrashRow: notFoundTrashResult,
+        onAdoptSnapshot: () => { adoptCount += 1; return true; },
+        onEditCell: async (nextRequest) => ({ ...editIdentity(nextRequest), status: "failed" }),
+        onReload: async () => snapshot,
+        t
+      });
+    await act(async () => {
+      root.render(render("vault_20260727_collection01", initial));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Move field to trash: Name"));
+    await act(async () => {
+      root.render(render("vault_20260727_collection02", replacement));
+      await settle(dom);
+    });
+    await act(async () => {
+      if (!request) throw new Error("Expected a field-trash request.");
+      resolveResult?.({
+        ...trashColumnIdentity(request),
+        status: "committed",
+        operationId: "op_20260728_collectiontrashcolumn02",
+        snapshot: withoutColumn(initial, "column_name000001")
+      });
+      await settle(dom);
+      await settle(dom);
+    });
+
+    expect(adoptCount).toBe(0);
+    expect(container.textContent).toContain("Replacement");
+    expect(container.querySelector('[data-collection-column-id="column_name000001"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("Field moved to trash.");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -663,6 +836,45 @@ describe("ManagedCollectionPanel", () => {
     await act(async () => root.unmount());
     dom.window.close();
   });
+
+  it("labels a trashed collection field and keeps forward Undo available through Activity", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const undone: string[] = [];
+    await act(async () => {
+      root.render(createElement(ActivityHistorySettingsPanel, {
+        activities: [{
+          operationId: "op_20260728_collectiontrashcolumn01",
+          kind: "trash_collection_column",
+          createdAt: "2026-07-28T08:00:00.000Z",
+          targetLabel: "Customers",
+          target: {
+            kind: "collection",
+            datasetId: "dataset_20260727_collection01",
+            tableId: "table_collection01",
+            revisionId: "dataset_rev_20260728_revision0002"
+          },
+          status: "applied",
+          canUndo: true
+        }],
+        undoingId: null,
+        openingId: null,
+        blockedIds: [],
+        locale: "en",
+        onOpen: async () => undefined,
+        onUndo: async (operationId) => { undone.push(operationId); },
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    expect(container.textContent).toContain("Collection field moved to trash: Customers");
+    await click(dom, buttonNamed(container, "Undo"));
+    expect(undone).toEqual(["op_20260728_collectiontrashcolumn01"]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
 });
 
 function CollectionAppendHarness(props: {
@@ -679,6 +891,7 @@ function CollectionAppendHarness(props: {
     onClose: () => undefined,
     onAddNullableColumn: notFoundColumnResult,
     onRenameColumn: notFoundRenameResult,
+    onTrashColumn: notFoundTrashColumnResult,
     onAppendDefaultRow: props.onAppend,
     onTrashRow: notFoundTrashResult,
     onAdoptSnapshot: (next, expectedRevisionId) => {
@@ -704,6 +917,7 @@ function CollectionTrashHarness(props: {
     onClose: () => undefined,
     onAddNullableColumn: notFoundColumnResult,
     onRenameColumn: notFoundRenameResult,
+    onTrashColumn: notFoundTrashColumnResult,
     onAppendDefaultRow: notFoundAppendResult,
     onTrashRow: props.onTrash,
     onAdoptSnapshot: (next, expectedRevisionId) => {
@@ -731,6 +945,7 @@ function CollectionColumnHarness(props: {
     onClose: () => undefined,
     onAddNullableColumn: props.onAddColumn,
     onRenameColumn: notFoundRenameResult,
+    onTrashColumn: notFoundTrashColumnResult,
     onAppendDefaultRow: notFoundAppendResult,
     onTrashRow: notFoundTrashResult,
     onAdoptSnapshot: (next, expectedRevisionId) => {
@@ -758,6 +973,35 @@ function CollectionRenameHarness(props: {
     onClose: () => undefined,
     onAddNullableColumn: notFoundColumnResult,
     onRenameColumn: props.onRename,
+    onTrashColumn: notFoundTrashColumnResult,
+    onAppendDefaultRow: notFoundAppendResult,
+    onTrashRow: notFoundTrashResult,
+    onAdoptSnapshot: (next, expectedRevisionId) => {
+      if (snapshot.revisionId !== expectedRevisionId) return false;
+      setSnapshot(next);
+      return true;
+    },
+    onEditCell: async (request) => ({ ...editIdentity(request), status: "failed" }),
+    onReload: async () => snapshot,
+    t
+  });
+}
+
+function CollectionTrashColumnHarness(props: {
+  readonly onTrashColumn: (
+    request: CollectionTrashColumnRequest
+  ) => Promise<CollectionTrashColumnResult>;
+}): React.JSX.Element {
+  const [snapshot, setSnapshot] = useState(() => (
+    collectionSnapshot("dataset_rev_20260728_revision0001", "Alpha", false, false, false, true, true)
+  ));
+  return createElement(ManagedCollectionPanel, {
+    activeVaultId: "vault_20260727_collection01",
+    snapshot,
+    onClose: () => undefined,
+    onAddNullableColumn: notFoundColumnResult,
+    onRenameColumn: notFoundRenameResult,
+    onTrashColumn: props.onTrashColumn,
     onAppendDefaultRow: notFoundAppendResult,
     onTrashRow: notFoundTrashResult,
     onAdoptSnapshot: (next, expectedRevisionId) => {
@@ -777,7 +1021,8 @@ function collectionSnapshot(
   canAppendDefaultRow = false,
   canAddColumn = false,
   canTrash = false,
-  canRename = false
+  canRename = false,
+  canTrashColumn = false
 ): CollectionSnapshot {
   return {
     datasetId: "dataset_20260727_collection01",
@@ -786,8 +1031,8 @@ function collectionSnapshot(
     tableId: "table_collection01",
     tableName: "Customers",
     columns: [
-      { columnId: "column_name000001", label: "Name", logicalType: "string", canRename },
-      { columnId: "column_total00001", label: "Total", logicalType: "number", canRename: false }
+      { columnId: "column_name000001", label: "Name", logicalType: "string", canRename, canTrash: canTrashColumn },
+      { columnId: "column_total00001", label: "Total", logicalType: "number", canRename: false, canTrash: false }
     ],
     rows: [{
       rowId: "row_customer0001",
@@ -813,7 +1058,7 @@ function withNullableColumn(
 ): CollectionSnapshot {
   return {
     ...snapshot,
-    columns: [...snapshot.columns, { columnId, label, logicalType, canRename: false }],
+    columns: [...snapshot.columns, { columnId, label, logicalType, canRename: false, canTrash: false }],
     rows: snapshot.rows.map((row) => ({
       ...row,
       cells: [...row.cells, { columnId, value: null, editable: true }]
@@ -829,6 +1074,17 @@ function renameColumnSnapshot(
   return {
     ...snapshot,
     columns: snapshot.columns.map((column) => column.columnId === columnId ? { ...column, label } : column)
+  };
+}
+
+function withoutColumn(snapshot: CollectionSnapshot, columnId: string): CollectionSnapshot {
+  return {
+    ...snapshot,
+    columns: snapshot.columns.filter((column) => column.columnId !== columnId),
+    rows: snapshot.rows.map((row) => ({
+      ...row,
+      cells: row.cells.filter((cell) => cell.columnId !== columnId)
+    }))
   };
 }
 
@@ -902,6 +1158,17 @@ function renameIdentity(request: CollectionRenameColumnRequest) {
   };
 }
 
+function trashColumnIdentity(request: CollectionTrashColumnRequest) {
+  return {
+    apiVersion: 1 as const,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    columnId: request.columnId
+  };
+}
+
 async function notFoundAppendResult(
   request: CollectionAppendDefaultRowRequest
 ): Promise<CollectionAppendDefaultRowResult> {
@@ -935,6 +1202,12 @@ async function notFoundRenameResult(
   request: CollectionRenameColumnRequest
 ): Promise<CollectionRenameColumnResult> {
   return { ...renameIdentity(request), status: "not_found" };
+}
+
+async function notFoundTrashColumnResult(
+  request: CollectionTrashColumnRequest
+): Promise<CollectionTrashColumnResult> {
+  return { ...trashColumnIdentity(request), status: "not_found" };
 }
 
 function committedResult(
