@@ -670,10 +670,10 @@ cached value plus a quiet formula/stale-cache indicator. Warnings are localized 
 never raw adapter errors. The original remains separately revealable. Do not flatten
 rows into Markdown or expose storage/query-engine terminology.
 
-The first P1 slice edits one scalar, adds or trashes an eligible row, or adds one Main-approved
-nullable field. Renderer sends no generated ID/default/formula/body and shows trash only when
-`canTrash === true`. Commit adopts the snapshot and moves focus; stale/failure preserves the
-surface. Undo requires the after-revision; other schema edits remain planned.
+The first P1 slice edits one scalar, adds/trashes a row, or adds/renames an eligible field.
+Renderer sends no generated ID/default/formula/body and shows actions only when their capability
+is true. Commit adopts the snapshot and moves focus; stale/failure preserves the surface. Undo
+requires the after-revision; other schema edits remain planned.
 
 ## 9. Sources View
 

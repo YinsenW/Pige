@@ -187,6 +187,8 @@ import {
   CollectionOpenResultSchema,
   CollectionAppendDefaultRowRequestSchema,
   CollectionAppendDefaultRowResultSchema,
+  CollectionRenameColumnRequestSchema,
+  CollectionRenameColumnResultSchema,
   CollectionTrashRowRequestSchema,
   CollectionTrashRowResultSchema,
   KnowledgeActivityListRequestSchema,
@@ -295,6 +297,8 @@ import type {
   CollectionOpenResult,
   CollectionAppendDefaultRowRequest,
   CollectionAppendDefaultRowResult,
+  CollectionRenameColumnRequest,
+  CollectionRenameColumnResult,
   CollectionTrashRowRequest,
   CollectionTrashRowResult
 } from "@pige/schemas";
@@ -414,6 +418,25 @@ async function invokeCollectionAddNullableColumn(
     result.tableId !== parsedRequest.tableId
   ) {
     throw new Error("Invalid Managed Collection nullable-column response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionRenameColumn(
+  request: CollectionRenameColumnRequest
+): Promise<CollectionRenameColumnResult> {
+  const parsedRequest = CollectionRenameColumnRequestSchema.parse(request);
+  const result = CollectionRenameColumnResultSchema.parse(
+    await ipcRenderer.invoke("collections.renameColumn", parsedRequest)
+  );
+  if (
+    result.requestId !== parsedRequest.requestId ||
+    result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.datasetId !== parsedRequest.datasetId ||
+    result.tableId !== parsedRequest.tableId ||
+    result.columnId !== parsedRequest.columnId
+  ) {
+    throw new Error("Invalid Managed Collection column-rename response identity.");
   }
   return result;
 }
@@ -818,6 +841,7 @@ const api: PigeDesktopApi = {
     editCell: invokeCollectionCellEdit,
     appendDefaultRow: invokeCollectionAppendDefaultRow,
     addNullableColumn: invokeCollectionAddNullableColumn,
+    renameColumn: invokeCollectionRenameColumn,
     trashRow: invokeCollectionTrashRow
   },
   proposals: {

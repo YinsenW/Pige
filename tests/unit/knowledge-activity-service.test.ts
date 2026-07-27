@@ -24,21 +24,21 @@ afterEach(() => {
 });
 
 describe("Knowledge Activity and Undo", () => {
-  it("routes body-free Collection row-trash Activity and forward Undo only through its owner", async () => {
+  it("routes body-free Collection column-rename Activity and forward Undo only through its owner", async () => {
     const fixture = createFixture();
     const operation = OperationRecordSchema.parse({
-      id: "op_20260728_rowtrashactivity",
+      id: "op_20260728_columnrenameactivity",
       schemaVersion: 1,
       createdAt: "2026-07-28T12:00:00.000Z",
       actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
-      kind: "trash_collection_row",
+      kind: "rename_collection_column",
       targetRefs: [
         { kind: "dataset", id: "dataset_20260728_activity123456" },
         { kind: "table", id: "table_activity123456" },
-        { kind: "row", id: "row_activity123456" }
+        { kind: "column", id: "column_activity123456" }
       ],
       sourceRefs: [{ kind: "dataset_revision", id: "dataset_rev_20260728_before123456" }],
-      summary: "Moved one Collection row to recoverable revision history.",
+      summary: "Renamed one Collection field.",
       reversible: "yes",
       rollbackHint: "Restore the exact prior Collection revision.",
       warnings: []
@@ -47,16 +47,16 @@ describe("Knowledge Activity and Undo", () => {
     const undo = vi.fn(async () => ({
       status: "undone" as const,
       operationId: operation.id,
-      undoOperationId: "op_20260728_rowtrashundo",
+      undoOperationId: "op_20260728_columnrenameundo",
       revisionId: "dataset_rev_20260728_restored123456"
     }));
     const collections: KnowledgeActivityCollectionPort = {
       activitySummary: (candidate) => candidate.id === operation.id &&
         candidate.targetRefs.some((ref) => ref.kind === "dataset" && ref.id === "dataset_20260728_activity123456") &&
         candidate.targetRefs.some((ref) => ref.kind === "table" && ref.id === "table_activity123456") &&
-        candidate.targetRefs.some((ref) => ref.kind === "row" && ref.id === "row_activity123456") ? {
+        candidate.targetRefs.some((ref) => ref.kind === "column" && ref.id === "column_activity123456") ? {
         operationId: candidate.id,
-        kind: "trash_collection_row",
+        kind: "rename_collection_column",
         createdAt: candidate.createdAt,
         targetLabel: "Reading list",
         target: {
@@ -77,7 +77,7 @@ describe("Knowledge Activity and Undo", () => {
     const listed = service.list({ limit: 20 });
     expect(listed.activities).toContainEqual(expect.objectContaining({
       operationId: operation.id,
-      kind: "trash_collection_row",
+      kind: "rename_collection_column",
       targetLabel: "Reading list",
       target: {
         kind: "collection",
@@ -87,19 +87,19 @@ describe("Knowledge Activity and Undo", () => {
       },
       canUndo: true
     }));
-    expect(JSON.stringify(listed)).not.toMatch(/row_activity|before123456|rollbackHint|sourceRefs|targetRefs/u);
+    expect(JSON.stringify(listed)).not.toMatch(/column_activity|before123456|rollbackHint|sourceRefs|targetRefs/u);
     await expect(service.undo({
       operationId: operation.id,
       expectedRevisionId: "dataset_rev_20260728_after123456"
     })).resolves.toEqual({
       status: "undone",
       operationId: operation.id,
-      undoOperationId: "op_20260728_rowtrashundo",
+      undoOperationId: "op_20260728_columnrenameundo",
       revisionId: "dataset_rev_20260728_restored123456"
     });
     expect(undo).toHaveBeenCalledWith(operation, "dataset_rev_20260728_after123456");
 
-    const tampered = { ...operation, targetRefs: [{ kind: "row", id: "row_attacker123456" }] } as OperationRecord;
+    const tampered = { ...operation, targetRefs: [{ kind: "column", id: "column_attacker123456" }] } as OperationRecord;
     expect(collections.activitySummary(tampered)).toBeUndefined();
     expect(undo).toHaveBeenCalledTimes(1);
   });

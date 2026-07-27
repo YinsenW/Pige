@@ -43,14 +43,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of reversible Managed Collection row trash: Main eligibility, immutable CAS revision, Activity/Undo and bounded UI adoption.",
+    "scope": "Independent Planning review of stable-ID Managed Collection column rename: Main eligibility, immutable CAS revision, Activity/Undo and bounded UI adoption.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 34,
-    "reviewedSha256": "601654aeb00559e70417642c711a3783a32597be4f075a5f1d1a16cb6d5be4f9"
+    "reviewedSha256": "7650af894fe0398a4c163537b7755447fb23c674a9881e331185c70f4ab1fd94"
   },
   "reviewers": [{
-    "reviewerId": "managed-collection-row-trash-review",
-    "task": "Managed Collection reversible row trash",
+    "reviewerId": "managed-collection-column-rename-review",
+    "task": "Managed Collection stable-ID column rename",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -58,33 +58,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed Dataset/API/recovery/UI/Decision/trace owners; Development and UI independently own row publication, Activity/Undo, presentation and evidence."
+    "independence": "Planning reviewed Dataset/API/recovery/UI/Decision/trace owners; Development and UI independently own rename publication, Activity/Undo, presentation and evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"managed-collection-row-trash-review","blockerCount":0,"summary":"One Dataset keeps immutable revision history; Main removes the row only from the current revision."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"managed-collection-row-trash-review","blockerCount":0,"summary":"Data/API/recovery/UI agree on Main eligibility, body-free request, snapshot adoption and forward Undo."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"managed-collection-row-trash-review","blockerCount":0,"summary":"PIGE-DATA-003 and E7.06 stay planned while broader Collection lifecycle remains open."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"managed-collection-row-trash-review","blockerCount":0,"summary":"Exact trash, replay, stale/ineligible, Activity and UI focus tests bind the vertical slice."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"managed-collection-row-trash-review","blockerCount":0,"summary":"Existing Collection owners and one decision absorb the slice without a new document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"managed-collection-column-rename-review","blockerCount":0,"summary":"One Dataset keeps immutable revision history and stable column identity while Main changes its label."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"managed-collection-column-rename-review","blockerCount":0,"summary":"Data/API/recovery/UI agree on Main eligibility, body-free request, snapshot adoption and forward Undo."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"managed-collection-column-rename-review","blockerCount":0,"summary":"PIGE-DATA-003 and E7.06 stay planned while broader Collection lifecycle remains open."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"managed-collection-column-rename-review","blockerCount":0,"summary":"Exact rename, replay, duplicate/stale/ineligible, Activity and UI tests bind the vertical slice."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"managed-collection-column-rename-review","blockerCount":0,"summary":"Existing Collection owners and one decision absorb the slice without a new document."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict row identity and authoritative snapshots expose no cell values or storage internals."},
-    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Dataset/API/recovery/UI and the existing Collection decision agree on reversible row trash."},
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict column identity and authoritative snapshots expose no cell values or storage internals."},
+    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Dataset/API/recovery/UI and the existing Collection decision agree on stable-ID rename."},
     {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Planned acceptance stays open and final service ownership/LOC are inventoried."}
   ],
   "coordination": {
-    "taskId": "managed-collection-row-trash-20260728",
-    "taskTitle": "Managed Collection reversible row trash",
+    "taskId": "managed-collection-column-rename-20260728",
+    "taskTitle": "Managed Collection stable-ID column rename",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing open/edit/add stays; trash removes one eligible row from the current revision under the same Activity boundaries.",
-    "acknowledgement": "Planning binds reversible row trash only; field deletion, rename/type change, formulas, views, relations and completion stay open."
+    "compatibility": "Existing open/edit/add/trash stays; rename changes one eligible label without changing column identity.",
+    "acknowledgement": "Planning binds column rename only; field deletion/type change, formulas, views, relations and completion stay open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Only an exact eligible current row can be trashed; prior immutable revision retains it.",
-    "Vault, Dataset, table, revision, row, replay or Operation drift fails closed.",
-    "Permanent delete, field deletion, formulas, views, relations and broad CRUD stay out of scope."
+    "Only an exact eligible current column can be renamed; prior immutable revision retains its label.",
+    "Vault, Dataset, table, revision, column, replay or Operation drift fails closed.",
+    "Field deletion/type change, formulas, views, relations and broad CRUD stay out of scope."
   ]
 }

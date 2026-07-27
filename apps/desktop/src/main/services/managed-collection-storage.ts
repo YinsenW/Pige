@@ -12,6 +12,8 @@ import {
   type CollectionCell,
   type CollectionAddNullableColumnRequest,
   type CollectionAddNullableColumnResult,
+  type CollectionRenameColumnRequest,
+  type CollectionRenameColumnResult,
   type CollectionScalarValue,
   type DatasetColumn,
   type DatasetLogicalType,
@@ -110,7 +112,8 @@ export function readCollectionSnapshot(binding: BundleBinding, tableId: string) 
       columns: columns.map((column) => ({
         columnId: column.id,
         label: column.name,
-        logicalType: column.logicalType
+        logicalType: column.logicalType,
+        canRename: !columnUsesFormula(column)
       })),
       rows: projectedRows,
       totalRowCount: table.rowCount,
@@ -227,7 +230,7 @@ function parseCellRecord(
   };
 }
 
-function columnUsesFormula(column: DatasetColumn): boolean {
+export function columnUsesFormula(column: DatasetColumn): boolean {
   return [column.sourceType, ...(column.sourceTypes ?? [])]
     .some((sourceType) => sourceType.toLowerCase().includes("formula"));
 }
@@ -293,233 +296,57 @@ export function adoptNullableColumnMutation(input: {
     : { status: "not_found" };
 }
 
-export function commitNullableColumnAdd(input: {
+export function adoptColumnRenameMutation(input: {
   readonly binding: BundleBinding;
+  readonly request: CollectionRenameColumnRequest;
   readonly identity: CollectionColumnMutationIdentity;
-  readonly tableId: string;
-  readonly columnId: string;
-  readonly label: string;
-  readonly logicalType: Exclude<DatasetLogicalType, "binary" | "unknown">;
-  readonly expectedRevisionId: string;
-}): { readonly binding: BundleBinding; readonly revision: DatasetRevision } {
-  const current = requireCurrentRevision(input.binding, input.expectedRevisionId);
-  const table = current.schema.tables.find((candidate) => candidate.id === input.tableId);
-  if (!table) throw new PigeDomainError("collection.table_not_found", "The Collection table is unavailable.");
-  if (table.columns.length >= MAX_OPEN_COLUMNS) {
-    throw new PigeDomainError("collection.column_limit", "The Collection column limit was reached.");
+  readonly createOperation: (binding: BundleBinding, revision: DatasetRevision) => OperationRecord;
+}): Partial<CollectionRenameColumnResult> | undefined {
+  const revisionPath = resolveBundleRelativePath(input.binding.bundlePath, `revisions/${input.identity.revisionId}.json`);
+  const operationPath = operationPathFor(input.binding.vaultPath, input.identity.operationId);
+  if (!fs.existsSync(revisionPath) && !fs.existsSync(operationPath)) return undefined;
+  if (!fs.existsSync(revisionPath)) throw requestConflict();
+  const revision = DatasetRevisionSchema.parse(readJsonBounded(revisionPath, MAX_COLLECTION_JSON_BYTES));
+  if (revision.id !== input.identity.revisionId || revision.operationId !== input.identity.operationId ||
+      revision.parentRevisionId !== input.request.expectedRevisionId || revision.change?.kind !== "collection_column_rename" ||
+      revision.change.tableId !== input.request.tableId || revision.change.columnId !== input.request.columnId) {
+    throw requestConflict();
   }
-  const normalized = normalizeColumnLabel(input.label);
-  if (table.columns.some((column) => normalizeColumnLabel(column.name) === normalized)) {
-    throw new PigeDomainError("collection.duplicate_label", "The Collection already has this column label.");
-  }
-  const column: DatasetColumn = {
-    id: input.columnId,
-    name: input.label,
-    ordinal: table.columns.length,
-    sourceType: "pige_user_nullable",
-    sourceTypes: ["pige_user_nullable"],
-    logicalType: input.logicalType,
-    nullable: true,
-    stats: { missing: 0, empty: 0, null: table.rowCount, value: 0 }
-  };
-  return publishColumnMutation({
-    current,
-    identity: input.identity,
-    tableId: input.tableId,
-    columnId: input.columnId,
-    expectedRevisionId: input.expectedRevisionId,
-    change: { kind: "collection_column_add" },
-    createPayload: (payloadPath) => appendNullableColumn(payloadPath, current, table, column, input.identity.revisionId),
-    createSchema: () => DatasetSchemaRecordSchema.parse({
-      ...current.schema,
-      revisionId: input.identity.revisionId,
-      createdAt: new Date().toISOString(),
-      tables: current.schema.tables.map((candidate) => candidate.id === table.id
-        ? { ...candidate, columnCount: candidate.columnCount + 1, columns: [...candidate.columns, column] }
-        : candidate)
-    }),
-    stats: {
-      ...current.revision.stats,
-      columnCount: current.revision.stats.columnCount + 1,
-      cellCount: current.revision.stats.cellCount + table.rowCount
+  const schema = DatasetSchemaRecordSchema.parse(readJsonRef(input.binding.bundlePath, revision.schema));
+  const column = schema.tables.find((table) => table.id === input.request.tableId)
+    ?.columns.find((candidate) => candidate.id === input.request.columnId);
+  if (!column || column.name !== input.request.label) throw requestConflict();
+  let committed = input.binding;
+  if (committed.manifest.activeRevision !== revision.id) {
+    if (committed.manifest.activeRevision !== input.request.expectedRevisionId) {
+      const snapshot = readCollectionSnapshot(committed, input.request.tableId);
+      return snapshot ? { status: "stale", columnId: input.request.columnId, snapshot } : { status: "not_found" };
     }
-  });
-}
-
-export function commitNullableColumnUndo(input: {
-  readonly binding: BundleBinding;
-  readonly identity: CollectionColumnMutationIdentity;
-  readonly tableId: string;
-  readonly columnId: string;
-  readonly expectedRevisionId: string;
-  readonly beforeRevisionId: string;
-  readonly undoOfOperationId: string;
-}): { readonly binding: BundleBinding; readonly revision: DatasetRevision } {
-  const current = requireCurrentRevision(input.binding, input.expectedRevisionId);
-  const before = readRevisionById(current, input.beforeRevisionId);
-  const schema = DatasetSchemaRecordSchema.parse(readJsonRef(current.bundlePath, before.schema));
-  return publishColumnMutation({
-    current,
-    identity: input.identity,
-    tableId: input.tableId,
-    columnId: input.columnId,
-    expectedRevisionId: input.expectedRevisionId,
-    sourcePayload: resolveBundleRelativePath(current.bundlePath, before.payload.path),
-    change: { kind: "collection_column_add_undo", undoOfOperationId: input.undoOfOperationId },
-    createPayload: (payloadPath) => rebindPayloadRevision(
-      payloadPath,
-      current.manifest.datasetId,
-      before.id,
-      input.identity.revisionId
-    ),
-    createSchema: () => DatasetSchemaRecordSchema.parse({
-      ...schema,
-      revisionId: input.identity.revisionId,
-      createdAt: new Date().toISOString()
-    }),
-    stats: before.stats
-  });
-}
-
-function publishColumnMutation(input: {
-  readonly current: BundleBinding;
-  readonly identity: CollectionColumnMutationIdentity;
-  readonly tableId: string;
-  readonly columnId: string;
-  readonly expectedRevisionId: string;
-  readonly sourcePayload?: string;
-  readonly change:
-    | { readonly kind: "collection_column_add" }
-    | { readonly kind: "collection_column_add_undo"; readonly undoOfOperationId: string };
-  readonly createPayload: (payloadPath: string) => void;
-  readonly createSchema: () => DatasetSchemaRecord;
-  readonly stats: DatasetRevision["stats"];
-}): { readonly binding: BundleBinding; readonly revision: DatasetRevision } {
-  const stagedRoot = path.join(input.current.bundlePath, ".staging", `${input.identity.revisionId}.${randomUUID()}`);
-  const payloadPath = `data/revisions/${input.identity.revisionId}.sqlite`;
-  const schemaPath = `schemas/${input.identity.revisionId}.json`;
-  const revisionPath = `revisions/${input.identity.revisionId}.json`;
-  const stagedPayload = path.join(stagedRoot, "payload.sqlite");
-  fs.mkdirSync(stagedRoot, { recursive: true, mode: 0o700 });
-  try {
-    fs.copyFileSync(input.sourcePayload ?? input.current.payloadPath, stagedPayload);
-    input.createPayload(stagedPayload);
-    const schema = input.createSchema();
-    publishImmutableFile(stagedPayload, resolveBundleRelativePath(input.current.bundlePath, payloadPath));
-    writeJsonImmutable(resolveBundleRelativePath(input.current.bundlePath, schemaPath), schema);
-    const now = new Date().toISOString();
-    const revision = DatasetRevisionSchema.parse({
-      ...input.current.revision,
-      id: input.identity.revisionId,
-      parentRevisionId: input.current.revision.id,
-      schema: fileRef(input.current.bundlePath, schemaPath),
-      payload: { ...fileRef(input.current.bundlePath, payloadPath), format: "sqlite" },
-      stats: input.stats,
-      operationId: input.identity.operationId,
-      change: { ...input.change, tableId: input.tableId, columnId: input.columnId },
-      createdAt: now
-    });
-    writeJsonImmutable(resolveBundleRelativePath(input.current.bundlePath, revisionPath), revision);
-    replaceManifestCas(input.current, DatasetManifestSchema.parse({
-      ...input.current.manifest,
-      initialRevision: input.current.manifest.initialRevision ?? input.current.manifest.activeRevision,
+    replaceManifestCas(committed, DatasetManifestSchema.parse({
+      ...committed.manifest,
+      initialRevision: committed.manifest.initialRevision ?? committed.manifest.activeRevision,
       activeRevision: revision.id,
-      revision: fileRef(input.current.bundlePath, revisionPath),
+      revision: fileRef(committed.bundlePath, `revisions/${revision.id}.json`),
       schema: revision.schema,
       payload: revision.payload,
-      updatedAt: now
+      updatedAt: revision.createdAt
     }));
-    const binding = readBundle(input.current.vaultPath, input.current.manifest.datasetId);
-    if (!binding || binding.manifest.activeRevision !== revision.id) {
-      throw new PigeDomainError("collection.commit_uncertain", "The Collection commit could not be adopted.");
+    const adopted = readBundle(committed.vaultPath, committed.manifest.datasetId);
+    if (!adopted || adopted.manifest.activeRevision !== revision.id) {
+      throw new PigeDomainError("collection.commit_uncertain", "The Collection replay could not be adopted.");
     }
-    return { binding, revision };
-  } finally {
-    fs.rmSync(stagedRoot, { recursive: true, force: true });
+    committed = adopted;
   }
-}
-
-function requireCurrentRevision(binding: BundleBinding, expectedRevisionId: string): BundleBinding {
-  const current = readBundle(binding.vaultPath, binding.manifest.datasetId);
-  if (!current || current.manifest.activeRevision !== expectedRevisionId) {
-    throw new PigeDomainError("collection.revision_changed", "The Collection revision changed before commit.");
-  }
-  return current;
-}
-
-function appendNullableColumn(
-  payloadPath: string,
-  binding: BundleBinding,
-  table: DatasetSchemaRecord["tables"][number],
-  column: DatasetColumn,
-  revisionId: string
-): void {
-  const database = new DatabaseSync(payloadPath);
-  try {
-    database.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;");
-    validatePayloadMeta(database, binding.manifest.datasetId, binding.revision.id);
-    database.exec("BEGIN IMMEDIATE");
-    try {
-      database.prepare("INSERT INTO pige_dataset_columns VALUES (?, ?, ?, ?, ?, ?, ?)").run(
-        column.id,
-        table.id,
-        column.ordinal,
-        column.name,
-        projectedType(column.logicalType),
-        JSON.stringify(column.sourceTypes),
-        JSON.stringify(column.stats)
-      );
-      const insert = database.prepare([
-        "INSERT INTO pige_dataset_cells",
-        "(row_id, column_id, state, source_type, lexical_raw, lexical_text, quoted, projection_kind, projection_json, formula_json, source_style_json)",
-        "SELECT row_id, ?, 'null', 'pige_user_nullable', NULL, NULL, NULL, 'null', NULL, NULL, NULL",
-        "FROM pige_dataset_rows WHERE table_id = ?"
-      ].join(" ")).run(column.id, table.id);
-      if (insert.changes !== table.rowCount) throw payloadInvalid();
-      if (database.prepare(
-        "UPDATE pige_dataset_tables SET column_count = column_count + 1 WHERE table_id = ? AND column_count = ?"
-      ).run(table.id, table.columnCount).changes !== 1) throw payloadInvalid();
-      if (database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'")
-        .run(revisionId).changes !== 1) throw payloadInvalid();
-      database.exec("COMMIT");
-    } catch (caught) {
-      database.exec("ROLLBACK");
-      throw caught;
-    }
-    assertPayloadIntegrity(database);
-  } finally {
-    database.close();
-  }
-  syncFile(payloadPath);
-}
-
-function rebindPayloadRevision(payloadPath: string, datasetId: string, beforeRevisionId: string, revisionId: string): void {
-  const database = new DatabaseSync(payloadPath);
-  try {
-    database.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;");
-    validatePayloadMeta(database, datasetId, beforeRevisionId);
-    if (database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'")
-      .run(revisionId).changes !== 1) throw payloadInvalid();
-    assertPayloadIntegrity(database);
-  } finally {
-    database.close();
-  }
-  syncFile(payloadPath);
-}
-
-function assertPayloadIntegrity(database: DatabaseSync): void {
-  const result = database.prepare("PRAGMA integrity_check").get() as { integrity_check?: unknown } | undefined;
-  if (result?.integrity_check !== "ok") throw payloadInvalid();
-}
-
-function normalizeColumnLabel(label: string): string {
-  return label.normalize("NFKC").toLocaleLowerCase("en-US");
-}
-
-function projectedType(logicalType: DatasetLogicalType): string {
-  if (logicalType === "string") return "text";
-  if (logicalType === "number") return "real";
-  return logicalType;
+  const expectedOperation = input.createOperation(committed, revision);
+  const operation = fs.existsSync(operationPath)
+    ? OperationRecordSchema.parse(readJsonBounded(operationPath, MAX_COLLECTION_JSON_BYTES))
+    : expectedOperation;
+  if (hashCanonical(operation) !== hashCanonical(expectedOperation)) throw requestConflict();
+  if (!fs.existsSync(operationPath)) writeJsonExclusive(operationPath, operation);
+  const snapshot = readCollectionSnapshot(committed, input.request.tableId);
+  return snapshot
+    ? { status: "committed", columnId: input.request.columnId, operationId: operation.id, snapshot }
+    : { status: "not_found" };
 }
 
 export function readBundle(vaultPath: string, datasetId: string): BundleBinding | undefined {

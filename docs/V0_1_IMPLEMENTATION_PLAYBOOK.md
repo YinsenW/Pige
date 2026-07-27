@@ -616,7 +616,7 @@ Build:
 - [B7.09 -> E7.04] Conversation-retention compaction for successful job detail.
 - [B7.10 -> E7.06] Managed Collections with typed fields, views, relations/formulas, and
   reversible Agent row/schema/view Activity/Undo. Foundation: same Dataset, CAS cell edit,
-  eligible row add/trash or nullable-field add with revision/Operation/Undo; rest stays open.
+  eligible row add/trash or nullable-field add/rename with revision/Operation/Undo; rest stays open.
 
 Deferred from this phase:
 

@@ -130,6 +130,8 @@ import {
   type CollectionAppendDefaultRowResult,
   type CollectionCellEditRequest,
   type CollectionCellEditResult,
+  type CollectionRenameColumnRequest,
+  type CollectionRenameColumnResult,
   type CollectionOpenRequest,
   type CollectionOpenResult,
   type CollectionSnapshot,
@@ -1022,6 +1024,14 @@ export function App(): React.JSX.Element {
     return result;
   };
 
+  const renameCollectionColumn = async (
+    request: CollectionRenameColumnRequest
+  ): Promise<CollectionRenameColumnResult> => {
+    const result = await window.pige.collections.renameColumn(request);
+    if (collectionRenameIdentityMatches(request, result) && result.status === "committed") void refreshVaultState();
+    return result;
+  };
+
   const trashCollectionRow = async (
     request: CollectionTrashRowRequest
   ): Promise<CollectionTrashRowResult> => {
@@ -1804,6 +1814,7 @@ export function App(): React.JSX.Element {
               }
             }}
             onAddNullableColumn={addCollectionNullableColumn}
+            onRenameColumn={renameCollectionColumn}
             onAppendDefaultRow={appendCollectionDefaultRow}
             onTrashRow={trashCollectionRow}
             onAdoptSnapshot={adoptCollectionSnapshot}
@@ -5712,6 +5723,17 @@ function collectionColumnIdentityMatches(
     result.activeVaultId === request.activeVaultId &&
     result.datasetId === request.datasetId &&
     result.tableId === request.tableId;
+}
+
+function collectionRenameIdentityMatches(
+  request: CollectionRenameColumnRequest,
+  result: CollectionRenameColumnResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.datasetId === request.datasetId &&
+    result.tableId === request.tableId &&
+    result.columnId === request.columnId;
 }
 
 function collectionTrashIdentityMatches(

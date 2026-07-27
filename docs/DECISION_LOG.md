@@ -3367,7 +3367,7 @@ Date: 2026-07-27
 
 Decision:
 
-A Collection keeps its imported ID. Cell edit, eligible row add/trash or nullable-column add
+A Collection keeps its imported ID. Cell edit, eligible row add/trash or nullable-column add/rename
 writes immutable CAS revision/Operation; manifest switches last; Undo advances.
 
 Rationale:
