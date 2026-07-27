@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type {
   AgentAttachmentCandidate,
   AgentStagedItem,
@@ -343,6 +344,7 @@ export function createAttachmentSetToolSession(
     throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The attachment tool set is invalid.");
   }
   let selected: number | undefined;
+  const activeCitations = new Map<number, ReturnType<AgentSourceToolSession["citationCandidates"]>[number]>();
   const toolsByName = new Map<string, PigeAgentToolDefinition[]>();
   for (const entry of entries) {
     for (const tool of entry.session.tools) {
@@ -438,7 +440,27 @@ export function createAttachmentSetToolSession(
             "Select one submitted attachment before using its source tools."
           );
         }
-        return tools[selected]!.execute(args, signal, context, onUpdate);
+        const selectedIndex = selected;
+        const result = await tools[selectedIndex]!.execute(args, signal, context, onUpdate);
+        if (name !== "pige_inspect_source") return result;
+        const localCitation = entries[selectedIndex]!.session.citationCandidates()
+          .find((citation) => citation.refId === "citation_11");
+        if (!localCitation) {
+          return result;
+        }
+        if (selectedIndex >= 6) {
+          return withoutCurrentSourceCitation(result);
+        }
+        const projected = projectAttachmentCitation(localCitation, selectedIndex);
+        const existing = activeCitations.get(selectedIndex);
+        if (existing && !isDeepStrictEqual(existing, projected)) {
+          throw new PigeDomainError(
+            "agent_runtime.turn_conflict",
+            "The inspected attachment citation identity changed during the Agent turn."
+          );
+        }
+        activeCitations.set(selectedIndex, projected);
+        return projectInspectCitationResult(result, projected);
       }
     } satisfies PigeAgentToolDefinition];
   });
@@ -450,10 +472,86 @@ export function createAttachmentSetToolSession(
     beforeModelTurn: async () => {
       for (const entry of entries) await entry.session.beforeModelTurn();
     },
-    citationCandidates: () => selected === undefined
-      ? []
-      : entries[selected]!.session.citationCandidates(),
+    citationCandidates: () => Object.freeze(Array.from(activeCitations.entries())
+      .sort(([left], [right]) => left - right)
+      .flatMap(([index, expected]) => {
+        const localCitation = entries[index]!.session.citationCandidates()
+          .find((citation) => citation.refId === "citation_11");
+        if (!localCitation) return [];
+        const projected = projectAttachmentCitation(localCitation, index);
+        if (!isDeepStrictEqual(expected, projected)) {
+          throw new PigeDomainError(
+            "agent_runtime.turn_conflict",
+            "The inspected attachment citation identity changed during the Agent turn."
+          );
+        }
+        return [projected];
+      })),
     result: () => entries.map((entry) => entry.session.result()).findLast((result) => result !== undefined)
+  };
+}
+
+function projectAttachmentCitation(
+  citation: ReturnType<AgentSourceToolSession["citationCandidates"]>[number],
+  attachmentIndex: number
+): ReturnType<AgentSourceToolSession["citationCandidates"]>[number] {
+  const citationNumber = 11 + attachmentIndex;
+  return Object.freeze({
+    ...citation,
+    refId: `citation_${citationNumber}`,
+    label: `[${citationNumber}]`
+  });
+}
+
+function projectInspectCitationResult(
+  result: Awaited<ReturnType<PigeAgentToolDefinition["execute"]>>,
+  citation: ReturnType<AgentSourceToolSession["citationCandidates"]>[number]
+): Awaited<ReturnType<PigeAgentToolDefinition["execute"]>> {
+  let citationRefFound = citation.refId === "citation_11";
+  const content = result.content.map((item) => {
+    if (item.type !== "text") return item;
+    if (item.text.includes('"citationRef":"citation_11"')) citationRefFound = true;
+    return {
+      ...item,
+      text: item.text
+        .replace('"citationRef":"citation_11"', `"citationRef":"${citation.refId}"`)
+        .replace('"label":"[11]"', `"label":"${citation.label}"`)
+    };
+  });
+  if (!citationRefFound) {
+    throw new PigeDomainError(
+      "agent_runtime.turn_conflict",
+      "The inspected attachment did not expose its expected opaque citation reference."
+    );
+  }
+  return {
+    ...result,
+    content
+  };
+}
+
+function withoutCurrentSourceCitation(
+  result: Awaited<ReturnType<PigeAgentToolDefinition["execute"]>>
+): Awaited<ReturnType<PigeAgentToolDefinition["execute"]>> {
+  let citationProjectionFound = false;
+  const content = result.content.map((item) => {
+    if (item.type !== "text") return item;
+    const lines = item.text.split("\n").map((line) => {
+      if (!line.startsWith("- current_source_citation:")) return line;
+      citationProjectionFound = true;
+      return "- current_source_citation: null";
+    });
+    return { ...item, text: lines.join("\n") };
+  });
+  if (!citationProjectionFound) {
+    throw new PigeDomainError(
+      "agent_runtime.turn_conflict",
+      "The uncited attachment did not expose its expected citation projection."
+    );
+  }
+  return {
+    ...result,
+    content
   };
 }
 

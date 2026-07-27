@@ -811,7 +811,7 @@ export class JobsService {
     sourceTools: AgentSourceToolExecutionPort
   ): Promise<AgentSourceToolSession> {
     const sourceIds = collectAgentTurnSourceIds(job);
-    const sourceFiles = sourceIds.map((sourceId) => readSourceRecordFile(vaultPath, sourceId));
+    let sourceFiles = sourceIds.map((sourceId) => readSourceRecordFile(vaultPath, sourceId));
     if (
       !this.#agentIngest ||
       sourceFiles.length < 1 ||
@@ -821,6 +821,32 @@ export class JobsService {
       throw new PigeDomainError(
         "agent_runtime.turn_binding_invalid",
         "The source-bearing Agent turn is missing its exact preserved source binding."
+      );
+    }
+    for (const sourceFile of sourceFiles) {
+      this.#sourcePages.createForSource(
+        vaultPath,
+        sourceFile!.sourceRecord,
+        sourceFile!.path,
+        job.id,
+        sourceFile!.sourceRecord,
+        {
+          onPublicationStart: () => control.markDurableCheckpoint(
+            "agent_turn_source_page_publication_started"
+          )
+        }
+      );
+    }
+    sourceFiles = sourceIds.map((sourceId) => readSourceRecordFile(vaultPath, sourceId));
+    if (sourceFiles.some((sourceFile) =>
+      !sourceFile ||
+      sourceFile.sourceRecord.metadata.agentTurnJobId !== job.id ||
+      !sourceFile.sourceRecord.knowledgePageId ||
+      !sourceFile.sourceRecord.knowledgePagePath
+    )) {
+      throw new PigeDomainError(
+        "agent_runtime.turn_binding_invalid",
+        "The source-bearing Agent turn is missing its exact Source Page binding."
       );
     }
     const prepare = async (sourceFile: NonNullable<(typeof sourceFiles)[number]>): Promise<AgentSourceToolSession> =>
@@ -849,6 +875,16 @@ export class JobsService {
             "The selected source evidence changed while the Agent turn was running."
           );
         }
+      },
+      readCurrentSource: () => {
+        const currentSource = readSourceRecord(vaultPath, sourceFile.sourceRecord.id);
+        if (!currentSource) {
+          throw new PigeDomainError(
+            "agent_ingest.source_changed",
+            "The selected source evidence is no longer available."
+          );
+        }
+        return currentSource;
       },
       parseCurrentSource: sourceTools.parse,
       materializeCurrentDataset: async (request) => {

@@ -169,6 +169,7 @@ export type AgentIngestPublicationBinding =
 export interface AgentIngestHooks {
   readonly onPolicyResolved?: (snapshot: AgentIngestPolicySnapshot) => void;
   readonly assertSourceCurrent?: (expected: SourceRecord) => void;
+  readonly readCurrentSource?: () => SourceRecord;
   readonly throwIfCancellationRequested?: () => void;
   readonly onPublicationStart?: (
     checkpointId: string,
@@ -947,6 +948,14 @@ export class AgentIngestService {
       retrievalSelection = undefined;
       approvedRetrievalPrivacyHash = undefined;
     };
+    const adoptSourceMutation = async (sourceRecord: SourceRecord): Promise<void> => {
+      currentSourceRecord = SourceRecordSchema.parse(sourceRecord);
+      hooks.assertSourceCurrent?.(currentSourceRecord);
+      await refreshEvidence();
+      inspectedEvidenceBinding = undefined;
+      currentSourceCitationSelection = undefined;
+      releaseConsumedRetrievalBinding();
+    };
     const assertNoDurableProposal = (): void => {
       if (this.#proposals?.findForJob(vaultPath, job.id)) {
         throw new PigeDomainError(
@@ -1432,19 +1441,31 @@ export class AgentIngestService {
                 "The Agent Dataset tool is not connected to the durable Job host."
               );
             }
-            const execution = await hooks.materializeCurrentDataset({
-              toolCallId: context.toolCallId,
-              toolId: INSPECT_DATASET_TOOL_NAME,
-              toolVersion: INSPECT_DATASET_TOOL_VERSION,
-              canonicalInputHash: createAgentPayloadIntegrityHash("{}"),
-              catalogHash: toolCatalogHash,
-              compatibleCatalogHashes: compatibleToolCatalogHashes,
-              policyHash: policy.policyHash,
-              sourceRecord: currentSourceRecord,
-              signal: context.signal
-            });
-            currentSourceRecord = SourceRecordSchema.parse(execution.sourceRecord);
-            hooks.assertSourceCurrent?.(currentSourceRecord);
+            let execution: AgentIngestDatasetToolExecution;
+            try {
+              execution = await hooks.materializeCurrentDataset({
+                toolCallId: context.toolCallId,
+                toolId: INSPECT_DATASET_TOOL_NAME,
+                toolVersion: INSPECT_DATASET_TOOL_VERSION,
+                canonicalInputHash: createAgentPayloadIntegrityHash("{}"),
+                catalogHash: toolCatalogHash,
+                compatibleCatalogHashes: compatibleToolCatalogHashes,
+                policyHash: policy.policyHash,
+                sourceRecord: currentSourceRecord,
+                signal: context.signal
+              });
+            } catch (caught) {
+              if (hooks.hasDurableDatasetEffect?.() && hooks.readCurrentSource) {
+                await adoptSourceMutation(hooks.readCurrentSource());
+              }
+              throw caught;
+            }
+            if (execution.status === "materialized" || execution.status === "reused") {
+              await adoptSourceMutation(execution.sourceRecord);
+            } else {
+              currentSourceRecord = SourceRecordSchema.parse(execution.sourceRecord);
+              hooks.assertSourceCurrent?.(currentSourceRecord);
+            }
             if (
               execution.status === "waiting_dependency" ||
               !execution.datasetId ||

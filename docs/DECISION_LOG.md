@@ -3139,8 +3139,9 @@ rewrite, or block the payload. Stored Provider credentials remain isolated in th
 store/authentication layer and are never injected into content.
 
 Host owns turn/transport, typed tools, high-risk authority, durable recovery, mutation
-commit, and safe projection. Source sessions and inspected URLs register only current
-refs; Pi selects explicitly, and bad refs disappear without rejecting prose.
+commit, and safe projection. Accepted attachments adopt one current Source Page each; the
+wrapper exposes inspected/current ordinal refs and rewrites the delegated ref before Pi
+sees it. Pi selects explicitly; bad refs disappear without renumbering or rejecting prose.
 
 Rationale:
 

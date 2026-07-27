@@ -265,6 +265,9 @@ describe("HomeAgentAttachmentService", () => {
 
   it("routes shared source tools through the exact selected opaque attachment", async () => {
     const calls: string[] = [];
+    const inspected = new Map<string, boolean>();
+    const current = new Map<string, boolean>();
+    const titles = new Map<string, string>();
     const session = (name: string) => ({
       tools: [{
         name: "pige_inspect_source",
@@ -298,19 +301,31 @@ describe("HomeAgentAttachmentService", () => {
         ownerService: "test",
         execute: async () => {
           calls.push(name);
-          return createPigeTextToolResult(name, {});
+          inspected.set(name, true);
+          return createPigeTextToolResult([
+            `inspected ${name}`,
+            `- current_source_citation: ${JSON.stringify({
+              citationRef: "citation_11",
+              label: "[11]",
+              title: titles.get(name) ?? `${name} citation`,
+              pageType: "source",
+              locator: "source_page"
+            })}`
+          ].join("\n"), {});
         }
       }],
       bindCatalog: vi.fn(),
       beforeModelTurn: vi.fn(async () => undefined),
-      citationCandidates: () => [{
-        refId: "citation_11",
-        label: "[11]",
-        pageId: `page_20260727_${name}citation`,
-        title: `${name} citation`,
-        pageType: "note" as const,
-        locator: "snippet:1"
-      }],
+      citationCandidates: () => inspected.get(name) && current.get(name) !== false
+        ? [{
+            refId: "citation_11",
+            label: "[11]",
+            pageId: `page_20260727_${name}citation`,
+            title: titles.get(name) ?? `${name} citation`,
+            pageType: "source" as const,
+            locator: "source_page"
+          }]
+        : [],
       result: () => undefined
     });
     const toolSession = createAttachmentSetToolSession([
@@ -327,16 +342,108 @@ describe("HomeAgentAttachmentService", () => {
       code: "agent_runtime.inspect_required"
     });
     await select.execute({ attachmentRef: "attachment_1" }, context.signal, context);
+    expect(toolSession.citationCandidates()).toEqual([]);
+    const firstInspect = await inspect.execute({}, context.signal, context);
+    expect(firstInspect.content).toEqual([expect.objectContaining({
+      type: "text",
+      text: expect.stringContaining('"citationRef":"citation_11"')
+    })]);
+    await select.execute({ attachmentRef: "attachment_2" }, context.signal, context);
     expect(toolSession.citationCandidates()).toEqual([
       expect.objectContaining({ refId: "citation_11", title: "one citation" })
     ]);
-    await inspect.execute({}, context.signal, context);
-    await select.execute({ attachmentRef: "attachment_2" }, context.signal, context);
+    const secondInspect = await inspect.execute({}, context.signal, context);
+    expect(secondInspect.content).toEqual([expect.objectContaining({
+      type: "text",
+      text: expect.stringContaining('"citationRef":"citation_12"')
+    })]);
     expect(toolSession.citationCandidates()).toEqual([
-      expect.objectContaining({ refId: "citation_11", title: "two citation" })
+      expect.objectContaining({ refId: "citation_11", pageId: "page_20260727_onecitation" }),
+      expect.objectContaining({ refId: "citation_12", pageId: "page_20260727_twocitation" })
     ]);
-    await inspect.execute({}, context.signal, context);
 
-    expect(calls).toEqual(["one", "two"]);
+    current.set("one", false);
+    expect(toolSession.citationCandidates()).toEqual([
+      expect.objectContaining({ refId: "citation_12" })
+    ]);
+    current.set("one", true);
+    await select.execute({ attachmentRef: "attachment_1" }, context.signal, context);
+    await inspect.execute({}, context.signal, context);
+    expect(toolSession.citationCandidates().map((citation) => citation.refId))
+      .toEqual(["citation_11", "citation_12"]);
+
+    titles.set("one", "conflicting citation");
+    expect(() => toolSession.citationCandidates()).toThrowError(expect.objectContaining({
+      code: "agent_runtime.turn_conflict"
+    }));
+
+    expect(calls).toEqual(["one", "two", "one"]);
+  });
+
+  it("keeps attachments beyond the global six-slot cap inspectable but uncited", async () => {
+    const session = (ordinal: number) => {
+      let inspected = false;
+      return {
+        tools: [{
+          name: "pige_inspect_source",
+          label: "Inspect",
+          description: "Inspect selected source",
+          parameters: { type: "object", properties: {}, additionalProperties: false },
+          version: "1",
+          capability: "read_current_source",
+          outputSchema: { type: "object", properties: {}, additionalProperties: true },
+          effect: "read_only" as const,
+          inputTrust: "model_generated" as const,
+          outputTrust: "host_validated" as const,
+          dataBoundary: {
+            resourceScope: "current_source" as const,
+            pathAuthority: "host_only" as const,
+            sourceIdAuthority: "host_only" as const,
+            modelAuthority: "none" as const
+          },
+          execution: "parallel_read_only" as const,
+          idempotency: { mode: "idempotent" as const, scope: "current_source" as const },
+          limits: { maxInputBytes: 2, maxOutputBytes: 1024, timeoutMs: 1000 },
+          ownerService: "test",
+          execute: async () => {
+            inspected = true;
+            return createPigeTextToolResult(
+              '- current_source_citation: {"citationRef":"citation_11","label":"[11]"}',
+              {}
+            );
+          }
+        }],
+        bindCatalog: vi.fn(),
+        beforeModelTurn: vi.fn(async () => undefined),
+        citationCandidates: () => inspected ? [{
+          refId: "citation_11",
+          label: "[11]",
+          pageId: `page_20260727_slot${ordinal}`,
+          title: `slot ${ordinal}`,
+          pageType: "source" as const,
+          locator: "source_page"
+        }] : [],
+        result: () => undefined
+      };
+    };
+    const toolSession = createAttachmentSetToolSession(Array.from({ length: 8 }, (_, index) => ({
+      ref: `attachment_${index + 1}`,
+      displayName: `${index + 1}.txt`,
+      kind: "plain_text_file",
+      session: session(index + 1)
+    })));
+    const context = { toolCallId: "tool_cap", signal: new AbortController().signal };
+    const select = toolSession.tools.find((tool) => tool.name === "pige_select_attachment")!;
+    const inspect = toolSession.tools.find((tool) => tool.name === "pige_inspect_source")!;
+
+    for (let ordinal = 1; ordinal <= 8; ordinal += 1) {
+      await select.execute({ attachmentRef: `attachment_${ordinal}` }, context.signal, context);
+      const result = await inspect.execute({}, context.signal, context);
+      const text = result.content.find((content) => content.type === "text")?.text ?? "";
+      if (ordinal <= 6) expect(text).toContain(`citation_${10 + ordinal}`);
+      else expect(text).toContain("current_source_citation: null");
+    }
+    expect(toolSession.citationCandidates().map((citation) => citation.refId))
+      .toEqual(["citation_11", "citation_12", "citation_13", "citation_14", "citation_15", "citation_16"]);
   });
 });

@@ -556,6 +556,90 @@ describe("jobs service", () => {
       .toHaveLength(2);
   });
 
+  it("adopts one Source Page per accepted attachment before source tools and reuses them on same-Job retry", async () => {
+    const { vaultPath, vault } = makeVault();
+    const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
+    const preparedSources: Array<{ id: string; pageId?: string; pagePath?: string }> = [];
+    const sourceSession = {
+      tools: [],
+      bindCatalog: vi.fn(),
+      beforeModelTurn: vi.fn(async () => undefined),
+      citationCandidates: () => [],
+      result: () => undefined
+    };
+    const agentIngest = {
+      prepareSourceToolSession: vi.fn(async (
+        _vaultPath: string,
+        source: { id: string; knowledgePageId?: string; knowledgePagePath?: string }
+      ) => {
+        preparedSources.push({
+          id: source.id,
+          pageId: source.knowledgePageId,
+          pagePath: source.knowledgePagePath
+        });
+        return sourceSession;
+      })
+    } as unknown as AgentIngestService;
+    const jobs = new JobsService(vaults, agentIngest);
+    const capture = new CaptureService(vaults);
+    const filePaths = ["compare-one.txt", "compare-two.txt"].map((name) => {
+      const filePath = path.join(path.dirname(vaultPath), name);
+      fs.writeFileSync(filePath, `content for ${name}`, "utf8");
+      return filePath;
+    });
+    const sourceChecksums = filePaths.map((filePath) =>
+      `sha256:${createHash("sha256").update(fs.readFileSync(filePath)).digest("hex")}`
+    );
+    const attachmentSetHash = `sha256:${"a".repeat(64)}`;
+    const created = jobs.createAgentTurnJob({
+      conversationEventId: "evt_20260727_sourcepages1",
+      conversationLocator: ".pige/conversations/2026/07/conv_20260727_sourcepages.jsonl",
+      inputHash: `sha256:${"b".repeat(64)}`,
+      sourceExpected: true,
+      attachmentCount: 2,
+      attachmentSetHash,
+      sourceChecksums
+    });
+    const sourceIds = (created.inputRefs ?? [])
+      .filter((ref) => ref.kind === "source" && ref.role === "agent_turn_source")
+      .map((ref) => requireValue(ref.id));
+    for (const [ordinal, filePath] of filePaths.entries()) {
+      await capture.preserveFilesForAgentTurn({
+        filePaths: [filePath],
+        inputKind: "file_picker",
+        userIntent: "unknown",
+        locale: "en"
+      }, {
+        jobId: created.id,
+        sourceId: sourceIds[ordinal]!,
+        inputChecksum: sourceChecksums[ordinal],
+        ordinal,
+        attachmentSetHash
+      });
+    }
+    jobs.attachAgentTurnSources(created.id, sourceIds, attachmentSetHash);
+
+    await jobs.runTextAgentTurn(created.id, async ({ sourceSession: session }) => {
+      expect(session).toBeDefined();
+    });
+    expect(preparedSources).toHaveLength(2);
+    expect(preparedSources.every((source) => source.pageId && source.pagePath)).toBe(true);
+    const firstPageIds = preparedSources.map((source) => source.pageId);
+    expect(new Set(firstPageIds).size).toBe(2);
+    expect(listFiles(path.join(vaultPath, "sources"))).toHaveLength(2);
+
+    const running = requireValue(jobs.readAgentTurnJob(created.id));
+    jobs.testOnlyWriteAgentTurnJob(running, JobRecordSchema.parse({
+      ...running,
+      state: "queued",
+      stage: "planning",
+      updatedAt: new Date(Date.parse(running.updatedAt) + 1).toISOString()
+    }));
+    await jobs.runTextAgentTurn(created.id, async () => undefined);
+    expect(preparedSources.slice(2).map((source) => source.pageId)).toEqual(firstPageIds);
+    expect(listFiles(path.join(vaultPath, "sources"))).toHaveLength(2);
+  });
+
   it("creates current-note Jobs with an atomic scope ref and never adopts a missing legacy binding", () => {
     const { vaultPath, vault } = makeVault();
     const vaults = { current: () => vault, activeVaultPath: () => vaultPath };

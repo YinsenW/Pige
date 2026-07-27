@@ -39,6 +39,12 @@ const PDF_PROMPT = "Parse this native-text PDF and cite its durable source page.
 const PDF_NATIVE_TEXT = "The native PDF confirms that durable parser evidence remains available after restart.";
 const PDF_ANSWER = "The native-text PDF confirms durable parser evidence remains available after restart. [citation_11]";
 const PDF_ATTACHMENT_NAME = "native-text-roundtrip.pdf";
+const MULTI_FILE_PROMPT = "Compare both attached text sources and cite each durable source page.";
+const MULTI_FILE_FIRST_TEXT = "Amber source: the launch checklist requires an offline archive before departure.";
+const MULTI_FILE_SECOND_TEXT = "Cobalt source: the launch checklist requires a checksum review after the archive.";
+const MULTI_FILE_ANSWER = "The amber source requires an offline archive [citation_11], while the cobalt source adds a checksum review [citation_12].";
+const MULTI_FILE_FIRST_NAME = "multi-file-amber.txt";
+const MULTI_FILE_SECOND_NAME = "multi-file-cobalt.txt";
 const CHILD_RESULT_PREFIX = "PIGE_ROUNDTRIP_RESULT ";
 const MAX_CHILD_MS = 90_000;
 const highRiskOnly = process.argv.includes("--high-risk-only");
@@ -60,6 +66,8 @@ async function runOrchestrator() {
   const datasetAttachmentPath = path.join(rootPath, "unified-agent-dataset.csv");
   const dropAttachmentPath = path.join(rootPath, DROP_ATTACHMENT_NAME);
   const pdfAttachmentPath = path.join(rootPath, PDF_ATTACHMENT_NAME);
+  const multiFileFirstPath = path.join(rootPath, MULTI_FILE_FIRST_NAME);
+  const multiFileSecondPath = path.join(rootPath, MULTI_FILE_SECOND_NAME);
   const deniedCommandSentinelPath = path.join(rootPath, "denied-command-must-not-exist.txt");
   fs.writeFileSync(attachmentPath, "Synthetic unified Agent attachment evidence.\n", "utf8");
   fs.writeFileSync(markdownAttachmentPath, "# Synthetic Markdown evidence\n\nThe Markdown source crosses the real file ingress.\n", "utf8");
@@ -67,6 +75,8 @@ async function runOrchestrator() {
   fs.writeFileSync(datasetAttachmentPath, "name,count\nAda,3\nGrace,5\n", "utf8");
   fs.writeFileSync(dropAttachmentPath, "Synthetic whole-window drop evidence.\n", "utf8");
   fs.writeFileSync(pdfAttachmentPath, createRoundtripPdf([PDF_NATIVE_TEXT], "Native text roundtrip"));
+  fs.writeFileSync(multiFileFirstPath, `${MULTI_FILE_FIRST_TEXT}\n`, "utf8");
+  fs.writeFileSync(multiFileSecondPath, `${MULTI_FILE_SECOND_TEXT}\n`, "utf8");
   const syntheticToken = `synthetic-${crypto.randomBytes(24).toString("hex")}`;
   const requests = [];
   const streamTiming = {};
@@ -223,7 +233,8 @@ async function runOrchestrator() {
     assert.equal(largePaste.largePasteSourceBound, true);
     assert.equal(largePaste.largePasteAnswerVisible, true);
     assert.equal(largePaste.largePasteCitationVisible, true);
-    assert.equal(largePaste.largePasteCitationIdentityExact, true);
+    assert.equal(typeof largePaste.largePasteCitationPageId, "string");
+    assert.ok(largePaste.largePasteCitationPageId.length > 0);
     assert.equal(largePaste.rawBodyAbsentFromConversation, true);
     assert.equal(largePaste.durableSnapshot.nonterminalJobIds.length, 0);
     assert.equal(largePaste.durableSnapshot.failedRetryableJobIds.length, 0);
@@ -231,7 +242,10 @@ async function runOrchestrator() {
     assert.equal(largePaste.durableSnapshot.sourceIds.length, restart.durableSnapshot.sourceIds.length + 1);
     assert.deepEqual(largePaste.durableSnapshot.datasetIds, restart.durableSnapshot.datasetIds);
     assert.deepEqual(largePaste.durableSnapshot.activities, restart.durableSnapshot.activities);
-    assert.deepEqual(largePaste.durableSnapshot.pageIdentities, restart.durableSnapshot.pageIdentities);
+    assert.equal(
+      largePaste.durableSnapshot.pageIdentities.length,
+      restart.durableSnapshot.pageIdentities.length + 1
+    );
     assertUniqueIdentities(largePaste.durableSnapshot.messageIdentities.map((message) => message.id), "conversation event after paste");
     assertUniqueIdentities(largePaste.durableSnapshot.relevantJobs.map((job) => job.id), "Job after paste");
     assertUniqueIdentities(largePaste.durableSnapshot.sourceIds, "source after paste");
@@ -258,6 +272,17 @@ async function runOrchestrator() {
     assert.equal(pastedSource.metadata?.unicodeCodePointCount, [...LARGE_PASTE_BODY].length);
     assert.equal(pastedSource.metadata?.utf8ByteSize, Buffer.byteLength(LARGE_PASTE_BODY));
     assert.equal(pastedSource.managedCopy?.checksum, sha256Digest(LARGE_PASTE_BODY));
+    assert.equal(largePaste.largePasteCitationPageId, pastedSource.knowledgePageId);
+    assert.deepEqual(
+      largePaste.durableSnapshot.pageIdentities.find((page) =>
+        page.pageId === pastedSource.knowledgePageId
+      ),
+      {
+        pageId: pastedSource.knowledgePageId,
+        pageType: "source",
+        sourceIds: [largePaste.largePasteSourceId]
+      }
+    );
     const pastedManagedPath = path.resolve(vaultPath, pastedSource.managedCopy.path);
     assert.equal(fs.readFileSync(pastedManagedPath, "utf8"), LARGE_PASTE_BODY);
     assert.deepEqual(findPlaintextFiles(vaultPath, LARGE_PASTE_BODY), [pastedManagedPath]);
@@ -286,7 +311,7 @@ async function runOrchestrator() {
     });
     assert.equal(largePasteRestart.largePasteAnswerVisible, true);
     assert.equal(largePasteRestart.largePasteCitationVisible, true);
-    assert.equal(largePasteRestart.largePasteCitationIdentityExact, true);
+    assert.equal(largePasteRestart.largePasteCitationPageId, largePaste.largePasteCitationPageId);
     assert.equal(largePasteRestart.rawBodyAbsentFromConversation, true);
     assert.deepEqual(largePasteRestart.durableSnapshot, largePaste.durableSnapshot);
     assert.equal(largePasteRestart.durableSnapshot.nonterminalJobIds.length, 0);
@@ -474,6 +499,74 @@ async function runOrchestrator() {
       job.class === "parse" && job.parentJobId === pdf.pdfJobId && job.sourceId === pdf.pdfSourceId
     ).length, 1);
 
+    const requestCountBeforeMultiFile = requests.length;
+    const multiFile = await runChild("multi_file", {
+      rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
+      activityAttachmentPath, datasetAttachmentPath, dropAttachmentPath, deniedCommandSentinelPath,
+      highRiskOnly: false
+    });
+    assert.equal(multiFile.answerVisible, true);
+    assert.equal(multiFile.citationCount, 2);
+    assert.equal(multiFile.citationsIdentityExact, true);
+    assert.equal(multiFile.firstCitationOpenedReader, true);
+    assert.equal(multiFile.secondCitationOpenedReader, true);
+    assert.equal(multiFile.continuedExactConversation, true);
+    assert.equal(multiFile.agentTurnDelta, 1);
+    assert.equal(multiFile.sourceDelta, 2);
+    assert.equal(countRoundtripSourceRecords(rootPath), multiFile.sourceRecordCountBeforeMultiFile + 2);
+    assert.equal(multiFile.durableSnapshot.relevantJobs.length, pdfRestart.durableSnapshot.relevantJobs.length + 1);
+    assert.equal(multiFile.durableSnapshot.sourceIds.length, pdfRestart.durableSnapshot.sourceIds.length + 2);
+    assert.equal(multiFile.durableSnapshot.nonterminalJobIds.length, 0);
+    assert.equal(multiFile.durableSnapshot.failedRetryableJobIds.length, 0);
+    assertUniqueIdentities(multiFile.durableSnapshot.messageIdentities.map((message) => message.id), "conversation event after multi-file");
+    assertUniqueIdentities(multiFile.durableSnapshot.relevantJobs.map((job) => job.id), "Job after multi-file");
+    assertUniqueIdentities(multiFile.durableSnapshot.sourceIds, "source after multi-file");
+    assert.notEqual(multiFile.firstCitationPageId, multiFile.secondCitationPageId);
+    const multiFileProviderRequests = requests.slice(requestCountBeforeMultiFile)
+      .filter((request) => request.method === "POST" && request.path === "/v1/responses");
+    assert.equal(multiFileProviderRequests.length, 6);
+    assert.ok(multiFileProviderRequests[0]?.body.includes('"name":"pige_list_attachments"'));
+    assert.ok(multiFileProviderRequests[1]?.body.includes('"call_id":"call_multi_list"'));
+    assert.ok(multiFileProviderRequests[2]?.body.includes('"call_id":"call_multi_select_1"'));
+    assert.ok(multiFileProviderRequests[3]?.body.includes('"call_id":"call_multi_inspect_1"'));
+    assert.ok(multiFileProviderRequests[4]?.body.includes('"call_id":"call_multi_select_2"'));
+    assert.ok(multiFileProviderRequests[5]?.body.includes('"call_id":"call_multi_inspect_2"'));
+    assert.ok(requests.every((request) =>
+      request.method !== "POST" || request.path !== "/v1/responses" ||
+      request.receivedAt < multiFile.stagedAt || request.receivedAt >= multiFile.submittedAt
+    ));
+
+    const multiFileSources = multiFile.sourceIds.map((sourceId) =>
+      readRoundtripRecord(vaultPath, "source-records", sourceId)
+    );
+    assert.deepEqual(multiFileSources.map((source) => source.original?.displayName), [
+      MULTI_FILE_FIRST_NAME,
+      MULTI_FILE_SECOND_NAME
+    ]);
+    assert.ok(multiFileSources.every((source) => source.kind === "plain_text_file"));
+    assert.ok(multiFileSources.every((source) => source.semanticOrchestration === "agent_turn"));
+    assert.ok(multiFileSources.every((source) => source.metadata?.inputKind === "file_picker"));
+    assert.deepEqual(multiFileSources.map((source) => source.knowledgePageId), [
+      multiFile.firstCitationPageId,
+      multiFile.secondCitationPageId
+    ]);
+
+    const requestCountBeforeMultiFileRestart = requests.length;
+    const multiFileRestart = await runChild("multi_file_restart", {
+      rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
+      activityAttachmentPath, datasetAttachmentPath, dropAttachmentPath, deniedCommandSentinelPath,
+      highRiskOnly: false
+    });
+    assert.equal(multiFileRestart.answerVisible, true);
+    assert.equal(multiFileRestart.citationCount, 2);
+    assert.equal(multiFileRestart.citationsIdentityExact, true);
+    assert.deepEqual(multiFileRestart.citationPageIds, [
+      multiFile.firstCitationPageId,
+      multiFile.secondCitationPageId
+    ]);
+    assert.deepEqual(multiFileRestart.durableSnapshot, multiFile.durableSnapshot);
+    assert.equal(requests.length, requestCountBeforeMultiFileRestart);
+
     const secretsPath = path.join(userDataPath, "secrets.json");
     const secrets = JSON.parse(fs.readFileSync(secretsPath, "utf8"));
     const providers = JSON.parse(fs.readFileSync(path.join(userDataPath, "provider-profiles.json"), "utf8"));
@@ -498,6 +591,7 @@ async function runOrchestrator() {
       `TXT/Markdown ingress, Dataset continuation, ordinary provider sends without a second approval, zero retryable Jobs, ` +
       `reversible Activity/Undo results, one exact large paste, one identity-free whole-window drop, ` +
       `one inspected URL citation, one native-text PDF parse/citation with stable Reader navigation, ` +
+      `one ordered two-file comparative turn with two stable Reader citations, ` +
       `and exact restart retention without another Provider or parser call.`
     );
   } finally {
@@ -521,6 +615,8 @@ async function runChild(phase, values) {
       PIGE_ROUNDTRIP_DATASET_ATTACHMENT_PATH: values.datasetAttachmentPath,
       PIGE_ROUNDTRIP_DROP_ATTACHMENT_PATH: values.dropAttachmentPath,
       PIGE_ROUNDTRIP_PDF_ATTACHMENT_PATH: path.join(values.rootPath, PDF_ATTACHMENT_NAME),
+      PIGE_ROUNDTRIP_MULTI_FILE_FIRST_PATH: path.join(values.rootPath, MULTI_FILE_FIRST_NAME),
+      PIGE_ROUNDTRIP_MULTI_FILE_SECOND_PATH: path.join(values.rootPath, MULTI_FILE_SECOND_NAME),
       PIGE_ROUNDTRIP_DENY_SENTINEL_PATH: values.deniedCommandSentinelPath,
       PIGE_ROUNDTRIP_HIGH_RISK_ONLY: values.highRiskOnly ? "1" : "0",
       PIGE_ROUNDTRIP_STAGE_PATH: path.join(values.rootPath, `stage-${phase}.txt`)
@@ -541,10 +637,11 @@ async function runChild(phase, values) {
   if (exitCode !== 0) {
     const marker = stderr.split(/\r?\n/u).find((line) => line.startsWith("PIGE_ROUNDTRIP_ERROR "));
     const state = stderr.split(/\r?\n/u).find((line) => line.startsWith("PIGE_ROUNDTRIP_STATE "));
+    const mainState = stderr.split(/\r?\n/u).find((line) => line.startsWith("PIGE_ROUNDTRIP_MAIN_STATE "));
     const stagePath = path.join(values.rootPath, `stage-${phase}.txt`);
     const stage = fs.existsSync(stagePath) ? fs.readFileSync(stagePath, "utf8").trim() : "unknown";
     const jobs = readSafeJobFailureSummary(values.rootPath);
-    throw new Error(`${marker ?? `Electron unified Agent ${phase} phase failed at ${stage}.`} ${state ?? ""} jobs=${JSON.stringify(jobs)}`);
+    throw new Error(`${marker ?? `Electron unified Agent ${phase} phase failed at ${stage}.`} ${state ?? ""} ${mainState ?? ""} jobs=${JSON.stringify(jobs)}`);
   }
   const marker = stdout.split(/\r?\n/u).find((line) => line.startsWith(CHILD_RESULT_PREFIX));
   if (!marker) throw new Error(`Electron unified Agent ${phase} phase returned no result.`);
@@ -724,6 +821,8 @@ async function runElectronPhase() {
   const datasetAttachmentPath = requireEnv("PIGE_ROUNDTRIP_DATASET_ATTACHMENT_PATH");
   const dropAttachmentPath = requireEnv("PIGE_ROUNDTRIP_DROP_ATTACHMENT_PATH");
   const pdfAttachmentPath = requireEnv("PIGE_ROUNDTRIP_PDF_ATTACHMENT_PATH");
+  const multiFileFirstPath = requireEnv("PIGE_ROUNDTRIP_MULTI_FILE_FIRST_PATH");
+  const multiFileSecondPath = requireEnv("PIGE_ROUNDTRIP_MULTI_FILE_SECOND_PATH");
   const deniedCommandSentinelPath = requireEnv("PIGE_ROUNDTRIP_DENY_SENTINEL_PATH");
   const runHighRiskOnly = requireEnv("PIGE_ROUNDTRIP_HIGH_RISK_ONLY") === "1";
   const stagePath = requireEnv("PIGE_ROUNDTRIP_STAGE_PATH");
@@ -737,6 +836,7 @@ async function runElectronPhase() {
   dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
   let stage = "prepare";
   let browserWindow;
+  let multiFileBaselineSourceIds = new Set();
   const markStage = (nextStage) => {
     stage = nextStage;
     fs.writeFileSync(stagePath, `${nextStage}\n`, "utf8");
@@ -756,7 +856,9 @@ async function runElectronPhase() {
       phase !== "url" &&
       phase !== "url_restart" &&
       phase !== "pdf" &&
-      phase !== "pdf_restart"
+      phase !== "pdf_restart" &&
+      phase !== "multi_file" &&
+      phase !== "multi_file_restart"
     ) {
       throw new Error("Unknown unified Agent roundtrip phase.");
     }
@@ -842,9 +944,33 @@ async function runElectronPhase() {
         submittedAt: staging.submittedAt,
         sourceRecordCountBeforePdf
       };
-    } else {
+    } else if (phase === "pdf_restart") {
       markStage("renderer_pdf_restart");
       result = await runPdfRestartRenderer(browserWindow);
+    } else if (phase === "multi_file") {
+      markStage("renderer_multi_file_prepare");
+      multiFileBaselineSourceIds = new Set(readRoundtripRecords(
+        path.join(rootPath, "vaults", "Roundtrip Vault"),
+        "source-records"
+      ).map((source) => source.id));
+      const sourceRecordCountBeforeMultiFile = countRoundtripSourceRecords(rootPath);
+      const multiFileBaseline = await readMultiFileBaselineRenderer(browserWindow);
+      await prepareSourceRenderer(browserWindow, MULTI_FILE_PROMPT);
+      const staging = await stageAndSubmitMultipleSourcesRenderer(
+        browserWindow,
+        [multiFileFirstPath, multiFileSecondPath],
+        markStage
+      );
+      markStage("renderer_multi_file_result");
+      result = {
+        ...(await readMultiFileRendererResult(browserWindow, multiFileBaseline)),
+        stagedAt: staging.stagedAt,
+        submittedAt: staging.submittedAt,
+        sourceRecordCountBeforeMultiFile
+      };
+    } else {
+      markStage("renderer_multi_file_restart");
+      result = await runMultiFileRestartRenderer(browserWindow);
     }
     if (phase === "connect" && runHighRiskOnly) {
       markStage("renderer_high_risk_deny");
@@ -907,6 +1033,18 @@ async function runElectronPhase() {
     if (/^\{[\x20-\x7e]{0,1000}\}$/u.test(rendererState)) {
       console.error(`PIGE_ROUNDTRIP_STATE ${rendererState}`);
     }
+    if (phase === "multi_file") {
+      const sourceRecords = readRoundtripRecords(
+        path.join(rootPath, "vaults", "Roundtrip Vault"),
+        "source-records"
+      ).filter((source) => !multiFileBaselineSourceIds.has(source.id));
+      console.error(`PIGE_ROUNDTRIP_MAIN_STATE ${JSON.stringify({
+        sourceRecordDelta: sourceRecords.length,
+        sourceKinds: sourceRecords.map((source) => source.kind),
+        inputKinds: sourceRecords.map((source) => source.metadata?.inputKind ?? "none"),
+        knowledgePageBindingCount: sourceRecords.filter((source) => typeof source.knowledgePageId === "string").length
+      })}`);
+    }
     console.error(`PIGE_ROUNDTRIP_ERROR phase=${phase ?? "unknown"} stage=${stage} renderer=${safeRendererStage} error=${safeErrorName}`);
     app.exit(1);
   }
@@ -935,13 +1073,6 @@ async function prepareLargePasteRenderer(browserWindow) {
       if (!composer || !jobs || !timeline) {
         throw new Error('Large-paste composer authority is unavailable.');
       }
-      const groundedAssistant = timeline.messages.find((message) =>
-        message.role === 'assistant' && message.text.includes(${JSON.stringify(GROUNDED_ANSWER)})
-      );
-      const groundedCitation = groundedAssistant?.answer?.citations.find((item) => item.refId === 'citation_2');
-      if (!groundedCitation?.pageId) {
-        throw new Error('Large-paste stable source-page identity is unavailable.');
-      }
       const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(composer), 'value');
       descriptor.set.call(composer, ${JSON.stringify(LARGE_PASTE_DRAFT)});
       composer.dispatchEvent(new Event('input', { bubbles: true }));
@@ -961,7 +1092,6 @@ async function prepareLargePasteRenderer(browserWindow) {
         conversationId: timeline.conversationId,
         baselineTailEventId: timeline.tailEventId,
         baselineMessageCount: timeline.messages.length,
-        sourceCitationPageId: groundedCitation.pageId,
         agentTurnJobIds: jobs.jobs.filter((job) => job.class === 'agent_turn').map((job) => job.id),
         sourceIds: jobs.jobs.filter((job) => job.class === 'agent_turn' && job.sourceId).map((job) => job.sourceId)
       };
@@ -1075,10 +1205,10 @@ async function submitLargePasteRenderer(browserWindow, expected) {
           message.role === 'assistant' && message.text.includes(${JSON.stringify(LARGE_PASTE_ANSWER)})
         );
         const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_11');
-        const citationIdentityExact = citation?.pageId === expected.sourceCitationPageId;
+        const citationIdentityPresent = typeof citation?.pageId === 'string' && citation.pageId.length > 0;
         const domAnswer = Array.from(document.querySelectorAll('.conversation-message.role-assistant:not(.provisional)'))
           .find((message) => message.textContent?.includes(${JSON.stringify(LARGE_PASTE_ANSWER)}));
-        const domCitation = document.querySelector('.conversation-citations .citation-row:not(:disabled)');
+        const domCitation = domAnswer?.querySelector('.conversation-citations .citation-row:not(:disabled)');
         const composer = document.querySelector('section.home .composer textarea');
         const rawBodyAbsentFromConversation = timeline?.messages.every((message) => !message.text.includes(pastedBody)) === true;
         const largePasteSourceBound = Boolean(
@@ -1092,7 +1222,7 @@ async function submitLargePasteRenderer(browserWindow, expected) {
         globalThis.__pigeRoundtripWaitState = {
           assistantVisible: Boolean(assistant && domAnswer),
           citationVisible: Boolean(citation && domCitation),
-          citationIdentityExact,
+          citationIdentityPresent,
           rawBodyAbsentFromConversation,
           continuedExactConversation,
           continuedExactTail,
@@ -1105,7 +1235,7 @@ async function submitLargePasteRenderer(browserWindow, expected) {
           composerCleared: composer?.value === ''
         };
         if (
-          assistant && domAnswer && citation && domCitation && citationIdentityExact &&
+          assistant && domAnswer && citation && domCitation && citationIdentityPresent &&
           rawBodyAbsentFromConversation &&
           continuedExactConversation && continuedExactTail &&
           newJobs.length === 1 && newSourceIds.length === 1 &&
@@ -1124,7 +1254,7 @@ async function submitLargePasteRenderer(browserWindow, expected) {
             largePasteSourceBound,
             largePasteAnswerVisible: true,
             largePasteCitationVisible: true,
-            largePasteCitationIdentityExact: true,
+            largePasteCitationPageId: citation.pageId,
             rawBodyAbsentFromConversation,
             largePasteJobId: newJob.id,
             largePasteUserEventId: newJob.conversationEventId,
@@ -1155,17 +1285,11 @@ async function runLargePasteRestartRenderer(browserWindow) {
         const assistant = timeline?.messages.find((message) =>
           message.role === 'assistant' && message.text.includes(${JSON.stringify(LARGE_PASTE_ANSWER)})
         );
-        const groundedAssistant = timeline?.messages.find((message) =>
-          message.role === 'assistant' && message.text.includes(${JSON.stringify(GROUNDED_ANSWER)})
-        );
-        const groundedCitation = groundedAssistant?.answer?.citations.find((item) => item.refId === 'citation_2');
         const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_11');
-        const citationIdentityExact = Boolean(
-          citation?.pageId && groundedCitation?.pageId && citation.pageId === groundedCitation.pageId
-        );
+        const citationIdentityPresent = typeof citation?.pageId === 'string' && citation.pageId.length > 0;
         const domAnswer = Array.from(document.querySelectorAll('.conversation-message.role-assistant:not(.provisional)'))
           .find((message) => message.textContent?.includes(${JSON.stringify(LARGE_PASTE_ANSWER)}));
-        const domCitation = document.querySelector('.conversation-citations .citation-row:not(:disabled)');
+        const domCitation = domAnswer?.querySelector('.conversation-citations .citation-row:not(:disabled)');
         const rawBodyAbsentFromConversation = timeline?.messages.every((message) => !message.text.includes(pastedBody)) === true;
         const activeJobs = jobs.jobs.filter((job) =>
           job.state === 'queued' || job.state === 'running' || job.state === 'waiting_dependency' ||
@@ -1174,19 +1298,19 @@ async function runLargePasteRestartRenderer(browserWindow) {
         globalThis.__pigeRoundtripWaitState = {
           answerVisible: Boolean(assistant && domAnswer),
           citationVisible: Boolean(citation && domCitation),
-          citationIdentityExact,
+          citationIdentityPresent,
           rawBodyAbsentFromConversation,
           activeJobCount: activeJobs.length,
           messageCount: timeline?.messages.length ?? 0
         };
         if (
-          assistant && domAnswer && citation && domCitation && citationIdentityExact &&
+          assistant && domAnswer && citation && domCitation && citationIdentityPresent &&
           rawBodyAbsentFromConversation && activeJobs.length === 0
         ) {
           return {
             largePasteAnswerVisible: true,
             largePasteCitationVisible: true,
-            largePasteCitationIdentityExact: true,
+            largePasteCitationPageId: citation.pageId,
             rawBodyAbsentFromConversation
           };
         }
@@ -2159,6 +2283,10 @@ async function prepareSourceRenderer(browserWindow, prompt) {
 }
 
 async function setRendererFileInput(browserWindow, attachmentPath) {
+  await setRendererFileInputFiles(browserWindow, [attachmentPath]);
+}
+
+async function setRendererFileInputFiles(browserWindow, attachmentPaths) {
   const debuggerApi = browserWindow.webContents.debugger;
   debuggerApi.attach("1.3");
   try {
@@ -2169,12 +2297,100 @@ async function setRendererFileInput(browserWindow, attachmentPath) {
     });
     if (!input.nodeId) throw new Error("Home file input is unavailable.");
     await debuggerApi.sendCommand("DOM.setFileInputFiles", {
-      files: [attachmentPath],
+      files: attachmentPaths,
       nodeId: input.nodeId
     });
   } finally {
     debuggerApi.detach();
   }
+}
+
+async function stageAndSubmitMultipleSourcesRenderer(browserWindow, attachmentPaths, markStage) {
+  markStage("renderer_multi_file_baseline");
+  const baseline = await readSourceSubmissionState(browserWindow);
+  const stagedAt = Date.now();
+  markStage("renderer_multi_file_input");
+  await setRendererFileInputFiles(browserWindow, attachmentPaths);
+  markStage("renderer_multi_file_side_effect_check");
+  const staged = await browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'multi_file_stage_send_ready';
+      console.info('PIGE_ROUNDTRIP_STAGE multi_file_stage_send_ready');
+      const expectedNames = ${JSON.stringify(attachmentPaths.map((entry) => path.basename(entry)))};
+      const expected = ${JSON.stringify(baseline)};
+      const deadline = Date.now() + 45000;
+      let stagedChips;
+      while (Date.now() < deadline) {
+        const currentJobs = await window.pige.jobs.list({ limit: 100 });
+        const currentTimeline = await window.pige.agent.conversation({ limit: 100 });
+        const chips = Array.from(document.querySelectorAll('.attachment-chip'));
+        const names = chips.map((chip) => chip.querySelector('strong')?.textContent ?? '');
+        if (!stagedChips && names.length === expectedNames.length &&
+          names.every((name, index) => name === expectedNames[index])) {
+          stagedChips = [...chips];
+        }
+        const chipOrderExact = Boolean(stagedChips) && chips.length === expectedNames.length &&
+          chips.every((chip, index) => chip === stagedChips[index]) &&
+          names.every((name, index) => name === expectedNames[index]);
+        const send = document.querySelector('section.home .composer button.composer-send');
+        const tail = currentTimeline?.messages.find((message) => message.id === currentTimeline.tailEventId);
+        const latestTurnState = currentTimeline?.latestTurn?.state ?? 'none';
+        const terminalTail = currentTimeline?.canFollowUp === true && tail?.role === 'assistant' &&
+          (latestTurnState === 'none' || latestTurnState === 'completed' || latestTurnState === 'completed_with_warnings');
+        const activeVaultMatches = currentJobs.activeVaultId === expected.activeVaultId;
+        const conversationMatches = currentTimeline?.conversationId === expected.conversationId;
+        const tailMatches = currentTimeline?.tailEventId === expected.conversationTailEventId;
+        const agentTurnCount = currentJobs.jobs.filter((job) => job.class === 'agent_turn').length;
+        const conversationMessageCount = currentTimeline?.messages.length ?? 0;
+        globalThis.__pigeRoundtripWaitState = {
+          chipCount: chips.length,
+          chipOrderExact,
+          sendPresent: Boolean(send),
+          sendEnabled: Boolean(send && !send.disabled),
+          canFollowUp: currentTimeline?.canFollowUp === true,
+          tailRoleAssistant: tail?.role === 'assistant',
+          latestTurnState,
+          activeVaultMatches,
+          conversationMatches,
+          tailMatches,
+          agentTurnCount
+        };
+        if (!activeVaultMatches || !conversationMatches || !tailMatches || (stagedChips && !chipOrderExact)) {
+          throw new Error('Multi-file staged submission identity changed before Send.');
+        }
+        if (chipOrderExact && terminalTail && send && !send.disabled) {
+          if (
+            agentTurnCount !== expected.agentTurnCount ||
+            currentTimeline?.tailEventId !== expected.conversationTailEventId ||
+            conversationMessageCount !== expected.conversationMessageCount
+          ) {
+            throw new Error('Multi-file staging created a durable Agent side effect before Send.');
+          }
+          const submittedAt = Date.now();
+          send.click();
+          return {
+            agentTurnCount,
+            conversationTailEventId: currentTimeline.tailEventId,
+            conversationMessageCount,
+            submittedAt,
+            chipOrderExact: true
+          };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for exact ordered multi-file Send authority.');
+    })()
+  `, true);
+  if (
+    staged.agentTurnCount !== baseline.agentTurnCount ||
+    staged.conversationTailEventId !== baseline.conversationTailEventId ||
+    staged.conversationMessageCount !== baseline.conversationMessageCount ||
+    staged.chipOrderExact !== true
+  ) {
+    throw new Error("Multi-file staging created a durable Agent side effect before Send.");
+  }
+  markStage("renderer_multi_file_send");
+  return { stagedAt, submittedAt: staged.submittedAt };
 }
 
 async function stageAndSubmitSourceRenderer(browserWindow, attachmentPath, markStage, stagePrefix) {
@@ -2326,6 +2542,204 @@ async function readPdfBaselineRenderer(browserWindow) {
       };
     })()
   `, true);
+}
+
+async function readMultiFileBaselineRenderer(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      const jobs = await window.pige.jobs.list({ limit: 100 });
+      const timeline = await window.pige.agent.conversation({ limit: 100 });
+      const library = await window.pige.library.list({ limit: 100 });
+      if (!timeline) throw new Error('Multi-file baseline conversation is unavailable.');
+      return {
+        jobIds: jobs.jobs.map((job) => job.id),
+        sourceIds: [...new Set(library.pages.flatMap((page) => page.sourceIds))],
+        conversationId: timeline.conversationId,
+        tailEventId: timeline.tailEventId,
+        messageCount: timeline.messages.length
+      };
+    })()
+  `, true);
+}
+
+async function readMultiFileRendererResult(browserWindow, baseline) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'multi_file_result_wait';
+      console.info('PIGE_ROUNDTRIP_STAGE multi_file_result_wait');
+      const deadline = Date.now() + 60000;
+      const expected = ${JSON.stringify(baseline)};
+      const baselineJobIds = new Set(expected.jobIds);
+      const baselineSourceIds = new Set(expected.sourceIds);
+      while (Date.now() < deadline) {
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const library = await window.pige.library.list({ limit: 100 });
+        const newAgentJobs = jobs.jobs.filter((job) => job.class === 'agent_turn' && !baselineJobIds.has(job.id));
+        const newSourceIds = [...new Set(library.pages.flatMap((page) => page.sourceIds)
+          .filter((sourceId) => !baselineSourceIds.has(sourceId)))];
+        const assistant = timeline?.messages.find((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(MULTI_FILE_ANSWER)})
+        );
+        const firstCitation = assistant?.answer?.citations.find((item) => item.refId === 'citation_11');
+        const secondCitation = assistant?.answer?.citations.find((item) => item.refId === 'citation_12');
+        const firstPage = library.pages.find((page) =>
+          page.pageId === firstCitation?.pageId && page.sourceIds.some((sourceId) => newSourceIds.includes(sourceId))
+        );
+        const secondPage = library.pages.find((page) =>
+          page.pageId === secondCitation?.pageId && page.sourceIds.some((sourceId) => newSourceIds.includes(sourceId))
+        );
+        const parent = newAgentJobs.length === 1 ? newAgentJobs[0] : undefined;
+        const citationRefs = assistant?.answer?.citations.map((item) => item.refId).sort() ?? [];
+        const citationsIdentityExact = Boolean(
+          firstCitation?.pageId && secondCitation?.pageId &&
+          firstCitation.pageId !== secondCitation.pageId &&
+          firstPage?.pageId === firstCitation.pageId && secondPage?.pageId === secondCitation.pageId
+        );
+        const continuedExactConversation = timeline?.conversationId === expected.conversationId &&
+          timeline?.messages.some((message) => message.id === expected.tailEventId) === true &&
+          timeline.messages.length === expected.messageCount + 2;
+        globalThis.__pigeRoundtripWaitState = {
+          agentTurnDelta: newAgentJobs.length,
+          sourceDelta: newSourceIds.length,
+          parentState: parent?.state ?? 'none',
+          answerVisible: Boolean(assistant),
+          authoredCitation11: assistant?.text.includes('[citation_11]') === true,
+          authoredCitation12: assistant?.text.includes('[citation_12]') === true,
+          publishedCitationRefs: citationRefs,
+          firstCandidateRegistered: Boolean(firstPage),
+          secondCandidateRegistered: Boolean(secondPage),
+          citationsIdentityExact,
+          continuedExactConversation
+        };
+        if (
+          parent?.state === 'completed' && newAgentJobs.length === 1 && newSourceIds.length === 2 &&
+          assistant && citationRefs.length === 2 && firstCitation && secondCitation &&
+          citationsIdentityExact && continuedExactConversation
+        ) {
+          const openCitation = async (refLabel, expectedTitle) => {
+            let button;
+            while (Date.now() < deadline && !button) {
+              const answerMessage = Array.from(
+                document.querySelectorAll('.conversation-message.role-assistant:not(.provisional)')
+              ).find((message) => {
+                const labels = Array.from(
+                  message.querySelectorAll('.conversation-citations .citation-row:not(:disabled)')
+                ).map((item) => item.textContent ?? '');
+                return labels.some((label) => label.includes('[11]')) &&
+                  labels.some((label) => label.includes('[12]'));
+              });
+              button = Array.from(
+                answerMessage?.querySelectorAll('.conversation-citations .citation-row:not(:disabled)') ?? []
+              ).find((item) => item.textContent?.includes(refLabel));
+              globalThis.__pigeRoundtripWaitState = {
+                ...globalThis.__pigeRoundtripWaitState,
+                readerCitationRef: refLabel,
+                readerCitationButtonPresent: Boolean(button),
+                readerPresent: false,
+                readerTitleMatched: false
+              };
+              if (!button) await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+            if (!button) return false;
+            button.click();
+            while (Date.now() < deadline) {
+              const reader = document.querySelector('.note-reader');
+              const readerTitleMatched = reader?.querySelector('.note-header h1')?.textContent === expectedTitle;
+              globalThis.__pigeRoundtripWaitState = {
+                ...globalThis.__pigeRoundtripWaitState,
+                readerPresent: Boolean(reader),
+                readerTitleMatched
+              };
+              if (readerTitleMatched) return true;
+              await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+            return false;
+          };
+          const firstCitationOpenedReader = await openCitation('[11]', firstPage.title);
+          if (!firstCitationOpenedReader) throw new Error('First multi-file citation did not open its exact Reader source.');
+          const back = document.querySelector('.home-reader .back-button');
+          if (!back) throw new Error('Multi-file Reader back action is unavailable.');
+          back.click();
+          while (Date.now() < deadline && !document.querySelector('.conversation-citations .citation-row:not(:disabled)')) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          const secondCitationOpenedReader = await openCitation('[12]', secondPage.title);
+          if (!secondCitationOpenedReader) throw new Error('Second multi-file citation did not open its exact Reader source.');
+          return {
+            answerVisible: true,
+            citationCount: 2,
+            citationsIdentityExact: true,
+            firstCitationOpenedReader,
+            secondCitationOpenedReader,
+            firstCitationPageId: firstCitation.pageId,
+            secondCitationPageId: secondCitation.pageId,
+            agentTurnDelta: 1,
+            sourceDelta: 2,
+            sourceIds: [firstPage.sourceIds[0], secondPage.sourceIds[0]],
+            continuedExactConversation
+          };
+        }
+        if (newAgentJobs.some((job) => job.state === 'failed_retryable' || job.state === 'failed_final')) {
+          throw new Error('Multi-file source turn reached a durable failure state.');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for two-file comparative citation convergence.');
+    })()
+  `, true).then(async (result) => ({
+    ...result,
+    durableSnapshot: await readDurableRestartSnapshot(browserWindow)
+  }));
+}
+
+async function runMultiFileRestartRenderer(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'multi_file_restart_wait';
+      console.info('PIGE_ROUNDTRIP_STAGE multi_file_restart_wait');
+      const deadline = Date.now() + 60000;
+      while (Date.now() < deadline) {
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const library = await window.pige.library.list({ limit: 100 });
+        const assistant = timeline?.messages.find((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(MULTI_FILE_ANSWER)})
+        );
+        const citations = ['citation_11', 'citation_12'].map((refId) =>
+          assistant?.answer?.citations.find((item) => item.refId === refId)
+        );
+        const pages = citations.map((citation) =>
+          library.pages.find((page) => page.pageId === citation?.pageId && page.sourceIds.length === 1)
+        );
+        const activeJobs = jobs.jobs.filter((job) =>
+          ['queued', 'running', 'waiting_dependency', 'awaiting_review', 'cancel_requested', 'failed_retryable'].includes(job.state)
+        );
+        const citationsIdentityExact = citations.every((citation, index) =>
+          Boolean(citation?.pageId && pages[index]?.pageId === citation.pageId)
+        ) && citations[0]?.pageId !== citations[1]?.pageId;
+        globalThis.__pigeRoundtripWaitState = {
+          answerVisible: Boolean(assistant),
+          publishedCitationRefs: assistant?.answer?.citations.map((item) => item.refId).sort() ?? [],
+          citationsIdentityExact,
+          activeJobCount: activeJobs.length
+        };
+        if (assistant && citationsIdentityExact && activeJobs.length === 0) {
+          return {
+            answerVisible: true,
+            citationCount: 2,
+            citationsIdentityExact: true,
+            citationPageIds: citations.map((citation) => citation.pageId)
+          };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for restarted two-file comparative evidence.');
+    })()
+  `, true).then(async (result) => ({
+    ...result,
+    durableSnapshot: await readDurableRestartSnapshot(browserWindow)
+  }));
 }
 
 async function readPdfRendererResult(browserWindow, baseline) {
@@ -2806,6 +3220,34 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
     }
     if (latestUserText.includes(PDF_PROMPT) && serializedTools.includes("pige_inspect_source")) {
       writeToolCallResponse(response, "pige_inspect_source", "call_pdf_inspect_before", "pdf-inspect-before-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_multi_inspect_2"') && serializedInput.includes("function_call_output")) {
+      writeTextResponse(response, MULTI_FILE_ANSWER, "multi-file-final-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_multi_select_2"') && serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_inspect_source", "call_multi_inspect_2", "multi-file-inspect-2");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_multi_inspect_1"') && serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_select_attachment", "call_multi_select_2", "multi-file-select-2", {
+        attachmentRef: "attachment_2"
+      });
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_multi_select_1"') && serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_inspect_source", "call_multi_inspect_1", "multi-file-inspect-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_multi_list"') && serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_select_attachment", "call_multi_select_1", "multi-file-select-1", {
+        attachmentRef: "attachment_1"
+      });
+      return;
+    }
+    if (latestUserText.includes(MULTI_FILE_PROMPT) && serializedTools.includes("pige_list_attachments")) {
+      writeToolCallResponse(response, "pige_list_attachments", "call_multi_list", "multi-file-list-1");
       return;
     }
     if (serializedInput.includes('"call_id":"call_source_inspect"') && serializedInput.includes("function_call_output")) {

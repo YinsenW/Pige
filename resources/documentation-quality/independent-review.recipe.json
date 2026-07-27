@@ -36,14 +36,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review of one native-PDF current-source citation: successful inspect yields conditional citation_11, mutation requires reinspection, retrieval shifts within 11-16, restart avoids parser/Provider replay, and statuses remain unchanged.",
+    "scope": "Independent Product Planning review of multi-attachment Source Page adoption and citation refs: accepted items adopt one current page, ordinal slots 1-6 map to citation_11-16 only after inspect, delegated tool output uses the global ref, and restart dedupes while statuses remain unchanged.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 28,
-    "reviewedSha256": "4dd763103ce95ff66e129cadf4eb2a750a65adb4874aa546dff069385ce2f352"
+    "reviewedSha256": "619bd4bb86f0283911d1c1d535aa51e0ceee739b8370566c8f6aba97cf72a7eb"
   },
   "reviewers": [{
-    "reviewerId": "pdf-current-source-citation-review",
-    "task": "Native-PDF current-source citation candidate contract review",
+    "reviewerId": "multi-attachment-source-citation-review",
+    "task": "Multi-attachment Source Page and citation candidate contract review",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -51,14 +51,14 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Product Planning reviews existing source-session, PDF, context, data, decision and trace owners; Development owns four internal service/test paths, while UI reuses its unchanged citation consumer."
+    "independence": "Product Planning reviews existing Job, source-storage, source-session, context, decision and trace owners; Development owns the bounded Jobs/attachment services and tests, while UI/public DTOs remain unchanged."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"pdf-current-source-citation-review","blockerCount":0,"summary":"Inspect owns current-source candidate lifecycle; parse/OCR/source drift clears eligibility until reinspection, without judging prose."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"pdf-current-source-citation-review","blockerCount":0,"summary":"Source-session, PDF, context and data reuse RetrievalAnswerCitation within citation_11-16 with no new DTO, IPC or renderer shape."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"pdf-current-source-citation-review","blockerCount":0,"summary":"PDF ingest and context gaps name conditional allocation, reinspection and assembled restart while every status stays unchanged."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"pdf-current-source-citation-review","blockerCount":0,"summary":"AgentSourceToolSession candidate lifecycle and shared Home registry define the approved four-path implementation boundary."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"pdf-current-source-citation-review","blockerCount":0,"summary":"Existing owners carry current-source projection and restart facts; no DTO, document, UI owner or architecture phase was added."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"multi-attachment-source-citation-review","blockerCount":0,"summary":"Accepted attachment records adopt current Source Pages; successful inspect alone activates a current ordinal-bound candidate."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"multi-attachment-source-citation-review","blockerCount":0,"summary":"Jobs, Source Storage, source-session and context owners share immutable citation_11-16 slots with no public DTO/UI change."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"multi-attachment-source-citation-review","blockerCount":0,"summary":"Multi-attachment page adoption, dual citation and restart stay explicit open work; every status remains unchanged."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"multi-attachment-source-citation-review","blockerCount":0,"summary":"The wrapper must rewrite each successful delegated inspect result to its preassigned global ref and revalidate candidates dynamically."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"multi-attachment-source-citation-review","blockerCount":0,"summary":"Existing owners carry the atomic rules without a new document, DTO, UI owner, budget increase or architecture phase."}
   ],
   "verification": [
     {"command":"npm run verify:verify-scripts-integrity && npm run verify:contracts","status":"passed","evidence":"Existing RetrievalAnswerCitation and answer channel remain canonical; no IPC, preload, schema or renderer vocabulary is added."},
@@ -66,17 +66,17 @@
     {"command":"npm run verify:traceability","status":"passed","evidence":"Native-PDF current-source citation and assembled restart remain open work and every status is unchanged."}
   ],
   "coordination": {
-    "taskId": "pdf-current-source-citation-candidate-20260727",
-    "taskTitle": "Native-PDF current-source citation candidate contract",
+    "taskId": "multi-attachment-source-citation-candidate-20260727",
+    "taskTitle": "Multi-attachment Source Page and citation candidate contract",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing refs remain current-note 1, Home search 2..9, Dataset 10, source-session 11..16 and inspected URL 17; current source conditionally reserves 11 and the selector remains unchanged.",
-    "acknowledgement": "Planning freezes internal source-session candidate semantics only; four implementation/test paths, assembled #179 evidence and status promotion remain outside this candidate."
+    "compatibility": "Existing refs remain current-note 1, Home search 2..9, Dataset 10, source-session 11..16 and URL 17; multi-attachment ordinals reserve the six source slots and the selector remains unchanged.",
+    "acknowledgement": "Planning freezes internal page-adoption and attachment-wrapper semantics only; five implementation/test paths, assembled #181 evidence and status promotion remain outside this candidate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Development must prove inspect-only current-source citation_11, post-mutation reinspection, conditional retrieval shift, collision guard and restart without parse or Provider replay.",
-    "Draft #179 evidence stays unchanged until product composition; UI/public DTO/locale/selector and network policy remain unchanged."
+    "Development must prove one adopted page per accepted item, inspect-only activation, result-ref rewrite, immutable ordinal slots, six-slot overflow, currentness removal, collision guard and duplicate-free restart.",
+    "Draft #181 evidence stays unchanged until product composition; UI/public DTO/locale/selector and network policy remain unchanged."
   ]
 }

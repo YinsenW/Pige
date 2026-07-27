@@ -306,9 +306,11 @@ Grounded answers and generated knowledge must preserve provenance.
 Rules:
 
 - Known Pi refs: current note `citation_1`; search `citation_2`–`9`; Dataset `citation_10`;
-  source `citation_11`–`16`; URL `citation_17`. An inspected current source takes `11` and
-  retrieval `citation_12`–`16`; otherwise retrieval takes `citation_11`–`16`. Drift/unknown stays uncited;
-  equal complete identity dedupes, unequal ref identity stops durable publication.
+  source `citation_11`–`16`; URL `citation_17`. A single inspected source takes `11` and
+  retrieval `12`–`16`, or retrieval uses `11`–`16` when absent. An attachment set reserves
+  ordinals 1–6 as `11`–`16`; successful inspect alone exposes its ref in result and registry.
+  Items 7–8 stay inspectable/uncited. Switching keeps current refs; drift removes without
+  reuse/renumber. Equal identity dedupes; unequal identity stops publish.
 - Ranked results must include snippets and match reasons.
 - Ingest outputs should cite source pages, source artifacts, or original locators.
 - Dataset claims cite exact Dataset revision/table/schema plus row ID, primary key, range,
