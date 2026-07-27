@@ -34,6 +34,8 @@ import type {
   KnowledgeActivityListResult,
   KnowledgeActivityUndoRequest,
   KnowledgeActivityUndoResult,
+  KnowledgeHealthRunRequest,
+  KnowledgeHealthRunResult,
   KnowledgeTreeResult,
   LibraryListRequest,
   LibraryListResult,
@@ -172,6 +174,8 @@ import {
   CollectionOpenResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
+  KnowledgeHealthRunRequestSchema,
+  KnowledgeHealthRunResultSchema,
   HighRiskConfirmationChangedEventSchema,
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
@@ -882,7 +886,13 @@ const api: PigeDesktopApi = {
     resetLocalDatabase: async (): Promise<LocalDatabaseResetResult> =>
       ipcRenderer.invoke("maintenance.resetLocalDatabase") as Promise<LocalDatabaseResetResult>,
     localDatabaseStatus: async (): Promise<LocalDatabaseStatus> =>
-      ipcRenderer.invoke("maintenance.localDatabaseStatus") as Promise<LocalDatabaseStatus>
+      ipcRenderer.invoke("maintenance.localDatabaseStatus") as Promise<LocalDatabaseStatus>,
+    runKnowledgeHealth: async (request: KnowledgeHealthRunRequest): Promise<KnowledgeHealthRunResult> => {
+      const parsedRequest = KnowledgeHealthRunRequestSchema.parse(request);
+      return KnowledgeHealthRunResultSchema.parse(
+        await ipcRenderer.invoke("maintenance.runKnowledgeHealth", parsedRequest)
+      );
+    }
   },
   diagnostics: {
     health: async (): Promise<DiagnosticsHealth> =>

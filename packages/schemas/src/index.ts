@@ -865,6 +865,133 @@ export const KnowledgeActivityListResultSchema = z.object({
   invalidOperationCount: z.number().int().nonnegative(),
   activities: z.array(KnowledgeActivitySummarySchema).max(20)
 }).strict();
+
+export const KNOWLEDGE_HEALTH_MAX_ISSUE_SUMMARIES = 100;
+export const KNOWLEDGE_HEALTH_MAX_DUPLICATE_TOPIC_PAGES = 8;
+export const KNOWLEDGE_HEALTH_MAX_RESULT_UTF8_BYTES = 128 * 1024;
+export const KnowledgeHealthRequestIdSchema = z.string()
+  .regex(/^knowledge_health_request_[a-z0-9]{16,64}$/);
+export const KnowledgeHealthIndexGenerationSchema = z.string()
+  .min(1)
+  .max(160)
+  .regex(/^[A-Za-z0-9:._+#-]+$/);
+export const KnowledgeHealthPageRefSchema = z.object({
+  pageId: PageIdSchema,
+  title: z.string().min(1).max(512)
+}).strict();
+export const KnowledgeHealthIssueKindSchema = z.enum([
+  "broken_link",
+  "orphan_page",
+  "duplicate_topic",
+  "unsourced_claim"
+]);
+const KnowledgeHealthBrokenLinkIssueSchema = z.object({
+  kind: z.literal("broken_link"),
+  page: KnowledgeHealthPageRefSchema,
+  unresolvedLinkCount: z.number().int().min(1).max(10_000_000)
+}).strict();
+const KnowledgeHealthOrphanPageIssueSchema = z.object({
+  kind: z.literal("orphan_page"),
+  page: KnowledgeHealthPageRefSchema
+}).strict();
+const KnowledgeHealthDuplicateTopicIssueSchema = z.object({
+  kind: z.literal("duplicate_topic"),
+  candidatePageCount: z.number().int().min(2).max(10_000_000),
+  pages: z.array(KnowledgeHealthPageRefSchema)
+    .min(2)
+    .max(KNOWLEDGE_HEALTH_MAX_DUPLICATE_TOPIC_PAGES)
+}).strict();
+const KnowledgeHealthUnsourcedClaimIssueSchema = z.object({
+  kind: z.literal("unsourced_claim"),
+  page: KnowledgeHealthPageRefSchema
+}).strict();
+export const KnowledgeHealthIssueSummarySchema = z.discriminatedUnion("kind", [
+  KnowledgeHealthBrokenLinkIssueSchema,
+  KnowledgeHealthOrphanPageIssueSchema,
+  KnowledgeHealthDuplicateTopicIssueSchema,
+  KnowledgeHealthUnsourcedClaimIssueSchema
+]).superRefine((issue, context) => {
+  if (issue.kind === "duplicate_topic") {
+    const pageIds = issue.pages.map(({ pageId }) => pageId);
+    if (pageIds.some((pageId, index) => index > 0 && pageId <= pageIds[index - 1]!)) {
+      context.addIssue({
+        code: "custom",
+        path: ["pages"],
+        message: "Duplicate-topic page identities must be unique and ordered."
+      });
+    }
+    if (issue.candidatePageCount < issue.pages.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["candidatePageCount"],
+        message: "Duplicate-topic candidate totals must include every projected page."
+      });
+    }
+  }
+});
+const KnowledgeHealthCountSchema = z.number().int().nonnegative().max(10_000_000);
+export const KnowledgeHealthCountsSchema = z.object({
+  totalIssueCount: KnowledgeHealthCountSchema,
+  brokenLinkPageCount: KnowledgeHealthCountSchema,
+  unresolvedLinkCount: KnowledgeHealthCountSchema,
+  orphanPageCount: KnowledgeHealthCountSchema,
+  duplicateTopicGroupCount: KnowledgeHealthCountSchema,
+  unsourcedClaimCount: KnowledgeHealthCountSchema
+}).strict().superRefine((counts, context) => {
+  if (counts.totalIssueCount !== counts.brokenLinkPageCount + counts.orphanPageCount +
+    counts.duplicateTopicGroupCount + counts.unsourcedClaimCount) {
+    context.addIssue({ code: "custom", path: ["totalIssueCount"], message: "Knowledge Health totals disagree." });
+  }
+  if (counts.unresolvedLinkCount < counts.brokenLinkPageCount) {
+    context.addIssue({ code: "custom", path: ["unresolvedLinkCount"], message: "Broken-link totals disagree." });
+  }
+});
+export const KnowledgeHealthRunRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: KnowledgeHealthRequestIdSchema,
+  activeVaultId: VaultIdSchema
+}).strict();
+const KnowledgeHealthResultIdentitySchema = KnowledgeHealthRunRequestSchema;
+const KnowledgeHealthReadyResultSchema = KnowledgeHealthResultIdentitySchema.extend({
+  status: z.literal("ready"),
+  checkedAt: z.string().datetime({ offset: true }),
+  indexGeneration: KnowledgeHealthIndexGenerationSchema,
+  coverage: z.enum(["complete", "partial"]),
+  invalidPageCount: KnowledgeHealthCountSchema,
+  counts: KnowledgeHealthCountsSchema,
+  issues: z.array(KnowledgeHealthIssueSummarySchema).max(KNOWLEDGE_HEALTH_MAX_ISSUE_SUMMARIES),
+  truncated: z.boolean()
+}).strict();
+export const KnowledgeHealthRunResultSchema = z.discriminatedUnion("status", [
+  KnowledgeHealthReadyResultSchema,
+  KnowledgeHealthResultIdentitySchema.extend({ status: z.literal("unavailable") }).strict(),
+  KnowledgeHealthResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "ready") return;
+  const keys = result.issues.map((issue) => {
+    switch (issue.kind) {
+      case "broken_link": return `0:${issue.page.pageId}`;
+      case "orphan_page": return `1:${issue.page.pageId}`;
+      case "duplicate_topic": return `2:${issue.pages.map(({ pageId }) => pageId).join(":")}`;
+      case "unsourced_claim": return `3:${issue.page.pageId}`;
+    }
+  });
+  if (keys.some((key, index) => index > 0 && key <= keys[index - 1]!)) {
+    context.addIssue({ code: "custom", path: ["issues"], message: "Knowledge Health issues must be unique and stably ordered." });
+  }
+  const duplicateGroupTruncated = result.issues.some((issue) =>
+    issue.kind === "duplicate_topic" && issue.candidatePageCount > issue.pages.length
+  );
+  if (result.truncated !== (result.counts.totalIssueCount > result.issues.length || duplicateGroupTruncated)) {
+    context.addIssue({ code: "custom", path: ["truncated"], message: "Knowledge Health truncation disagrees with complete counts." });
+  }
+  if ((result.coverage === "complete") !== (result.invalidPageCount === 0)) {
+    context.addIssue({ code: "custom", path: ["coverage"], message: "Knowledge Health coverage disagrees with invalid-page count." });
+  }
+  if (new TextEncoder().encode(JSON.stringify(result)).byteLength > KNOWLEDGE_HEALTH_MAX_RESULT_UTF8_BYTES) {
+    context.addIssue({ code: "custom", path: [], message: "Knowledge Health result exceeds its UTF-8 byte bound." });
+  }
+});
 export const ArtifactIdSchema = z.string().regex(/^art_[a-z0-9][a-z0-9_]{2,}$/);
 export const RootBindingIdSchema = z.string().regex(/^root_[a-z0-9][a-z0-9_]{5,}$/);
 export const BackupIdSchema = z.string().regex(/^backup_\d{8}_[a-z0-9]{8,}$/);
@@ -4379,6 +4506,14 @@ export type KnowledgeActivityTarget = z.infer<typeof KnowledgeActivityTargetSche
 export type KnowledgeActivitySummary = z.infer<typeof KnowledgeActivitySummarySchema>;
 export type KnowledgeActivityListRequest = z.infer<typeof KnowledgeActivityListRequestSchema>;
 export type KnowledgeActivityListResult = z.infer<typeof KnowledgeActivityListResultSchema>;
+export type KnowledgeHealthRequestId = z.infer<typeof KnowledgeHealthRequestIdSchema>;
+export type KnowledgeHealthIndexGeneration = z.infer<typeof KnowledgeHealthIndexGenerationSchema>;
+export type KnowledgeHealthPageRef = z.infer<typeof KnowledgeHealthPageRefSchema>;
+export type KnowledgeHealthIssueKind = z.infer<typeof KnowledgeHealthIssueKindSchema>;
+export type KnowledgeHealthIssueSummary = z.infer<typeof KnowledgeHealthIssueSummarySchema>;
+export type KnowledgeHealthCounts = z.infer<typeof KnowledgeHealthCountsSchema>;
+export type KnowledgeHealthRunRequest = z.infer<typeof KnowledgeHealthRunRequestSchema>;
+export type KnowledgeHealthRunResult = z.infer<typeof KnowledgeHealthRunResultSchema>;
 export type JobCheckpoint = z.infer<typeof JobCheckpointSchema>;
 export type JobRef = z.infer<typeof JobRefSchema>;
 export type JobRecord = z.infer<typeof JobRecordSchema>;
