@@ -2375,7 +2375,10 @@ async function readPdfRendererResult(browserWindow, baseline) {
         ) {
           const button = Array.from(document.querySelectorAll('.conversation-citations .citation-row:not(:disabled)'))
             .find((item) => item.textContent?.includes('[11]'));
-          if (!button) throw new Error('PDF citation navigation action is unavailable.');
+          if (!button) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            continue;
+          }
           button.click();
           while (Date.now() < deadline && !document.querySelector('.note-reader')) {
             await new Promise((resolve) => setTimeout(resolve, 50));

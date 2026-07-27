@@ -247,6 +247,8 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain("item.refId === 'citation_11'");
     expect(source).toContain("sourcePage?.pageId === citation.pageId");
     expect(source).toContain(".conversation-citations .citation-row:not(:disabled)");
+    expect(source).toContain("if (!button) {\n            await new Promise((resolve) => setTimeout(resolve, 50));\n            continue;");
+    expect(source).not.toContain("if (!button) throw new Error('PDF citation navigation action is unavailable.');");
     expect(source).toContain("assert.equal(pdfSource.knowledgePageId, pdf.pdfCitationPageId)");
     expect(source).toContain('assert.equal(pdfSource.kind, "pdf_file")');
     expect(source).toContain('job.class === "parse" && job.parentJobId === pdf.pdfJobId');
