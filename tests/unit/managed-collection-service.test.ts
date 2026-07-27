@@ -270,7 +270,7 @@ describe("ManagedCollectionService", () => {
       snapshot: {
         revisionId: expect.any(String),
         columns: expect.arrayContaining([
-          { columnId: expect.any(String), label: "Notes", logicalType: "string" }
+          { columnId: expect.any(String), label: "Notes", logicalType: "string", canRename: true }
         ]),
         totalRowCount: initialRows.length,
         returnedRowCount: initialRows.length,
@@ -418,16 +418,11 @@ describe("ManagedCollectionService", () => {
         label: `${logicalType} value`,
         logicalType
       });
-      expect(added).toMatchObject({
-        status: "committed",
-        snapshot: {
-          columns: expect.arrayContaining([
-            { columnId: expect.any(String), label: `${logicalType} value`, logicalType }
-          ]),
-          canAddColumn: true
-        }
-      });
+      expect(added).toMatchObject({ status: "committed", snapshot: { canAddColumn: true } });
       if (added.status !== "committed") throw new Error(`Collection ${logicalType} column did not commit`);
+      expect(added.snapshot.columns).toEqual(expect.arrayContaining([
+        { columnId: expect.any(String), label: `${logicalType} value`, logicalType, canRename: true }
+      ]));
       for (const row of added.snapshot.rows) {
         expect(row.cells.find((cell) => cell.columnId === added.columnId)).toEqual({
           columnId: added.columnId,
@@ -469,6 +464,155 @@ describe("ManagedCollectionService", () => {
       expectedRevisionId: currentRevisionId,
       label: "One too many"
     })).resolves.toMatchObject({ status: "invalid", reason: "column_limit" });
+  });
+
+  it("renames one stable column immutably, adopts exact replay, and restores the prior label through forward Undo", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionService(port);
+    const manifestPath = path.join(fixture.bundlePath, "dataset.json");
+    const initialManifestBytes = fs.readFileSync(manifestPath);
+    const initialManifest = readManifest(fixture.bundlePath);
+    const initialSchemaPath = path.join(fixture.bundlePath, initialManifest.schema.path);
+    const initialPayloadPath = path.join(fixture.bundlePath, initialManifest.payload.path);
+    const initialSchemaBytes = fs.readFileSync(initialSchemaPath);
+    const initialPayloadBytes = fs.readFileSync(initialPayloadPath);
+    const initialSchema = DatasetSchemaRecordSchema.parse(readJson(initialSchemaPath));
+    const table = required(initialSchema.tables[0]);
+    const column = required(table.columns[0]);
+    const opened = await service.open({
+      apiVersion: 1,
+      requestId: "collection_request_renameopenabcdef",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id
+    });
+    expect(opened.status).toBe("ready");
+    if (opened.status !== "ready") throw new Error("Collection did not open for rename");
+    expect(opened.snapshot.columns).toEqual(expect.arrayContaining([
+      expect.objectContaining({ columnId: column.id, canRename: true })
+    ]));
+    const initialRows = opened.snapshot.rows;
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "collection_request_renamecolumnabcd",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id,
+      expectedRevisionId: initialManifest.activeRevision,
+      columnId: column.id,
+      label: "Display name"
+    };
+
+    const committed = await service.renameColumn(request);
+    expect(committed).toMatchObject({
+      status: "committed",
+      columnId: column.id,
+      snapshot: {
+        revisionId: expect.any(String),
+        columns: expect.arrayContaining([{
+          columnId: column.id,
+          label: "Display name",
+          logicalType: column.logicalType,
+          canRename: true
+        }]),
+        rows: initialRows
+      }
+    });
+    if (committed.status !== "committed") throw new Error("Collection column rename did not commit");
+    expect(committed.snapshot.columns.map((entry) => entry.columnId)).toEqual(opened.snapshot.columns.map((entry) => entry.columnId));
+    expect(committed.snapshot.columns.map((entry) => entry.logicalType)).toEqual(opened.snapshot.columns.map((entry) => entry.logicalType));
+    expect(committed.snapshot.revisionId).not.toBe(initialManifest.activeRevision);
+    const committedManifest = readManifest(fixture.bundlePath);
+    const committedRevision = DatasetRevisionSchema.parse(readJson(path.join(fixture.bundlePath, committedManifest.revision.path)));
+    expect(committedRevision).toMatchObject({
+      parentRevisionId: initialManifest.activeRevision,
+      operationId: committed.operationId,
+      change: { kind: "collection_column_rename", tableId: table.id, columnId: column.id }
+    });
+    const committedSchema = DatasetSchemaRecordSchema.parse(readJson(path.join(fixture.bundlePath, committedManifest.schema.path)));
+    expect(required(committedSchema.tables[0]).columns.find((entry) => entry.id === column.id)).toEqual({
+      ...column,
+      name: "Display name"
+    });
+    const database = new DatabaseSync(path.join(fixture.bundlePath, committedManifest.payload.path), { readOnly: true });
+    try {
+      expect(database.prepare(
+        "SELECT name, ordinal, projected_type FROM pige_dataset_columns WHERE table_id = ? AND column_id = ?"
+      ).get(table.id, column.id)).toEqual({ name: "Display name", ordinal: column.ordinal, projected_type: "text" });
+      expect(database.prepare("SELECT COUNT(*) AS count FROM pige_dataset_cells WHERE column_id = ?")
+        .get(column.id)).toEqual({ count: table.rowCount });
+    } finally {
+      database.close();
+    }
+    expect(fs.readFileSync(initialSchemaPath)).toEqual(initialSchemaBytes);
+    expect(fs.readFileSync(initialPayloadPath)).toEqual(initialPayloadBytes);
+
+    const operationPath = findFile(path.join(fixture.vaultPath, ".pige/operations"), `${committed.operationId}.json`);
+    const operationBytes = fs.readFileSync(operationPath);
+    const operation = OperationRecordSchema.parse(readJson(operationPath));
+    expect(operation).toMatchObject({ id: committed.operationId, kind: "rename_collection_column", reversible: "yes" });
+    expect(operation.targetRefs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "column", id: column.id })
+    ]));
+
+    fs.writeFileSync(manifestPath, initialManifestBytes);
+    fs.rmSync(operationPath);
+    await expect(new ManagedCollectionService(port).renameColumn(request)).resolves.toEqual(committed);
+    expect(readManifest(fixture.bundlePath).activeRevision).toBe(committed.snapshot.revisionId);
+    const revisionCount = fs.readdirSync(path.join(fixture.bundlePath, "revisions")).length;
+    await expect(service.renameColumn(request)).resolves.toEqual(committed);
+    expect(fs.readdirSync(path.join(fixture.bundlePath, "revisions"))).toHaveLength(revisionCount);
+    fs.writeFileSync(operationPath, `${JSON.stringify({ ...readJson(operationPath) as object, summary: "tampered" }, null, 2)}\n`);
+    await expect(service.renameColumn(request)).rejects.toMatchObject({ code: "collection.request_conflict" });
+    fs.writeFileSync(operationPath, operationBytes);
+
+    await expect(service.renameColumn({
+      ...request,
+      requestId: "collection_request_renamestaleabcde"
+    })).resolves.toMatchObject({ status: "stale", snapshot: { revisionId: committed.snapshot.revisionId } });
+    await expect(service.renameColumn({
+      ...request,
+      requestId: "collection_request_renameduplicatea",
+      expectedRevisionId: committed.snapshot.revisionId,
+      label: " COUNT "
+    })).resolves.toMatchObject({ status: "duplicate", snapshot: { revisionId: committed.snapshot.revisionId } });
+    await expect(service.renameColumn({
+      ...request,
+      requestId: "collection_request_renamemissingabc",
+      expectedRevisionId: committed.snapshot.revisionId,
+      columnId: "column_missing123456"
+    })).resolves.toMatchObject({ status: "not_found" });
+
+    const undone = await service.undo(operation, committed.snapshot.revisionId);
+    expect(undone).toMatchObject({ status: "undone", revisionId: expect.any(String) });
+    if (undone.status !== "undone") throw new Error("Collection column rename was not undone");
+    expect(undone.revisionId).not.toBe(initialManifest.activeRevision);
+    expect(undone.revisionId).not.toBe(committed.snapshot.revisionId);
+    const restored = await service.open({
+      apiVersion: 1,
+      requestId: "collection_request_renameundoabcdef",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id
+    });
+    expect(restored).toMatchObject({ status: "ready", snapshot: { revisionId: undone.revisionId, rows: initialRows } });
+    if (restored.status !== "ready") throw new Error("Collection did not reopen after rename Undo");
+    expect(restored.snapshot.columns).toEqual(expect.arrayContaining([
+      expect.objectContaining({ columnId: column.id, label: column.name, canRename: true })
+    ]));
+    const undoManifest = readManifest(fixture.bundlePath);
+    const undoRevision = DatasetRevisionSchema.parse(readJson(path.join(fixture.bundlePath, undoManifest.revision.path)));
+    expect(undoRevision).toMatchObject({
+      parentRevisionId: committed.snapshot.revisionId,
+      change: {
+        kind: "collection_column_rename_undo",
+        tableId: table.id,
+        columnId: column.id,
+        undoOfOperationId: committed.operationId
+      }
+    });
   });
 
   it("appends one authoritative default row, adopts replay, and undoes the exact revision", async () => {

@@ -8,19 +8,22 @@ import {
   CollectionAddNullableColumnRequestSchema, CollectionAddNullableColumnResultSchema,
   CollectionAppendDefaultRowRequestSchema, CollectionAppendDefaultRowResultSchema,
   CollectionCellEditRequestSchema, CollectionCellEditResultSchema,
+  CollectionRenameColumnRequestSchema,
   CollectionTrashRowRequestSchema, CollectionTrashRowResultSchema, CollectionOpenRequestSchema, CollectionOpenResultSchema,
   DatasetManifestSchema,
   DatasetRevisionSchema, DatasetSchemaRecordSchema, OperationRecordSchema,
   type CollectionAddNullableColumnRequest, type CollectionAddNullableColumnResult,
   type CollectionAppendDefaultRowRequest, type CollectionAppendDefaultRowResult,
   type CollectionCellEditRequest, type CollectionCellEditResult,
+  type CollectionRenameColumnRequest, type CollectionRenameColumnResult,
   type CollectionTrashRowRequest, type CollectionTrashRowResult, type CollectionOpenRequest, type CollectionOpenResult,
   type CollectionScalarValue,
   type DatasetLogicalType, type DatasetRevision, type DatasetSchemaRecord, type OperationRecord
 } from "@pige/schemas";
 import {
-  MAX_COLLECTION_JSON_BYTES, adoptNullableColumnMutation, assertSafeVaultRoot, collectionCellReadOnlyReason, commitNullableColumnAdd,
-  commitNullableColumnUndo, createNullableColumnId, fileRef, hashCanonical,
+  MAX_COLLECTION_JSON_BYTES, adoptColumnRenameMutation, adoptNullableColumnMutation, assertSafeVaultRoot,
+  collectionCellReadOnlyReason, commitColumnRenameUndo, commitNullableColumnAdd,
+  commitNullableColumnUndo, createNullableColumnId, executeColumnRename, fileRef, hashCanonical, normalizeColumnLabel,
   openReadOnlyPayload, operationConflict, operationPathFor, payloadInvalid, publishImmutableFile,
   parseCollectionCellValue, readAllBundles, readBundle, readCollectionCell, readCollectionCellFromRevision,
   readCollectionSnapshot, readJsonBounded, readJsonRef, readOperationRecords, readRevisionById,
@@ -38,28 +41,12 @@ import {
   executeRowTrash
 } from "./managed-collection-row-storage";
 
-export interface ManagedCollectionVaultPort {
-  current(): VaultSummary | undefined;
-  activeVaultPath(): string | undefined;
-}
-
-export interface ManagedCollectionRecoveryResult {
-  readonly recovered: number;
-  readonly failed: number;
-}
-
-interface MutationIdentity {
-  readonly revisionId: string;
-  readonly operationId: string;
-}
-
+export interface ManagedCollectionVaultPort { current(): VaultSummary | undefined; activeVaultPath(): string | undefined; }
+export interface ManagedCollectionRecoveryResult { readonly recovered: number; readonly failed: number; }
+interface MutationIdentity { readonly revisionId: string; readonly operationId: string; }
 interface CollectionOperationBinding {
-  readonly datasetId: string;
-  readonly tableId: string;
-  readonly rowId?: string;
-  readonly columnId?: string;
-  readonly beforeRevisionId: string;
-  readonly afterRevisionId: string;
+  readonly datasetId: string; readonly tableId: string; readonly rowId?: string; readonly columnId?: string;
+  readonly beforeRevisionId: string; readonly afterRevisionId: string;
   readonly changeKind:
     | "collection_cell_edit"
     | "collection_cell_undo"
@@ -67,23 +54,19 @@ interface CollectionOperationBinding {
     | "collection_row_add_undo"
     | "collection_column_add"
     | "collection_column_add_undo"
+    | "collection_column_rename"
+    | "collection_column_rename_undo"
     | "collection_row_trash"
     | "collection_row_trash_undo";
 }
-
-const MAX_OPEN_COLUMNS = 32;
-const MAX_STRING_BYTES = 4 * 1024;
-const OPERATION_ID = /^op_(\d{8})_[a-z0-9]{8,}$/u;
-const REVISION_ID = /^dataset_rev_(\d{8})_[a-z0-9]{12,}$/u;
+const MAX_OPEN_COLUMNS = 32, MAX_STRING_BYTES = 4 * 1024;
+const OPERATION_ID = /^op_(\d{8})_[a-z0-9]{8,}$/u, REVISION_ID = /^dataset_rev_(\d{8})_[a-z0-9]{12,}$/u;
 const EDITABLE_TYPES = new Set<DatasetLogicalType>(["string", "integer", "number", "boolean", "date", "datetime"]);
 
 export class ManagedCollectionService {
   readonly #vaults: ManagedCollectionVaultPort;
   #mutationTail: Promise<void> = Promise.resolve();
-
-  constructor(vaults: ManagedCollectionVaultPort) {
-    this.#vaults = vaults;
-  }
+  constructor(vaults: ManagedCollectionVaultPort) { this.#vaults = vaults; }
 
   async open(request: CollectionOpenRequest): Promise<CollectionOpenResult> {
     const parsed = CollectionOpenRequestSchema.parse(request);
@@ -115,11 +98,20 @@ export class ManagedCollectionService {
     return this.#serialize(() => this.#appendDefaultRow(parsed));
   }
 
-  async addNullableColumn(
-    request: CollectionAddNullableColumnRequest
-  ): Promise<CollectionAddNullableColumnResult> {
+  async addNullableColumn(request: CollectionAddNullableColumnRequest): Promise<CollectionAddNullableColumnResult> {
     const parsed = CollectionAddNullableColumnRequestSchema.parse(request);
     return this.#serialize(() => this.#addNullableColumn(parsed));
+  }
+
+  async renameColumn(request: CollectionRenameColumnRequest): Promise<CollectionRenameColumnResult> {
+    const parsed = CollectionRenameColumnRequestSchema.parse(request);
+    return this.#serialize(async () => {
+      const active = this.#activeVault(parsed.activeVaultId);
+      return executeColumnRename({
+        vaultPath: active?.vaultPath, request: parsed, identity: createColumnRenameMutationIdentity(parsed),
+        isVaultActive: () => !!this.#activeVault(parsed.activeVaultId), createOperation: createOperationForRevision
+      });
+    });
   }
 
   async trashRow(request: CollectionTrashRowRequest): Promise<CollectionTrashRowResult> {
@@ -153,6 +145,8 @@ export class ManagedCollectionService {
           ? "trash_collection_row"
         : binding.changeKind.startsWith("collection_column_add")
           ? "add_collection_column"
+        : binding.changeKind.startsWith("collection_column_rename")
+          ? "rename_collection_column"
           : "update_collection_cell",
       createdAt: operation.createdAt,
       ...(current?.manifest.title ? { targetLabel: current.manifest.title } : {}),
@@ -230,8 +224,8 @@ export class ManagedCollectionService {
             beforeRevisionId: binding.beforeRevisionId,
             undoOfOperationId: operation.id
           })
-        : binding.changeKind === "collection_column_add"
-          ? commitColumnAddUndo(current, binding, operation.id)
+        : binding.changeKind === "collection_column_add" || binding.changeKind === "collection_column_rename"
+          ? commitColumnUndo(current, binding, operation.id)
           : commitCellUndo(current, binding, operation.id);
       return {
         status: "undone",
@@ -315,9 +309,7 @@ export class ManagedCollectionService {
     }
   }
 
-  async #appendDefaultRow(
-    request: CollectionAppendDefaultRowRequest
-  ): Promise<CollectionAppendDefaultRowResult> {
+  async #appendDefaultRow(request: CollectionAppendDefaultRowRequest): Promise<CollectionAppendDefaultRowResult> {
     const identity = openIdentity(request);
     const active = this.#activeVault(request.activeVaultId);
     if (!active) return CollectionAppendDefaultRowResultSchema.parse({ ...identity, status: "not_found" });
@@ -377,9 +369,7 @@ export class ManagedCollectionService {
     }
   }
 
-  async #addNullableColumn(
-    request: CollectionAddNullableColumnRequest
-  ): Promise<CollectionAddNullableColumnResult> {
+  async #addNullableColumn(request: CollectionAddNullableColumnRequest): Promise<CollectionAddNullableColumnResult> {
     const identity = openIdentity(request);
     const active = this.#activeVault(request.activeVaultId);
     if (!active) return CollectionAddNullableColumnResultSchema.parse({ ...identity, status: "not_found" });
@@ -444,6 +434,7 @@ export class ManagedCollectionService {
     }
   }
 
+
   #recoverActiveOperation(binding: BundleBinding): boolean {
     if (!binding.revision.change || binding.revision.change.kind === "initial_import") return false;
     const operationPath = operationPathFor(binding.vaultPath, binding.revision.operationId);
@@ -489,12 +480,8 @@ export class ManagedCollectionService {
 }
 
 interface CommitMutationInput {
-  readonly binding: BundleBinding;
-  readonly identity: MutationIdentity;
-  readonly tableId: string;
-  readonly rowId: string;
-  readonly columnId: string;
-  readonly value: CollectionScalarValue;
+  readonly binding: BundleBinding; readonly identity: MutationIdentity; readonly tableId: string;
+  readonly rowId: string; readonly columnId: string; readonly value: CollectionScalarValue;
   readonly expectedRevisionId: string;
   readonly change:
     | { readonly kind: "collection_cell_edit" }
@@ -554,17 +541,11 @@ function commitMutation(input: CommitMutationInput): { readonly revision: Datase
 }
 
 interface CommitRowAddInput {
-  readonly binding: BundleBinding;
-  readonly identity: MutationIdentity;
-  readonly tableId: string;
-  readonly rowId: string;
-  readonly expectedRevisionId: string;
+  readonly binding: BundleBinding; readonly identity: MutationIdentity; readonly tableId: string;
+  readonly rowId: string; readonly expectedRevisionId: string;
 }
-
 function commitRowAdd(input: CommitRowAddInput): {
-  readonly binding: BundleBinding;
-  readonly revision: DatasetRevision;
-  readonly operation: OperationRecord;
+  readonly binding: BundleBinding; readonly revision: DatasetRevision; readonly operation: OperationRecord;
 } {
   const committed = commitDefaultRowAppend(input);
   const operation = createOperationForRevision(committed.binding, committed.revision);
@@ -573,8 +554,7 @@ function commitRowAdd(input: CommitRowAddInput): {
 }
 
 function commitRowAddUndo(input: CommitRowAddInput & {
-  readonly beforeRevisionId: string;
-  readonly undoOfOperationId: string;
+  readonly beforeRevisionId: string; readonly undoOfOperationId: string;
 }): { readonly revision: DatasetRevision; readonly operation: OperationRecord } {
   const committed = commitDefaultRowUndo(input);
   const operation = createOperationForRevision(committed.binding, committed.revision);
@@ -583,8 +563,7 @@ function commitRowAddUndo(input: CommitRowAddInput & {
 }
 
 function commitRowTrashUndoOperation(input: CommitRowAddInput & {
-  readonly beforeRevisionId: string;
-  readonly undoOfOperationId: string;
+  readonly beforeRevisionId: string; readonly undoOfOperationId: string;
 }): { readonly revision: DatasetRevision; readonly operation: OperationRecord } {
   const committed = commitRowTrashUndo(input);
   const operation = createOperationForRevision(committed.binding, committed.revision);
@@ -614,13 +593,13 @@ function commitCellUndo(
   });
 }
 
-function commitColumnAddUndo(
+function commitColumnUndo(
   current: BundleBinding,
   binding: CollectionOperationBinding,
   operationId: string
 ): { readonly revision: DatasetRevision; readonly operation: OperationRecord } {
   if (!binding.columnId) throw operationConflict();
-  const committed = commitNullableColumnUndo({
+  const input = {
     binding: current,
     identity: createUndoIdentity(operationId, binding.afterRevisionId),
     tableId: binding.tableId,
@@ -628,7 +607,10 @@ function commitColumnAddUndo(
     expectedRevisionId: binding.afterRevisionId,
     beforeRevisionId: binding.beforeRevisionId,
     undoOfOperationId: operationId
-  });
+  };
+  const committed = binding.changeKind === "collection_column_rename"
+    ? commitColumnRenameUndo(input)
+    : commitNullableColumnUndo(input);
   const operation = createOperationForRevision(committed.binding, committed.revision);
   writeJsonExclusive(operationPathFor(committed.binding.vaultPath, operation.id), operation);
   return { revision: committed.revision, operation };
@@ -820,8 +802,13 @@ function createColumnMutationIdentity(request: CollectionAddNullableColumnReques
   };
 }
 
-function normalizeColumnLabel(label: string): string {
-  return label.normalize("NFKC").toLocaleLowerCase("en-US");
+function createColumnRenameMutationIdentity(request: CollectionRenameColumnRequest): MutationIdentity {
+  const dateKey = REVISION_ID.exec(request.expectedRevisionId)?.[1];
+  if (!dateKey) throw requestConflict();
+  return {
+    revisionId: `dataset_rev_${dateKey}_${digest("pige:collection-column-rename:v1", request.requestId).slice(0, 20)}`,
+    operationId: `op_${dateKey}_${digest("pige:collection-column-rename-operation:v1", request.requestId).slice(0, 20)}`
+  };
 }
 
 function createUndoIdentity(operationId: string, revisionId: string): MutationIdentity {
@@ -872,7 +859,7 @@ function createOperationForRevision(binding: BundleBinding, revision: DatasetRev
     },
     ...((change.kind === "collection_cell_undo" || change.kind === "collection_row_add_undo" ||
         change.kind === "collection_row_trash_undo" ||
-        change.kind === "collection_column_add_undo")
+        change.kind === "collection_column_add_undo" || change.kind === "collection_column_rename_undo")
       ? [{ kind: "operation" as const, id: change.undoOfOperationId }]
       : [])
   ];
@@ -887,6 +874,8 @@ function createOperationForRevision(binding: BundleBinding, revision: DatasetRev
         ? "trash_collection_row"
       : change.kind.startsWith("collection_column_add")
         ? "add_collection_column"
+      : change.kind.startsWith("collection_column_rename")
+        ? "rename_collection_column"
         : "update_collection_cell",
     targetRefs,
     sourceRefs,
@@ -900,6 +889,10 @@ function createOperationForRevision(binding: BundleBinding, revision: DatasetRev
           ? `Restored one trashed Collection row through forward revision ${revision.id}.`
         : change.kind === "collection_column_add_undo"
           ? `Removed one added Collection column through forward revision ${revision.id}.`
+        : change.kind === "collection_column_rename_undo"
+          ? `Restored one Collection column label through forward revision ${revision.id}.`
+        : change.kind === "collection_column_rename"
+          ? `Renamed one Collection column through immutable revision ${revision.id}.`
           : change.kind === "collection_column_add"
             ? `Added one nullable Collection column through immutable revision ${revision.id}.`
         : change.kind === "collection_row_trash"
@@ -915,7 +908,8 @@ function createOperationForRevision(binding: BundleBinding, revision: DatasetRev
 
 function readOperationBinding(operation: OperationRecord): CollectionOperationBinding | undefined {
   if (operation.kind !== "update_collection_cell" && operation.kind !== "add_collection_row" &&
-      operation.kind !== "add_collection_column" && operation.kind !== "trash_collection_row") return undefined;
+      operation.kind !== "add_collection_column" && operation.kind !== "rename_collection_column" &&
+      operation.kind !== "trash_collection_row") return undefined;
   const dataset = operation.targetRefs.find((ref) => ref.kind === "dataset");
   const after = operation.after?.kind === "dataset_revision" ? operation.after : undefined;
   const before = operation.before?.kind === "dataset_revision" ? operation.before : undefined;
@@ -923,8 +917,9 @@ function readOperationBinding(operation: OperationRecord): CollectionOperationBi
   const row = operation.targetRefs.find((ref) => ref.kind === "row");
   const column = operation.targetRefs.find((ref) => ref.kind === "column");
   if (!dataset || !before || !after || !table || !REVISION_ID.test(after.id)) return undefined;
-  if (operation.kind !== "add_collection_column" && !row) return undefined;
-  if ((operation.kind === "update_collection_cell" || operation.kind === "add_collection_column") && !column) return undefined;
+  if (operation.kind !== "add_collection_column" && operation.kind !== "rename_collection_column" && !row) return undefined;
+  if ((operation.kind === "update_collection_cell" || operation.kind === "add_collection_column" ||
+      operation.kind === "rename_collection_column") && !column) return undefined;
   const undo = operation.sourceRefs.some((ref) => ref.kind === "operation");
   return {
     datasetId: dataset.id,
@@ -939,6 +934,8 @@ function readOperationBinding(operation: OperationRecord): CollectionOperationBi
         ? (undo ? "collection_row_trash_undo" : "collection_row_trash")
       : operation.kind === "add_collection_column"
         ? (undo ? "collection_column_add_undo" : "collection_column_add")
+      : operation.kind === "rename_collection_column"
+        ? (undo ? "collection_column_rename_undo" : "collection_column_rename")
         : (undo ? "collection_cell_undo" : "collection_cell_edit")
   };
 }
@@ -954,6 +951,8 @@ function isMatchingUndoOperation(original: OperationRecord, candidate: Operation
         ? "collection_row_trash_undo"
       : originalBinding.changeKind === "collection_column_add"
         ? "collection_column_add_undo"
+      : originalBinding.changeKind === "collection_column_rename"
+        ? "collection_column_rename_undo"
         : "collection_cell_undo") &&
     candidateBinding.datasetId === originalBinding.datasetId &&
     candidateBinding.tableId === originalBinding.tableId &&
@@ -965,7 +964,8 @@ function isMatchingUndoOperation(original: OperationRecord, candidate: Operation
 
 function isUndoableCollectionChange(changeKind: CollectionOperationBinding["changeKind"]): boolean {
   return changeKind === "collection_cell_edit" || changeKind === "collection_row_add" ||
-    changeKind === "collection_column_add" || changeKind === "collection_row_trash";
+    changeKind === "collection_column_add" || changeKind === "collection_column_rename" ||
+    changeKind === "collection_row_trash";
 }
 
 function assertOperationMatchesRevision(binding: BundleBinding, operation: OperationRecord): void {
