@@ -81,9 +81,9 @@ Rules:
 - Renderer never talks to Pi directly.
 - One main-process or worker-owned anti-corruption adapter is the only Pige module
   allowed to import Pi; Agent Orchestrator owns its lifecycle.
-- Pi receives no ambient Node, filesystem, shell, or credential handle. Registered
-  first-party ordinary tools inherit the submitted turn; exceptional high-risk effects
-  use the narrow confirmation boundary.
+- Pi receives no ambient Node/filesystem/shell/credential handle. Text-only explicit tasks
+  retain ordinary registered tools. A source-bound catalog contains only exact-source
+  tools; high-risk confirmation cannot add an excluded capability.
 - Every Agent receives an explicit receiver-safe wrapper around its isolated
   `Models.streamSimple`; Pige code never calls `/compat`, `providers/all`, global
   registries/config, or the default compat dispatcher.
@@ -273,10 +273,13 @@ Rules:
 
 - Disable or avoid Pi built-in tools unless Pige wraps them with scoped adapters.
 - Register Pige-owned tools only through Agent Orchestrator.
-- One user submit authorizes registered first-party reads, parsing, OCR, retrieval,
-  user-specified fetch, and bounded local tools for that turn. `beforeToolCall` freezes
-  scoped input; handlers revalidate canonical input, path, resource, byte/time, and effect
-  guards without writing a parallel permission lifecycle.
+- One user submit authorizes registered first-party reads only when present in its scoped
+  catalog. A text-only task retains ordinary authority. A source-bound Home turn
+  (`file_picker`, `file_drop`, `large_paste`, or any accepted source session) registers only
+  exact accepted-SourceRecord inspect/parse/OCR/retrieval/write tools. Parent directories,
+  siblings, cwd, prompt/model/tool text and confirmation cannot widen that set. Typed URL
+  ingress alone owns URL fetch. `beforeToolCall` and handlers revalidate scope/resources
+  without a parallel permission lifecycle.
 - Side-effecting tools run sequentially; parallel tools require an explicit
   read-only/idempotent contract plus ordering, cancellation, and audit tests.
 - Irreversible delete, original-file overwrite, out-of-root write, arbitrary shell,
@@ -307,19 +310,16 @@ Rules:
   confirmation boundary. New Jobs do not enter `waiting_permission`; Pi may choose
   another available capability after the user decision or denial.
 
-The Pige Tool Registry is Pi's only product-capability surface. Each entry declares
-stable ID/version/description/capability; strict input/output schemas and trust; effect,
-required capabilities, resource scope, authority class, data boundary, execution order,
-idempotency, limits, owner service, and handler.
+The Pige Tool Registry is Pi's only capability surface. Entries bind identity/version,
+schemas/trust, effect, resource/authority/data scope, execution, idempotency, limits,
+owner and handler.
 
-Production exposes read-only folder/text/fetch, `pige_install_pi_package` for managed Pi
-packages, and the first-party `pige_run_command` OS capability. The command tool accepts
-an executable plus argv/cwd/timeout rather than an interpolated command string; an Agent
-may explicitly invoke a shell, npm, npx, a CLI, or another system utility when the user
-task needs it. Ordinary first-party desktop calls inherit the submitted user task as
-one-use authority and emit one audit record without a duplicate prompt. Third-party
-actors cannot inherit first-party authority; credentials, destructive effects, and
-boundary changes retain their own gates.
+Text-only explicit tasks may expose reviewed folder/text/fetch, managed-package and
+`pige_run_command` adapters under current high-risk rules. Source-bound turns never
+register arbitrary shell/command, external filesystem list/read, package install/manager,
+or generic ambient fetch. Stale or model-invented calls fail before confirmation,
+execution, or persistence. Exact-source tools remain, and URL fetch stays behind its typed
+URL owner. Third-party actors cannot inherit first-party authority.
 
 Pi-selected Dataset tools bind the exact source or Dataset revision. A deterministic
 `dataset_import` child may materialize one validated Bundle/Operation; read-only Home

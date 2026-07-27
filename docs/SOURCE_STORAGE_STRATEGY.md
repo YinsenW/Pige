@@ -216,7 +216,7 @@ Rules:
 - The sidecar under `.pige/source-records/` is the sole operational source-record authority.
 - A Markdown source page is user-editable bounded sidecar projection, not owner of paths, copy resolution, checksums, or artifact locators. After accepted Agent-turn preservation, `SourcePageService` ensures one current page per accepted record before inspect citation; rejected items get none, and parent retry/restart adopts rather than duplicates it.
 - Source records must be enough to locate, verify, repair, or explain a source.
-- `reference_original` records are mutually exclusive with `managedCopy`: they require verified `original` metadata and must not contain a managed-copy locator. `copy_to_source_library` records require `managedCopy`; they may retain `original` metadata only as provenance. Source readers branch on `storageStrategy` before resolving a locator and never prefer a field from the other strategy.
+- Agent/model/tools use Pige-owned handles, never raw paths. `reference_original` records are mutually exclusive with `managedCopy`; original identity stays private. `copy_to_source_library` requires `managedCopy`; readers branch on strategy. Always-staging is future defense-in-depth; if adopted, Job/recovery owns crash-safe cleanup, never immediate deletion.
 - Missing referenced originals should not break Markdown knowledge.
 - If an original referenced file changes, Pige records the change and may re-ingest through a normal job.
 - A source mutation writes the sidecar atomically first, then refreshes the Markdown projection using a recorded before/target hash. A crash between the writes is recovered from the sidecar and job checkpoint.

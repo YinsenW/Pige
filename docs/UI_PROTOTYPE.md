@@ -222,8 +222,9 @@ Behavior:
 - Send/valid Enter snapshots exact text and staged identities into one Agent turn/Job.
   Direct `file_picker` also snapshots the active `canFollowUp` conversation/tail pair;
   it must continue that pair, or starts one conversation when none exists. Stale rejection
-  preserves exact draft/item revisions. Attachment-only adds minimal organize intent;
-  text-only whitespace creates no turn.
+  preserves exact draft/item revisions. Attachment-only uses six-locale “Use only the
+  attached file(s) as source material.” Whitespace creates no turn; no control/modal is
+  added, and confirmation grants no authority.
 - Clear text/chips only after the authoritative accepted receipt. Validation, IPC, vault-
   identity, or submission failure preserves the exact composer state for idempotent retry.
   A Send-button/Enter race shares one client turn identity and cannot duplicate work.
