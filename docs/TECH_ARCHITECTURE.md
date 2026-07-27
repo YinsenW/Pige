@@ -660,8 +660,11 @@ Responsibilities:
 - Select an internal model call profile from app defaults.
 - Run the embedded Pi Agent loop through the one approved adapter.
 - Present a typed catalog. One submitted turn authorizes registered first-party tools only
-  when its scoped catalog contains them: text-only retains ordinary authority; source-bound
-  registers exact-source inspect/parse/OCR/retrieval/write only, with typed URL separate.
+  when its scoped catalog contains them. Attachments grant exact-source tools only; they do
+  not grant ambient scope. Separately authored ambient intent may register its precise
+  confirmed/reviewed effect even with attachments; typed URL ingress stays separate.
+- `AgentTurnConversationStore` persists `authoredTaskIntent` before fallback; Home reads it
+  apart from display text, and legacy/malformed means neutral.
 - Keep recoverable schema/tool/citation/evidence rejection inside that Pi loop as typed
   feedback until an accepted result, grounded abstention, or true external boundary.
 - Run Pi as the owner of wiki-change planning and bounded Markdown authorship.
@@ -1176,7 +1179,8 @@ Responsibilities:
 
 - Own only exceptional high-risk confirmation: irreversible deletion, user-original
   overwrite, out-of-root write, arbitrary shell or unknown package install, credential
-  disclosure, risky Agent edits, and equivalent authority/security escalation.
+  disclosure, risky Agent edits, equivalent escalation, and one immutable reviewed
+  install/config/auth plan under its distinct compound-effect schema.
 - Produce one safe summary and return an allow/deny result to the active Pi turn or
   deterministic operation. New Jobs never enter `waiting_permission`.
 
@@ -1190,22 +1194,24 @@ Contract ownership:
 
 Service-level constraints:
 
-- Durable replay/idempotency belongs to the effect's Job/Operation owner, not a parallel
-  request/decision/consume/completion state machine.
-- The renderer receives only reviewed actor/action/resource summaries. Raw action input,
-  paths, commands, hashes, credentials, bodies, records and transport errors stay in main.
-- Prompts expose only the concrete high-risk effect and Deny/Allow. There is no global
-  mode, saved grant, or model-egress approval layer.
-- Raw credentials stay inside reviewed provider adapters behind secret references and are never returned to the requesting actor.
-- Renderer surfaces receive safe request/decision summaries, not permission-store internals.
-- A denial leaves prior safe durable outputs intact and produces an explainable turn or
-  operation result.
-- Eligible text-only tasks may register folder/text/fetch plus current-action
-  `pige_install_pi_package` for exact `installed_disabled` packages. Source-bound catalogs
-  exclude them and confirmation cannot add them. No other package/runtime adapter exists.
-- The unregistered create foundation owns local revision intents, publication/recovery
-  sequencing and path-free Operations through an async identity/tool/content, receipt,
-  permission and lease protocol. No-follow/process helpers required.
+- Effect Jobs/Operations own replay. Renderer gets safe summaries, never command/path/raw
+  hash/credential/body/record/error. Deny preserves outputs; no global/saved/egress lifecycle.
+- Explicit authored tasks may register reviewed folder/fetch/install boundaries. An
+  attachment/fallback alone cannot add them, but attachment presence does not veto intent.
+- Local revision/publication/recovery uses the existing identity/receipt/lease protocol and
+  no-follow/process helpers.
+
+#### 5.7.1.1 Task Execution Plan And Process Session
+
+`TaskExecutionPlanService` resolves registered recipe/adapter supply chains, canonical
+environment/config, safe summary, private Job checkpoint, and one exact-next-ordinal
+authority; it rejects attachment-derived/model-inferred authority, not explicit user intent.
+Raw `pige_run_command` stays per-effect
+`arbitrary_shell`. `TaskProcessSessionService` runs direct `shell:false` steps, bounded
+streams/cancellation/probes/recovery, and Main-private `browser_oauth`. The exact schemas,
+limits and Feishu data fixture live in `resources/task-execution-plan.manifest.json`; the
+fixture forbids opaque `npx skills add`, ambient npm/HOME/PATH/agent discovery, and unbound
+file/destination/network drift. `packages/schemas` derives the types.
 
 ### 5.7.2 Skill Registry Service
 
@@ -1357,7 +1363,9 @@ Responsibilities:
 - Expose package capabilities to the Agent only after the user enables the package.
 - Enforce package permissions before any package tool runs.
 - Route package writes through permission-scoped Pige APIs and Operations; exceptional boundaries still intervene.
-- Block task-time package installation from Agent plans.
+- Block hidden/inferred task-time installation. An explicit text task may run only a
+  registered immutable plan that resolves package, native asset and Skill identities and
+  integrities before its one confirmation; it grants no later runtime authority.
 - Show update diffs for version, permissions, and data boundary when possible.
 
 The bounded `PiPackageManagerService` is install-only: exact public npm identity,

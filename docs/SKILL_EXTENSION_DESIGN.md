@@ -343,20 +343,25 @@ adapter- and Permission-Broker-scoped.
 Install state is `not_installed | staged | installed_disabled | installed_enabled`; health
 flags `update_available | deprecated | repair_needed` are independent from trust.
 
-- Search/inspect/stage never run package code, hooks, shell, or package callbacks.
-- Install/update need explicit disclosed intent; enable exposes only reviewed adapters;
-  disable stops new use without deleting durable output.
-- Manual update discloses version/capability/permission/boundary/trust/dependency drift;
-  pinning, rollback records and failed-change restoration remain required.
-- Uninstall explicitly removes machine-local files/grants, never user Markdown/evidence.
-- Ordinary work never infers or hides install/update. Explicit chat install must name an
-  exact package/version; Pi cannot choose dependencies or turn another task into install.
+- Search/stage executes nothing. Explicit install/update discloses identity and drift;
+  enable exposes reviewed adapters, disable preserves outputs, and uninstall never removes
+  user evidence. Pin/rollback and failed-change restoration remain required.
+- Ordinary work cannot infer install. Explicit text intent may select a registered recipe;
+  before one plan confirmation Main resolves packages/assets/redirects/Skills and fixed
+  destinations. Pi cannot choose dependencies or alter steps.
 
 Current foundation permits that exact public npm request only after current-action
 `install_package`; SHA-512 and bounded path-safe extraction are required, while hooks,
 executable/native metadata/content, and runtime dependencies fail closed. Success is an
 immutable machine-local `installed_disabled` record only. It adds no trust, catalog, UI,
 enable/runtime tool, update, rollback, or uninstall authority.
+
+The planned official Feishu fixture is data, not Feishu-only execution code. Its registered
+recipe resolves CLI/package/native identities and an exact 27-Skill/444-file projection
+before confirmation. It hashes every file, fixes target agents/destinations/link/overwrite
+policy, disables installer telemetry, and uses controlled npm/HOME/PATH/config. Opaque
+`npx skills add`, moving/fallback sources, arbitrary stdin and post-Allow discovery are not
+steps. Fixed adapters then install/configure, hand off browser OAuth, and probe status.
 
 ## 11. v0.1 Scope
 

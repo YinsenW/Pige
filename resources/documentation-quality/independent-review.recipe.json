@@ -24,26 +24,28 @@
       "docs/SOURCE_STORAGE_STRATEGY.md",
       "docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md",
       "docs/JOB_OPERATION_AND_RECOVERY.md",
+      "docs/SKILL_EXTENSION_DESIGN.md",
       "docs/QUALITY_AND_TEST_STRATEGY.md",
       "docs/V0_1_IMPLEMENTATION_PLAYBOOK.md",
       "docs/SPEC_TRACEABILITY.md",
       "docs/DECISION_LOG.md",
       "resources/architecture-reset.manifest.json",
       "resources/large-paste-boundary.manifest.json",
+      "resources/task-execution-plan.manifest.json",
       "resources/traceability/acceptance.manifest.json",
       "resources/traceability/semantic-claims.manifest.json",
       "scripts/verify/architecture-reset.mjs",
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review of source-bound exact authority: accepted SourceRecords alone define scope, ambient tools are absent before confirmation/effect, six locales use neutral exact-source intent, preserved handles hide original paths, and statuses remain unchanged.",
+    "scope": "Independent Product Planning review of authored ambient intent plus reviewed task execution: attachments/fallback grant exact-source authority only, explicit authored tasks remain eligible with attachments, immutable supply-chain/environment/ordinal plans replace repeated prompts, OAuth stays Main-private, and statuses remain unchanged.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
-    "minimumFileCount": 28,
-    "reviewedSha256": "47a67e05874eab8b8674f496bb24a76b0de60cddf95d63bebb8b8b1924f9f4de"
+    "minimumFileCount": 30,
+    "reviewedSha256": "7141543e88fa6d0b10931bb3f2d077636b1b5bd53071aeeb8106c54c5a646f08"
   },
   "reviewers": [{
-    "reviewerId": "source-bound-exact-authority-review",
-    "task": "Source-bound exact authority contract review",
+    "reviewerId": "reviewed-task-execution-plan-review",
+    "task": "Reviewed task execution plan and authored-intent correction",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -51,32 +53,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Product Planning reviews existing security, Pi catalog, runtime policy, source storage, API, UI, decision and trace owners; Development owns implementation/reproduction and UI owns mechanical locale copy."
+    "independence": "Product Planning reviewed security, Pi catalog, API, Job, Skill, UI, decision, manifest and trace owners against independent Development supply-chain/call-graph findings; Development owns implementation and UI owns mechanical presentation."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"source-bound-exact-authority-review","blockerCount":0,"summary":"Accepted SourceRecords are the sole resource set; preserved handles hide raw original paths and optional future staging requires recovery-safe cleanup."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"source-bound-exact-authority-review","blockerCount":0,"summary":"Security, Pi, runtime, API and UI agree that source-bound catalogs exclude ambient tools and confirmation cannot widen scope."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"source-bound-exact-authority-review","blockerCount":0,"summary":"SEC/PI planned targets name exact-source exclusion and stale-call failure while every Requirement/Exit/Phase status stays unchanged."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"source-bound-exact-authority-review","blockerCount":0,"summary":"Development can gate catalog registration before confirmation/effect; text-only authority, typed source tools and URL ingress remain isolated."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"source-bound-exact-authority-review","blockerCount":0,"summary":"Existing owners and one decision carry the P0 rule with no new document, status, control, modal or budget increase."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"reviewed-task-execution-plan-review","blockerCount":0,"summary":"One current-Job plan binds each ordinal, process interaction and recovery probe; neutral attachment authority remains exact-source."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"reviewed-task-execution-plan-review","blockerCount":0,"summary":"Owners agree that authoredTaskIntent—not attachments, fallback or model text—controls ambient eligibility, while raw Shell remains per-effect."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"reviewed-task-execution-plan-review","blockerCount":0,"summary":"SEC/PI/JOB/SKILL and E8 gaps bind the correction and plan without Requirement, Exit or Phase promotion."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"reviewed-task-execution-plan-review","blockerCount":0,"summary":"The manifest fixes schemas, limits, environment identity, 27-Skill projection, ordinal authority and OAuth protocols for bounded implementation."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"reviewed-task-execution-plan-review","blockerCount":0,"summary":"Existing owners plus one machine manifest carry the contract within the governed byte budget; no framework, mode or status was added."}
   ],
   "verification": [
-    {"command":"npm run verify:verify-scripts-integrity && npm run verify:contracts","status":"passed","evidence":"Submitted-turn and high-risk contracts distinguish exact-source catalogs from unchanged text-only authority without a new IPC or permission state."},
-    {"command":"npm run verify:docs && npm run verify:decisions && npm run verify:documentation-leanness","status":"passed","evidence":"Owner links, amended decision and governed byte limits pass without a new document."},
-    {"command":"npm run verify:traceability","status":"passed","evidence":"PIGE-SEC-003, PIGE-PI-003 and E8 gaps name the P0 boundary while all statuses remain unchanged."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Submitted-turn, high-risk, Job, API and Provider contracts retain current boundaries with no new permission state."},
+    {"command":"npm run verify:docs && npm run verify:decisions && npm run verify:documentation-leanness","status":"passed","evidence":"Owner links, superseding decision and governed byte limits pass."},
+    {"command":"npm run verify:traceability","status":"passed","evidence":"PIGE-SEC/PI/JOB/SKILL and E8 gaps bind authored intent, exact plan execution and unchanged statuses."}
   ],
   "coordination": {
-    "taskId": "source-bound-exact-authority-candidate-20260727",
-    "taskTitle": "Source-bound exact authority contract",
+    "taskId": "reviewed-task-execution-plan-candidate-20260727",
+    "taskTitle": "Reviewed task execution plan and authored-intent correction",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Text-only explicit tasks retain current high-risk confirmation; exact-source inspect/parse/OCR/retrieval/write and dedicated URL ingress remain available without ambient capability widening.",
-    "acknowledgement": "Planning freezes catalog/resource and neutral fallback semantics only; implementation, six locale bytes, real Electron evidence, image OCR and status promotion remain outside this candidate."
+    "compatibility": "Neutral attachments keep exact-source tools; explicit authored tasks may request precise ambient confirmation/plans with or without attachments. Raw Shell remains per-effect and no saved grant/YOLO exists.",
+    "acknowledgement": "Planning freezes private authored intent, canonical plan/OAuth/supply-chain contracts and safe copy; implementation, locales, real Electron evidence and status promotion remain outside."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Development must prove every source-bound ingress omits command/filesystem/package/generic-fetch adapters and rejects stale or invented excluded calls before confirmation, execution and persistence.",
-    "UI must mechanically replace the six locale values without adding a control/modal; always-staging remains optional defense-in-depth and cannot replace catalog exclusion."
+    "Development must persist/recover authoredTaskIntent and prove neutral, explicit-with-attachment, legacy, stale-call, raw-command and reviewed-plan paths without inference or duplicate effect.",
+    "Execution-plan implementation must resolve complete supply-chain/environment/destination identity, disable telemetry, preserve exact ordinal recovery and use synthetic OAuth/install fixtures; UI remains one modal/card without Settings mode or restyle.",
+    "Ingress snapshot b1b136db remains HOLD and requires corrective replay of its blanket ambient-exclusion sentence before implementation."
   ]
 }

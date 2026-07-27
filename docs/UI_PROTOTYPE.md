@@ -995,36 +995,35 @@ model service. Pige does not classify, redact, or block message content.
 Uses your connected provider
 ```
 
-Provider setup discloses the destination once. Send requires an exact connected Provider
-and selected model; there is no content-policy modal, toggle, confirmation control, or
-content-class indicator or action affordance; this row is informational only. UI Design
-translates the three strings mechanically across all six locales and deletes unused
-`errors.model_provider.egress_confirmation_required` keys/tests. Plaintext secret storage
-remains an advanced warned escape hatch.
-
-Remove the entire `privacy.redactionTitle`/`privacy.redactionDescription` row and
-`privacy.partialNote`, including all dead six-locale keys/tests. Do not replace either
-with a control, static status, warning, note, or development affordance. The existing API
-key secure-store row remains. Diagnostics/support-export redaction applies only to exported
-artifacts under its separate owner and is not Provider-message mutation.
-
-Also delete all reachable references, tests and six-locale keys for
-`errors.model_provider.output_invalid` and `errors.agent_runtime.completion_invalid`.
-Do not replace them with another generic “validated answer” or “completion invalid” copy;
-transport/tool/effect failures keep their exact existing owner codes.
-
-Voice input, OCR, local RAG, parser health, and bundled toolchain status belong to Local Capabilities. Models should not contain those controls.
+Provider/model plus Send authorizes exact bounded context; the row is informational, with
+no policy control/class indicator. Six locales are mechanical. Keep API-key secure-store
+and advanced warned plaintext truth. Redaction/partial-note rows and dead egress/output/
+completion error keys stay absent; diagnostics-export redaction is separate. Voice, OCR,
+RAG, parser and toolchain health remain Local Capabilities, not Models.
+Remove the entire `privacy.redactionTitle`/`privacy.redactionDescription` row.
 
 ### Submitted-turn Authority And High-risk Effects
 
-The user pressing Send authorizes ordinary registered first-party tools for that exact
-turn. Do not show permission modes, saved grants, per-tool approval cards, or YOLO.
-Only a concrete closed-list high-risk effect opens a focused modal: irreversible delete,
-overwrite of a user file, write outside an explicitly selected directory, arbitrary
-shell/unknown-package install, or credential display/export. Deny is safe and executes
-no effect. Connected Provider plus Send authorizes the selected bounded context; secrets
-stored by Pige remain outside payload content, while user-authored/selected content is
-sent unchanged.
+Send authorizes that turn's registered bounded tools and selected Provider context. No
+permission mode, saved grant, per-tool card, or YOLO exists. Only closed-list high risk
+(irreversible delete, original overwrite, out-of-root write, arbitrary shell/unknown
+install, credential export) opens the global modal; Deny executes nothing.
+
+A reviewed plan reuses that modal. Exact English source copy:
+
+- `taskExecution.plan.title`: “Allow this task plan?”
+- `taskExecution.plan.allow`: “Allow plan”
+- `taskExecution.plan.summary`: “Pige will run {tool} {version} from {source} in {count} fixed steps.”
+- `taskExecution.plan.skills`: “Installs {count} reviewed skills for: {agents}”
+- `taskExecution.plan.destinations`: “Writes only to: {destinations}”
+- `taskExecution.plan.oauth`: “Browser sign-in required”
+- `taskExecution.oauth.title`: “Continue in browser”
+- `taskExecution.oauth.open`: “Open browser”
+- `taskExecution.oauth.waiting`: “Waiting for browser sign-in…”
+
+The modal renders exact integrities, Skill count, target agents, and bounded destination
+roots. Home OAuth shows safe origin/plan/step and invokes typed Main open. Six locales are
+mechanical; no Settings mode, argv/output/reason, second prompt, or restyle.
 
 ### Agent And Memory Settings
 

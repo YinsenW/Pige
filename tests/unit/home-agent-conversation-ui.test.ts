@@ -4677,6 +4677,11 @@ function makePigeApi(harness: ConversationHarness): object {
         return () => harness.confirmationListeners.delete(listener);
       }
     },
+    taskExecution: {
+      interaction: async () => ({ status: "none" as const }),
+      openInteraction: async () => ({ status: "not_found" as const }),
+      onInteractionChanged: () => () => undefined
+    },
     activity: {
       list: async () => {
         harness.activityListReads += 1;

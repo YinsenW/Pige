@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, safeStorage, screen, shell, type WebContents } from "electron";
-import { randomUUID } from "node:crypto";
-import { existsSync, realpathSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { PigeDomainError } from "@pige/domain";
@@ -94,6 +94,7 @@ import {
 import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
 import { registerReaderIpc } from "./register-reader-ipc";
 import { registerBackupRestoreIpc } from "./register-backup-restore-ipc";
+import { registerTaskExecutionIpc } from "./register-task-execution-ipc";
 import {
   AgentIngestService,
   type AgentIngestCapabilitySnapshot,
@@ -191,6 +192,18 @@ import { guardSettingAction, type SettingActionConfirmation } from "./services/s
 import { getSettingsRegistry } from "./services/settings-registry";
 import { ToolchainService } from "./services/toolchain-service";
 import { SpeechService } from "./services/speech-service";
+import { TaskProcessSessionService } from "./services/task-process-session-service";
+import {
+  createTaskExecutionPlanConfirmation,
+  createNodeTaskExecutionPlanProgressStore,
+  TaskExecutionPlanService,
+} from "./services/task-execution-plan-service";
+import { TaskExecutionPlanRunner } from "./services/task-execution-plan-runner";
+import {
+  createNodeTaskExecutionRecipeFileSystem,
+  TaskExecutionRecipeService,
+  type TaskExecutionRecipeToolRoots
+} from "./services/task-execution-recipe-service";
 import { NoNetworkUpdateCheckAdapter, UpdateService } from "./services/update-service";
 import { SkillRegistryService } from "./services/skill-registry-service";
 import { VaultService } from "./services/vault-service";
@@ -238,6 +251,11 @@ let ocrService: OcrService | undefined;
 let speechService: SpeechService | undefined;
 let updateService: UpdateService | undefined;
 let skillRegistryService: SkillRegistryService | undefined;
+let taskProcessSessionService: TaskProcessSessionService | undefined;
+let taskExecutionPlanService: TaskExecutionPlanService | undefined;
+let taskExecutionPlanRunner: TaskExecutionPlanRunner | undefined;
+let taskExecutionRecipeService: TaskExecutionRecipeService | undefined;
+let taskExecutionIpcUnsubscribe: (() => void) | undefined;
 let latestSupportBundlePreview: SupportBundlePreview | undefined;
 const activeSupportBundleExports = new Map<string, {
   readonly senderId: number;
@@ -659,6 +677,122 @@ const getPermissionBrokerService = (): PermissionBrokerService => {
   return permissionBrokerService;
 };
 
+const getTaskProcessSessionService = (): TaskProcessSessionService => {
+  taskProcessSessionService ??= new TaskProcessSessionService({
+    openBrowserOAuth: async ({ url }) => {
+      await shell.openExternal(url);
+    }
+  });
+  return taskProcessSessionService;
+};
+
+const getTaskExecutionPlanService = (): TaskExecutionPlanService => {
+  taskExecutionPlanService ??= new TaskExecutionPlanService({
+    confirmPlan: createTaskExecutionPlanConfirmation(getHighRiskConfirmationService()),
+    progressStore: createNodeTaskExecutionPlanProgressStore(join(app.getPath("userData"), "task-execution", "progress"))
+  });
+  return taskExecutionPlanService;
+};
+
+const getTaskExecutionRecipeService = (): TaskExecutionRecipeService => {
+  taskExecutionRecipeService ??= new TaskExecutionRecipeService({
+    fetch: async (url, init) => {
+      const response = await fetch(url, init);
+      return {
+        status: response.status,
+        url: response.url || url,
+        headers: response.headers,
+        arrayBuffer: () => response.arrayBuffer()
+      };
+    },
+    fileSystem: createNodeTaskExecutionRecipeFileSystem()
+  });
+  return taskExecutionRecipeService;
+};
+
+const getTaskExecutionPlanRunner = (): TaskExecutionPlanRunner => {
+  if (!taskExecutionPlanRunner) {
+    const plans = getTaskExecutionPlanService();
+    taskExecutionPlanRunner = new TaskExecutionPlanRunner({
+      plans,
+      sessions: getTaskProcessSessionService(),
+      createCapabilityRegistry: (adapters) => new PermissionedExternalCapabilityRegistry(
+        adapters,
+        getPermissionBrokerService()
+      ),
+      resolve: async (input) => {
+        const recipe = await getTaskExecutionRecipeService().resolveOfficialFeishuRecipe({
+          ...input,
+          actorId: "pige.reviewed-task-plan",
+          actorVersion: "1.0.0",
+          actorDigest: taskExecutionActorDigest(),
+          roots: taskExecutionRecipeRoots(),
+          signal: input.signal
+        });
+        const plan = plans.resolvePlan(recipe.planInput);
+        return {
+          plan,
+          readCurrentPlanBinding: () => plans.binding(plan),
+          steps: recipe.processes.map((process) => ({
+            ordinal: process.ordinal,
+            toolName: "pige_run_reviewed_task_step",
+            toolLabel: "Run reviewed task step",
+            capability: "install_local_tool" as const,
+            dataBoundary: "filesystem" as const,
+            resourceScope: "current_action" as const,
+            readOnlyProbe: process.ordinal === recipe.processes.length,
+            ...(process.proveCompleted ? { proveCompleted: process.proveCompleted } : {}),
+            process: {
+              revision: 1,
+              command: process.command,
+              environment: process.environment,
+              ...(process.interaction ? { interaction: process.interaction } : {})
+            }
+          }))
+        };
+      }
+    });
+  }
+  return taskExecutionPlanRunner;
+};
+
+function taskExecutionRecipeRoots(): TaskExecutionRecipeToolRoots {
+  if (process.platform !== "darwin" && process.platform !== "linux" && process.platform !== "win32") {
+    throw new PigeDomainError("task_execution.recipe_unavailable", "The reviewed task recipe is unavailable on this platform.");
+  }
+  if (process.arch !== "arm64" && process.arch !== "x64" && process.arch !== "riscv64") {
+    throw new PigeDomainError("task_execution.recipe_unavailable", "The reviewed task recipe is unavailable on this architecture.");
+  }
+  const root = join(app.getPath("userData"), "task-execution");
+  const roots = {
+    controlledHomeRoot: join(root, "home"),
+    configRoot: join(root, "config"),
+    workingDirectory: join(root, "work"),
+    artifactRoot: join(root, "artifacts"),
+    managedToolRoot: join(root, "tools"),
+    npmPrefix: join(root, "npm-prefix"),
+    npmCache: join(root, "npm-cache"),
+    targetAgentRoot: join(root, "agents", "pige")
+  };
+  for (const directory of Object.values(roots)) mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const npmrcPath = join(roots.configRoot, "npmrc");
+  if (!existsSync(npmrcPath)) writeFileSync(npmrcPath, "registry=https://registry.npmjs.org/\n", { mode: 0o600 });
+  return {
+    ...roots,
+    npmrcPath,
+    targetAgentRoots: { pige: roots.targetAgentRoot },
+    npmExecutable: process.execPath,
+    nodeExecutable: process.execPath,
+    archiveExtractorExecutable: process.execPath,
+    platform: process.platform,
+    arch: process.arch
+  };
+}
+
+function taskExecutionActorDigest(): `sha256:${string}` {
+  return `sha256:${createHash("sha256").update("pige.reviewed-task-plan@1.0.0", "utf8").digest("hex")}`;
+}
+
 const getJobsService = (): JobsService => {
   if (!jobsService) {
     jobsService = new JobsService(
@@ -937,6 +1071,12 @@ const getHomeAgentService = (): HomeAgentService => {
           }
           return undefined;
         }
+      },
+      {
+        toolsForTurn: (turn) => [getTaskExecutionPlanRunner().toolForExplicitHomeTurn({
+          ...turn,
+          readToolCatalogHash: turn.readToolCatalogHash
+        })]
       }
     );
   }
@@ -1610,6 +1750,7 @@ ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
 });
 ipcMain.handle("jobs.list", (_event, request?: JobsListRequest) => getJobsService().list(request));
 ipcMain.handle("jobs.cancel", async (_event, request: JobActionRequest): Promise<JobActionResult> => {
+  getTaskProcessSessionService().cancelJob(request.jobId);
   const jobs = getJobsService();
   const jobClass = jobs.readJobClass(request.jobId);
   const executor = jobClass ? getJobClassExecutorRegistry().require(jobClass) : undefined;
@@ -1633,6 +1774,12 @@ ipcMain.handle("confirmations.resolve", async (_event, request: HighRiskConfirma
   return HighRiskConfirmationResolveResultSchema.parse(
     await getHighRiskConfirmationService().resolve(parsed)
   );
+});
+taskExecutionIpcUnsubscribe = registerTaskExecutionIpc({
+  ipcMain,
+  readInteraction: () => getTaskProcessSessionService().interaction(),
+  openInteraction: (request) => getTaskProcessSessionService().openInteraction(request),
+  subscribeInteractionChanged: (listener) => getTaskProcessSessionService().onInteractionChanged(listener)
 });
 ipcMain.handle("skills.summary", () =>
   SkillRegistryQueryResultSchema.parse(getSkillRegistryService().summary())
@@ -2048,6 +2195,8 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  taskExecutionIpcUnsubscribe?.();
+  taskExecutionIpcUnsubscribe = undefined;
   appearanceServiceUnsubscribe?.();
   appearanceServiceUnsubscribe = undefined;
   appearanceService?.dispose();

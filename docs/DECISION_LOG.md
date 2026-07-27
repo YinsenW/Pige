@@ -3247,8 +3247,9 @@ References:
 
 ### D-20260727-Source-Bound-Exact-Authority
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-27
+Superseded by: D-20260727-Reviewed-Task-Execution-Plan
 
 Decision:
 
@@ -3263,12 +3264,44 @@ Ambient tools turn one file into system authority; copying cannot confine it.
 
 Consequences:
 
-- Registration—not UI—enforces it; statuses stay unchanged.
+- Superseded by D-20260727-Reviewed-Task-Execution-Plan: attachment authority stays exact,
+  but explicit authored ambient intent is not forbidden merely because a file coexists.
 
 References:
 
 - `docs/SECURITY_THREAT_MODEL.md`
 - `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
+
+### D-20260727-Reviewed-Task-Execution-Plan
+
+Status: Accepted
+Date: 2026-07-27
+Supersedes: D-20260727-Source-Bound-Exact-Authority
+
+Decision:
+
+Explicit user-authored tasks, with or without attachments, may confirm one registered
+immutable install/config/auth plan. Attachments/fallback/model/source text grant no ambient
+authority. Main persists request-presence `authoredTaskIntent` before fallback (legacy is
+neutral), then binds supply chain, environment, destinations, Job and ordinal; read-only probes
+use recipe metadata and OAuth stays Main-private. Raw Shell remains per-effect.
+
+Rationale:
+
+This removes repeated reviewed-setup prompts without command heuristics or broad grants.
+
+Consequences:
+
+- No saved grant/YOLO/mode; drift fails closed or exact probes adopt.
+- Feishu is a recipe fixture; statuses stay unchanged.
+- Ingress snapshot `b1b136db` remains HOLD and must drop its blanket ambient exclusion
+  before implementation; exact-file snapshot authority remains unchanged.
+
+References:
+
+- `docs/SECURITY_THREAT_MODEL.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `resources/task-execution-plan.manifest.json`
 
 ## 4. Deferred Decisions
 

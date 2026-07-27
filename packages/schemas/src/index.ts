@@ -398,12 +398,164 @@ export const ProposalIdSchema = z.string().regex(/^proposal_\d{8}_[a-z0-9]{8,}$/
 export const OperationIdSchema = z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/);
 
 export const HighRiskConfirmationIdSchema = z.string().regex(/^confirm_\d{8}_[a-z0-9]{16,64}$/);
+export const TaskExecutionPlanIdSchema = z.string()
+  .regex(/^plan_[a-f0-9]{32}$/u);
+export const TaskInteractionIdSchema = z.string()
+  .regex(/^interaction_[a-f0-9]{32}$/u);
+
+const TaskExecutionDigestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
+const TaskExecutionIdentifierSchema = z.string()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,191}$/u);
+const TaskExecutionComponentVersionSchema = z.string()
+  .regex(/^[0-9A-Za-z][0-9A-Za-z._-]{0,63}$/u);
+const TaskExecutionVersionSchema = z.string()
+  .regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u);
+const TaskExecutionSafeLabelSchema = z.string()
+  .min(1)
+  .max(192)
+  .regex(/^[\p{L}\p{N}][\p{L}\p{N} ._+()@-]*$/u)
+  .refine((value) => value === value.trim());
+const TaskExecutionOriginSchema = z.string().url().max(255).refine((value) => {
+  const parsed = new URL(value);
+  return parsed.protocol === "https:" &&
+    parsed.origin === value &&
+    parsed.username === "" &&
+    parsed.password === "";
+});
+const TaskExecutionIntegritySchema = z.string().max(160).refine((value) =>
+  /^sha256:[a-f0-9]{64}$/u.test(value)
+);
+
+export const TaskExecutionPlanSummarySchema = z.object({
+  planId: TaskExecutionPlanIdSchema,
+  toolLabel: TaskExecutionSafeLabelSchema,
+  resolvedVersion: TaskExecutionVersionSchema,
+  sourceOrigin: TaskExecutionOriginSchema,
+  integrities: z.array(TaskExecutionIntegritySchema).min(1).max(16),
+  stepCount: z.number().int().min(1).max(8),
+  destinationRoots: z.array(TaskExecutionSafeLabelSchema).max(32),
+  skillCount: z.number().int().min(0).max(512),
+  targetAgents: z.array(TaskExecutionSafeLabelSchema).max(32),
+  requiresBrowserOAuth: z.boolean()
+}).strict();
+
+export const TaskExecutionPlanStepSchema = z.object({
+  ordinal: z.number().int().min(1).max(8),
+  adapterId: TaskExecutionIdentifierSchema,
+  adapterVersion: TaskExecutionComponentVersionSchema,
+  adapterDigest: TaskExecutionDigestSchema,
+  actionId: TaskExecutionIdentifierSchema,
+  normalizedExecutableIdentity: z.string().min(1).max(1024),
+  argv: z.array(z.string().max(4096)).max(64),
+  canonicalWorkingDirectory: z.string().min(1).max(4096),
+  environmentProfileHash: TaskExecutionDigestSchema,
+  networkOrigins: z.array(TaskExecutionOriginSchema).max(4),
+  destinations: z.array(z.string().min(1).max(4096)).max(4),
+  interactionProtocol: z.enum(["none", "browser_oauth"]),
+  timeoutMs: z.number().int().min(1).max(600_000),
+  inputHash: TaskExecutionDigestSchema,
+  postconditionProbeId: TaskExecutionIdentifierSchema,
+  recoveryMode: z.enum(["probe_then_adopt", "fail_closed"])
+}).strict();
+
+const TaskExecutionPlanEnvironmentSchema = z.object({
+  controlledHomeRoot: z.string().min(1).max(4096),
+  configRoot: z.string().min(1).max(4096),
+  sanitizedPathEntries: z.array(z.string().min(1).max(4096)).max(64),
+  descendantExecutableIdentities: z.array(z.string().min(1).max(1024)).max(64),
+  canonicalWorkingDirectory: z.string().min(1).max(4096),
+  temporaryDirectoryPolicy: TaskExecutionIdentifierSchema,
+  localeProfile: TaskExecutionIdentifierSchema,
+  npmRegistry: TaskExecutionOriginSchema,
+  npmPrefix: z.string().min(1).max(4096),
+  npmCache: z.string().min(1).max(4096),
+  npmConfigProvenance: z.string().min(1).max(4096),
+  targetAgentRoots: z.array(z.string().min(1).max(4096)).max(32),
+  networkOrigins: z.array(TaskExecutionOriginSchema).max(32),
+  destinations: z.array(z.string().min(1).max(4096)).max(32),
+  secretHandleVersions: z.record(
+    TaskExecutionIdentifierSchema,
+    TaskExecutionComponentVersionSchema
+  )
+}).strict();
+
+export const TaskExecutionPlanSchema = z.object({
+  planId: TaskExecutionPlanIdSchema,
+  vaultId: VaultIdSchema,
+  jobId: JobIdSchema,
+  clientTurnId: AgentClientTurnIdSchema,
+  authoredTaskIntent: z.enum(["neutral_attachment", "explicit_user_task"]),
+  policyHash: TaskExecutionDigestSchema,
+  toolCatalogHash: TaskExecutionDigestSchema,
+  recipeId: TaskExecutionIdentifierSchema,
+  recipeVersion: TaskExecutionComponentVersionSchema,
+  recipeDigest: TaskExecutionDigestSchema,
+  actorId: TaskExecutionIdentifierSchema,
+  actorVersion: TaskExecutionComponentVersionSchema,
+  actorDigest: TaskExecutionDigestSchema,
+  environment: TaskExecutionPlanEnvironmentSchema,
+  planDigest: TaskExecutionDigestSchema,
+  summary: TaskExecutionPlanSummarySchema,
+  steps: z.array(TaskExecutionPlanStepSchema).min(1).max(8)
+}).strict().superRefine((plan, context) => {
+  if (plan.steps.some((step, index) => step.ordinal !== index + 1)) {
+    context.addIssue({
+      code: "custom",
+      path: ["steps"],
+      message: "Task execution plan step ordinals must be contiguous and ordered."
+    });
+  }
+  if (plan.summary.planId !== plan.planId || plan.summary.stepCount !== plan.steps.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["summary"],
+      message: "Task execution plan summary must match the private plan identity and step count."
+    });
+  }
+});
+
+const TaskInteractionIdentitySchema = z.object({
+  interactionId: TaskInteractionIdSchema,
+  planId: TaskExecutionPlanIdSchema,
+  jobId: JobIdSchema,
+  stepOrdinal: z.number().int().min(1).max(8),
+  origin: TaskExecutionOriginSchema
+});
+
+export const TaskInteractionPendingResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("none")
+  }).strict(),
+  TaskInteractionIdentitySchema.extend({
+    status: z.literal("browser_oauth"),
+    revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+  }).strict()
+]);
+
+export const TaskInteractionOpenRequestSchema = TaskInteractionIdentitySchema.omit({
+  origin: true
+}).extend({
+  expectedRevision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+
+const TaskInteractionRevisionResultSchema = z.object({
+  revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+});
+export const TaskInteractionOpenResultSchema = z.discriminatedUnion("status", [
+  TaskInteractionRevisionResultSchema.extend({ status: z.literal("opened") }).strict(),
+  TaskInteractionRevisionResultSchema.extend({ status: z.literal("stale") }).strict(),
+  z.object({ status: z.literal("not_found") }).strict(),
+  TaskInteractionRevisionResultSchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const TaskInteractionChangedEventSchema = TaskInteractionPendingResultSchema;
+
 export const HighRiskEffectSchema = z.enum([
   "irreversible_delete",
   "overwrite_user_original",
   "write_outside_authorized_root",
   "arbitrary_shell",
   "install_unreviewed_package",
+  "reviewed_execution_plan",
   "export_secret",
   "risky_agent_edit",
   "authority_boundary_change"
@@ -414,6 +566,7 @@ export const HighRiskConfirmationActionSchema = z.enum([
   "write_external_item",
   "run_shell_command",
   "install_package",
+  "execute_reviewed_plan",
   "export_credential",
   "apply_risky_edit",
   "change_authority_boundary"
@@ -497,7 +650,12 @@ export const HighRiskConfirmationSubjectSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("item_count"), count: z.number().int().min(1).max(8) }).strict(),
   z.object({ kind: z.literal("display_name"), value: RendererSafeSubjectLabelSchema }).strict(),
   z.object({ kind: z.literal("package_name"), value: z.string().refine(isSafePackageSpec) }).strict(),
-  z.object({ kind: z.literal("executable_name"), value: z.string().refine(isSafeExecutableName) }).strict()
+  z.object({ kind: z.literal("executable_name"), value: z.string().refine(isSafeExecutableName) }).strict(),
+  z.object({
+    kind: z.literal("reviewed_execution_plan"),
+    value: RendererSafeSubjectLabelSchema,
+    plan: TaskExecutionPlanSummarySchema
+  }).strict()
 ]);
 const HighRiskDisplayNameSubjectSchema = z.object({
   kind: z.literal("display_name"),
@@ -560,6 +718,19 @@ export const HighRiskConfirmationSummarySchema = z.discriminatedUnion("effect", 
     presentation: z.object({
       action: z.literal("install_package"), target: z.literal("local_toolchain"),
       subject: z.object({ kind: z.literal("package_name"), value: z.string().refine(isSafePackageSpec) }).strict()
+    }).strict(),
+    owner: HighRiskConfirmationOwnerSchema
+  }).strict(),
+  HighRiskConfirmationSummaryBaseSchema.extend({
+    effect: z.literal("reviewed_execution_plan"),
+    presentation: z.object({
+      action: z.literal("execute_reviewed_plan"),
+      target: z.literal("local_toolchain"),
+      subject: z.object({
+        kind: z.literal("reviewed_execution_plan"),
+        value: RendererSafeSubjectLabelSchema,
+        plan: TaskExecutionPlanSummarySchema
+      }).strict()
     }).strict(),
     owner: HighRiskConfirmationOwnerSchema
   }).strict(),
@@ -3550,6 +3721,13 @@ export type DatasetRevision = z.infer<typeof DatasetRevisionSchema>;
 export type DatasetSchemaRecord = z.infer<typeof DatasetSchemaRecordSchema>;
 export type DatasetTable = z.infer<typeof DatasetTableSchema>;
 export type JobClass = z.infer<typeof JobClassSchema>;
+export type TaskExecutionPlan = z.infer<typeof TaskExecutionPlanSchema>;
+export type TaskExecutionPlanStep = z.infer<typeof TaskExecutionPlanStepSchema>;
+export type TaskExecutionPlanSummary = z.infer<typeof TaskExecutionPlanSummarySchema>;
+export type TaskInteractionChangedEvent = z.infer<typeof TaskInteractionChangedEventSchema>;
+export type TaskInteractionOpenRequest = z.infer<typeof TaskInteractionOpenRequestSchema>;
+export type TaskInteractionOpenResult = z.infer<typeof TaskInteractionOpenResultSchema>;
+export type TaskInteractionPendingResult = z.infer<typeof TaskInteractionPendingResultSchema>;
 export type HighRiskConfirmationAction = z.infer<typeof HighRiskConfirmationActionSchema>;
 export type HighRiskConfirmationChangedEvent = z.infer<typeof HighRiskConfirmationChangedEventSchema>;
 export type HighRiskConfirmationId = z.infer<typeof HighRiskConfirmationIdSchema>;

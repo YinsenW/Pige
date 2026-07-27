@@ -50,6 +50,24 @@ export interface CommandExecutionResult {
 export interface CommandExecutionServiceOptions {
   readonly managedBinDirectories?: readonly string[];
   readonly environment?: NodeJS.ProcessEnv;
+  readonly launcher?: CommandProcessLauncher;
+}
+
+export interface CommandProcessLaunchOptions {
+  readonly cwd: string;
+  readonly env: NodeJS.ProcessEnv;
+  readonly stdio: readonly ["ignore", "pipe", "pipe"];
+  readonly shell: false;
+  readonly windowsHide: true;
+  readonly detached: boolean;
+}
+
+export interface CommandProcessLauncher {
+  spawn(
+    executable: string,
+    args: readonly string[],
+    options: CommandProcessLaunchOptions
+  ): ChildProcess;
 }
 
 interface CapturedOutput {
@@ -62,12 +80,14 @@ interface CapturedOutput {
 export class CommandExecutionService {
   readonly #managedBinDirectories: readonly string[];
   readonly #environment: NodeJS.ProcessEnv;
+  readonly #launcher: CommandProcessLauncher;
 
   constructor(options: CommandExecutionServiceOptions = {}) {
     this.#managedBinDirectories = Object.freeze(
       (options.managedBinDirectories ?? []).map((directory) => path.resolve(directory))
     );
     this.#environment = options.environment ?? process.env;
+    this.#launcher = options.launcher ?? DEFAULT_PROCESS_LAUNCHER;
   }
 
   normalize(input: CommandExecutionRequest): NormalizedCommandExecutionRequest {
@@ -97,8 +117,8 @@ export class CommandExecutionService {
     abortSignal: AbortSignal
   ): Promise<CommandExecutionResult> {
     abortSignal.throwIfAborted();
-    assertExecutableUnchanged(input);
-    const child = spawn(input.executable, [...input.args], {
+    assertNormalizedCommandExecutionRequest(input);
+    const child = this.#launcher.spawn(input.executable, input.args, {
       cwd: input.workingDirectory,
       env: this.#safeEnvironment(),
       stdio: ["ignore", "pipe", "pipe"],
@@ -108,7 +128,7 @@ export class CommandExecutionService {
     });
     const captured: CapturedOutput = { stdout: "", stderr: "", outputBytes: 0, truncated: false };
     if (!child.stdout || !child.stderr) {
-      terminateProcessTree(child);
+      terminateCommandProcessTree(child);
       throw commandError("command.spawn_failed");
     }
     capture(child.stdout, "stdout", captured);
@@ -125,12 +145,12 @@ export class CommandExecutionService {
         action();
       };
       const onAbort = (): void => {
-        terminateProcessTree(child);
+        terminateCommandProcessTree(child);
         finish(() => reject(commandError("command.cancelled")));
       };
       const timeout = setTimeout(() => {
         timedOut = true;
-        terminateProcessTree(child);
+        terminateCommandProcessTree(child);
       }, input.timeoutMs);
       timeout.unref?.();
       abortSignal.addEventListener("abort", onAbort, { once: true });
@@ -245,15 +265,35 @@ function statExecutable(executable: string): fs.Stats {
   }
 }
 
-function assertExecutableUnchanged(input: NormalizedCommandExecutionRequest): void {
+export function assertCommandExecutableCurrent(input: NormalizedCommandExecutionRequest): void {
   const stats = statExecutable(input.executable);
   const identity = input.executableIdentity;
   if (
+    identity.pathHash !== digest(input.executable) ||
     stats.dev !== identity.device ||
     stats.ino !== identity.inode ||
     stats.size !== identity.size ||
     stats.mtimeMs !== identity.modifiedAtMs
   ) throw commandError("command.executable_changed");
+}
+
+export function assertNormalizedCommandExecutionRequest(input: NormalizedCommandExecutionRequest): void {
+  if (
+    !input ||
+    typeof input.executable !== "string" ||
+    !path.isAbsolute(input.executable) ||
+    requireExecutable(input.executable) !== input.executable ||
+    canonicalArguments(normalizeArguments(input.args)) !== canonicalArguments(input.args) ||
+    normalizeWorkingDirectory(input.workingDirectory) !== input.workingDirectory ||
+    normalizeTimeout(input.timeoutMs) !== input.timeoutMs ||
+    !input.executableIdentity ||
+    typeof input.executableIdentity !== "object"
+  ) throw commandError("command.request_invalid");
+  assertCommandExecutableCurrent(input);
+}
+
+function canonicalArguments(args: readonly string[]): string {
+  return JSON.stringify(args);
 }
 
 function capture(
@@ -275,7 +315,7 @@ function capture(
   });
 }
 
-function terminateProcessTree(child: ChildProcess): void {
+export function terminateCommandProcessTree(child: ChildProcess): void {
   if (!child.pid) return;
   if (process.platform === "win32") {
     spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
@@ -291,6 +331,14 @@ function terminateProcessTree(child: ChildProcess): void {
   }, TERMINATION_GRACE_MS);
   force.unref?.();
 }
+
+const DEFAULT_PROCESS_LAUNCHER: CommandProcessLauncher = Object.freeze({
+  spawn: (
+    executable: string,
+    args: readonly string[],
+    options: CommandProcessLaunchOptions
+  ) => spawn(executable, [...args], { ...options, stdio: ["ignore", "pipe", "pipe"] })
+});
 
 function windowsExecutableNames(name: string, pathExt: string | undefined): readonly string[] {
   if (path.extname(name)) return [name];

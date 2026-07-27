@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { HighRiskConfirmationSummary } from "@pige/contracts";
+import { TaskExecutionPlanDetails } from "./TaskExecutionInteraction";
 
 type ConfirmationDecision = "allow" | "deny";
 
@@ -43,6 +44,7 @@ export function HighRiskConfirmationDialog(props: {
   const subjectText = subject.kind === "item_count"
     ? `${subject.count} ${props.t(subject.count === 1 ? "confirmation.item" : "confirmation.items")}`
     : subject.value;
+  const reviewedPlan = subject.kind === "reviewed_execution_plan" ? subject.plan : null;
 
   return (
     <div className="confirmation-backdrop">
@@ -76,10 +78,12 @@ export function HighRiskConfirmationDialog(props: {
       >
         <div className="confirmation-icon" aria-hidden="true">!</div>
         <div className="confirmation-copy">
-          <h2 id="high-risk-confirmation-title">{props.t("confirmation.title")}</h2>
+          <h2 id="high-risk-confirmation-title">
+            {props.t(reviewedPlan ? "taskExecution.plan.title" : "confirmation.title")}
+          </h2>
           <p id="high-risk-confirmation-description">{props.t("confirmation.description")}</p>
         </div>
-        <dl className="confirmation-summary">
+        {reviewedPlan ? <TaskExecutionPlanDetails plan={reviewedPlan} t={props.t} /> : <dl className="confirmation-summary">
           <div>
             <dt>{props.t("confirmation.action")}</dt>
             <dd>{props.t(`confirmation.action.${props.confirmation.presentation.action}`)}</dd>
@@ -92,7 +96,7 @@ export function HighRiskConfirmationDialog(props: {
             <dt>{props.t("confirmation.subject")}</dt>
             <dd>{subjectText}</dd>
           </div>
-        </dl>
+        </dl>}
         {props.error ? (
           <p className="confirmation-error" role="alert">{props.t("confirmation.failed")}</p>
         ) : null}
@@ -112,7 +116,9 @@ export function HighRiskConfirmationDialog(props: {
             disabled={props.resolving}
             onClick={() => props.onResolve("allow")}
           >
-            {props.resolving ? props.t("confirmation.resolving") : props.t("confirmation.allow")}
+            {props.resolving
+              ? props.t("confirmation.resolving")
+              : props.t(reviewedPlan ? "taskExecution.plan.allow" : "confirmation.allow")}
           </button>
         </div>
       </section>

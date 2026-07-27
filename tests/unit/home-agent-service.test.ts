@@ -24,6 +24,7 @@ import {
   mergeHomeCitationCandidates,
   type HomeAgentDatasetQueryPort,
   type HomeAgentModelPort,
+  type HomeAgentReviewedTaskPlanPort,
   type HomeAgentRetrievalPort
 } from "../../apps/desktop/src/main/services/home-agent-service";
 import type {
@@ -65,6 +66,7 @@ import {
   type PiFauxResponse,
   type PiAgentRunRequest,
   type PiAgentRunResult,
+  type PigeAgentToolDefinition,
   type PigeAgentToolResult
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
@@ -406,6 +408,204 @@ describe("Home Pi Agent service", () => {
       "pige_run_command"
     ]));
     expect(confirmations.pending()).toMatchObject({ status: "none" });
+  });
+
+  it("registers and executes a reviewed task plan only for explicit Home task intent", async () => {
+    const fixture = makeFixture();
+    const jobs = new JobsService(fixture.vaults);
+    let registeredTurn: Parameters<HomeAgentReviewedTaskPlanPort["toolsForTurn"]>[0] | undefined;
+    let executions = 0;
+    const reviewedTaskPlans = makeReviewedTaskPlanPort({
+      onRegister: (turn) => { registeredTurn = turn; },
+      onExecute: () => { executions += 1; }
+    });
+    const runtime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        await request.beforeModelTurn?.();
+        const tool = request.tools.find((candidate) => candidate.name === "pige_execute_reviewed_plan");
+        if (!tool) throw new Error("Missing reviewed task-plan tool.");
+        const signal = new AbortController().signal;
+        await tool.execute({}, signal, { toolCallId: "pi_tool_reviewed_plan", signal });
+        await request.beforeModelTurn?.();
+        return makeRuntimeResult(request, tool.name, {
+          answer: "The reviewed task plan completed.",
+          citationRefs: [],
+          grounding: "general"
+        });
+      }
+    };
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      reviewedTaskPlans
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Install the reviewed local toolchain.",
+      inputKind: "typed_text",
+      locale: "en",
+      clientTurnId: "turn_20260727_reviewedplan"
+    });
+
+    expect(outcome).toMatchObject({ state: "completed" });
+    expect(executions).toBe(1);
+    expect(registeredTurn).toMatchObject({
+      vaultId: fixture.vault.vaultId,
+      clientTurnId: "turn_20260727_reviewedplan",
+      authoredTaskIntent: "explicit_user_task",
+      confirmationOwner: { kind: "agent_turn", clientTurnId: "turn_20260727_reviewedplan" }
+    });
+    expect(jobs.readAgentTurnJob(outcome.requestId)?.privacy?.usedShell).toBe(true);
+  });
+
+  it("omits reviewed task plans from neutral attachment turns", async () => {
+    const fixture = makeFixture();
+    const models = makeModels();
+    let registrations = 0;
+    let observedToolNames: readonly string[] = [];
+    const runtime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        observedToolNames = request.tools.map(({ name }) => name);
+        return makeRuntimeResult(request, undefined, {
+          answer: "The attached source remains exact-source only.",
+          citationRefs: [],
+          grounding: "general"
+        });
+      }
+    };
+    const jobs = new JobsService(fixture.vaults, new AgentIngestService(models, runtime));
+    const service = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      makeReviewedTaskPlanPort({ onRegister: () => { registrations += 1; } })
+    );
+    const sourcePath = path.join(path.dirname(fixture.vaultPath), "neutral-reviewed-plan.txt");
+    fs.writeFileSync(sourcePath, "Neutral attachment source.\n", "utf8");
+    const prepared = service.prepareSourceTurn({
+      inputKind: "file_picker",
+      locale: "en",
+      clientTurnId: "turn_20260727_neutralplan001"
+    });
+    await new CaptureService(fixture.vaults).preserveFilesForAgentTurn({
+      filePaths: [sourcePath],
+      inputKind: "file_picker",
+      userIntent: "Use only the attached file(s) as source material.",
+      locale: "en"
+    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+
+    await expect(service.submitPreparedSourceTurn(prepared)).resolves.toMatchObject({ state: "completed" });
+    expect(registrations).toBe(0);
+    expect(observedToolNames).not.toContain("pige_execute_reviewed_plan");
+    expect(observedToolNames).toContain("pige_inspect_source");
+  });
+
+  it("omits reviewed task plans from current-note turns", async () => {
+    const fixture = makeFixture();
+    let registrations = 0;
+    let observedToolNames: readonly string[] = [];
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          observedToolNames = request.tools.map(({ name }) => name);
+          return makeRuntimeResult(request, undefined, {
+            answer: "The current note remains scoped.",
+            citationRefs: [],
+            grounding: "general"
+          });
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      makeReviewedTaskPlanPort({ onRegister: () => { registrations += 1; } })
+    );
+
+    await expect(service.submitTurn({
+      text: "Run a reviewed task while reading this note.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260727_currentnoteplan"
+    })).resolves.toMatchObject({ state: "completed" });
+    expect(registrations).toBe(0);
+    expect(observedToolNames).toEqual(["pige_read_current_note"]);
+  });
+
+  it("rejects stale reviewed task-plan execution before the delegated effect", async () => {
+    const fixture = makeFixture();
+    let active = true;
+    let executions = 0;
+    let observedFailure: unknown;
+    const vaults = {
+      current: () => active ? fixture.vault : undefined,
+      activeVaultPath: () => active ? fixture.vaultPath : undefined
+    };
+    const service = new HomeAgentService(
+      vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(vaults),
+      {
+        run: async (request) => {
+          await request.beforeModelTurn?.();
+          const tool = request.tools.find((candidate) => candidate.name === "pige_execute_reviewed_plan");
+          if (!tool) throw new Error("Missing reviewed task-plan tool.");
+          active = false;
+          const signal = new AbortController().signal;
+          try {
+            await tool.execute({}, signal, { toolCallId: "pi_tool_stale_reviewed_plan", signal });
+          } catch (caught) {
+            observedFailure = caught;
+            active = true;
+            throw caught;
+          }
+          throw new Error("A stale reviewed task plan must not execute.");
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      makeReviewedTaskPlanPort({ onExecute: () => { executions += 1; } })
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Execute this reviewed plan.",
+      inputKind: "typed_text",
+      locale: "en",
+      clientTurnId: "turn_20260727_staleplan001"
+    });
+
+    expect(outcome).toMatchObject({ state: "failed" });
+    expect(observedFailure).toMatchObject({ code: "vault_missing" });
+    expect(executions).toBe(0);
   });
 
   it("rejects an invented ambient command in a neutral source-bound turn before confirmation or execution", async () => {
@@ -4888,6 +5088,58 @@ async function runUntilSecondModelTurn(
   await tool.execute({}, signal, context);
   await request.beforeModelTurn?.();
   throw new Error("The second model turn should have been rejected.");
+}
+
+function makeReviewedTaskPlanPort(options: {
+  readonly onRegister?: (
+    turn: Parameters<HomeAgentReviewedTaskPlanPort["toolsForTurn"]>[0]
+  ) => void;
+  readonly onExecute?: () => void;
+} = {}): HomeAgentReviewedTaskPlanPort {
+  const tool: PigeAgentToolDefinition = {
+    name: "pige_execute_reviewed_plan",
+    label: "Execute reviewed plan",
+    description: "Executes the exact next step of the reviewed task plan.",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false
+    },
+    version: "1",
+    capability: "run_shell",
+    outputSchema: {
+      type: "object",
+      properties: { status: { const: "completed" } },
+      required: ["status"],
+      additionalProperties: false
+    },
+    effect: "idempotent_write",
+    inputTrust: "model_generated",
+    outputTrust: "host_validated",
+    dataBoundary: {
+      resourceScope: "none",
+      pathAuthority: "host_only",
+      sourceIdAuthority: "host_only",
+      modelAuthority: "none"
+    },
+    execution: "sequential",
+    idempotency: { mode: "idempotent", scope: "tool_call" },
+    limits: { maxInputBytes: 2, maxOutputBytes: 1_024, timeoutMs: 30_000 },
+    ownerService: "TaskExecutionPlanService",
+    execute: async () => {
+      options.onExecute?.();
+      return {
+        content: [{ type: "text", text: "reviewed plan completed" }],
+        details: { status: "completed" }
+      };
+    }
+  };
+  return {
+    toolsForTurn: (turn) => {
+      options.onRegister?.(turn);
+      return [tool];
+    }
+  };
 }
 
 function makeFixture(): {

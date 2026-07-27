@@ -88,6 +88,7 @@ export interface PermissionedExternalCapabilityAdapter {
     readonly reasonCode: string;
     readonly highRisk?: (normalizedInput: unknown) => PermissionHighRiskIntent;
   };
+  readonly reviewedPlan?: PermissionedExternalReviewedPlanBinding;
   normalizeInput(args: unknown): unknown;
   resourceIdentity(normalizedInput: unknown): unknown;
   resourceDisplayName?(normalizedInput: unknown): string;
@@ -104,6 +105,23 @@ export interface PermissionedExternalCapabilityAdapter {
     signal: AbortSignal,
     context: PigeAgentToolCallContext
   ): Promise<PigeAgentToolResult>;
+}
+
+export interface PermissionedExternalReviewedPlanBinding {
+  readonly planId: string;
+  readonly jobId: string;
+  readonly stepOrdinal: number;
+  readonly planDigest: `sha256:${string}`;
+  readonly readOnlyProbe: boolean;
+  assertAuthority(input: {
+    readonly planId: string;
+    readonly jobId: string;
+    readonly stepOrdinal: number;
+    readonly planDigest: `sha256:${string}`;
+    readonly bindingHash: string;
+    readonly toolCallId: string;
+    readonly disposition: "execute" | "join" | "adopt";
+  }): void;
 }
 
 export interface PermissionedExternalTurnContext {
@@ -162,9 +180,45 @@ export class PermissionedExternalCapabilityRegistry {
         requireResourceCount(adapter.resourceCount(normalizedInput));
         const highRisk = adapter.permission.highRisk?.(normalizedInput);
         const binding = createExternalActionBinding(adapter, turn, normalizedInput, context.toolCallId);
+        if (adapter.reviewedPlan) {
+          return this.#runReviewedPlanBound(adapter, normalizedInput, signal, context, turn, binding);
+        }
         return this.#runBound(adapter, normalizedInput, signal, context, turn, binding, broker, highRisk);
       }
     }));
+  }
+
+  async #runReviewedPlanBound(
+    adapter: PermissionedExternalCapabilityAdapter,
+    normalizedInput: unknown,
+    signal: AbortSignal,
+    context: PigeAgentToolCallContext,
+    turn: PermissionedExternalTurnContext,
+    binding: PermissionActionBinding
+  ): Promise<PigeAgentToolResult> {
+    const reviewedPlan = adapter.reviewedPlan;
+    if (!reviewedPlan || reviewedPlan.jobId !== turn.jobId) throw reviewedPlanInvalid();
+    signal.throwIfAborted();
+    turn.assertCurrent();
+    const completed = this.#completed.get(binding.bindingHash);
+    if (completed) {
+      assertReviewedPlanAuthority(reviewedPlan, binding.bindingHash, context.toolCallId, "adopt");
+      turn.assertCurrent();
+      return completed;
+    }
+    const active = this.#inFlight.get(binding.bindingHash);
+    if (active) {
+      assertReviewedPlanAuthority(reviewedPlan, binding.bindingHash, context.toolCallId, "join");
+      return active;
+    }
+    assertReviewedPlanAuthority(reviewedPlan, binding.bindingHash, context.toolCallId, "execute");
+    const execution = this.#executeBound(adapter, normalizedInput, signal, context, turn, binding);
+    this.#inFlight.set(binding.bindingHash, execution);
+    try {
+      return await execution;
+    } finally {
+      if (this.#inFlight.get(binding.bindingHash) === execution) this.#inFlight.delete(binding.bindingHash);
+    }
   }
 
   async #runBound(
@@ -410,8 +464,48 @@ function assertAdapter(adapter: PermissionedExternalCapabilityAdapter): void {
     typeof adapter.resourceIdentity !== "function" ||
     typeof adapter.resourceCount !== "function" ||
     typeof adapter.execute !== "function" ||
-    (adapter.adoptCompleted !== undefined && typeof adapter.adoptCompleted !== "function")
+    (adapter.adoptCompleted !== undefined && typeof adapter.adoptCompleted !== "function") ||
+    (adapter.reviewedPlan !== undefined && !isReviewedPlanBinding(adapter.reviewedPlan)) ||
+    (adapter.reviewedPlan !== undefined && adapter.permission.highRisk !== undefined)
   ) throw registryInvalid();
+}
+
+function isReviewedPlanBinding(value: PermissionedExternalReviewedPlanBinding): boolean {
+  return /^plan_[a-f0-9]{32}$/u.test(value.planId) &&
+    /^job_\d{8}_[a-z0-9]{8,}$/u.test(value.jobId) &&
+    Number.isInteger(value.stepOrdinal) && value.stepOrdinal >= 1 && value.stepOrdinal <= 8 &&
+    SHA256_PATTERN.test(value.planDigest) &&
+    typeof value.readOnlyProbe === "boolean" &&
+    typeof value.assertAuthority === "function";
+}
+
+function assertReviewedPlanAuthority(
+  reviewedPlan: PermissionedExternalReviewedPlanBinding,
+  bindingHash: string,
+  toolCallId: string,
+  disposition: "execute" | "join" | "adopt"
+): void {
+  try {
+    reviewedPlan.assertAuthority({
+      planId: reviewedPlan.planId,
+      jobId: reviewedPlan.jobId,
+      stepOrdinal: reviewedPlan.stepOrdinal,
+      planDigest: reviewedPlan.planDigest,
+      bindingHash,
+      toolCallId,
+      disposition
+    });
+  } catch (caught) {
+    if (caught instanceof PigeDomainError) throw caught;
+    throw reviewedPlanInvalid();
+  }
+}
+
+function reviewedPlanInvalid(): PigeDomainError {
+  return new PigeDomainError(
+    "permission.reviewed_plan_invalid",
+    "The reviewed task execution authority is stale or invalid."
+  );
 }
 
 function requireResourceCount(value: number): number {

@@ -716,6 +716,47 @@ describe("desktop shell build contract", () => {
     expect(preloadApi).not.toContain("Permission");
   });
 
+  it("exposes strict renderer-safe reviewed-task interaction IPC without private OAuth state", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const registrarSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-task-execution-ipc.ts"),
+      "utf8"
+    );
+    const taskExecutionStart = preloadSource.indexOf("taskExecution: {");
+    const preloadApi = preloadSource.slice(
+      taskExecutionStart,
+      preloadSource.indexOf("skills: {", taskExecutionStart)
+    );
+
+    expect(contractsSource).toContain("readonly taskExecution: {");
+    expect(contractsSource).toContain(
+      "readonly interaction: () => Promise<TaskInteractionPendingResult>"
+    );
+    expect(contractsSource).toContain(
+      "request: TaskInteractionOpenRequest"
+    );
+    expect(contractsSource).toContain(
+      "listener: (event: TaskInteractionChangedEvent) => void"
+    );
+    expect(preloadApi).toContain('ipcRenderer.invoke("taskExecution.interaction")');
+    expect(preloadApi).toContain("TaskInteractionPendingResultSchema.parse(");
+    expect(preloadApi).toContain("TaskInteractionOpenRequestSchema.parse(request)");
+    expect(preloadApi).toContain("TaskInteractionOpenResultSchema.parse(");
+    expect(preloadApi).toContain("TaskInteractionChangedEventSchema.safeParse(value)");
+    expect(preloadApi).toContain('ipcRenderer.on("taskExecution.interactionChanged", handler)');
+    expect(registrarSource).toContain('options.ipcMain.handle("taskExecution.interaction"');
+    expect(registrarSource).toContain("TaskInteractionPendingResultSchema.parse(");
+    expect(registrarSource).toContain('options.ipcMain.handle("taskExecution.openInteraction"');
+    expect(registrarSource).toContain("TaskInteractionOpenRequestSchema.parse(request)");
+    expect(registrarSource).toContain("TaskInteractionOpenResultSchema.parse(");
+    expect(registrarSource).toContain('"taskExecution.interactionChanged"');
+    expect(registrarSource).toContain("TaskInteractionChangedEventSchema.parse(event)");
+    for (const unsafeField of ["url", "deviceCode", "path", "body", "rawError", "argv", "command"]) {
+      expect(preloadApi).not.toContain(unsafeField);
+    }
+  });
+
   it("projects Activity open authority as a parsed stable page identity without paths", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");

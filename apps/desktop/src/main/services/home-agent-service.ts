@@ -61,7 +61,10 @@ import {
   type DatasetQueryExecutionResult,
   type DatasetQueryToolRequest
 } from "./dataset-query-types";
-import { PermissionedExternalCapabilityRegistry } from "./permissioned-external-capability-service";
+import {
+  PermissionedExternalCapabilityRegistry,
+  type PermissionedExternalTurnContext
+} from "./permissioned-external-capability-service";
 import type { ModelProviderRuntimeConfig } from "./model-provider-registry";
 import {
   assertApprovedModelProviderBinding,
@@ -199,6 +202,14 @@ export interface HomeAgentUrlPort {
   citationCandidate(request: ReadHomeAgentUrlRequest): RetrievalAnswerCitation;
 }
 
+export interface HomeAgentReviewedTaskPlanPort {
+  toolsForTurn(turn: PermissionedExternalTurnContext & {
+    readonly clientTurnId: string;
+    readonly authoredTaskIntent: "explicit_user_task";
+    readonly readToolCatalogHash: () => string;
+  }): readonly PigeAgentToolDefinition[];
+}
+
 export interface HomeAgentJobPort {
   createAgentTurnJob(request: {
     readonly conversationEventId: string;
@@ -279,6 +290,7 @@ export class HomeAgentService {
   readonly #datasets: HomeAgentDatasetQueryPort | undefined;
   readonly #externalCapabilities: PermissionedExternalCapabilityRegistry | undefined;
   readonly #readerSelectionMutations: HomeAgentReaderSelectionMutationPort | undefined;
+  readonly #reviewedTaskPlans: HomeAgentReviewedTaskPlanPort | undefined;
 
   constructor(
     vaults: HomeAgentVaultPort,
@@ -291,7 +303,8 @@ export class HomeAgentService {
     urls?: HomeAgentUrlPort,
     datasets?: HomeAgentDatasetQueryPort,
     externalCapabilities?: PermissionedExternalCapabilityRegistry,
-    readerSelectionMutations?: HomeAgentReaderSelectionMutationPort
+    readerSelectionMutations?: HomeAgentReaderSelectionMutationPort,
+    reviewedTaskPlans?: HomeAgentReviewedTaskPlanPort
   ) {
     this.#vaults = vaults;
     this.#models = models;
@@ -304,6 +317,7 @@ export class HomeAgentService {
     this.#datasets = datasets;
     this.#externalCapabilities = externalCapabilities;
     this.#readerSelectionMutations = readerSelectionMutations;
+    this.#reviewedTaskPlans = reviewedTaskPlans;
   }
 
   conversation(request: AgentConversationEarlierRequest): AgentConversationEarlierPage;
@@ -1282,10 +1296,7 @@ export class HomeAgentService {
         evidenceLedger.assertVisible("dataset_catalog", modelTurnSequence);
       }
     };
-    const registeredExternalTools = currentNoteScope ||
-      (sourceSession && request.authoredTaskIntent !== "explicit_user_task")
-      ? []
-      : this.#externalCapabilities?.toolsForTurn({
+    const externalTurnContext: PermissionedExternalTurnContext = {
       vaultPath,
       vaultId: activeVault.vaultId,
       jobId,
@@ -1295,11 +1306,30 @@ export class HomeAgentService {
       clientCapabilityTier: "desktop_full",
       confirmationOwner: { kind: "agent_turn", clientTurnId: request.clientTurnId },
       assertCurrent: assertCurrentBindingAndVault
-    }) ?? [];
-    const externalTools = registeredExternalTools.map((tool): PigeAgentToolDefinition => ({
+    };
+    const registeredAmbientTools = currentNoteScope ||
+      (sourceSession && request.authoredTaskIntent !== "explicit_user_task")
+      ? []
+      : this.#externalCapabilities?.toolsForTurn(externalTurnContext) ?? [];
+    const registeredReviewedTaskPlanTools = !currentNoteScope &&
+      request.authoredTaskIntent === "explicit_user_task"
+      ? this.#reviewedTaskPlans?.toolsForTurn({
+          ...externalTurnContext,
+          clientTurnId: request.clientTurnId,
+          authoredTaskIntent: "explicit_user_task",
+          readToolCatalogHash: () => toolCatalogHash
+        }) ?? []
+      : [];
+    const externalTools = [...registeredAmbientTools, ...registeredReviewedTaskPlanTools]
+      .map((tool): PigeAgentToolDefinition => ({
       ...tool,
+      authorize: async (args, context) => {
+        assertCurrentBindingAndVault();
+        return await tool.authorize?.(args, context) ?? true;
+      },
       execute: async (args, toolSignal, context) => {
         try {
+          assertCurrentBindingAndVault();
           const result = await tool.execute(args, toolSignal, context);
           externalToolEvidence.push(projectExternalToolEvidence(tool.name, result));
           const currentPrivacy = session.current.privacy ?? {

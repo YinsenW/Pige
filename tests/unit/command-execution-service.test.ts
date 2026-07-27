@@ -1,12 +1,16 @@
+import { type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFirstPartyCommandCapabilityAdapter } from "../../apps/desktop/src/main/services/command-capability-adapter";
 import {
   CommandExecutionService,
-  MAX_COMMAND_OUTPUT_BYTES
+  MAX_COMMAND_OUTPUT_BYTES,
+  type CommandProcessLauncher
 } from "../../apps/desktop/src/main/services/command-execution-service";
 import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
@@ -39,6 +43,38 @@ describe("CommandExecutionService", () => {
       cwd: fs.realpathSync.native(root)
     });
     expect(result.stderr).toBe("");
+  });
+
+  it("uses the injectable direct-process launcher with shell disabled", async () => {
+    const root = tempRoot();
+    const child = Object.assign(new EventEmitter(), {
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      pid: undefined as undefined,
+      kill: vi.fn(() => true)
+    });
+    const launch = vi.fn<CommandProcessLauncher["spawn"]>(() => child as unknown as ChildProcess);
+    const service = new CommandExecutionService({ launcher: { spawn: launch } });
+    const request = service.normalize({
+      executable: process.execPath,
+      args: ["--version"],
+      workingDirectory: root
+    });
+
+    const execution = service.execute(request, new AbortController().signal);
+    await vi.waitFor(() => expect(launch).toHaveBeenCalledOnce());
+    child.emit("close", 0, null);
+    await expect(execution).resolves.toMatchObject({ status: "completed", exitCode: 0 });
+    expect(launch).toHaveBeenCalledWith(
+      fs.realpathSync.native(process.execPath),
+      ["--version"],
+      expect.objectContaining({
+        cwd: path.resolve(root),
+        shell: false,
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true
+      })
+    );
   });
 
   it("allows an explicitly requested shell executable", async () => {
