@@ -7,6 +7,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { ZipFile } from "yazl";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const desktopRoot = path.resolve(path.dirname(scriptPath), "..");
@@ -39,6 +40,10 @@ const PDF_PROMPT = "Parse this native-text PDF and cite its durable source page.
 const PDF_NATIVE_TEXT = "The native PDF confirms that durable parser evidence remains available after restart.";
 const PDF_ANSWER = "The native-text PDF confirms durable parser evidence remains available after restart. [citation_11]";
 const PDF_ATTACHMENT_NAME = "native-text-roundtrip.pdf";
+const DOCX_PROMPT = "Parse this semantic DOCX and cite its durable source page.";
+const DOCX_NATIVE_TEXT = "The semantic DOCX confirms that structured Office evidence remains available after restart.";
+const DOCX_ANSWER = "The semantic DOCX confirms structured Office evidence remains available after restart. [citation_11]";
+const DOCX_ATTACHMENT_NAME = "semantic-roundtrip.docx";
 const MULTI_FILE_PROMPT = "Compare both attached text sources and cite each durable source page.";
 const MULTI_FILE_FIRST_TEXT = "Amber source: the launch checklist requires an offline archive before departure.";
 const MULTI_FILE_SECOND_TEXT = "Cobalt source: the launch checklist requires a checksum review after the archive.";
@@ -66,6 +71,7 @@ async function runOrchestrator() {
   const datasetAttachmentPath = path.join(rootPath, "unified-agent-dataset.csv");
   const dropAttachmentPath = path.join(rootPath, DROP_ATTACHMENT_NAME);
   const pdfAttachmentPath = path.join(rootPath, PDF_ATTACHMENT_NAME);
+  const docxAttachmentPath = path.join(rootPath, DOCX_ATTACHMENT_NAME);
   const multiFileFirstPath = path.join(rootPath, MULTI_FILE_FIRST_NAME);
   const multiFileSecondPath = path.join(rootPath, MULTI_FILE_SECOND_NAME);
   const deniedCommandSentinelPath = path.join(rootPath, "denied-command-must-not-exist.txt");
@@ -75,6 +81,7 @@ async function runOrchestrator() {
   fs.writeFileSync(datasetAttachmentPath, "name,count\nAda,3\nGrace,5\n", "utf8");
   fs.writeFileSync(dropAttachmentPath, "Synthetic whole-window drop evidence.\n", "utf8");
   fs.writeFileSync(pdfAttachmentPath, createRoundtripPdf([PDF_NATIVE_TEXT], "Native text roundtrip"));
+  fs.writeFileSync(docxAttachmentPath, await createRoundtripDocx());
   fs.writeFileSync(multiFileFirstPath, `${MULTI_FILE_FIRST_TEXT}\n`, "utf8");
   fs.writeFileSync(multiFileSecondPath, `${MULTI_FILE_SECOND_TEXT}\n`, "utf8");
   const syntheticToken = `synthetic-${crypto.randomBytes(24).toString("hex")}`;
@@ -499,6 +506,87 @@ async function runOrchestrator() {
       job.class === "parse" && job.parentJobId === pdf.pdfJobId && job.sourceId === pdf.pdfSourceId
     ).length, 1);
 
+    const requestCountBeforeDocx = requests.length;
+    const docx = await runChild("docx", {
+      rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
+      activityAttachmentPath, datasetAttachmentPath, dropAttachmentPath, deniedCommandSentinelPath,
+      highRiskOnly: false
+    });
+    assert.equal(docx.docxAnswerVisible, true);
+    assert.equal(docx.docxCitationVisible, true);
+    assert.equal(docx.docxCitationIdentityExact, true);
+    assert.equal(docx.docxCitationOpenedReader, true);
+    assert.equal(docx.continuedExactConversation, true);
+    assert.equal(docx.agentTurnDelta, 1);
+    assert.equal(docx.sourceDelta, 1);
+    assert.equal(docx.parseChildDelta, 1);
+    assert.equal(countRoundtripSourceRecords(rootPath), docx.sourceRecordCountBeforeDocx + 1);
+    assert.equal(docx.durableSnapshot.relevantJobs.length, pdfRestart.durableSnapshot.relevantJobs.length + 1);
+    assert.equal(docx.durableSnapshot.sourceIds.length, pdfRestart.durableSnapshot.sourceIds.length + 1);
+    assert.equal(docx.durableSnapshot.nonterminalJobIds.length, 0);
+    assert.equal(docx.durableSnapshot.failedRetryableJobIds.length, 0);
+    assertUniqueIdentities(docx.durableSnapshot.messageIdentities.map((message) => message.id), "conversation event after DOCX");
+    assertUniqueIdentities(docx.durableSnapshot.relevantJobs.map((job) => job.id), "Job after DOCX");
+    assertUniqueIdentities(docx.durableSnapshot.sourceIds, "source after DOCX");
+    const docxProviderRequests = requests.slice(requestCountBeforeDocx)
+      .filter((request) => request.method === "POST" && request.path === "/v1/responses");
+    assert.equal(docxProviderRequests.length, 4);
+    assert.ok(docxProviderRequests[0]?.body.includes('"name":"pige_inspect_source"'));
+    assert.ok(docxProviderRequests[1]?.body.includes('"call_id":"call_docx_inspect_before"'));
+    assert.ok(docxProviderRequests[1]?.body.includes('"name":"pige_parse_source"'));
+    assert.ok(docxProviderRequests[2]?.body.includes('"call_id":"call_docx_parse"'));
+    assert.ok(docxProviderRequests[2]?.body.includes('"name":"pige_inspect_source"'));
+    assert.ok(docxProviderRequests[3]?.body.includes('"call_id":"call_docx_inspect_after"'));
+    assert.ok(requests.every((request) =>
+      request.method !== "POST" || request.path !== "/v1/responses" ||
+      request.receivedAt < docx.stagedAt || request.receivedAt >= docx.submittedAt
+    ));
+
+    const docxSource = readRoundtripRecord(vaultPath, "source-records", docx.docxSourceId);
+    const docxParent = readRoundtripRecord(vaultPath, "jobs", docx.docxJobId);
+    const docxJobs = readRoundtripRecords(vaultPath, "jobs");
+    const docxParseChildren = docxJobs.filter((job) =>
+      job.class === "parse" && job.parentJobId === docx.docxJobId && job.sourceId === docx.docxSourceId
+    );
+    assert.equal(docxSource.kind, "docx_file");
+    assert.equal(docxSource.semanticOrchestration, "agent_turn");
+    assert.equal(docxSource.metadata?.inputKind, "file_picker");
+    assert.equal(docxSource.metadata?.agentTurnJobId, docx.docxJobId);
+    assert.equal(docxSource.knowledgePageId, docx.docxCitationPageId);
+    assert.equal(docxSource.managedCopy?.checksum, sha256BufferDigest(fs.readFileSync(docxAttachmentPath)));
+    assert.equal(docxParseChildren.length, 1);
+    assert.equal(docxParseChildren[0]?.state, "completed");
+    assert.deepEqual(docxParent.childJobIds, [docxParseChildren[0].id]);
+    assert.deepEqual(docxSource.artifacts.map((artifact) => artifact.kind), ["extracted_text", "metadata"]);
+    for (const artifact of docxSource.artifacts) {
+      const artifactPath = path.resolve(vaultPath, artifact.path);
+      const artifactBytes = fs.readFileSync(artifactPath);
+      assert.equal(artifact.checksum, sha256BufferDigest(artifactBytes));
+      assert.equal(artifact.size, artifactBytes.byteLength);
+    }
+    const docxExtractedText = docxSource.artifacts.find((artifact) => artifact.kind === "extracted_text");
+    const docxMetadataArtifact = docxSource.artifacts.find((artifact) => artifact.kind === "metadata");
+    assert.ok(fs.readFileSync(path.resolve(vaultPath, docxExtractedText.path), "utf8").includes(DOCX_NATIVE_TEXT));
+    const docxMetadata = JSON.parse(fs.readFileSync(path.resolve(vaultPath, docxMetadataArtifact.path), "utf8"));
+    assert.deepEqual(docxMetadata.units.map((unit) => unit.locator), ["block:1", "block:2", "block:3", "block:4"]);
+    assert.equal(docxMetadata.extractedTextChecksum, docxExtractedText.checksum);
+
+    const requestCountBeforeDocxRestart = requests.length;
+    const docxRestart = await runChild("docx_restart", {
+      rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
+      activityAttachmentPath, datasetAttachmentPath, dropAttachmentPath, deniedCommandSentinelPath,
+      highRiskOnly: false
+    });
+    assert.equal(docxRestart.docxAnswerVisible, true);
+    assert.equal(docxRestart.docxCitationVisible, true);
+    assert.equal(docxRestart.docxCitationIdentityExact, true);
+    assert.equal(docxRestart.docxCitationPageId, docx.docxCitationPageId);
+    assert.deepEqual(docxRestart.durableSnapshot, docx.durableSnapshot);
+    assert.equal(requests.length, requestCountBeforeDocxRestart);
+    assert.equal(readRoundtripRecords(vaultPath, "jobs").filter((job) =>
+      job.class === "parse" && job.parentJobId === docx.docxJobId && job.sourceId === docx.docxSourceId
+    ).length, 1);
+
     const requestCountBeforeMultiFile = requests.length;
     const multiFile = await runChild("multi_file", {
       rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
@@ -514,8 +602,8 @@ async function runOrchestrator() {
     assert.equal(multiFile.agentTurnDelta, 1);
     assert.equal(multiFile.sourceDelta, 2);
     assert.equal(countRoundtripSourceRecords(rootPath), multiFile.sourceRecordCountBeforeMultiFile + 2);
-    assert.equal(multiFile.durableSnapshot.relevantJobs.length, pdfRestart.durableSnapshot.relevantJobs.length + 1);
-    assert.equal(multiFile.durableSnapshot.sourceIds.length, pdfRestart.durableSnapshot.sourceIds.length + 2);
+    assert.equal(multiFile.durableSnapshot.relevantJobs.length, docxRestart.durableSnapshot.relevantJobs.length + 1);
+    assert.equal(multiFile.durableSnapshot.sourceIds.length, docxRestart.durableSnapshot.sourceIds.length + 2);
     assert.equal(multiFile.durableSnapshot.nonterminalJobIds.length, 0);
     assert.equal(multiFile.durableSnapshot.failedRetryableJobIds.length, 0);
     assertUniqueIdentities(multiFile.durableSnapshot.messageIdentities.map((message) => message.id), "conversation event after multi-file");
@@ -591,6 +679,7 @@ async function runOrchestrator() {
       `TXT/Markdown ingress, Dataset continuation, ordinary provider sends without a second approval, zero retryable Jobs, ` +
       `reversible Activity/Undo results, one exact large paste, one identity-free whole-window drop, ` +
       `one inspected URL citation, one native-text PDF parse/citation with stable Reader navigation, ` +
+      `one semantic DOCX parse/citation with stable Reader navigation, ` +
       `one ordered two-file comparative turn with two stable Reader citations, ` +
       `and exact restart retention without another Provider or parser call.`
     );
@@ -615,6 +704,7 @@ async function runChild(phase, values) {
       PIGE_ROUNDTRIP_DATASET_ATTACHMENT_PATH: values.datasetAttachmentPath,
       PIGE_ROUNDTRIP_DROP_ATTACHMENT_PATH: values.dropAttachmentPath,
       PIGE_ROUNDTRIP_PDF_ATTACHMENT_PATH: path.join(values.rootPath, PDF_ATTACHMENT_NAME),
+      PIGE_ROUNDTRIP_DOCX_ATTACHMENT_PATH: path.join(values.rootPath, DOCX_ATTACHMENT_NAME),
       PIGE_ROUNDTRIP_MULTI_FILE_FIRST_PATH: path.join(values.rootPath, MULTI_FILE_FIRST_NAME),
       PIGE_ROUNDTRIP_MULTI_FILE_SECOND_PATH: path.join(values.rootPath, MULTI_FILE_SECOND_NAME),
       PIGE_ROUNDTRIP_DENY_SENTINEL_PATH: values.deniedCommandSentinelPath,
@@ -734,6 +824,69 @@ function sha256BufferDigest(value) {
   return `sha256:${crypto.createHash("sha256").update(value).digest("hex")}`;
 }
 
+async function createRoundtripDocx() {
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Roundtrip DOCX operations</w:t></w:r></w:p>
+    <w:p><w:r><w:t>${DOCX_NATIVE_TEXT} See </w:t></w:r><w:hyperlink r:id="rIdLink"><w:r><w:t>the local reference</w:t></w:r></w:hyperlink><w:r><w:t>.</w:t></w:r></w:p>
+    <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Preserve original bytes before semantic parsing.</w:t></w:r></w:p>
+    <w:tbl><w:tr><w:tc><w:p><w:r><w:t>Owner</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Local Agent</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+    <w:sectPr/>
+  </w:body>
+</w:document>`;
+  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>
+  <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:qFormat/></w:style>
+</w:styles>`;
+  const numberingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/></w:lvl></w:abstractNum>
+  <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+</w:numbering>`;
+  return createRoundtripZip([
+    ["[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+  <Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+</Types>`],
+    ["_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+</Relationships>`],
+    ["docProps/core.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Semantic roundtrip DOCX</dc:title></cp:coreProperties>`],
+    ["word/styles.xml", stylesXml],
+    ["word/numbering.xml", numberingXml],
+    ["word/_rels/document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdLink" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com/docx-roundtrip" TargetMode="External"/>
+</Relationships>`],
+    ["word/document.xml", documentXml]
+  ]);
+}
+
+async function createRoundtripZip(entries) {
+  const zip = new ZipFile();
+  for (const [name, data] of entries) {
+    zip.addBuffer(Buffer.from(data, "utf8"), name, {
+      compress: true,
+      mtime: new Date("2026-07-27T00:00:00.000Z"),
+      mode: 0o100644
+    });
+  }
+  zip.end();
+  const chunks = [];
+  for await (const chunk of zip.outputStream) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
+}
+
 function createRoundtripPdf(pages, title) {
   const objects = new Map();
   const pageObjectIds = [];
@@ -821,6 +974,7 @@ async function runElectronPhase() {
   const datasetAttachmentPath = requireEnv("PIGE_ROUNDTRIP_DATASET_ATTACHMENT_PATH");
   const dropAttachmentPath = requireEnv("PIGE_ROUNDTRIP_DROP_ATTACHMENT_PATH");
   const pdfAttachmentPath = requireEnv("PIGE_ROUNDTRIP_PDF_ATTACHMENT_PATH");
+  const docxAttachmentPath = requireEnv("PIGE_ROUNDTRIP_DOCX_ATTACHMENT_PATH");
   const multiFileFirstPath = requireEnv("PIGE_ROUNDTRIP_MULTI_FILE_FIRST_PATH");
   const multiFileSecondPath = requireEnv("PIGE_ROUNDTRIP_MULTI_FILE_SECOND_PATH");
   const deniedCommandSentinelPath = requireEnv("PIGE_ROUNDTRIP_DENY_SENTINEL_PATH");
@@ -857,6 +1011,8 @@ async function runElectronPhase() {
       phase !== "url_restart" &&
       phase !== "pdf" &&
       phase !== "pdf_restart" &&
+      phase !== "docx" &&
+      phase !== "docx_restart" &&
       phase !== "multi_file" &&
       phase !== "multi_file_restart"
     ) {
@@ -947,6 +1103,22 @@ async function runElectronPhase() {
     } else if (phase === "pdf_restart") {
       markStage("renderer_pdf_restart");
       result = await runPdfRestartRenderer(browserWindow);
+    } else if (phase === "docx") {
+      markStage("renderer_docx_prepare");
+      const sourceRecordCountBeforeDocx = countRoundtripSourceRecords(rootPath);
+      const docxBaseline = await readDocxBaselineRenderer(browserWindow);
+      await prepareSourceRenderer(browserWindow, DOCX_PROMPT);
+      const staging = await stageAndSubmitSourceRenderer(browserWindow, docxAttachmentPath, markStage, "renderer_docx");
+      markStage("renderer_docx_result");
+      result = {
+        ...(await readDocxRendererResult(browserWindow, docxBaseline)),
+        stagedAt: staging.stagedAt,
+        submittedAt: staging.submittedAt,
+        sourceRecordCountBeforeDocx
+      };
+    } else if (phase === "docx_restart") {
+      markStage("renderer_docx_restart");
+      result = await runDocxRestartRenderer(browserWindow);
     } else if (phase === "multi_file") {
       markStage("renderer_multi_file_prepare");
       multiFileBaselineSourceIds = new Set(readRoundtripRecords(
@@ -2544,6 +2716,24 @@ async function readPdfBaselineRenderer(browserWindow) {
   `, true);
 }
 
+async function readDocxBaselineRenderer(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      const jobs = await window.pige.jobs.list({ limit: 100 });
+      const timeline = await window.pige.agent.conversation({ limit: 100 });
+      const library = await window.pige.library.list({ limit: 100 });
+      if (!timeline) throw new Error('DOCX baseline conversation is unavailable.');
+      return {
+        jobIds: jobs.jobs.map((job) => job.id),
+        sourceIds: [...new Set(library.pages.flatMap((page) => page.sourceIds))],
+        conversationId: timeline.conversationId,
+        tailEventId: timeline.tailEventId,
+        messageCount: timeline.messages.length
+      };
+    })()
+  `, true);
+}
+
 async function readMultiFileBaselineRenderer(browserWindow) {
   return browserWindow.webContents.executeJavaScript(`
     (async () => {
@@ -2864,6 +3054,135 @@ async function runPdfRestartRenderer(browserWindow) {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
       throw new Error('Timed out waiting for restarted native-text PDF evidence.');
+    })()
+  `, true).then(async (result) => ({
+    ...result,
+    durableSnapshot: await readDurableRestartSnapshot(browserWindow)
+  }));
+}
+
+async function readDocxRendererResult(browserWindow, baseline) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'docx_result_wait';
+      console.info('PIGE_ROUNDTRIP_STAGE docx_result_wait');
+      const deadline = Date.now() + 60000;
+      const expected = ${JSON.stringify(baseline)};
+      const baselineJobIds = new Set(expected.jobIds);
+      const baselineSourceIds = new Set(expected.sourceIds);
+      while (Date.now() < deadline) {
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const library = await window.pige.library.list({ limit: 100 });
+        const newAgentJobs = jobs.jobs.filter((job) => job.class === 'agent_turn' && !baselineJobIds.has(job.id));
+        const newParseJobs = jobs.jobs.filter((job) => job.class === 'parse' && !baselineJobIds.has(job.id));
+        const newSourceIds = [...new Set(library.pages.flatMap((page) => page.sourceIds).filter((id) => !baselineSourceIds.has(id)))];
+        const assistant = timeline?.messages.find((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(DOCX_ANSWER)})
+        );
+        const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_11');
+        const sourcePage = library.pages.find((page) =>
+          citation?.pageId === page.pageId && newSourceIds.some((sourceId) => page.sourceIds.includes(sourceId))
+        );
+        const parent = newAgentJobs.length === 1 ? newAgentJobs[0] : undefined;
+        const parseChild = newParseJobs.length === 1 ? newParseJobs[0] : undefined;
+        const continuedExactConversation = timeline?.conversationId === expected.conversationId &&
+          timeline?.messages.some((message) => message.id === expected.tailEventId) === true &&
+          timeline.messages.length === expected.messageCount + 2;
+        const citationIdentityExact = Boolean(citation?.pageId && sourcePage?.pageId === citation.pageId);
+        globalThis.__pigeRoundtripWaitState = {
+          agentTurnDelta: newAgentJobs.length,
+          parseChildDelta: newParseJobs.length,
+          sourceDelta: newSourceIds.length,
+          parentState: parent?.state ?? 'none',
+          parseState: parseChild?.state ?? 'none',
+          answerVisible: Boolean(assistant),
+          citationVisible: Boolean(citation),
+          citationIdentityExact,
+          continuedExactConversation
+        };
+        if (
+          parent?.state === 'completed' && parseChild?.state === 'completed' &&
+          newAgentJobs.length === 1 && newParseJobs.length === 1 && newSourceIds.length === 1 &&
+          assistant && citation && citationIdentityExact && continuedExactConversation
+        ) {
+          const button = Array.from(document.querySelectorAll('.conversation-citations .citation-row:not(:disabled)'))
+            .find((item) => item.textContent?.includes('[11]'));
+          if (!button) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            continue;
+          }
+          button.click();
+          while (Date.now() < deadline && !document.querySelector('.note-reader')) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          if (!document.querySelector('.note-reader')) throw new Error('DOCX citation did not open the Reader.');
+          return {
+            docxAnswerVisible: true,
+            docxCitationVisible: true,
+            docxCitationIdentityExact: true,
+            docxCitationOpenedReader: true,
+            docxCitationPageId: citation.pageId,
+            docxJobId: parent.id,
+            docxSourceId: newSourceIds[0],
+            continuedExactConversation,
+            agentTurnDelta: 1,
+            parseChildDelta: 1,
+            sourceDelta: 1
+          };
+        }
+        if ([...newAgentJobs, ...newParseJobs].some((job) =>
+          job.state === 'failed_retryable' || job.state === 'failed_final'
+        )) {
+          throw new Error('DOCX source turn reached a durable failure state.');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for semantic DOCX convergence.');
+    })()
+  `, true).then(async (result) => ({
+    ...result,
+    durableSnapshot: await readDurableRestartSnapshot(browserWindow)
+  }));
+}
+
+async function runDocxRestartRenderer(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'docx_restart_wait';
+      console.info('PIGE_ROUNDTRIP_STAGE docx_restart_wait');
+      const deadline = Date.now() + 60000;
+      while (Date.now() < deadline) {
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const library = await window.pige.library.list({ limit: 100 });
+        const assistant = timeline?.messages.find((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(DOCX_ANSWER)})
+        );
+        const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_11');
+        const sourcePage = library.pages.find((page) =>
+          page.pageId === citation?.pageId && page.sourceIds.length === 1
+        );
+        const activeJobs = jobs.jobs.filter((job) =>
+          ['queued', 'running', 'waiting_dependency', 'awaiting_review', 'cancel_requested', 'failed_retryable'].includes(job.state)
+        );
+        globalThis.__pigeRoundtripWaitState = {
+          answerVisible: Boolean(assistant),
+          citationVisible: Boolean(citation),
+          citationIdentityExact: Boolean(citation?.pageId && sourcePage?.pageId === citation.pageId),
+          activeJobCount: activeJobs.length
+        };
+        if (assistant && citation?.pageId && sourcePage?.pageId === citation.pageId && activeJobs.length === 0) {
+          return {
+            docxAnswerVisible: true,
+            docxCitationVisible: true,
+            docxCitationIdentityExact: true,
+            docxCitationPageId: citation.pageId
+          };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for restarted semantic DOCX evidence.');
     })()
   `, true).then(async (result) => ({
     ...result,
@@ -3220,6 +3539,22 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
     }
     if (latestUserText.includes(PDF_PROMPT) && serializedTools.includes("pige_inspect_source")) {
       writeToolCallResponse(response, "pige_inspect_source", "call_pdf_inspect_before", "pdf-inspect-before-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_docx_inspect_after"') && serializedInput.includes("function_call_output")) {
+      writeTextResponse(response, DOCX_ANSWER, "docx-final-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_docx_parse"') && serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_inspect_source", "call_docx_inspect_after", "docx-inspect-after-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_docx_inspect_before"') && serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_parse_source", "call_docx_parse", "docx-parse-1");
+      return;
+    }
+    if (latestUserText.includes(DOCX_PROMPT) && serializedTools.includes("pige_inspect_source")) {
+      writeToolCallResponse(response, "pige_inspect_source", "call_docx_inspect_before", "docx-inspect-before-1");
       return;
     }
     if (serializedInput.includes('"call_id":"call_multi_inspect_2"') && serializedInput.includes("function_call_output")) {

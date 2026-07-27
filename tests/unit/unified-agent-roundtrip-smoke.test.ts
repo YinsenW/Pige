@@ -261,15 +261,15 @@ describe("unified Agent assembled smoke navigation", () => {
   });
 
   it("stages two ordered TXT files, compares both, opens both citations, and restarts without replay", () => {
-    const pdfRestart = source.indexOf('await runChild("pdf_restart"');
-    const multiFile = source.indexOf('await runChild("multi_file"', pdfRestart);
+    const docxRestart = source.indexOf('await runChild("docx_restart"');
+    const multiFile = source.indexOf('await runChild("multi_file"', docxRestart);
     const multiFileRestart = source.indexOf('await runChild("multi_file_restart"', multiFile);
     const cleanup = source.indexOf("fs.rmSync(rootPath, { recursive: true, force: true });", multiFileRestart);
     const staging = source.indexOf("async function stageAndSubmitMultipleSourcesRenderer");
     const stagingEnd = source.indexOf("async function stageAndSubmitSourceRenderer", staging);
     const stagingSource = source.slice(staging, stagingEnd);
 
-    expect(multiFile).toBeGreaterThan(pdfRestart);
+    expect(multiFile).toBeGreaterThan(docxRestart);
     expect(multiFileRestart).toBeGreaterThan(multiFile);
     expect(cleanup).toBeGreaterThan(multiFileRestart);
     expect(source).toContain('const MULTI_FILE_FIRST_NAME = "multi-file-amber.txt"');
@@ -305,5 +305,47 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain("knowledgePageBindingCount");
     expect(source).toContain('phase !== "multi_file"');
     expect(source).toContain('phase !== "multi_file_restart"');
+  });
+
+  it("stages one semantic DOCX, parses and cites it, then restarts without replay", () => {
+    const pdfRestart = source.indexOf('await runChild("pdf_restart"');
+    const docx = source.indexOf('await runChild("docx"', pdfRestart);
+    const docxRestart = source.indexOf('await runChild("docx_restart"', docx);
+    const multiFile = source.indexOf('await runChild("multi_file"', docxRestart);
+    const docxPhase = source.indexOf('phase === "docx"');
+    const genericPicker = source.indexOf(
+      "await stageAndSubmitSourceRenderer(browserWindow, docxAttachmentPath",
+      docxPhase
+    );
+
+    expect(docx).toBeGreaterThan(pdfRestart);
+    expect(docxRestart).toBeGreaterThan(docx);
+    expect(multiFile).toBeGreaterThan(docxRestart);
+    expect(source).toContain('const DOCX_ATTACHMENT_NAME = "semantic-roundtrip.docx"');
+    expect(source).toContain("fs.writeFileSync(docxAttachmentPath, await createRoundtripDocx())");
+    expect(source).toContain('import { ZipFile } from "yazl"');
+    expect(source).toContain('mtime: new Date("2026-07-27T00:00:00.000Z")');
+    expect(genericPicker).toBeGreaterThan(docxPhase);
+    expect(source).toContain("sourceRecordCountBeforeDocx");
+    expect(source).toContain("docx.sourceRecordCountBeforeDocx + 1");
+    expect(source).toContain('writeToolCallResponse(response, "pige_inspect_source", "call_docx_inspect_before"');
+    expect(source).toContain('writeToolCallResponse(response, "pige_parse_source", "call_docx_parse"');
+    expect(source).toContain('writeToolCallResponse(response, "pige_inspect_source", "call_docx_inspect_after"');
+    expect(source).toContain('writeTextResponse(response, DOCX_ANSWER, "docx-final-1")');
+    expect(source).toContain("assert.equal(docxProviderRequests.length, 4)");
+    expect(source).toContain("request.receivedAt < docx.stagedAt || request.receivedAt >= docx.submittedAt");
+    expect(source).toContain("item.refId === 'citation_11'");
+    expect(source).toContain("sourcePage?.pageId === citation.pageId");
+    expect(source).toContain(".conversation-citations .citation-row:not(:disabled)");
+    expect(source).toContain("assert.equal(docxSource.knowledgePageId, docx.docxCitationPageId)");
+    expect(source).toContain('assert.equal(docxSource.kind, "docx_file")');
+    expect(source).toContain('job.class === "parse" && job.parentJobId === docx.docxJobId');
+    expect(source).toContain('assert.deepEqual(docxSource.artifacts.map((artifact) => artifact.kind), ["extracted_text", "metadata"])');
+    expect(source).toContain('["block:1", "block:2", "block:3", "block:4"]');
+    expect(source).toContain("assert.equal(artifact.checksum, sha256BufferDigest(artifactBytes))");
+    expect(source).toContain("assert.deepEqual(docxRestart.durableSnapshot, docx.durableSnapshot)");
+    expect(source).toContain("assert.equal(requests.length, requestCountBeforeDocxRestart)");
+    expect(source).toContain('phase !== "docx"');
+    expect(source).toContain('phase !== "docx_restart"');
   });
 });
