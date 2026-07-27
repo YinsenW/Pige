@@ -138,7 +138,7 @@ describe("Unified Agent ingress", () => {
       ])
     });
     expect(home.conversation()?.messages).toEqual([
-      expect.objectContaining({ role: "user", text: "Organize these files." })
+      expect.objectContaining({ role: "user", text: "Use only the attached file(s) as source material." })
     ]);
   });
 
@@ -207,12 +207,12 @@ describe("Unified Agent ingress", () => {
   });
 
   it.each([
-    ["en", "Organize these files."],
-    ["zh-Hans", "整理这些文件。"],
-    ["ja", "これらのファイルを整理してください。"],
-    ["ko", "이 파일들을 정리해 주세요."],
-    ["fr", "Organisez ces fichiers."],
-    ["de", "Organisiere diese Dateien."]
+    ["en", "Use only the attached file(s) as source material."],
+    ["zh-Hans", "仅使用所附文件作为来源材料。"],
+    ["ja", "添付されたファイルのみを資料として使用する。"],
+    ["ko", "첨부된 파일만 소스 자료로 사용하세요."],
+    ["fr", "Utiliser uniquement les fichiers joints comme documents sources."],
+    ["de", "Nur die angehängten Dateien als Quellmaterial verwenden."]
   ] as const)("uses the minimal attachment-only intent for %s", (locale, expectedText) => {
     const fixture = makeVault();
     const home = new HomeAgentService(
