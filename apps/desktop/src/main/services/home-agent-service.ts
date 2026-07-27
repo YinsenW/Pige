@@ -206,6 +206,7 @@ export interface HomeAgentReviewedTaskPlanPort {
   toolsForTurn(turn: PermissionedExternalTurnContext & {
     readonly clientTurnId: string;
     readonly authoredTaskIntent: "explicit_user_task";
+    readonly readToolCatalogHash: () => string;
   }): readonly PigeAgentToolDefinition[];
 }
 
@@ -1315,7 +1316,8 @@ export class HomeAgentService {
       ? this.#reviewedTaskPlans?.toolsForTurn({
           ...externalTurnContext,
           clientTurnId: request.clientTurnId,
-          authoredTaskIntent: "explicit_user_task"
+          authoredTaskIntent: "explicit_user_task",
+          readToolCatalogHash: () => toolCatalogHash
         }) ?? []
       : [];
     const externalTools = [...registeredAmbientTools, ...registeredReviewedTaskPlanTools]
