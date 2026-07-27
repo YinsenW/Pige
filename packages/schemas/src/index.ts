@@ -1420,18 +1420,71 @@ export const MemoryListRequestSchema = z.object({
   activeVaultId: VaultIdSchema
 }).strict();
 
-export const MemoryDisableRequestSchema = z.object({
+export const MemoryRequestIdSchema = z.string().regex(/^memory_request_[a-z0-9]{16,64}$/);
+const MemoryRecordMutationRequestIdentitySchema = z.object({
   apiVersion: z.literal(1),
-  requestId: z.string().regex(/^memory_request_[a-z0-9]{16,64}$/),
+  requestId: MemoryRequestIdSchema,
   activeVaultId: VaultIdSchema,
   memoryId: MemoryRecordIdSchema,
   expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+});
+
+export const MemoryDisableRequestSchema = MemoryRecordMutationRequestIdentitySchema.strict();
+export const MemoryEnableRequestSchema = MemoryRecordMutationRequestIdentitySchema.strict();
+export const MemoryDeleteRequestSchema = MemoryRecordMutationRequestIdentitySchema.strict();
+
+export const MemoryResetRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: MemoryRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 }).strict();
+
+export const MemoryExportRequestSchema = MemoryResetRequestSchema;
 
 export const MemoryMutationResultSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("committed"), summary: MemorySummarySchema }).strict(),
   z.object({ status: z.literal("stale"), summary: MemorySummarySchema }).strict(),
   z.object({ status: z.literal("not_found"), summary: MemorySummarySchema }).strict()
+]);
+
+export const MemoryLifecycleMutationResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("committed"),
+    requestId: MemoryRequestIdSchema,
+    activeVaultId: VaultIdSchema,
+    operationId: OperationIdSchema,
+    summary: MemorySummarySchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("stale"),
+    requestId: MemoryRequestIdSchema,
+    activeVaultId: VaultIdSchema,
+    summary: MemorySummarySchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("not_found"),
+    requestId: MemoryRequestIdSchema,
+    activeVaultId: VaultIdSchema,
+    summary: MemorySummarySchema
+  }).strict()
+]);
+
+const MemoryExportResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: MemoryRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+});
+
+export const MemoryExportResultSchema = z.discriminatedUnion("status", [
+  MemoryExportResultIdentitySchema.extend({ status: z.literal("exported") }).strict(),
+  MemoryExportResultIdentitySchema.extend({ status: z.literal("cancelled") }).strict(),
+  MemoryExportResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  MemoryExportResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 
 export const PermissionResourceScopeSchema = z.enum([
@@ -4319,8 +4372,15 @@ export type MemoryStatus = z.infer<typeof MemoryStatusSchema>;
 export type MemoryRecordSummary = z.infer<typeof MemoryRecordSummarySchema>;
 export type MemorySummary = z.infer<typeof MemorySummarySchema>;
 export type MemoryListRequest = z.infer<typeof MemoryListRequestSchema>;
+export type MemoryRequestId = z.infer<typeof MemoryRequestIdSchema>;
 export type MemoryDisableRequest = z.infer<typeof MemoryDisableRequestSchema>;
+export type MemoryEnableRequest = z.infer<typeof MemoryEnableRequestSchema>;
+export type MemoryDeleteRequest = z.infer<typeof MemoryDeleteRequestSchema>;
+export type MemoryResetRequest = z.infer<typeof MemoryResetRequestSchema>;
+export type MemoryExportRequest = z.infer<typeof MemoryExportRequestSchema>;
 export type MemoryMutationResult = z.infer<typeof MemoryMutationResultSchema>;
+export type MemoryLifecycleMutationResult = z.infer<typeof MemoryLifecycleMutationResultSchema>;
+export type MemoryExportResult = z.infer<typeof MemoryExportResultSchema>;
 export type PermissionDataBoundary = z.infer<typeof PermissionDataBoundarySchema>;
 export type PermissionResourceScope = z.infer<typeof PermissionResourceScopeSchema>;
 export type ExternalMutationIntent = z.infer<typeof ExternalMutationIntentSchema>;

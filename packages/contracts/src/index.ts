@@ -33,10 +33,16 @@ import type {
   HighRiskConfirmationResolveRequest,
   HighRiskConfirmationResolveResult,
   Locale,
+  MemoryDeleteRequest,
   MemoryDisableRequest,
+  MemoryEnableRequest,
+  MemoryExportRequest,
+  MemoryExportResult,
+  MemoryLifecycleMutationResult,
   MemoryListRequest,
   MemoryMutationResult,
   MemoryRecordSummary,
+  MemoryResetRequest,
   MemorySummary,
   JobClass,
   JobRecord,
@@ -228,10 +234,16 @@ export type {
   TaskInteractionOpenRequest,
   TaskInteractionOpenResult,
   TaskInteractionPendingResult,
+  MemoryDeleteRequest,
   MemoryDisableRequest,
+  MemoryEnableRequest,
+  MemoryExportRequest,
+  MemoryExportResult,
+  MemoryLifecycleMutationResult,
   MemoryListRequest,
   MemoryMutationResult,
   MemoryRecordSummary,
+  MemoryResetRequest,
   MemorySummary,
   SkillCapability,
   SkillDataBoundary,
@@ -1400,6 +1412,10 @@ export interface PigeDesktopApi {
   readonly memory: {
     readonly list: (request: MemoryListRequest) => Promise<MemorySummary>;
     readonly disable: (request: MemoryDisableRequest) => Promise<MemoryMutationResult>;
+    readonly enable: (request: MemoryEnableRequest) => Promise<MemoryLifecycleMutationResult>;
+    readonly delete: (request: MemoryDeleteRequest) => Promise<MemoryLifecycleMutationResult>;
+    readonly export: (request: MemoryExportRequest) => Promise<MemoryExportResult>;
+    readonly reset: (request: MemoryResetRequest) => Promise<MemoryLifecycleMutationResult>;
     readonly onChanged: (listener: (summary: MemorySummary) => void) => () => void;
   };
   readonly collections: {
