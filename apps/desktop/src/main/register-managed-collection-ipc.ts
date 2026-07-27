@@ -8,6 +8,8 @@ import {
   CollectionCellEditResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
+  CollectionTrashRowRequestSchema,
+  CollectionTrashRowResultSchema,
   type CollectionAddNullableColumnRequest,
   type CollectionAddNullableColumnResult,
   type CollectionCellEditRequest,
@@ -15,7 +17,9 @@ import {
   type CollectionAppendDefaultRowRequest,
   type CollectionAppendDefaultRowResult,
   type CollectionOpenRequest,
-  type CollectionOpenResult
+  type CollectionOpenResult,
+  type CollectionTrashRowRequest,
+  type CollectionTrashRowResult
 } from "@pige/schemas";
 
 interface RegisterManagedCollectionIpcOptions {
@@ -33,6 +37,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly addNullableCollectionColumn: (
     request: CollectionAddNullableColumnRequest
   ) => CollectionAddNullableColumnResult | Promise<CollectionAddNullableColumnResult>;
+  readonly trashCollectionRow: (
+    request: CollectionTrashRowRequest
+  ) => CollectionTrashRowResult | Promise<CollectionTrashRowResult>;
 }
 
 function failedOpen(request: CollectionOpenRequest): CollectionOpenResult {
@@ -79,6 +86,18 @@ function notFoundAddColumn(
     activeVaultId: request.activeVaultId,
     datasetId: request.datasetId,
     tableId: request.tableId,
+    status: "not_found"
+  });
+}
+
+function notFoundTrashRow(request: CollectionTrashRowRequest): CollectionTrashRowResult {
+  return CollectionTrashRowResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    rowId: request.rowId,
     status: "not_found"
   });
 }
@@ -180,5 +199,25 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
       result.tableId !== parsed.tableId
     ) throw new Error("Managed Collection add-column response identity did not match the request.");
     return options.getActiveVaultId() === parsed.activeVaultId ? result : notFoundAddColumn(parsed);
+  });
+
+  options.ipcMain.handle("collections.trashRow", async (_event, request: unknown) => {
+    const parsed = CollectionTrashRowRequestSchema.parse(request);
+    if (options.getActiveVaultId() !== parsed.activeVaultId) return notFoundTrashRow(parsed);
+    let rawResult: CollectionTrashRowResult;
+    try {
+      rawResult = await options.trashCollectionRow(parsed);
+    } catch {
+      return notFoundTrashRow(parsed);
+    }
+    const result = CollectionTrashRowResultSchema.parse(rawResult);
+    if (
+      result.requestId !== parsed.requestId ||
+      result.activeVaultId !== parsed.activeVaultId ||
+      result.datasetId !== parsed.datasetId ||
+      result.tableId !== parsed.tableId ||
+      result.rowId !== parsed.rowId
+    ) throw new Error("Managed Collection row-trash response identity did not match the request.");
+    return options.getActiveVaultId() === parsed.activeVaultId ? result : notFoundTrashRow(parsed);
   });
 }

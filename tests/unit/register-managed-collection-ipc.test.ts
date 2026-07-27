@@ -32,6 +32,12 @@ const addColumnRequest = {
   label: "Owner",
   logicalType: "string"
 } as const;
+const trashRowRequest = {
+  ...openRequest,
+  requestId: "collection_request_trashabcdefghijk",
+  expectedRevisionId: "dataset_rev_20260727_abcdefghijkl",
+  rowId: "row_abcdefghijkl"
+} as const;
 
 function makeHarness(options: {
   readonly getActiveVaultId?: () => string | undefined;
@@ -39,6 +45,7 @@ function makeHarness(options: {
   readonly editCollectionCell?: (request: typeof editRequest) => unknown;
   readonly appendDefaultCollectionRow?: (request: typeof appendRequest) => unknown;
   readonly addNullableCollectionColumn?: (request: typeof addColumnRequest) => unknown;
+  readonly trashCollectionRow?: (request: typeof trashRowRequest) => unknown;
 } = {}) {
   const handlers = new Map<string, IpcHandler>();
   const openCollection = vi.fn(options.openCollection ?? ((request) => ({
@@ -53,7 +60,8 @@ function makeHarness(options: {
       columns: [{ columnId: "column_abcdefghijkl", label: "Task", logicalType: "string" }],
       rows: [{
         rowId: "row_abcdefghijkl",
-        cells: [{ columnId: "column_abcdefghijkl", value: "Draft", editable: true }]
+        cells: [{ columnId: "column_abcdefghijkl", value: "Draft", editable: true }],
+        canTrash: true
       }],
       totalRowCount: 1,
       returnedRowCount: 1,
@@ -90,6 +98,15 @@ function makeHarness(options: {
     tableId: request.tableId,
     status: "not_found"
   })));
+  const trashCollectionRow = vi.fn(options.trashCollectionRow ?? ((request) => ({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    rowId: request.rowId,
+    status: "not_found"
+  })));
 
   registerManagedCollectionIpc({
     ipcMain: {
@@ -99,14 +116,16 @@ function makeHarness(options: {
     openCollection,
     editCollectionCell,
     appendDefaultCollectionRow,
-    addNullableCollectionColumn
+    addNullableCollectionColumn,
+    trashCollectionRow
   });
   return {
     handlers,
     openCollection,
     editCollectionCell,
     appendDefaultCollectionRow,
-    addNullableCollectionColumn
+    addNullableCollectionColumn,
+    trashCollectionRow
   };
 }
 
@@ -116,7 +135,8 @@ describe("registerManagedCollectionIpc", () => {
       "collections.open",
       "collections.editCell",
       "collections.appendDefaultRow",
-      "collections.addNullableColumn"
+      "collections.addNullableColumn",
+      "collections.trashRow"
     ]);
   });
 
@@ -126,7 +146,8 @@ describe("registerManagedCollectionIpc", () => {
       openCollection,
       editCollectionCell,
       appendDefaultCollectionRow,
-      addNullableCollectionColumn
+      addNullableCollectionColumn,
+      trashCollectionRow
     } = makeHarness({
       addNullableCollectionColumn: (request) => ({
         apiVersion: request.apiVersion,
@@ -146,7 +167,8 @@ describe("registerManagedCollectionIpc", () => {
           columns: [{ columnId: "column_ownerabcdefghijkl", label: "Owner", logicalType: "string" }],
           rows: [{
             rowId: "row_abcdefghijkl",
-            cells: [{ columnId: "column_ownerabcdefghijkl", value: null, editable: true }]
+            cells: [{ columnId: "column_ownerabcdefghijkl", value: null, editable: true }],
+            canTrash: true
           }],
           totalRowCount: 1,
           returnedRowCount: 1,
@@ -173,10 +195,13 @@ describe("registerManagedCollectionIpc", () => {
         requestId: addColumnRequest.requestId,
         columnId: "column_ownerabcdefghijkl"
       });
+    await expect(handlers.get("collections.trashRow")!({} as IpcMainInvokeEvent, trashRowRequest))
+      .resolves.toMatchObject({ status: "not_found", requestId: trashRowRequest.requestId });
     expect(openCollection).toHaveBeenCalledWith(openRequest);
     expect(editCollectionCell).toHaveBeenCalledWith(editRequest);
     expect(appendDefaultCollectionRow).toHaveBeenCalledWith(appendRequest);
     expect(addNullableCollectionColumn).toHaveBeenCalledWith(addColumnRequest);
+    expect(trashCollectionRow).toHaveBeenCalledWith(trashRowRequest);
   });
 
   it("fails closed before service access when the active vault does not match", async () => {
@@ -185,7 +210,8 @@ describe("registerManagedCollectionIpc", () => {
       openCollection,
       editCollectionCell,
       appendDefaultCollectionRow,
-      addNullableCollectionColumn
+      addNullableCollectionColumn,
+      trashCollectionRow
     } = makeHarness({
       getActiveVaultId: () => "vault_20260727_elsewhere"
     });
@@ -221,10 +247,21 @@ describe("registerManagedCollectionIpc", () => {
         tableId: addColumnRequest.tableId,
         status: "not_found"
       });
+    await expect(handlers.get("collections.trashRow")!({} as IpcMainInvokeEvent, trashRowRequest))
+      .resolves.toEqual({
+        apiVersion: 1,
+        requestId: trashRowRequest.requestId,
+        activeVaultId: trashRowRequest.activeVaultId,
+        datasetId: trashRowRequest.datasetId,
+        tableId: trashRowRequest.tableId,
+        rowId: trashRowRequest.rowId,
+        status: "not_found"
+      });
     expect(openCollection).not.toHaveBeenCalled();
     expect(editCollectionCell).not.toHaveBeenCalled();
     expect(appendDefaultCollectionRow).not.toHaveBeenCalled();
     expect(addNullableCollectionColumn).not.toHaveBeenCalled();
+    expect(trashCollectionRow).not.toHaveBeenCalled();
   });
 
   it("rejects malformed or identity-swapped service responses", async () => {
@@ -249,7 +286,7 @@ describe("registerManagedCollectionIpc", () => {
   });
 
   it("rejects unknown request fields before service access", async () => {
-    const { handlers, openCollection, addNullableCollectionColumn } = makeHarness();
+    const { handlers, openCollection, addNullableCollectionColumn, trashCollectionRow } = makeHarness();
     await expect(handlers.get("collections.open")!({} as IpcMainInvokeEvent, {
       ...openRequest,
       path: "/private/data.sqlite"
@@ -260,6 +297,11 @@ describe("registerManagedCollectionIpc", () => {
       path: "/private/data.sqlite"
     })).rejects.toThrow();
     expect(addNullableCollectionColumn).not.toHaveBeenCalled();
+    await expect(handlers.get("collections.trashRow")!({} as IpcMainInvokeEvent, {
+      ...trashRowRequest,
+      path: "/private/data.sqlite"
+    })).rejects.toThrow();
+    expect(trashCollectionRow).not.toHaveBeenCalled();
   });
 
   it("rejects an identity-swapped add-column result", async () => {
@@ -278,5 +320,24 @@ describe("registerManagedCollectionIpc", () => {
       {} as IpcMainInvokeEvent,
       addColumnRequest
     )).rejects.toThrow("add-column response identity did not match");
+  });
+
+  it("rejects an identity-swapped row-trash result", async () => {
+    const { handlers } = makeHarness({
+      trashCollectionRow: (request) => ({
+        apiVersion: request.apiVersion,
+        requestId: request.requestId,
+        activeVaultId: request.activeVaultId,
+        datasetId: request.datasetId,
+        tableId: request.tableId,
+        rowId: "row_wrongwrongwrong",
+        status: "not_found"
+      })
+    });
+
+    await expect(handlers.get("collections.trashRow")!(
+      {} as IpcMainInvokeEvent,
+      trashRowRequest
+    )).rejects.toThrow("row-trash response identity did not match");
   });
 });
