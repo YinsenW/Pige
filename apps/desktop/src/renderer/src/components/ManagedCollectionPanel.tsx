@@ -8,6 +8,8 @@ import type {
   CollectionCellEditResult,
   CollectionScalarValue,
   CollectionSnapshot,
+  CollectionTrashRowRequest,
+  CollectionTrashRowResult,
   DatasetLogicalType
 } from "@pige/schemas";
 import { PigeIcon } from "./PigeIcon";
@@ -38,6 +40,11 @@ type EditNotice =
   | { readonly kind: "append_stale" }
   | { readonly kind: "append_not_found" }
   | { readonly kind: "append_failed" }
+  | { readonly kind: "row_trashed" }
+  | { readonly kind: "trash_stale" }
+  | { readonly kind: "trash_not_found" }
+  | { readonly kind: "trash_ineligible" }
+  | { readonly kind: "trash_failed" }
   | { readonly kind: "column_added" }
   | { readonly kind: "column_stale" }
   | { readonly kind: "column_not_found" }
@@ -57,6 +64,7 @@ export function ManagedCollectionPanel(props: {
   readonly onAppendDefaultRow: (
     request: CollectionAppendDefaultRowRequest
   ) => Promise<CollectionAppendDefaultRowResult>;
+  readonly onTrashRow: (request: CollectionTrashRowRequest) => Promise<CollectionTrashRowResult>;
   readonly onAddNullableColumn: (
     request: CollectionAddNullableColumnRequest
   ) => Promise<CollectionAddNullableColumnResult>;
@@ -72,6 +80,8 @@ export function ManagedCollectionPanel(props: {
   const requestSequence = useRef(0);
   const appendActiveRef = useRef<number | null>(null);
   const appendTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const trashActiveRef = useRef<{ readonly sequence: number; readonly rowId: string } | null>(null);
+  const trashTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const columnActiveRef = useRef<number | null>(null);
   const columnTriggerRef = useRef<HTMLButtonElement | null>(null);
   const columnLabelRef = useRef<HTMLInputElement | null>(null);
@@ -81,6 +91,10 @@ export function ManagedCollectionPanel(props: {
   const pendingFocusRef = useRef<CellIdentity | null>(null);
   const pendingAppendFocusRef = useRef(false);
   const pendingRowFocusRef = useRef<string | null>(null);
+  const pendingTrashFocusRef = useRef<{
+    readonly rowId: string | null;
+    readonly preferAction: boolean;
+  } | null>(null);
   const pendingColumnFocusRef = useRef<string | null>(null);
   const pendingColumnTriggerFocusRef = useRef(false);
   const pendingColumnEditorFocusRef = useRef(false);
@@ -95,10 +109,12 @@ export function ManagedCollectionPanel(props: {
   useEffect(() => {
     requestSequence.current += 1;
     appendActiveRef.current = null;
+    trashActiveRef.current = null;
     columnActiveRef.current = null;
     pendingFocusRef.current = null;
     pendingAppendFocusRef.current = false;
     pendingRowFocusRef.current = null;
+    pendingTrashFocusRef.current = null;
     pendingColumnFocusRef.current = null;
     pendingColumnTriggerFocusRef.current = false;
     pendingColumnEditorFocusRef.current = false;
@@ -126,6 +142,17 @@ export function ManagedCollectionPanel(props: {
 
   useLayoutEffect(() => {
     if (busy) return;
+    if (pendingTrashFocusRef.current) {
+      const pending = pendingTrashFocusRef.current;
+      const target = pending.rowId
+        ? (pending.preferAction ? trashTriggerRefs.current.get(pending.rowId) : null) ?? rowRefs.current.get(pending.rowId)
+        : panelRef.current;
+      if (target) {
+        pendingTrashFocusRef.current = null;
+        target.focus();
+        return;
+      }
+    }
     if (pendingColumnFocusRef.current) {
       const header = columnHeaderRefs.current.get(pendingColumnFocusRef.current);
       if (header) {
@@ -266,7 +293,7 @@ export function ManagedCollectionPanel(props: {
   };
 
   const appendDefaultRow = async (): Promise<void> => {
-    if (!props.snapshot.canAppendDefaultRow || busy || edit || columnDraft || appendActiveRef.current !== null) return;
+    if (!props.snapshot.canAppendDefaultRow || busy || edit || columnDraft || appendActiveRef.current !== null || trashActiveRef.current) return;
     const sequence = requestSequence.current + 1;
     requestSequence.current = sequence;
     appendActiveRef.current = sequence;
@@ -307,6 +334,65 @@ export function ManagedCollectionPanel(props: {
       if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) setBusy(false);
     }
   };
+
+  const trashRow = async (rowId: string, rowIndex: number): Promise<void> => {
+    const row = props.snapshot.rows.find((candidate) => candidate.rowId === rowId);
+    if (!row?.canTrash || busy || edit || columnDraft || trashActiveRef.current) return;
+    const sequence = requestSequence.current + 1;
+    requestSequence.current = sequence;
+    trashActiveRef.current = { sequence, rowId };
+    const request: CollectionTrashRowRequest = {
+      apiVersion: 1,
+      requestId: createCollectionRequestId(),
+      activeVaultId: props.activeVaultId,
+      datasetId: props.snapshot.datasetId,
+      tableId: props.snapshot.tableId,
+      expectedRevisionId: props.snapshot.revisionId,
+      rowId
+    };
+    const expectedOwnerKey = ownerKey;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await props.onTrashRow(request);
+      if (
+        sequence !== requestSequence.current ||
+        ownerKeyRef.current !== expectedOwnerKey ||
+        snapshotRevisionRef.current !== request.expectedRevisionId ||
+        !collectionTrashIdentityMatches(request, result)
+      ) return;
+      if ((result.status === "committed" || result.status === "stale") &&
+          !props.onAdoptSnapshot(result.snapshot, request.expectedRevisionId)) return;
+      if (result.status === "committed") {
+        pendingTrashFocusRef.current = {
+          rowId: result.snapshot.rows[rowIndex]?.rowId ?? result.snapshot.rows[rowIndex - 1]?.rowId ?? null,
+          preferAction: false
+        };
+        setNotice({ kind: "row_trashed" });
+        return;
+      }
+      pendingTrashFocusRef.current = { rowId, preferAction: true };
+      setNotice({
+        kind: result.status === "stale"
+          ? "trash_stale"
+          : result.status === "not_found"
+            ? "trash_not_found"
+            : result.status === "ineligible"
+              ? "trash_ineligible"
+              : "trash_failed"
+      });
+    } catch {
+      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) {
+        pendingTrashFocusRef.current = { rowId, preferAction: true };
+        setNotice({ kind: "trash_failed" });
+      }
+    } finally {
+      if (trashActiveRef.current?.sequence === sequence) trashActiveRef.current = null;
+      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) setBusy(false);
+    }
+  };
+
+  const hasTrashActions = props.snapshot.rows.some((row) => row.canTrash);
 
   const addNullableColumn = async (): Promise<void> => {
     if (!columnDraft || busy || columnActiveRef.current !== null) return;
@@ -501,7 +587,7 @@ export function ManagedCollectionPanel(props: {
         </form>
       ) : null}
       {notice ? (
-        <div className={`settings-inline-status ${notice.kind === "saved" || notice.kind === "row_added" || notice.kind === "column_added" ? "success" : "error"}`} role="status" aria-live="polite">
+        <div className={`settings-inline-status ${notice.kind === "saved" || notice.kind === "row_added" || notice.kind === "column_added" || notice.kind === "row_trashed" ? "success" : "error"}`} role="status" aria-live="polite">
           <span>{props.t(`collection.${notice.kind}`)}</span>
           {notice.kind === "stale" ? (
             <button type="button" className="settings-button" disabled={busy} onClick={() => void reloadAfterStale()}>
@@ -527,7 +613,7 @@ export function ManagedCollectionPanel(props: {
               >
                 {column.label}
               </th>
-            ))}</tr>
+            ))}{hasTrashActions ? <th scope="col">{props.t("collection.actions")}</th> : null}</tr>
           </thead>
           <tbody>
             {props.snapshot.rows.map((row, rowIndex) => (
@@ -590,7 +676,7 @@ export function ManagedCollectionPanel(props: {
                           }}
                           aria-label={`${props.t("collection.edit")}: ${column.label}, ${props.t("collection.row")} ${rowIndex + 1}`}
                           onClick={() => {
-                            if (busy || columnDraft || appendActiveRef.current !== null || columnActiveRef.current !== null) return;
+                            if (busy || columnDraft || appendActiveRef.current !== null || columnActiveRef.current !== null || trashActiveRef.current) return;
                             setNotice(null);
                             setEdit({
                               ...identity,
@@ -609,6 +695,27 @@ export function ManagedCollectionPanel(props: {
                     </td>
                   );
                 })}
+                {hasTrashActions ? (
+                  <td>
+                    {row.canTrash ? (
+                      <button
+                        type="button"
+                        className="ghost"
+                        disabled={busy || edit !== null}
+                        ref={(element) => {
+                          if (element) trashTriggerRefs.current.set(row.rowId, element);
+                          else trashTriggerRefs.current.delete(row.rowId);
+                        }}
+                        aria-label={`${props.t("collection.trashRow")}: ${props.t("collection.row")} ${rowIndex + 1}`}
+                        onClick={() => void trashRow(row.rowId, rowIndex)}
+                      >
+                        {props.t(busy && trashActiveRef.current?.rowId === row.rowId
+                          ? "collection.trashingRow"
+                          : "collection.trashRow")}
+                      </button>
+                    ) : null}
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>
@@ -729,4 +836,15 @@ function collectionColumnIdentityMatches(
     result.activeVaultId === request.activeVaultId &&
     result.datasetId === request.datasetId &&
     result.tableId === request.tableId;
+}
+
+function collectionTrashIdentityMatches(
+  request: CollectionTrashRowRequest,
+  result: CollectionTrashRowResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.datasetId === request.datasetId &&
+    result.tableId === request.tableId &&
+    result.rowId === request.rowId;
 }

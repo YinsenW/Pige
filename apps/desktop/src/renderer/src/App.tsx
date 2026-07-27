@@ -133,6 +133,8 @@ import {
   type CollectionOpenRequest,
   type CollectionOpenResult,
   type CollectionSnapshot,
+  type CollectionTrashRowRequest,
+  type CollectionTrashRowResult,
   type JobState,
   type Locale,
   type ProviderEndpointProtocol,
@@ -1020,6 +1022,14 @@ export function App(): React.JSX.Element {
     return result;
   };
 
+  const trashCollectionRow = async (
+    request: CollectionTrashRowRequest
+  ): Promise<CollectionTrashRowResult> => {
+    const result = await window.pige.collections.trashRow(request);
+    if (collectionTrashIdentityMatches(request, result) && result.status === "committed") void refreshVaultState();
+    return result;
+  };
+
   const adoptCollectionSnapshot = (snapshot: CollectionSnapshot, expectedRevisionId: string): boolean => {
     const active = selectedCollectionRef.current;
     if (
@@ -1795,6 +1805,7 @@ export function App(): React.JSX.Element {
             }}
             onAddNullableColumn={addCollectionNullableColumn}
             onAppendDefaultRow={appendCollectionDefaultRow}
+            onTrashRow={trashCollectionRow}
             onAdoptSnapshot={adoptCollectionSnapshot}
             onEditCell={editCollectionCell}
             onReload={reloadSelectedCollection}
@@ -5703,6 +5714,17 @@ function collectionColumnIdentityMatches(
     result.tableId === request.tableId;
 }
 
+function collectionTrashIdentityMatches(
+  request: CollectionTrashRowRequest,
+  result: CollectionTrashRowResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.datasetId === request.datasetId &&
+    result.tableId === request.tableId &&
+    result.rowId === request.rowId;
+}
+
 async function resolveAndOpenInlineReference(
   request: NoteResolveInlineReferenceRequest,
   isCurrent: () => boolean,
@@ -6969,6 +6991,8 @@ export function ActivityHistorySettingsPanel(props: {
             {props.activities.map((activity, index) => {
               const activityMessageKey = activity.kind === "update_collection_cell"
                 ? "activity.updatedCollection"
+                : activity.kind === "trash_collection_row"
+                  ? "activity.trashedCollectionRow"
                 : activity.kind === "update_page"
                   ? "activity.updatedPage"
                   : "activity.createdPage";
