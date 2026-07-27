@@ -114,8 +114,13 @@ export class SkillSourceUpdateRegistry {
         skillId: request.skillId
       };
       const current = status === "failed" ? undefined : (registry ?? this.#ports.readRegistry());
+      const resolvedStatus = status === "current" && current!.revision !== request.expectedRegistryRevision
+        ? "stale"
+        : status;
       return SkillStageUpdateResultSchema.parse(
-        status === "failed" ? { ...identity, status } : { ...identity, status, registry: this.#ports.project(current!) }
+        resolvedStatus === "failed"
+          ? { ...identity, status: resolvedStatus }
+          : { ...identity, status: resolvedStatus, registry: this.#ports.project(current!) }
       );
     } catch {
       return SkillStageUpdateResultSchema.parse({

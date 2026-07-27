@@ -153,6 +153,32 @@ describe("SkillUrlInstallService", () => {
     expect(fs.readFileSync(path.join(root, "skills", "installed", "paper-reading", "SKILL.md"), "utf8")).toBe(initial);
   });
 
+  it("returns stale instead of current when registry authority changes during an unchanged fetch", async () => {
+    const root = createRoot();
+    const initial = skillMarkdown({ version: "1", updatedAt: "2026-07-27T10:00:00.000Z", sourceUrl: "https://example.com/SKILL.md" });
+    const registry = new SkillRegistryService(root);
+    const fetchSnapshot = vi.fn().mockResolvedValueOnce(snapshot(initial));
+    const service = new SkillUrlInstallService({ appDataRoot: root, registry, fetcher: { fetchSnapshot } });
+    const first = await service.stageFromUrl({ apiVersion: 1, requestId, sourceUrl: "https://example.com/SKILL.md" });
+    if (first.status !== "ready") throw new Error("Expected initial stage.");
+    service.installStaged({
+      apiVersion: 1, requestId, stagingId: first.staged.stagingId,
+      manifestSha256: first.staged.manifestSha256, expectedRegistryRevision: 0, enabled: true
+    });
+    fetchSnapshot.mockImplementationOnce(async () => {
+      expect(registry.disable({ apiVersion: 1, skillId: "paper-reading", expectedRevision: 1 }))
+        .toMatchObject({ status: "committed" });
+      return snapshot(initial);
+    });
+    expect(await service.stageUpdate({
+      apiVersion: 1,
+      requestId: "skill_lifecycle_request_updatecurrent012345",
+      activeVaultId: "vault_20260728_skillupdate",
+      skillId: "paper-reading",
+      expectedRegistryRevision: 1
+    })).toMatchObject({ status: "stale", registry: { revision: 2 } });
+  });
+
   it("adopts an exact durable stage across restart and fails changed or unsafe input closed", async () => {
     const root = createRoot();
     const firstFetch = vi.fn(async () => snapshot(skillMarkdown()));
