@@ -44,6 +44,12 @@ describe("AgentMemoryService", () => {
     fs.rmSync(atomPath);
     expect(service.rememberPreference(rememberRequest).id).toBe(record.id);
     expect(fs.existsSync(atomPath)).toBe(true);
+    expect(service.rememberPreference({
+      ...rememberRequest,
+      title: "Different retry title",
+      body: "A model retry must not create a second memory effect."
+    }).id).toBe(record.id);
+    expect(service.list(vaultPath, "vault_20260727_memorytest").records).toHaveLength(1);
 
     const stale = service.disable(vaultPath, {
       apiVersion: 1,
@@ -80,6 +86,31 @@ describe("AgentMemoryService", () => {
 
     expect(service.list(vaultPath, "vault_20260727_memorytest").records).toEqual([]);
     expect(fs.existsSync(path.join(vaultPath, ".pige/memory/registry.json"))).toBe(false);
+  });
+
+  it("rejects mismatched event provenance and ignores a stale fixed temporary file", () => {
+    const vaultPath = createVault();
+    const service = new AgentMemoryService();
+    const memoryRoot = path.join(vaultPath, ".pige/memory");
+    fs.mkdirSync(memoryRoot, { recursive: true });
+    fs.writeFileSync(path.join(memoryRoot, "registry.json.tmp"), "stale", "utf8");
+    service.rememberPreference({
+      vaultPath,
+      activeVaultId: "vault_20260727_memorytest",
+      title: "Stable preference",
+      body: "Keep one stable preference.",
+      sourceConversationId: "conv_20260727_memorytest",
+      sourceEventId: "evt_20260727_memoryevent",
+      parentJobId: "job_20260727_memoryjob"
+    });
+    const registryPath = path.join(memoryRoot, "registry.json");
+    const registry = JSON.parse(fs.readFileSync(registryPath, "utf8")) as {
+      records: Array<{ parentJobId: string }>;
+    };
+    registry.records[0]!.parentJobId = "job_20260727_tampered";
+    fs.writeFileSync(registryPath, `${JSON.stringify(registry)}\n`, "utf8");
+    expect(() => service.list(vaultPath, "vault_20260727_memorytest"))
+      .toThrowError(expect.objectContaining({ code: "memory.registry_invalid" }));
   });
 });
 

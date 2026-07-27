@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
@@ -12,6 +12,7 @@ import {
   type MemoryRecordSummary,
   type MemorySummary
 } from "@pige/schemas";
+import { flushDirectoryWhereSupported } from "./durable-directory-sync";
 import { containsRestrictedModelContent } from "./model-egress-content";
 
 const REGISTRY_FILE = "registry.json";
@@ -68,9 +69,16 @@ export class AgentMemoryService {
       throw new PigeDomainError("memory.secret_blocked", "Secret-like content cannot be saved as Agent memory.");
     }
     const registry = this.#readRegistry(request.vaultPath);
-    const id = createMemoryId(request.sourceEventId, body);
+    const id = createMemoryId(request.sourceEventId);
     const existing = registry.records.find((record) => record.id === id);
     if (existing) {
+      if (
+        existing.conversationId !== request.sourceConversationId ||
+        existing.userEventId !== request.sourceEventId ||
+        existing.parentJobId !== request.parentJobId
+      ) {
+        throw new PigeDomainError("memory.provenance_conflict", "The memory event provenance changed during retry.");
+      }
       this.#writeInspectableRecord(request.vaultPath, existing);
       return existing;
     }
@@ -88,7 +96,7 @@ export class AgentMemoryService {
       createdAt: now,
       updatedAt: now
     });
-    const eventId = `memory_event_${createHash("sha256").update(`${request.sourceEventId}\0${body}`).digest("hex").slice(0, 20)}`;
+    const eventId = createMemoryEventId(request.sourceEventId);
     const event: MemoryEventRecord = {
       id: eventId,
       kind: "explicit_remember",
@@ -162,11 +170,14 @@ export class AgentMemoryService {
     if (parsed.schemaVersion !== 1 || !Number.isSafeInteger(parsed.revision) || parsed.revision < 0 || !Array.isArray(parsed.events) || !Array.isArray(parsed.records)) {
       throw new PigeDomainError("memory.registry_invalid", "The vault memory registry is invalid.");
     }
+    const events = parsed.events.map(parseMemoryEvent);
+    const records = parsed.records.map(parseStoredMemoryRecord);
+    assertRegistryBindings(events, records);
     return {
       schemaVersion: 1,
       revision: parsed.revision,
-      events: parsed.events.map(parseMemoryEvent),
-      records: parsed.records.map(parseStoredMemoryRecord)
+      events,
+      records
     };
   }
 
@@ -194,9 +205,15 @@ function projectSummary(activeVaultId: string, registry: MemoryRegistry): Memory
   });
 }
 
-function createMemoryId(sourceEventId: string, body: string): string {
-  const date = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-  return `memory_${date}_${createHash("sha256").update(`${sourceEventId}\0${body}`).digest("hex").slice(0, 20)}`;
+function createMemoryId(sourceEventId: string): string {
+  const match = /^evt_(\d{8})_[a-z0-9]{8,}$/u.exec(sourceEventId);
+  if (!match) throw new PigeDomainError("memory.provenance_invalid", "Memory requires a durable user event identity.");
+  const date = match[1]!;
+  return `memory_${date}_${createHash("sha256").update(sourceEventId).digest("hex").slice(0, 20)}`;
+}
+
+function createMemoryEventId(sourceEventId: string): string {
+  return `memory_event_${createHash("sha256").update(sourceEventId).digest("hex").slice(0, 20)}`;
 }
 
 function projectRecord(record: StoredMemoryRecord): MemoryRecordSummary {
@@ -240,6 +257,48 @@ function parseStoredMemoryRecord(value: unknown): StoredMemoryRecord {
   return { ...summary, eventId: record.eventId, conversationId: record.conversationId, userEventId: record.userEventId, parentJobId: record.parentJobId };
 }
 
+function assertRegistryBindings(
+  events: readonly MemoryEventRecord[],
+  records: readonly StoredMemoryRecord[]
+): void {
+  const eventsById = new Map<string, MemoryEventRecord>();
+  for (const event of events) {
+    if (eventsById.has(event.id)) throw registryInvalid("The memory registry contains duplicate events.");
+    eventsById.set(event.id, event);
+  }
+  const recordIds = new Set<string>();
+  const boundEventIds = new Set<string>();
+  for (const record of records) {
+    if (recordIds.has(record.id) || boundEventIds.has(record.eventId)) {
+      throw registryInvalid("The memory registry contains duplicate atoms.");
+    }
+    recordIds.add(record.id);
+    boundEventIds.add(record.eventId);
+    const event = eventsById.get(record.eventId);
+    if (
+      !event ||
+      event.title !== record.title ||
+      event.body !== record.body ||
+      event.conversationId !== record.conversationId ||
+      event.userEventId !== record.userEventId ||
+      event.parentJobId !== record.parentJobId ||
+      event.occurredAt !== record.provenance.occurredAt ||
+      event.occurredAt !== record.createdAt ||
+      record.id !== createMemoryId(event.userEventId) ||
+      event.id !== createMemoryEventId(event.userEventId)
+    ) {
+      throw registryInvalid("A memory atom is not bound to its explicit event.");
+    }
+  }
+  if (eventsById.size !== boundEventIds.size) {
+    throw registryInvalid("The memory registry contains an unbound event.");
+  }
+}
+
+function registryInvalid(message: string): PigeDomainError {
+  return new PigeDomainError("memory.registry_invalid", message);
+}
+
 function ensureMemoryRoot(vaultPath: string): string {
   if (!path.isAbsolute(vaultPath)) throw new PigeDomainError("memory.vault_invalid", "Memory requires an active vault.");
   const vaultRoot = fs.realpathSync.native(vaultPath);
@@ -260,11 +319,22 @@ function ensureDirectory(directoryPath: string): void {
 }
 
 function atomicWrite(filePath: string, contents: string): void {
-  const temporaryPath = `${filePath}.tmp`;
-  fs.writeFileSync(temporaryPath, contents, { encoding: "utf8", mode: 0o600, flag: "wx" });
+  const temporaryPath = `${filePath}.tmp-${process.pid}-${randomBytes(8).toString("hex")}`;
+  let descriptor: number | undefined;
   try {
+    descriptor = fs.openSync(
+      temporaryPath,
+      fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | (fs.constants.O_NOFOLLOW ?? 0),
+      0o600
+    );
+    fs.writeFileSync(descriptor, contents, "utf8");
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
     fs.renameSync(temporaryPath, filePath);
+    flushDirectoryWhereSupported(path.dirname(filePath));
   } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
     fs.rmSync(temporaryPath, { force: true });
   }
 }

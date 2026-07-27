@@ -479,9 +479,11 @@ describe("Home Pi Agent service", () => {
       }
     };
     let observedSystemPrompt = "";
+    let observedUserPrompt = "";
     const runtime = {
       run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
         observedSystemPrompt = request.systemPrompt;
+        observedUserPrompt = request.userPrompt;
         await request.beforeModelTurn?.();
         const tool = request.tools.find((candidate) => candidate.name === "pige_remember_preference");
         if (!tool) throw new Error("Missing explicit memory tool.");
@@ -529,8 +531,59 @@ describe("Home Pi Agent service", () => {
       sourceConversationId: expect.stringMatching(/^conv_/u),
       sourceEventId: expect.stringMatching(/^evt_/u)
     })]);
-    expect(observedSystemPrompt).toContain("Memory 1: Concise summaries: Prefer concise summaries.");
-    expect(observedSystemPrompt).toContain("current user instruction always wins");
+    expect(observedSystemPrompt).not.toContain("Prefer concise summaries.");
+    expect(observedUserPrompt).toContain("lower-authority memory context");
+    expect(observedUserPrompt).toContain("Prefer concise summaries.");
+    expect(observedUserPrompt).toContain("Current user instruction follows and overrides");
+  });
+
+  it("fails closed when vault memory is disabled by runtime policy", async () => {
+    const fixture = makeFixture();
+    const configPath = path.join(fixture.vaultPath, ".pige/config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as { memory: { vaultMemoryEnabled: boolean } };
+    config.memory.vaultMemoryEnabled = false;
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    let recalls = 0;
+    let observedTools: readonly string[] = [];
+    let observedUserPrompt = "";
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          observedTools = request.tools.map(({ name }) => name);
+          observedUserPrompt = request.userPrompt;
+          return makeRuntimeResult(request, undefined, {
+            answer: "Memory is disabled for this vault.",
+            citationRefs: [],
+            grounding: "general"
+          });
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        recall: () => { recalls += 1; return [{ title: "Must not leak", body: "Disabled memory." }]; },
+        rememberPreference: () => { throw new Error("Disabled memory must not write."); }
+      }
+    );
+
+    await expect(service.submitTurn({
+      text: "Remember this preference.",
+      inputKind: "typed_text",
+      locale: "en",
+      clientTurnId: "turn_20260727_memorydisabled"
+    })).resolves.toMatchObject({ state: "completed" });
+    expect(recalls).toBe(0);
+    expect(observedTools).not.toContain("pige_remember_preference");
+    expect(observedUserPrompt).not.toContain("Disabled memory.");
   });
 
   it("omits reviewed task plans from neutral attachment turns", async () => {
