@@ -335,6 +335,9 @@ describe("Unified Agent ingress", () => {
         datasetResult: expect.objectContaining({ returnedRowCount: 2, matchedRowCount: 2 })
       }
     });
+    expect(outcome.answer?.citations).toEqual([
+      expect.objectContaining({ kind: "dataset", refId: "citation_10" })
+    ]);
     expect(readJobs(fixture.vaultPath).filter((job) => job.class === "agent_turn")).toEqual([
       expect.objectContaining({
         id: prepared.jobId,

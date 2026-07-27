@@ -876,6 +876,16 @@ export class JobsService {
           );
         }
       },
+      readCurrentSource: () => {
+        const currentSource = readSourceRecord(vaultPath, sourceFile.sourceRecord.id);
+        if (!currentSource) {
+          throw new PigeDomainError(
+            "agent_ingest.source_changed",
+            "The selected source evidence is no longer available."
+          );
+        }
+        return currentSource;
+      },
       parseCurrentSource: sourceTools.parse,
       materializeCurrentDataset: async (request) => {
         const result = await sourceTools.materializeDataset(request);
