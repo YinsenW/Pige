@@ -7,6 +7,7 @@ import { PigeDomainError } from "@pige/domain";
 import { OperationRecordSchema, type OperationRecord } from "@pige/schemas";
 import {
   KnowledgeActivityService,
+  type KnowledgeActivityCollectionPort,
   type KnowledgeActivityMemoryPort,
   type KnowledgeActivityVaultPort
 } from "../../apps/desktop/src/main/services/knowledge-activity-service";
@@ -23,6 +24,86 @@ afterEach(() => {
 });
 
 describe("Knowledge Activity and Undo", () => {
+  it("routes body-free Collection row-trash Activity and forward Undo only through its owner", async () => {
+    const fixture = createFixture();
+    const operation = OperationRecordSchema.parse({
+      id: "op_20260728_rowtrashactivity",
+      schemaVersion: 1,
+      createdAt: "2026-07-28T12:00:00.000Z",
+      actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+      kind: "trash_collection_row",
+      targetRefs: [
+        { kind: "dataset", id: "dataset_20260728_activity123456" },
+        { kind: "table", id: "table_activity123456" },
+        { kind: "row", id: "row_activity123456" }
+      ],
+      sourceRefs: [{ kind: "dataset_revision", id: "dataset_rev_20260728_before123456" }],
+      summary: "Moved one Collection row to recoverable revision history.",
+      reversible: "yes",
+      rollbackHint: "Restore the exact prior Collection revision.",
+      warnings: []
+    });
+    writeOperation(fixture.vaultPath, operation);
+    const undo = vi.fn(async () => ({
+      status: "undone" as const,
+      operationId: operation.id,
+      undoOperationId: "op_20260728_rowtrashundo",
+      revisionId: "dataset_rev_20260728_restored123456"
+    }));
+    const collections: KnowledgeActivityCollectionPort = {
+      activitySummary: (candidate) => candidate.id === operation.id &&
+        candidate.targetRefs.some((ref) => ref.kind === "dataset" && ref.id === "dataset_20260728_activity123456") &&
+        candidate.targetRefs.some((ref) => ref.kind === "table" && ref.id === "table_activity123456") &&
+        candidate.targetRefs.some((ref) => ref.kind === "row" && ref.id === "row_activity123456") ? {
+        operationId: candidate.id,
+        kind: "trash_collection_row",
+        createdAt: candidate.createdAt,
+        targetLabel: "Reading list",
+        target: {
+          kind: "collection",
+          datasetId: "dataset_20260728_activity123456",
+          tableId: "table_activity123456",
+          revisionId: "dataset_rev_20260728_after123456"
+        },
+        status: "applied",
+        canUndo: true
+      } : undefined,
+      findUndoOperation: () => undefined,
+      undo,
+      recoverIncompleteOperations: () => ({ recovered: 0, failed: 0 })
+    };
+    const service = new KnowledgeActivityService(fixture.vaults, collections);
+
+    const listed = service.list({ limit: 20 });
+    expect(listed.activities).toContainEqual(expect.objectContaining({
+      operationId: operation.id,
+      kind: "trash_collection_row",
+      targetLabel: "Reading list",
+      target: {
+        kind: "collection",
+        datasetId: "dataset_20260728_activity123456",
+        tableId: "table_activity123456",
+        revisionId: "dataset_rev_20260728_after123456"
+      },
+      canUndo: true
+    }));
+    expect(JSON.stringify(listed)).not.toMatch(/row_activity|before123456|rollbackHint|sourceRefs|targetRefs/u);
+    await expect(service.undo({
+      operationId: operation.id,
+      expectedRevisionId: "dataset_rev_20260728_after123456"
+    })).resolves.toEqual({
+      status: "undone",
+      operationId: operation.id,
+      undoOperationId: "op_20260728_rowtrashundo",
+      revisionId: "dataset_rev_20260728_restored123456"
+    });
+    expect(undo).toHaveBeenCalledWith(operation, "dataset_rev_20260728_after123456");
+
+    const tampered = { ...operation, targetRefs: [{ kind: "row", id: "row_attacker123456" }] } as OperationRecord;
+    expect(collections.activitySummary(tampered)).toBeUndefined();
+    expect(undo).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects malformed renderer requests before reading or changing the vault", () => {
     const fixture = createFixture();
     const service = new KnowledgeActivityService(fixture.vaults);
