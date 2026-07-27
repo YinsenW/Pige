@@ -1,11 +1,15 @@
 import type { IpcMain } from "electron";
 import {
+  CollectionAppendDefaultRowRequestSchema,
+  CollectionAppendDefaultRowResultSchema,
   CollectionCellEditRequestSchema,
   CollectionCellEditResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
   type CollectionCellEditRequest,
   type CollectionCellEditResult,
+  type CollectionAppendDefaultRowRequest,
+  type CollectionAppendDefaultRowResult,
   type CollectionOpenRequest,
   type CollectionOpenResult
 } from "@pige/schemas";
@@ -19,6 +23,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly editCollectionCell: (
     request: CollectionCellEditRequest
   ) => CollectionCellEditResult | Promise<CollectionCellEditResult>;
+  readonly appendDefaultCollectionRow: (
+    request: CollectionAppendDefaultRowRequest
+  ) => CollectionAppendDefaultRowResult | Promise<CollectionAppendDefaultRowResult>;
 }
 
 function failedOpen(request: CollectionOpenRequest): CollectionOpenResult {
@@ -42,6 +49,17 @@ function failedEdit(request: CollectionCellEditRequest): CollectionCellEditResul
     rowId: request.rowId,
     columnId: request.columnId,
     status: "failed"
+  });
+}
+
+function notFoundAppend(request: CollectionAppendDefaultRowRequest): CollectionAppendDefaultRowResult {
+  return CollectionAppendDefaultRowResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    status: "not_found"
   });
 }
 
@@ -104,5 +122,24 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
     }
     const result = assertEditIdentity(parsed, CollectionCellEditResultSchema.parse(rawResult));
     return options.getActiveVaultId() === parsed.activeVaultId ? result : failedEdit(parsed);
+  });
+
+  options.ipcMain.handle("collections.appendDefaultRow", async (_event, request: unknown) => {
+    const parsed = CollectionAppendDefaultRowRequestSchema.parse(request);
+    if (options.getActiveVaultId() !== parsed.activeVaultId) return notFoundAppend(parsed);
+    let rawResult: CollectionAppendDefaultRowResult;
+    try {
+      rawResult = await options.appendDefaultCollectionRow(parsed);
+    } catch {
+      return notFoundAppend(parsed);
+    }
+    const result = CollectionAppendDefaultRowResultSchema.parse(rawResult);
+    if (
+      result.requestId !== parsed.requestId ||
+      result.activeVaultId !== parsed.activeVaultId ||
+      result.datasetId !== parsed.datasetId ||
+      result.tableId !== parsed.tableId
+    ) throw new Error("Managed Collection append response identity did not match the request.");
+    return options.getActiveVaultId() === parsed.activeVaultId ? result : notFoundAppend(parsed);
   });
 }

@@ -2,8 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
-  KnowledgeActivityListRequest,
-  KnowledgeActivityListResult,
+  KnowledgeActivityListRequest, KnowledgeActivityListResult,
   KnowledgeActivitySummary,
   KnowledgeActivityUndoRequest,
   KnowledgeActivityUndoResult,
@@ -73,7 +72,7 @@ export class KnowledgeActivityService {
     const undoByOperationId = createUndoOperationMap(scan.operations);
     const activities = scan.operations
       .filter((operation) => !!this.#memory?.activitySummary(operation, this.#memory.findUndoOperation(operation, scan.operations)) || !!this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations)) || isKnowledgeActivityOperation(operation) || (
-        operation.kind === "update_collection_cell" && !!this.#collections?.activitySummary(
+        (operation.kind === "update_collection_cell" || operation.kind === "add_collection_row") && !!this.#collections?.activitySummary(
           operation, this.#collections.findUndoOperation(operation, scan.operations)
         )))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id));
@@ -87,7 +86,7 @@ export class KnowledgeActivityService {
         .map((operation) => {
           const memory = this.#memory?.activitySummary(operation, this.#memory.findUndoOperation(operation, scan.operations)); const editor = this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations));
           if (memory) return memory; if (editor) return editor;
-          if (operation.kind === "update_collection_cell" && this.#collections) {
+          if ((operation.kind === "update_collection_cell" || operation.kind === "add_collection_row") && this.#collections) {
             return this.#collections.activitySummary(operation, this.#collections.findUndoOperation(operation, scan.operations))!;
           }
           return toActivitySummary(vaultPath, operation, undoByOperationId.get(operation.id));
@@ -107,11 +106,11 @@ export class KnowledgeActivityService {
     const scan = readOperationRecords(vaultPath);
     const operation = scan.operations.find((candidate) => candidate.id === request.operationId);
     const memory = operation && this.#memory?.activitySummary(operation, this.#memory.findUndoOperation(operation, scan.operations)); const editor = operation && this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations));
-    if (!operation || (!memory && !editor && !isKnowledgeActivityOperation(operation) && operation.kind !== "update_collection_cell")) {
+    if (!operation || (!memory && !editor && !isKnowledgeActivityOperation(operation) && operation.kind !== "update_collection_cell" && operation.kind !== "add_collection_row")) {
       throw new PigeDomainError("activity.not_allowed", "This Activity cannot be undone by the current bounded path.");
     }
     if (memory) return this.#memory!.undo(operation, request.expectedRevisionId); if (editor) return this.#editor!.undo(operation, request.expectedRevisionId);
-    if (operation.kind === "update_collection_cell") {
+    if (operation.kind === "update_collection_cell" || operation.kind === "add_collection_row") {
       if (!this.#collections) throw new PigeDomainError("activity.not_allowed", "Collection Activity is unavailable.");
       return this.#collections.undo(operation, request.expectedRevisionId);
     }
@@ -735,6 +734,7 @@ function isAgentPageUpdateOperation(operation: OperationRecord): boolean {
 function isKnowledgeActivityOperation(operation: OperationRecord): boolean {
   return isGeneratedCreatePageOperation(operation) || isAgentPageUpdateOperation(operation);
 }
+
 
 function createUndoOperationMap(operations: readonly OperationRecord[]): Map<string, OperationRecord> {
   const result = new Map<string, OperationRecord>();
