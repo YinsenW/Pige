@@ -47,10 +47,15 @@ import {
   SetThemeRequestSchema,
   SkillDiscardStagedRequestSchema,
   SkillDiscardStagedResultSchema,
+  SkillEnableRequestSchema,
+  SkillExportRequestSchema,
+  SkillExportResultSchema,
   SkillInstallStagedRequestSchema,
   SkillInstallStagedResultSchema,
+  SkillLifecycleMutationResultSchema,
   SkillStageFromUrlRequestSchema,
   SkillStageFromUrlResultSchema,
+  SkillUninstallRequestSchema,
   SourceRecordSchema,
   TaskExecutionPlanSchema,
   TaskExecutionPlanSummarySchema,
@@ -1206,5 +1211,84 @@ describe("schemas", () => {
     expect(SkillDiscardStagedRequestSchema.parse(discardRequest)).toEqual(discardRequest);
     expect(SkillDiscardStagedResultSchema.parse({ status: "discarded", requestId }))
       .toEqual({ status: "discarded", requestId });
+  });
+
+  it("keeps installed Skill lifecycle vault-bound, CAS-fenced, and pathless", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "skill_lifecycle_request_abcdefghijklmnop",
+      activeVaultId: "vault_20260728_abcdefgh",
+      skillId: "paper-reading",
+      expectedRegistryRevision: 5
+    } as const;
+    expect(SkillEnableRequestSchema.parse(request)).toEqual(request);
+    expect(SkillUninstallRequestSchema.parse(request)).toEqual(request);
+    expect(SkillExportRequestSchema.parse(request)).toEqual(request);
+
+    const identity = {
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      skillId: request.skillId
+    } as const;
+    const skill = {
+      id: request.skillId,
+      name: "Paper Reading",
+      version: "1.0.0",
+      description: "Review papers with source-aware prompts.",
+      scope: "machine_local",
+      kind: "pure",
+      enabled: false,
+      trust: "user_confirmed",
+      capabilities: ["read_current_source"],
+      dataBoundaries: ["local"],
+      canEnable: true,
+      canUninstall: true,
+      canExport: true
+    } as const;
+    const registry = { apiVersion: 1, revision: 6, invalidManifestCount: 0, skills: [skill] } as const;
+    for (const status of ["committed", "stale", "not_found"] as const) {
+      expect(SkillLifecycleMutationResultSchema.parse({ ...identity, status, registry }))
+        .toEqual({ ...identity, status, registry });
+    }
+    expect(SkillLifecycleMutationResultSchema.parse({ ...identity, status: "failed" }))
+      .toEqual({ ...identity, status: "failed" });
+
+    for (const status of ["exported", "cancelled", "stale", "not_found", "failed"] as const) {
+      const result = { ...identity, registryRevision: 6, status } as const;
+      expect(SkillExportResultSchema.parse(result)).toEqual(result);
+    }
+    for (const unsafe of [
+      { path: "/private/export/SKILL.md" },
+      { body: "private Skill body" },
+      { sourceUrl: "https://example.com/private" },
+      { error: { code: "raw_fs_error" } }
+    ]) {
+      expect(() => SkillExportResultSchema.parse({
+        ...identity,
+        registryRevision: 6,
+        status: "failed",
+        ...unsafe
+      })).toThrow();
+    }
+    expect(() => SkillEnableRequestSchema.parse({ ...request, path: "/private/skill" })).toThrow();
+    for (const unsafe of [
+      { ...skill, scope: "built_in", trust: "built_in", canEnable: true },
+      { ...skill, kind: "package_provided", trust: "package_managed", canUninstall: true },
+      { ...skill, enabled: true, canEnable: true }
+    ]) {
+      expect(() => SkillLifecycleMutationResultSchema.parse({
+        ...identity,
+        status: "committed",
+        registry: { ...registry, skills: [unsafe] }
+      })).toThrow();
+    }
+    const missingEligibility: Record<string, unknown> = { ...skill };
+    delete missingEligibility.canExport;
+    expect(() => SkillLifecycleMutationResultSchema.parse({
+      ...identity,
+      status: "committed",
+      registry: { ...registry, skills: [missingEligibility] }
+    })).toThrow();
   });
 });

@@ -194,7 +194,10 @@ describe("security-sensitive shared contracts", () => {
         enabled: true,
         trust: "user_confirmed" as const,
         capabilities: ["read_current_source" as const],
-        dataBoundaries: ["local" as const]
+        dataBoundaries: ["local" as const],
+        canEnable: false,
+        canUninstall: true,
+        canExport: true
       }]
     };
     expect(SkillRegistrySummarySchema.parse(summary)).toEqual(summary);
