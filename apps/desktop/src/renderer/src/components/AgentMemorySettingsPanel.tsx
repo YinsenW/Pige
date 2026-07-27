@@ -40,9 +40,17 @@ export function AgentMemorySettingsPanel(props: AgentMemorySettingsPanelProps): 
         mountedRef.current = false;
       };
     }
+    const memoryApi = window.pige.memory;
+    if (!memoryApi) {
+      setReadState("failed");
+      return () => {
+        current = false;
+        mountedRef.current = false;
+      };
+    }
 
     setReadState("loading");
-    void window.pige.memory.list({ apiVersion: 1, activeVaultId: requestedVaultId }).then((next) => {
+    void memoryApi.list({ apiVersion: 1, activeVaultId: requestedVaultId }).then((next) => {
       if (!current || activeVaultIdRef.current !== requestedVaultId || next.activeVaultId !== requestedVaultId) return;
       setSummary(next);
       setReadState("ready");
@@ -57,12 +65,13 @@ export function AgentMemorySettingsPanel(props: AgentMemorySettingsPanelProps): 
 
   const disableMemory = async (record: MemoryRecordSummary): Promise<void> => {
     const requestedSummary = summary;
-    if (!requestedSummary || record.status !== "active" || disablingMemoryId) return;
+    const memoryApi = window.pige.memory;
+    if (!memoryApi || !requestedSummary || record.status !== "active" || disablingMemoryId) return;
     const requestedVaultId = requestedSummary.activeVaultId;
     setDisablingMemoryId(record.id);
     setStatusKey(null);
     try {
-      const result = await window.pige.memory.disable({
+      const result = await memoryApi.disable({
         apiVersion: 1,
         requestId: createMemoryRequestId(),
         activeVaultId: requestedVaultId,
