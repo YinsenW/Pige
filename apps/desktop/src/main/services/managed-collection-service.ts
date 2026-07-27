@@ -859,7 +859,7 @@ function createOperationForRevision(binding: BundleBinding, revision: DatasetRev
   const rowId = "rowId" in change ? change.rowId : undefined;
   const columnId = "columnId" in change ? change.columnId : undefined;
   const column = columnId ? table?.columns.find((candidate) => candidate.id === columnId) : undefined;
-  if (!table || (columnId && !column)) throw operationConflict();
+  if (!table || (columnId && !column && change.kind !== "collection_column_add_undo")) throw operationConflict();
   const revisionRelativePath = `revisions/${revision.id}.json`;
   const beforeRelativePath = `revisions/${beforeRevision.id}.json`;
   const targetRefs = [
