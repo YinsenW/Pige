@@ -632,15 +632,12 @@ Startup recovery flow:
    directory identity, current mtime/freshness, and the sentinel generation, bounded
    content hash and named-path metadata twice around the cleanup commit boundary before
    mutable services start. Same-name inode reuse is not accepted as identity.
-3. Scan `.pige/jobs/`, `.pige/proposals/`, `.pige/operations/`, `.pige/source-records/`, conversations, and `log.md`.
-4. Rebuild SQLite job/proposal/operation indexes if missing or dirty.
-5. Detect jobs in `running`, `cancel_requested`, `waiting_dependency`,
-   legacy waiting or partial stage states; AR1 may reject/clear unpublished approval
-   states rather than migrate them into the new vocabulary.
-6. Reconcile checkpoint output refs with actual files and hashes.
-7. Mark safe jobs resumable, retryable, or completed with warnings.
-8. Mark uncertain jobs `failed_retryable` with a recovery explanation or create a repair proposal.
-9. Resume queued high-priority work only after Home is usable.
+3. Scan durable Jobs/proposals/Operations/source records/conversations/log, rebuilding dirty
+   SQLite projections and reconciling checkpoint refs/hashes.
+4. Reclassify running/cancel/waiting/partial or legacy states as proven resumable,
+   retryable, warning-complete, or body-free `failed_retryable`/repair; unpublished approval
+   states may be cleared rather than migrated.
+5. Resume queued priority work only after Home is usable.
 
 The lease and Job claims are temporary coordination state, not recovery evidence. They
 are excluded from backup/restore/sync and recreated empty; durable Job bytes,
@@ -666,6 +663,16 @@ Recovery decisions:
 | Dataset revision or schema changed after query/write plan | Reject stale evidence or preserve a new revision; never replay against a different base. |
 | Dataset payload exists but manifest/revision/Operation is incomplete | Adopt only when every planned ID/hash matches; otherwise quarantine/preserve and fail closed. |
 | High-risk confirmation owner disappears | Withdraw the exact confirmation by owner/revision; never convert it into a Job waiting state or replay the effect. |
+| Reviewed task plan/process is interrupted | Revalidate plan/Job/policy/catalog/actor and exact ordinal; probe/adopt the same result, or fail closed. Never consume the next authority or duplicate an uncertain install/auth effect. |
+
+### 13.1 Reviewed Task Plan Checkpoints
+
+No new Job state exists. Its private checkpoint binds plan digest, ordinal/consumption,
+process, interaction revision and postcondition. Before spawn Main revalidates every
+Job/turn `authoredTaskIntent`/plan/policy/recipe/environment binding and consumes one nonserializable exact-ordinal
+authority. Drift/reorder/reuse fails pre-effect. OAuth suspension checkpoints private
+process/device state, not a synchronous Home call. Restart only probes/adopts that effect
+or fails body-free without minting another interaction; cancel kills the exact tree.
 
 ## 14. Compaction And Retention
 
@@ -709,7 +716,8 @@ Rules:
 
 - Completed jobs should say what changed in the vault.
 - Failed jobs should say what was preserved and what can be retried.
-- Durable proposal and Job states survive window close and app restart. A high-risk confirmation is owned by one exact live effect and is withdrawn when that owner expires.
+- Durable Jobs survive restart. A high-risk confirmation is withdrawn with its exact live
+  owner; an allowed task plan resumes only through its private ordinal checkpoint/probe.
 
 ## 16. Backup, Restore, And Migration
 

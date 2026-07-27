@@ -225,102 +225,71 @@ Acceptance:
 
 Product decision:
 
-- v0.1 supports external/Web Skills and permission-scoped execution, including Skills installed from URLs, Markdown files, ZIPs, and reviewed package sources.
-- Pige should not pretend all extension execution is safe; it must make sensitive capability requests explicit and elegant.
+- v0.1 stages external/Web Skills from URL, Markdown, ZIP, or reviewed package source;
+  enabling exposes only declared, service-enforced capabilities.
 
-Threat:
-
-- Skill/package reads too much, writes outside scope, calls network, runs shell, changes settings, exfiltrates notes, or stores secrets.
+Threat: extension code exceeds scope, executes effects, or exfiltrates data/secrets.
 
 Mitigations:
 
-- All external Skills/packages are staged before enabling.
-- Install-time code is not executed during staging.
-- Runtime capabilities are declared and enforced by Pige services.
-- Sensitive capabilities require a first-class authorization dialog.
-- Authorization is allow or deny for the exact current third-party action. It is not a
-  saved grant, does not persist across actions, and cannot become a global mode.
-- Package writes use brokered Pige APIs; core tools are separate.
-- Skills/packages cannot directly access API keys. A reviewed adapter can request brokered credential use for one declared provider action, but never receives or returns raw credential bytes.
-- Executable/package-backed Skills run only through reviewed runtime adapters in a
-  dedicated worker, utility process, or child process with scoped handles; they do not
-  inherit first-party submitted-turn authority.
-- Install preview/staging never executes Skill/package code, package hooks, shell commands, or network callbacks.
-- Exact public npm package install requires current-action `install_package`, SHA-512,
-  pinned same-origin redirects, bounded link-free extraction, and rejects unsafe paths,
-  hooks, dependencies and executable/native input. PID-aware locking and immutable
-  `installed_disabled` publication grant no runtime authority.
+- Staging executes nothing. External code uses reviewed adapters/scoped handles, brokered
+  writes, and one-action authorization; it inherits no first-party authority or raw secret.
+- Public npm install binds SHA-512/same-origin redirects, rejects hooks, dependencies,
+  links and executable/native input, and atomically publishes `installed_disabled` only.
 
-Sensitive capabilities:
-
-- Any Pi Agent filesystem/path/commit action outside standing active-vault knowledge
-  Markdown authority or the exact source selected by the user for the current Job.
-- Read entire vault.
-- Write vault files.
-- Delete or move files.
-- Access filesystem outside vault.
-- Network access beyond current source fetch.
-- Run shell commands.
-- Install/update packages or local tools.
-- Skill/package model use or egress requiring a sensitive, unknown-boundary, or stricter-policy decision.
-- Use a brokered credential for a declared provider action; raw-secret read is never an extension capability.
-- Change `PIGE.md`, provider settings, privacy settings, or update settings.
-- Spawn sub-agents or long-running background tasks.
-
-Shell policy:
-
-- Shell execution is denied by default.
-- Pige-owned bundled tool commands may run only through the Local Tool Service with fixed argv construction, path validation, timeout, and output limits.
-- Text-only explicit tasks retain the reviewed first-party command boundary and its
-  current high-risk rules. Source-bound turns do not register command, ambient filesystem,
-  package or generic network adapters; no confirmation can add them.
-- Source content, model output, or package metadata cannot grant shell access.
-
-Authorization dialog requirements:
-
-- Show actor/action, plain reason, scoped capabilities/data boundary, Deny and Allow This
-  Action. Bind exact actor/version/capability/scope; changed identity needs a new decision.
-  Destructive actions use stronger non-default-Allow copy. Copy is presentation, not
-  authority: it cannot widen resources, source-bound catalogs cannot produce Bash
-  confirmation, and no global mode bypasses closed-list or third-party isolation.
-
-Acceptance:
-
-- Non-default third-party shell/filesystem/network/credential/delete/commit/settings use
-  requires its reviewed boundary; closed-list high risk retains exact confirmation.
-- Package-install tests cover deny-before-network, identity/integrity/archive, cancellation,
-  locking, recovery and disabled-only behavior. Denial is stable and recorded.
+Sensitive capabilities include out-of-scope filesystem/destruction, ambient network/shell,
+install, protected policy, brokered credentials, sub-agents, and background work.
+raw-secret read is never an extension capability. Shell defaults denied; bundled commands
+use fixed argv/path/limits. Authorization shows safe actor/action/boundary and exact
+Allow/Deny; identity drift re-prompts. Tests cover pre-network denial, package identity/
+archive, cancellation, locking, recovery, and disabled-only publication.
 
 ### 6.6.1 Pi Capability And Filesystem Authority
 
-Pi receives capability only through its turn catalog. The governing matrix is:
+Pi receives capability only through its turn catalog. Recoverable active-vault Markdown uses
+confined writer/schema/evidence/base-hash/Operation authority. Attachments grant exact files
+only. Explicit authored ambient tasks use exact confirmation or one immutable reviewed
+plan; raw effects remain one-confirmation. Third-party actions require their adapter plus
+closed high-risk gate. Permanent loss/protected policy never inherits standing authority,
+and raw secret bytes are not grantable (reviewed adapters use refs only).
 
-| Requested action | Default authority | Gate |
-| --- | --- | --- |
-| Schema-valid recoverable knowledge Markdown inside the active vault | Standing Pige authority; no prompt | Confined writer, schema/evidence/base hash, Operation/Undo |
-| Source-bound accepted SourceRecord set | Exact accepted files only; no duplicate prompt | Exact identity/currentness; no parent/sibling/cwd or ambient adapters |
-| First-party path/folder/repository/command/package action in an explicit text-only task | Current task authority; no duplicate prompt | Exact executable/resource binding, bounded execution, one-use audit |
-| Third-party path/file/folder/repository/command/commit action | Available, not pre-authorized | Reviewed adapter/capability boundary plus exact high-risk confirmation where the effect qualifies |
-| Permanent deletion, source-original overwrite, protected policy/settings, other always-confirmed effect | Never covered by ordinary standing/grant authority | Strong current-action confirmation |
-| Raw secret bytes | Not grantable | Block; reviewed adapters may use secret refs only |
-
-Standing Markdown authority comes from managed root/owner, not `.md`; external Markdown
-and originals stay outside. Main executes only the bound action for the same Job; text
-cannot approve itself.
-
-Current-action authority is exact and one-use. A source-bound turn admits only its exact
-accepted Source Records; source/prompt/model/tool text and confirmation cannot add a
-directory, sibling, cwd or ambient adapter. Stale/invented calls fail before confirmation,
-execution or persistence. Text-only explicit tasks retain existing high-risk semantics.
+Standing Markdown authority comes from managed ownership, not `.md`. Attachments grant
+only exact SourceRecords; fallback/model/source text cannot widen them. A separate explicit
+user-authored task may request ambient scope under its precise confirmation/reviewed plan.
+Main persists `authoredTaskIntent = neutral_attachment | explicit_user_task` from request
+text presence before fallback; recovery reads it, and missing/legacy fails neutral. Main
+executes only that same-Job bound effect; stale/invented calls fail pre-effect.
 
 ### 6.7 Arbitrary Shell Execution
 
 Threat: tool or Skill runs dangerous commands.
 
-For eligible text-only tasks, `pige_run_command` binds executable, argv/cwd, `shell:false`,
-reduced environment, limits, cancellation and process-tree termination; explicit shell
-syntax requires a shell executable. Source-bound catalogs omit it. Third-party, destructive
-and credential effects retain separate authority.
+For an explicit user-authored ambient task, `pige_run_command` remains `arbitrary_shell`, binds
+executable/argv/cwd, uses `shell:false`, limits and process-tree cancellation, and is
+confirmed per effect. Attachment presence alone and neutral fallback cannot register it.
+
+### 6.7.1 Reviewed Task Execution Plans
+
+Only registered recipes/adapters create immutable `TaskExecutionPlanSchema`. It binds
+vault/Job/turn/policy/catalog/recipe/actor and each
+ordinal's executable, argv, cwd, canonical sanitized environment/config hash, origins,
+destinations, interaction, timeout, input, and recovery probe. Controlled HOME/config,
+resolved descendant PATH identities, TMPDIR/locale, npm registry/prefix/cache/provenance,
+agent roots, and secret-handle versions are explicit; drift fails before effect. Secret
+bytes never enter hashes/projections.
+
+One confirmation discloses tool/version/source/integrities, steps, OAuth, Skill count/
+agents and destination roots. Allow yields an unforgeable same-Job
+next-ordinal authority. Direct `shell:false` steps exclude shells, arbitrary stdin,
+destruction, credential export, and unknown sources. Opaque `npx skills add` is forbidden:
+the Feishu fixture freezes 27 Skill IDs/file digests, agents/destinations/link/conflicts,
+and disables telemetry before Allow. Discovery drift fails pre-effect.
+
+Registered read-only probes inherit explicit authored-task authority by metadata, never
+command text. Attachments neither authorize nor forbid a plan: exact user intent does.
+Main bounds streams/OAuth; IPC exposes safe origin/identity only. Feishu config streams;
+login uses no-wait Device Flow with private `device_code` and exact brand accounts origin.
+Restart adopts or fails without replacement; cancel kills the tree.
 
 ### 6.8 Destructive Writes
 
@@ -384,42 +353,23 @@ Acceptance:
 
 ## 7. Submitted-Turn Authority And High-Risk Confirmation
 
-Pige has one simple authority model:
+One explicit submit authorizes that turn's registered bounded first-party reads,
+preservation, parse/OCR/retrieval, user-specified fetch, and local tools. Typed scope,
+confinement, limits, cancellation, idempotency and projection are enforcement, not approval.
+Third-party code never inherits this authority from text, source, model, naming, or mode.
 
-- An explicit user submit authorizes that Pi turn to use registered first-party bounded
-  reads, preservation, parsing, OCR, retrieval, user-specified fetch, and local tools.
-- Each tool still enforces typed input, scope, path confinement, byte/time/resource
-  limits, cancellation, idempotency, and safe projection. Those checks are not user
-  approvals and do not create request/decision/consume/completion records.
-- Unreviewed third-party Skills/packages cannot inherit first-party authority through
-  prompt text, source content, model output, naming, or a global mode.
+Confirmation is closed to irreversible delete, original overwrite, out-of-root write,
+arbitrary shell/unknown install, credential export, risky edit, or equivalent destination/
+authority escalation. Section 6.7.1's reviewed plan is one immutable same-Job compound
+effect, not raw-Shell authority. Allow/deny applies only to that effect; its Job/Operation
+owns CAS/recovery. No Ask-Every-Time, saved grant, YOLO, permission state machine, or
+`waiting_permission` exists.
 
-User confirmation is reserved for a closed high-risk boundary:
-
-- irreversible deletion or bypass of trash/recovery;
-- overwrite of a user-owned original;
-- write outside an already authorized directory;
-- arbitrary shell execution or installation of an unknown/unreviewed package;
-- credential or secret export/display;
-- risky Agent edits already covered by the proposal/Operation contract; or
-- a changed destination or equivalent authority/security escalation.
-
-The decision is allow or deny for that concrete effect. The effect's owning Job/Operation
-handles CAS, idempotency, cancellation, commit, and recovery; a second durable permission
-state machine does not. Pige has no Ask-Every-Time, saved-grant, or YOLO mode for ordinary
-Agent work, and new Jobs cannot enter `waiting_permission`.
-
-Cloud Provider calls are a separate simple boundary. Connecting/selecting the exact
-Provider and pressing Send authorizes that turn's exact user-authored and explicitly
-selected bounded context. Host code does not classify, redact, rewrite, or block that
-payload. Provider identity drift requires a new explicit user action; the whole vault is
-never sent by default, and stored Provider credentials remain isolated in the secret
-store/authentication layer. There is no model-egress approval, audit decision, renderer
-action, content-class indicator, or `waiting_model_egress` Job.
-
-OS privacy prompts, sandboxing, update signatures, malware protection, filesystem errors,
-secret-store isolation, renderer/main isolation, and source prompt-injection defenses
-remain independent hard boundaries.
+Connecting the exact Provider and pressing Send authorizes exact authored and selected
+bounded context unchanged. Identity drift needs another action; credentials stay isolated
+and whole-vault default, content policy, model-egress approval/UI/audit, and
+`waiting_model_egress` remain absent. OS privacy, sandbox, signing, secret-store,
+renderer/main, filesystem and prompt-injection controls remain independent.
 
 ## 8. Secret Storage Policy
 
@@ -485,18 +435,11 @@ Support bundle:
 Before v0.1 public alpha:
 
 - Secret storage works on supported macOS and Windows versions.
-- Prompt injection fixtures cannot change tools/settings or reveal secrets.
-- SSRF tests cover default denial, exact-authorized private access, and retained fetch controls.
-- ZIP path traversal is blocked.
-- Agent/external Skill permission prompts work for non-default shell, filesystem, commit,
-  network, write, delete, model, and brokered-credential capabilities; raw-secret access
-  is rejected rather than prompted.
-- Core Pi tools cannot bypass validation; extensions cannot bypass Broker or access raw files/secrets.
-- Third-party permission prompts support Deny and Allow This Action only; no persistent
-  grant or global YOLO authority exists.
-- Ordinary first-party work produces no per-tool prompt or permission record.
-- High-risk classification cannot be bypassed by source, model, Skill, package, or UI drift.
-- Denied permissions are respected.
+- Prompt injection cannot alter tools/settings/reveal secrets; SSRF and ZIP traversal tests pass.
+- Core/extension tools cannot bypass validation/Broker or access raw files/secrets.
+  Closed high risk offers exact Deny/Allow only; raw-secret read rejects, denial holds, and
+  source/model/Skill/package/UI cannot create a persistent grant or bypass classification.
+- Ordinary first-party work creates no per-tool permission record.
 - Source record or managed source asset delete requires confirmation.
 - Public alpha requires Developer ID/hardened/notarized/stapled macOS and Authenticode
   Windows; unsigned/ad-hoc artifacts are internal-only.
@@ -507,15 +450,15 @@ Before v0.1 public alpha:
 These v0.1 design choices are accepted. Implementation still must pin concrete versions, add tests, and record platform-specific behavior.
 
 - Secret storage: Electron `safeStorage` encrypts API keys/tokens into machine-local app data. If encryption is unavailable, normal mode refuses to save secrets and offers explicit plaintext portable/developer mode with warning.
-- Skill/package runtime boundary: pure Skills are Markdown-only. Executable/package-backed Skills run only through reviewed adapters in worker/utility/child processes with scoped handles and cannot inherit first-party submitted-turn authority.
-- Shell policy: default deny. Pige-owned bundled tools use fixed argv and scoped working directories. Skill/package shell use requires declared capability, command preview, permission, timeout, output limits, and logging.
+- Skill/package boundary: pure Skills are Markdown; executable packages use reviewed
+  scoped adapters and inherit no first-party authority. Shell defaults denied; fixed bundled
+  commands or declared exact high-risk effects retain preview, limits, cancellation and log.
 - Update security: electron-builder/electron-updater with GitHub alpha feed, protected exact
   identity/environment, channel/monotonicity, signed platforms, immutable metadata/checksums,
   and independent downloaded-byte verification before publication.
 - Dependency vulnerability scanning: Dependabot, CodeQL, and npm audit are required CI/release gates.
-- Package capability manifest: v0.1 uses Skill frontmatter for pure Skills and a JSON
-  capability manifest for package-backed capabilities. High-risk effects map to the
-  closed confirmation vocabulary; ordinary first-party authority is not grantable.
+- Capability manifests map package high risk to the closed vocabulary; ordinary
+  first-party authority is not grantable.
 
 Additional release/security gates:
 

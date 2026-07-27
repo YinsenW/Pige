@@ -628,21 +628,13 @@ Rules:
 
 ### 6.7 High-Risk Confirmation
 
-Commands: `confirmations.resolve` only when a current effect is in the closed high-risk
-set. Queries: `confirmations.pending` for renderer recovery after uncertainty.
-
-The safe DTO contains a confirmation ID, effect class, bounded display label, and owning
-turn/Operation reference. It never includes path authority, command input, prompt/body,
-credential, provider payload, or raw error. Resolution is `allow | deny`; the effect's
-Job/Operation owner revalidates and owns commit/idempotency/recovery. No saved grant,
-YOLO, request/decision/consume/completion chain, or waiting Job state exists.
-
-Ordinary tools have no renderer permission API. Source-bound Home exposes exact accepted-
-source tools only; excluded ambient calls fail before confirmation/effect, and typed URL
-ingress stays separate. Provider calls have no model-egress approval API:
-Connect/select plus Send authorizes exact user-authored and explicitly selected bounded
-context; main preserves that payload unchanged, keeps stored credentials out of it, and
-rejects Provider/model identity drift.
+`confirmations.pending`/`confirmations.resolve` expose safe owner/effect presentation and
+`allow | deny` only for closed high risk; raw path/command/body/credential/error stays in
+Main and the effect Job revalidates. No saved/YOLO/permission/waiting state exists.
+Attachments grant exact-source tools only; explicit authored intent may separately request
+a precise ambient effect even with attachments. Fallback/model/source cannot. Typed URL is
+separate. Provider/model plus Send authorizes exact authored/selected bounded context
+unchanged; stored credentials stay outside it and identity drift rejects.
 
 Whitespace inspection is permitted only to decide whether an authored field is empty.
 Non-empty original text—including outer whitespace, line breaks, punctuation and secret/
@@ -650,6 +642,20 @@ path-like text—owns durable input and the input identity/hash used by history,
 Text-only whitespace creates no turn; attachments plus whitespace-only text use the minimal
 “Use only the attached file(s) as source material.” intent in six locales. Context bounding
 precedes assembly and never rewrites selected text.
+
+### 6.7.1 Reviewed Task Plan And Browser Interaction
+
+`TaskExecutionPlanSchema`/`TaskExecutionPlanStepSchema` are Main-private.
+`TaskExecutionPlanSummarySchema`, the existing confirmation's `reviewed_execution_plan`
+subject, exposes only plan ID; tool/version/source/integrities; step/Skill counts; target
+agents; bounded destination roots; and OAuth need.
+
+`taskExecution.interaction` returns `TaskInteractionPendingResultSchema` (`none` or
+`browser_oauth`: interaction/plan/Job/ordinal/safe origin/revision).
+`taskExecution.openInteraction` accepts `TaskInteractionOpenRequestSchema` with the same
+identity/revision and returns `opened | stale | not_found | failed` without URL/reason.
+`taskExecution.interactionChanged` emits `TaskInteractionChangedEventSchema`, equal to the
+pending schema. Main revalidates and opens its private URL/process; `jobs.cancel` kills it.
 
 ### 6.8 Settings, Providers, Tools
 

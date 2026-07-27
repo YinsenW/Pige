@@ -1,0 +1,241 @@
+{
+  "schemaVersion": 1,
+  "status": "planned",
+  "owner": "TaskExecutionPlanService",
+  "limits": {
+    "maxSteps": 8,
+    "maxOriginsPerStep": 4,
+    "maxDestinationsPerStep": 4,
+    "maxOutputBytesPerStep": 262144,
+    "maxInteractionUrlBytes": 4096,
+    "maxStepTimeoutMs": 600000
+  },
+  "canonicalSchemas": [
+    "TaskExecutionPlanSchema",
+    "TaskExecutionPlanStepSchema",
+    "TaskExecutionPlanSummarySchema",
+    "TaskInteractionPendingResultSchema",
+    "TaskInteractionOpenRequestSchema",
+    "TaskInteractionOpenResultSchema",
+    "TaskInteractionChangedEventSchema"
+  ],
+  "ipcChannels": [
+    "taskExecution.interaction",
+    "taskExecution.openInteraction",
+    "taskExecution.interactionChanged"
+  ],
+  "planBindings": [
+    "planId",
+    "vaultId",
+    "jobId",
+    "clientTurnId",
+    "authoredTaskIntent",
+    "policyHash",
+    "toolCatalogHash",
+    "recipeId",
+    "recipeVersion",
+    "recipeDigest",
+    "actorId",
+    "actorVersion",
+    "actorDigest",
+    "planDigest"
+  ],
+  "stepBindings": [
+    "ordinal",
+    "adapterId",
+    "adapterVersion",
+    "adapterDigest",
+    "actionId",
+    "normalizedExecutableIdentity",
+    "argv",
+    "canonicalWorkingDirectory",
+    "environmentProfileHash",
+    "networkOrigins",
+    "destinations",
+    "interactionProtocol",
+    "timeoutMs",
+    "inputHash",
+    "postconditionProbeId",
+    "recoveryMode"
+  ],
+  "canonicalEnvironmentBindings": [
+    "controlledHomeRoot",
+    "configRoot",
+    "sanitizedPathEntries",
+    "descendantExecutableIdentities",
+    "canonicalWorkingDirectory",
+    "temporaryDirectoryPolicy",
+    "localeProfile",
+    "npmRegistry",
+    "npmPrefix",
+    "npmCache",
+    "npmConfigProvenance",
+    "targetAgentRoots",
+    "networkOrigins",
+    "destinations",
+    "secretHandleVersions"
+  ],
+  "publicPlanSummaryFields": [
+    "planId",
+    "toolLabel",
+    "resolvedVersion",
+    "sourceOrigin",
+    "integrities",
+    "stepCount",
+    "destinationRoots",
+    "skillCount",
+    "targetAgents",
+    "requiresBrowserOAuth"
+  ],
+  "interactionProtocol": {
+    "kind": "browser_oauth",
+    "rendererFields": [
+      "interactionId",
+      "planId",
+      "jobId",
+      "stepOrdinal",
+      "origin",
+      "revision"
+    ],
+    "privateFields": ["url", "brand", "deviceCode", "processIdentity", "streamState"],
+    "openAction": "typed_main_only"
+  },
+  "authorityProvenance": {
+    "owner": "AgentTurnConversationStore",
+    "field": "authoredTaskIntent",
+    "values": ["neutral_attachment", "explicit_user_task"],
+    "writeSource": "request_text_presence_before_fallback",
+    "legacyOrMalformed": "neutral_attachment",
+    "forbiddenInferenceSources": ["fallback_text", "attachment_body", "source_body", "model_output", "tool_output"]
+  },
+  "officialRecipeFixture": {
+    "recipeId": "official.feishu-cli.install-config-auth-status",
+    "recipeVersion": "1",
+    "displayName": "Feishu CLI",
+    "attachmentTurnEligibility": "explicit_user_authored_ambient_task_only",
+    "attachmentPresenceOrFallbackGrantsAuthority": false,
+    "movingSelectorsMustResolveBeforeConfirmation": true,
+    "sources": [
+      {
+        "id": "feishu-cli-package",
+        "kind": "npm_package",
+        "identity": "@larksuite/cli",
+        "selector": "latest",
+        "declaredOrigin": "https://registry.npmjs.org",
+        "binaryOriginPolicy": "github_release_only_no_custom_registry_or_mirror_fallback",
+        "requiredResolution": [
+          "exactVersion",
+          "tarballUrl",
+          "tarballSri",
+          "platformBinaryUrl",
+          "platformBinarySha256",
+          "redirectOrigins"
+        ]
+      },
+      {
+        "id": "skills-installer-package",
+        "kind": "npm_package",
+        "identity": "skills",
+        "selector": "latest",
+        "declaredOrigin": "https://registry.npmjs.org",
+        "requiredResolution": ["exactVersion", "tarballUrl", "tarballSri"]
+      },
+      {
+        "id": "feishu-cli-skill",
+        "kind": "official_well_known_skill_index",
+        "identity": "https://open.feishu.cn/.well-known/skills/index.json",
+        "selector": "current_response",
+        "declaredOrigin": "https://open.feishu.cn",
+        "requiredResolution": [
+          "indexDigest",
+          "selectedSkillIds",
+          "selectedFileSet",
+          "perFileDigests",
+          "targetAgentSet",
+          "destinationRoots",
+          "copyOrSymlinkMode",
+          "overwriteSet"
+        ],
+        "frozenSelection": {
+          "indexSha256": "babfb26a9ef45d06c95955d92fca17056a526a8f524db93b62fb6accf9fa95ba",
+          "skillCount": 27,
+          "fileCount": 444,
+          "skillIds": [
+            "lark-approval",
+            "lark-apps",
+            "lark-attendance",
+            "lark-base",
+            "lark-calendar",
+            "lark-contact",
+            "lark-doc",
+            "lark-drive",
+            "lark-event",
+            "lark-im",
+            "lark-mail",
+            "lark-markdown",
+            "lark-minutes",
+            "lark-note",
+            "lark-okr",
+            "lark-openapi-explorer",
+            "lark-shared",
+            "lark-sheets",
+            "lark-skill-maker",
+            "lark-slides",
+            "lark-task",
+            "lark-vc",
+            "lark-vc-agent",
+            "lark-whiteboard",
+            "lark-wiki",
+            "lark-workflow-meeting-summary",
+            "lark-workflow-standup-report"
+          ]
+        }
+      }
+    ],
+    "environmentRequirements": {
+      "DISABLE_TELEMETRY": "1",
+      "DO_NOT_TRACK": "1",
+      "controlledHomeAndConfigRoots": true,
+      "sanitizedPathWithResolvedDescendants": true,
+      "explicitNpmRegistryPrefixCacheAndConfig": true,
+      "ambientNpmConfigAllowed": false,
+      "ambientUserHomeDestinationsAllowed": false,
+      "dynamicAgentDetectionAfterConfirmation": false,
+      "crossOriginSkillArtifacts": "reject_unless_exact_origin_and_digest_were_reviewed"
+    },
+    "browserOAuthProfiles": {
+      "allowedAccountOrigins": [
+        "https://accounts.feishu.cn",
+        "https://accounts.larksuite.com"
+      ],
+      "config_init": "bounded_streaming_process_session",
+      "auth_login": "device_flow_no_wait_json_then_private_device_code_poll",
+      "deviceCodeProjection": "main_private_ephemeral_only",
+      "restartPolicy": "adopt_exact_interaction_or_fail_without_minting_replacement"
+    },
+    "skillInstallProjection": {
+      "opaqueNpxStepAllowed": false,
+      "allDiscoveredSkillsAllowed": false,
+      "requiredBeforeConfirmation": [
+        "exactSkillsPackageIdentity",
+        "exactFrozenSkillIds",
+        "completeFileSetAndPerFileDigests",
+        "canonicalWorkingDirectory",
+        "targetAgentSet",
+        "destinationRoots",
+        "copyOrSymlinkMode",
+        "overwriteAndConflictPolicy"
+      ],
+      "driftPolicy": "fail_before_network_or_write"
+    },
+    "steps": [
+      { "ordinal": 1, "actionId": "install_cli_package", "interactionProtocol": "none", "destinationKinds": ["pige_managed_tool_root"] },
+      { "ordinal": 2, "actionId": "install_cli_native_asset", "interactionProtocol": "none", "destinationKinds": ["pige_managed_tool_root"] },
+      { "ordinal": 3, "actionId": "install_official_skill", "interactionProtocol": "none", "destinationKinds": ["reviewed_target_agent_skill_roots", "reviewed_skills_lockfile"] },
+      { "ordinal": 4, "actionId": "config_init", "interactionProtocol": "browser_oauth", "destinationKinds": ["tool_private_config"] },
+      { "ordinal": 5, "actionId": "auth_login", "interactionProtocol": "browser_oauth", "destinationKinds": ["tool_private_config"] },
+      { "ordinal": 6, "actionId": "auth_status", "interactionProtocol": "none", "destinationKinds": [], "readOnlyProbe": true }
+    ],
+    "testTransport": "synthetic_local_executable_and_http_fixture_only"
+  }
+}

@@ -273,13 +273,14 @@ Rules:
 
 - Disable or avoid Pi built-in tools unless Pige wraps them with scoped adapters.
 - Register Pige-owned tools only through Agent Orchestrator.
-- One user submit authorizes registered first-party reads only when present in its scoped
-  catalog. A text-only task retains ordinary authority. A source-bound Home turn
-  (`file_picker`, `file_drop`, `large_paste`, or any accepted source session) registers only
-  exact accepted-SourceRecord inspect/parse/OCR/retrieval/write tools. Parent directories,
-  siblings, cwd, prompt/model/tool text and confirmation cannot widen that set. Typed URL
-  ingress alone owns URL fetch. `beforeToolCall` and handlers revalidate scope/resources
-  without a parallel permission lifecycle.
+- One user submit authorizes registered first-party reads only through its scoped catalog.
+  Attachments register exact accepted-source
+  tools and do not themselves authorize parent/sibling/cwd/ambient effects; fallback,
+  model/tool/source text cannot widen them. Separately, explicit user-authored intent may
+  request a precise confirmed/reviewed ambient effect even when attachments coexist.
+  Main derives private durable `authoredTaskIntent` only from request-text presence before
+  fallback; recovery uses it and missing/legacy means neutral. Typed URL ingress remains
+  separate; handlers revalidate without a permission lifecycle.
 - Side-effecting tools run sequentially; parallel tools require an explicit
   read-only/idempotent contract plus ordering, cancellation, and audit tests.
 - Irreversible delete, original-file overwrite, out-of-root write, arbitrary shell,

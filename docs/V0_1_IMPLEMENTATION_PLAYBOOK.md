@@ -649,16 +649,15 @@ Build:
 - [B8.05 -> E8.01] Skill Registry Service (inventory/disable foundation only).
 - [B8.06 -> E8.01] Pure Skill staging/install from URL, Markdown, and ZIP plus explicit chat-initiated staging, enable, disable, uninstall, export, and source-aware update.
 - [B8.07 -> E8.01] External/Web Skill staging with capability disclosure.
-- [B8.08 -> E8.02] High-risk prompts only for irreversible delete, original overwrite,
-  out-of-root write, arbitrary shell/unknown install, credential disclosure, risky edit,
-  or equivalent escalation.
+- [B8.08 -> E8.02] Raw Shell confirms per effect; a registered immutable install/config/
+  auth plan confirms exact supply chain/destinations once and runs current-Job ordinals.
 - [B8.09 -> E8.04] Curated Pi package catalog and manager with reviewed recommendations and explicit search/inspection.
 - [B8.10 -> E8.04] Pi package install, enable/disable, update, uninstall, version pinning, rollback, rollback-safe records, and trust/capability/data-boundary disclosure.
 
 Deferred from this phase:
 
 - [D8.01] Open unreviewed marketplace as the default experience; deferred beyond v0.1.
-- [D8.02] Hidden arbitrary or task-time package installation; prohibited.
+- [D8.02] Hidden/inferred task-time installation or arbitrary command plans; prohibited.
 - [D8.03] Skill-defined custom UI panels; deferred beyond v0.1.
 
 Exit criteria:
@@ -668,7 +667,9 @@ Exit criteria:
   third-party authority and high-risk effects fail closed without a waiting Job state;
   standing-authority knowledge Markdown and exact selected-source admission do not.
   A concrete high-risk decision is redacted and revalidated by the effect owner; denial
-  executes nothing and uncertain commit follows that Operation's recovery path.
+  executes nothing. A reviewed plan confirms once, runs fixed ordinals/probes/OAuth and
+  adopts without duplicates. Raw Shell remains per-effect; attachments grant no ambient
+  authority, while explicit authored intent remains eligible.
 - [E8.03] No source/model/package input can expand authority; the concrete high-risk
   effect is denied or confirmed, and no global mode can bypass it.
 - [E8.04] Curated Pi packages can be searched, inspected, explicitly installed, enabled/disabled, updated, version-pinned, rolled back, and uninstalled; ordinary Agent jobs never install them implicitly.

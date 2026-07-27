@@ -161,11 +161,12 @@ Examples:
 - Window sizes and always-on-top preference.
 - Local tool install status.
 - Local model asset status.
-- Machine-local job records for tool/model install, update checks, repair jobs, and app-level maintenance.
+- Machine-local job records for tool/model install, update/repair/maintenance, including
+  private reviewed-plan bindings, ordinal/process/OAuth state and recovery probes; only
+  safe status projects, and backup/export/sync exclude these bytes.
 - Pre-destination restore coordinator Jobs, claims, and checkpoints. They exist before a
   destination vault and remain machine-local after commit.
-- Machine-local package install records.
-- Machine-local provider profile metadata.
+- Machine-local package install records and Provider profile metadata.
 - Body-free Provider-send failures and high-risk confirmation audit events. Ordinary
   sends and first-party tool use create no approval/grant record.
 - Unregistered external-create intent revisions/paths, excluded from backup/export.

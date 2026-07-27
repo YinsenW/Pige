@@ -701,7 +701,9 @@ Navigation:
 - Curated Pi Package Manager for reviewed package install, disable, uninstall, and update flows.
 - Focused confirmation only for irreversible delete, original overwrite, out-of-root
   write, arbitrary shell/unknown install, credential disclosure, risky Agent edits, or
-  equivalent authority escalation.
+  equivalent escalation. Raw Shell stays per-effect; a registered fixed install/config/
+  auth recipe may confirm one exact plan. Attachments grant no ambient authority, while
+  explicit authored intent may request that precise effect.
 - Ordinary submitted-turn tool work has no permission-mode, saved-grant, or approval UI.
 - Settings IA grouped as Basic, Knowledge Base, AI, Security, Extensions, and System.
 - Setting ownership, scope, storage, backup behavior, permission requirement, and apply behavior are governed by `docs/SETTINGS_AND_PREFERENCES.md`.
@@ -789,7 +791,6 @@ Pi packages:
 - Install only after explicit user confirmation.
 - Show package permissions and data boundary before install.
 - Support disable, uninstall, update, and version pinning.
-
 Skills:
 
 - Install pure Markdown Skills and external/Web Skills from URL, local `.md`, local `.zip`, or reviewed package sources.
@@ -1392,7 +1393,9 @@ v0.1 package manager requirements:
   capabilities, and permission changes before install or update.
 - Show capability and permission requests before install.
 - Require explicit user confirmation for install and update.
-- Block package installation during ordinary Agent jobs.
+- Block hidden/inferred package installation. Explicit text-only intent may run a
+  registered, immutable, exact-version/integrity plan after one whole-plan confirmation;
+  drift falls back to no effect, never raw Shell approval reuse.
 - Route package writes through permission-scoped Pige APIs and Operations; exceptional boundaries still intervene.
 - Keep package-generated durable outputs inspectable as Markdown or source artifacts when possible.
 
