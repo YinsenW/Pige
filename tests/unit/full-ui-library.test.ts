@@ -10,6 +10,8 @@ import type {
   NoteRenderResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteEditorOpenRequest,
+  NoteEditorSaveRequest,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
   ReaderSelectionResolveRequest,
@@ -32,6 +34,7 @@ const globalKeys = [
   "HTMLElement",
   "HTMLButtonElement",
   "HTMLInputElement",
+  "HTMLTextAreaElement",
   "InputEvent",
   "Event",
   "MouseEvent",
@@ -343,6 +346,9 @@ describe("full UI Library", () => {
     const copied: string[] = [];
     const opened: string[] = [];
     const sourceRequests: NoteOpenSourceReferenceRequest[] = [];
+    const editorOpenRequests: NoteEditorOpenRequest[] = [];
+    const editorSaveRequests: NoteEditorSaveRequest[] = [];
+    const committedNotes: NoteRenderResult[] = [];
     const unavailable: string[] = [];
     let cleared = 0;
     const note = readerNote();
@@ -365,6 +371,40 @@ describe("full UI Library", () => {
         developmentNotice: null,
         onClearDevelopment: () => { cleared += 1; },
         onCopyNote: async (pageId) => { copied.push(pageId); return true; },
+        onOpenNoteEditor: async (request) => {
+          editorOpenRequests.push(request);
+          return {
+            apiVersion: 1,
+            requestId: request.requestId,
+            activeVaultId: request.activeVaultId,
+            pageId: request.pageId,
+            status: "ready",
+            renderContextId: request.renderContextId,
+            revision: `noteeditrev_${"a".repeat(32)}`,
+            markdown: "# Reader actions\n\nOriginal body\n"
+          };
+        },
+        onSaveNoteEditor: async (request) => {
+          editorSaveRequests.push(request);
+          return {
+            apiVersion: 1,
+            requestId: request.requestId,
+            activeVaultId: request.activeVaultId,
+            pageId: request.pageId,
+            status: "committed",
+            revision: `noteeditrev_${"b".repeat(32)}`,
+            operationId: "operation_library_editor",
+            render: { ...note, html: "<p>Edited body</p>", byteSize: 25, renderContextId: `notectx_${"d".repeat(32)}` }
+          };
+        },
+        onReloadNoteEditor: async (request) => ({
+          apiVersion: 1,
+          requestId: request.requestId,
+          activeVaultId: request.activeVaultId,
+          pageId: request.pageId,
+          status: "failed"
+        }),
+        onNoteEditorCommitted: (result) => committedNotes.push(result.render),
         activeVaultId: "vault_20260715_fullui01",
         onOpenSourceReference: async (request) => {
           sourceRequests.push(request);
@@ -394,9 +434,45 @@ describe("full UI Library", () => {
       buttonWithLabel(container, "Edit note").click();
       await settle(dom);
     });
-    expect(unavailable).toEqual(["document_actions"]);
-    expect(cleared).toBeGreaterThan(0);
-    expect(container.textContent).not.toContain("Markdown copied.");
+    expect(editorOpenRequests).toHaveLength(1);
+    expect(editorOpenRequests[0]).toMatchObject({
+      activeVaultId: "vault_20260715_fullui01",
+      pageId: note.summary.pageId,
+      renderContextId: note.renderContextId
+    });
+    expect(container.textContent).toContain("Edit Markdown");
+    const markdown = requireElement(container.querySelector<HTMLTextAreaElement>("textarea"));
+    await inputText(dom, markdown, "# Edited\n");
+    await act(async () => {
+      buttonNamed(container, "Save").click();
+      await settle(dom);
+    });
+    expect(editorSaveRequests[0]).toMatchObject({
+      activeVaultId: "vault_20260715_fullui01",
+      pageId: note.summary.pageId,
+      renderContextId: note.renderContextId,
+      expectedRevision: `noteeditrev_${"a".repeat(32)}`,
+      markdown: "# Edited\n"
+    });
+    expect(committedNotes[0]?.renderContextId).toBe(`notectx_${"d".repeat(32)}`);
+
+    await act(async () => {
+      root.render(createElement(LibraryPanel, {
+        libraryList: libraryList(), selectedNote: note, selectedNoteRelated: null,
+        noteLoadingPageId: null, error: null, onGoHome: () => undefined,
+        onRefresh: async () => undefined, onSearch: async () => searchResult("unused", []), searchFocusRequest: 0,
+        onOpenNote: async (pageId) => { opened.push(pageId); }, onCloseNote: () => undefined,
+        noteAgentOpen: false, onToggleNoteAgent: () => undefined, noteAgentToggleRef: { current: null },
+        developmentNotice: null, onClearDevelopment: () => { cleared += 1; },
+        onCopyNote: async (pageId) => { copied.push(pageId); return true; }, activeVaultId: "vault_20260715_fullui01",
+        onOpenSourceReference: async (request) => {
+          sourceRequests.push(request);
+          return { apiVersion: 1, requestId: request.requestId, status: "resolved", target: { pageId: "page_20260715_source111" } };
+        },
+        onDevelopment: (capability) => unavailable.push(capability), t
+      }));
+      await settle(dom);
+    });
 
     const sourceButtons = container.querySelectorAll<HTMLButtonElement>(".reader-source");
     expect(sourceButtons).toHaveLength(2);
@@ -416,7 +492,7 @@ describe("full UI Library", () => {
       sourceId: note.summary.sourceIds[0]
     });
     expect(opened).toEqual(["page_20260715_source111"]);
-    expect(unavailable).toEqual(["document_actions"]);
+    expect(unavailable).toEqual([]);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -1619,6 +1695,18 @@ function createDom(): JSDOM {
     configurable: true,
     value: true
   });
+  Object.defineProperty(dom.window.HTMLElement.prototype, "attachEvent", {
+    configurable: true,
+    value(this: HTMLElement, name: string, listener: EventListener) {
+      this.addEventListener(name.replace(/^on/u, ""), listener);
+    }
+  });
+  Object.defineProperty(dom.window.HTMLElement.prototype, "detachEvent", {
+    configurable: true,
+    value(this: HTMLElement, name: string, listener: EventListener) {
+      this.removeEventListener(name.replace(/^on/u, ""), listener);
+    }
+  });
   Object.defineProperty(dom.window, "requestAnimationFrame", {
     configurable: true,
     value: (callback: FrameRequestCallback) => dom.window.setTimeout(() => callback(Date.now()), 0)
@@ -1651,10 +1739,16 @@ function buttonWithLabel(container: ParentNode, label: string): HTMLButtonElemen
   return button;
 }
 
-async function inputText(dom: JSDOM, input: HTMLInputElement, value: string): Promise<void> {
+async function inputText(dom: JSDOM, input: HTMLInputElement | HTMLTextAreaElement, value: string): Promise<void> {
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")?.set;
+    const prototype = input instanceof dom.window.HTMLTextAreaElement
+      ? dom.window.HTMLTextAreaElement.prototype
+      : dom.window.HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
     setter?.call(input, value);
+    const propertyChange = new dom.window.Event("propertychange", { bubbles: true });
+    Object.defineProperty(propertyChange, "propertyName", { value: "value" });
+    input.dispatchEvent(propertyChange);
     input.dispatchEvent(new dom.window.InputEvent("input", {
       bubbles: true,
       data: value,

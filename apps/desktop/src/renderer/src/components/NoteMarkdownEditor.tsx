@@ -5,25 +5,16 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject
 } from "react";
+import type {
+  NoteEditorInvalidReason,
+  NoteEditorOpenRequest,
+  NoteEditorOpenResult,
+  NoteEditorSaveRequest,
+  NoteEditorSaveResult
+} from "@pige/contracts";
 
-export type NoteMarkdownEditorBaseIdentity = Readonly<{
-  activeVaultId: string;
-  pageId: string;
-  revisionId: string;
-}>;
-
-export type NoteMarkdownEditorSaveRequest = Readonly<{
-  base: NoteMarkdownEditorBaseIdentity;
-  markdown: string;
-}>;
-
-export type NoteMarkdownEditorSaveResult =
-  | Readonly<{ status: "saved"; identity: NoteMarkdownEditorBaseIdentity }>
-  | Readonly<{ status: "stale" | "conflict" | "failed" }>;
-
-export type NoteMarkdownEditorReloadResult =
-  | Readonly<{ status: "ready"; identity: NoteMarkdownEditorBaseIdentity }>
-  | Readonly<{ status: "not_found" | "failed" }>;
+export type NoteMarkdownEditorReady = Extract<NoteEditorOpenResult, { status: "ready" }>;
+export type NoteMarkdownEditorCommitted = Extract<NoteEditorSaveResult, { status: "committed" }>;
 
 export type NoteMarkdownEditorLabels = Readonly<{
   title: string;
@@ -34,30 +25,30 @@ export type NoteMarkdownEditorLabels = Readonly<{
   reload: string;
   reloading: string;
   stale: string;
-  conflict: string;
   failed: string;
+  notFound: string;
   reloaded: string;
+  invalid: Readonly<Record<NoteEditorInvalidReason, string>>;
 }>;
 
 export type NoteMarkdownEditorProps = Readonly<{
-  identity: NoteMarkdownEditorBaseIdentity;
-  initialMarkdown: string;
+  ready: NoteMarkdownEditorReady;
   labels: NoteMarkdownEditorLabels;
   returnFocusRef: RefObject<HTMLElement | null>;
-  onSave: (request: NoteMarkdownEditorSaveRequest) => Promise<NoteMarkdownEditorSaveResult>;
-  onReload: (base: NoteMarkdownEditorBaseIdentity) => Promise<NoteMarkdownEditorReloadResult>;
-  onSaved: (identity: NoteMarkdownEditorBaseIdentity) => void;
+  onSave: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
+  onReload: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
+  onCommitted: (result: NoteMarkdownEditorCommitted) => void;
   onCancel: () => void;
 }>;
 
-type Notice = "stale" | "conflict" | "failed" | "reloaded";
+type Notice = "stale" | "failed" | "notFound" | "reloaded" | NoteEditorInvalidReason;
 
 export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.Element {
-  const propIdentityKey = identityKey(props.identity);
+  const propIdentityKey = editorIdentityKey(props.ready);
   const renderedIdentityKeyRef = useRef(propIdentityKey);
   renderedIdentityKeyRef.current = propIdentityKey;
-  const [base, setBase] = useState(props.identity);
-  const [draft, setDraft] = useState(props.initialMarkdown);
+  const [base, setBase] = useState(props.ready);
+  const [draft, setDraft] = useState(props.ready.markdown);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [pending, setPending] = useState<"save" | "reload" | null>(null);
   const requestSequenceRef = useRef(0);
@@ -65,8 +56,8 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
 
   useEffect(() => {
     requestSequenceRef.current += 1;
-    setBase(props.identity);
-    setDraft(props.initialMarkdown);
+    setBase(props.ready);
+    setDraft(props.ready.markdown);
     setNotice(null);
     setPending(null);
   }, [propIdentityKey]);
@@ -77,8 +68,13 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
 
   const save = async (): Promise<void> => {
     if (pending) return;
-    const request: NoteMarkdownEditorSaveRequest = {
-      base: { ...base },
+    const request: NoteEditorSaveRequest = {
+      apiVersion: 1,
+      requestId: createNoteEditorRequestId(),
+      activeVaultId: base.activeVaultId,
+      pageId: base.pageId,
+      renderContextId: base.renderContextId,
+      expectedRevision: base.revision,
       markdown: draft
     };
     const sequence = requestSequenceRef.current + 1;
@@ -89,15 +85,26 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     try {
       const result = await props.onSave(request);
       if (!requestIsCurrent(sequence, expectedPropIdentityKey)) return;
-      if (result.status === "saved") {
-        if (!sameNoteOwner(request.base, result.identity)) {
+      if (!resultMatchesRequest(request, result)) {
+        setNotice("failed");
+        return;
+      }
+      if (result.status === "committed") {
+        if (
+          result.render.summary.pageId !== request.pageId ||
+          result.render.renderContextId === undefined
+        ) {
           setNotice("failed");
           return;
         }
-        props.onSaved(result.identity);
+        props.onCommitted(result);
         return;
       }
-      setNotice(result.status);
+      setNotice(result.status === "not_found"
+        ? "notFound"
+        : result.status === "invalid"
+          ? result.reason
+          : result.status);
     } catch {
       if (requestIsCurrent(sequence, expectedPropIdentityKey)) setNotice("failed");
     } finally {
@@ -107,19 +114,25 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
 
   const reload = async (): Promise<void> => {
     if (pending) return;
-    const requestedBase = { ...base };
+    const request: NoteEditorOpenRequest = {
+      apiVersion: 1,
+      requestId: createNoteEditorRequestId(),
+      activeVaultId: base.activeVaultId,
+      pageId: base.pageId,
+      renderContextId: base.renderContextId
+    };
     const sequence = requestSequenceRef.current + 1;
     requestSequenceRef.current = sequence;
     const expectedPropIdentityKey = propIdentityKey;
     setPending("reload");
     try {
-      const result = await props.onReload(requestedBase);
+      const result = await props.onReload(request);
       if (!requestIsCurrent(sequence, expectedPropIdentityKey)) return;
-      if (result.status !== "ready" || !sameNoteOwner(requestedBase, result.identity)) {
-        setNotice("failed");
+      if (!resultMatchesRequest(request, result) || result.status !== "ready") {
+        setNotice(result.status === "not_found" ? "notFound" : "failed");
         return;
       }
-      setBase(result.identity);
+      setBase(result);
       setNotice("reloaded");
       textareaRef.current?.focus();
     } catch {
@@ -131,9 +144,8 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
 
   const cancel = (): void => {
     requestSequenceRef.current += 1;
-    const returnFocus = props.returnFocusRef.current;
     props.onCancel();
-    returnFocus?.ownerDocument.defaultView?.requestAnimationFrame(() => returnFocus.focus());
+    window.requestAnimationFrame(() => props.returnFocusRef.current?.focus());
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>): void => {
@@ -148,6 +160,12 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
       void save();
     }
   };
+
+  const noticeLabel = notice === null
+    ? null
+    : notice in props.labels.invalid
+      ? props.labels.invalid[notice as NoteEditorInvalidReason]
+      : props.labels[notice as "stale" | "failed" | "notFound" | "reloaded"];
 
   return (
     <section className="note-reader" aria-labelledby="note-markdown-editor-title">
@@ -177,14 +195,14 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
           }}
           onKeyDown={handleKeyDown}
         />
-        {notice ? (
+        {noticeLabel ? (
           <div
             className={`settings-inline-status ${notice === "reloaded" ? "success" : "error"}`}
             role="status"
             aria-live="polite"
           >
-            <span>{props.labels[notice]}</span>
-            {notice === "stale" || notice === "conflict" ? (
+            <span>{noticeLabel}</span>
+            {notice === "stale" ? (
               <button type="button" className="settings-button" onClick={() => void reload()}>
                 {pending === "reload" ? props.labels.reloading : props.labels.reload}
               </button>
@@ -195,7 +213,7 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
           <button type="submit" className="primary" disabled={pending !== null}>
             {pending === "save" ? props.labels.saving : props.labels.save}
           </button>
-          <button type="button" className="ghost" onClick={cancel}>
+          <button type="button" className="ghost" disabled={pending !== null} onClick={cancel}>
             {props.labels.cancel}
           </button>
         </div>
@@ -204,13 +222,19 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
   );
 }
 
-function sameNoteOwner(
-  left: NoteMarkdownEditorBaseIdentity,
-  right: NoteMarkdownEditorBaseIdentity
-): boolean {
-  return left.activeVaultId === right.activeVaultId && left.pageId === right.pageId;
+function createNoteEditorRequestId(): `noteeditreq_${string}` {
+  return `noteeditreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
 }
 
-function identityKey(identity: NoteMarkdownEditorBaseIdentity): string {
-  return `${identity.activeVaultId}:${identity.pageId}:${identity.revisionId}`;
+function resultMatchesRequest(
+  request: Pick<NoteEditorOpenRequest, "requestId" | "activeVaultId" | "pageId">,
+  result: NoteEditorOpenResult | NoteEditorSaveResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.pageId === request.pageId;
+}
+
+function editorIdentityKey(ready: NoteMarkdownEditorReady): string {
+  return `${ready.activeVaultId}:${ready.pageId}:${ready.renderContextId}:${ready.revision}`;
 }

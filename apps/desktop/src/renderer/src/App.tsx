@@ -37,6 +37,11 @@ import { WindowModeToggle } from "./components/WindowModeToggle";
 import { useWindowControls } from "./components/useWindowControls";
 import type { ReaderInlineReferenceActivation } from "./components/ReaderInlineReferenceSurface";
 import { NoteReader, type NoteRelatedState } from "./components/NoteReader";
+import {
+  NoteMarkdownEditor,
+  type NoteMarkdownEditorLabels,
+  type NoteMarkdownEditorReady
+} from "./components/NoteMarkdownEditor";
 import { RecentVaults, RestorePreviewPanel, VaultBackupSettingsPanel, useRestoreFlow } from "./components/VaultBackupSettingsPanel";
 import pigeMarkUrl from "../../../../../resources/brand/pige-icon/master/pige-icon-1024.png";
 import deMessages from "./locales/de/messages.json";
@@ -71,6 +76,10 @@ import type {
   ModelProfileSummary,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteEditorOpenRequest,
+  NoteEditorOpenResult,
+  NoteEditorSaveRequest,
+  NoteEditorSaveResult,
   NoteRenderResult,
   NoteResolveInlineReferenceRequest,
   ReaderSelectionActionRequest,
@@ -1030,6 +1039,27 @@ export function App(): React.JSX.Element {
     }
   };
 
+  const reloadNoteEditor = async (request: NoteEditorOpenRequest): Promise<NoteEditorOpenResult> => {
+    try {
+      const render = await window.pige.notes.render({ pageId: request.pageId });
+      if (
+        activeVaultIdRef.current !== request.activeVaultId ||
+        render.summary.pageId !== request.pageId ||
+        !render.renderContextId
+      ) return failedNoteEditorOpenResult(request);
+      return await window.pige.notes.openEditor({ ...request, renderContextId: render.renderContextId });
+    } catch {
+      return failedNoteEditorOpenResult(request);
+    }
+  };
+
+  const adoptCommittedNote = (result: Extract<NoteEditorSaveResult, { status: "committed" }>): void => {
+    if (activeVaultIdRef.current !== result.activeVaultId) return;
+    setSelectedNoteVaultId(result.activeVaultId);
+    setSelectedNote(result.render);
+    void refreshVaultState();
+  };
+
   const toggleSidebar = async (): Promise<void> => {
     const nextSidebarOpen = !sidebarOpen;
     const wasOverlay = sidebarOpen && sidebarOverlayLayout;
@@ -1758,6 +1788,10 @@ export function App(): React.JSX.Element {
             developmentNotice={developmentNotice?.surface === "reader" ? developmentNotice : null}
             onClearDevelopment={() => setDevelopmentNotice(null)}
             onCopyNote={copyNoteMarkdown}
+            onOpenNoteEditor={(request) => window.pige.notes.openEditor(request)}
+            onSaveNoteEditor={(request) => window.pige.notes.saveEditor(request)}
+            onReloadNoteEditor={reloadNoteEditor}
+            onNoteEditorCommitted={adoptCommittedNote}
             {...(selectedNote?.renderContextId && selectedNoteVaultId === activeVault.vaultId
               ? { onActivateInlineReference: activateInlineReference }
               : {})}
@@ -1799,6 +1833,10 @@ export function App(): React.JSX.Element {
               developmentNotice={developmentNotice?.surface === "reader" ? developmentNotice : null}
               onClearDevelopment={() => setDevelopmentNotice(null)}
               onCopyNote={copyNoteMarkdown}
+              onOpenNoteEditor={(request) => window.pige.notes.openEditor(request)}
+              onSaveNoteEditor={(request) => window.pige.notes.saveEditor(request)}
+              onReloadNoteEditor={reloadNoteEditor}
+              onNoteEditorCommitted={adoptCommittedNote}
               {...(selectedNote?.renderContextId && selectedNoteVaultId === activeVault.vaultId
                 ? { onActivateInlineReference: activateInlineReference }
                 : {})}
@@ -1829,6 +1867,9 @@ export function App(): React.JSX.Element {
             recentJobs={recentJobs}
             locale={locale}
             onReaderSelectionAction={revealReaderSelectionAction}
+            onOpenNoteEditor={(request) => window.pige.notes.openEditor(request)}
+            onSaveNoteEditor={(request) => window.pige.notes.saveEditor(request)}
+            onReloadNoteEditor={reloadNoteEditor}
             onOpenCollection={(datasetId, tableId) => openCollection(datasetId, tableId, "home")}
             draftText={homeDraftText}
             onDraftChange={setHomeDraftText}
@@ -2237,6 +2278,10 @@ export function LibraryPanel(props: {
   readonly developmentNotice: DevelopmentNotice | null;
   readonly onClearDevelopment: () => void;
   readonly onCopyNote: (pageId: string) => Promise<boolean>;
+  readonly onOpenNoteEditor?: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
+  readonly onSaveNoteEditor?: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
+  readonly onReloadNoteEditor?: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
+  readonly onNoteEditorCommitted?: (result: Extract<NoteEditorSaveResult, { status: "committed" }>) => void;
   readonly activeVaultId?: string;
   readonly onResolveReaderSelection?: (request: ReaderSelectionResolveRequest) => Promise<ReaderSelectionResolveResult>;
   readonly onSubmitReaderSelectionAction?: (request: ReaderSelectionActionRequest) => Promise<ReaderSelectionActionResult>;
@@ -2258,14 +2303,53 @@ export function LibraryPanel(props: {
   const tabRefs = useRef(new Map<LibraryFamily, HTMLButtonElement>());
   const focusSearchAfterRetry = useRef(false);
   const readerActionSequence = useRef(0);
+  const editorOpenSequence = useRef(0);
+  const editorOpenerRef = useRef<HTMLButtonElement | null>(null);
   const [readerActionState, setReaderActionState] = useState<"idle" | "copying" | "copied" | "copy_failed">("idle");
+  const [editorReady, setEditorReady] = useState<NoteMarkdownEditorReady | null>(null);
+  const [editorOpenState, setEditorOpenState] = useState<"idle" | "opening" | "failed">("idle");
   const normalizedQuery = query.trim();
   const activeVaultId = props.libraryList?.activeVaultId;
 
   useEffect(() => {
     readerActionSequence.current += 1;
+    editorOpenSequence.current += 1;
     setReaderActionState("idle");
-  }, [props.selectedNote?.summary.pageId]);
+    setEditorReady(null);
+    setEditorOpenState("idle");
+  }, [props.activeVaultId, props.selectedNote?.summary.pageId, props.selectedNote?.renderContextId]);
+
+  const openEditor = async (): Promise<void> => {
+    const note = props.selectedNote;
+    const activeVaultId = props.activeVaultId;
+    const renderContextId = note?.renderContextId;
+    if (!note || !activeVaultId || !renderContextId || !props.onOpenNoteEditor || editorOpenState === "opening") return;
+    const sequence = editorOpenSequence.current + 1;
+    editorOpenSequence.current = sequence;
+    const request: NoteEditorOpenRequest = {
+      apiVersion: 1,
+      requestId: createNoteEditorRequestId(),
+      activeVaultId,
+      pageId: note.summary.pageId,
+      renderContextId
+    };
+    setEditorOpenState("opening");
+    try {
+      const result = await props.onOpenNoteEditor(request);
+      if (
+        sequence !== editorOpenSequence.current ||
+        props.activeVaultId !== request.activeVaultId ||
+        props.selectedNote?.summary.pageId !== request.pageId ||
+        props.selectedNote.renderContextId !== request.renderContextId
+      ) return;
+      if (noteEditorOpenMatches(request, result) && result.status === "ready" && result.renderContextId === renderContextId) {
+        setEditorReady(result);
+        setEditorOpenState("idle");
+      } else setEditorOpenState("failed");
+    } catch {
+      if (sequence === editorOpenSequence.current) setEditorOpenState("failed");
+    }
+  };
 
   const showReaderDevelopment = (capability: DevelopmentCapability): void => {
     readerActionSequence.current += 1;
@@ -2346,6 +2430,24 @@ export function LibraryPanel(props: {
 
   if (props.selectedNote) {
     const summary = props.selectedNote.summary;
+    if (editorReady && props.onSaveNoteEditor && props.onReloadNoteEditor && props.onNoteEditorCommitted) {
+      const onNoteEditorCommitted = props.onNoteEditorCommitted;
+      return (
+        <NoteMarkdownEditor
+          ready={editorReady}
+          labels={noteMarkdownEditorLabels(props.t)}
+          returnFocusRef={editorOpenerRef}
+          onSave={props.onSaveNoteEditor}
+          onReload={props.onReloadNoteEditor}
+          onCommitted={(result) => {
+            editorOpenSequence.current += 1;
+            setEditorReady(null);
+            onNoteEditorCommitted(result);
+          }}
+          onCancel={() => setEditorReady(null)}
+        />
+      );
+    }
     return (
       <section className="library-page reader-page" aria-label={props.t("note.reader")}>
         <header className="reader-toolbar">
@@ -2370,12 +2472,15 @@ export function LibraryPanel(props: {
               <PigeIcon name="panel" size={17} />
             </button>
             <button
+              ref={editorOpenerRef}
               type="button"
               data-reader-action="edit"
-              className="icon-button prototype-action"
+              className={`icon-button${props.onOpenNoteEditor ? "" : " prototype-action"}`}
               aria-label={props.t("note.edit")}
               title={props.t("note.edit")}
-              onClick={() => showReaderDevelopment("document_actions")}
+              aria-busy={editorOpenState === "opening"}
+              disabled={editorOpenState === "opening" || !props.selectedNote.renderContextId}
+              onClick={props.onOpenNoteEditor ? () => void openEditor() : () => showReaderDevelopment("document_actions")}
             >
               <PigeIcon name="edit" size={16} />
             </button>
@@ -2417,7 +2522,11 @@ export function LibraryPanel(props: {
             {props.t(`note.document.${readerActionState}`)}
           </p>
         ) : (
-          <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
+          editorOpenState === "failed" ? (
+            <p className="reader-action-status copy_failed" role="status" aria-live="polite">
+              {props.t("note.editor.failed")}
+            </p>
+          ) : <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
         )}
         <NoteReader
           note={props.selectedNote}
@@ -3167,6 +3276,9 @@ function HomeComposer(props: {
   readonly recentJobs: readonly JobSummary[];
   readonly locale: Locale;
   readonly onReaderSelectionAction: (result: ReaderSelectionActionResult) => void;
+  readonly onOpenNoteEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
+  readonly onSaveNoteEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
+  readonly onReloadNoteEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
   readonly onOpenCollection: (datasetId: string, tableId: string) => Promise<boolean>;
   readonly draftText: string;
   readonly onDraftChange: (text: string) => void;
@@ -3223,6 +3335,8 @@ function HomeComposer(props: {
   } | null>(null);
   const [composerSubmitActive, setComposerSubmitActive] = useState(false);
   const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
+  const [editorReady, setEditorReady] = useState<NoteMarkdownEditorReady | null>(null);
+  const [editorOpenState, setEditorOpenState] = useState<"idle" | "opening" | "failed">("idle");
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -3249,6 +3363,8 @@ function HomeComposer(props: {
     readonly clientTurnId: string;
   } | null>(null);
   const noteOpenSequence = useRef(0);
+  const editorOpenSequence = useRef(0);
+  const editorOpenerRef = useRef<HTMLButtonElement | null>(null);
   const inlineReferenceSequence = useRef(0);
   const selectedNoteRef = useRef<NoteRenderResult | null>(selectedNote);
   const modelSwitcherRef = useRef<HTMLButtonElement | null>(null);
@@ -3280,6 +3396,12 @@ function HomeComposer(props: {
   selectedNoteRef.current = selectedNote;
   voiceLanguageTagRef.current = props.locale;
   draftTextRef.current = text;
+
+  useEffect(() => {
+    editorOpenSequence.current += 1;
+    setEditorReady(null);
+    setEditorOpenState("idle");
+  }, [props.activeVault?.vaultId, selectedNote?.summary.pageId, selectedNote?.renderContextId]);
 
   useEffect(() => () => {
     if (conversationCopyResetTimerRef.current !== undefined) {
@@ -4492,6 +4614,38 @@ function HomeComposer(props: {
     await openResultTarget(pageId);
   };
 
+  const openEditor = async (): Promise<void> => {
+    const note = selectedNoteRef.current;
+    const activeVaultId = activeVaultIdRef.current;
+    const renderContextId = note?.renderContextId;
+    if (!note || !activeVaultId || !renderContextId || editorOpenState === "opening") return;
+    const sequence = editorOpenSequence.current + 1;
+    editorOpenSequence.current = sequence;
+    const request: NoteEditorOpenRequest = {
+      apiVersion: 1,
+      requestId: createNoteEditorRequestId(),
+      activeVaultId,
+      pageId: note.summary.pageId,
+      renderContextId
+    };
+    setEditorOpenState("opening");
+    try {
+      const result = await props.onOpenNoteEditor(request);
+      if (
+        sequence !== editorOpenSequence.current ||
+        activeVaultIdRef.current !== request.activeVaultId ||
+        selectedNoteRef.current?.summary.pageId !== request.pageId ||
+        selectedNoteRef.current.renderContextId !== request.renderContextId
+      ) return;
+      if (noteEditorOpenMatches(request, result) && result.status === "ready" && result.renderContextId === renderContextId) {
+        setEditorReady(result);
+        setEditorOpenState("idle");
+      } else setEditorOpenState("failed");
+    } catch {
+      if (sequence === editorOpenSequence.current) setEditorOpenState("failed");
+    }
+  };
+
   const activateInlineReference = async (href: string): Promise<ReaderInlineReferenceActivation> => {
     const vaultId = activeVaultIdRef.current;
     const note = selectedNoteRef.current;
@@ -4870,36 +5024,73 @@ function HomeComposer(props: {
       ) : null}
       {selectedNote ? (
         <section className="home-reader">
-          <button
-            type="button"
-            className="ghost back-button"
-            onClick={() => {
-              noteOpenSequence.current += 1;
-              inlineReferenceSequence.current += 1;
-              setSelectedNote(null);
-              setSelectedNoteRelated(null);
-            }}
-          >
-            {props.t("retrieval.backToResults")}
-          </button>
-          <NoteReader
-            note={selectedNote}
-            {...(props.activeVault && selectedNote.renderContextId ? {
-              activeVaultId: props.activeVault.vaultId,
-              onResolveSelection: resolveReaderSelection,
-              onSubmitSelectionAction: submitReaderSelectionAction,
-              onOpenSourceReference: (request) => window.pige.notes.openSourceReference(request),
-              onOpenSourcePage: openResult
-            } : {})}
-            locale={props.locale}
-            onSelectionActionResult={props.onReaderSelectionAction}
-            related={selectedNoteRelated}
-            relatedLoadingPageId={noteLoadingPageId}
-            onOpenRelated={openResult}
-            {...(selectedNote.renderContextId ? { onActivateInlineReference: activateInlineReference } : {})}
-            onDevelopment={props.onDevelopment}
-            t={props.t}
-          />
+          {editorReady ? (
+            <NoteMarkdownEditor
+              ready={editorReady}
+              labels={noteMarkdownEditorLabels(props.t)}
+              returnFocusRef={editorOpenerRef}
+              onSave={props.onSaveNoteEditor}
+              onReload={props.onReloadNoteEditor}
+              onCommitted={(result) => {
+                editorOpenSequence.current += 1;
+                setEditorReady(null);
+                setSelectedNote(result.render);
+                void props.onHomeStateChanged();
+              }}
+              onCancel={() => setEditorReady(null)}
+            />
+          ) : (
+            <>
+              <div className="settings-inline-actions">
+                <button
+                  type="button"
+                  className="ghost back-button"
+                  onClick={() => {
+                    noteOpenSequence.current += 1;
+                    inlineReferenceSequence.current += 1;
+                    editorOpenSequence.current += 1;
+                    setSelectedNote(null);
+                    setSelectedNoteRelated(null);
+                  }}
+                >
+                  {props.t("retrieval.backToResults")}
+                </button>
+                <button
+                  ref={editorOpenerRef}
+                  type="button"
+                  className="ghost"
+                  aria-busy={editorOpenState === "opening"}
+                  disabled={editorOpenState === "opening" || !selectedNote.renderContextId}
+                  onClick={() => void openEditor()}
+                >
+                  {props.t("note.edit")}
+                </button>
+              </div>
+              {editorOpenState === "failed" ? (
+                <p className="reader-action-status copy_failed" role="status" aria-live="polite">
+                  {props.t("note.editor.failed")}
+                </p>
+              ) : null}
+              <NoteReader
+                note={selectedNote}
+                {...(props.activeVault && selectedNote.renderContextId ? {
+                  activeVaultId: props.activeVault.vaultId,
+                  onResolveSelection: resolveReaderSelection,
+                  onSubmitSelectionAction: submitReaderSelectionAction,
+                  onOpenSourceReference: (request) => window.pige.notes.openSourceReference(request),
+                  onOpenSourcePage: openResult
+                } : {})}
+                locale={props.locale}
+                onSelectionActionResult={props.onReaderSelectionAction}
+                related={selectedNoteRelated}
+                relatedLoadingPageId={noteLoadingPageId}
+                onOpenRelated={openResult}
+                {...(selectedNote.renderContextId ? { onActivateInlineReference: activateInlineReference } : {})}
+                onDevelopment={props.onDevelopment}
+                t={props.t}
+              />
+            </>
+          )}
         </section>
       ) : agentAnswer?.datasetResult ? (
         <DatasetAnswerResult
@@ -5374,6 +5565,50 @@ function formatByteCount(byteCount: number, locale: Locale): string {
 
 function createNoteReferenceRequestId(): string {
   return `noteref_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function createNoteEditorRequestId(): `noteeditreq_${string}` {
+  return `noteeditreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function noteEditorOpenMatches(request: NoteEditorOpenRequest, result: NoteEditorOpenResult): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.pageId === request.pageId;
+}
+
+function failedNoteEditorOpenResult(request: NoteEditorOpenRequest): NoteEditorOpenResult {
+  return {
+    apiVersion: 1,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    pageId: request.pageId,
+    status: "failed"
+  };
+}
+
+function noteMarkdownEditorLabels(t: (key: string) => string): NoteMarkdownEditorLabels {
+  return {
+    title: t("note.editor.title"),
+    field: t("note.editor.field"),
+    save: t("note.editor.save"),
+    saving: t("note.editor.saving"),
+    cancel: t("note.editor.cancel"),
+    reload: t("note.editor.reload"),
+    reloading: t("note.editor.reloading"),
+    stale: t("note.editor.stale"),
+    failed: t("note.editor.failed"),
+    notFound: t("note.editor.notFound"),
+    reloaded: t("note.editor.reloaded"),
+    invalid: {
+      markdown_too_large: t("note.editor.invalid.markdownTooLarge"),
+      invalid_frontmatter: t("note.editor.invalid.frontmatter"),
+      page_id_changed: t("note.editor.invalid.pageId"),
+      unsupported_page_type: t("note.editor.invalid.pageType"),
+      invalid_wiki_link: t("note.editor.invalid.wikiLink"),
+      invalid_citation: t("note.editor.invalid.citation")
+    }
+  };
 }
 
 function createCollectionRequestId(): `collection_request_${string}` {
