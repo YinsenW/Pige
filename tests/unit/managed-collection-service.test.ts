@@ -60,6 +60,17 @@ describe("ManagedCollectionService", () => {
     expect(committed.snapshot.rows.find((row) => row.rowId === committed.rowId)?.cells)
       .toEqual(table.columns.map((column) => ({ columnId: column.id, value: null, editable: true })));
     await expect(service.appendDefaultRow(request)).resolves.toEqual(committed);
+    const operationPath = findFile(
+      path.join(fixture.vaultPath, ".pige/operations"),
+      `${committed.operationId}.json`
+    );
+    const operationBytes = fs.readFileSync(operationPath);
+    const tamperedOperation = readJson(operationPath) as Record<string, unknown>;
+    fs.writeFileSync(operationPath, `${JSON.stringify({ ...tamperedOperation, summary: "tampered" }, null, 2)}\n`);
+    await expect(service.appendDefaultRow(request)).rejects.toMatchObject({
+      code: "collection.request_conflict"
+    });
+    fs.writeFileSync(operationPath, operationBytes);
     await expect(service.appendDefaultRow({
       ...request,
       requestId: "collection_request_appendstaleabcdef"

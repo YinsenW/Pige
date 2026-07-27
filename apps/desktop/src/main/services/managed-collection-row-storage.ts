@@ -18,6 +18,7 @@ import {
 } from "@pige/schemas";
 import {
   fileRef,
+  hashCanonical,
   MAX_COLLECTION_JSON_BYTES,
   operationPathFor,
   payloadInvalid,
@@ -89,9 +90,11 @@ export function adoptDefaultRowAppend(input: {
     if (!adopted || adopted.manifest.activeRevision !== revision.id) throw new PigeDomainError("collection.commit_uncertain", "The Collection replay could not be adopted.");
     committed = adopted;
   }
+  const expectedOperation = input.createOperation(committed, revision);
   const operation = fs.existsSync(operationPath)
     ? OperationRecordSchema.parse(readJsonBounded(operationPath, MAX_COLLECTION_JSON_BYTES))
-    : input.createOperation(committed, revision);
+    : expectedOperation;
+  if (hashCanonical(operation) !== hashCanonical(expectedOperation)) throw requestConflict();
   if (!fs.existsSync(operationPath)) writeJsonExclusive(operationPath, operation);
   const snapshot = input.readSnapshot(committed, input.request.tableId);
   const resultIdentity = {
