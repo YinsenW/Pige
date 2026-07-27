@@ -3367,8 +3367,8 @@ Date: 2026-07-27
 
 Decision:
 
-One imported Collection keeps its Dataset ID. Scalar edit CAS-writes immutable revision/
-Operation and switches manifest last; Undo advances from its after-revision.
+One imported Collection keeps its ID. Scalar edit CAS-writes immutable revision/Operation,
+switches manifest last and Undo advances from its after-revision.
 
 Rationale:
 
@@ -3376,8 +3376,8 @@ Enable reversible value without rewriting history or exposing internals.
 
 Consequences:
 
-- Manifest owns current truth; evidence/originals/history stay immutable.
-- Bounded `collections.open/editCell` fails closed; broader editing stays open.
+- Manifest owns current truth; evidence/history stay immutable. Bounded open/edit fails closed;
+  broader editing stays open.
 
 References:
 
@@ -3391,8 +3391,7 @@ Date: 2026-07-27
 
 Decision:
 
-Ship explicit Settings review and exact stage/digest/registry-CAS install or discard for one
-bounded HTTPS machine-local pure `SKILL.md`.
+Ship Settings review and exact stage/digest/CAS install or discard for one bounded HTTPS pure Skill.
 
 Rationale:
 
@@ -3400,8 +3399,7 @@ Deliver links without admitting ZIP, executable, runtime or chat scope.
 
 Consequences:
 
-- Staging executes nothing, exposes no body/path and fails drift closed; broader lifecycle and
-  PIGE-SKILL-001 status remain open.
+- Stage executes nothing, exposes no body/path and fails drift closed; broader lifecycle stays open.
 
 References:
 
@@ -3429,6 +3427,29 @@ Consequences:
 References:
 
 - `docs/API_AND_IPC_DESIGN.md`; `docs/MARKDOWN_SCHEMA.md`; `docs/SYNC_CONFLICT_AND_MIGRATION.md`
+
+### D-20260727-Vault-Memory-Reversible-Lifecycle
+
+Status: Accepted
+Date: 2026-07-27
+
+Decision:
+
+Complete explicit vault Memory controls with revision-CAS enable, private-trash delete/reset,
+pathless safe export and deterministic Activity Undo/restart.
+
+Rationale:
+
+Make inspectable memory user-controlled without permanent erase or private provenance exposure.
+
+Consequences:
+
+- Exact receipts/Operations restore deleted facts without replacing later memory; broader edit,
+  autonomous/global memory, semantic recall and release evidence remain open.
+
+References:
+
+- `docs/AGENT_MEMORY_DESIGN.md`; `docs/API_AND_IPC_DESIGN.md`
 
 ## 4. Deferred Decisions
 

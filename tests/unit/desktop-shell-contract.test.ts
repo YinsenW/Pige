@@ -17,6 +17,26 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("strictly bridges the complete pathless Memory lifecycle surface", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const registrarSource = fs.readFileSync(path.resolve("apps/desktop/src/main/register-memory-ipc.ts"), "utf8");
+
+    for (const method of ["enable", "delete", "export", "reset"] as const) {
+      expect(contractsSource).toContain(`readonly ${method}:`);
+      expect(preloadSource).toContain(`"memory.${method}"`);
+      expect(registrarSource).toContain(`"memory.${method}"`);
+    }
+    expect(preloadSource).toContain("MemoryEnableRequestSchema.parse(request)");
+    expect(preloadSource).toContain("MemoryDeleteRequestSchema.parse(request)");
+    expect(preloadSource).toContain("MemoryExportRequestSchema.parse(request)");
+    expect(preloadSource).toContain("MemoryResetRequestSchema.parse(request)");
+    expect(preloadSource).toContain("MemoryLifecycleMutationResultSchema.parse(await ipcRenderer.invoke");
+    expect(preloadSource).toContain("MemoryExportResultSchema.parse(await ipcRenderer.invoke");
+    expect(registrarSource).not.toContain("outputPath:");
+    expect(registrarSource).not.toContain("filePath: selection.filePath");
+  });
+
   it("strictly parses durable conversation pagination on both IPC sides", () => {
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
@@ -963,9 +983,10 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('"activity.list",');
     expect(preloadSource).toContain("KnowledgeActivityListResultSchema.parse");
     expect(preloadSource).toContain('ipcRenderer.invoke("activity.undo", request)');
-    expect(contractsSource).toContain(
-      'readonly kind: "create_page" | "update_page" | "update_collection_cell";'
-    );
+    expect(contractsSource).toContain('| "update_collection_cell"');
+    expect(contractsSource).toContain('| "update_memory"');
+    expect(contractsSource).toContain('| "trash_memory"');
+    expect(contractsSource).toContain('| "restore_memory"');
     expect(contractsSource).toContain("export interface KnowledgeActivityCollectionTarget");
     expect(contractsSource).toContain("readonly expectedRevisionId?: string;");
     expect(rendererSource).toContain('window.pige.activity.list({ limit: 20 })');

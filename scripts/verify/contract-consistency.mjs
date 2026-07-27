@@ -350,11 +350,13 @@ const apiDocument = read("docs/API_AND_IPC_DESIGN.md");
 const readerIpcRegistrarPath = "apps/desktop/src/main/register-reader-ipc.ts";
 const backupIpcRegistrarPath = "apps/desktop/src/main/register-backup-restore-ipc.ts";
 const skillsIpcRegistrarPath = "apps/desktop/src/main/register-skills-ipc.ts";
+const memoryIpcRegistrarPath = "apps/desktop/src/main/register-memory-ipc.ts";
 const ipcChannelOwnerPaths = [
   "apps/desktop/src/main/index.ts",
   readerIpcRegistrarPath,
   backupIpcRegistrarPath,
-  skillsIpcRegistrarPath
+  skillsIpcRegistrarPath,
+  memoryIpcRegistrarPath
 ];
 const ipcChannelSources = ipcChannelOwnerPaths
   .filter((relativePath) => fs.existsSync(path.join(root, relativePath)))
@@ -370,6 +372,10 @@ const backupIpcRegistrarSource = backupIpcRegistrarExists
 const skillsIpcRegistrarExists = fs.existsSync(path.join(root, skillsIpcRegistrarPath));
 const skillsIpcRegistrarSource = skillsIpcRegistrarExists
   ? read(skillsIpcRegistrarPath)
+  : "";
+const memoryIpcRegistrarExists = fs.existsSync(path.join(root, memoryIpcRegistrarPath));
+const memoryIpcRegistrarSource = memoryIpcRegistrarExists
+  ? read(memoryIpcRegistrarPath)
   : "";
 const requiredReaderIpcChannels = [
   "notes.openSourceReference",
@@ -390,13 +396,23 @@ const requiredSkillsIpcChannels = [
   "skills.discardStaged",
   "skills.disable"
 ];
+const requiredMemoryIpcChannels = [
+  "memory.list",
+  "memory.disable",
+  "memory.enable",
+  "memory.delete",
+  "memory.export",
+  "memory.reset"
+];
 const resetLegacyChannels = new Set([
   "modelEgress.pending", "modelEgress.resolve", "permissions.pending", "permissions.resolve"
 ]);
 
 function ipcHandleChannels(source) {
-  return [...source.matchAll(/ipcMain\.handle\("([a-z][A-Za-z0-9]*\.[A-Za-z][A-Za-z0-9]*)"/gu)]
-    .map((match) => match[1]);
+  return [
+    ...source.matchAll(/ipcMain\.handle\("([a-z][A-Za-z0-9]*\.[A-Za-z][A-Za-z0-9]*)"/gu),
+    ...source.matchAll(/registerLifecycleMutation\(options,\s*"([a-z][A-Za-z0-9]*\.[A-Za-z][A-Za-z0-9]*)"/gu)
+  ].map((match) => match[1]);
 }
 
 function undocumentedIpcChannels(source, document) {
@@ -431,6 +447,14 @@ if (skillsIpcRegistrarExists) {
   for (const channel of requiredSkillsIpcChannels) {
     if (!implementedSkillsChannels.has(channel)) {
       failures.push(`${skillsIpcRegistrarPath} is missing required IPC channel ${channel}.`);
+    }
+  }
+}
+if (memoryIpcRegistrarExists) {
+  const implementedMemoryChannels = new Set(ipcHandleChannels(memoryIpcRegistrarSource));
+  for (const channel of requiredMemoryIpcChannels) {
+    if (!implementedMemoryChannels.has(channel)) {
+      failures.push(`${memoryIpcRegistrarPath} is missing required IPC channel ${channel}.`);
     }
   }
 }
@@ -524,6 +548,16 @@ const ownerOnlyNegativeFixtures = [
       'ipcMain.handle("skills.stageFromUrl", () => undefined);',
       'ipcMain.handle("skills.installStaged", () => undefined);',
       'ipcMain.handle("skills.disable", () => undefined);'
+    ].join("\n")).includes(channel))
+  },
+  {
+    label: "missing Memory lifecycle registrar channel",
+    rejected: requiredMemoryIpcChannels.some((channel) => !ipcHandleChannels([
+      'ipcMain.handle("memory.list", () => undefined);',
+      'ipcMain.handle("memory.disable", () => undefined);',
+      'ipcMain.handle("memory.enable", () => undefined);',
+      'ipcMain.handle("memory.delete", () => undefined);',
+      'ipcMain.handle("memory.export", () => undefined);'
     ].join("\n")).includes(channel))
   },
   {

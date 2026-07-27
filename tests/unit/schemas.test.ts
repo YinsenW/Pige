@@ -13,6 +13,12 @@ import {
   MachineLocalSettingsSchema,
   MarkdownPageStatusSchema,
   MarkdownPageTypeSchema,
+  MemoryDeleteRequestSchema,
+  MemoryEnableRequestSchema,
+  MemoryExportRequestSchema,
+  MemoryExportResultSchema,
+  MemoryLifecycleMutationResultSchema,
+  MemoryResetRequestSchema,
   NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES,
   NoteEditorOpenRequestSchema,
   NoteEditorOpenResultSchema,
@@ -331,6 +337,71 @@ describe("schemas", () => {
     )).toThrow();
   });
 
+  it("keeps vault Memory lifecycle CAS-bound, reversible, and pathless", () => {
+    const identity = {
+      apiVersion: 1,
+      requestId: "memory_request_abcdefghijklmnop",
+      activeVaultId: "vault_20260727_abcdefgh"
+    } as const;
+    const recordRequest = {
+      ...identity,
+      memoryId: "memory_20260727_abcdefghijkl",
+      expectedRevision: 7
+    } as const;
+    const summary = {
+      apiVersion: 1,
+      activeVaultId: identity.activeVaultId,
+      revision: 8,
+      records: [{
+        id: recordRequest.memoryId,
+        kind: "preference",
+        title: "Concise replies",
+        body: "Prefer concise replies.",
+        status: "active",
+        provenance: { kind: "explicit_user_request", occurredAt: "2026-07-27T10:00:00.000Z" },
+        createdAt: "2026-07-27T10:00:00.000Z",
+        updatedAt: "2026-07-27T10:01:00.000Z"
+      }]
+    } as const;
+
+    expect(MemoryEnableRequestSchema.parse(recordRequest)).toEqual(recordRequest);
+    expect(MemoryDeleteRequestSchema.parse(recordRequest)).toEqual(recordRequest);
+    const resetRequest = { ...identity, expectedRevision: 7 } as const;
+    expect(MemoryResetRequestSchema.parse(resetRequest)).toEqual(resetRequest);
+    expect(MemoryLifecycleMutationResultSchema.parse({
+      ...identity,
+      status: "committed",
+      operationId: "op_20260727_memory01",
+      summary
+    })).toMatchObject({ status: "committed", operationId: "op_20260727_memory01" });
+    for (const status of ["stale", "not_found"] as const) {
+      expect(MemoryLifecycleMutationResultSchema.parse({ ...identity, status, summary }))
+        .toEqual({ ...identity, status, summary });
+    }
+    expect(() => MemoryDeleteRequestSchema.parse({ ...recordRequest, path: "/private/memory.json" })).toThrow();
+    expect(() => MemoryLifecycleMutationResultSchema.parse({
+      ...identity,
+      status: "committed",
+      operationId: "op_20260727_memory01",
+      summary,
+      sourceEventId: "evt_private"
+    })).toThrow();
+
+    expect(MemoryExportRequestSchema.parse(resetRequest)).toEqual(resetRequest);
+    for (const status of ["exported", "cancelled", "stale", "failed"] as const) {
+      const result = { ...identity, revision: 7, status } as const;
+      expect(MemoryExportResultSchema.parse(result)).toEqual(result);
+    }
+    expect(() => MemoryExportResultSchema.parse({
+      ...identity,
+      revision: 7,
+      status: "exported",
+      path: "/private/export.json",
+      conversationId: "conversation_private",
+      records: summary.records
+    })).toThrow();
+  });
+
   it("accepts only the bounded Reader transform input presentation", () => {
     const event = {
       schemaVersion: 1,
@@ -595,7 +666,7 @@ describe("schemas", () => {
     expect(settings.updates).toMatchObject({ revision: 2, channel: "alpha", lastCheck: { phase: "failed" } });
   });
 
-  it("validates a pathless Activity page target projection", () => {
+  it("validates pathless Activity page and Memory target projections", () => {
     const result = KnowledgeActivityListResultSchema.parse({
       scannedAt: "2026-07-18T00:00:00.000Z",
       activeVaultId: "vault_20260718_activitysafe",
@@ -618,6 +689,51 @@ describe("schemas", () => {
     expect(() => KnowledgeActivityListResultSchema.parse({
       ...result,
       activities: [{ ...result.activities[0], path: "/private/vault/page.md" }]
+    })).toThrow();
+
+    for (const activity of [
+      {
+        operationId: "op_20260727_memoryupdate",
+        kind: "update_memory",
+        target: { kind: "memory", memoryId: "memory_20260727_abcdefghijkl" }
+      },
+      {
+        operationId: "op_20260727_memorytrash",
+        kind: "trash_memory",
+        target: { kind: "memory", memoryId: "memory_20260727_abcdefghijkl" }
+      },
+      {
+        operationId: "op_20260727_memoryreset",
+        kind: "restore_memory",
+        target: { kind: "memory" }
+      }
+    ] as const) {
+      expect(KnowledgeActivityListResultSchema.parse({
+        scannedAt: "2026-07-27T00:00:00.000Z",
+        activeVaultId: "vault_20260727_activitysafe",
+        total: 1,
+        invalidOperationCount: 0,
+        activities: [{
+          ...activity,
+          createdAt: "2026-07-27T00:00:00.000Z",
+          status: "applied",
+          canUndo: true
+        }]
+      }).activities[0]?.target).toEqual(activity.target);
+    }
+    expect(() => KnowledgeActivityListResultSchema.parse({
+      scannedAt: "2026-07-27T00:00:00.000Z",
+      activeVaultId: "vault_20260727_activitysafe",
+      total: 1,
+      invalidOperationCount: 0,
+      activities: [{
+        operationId: "op_20260727_memorytrash",
+        kind: "trash_memory",
+        createdAt: "2026-07-27T00:00:00.000Z",
+        target: { kind: "memory", memoryId: "memory_20260727_abcdefghijkl", path: "/private/atom.md" },
+        status: "applied",
+        canUndo: true
+      }]
     })).toThrow();
   });
 

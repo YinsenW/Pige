@@ -7,6 +7,7 @@ import { PigeDomainError } from "@pige/domain";
 import { OperationRecordSchema, type OperationRecord } from "@pige/schemas";
 import {
   KnowledgeActivityService,
+  type KnowledgeActivityMemoryPort,
   type KnowledgeActivityVaultPort
 } from "../../apps/desktop/src/main/services/knowledge-activity-service";
 import { LocalDatabaseService } from "../../apps/desktop/src/main/services/local-database-service";
@@ -29,6 +30,58 @@ describe("Knowledge Activity and Undo", () => {
     expect(() => service.list(null as unknown as {})).toThrowError(PigeDomainError);
     expect(() => service.undo(undefined as unknown as { operationId: string })).toThrowError(PigeDomainError);
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.pageContent);
+  });
+
+  it("delegates body-free Memory Activity, Undo, and recovery to the Memory owner", () => {
+    const fixture = createFixture();
+    const memoryId = "memory_20260712_activitymemory";
+    const operation = OperationRecordSchema.parse({
+      id: "op_20260712_memorytrash",
+      schemaVersion: 1,
+      createdAt: "2026-07-12T12:02:00.000Z",
+      actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+      kind: "trash_memory",
+      targetRefs: [{ kind: "memory", id: memoryId }],
+      sourceRefs: [],
+      summary: "Moved one vault memory to recoverable trash.",
+      reversible: "yes",
+      rollbackHint: "Restore the exact receipt through the Memory owner.",
+      warnings: []
+    });
+    writeOperation(fixture.vaultPath, operation);
+    const undo = vi.fn(() => ({
+      status: "undone" as const,
+      operationId: operation.id,
+      undoOperationId: "op_20260712_memoryrestore"
+    }));
+    const memory: KnowledgeActivityMemoryPort = {
+      activitySummary: (candidate) => candidate.id === operation.id ? {
+        operationId: candidate.id,
+        kind: "trash_memory",
+        createdAt: candidate.createdAt,
+        targetLabel: "Saved preference",
+        target: { kind: "memory", memoryId },
+        status: "applied",
+        canUndo: true
+      } : undefined,
+      findUndoOperation: () => undefined,
+      undo,
+      recoverIncompleteOperations: () => ({ recovered: 1, failed: 0 })
+    };
+    const service = new KnowledgeActivityService(fixture.vaults, undefined, undefined, memory);
+
+    expect(service.list().activities).toContainEqual(expect.objectContaining({
+      operationId: operation.id,
+      target: { kind: "memory", memoryId },
+      canUndo: true
+    }));
+    expect(service.undo({ operationId: operation.id })).toEqual({
+      status: "undone",
+      operationId: operation.id,
+      undoOperationId: "op_20260712_memoryrestore"
+    });
+    expect(undo).toHaveBeenCalledWith(operation, undefined);
+    expect(service.recoverIncompleteUndos()).toEqual({ recovered: 1, failed: 0 });
   });
 
   it("lists a checksum-bound Agent create, moves it to recoverable trash, and remains idempotent after restart", () => {

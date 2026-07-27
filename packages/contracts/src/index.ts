@@ -33,10 +33,17 @@ import type {
   HighRiskConfirmationResolveRequest,
   HighRiskConfirmationResolveResult,
   Locale,
+  MemoryDeleteRequest,
   MemoryDisableRequest,
+  MemoryEnableRequest,
+  MemoryExportRequest,
+  MemoryExportResult,
+  MemoryLifecycleMutationResult,
   MemoryListRequest,
   MemoryMutationResult,
+  MemoryRecordId,
   MemoryRecordSummary,
+  MemoryResetRequest,
   MemorySummary,
   JobClass,
   JobRecord,
@@ -228,10 +235,17 @@ export type {
   TaskInteractionOpenRequest,
   TaskInteractionOpenResult,
   TaskInteractionPendingResult,
+  MemoryDeleteRequest,
   MemoryDisableRequest,
+  MemoryEnableRequest,
+  MemoryExportRequest,
+  MemoryExportResult,
+  MemoryLifecycleMutationResult,
   MemoryListRequest,
   MemoryMutationResult,
+  MemoryRecordId,
   MemoryRecordSummary,
+  MemoryResetRequest,
   MemorySummary,
   SkillCapability,
   SkillDataBoundary,
@@ -716,11 +730,25 @@ export interface KnowledgeActivityCollectionTarget {
   readonly revisionId: string;
 }
 
-export type KnowledgeActivityTarget = KnowledgeActivityPageTarget | KnowledgeActivityCollectionTarget;
+export interface KnowledgeActivityMemoryTarget {
+  readonly kind: "memory";
+  readonly memoryId?: MemoryRecordId | undefined;
+}
+
+export type KnowledgeActivityTarget =
+  | KnowledgeActivityPageTarget
+  | KnowledgeActivityCollectionTarget
+  | KnowledgeActivityMemoryTarget;
 
 export interface KnowledgeActivitySummary {
   readonly operationId: string;
-  readonly kind: "create_page" | "update_page" | "update_collection_cell";
+  readonly kind:
+    | "create_page"
+    | "update_page"
+    | "update_collection_cell"
+    | "update_memory"
+    | "trash_memory"
+    | "restore_memory";
   readonly createdAt: string;
   readonly targetLabel?: string;
   readonly target?: KnowledgeActivityTarget;
@@ -1400,6 +1428,10 @@ export interface PigeDesktopApi {
   readonly memory: {
     readonly list: (request: MemoryListRequest) => Promise<MemorySummary>;
     readonly disable: (request: MemoryDisableRequest) => Promise<MemoryMutationResult>;
+    readonly enable: (request: MemoryEnableRequest) => Promise<MemoryLifecycleMutationResult>;
+    readonly delete: (request: MemoryDeleteRequest) => Promise<MemoryLifecycleMutationResult>;
+    readonly export: (request: MemoryExportRequest) => Promise<MemoryExportResult>;
+    readonly reset: (request: MemoryResetRequest) => Promise<MemoryLifecycleMutationResult>;
     readonly onChanged: (listener: (summary: MemorySummary) => void) => () => void;
   };
   readonly collections: {

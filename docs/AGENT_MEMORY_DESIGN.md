@@ -5,52 +5,29 @@ Date: 2026-07-09
 
 ## 1. Decision
 
-Pige should implement a Pige-native Agent Memory Core.
-
-External memory projects should be used as references or optional curated packages, not as the default runtime.
-
-Pige owns vault lifecycle, privacy, backup, UI and prompt authority. It borrows layered,
-Markdown-readable, secret-scanned recall ideas from external projects, stores portable
-truth under `.pige/memory/`, and keeps indexes rebuildable under `.pige/indexes/memory/`.
+Pige owns its Agent Memory Core, lifecycle, privacy, backup, UI and prompt authority.
+Portable truth stays under `.pige/memory/`; rebuildable indexes stay under
+`.pige/indexes/memory/`. External projects are references or curated packages, not the runtime.
 
 ## 2. What Memory Means In Pige
 
-Memory is not the same as the wiki.
+Memory differs from browsable wiki knowledge, preserved sources/artifacts and RAG retrieval.
+It holds preferences, corrections, recurring workflows, vault conventions and lessons.
 
-- Wiki: durable knowledge pages the user can read and browse.
-- Sources: preserved evidence and extracted artifacts.
-- RAG: retrieval over wiki, sources, artifacts, and selected memory records.
-- Agent Memory: preferences, corrections, recurring workflows, vault conventions, and lessons that help Pige behave better over time.
-
-Memory should help with questions like:
-
-- How does this user prefer summaries to look?
-- Which note naming and linking conventions are stable in this vault?
-- What did the user correct before?
-- What Agent mistake should not be repeated?
-- Which workflow usually applies to article captures, PDF research, or meeting notes?
-
-Memory should not become hidden factual evidence. If Pige answers a factual question, sources and wiki pages should remain the default grounding layer.
+Memory captures stable preferences, corrections, vault conventions and workflow lessons. It is
+not hidden factual evidence; sources and wiki pages remain the grounding layer for factual answers.
 
 ## 3. Options Reviewed
 
-| Reference | Useful idea | Why not the default |
-| --- | --- | --- |
-| TencentDB Agent Memory | L0-L3 layering and traceability | Own gateway/runtime lifecycle exceeds Pige's product boundary. |
-| `pi-hermes-memory` | Pi-native FTS, secret scan and consolidation | Coding-session conventions overlap Pige vault/review ownership. |
-| `pi-memctx` / `pi-memory` | Inspectable Markdown and compact injection | Lacks Pige backup, review and knowledge integration. |
-| Engram | Agent-neutral local FTS substrate | Adds binary/API/cloud surface before Pige needs it. |
-
-They remain references or later reviewed optional packages, never the default core.
+TencentDB Agent Memory, `pi-hermes-memory`, `pi-memctx`/`pi-memory` and Engram inform
+layering, traceability, inspectability and local retrieval, but do not own Pige vault/runtime lifecycle.
 
 ## 4. Chosen Architecture
 
 ### 4.1 Memory Layers
 
-- L0 events: attributable explicit requests, accepted corrections/Operations, failures and outcomes.
-- L1 atoms: concise preferences, corrections and lessons.
-- L2 scenarios: recurring contextual workflows.
-- L3 profile: a small explainable summary.
+L0 events retain attributable requests/outcomes; L1 atoms retain concise preferences/corrections;
+L2 scenarios retain recurring workflows; L3 is a small explainable profile.
 
 ### 4.2 Storage
 
@@ -81,18 +58,20 @@ projection only. Vault memory is portable and backed up unless excluded; indexes
   stay in Main. Renderer gets at most 1,000 bounded safe summaries.
 - Enabled Home recall adds at most eight recently updated active atoms as lower-authority
   user context, never system policy. Current instruction, `PIGE.md`, settings and safety win.
-- Settings CAS-disable returns `committed | stale | not_found` plus current summary;
-  disabled atoms leave subsequent recall.
-
-No autonomous/global memory, edit, re-enable, delete, export, reset, semantic recall or
-new permission mode ships here.
+- Settings lists at most 1,000 safe atoms and keeps disable compatible. Enable/delete/reset use
+  exact vault/request/revision CAS; committed mutations return safe Operation identity/current
+  summary. Delete/reset move exact L0/L1 facts into private receipts/trash and record
+  `trash_memory`; deterministic Activity Undo records `restore_memory`, merges only missing exact
+  facts, preserves later memory, and is restart-adoptable. Disabled/deleted atoms leave recall.
+- Export rechecks the exact revision after Main's save dialog and writes safe inspectable summaries
+  only. Renderer sees pathless `exported | cancelled | stale | failed`, never destination/private
+  provenance. Edit, autonomous/global memory, semantic recall and new permission modes remain open.
 
 ## 5. v0.1 Scope
 
-Include vault-scoped explicit/correction/Operation memory; provenance; secret-before-write;
-inspect/disable/delete/export/reset; lexical recall; and optional Local RAG semantic recall.
-Defer full persona modeling, global sync, multi-user memory, task-graph UI, and any external
-default memory runtime.
+Include vault-scoped explicit/correction/Operation memory, provenance, secret-before-write,
+lifecycle/export and lexical recall. Defer persona, global/multi-user sync, task graphs,
+external default runtimes and optional semantic recall until separately accepted.
 
 ## 6. References
 

@@ -888,7 +888,7 @@ Agent, Reader copy, composer processing, compact Activity/Undo, locale/window pi
 current-action prompts. Settings framing and Reader related context remain partial.
 Compact Settings owns focus/inert state; Escape closes its navigator before the dialog
 and restores trigger focus.
-Appearance, local capabilities, Agent/memory, reusable permission policy, Skills, Pi
+Appearance, local capabilities, reusable permission policy, Skills, Pi
 Packages, updates/voice, Reader mutations and unbound Knowledge evidence/backlink/
 relationship actions remain localized unavailable without IPC, Job, persistence, fake
 result/progress or status credit. Until a
@@ -1030,10 +1030,11 @@ Concise source summaries
   Preference · Active · Explicit request · Disable
 ```
 
-Load the strict active-vault summary. Show only bounded content/status/time and safe
-provenance; never private IDs. Exact revision CAS disables, adopts returned state, and
-uses body-free stale/not-found copy. No autonomous/edit/re-enable/delete/export/reset
-control ships in this slice; the fuller v0.1 lifecycle remains planned.
+Load the strict active-vault summary and show bounded content/status/time/safe provenance only.
+Active atoms disable; disabled atoms re-enable; delete/reset are reversible and appear in Activity
+with Undo. Every mutation uses exact revision CAS, adopts returned state, and handles stale/not-found
+without losing the list. Export opens Main's save dialog; cancel is quiet and every result is
+pathless. No edit, permanent erase, autonomous/global memory or new permission control ships.
 
 ### Skills Settings
 

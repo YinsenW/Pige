@@ -1272,7 +1272,8 @@ export function App(): React.JSX.Element {
       activityOpenInFlightRef.current ||
       !originVaultId ||
       originVaultId !== activeVaultIdRef.current ||
-      !target
+      !target ||
+      target.kind === "memory"
     ) return;
     const requestId = activityOpenSequence.current + 1;
     activityOpenSequence.current = requestId;

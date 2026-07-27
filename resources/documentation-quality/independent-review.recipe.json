@@ -39,14 +39,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review of the first B6.13/E6.08 note-only Markdown editor: the current Reader render opens one exact bounded portable draft; save is revision/CAS fenced, returns the canonical safe render, records a reversible update_page Operation, and preserves the draft and live file on stale; statuses remain unchanged.",
+    "scope": "Independent Product Planning review of the first complete explicit vault Memory lifecycle: list/disable remain compatible; enable, private-trash delete/reset, safe pathless export and deterministic Activity Undo/restart are revision fenced; broader memory acceptance and statuses remain open.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 30,
-    "reviewedSha256": "0198bd5e1570abe27a33037a5519dded4013f8d0abc031f247a5e1a2bfb58920"
+    "reviewedSha256": "230d5476163ec606399482ad2d09ab99398e34d778b4c7b73bcac63de9d305c1"
   },
   "reviewers": [{
-    "reviewerId": "reader-markdown-editor-review",
-    "task": "Reader Markdown revision editor",
+    "reviewerId": "vault-memory-lifecycle-review",
+    "task": "Reversible vault Memory lifecycle",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -54,33 +54,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Product Planning reviewed Markdown, API, UI, sync, recovery, Decision and trace owners against the combined service/registrar/Reader implementation; Development and UI own those product and focused-test bytes."
+    "independence": "Product Planning reviewed Memory, API, UI, recovery, Decision and trace owners against the combined service/registrar/Settings implementation; Development and UI own those product and focused-test bytes."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"reader-markdown-editor-review","blockerCount":0,"summary":"The same stable note page moves from Reader render to exact draft and back to a refreshed canonical render; source pages remain read-only."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"reader-markdown-editor-review","blockerCount":0,"summary":"Markdown, API, sync, recovery and Decision owners agree on render/revision identity, exact draft CAS, atomic replace, reversible update_page and stale behavior."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"reader-markdown-editor-review","blockerCount":0,"summary":"PIGE-UI-001 and E6.05 remain partial and E6.08 remains planned while the first note-only editor evidence is bound without status promotion."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"reader-markdown-editor-review","blockerCount":0,"summary":"Canonical schemas, exact Reader registrar channels and closed save outcomes give Development and UI one bounded note-editing surface."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"reader-markdown-editor-review","blockerCount":0,"summary":"Existing Markdown, API, UI, sync, recovery, Decision and trace owners bind the slice without a new document or merge framework."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-memory-lifecycle-review","blockerCount":0,"summary":"Settings lists safe atoms, applies exact lifecycle actions, exports through Main and converges through current summary and Activity."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-memory-lifecycle-review","blockerCount":0,"summary":"Memory, API, UI, recovery and Decision owners agree on CAS identity, private trash receipts, Operation/Undo and pathless export."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-memory-lifecycle-review","blockerCount":0,"summary":"PIGE-MEM-001 and E7.02 remain planned while their targets record the usable explicit lifecycle and remaining evidence."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-memory-lifecycle-review","blockerCount":0,"summary":"Canonical schemas, exact Memory registrar channels and protected lifecycle owners give Development and UI one bounded surface."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-memory-lifecycle-review","blockerCount":0,"summary":"Existing Memory, API, UI, recovery, Decision and trace owners bind the slice without a new document or generic framework."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Editor schemas and exact Reader registrar channels remain canonical and body/path-free."},
-    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Markdown, API, UI, sync, recovery and accepted-decision owners pass without a new document."},
-    {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Unchanged-status note-editing acceptance stays synchronized and the protected registrar/service inventory covers the final combined source."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Lifecycle schemas and exact Memory registrar channels remain canonical and body/path-free."},
+    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Memory, API, UI, recovery and accepted-decision owners pass without a new document."},
+    {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Planned Memory acceptance stays synchronized and protected registrar/service inventory covers final combined source."}
   ],
   "coordination": {
-    "taskId": "reader-markdown-revision-editor-20260727",
-    "taskTitle": "Reader Markdown revision editor",
+    "taskId": "vault-memory-lifecycle-20260727",
+    "taskTitle": "Reversible vault Memory lifecycle",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing notes, Reader rendering and Activity history remain readable; new saves add opaque revision fencing and a reversible update_page Operation without migrating prior pages.",
-    "acknowledgement": "Planning binds the first note-only Markdown editor; source-page editing, create/rename/delete, rich text, automatic merge and broader platform acceptance stay open."
+    "compatibility": "Existing explicit memory, list and disable remain readable; lifecycle actions add receipts and Operations without migrating prior atoms or exposing private provenance.",
+    "acknowledgement": "Planning binds explicit vault lifecycle only; edit, autonomous/global memory, semantic recall, backup and broader real-Electron acceptance stay open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Real Electron IME, long-page and platform behavior remain acceptance work.",
-    "External-editor races and restart recovery must preserve the live file and exact local draft without automatic merge.",
-    "Source-page editing and broader page lifecycle actions remain outside this slice."
+    "Real Electron lifecycle, 1,000-record and platform evidence remain acceptance work.",
+    "Backup/restore must preserve private receipts, Operations and portable memory without paths.",
+    "Edit, autonomous/global memory and semantic recall remain outside this slice."
   ]
 }

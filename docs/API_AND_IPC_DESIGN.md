@@ -687,6 +687,10 @@ Commands:
 - `models.updateModel`
 - `models.setDefaultModel`
 - `memory.disable`
+- `memory.enable`
+- `memory.delete`
+- `memory.export`
+- `memory.reset`
 - `skills.stageFromUrl`
 - `skills.installStaged`
 - `skills.discardStaged`
@@ -708,19 +712,17 @@ Events:
 - `settings.appearanceChanged`
 - `memory.changed`
 
-`skills.stageFromUrl({apiVersion:1,requestId,sourceUrl})` returns `ready | invalid | failed` for
-one safe HTTPS pure machine-local `SKILL.md`; projection is opaque stage/digest, revision,
-expiry and safe metadata/capabilities/warnings, never body/path.
-`skills.installStaged` binds stage/digest/revision/enabled and returns `committed | stale |
-not_found | failed`; `skills.discardStaged` returns `discarded | stale | not_found | failed`.
-All echo request ID; summary/disable/changed, owner locks and receipt adoption remain canonical.
+Skill URL stage returns `ready | invalid | failed` with opaque identity/revision/expiry/safe
+metadata, never body/path. Exact install/discard binds digest/revision and echoes request identity;
+summary/disable/events, owner locks and receipt adoption remain canonical.
 
-`memory.list({apiVersion:1,activeVaultId})` returns `MemorySummarySchema`: vault, revision
-and at most 1,000 bounded safe records (`id/kind/title/body/status/timestamps` plus
-`explicit_user_request/occurredAt`); private conversation/event/Job IDs stay in Main.
-`memory.disable({apiVersion:1,requestId,activeVaultId,memoryId,expectedRevision})` returns
-`committed | stale | not_found` plus the current summary. `memory.changed` emits that safe
-summary. Main fences vault/CAS; renderer cannot create memory or submit provenance.
+Memory list returns vault/revision and at most 1,000 safe records; private conversation/event/Job
+IDs stay in Main. Disable remains compatible. Enable/delete bind exact record/revision; reset binds
+vault/revision. Lifecycle `committed | stale | not_found` echoes request/vault, returns current
+summary, and committed adds safe Operation ID. Delete/reset are private-trash Operations; Activity
+owns deterministic Undo/restart. Export binds revision, Main alone chooses the destination, and
+returns pathless `exported | cancelled | stale | failed`. `memory.changed` emits safe summary;
+renderer cannot create memory, submit provenance/path, or permanently erase it.
 
 Provider/model DTOs:
 
