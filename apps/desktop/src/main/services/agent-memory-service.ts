@@ -2,21 +2,41 @@ import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
+import type {
+  KnowledgeActivitySummary,
+  KnowledgeActivityUndoResult
+} from "@pige/contracts";
 import {
+  MemoryDeleteRequestSchema,
   MemoryDisableRequestSchema,
+  MemoryEnableRequestSchema,
+  MemoryExportRequestSchema,
+  MemoryExportResultSchema,
+  MemoryLifecycleMutationResultSchema,
   MemoryMutationResultSchema,
   MemoryRecordSummarySchema,
+  MemoryResetRequestSchema,
   MemorySummarySchema,
+  OperationRecordSchema,
+  type MemoryDeleteRequest,
   type MemoryDisableRequest,
+  type MemoryEnableRequest,
+  type MemoryExportRequest,
+  type MemoryExportResult,
+  type MemoryLifecycleMutationResult,
   type MemoryMutationResult,
   type MemoryRecordSummary,
-  type MemorySummary
+  type MemoryResetRequest,
+  type MemorySummary,
+  type OperationRecord
 } from "@pige/schemas";
 import { flushDirectoryWhereSupported } from "./durable-directory-sync";
 import { containsRestrictedModelContent } from "./model-egress-content";
 
 const REGISTRY_FILE = "registry.json";
 const MAX_REGISTRY_BYTES = 2 * 1024 * 1024;
+const MAX_PRIVATE_RECORD_BYTES = 4 * 1024 * 1024;
+const OPERATION_ID_PATTERN = /^op_(\d{8})_[a-z0-9]{8,}$/u;
 
 interface MemoryRegistry {
   readonly schemaVersion: 1;
@@ -43,6 +63,38 @@ interface StoredMemoryRecord extends MemoryRecordSummary {
   readonly parentJobId: string;
 }
 
+type MemoryLifecycleAction = "enable" | "delete" | "reset";
+
+interface MemoryLifecycleReceipt {
+  readonly schemaVersion: 1;
+  readonly action: MemoryLifecycleAction;
+  readonly requestId: string;
+  readonly activeVaultId: string;
+  readonly memoryId?: string;
+  readonly expectedRevision: number;
+  readonly operationId: string;
+  readonly createdAt: string;
+  readonly beforeRevision: number;
+  readonly afterRevision: number;
+  readonly beforeRegistryHash: string;
+  readonly afterRegistryHash: string;
+  readonly removedEvents: readonly MemoryEventRecord[];
+  readonly removedRecords: readonly StoredMemoryRecord[];
+  readonly beforeRecord?: StoredMemoryRecord;
+  readonly afterRecord?: StoredMemoryRecord;
+}
+
+interface MemoryRestoreIntent {
+  readonly schemaVersion: 1;
+  readonly originalOperationId: string;
+  readonly undoOperationId: string;
+  readonly createdAt: string;
+  readonly baseRevision: number;
+  readonly restoredRevision: number;
+  readonly baseRegistryHash: string;
+  readonly restoredRegistryHash: string;
+}
+
 export interface RememberVaultPreferenceRequest {
   readonly vaultPath: string;
   readonly activeVaultId: string;
@@ -53,13 +105,37 @@ export interface RememberVaultPreferenceRequest {
   readonly parentJobId: string;
 }
 
+export interface AgentMemoryServiceDependencies {
+  readonly now?: () => Date;
+  readonly randomBytes?: (size: number) => Buffer;
+  readonly activeVaultPath?: () => string | undefined;
+}
+
+export interface AgentMemoryRecoveryResult {
+  readonly recovered: number;
+  readonly failed: number;
+}
+
 export class AgentMemoryService {
+  readonly #now: () => Date;
+  readonly #randomBytes: (size: number) => Buffer;
+  readonly #activeVaultPath: (() => string | undefined) | undefined;
+  readonly #knownVaultPaths = new Set<string>();
+
+  constructor(dependencies: AgentMemoryServiceDependencies = {}) {
+    this.#now = dependencies.now ?? (() => new Date());
+    this.#randomBytes = dependencies.randomBytes ?? randomBytes;
+    this.#activeVaultPath = dependencies.activeVaultPath;
+  }
+
   list(vaultPath: string, activeVaultId: string): MemorySummary {
+    this.#rememberVault(vaultPath);
     const registry = this.#readRegistry(vaultPath);
     return projectSummary(activeVaultId, registry);
   }
 
   rememberPreference(request: RememberVaultPreferenceRequest): MemoryRecordSummary {
+    this.#rememberVault(request.vaultPath);
     const id = createMemoryId(request.sourceEventId);
     const registry = this.#readRegistry(request.vaultPath);
     const existing = registry.records.find((record) => record.id === id);
@@ -85,7 +161,7 @@ export class AgentMemoryService {
     if (registry.revision === Number.MAX_SAFE_INTEGER || registry.records.length >= 1_000) {
       throw new PigeDomainError("memory.capacity_exhausted", "The vault memory registry is full.");
     }
-    const now = new Date().toISOString();
+    const now = this.#now().toISOString();
     const summary = MemoryRecordSummarySchema.parse({
       id,
       kind: "preference",
@@ -126,6 +202,7 @@ export class AgentMemoryService {
   }
 
   disable(vaultPath: string, request: MemoryDisableRequest): MemoryMutationResult {
+    this.#rememberVault(vaultPath);
     const parsed = MemoryDisableRequestSchema.parse(request);
     const registry = this.#readRegistry(vaultPath);
     if (parsed.expectedRevision !== registry.revision) {
@@ -140,22 +217,292 @@ export class AgentMemoryService {
       return MemoryMutationResultSchema.parse({ status: "committed", summary: projectSummary(parsed.activeVaultId, registry) });
     }
     const records = [...registry.records];
-    records[index] = {
-      ...current,
-      status: "disabled",
-      updatedAt: new Date().toISOString()
-    };
+    records[index] = { ...current, status: "disabled", updatedAt: this.#now().toISOString() };
     const next = { schemaVersion: 1 as const, revision: registry.revision + 1, events: registry.events, records };
     this.#writeRegistry(vaultPath, next);
     this.#writeInspectableRecord(vaultPath, records[index]!);
     return MemoryMutationResultSchema.parse({ status: "committed", summary: projectSummary(parsed.activeVaultId, next) });
   }
 
+  enable(vaultPath: string, request: MemoryEnableRequest): MemoryLifecycleMutationResult {
+    const parsed = MemoryEnableRequestSchema.parse(request);
+    return this.#mutate(vaultPath, parsed.activeVaultId, {
+      action: "enable",
+      requestId: parsed.requestId,
+      expectedRevision: parsed.expectedRevision,
+      memoryId: parsed.memoryId
+    });
+  }
+
+  delete(vaultPath: string, request: MemoryDeleteRequest): MemoryLifecycleMutationResult {
+    const parsed = MemoryDeleteRequestSchema.parse(request);
+    return this.#mutate(vaultPath, parsed.activeVaultId, {
+      action: "delete",
+      requestId: parsed.requestId,
+      expectedRevision: parsed.expectedRevision,
+      memoryId: parsed.memoryId
+    });
+  }
+
+  reset(vaultPath: string, request: MemoryResetRequest): MemoryLifecycleMutationResult {
+    const parsed = MemoryResetRequestSchema.parse(request);
+    return this.#mutate(vaultPath, parsed.activeVaultId, {
+      action: "reset",
+      requestId: parsed.requestId,
+      expectedRevision: parsed.expectedRevision
+    });
+  }
+
+  export(vaultPath: string, request: MemoryExportRequest, privateDestinationPath: string): MemoryExportResult {
+    this.#rememberVault(vaultPath);
+    const parsed = MemoryExportRequestSchema.parse(request);
+    const identity = {
+      apiVersion: 1 as const,
+      requestId: parsed.requestId,
+      activeVaultId: parsed.activeVaultId
+    };
+    const registry = this.#readRegistry(vaultPath);
+    if (!privateDestinationPath) {
+      return MemoryExportResultSchema.parse({ ...identity, status: "cancelled", revision: registry.revision });
+    }
+    if (parsed.expectedRevision !== registry.revision) {
+      return MemoryExportResultSchema.parse({ ...identity, status: "stale", revision: registry.revision });
+    }
+    const records = registry.records.map(projectRecord);
+    if (records.some((record) => containsRestrictedModelContent(`${record.title}\n${record.body}`))) {
+      return MemoryExportResultSchema.parse({ ...identity, status: "failed", revision: registry.revision });
+    }
+    const envelope = {
+      schemaVersion: 1,
+      exportedAt: this.#now().toISOString(),
+      scope: "vault",
+      revision: registry.revision,
+      records
+    } as const;
+    try {
+      writePrivateExport(privateDestinationPath, `${JSON.stringify(envelope, null, 2)}\n`, this.#randomBytes);
+      return MemoryExportResultSchema.parse({ ...identity, status: "exported", revision: registry.revision });
+    } catch {
+      return MemoryExportResultSchema.parse({ ...identity, status: "failed", revision: registry.revision });
+    }
+  }
+
   recall(vaultPath: string, limit = 8): readonly MemoryRecordSummary[] {
+    this.#rememberVault(vaultPath);
     return this.#readRegistry(vaultPath).records
       .filter((record) => record.status === "active")
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .slice(0, Math.max(0, Math.min(limit, 8)));
+  }
+
+  activitySummary(operation: OperationRecord, undoOperation?: OperationRecord): KnowledgeActivitySummary | undefined {
+    const binding = readMemoryOperationBinding(operation);
+    if (!binding || (undoOperation && !isMatchingRestoreOperation(operation, undoOperation))) return undefined;
+    const vaultPath = this.#currentVaultPath();
+    let registry: MemoryRegistry | undefined;
+    if (vaultPath) {
+      try {
+        registry = this.#readRegistry(vaultPath);
+      } catch {
+        registry = undefined;
+      }
+    }
+    const target = binding.memoryId
+      ? { kind: "memory" as const, memoryId: binding.memoryId }
+      : { kind: "memory" as const };
+    const receipt = vaultPath ? this.#readReceiptForOperation(vaultPath, operation) : undefined;
+    const unavailableReason = !registry || !receipt
+      ? "legacy_record" as const
+      : undoUnavailableReason(registry, receipt);
+    return {
+      operationId: operation.id,
+      kind: operation.kind as "update_memory" | "trash_memory" | "restore_memory",
+      createdAt: operation.createdAt,
+      ...(binding.action === "reset" ? { targetLabel: "All Agent memory" } : {}),
+      target,
+      status: undoOperation ? "undone" : "applied",
+      canUndo: !undoOperation && unavailableReason === undefined,
+      ...(undoOperation
+        ? { undoUnavailableReason: "already_undone" as const }
+        : unavailableReason ? { undoUnavailableReason: unavailableReason } : {})
+    };
+  }
+
+  findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined {
+    const binding = readMemoryOperationBinding(operation);
+    if (!binding || operation.kind === "restore_memory") return undefined;
+    const candidate = operations.find((entry) => entry.id === createUndoOperationId(operation.id));
+    return candidate && isMatchingRestoreOperation(operation, candidate) ? candidate : undefined;
+  }
+
+  undo(operation: OperationRecord, expectedRevisionId?: string): KnowledgeActivityUndoResult {
+    const binding = readMemoryOperationBinding(operation);
+    if (!binding || operation.kind === "restore_memory") return { status: "not_found", operationId: operation.id };
+    if (expectedRevisionId !== undefined && expectedRevisionId !== String(binding.afterRevision)) {
+      return { status: "stale", operationId: operation.id, currentRevisionId: String(binding.afterRevision) };
+    }
+    const vaultPath = this.#currentVaultPath();
+    if (!vaultPath) return { status: "not_found", operationId: operation.id };
+    this.#rememberVault(vaultPath);
+    const receipt = this.#readReceiptForOperation(vaultPath, operation);
+    if (!receipt || receipt.operationId !== operation.id) return { status: "not_found", operationId: operation.id };
+    const undoOperationId = createUndoOperationId(operation.id);
+    const existing = this.#readOperation(vaultPath, undoOperationId);
+    if (existing) {
+      if (!isMatchingRestoreOperation(operation, existing)) throw lifecycleConflict();
+      const restored = readMemoryOperationBinding(existing)!;
+      return {
+        status: "already_undone",
+        operationId: operation.id,
+        undoOperationId,
+        revisionId: String(restored.afterRevision)
+      };
+    }
+    const registry = this.#readRegistry(vaultPath);
+    const next = createUndoRegistry(registry, receipt, this.#now().toISOString());
+    const intent: MemoryRestoreIntent = {
+      schemaVersion: 1,
+      originalOperationId: operation.id,
+      undoOperationId,
+      createdAt: this.#now().toISOString(),
+      baseRevision: registry.revision,
+      restoredRevision: next.revision,
+      baseRegistryHash: hashRegistry(registry),
+      restoredRegistryHash: hashRegistry(next)
+    };
+    this.#persistRestoreIntent(vaultPath, intent);
+    this.#recoverRestoreIntent(vaultPath, receipt, intent, operation);
+    return {
+      status: "undone",
+      operationId: operation.id,
+      undoOperationId,
+      revisionId: String(next.revision)
+    };
+  }
+
+  recoverIncompleteOperations(): AgentMemoryRecoveryResult {
+    let recovered = 0;
+    let failed = 0;
+    for (const vaultPath of this.#vaultPathsForRecovery()) {
+      for (const receipt of this.#readAllReceipts(vaultPath)) {
+        try {
+          const intent = this.#readRestoreIntent(vaultPath, receipt.operationId);
+          if (intent) {
+            const operation = this.#readOperation(vaultPath, receipt.operationId);
+            if (!operation) throw lifecycleConflict();
+            const undoOperation = this.#readOperation(vaultPath, intent.undoOperationId);
+            if (undoOperation) {
+              if (!isMatchingRestoreOperation(operation, undoOperation)) throw lifecycleConflict();
+            } else if (this.#recoverRestoreIntent(vaultPath, receipt, intent, operation)) recovered += 1;
+          } else if (this.#recoverReceipt(vaultPath, receipt)) {
+            recovered += 1;
+          }
+        } catch {
+          failed += 1;
+        }
+      }
+    }
+    return { recovered, failed };
+  }
+
+  #mutate(
+    vaultPath: string,
+    activeVaultId: string,
+    input: {
+      readonly action: MemoryLifecycleAction;
+      readonly requestId: string;
+      readonly expectedRevision: number;
+      readonly memoryId?: string;
+    }
+  ): MemoryLifecycleMutationResult {
+    this.#rememberVault(vaultPath);
+    const existing = this.#findReceiptByRequest(vaultPath, input.requestId);
+    if (existing) {
+      assertReceiptRequest(existing, activeVaultId, input);
+      this.#recoverReceipt(vaultPath, existing);
+      const current = this.#readRegistry(vaultPath);
+      return lifecycleResult("committed", activeVaultId, input.requestId, current, existing.operationId);
+    }
+    const registry = this.#readRegistry(vaultPath);
+    if (registry.revision !== input.expectedRevision) {
+      return lifecycleResult("stale", activeVaultId, input.requestId, registry);
+    }
+    if (registry.revision === Number.MAX_SAFE_INTEGER) throw lifecycleConflict();
+    const createdAt = this.#now().toISOString();
+    const operationId = createOperationId(input.requestId, createdAt);
+    const prepared = prepareMutation(registry, input, createdAt);
+    if (!prepared) return lifecycleResult("not_found", activeVaultId, input.requestId, registry);
+    const receipt: MemoryLifecycleReceipt = {
+      schemaVersion: 1,
+      action: input.action,
+      requestId: input.requestId,
+      activeVaultId,
+      ...(input.memoryId ? { memoryId: input.memoryId } : {}),
+      expectedRevision: input.expectedRevision,
+      operationId,
+      createdAt,
+      beforeRevision: registry.revision,
+      afterRevision: prepared.next.revision,
+      beforeRegistryHash: hashRegistry(registry),
+      afterRegistryHash: hashRegistry(prepared.next),
+      removedEvents: prepared.removedEvents,
+      removedRecords: prepared.removedRecords,
+      ...(prepared.beforeRecord ? { beforeRecord: prepared.beforeRecord } : {}),
+      ...(prepared.afterRecord ? { afterRecord: prepared.afterRecord } : {})
+    };
+    this.#persistReceipt(vaultPath, receipt);
+    this.#recoverReceipt(vaultPath, receipt);
+    return lifecycleResult("committed", activeVaultId, input.requestId, prepared.next, operationId);
+  }
+
+  #recoverReceipt(vaultPath: string, receipt: MemoryLifecycleReceipt): boolean {
+    const current = this.#readRegistry(vaultPath);
+    const currentHash = hashRegistry(current);
+    let changed = false;
+    if (currentHash === receipt.beforeRegistryHash && current.revision === receipt.beforeRevision) {
+      const next = applyReceipt(current, receipt);
+      if (hashRegistry(next) !== receipt.afterRegistryHash || next.revision !== receipt.afterRevision) {
+        throw lifecycleConflict();
+      }
+      this.#writeRegistryExact(vaultPath, currentHash, next);
+      this.#syncInspectableRecords(vaultPath, receipt, next);
+      changed = true;
+    } else if (currentHash !== receipt.afterRegistryHash || current.revision !== receipt.afterRevision) {
+      throw lifecycleConflict();
+    }
+    const operation = createLifecycleOperation(receipt);
+    const operationWasMissing = this.#readOperation(vaultPath, operation.id) === undefined;
+    this.#persistOperation(vaultPath, operation);
+    return changed || operationWasMissing;
+  }
+
+  #recoverRestoreIntent(
+    vaultPath: string,
+    receipt: MemoryLifecycleReceipt,
+    intent: MemoryRestoreIntent,
+    originalOperation: OperationRecord
+  ): boolean {
+    if (intent.originalOperationId !== originalOperation.id || intent.undoOperationId !== createUndoOperationId(originalOperation.id)) {
+      throw lifecycleConflict();
+    }
+    const current = this.#readRegistry(vaultPath);
+    const currentHash = hashRegistry(current);
+    let changed = false;
+    if (currentHash === intent.baseRegistryHash && current.revision === intent.baseRevision) {
+      const next = createUndoRegistry(current, receipt, intent.createdAt);
+      if (next.revision !== intent.restoredRevision || hashRegistry(next) !== intent.restoredRegistryHash) {
+        throw lifecycleConflict();
+      }
+      this.#writeRegistryExact(vaultPath, currentHash, next);
+      for (const record of restoredRecords(receipt, next)) this.#writeInspectableRecord(vaultPath, record);
+      changed = true;
+    } else if (currentHash !== intent.restoredRegistryHash || current.revision !== intent.restoredRevision) {
+      throw lifecycleConflict();
+    }
+    const restoreOperation = createRestoreOperation(originalOperation, receipt, intent);
+    const operationWasMissing = this.#readOperation(vaultPath, restoreOperation.id) === undefined;
+    this.#persistOperation(vaultPath, restoreOperation);
+    return changed || operationWasMissing;
   }
 
   #readRegistry(vaultPath: string): MemoryRegistry {
@@ -167,31 +514,367 @@ export class AgentMemoryService {
       throw new PigeDomainError("memory.registry_invalid", "The vault memory registry is unsafe.");
     }
     const parsed = JSON.parse(fs.readFileSync(registryPath, "utf8")) as MemoryRegistry;
-    if (parsed.schemaVersion !== 1 || !Number.isSafeInteger(parsed.revision) || parsed.revision < 0 || !Array.isArray(parsed.events) || !Array.isArray(parsed.records)) {
-      throw new PigeDomainError("memory.registry_invalid", "The vault memory registry is invalid.");
-    }
-    const events = parsed.events.map(parseMemoryEvent);
-    const records = parsed.records.map(parseStoredMemoryRecord);
-    assertRegistryBindings(events, records);
-    return {
-      schemaVersion: 1,
-      revision: parsed.revision,
-      events,
-      records
-    };
+    return parseRegistry(parsed);
   }
 
   #writeRegistry(vaultPath: string, registry: MemoryRegistry): void {
-    const root = ensureMemoryRoot(vaultPath);
-    atomicWrite(path.join(root, REGISTRY_FILE), `${JSON.stringify(registry, null, 2)}\n`);
+    atomicWrite(path.join(ensureMemoryRoot(vaultPath), REGISTRY_FILE), serializeRegistry(registry), this.#randomBytes);
+  }
+
+  #writeRegistryExact(vaultPath: string, expectedHash: string, registry: MemoryRegistry): void {
+    const current = this.#readRegistry(vaultPath);
+    if (hashRegistry(current) !== expectedHash) throw lifecycleConflict();
+    this.#writeRegistry(vaultPath, registry);
   }
 
   #writeInspectableRecord(vaultPath: string, record: MemoryRecordSummary): void {
     const atomsRoot = path.join(ensureMemoryRoot(vaultPath), "atoms");
     ensureDirectory(atomsRoot);
     const frontmatter = JSON.stringify({ ...record, body: undefined });
-    atomicWrite(path.join(atomsRoot, `${record.id}.md`), `---\n${frontmatter}\n---\n\n${record.body}\n`);
+    atomicWrite(path.join(atomsRoot, `${record.id}.md`), `---\n${frontmatter}\n---\n\n${record.body}\n`, this.#randomBytes);
   }
+
+  #syncInspectableRecords(vaultPath: string, receipt: MemoryLifecycleReceipt, next: MemoryRegistry): void {
+    for (const removed of receipt.removedRecords) {
+      removeRegularFileIfPresent(path.join(ensureMemoryRoot(vaultPath), "atoms", `${removed.id}.md`));
+    }
+    if (receipt.afterRecord) this.#writeInspectableRecord(vaultPath, receipt.afterRecord);
+    for (const record of next.records.filter((entry) => receipt.removedRecords.some((removed) => removed.id === entry.id))) {
+      this.#writeInspectableRecord(vaultPath, record);
+    }
+  }
+
+  #persistReceipt(vaultPath: string, receipt: MemoryLifecycleReceipt): void {
+    const relativePath = receiptRelativePath(receipt);
+    writePrivateExclusive(vaultPath, relativePath, `${JSON.stringify(receipt, null, 2)}\n`, this.#randomBytes);
+    const adopted = this.#readReceipt(vaultPath, relativePath);
+    if (!adopted || stableJson(adopted) !== stableJson(receipt)) throw lifecycleConflict();
+  }
+
+  #persistRestoreIntent(vaultPath: string, intent: MemoryRestoreIntent): void {
+    const relativePath = restoreIntentRelativePath(intent.originalOperationId);
+    writePrivateExclusive(vaultPath, relativePath, `${JSON.stringify(intent, null, 2)}\n`, this.#randomBytes);
+    const adopted = this.#readRestoreIntent(vaultPath, intent.originalOperationId);
+    if (!adopted || stableJson(adopted) !== stableJson(intent)) throw lifecycleConflict();
+  }
+
+  #persistOperation(vaultPath: string, operation: OperationRecord): void {
+    const relativePath = operationRelativePath(operation.id);
+    writePrivateExclusive(vaultPath, relativePath, `${JSON.stringify(operation, null, 2)}\n`, this.#randomBytes);
+    const adopted = this.#readOperation(vaultPath, operation.id);
+    if (!adopted || stableJson(adopted) !== stableJson(operation)) throw lifecycleConflict();
+  }
+
+  #readReceipt(vaultPath: string, relativePath: string): MemoryLifecycleReceipt | undefined {
+    const value = readPrivateJson(vaultPath, relativePath, MAX_PRIVATE_RECORD_BYTES);
+    return value === undefined ? undefined : parseReceipt(value);
+  }
+
+  #findReceiptByRequest(vaultPath: string, requestId: string): MemoryLifecycleReceipt | undefined {
+    const mutation = this.#readReceipt(vaultPath, `.pige/memory/mutations/${requestId}.json`);
+    const trash = this.#readReceipt(vaultPath, `.pige/trash/memory/${requestId}.json`);
+    if (mutation && trash) throw lifecycleConflict();
+    return mutation ?? trash;
+  }
+
+  #readReceiptForOperation(vaultPath: string, operation: OperationRecord): MemoryLifecycleReceipt | undefined {
+    const binding = readMemoryOperationBinding(operation);
+    return binding ? this.#readReceipt(vaultPath, binding.receiptPath) : undefined;
+  }
+
+  #readRestoreIntent(vaultPath: string, operationId: string): MemoryRestoreIntent | undefined {
+    const value = readPrivateJson(vaultPath, restoreIntentRelativePath(operationId), MAX_PRIVATE_RECORD_BYTES);
+    return value === undefined ? undefined : parseRestoreIntent(value);
+  }
+
+  #readOperation(vaultPath: string, operationId: string): OperationRecord | undefined {
+    const value = readPrivateJson(vaultPath, operationRelativePath(operationId), MAX_PRIVATE_RECORD_BYTES);
+    return value === undefined ? undefined : OperationRecordSchema.parse(value);
+  }
+
+  #readAllReceipts(vaultPath: string): readonly MemoryLifecycleReceipt[] {
+    const relativeRoots = [".pige/memory/mutations", ".pige/trash/memory"];
+    const receipts: MemoryLifecycleReceipt[] = [];
+    for (const relativeRoot of relativeRoots) {
+      const root = resolveVaultPrivatePath(vaultPath, relativeRoot);
+      if (!fs.existsSync(root)) continue;
+      const stats = fs.lstatSync(root);
+      if (!stats.isDirectory() || stats.isSymbolicLink()) throw lifecycleConflict();
+      for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+        if (!entry.isFile() || entry.isSymbolicLink() || !/^memory_request_[a-z0-9]{16,64}\.json$/u.test(entry.name)) continue;
+        const receipt = this.#readReceipt(vaultPath, `${relativeRoot}/${entry.name}`);
+        if (receipt) receipts.push(receipt);
+      }
+    }
+    return receipts;
+  }
+
+  #rememberVault(vaultPath: string): void {
+    this.#knownVaultPaths.add(fs.realpathSync.native(vaultPath));
+  }
+
+  #currentVaultPath(): string | undefined {
+    const configured = this.#activeVaultPath?.();
+    if (configured) return configured;
+    return this.#knownVaultPaths.size === 1 ? [...this.#knownVaultPaths][0] : undefined;
+  }
+
+  #vaultPathsForRecovery(): readonly string[] {
+    const configured = this.#activeVaultPath?.();
+    return configured ? [configured] : [...this.#knownVaultPaths];
+  }
+}
+
+function prepareMutation(
+  registry: MemoryRegistry,
+  input: { readonly action: MemoryLifecycleAction; readonly memoryId?: string },
+  now: string
+): {
+  readonly next: MemoryRegistry;
+  readonly removedEvents: readonly MemoryEventRecord[];
+  readonly removedRecords: readonly StoredMemoryRecord[];
+  readonly beforeRecord?: StoredMemoryRecord;
+  readonly afterRecord?: StoredMemoryRecord;
+} | undefined {
+  if (input.action === "enable") {
+    const index = registry.records.findIndex((record) => record.id === input.memoryId);
+    if (index < 0 || registry.records[index]!.status !== "disabled") return undefined;
+    const beforeRecord = registry.records[index]!;
+    const afterRecord = { ...beforeRecord, status: "active" as const, updatedAt: now };
+    const records = [...registry.records];
+    records[index] = afterRecord;
+    return {
+      next: { schemaVersion: 1, revision: registry.revision + 1, events: registry.events, records },
+      removedEvents: [],
+      removedRecords: [],
+      beforeRecord,
+      afterRecord
+    };
+  }
+  const removedRecords = input.action === "reset"
+    ? [...registry.records]
+    : registry.records.filter((record) => record.id === input.memoryId);
+  if (removedRecords.length === 0) return undefined;
+  const removedEventIds = new Set(removedRecords.map((record) => record.eventId));
+  const removedEvents = registry.events.filter((event) => removedEventIds.has(event.id));
+  const next = {
+    schemaVersion: 1 as const,
+    revision: registry.revision + 1,
+    events: registry.events.filter((event) => !removedEventIds.has(event.id)),
+    records: registry.records.filter((record) => !removedEventIds.has(record.eventId))
+  };
+  return { next, removedEvents, removedRecords };
+}
+
+function applyReceipt(registry: MemoryRegistry, receipt: MemoryLifecycleReceipt): MemoryRegistry {
+  if (receipt.action === "enable") {
+    const index = registry.records.findIndex((record) => record.id === receipt.memoryId);
+    if (index < 0 || !receipt.beforeRecord || !receipt.afterRecord || stableJson(registry.records[index]) !== stableJson(receipt.beforeRecord)) {
+      throw lifecycleConflict();
+    }
+    const records = [...registry.records];
+    records[index] = receipt.afterRecord;
+    return { schemaVersion: 1, revision: receipt.afterRevision, events: registry.events, records };
+  }
+  const removedIds = new Set(receipt.removedRecords.map((record) => record.id));
+  const removedEventIds = new Set(receipt.removedEvents.map((event) => event.id));
+  if (
+    receipt.removedRecords.some((removed) => !registry.records.some((record) => stableJson(record) === stableJson(removed))) ||
+    receipt.removedEvents.some((removed) => !registry.events.some((event) => stableJson(event) === stableJson(removed)))
+  ) throw lifecycleConflict();
+  return {
+    schemaVersion: 1,
+    revision: receipt.afterRevision,
+    events: registry.events.filter((event) => !removedEventIds.has(event.id)),
+    records: registry.records.filter((record) => !removedIds.has(record.id))
+  };
+}
+
+function createUndoRegistry(registry: MemoryRegistry, receipt: MemoryLifecycleReceipt, now: string): MemoryRegistry {
+  if (registry.revision === Number.MAX_SAFE_INTEGER) throw lifecycleConflict();
+  if (receipt.action === "enable") {
+    const current = registry.records.find((record) => record.id === receipt.memoryId);
+    if (!current || !receipt.afterRecord || !receipt.beforeRecord || stableJson(current) !== stableJson(receipt.afterRecord)) {
+      throw lifecycleConflict();
+    }
+    const records = registry.records.map((record) => record.id === current.id
+      ? { ...receipt.beforeRecord!, updatedAt: now }
+      : record);
+    return { schemaVersion: 1, revision: registry.revision + 1, events: registry.events, records };
+  }
+  const eventIds = new Set(registry.events.map((event) => event.id));
+  const recordIds = new Set(registry.records.map((record) => record.id));
+  if (
+    receipt.removedEvents.some((event) => eventIds.has(event.id)) ||
+    receipt.removedRecords.some((record) => recordIds.has(record.id))
+  ) throw lifecycleConflict();
+  const next = {
+    schemaVersion: 1 as const,
+    revision: registry.revision + 1,
+    events: [...registry.events, ...receipt.removedEvents],
+    records: [...registry.records, ...receipt.removedRecords]
+  };
+  assertRegistryBindings(next.events, next.records);
+  return next;
+}
+
+function restoredRecords(receipt: MemoryLifecycleReceipt, registry: MemoryRegistry): readonly StoredMemoryRecord[] {
+  if (receipt.action === "enable") {
+    return registry.records.filter((record) => record.id === receipt.memoryId);
+  }
+  const restored = new Set(receipt.removedRecords.map((record) => record.id));
+  return registry.records.filter((record) => restored.has(record.id));
+}
+
+function createLifecycleOperation(receipt: MemoryLifecycleReceipt): OperationRecord {
+  const receiptPath = receiptRelativePath(receipt);
+  const targetRefs = receipt.memoryId ? [{ kind: "memory" as const, id: receipt.memoryId }] : [];
+  return OperationRecordSchema.parse({
+    id: receipt.operationId,
+    schemaVersion: 1,
+    createdAt: receipt.createdAt,
+    actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+    kind: receipt.action === "enable" ? "update_memory" : "trash_memory",
+    targetRefs,
+    sourceRefs: [],
+    before: { kind: "memory", id: `registry_revision_${receipt.beforeRevision}`, path: receiptPath, checksum: receipt.beforeRegistryHash },
+    after: { kind: "memory", id: `registry_revision_${receipt.afterRevision}`, path: ".pige/memory/registry.json", checksum: receipt.afterRegistryHash },
+    summary: receipt.action === "enable"
+      ? "Enabled an Agent memory record."
+      : receipt.action === "delete"
+        ? "Moved an Agent memory record to private trash."
+        : "Moved all Agent memory records to private trash.",
+    reversible: "yes",
+    rollbackHint: "Restore the exact private memory receipt without replacing later memory records.",
+    warnings: []
+  });
+}
+
+function createRestoreOperation(
+  original: OperationRecord,
+  receipt: MemoryLifecycleReceipt,
+  intent: MemoryRestoreIntent
+): OperationRecord {
+  const targetRefs = receipt.memoryId ? [{ kind: "memory" as const, id: receipt.memoryId }] : [];
+  return OperationRecordSchema.parse({
+    id: intent.undoOperationId,
+    schemaVersion: 1,
+    createdAt: intent.createdAt,
+    actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+    kind: "restore_memory",
+    targetRefs,
+    sourceRefs: [{ kind: "operation", id: original.id }],
+    before: { kind: "memory", id: `registry_revision_${intent.baseRevision}`, path: restoreIntentRelativePath(original.id), checksum: intent.baseRegistryHash },
+    after: { kind: "memory", id: `registry_revision_${intent.restoredRevision}`, path: ".pige/memory/registry.json", checksum: intent.restoredRegistryHash },
+    summary: receipt.action === "enable"
+      ? "Restored the prior disabled Agent memory state."
+      : receipt.action === "delete"
+        ? "Restored an Agent memory record from private trash."
+        : "Restored Agent memory records from private trash.",
+    reversible: "best_effort",
+    rollbackHint: "Create another explicit memory lifecycle action if the restored registry remains current.",
+    warnings: []
+  });
+}
+
+interface MemoryOperationBinding {
+  readonly action: MemoryLifecycleAction | "restore";
+  readonly memoryId?: string;
+  readonly receiptPath: string;
+  readonly beforeRevision: number;
+  readonly afterRevision: number;
+}
+
+function undoUnavailableReason(
+  registry: MemoryRegistry,
+  receipt: MemoryLifecycleReceipt
+): "content_changed" | "revision_changed" | "target_missing" | undefined {
+  if (registry.revision < receipt.afterRevision) return "revision_changed";
+  if (receipt.action === "enable") {
+    const current = registry.records.find((record) => record.id === receipt.memoryId);
+    if (!current) return "target_missing";
+    return receipt.afterRecord && stableJson(current) === stableJson(receipt.afterRecord)
+      ? undefined
+      : "content_changed";
+  }
+  const eventIds = new Set(registry.events.map((event) => event.id));
+  const recordIds = new Set(registry.records.map((record) => record.id));
+  return receipt.removedEvents.some((event) => eventIds.has(event.id)) ||
+    receipt.removedRecords.some((record) => recordIds.has(record.id))
+    ? "content_changed"
+    : undefined;
+}
+
+function readMemoryOperationBinding(operation: OperationRecord): MemoryOperationBinding | undefined {
+  if (!(["update_memory", "trash_memory", "restore_memory"] as const).includes(operation.kind as never)) return undefined;
+  if (
+    operation.actor.kind !== "user" || operation.actor.runtimeKind !== "desktop_local" ||
+    operation.jobId !== undefined || operation.proposalId !== undefined || operation.modelProfileId !== undefined ||
+    operation.skillId !== undefined || operation.packageId !== undefined || operation.policyAudit !== undefined ||
+    operation.targetRefs.length > 1 || operation.targetRefs.some((reference) => reference.kind !== "memory" || !!reference.path) ||
+    operation.before?.kind !== "memory" || operation.after?.kind !== "memory" ||
+    !operation.before.path || !operation.after.path || !operation.before.checksum || !operation.after.checksum ||
+    !/^sha256:[a-f0-9]{64}$/u.test(operation.before.checksum) || !/^sha256:[a-f0-9]{64}$/u.test(operation.after.checksum) ||
+    operation.after.path !== ".pige/memory/registry.json"
+  ) return undefined;
+  const beforeRevision = parseRegistryRevision(operation.before.id);
+  const afterRevision = parseRegistryRevision(operation.after.id);
+  if (beforeRevision === undefined || afterRevision === undefined || afterRevision <= beforeRevision) return undefined;
+  if (operation.kind === "restore_memory") {
+    if (operation.sourceRefs.length !== 1 || operation.sourceRefs[0]?.kind !== "operation") return undefined;
+    return {
+      action: "restore",
+      ...(operation.targetRefs[0] ? { memoryId: operation.targetRefs[0].id } : {}),
+      receiptPath: operation.before.path,
+      beforeRevision,
+      afterRevision
+    };
+  }
+  if (operation.sourceRefs.length !== 0) return undefined;
+  const action = operation.kind === "update_memory"
+    ? "enable"
+    : operation.targetRefs.length === 0 ? "reset" : "delete";
+  return {
+    action,
+    ...(operation.targetRefs[0] ? { memoryId: operation.targetRefs[0].id } : {}),
+    receiptPath: operation.before.path,
+    beforeRevision,
+    afterRevision
+  };
+}
+
+function isMatchingRestoreOperation(original: OperationRecord, candidate: OperationRecord): boolean {
+  const originalBinding = readMemoryOperationBinding(original);
+  const restoreBinding = readMemoryOperationBinding(candidate);
+  return !!originalBinding && !!restoreBinding && restoreBinding.action === "restore" &&
+    candidate.id === createUndoOperationId(original.id) &&
+    candidate.sourceRefs.length === 1 && candidate.sourceRefs[0]?.kind === "operation" && candidate.sourceRefs[0].id === original.id &&
+    restoreBinding.memoryId === originalBinding.memoryId &&
+    restoreBinding.beforeRevision >= originalBinding.afterRevision;
+}
+
+function parseRegistryRevision(value: string): number | undefined {
+  const match = /^registry_revision_(\d+)$/u.exec(value);
+  if (!match) return undefined;
+  const revision = Number(match[1]);
+  return Number.isSafeInteger(revision) ? revision : undefined;
+}
+
+function lifecycleResult(
+  status: "committed" | "stale" | "not_found",
+  activeVaultId: string,
+  requestId: string,
+  registry: MemoryRegistry,
+  operationId?: string
+): MemoryLifecycleMutationResult {
+  return MemoryLifecycleMutationResultSchema.parse({
+    apiVersion: 1,
+    status,
+    requestId,
+    activeVaultId,
+    ...(operationId ? { operationId } : {}),
+    summary: projectSummary(activeVaultId, registry)
+  });
 }
 
 function projectSummary(activeVaultId: string, registry: MemoryRegistry): MemorySummary {
@@ -199,21 +882,33 @@ function projectSummary(activeVaultId: string, registry: MemoryRegistry): Memory
     apiVersion: 1,
     activeVaultId,
     revision: registry.revision,
-  records: [...registry.records]
-    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-    .map(projectRecord)
+    records: [...registry.records]
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .map(projectRecord)
   });
 }
 
 function createMemoryId(sourceEventId: string): string {
   const match = /^evt_(\d{8})_[a-z0-9]{8,}$/u.exec(sourceEventId);
   if (!match) throw new PigeDomainError("memory.provenance_invalid", "Memory requires a durable user event identity.");
-  const date = match[1]!;
-  return `memory_${date}_${createHash("sha256").update(sourceEventId).digest("hex").slice(0, 20)}`;
+  return `memory_${match[1]!}_${createHash("sha256").update(sourceEventId).digest("hex").slice(0, 20)}`;
 }
 
 function createMemoryEventId(sourceEventId: string): string {
   return `memory_event_${createHash("sha256").update(sourceEventId).digest("hex").slice(0, 20)}`;
+}
+
+function createOperationId(requestId: string, createdAt: string): string {
+  const date = createdAt.slice(0, 10).replace(/-/gu, "");
+  const suffix = createHash("sha256").update(`pige.memory.lifecycle.v1\0${requestId}`).digest("hex").slice(0, 20);
+  return `op_${date}_${suffix}`;
+}
+
+function createUndoOperationId(operationId: string): string {
+  const date = OPERATION_ID_PATTERN.exec(operationId)?.[1];
+  if (!date) throw lifecycleConflict();
+  const suffix = createHash("sha256").update(`pige.memory.lifecycle.undo.v1\0${operationId}`).digest("hex").slice(0, 20);
+  return `op_${date}_${suffix}`;
 }
 
 function projectRecord(record: StoredMemoryRecord): MemoryRecordSummary {
@@ -229,38 +924,42 @@ function projectRecord(record: StoredMemoryRecord): MemoryRecordSummary {
   });
 }
 
+function parseRegistry(value: MemoryRegistry): MemoryRegistry {
+  if (
+    value.schemaVersion !== 1 || !Number.isSafeInteger(value.revision) || value.revision < 0 ||
+    !Array.isArray(value.events) || !Array.isArray(value.records) || value.records.length > 1_000
+  ) throw registryInvalid("The vault memory registry is invalid.");
+  const events = value.events.map(parseMemoryEvent);
+  const records = value.records.map(parseStoredMemoryRecord);
+  assertRegistryBindings(events, records);
+  return { schemaVersion: 1, revision: value.revision, events, records };
+}
+
 function parseMemoryEvent(value: unknown): MemoryEventRecord {
-  if (!value || typeof value !== "object") throw new PigeDomainError("memory.registry_invalid", "A memory event is invalid.");
+  if (!value || typeof value !== "object") throw registryInvalid("A memory event is invalid.");
   const event = value as Partial<MemoryEventRecord>;
   if (
     typeof event.id !== "string" || !/^memory_event_[a-f0-9]{20}$/u.test(event.id) ||
     event.kind !== "explicit_remember" || typeof event.title !== "string" || typeof event.body !== "string" ||
     typeof event.conversationId !== "string" || typeof event.userEventId !== "string" ||
     typeof event.parentJobId !== "string" || typeof event.occurredAt !== "string"
-  ) {
-    throw new PigeDomainError("memory.registry_invalid", "A memory event is invalid.");
-  }
+  ) throw registryInvalid("A memory event is invalid.");
   return event as MemoryEventRecord;
 }
 
 function parseStoredMemoryRecord(value: unknown): StoredMemoryRecord {
-  if (!value || typeof value !== "object") throw new PigeDomainError("memory.registry_invalid", "A memory atom is invalid.");
+  if (!value || typeof value !== "object") throw registryInvalid("A memory atom is invalid.");
   const record = value as Partial<StoredMemoryRecord>;
   const summary = projectRecord(record as StoredMemoryRecord);
   if (
     typeof record.eventId !== "string" || !/^memory_event_[a-f0-9]{20}$/u.test(record.eventId) ||
     typeof record.conversationId !== "string" || typeof record.userEventId !== "string" ||
     typeof record.parentJobId !== "string"
-  ) {
-    throw new PigeDomainError("memory.registry_invalid", "A memory atom provenance binding is invalid.");
-  }
+  ) throw registryInvalid("A memory atom provenance binding is invalid.");
   return { ...summary, eventId: record.eventId, conversationId: record.conversationId, userEventId: record.userEventId, parentJobId: record.parentJobId };
 }
 
-function assertRegistryBindings(
-  events: readonly MemoryEventRecord[],
-  records: readonly StoredMemoryRecord[]
-): void {
+function assertRegistryBindings(events: readonly MemoryEventRecord[], records: readonly StoredMemoryRecord[]): void {
   const eventsById = new Map<string, MemoryEventRecord>();
   for (const event of events) {
     if (eventsById.has(event.id)) throw registryInvalid("The memory registry contains duplicate events.");
@@ -269,34 +968,104 @@ function assertRegistryBindings(
   const recordIds = new Set<string>();
   const boundEventIds = new Set<string>();
   for (const record of records) {
-    if (recordIds.has(record.id) || boundEventIds.has(record.eventId)) {
-      throw registryInvalid("The memory registry contains duplicate atoms.");
-    }
+    if (recordIds.has(record.id) || boundEventIds.has(record.eventId)) throw registryInvalid("The memory registry contains duplicate atoms.");
     recordIds.add(record.id);
     boundEventIds.add(record.eventId);
     const event = eventsById.get(record.eventId);
     if (
-      !event ||
-      event.title !== record.title ||
-      event.body !== record.body ||
-      event.conversationId !== record.conversationId ||
-      event.userEventId !== record.userEventId ||
-      event.parentJobId !== record.parentJobId ||
-      event.occurredAt !== record.provenance.occurredAt ||
-      event.occurredAt !== record.createdAt ||
-      record.id !== createMemoryId(event.userEventId) ||
+      !event || event.title !== record.title || event.body !== record.body ||
+      event.conversationId !== record.conversationId || event.userEventId !== record.userEventId ||
+      event.parentJobId !== record.parentJobId || event.occurredAt !== record.provenance.occurredAt ||
+      event.occurredAt !== record.createdAt || record.id !== createMemoryId(event.userEventId) ||
       event.id !== createMemoryEventId(event.userEventId)
-    ) {
-      throw registryInvalid("A memory atom is not bound to its explicit event.");
-    }
+    ) throw registryInvalid("A memory atom is not bound to its explicit event.");
   }
-  if (eventsById.size !== boundEventIds.size) {
-    throw registryInvalid("The memory registry contains an unbound event.");
-  }
+  if (eventsById.size !== boundEventIds.size) throw registryInvalid("The memory registry contains an unbound event.");
 }
 
-function registryInvalid(message: string): PigeDomainError {
-  return new PigeDomainError("memory.registry_invalid", message);
+function parseReceipt(value: unknown): MemoryLifecycleReceipt {
+  if (!value || typeof value !== "object") throw lifecycleConflict();
+  const receipt = value as Partial<MemoryLifecycleReceipt>;
+  if (
+    receipt.schemaVersion !== 1 || !(["enable", "delete", "reset"] as const).includes(receipt.action as never) ||
+    typeof receipt.requestId !== "string" || !/^memory_request_[a-z0-9]{16,64}$/u.test(receipt.requestId) ||
+    typeof receipt.activeVaultId !== "string" || !OPERATION_ID_PATTERN.test(receipt.operationId ?? "") ||
+    typeof receipt.createdAt !== "string" || !Number.isSafeInteger(receipt.expectedRevision) ||
+    !Number.isSafeInteger(receipt.beforeRevision) || !Number.isSafeInteger(receipt.afterRevision) ||
+    receipt.afterRevision !== receipt.beforeRevision! + 1 || !isSha256(receipt.beforeRegistryHash) ||
+    !isSha256(receipt.afterRegistryHash) || !Array.isArray(receipt.removedEvents) || !Array.isArray(receipt.removedRecords)
+  ) throw lifecycleConflict();
+  const removedEvents = receipt.removedEvents.map(parseMemoryEvent);
+  const removedRecords = receipt.removedRecords.map(parseStoredMemoryRecord);
+  assertRegistryBindings(removedEvents, removedRecords);
+  const beforeRecord = receipt.beforeRecord ? parseStoredMemoryRecord(receipt.beforeRecord) : undefined;
+  const afterRecord = receipt.afterRecord ? parseStoredMemoryRecord(receipt.afterRecord) : undefined;
+  if (
+    receipt.action === "enable"
+      ? (!receipt.memoryId || !beforeRecord || !afterRecord || removedRecords.length !== 0 || removedEvents.length !== 0)
+      : (receipt.action === "delete" ? !receipt.memoryId || removedRecords.length !== 1 : !!receipt.memoryId) ||
+        beforeRecord !== undefined || afterRecord !== undefined
+  ) throw lifecycleConflict();
+  return { ...(receipt as MemoryLifecycleReceipt), removedEvents, removedRecords, ...(beforeRecord ? { beforeRecord } : {}), ...(afterRecord ? { afterRecord } : {}) };
+}
+
+function parseRestoreIntent(value: unknown): MemoryRestoreIntent {
+  if (!value || typeof value !== "object") throw lifecycleConflict();
+  const intent = value as Partial<MemoryRestoreIntent>;
+  if (
+    intent.schemaVersion !== 1 || !OPERATION_ID_PATTERN.test(intent.originalOperationId ?? "") ||
+    !OPERATION_ID_PATTERN.test(intent.undoOperationId ?? "") || typeof intent.createdAt !== "string" ||
+    !Number.isSafeInteger(intent.baseRevision) || !Number.isSafeInteger(intent.restoredRevision) ||
+    intent.restoredRevision !== intent.baseRevision! + 1 || !isSha256(intent.baseRegistryHash) || !isSha256(intent.restoredRegistryHash)
+  ) throw lifecycleConflict();
+  return intent as MemoryRestoreIntent;
+}
+
+function assertReceiptRequest(
+  receipt: MemoryLifecycleReceipt,
+  activeVaultId: string,
+  input: { readonly action: MemoryLifecycleAction; readonly expectedRevision: number; readonly memoryId?: string }
+): void {
+  if (
+    receipt.activeVaultId !== activeVaultId || receipt.action !== input.action ||
+    receipt.expectedRevision !== input.expectedRevision || receipt.memoryId !== input.memoryId
+  ) throw lifecycleConflict();
+}
+
+function receiptRelativePath(receipt: MemoryLifecycleReceipt): string {
+  return receipt.action === "enable"
+    ? `.pige/memory/mutations/${receipt.requestId}.json`
+    : `.pige/trash/memory/${receipt.requestId}.json`;
+}
+
+function restoreIntentRelativePath(operationId: string): string {
+  if (!OPERATION_ID_PATTERN.test(operationId)) throw lifecycleConflict();
+  return `.pige/trash/memory/${operationId}.restore.json`;
+}
+
+function operationRelativePath(operationId: string): string {
+  const date = OPERATION_ID_PATTERN.exec(operationId)?.[1];
+  if (!date) throw lifecycleConflict();
+  return `.pige/operations/${date.slice(0, 4)}/${date.slice(4, 6)}/${operationId}.json`;
+}
+
+function serializeRegistry(registry: MemoryRegistry): string {
+  return `${JSON.stringify(registry, null, 2)}\n`;
+}
+
+function hashRegistry(registry: MemoryRegistry): string {
+  return `sha256:${createHash("sha256").update(stableJson(registry)).digest("hex")}`;
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right, "en-US"))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function ensureMemoryRoot(vaultPath: string): string {
@@ -313,28 +1082,129 @@ function ensureMemoryRoot(vaultPath: string): string {
 function ensureDirectory(directoryPath: string): void {
   fs.mkdirSync(directoryPath, { recursive: true, mode: 0o700 });
   const stats = fs.lstatSync(directoryPath);
-  if (!stats.isDirectory() || stats.isSymbolicLink()) {
-    throw new PigeDomainError("memory.path_unsafe", "A memory directory is unsafe.");
-  }
+  if (!stats.isDirectory() || stats.isSymbolicLink()) throw new PigeDomainError("memory.path_unsafe", "A memory directory is unsafe.");
 }
 
-function atomicWrite(filePath: string, contents: string): void {
-  const temporaryPath = `${filePath}.tmp-${process.pid}-${randomBytes(8).toString("hex")}`;
+function resolveVaultPrivatePath(vaultPath: string, relativePath: string): string {
+  if (
+    path.isAbsolute(relativePath) || relativePath.includes("\\") ||
+    relativePath.split("/").some((part) => !part || part === "." || part === "..")
+  ) throw lifecycleConflict();
+  const root = fs.realpathSync.native(vaultPath);
+  const resolved = path.resolve(root, ...relativePath.split("/"));
+  if (!resolved.startsWith(`${root}${path.sep}`)) throw lifecycleConflict();
+  return resolved;
+}
+
+function writePrivateExclusive(
+  vaultPath: string,
+  relativePath: string,
+  contents: string,
+  random: (size: number) => Buffer
+): void {
+  if (Buffer.byteLength(contents, "utf8") > MAX_PRIVATE_RECORD_BYTES) throw lifecycleConflict();
+  const filePath = resolveVaultPrivatePath(vaultPath, relativePath);
+  ensureDirectory(path.dirname(filePath));
+  if (fs.existsSync(filePath)) {
+    const stats = fs.lstatSync(filePath);
+    if (!stats.isFile() || stats.isSymbolicLink() || fs.readFileSync(filePath, "utf8") !== contents) throw lifecycleConflict();
+    return;
+  }
+  atomicWriteExclusive(filePath, contents, random);
+}
+
+function readPrivateJson(vaultPath: string, relativePath: string, maximumBytes: number): unknown | undefined {
+  const filePath = resolveVaultPrivatePath(vaultPath, relativePath);
+  if (!fs.existsSync(filePath)) return undefined;
+  const stats = fs.lstatSync(filePath);
+  if (!stats.isFile() || stats.isSymbolicLink() || stats.size > maximumBytes) throw lifecycleConflict();
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function atomicWrite(filePath: string, contents: string, random: (size: number) => Buffer): void {
+  const temporaryPath = `${filePath}.tmp-${process.pid}-${random(8).toString("hex")}`;
   let descriptor: number | undefined;
   try {
-    descriptor = fs.openSync(
-      temporaryPath,
-      fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | (fs.constants.O_NOFOLLOW ?? 0),
-      0o600
-    );
+    descriptor = fs.openSync(temporaryPath, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | (fs.constants.O_NOFOLLOW ?? 0), 0o600);
     fs.writeFileSync(descriptor, contents, "utf8");
     fs.fsyncSync(descriptor);
     fs.closeSync(descriptor);
     descriptor = undefined;
     fs.renameSync(temporaryPath, filePath);
+    fs.chmodSync(filePath, 0o600);
     flushDirectoryWhereSupported(path.dirname(filePath));
   } finally {
     if (descriptor !== undefined) fs.closeSync(descriptor);
     fs.rmSync(temporaryPath, { force: true });
   }
+}
+
+function atomicWriteExclusive(filePath: string, contents: string, random: (size: number) => Buffer): void {
+  const temporaryPath = `${filePath}.tmp-${process.pid}-${random(8).toString("hex")}`;
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(temporaryPath, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | (fs.constants.O_NOFOLLOW ?? 0), 0o600);
+    fs.writeFileSync(descriptor, contents, "utf8");
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    fs.linkSync(temporaryPath, filePath);
+    fs.unlinkSync(temporaryPath);
+    fs.chmodSync(filePath, 0o600);
+    flushDirectoryWhereSupported(path.dirname(filePath));
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+    fs.rmSync(temporaryPath, { force: true });
+  }
+}
+
+function writePrivateExport(destinationPath: string, contents: string, random: (size: number) => Buffer): void {
+  if (!path.isAbsolute(destinationPath)) throw lifecycleConflict();
+  const parent = path.dirname(destinationPath);
+  const parentStats = fs.lstatSync(parent);
+  if (!parentStats.isDirectory() || parentStats.isSymbolicLink()) throw lifecycleConflict();
+  const parentReal = fs.realpathSync.native(parent);
+  if (parentReal !== parent) throw lifecycleConflict();
+  if (fs.existsSync(destinationPath)) {
+    const destinationStats = fs.lstatSync(destinationPath);
+    if (!destinationStats.isFile() || destinationStats.isSymbolicLink()) throw lifecycleConflict();
+  }
+  const temporaryPath = path.join(parent, `.${path.basename(destinationPath)}.${process.pid}.${random(8).toString("hex")}.tmp`);
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(temporaryPath, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | (fs.constants.O_NOFOLLOW ?? 0), 0o600);
+    fs.writeFileSync(descriptor, contents, "utf8");
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    const parentAfter = fs.lstatSync(parent);
+    if (parentAfter.dev !== parentStats.dev || parentAfter.ino !== parentStats.ino || fs.realpathSync.native(parent) !== parentReal) throw lifecycleConflict();
+    if (fs.existsSync(destinationPath) && fs.lstatSync(destinationPath).isSymbolicLink()) throw lifecycleConflict();
+    fs.renameSync(temporaryPath, destinationPath);
+    fs.chmodSync(destinationPath, 0o600);
+    flushDirectoryWhereSupported(parent);
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+    fs.rmSync(temporaryPath, { force: true });
+  }
+}
+
+function removeRegularFileIfPresent(filePath: string): void {
+  if (!fs.existsSync(filePath)) return;
+  const stats = fs.lstatSync(filePath);
+  if (!stats.isFile() || stats.isSymbolicLink()) throw lifecycleConflict();
+  fs.unlinkSync(filePath);
+  flushDirectoryWhereSupported(path.dirname(filePath));
+}
+
+function isSha256(value: unknown): value is string {
+  return typeof value === "string" && /^sha256:[a-f0-9]{64}$/u.test(value);
+}
+
+function registryInvalid(message: string): PigeDomainError {
+  return new PigeDomainError("memory.registry_invalid", message);
+}
+
+function lifecycleConflict(): PigeDomainError {
+  return new PigeDomainError("memory.lifecycle_conflict", "The durable Memory lifecycle identity is conflicting or ambiguous.");
 }
