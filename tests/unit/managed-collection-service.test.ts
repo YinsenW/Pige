@@ -6,8 +6,10 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   DatasetManifestSchema,
+  DatasetRevisionSchema,
   DatasetSchemaRecordSchema,
   JobRecordSchema,
+  OperationRecordSchema,
   SourceRecordSchema
 } from "@pige/schemas";
 import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
@@ -27,6 +29,250 @@ afterEach(() => {
 });
 
 describe("ManagedCollectionService", () => {
+  it("adds nullable columns across all editable types, adopts replay, and restores the prior schema through Activity", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionService(port);
+    const initialManifest = readManifest(fixture.bundlePath);
+    const initialSchemaPath = path.join(fixture.bundlePath, initialManifest.schema.path);
+    const initialPayloadPath = path.join(fixture.bundlePath, initialManifest.payload.path);
+    const initialSchemaBytes = fs.readFileSync(initialSchemaPath);
+    const initialPayloadBytes = fs.readFileSync(initialPayloadPath);
+    const initialSchema = DatasetSchemaRecordSchema.parse(readJson(initialSchemaPath));
+    const table = required(initialSchema.tables[0]);
+    const initialOpen = await service.open({
+      apiVersion: 1,
+      requestId: "collection_request_columnopenabcdef",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id
+    });
+    expect(initialOpen).toMatchObject({
+      status: "ready",
+      snapshot: { canAddColumn: true, columns: expect.any(Array), rows: expect.any(Array) }
+    });
+    if (initialOpen.status !== "ready") throw new Error("Collection did not open");
+    const initialColumns = initialOpen.snapshot.columns;
+    const initialRows = initialOpen.snapshot.rows;
+
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "collection_request_columnaddabcdefg",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id,
+      expectedRevisionId: initialManifest.activeRevision,
+      label: "Notes",
+      logicalType: "string" as const
+    };
+    const committed = await service.addNullableColumn(request);
+    expect(committed).toMatchObject({
+      status: "committed",
+      snapshot: {
+        revisionId: expect.any(String),
+        columns: expect.arrayContaining([
+          { columnId: expect.any(String), label: "Notes", logicalType: "string" }
+        ]),
+        totalRowCount: initialRows.length,
+        returnedRowCount: initialRows.length,
+        canAddColumn: true
+      }
+    });
+    if (committed.status !== "committed") throw new Error("Collection column add did not commit");
+    expect(committed.snapshot.revisionId).not.toBe(initialManifest.activeRevision);
+    expect(committed.snapshot.columns).toHaveLength(initialColumns.length + 1);
+    expect(committed.snapshot.rows).toHaveLength(initialRows.length);
+    for (const row of committed.snapshot.rows) {
+      expect(row.cells.find((cell) => cell.columnId === committed.columnId)).toEqual({
+        columnId: committed.columnId,
+        value: null,
+        editable: true
+      });
+    }
+
+    const committedManifest = readManifest(fixture.bundlePath);
+    const committedRevision = DatasetRevisionSchema.parse(
+      readJson(path.join(fixture.bundlePath, committedManifest.revision.path))
+    );
+    expect(committedManifest.activeRevision).toBe(committed.snapshot.revisionId);
+    expect(committedManifest.initialRevision).toBe(initialManifest.activeRevision);
+    expect(committedRevision).toMatchObject({
+      id: committed.snapshot.revisionId,
+      parentRevisionId: initialManifest.activeRevision,
+      operationId: committed.operationId,
+      change: {
+        kind: "collection_column_add",
+        tableId: table.id,
+        columnId: committed.columnId
+      }
+    });
+    expect(committedRevision.payload.path).toBe(`data/revisions/${committedRevision.id}.sqlite`);
+    expect(fs.readFileSync(initialSchemaPath)).toEqual(initialSchemaBytes);
+    expect(fs.readFileSync(initialPayloadPath)).toEqual(initialPayloadBytes);
+
+    const operationPath = findFile(
+      path.join(fixture.vaultPath, ".pige/operations"),
+      `${committed.operationId}.json`
+    );
+    const operationBytes = fs.readFileSync(operationPath);
+    const operation = OperationRecordSchema.parse(readJson(operationPath));
+    expect(operation).toMatchObject({
+      id: committed.operationId,
+      kind: "add_collection_column",
+      reversible: "yes"
+    });
+    expect(operation.targetRefs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "dataset", id: initialManifest.datasetId }),
+      expect.objectContaining({ kind: "table", id: table.id }),
+      expect.objectContaining({ kind: "column", id: committed.columnId })
+    ]));
+
+    await expect(service.addNullableColumn(request)).resolves.toEqual(committed);
+    expect(readManifest(fixture.bundlePath).activeRevision).toBe(committed.snapshot.revisionId);
+    expect(readManifest(fixture.bundlePath).schema.path).toBe(committedManifest.schema.path);
+    const tamperedOperation = readJson(operationPath) as Record<string, unknown>;
+    fs.writeFileSync(operationPath, `${JSON.stringify({ ...tamperedOperation, summary: "tampered" }, null, 2)}\n`);
+    await expect(service.addNullableColumn(request)).rejects.toMatchObject({
+      code: "collection.request_conflict"
+    });
+    expect(readManifest(fixture.bundlePath).activeRevision).toBe(committed.snapshot.revisionId);
+    fs.writeFileSync(operationPath, operationBytes);
+
+    await expect(service.addNullableColumn({
+      ...request,
+      requestId: "collection_request_columnstaleabcde"
+    })).resolves.toMatchObject({
+      status: "stale",
+      snapshot: { revisionId: committed.snapshot.revisionId }
+    });
+    await expect(service.addNullableColumn({
+      ...request,
+      requestId: "collection_request_columnduplicatea",
+      expectedRevisionId: committed.snapshot.revisionId,
+      label: " Notes "
+    })).resolves.toMatchObject({ status: "invalid", reason: "duplicate_label" });
+
+    const activity = new KnowledgeActivityService(port, service);
+    const columnActivity = activity.list({ limit: 20 }).activities.find(
+      (entry) => entry.kind === "add_collection_column"
+    );
+    expect(columnActivity).toMatchObject({
+      operationId: committed.operationId,
+      status: "applied",
+      canUndo: true,
+      target: {
+        kind: "collection",
+        datasetId: initialManifest.datasetId,
+        tableId: table.id,
+        revisionId: committed.snapshot.revisionId
+      }
+    });
+    const undone = await activity.undo({
+      operationId: required(columnActivity).operationId,
+      expectedRevisionId: committed.snapshot.revisionId
+    });
+    expect(undone).toMatchObject({ status: "undone" });
+    if (undone.status !== "undone") throw new Error("Collection column add was not undone");
+    const afterUndo = await service.open({
+      apiVersion: 1,
+      requestId: "collection_request_columnundoabcdef",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id
+    });
+    expect(afterUndo).toMatchObject({
+      status: "ready",
+      snapshot: {
+        revisionId: undone.revisionId,
+        columns: initialColumns,
+        rows: initialRows,
+        canAddColumn: true
+      }
+    });
+    expect(undone.revisionId).not.toBe(initialManifest.activeRevision);
+    expect(undone.revisionId).not.toBe(committed.snapshot.revisionId);
+    const undoManifest = readManifest(fixture.bundlePath);
+    const undoRevision = DatasetRevisionSchema.parse(
+      readJson(path.join(fixture.bundlePath, undoManifest.revision.path))
+    );
+    expect(undoRevision).toMatchObject({
+      id: undone.revisionId,
+      parentRevisionId: committed.snapshot.revisionId,
+      change: {
+        kind: "collection_column_add_undo",
+        tableId: table.id,
+        columnId: committed.columnId,
+        undoOfOperationId: committed.operationId
+      }
+    });
+    expect(undoRevision.payload.path).toBe(`data/revisions/${undoRevision.id}.sqlite`);
+    expect(fs.readFileSync(initialSchemaPath)).toEqual(initialSchemaBytes);
+    expect(fs.readFileSync(initialPayloadPath)).toEqual(initialPayloadBytes);
+
+    let currentRevisionId = undone.revisionId;
+    const remainingTypes = ["integer", "number", "boolean", "date", "datetime"] as const;
+    for (const [index, logicalType] of remainingTypes.entries()) {
+      const added = await service.addNullableColumn({
+        ...request,
+        requestId: `collection_request_columntype${String(index).padStart(12, "0")}`,
+        expectedRevisionId: currentRevisionId,
+        label: `${logicalType} value`,
+        logicalType
+      });
+      expect(added).toMatchObject({
+        status: "committed",
+        snapshot: {
+          columns: expect.arrayContaining([
+            { columnId: expect.any(String), label: `${logicalType} value`, logicalType }
+          ]),
+          canAddColumn: true
+        }
+      });
+      if (added.status !== "committed") throw new Error(`Collection ${logicalType} column did not commit`);
+      for (const row of added.snapshot.rows) {
+        expect(row.cells.find((cell) => cell.columnId === added.columnId)).toEqual({
+          columnId: added.columnId,
+          value: null,
+          editable: true
+        });
+      }
+      currentRevisionId = added.snapshot.revisionId;
+    }
+
+    for (let index = initialColumns.length + remainingTypes.length; index < 32; index += 1) {
+      const added = await service.addNullableColumn({
+        ...request,
+        requestId: `collection_request_columnfill${String(index).padStart(10, "0")}`,
+        expectedRevisionId: currentRevisionId,
+        label: `Optional ${index}`,
+        logicalType: "string"
+      });
+      expect(added.status).toBe("committed");
+      if (added.status !== "committed") throw new Error("Collection column limit setup did not commit");
+      currentRevisionId = added.snapshot.revisionId;
+    }
+    const full = await service.open({
+      apiVersion: 1,
+      requestId: "collection_request_columnfullabcdef",
+      activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId,
+      tableId: table.id
+    });
+    expect(full).toMatchObject({
+      status: "ready",
+      snapshot: { revisionId: currentRevisionId, columns: expect.any(Array), canAddColumn: false }
+    });
+    if (full.status !== "ready") throw new Error("Full Collection did not open");
+    expect(full.snapshot.columns).toHaveLength(32);
+    await expect(service.addNullableColumn({
+      ...request,
+      requestId: "collection_request_columnlimitabcde",
+      expectedRevisionId: currentRevisionId,
+      label: "One too many"
+    })).resolves.toMatchObject({ status: "invalid", reason: "column_limit" });
+  });
+
   it("appends one authoritative default row, adopts replay, and undoes the exact revision", async () => {
     const fixture = await makeCollectionFixture();
     const vault = loadVaultSummary(fixture.vaultPath);
