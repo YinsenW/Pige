@@ -710,6 +710,9 @@ Commands:
 - `skills.installStaged`
 - `skills.discardStaged`
 - `skills.disable`
+- `skills.enable`
+- `skills.uninstall`
+- `skills.export`
 - `tools.install`
 - `tools.remove`
 
@@ -727,9 +730,11 @@ Events:
 - `settings.appearanceChanged`
 - `memory.changed`
 
-Skill URL stage returns `ready | invalid | failed` with opaque identity/revision/expiry/safe
-metadata, never body/path. Exact install/discard binds digest/revision and echoes request identity;
-summary/disable/events, owner locks and receipt adoption remain canonical.
+Skill URL stage/install/discard stay body/path-free and digest/revision-bound. Installed lifecycle
+binds request/vault/Skill/registry revision and Main-reproved `user_confirmed` machine-local pure
+bytes; only required `canEnable`/`canUninstall`/`canExport` authorize UI. Enable/uninstall return
+`committed | stale | not_found | failed` and registry where defined; Main-dialog export returns
+pathless `exported | cancelled | stale | not_found | failed`; summary/disable/events stay unchanged.
 
 Memory list returns vault/revision and at most 1,000 safe records; private conversation/event/Job
 IDs stay in Main. Disable remains compatible. Enable/delete bind exact record/revision; reset binds

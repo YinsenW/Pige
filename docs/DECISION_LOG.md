@@ -3391,15 +3391,17 @@ Date: 2026-07-27
 
 Decision:
 
-Ship Settings review and exact stage/digest/CAS install or discard for one bounded HTTPS pure Skill.
+Ship exact URL stage/install/discard plus CAS enable, trash uninstall and pathless export for
+verified machine-local pure Skills.
 
 Rationale:
 
-Deliver links without admitting ZIP, executable, runtime or chat scope.
+Deliver a safe first pure-Skill lifecycle without broader source/class/runtime scope.
 
 Consequences:
 
-- Stage executes nothing, exposes no body/path and fails drift closed; broader lifecycle stays open.
+- Stage executes nothing; Main-derived eligibility fences installed actions, uninstall trashes
+  before removal and export is body/path-free. Other sources, update and public restore stay open.
 
 References:
 

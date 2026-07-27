@@ -48,22 +48,23 @@ Skill classes:
 
 ## 3. Install Sources
 
-v0.1 supports URL/GitHub-raw Markdown, local `.md`/`.zip`, reviewed package-provided,
-and declared External/Web sources. Git repositories and a signed registry remain later.
+v0.1 targets URL/GitHub-raw Markdown, local `.md`/`.zip`, package-provided and declared
+External/Web sources; Git repositories and a signed registry remain later.
 
-## 4. Chat-Based Install Flow
+## 4. Install And Installed Lifecycle
 
-Explicit chat intent may route a link/file to the same stage → metadata/safety review →
-confirm → atomic install flow; an ordinary Markdown drop remains knowledge capture. Runtime
-sensitive effects stay separately mediated.
+Explicit chat links/files use the Settings stage → review → confirm → atomic-install flow;
+ordinary Markdown drop remains capture and runtime effects stay mediated. The current URL slice
+accepts one credential/query/fragment-free HTTPS `SKILL.md` up to 256 KiB in a private 24-hour
+stage. Only safe metadata/digest/expiry crosses IPC. Install binds request/stage/digest/registry
+revision with receipt adoption; discard removes that exact stage and drift fails closed.
 
-Current first slice is Settings-only URL install: `skills.stageFromUrl` accepts one HTTPS
-URL without credentials/query/fragment and fetches at most 256 KiB into a private 24-hour
-stage. Only one renderer-safe, machine-local pure `SKILL.md` can become `ready`; metadata,
-digest, size, capabilities, local boundary, expiry and closed warnings cross IPC, never body
-or path. `skills.installStaged` binds request/stage/digest/registry revision and chosen enabled
-state; idempotent receipt adoption or atomic registry publication wins. `discardStaged`
-removes only that exact stage. Redirect, content, stage or registry drift fails closed.
+Installed actions cover only verified `user_confirmed` machine-local pure Skills. Required
+`canEnable`/`canUninstall`/`canExport` alone expose UI; Main rechecks vault/revision/manifest.
+Enable restores disabled state. Uninstall trashes bytes before registry removal and restart-adopts
+its receipt, with no permanent delete or public Restore/Undo. Main-dialog export atomically writes
+portable bytes without path/body/raw error. Built-in, package, invalid or drifted entries stay
+ineligible; URL disable is unchanged and source update/other input-scope-kind lifecycle stays open.
 
 ## 5. Skill Format
 
