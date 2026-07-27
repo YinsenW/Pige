@@ -80,7 +80,7 @@ Two storage profiles share this envelope:
 
 `dataset.json` binds profile, initial/active revision, stable IDs, integrity, versions and
 compatibility. An imported `managed_collection` keeps its Dataset ID. Cell, row add/trash or
-nullable-column mutation/Undo writes an immutable SQLite/schema/Operation revision, then switches
+nullable-column add/rename/Undo writes an immutable SQLite/schema/Operation revision, then switches
 the manifest last. Source evidence, originals, old revisions and previews stay immutable.
 Missing new fields are legacy-read only; dual payload roles require a derived revision.
 
