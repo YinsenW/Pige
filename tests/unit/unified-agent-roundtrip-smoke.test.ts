@@ -135,8 +135,9 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain("clipboard.writeText(LARGE_PASTE_BODY)");
     expect(source).toContain("[citation_11]");
     expect(source).toContain("item.refId === 'citation_11'");
-    expect(source).toContain("citation?.pageId === expected.sourceCitationPageId");
-    expect(source).toContain("citation.pageId === groundedCitation.pageId");
+    expect(source).toContain("largePaste.largePasteCitationPageId, pastedSource.knowledgePageId");
+    expect(source).toContain("restart.durableSnapshot.pageIdentities.length + 1");
+    expect(source).toContain("largePasteRestart.largePasteCitationPageId, largePaste.largePasteCitationPageId");
     expect(source).toContain(".conversation-citations .citation-row:not(:disabled)");
     expect(source).toContain('readRoundtripRecord(vaultPath, "source-records", largePaste.largePasteSourceId)');
     expect(source.indexOf("const stagedAt = Date.now()")).toBeLessThan(source.indexOf("browserWindow.webContents.paste()"));
@@ -291,6 +292,8 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain("secondPage?.pageId === secondCitation.pageId");
     expect(source).toContain("await openCitation('[11]', firstPage.title)");
     expect(source).toContain("await openCitation('[12]', secondPage.title)");
+    expect(source).toContain("labels.some((label) => label.includes('[11]'))");
+    expect(source).toContain("labels.some((label) => label.includes('[12]'))");
     expect(source).toContain("assert.equal(multiFile.agentTurnDelta, 1)");
     expect(source).toContain("assert.equal(multiFile.sourceDelta, 2)");
     expect(source).toContain("assert.equal(multiFileProviderRequests.length, 6)");

@@ -233,7 +233,8 @@ async function runOrchestrator() {
     assert.equal(largePaste.largePasteSourceBound, true);
     assert.equal(largePaste.largePasteAnswerVisible, true);
     assert.equal(largePaste.largePasteCitationVisible, true);
-    assert.equal(largePaste.largePasteCitationIdentityExact, true);
+    assert.equal(typeof largePaste.largePasteCitationPageId, "string");
+    assert.ok(largePaste.largePasteCitationPageId.length > 0);
     assert.equal(largePaste.rawBodyAbsentFromConversation, true);
     assert.equal(largePaste.durableSnapshot.nonterminalJobIds.length, 0);
     assert.equal(largePaste.durableSnapshot.failedRetryableJobIds.length, 0);
@@ -241,7 +242,10 @@ async function runOrchestrator() {
     assert.equal(largePaste.durableSnapshot.sourceIds.length, restart.durableSnapshot.sourceIds.length + 1);
     assert.deepEqual(largePaste.durableSnapshot.datasetIds, restart.durableSnapshot.datasetIds);
     assert.deepEqual(largePaste.durableSnapshot.activities, restart.durableSnapshot.activities);
-    assert.deepEqual(largePaste.durableSnapshot.pageIdentities, restart.durableSnapshot.pageIdentities);
+    assert.equal(
+      largePaste.durableSnapshot.pageIdentities.length,
+      restart.durableSnapshot.pageIdentities.length + 1
+    );
     assertUniqueIdentities(largePaste.durableSnapshot.messageIdentities.map((message) => message.id), "conversation event after paste");
     assertUniqueIdentities(largePaste.durableSnapshot.relevantJobs.map((job) => job.id), "Job after paste");
     assertUniqueIdentities(largePaste.durableSnapshot.sourceIds, "source after paste");
@@ -268,6 +272,17 @@ async function runOrchestrator() {
     assert.equal(pastedSource.metadata?.unicodeCodePointCount, [...LARGE_PASTE_BODY].length);
     assert.equal(pastedSource.metadata?.utf8ByteSize, Buffer.byteLength(LARGE_PASTE_BODY));
     assert.equal(pastedSource.managedCopy?.checksum, sha256Digest(LARGE_PASTE_BODY));
+    assert.equal(largePaste.largePasteCitationPageId, pastedSource.knowledgePageId);
+    assert.deepEqual(
+      largePaste.durableSnapshot.pageIdentities.find((page) =>
+        page.pageId === pastedSource.knowledgePageId
+      ),
+      {
+        pageId: pastedSource.knowledgePageId,
+        pageType: "source",
+        sourceIds: [largePaste.largePasteSourceId]
+      }
+    );
     const pastedManagedPath = path.resolve(vaultPath, pastedSource.managedCopy.path);
     assert.equal(fs.readFileSync(pastedManagedPath, "utf8"), LARGE_PASTE_BODY);
     assert.deepEqual(findPlaintextFiles(vaultPath, LARGE_PASTE_BODY), [pastedManagedPath]);
@@ -296,7 +311,7 @@ async function runOrchestrator() {
     });
     assert.equal(largePasteRestart.largePasteAnswerVisible, true);
     assert.equal(largePasteRestart.largePasteCitationVisible, true);
-    assert.equal(largePasteRestart.largePasteCitationIdentityExact, true);
+    assert.equal(largePasteRestart.largePasteCitationPageId, largePaste.largePasteCitationPageId);
     assert.equal(largePasteRestart.rawBodyAbsentFromConversation, true);
     assert.deepEqual(largePasteRestart.durableSnapshot, largePaste.durableSnapshot);
     assert.equal(largePasteRestart.durableSnapshot.nonterminalJobIds.length, 0);
@@ -1058,13 +1073,6 @@ async function prepareLargePasteRenderer(browserWindow) {
       if (!composer || !jobs || !timeline) {
         throw new Error('Large-paste composer authority is unavailable.');
       }
-      const groundedAssistant = timeline.messages.find((message) =>
-        message.role === 'assistant' && message.text.includes(${JSON.stringify(GROUNDED_ANSWER)})
-      );
-      const groundedCitation = groundedAssistant?.answer?.citations.find((item) => item.refId === 'citation_2');
-      if (!groundedCitation?.pageId) {
-        throw new Error('Large-paste stable source-page identity is unavailable.');
-      }
       const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(composer), 'value');
       descriptor.set.call(composer, ${JSON.stringify(LARGE_PASTE_DRAFT)});
       composer.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1084,7 +1092,6 @@ async function prepareLargePasteRenderer(browserWindow) {
         conversationId: timeline.conversationId,
         baselineTailEventId: timeline.tailEventId,
         baselineMessageCount: timeline.messages.length,
-        sourceCitationPageId: groundedCitation.pageId,
         agentTurnJobIds: jobs.jobs.filter((job) => job.class === 'agent_turn').map((job) => job.id),
         sourceIds: jobs.jobs.filter((job) => job.class === 'agent_turn' && job.sourceId).map((job) => job.sourceId)
       };
@@ -1198,10 +1205,10 @@ async function submitLargePasteRenderer(browserWindow, expected) {
           message.role === 'assistant' && message.text.includes(${JSON.stringify(LARGE_PASTE_ANSWER)})
         );
         const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_11');
-        const citationIdentityExact = citation?.pageId === expected.sourceCitationPageId;
+        const citationIdentityPresent = typeof citation?.pageId === 'string' && citation.pageId.length > 0;
         const domAnswer = Array.from(document.querySelectorAll('.conversation-message.role-assistant:not(.provisional)'))
           .find((message) => message.textContent?.includes(${JSON.stringify(LARGE_PASTE_ANSWER)}));
-        const domCitation = document.querySelector('.conversation-citations .citation-row:not(:disabled)');
+        const domCitation = domAnswer?.querySelector('.conversation-citations .citation-row:not(:disabled)');
         const composer = document.querySelector('section.home .composer textarea');
         const rawBodyAbsentFromConversation = timeline?.messages.every((message) => !message.text.includes(pastedBody)) === true;
         const largePasteSourceBound = Boolean(
@@ -1215,7 +1222,7 @@ async function submitLargePasteRenderer(browserWindow, expected) {
         globalThis.__pigeRoundtripWaitState = {
           assistantVisible: Boolean(assistant && domAnswer),
           citationVisible: Boolean(citation && domCitation),
-          citationIdentityExact,
+          citationIdentityPresent,
           rawBodyAbsentFromConversation,
           continuedExactConversation,
           continuedExactTail,
@@ -1228,7 +1235,7 @@ async function submitLargePasteRenderer(browserWindow, expected) {
           composerCleared: composer?.value === ''
         };
         if (
-          assistant && domAnswer && citation && domCitation && citationIdentityExact &&
+          assistant && domAnswer && citation && domCitation && citationIdentityPresent &&
           rawBodyAbsentFromConversation &&
           continuedExactConversation && continuedExactTail &&
           newJobs.length === 1 && newSourceIds.length === 1 &&
@@ -1247,7 +1254,7 @@ async function submitLargePasteRenderer(browserWindow, expected) {
             largePasteSourceBound,
             largePasteAnswerVisible: true,
             largePasteCitationVisible: true,
-            largePasteCitationIdentityExact: true,
+            largePasteCitationPageId: citation.pageId,
             rawBodyAbsentFromConversation,
             largePasteJobId: newJob.id,
             largePasteUserEventId: newJob.conversationEventId,
@@ -1278,17 +1285,11 @@ async function runLargePasteRestartRenderer(browserWindow) {
         const assistant = timeline?.messages.find((message) =>
           message.role === 'assistant' && message.text.includes(${JSON.stringify(LARGE_PASTE_ANSWER)})
         );
-        const groundedAssistant = timeline?.messages.find((message) =>
-          message.role === 'assistant' && message.text.includes(${JSON.stringify(GROUNDED_ANSWER)})
-        );
-        const groundedCitation = groundedAssistant?.answer?.citations.find((item) => item.refId === 'citation_2');
         const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_11');
-        const citationIdentityExact = Boolean(
-          citation?.pageId && groundedCitation?.pageId && citation.pageId === groundedCitation.pageId
-        );
+        const citationIdentityPresent = typeof citation?.pageId === 'string' && citation.pageId.length > 0;
         const domAnswer = Array.from(document.querySelectorAll('.conversation-message.role-assistant:not(.provisional)'))
           .find((message) => message.textContent?.includes(${JSON.stringify(LARGE_PASTE_ANSWER)}));
-        const domCitation = document.querySelector('.conversation-citations .citation-row:not(:disabled)');
+        const domCitation = domAnswer?.querySelector('.conversation-citations .citation-row:not(:disabled)');
         const rawBodyAbsentFromConversation = timeline?.messages.every((message) => !message.text.includes(pastedBody)) === true;
         const activeJobs = jobs.jobs.filter((job) =>
           job.state === 'queued' || job.state === 'running' || job.state === 'waiting_dependency' ||
@@ -1297,19 +1298,19 @@ async function runLargePasteRestartRenderer(browserWindow) {
         globalThis.__pigeRoundtripWaitState = {
           answerVisible: Boolean(assistant && domAnswer),
           citationVisible: Boolean(citation && domCitation),
-          citationIdentityExact,
+          citationIdentityPresent,
           rawBodyAbsentFromConversation,
           activeJobCount: activeJobs.length,
           messageCount: timeline?.messages.length ?? 0
         };
         if (
-          assistant && domAnswer && citation && domCitation && citationIdentityExact &&
+          assistant && domAnswer && citation && domCitation && citationIdentityPresent &&
           rawBodyAbsentFromConversation && activeJobs.length === 0
         ) {
           return {
             largePasteAnswerVisible: true,
             largePasteCitationVisible: true,
-            largePasteCitationIdentityExact: true,
+            largePasteCitationPageId: citation.pageId,
             rawBodyAbsentFromConversation
           };
         }
@@ -2617,13 +2618,40 @@ async function readMultiFileRendererResult(browserWindow, baseline) {
           citationsIdentityExact && continuedExactConversation
         ) {
           const openCitation = async (refLabel, expectedTitle) => {
-            const button = Array.from(document.querySelectorAll('.conversation-citations .citation-row:not(:disabled)'))
-              .find((item) => item.textContent?.includes(refLabel));
+            let button;
+            while (Date.now() < deadline && !button) {
+              const answerMessage = Array.from(
+                document.querySelectorAll('.conversation-message.role-assistant:not(.provisional)')
+              ).find((message) => {
+                const labels = Array.from(
+                  message.querySelectorAll('.conversation-citations .citation-row:not(:disabled)')
+                ).map((item) => item.textContent ?? '');
+                return labels.some((label) => label.includes('[11]')) &&
+                  labels.some((label) => label.includes('[12]'));
+              });
+              button = Array.from(
+                answerMessage?.querySelectorAll('.conversation-citations .citation-row:not(:disabled)') ?? []
+              ).find((item) => item.textContent?.includes(refLabel));
+              globalThis.__pigeRoundtripWaitState = {
+                ...globalThis.__pigeRoundtripWaitState,
+                readerCitationRef: refLabel,
+                readerCitationButtonPresent: Boolean(button),
+                readerPresent: false,
+                readerTitleMatched: false
+              };
+              if (!button) await new Promise((resolve) => setTimeout(resolve, 50));
+            }
             if (!button) return false;
             button.click();
             while (Date.now() < deadline) {
               const reader = document.querySelector('.note-reader');
-              if (reader?.querySelector('.note-header h1')?.textContent === expectedTitle) return true;
+              const readerTitleMatched = reader?.querySelector('.note-header h1')?.textContent === expectedTitle;
+              globalThis.__pigeRoundtripWaitState = {
+                ...globalThis.__pigeRoundtripWaitState,
+                readerPresent: Boolean(reader),
+                readerTitleMatched
+              };
+              if (readerTitleMatched) return true;
               await new Promise((resolve) => setTimeout(resolve, 50));
             }
             return false;
