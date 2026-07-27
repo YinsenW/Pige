@@ -680,6 +680,9 @@ Commands:
 - `models.updateModel`
 - `models.setDefaultModel`
 - `memory.disable`
+- `skills.stageFromUrl`
+- `skills.installStaged`
+- `skills.discardStaged`
 - `skills.disable`
 - `tools.install`
 - `tools.remove`
@@ -698,10 +701,12 @@ Events:
 - `settings.appearanceChanged`
 - `memory.changed`
 
-`skills.summary`, owner-token/CAS `skills.disable({apiVersion:1,skillId,expectedRevision})`, and
-`skills.changed` are schema-validated. Summary is `ready {registry}` or body-free `failed {error}`.
-Main projects checksum-safe identity/count; disable reduces authority. Singleton recovery and
-token/inode release protect successor locks.
+`skills.stageFromUrl({apiVersion:1,requestId,sourceUrl})` returns `ready | invalid | failed` for
+one safe HTTPS pure machine-local `SKILL.md`; projection is opaque stage/digest, revision,
+expiry and safe metadata/capabilities/warnings, never body/path.
+`skills.installStaged` binds stage/digest/revision/enabled and returns `committed | stale |
+not_found | failed`; `skills.discardStaged` returns `discarded | stale | not_found | failed`.
+All echo request ID; summary/disable/changed, owner locks and receipt adoption remain canonical.
 
 `memory.list({apiVersion:1,activeVaultId})` returns `MemorySummarySchema`: vault, revision
 and at most 1,000 bounded safe records (`id/kind/title/body/status/timestamps` plus

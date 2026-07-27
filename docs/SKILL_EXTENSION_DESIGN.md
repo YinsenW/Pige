@@ -48,45 +48,22 @@ Skill classes:
 
 ## 3. Install Sources
 
-v0.1 should support:
-
-- URL to a `SKILL.md` or Markdown file.
-- GitHub raw Markdown URL.
-- ZIP archive containing a Skill directory.
-- Local `.md` file dropped into the chat or selected from disk.
-- Local `.zip` file dropped into the chat or selected from disk.
-- Reviewed package-provided Skill.
-- External/Web Skill source that declares capabilities and can be mediated by Pige.
-
-Later:
-
-- Git repository install.
-- Signed Skill registry.
+v0.1 supports URL/GitHub-raw Markdown, local `.md`/`.zip`, reviewed package-provided,
+and declared External/Web sources. Git repositories and a signed registry remain later.
 
 ## 4. Chat-Based Install Flow
 
-The chat input can initiate Skill installation when the user's intent is explicit.
+Explicit chat intent may route a link/file to the same stage → metadata/safety review →
+confirm → atomic install flow; an ordinary Markdown drop remains knowledge capture. Runtime
+sensitive effects stay separately mediated.
 
-Examples:
-
-- "Install this Skill: https://example.com/SKILL.md"
-- "把这个 zip 作为 Skill 安装"
-- Drop `paper-reading-skill.zip` into Pige and say "安装成论文阅读 Skill".
-
-Flow:
-
-1. Capture the link or file.
-2. Detect explicit Skill install intent.
-3. Fetch or read the Skill source.
-4. Stage it in a temporary review area.
-5. Parse metadata and validate contents.
-6. Show an install proposal with name, description, source, scope, capabilities, files, data boundary, and warnings.
-7. User confirms install.
-8. Pige copies the Skill into the selected scope and records install metadata.
-9. Skill is enabled or left disabled depending on user choice.
-10. If the Skill requests sensitive capabilities at runtime, Pige pauses the job and asks for permission before the action happens.
-
-If the user only drops a Markdown file without saying it is a Skill, Pige should treat it as ordinary knowledge capture.
+Current first slice is Settings-only URL install: `skills.stageFromUrl` accepts one HTTPS
+URL without credentials/query/fragment and fetches at most 256 KiB into a private 24-hour
+stage. Only one renderer-safe, machine-local pure `SKILL.md` can become `ready`; metadata,
+digest, size, capabilities, local boundary, expiry and closed warnings cross IPC, never body
+or path. `skills.installStaged` binds request/stage/digest/registry revision and chosen enabled
+state; idempotent receipt adoption or atomic registry publication wins. `discardStaged`
+removes only that exact stage. Redirect, content, stage or registry drift fails closed.
 
 ## 5. Skill Format
 
@@ -216,16 +193,10 @@ Rules:
 
 ## 7. Safety Rules
 
-Skill install safety:
-
-- ZIP extraction must block path traversal.
-- Enforce maximum archive size and file count.
-- Only allow Markdown, JSON metadata, and small supporting assets by default.
-- Scripts, binaries, packages, MCP configs, native modules, package hooks, and executable files cannot run during staging or preview.
-- Executable/package-backed contents must be identified, shown as warnings, and routed through a reviewed runtime adapter, Package Manager, or Local Tools flow before runtime use.
-- Do not execute anything during Skill install.
-- Remote Skill content is untrusted until the user confirms install.
-- Show source URL, checksum, file list, and warnings before install.
+Install staging is bounded and non-executing: ZIP traversal/file-count/size and allowed-file
+rules apply; scripts, binaries, packages, hooks, native modules and MCP configs never run.
+Executable/package-backed content routes elsewhere. Remote content stays untrusted until
+exact review; safe source, checksums, files and warnings remain visible.
 
 Runtime safety:
 
@@ -246,18 +217,8 @@ Runtime safety:
 
 Settings should include a Skills section.
 
-Required actions:
-
-- Install from link.
-- Install from file.
-- Inspect staged Skill before install.
-- Enable.
-- Disable.
-- Uninstall.
-- Update from source when source metadata exists.
-- Export.
-- Change scope when safe.
-- Show conflicts and trigger overlaps.
+Required actions are link/file install, staged inspection, enable/disable, uninstall,
+source-aware update, export, safe scope change, and conflict/trigger-overlap visibility.
 
 Skill details should show:
 
@@ -365,20 +326,9 @@ steps. Fixed adapters then install/configure, hand off browser OAuth, and probe 
 
 ## 11. v0.1 Scope
 
-Include:
-
-- Skills settings page.
-- Install from URL, `.md`, and `.zip`.
-- Chat-initiated install when user intent is explicit.
-- Staging preview and confirmation.
-- Vault-scoped and machine-local Skills.
-- Enable, disable, uninstall, export.
-- Metadata parsing.
-- Basic capability declaration.
-- Safety checks for ZIP and file types.
-- Permission Broker integration for external/Web Skill actions.
-- Saved grants and permission revocation UI.
-- Agent runtime selection of active relevant Skills.
+Include Settings and explicit-chat URL/`.md`/`.zip` staging, review and confirmation;
+vault/machine scopes; enable/disable/uninstall/export; metadata/capability parsing and
+ZIP/file safety; mediated External/Web effects; and relevant active-Skill selection.
 
 Defer:
 
