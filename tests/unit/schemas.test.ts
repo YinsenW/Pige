@@ -4,6 +4,9 @@ import {
   AppearanceThemeMutationResultSchema,
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
+  COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES,
+  CollectionAddNullableColumnRequestSchema,
+  CollectionAddNullableColumnResultSchema,
   ConfirmationProposalSchema,
   CollectionAppendDefaultRowRequestSchema,
   CollectionAppendDefaultRowResultSchema,
@@ -97,7 +100,8 @@ describe("schemas", () => {
       totalRowCount: 0,
       returnedRowCount: 0,
       truncated: false,
-      canAppendDefaultRow: true
+      canAppendDefaultRow: true,
+      canAddColumn: true
     } as const;
     const identity = {
       apiVersion: request.apiVersion,
@@ -145,6 +149,91 @@ describe("schemas", () => {
     })).toThrow();
     for (const unsafe of [{ path: "/private" }, { body: "private" }, { rawError: "SQLITE_BUSY" }]) {
       expect(() => CollectionAppendDefaultRowResultSchema.parse({
+        ...identity,
+        status: "not_found",
+        ...unsafe
+      })).toThrow();
+    }
+  });
+
+  it("keeps nullable-column creation Main-owned, revision-bound, and schema-safe", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "collection_request_bcdefghijklmnopq",
+      activeVaultId: "vault_20260728_abcdefgh",
+      datasetId: "dataset_20260728_abcdef123456",
+      tableId: "table_abcdef123456",
+      expectedRevisionId: "dataset_rev_20260728_abcdef123456",
+      label: " Notes ",
+      logicalType: "string"
+    } as const;
+    const parsedRequest = CollectionAddNullableColumnRequestSchema.parse(request);
+    expect(parsedRequest.label).toBe("Notes");
+    expect(COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES).toBe(256);
+    for (const logicalType of ["string", "integer", "number", "boolean", "date", "datetime"] as const) {
+      expect(CollectionAddNullableColumnRequestSchema.parse({ ...request, logicalType }).logicalType)
+        .toBe(logicalType);
+    }
+    const snapshot = {
+      datasetId: request.datasetId,
+      revisionId: "dataset_rev_20260728_bcdefa123456",
+      title: "Reading list",
+      tableId: request.tableId,
+      tableName: "Items",
+      columns: [{ columnId: "column_abcdef123456", label: "Title", logicalType: "string" }],
+      rows: [],
+      totalRowCount: 0,
+      returnedRowCount: 0,
+      truncated: false,
+      canAppendDefaultRow: true,
+      canAddColumn: true
+    } as const;
+    const identity = {
+      apiVersion: request.apiVersion,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      datasetId: request.datasetId,
+      tableId: request.tableId
+    } as const;
+    expect(CollectionAddNullableColumnResultSchema.parse({
+      ...identity,
+      status: "committed",
+      columnId: "column_bcdefa123456",
+      operationId: "op_20260728_bcdefa12",
+      snapshot: {
+        ...snapshot,
+        columns: [
+          ...snapshot.columns,
+          { columnId: "column_bcdefa123456", label: "Notes", logicalType: "string" as const }
+        ],
+        canAddColumn: false
+      }
+    })).toMatchObject({ status: "committed", columnId: "column_bcdefa123456" });
+    expect(CollectionAddNullableColumnResultSchema.parse({
+      ...identity,
+      status: "stale",
+      snapshot: { ...snapshot, canAddColumn: false }
+    })).toMatchObject({ status: "stale", snapshot: { canAddColumn: false } });
+    for (const reason of ["duplicate_label", "column_limit", "type_mismatch"] as const) {
+      expect(CollectionAddNullableColumnResultSchema.parse({ ...identity, status: "invalid", reason }).reason)
+        .toBe(reason);
+    }
+    expect(CollectionAddNullableColumnResultSchema.parse({ ...identity, status: "not_found" }))
+      .toEqual({ ...identity, status: "not_found" });
+
+    for (const unsafe of [
+      { label: "   " },
+      { label: "界".repeat(86) },
+      { logicalType: "binary" },
+      { columnId: "column_renderer_owned" },
+      { formula: "=A1" },
+      { default: null },
+      { path: "/private/collection.sqlite" }
+    ]) {
+      expect(() => CollectionAddNullableColumnRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+    }
+    for (const unsafe of [{ body: "private" }, { sql: "ALTER TABLE" }, { rawError: "SQLITE_BUSY" }]) {
+      expect(() => CollectionAddNullableColumnResultSchema.parse({
         ...identity,
         status: "not_found",
         ...unsafe
@@ -1071,6 +1160,25 @@ describe("schemas", () => {
         canUndo: true
       }]
     }).activities[0]?.kind).toBe("add_collection_row");
+    expect(KnowledgeActivityListResultSchema.parse({
+      scannedAt: "2026-07-28T00:00:00.000Z",
+      activeVaultId: "vault_20260728_activitysafe",
+      total: 1,
+      invalidOperationCount: 0,
+      activities: [{
+        operationId: "op_20260728_columnadd",
+        kind: "add_collection_column",
+        createdAt: "2026-07-28T00:00:00.000Z",
+        target: {
+          kind: "collection",
+          datasetId: "dataset_20260728_abcdef123456",
+          tableId: "table_abcdef123456",
+          revisionId: "dataset_rev_20260728_cdefab123456"
+        },
+        status: "applied",
+        canUndo: true
+      }]
+    }).activities[0]?.kind).toBe("add_collection_column");
     expect(() => KnowledgeActivityListResultSchema.parse({
       ...result,
       activities: [{ ...result.activities[0], path: "/private/vault/page.md" }]

@@ -79,9 +79,9 @@ Two storage profiles share this envelope:
   created.
 
 `dataset.json` binds profile, initial/active revision, stable IDs, integrity, versions and
-compatibility. An imported `managed_collection` keeps its Dataset ID. Cell/default-row
-mutation or Undo writes immutable revision SQLite/schema/Operation, then CAS-switches the
-manifest last. SourceRecord evidence, originals, old revisions and previews stay immutable.
+compatibility. An imported `managed_collection` keeps its Dataset ID. Cell, default-row or
+nullable-column mutation/Undo writes immutable SQLite/schema/Operation revision, then switches
+the manifest last. Source evidence, originals, old revisions and previews stay immutable.
 Missing new fields are legacy-read only; dual payload roles require a derived revision.
 
 ```ts

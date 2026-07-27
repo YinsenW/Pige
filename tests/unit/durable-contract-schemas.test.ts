@@ -382,6 +382,31 @@ describe("durable contract schemas", () => {
         undoOfOperationId: "op_20260713_bcdefa12"
       }
     }).change?.kind).toBe("collection_row_add_undo");
+    expect(DatasetRevisionSchema.parse({
+      ...revision,
+      id: "dataset_rev_20260713_defabc123456",
+      parentRevisionId: "dataset_rev_20260713_cdefab123456",
+      payload: { ...revision.payload, path: "data/revisions/dataset_rev_20260713_defabc123456.sqlite" },
+      operationId: "op_20260713_defabc12",
+      change: {
+        kind: "collection_column_add",
+        tableId: schema.tables[0]!.id,
+        columnId: "column_bcdefa123456"
+      }
+    }).change?.kind).toBe("collection_column_add");
+    expect(DatasetRevisionSchema.parse({
+      ...revision,
+      id: "dataset_rev_20260713_efabcd123456",
+      parentRevisionId: "dataset_rev_20260713_defabc123456",
+      payload: { ...revision.payload, path: "data/revisions/dataset_rev_20260713_efabcd123456.sqlite" },
+      operationId: "op_20260713_efabcd12",
+      change: {
+        kind: "collection_column_add_undo",
+        tableId: schema.tables[0]!.id,
+        columnId: "column_bcdefa123456",
+        undoOfOperationId: "op_20260713_defabc12"
+      }
+    }).change?.kind).toBe("collection_column_add_undo");
     expect(() => DatasetSchemaRecordSchema.parse({
       ...schema,
       tables: [{ ...schema.tables[0], columnCount: 2 }]
@@ -643,7 +668,7 @@ describe("durable contract schemas", () => {
     })).toThrow("Unrecognized key");
   });
 
-  it("binds Managed Collection row append Operations to dataset, table, and Main-owned row identities", () => {
+  it("binds Managed Collection row/column additions to Main-owned stable identities", () => {
     const operation = OperationRecordSchema.parse({
       id: "op_20260728_abcdef12",
       schemaVersion: 1,
@@ -663,6 +688,19 @@ describe("durable contract schemas", () => {
     });
     expect(operation.kind).toBe("add_collection_row");
     expect(operation.targetRefs.map((reference) => reference.kind)).toEqual(["dataset", "table", "row"]);
+    const columnOperation = OperationRecordSchema.parse({
+      ...operation,
+      id: "op_20260728_bcdefa12",
+      kind: "add_collection_column",
+      targetRefs: [
+        { kind: "dataset", id: "dataset_20260728_abcdef123456" },
+        { kind: "table", id: "table_abcdef123456" },
+        { kind: "column", id: "column_bcdefa123456" }
+      ],
+      summary: "Added one nullable Managed Collection column."
+    });
+    expect(columnOperation.kind).toBe("add_collection_column");
+    expect(columnOperation.targetRefs.map((reference) => reference.kind)).toEqual(["dataset", "table", "column"]);
   });
 
   it("rejects unknown Operation kinds and fields", () => {

@@ -21,6 +21,8 @@ import type {
   CloudBoundary,
   CloudSendPolicy,
   ChangeOperation,
+  CollectionAddNullableColumnRequest,
+  CollectionAddNullableColumnResult,
   CollectionCellEditRequest,
   CollectionCellEditResult,
   CollectionOpenRequest,
@@ -808,6 +810,7 @@ export interface KnowledgeActivitySummary {
     | "update_page"
     | "update_collection_cell"
     | "add_collection_row"
+    | "add_collection_column"
     | "update_memory"
     | "trash_memory"
     | "restore_memory";
@@ -1507,6 +1510,9 @@ export interface PigeDesktopApi {
     readonly appendDefaultRow: (
       request: CollectionAppendDefaultRowRequest
     ) => Promise<CollectionAppendDefaultRowResult>;
+    readonly addNullableColumn: (
+      request: CollectionAddNullableColumnRequest
+    ) => Promise<CollectionAddNullableColumnResult>;
   };
   readonly activity: {
     readonly list: (request?: KnowledgeActivityListRequest) => Promise<KnowledgeActivityListResult>;

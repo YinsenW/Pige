@@ -3367,17 +3367,17 @@ Date: 2026-07-27
 
 Decision:
 
-A Collection keeps its imported ID. Cell edit or eligible Main-owned default-row append
-writes immutable CAS revision/Operation; manifest switches last; Undo advances.
+A Collection keeps its imported ID. Cell edit, eligible default-row append or nullable-column
+add writes immutable CAS revision/Operation; manifest switches last; Undo advances.
 
 Rationale:
 
-Enable reversible growth without rewriting history or exposing internals.
+Enable reversible value and schema growth without rewriting history or exposing internals.
 
 Consequences:
 
-- Manifest is current; evidence/history stay immutable. Renderer supplies no default values/row
-  ID; channels fail closed and broader editing stays open.
+- Manifest is current; evidence/history stay immutable. Main owns generated IDs/defaults;
+  channels fail closed and broader editing stays open.
 
 References:
 

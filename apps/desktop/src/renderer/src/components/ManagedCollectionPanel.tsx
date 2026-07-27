@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type Ref } from "react";
 import type {
+  CollectionAddNullableColumnRequest,
+  CollectionAddNullableColumnResult,
   CollectionAppendDefaultRowRequest,
   CollectionAppendDefaultRowResult,
   CollectionCellEditRequest,
@@ -8,6 +10,7 @@ import type {
   CollectionSnapshot,
   DatasetLogicalType
 } from "@pige/schemas";
+import { PigeIcon } from "./PigeIcon";
 
 type CellIdentity = {
   readonly rowId: string;
@@ -21,12 +24,27 @@ type CellEdit = CellIdentity & {
   readonly draft: string;
 };
 
+type ColumnDraft = {
+  readonly expectedRevisionId: string;
+  readonly label: string;
+  readonly logicalType: CollectionAddNullableColumnRequest["logicalType"];
+};
+
+const COLLECTION_EDITABLE_TYPES = ["string", "integer", "number", "boolean", "date", "datetime"] as const;
+
 type EditNotice =
   | { readonly kind: "saved" }
   | { readonly kind: "row_added" }
   | { readonly kind: "append_stale" }
   | { readonly kind: "append_not_found" }
   | { readonly kind: "append_failed" }
+  | { readonly kind: "column_added" }
+  | { readonly kind: "column_stale" }
+  | { readonly kind: "column_not_found" }
+  | { readonly kind: "column_failed" }
+  | { readonly kind: "column_duplicate_label" }
+  | { readonly kind: "column_limit" }
+  | { readonly kind: "column_type_mismatch" }
   | { readonly kind: "stale" }
   | { readonly kind: "invalid" }
   | { readonly kind: "not_editable" }
@@ -39,22 +57,33 @@ export function ManagedCollectionPanel(props: {
   readonly onAppendDefaultRow: (
     request: CollectionAppendDefaultRowRequest
   ) => Promise<CollectionAppendDefaultRowResult>;
+  readonly onAddNullableColumn: (
+    request: CollectionAddNullableColumnRequest
+  ) => Promise<CollectionAddNullableColumnResult>;
   readonly onAdoptSnapshot: (snapshot: CollectionSnapshot, expectedRevisionId: string) => boolean;
   readonly onEditCell: (request: CollectionCellEditRequest) => Promise<CollectionCellEditResult>;
   readonly onReload: () => Promise<CollectionSnapshot | null>;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const [edit, setEdit] = useState<CellEdit | null>(null);
+  const [columnDraft, setColumnDraft] = useState<ColumnDraft | null>(null);
   const [notice, setNotice] = useState<EditNotice | null>(null);
   const [busy, setBusy] = useState(false);
   const requestSequence = useRef(0);
   const appendActiveRef = useRef<number | null>(null);
   const appendTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const columnActiveRef = useRef<number | null>(null);
+  const columnTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const columnLabelRef = useRef<HTMLInputElement | null>(null);
+  const columnHeaderRefs = useRef(new Map<string, HTMLTableCellElement>());
   const editTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
   const pendingFocusRef = useRef<CellIdentity | null>(null);
   const pendingAppendFocusRef = useRef(false);
   const pendingRowFocusRef = useRef<string | null>(null);
+  const pendingColumnFocusRef = useRef<string | null>(null);
+  const pendingColumnTriggerFocusRef = useRef(false);
+  const pendingColumnEditorFocusRef = useRef(false);
   const editorRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const ownerKey = `${props.activeVaultId}:${props.snapshot.datasetId}:${props.snapshot.tableId}`;
@@ -66,10 +95,15 @@ export function ManagedCollectionPanel(props: {
   useEffect(() => {
     requestSequence.current += 1;
     appendActiveRef.current = null;
+    columnActiveRef.current = null;
     pendingFocusRef.current = null;
     pendingAppendFocusRef.current = false;
     pendingRowFocusRef.current = null;
+    pendingColumnFocusRef.current = null;
+    pendingColumnTriggerFocusRef.current = false;
+    pendingColumnEditorFocusRef.current = false;
     setEdit(null);
+    setColumnDraft(null);
     setNotice(null);
     setBusy(false);
   }, [ownerKey]);
@@ -77,6 +111,10 @@ export function ManagedCollectionPanel(props: {
   useEffect(() => {
     if (edit) editorRef.current?.focus();
   }, [edit?.rowId, edit?.columnId]);
+
+  useEffect(() => {
+    if (columnDraft && !busy) columnLabelRef.current?.focus();
+  }, [columnDraft?.expectedRevisionId]);
 
   useLayoutEffect(() => {
     if (edit || !pendingFocusRef.current) return;
@@ -88,6 +126,14 @@ export function ManagedCollectionPanel(props: {
 
   useLayoutEffect(() => {
     if (busy) return;
+    if (pendingColumnFocusRef.current) {
+      const header = columnHeaderRefs.current.get(pendingColumnFocusRef.current);
+      if (header) {
+        pendingColumnFocusRef.current = null;
+        header.focus();
+        return;
+      }
+    }
     if (pendingRowFocusRef.current) {
       const row = rowRefs.current.get(pendingRowFocusRef.current);
       if (row) {
@@ -100,6 +146,18 @@ export function ManagedCollectionPanel(props: {
     pendingAppendFocusRef.current = false;
     (appendTriggerRef.current ?? panelRef.current)?.focus();
   }, [busy, notice, props.snapshot.revisionId]);
+
+  useLayoutEffect(() => {
+    if (busy) return;
+    if (pendingColumnEditorFocusRef.current && columnDraft) {
+      pendingColumnEditorFocusRef.current = false;
+      columnLabelRef.current?.focus();
+      return;
+    }
+    if (!pendingColumnTriggerFocusRef.current || columnDraft) return;
+    pendingColumnTriggerFocusRef.current = false;
+    (columnTriggerRef.current ?? panelRef.current)?.focus();
+  }, [busy, columnDraft, notice, props.snapshot.revisionId]);
 
   const restoreCellFocus = (identity: CellIdentity): void => {
     pendingFocusRef.current = identity;
@@ -208,7 +266,7 @@ export function ManagedCollectionPanel(props: {
   };
 
   const appendDefaultRow = async (): Promise<void> => {
-    if (!props.snapshot.canAppendDefaultRow || busy || edit || appendActiveRef.current !== null) return;
+    if (!props.snapshot.canAppendDefaultRow || busy || edit || columnDraft || appendActiveRef.current !== null) return;
     const sequence = requestSequence.current + 1;
     requestSequence.current = sequence;
     appendActiveRef.current = sequence;
@@ -250,6 +308,77 @@ export function ManagedCollectionPanel(props: {
     }
   };
 
+  const addNullableColumn = async (): Promise<void> => {
+    if (!columnDraft || busy || columnActiveRef.current !== null) return;
+    const sequence = requestSequence.current + 1;
+    requestSequence.current = sequence;
+    columnActiveRef.current = sequence;
+    const request: CollectionAddNullableColumnRequest = {
+      apiVersion: 1,
+      requestId: createCollectionRequestId(),
+      activeVaultId: props.activeVaultId,
+      datasetId: props.snapshot.datasetId,
+      tableId: props.snapshot.tableId,
+      expectedRevisionId: columnDraft.expectedRevisionId,
+      label: columnDraft.label,
+      logicalType: columnDraft.logicalType
+    };
+    const expectedOwnerKey = ownerKey;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await props.onAddNullableColumn(request);
+      if (
+        sequence !== requestSequence.current ||
+        ownerKeyRef.current !== expectedOwnerKey ||
+        snapshotRevisionRef.current !== request.expectedRevisionId ||
+        !collectionColumnIdentityMatches(request, result)
+      ) return;
+      if ((result.status === "committed" || result.status === "stale") &&
+          !props.onAdoptSnapshot(result.snapshot, request.expectedRevisionId)) return;
+      if (result.status === "committed") {
+        pendingColumnFocusRef.current = result.columnId;
+        setColumnDraft(null);
+        setNotice({ kind: "column_added" });
+        return;
+      }
+      if (result.status === "stale") {
+        pendingColumnEditorFocusRef.current = true;
+        setColumnDraft((current) => current ? {
+          ...current,
+          expectedRevisionId: result.snapshot.revisionId
+        } : current);
+        setNotice({ kind: "column_stale" });
+        return;
+      }
+      pendingColumnEditorFocusRef.current = true;
+      setNotice({
+        kind: result.status === "not_found"
+          ? "column_not_found"
+          : result.reason === "duplicate_label"
+            ? "column_duplicate_label"
+            : result.reason === "column_limit"
+              ? "column_limit"
+              : "column_type_mismatch"
+      });
+    } catch {
+      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) {
+        pendingColumnEditorFocusRef.current = true;
+        setNotice({ kind: "column_failed" });
+      }
+    } finally {
+      if (columnActiveRef.current === sequence) columnActiveRef.current = null;
+      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) setBusy(false);
+    }
+  };
+
+  const cancelColumnDraft = (): void => {
+    if (busy) return;
+    pendingColumnTriggerFocusRef.current = true;
+    setColumnDraft(null);
+    setNotice(null);
+  };
+
   return (
     <section
       ref={panelRef}
@@ -277,16 +406,102 @@ export function ManagedCollectionPanel(props: {
               ref={appendTriggerRef}
               type="button"
               className="settings-button"
-              disabled={busy || edit !== null}
+              disabled={busy || edit !== null || columnDraft !== null}
               onClick={() => void appendDefaultRow()}
             >
               {props.t(busy && appendActiveRef.current !== null ? "collection.addingRow" : "collection.addRow")}
             </button>
           ) : null}
+          {props.snapshot.canAddColumn && !columnDraft ? (
+            <button
+              ref={columnTriggerRef}
+              type="button"
+              className="settings-button"
+              disabled={busy || edit !== null || appendActiveRef.current !== null}
+              onClick={() => {
+                if (busy || edit || appendActiveRef.current !== null || columnActiveRef.current !== null) return;
+                setNotice(null);
+                setColumnDraft({
+                  expectedRevisionId: props.snapshot.revisionId,
+                  label: "",
+                  logicalType: "string"
+                });
+              }}
+            >
+              <PigeIcon name="attach" size={14} />
+              {props.t("collection.addField")}
+            </button>
+          ) : null}
         </div>
       </header>
+      {columnDraft ? (
+        <form
+          className="settings-card settings-row tall"
+          aria-label={props.t("collection.addField")}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void addNullableColumn();
+          }}
+        >
+          <div className="settings-row-copy">
+            <label htmlFor="collection-new-field-name"><strong>{props.t("collection.fieldName")}</strong></label>
+            <input
+              ref={columnLabelRef}
+              id="collection-new-field-name"
+              className="settings-input"
+              value={columnDraft.label}
+              disabled={busy}
+              maxLength={120}
+              onChange={(event) => {
+                setColumnDraft((current) => current ? { ...current, label: event.target.value } : current);
+                setNotice(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  cancelColumnDraft();
+                }
+              }}
+            />
+          </div>
+          <div className="settings-row-copy">
+            <label htmlFor="collection-new-field-type"><strong>{props.t("collection.fieldType")}</strong></label>
+            <select
+              id="collection-new-field-type"
+              className="settings-input"
+              value={columnDraft.logicalType}
+              disabled={busy}
+              onChange={(event) => {
+                setColumnDraft((current) => current ? {
+                  ...current,
+                  logicalType: event.target.value as CollectionAddNullableColumnRequest["logicalType"]
+                } : current);
+                setNotice(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  cancelColumnDraft();
+                }
+              }}
+            >
+              {COLLECTION_EDITABLE_TYPES.map((logicalType) => (
+                <option value={logicalType} key={logicalType}>{props.t(`collection.type.${logicalType}`)}</option>
+              ))}
+            </select>
+          </div>
+          <div className="settings-row-control">
+            <button type="submit" className="settings-button primary" disabled={busy || columnDraft.label.trim().length === 0}>
+              {props.t(busy && columnActiveRef.current !== null ? "collection.addingField" : "collection.save")}
+            </button>
+            <button type="button" className="settings-button" disabled={busy} onClick={cancelColumnDraft}>
+              {props.t("collection.cancel")}
+            </button>
+          </div>
+        </form>
+      ) : null}
       {notice ? (
-        <div className={`settings-inline-status ${notice.kind === "saved" || notice.kind === "row_added" ? "success" : "error"}`} role="status" aria-live="polite">
+        <div className={`settings-inline-status ${notice.kind === "saved" || notice.kind === "row_added" || notice.kind === "column_added" ? "success" : "error"}`} role="status" aria-live="polite">
           <span>{props.t(`collection.${notice.kind}`)}</span>
           {notice.kind === "stale" ? (
             <button type="button" className="settings-button" disabled={busy} onClick={() => void reloadAfterStale()}>
@@ -299,7 +514,20 @@ export function ManagedCollectionPanel(props: {
         <table className="dataset-table">
           <caption>{props.snapshot.tableName}</caption>
           <thead>
-            <tr>{props.snapshot.columns.map((column) => <th scope="col" key={column.columnId}>{column.label}</th>)}</tr>
+            <tr>{props.snapshot.columns.map((column) => (
+              <th
+                scope="col"
+                key={column.columnId}
+                ref={(element) => {
+                  if (element) columnHeaderRefs.current.set(column.columnId, element);
+                  else columnHeaderRefs.current.delete(column.columnId);
+                }}
+                tabIndex={-1}
+                data-collection-column-id={column.columnId}
+              >
+                {column.label}
+              </th>
+            ))}</tr>
           </thead>
           <tbody>
             {props.snapshot.rows.map((row, rowIndex) => (
@@ -355,14 +583,14 @@ export function ManagedCollectionPanel(props: {
                         <button
                           type="button"
                           className="ghost"
-                          disabled={busy}
+                          disabled={busy || columnDraft !== null}
                           ref={(element) => {
                             if (element) editTriggerRefs.current.set(cellKey(identity), element);
                             else editTriggerRefs.current.delete(cellKey(identity));
                           }}
                           aria-label={`${props.t("collection.edit")}: ${column.label}, ${props.t("collection.row")} ${rowIndex + 1}`}
                           onClick={() => {
-                            if (busy || appendActiveRef.current !== null) return;
+                            if (busy || columnDraft || appendActiveRef.current !== null || columnActiveRef.current !== null) return;
                             setNotice(null);
                             setEdit({
                               ...identity,
@@ -486,6 +714,16 @@ function collectionEditIdentityMatches(
 function collectionAppendIdentityMatches(
   request: CollectionAppendDefaultRowRequest,
   result: CollectionAppendDefaultRowResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.datasetId === request.datasetId &&
+    result.tableId === request.tableId;
+}
+
+function collectionColumnIdentityMatches(
+  request: CollectionAddNullableColumnRequest,
+  result: CollectionAddNullableColumnResult
 ): boolean {
   return result.requestId === request.requestId &&
     result.activeVaultId === request.activeVaultId &&

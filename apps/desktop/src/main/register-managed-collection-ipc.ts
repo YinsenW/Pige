@@ -1,11 +1,15 @@
 import type { IpcMain } from "electron";
 import {
+  CollectionAddNullableColumnRequestSchema,
+  CollectionAddNullableColumnResultSchema,
   CollectionAppendDefaultRowRequestSchema,
   CollectionAppendDefaultRowResultSchema,
   CollectionCellEditRequestSchema,
   CollectionCellEditResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
+  type CollectionAddNullableColumnRequest,
+  type CollectionAddNullableColumnResult,
   type CollectionCellEditRequest,
   type CollectionCellEditResult,
   type CollectionAppendDefaultRowRequest,
@@ -26,6 +30,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly appendDefaultCollectionRow: (
     request: CollectionAppendDefaultRowRequest
   ) => CollectionAppendDefaultRowResult | Promise<CollectionAppendDefaultRowResult>;
+  readonly addNullableCollectionColumn: (
+    request: CollectionAddNullableColumnRequest
+  ) => CollectionAddNullableColumnResult | Promise<CollectionAddNullableColumnResult>;
 }
 
 function failedOpen(request: CollectionOpenRequest): CollectionOpenResult {
@@ -54,6 +61,19 @@ function failedEdit(request: CollectionCellEditRequest): CollectionCellEditResul
 
 function notFoundAppend(request: CollectionAppendDefaultRowRequest): CollectionAppendDefaultRowResult {
   return CollectionAppendDefaultRowResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    status: "not_found"
+  });
+}
+
+function notFoundAddColumn(
+  request: CollectionAddNullableColumnRequest
+): CollectionAddNullableColumnResult {
+  return CollectionAddNullableColumnResultSchema.parse({
     apiVersion: request.apiVersion,
     requestId: request.requestId,
     activeVaultId: request.activeVaultId,
@@ -141,5 +161,24 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
       result.tableId !== parsed.tableId
     ) throw new Error("Managed Collection append response identity did not match the request.");
     return options.getActiveVaultId() === parsed.activeVaultId ? result : notFoundAppend(parsed);
+  });
+
+  options.ipcMain.handle("collections.addNullableColumn", async (_event, request: unknown) => {
+    const parsed = CollectionAddNullableColumnRequestSchema.parse(request);
+    if (options.getActiveVaultId() !== parsed.activeVaultId) return notFoundAddColumn(parsed);
+    let rawResult: CollectionAddNullableColumnResult;
+    try {
+      rawResult = await options.addNullableCollectionColumn(parsed);
+    } catch {
+      return notFoundAddColumn(parsed);
+    }
+    const result = CollectionAddNullableColumnResultSchema.parse(rawResult);
+    if (
+      result.requestId !== parsed.requestId ||
+      result.activeVaultId !== parsed.activeVaultId ||
+      result.datasetId !== parsed.datasetId ||
+      result.tableId !== parsed.tableId
+    ) throw new Error("Managed Collection add-column response identity did not match the request.");
+    return options.getActiveVaultId() === parsed.activeVaultId ? result : notFoundAddColumn(parsed);
   });
 }
