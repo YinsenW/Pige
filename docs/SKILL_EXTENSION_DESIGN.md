@@ -53,18 +53,17 @@ External/Web sources; Git repositories and a signed registry remain later.
 
 ## 4. Install And Installed Lifecycle
 
-Explicit chat links/files use the Settings stage → review → confirm → atomic-install flow;
-ordinary Markdown drop remains capture and runtime effects stay mediated. The current URL slice
-accepts one credential/query/fragment-free HTTPS `SKILL.md` up to 256 KiB in a private 24-hour
-stage. Only safe metadata/digest/expiry crosses IPC. Install binds request/stage/digest/registry
-revision with receipt adoption; discard removes that exact stage and drift fails closed.
+Settings stages one HTTPS or Main-picked local `.md` pure Skill for review → explicit install;
+ordinary drop remains capture. Both are 256 KiB UTF-8 maximum and expose only safe
+metadata/digest/expiry. Local selection uses one no-follow descriptor-bound read and a private
+vault/file/hash receipt: no path, body, `sourceUrl` or update authority crosses IPC; cancel has no
+effect. Install binds request/stage/digest/revision and adopts once; drift fails closed.
 
-Only verified `user_confirmed` machine-local pure Skills expose required
-`canEnable`/`canUninstall`/`canExport`/`canUpdate`; Main reproves registry/manifest. Enable restores;
-uninstall trash-adopts; export is pathless. Update re-fetches only the strict HTTPS source, staging
-a safe preview bound to installed digest/version/`updatedAt` and revision. `installStaged` preserves
-enablement, trashes prior bytes and CAS/restart-adopts once. Same bytes are `current`; drift is
-`stale` or closed. No background, cross-source, local-file/ZIP/chat update or public restore.
+Verified `user_confirmed` machine-local pure Skills alone expose required lifecycle booleans; Main
+reproves registry/manifest. Enable restores, uninstall trash-adopts and export is pathless. Update
+re-fetches only its strict HTTPS source and binds safe preview to installed identity/revision;
+`installStaged` preserves enablement, trashes prior bytes and CAS/restart-adopts once. Same bytes
+are `current`; drift closes. No background/cross-source/file/ZIP/chat update or public restore.
 
 ## 5. Skill Format
 

@@ -43,14 +43,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review of source-aware pure-Skill update: strict eligibility, immutable source/base identity, staged review, CAS adoption and Settings ownership.",
+    "scope": "Independent Planning review of local Markdown Skill staging: Main picker, bounded no-follow read, pathless receipt, reviewed install and Settings ownership.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 34,
-    "reviewedSha256": "dfcb2446245442ba87a80a5628340475d805cb75811f60ae71bde620cc9aca76"
+    "reviewedSha256": "e1a8f5dd28276a9eddc190f7afa65a9446d128c3e5ef6a2d5d54c7f80b46a8f0"
   },
   "reviewers": [{
-    "reviewerId": "skill-source-update-review",
-    "task": "Source-aware pure-Skill update",
+    "reviewerId": "skill-local-markdown-review",
+    "task": "Local Markdown pure-Skill staging",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -58,33 +58,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed Skill/API/UI/Decision/trace owners; Development and UI independently own source/base reproving, byte adoption, presentation and evidence."
+    "independence": "Planning reviewed Skill/API/UI/Decision/trace; Development and UI independently own picker/file reproving, staging, presentation and evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"skill-source-update-review","blockerCount":0,"summary":"Only canUpdate exposes Update; source, stage, old-byte trash and destinations stay Main-private."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"skill-source-update-review","blockerCount":0,"summary":"Skill/API/UI/Decision owners agree on source/base/revision fences, safe preview and one CAS effect."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"skill-source-update-review","blockerCount":0,"summary":"PIGE-SKILL-001 and B8.06 stay planned while other sources/classes and public restore remain open."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"skill-source-update-review","blockerCount":0,"summary":"Closed update results, private receipt and unchanged-body/revision rules fix implementation boundaries."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"skill-source-update-review","blockerCount":0,"summary":"Existing owners bind update without a new document, background updater or rollback API."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"skill-local-markdown-review","blockerCount":0,"summary":"Main alone selects and reads one .md; cancel is inert and no path/body reaches renderer."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"skill-local-markdown-review","blockerCount":0,"summary":"Skill/API/UI/Decision owners agree on exact vault/file receipt, safe preview and shared install."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"skill-local-markdown-review","blockerCount":0,"summary":"PIGE-SKILL-001 and B8.06 stay planned while ZIP/chat/vault/External-Web and restore remain."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"skill-local-markdown-review","blockerCount":0,"summary":"Closed picker results and descriptor/hash/vault fences fix implementation boundaries."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"skill-local-markdown-review","blockerCount":0,"summary":"Existing owners bind one .md slice without another document or importer framework."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict update identity, eligibility and closed results expose no body/path/source authority."},
-    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Skill, API, UI and Decision owners agree on the source-aware update boundary."},
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict picker/result identity exposes no path, body or local-source authority."},
+    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Skill/API/UI/Decision owners agree on local Markdown staging."},
     {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Planned acceptance remains open and final service LOC is inventoried."}
   ],
   "coordination": {
-    "taskId": "skill-source-update-20260728",
-    "taskTitle": "Source-aware pure-Skill update",
+    "taskId": "skill-local-markdown-20260728",
+    "taskTitle": "Local Markdown pure-Skill staging",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "URL install and installed lifecycle stay; update reuses reviewed stage/install with one exact target/source/base receipt.",
-    "acknowledgement": "Planning binds source-aware update; other inputs/classes, public restore and release completion stay open."
+    "compatibility": "URL/update/lifecycle stay; local Markdown adds one Main-owned picker and reuses staged review/install.",
+    "acknowledgement": "Planning binds local Markdown staging; ZIP/chat/vault/External-Web, restore and completion stay open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Eligibility is limited to current user-confirmed machine-local pure HTTPS-backed bytes.",
-    "Registry, vault, source, base or manifest drift fails closed before update mutation.",
-    "Background, cross-source, local-file/ZIP/chat update and public restore remain out of scope."
+    "Only one bounded UTF-8 pure machine-local SKILL.md is eligible.",
+    "Vault, descriptor, file identity, digest or registry drift fails closed.",
+    "Directory, ZIP, chat, remote update authority and public restore stay out of scope."
   ]
 }

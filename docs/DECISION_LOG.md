@@ -3391,8 +3391,8 @@ Date: 2026-07-27
 
 Decision:
 
-Ship exact URL stage/install/discard, source-aware staged update, CAS enable, trash uninstall and
-pathless export for verified machine-local pure Skills.
+Ship exact URL or Main-picked local Markdown stage/install, source update, CAS enable, trash
+uninstall and pathless export for verified machine-local pure Skills.
 
 Rationale:
 
@@ -3400,9 +3400,9 @@ Deliver a safe pure-Skill lifecycle without broader source/class/runtime scope.
 
 Consequences:
 
-- Stage executes nothing. Eligibility fences actions; update binds the same strict HTTPS source and
-  installed base/revision, preserves enablement, trashes old bytes and CAS-adopts once. Other
-  sources and public restore stay open.
+- Stage executes nothing. Local pick is one bounded no-follow read with private file identity;
+  update binds its strict HTTPS source and installed base/revision. Both reuse reviewed install;
+  ZIP/chat/vault/External-Web sources and public restore stay open.
 
 References:
 
