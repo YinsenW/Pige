@@ -670,10 +670,10 @@ cached value plus a quiet formula/stale-cache indicator. Warnings are localized 
 never raw adapter errors. The original remains separately revealable. Do not flatten
 rows into Markdown or expose storage/query-engine terminology.
 
-The first P1 slice opens the imported Dataset and keyboard-edits one non-formula scalar
-against its displayed revision. Commit refreshes; stale keeps the local attempt and offers
-Reload; unsupported is read-only. Undo requires the current after-revision.
-Pane/table/previews stay; other edits remain planned
+The first P1 slice opens a Dataset, keyboard-edits one non-formula scalar, and shows Add row
+only when Main approves a default row. Renderer sends no values/row ID. Commit adopts the
+snapshot and focuses the row; stale preserves the surface. Undo
+requires the current after-revision. Pane/table/previews stay; other edits remain planned.
 
 ## 9. Sources View
 

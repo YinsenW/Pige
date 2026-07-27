@@ -78,12 +78,11 @@ Two storage profiles share this envelope:
   plus versioned schema and provenance. It is read-only until a derived Dataset is
   created.
 
-`dataset.json` binds one profile, initial/active revision, stable IDs, payload integrity,
-versions and compatibility. An imported `managed_collection` stays one Dataset; new
-edit/Undo writes declare change kind, immutable revision SQLite/schema/Operation, then
-CAS-switch the manifest last. The manifest alone owns current truth; SourceRecord import
-evidence, originals, prior revisions and previews never change. Missing new fields are
-legacy-read only; dual payload roles require an explicit derived revision.
+`dataset.json` binds profile, initial/active revision, stable IDs, integrity, versions and
+compatibility. An imported `managed_collection` keeps its Dataset ID. Cell/default-row
+mutation or Undo writes immutable revision SQLite/schema/Operation, then CAS-switches the
+manifest last. SourceRecord evidence, originals, old revisions and previews stay immutable.
+Missing new fields are legacy-read only; dual payload roles require a derived revision.
 
 ```ts
 type DatasetEvidenceRef = {
