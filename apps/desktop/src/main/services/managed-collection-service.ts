@@ -2,11 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type {
-  KnowledgeActivitySummary,
-  KnowledgeActivityUndoResult,
-  VaultSummary
-} from "@pige/contracts";
+import type { KnowledgeActivitySummary, KnowledgeActivityUndoResult, VaultSummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
   CollectionCellEditRequestSchema,
@@ -18,7 +14,6 @@ import {
   DatasetRevisionSchema,
   DatasetSchemaRecordSchema,
   OperationRecordSchema,
-  SourceRecordSchema,
   type CollectionCell,
   type CollectionCellEditRequest,
   type CollectionCellEditResult,
@@ -27,12 +22,36 @@ import {
   type CollectionScalarValue,
   type DatasetColumn,
   type DatasetLogicalType,
-  type DatasetManifest,
   type DatasetRevision,
   type DatasetSchemaRecord,
   type OperationRecord
 } from "@pige/schemas";
-import { createVaultRelativePathResolver } from "./vault-layout";
+import {
+  MAX_COLLECTION_JSON_BYTES,
+  assertFileRef,
+  assertSafeVaultRoot,
+  fileRef,
+  hashCanonical,
+  openReadOnlyPayload,
+  operationConflict,
+  operationPathFor,
+  payloadInvalid,
+  publishImmutableFile,
+  readAllBundles,
+  readBundle,
+  readJsonBounded,
+  readJsonRef,
+  readOperationRecords,
+  readRevisionById,
+  replaceManifestCas,
+  requestConflict,
+  resolveBundleRelativePath,
+  syncFile,
+  validatePayloadMeta,
+  writeJsonExclusive,
+  writeJsonImmutable,
+  type BundleBinding
+} from "./managed-collection-storage";
 
 export interface ManagedCollectionVaultPort {
   current(): VaultSummary | undefined;
@@ -42,25 +61,6 @@ export interface ManagedCollectionVaultPort {
 export interface ManagedCollectionRecoveryResult {
   readonly recovered: number;
   readonly failed: number;
-}
-
-interface FileRef {
-  readonly path: string;
-  readonly checksum: string;
-  readonly size: number;
-}
-
-interface BundleBinding {
-  readonly vaultPath: string;
-  readonly bundlePath: string;
-  readonly bundleRelativePath: string;
-  readonly manifestPath: string;
-  readonly manifestBytes: Buffer;
-  readonly manifestStat: fs.Stats;
-  readonly manifest: DatasetManifest;
-  readonly revision: DatasetRevision;
-  readonly schema: DatasetSchemaRecord;
-  readonly payloadPath: string;
 }
 
 interface CellBinding {
@@ -77,21 +77,23 @@ interface MutationIdentity {
   readonly operationId: string;
 }
 
-const MAX_DATASET_ENTRIES = 10_000;
-const MAX_JSON_BYTES = 512 * 1024;
-const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
+interface CollectionOperationBinding {
+  readonly datasetId: string;
+  readonly tableId: string;
+  readonly rowId: string;
+  readonly columnId: string;
+  readonly beforeRevisionId: string;
+  readonly afterRevisionId: string;
+  readonly changeKind: "collection_cell_edit" | "collection_cell_undo";
+}
+
 const MAX_OPEN_ROWS = 50;
 const MAX_OPEN_COLUMNS = 32;
 const MAX_STRING_BYTES = 4 * 1024;
 const OPERATION_ID = /^op_(\d{8})_[a-z0-9]{8,}$/u;
 const REVISION_ID = /^dataset_rev_(\d{8})_[a-z0-9]{12,}$/u;
-const EDITABLE_LOGICAL_TYPES = new Set<DatasetLogicalType>([
-  "string",
-  "integer",
-  "number",
-  "boolean",
-  "date",
-  "datetime"
+const EDITABLE_TYPES = new Set<DatasetLogicalType>([
+  "string", "integer", "number", "boolean", "date", "datetime"
 ]);
 
 export class ManagedCollectionService {
@@ -104,7 +106,7 @@ export class ManagedCollectionService {
 
   async open(request: CollectionOpenRequest): Promise<CollectionOpenResult> {
     const parsed = CollectionOpenRequestSchema.parse(request);
-    const identity = resultIdentity(parsed);
+    const identity = openIdentity(parsed);
     const active = this.#activeVault(parsed.activeVaultId);
     if (!active) return CollectionOpenResultSchema.parse({ ...identity, status: "stale" });
     try {
@@ -127,30 +129,23 @@ export class ManagedCollectionService {
     return this.#serialize(() => this.#editCell(parsed));
   }
 
-  activitySummary(
-    operation: OperationRecord,
-    undoOperation: OperationRecord | undefined
-  ): KnowledgeActivitySummary | undefined {
-    const binding = readCollectionOperationBinding(operation);
+  activitySummary(operation: OperationRecord, undoOperation?: OperationRecord): KnowledgeActivitySummary | undefined {
+    const binding = readOperationBinding(operation);
     if (!binding) return undefined;
-    const undoBinding = undoOperation
-      ? readCollectionOperationBinding(undoOperation)
-      : undefined;
+    const undoBinding = undoOperation ? readOperationBinding(undoOperation) : undefined;
     if (undoOperation && !undoBinding) return undefined;
-    const currentRevisionId = this.#readCurrentRevision(binding.datasetId);
-    const revisionChanged = !undoOperation && currentRevisionId !== binding.afterRevisionId;
-    const target = {
-      kind: "collection" as const,
-      datasetId: binding.datasetId,
-      tableId: binding.tableId,
-      revisionId: undoBinding?.afterRevisionId ?? binding.afterRevisionId
-    };
+    const revisionChanged = !undoOperation && this.#readCurrentRevision(binding.datasetId) !== binding.afterRevisionId;
     return {
       operationId: operation.id,
       kind: "update_collection_cell",
       createdAt: operation.createdAt,
       targetLabel: "Collection cell",
-      target,
+      target: {
+        kind: "collection",
+        datasetId: binding.datasetId,
+        tableId: binding.tableId,
+        revisionId: undoBinding?.afterRevisionId ?? binding.afterRevisionId
+      },
       status: undoOperation ? "undone" : "applied",
       canUndo: !undoOperation && !revisionChanged,
       ...(undoOperation
@@ -161,37 +156,27 @@ export class ManagedCollectionService {
     };
   }
 
-  findUndoOperation(
-    operation: OperationRecord,
-    operations: readonly OperationRecord[]
-  ): OperationRecord | undefined {
-    const binding = readCollectionOperationBinding(operation);
+  findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined {
+    const binding = readOperationBinding(operation);
     if (!binding || binding.changeKind !== "collection_cell_edit") return undefined;
-    const undoId = createUndoOperationId(operation.id);
-    const candidate = operations.find((entry) => entry.id === undoId);
+    const candidate = operations.find((entry) => entry.id === createUndoOperationId(operation.id));
     return candidate && isMatchingUndoOperation(operation, candidate) ? candidate : undefined;
   }
 
-  async undo(
-    operation: OperationRecord,
-    expectedRevisionId: string | undefined
-  ): Promise<KnowledgeActivityUndoResult> {
+  async undo(operation: OperationRecord, expectedRevisionId?: string): Promise<KnowledgeActivityUndoResult> {
     return this.#serialize(async () => {
-      const binding = readCollectionOperationBinding(operation);
+      const binding = readOperationBinding(operation);
       if (!binding || binding.changeKind !== "collection_cell_edit") {
         return { status: "not_found", operationId: operation.id };
       }
-      if (!expectedRevisionId || expectedRevisionId !== binding.afterRevisionId) {
+      if (expectedRevisionId !== binding.afterRevisionId) {
         const current = this.#readCurrentRevision(binding.datasetId);
-        return {
-          status: "stale",
-          operationId: operation.id,
-          ...(current ? { currentRevisionId: current } : {})
-        };
+        return { status: "stale", operationId: operation.id, ...(current ? { currentRevisionId: current } : {}) };
       }
-      const existing = this.findUndoOperation(operation, readOperationRecords(this.#requireVaultPath()));
+      const operations = readOperationRecords(this.#requireVaultPath());
+      const existing = this.findUndoOperation(operation, operations);
       if (existing) {
-        const existingBinding = readCollectionOperationBinding(existing);
+        const existingBinding = readOperationBinding(existing);
         if (!existingBinding) throw operationConflict();
         return {
           status: "already_undone",
@@ -205,19 +190,14 @@ export class ManagedCollectionService {
       const current = readBundle(active.vaultPath, binding.datasetId);
       if (!current) return { status: "not_found", operationId: operation.id };
       if (current.manifest.activeRevision !== binding.afterRevisionId) {
-        return {
-          status: "stale",
-          operationId: operation.id,
-          currentRevisionId: current.manifest.activeRevision
-        };
+        return { status: "stale", operationId: operation.id, currentRevisionId: current.manifest.activeRevision };
       }
       const beforeRevision = readRevisionById(current, binding.beforeRevisionId);
       const beforeCell = readCellFromRevision(current, beforeRevision, binding.rowId, binding.columnId);
       if (!beforeCell) throw operationConflict();
-      const identity = createUndoIdentity(operation.id, binding.afterRevisionId);
       const committed = commitMutation({
         binding: current,
-        identity,
+        identity: createUndoIdentity(operation.id, binding.afterRevisionId),
         tableId: binding.tableId,
         rowId: binding.rowId,
         columnId: binding.columnId,
@@ -250,13 +230,19 @@ export class ManagedCollectionService {
   }
 
   async #editCell(request: CollectionCellEditRequest): Promise<CollectionCellEditResult> {
-    const identity = editResultIdentity(request);
+    const identity = editIdentity(request);
     const active = this.#activeVault(request.activeVaultId);
-    if (!active) return CollectionCellEditResultSchema.parse({ ...identity, status: "stale", currentRevisionId: request.expectedRevisionId });
+    if (!active) {
+      return CollectionCellEditResultSchema.parse({
+        ...identity,
+        status: "stale",
+        currentRevisionId: request.expectedRevisionId
+      });
+    }
     try {
       const binding = readBundle(active.vaultPath, request.datasetId);
       if (!binding) return CollectionCellEditResultSchema.parse({ ...identity, status: "not_found" });
-      const mutationIdentity = createEditIdentity(request);
+      const mutationIdentity = createEditMutationIdentity(request);
       const adopted = adoptExistingMutation(binding, request, mutationIdentity);
       if (adopted) return CollectionCellEditResultSchema.parse({ ...identity, ...adopted });
       if (binding.manifest.activeRevision !== request.expectedRevisionId) {
@@ -305,12 +291,11 @@ export class ManagedCollectionService {
     if (!binding.revision.change || binding.revision.change.kind === "initial_import") return false;
     const operationPath = operationPathFor(binding.vaultPath, binding.revision.operationId);
     if (fs.existsSync(operationPath)) {
-      const operation = OperationRecordSchema.parse(readJsonBounded(operationPath, MAX_JSON_BYTES));
+      const operation = OperationRecordSchema.parse(readJsonBounded(operationPath, MAX_COLLECTION_JSON_BYTES));
       assertOperationMatchesRevision(binding, operation);
       return false;
     }
-    const operation = createOperationForRevision(binding, binding.revision);
-    writeJsonExclusive(operationPath, operation);
+    writeJsonExclusive(operationPath, createOperationForRevision(binding, binding.revision));
     return true;
   }
 
@@ -359,10 +344,7 @@ interface CommitMutationInput {
     | { readonly kind: "collection_cell_undo"; readonly undoOfOperationId: string };
 }
 
-function commitMutation(input: CommitMutationInput): {
-  readonly revision: DatasetRevision;
-  readonly operation: OperationRecord;
-} {
+function commitMutation(input: CommitMutationInput): { readonly revision: DatasetRevision; readonly operation: OperationRecord } {
   const current = readBundle(input.binding.vaultPath, input.binding.manifest.datasetId);
   if (!current || current.manifest.activeRevision !== input.expectedRevisionId) {
     throw new PigeDomainError("collection.revision_changed", "The Collection revision changed before commit.");
@@ -379,11 +361,8 @@ function commitMutation(input: CommitMutationInput): {
     fs.copyFileSync(current.payloadPath, stagedPayload);
     mutatePayload(stagedPayload, input.identity.revisionId, input.rowId, currentCell, input.value);
     const schema = createNextSchema(current.schema, input.identity.revisionId, currentCell, input.value);
-    const finalPayload = resolveBundleRelativePath(current.bundlePath, payloadRelativePath);
-    const finalSchema = resolveBundleRelativePath(current.bundlePath, schemaRelativePath);
-    const finalRevision = resolveBundleRelativePath(current.bundlePath, revisionRelativePath);
-    publishImmutableFile(stagedPayload, finalPayload);
-    writeJsonImmutable(finalSchema, schema);
+    publishImmutableFile(stagedPayload, resolveBundleRelativePath(current.bundlePath, payloadRelativePath));
+    writeJsonImmutable(resolveBundleRelativePath(current.bundlePath, schemaRelativePath), schema);
     const now = new Date().toISOString();
     const revision = DatasetRevisionSchema.parse({
       ...current.revision,
@@ -392,26 +371,19 @@ function commitMutation(input: CommitMutationInput): {
       schema: fileRef(current.bundlePath, schemaRelativePath),
       payload: { ...fileRef(current.bundlePath, payloadRelativePath), format: "sqlite" },
       operationId: input.identity.operationId,
-      change: {
-        ...input.change,
-        tableId: input.tableId,
-        rowId: input.rowId,
-        columnId: input.columnId
-      },
+      change: { ...input.change, tableId: input.tableId, rowId: input.rowId, columnId: input.columnId },
       createdAt: now
     });
-    writeJsonImmutable(finalRevision, revision);
-    const revisionRef = fileRef(current.bundlePath, revisionRelativePath);
-    const nextManifest = DatasetManifestSchema.parse({
+    writeJsonImmutable(resolveBundleRelativePath(current.bundlePath, revisionRelativePath), revision);
+    replaceManifestCas(current, DatasetManifestSchema.parse({
       ...current.manifest,
       initialRevision: current.manifest.initialRevision ?? current.manifest.activeRevision,
       activeRevision: revision.id,
-      revision: revisionRef,
+      revision: fileRef(current.bundlePath, revisionRelativePath),
       schema: revision.schema,
       payload: revision.payload,
       updatedAt: now
-    });
-    replaceManifestCas(current, nextManifest);
+    }));
     const committed = readBundle(current.vaultPath, current.manifest.datasetId);
     if (!committed || committed.manifest.activeRevision !== revision.id) {
       throw new PigeDomainError("collection.commit_uncertain", "The Collection commit could not be adopted.");
@@ -435,22 +407,21 @@ function readSnapshot(binding: BundleBinding, tableId: string) {
     const rows = database.prepare(
       `SELECT row_id FROM pige_dataset_rows WHERE table_id = ? ORDER BY ordinal ASC LIMIT ${MAX_OPEN_ROWS}`
     ).all(tableId) as Array<{ row_id?: unknown }>;
-    const readCellStatement = database.prepare([
-      "SELECT state, projection_kind, projection_json, formula_json",
-      "FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
-    ].join(" "));
+    const statement = database.prepare(
+      "SELECT state, projection_kind, projection_json, formula_json FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
+    );
     const projectedRows = rows.map((row) => {
       if (typeof row.row_id !== "string") throw payloadInvalid();
       const rowId = row.row_id;
       const cells = columns.map((column): CollectionCell => {
-        const raw = readCellStatement.get(rowId, column.id) as Record<string, unknown> | undefined;
+        const raw = statement.get(rowId, column.id) as Record<string, unknown> | undefined;
         if (!raw) throw payloadInvalid();
         const cell = parseCellRecord(column, raw);
         const reason = cellReadOnlyReason(cell);
         return {
           columnId: column.id,
           value: parseCellValue(cell, column.logicalType),
-          editable: reason === undefined,
+          editable: !reason,
           ...(reason ? { readOnlyReason: reason } : {})
         };
       });
@@ -477,26 +448,20 @@ function readSnapshot(binding: BundleBinding, tableId: string) {
   }
 }
 
-function readCell(
-  binding: BundleBinding,
-  tableId: string,
-  rowId: string,
-  columnId: string
-): CellBinding | undefined {
+function readCell(binding: BundleBinding, tableId: string, rowId: string, columnId: string): CellBinding | undefined {
   const table = binding.schema.tables.find((candidate) => candidate.id === tableId);
   const column = table?.columns.find((candidate) => candidate.id === columnId);
   if (!table || !column) return undefined;
   const database = openReadOnlyPayload(binding.payloadPath);
   try {
     validatePayloadMeta(database, binding.manifest.datasetId, binding.revision.id);
-    const row = database.prepare(
-      "SELECT table_id FROM pige_dataset_rows WHERE row_id = ?"
-    ).get(rowId) as { table_id?: unknown } | undefined;
+    const row = database.prepare("SELECT table_id FROM pige_dataset_rows WHERE row_id = ?").get(rowId) as {
+      table_id?: unknown;
+    } | undefined;
     if (row?.table_id !== tableId) return undefined;
-    const raw = database.prepare([
-      "SELECT state, projection_kind, projection_json, formula_json",
-      "FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
-    ].join(" ")).get(rowId, columnId) as Record<string, unknown> | undefined;
+    const raw = database.prepare(
+      "SELECT state, projection_kind, projection_json, formula_json FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
+    ).get(rowId, columnId) as Record<string, unknown> | undefined;
     return raw ? { tableName: table.name, ...parseCellRecord(column, raw) } : undefined;
   } finally {
     database.close();
@@ -513,9 +478,8 @@ function readCellFromRevision(
   const table = schema.tables.find((candidate) => candidate.columns.some((column) => column.id === columnId));
   const column = table?.columns.find((candidate) => candidate.id === columnId);
   if (!table || !column) return undefined;
-  const payloadPath = resolveBundleRelativePath(binding.bundlePath, revision.payload.path);
   assertFileRef(binding.bundlePath, revision.payload);
-  const database = openReadOnlyPayload(payloadPath);
+  const database = openReadOnlyPayload(resolveBundleRelativePath(binding.bundlePath, revision.payload.path));
   try {
     validatePayloadMeta(database, revision.datasetId, revision.id);
     const raw = database.prepare([
@@ -547,31 +511,29 @@ function parseCellRecord(column: DatasetColumn, raw: Record<string, unknown>): O
 
 function parseCellValue(cell: Omit<CellBinding, "tableName">, logicalType: DatasetLogicalType): CollectionScalarValue {
   if (cell.state === "missing" || cell.state === "null") return null;
-  if (typeof cell.projectionJson !== "string") throw payloadInvalid();
-  let projection: unknown;
-  try {
-    projection = JSON.parse(cell.projectionJson);
-  } catch {
-    throw payloadInvalid();
-  }
-  if (!projection || typeof projection !== "object" || Array.isArray(projection)) throw payloadInvalid();
-  const value = (projection as Record<string, unknown>).value;
+  if (cell.state === "empty") return "";
+  if (cell.state !== "value" || cell.projectionJson === null) throw payloadInvalid();
+  const projection = JSON.parse(cell.projectionJson) as Record<string, unknown>;
   switch (logicalType) {
     case "string":
-    case "integer":
     case "date":
     case "datetime":
-      if (typeof value !== "string") throw payloadInvalid();
+      if (typeof projection.value !== "string") throw payloadInvalid();
+      return projection.value;
+    case "integer": {
+      const value = typeof projection.value === "number" ? projection.value : Number(projection.value);
+      if (!Number.isSafeInteger(value)) throw payloadInvalid();
       return value;
-    case "number":
-      if (typeof value !== "number" || !Number.isFinite(value)) throw payloadInvalid();
+    }
+    case "number": {
+      const value = typeof projection.value === "number" ? projection.value : Number(projection.value);
+      if (!Number.isFinite(value)) throw payloadInvalid();
       return value;
+    }
     case "boolean":
-      if (typeof value !== "boolean") throw payloadInvalid();
-      return value;
+      if (typeof projection.value !== "boolean") throw payloadInvalid();
+      return projection.value;
     case "binary":
-      if (typeof value !== "string") throw payloadInvalid();
-      return value;
     case "unknown":
       throw payloadInvalid();
   }
@@ -579,32 +541,24 @@ function parseCellValue(cell: Omit<CellBinding, "tableName">, logicalType: Datas
 
 function cellReadOnlyReason(cell: Omit<CellBinding, "tableName">): "formula" | "unsupported_type" | undefined {
   if (cell.formulaJson !== null) return "formula";
-  return EDITABLE_LOGICAL_TYPES.has(cell.column.logicalType) ? undefined : "unsupported_type";
+  return EDITABLE_TYPES.has(cell.column.logicalType) ? undefined : "unsupported_type";
 }
 
-function validateScalar(
-  value: CollectionScalarValue,
-  logicalType: DatasetLogicalType
-): "type_mismatch" | "value_too_large" | undefined {
+function validateScalar(value: CollectionScalarValue, logicalType: DatasetLogicalType): string | undefined {
   if (value === null) return undefined;
-  if (typeof value === "string" && Buffer.byteLength(value, "utf8") > MAX_STRING_BYTES) return "value_too_large";
-  switch (logicalType) {
-    case "string":
-      return typeof value === "string" ? undefined : "type_mismatch";
-    case "integer":
-      return typeof value === "string" && /^-?(?:0|[1-9][0-9]*)$/u.test(value) ? undefined : "type_mismatch";
-    case "number":
-      return typeof value === "number" && Number.isFinite(value) ? undefined : "type_mismatch";
-    case "boolean":
-      return typeof value === "boolean" ? undefined : "type_mismatch";
-    case "date":
-      return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/u.test(value) ? undefined : "type_mismatch";
-    case "datetime":
-      return typeof value === "string" && Number.isFinite(Date.parse(value)) ? undefined : "type_mismatch";
-    case "binary":
-    case "unknown":
-      return "type_mismatch";
+  if (logicalType === "string") {
+    return typeof value === "string" && Buffer.byteLength(value, "utf8") <= MAX_STRING_BYTES
+      ? undefined
+      : "type_mismatch";
   }
+  if (logicalType === "integer") return typeof value === "number" && Number.isSafeInteger(value) ? undefined : "type_mismatch";
+  if (logicalType === "number") return typeof value === "number" && Number.isFinite(value) ? undefined : "type_mismatch";
+  if (logicalType === "boolean") return typeof value === "boolean" ? undefined : "type_mismatch";
+  if (logicalType === "date") return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/u.test(value) ? undefined : "type_mismatch";
+  if (logicalType === "datetime") {
+    return typeof value === "string" && !Number.isNaN(Date.parse(value)) ? undefined : "type_mismatch";
+  }
+  return "type_mismatch";
 }
 
 function mutatePayload(
@@ -617,7 +571,7 @@ function mutatePayload(
   const database = new DatabaseSync(payloadPath);
   try {
     database.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;");
-    validatePayloadMeta(database, undefined, undefined);
+    validatePayloadMeta(database);
     const encoded = encodeCellValue(value, cell.column.logicalType);
     database.exec("BEGIN IMMEDIATE");
     try {
@@ -634,8 +588,9 @@ function mutatePayload(
         cell.column.id
       );
       if (result.changes !== 1) throw new PigeDomainError("collection.cell_changed", "The Collection cell changed before commit.");
-      const meta = database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'").run(revisionId);
-      if (meta.changes !== 1) throw payloadInvalid();
+      if (database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'").run(revisionId).changes !== 1) {
+        throw payloadInvalid();
+      }
       database.exec("COMMIT");
     } catch (caught) {
       database.exec("ROLLBACK");
@@ -649,33 +604,22 @@ function mutatePayload(
   syncFile(payloadPath);
 }
 
-function encodeCellValue(value: CollectionScalarValue, logicalType: DatasetLogicalType): {
-  readonly state: "null" | "empty" | "value";
-  readonly projectionKind: string;
-  readonly projectionJson: string | null;
-} {
-  if (value === null) return { state: "null", projectionKind: "null", projectionJson: null };
-  switch (logicalType) {
-    case "string":
-      return {
-        state: value === "" ? "empty" : "value",
-        projectionKind: "text",
-        projectionJson: JSON.stringify({ kind: "text", value })
-      };
-    case "integer":
-      return { state: "value", projectionKind: "integer", projectionJson: JSON.stringify({ kind: "integer", value }) };
-    case "number":
-      return { state: "value", projectionKind: "real", projectionJson: JSON.stringify({ kind: "real", value }) };
-    case "boolean":
-      return { state: "value", projectionKind: "boolean", projectionJson: JSON.stringify({ kind: "boolean", value }) };
-    case "date":
-      return { state: "value", projectionKind: "date", projectionJson: JSON.stringify({ kind: "date", value }) };
-    case "datetime":
-      return { state: "value", projectionKind: "datetime", projectionJson: JSON.stringify({ kind: "datetime", value }) };
-    case "binary":
-    case "unknown":
-      throw new PigeDomainError("collection.type_mismatch", "The Collection cell type is not editable.");
+function encodeCellValue(value: CollectionScalarValue, logicalType: DatasetLogicalType) {
+  if (value === null) return { state: "null" as const, projectionKind: "null", projectionJson: null };
+  if (logicalType === "string") {
+    return {
+      state: value === "" ? "empty" as const : "value" as const,
+      projectionKind: "text",
+      projectionJson: JSON.stringify({ kind: "text", value })
+    };
   }
+  const projectionKind = logicalType === "number" ? "real" : logicalType;
+  if (!EDITABLE_TYPES.has(logicalType)) throw new PigeDomainError("collection.type_mismatch", "The Collection cell type is not editable.");
+  return {
+    state: "value" as const,
+    projectionKind,
+    projectionJson: JSON.stringify({ kind: projectionKind, value })
+  };
 }
 
 function createNextSchema(
@@ -716,12 +660,12 @@ function adoptExistingMutation(
   binding: BundleBinding,
   request: CollectionCellEditRequest,
   identity: MutationIdentity
-): Pick<CollectionCellEditResult, "status"> & Partial<CollectionCellEditResult> | undefined {
+): Partial<CollectionCellEditResult> | undefined {
   const revisionPath = resolveBundleRelativePath(binding.bundlePath, `revisions/${identity.revisionId}.json`);
   const operationPath = operationPathFor(binding.vaultPath, identity.operationId);
   if (!fs.existsSync(revisionPath) && !fs.existsSync(operationPath)) return undefined;
   if (!fs.existsSync(revisionPath)) throw requestConflict();
-  const revision = DatasetRevisionSchema.parse(readJsonBounded(revisionPath, MAX_JSON_BYTES));
+  const revision = DatasetRevisionSchema.parse(readJsonBounded(revisionPath, MAX_COLLECTION_JSON_BYTES));
   if (
     revision.id !== identity.revisionId ||
     revision.operationId !== identity.operationId ||
@@ -738,45 +682,36 @@ function adoptExistingMutation(
   let committedBinding = binding;
   if (binding.manifest.activeRevision !== revision.id) {
     if (binding.manifest.activeRevision !== request.expectedRevisionId) {
-      return {
-        status: "stale",
-        currentRevisionId: binding.manifest.activeRevision
-      } as Pick<CollectionCellEditResult, "status"> & Partial<CollectionCellEditResult>;
+      return { status: "stale", currentRevisionId: binding.manifest.activeRevision };
     }
-    const revisionRelativePath = `revisions/${revision.id}.json`;
     replaceManifestCas(binding, DatasetManifestSchema.parse({
       ...binding.manifest,
       initialRevision: binding.manifest.initialRevision ?? binding.manifest.activeRevision,
       activeRevision: revision.id,
-      revision: fileRef(binding.bundlePath, revisionRelativePath),
+      revision: fileRef(binding.bundlePath, `revisions/${revision.id}.json`),
       schema: revision.schema,
       payload: revision.payload,
       updatedAt: revision.createdAt
     }));
-    const adoptedBinding = readBundle(binding.vaultPath, binding.manifest.datasetId);
-    if (!adoptedBinding || adoptedBinding.manifest.activeRevision !== revision.id) {
+    const adopted = readBundle(binding.vaultPath, binding.manifest.datasetId);
+    if (!adopted || adopted.manifest.activeRevision !== revision.id) {
       throw new PigeDomainError("collection.commit_uncertain", "The Collection replay could not be adopted.");
     }
-    committedBinding = adoptedBinding;
+    committedBinding = adopted;
   }
   const operation = fs.existsSync(operationPath)
-    ? OperationRecordSchema.parse(readJsonBounded(operationPath, MAX_JSON_BYTES))
+    ? OperationRecordSchema.parse(readJsonBounded(operationPath, MAX_COLLECTION_JSON_BYTES))
     : createOperationForRevision(committedBinding, revision);
   assertOperationMatchesRevision({ ...committedBinding, revision }, operation);
   if (!fs.existsSync(operationPath)) writeJsonExclusive(operationPath, operation);
-  return {
-    status: "committed",
-    revisionId: revision.id,
-    operationId: operation.id
-  } as Pick<CollectionCellEditResult, "status"> & Partial<CollectionCellEditResult>;
+  return { status: "committed", revisionId: revision.id, operationId: operation.id };
 }
 
-function createEditIdentity(request: CollectionCellEditRequest): MutationIdentity {
+function createEditMutationIdentity(request: CollectionCellEditRequest): MutationIdentity {
   const dateKey = REVISION_ID.exec(request.expectedRevisionId)?.[1];
   if (!dateKey) throw requestConflict();
-  const suffix = digest("pige:collection-edit:v1", request.requestId).slice(0, 20);
   return {
-    revisionId: `dataset_rev_${dateKey}_${suffix}`,
+    revisionId: `dataset_rev_${dateKey}_${digest("pige:collection-edit:v1", request.requestId).slice(0, 20)}`,
     operationId: `op_${dateKey}_${digest("pige:collection-edit-operation:v1", request.requestId).slice(0, 20)}`
   };
 }
@@ -796,101 +731,35 @@ function createUndoOperationId(operationId: string): string {
   return `op_${dateKey}_${digest("pige:collection-undo-operation:v1", operationId).slice(0, 20)}`;
 }
 
-function readBundle(vaultPath: string, datasetId: string): BundleBinding | undefined {
-  return readAllBundles(vaultPath).find((binding) => binding.manifest.datasetId === datasetId);
-}
-
-function readAllBundles(vaultPath: string): BundleBinding[] {
-  assertSafeVaultRoot(vaultPath);
-  const datasetsRoot = resolveVaultRelativePath(vaultPath, "datasets");
-  if (!fs.existsSync(datasetsRoot)) return [];
-  assertSafeDirectory(vaultPath, datasetsRoot);
-  const entries = fs.readdirSync(datasetsRoot, { withFileTypes: true });
-  if (entries.length > MAX_DATASET_ENTRIES) throw new PigeDomainError("collection.limit", "The Dataset directory is too large.");
-  const result: BundleBinding[] = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
-    const bundlePath = path.join(datasetsRoot, entry.name);
-    assertSafeDirectory(vaultPath, bundlePath);
-    const manifestPath = path.join(bundlePath, "dataset.json");
-    if (!fs.existsSync(manifestPath)) continue;
-    const manifestFile = readRegularFile(manifestPath, MAX_JSON_BYTES, bundlePath);
-    const manifest = DatasetManifestSchema.parse(JSON.parse(manifestFile.bytes.toString("utf8")));
-    const revision = DatasetRevisionSchema.parse(readJsonRef(bundlePath, manifest.revision));
-    const schema = DatasetSchemaRecordSchema.parse(readJsonRef(bundlePath, manifest.schema));
-    assertFileRef(bundlePath, manifest.payload);
-    assertFileRef(bundlePath, revision.schema);
-    assertFileRef(bundlePath, revision.payload);
-    if (
-      manifest.profile !== "managed_collection" ||
-      manifest.activeRevision !== revision.id ||
-      manifest.datasetId !== revision.datasetId ||
-      manifest.datasetId !== schema.datasetId ||
-      revision.id !== schema.revisionId ||
-      hashCanonical(manifest.schema) !== hashCanonical(revision.schema) ||
-      hashCanonical(manifest.payload) !== hashCanonical(revision.payload)
-    ) throw new PigeDomainError("collection.revision_invalid", "The Collection revision binding is invalid.");
-    result.push({
-      vaultPath,
-      bundlePath,
-      bundleRelativePath: path.posix.join("datasets", entry.name),
-      manifestPath,
-      manifestBytes: manifestFile.bytes,
-      manifestStat: manifestFile.stat,
-      manifest,
-      revision,
-      schema,
-      payloadPath: resolveBundleRelativePath(bundlePath, manifest.payload.path)
-    });
-  }
-  const identities = new Set(result.map((binding) => binding.manifest.datasetId));
-  if (identities.size !== result.length) throw new PigeDomainError("collection.identity_conflict", "Dataset identities are not unique.");
-  return result;
-}
-
-function readRevisionById(binding: BundleBinding, revisionId: string): DatasetRevision {
-  const revisionPath = resolveBundleRelativePath(binding.bundlePath, `revisions/${revisionId}.json`);
-  if (!fs.existsSync(revisionPath)) throw operationConflict();
-  const revision = DatasetRevisionSchema.parse(readJsonBounded(revisionPath, MAX_JSON_BYTES));
-  if (revision.id !== revisionId || revision.datasetId !== binding.manifest.datasetId) throw operationConflict();
-  assertFileRef(binding.bundlePath, revision.schema);
-  assertFileRef(binding.bundlePath, revision.payload);
-  return revision;
-}
-
-interface CollectionOperationBinding {
-  readonly datasetId: string;
-  readonly tableId: string;
-  readonly rowId: string;
-  readonly columnId: string;
-  readonly beforeRevisionId: string;
-  readonly afterRevisionId: string;
-  readonly changeKind: "collection_cell_edit" | "collection_cell_undo";
-}
-
-function createOperationForRevision(
-  binding: BundleBinding,
-  revision: DatasetRevision
-): OperationRecord {
+function createOperationForRevision(binding: BundleBinding, revision: DatasetRevision): OperationRecord {
   const change = revision.change;
   if (!change || change.kind === "initial_import" || !revision.parentRevisionId) throw operationConflict();
   const beforeRevision = readRevisionById(binding, revision.parentRevisionId);
   const schema = DatasetSchemaRecordSchema.parse(readJsonRef(binding.bundlePath, revision.schema));
-  const column = schema.tables
-    .find((table) => table.id === change.tableId)
+  const column = schema.tables.find((table) => table.id === change.tableId)
     ?.columns.find((candidate) => candidate.id === change.columnId);
   if (!column) throw operationConflict();
   const revisionRelativePath = `revisions/${revision.id}.json`;
   const beforeRelativePath = `revisions/${beforeRevision.id}.json`;
   const targetRefs = [
     { kind: "dataset" as const, id: revision.datasetId, path: binding.bundleRelativePath },
-    { kind: "dataset_revision" as const, id: revision.id, path: `${binding.bundleRelativePath}/${revisionRelativePath}`, checksum: fileRef(binding.bundlePath, revisionRelativePath).checksum },
+    {
+      kind: "dataset_revision" as const,
+      id: revision.id,
+      path: `${binding.bundleRelativePath}/${revisionRelativePath}`,
+      checksum: fileRef(binding.bundlePath, revisionRelativePath).checksum
+    },
     { kind: "table" as const, id: change.tableId },
     { kind: "row" as const, id: change.rowId },
     { kind: "column" as const, id: change.columnId }
   ];
   const sourceRefs = [
-    { kind: "dataset_revision" as const, id: beforeRevision.id, path: `${binding.bundleRelativePath}/${beforeRelativePath}`, checksum: fileRef(binding.bundlePath, beforeRelativePath).checksum },
+    {
+      kind: "dataset_revision" as const,
+      id: beforeRevision.id,
+      path: `${binding.bundleRelativePath}/${beforeRelativePath}`,
+      checksum: fileRef(binding.bundlePath, beforeRelativePath).checksum
+    },
     ...(change.kind === "collection_cell_undo"
       ? [{ kind: "operation" as const, id: change.undoOfOperationId }]
       : [])
@@ -914,7 +783,7 @@ function createOperationForRevision(
   });
 }
 
-function readCollectionOperationBinding(operation: OperationRecord): CollectionOperationBinding | undefined {
+function readOperationBinding(operation: OperationRecord): CollectionOperationBinding | undefined {
   if (operation.kind !== "update_collection_cell") return undefined;
   const dataset = operation.targetRefs.find((ref) => ref.kind === "dataset");
   const after = operation.after?.kind === "dataset_revision" ? operation.after : undefined;
@@ -922,11 +791,7 @@ function readCollectionOperationBinding(operation: OperationRecord): CollectionO
   const table = operation.targetRefs.find((ref) => ref.kind === "table");
   const row = operation.targetRefs.find((ref) => ref.kind === "row");
   const column = operation.targetRefs.find((ref) => ref.kind === "column");
-  if (!dataset || !before || !after || !table || !row || !column) return undefined;
-  const revisionId = after.id;
-  const revisionDate = REVISION_ID.exec(revisionId);
-  if (!revisionDate) return undefined;
-  const sourceOperation = operation.sourceRefs.find((ref) => ref.kind === "operation");
+  if (!dataset || !before || !after || !table || !row || !column || !REVISION_ID.test(after.id)) return undefined;
   return {
     datasetId: dataset.id,
     tableId: table.id,
@@ -934,14 +799,16 @@ function readCollectionOperationBinding(operation: OperationRecord): CollectionO
     columnId: column.id,
     beforeRevisionId: before.id,
     afterRevisionId: after.id,
-    changeKind: sourceOperation ? "collection_cell_undo" : "collection_cell_edit"
+    changeKind: operation.sourceRefs.some((ref) => ref.kind === "operation")
+      ? "collection_cell_undo"
+      : "collection_cell_edit"
   };
 }
 
 function isMatchingUndoOperation(original: OperationRecord, candidate: OperationRecord): boolean {
-  const originalBinding = readCollectionOperationBinding(original);
-  const candidateBinding = readCollectionOperationBinding(candidate);
-  return originalBinding !== undefined && candidateBinding !== undefined &&
+  const originalBinding = readOperationBinding(original);
+  const candidateBinding = readOperationBinding(candidate);
+  return !!originalBinding && !!candidateBinding &&
     candidate.id === createUndoOperationId(original.id) &&
     candidateBinding.changeKind === "collection_cell_undo" &&
     candidateBinding.datasetId === originalBinding.datasetId &&
@@ -953,259 +820,15 @@ function isMatchingUndoOperation(original: OperationRecord, candidate: Operation
 }
 
 function assertOperationMatchesRevision(binding: BundleBinding, operation: OperationRecord): void {
-  if (operation.id !== binding.revision.operationId) throw operationConflict();
-  const parsed = createOperationForRevision(binding, binding.revision);
-  if (hashCanonical(operation) !== hashCanonical(parsed)) throw operationConflict();
-}
-
-function replaceManifestCas(binding: BundleBinding, next: DatasetManifest): void {
-  const current = readRegularFile(binding.manifestPath, MAX_JSON_BYTES, binding.bundlePath);
   if (
-    !current.bytes.equals(binding.manifestBytes) ||
-    !sameFileRevision(current.stat, binding.manifestStat)
-  ) throw new PigeDomainError("collection.revision_changed", "The Collection manifest changed before commit.");
-  const temporaryPath = `${binding.manifestPath}.${process.pid}.${randomUUID()}.tmp`;
-  try {
-    fs.writeFileSync(temporaryPath, `${JSON.stringify(next, null, 2)}\n`, { flag: "wx", mode: 0o600 });
-    syncFile(temporaryPath);
-    const verify = readRegularFile(binding.manifestPath, MAX_JSON_BYTES, binding.bundlePath);
-    if (!verify.bytes.equals(binding.manifestBytes) || !sameFileRevision(verify.stat, binding.manifestStat)) {
-      throw new PigeDomainError("collection.revision_changed", "The Collection manifest changed before publication.");
-    }
-    fs.renameSync(temporaryPath, binding.manifestPath);
-    syncDirectory(path.dirname(binding.manifestPath));
-  } finally {
-    fs.rmSync(temporaryPath, { force: true });
-  }
+    operation.id !== binding.revision.operationId ||
+    hashCanonical(operation) !== hashCanonical(createOperationForRevision(binding, binding.revision))
+  ) throw operationConflict();
 }
 
-function publishImmutableFile(stagedPath: string, destinationPath: string): void {
-  fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
-  try {
-    fs.linkSync(stagedPath, destinationPath);
-  } catch (caught) {
-    if (!isErrno(caught, "EEXIST")) throw caught;
-    if (checksumFile(stagedPath) !== checksumFile(destinationPath)) throw requestConflict();
-    return;
-  }
-  syncDirectory(path.dirname(destinationPath));
-}
-
-function writeJsonImmutable(filePath: string, value: unknown): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const bytes = Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8");
-  try {
-    fs.writeFileSync(filePath, bytes, { flag: "wx", mode: 0o600 });
-    syncFile(filePath);
-    syncDirectory(path.dirname(filePath));
-  } catch (caught) {
-    if (!isErrno(caught, "EEXIST")) throw caught;
-    const existing = readRegularFile(filePath, MAX_JSON_BYTES, path.dirname(filePath));
-    if (!existing.bytes.equals(bytes)) throw requestConflict();
-  }
-}
-
-function writeJsonExclusive(filePath: string, value: unknown): void {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const expected = Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8");
-  try {
-    fs.writeFileSync(filePath, expected, { flag: "wx", mode: 0o600 });
-    syncFile(filePath);
-    syncDirectory(path.dirname(filePath));
-  } catch (caught) {
-    if (!isErrno(caught, "EEXIST")) throw caught;
-    const existing = readRegularFile(filePath, MAX_JSON_BYTES, path.dirname(filePath));
-    if (!existing.bytes.equals(expected)) throw operationConflict();
-  }
-}
-
-function operationPathFor(vaultPath: string, operationId: string): string {
-  const dateKey = OPERATION_ID.exec(operationId)?.[1];
-  if (!dateKey) throw operationConflict();
-  return resolveVaultRelativePath(
-    vaultPath,
-    `.pige/operations/${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}/${operationId}.json`
-  );
-}
-
-function readOperationRecords(vaultPath: string): OperationRecord[] {
-  const root = resolveVaultRelativePath(vaultPath, ".pige/operations");
-  if (!fs.existsSync(root)) return [];
-  const result: OperationRecord[] = [];
-  const stack = [root];
-  let seen = 0;
-  while (stack.length > 0) {
-    const current = stack.pop()!;
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      seen += 1;
-      if (seen > MAX_DATASET_ENTRIES) throw new PigeDomainError("collection.limit", "The Operation store is too large.");
-      if (entry.isSymbolicLink()) continue;
-      const absolute = path.join(current, entry.name);
-      if (entry.isDirectory()) stack.push(absolute);
-      else if (entry.isFile() && entry.name.endsWith(".json")) {
-        try {
-          result.push(OperationRecordSchema.parse(readJsonBounded(absolute, MAX_JSON_BYTES)));
-        } catch {
-          // Activity separately reports malformed records; Collection adoption ignores them.
-        }
-      }
-    }
-  }
-  return result;
-}
-
-function openReadOnlyPayload(filePath: string): DatabaseSync {
-  const stat = fs.lstatSync(filePath);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_PAYLOAD_BYTES) throw payloadInvalid();
-  const database = new DatabaseSync(filePath, { readOnly: true });
-  try {
-    database.exec("PRAGMA query_only=ON; PRAGMA trusted_schema=OFF; PRAGMA foreign_keys=ON;");
-    validatePayloadSchema(database);
-    return database;
-  } catch (caught) {
-    database.close();
-    throw caught;
-  }
-}
-
-function validatePayloadSchema(database: DatabaseSync): void {
-  const expectedTables = new Set([
-    "pige_dataset_meta",
-    "pige_dataset_tables",
-    "pige_dataset_columns",
-    "pige_dataset_rows",
-    "pige_dataset_cells"
-  ]);
-  const expectedIndexes = new Set([
-    "sqlite_autoindex_pige_dataset_meta_1",
-    "sqlite_autoindex_pige_dataset_tables_1",
-    "sqlite_autoindex_pige_dataset_columns_1",
-    "sqlite_autoindex_pige_dataset_columns_2",
-    "sqlite_autoindex_pige_dataset_rows_1",
-    "sqlite_autoindex_pige_dataset_rows_2",
-    "sqlite_autoindex_pige_dataset_cells_1"
-  ]);
-  const objects = database.prepare(
-    "SELECT type, name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' OR name LIKE 'sqlite_autoindex_pige_dataset_%'"
-  ).all() as Array<{ type?: unknown; name?: unknown }>;
-  for (const object of objects) {
-    if (typeof object.type !== "string" || typeof object.name !== "string") throw payloadInvalid();
-    if (object.type === "table" && expectedTables.delete(object.name)) continue;
-    if (object.type === "index" && expectedIndexes.delete(object.name)) continue;
-    throw payloadInvalid();
-  }
-  if (expectedTables.size !== 0 || expectedIndexes.size !== 0) throw payloadInvalid();
-}
-
-function validatePayloadMeta(database: DatabaseSync, datasetId?: string, revisionId?: string): void {
-  validatePayloadSchema(database);
-  const rows = database.prepare("SELECT key, value FROM pige_dataset_meta").all() as Array<{
-    key?: unknown;
-    value?: unknown;
-  }>;
-  const meta = new Map<string, string>();
-  for (const row of rows) {
-    if (typeof row.key !== "string" || typeof row.value !== "string" || meta.has(row.key)) throw payloadInvalid();
-    meta.set(row.key, row.value);
-  }
-  if (
-    meta.get("format") !== "pige-managed-collection-v1" ||
-    (datasetId !== undefined && meta.get("dataset_id") !== datasetId) ||
-    (revisionId !== undefined && meta.get("revision_id") !== revisionId)
-  ) throw payloadInvalid();
-}
-
-function readJsonRef(bundlePath: string, ref: FileRef): unknown {
-  assertFileRef(bundlePath, ref);
-  return readJsonBounded(resolveBundleRelativePath(bundlePath, ref.path), MAX_JSON_BYTES);
-}
-
-function assertFileRef(bundlePath: string, ref: FileRef): void {
-  const filePath = resolveBundleRelativePath(bundlePath, ref.path);
-  const file = readRegularFile(filePath, Math.max(MAX_JSON_BYTES, Math.min(MAX_PAYLOAD_BYTES, ref.size)), bundlePath);
-  if (file.stat.size !== ref.size || hashBytes(file.bytes) !== ref.checksum) {
-    throw new PigeDomainError("collection.file_changed", "A Collection file failed integrity validation.");
-  }
-}
-
-function fileRef(bundlePath: string, relativePath: string): FileRef {
-  const filePath = resolveBundleRelativePath(bundlePath, relativePath);
-  const file = readRegularFile(filePath, MAX_PAYLOAD_BYTES, bundlePath);
-  return { path: relativePath, checksum: hashBytes(file.bytes), size: file.stat.size };
-}
-
-function readRegularFile(
-  filePath: string,
-  maximumBytes: number,
-  confinedRoot: string
-): { readonly bytes: Buffer; readonly stat: fs.Stats } {
-  const resolvedRoot = fs.realpathSync(confinedRoot);
-  const parent = path.dirname(filePath);
-  const realParent = fs.realpathSync(parent);
-  if (realParent !== resolvedRoot && !realParent.startsWith(`${resolvedRoot}${path.sep}`)) {
-    throw new PigeDomainError("collection.path_unsafe", "A Collection path escapes its durable root.");
-  }
-  const stat = fs.lstatSync(filePath);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > maximumBytes) throw payloadInvalid();
-  const handle = fs.openSync(filePath, fs.constants.O_RDONLY | noFollowFlag());
-  try {
-    const descriptor = fs.fstatSync(handle);
-    if (!descriptor.isFile() || descriptor.dev !== stat.dev || descriptor.ino !== stat.ino || descriptor.size !== stat.size) {
-      throw new PigeDomainError("collection.file_changed", "A Collection file changed while it was read.");
-    }
-    const bytes = fs.readFileSync(handle);
-    const after = fs.fstatSync(handle);
-    if (after.size !== descriptor.size || after.mtimeMs !== descriptor.mtimeMs || bytes.byteLength !== descriptor.size) {
-      throw new PigeDomainError("collection.file_changed", "A Collection file changed while it was read.");
-    }
-    return { bytes, stat: descriptor };
-  } finally {
-    fs.closeSync(handle);
-  }
-}
-
-function readJsonBounded(filePath: string, maximumBytes: number): unknown {
-  const root = path.dirname(filePath);
-  return JSON.parse(readRegularFile(filePath, maximumBytes, root).bytes.toString("utf8"));
-}
-
-function resolveBundleRelativePath(bundlePath: string, relativePath: string): string {
-  if (path.isAbsolute(relativePath) || relativePath.includes("\\") || relativePath.split("/").some((part) => !part || part === "." || part === "..")) {
-    throw new PigeDomainError("collection.path_unsafe", "Collection paths must be confined relative POSIX paths.");
-  }
-  const root = path.resolve(bundlePath);
-  const resolved = path.resolve(root, ...relativePath.split("/"));
-  if (!resolved.startsWith(`${root}${path.sep}`)) {
-    throw new PigeDomainError("collection.path_unsafe", "A Collection path escapes its Bundle.");
-  }
-  return resolved;
-}
-
-const resolveVaultRelativePath = createVaultRelativePathResolver(
-  () => new PigeDomainError("collection.path_unsafe", "A Collection path escapes the active vault."),
-  { allowVaultRoot: false }
-);
-
-function assertSafeVaultRoot(vaultPath: string): void {
-  const stat = fs.lstatSync(vaultPath);
-  if (!stat.isDirectory() || stat.isSymbolicLink()) {
-    throw new PigeDomainError("collection.path_unsafe", "The active vault root is unsafe.");
-  }
-}
-
-function assertSafeDirectory(vaultPath: string, directoryPath: string): void {
-  const realVault = fs.realpathSync(vaultPath);
-  const stat = fs.lstatSync(directoryPath);
-  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new PigeDomainError("collection.path_unsafe", "A Collection directory is unsafe.");
-  const real = fs.realpathSync(directoryPath);
-  if (real !== realVault && !real.startsWith(`${realVault}${path.sep}`)) {
-    throw new PigeDomainError("collection.path_unsafe", "A Collection directory escapes the active vault.");
-  }
-}
-
-function resultIdentity(request: CollectionOpenRequest) {
+function openIdentity(request: CollectionOpenRequest) {
   return {
-    apiVersion: 1 as const,
+    apiVersion: request.apiVersion,
     requestId: request.requestId,
     activeVaultId: request.activeVaultId,
     datasetId: request.datasetId,
@@ -1213,87 +836,16 @@ function resultIdentity(request: CollectionOpenRequest) {
   };
 }
 
-function editResultIdentity(request: CollectionCellEditRequest) {
+function editIdentity(request: CollectionCellEditRequest) {
   return {
-    apiVersion: 1 as const,
-    requestId: request.requestId,
-    activeVaultId: request.activeVaultId,
-    datasetId: request.datasetId,
-    tableId: request.tableId,
+    ...openIdentity(request),
     rowId: request.rowId,
     columnId: request.columnId
   };
-}
-
-function sameFileRevision(left: fs.Stats, right: fs.Stats): boolean {
-  return left.dev === right.dev && left.ino === right.ino && left.size === right.size && left.mtimeMs === right.mtimeMs;
 }
 
 function digest(...parts: readonly string[]): string {
   const hash = createHash("sha256");
   for (const part of parts) hash.update(part).update("\0");
   return hash.digest("hex");
-}
-
-function hashCanonical(value: unknown): string {
-  return hashBytes(Buffer.from(stableStringify(value), "utf8"));
-}
-
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .filter(([, item]) => item !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function hashBytes(bytes: Buffer): string {
-  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
-}
-
-function checksumFile(filePath: string): string {
-  return hashBytes(fs.readFileSync(filePath));
-}
-
-function syncFile(filePath: string): void {
-  const descriptor = fs.openSync(filePath, "r");
-  try {
-    fs.fsyncSync(descriptor);
-  } finally {
-    fs.closeSync(descriptor);
-  }
-}
-
-function syncDirectory(directoryPath: string): void {
-  if (process.platform === "win32") return;
-  const descriptor = fs.openSync(directoryPath, "r");
-  try {
-    fs.fsyncSync(descriptor);
-  } finally {
-    fs.closeSync(descriptor);
-  }
-}
-
-function noFollowFlag(): number {
-  return typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0;
-}
-
-function isErrno(value: unknown, code: string): value is NodeJS.ErrnoException {
-  return typeof value === "object" && value !== null && "code" in value && (value as { code?: unknown }).code === code;
-}
-
-function payloadInvalid(): PigeDomainError {
-  return new PigeDomainError("collection.payload_invalid", "The Collection payload is invalid.");
-}
-
-function requestConflict(): PigeDomainError {
-  return new PigeDomainError("collection.request_conflict", "The Collection request identity conflicts with a durable mutation.");
-}
-
-function operationConflict(): PigeDomainError {
-  return new PigeDomainError("activity.operation_conflict", "The Collection Operation binding is inconsistent.");
 }
