@@ -4,8 +4,10 @@ import type {
   PermissionDataBoundary,
   PermissionResourceScope
 } from "@pige/schemas";
-import type { PermissionBrokerService } from "./permission-broker-service";
-import { PermissionedExternalCapabilityRegistry } from "./permissioned-external-capability-service";
+import {
+  type PermissionedExternalCapabilityAdapter,
+  type PermissionedExternalCapabilityRegistry
+} from "./permissioned-external-capability-service";
 import type {
   PigeAgentToolCallContext,
   PigeAgentToolDefinition,
@@ -69,6 +71,10 @@ export type TaskExecutionPlanRunnerResolver = (input: {
   readonly signal: AbortSignal;
 }) => Promise<ResolvedTaskExecutionPlanRun>;
 
+export type TaskExecutionPlanCapabilityRegistryFactory = (
+  adapters: readonly PermissionedExternalCapabilityAdapter[]
+) => PermissionedExternalCapabilityRegistry;
+
 interface RunnerState {
   resolved: ResolvedTaskExecutionPlanRun | undefined;
   resolving: Promise<ResolvedTaskExecutionPlanRun> | undefined;
@@ -85,25 +91,25 @@ interface RunnerState {
 export class TaskExecutionPlanRunner {
   readonly #plans: TaskExecutionPlanService;
   readonly #sessions: TaskProcessSessionService;
-  readonly #broker: PermissionBrokerService;
+  readonly #createCapabilityRegistry: TaskExecutionPlanCapabilityRegistryFactory;
   readonly #resolve: TaskExecutionPlanRunnerResolver;
 
   constructor(options: {
     readonly plans: TaskExecutionPlanService;
     readonly sessions: TaskProcessSessionService;
-    readonly broker: PermissionBrokerService;
+    readonly createCapabilityRegistry: TaskExecutionPlanCapabilityRegistryFactory;
     readonly resolve: TaskExecutionPlanRunnerResolver;
   }) {
     if (
       !options ||
       !(options.plans instanceof TaskExecutionPlanService) ||
       !(options.sessions instanceof TaskProcessSessionService) ||
-      !options.broker ||
+      typeof options.createCapabilityRegistry !== "function" ||
       typeof options.resolve !== "function"
     ) throw runnerError("task_execution.runner_configuration_invalid");
     this.#plans = options.plans;
     this.#sessions = options.sessions;
-    this.#broker = options.broker;
+    this.#createCapabilityRegistry = options.createCapabilityRegistry;
     this.#resolve = options.resolve;
   }
 
@@ -276,7 +282,7 @@ export class TaskExecutionPlanRunner {
         this.#plans.consumeAuthority(issued, resolved.plan, planStep.ordinal, planBinding);
       }
     });
-    const registry = new PermissionedExternalCapabilityRegistry([adapter], this.#broker);
+    const registry = this.#createCapabilityRegistry([adapter]);
     const tool = registry.toolsForTurn({
       vaultPath: turn.vaultPath,
       vaultId: turn.vaultId,

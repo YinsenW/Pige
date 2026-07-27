@@ -716,7 +716,10 @@ const getTaskExecutionPlanRunner = (): TaskExecutionPlanRunner => {
     taskExecutionPlanRunner = new TaskExecutionPlanRunner({
       plans,
       sessions: getTaskProcessSessionService(),
-      broker: getPermissionBrokerService(),
+      createCapabilityRegistry: (adapters) => new PermissionedExternalCapabilityRegistry(
+        adapters,
+        getPermissionBrokerService()
+      ),
       resolve: async (input) => {
         const recipe = await getTaskExecutionRecipeService().resolveOfficialFeishuRecipe({
           ...input,

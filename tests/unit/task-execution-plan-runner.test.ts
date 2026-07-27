@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommandExecutionService, type CommandProcessLauncher } from "../../apps/desktop/src/main/services/command-execution-service";
 import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
+import { PermissionedExternalCapabilityRegistry } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
 import {
   TaskExecutionPlanRunner,
   type ResolvedTaskExecutionPlanRun,
@@ -176,7 +177,12 @@ function createFixture(): {
   fs.mkdirSync(path.join(root, "machine"));
   const readToolCatalogHash = vi.fn(() => input.toolCatalogHash);
   const fixture = {
-    runner: new TaskExecutionPlanRunner({ plans, sessions, broker, resolve }),
+    runner: new TaskExecutionPlanRunner({
+      plans,
+      sessions,
+      createCapabilityRegistry: (adapters) => new PermissionedExternalCapabilityRegistry(adapters, broker),
+      resolve
+    }),
     confirmations,
     resolve,
     launch,
