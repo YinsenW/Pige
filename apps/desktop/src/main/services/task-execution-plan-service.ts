@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { PigeDomainError } from "@pige/domain";
 import taskExecutionPlanManifest from "../../../../../resources/task-execution-plan.manifest.json";
+import type { HighRiskConfirmationService } from "./high-risk-confirmation-service";
 
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,191}$/u;
@@ -112,10 +113,62 @@ export interface TaskExecutionStepAuthority {
 }
 
 export type TaskExecutionPlanConfirmation = (
-  summary: TaskExecutionPlanSummary
+  summary: TaskExecutionPlanSummary,
+  binding: TaskExecutionPlanBinding,
+  signal?: AbortSignal
 ) => Promise<"allow" | "deny">;
 
 export type TaskExecutionPlanBindingReader = () => TaskExecutionPlanBinding;
+
+export function createTaskExecutionPlanConfirmation(
+  confirmations: HighRiskConfirmationService
+): TaskExecutionPlanConfirmation {
+  return (summary, binding, signal) => {
+    signal?.throwIfAborted();
+    return new Promise((resolve, reject) => {
+      const confirmationId = `confirm_${binding.jobId.split("_")[1]}_${binding.planId.slice("plan_".length)}`;
+      let revision: number | undefined;
+      const owner = { kind: "agent_turn" as const, clientTurnId: binding.clientTurnId };
+      const onAbort = (): void => {
+        if (revision !== undefined) confirmations.withdraw({ confirmationId, expectedRevision: revision, owner });
+        reject(signal?.reason ?? new DOMException("Aborted", "AbortError"));
+      };
+      const registration = confirmations.register({
+        confirmationId,
+        effect: "reviewed_execution_plan",
+        presentation: {
+          action: "execute_reviewed_plan",
+          target: "local_toolchain",
+          subject: {
+            kind: "reviewed_execution_plan",
+            value: summary.toolLabel,
+            plan: {
+              ...summary,
+              integrities: [...summary.integrities],
+              destinationRoots: [...summary.destinationRoots],
+              targetAgents: [...summary.targetAgents]
+            }
+          }
+        },
+        owner
+      }, (decision) => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve(decision);
+        return "committed";
+      });
+      revision = registration.revision;
+      if (registration.status === "busy") {
+        reject(new PigeDomainError("permission.confirmation_busy", "Another high-risk effect is awaiting confirmation."));
+      } else if (registration.status === "already_resolved") {
+        resolve(registration.decision);
+      } else if (signal?.aborted) {
+        onAbort();
+      } else {
+        signal?.addEventListener("abort", onAbort, { once: true });
+      }
+    });
+  };
+}
 
 interface RegisteredRecipeStep {
   readonly ordinal: number;
@@ -276,8 +329,13 @@ export class TaskExecutionPlanService {
     });
   }
 
-  async confirmPlan(plan: TaskExecutionPlan, readCurrent: TaskExecutionPlanBindingReader): Promise<void> {
+  async confirmPlan(
+    plan: TaskExecutionPlan,
+    readCurrent: TaskExecutionPlanBindingReader,
+    signal?: AbortSignal
+  ): Promise<void> {
     const state = this.#requirePlan(plan);
+    signal?.throwIfAborted();
     this.#assertCurrent(state, readCurrent);
     if (state.status === "confirmed") return;
     if (state.status === "denied") throw confirmationDenied();
@@ -288,7 +346,8 @@ export class TaskExecutionPlanService {
     const confirmation = (async () => {
       let decision: "allow" | "deny";
       try {
-        decision = await this.#confirmation(state.plan.summary);
+        decision = await this.#confirmation(state.plan.summary, this.binding(state.plan), signal);
+        signal?.throwIfAborted();
         this.#assertCurrent(state, readCurrent);
       } catch (caught) {
         state.status = "invalid";

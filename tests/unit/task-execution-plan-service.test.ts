@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createTaskExecutionPlanConfirmation,
   TaskExecutionPlanService,
   type ResolveTaskExecutionPlanInput,
   type TaskExecutionPlanBinding
 } from "../../apps/desktop/src/main/services/task-execution-plan-service";
+import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
 
 const RECIPE_ID = "official.feishu-cli.install-config-auth-status";
 
@@ -37,7 +39,7 @@ describe("TaskExecutionPlanService", () => {
 
     await Promise.all([service.confirmPlan(plan, reread), service.confirmPlan(plan, reread)]);
     expect(confirmPlan).toHaveBeenCalledTimes(1);
-    expect(confirmPlan).toHaveBeenCalledWith(service.summary(plan));
+    expect(confirmPlan).toHaveBeenCalledWith(service.summary(plan), service.binding(plan), undefined);
 
     const first = service.issueNextAuthority(plan, 1, reread);
     expect(service.issueNextAuthority(plan, 1, reread)).toBe(first);
@@ -113,6 +115,60 @@ describe("TaskExecutionPlanService", () => {
     expect(() => other.consumeAuthority(otherAuthority, otherPlan, 1, current(service, plan)))
       .toThrowError(expect.objectContaining({ code: "task_execution.binding_changed" }));
   });
+
+  it("routes one safe reviewed-plan summary through the canonical confirmation owner", async () => {
+    const confirmations = new HighRiskConfirmationService();
+    const service = new TaskExecutionPlanService({
+      confirmPlan: createTaskExecutionPlanConfirmation(confirmations)
+    });
+    const plan = service.resolvePlan(feishuResolution());
+    const pendingConfirmation = service.confirmPlan(plan, current(service, plan));
+
+    await vi.waitFor(() => expect(confirmations.pending().status).toBe("pending"));
+    const pending = confirmations.pending();
+    expect(pending).toMatchObject({
+      status: "pending",
+      confirmation: {
+        effect: "reviewed_execution_plan",
+        presentation: {
+          action: "execute_reviewed_plan",
+          target: "local_toolchain",
+          subject: {
+            kind: "reviewed_execution_plan",
+            value: "Feishu CLI",
+            plan: service.summary(plan)
+          }
+        }
+      }
+    });
+    expect(JSON.stringify(pending)).not.toContain("/private/");
+    if (pending.status !== "pending") throw new Error("expected a pending reviewed plan");
+    await expect(confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: pending.confirmation.confirmationId,
+      expectedRevision: pending.revision,
+      decision: "allow"
+    })).resolves.toMatchObject({ status: "committed", decision: "allow" });
+    await expect(pendingConfirmation).resolves.toBeUndefined();
+    expect(service.issueNextAuthority(plan, 1, current(service, plan))).toBeDefined();
+  });
+
+  it("withdraws an aborted reviewed-plan confirmation without granting authority", async () => {
+    const confirmations = new HighRiskConfirmationService();
+    const service = new TaskExecutionPlanService({
+      confirmPlan: createTaskExecutionPlanConfirmation(confirmations)
+    });
+    const plan = service.resolvePlan(feishuResolution());
+    const controller = new AbortController();
+    const pendingConfirmation = service.confirmPlan(plan, current(service, plan), controller.signal);
+    await vi.waitFor(() => expect(confirmations.pending().status).toBe("pending"));
+    controller.abort();
+
+    await expect(pendingConfirmation).rejects.toMatchObject({ name: "AbortError" });
+    expect(confirmations.pending().status).toBe("none");
+    expect(() => service.issueNextAuthority(plan, 1, current(service, plan)))
+      .toThrowError(expect.objectContaining({ code: "task_execution.binding_changed" }));
+  });
 });
 
 function current(
@@ -137,7 +193,7 @@ function feishuResolution(): ResolveTaskExecutionPlanInput {
   return {
     vaultId: "vault_20260727_taskplan",
     jobId: "job_20260727_taskplan",
-    clientTurnId: "turn_20260727_taskplan",
+    clientTurnId: "turn_20260727_taskplanabcd",
     authoredTaskIntent: "explicit_user_task",
     policyHash: digest("policy"),
     toolCatalogHash: digest("catalog"),

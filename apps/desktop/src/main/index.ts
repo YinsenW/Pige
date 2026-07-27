@@ -193,6 +193,10 @@ import { getSettingsRegistry } from "./services/settings-registry";
 import { ToolchainService } from "./services/toolchain-service";
 import { SpeechService } from "./services/speech-service";
 import { TaskProcessSessionService } from "./services/task-process-session-service";
+import {
+  createTaskExecutionPlanConfirmation,
+  TaskExecutionPlanService,
+} from "./services/task-execution-plan-service";
 import { NoNetworkUpdateCheckAdapter, UpdateService } from "./services/update-service";
 import { SkillRegistryService } from "./services/skill-registry-service";
 import { VaultService } from "./services/vault-service";
@@ -241,6 +245,7 @@ let speechService: SpeechService | undefined;
 let updateService: UpdateService | undefined;
 let skillRegistryService: SkillRegistryService | undefined;
 let taskProcessSessionService: TaskProcessSessionService | undefined;
+let taskExecutionPlanService: TaskExecutionPlanService | undefined;
 let taskExecutionIpcUnsubscribe: (() => void) | undefined;
 let latestSupportBundlePreview: SupportBundlePreview | undefined;
 const activeSupportBundleExports = new Map<string, {
@@ -670,6 +675,13 @@ const getTaskProcessSessionService = (): TaskProcessSessionService => {
     }
   });
   return taskProcessSessionService;
+};
+
+const getTaskExecutionPlanService = (): TaskExecutionPlanService => {
+  taskExecutionPlanService ??= new TaskExecutionPlanService({
+    confirmPlan: createTaskExecutionPlanConfirmation(getHighRiskConfirmationService())
+  });
+  return taskExecutionPlanService;
 };
 
 const getJobsService = (): JobsService => {
