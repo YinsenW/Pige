@@ -3367,6 +3367,8 @@ export const OperationRefSchema = z.object({
     "dataset",
     "dataset_revision",
     "table",
+    "row",
+    "column",
     "asset",
     "memory",
     "skill",
