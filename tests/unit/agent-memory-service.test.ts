@@ -14,7 +14,7 @@ describe("AgentMemoryService", () => {
   it("atomically preserves an explicit event and active atom, then disables recall with CAS", () => {
     const vaultPath = createVault();
     const service = new AgentMemoryService();
-    const record = service.rememberPreference({
+    const rememberRequest = {
       vaultPath,
       activeVaultId: "vault_20260727_memorytest",
       title: "Concise summaries",
@@ -22,7 +22,8 @@ describe("AgentMemoryService", () => {
       sourceConversationId: "conv_20260727_memorytest",
       sourceEventId: "evt_20260727_memoryevent",
       parentJobId: "job_20260727_memoryjob"
-    });
+    } as const;
+    const record = service.rememberPreference(rememberRequest);
 
     expect(service.recall(vaultPath)).toEqual([expect.objectContaining({ id: record.id, status: "active" })]);
     const summary = service.list(vaultPath, "vault_20260727_memorytest");
@@ -39,6 +40,10 @@ describe("AgentMemoryService", () => {
     };
     expect(registry.events).toHaveLength(1);
     expect(registry.records).toHaveLength(1);
+    const atomPath = path.join(vaultPath, ".pige/memory/atoms", `${record.id}.md`);
+    fs.rmSync(atomPath);
+    expect(service.rememberPreference(rememberRequest).id).toBe(record.id);
+    expect(fs.existsSync(atomPath)).toBe(true);
 
     const stale = service.disable(vaultPath, {
       apiVersion: 1,

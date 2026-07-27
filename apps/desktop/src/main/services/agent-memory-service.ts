@@ -70,7 +70,10 @@ export class AgentMemoryService {
     const registry = this.#readRegistry(request.vaultPath);
     const id = createMemoryId(request.sourceEventId, body);
     const existing = registry.records.find((record) => record.id === id);
-    if (existing) return existing;
+    if (existing) {
+      this.#writeInspectableRecord(request.vaultPath, existing);
+      return existing;
+    }
     if (registry.revision === Number.MAX_SAFE_INTEGER || registry.records.length >= 1_000) {
       throw new PigeDomainError("memory.capacity_exhausted", "The vault memory registry is full.");
     }

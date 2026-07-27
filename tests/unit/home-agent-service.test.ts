@@ -561,7 +561,11 @@ describe("Home Pi Agent service", () => {
       undefined,
       undefined,
       undefined,
-      makeReviewedTaskPlanPort({ onRegister: () => { registrations += 1; } })
+      makeReviewedTaskPlanPort({ onRegister: () => { registrations += 1; } }),
+      {
+        recall: () => [],
+        rememberPreference: () => { throw new Error("Neutral attachment turns must not register memory writes."); }
+      }
     );
     const sourcePath = path.join(path.dirname(fixture.vaultPath), "neutral-reviewed-plan.txt");
     fs.writeFileSync(sourcePath, "Neutral attachment source.\n", "utf8");
@@ -580,6 +584,7 @@ describe("Home Pi Agent service", () => {
     await expect(service.submitPreparedSourceTurn(prepared)).resolves.toMatchObject({ state: "completed" });
     expect(registrations).toBe(0);
     expect(observedToolNames).not.toContain("pige_execute_reviewed_plan");
+    expect(observedToolNames).not.toContain("pige_remember_preference");
     expect(observedToolNames).toContain("pige_inspect_source");
   });
 
