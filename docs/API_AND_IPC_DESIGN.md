@@ -260,10 +260,11 @@ type LocalDatabaseStatus = {
 };
 ```
 
-`maintenance.runKnowledgeHealth` takes strict `{ apiVersion: 1, requestId,
-activeVaultId }`. Identity-bound `ready` adds generation, coverage, complete counts and
-bounded stable page-ID/title summaries for the four closed issue kinds;
-`unavailable`/`failed` add no body.
+`maintenance.runKnowledgeHealth` returns a strict body-free generation report; complete
+coverage may give one missing link an opaque context.
+`maintenance.repairKnowledgeHealth` binds vault/generation/page/action/context. `committed`
+adds safe revision/Operation ID, `stale` revision, and other closed states no body. Main
+re-proves generation, page revision/render, target and occurrence; reruns invalidate context.
 
 Rules:
 
@@ -282,8 +283,6 @@ Rules:
   body may run synchronously; release scale still requires worker progress/cancellation.
 - `maintenance.resetLocalDatabase` recreates only `.pige/db`, `.pige/indexes`, and
   `.pige/cache`; durable vault data is untouched.
-- Health rereads the vault lease/generation; absent is `unavailable`, malformed/oversized
-  is `failed`. It is ephemeral, offline and read-only.
 
 ### 6.2 Capture
 

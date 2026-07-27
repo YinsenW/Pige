@@ -11,6 +11,11 @@ type KnowledgeHealthState =
   | { readonly kind: "not_run" | "checking" | "unavailable" | "failed" }
   | { readonly kind: "ready"; readonly result: Extract<KnowledgeHealthRunResult, { readonly status: "ready" }> };
 
+type KnowledgeHealthRepairState =
+  | { readonly kind: "repairing"; readonly issueKey: string }
+  | { readonly kind: "committed" | "stale" | "failed" }
+  | null;
+
 const KNOWLEDGE_HEALTH_KINDS: readonly KnowledgeHealthIssueKind[] = [
   "broken_link",
   "orphan_page",
@@ -35,25 +40,35 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
   const [maintenanceNotice, setMaintenanceNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
   const [resetConfirming, setResetConfirming] = useState(false);
   const [knowledgeHealthState, setKnowledgeHealthState] = useState<KnowledgeHealthState>({ kind: "not_run" });
+  const [knowledgeHealthRepairState, setKnowledgeHealthRepairState] = useState<KnowledgeHealthRepairState>(null);
   const [knowledgeHealthOpenFailed, setKnowledgeHealthOpenFailed] = useState(false);
   const resetDatabaseButtonRef = useRef<HTMLButtonElement>(null);
   const cancelResetButtonRef = useRef<HTMLButtonElement>(null);
   const mountedRef = useRef(true);
   const activeVaultIdRef = useRef(props.activeVaultId);
   const knowledgeHealthSequenceRef = useRef(0);
+  const knowledgeHealthRepairSequenceRef = useRef(0);
+  const knowledgeHealthRepairBusyRef = useRef(false);
+  const knowledgeHealthStateRef = useRef(knowledgeHealthState);
   activeVaultIdRef.current = props.activeVaultId;
+  knowledgeHealthStateRef.current = knowledgeHealthState;
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       knowledgeHealthSequenceRef.current += 1;
+      knowledgeHealthRepairSequenceRef.current += 1;
+      knowledgeHealthRepairBusyRef.current = false;
     };
   }, []);
 
   useEffect(() => {
     knowledgeHealthSequenceRef.current += 1;
+    knowledgeHealthRepairSequenceRef.current += 1;
+    knowledgeHealthRepairBusyRef.current = false;
     setKnowledgeHealthState({ kind: "not_run" });
+    setKnowledgeHealthRepairState(null);
     setKnowledgeHealthOpenFailed(false);
   }, [props.activeVaultId]);
 
@@ -116,8 +131,13 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
     window.requestAnimationFrame(() => resetDatabaseButtonRef.current?.focus());
   };
 
-  const runKnowledgeHealth = async (): Promise<void> => {
+  const runKnowledgeHealth = async (preserveRepairNotice = false): Promise<void> => {
     if (knowledgeHealthState.kind === "checking") return;
+    if (!preserveRepairNotice) {
+      knowledgeHealthRepairSequenceRef.current += 1;
+      knowledgeHealthRepairBusyRef.current = false;
+      setKnowledgeHealthRepairState(null);
+    }
     const activeVaultId = props.activeVaultId;
     const sequence = knowledgeHealthSequenceRef.current + 1;
     knowledgeHealthSequenceRef.current = sequence;
@@ -148,6 +168,86 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
         sequence === knowledgeHealthSequenceRef.current &&
         activeVaultIdRef.current === activeVaultId
       ) setKnowledgeHealthState({ kind: "failed" });
+    }
+  };
+
+  const repairKnowledgeHealthIssue = async (
+    issue: Extract<KnowledgeHealthIssueSummary, { readonly kind: "broken_link" }> & {
+      readonly repairContextId: string;
+    }
+  ): Promise<void> => {
+    const reportState = knowledgeHealthStateRef.current;
+    if (reportState.kind !== "ready" || knowledgeHealthRepairBusyRef.current) return;
+    knowledgeHealthRepairBusyRef.current = true;
+    const report = reportState.result;
+    const activeVaultId = props.activeVaultId;
+    const reportSequence = knowledgeHealthSequenceRef.current;
+    const repairSequence = knowledgeHealthRepairSequenceRef.current + 1;
+    knowledgeHealthRepairSequenceRef.current = repairSequence;
+    const issueKey = knowledgeHealthIssueKey(issue);
+    const request = {
+      apiVersion: 1 as const,
+      requestId: `knowledge_health_repair_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+      activeVaultId,
+      indexGeneration: report.indexGeneration,
+      issueKind: "broken_link" as const,
+      pageId: issue.page.pageId,
+      action: "unlink_broken_reference" as const,
+      repairContextId: issue.repairContextId
+    };
+    setKnowledgeHealthOpenFailed(false);
+    setKnowledgeHealthRepairState({ kind: "repairing", issueKey });
+    try {
+      const result = await window.pige.maintenance.repairKnowledgeHealth(request);
+      const currentState = knowledgeHealthStateRef.current;
+      const currentIssue = currentState.kind === "ready"
+        ? currentState.result.issues.find((candidate) =>
+          candidate.kind === "broken_link" &&
+          candidate.page.pageId === issue.page.pageId &&
+          candidate.repairContextId === issue.repairContextId
+        )
+        : undefined;
+      if (
+        !mountedRef.current ||
+        repairSequence !== knowledgeHealthRepairSequenceRef.current ||
+        reportSequence !== knowledgeHealthSequenceRef.current ||
+        activeVaultIdRef.current !== activeVaultId ||
+        currentState.kind !== "ready" ||
+        currentState.result.requestId !== report.requestId ||
+        currentState.result.indexGeneration !== report.indexGeneration ||
+        !currentIssue
+      ) return;
+      if (
+        result.requestId !== request.requestId ||
+        result.activeVaultId !== request.activeVaultId ||
+        result.indexGeneration !== request.indexGeneration ||
+        result.issueKind !== request.issueKind ||
+        result.pageId !== request.pageId ||
+        result.action !== request.action ||
+        result.repairContextId !== request.repairContextId
+      ) {
+        setKnowledgeHealthRepairState({ kind: "failed" });
+        return;
+      }
+      if (result.status === "committed") {
+        setKnowledgeHealthRepairState({ kind: "committed" });
+        await runKnowledgeHealth(true);
+        return;
+      }
+      setKnowledgeHealthRepairState({
+        kind: result.status === "failed" ? "failed" : "stale"
+      });
+    } catch {
+      if (
+        mountedRef.current &&
+        repairSequence === knowledgeHealthRepairSequenceRef.current &&
+        reportSequence === knowledgeHealthSequenceRef.current &&
+        activeVaultIdRef.current === activeVaultId
+      ) setKnowledgeHealthRepairState({ kind: "failed" });
+    } finally {
+      if (repairSequence === knowledgeHealthRepairSequenceRef.current) {
+        knowledgeHealthRepairBusyRef.current = false;
+      }
     }
   };
 
@@ -239,7 +339,9 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
       <section
         className="settings-section"
         aria-labelledby="maintenance-knowledge-health-title"
-        aria-busy={knowledgeHealthState.kind === "checking" ? "true" : undefined}
+        aria-busy={knowledgeHealthState.kind === "checking" || knowledgeHealthRepairState?.kind === "repairing"
+          ? "true"
+          : undefined}
       >
         <h2 className="settings-section-title" id="maintenance-knowledge-health-title">
           {props.t("maintenance.knowledgeHealth.title")}
@@ -253,7 +355,7 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
             <button
               className="settings-button settings-action"
               type="button"
-              disabled={knowledgeHealthState.kind === "checking"}
+              disabled={knowledgeHealthState.kind === "checking" || knowledgeHealthRepairState?.kind === "repairing"}
               onClick={() => void runKnowledgeHealth()}
             >
               {props.t(knowledgeHealthState.kind === "checking"
@@ -267,6 +369,8 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
               groupedIssues={groupedIssues}
               locale={props.locale}
               onOpenPage={openKnowledgePage}
+              onRepairIssue={repairKnowledgeHealthIssue}
+              repairState={knowledgeHealthRepairState}
               t={props.t}
             />
           ) : null}
@@ -282,6 +386,19 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
         ) : null}
         {knowledgeHealthOpenFailed ? (
           <p className="error" role="alert">{props.t("maintenance.knowledgeHealth.openFailed")}</p>
+        ) : null}
+        {knowledgeHealthRepairState && knowledgeHealthRepairState.kind !== "repairing" ? (
+          <p
+            className={knowledgeHealthRepairState.kind === "committed" ? "settings-note" : "error"}
+            role={knowledgeHealthRepairState.kind === "committed" ? "status" : "alert"}
+            aria-live="polite"
+          >
+            {props.t(knowledgeHealthRepairState.kind === "committed"
+              ? "maintenance.knowledgeHealth.repairCommitted"
+              : knowledgeHealthRepairState.kind === "stale"
+                ? "maintenance.knowledgeHealth.repairStale"
+                : "maintenance.knowledgeHealth.repairFailed")}
+          </p>
         ) : null}
       </section>
 
@@ -366,6 +483,12 @@ function KnowledgeHealthReadyResult(props: {
   }[];
   readonly locale: Locale;
   readonly onOpenPage: (pageId: string) => Promise<void>;
+  readonly onRepairIssue: (
+    issue: Extract<KnowledgeHealthIssueSummary, { readonly kind: "broken_link" }> & {
+      readonly repairContextId: string;
+    }
+  ) => Promise<void>;
+  readonly repairState: KnowledgeHealthRepairState;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const resultDescription = props.result.counts.totalIssueCount === 0
@@ -418,6 +541,8 @@ function KnowledgeHealthReadyResult(props: {
                 key={knowledgeHealthIssueKey(issue)}
                 issue={issue}
                 onOpenPage={props.onOpenPage}
+                onRepairIssue={props.onRepairIssue}
+                repairState={props.repairState}
                 t={props.t}
               />
             ))}
@@ -431,6 +556,12 @@ function KnowledgeHealthReadyResult(props: {
 function KnowledgeHealthIssueRow(props: {
   readonly issue: KnowledgeHealthIssueSummary;
   readonly onOpenPage: (pageId: string) => Promise<void>;
+  readonly onRepairIssue: (
+    issue: Extract<KnowledgeHealthIssueSummary, { readonly kind: "broken_link" }> & {
+      readonly repairContextId: string;
+    }
+  ) => Promise<void>;
+  readonly repairState: KnowledgeHealthRepairState;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   if (props.issue.kind === "duplicate_topic") {
@@ -454,12 +585,33 @@ function KnowledgeHealthIssueRow(props: {
     ? ` · ${props.issue.unresolvedLinkCount} ${props.t("maintenance.knowledgeHealth.unresolvedLinks")}`
     : "";
   const page = props.issue.page;
+  const issueKey = knowledgeHealthIssueKey(props.issue);
+  const repairableIssue = props.issue.kind === "broken_link" && props.issue.repairContextId
+    ? props.issue as Extract<KnowledgeHealthIssueSummary, { readonly kind: "broken_link" }> & {
+      readonly repairContextId: string;
+    }
+    : null;
   return (
     <span>
       <button className="settings-button" type="button" onClick={() => void props.onOpenPage(page.pageId)}>
         {page.title}
       </button>
       {detail}
+      {repairableIssue ? (
+        <>
+          {" · "}
+          <button
+            className="settings-button"
+            type="button"
+            disabled={props.repairState?.kind === "repairing"}
+            onClick={() => void props.onRepairIssue(repairableIssue)}
+          >
+            {props.t(props.repairState?.kind === "repairing" && props.repairState.issueKey === issueKey
+              ? "maintenance.knowledgeHealth.repairing"
+              : "maintenance.knowledgeHealth.repair")}
+          </button>
+        </>
+      ) : null}
     </span>
   );
 }

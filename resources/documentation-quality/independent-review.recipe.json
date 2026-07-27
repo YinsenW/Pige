@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-27T00:00:00Z",
+  "reviewedAt": "2026-07-28T00:00:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -43,14 +43,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review of report-only Knowledge Health: current-generation issue semantics, body-free navigation, partial/truncated coverage and Settings maintenance ownership.",
+    "scope": "Independent Product Planning review of the sole Knowledge Health unlink repair: complete-report eligibility, opaque context fencing, exact reversible mutation and Settings ownership.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 34,
-    "reviewedSha256": "d2db2743533ac15f7c2867b4b9fc12bfa10a91cdd2ca8b828d37c6d2c85941a6"
+    "reviewedSha256": "de192a8e1516e5289e43d93c2708ce1d433a3c8e1ca1f85a19a81efce3dc655b"
   },
   "reviewers": [{
-    "reviewerId": "knowledge-health-report-review",
-    "task": "Derived Knowledge Health report",
+    "reviewerId": "knowledge-health-unlink-review",
+    "task": "Deterministic Knowledge Health unlink repair",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -58,33 +58,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Product Planning reviewed API, knowledge-model, UI, Decision and trace owners; Development and UI Design independently own index analysis, IPC, maintenance presentation and evidence."
+    "independence": "Product Planning reviewed API, knowledge-model, UI, Decision and trace owners; Development and UI Design independently own reproving, atomic edit/Undo, maintenance presentation and evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"knowledge-health-report-review","blockerCount":0,"summary":"Settings > Index & Maintenance owns one report action; safe page identities reuse Reader navigation without a new destination."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"knowledge-health-report-review","blockerCount":0,"summary":"API, knowledge-model, UI and Decision owners agree on current-generation derived facts and body-free output."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"knowledge-health-report-review","blockerCount":0,"summary":"PIGE-KNOW-005 and E9.05 stay planned while report-only detection exists and repair/Undo acceptance remains open."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"knowledge-health-report-review","blockerCount":0,"summary":"Closed issue classes, caps, ordering, coverage and unavailable/failed states give Development exact boundaries."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"knowledge-health-report-review","blockerCount":0,"summary":"Existing API, knowledge-model and UI owners replace the speculative prototype without a new document or report authority."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"knowledge-health-unlink-review","blockerCount":0,"summary":"Settings owns one eligible row action and existing Reader/Activity owners retain navigation and Undo."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"knowledge-health-unlink-review","blockerCount":0,"summary":"API, knowledge-model, UI and Decision owners agree on one opaque, reproved, body-free unlink contract."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"knowledge-health-unlink-review","blockerCount":0,"summary":"PIGE-KNOW-005 and E9.05 stay planned while one reversible repair exists and broader repair evidence remains open."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"knowledge-health-unlink-review","blockerCount":0,"summary":"Exact eligibility, context invalidation, closed statuses and no-choice exclusions give Development fixed boundaries."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"knowledge-health-unlink-review","blockerCount":0,"summary":"Existing owners bind the feature without a new document or duplicate repair authority."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict maintenance request/result and closed issue/status values are documented without body/path authority."},
-    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"API, knowledge-model, UI and Decision owners agree on the report-only boundary."},
-    {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Planned acceptance remains open and both new service responsibilities are inventoried."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict repair identity, opaque context and closed result statuses expose no body/path authority."},
+    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"API, knowledge-model, UI and Decision owners agree on the sole unlink boundary."},
+    {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Planned acceptance remains open and final service LOC is inventoried."}
   ],
   "coordination": {
-    "taskId": "knowledge-health-report-20260727",
-    "taskTitle": "Derived Knowledge Health report",
+    "taskId": "knowledge-health-unlink-20260728",
+    "taskTitle": "Deterministic Knowledge Health unlink repair",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The report is ephemeral and read-only; durable Markdown, rebuild ownership, Reader navigation and maintenance actions remain compatible.",
-    "acknowledgement": "Planning binds report-only Knowledge Health; repair, Operation/Undo, broader analysis and release evidence stay open."
+    "compatibility": "Report truth stays derived; the sole repair reuses atomic update_page and Activity Undo without a new durable owner.",
+    "acknowledgement": "Planning binds one exact unlink; all other repairs, broader analysis and release completion stay open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Repair and deterministic Operation/Undo remain a later slice.",
-    "Invalid Markdown keeps coverage partial and never produces a false clean report.",
-    "Broader contradiction, missing-concept and sentence-level provenance analysis remain out of scope."
+    "Only a complete report with one missing safe local reference can offer unlink.",
+    "Reruns or identity/currentness drift invalidate contexts without mutation.",
+    "Ambiguous or choice-requiring repair and broader analysis remain out of scope."
   ]
 }

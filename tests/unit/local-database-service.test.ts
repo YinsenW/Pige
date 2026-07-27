@@ -189,6 +189,66 @@ describe("local database service", () => {
     });
   });
 
+  it("withholds repair authority for one ambiguity-bound unresolved link", () => {
+    const vaultPath = makeVaultRoot();
+    const service = new LocalDatabaseService();
+    writePage(vaultPath, "wiki/first.md", {
+      id: "page_20260727_firstambig",
+      title: "Ambiguous target",
+      body: "First."
+    });
+    writePage(vaultPath, "wiki/second.md", {
+      id: "page_20260727_secondambig",
+      title: "Ambiguous target",
+      body: "Second."
+    });
+    writePage(vaultPath, "wiki/origin.md", {
+      id: "page_20260727_originambig",
+      title: "Origin",
+      body: "[[Ambiguous target]]"
+    });
+
+    service.rebuild(vaultPath);
+    const report = service.knowledgeHealth(vaultPath);
+    expect(report?.issues).toContainEqual({
+      kind: "broken_link",
+      page: { pageId: "page_20260727_originambig", title: "Origin" },
+      unresolvedLinkCount: 1
+    });
+    expect(report?.repairTargetsByPageId?.has("page_20260727_originambig")).toBe(false);
+  });
+
+  it("withholds repair authority when only the path-relative candidate is ambiguous", () => {
+    const vaultPath = makeVaultRoot();
+    const service = new LocalDatabaseService();
+    writePage(vaultPath, "wiki/first-relative.md", {
+      id: "page_20260727_firstrelat",
+      title: "First relative candidate",
+      aliases: ["wiki/nested/missing"],
+      body: "First."
+    });
+    writePage(vaultPath, "wiki/second-relative.md", {
+      id: "page_20260727_secondrela",
+      title: "Second relative candidate",
+      aliases: ["wiki/nested/missing"],
+      body: "Second."
+    });
+    writePage(vaultPath, "wiki/nested/origin.md", {
+      id: "page_20260727_originrelat",
+      title: "Relative origin",
+      body: "[missing label](missing.md)"
+    });
+
+    service.rebuild(vaultPath);
+    const report = service.knowledgeHealth(vaultPath);
+    expect(report?.issues).toContainEqual({
+      kind: "broken_link",
+      page: { pageId: "page_20260727_originrelat", title: "Relative origin" },
+      unresolvedLinkCount: 1
+    });
+    expect(report?.repairTargetsByPageId?.has("page_20260727_originrelat")).toBe(false);
+  });
+
   it("derives the four stable Knowledge Health issue classes with partial coverage", () => {
     const vaultPath = makeVaultRoot();
     const service = new LocalDatabaseService();
@@ -249,6 +309,7 @@ describe("local database service", () => {
     }]);
     expect(report?.issues.some((issue) => issue.kind === "orphan_page")).toBe(true);
     expect(report?.counts.unsourcedClaimCount).toBe(1);
+    expect(report?.repairTargetsByPageId?.get("page_20260727_healthorig")).toBe("Missing Page");
 
     writePage(vaultPath, "wiki/new.md", {
       id: "page_20260727_healthnew1",
