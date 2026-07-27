@@ -75,10 +75,13 @@ describe("LocalSemanticRetrievalService", () => {
     const accepted = service.install(request);
 
     expect(accepted.status).toBe("accepted");
-    await waitFor(() => service.status(STATUS_REQUEST).assetState === "ready");
+    await waitFor(() => service.status(STATUS_REQUEST).assetState === "disabled");
     expect(downloads).toBe(1);
-    expect(service.embeddingModelInstalled()).toBe(true);
+    expect(service.embeddingModelInstalled()).toBe(false);
     expect(service.install(request)).toEqual(accepted);
+    const enabled = await service.enable(requestFor("enable0000000002", service.status(STATUS_REQUEST).revision));
+    expect(enabled.status).toBe("committed");
+    expect(service.embeddingModelInstalled()).toBe(true);
     expect(JSON.stringify(service.status(STATUS_REQUEST))).not.toMatch(/sha256|huggingface|\.gguf|private/u);
   });
 
@@ -87,16 +90,16 @@ describe("LocalSemanticRetrievalService", () => {
     const service = makeService(store);
     await service.recover();
 
-    expect(service.disable(request("disable000000001", 99))).toMatchObject({ status: "stale", revision: 0 });
-    const disabled = service.disable(request("disable000000002", store.record.revision));
+    expect(service.disable(requestFor("disable000000001", 99))).toMatchObject({ status: "stale", revision: 0 });
+    const disabled = service.disable(requestFor("disable000000002", store.record.revision));
     expect(disabled.status).toBe("committed");
     expect(service.status(STATUS_REQUEST)).toMatchObject({ assetState: "disabled", lexicalSearchRemainsAvailable: true });
     expect(service.embeddingModelInstalled()).toBe(false);
 
-    const enabled = await service.enable(request("enable0000000001", store.record.revision));
+    const enabled = await service.enable(requestFor("enable0000000001", store.record.revision));
     expect(enabled.status).toBe("committed");
     expect(service.embeddingModelInstalled()).toBe(true);
-    const removed = service.remove(request("remove0000000001", store.record.revision));
+    const removed = service.remove(requestFor("remove0000000001", store.record.revision));
     expect(removed.status).toBe("committed");
     expect(service.status(STATUS_REQUEST)).toMatchObject({ assetState: "not_installed", lexicalSearchRemainsAvailable: true });
   });
@@ -105,8 +108,8 @@ describe("LocalSemanticRetrievalService", () => {
     const adoptedStore = readyStore("verifying");
     const adopted = makeService(adoptedStore);
     await adopted.recover();
-    expect(adopted.status(STATUS_REQUEST).assetState).toBe("ready");
-    expect(adopted.embeddingModelInstalled()).toBe(true);
+    expect(adopted.status(STATUS_REQUEST).assetState).toBe("disabled");
+    expect(adopted.embeddingModelInstalled()).toBe(false);
 
     const corruptStore = readyStore();
     corruptStore.assetPresent = false;
@@ -124,7 +127,7 @@ describe("LocalSemanticRetrievalService", () => {
       now: () => NOW,
       transport: { download: async () => { store.stagingValid = false; } }
     });
-    service.install(request("install0000000002", 0));
+    service.install(requestFor("install0000000002", 0));
     await waitFor(() => service.status(STATUS_REQUEST).assetState === "needs_repair");
     expect(service.embeddingModelInstalled()).toBe(false);
     expect(store.assetPresent).toBe(false);
@@ -164,7 +167,7 @@ function makeService(store: FakeAssetStore): LocalSemanticRetrievalService {
   });
 }
 
-function request(suffix: string, expectedRevision: number) {
+function requestFor(suffix: string, expectedRevision: number) {
   return { apiVersion: 1 as const, requestId: `ragasset_${suffix}`, expectedRevision };
 }
 

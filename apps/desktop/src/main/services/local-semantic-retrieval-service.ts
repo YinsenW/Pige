@@ -172,7 +172,7 @@ export class LocalSemanticRetrievalService {
       }
       this.#verifiedBinding = await this.#store.verify();
       if (record.state === "installing" || record.state === "verifying" || record.state === "needs_repair") {
-        record = nextRecord(record, this.#now(), { state: "ready", receipts: record.receipts });
+        record = nextRecord(record, this.#now(), { state: "disabled", receipts: record.receipts });
         this.#store.write(record);
       }
       this.#store.discardStaging();
@@ -195,7 +195,7 @@ export class LocalSemanticRetrievalService {
       this.#verifiedBinding = await this.#store.publish(stagingPath);
       const current = this.#read();
       if (!sameActiveInstall(current, requestId, jobId)) throw new Error("Install ownership changed.");
-      this.#store.write(nextRecord(current, this.#now(), { state: "ready", receipts: current.receipts }));
+      this.#store.write(nextRecord(current, this.#now(), { state: "disabled", receipts: current.receipts }));
       this.#store.discardStaging();
     } catch {
       this.#verifiedBinding = undefined;
