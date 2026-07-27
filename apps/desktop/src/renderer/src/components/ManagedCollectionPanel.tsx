@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type Ref } from "react";
 import type {
+  CollectionAppendDefaultRowRequest,
+  CollectionAppendDefaultRowResult,
   CollectionCellEditRequest,
   CollectionCellEditResult,
   CollectionScalarValue,
@@ -21,6 +23,10 @@ type CellEdit = CellIdentity & {
 
 type EditNotice =
   | { readonly kind: "saved" }
+  | { readonly kind: "row_added" }
+  | { readonly kind: "append_stale" }
+  | { readonly kind: "append_not_found" }
+  | { readonly kind: "append_failed" }
   | { readonly kind: "stale" }
   | { readonly kind: "invalid" }
   | { readonly kind: "not_editable" }
@@ -30,6 +36,10 @@ export function ManagedCollectionPanel(props: {
   readonly activeVaultId: string;
   readonly snapshot: CollectionSnapshot;
   readonly onClose: () => void;
+  readonly onAppendDefaultRow: (
+    request: CollectionAppendDefaultRowRequest
+  ) => Promise<CollectionAppendDefaultRowResult>;
+  readonly onAdoptSnapshot: (snapshot: CollectionSnapshot, expectedRevisionId: string) => boolean;
   readonly onEditCell: (request: CollectionCellEditRequest) => Promise<CollectionCellEditResult>;
   readonly onReload: () => Promise<CollectionSnapshot | null>;
   readonly t: (key: string) => string;
@@ -38,16 +48,27 @@ export function ManagedCollectionPanel(props: {
   const [notice, setNotice] = useState<EditNotice | null>(null);
   const [busy, setBusy] = useState(false);
   const requestSequence = useRef(0);
+  const appendActiveRef = useRef<number | null>(null);
+  const appendTriggerRef = useRef<HTMLButtonElement | null>(null);
   const editTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
   const pendingFocusRef = useRef<CellIdentity | null>(null);
+  const pendingAppendFocusRef = useRef(false);
+  const pendingRowFocusRef = useRef<string | null>(null);
   const editorRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
   const ownerKey = `${props.activeVaultId}:${props.snapshot.datasetId}:${props.snapshot.tableId}`;
   const ownerKeyRef = useRef(ownerKey);
+  const snapshotRevisionRef = useRef(props.snapshot.revisionId);
   ownerKeyRef.current = ownerKey;
+  snapshotRevisionRef.current = props.snapshot.revisionId;
 
   useEffect(() => {
     requestSequence.current += 1;
+    appendActiveRef.current = null;
     pendingFocusRef.current = null;
+    pendingAppendFocusRef.current = false;
+    pendingRowFocusRef.current = null;
     setEdit(null);
     setNotice(null);
     setBusy(false);
@@ -64,6 +85,21 @@ export function ManagedCollectionPanel(props: {
     pendingFocusRef.current = null;
     button.focus();
   }, [edit]);
+
+  useLayoutEffect(() => {
+    if (busy) return;
+    if (pendingRowFocusRef.current) {
+      const row = rowRefs.current.get(pendingRowFocusRef.current);
+      if (row) {
+        pendingRowFocusRef.current = null;
+        row.focus();
+        return;
+      }
+    }
+    if (!pendingAppendFocusRef.current) return;
+    pendingAppendFocusRef.current = false;
+    (appendTriggerRef.current ?? panelRef.current)?.focus();
+  }, [busy, notice, props.snapshot.revisionId]);
 
   const restoreCellFocus = (identity: CellIdentity): void => {
     pendingFocusRef.current = identity;
@@ -171,8 +207,52 @@ export function ManagedCollectionPanel(props: {
     }
   };
 
+  const appendDefaultRow = async (): Promise<void> => {
+    if (!props.snapshot.canAppendDefaultRow || busy || edit || appendActiveRef.current !== null) return;
+    const sequence = requestSequence.current + 1;
+    requestSequence.current = sequence;
+    appendActiveRef.current = sequence;
+    const request: CollectionAppendDefaultRowRequest = {
+      apiVersion: 1,
+      requestId: createCollectionRequestId(),
+      activeVaultId: props.activeVaultId,
+      datasetId: props.snapshot.datasetId,
+      tableId: props.snapshot.tableId,
+      expectedRevisionId: props.snapshot.revisionId
+    };
+    const expectedOwnerKey = ownerKey;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await props.onAppendDefaultRow(request);
+      if (
+        sequence !== requestSequence.current ||
+        ownerKeyRef.current !== expectedOwnerKey ||
+        snapshotRevisionRef.current !== request.expectedRevisionId ||
+        !collectionAppendIdentityMatches(request, result)
+      ) return;
+      if (result.status !== "not_found" && !props.onAdoptSnapshot(result.snapshot, request.expectedRevisionId)) return;
+      if (result.status === "committed") {
+        pendingRowFocusRef.current = result.rowId;
+        setNotice({ kind: "row_added" });
+        return;
+      }
+      pendingAppendFocusRef.current = true;
+      setNotice({ kind: result.status === "stale" ? "append_stale" : "append_not_found" });
+    } catch {
+      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) {
+        pendingAppendFocusRef.current = true;
+        setNotice({ kind: "append_failed" });
+      }
+    } finally {
+      if (appendActiveRef.current === sequence) appendActiveRef.current = null;
+      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) setBusy(false);
+    }
+  };
+
   return (
     <section
+      ref={panelRef}
       className="dataset-answer managed-collection-panel"
       aria-labelledby="managed-collection-title"
       tabIndex={-1}
@@ -188,12 +268,25 @@ export function ManagedCollectionPanel(props: {
           <h1 id="managed-collection-title">{props.snapshot.title}</h1>
           <p className="muted">{props.snapshot.tableName}</p>
         </div>
-        <p className="muted dataset-answer-count">
-          {props.t("dataset.rows")}: {props.snapshot.returnedRowCount}/{props.snapshot.totalRowCount}
-        </p>
+        <div>
+          <p className="muted dataset-answer-count">
+            {props.t("dataset.rows")}: {props.snapshot.returnedRowCount}/{props.snapshot.totalRowCount}
+          </p>
+          {props.snapshot.canAppendDefaultRow ? (
+            <button
+              ref={appendTriggerRef}
+              type="button"
+              className="settings-button"
+              disabled={busy || edit !== null}
+              onClick={() => void appendDefaultRow()}
+            >
+              {props.t(busy && appendActiveRef.current !== null ? "collection.addingRow" : "collection.addRow")}
+            </button>
+          ) : null}
+        </div>
       </header>
       {notice ? (
-        <div className={`settings-inline-status ${notice.kind === "saved" ? "success" : "error"}`} role="status" aria-live="polite">
+        <div className={`settings-inline-status ${notice.kind === "saved" || notice.kind === "row_added" ? "success" : "error"}`} role="status" aria-live="polite">
           <span>{props.t(`collection.${notice.kind}`)}</span>
           {notice.kind === "stale" ? (
             <button type="button" className="settings-button" disabled={busy} onClick={() => void reloadAfterStale()}>
@@ -210,7 +303,16 @@ export function ManagedCollectionPanel(props: {
           </thead>
           <tbody>
             {props.snapshot.rows.map((row, rowIndex) => (
-              <tr key={row.rowId}>
+              <tr
+                key={row.rowId}
+                ref={(element) => {
+                  if (element) rowRefs.current.set(row.rowId, element);
+                  else rowRefs.current.delete(row.rowId);
+                }}
+                tabIndex={-1}
+                aria-label={`${props.t("collection.row")} ${rowIndex + 1}`}
+                data-collection-row-id={row.rowId}
+              >
                 {props.snapshot.columns.map((column) => {
                   const cell = row.cells.find((candidate) => candidate.columnId === column.columnId);
                   if (!cell) return <td key={column.columnId}>-</td>;
@@ -253,12 +355,14 @@ export function ManagedCollectionPanel(props: {
                         <button
                           type="button"
                           className="ghost"
+                          disabled={busy}
                           ref={(element) => {
                             if (element) editTriggerRefs.current.set(cellKey(identity), element);
                             else editTriggerRefs.current.delete(cellKey(identity));
                           }}
                           aria-label={`${props.t("collection.edit")}: ${column.label}, ${props.t("collection.row")} ${rowIndex + 1}`}
                           onClick={() => {
+                            if (busy || appendActiveRef.current !== null) return;
                             setNotice(null);
                             setEdit({
                               ...identity,
@@ -377,4 +481,14 @@ function collectionEditIdentityMatches(
     result.tableId === request.tableId &&
     result.rowId === request.rowId &&
     result.columnId === request.columnId;
+}
+
+function collectionAppendIdentityMatches(
+  request: CollectionAppendDefaultRowRequest,
+  result: CollectionAppendDefaultRowResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.datasetId === request.datasetId &&
+    result.tableId === request.tableId;
 }
