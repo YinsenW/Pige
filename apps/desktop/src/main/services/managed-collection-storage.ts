@@ -113,7 +113,8 @@ export function readCollectionSnapshot(binding: BundleBinding, tableId: string) 
         columnId: column.id,
         label: column.name,
         logicalType: column.logicalType,
-        canRename: !columnUsesFormula(column)
+        canRename: !columnUsesFormula(column),
+        canTrash: columns.length > 1 && !columnUsesFormula(column)
       })),
       rows: projectedRows,
       totalRowCount: table.rowCount,
