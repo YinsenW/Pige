@@ -841,6 +841,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "update_page",
     "update_collection_cell",
     "add_collection_row",
+    "add_collection_column",
     "update_memory",
     "trash_memory",
     "restore_memory"
@@ -2589,6 +2590,17 @@ export const DatasetRevisionSchema = z.object({
       tableId: TableIdSchema,
       rowId: RowIdSchema,
       undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_column_add"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_column_add_undo"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      undoOfOperationId: OperationIdSchema
     }).strict()
   ]).optional(),
   createdAt: z.string().datetime({ offset: true })
@@ -2650,6 +2662,19 @@ export const DatasetQueryScalarSchema = z.union([
 export const CollectionRequestIdSchema = z.string().regex(/^collection_request_[a-z0-9]{16,64}$/);
 export const CollectionScalarValueSchema = DatasetQueryScalarSchema;
 export const CollectionCellReadOnlyReasonSchema = z.enum(["formula", "unsupported_type"]);
+export const COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES = 256;
+export const CollectionEditableLogicalTypeSchema = z.enum([
+  "string",
+  "integer",
+  "number",
+  "boolean",
+  "date",
+  "datetime"
+]);
+export const CollectionNewColumnLabelSchema = z.string().trim().min(1).max(120).refine(
+  (value) => new TextEncoder().encode(value).byteLength <= COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES,
+  `Collection column labels must not exceed ${COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES} UTF-8 bytes.`
+);
 
 export const CollectionColumnSummarySchema = z.object({
   columnId: DatasetQueryColumnIdSchema,
@@ -2688,7 +2713,8 @@ export const CollectionSnapshotSchema = z.object({
   totalRowCount: DatasetQueryCountSchema,
   returnedRowCount: DatasetQueryCountSchema,
   truncated: z.boolean(),
-  canAppendDefaultRow: z.boolean()
+  canAppendDefaultRow: z.boolean(),
+  canAddColumn: z.boolean()
 }).strict().superRefine((snapshot, context) => {
   if (snapshot.returnedRowCount !== snapshot.rows.length) {
     context.addIssue({
@@ -2774,6 +2800,17 @@ export const CollectionAppendDefaultRowRequestSchema = z.object({
   expectedRevisionId: DatasetQueryRevisionIdSchema
 }).strict();
 
+export const CollectionAddNullableColumnRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  label: CollectionNewColumnLabelSchema,
+  logicalType: CollectionEditableLogicalTypeSchema
+}).strict();
+
 const CollectionEditResultIdentitySchema = z.object({
   apiVersion: z.literal(1),
   requestId: CollectionRequestIdSchema,
@@ -2825,6 +2862,43 @@ export const CollectionAppendDefaultRowResultSchema = z.discriminatedUnion("stat
       code: "custom",
       path: ["snapshot"],
       message: "Collection default-row append snapshots must match the request identity."
+    });
+  }
+});
+
+export const CollectionAddNullableColumnResultSchema = z.discriminatedUnion("status", [
+  CollectionResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    columnId: DatasetQueryColumnIdSchema,
+    operationId: OperationIdSchema,
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionResultIdentitySchema.extend({
+    status: z.literal("invalid"),
+    reason: z.enum(["duplicate_label", "column_limit", "type_mismatch"])
+  }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "committed" && result.status !== "stale") return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({
+      code: "custom",
+      path: ["snapshot"],
+      message: "Collection nullable-column snapshots must match the request identity."
+    });
+  }
+  if (
+    result.status === "committed" &&
+    !result.snapshot.columns.some((column) => column.columnId === result.columnId)
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["columnId"],
+      message: "Committed Collection columns must appear in the authoritative snapshot."
     });
   }
 });
@@ -4216,6 +4290,7 @@ export const OperationRecordSchema = z.object({
     "create_dataset_revision",
     "update_collection_cell",
     "add_collection_row",
+    "add_collection_column",
     "trash_artifact",
     "restore_artifact",
     "create_page",
@@ -4690,6 +4765,8 @@ export type CollectionCellEditRequest = z.infer<typeof CollectionCellEditRequest
 export type CollectionCellEditResult = z.infer<typeof CollectionCellEditResultSchema>;
 export type CollectionAppendDefaultRowRequest = z.infer<typeof CollectionAppendDefaultRowRequestSchema>;
 export type CollectionAppendDefaultRowResult = z.infer<typeof CollectionAppendDefaultRowResultSchema>;
+export type CollectionAddNullableColumnRequest = z.infer<typeof CollectionAddNullableColumnRequestSchema>;
+export type CollectionAddNullableColumnResult = z.infer<typeof CollectionAddNullableColumnResultSchema>;
 export type CollectionCellReadOnlyReason = z.infer<typeof CollectionCellReadOnlyReasonSchema>;
 export type CollectionColumnSummary = z.infer<typeof CollectionColumnSummarySchema>;
 export type CollectionOpenRequest = z.infer<typeof CollectionOpenRequestSchema>;

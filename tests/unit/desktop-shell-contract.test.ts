@@ -1065,6 +1065,7 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('ipcRenderer.invoke("activity.undo", request)');
     expect(contractsSource).toContain('| "update_collection_cell"');
     expect(contractsSource).toContain('| "add_collection_row"');
+    expect(contractsSource).toContain('| "add_collection_column"');
     expect(contractsSource).toContain('| "update_memory"');
     expect(contractsSource).toContain('| "trash_memory"');
     expect(contractsSource).toContain('| "restore_memory"');
@@ -1270,14 +1271,19 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.open", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.editCell", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.appendDefaultRow", parsedRequest)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("collections.addNullableColumn", parsedRequest)');
     expect(preloadSource).toContain("CollectionOpenRequestSchema.parse(request)");
     expect(preloadSource).toContain("CollectionOpenResultSchema.parse(");
     expect(preloadSource).toContain("CollectionCellEditRequestSchema.parse(request)");
     expect(preloadSource).toContain("CollectionCellEditResultSchema.parse(");
     expect(preloadSource).toContain("CollectionAppendDefaultRowRequestSchema.parse(request)");
     expect(preloadSource).toContain("CollectionAppendDefaultRowResultSchema.parse(");
+    expect(preloadSource).toContain("CollectionAddNullableColumnRequestSchema.parse(request)");
+    expect(preloadSource).toContain("CollectionAddNullableColumnResultSchema.parse(");
     expect(contractsSource).toContain("readonly appendDefaultRow:");
     expect(contractsSource).toContain("CollectionAppendDefaultRowRequest");
+    expect(contractsSource).toContain("readonly addNullableColumn:");
+    expect(contractsSource).toContain("CollectionAddNullableColumnRequest");
   });
 
   it("wires onboarding readiness to the non-secret provider runtime binding check", () => {

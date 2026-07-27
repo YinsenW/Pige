@@ -179,6 +179,8 @@ import {
   AppearanceThemeMutationResultSchema,
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
+  CollectionAddNullableColumnRequestSchema,
+  CollectionAddNullableColumnResultSchema,
   CollectionCellEditRequestSchema,
   CollectionCellEditResultSchema,
   CollectionOpenRequestSchema,
@@ -283,6 +285,8 @@ import {
   VaultActionResultSchema
 } from "@pige/schemas";
 import type {
+  CollectionAddNullableColumnRequest,
+  CollectionAddNullableColumnResult,
   CollectionCellEditRequest,
   CollectionCellEditResult,
   CollectionOpenRequest,
@@ -388,6 +392,24 @@ async function invokeCollectionAppendDefaultRow(
     result.tableId !== parsedRequest.tableId
   ) {
     throw new Error("Invalid Managed Collection default-row append response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionAddNullableColumn(
+  request: CollectionAddNullableColumnRequest
+): Promise<CollectionAddNullableColumnResult> {
+  const parsedRequest = CollectionAddNullableColumnRequestSchema.parse(request);
+  const result = CollectionAddNullableColumnResultSchema.parse(
+    await ipcRenderer.invoke("collections.addNullableColumn", parsedRequest)
+  );
+  if (
+    result.requestId !== parsedRequest.requestId ||
+    result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.datasetId !== parsedRequest.datasetId ||
+    result.tableId !== parsedRequest.tableId
+  ) {
+    throw new Error("Invalid Managed Collection nullable-column response identity.");
   }
   return result;
 }
@@ -771,7 +793,8 @@ const api: PigeDesktopApi = {
   collections: {
     open: invokeCollectionOpen,
     editCell: invokeCollectionCellEdit,
-    appendDefaultRow: invokeCollectionAppendDefaultRow
+    appendDefaultRow: invokeCollectionAppendDefaultRow,
+    addNullableColumn: invokeCollectionAddNullableColumn
   },
   proposals: {
     list: async (request?: ProposalsListRequest): Promise<ProposalsListResult> =>
