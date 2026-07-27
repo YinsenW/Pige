@@ -518,15 +518,15 @@ Current Home Dataset read boundary:
   columns, bounded rows/counts/truncation/citations, never storage or query internals.
 - `collections.open` binds request/vault/Dataset/table and returns `ready | stale |
   not_found | failed`; ready is current, <=32 columns, 50 rows, 4 KiB/string and 64 KiB total.
-- `collections.editCell` binds revision/row/column/scalar. `appendDefaultRow` binds only the
-  revision; `canAppendDefaultRow` gates eligibility and Main creates the row ID. Both return
-  closed committed/stale/missing/invalid outcomes with authoritative identities or snapshot.
+- `collections.editCell` binds revision/row/column/scalar; `appendDefaultRow` binds revision and
+  lets Main create the row ID. `trashRow` binds revision/row and requires exact `canTrash`. Closed
+  results return authoritative identity/snapshot; old revisions retain a trashed row for Undo.
 - `collections.addNullableColumn` binds expected revision, bounded label and one of string/
   integer/number/boolean/date/datetime. Main gates `canAddColumn`, creates column ID and null
   cells; committed returns column/Operation/snapshot, stale returns snapshot, and duplicate,
   limit or type invalidity fails closed.
-- Main fences vault/manifest/revision/schema/payload. Renderer sends no generated ID, default or
-  formula; results expose no source/storage/query/error/value internals. Broader schema stays open.
+- Main fences vault/manifest/revision/schema/payload. Renderer sends no generated ID, default,
+  formula or row body; results expose no source/storage/query/error/value internals.
 
 ### 6.6 Retrieval
 

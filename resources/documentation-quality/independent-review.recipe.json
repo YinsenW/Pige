@@ -43,14 +43,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of nullable Managed Collection field add: Main eligibility and identity, immutable CAS revision, Activity/Undo and bounded UI adoption.",
+    "scope": "Independent Planning review of reversible Managed Collection row trash: Main eligibility, immutable CAS revision, Activity/Undo and bounded UI adoption.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 34,
-    "reviewedSha256": "08821cc248b9d8a47f30a48c971749974dc9c20e4342722dbd2fbf9ca1c5ba70"
+    "reviewedSha256": "601654aeb00559e70417642c711a3783a32597be4f075a5f1d1a16cb6d5be4f9"
   },
   "reviewers": [{
-    "reviewerId": "managed-collection-column-review",
-    "task": "Managed Collection nullable field add",
+    "reviewerId": "managed-collection-row-trash-review",
+    "task": "Managed Collection reversible row trash",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -58,33 +58,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed Dataset/API/recovery/UI/Decision/trace owners; Development and UI independently own field publication, Activity/Undo, presentation and evidence."
+    "independence": "Planning reviewed Dataset/API/recovery/UI/Decision/trace owners; Development and UI independently own row publication, Activity/Undo, presentation and evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"managed-collection-column-review","blockerCount":0,"summary":"One Dataset keeps immutable revision history; Main creates the field and manifest switches last."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"managed-collection-column-review","blockerCount":0,"summary":"Data/API/recovery/UI agree on Main eligibility, typed request, snapshot adoption and forward Undo."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"managed-collection-column-review","blockerCount":0,"summary":"PIGE-DATA-003 and E7.06 stay planned while broader Collection lifecycle remains open."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"managed-collection-column-review","blockerCount":0,"summary":"Exact add, replay, stale/invalid, Activity and UI focus tests bind the vertical slice."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"managed-collection-column-review","blockerCount":0,"summary":"Existing Collection owners and one prior decision absorb the slice without a new document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"managed-collection-row-trash-review","blockerCount":0,"summary":"One Dataset keeps immutable revision history; Main removes the row only from the current revision."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"managed-collection-row-trash-review","blockerCount":0,"summary":"Data/API/recovery/UI agree on Main eligibility, body-free request, snapshot adoption and forward Undo."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"managed-collection-row-trash-review","blockerCount":0,"summary":"PIGE-DATA-003 and E7.06 stay planned while broader Collection lifecycle remains open."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"managed-collection-row-trash-review","blockerCount":0,"summary":"Exact trash, replay, stale/ineligible, Activity and UI focus tests bind the vertical slice."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"managed-collection-row-trash-review","blockerCount":0,"summary":"Existing Collection owners and one decision absorb the slice without a new document."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict field identity and authoritative snapshots expose no defaults, formulas or storage internals."},
-    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Dataset/API/recovery/UI and the existing Collection decision agree on nullable field add."},
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict row identity and authoritative snapshots expose no cell values or storage internals."},
+    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Dataset/API/recovery/UI and the existing Collection decision agree on reversible row trash."},
     {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Planned acceptance stays open and final service ownership/LOC are inventoried."}
   ],
   "coordination": {
-    "taskId": "managed-collection-nullable-field-20260728",
-    "taskTitle": "Managed Collection nullable field add",
+    "taskId": "managed-collection-row-trash-20260728",
+    "taskTitle": "Managed Collection reversible row trash",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing open/edit/append stays; add field creates one Main-owned nullable column under the same revision and Activity boundaries.",
-    "acknowledgement": "Planning binds nullable field add only; deletion, rename/type change, formulas, views, relations and completion stay open."
+    "compatibility": "Existing open/edit/add stays; trash removes one eligible row from the current revision under the same Activity boundaries.",
+    "acknowledgement": "Planning binds reversible row trash only; field deletion, rename/type change, formulas, views, relations and completion stay open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Only a bounded current table below the field limit accepts one supported nullable type.",
-    "Vault, Dataset, table, revision, label, replay or Operation drift fails closed.",
-    "Delete, rename/type change, defaults, formulas, views, relations and broad CRUD stay out of scope."
+    "Only an exact eligible current row can be trashed; prior immutable revision retains it.",
+    "Vault, Dataset, table, revision, row, replay or Operation drift fails closed.",
+    "Permanent delete, field deletion, formulas, views, relations and broad CRUD stay out of scope."
   ]
 }
