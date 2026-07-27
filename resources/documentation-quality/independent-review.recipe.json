@@ -39,14 +39,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review of PR #189 explicit vault memory: enabled explicit-task turns bind one secret-scanned L0/L1 effect per durable event; retry adopts its receipt before changed-body validation; registry writes and bindings fail closed; recall is bounded lower-authority user context; Settings safely inspects/CAS-disables; statuses remain unchanged.",
+    "scope": "Independent Product Planning review of the first PIGE-DATA-003 Managed Collection interface: one imported Dataset opens under the same identity; one non-formula scalar edit and Activity Undo create immutable CAS-fenced revisions/Operations; originals, SourceRecord import evidence and historical previews remain unchanged; statuses remain unchanged.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 30,
-    "reviewedSha256": "0a29840db25e7d190eb6607e11adb81547a036d1d45997497f6a0a5cbe34e7c3"
+    "reviewedSha256": "637c478d0481cc7f2f8c2d7a4aa9ff8d3849ae814647e4664c9ddf2786f5d253"
   },
   "reviewers": [{
-    "reviewerId": "explicit-vault-memory-review",
-    "task": "Explicit vault-memory foundation",
+    "reviewerId": "managed-collection-interface-review",
+    "task": "Managed Collection cell revision interface",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -54,33 +54,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Product Planning reviewed Agent Memory, context, IPC, UI, decision and trace owners against the frozen Development/UI interfaces and tests; Development owns service, Home tool, IPC and renderer implementation."
+    "independence": "Product Planning reviewed Dataset durability, IPC, Activity/Undo, UI and phase owners against the existing import/query implementation; Development and UI own the separate service, preload, renderer and focused-test implementation."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"explicit-vault-memory-review","blockerCount":0,"summary":"One revisioned registry owns atomic L0/L1 truth; inspectable atoms, bounded recall and CAS-disable have explicit adoption boundaries."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"explicit-vault-memory-review","blockerCount":0,"summary":"Memory, context, API and UI agree on explicit intent, secret-before-write, private provenance, safe projection and current-instruction precedence."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"explicit-vault-memory-review","blockerCount":0,"summary":"PIGE-MEM-001 remains planned while its target records the remaining lifecycle beyond the bounded explicit foundation."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"explicit-vault-memory-review","blockerCount":0,"summary":"Development has exact schema, service, Home, IPC and Settings contracts plus focused secret, idempotency, recall and CAS tests."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"explicit-vault-memory-review","blockerCount":0,"summary":"Five existing owners, one decision and mechanical trace facts bind the slice without a new document or broader memory framework."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"managed-collection-interface-review","blockerCount":0,"summary":"One Dataset identity and manifest select immutable revision payloads; source evidence, prior revisions and historical previews remain intact."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"managed-collection-interface-review","blockerCount":0,"summary":"Data, API, Job and UI agree on exact revision CAS, scalar edit bounds, manifest-switch-last and forward-only Undo."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"managed-collection-interface-review","blockerCount":0,"summary":"B7.10 records only the bounded foundation while E7.06 and PIGE-DATA-003 remain open without status promotion."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"managed-collection-interface-review","blockerCount":0,"summary":"Canonical schemas name the two channels, safe projections, result states, revision changes and Activity target needed for parallel Development/UI work."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"managed-collection-interface-review","blockerCount":0,"summary":"Existing Dataset, API, recovery, UI, phase and decision owners bind one vertical slice without a new document or broader Collection framework."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict memory list/disable schemas, safe summary event and renderer/Main ownership remain one canonical IPC contract."},
-    {"command":"npm run verify:docs && npm run verify:decisions && npm run verify:documentation-leanness","status":"passed","evidence":"Memory owner links, accepted bounded decision and governed byte limits pass without a new document."},
-    {"command":"npm run verify:traceability","status":"passed","evidence":"The PIGE-MEM-001 planned target and its single semantic digest remain synchronized without Requirement, Exit or Phase promotion."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Collection open/edit schemas, revision-fenced Activity/Undo vocabulary and body/path/SQL-free ownership remain canonical."},
+    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Dataset, API, recovery, UI, phase and accepted-decision owners pass without a new document."},
+    {"command":"npm run typecheck","status":"passed","evidence":"Canonical schemas/contracts compile while preload and implementation remain a separate parallel slice."}
   ],
   "coordination": {
-    "taskId": "explicit-vault-memory-20260727",
-    "taskTitle": "Explicit vault-memory foundation",
+    "taskId": "managed-collection-cell-revision-20260727",
+    "taskTitle": "Managed Collection cell revision interface",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Only durable explicit-user-task provenance registers memory write; neutral/legacy/current-note and source/model/tool content remain unable to create memory. Current instruction always outranks recalled atoms.",
-    "acknowledgement": "Planning binds the explicit remember, inspect, bounded recall and CAS-disable foundation only; autonomous memory and the remaining lifecycle stay planned."
+    "compatibility": "Legacy initial payloads remain readable; new mutations use unique revision payloads and leave SourceRecord initial-import evidence, originals and historical previews unchanged.",
+    "acknowledgement": "Planning binds open, one scalar-cell edit and forward-only Activity Undo only; formulas, views, relations, CRUD and remaining PIGE-DATA-003 acceptance stay planned."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Restart, backup, 1,000-record and real-Electron evidence remain required before memory acceptance can advance.",
-    "Edit, re-enable, delete, export, reset, autonomous provenance/Undo and exception handling remain outside this slice.",
-    "Future semantic recall must preserve the same secret, authority, provenance and current-instruction boundaries."
+    "Development must prove manifest-last recovery, exact request adoption, stale CAS and Operation repair with focused synthetic Dataset fixtures.",
+    "UI must prove keyboard editing, stale reload, read-only formula/unsupported cells and Activity Undo without changing historical previews.",
+    "Fields, rows, formulas, views, relations, bulk edits, redo and external-source writes remain outside this slice."
   ]
 }

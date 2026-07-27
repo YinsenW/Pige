@@ -174,9 +174,12 @@ successful materialization records the Dataset/revision refs and requeues the sa
 Dataset query tool. That continuation catalog is limited to the exact current source,
 Dataset, and revision refs; unrelated historical Datasets cannot block or enter the
 answer context. Restart adopts that continuation without another source loop or Dataset
-revision. Dataset query remains read-only and revision-bound; Collection/view/
-derived-Dataset changes still require deterministic operation identity, revision fences,
-Activity/Undo, and restart recovery.
+revision. Dataset query stays read-only. Collection cell edit revalidates current
+manifest/revision/schema/payload/cell, writes one verified immutable revision, then
+CAS-switches manifest last. `update_collection_cell` binds stable cell/before/after;
+exact replay adopts, changed reuse fails, and recovery repairs only its missing Operation.
+Undo requires that after-revision and writes forward; drift/pre-switch failure changes
+nothing. Broader Collection/view/derived work keeps the same Operation/Activity/recovery rules.
 
 ## 5. Job State Machine
 
@@ -570,7 +573,7 @@ Executable operation-kind vocabulary (machine checked):
 - `create_source_record`, `update_source_record`, `relink_source`.
 - `copy_source_asset`, `move_source_asset`, `trash_source_asset`, `restore_source_asset`.
 - `create_artifact`, `trash_artifact`, `restore_artifact`.
-- `create_dataset_revision`.
+- `create_dataset_revision`, `update_collection_cell`.
 - `create_page`, `update_page`, `rename_page`, `archive_page`, `trash_page`, `restore_page`.
 - `update_index`.
 - `create_memory`, `update_memory`, `trash_memory`, `restore_memory`.

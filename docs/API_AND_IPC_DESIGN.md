@@ -434,12 +434,9 @@ base hash or Operation internals.
 
 #### 6.4.1 Knowledge Activity And Undo
 
-`activity.list` (default 5, max 20) returns `activeVaultId` and safe create/update
-summaries. Matching applied rows may add `target?: { kind: "page"; pageId }`; missing,
-identity-mismatched or undone rows omit it. No paths/bodies/hashes cross preload; `targetLabel` is
-display-only. Renderer sends only `pageId` to Reader, fences the vault before/after
-render, and leaves Settings open on failure. `activity.undo` independently rechecks checksum,
-trashes create, restores update, and rebuilds. Other Operations/history remain open.
+`activity.list` may project `{kind:"collection",datasetId,tableId,revisionId}` for
+`update_collection_cell`; `activity.undo` requires its exact `expectedRevisionId` and
+creates a forward revision/Operation or stale. Page Undo and the body/path/hash ban remain.
 
 ### 6.5 Library And Notes
 
@@ -509,10 +506,15 @@ Current Home Dataset read boundary:
 - The main process binds the active vault, manifest/revision/schema/payload and Source
   Record privacy revision. Stale evidence writes the current body-free replacement audit
   and fails before another model turn; corrupt or unsafe evidence fails closed.
-- No standalone Dataset IPC channel exists in this slice. Library paging, citation-open
-  highlighting, independent Dataset browsing, and public query-builder APIs remain open.
-- Managed Collection mutations later use separate commands that bind expected revision
-  and produce Operation/Activity/Undo.
+- `collections.open` strictly binds version/request/vault/Dataset/table; statuses are
+  `ready | stale | not_found | failed`. Ready is the current revision, <=32 columns,
+  50 rows, 4 KiB/string and 64 KiB total.
+- `collections.editCell` adds expected revision/row/column/scalar; outcomes are
+  `committed(revision,Operation) | stale(currentRevision) | not_found |
+  not_editable(formula|unsupported_type) | invalid(type_mismatch|value_too_large) | failed`.
+- Main fences manifest/revision/schema/payload and stable IDs. DTO/results expose no
+  source/path/hash/payload/formula/SQL/engine/query-plan/raw error or echoed value. CRUD,
+  formulas/views/relations, query builder, external writes and conversion stay open.
 
 ### 6.6 Retrieval
 
