@@ -65,7 +65,7 @@ export class LocalSemanticRetrievalService {
     if (prior) return installResult(request.requestId, prior);
     if (request.expectedRevision !== record.revision) return mutationResult(request, record.revision, "stale");
     if (record.state === "ready" || record.state === "disabled") {
-      return this.#recordInstallResult(record, request, "already_installed");
+      return mutationResult(request, record.revision, "already_installed");
     }
     if (record.state === "installing" || record.state === "verifying") {
       return mutationResult(request, record.revision, "stale");
@@ -104,7 +104,7 @@ export class LocalSemanticRetrievalService {
       return mutationResult(request, record.revision, "stale");
     }
     if (record.state === "ready" && this.embeddingModelInstalled()) {
-      return this.#recordMutation(record, request, "enable", "already_enabled");
+      return mutationResult(request, record.revision, "already_enabled");
     }
     try {
       this.#verifiedBinding = await this.#store.verify();
@@ -127,6 +127,7 @@ export class LocalSemanticRetrievalService {
     if (record.state === "installing" || record.state === "verifying") {
       return mutationResult(request, record.revision, "stale");
     }
+    if (record.state === "disabled") return mutationResult(request, record.revision, "committed");
     return this.#recordMutation(record, request, "disable", "committed", "disabled");
   }
 
@@ -205,21 +206,6 @@ export class LocalSemanticRetrievalService {
         this.#store.discardStaging();
       } catch { /* The durable active state is recovered fail-closed on restart. */ }
     }
-  }
-
-  #recordInstallResult(
-    record: LocalSemanticAssetRecord,
-    request: LocalSemanticRetrievalInstallRequest,
-    status: "already_installed"
-  ): LocalSemanticRetrievalInstallResult {
-    const next = nextRecord(record, this.#now(), {
-      state: record.state,
-      receipts: appendReceipt(record, {
-        requestId: request.requestId, action: "install", revision: record.revision + 1, status
-      })
-    });
-    this.#store.write(next);
-    return { apiVersion: 1, requestId: request.requestId, revision: next.revision, status };
   }
 
   #recordMutation<T extends "enable" | "disable" | "remove", S extends string>(
@@ -306,7 +292,8 @@ function installResult(requestId: string, receipt: LocalSemanticAssetReceipt): L
   return { apiVersion: 1, requestId, revision: receipt.revision, status: "already_installed" };
 }
 
-function mutationResult<S extends "committed" | "already_enabled" | "stale" | "not_found" | "failed">(
+function mutationResult<S extends
+  "committed" | "already_enabled" | "already_installed" | "stale" | "not_found" | "failed">(
   request: MutationRequest,
   revision: number,
   status: S

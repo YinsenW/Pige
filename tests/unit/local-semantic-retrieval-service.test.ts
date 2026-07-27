@@ -82,6 +82,11 @@ describe("LocalSemanticRetrievalService", () => {
     const enabled = await service.enable(requestFor("enable0000000002", service.status(STATUS_REQUEST).revision));
     expect(enabled.status).toBe("committed");
     expect(service.embeddingModelInstalled()).toBe(true);
+    const readyRevision = service.status(STATUS_REQUEST).revision;
+    expect(await service.enable(requestFor("enable0000000003", readyRevision))).toMatchObject({
+      status: "already_enabled", revision: readyRevision
+    });
+    expect(service.status(STATUS_REQUEST).revision).toBe(readyRevision);
     expect(JSON.stringify(service.status(STATUS_REQUEST))).not.toMatch(/sha256|huggingface|\.gguf|private/u);
   });
 
