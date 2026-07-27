@@ -431,18 +431,15 @@ Ranking rules:
 
 SQLite graph tables are rebuildable indexes.
 
-Schema areas cover pages, tags/page-tags, topics, entities, normalized relation edges,
-citations, aliases, and backlinks. Rebuild scans frontmatter/bodies/managed evidence;
-resolves IDs, titles, aliases, paths, links, and citations; derives edges/facets/Tree; then
-reports broken links, unresolved aliases, duplicate topics, and weak claims.
+Rebuild indexes Markdown pages, facets, relations, citations, aliases and backlinks. Links
+resolve unique-or-ambiguous; unresolved targets grant no renderer access. Reader navigation
+binds the generation and returns one stable target or body-free failure.
 
-Current Phase 4 foundation:
-
-- Markdown body links remain durable truth. Rebuild parses wiki/local Markdown/`#wiki:`
-  links into deduplicated `links`, `backlinks`, and `relation_edges`; unresolved targets
-  may inform Knowledge Health but grant no renderer file access.
-- Reader binds the render-time index generation and returns one stable target or body-free
-  ambiguous/not-found/stale/failed, never candidates or a guessed relationship.
+Report-only Knowledge Health reads one current generation: missing/ambiguous links, active
+non-source wiki orphans, active topics sharing a normalized title/alias, and active claims
+with zero `sourceIds`. Invalid Markdown makes coverage partial; capped page-ID/title rows
+retain complete counts. Reports are ephemeral/body-free; repair, Operation/Undo,
+contradictions and missing concepts remain open.
 
 B6.12: rev2 rebuilds on first query. Body-free tree resolves ID/title/alias; root topic→domain; `has_topic`>`links_to`; primary=stable, others=related, cycles=cut, depth=iterative; Unassigned. weight=structural+fragment+unique-source; leaf=fragment-ref+source-leaf; sourcePages≠fragments. No public DTO/IPC/UI.
 

@@ -820,45 +820,9 @@ Main trunk: Local-first
 
 ## 12. Knowledge Health
 
-v0.1 can be a report page. Later it can become an interactive maintenance workflow.
-
-Prototype:
-
-```txt
-Knowledge Health
-
-Run Check
-
-Last check: Never
-
-Checks
-✓ Broken links
-✓ Orphan pages
-✓ Duplicate topics
-✓ Claims without sources
-✓ Possible contradictions
-✓ Missing concept pages
-```
-
-After running:
-
-```txt
-Knowledge Health
-
-4 suggestions
-
-Orphan pages
-  "AI Notes Architecture" has no inbound links.
-
-Duplicate topics
-  "Agent Notes" may overlap with "Agent Workflows".
-
-Unsourced claims
-  "Local models are enough for most capture" needs evidence.
-
-Missing concept
-  "Provider Registry" is mentioned 8 times but has no concept page.
-```
+Settings > Index & Maintenance owns the `MaintenanceSettingsPanel` report. Run Check keeps
+zero/issues, partial/truncated and failure distinct; safe page IDs open Reader. Results
+contain no body, path, repair, Activity or Undo.
 
 ## 13. Settings
 

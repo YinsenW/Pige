@@ -193,7 +193,7 @@ Rules:
 
 Current renderer/preload commands: `onboarding.dismissFirstHome`, `vault.revealKnowledgeRoot`, and `vault.revealSourceAssetRoot`.
 
-Internal compatibility/recovery commands: `vault.create`, `vault.open`, `onboarding.complete`, `vault.updateSourceStoragePolicy`, `vault.removeRecent`, `maintenance.rebuildLocalDatabase`, and `maintenance.resetLocalDatabase`.
+Commands: `vault.create`, `vault.open`, `onboarding.complete`, `vault.updateSourceStoragePolicy`, `vault.removeRecent`, `maintenance.rebuildLocalDatabase`, `maintenance.resetLocalDatabase`, and `maintenance.runKnowledgeHealth`.
 
 Queries: `vault.current`, `vault.recent`, `vault.health`, `onboarding.status`, and `maintenance.localDatabaseStatus`.
 
@@ -260,6 +260,11 @@ type LocalDatabaseStatus = {
 };
 ```
 
+`maintenance.runKnowledgeHealth` takes strict `{ apiVersion: 1, requestId,
+activeVaultId }`. Identity-bound `ready` adds generation, coverage, complete counts and
+bounded stable page-ID/title summaries for the four closed issue kinds;
+`unavailable`/`failed` add no body.
+
 Rules:
 
 - The renderer may display these paths, but it never receives direct filesystem capability.
@@ -272,9 +277,13 @@ Rules:
 - `vault.open` takes a folder selected through a trusted OS file dialog and validates Pige compatibility.
 - Active vault path and recent vault list are machine-local settings; they are not written into `.pige/manifest.json`.
 - Updating an external managed-copy root creates/selects a machine-local binding keyed by `vaultId` plus stable `rootId`; in-vault managed-copy roots use relative vault preferences. Existing source records retain their recorded root ID.
-- `maintenance.rebuildLocalDatabase` creates an `index_rebuild` job before rebuilding the active vault's SQLite page metadata and FTS index from durable Markdown. It returns rebuild counts plus the completed job ID when the immediate foundation runner succeeds.
-- The current runner may execute the rebuild body synchronously after job creation; large-vault release readiness requires moving that body to worker/job execution with progress and cancellation.
-- `maintenance.resetLocalDatabase` deletes and recreates only `.pige/db`, `.pige/indexes`, and `.pige/cache`; it must not delete Markdown knowledge, raw source assets, source records, conversations, jobs, proposals, operations, memory, skills, or trash.
+- `maintenance.rebuildLocalDatabase` creates an `index_rebuild` Job, rebuilds SQLite
+  metadata/FTS from Markdown, and returns counts plus the completed Job ID. The current
+  body may run synchronously; release scale still requires worker progress/cancellation.
+- `maintenance.resetLocalDatabase` recreates only `.pige/db`, `.pige/indexes`, and
+  `.pige/cache`; durable vault data is untouched.
+- Health rereads the vault lease/generation; absent is `unavailable`, malformed/oversized
+  is `failed`. It is ephemeral, offline and read-only.
 
 ### 6.2 Capture
 
