@@ -1010,9 +1010,9 @@ Staged: review identity, files, capabilities, boundary and warnings
 ```
 
 Explicit chat install joins the same staged confirmation. Skills are workflows, not apps.
-Installed actions require exact `canEnable`/`canUninstall`/`canExport === true`; uninstall has
-accessible confirmation/recoverable trash and export is pathless. Closed failures retain
-authoritative state; renderer never infers eligibility.
+Installed actions require exact `canEnable`/`canUninstall`/`canExport`/`canUpdate === true`.
+Update binds vault/Skill/revision, reuses staged review and labels `Update`; uninstall confirms,
+export is pathless and closed results replace state. Renderer never infers eligibility.
 
 Focused high-risk dialog target:
 

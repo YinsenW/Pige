@@ -3,6 +3,7 @@ import type {
   SkillExportResult,
   SkillLifecycleMutationResult,
   SkillStageInvalidReason,
+  SkillStageUpdateResult,
   SkillStagedSummary,
   SkillRegistryQueryResult,
   SkillRegistrySummary,
@@ -10,7 +11,7 @@ import type {
 } from "@pige/contracts";
 import { PigeIcon } from "./PigeIcon";
 
-type InstalledLifecycleKind = "disable" | "enable" | "export" | "uninstall";
+type InstalledLifecycleKind = "disable" | "enable" | "export" | "uninstall" | "update";
 
 interface InstalledLifecycleAction {
   readonly kind: InstalledLifecycleKind;
@@ -21,6 +22,15 @@ interface UninstallConfirmation {
   readonly skill: SkillSummary;
   readonly expectedRevision: number;
 }
+
+type StagedSkillReview =
+  | { readonly kind: "install"; readonly staged: SkillStagedSummary }
+  | {
+    readonly kind: "update";
+    readonly staged: SkillStagedSummary;
+    readonly skillId: string;
+    readonly enabled: boolean;
+  };
 
 export function SkillsSettingsPanel(props: {
   readonly t: (key: string) => string;
@@ -33,7 +43,7 @@ export function SkillsSettingsPanel(props: {
   const [statusKey, setStatusKey] = useState<string | null>(null);
   const [installOpen, setInstallOpen] = useState(false);
   const [installUrl, setInstallUrl] = useState("");
-  const [stagedSkill, setStagedSkill] = useState<SkillStagedSummary | null>(null);
+  const [stagedReview, setStagedReview] = useState<StagedSkillReview | null>(null);
   const [installBusy, setInstallBusy] = useState<"stage" | "install" | "discard" | null>(null);
   const latestRevisionRef = useRef(-1);
   const mountedRef = useRef(true);
@@ -42,9 +52,13 @@ export function SkillsSettingsPanel(props: {
   const uninstallConfirmationActiveRef = useRef(false);
   const installOperationRef = useRef(0);
   const pendingFocusRef = useRef<"trigger" | "url" | null>(null);
-  const pendingInstalledFocusRef = useRef<string | null | undefined>(undefined);
+  const pendingInstalledFocusRef = useRef<{
+    readonly skillId: string | null;
+    readonly action?: InstalledLifecycleKind;
+  } | undefined>(undefined);
   const installTriggerRef = useRef<HTMLButtonElement | null>(null);
   const installUrlRef = useRef<HTMLInputElement | null>(null);
+  const stagedPrimaryActionRef = useRef<HTMLButtonElement | null>(null);
   const uninstallTriggerRef = useRef<HTMLButtonElement | null>(null);
   const uninstallCancelRef = useRef<HTMLButtonElement | null>(null);
   const pageRef = useRef<HTMLElement | null>(null);
@@ -53,11 +67,15 @@ export function SkillsSettingsPanel(props: {
     if (pendingFocusRef.current === "trigger" && !installOpen) {
       pendingFocusRef.current = null;
       installTriggerRef.current?.focus();
-    } else if (pendingFocusRef.current === "url" && installOpen && !stagedSkill) {
+    } else if (pendingFocusRef.current === "url" && installOpen && !stagedReview) {
       pendingFocusRef.current = null;
       installUrlRef.current?.focus();
     }
-  }, [installOpen, stagedSkill]);
+  }, [installOpen, stagedReview]);
+
+  useEffect(() => {
+    if (stagedReview?.kind === "update") stagedPrimaryActionRef.current?.focus();
+  }, [stagedReview]);
 
   useEffect(() => {
     if (uninstallConfirmation) uninstallCancelRef.current?.focus();
@@ -67,10 +85,12 @@ export function SkillsSettingsPanel(props: {
     if (pendingInstalledFocusRef.current === undefined || lifecycleAction !== null || uninstallConfirmation !== null) {
       return;
     }
-    const skillId = pendingInstalledFocusRef.current;
+    const pendingFocus = pendingInstalledFocusRef.current;
     pendingInstalledFocusRef.current = undefined;
-    const selector = skillId
-      ? `[data-skill-id="${skillId}"] button:not(:disabled)`
+    const selector = pendingFocus.skillId
+      ? `[data-skill-id="${pendingFocus.skillId}"] ${pendingFocus.action === "update"
+        ? '[data-skill-update="true"]'
+        : "button:not(:disabled)"}`
       : undefined;
     const action = selector ? pageRef.current?.querySelector<HTMLButtonElement>(selector) : null;
     (action ?? installTriggerRef.current)?.focus();
@@ -145,8 +165,11 @@ export function SkillsSettingsPanel(props: {
     }
   };
 
-  const queueInstalledFocus = (skillId?: string): void => {
-    pendingInstalledFocusRef.current = skillId ?? null;
+  const queueInstalledFocus = (skillId?: string, action?: InstalledLifecycleKind): void => {
+    pendingInstalledFocusRef.current = {
+      skillId: skillId ?? null,
+      ...(action ? { action } : {})
+    };
   };
 
   const closeUninstallConfirmation = (): void => {
@@ -299,6 +322,61 @@ export function SkillsSettingsPanel(props: {
     }
   };
 
+  const stageInstalledSkillUpdate = async (skill: SkillSummary): Promise<void> => {
+    if (!registry || !skill.canUpdate || stagedReview || installOpen) return;
+    const expectedRegistryRevision = registry.revision;
+    const sequence = beginLifecycleAction("update", skill.id);
+    if (sequence === null) return;
+    const requestId = createSkillLifecycleRequestId();
+    try {
+      const requestedVault = await window.pige.vault.current();
+      if (!isCurrentLifecycleAction(sequence)) return;
+      if (!requestedVault) {
+        setStatusKey("skills.updateFailed");
+        return;
+      }
+      const result = await window.pige.skills.stageUpdate({
+        apiVersion: 1,
+        requestId,
+        activeVaultId: requestedVault.vaultId,
+        skillId: skill.id,
+        expectedRegistryRevision
+      });
+      if (!isCurrentLifecycleAction(sequence)) return;
+      const currentVault = await window.pige.vault.current();
+      if (!isCurrentLifecycleAction(sequence)) return;
+      if (!matchesLifecycleIdentity(result, requestId, requestedVault.vaultId, skill.id) ||
+          currentVault?.vaultId !== requestedVault.vaultId) {
+        setStatusKey("skills.updateFailed");
+        return;
+      }
+      if (result.status === "ready") {
+        setInstallOpen(true);
+        setStagedReview({ kind: "update", staged: result.staged, skillId: skill.id, enabled: skill.enabled });
+        return;
+      }
+      if (result.status === "failed") {
+        setStatusKey("skills.updateFailed");
+        queueInstalledFocus(skill.id, "update");
+        return;
+      }
+      adoptRegistry(result.registry);
+      setStatusKey(result.status === "current"
+        ? "skills.updateCurrent"
+        : result.status === "stale"
+          ? "skills.updateStale"
+          : "skills.updateUnavailable");
+      queueInstalledFocus(skill.id, "update");
+    } catch {
+      if (isCurrentLifecycleAction(sequence)) {
+        setStatusKey("skills.updateFailed");
+        queueInstalledFocus(skill.id, "update");
+      }
+    } finally {
+      finishLifecycleAction(sequence);
+    }
+  };
+
   const openUninstallConfirmation = (skill: SkillSummary): void => {
     if (!registry || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || !skill.canUninstall) return;
     uninstallConfirmationActiveRef.current = true;
@@ -317,7 +395,7 @@ export function SkillsSettingsPanel(props: {
   );
 
   const stageFromUrl = async (): Promise<void> => {
-    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || stagedSkill || installUrl.length === 0) return;
+    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || stagedReview || installUrl.length === 0) return;
     const operation = installOperationRef.current + 1;
     installOperationRef.current = operation;
     setInstallBusy("stage");
@@ -335,7 +413,7 @@ export function SkillsSettingsPanel(props: {
         return;
       }
       if (result.status === "ready") {
-        setStagedSkill(result.staged);
+        setStagedReview({ kind: "install", staged: result.staged });
         return;
       }
       setStatusKey(result.status === "invalid"
@@ -349,8 +427,9 @@ export function SkillsSettingsPanel(props: {
   };
 
   const installStaged = async (): Promise<void> => {
-    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || !stagedSkill) return;
-    const staged = stagedSkill;
+    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || !stagedReview) return;
+    const review = stagedReview;
+    const staged = review.staged;
     const operation = installOperationRef.current + 1;
     installOperationRef.current = operation;
     setInstallBusy("install");
@@ -363,7 +442,7 @@ export function SkillsSettingsPanel(props: {
         stagingId: staged.stagingId,
         manifestSha256: staged.manifestSha256,
         expectedRegistryRevision: staged.registryRevision,
-        enabled: true
+        enabled: review.kind === "update" ? review.enabled : true
       });
       if (!finishInstallOperation(operation)) return;
       if (result.requestId !== requestId) {
@@ -376,32 +455,42 @@ export function SkillsSettingsPanel(props: {
         setReadState("ready");
       }
       if (result.status === "committed") {
-        setStagedSkill(null);
+        setStagedReview(null);
         setInstallUrl("");
         setInstallOpen(false);
-        setStatusKey("skills.installCompleted");
-        pendingFocusRef.current = "trigger";
+        setStatusKey(review.kind === "update" ? "skills.updateCompleted" : "skills.installCompleted");
+        if (review.kind === "update") queueInstalledFocus(review.skillId, "update");
+        else pendingFocusRef.current = "trigger";
       } else if (result.status === "stale") {
-        setStagedSkill(null);
-        setStatusKey("skills.installReviewExpired");
-        pendingFocusRef.current = "url";
+        setStagedReview(null);
+        setStatusKey(review.kind === "update" ? "skills.updateStale" : "skills.installReviewExpired");
+        if (review.kind === "update") {
+          setInstallOpen(false);
+          queueInstalledFocus(review.skillId, "update");
+        } else pendingFocusRef.current = "url";
       } else if (result.status === "not_found") {
-        setStagedSkill(null);
-        setStatusKey("skills.installReviewUnavailable");
-        pendingFocusRef.current = "url";
+        setStagedReview(null);
+        setStatusKey(review.kind === "update" ? "skills.updateUnavailable" : "skills.installReviewUnavailable");
+        if (review.kind === "update") {
+          setInstallOpen(false);
+          queueInstalledFocus(review.skillId, "update");
+        } else pendingFocusRef.current = "url";
       } else {
-        setStatusKey("skills.installFailed");
+        setStatusKey(review.kind === "update" ? "skills.updateFailed" : "skills.installFailed");
       }
     } catch {
-      if (finishInstallOperation(operation)) setStatusKey("skills.installFailed");
+      if (finishInstallOperation(operation)) {
+        setStatusKey(review.kind === "update" ? "skills.updateFailed" : "skills.installFailed");
+      }
     } finally {
       if (finishInstallOperation(operation)) setInstallBusy(null);
     }
   };
 
   const discardStaged = async (): Promise<void> => {
-    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || !stagedSkill) return;
-    const staged = stagedSkill;
+    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || !stagedReview) return;
+    const review = stagedReview;
+    const staged = review.staged;
     const operation = installOperationRef.current + 1;
     installOperationRef.current = operation;
     setInstallBusy("discard");
@@ -423,9 +512,14 @@ export function SkillsSettingsPanel(props: {
         setStatusKey("skills.discardFailed");
         return;
       }
-      setStagedSkill(null);
-      setStatusKey(result.status === "discarded" ? null : "skills.installReviewUnavailable");
-      pendingFocusRef.current = "url";
+      setStagedReview(null);
+      setStatusKey(result.status === "discarded"
+        ? null
+        : review.kind === "update" ? "skills.updateUnavailable" : "skills.installReviewUnavailable");
+      if (review.kind === "update") {
+        setInstallOpen(false);
+        queueInstalledFocus(review.skillId, "update");
+      } else pendingFocusRef.current = "url";
     } catch {
       if (finishInstallOperation(operation)) setStatusKey("skills.discardFailed");
     } finally {
@@ -434,7 +528,7 @@ export function SkillsSettingsPanel(props: {
   };
 
   const closeInstall = (): void => {
-    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || stagedSkill) return;
+    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || stagedReview) return;
     installOperationRef.current += 1;
     setInstallOpen(false);
     setInstallUrl("");
@@ -523,6 +617,17 @@ export function SkillsSettingsPanel(props: {
                   >
                     {lifecycleAction?.kind === "export" && lifecycleAction.skillId === skill.id
                       ? props.t("skills.exporting") : props.t("skills.export")}
+                  </button> : null}
+                  {skill.canUpdate ? <button
+                    className="settings-button"
+                    type="button"
+                    data-skill-update="true"
+                    aria-label={`${props.t("skills.update")}: ${skill.name}`}
+                    disabled={lifecycleAction !== null || installBusy !== null || uninstallConfirmation !== null || installOpen}
+                    onClick={() => void stageInstalledSkillUpdate(skill)}
+                  >
+                    {lifecycleAction?.kind === "update" && lifecycleAction.skillId === skill.id
+                      ? props.t("skills.checkingUpdate") : props.t("skills.update")}
                   </button> : null}
                   {skill.canUninstall ? <button
                     className="settings-button danger"
@@ -625,31 +730,39 @@ export function SkillsSettingsPanel(props: {
         </div>
         {installOpen ? (
           <div className="settings-card" id="skill-url-install">
-            {stagedSkill ? (
+            {stagedReview ? (
               <div className="settings-row tall">
                 <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="skill" size={17} /></span>
                 <div className="settings-row-copy">
-                  <strong>{stagedSkill.name}</strong>
-                  <span>{stagedSkill.description}</span>
+                  <strong>{stagedReview.staged.name}</strong>
+                  <span>{stagedReview.staged.description}</span>
                   <div className="skill-registry-meta" aria-label={props.t("skills.reviewDetails")}>
-                    <span>{`v${stagedSkill.version}`}</span>
-                    {stagedSkill.author ? <span>{stagedSkill.author}</span> : null}
-                    {stagedSkill.license ? <span>{stagedSkill.license}</span> : null}
+                    <span>{`v${stagedReview.staged.version}`}</span>
+                    {stagedReview.staged.author ? <span>{stagedReview.staged.author}</span> : null}
+                    {stagedReview.staged.license ? <span>{stagedReview.staged.license}</span> : null}
                     <span>{props.t("skills.scope.machine_local")}</span>
                     <span>{props.t("skills.boundary.local")}</span>
                   </div>
-                  <span>{stagedSkill.sourceUrl}</span>
-                  <span>{`${stagedSkill.files[0].relativePath} · ${formatByteSize(stagedSkill.files[0].utf8ByteSize)}`}</span>
-                  {stagedSkill.capabilities.map((capability) => (
+                  <span>{stagedReview.staged.sourceUrl}</span>
+                  <span>{`${stagedReview.staged.files[0].relativePath} · ${formatByteSize(stagedReview.staged.files[0].utf8ByteSize)}`}</span>
+                  {stagedReview.staged.capabilities.map((capability) => (
                     <span key={capability}>{props.t(`skills.capability.${capability}`)}</span>
                   ))}
-                  {stagedSkill.warnings.map((warning) => (
+                  {stagedReview.staged.warnings.map((warning) => (
                     <span role="status" key={warning}>{props.t(`skills.warning.${warning}`)}</span>
                   ))}
                 </div>
                 <div className="settings-row-control skill-registry-control">
-                  <button className="settings-button primary" type="button" disabled={installBusy !== null || lifecycleAction !== null || uninstallConfirmation !== null} onClick={() => void installStaged()}>
-                    {props.t(installBusy === "install" ? "skills.installing" : "skills.installReviewed")}
+                  <button
+                    ref={stagedPrimaryActionRef}
+                    className="settings-button primary"
+                    type="button"
+                    disabled={installBusy !== null || lifecycleAction !== null || uninstallConfirmation !== null}
+                    onClick={() => void installStaged()}
+                  >
+                    {props.t(installBusy === "install"
+                      ? stagedReview.kind === "update" ? "skills.updating" : "skills.installing"
+                      : stagedReview.kind === "update" ? "skills.updateReviewed" : "skills.installReviewed")}
                   </button>
                   <button className="settings-button" type="button" disabled={installBusy !== null || lifecycleAction !== null || uninstallConfirmation !== null} onClick={() => void discardStaged()}>
                     {props.t(installBusy === "discard" ? "skills.discarding" : "skills.discardReview")}
@@ -737,7 +850,7 @@ function createSkillLifecycleRequestId(): `skill_lifecycle_request_${string}` {
 }
 
 function matchesLifecycleIdentity(
-  result: SkillLifecycleMutationResult | SkillExportResult,
+  result: SkillLifecycleMutationResult | SkillExportResult | SkillStageUpdateResult,
   requestId: string,
   activeVaultId: string,
   skillId: string

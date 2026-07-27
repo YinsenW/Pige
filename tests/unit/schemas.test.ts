@@ -55,6 +55,8 @@ import {
   SkillLifecycleMutationResultSchema,
   SkillStageFromUrlRequestSchema,
   SkillStageFromUrlResultSchema,
+  SkillStageUpdateRequestSchema,
+  SkillStageUpdateResultSchema,
   SkillUninstallRequestSchema,
   SourceRecordSchema,
   TaskExecutionPlanSchema,
@@ -1224,6 +1226,7 @@ describe("schemas", () => {
     expect(SkillEnableRequestSchema.parse(request)).toEqual(request);
     expect(SkillUninstallRequestSchema.parse(request)).toEqual(request);
     expect(SkillExportRequestSchema.parse(request)).toEqual(request);
+    expect(SkillStageUpdateRequestSchema.parse(request)).toEqual(request);
 
     const identity = {
       apiVersion: 1,
@@ -1244,7 +1247,8 @@ describe("schemas", () => {
       dataBoundaries: ["local"],
       canEnable: true,
       canUninstall: true,
-      canExport: true
+      canExport: true,
+      canUpdate: true
     } as const;
     const registry = { apiVersion: 1, revision: 6, invalidManifestCount: 0, skills: [skill] } as const;
     for (const status of ["committed", "stale", "not_found"] as const) {
@@ -1258,6 +1262,31 @@ describe("schemas", () => {
       const result = { ...identity, registryRevision: 6, status } as const;
       expect(SkillExportResultSchema.parse(result)).toEqual(result);
     }
+    const stagedUpdate = {
+      stagingId: `skillstage_${"a".repeat(32)}`,
+      manifestSha256: `sha256:${"b".repeat(64)}`,
+      registryRevision: request.expectedRegistryRevision,
+      expiresAt: "2026-07-28T12:00:00.000Z",
+      sourceUrl: "https://example.com/skills/paper-reading/SKILL.md",
+      id: request.skillId,
+      name: "Paper Reading",
+      version: "2.0.0",
+      description: "Review papers with current source-aware prompts.",
+      scope: "machine_local",
+      kind: "pure",
+      capabilities: ["read_current_source"],
+      dataBoundaries: ["local"],
+      files: [{ relativePath: "SKILL.md", utf8ByteSize: 1024, sha256: `sha256:${"b".repeat(64)}` }],
+      warnings: ["untrusted_remote_source"]
+    } as const;
+    expect(SkillStageUpdateResultSchema.parse({ ...identity, status: "ready", staged: stagedUpdate }))
+      .toEqual({ ...identity, status: "ready", staged: stagedUpdate });
+    for (const status of ["current", "stale", "not_found"] as const) {
+      expect(SkillStageUpdateResultSchema.parse({ ...identity, status, registry }))
+        .toEqual({ ...identity, status, registry });
+    }
+    expect(SkillStageUpdateResultSchema.parse({ ...identity, status: "failed" }))
+      .toEqual({ ...identity, status: "failed" });
     for (const unsafe of [
       { path: "/private/export/SKILL.md" },
       { body: "private Skill body" },
@@ -1273,8 +1302,21 @@ describe("schemas", () => {
     }
     expect(() => SkillEnableRequestSchema.parse({ ...request, path: "/private/skill" })).toThrow();
     for (const unsafe of [
+      { sourceUrl: "https://example.com/private/SKILL.md" },
+      { path: "/private/skill" },
+      { manifestSha256: `sha256:${"c".repeat(64)}` }
+    ]) {
+      expect(() => SkillStageUpdateRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+    }
+    expect(() => SkillStageUpdateResultSchema.parse({
+      ...identity,
+      status: "failed",
+      error: { code: "raw_fs_error" }
+    })).toThrow();
+    for (const unsafe of [
       { ...skill, scope: "built_in", trust: "built_in", canEnable: true },
       { ...skill, kind: "package_provided", trust: "package_managed", canUninstall: true },
+      { ...skill, scope: "built_in", trust: "built_in", canUpdate: true },
       { ...skill, enabled: true, canEnable: true }
     ]) {
       expect(() => SkillLifecycleMutationResultSchema.parse({
@@ -1289,6 +1331,13 @@ describe("schemas", () => {
       ...identity,
       status: "committed",
       registry: { ...registry, skills: [missingEligibility] }
+    })).toThrow();
+    const missingUpdateEligibility: Record<string, unknown> = { ...skill };
+    delete missingUpdateEligibility.canUpdate;
+    expect(() => SkillLifecycleMutationResultSchema.parse({
+      ...identity,
+      status: "committed",
+      registry: { ...registry, skills: [missingUpdateEligibility] }
     })).toThrow();
   });
 });

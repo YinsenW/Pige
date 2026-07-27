@@ -43,14 +43,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review of the installed pure-Skill lifecycle: strict eligibility, CAS identity, recoverable uninstall, pathless export and Settings ownership.",
+    "scope": "Independent Product Planning review of source-aware pure-Skill update: strict eligibility, immutable source/base identity, staged review, CAS adoption and Settings ownership.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 34,
-    "reviewedSha256": "1f7804c34c305cb37f320b3ffa15f1cb2812bf6a6ac7e51b2fcd3237600b9e13"
+    "reviewedSha256": "dfcb2446245442ba87a80a5628340475d805cb75811f60ae71bde620cc9aca76"
   },
   "reviewers": [{
-    "reviewerId": "installed-skill-lifecycle-review",
-    "task": "Installed pure-Skill lifecycle",
+    "reviewerId": "skill-source-update-review",
+    "task": "Source-aware pure-Skill update",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -58,33 +58,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Product Planning reviewed Skill, API, UI, Decision and trace owners; Development and UI Design independently own installed-byte reproving, lifecycle persistence, presentation and evidence."
+    "independence": "Planning reviewed Skill/API/UI/Decision/trace owners; Development and UI independently own source/base reproving, byte adoption, presentation and evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"installed-skill-lifecycle-review","blockerCount":0,"summary":"Settings exposes only Main-derived eligible actions; export and trash destinations remain Main-private."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"installed-skill-lifecycle-review","blockerCount":0,"summary":"Skill, API, UI and Decision owners agree on exact CAS, body-free results and installed-byte reproving."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"installed-skill-lifecycle-review","blockerCount":0,"summary":"PIGE-SKILL-001 and B8.06 stay planned while update, other sources/classes and public restore remain open."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"installed-skill-lifecycle-review","blockerCount":0,"summary":"Required eligibility fields, closed statuses and private trash receipts give Development fixed boundaries."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"installed-skill-lifecycle-review","blockerCount":0,"summary":"Existing owners bind the lifecycle without a new document or generic action framework."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"skill-source-update-review","blockerCount":0,"summary":"Only canUpdate exposes Update; source, stage, old-byte trash and destinations stay Main-private."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"skill-source-update-review","blockerCount":0,"summary":"Skill/API/UI/Decision owners agree on source/base/revision fences, safe preview and one CAS effect."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"skill-source-update-review","blockerCount":0,"summary":"PIGE-SKILL-001 and B8.06 stay planned while other sources/classes and public restore remain open."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"skill-source-update-review","blockerCount":0,"summary":"Closed update results, private receipt and unchanged-body/revision rules fix implementation boundaries."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"skill-source-update-review","blockerCount":0,"summary":"Existing owners bind update without a new document, background updater or rollback API."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict lifecycle identity, eligibility and closed results expose no body/path authority."},
-    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Skill, API, UI and Decision owners agree on the installed pure-Skill boundary."},
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict update identity, eligibility and closed results expose no body/path/source authority."},
+    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Skill, API, UI and Decision owners agree on the source-aware update boundary."},
     {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Planned acceptance remains open and final service LOC is inventoried."}
   ],
   "coordination": {
-    "taskId": "installed-skill-lifecycle-20260728",
-    "taskTitle": "Installed pure-Skill lifecycle",
+    "taskId": "skill-source-update-20260728",
+    "taskTitle": "Source-aware pure-Skill update",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "URL stage/install/disable stay unchanged; this slice adds only exact installed enable, private-trash uninstall and pathless export.",
-    "acknowledgement": "Planning binds the installed pure-Skill lifecycle; source update, other inputs/classes, public restore and release completion stay open."
+    "compatibility": "URL install and installed lifecycle stay; update reuses reviewed stage/install with one exact target/source/base receipt.",
+    "acknowledgement": "Planning binds source-aware update; other inputs/classes, public restore and release completion stay open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Eligibility is limited to current user-confirmed machine-local pure installed bytes.",
-    "Registry, vault or manifest drift fails closed before mutation or export.",
-    "Source update, other inputs/classes and public restore remain out of scope."
+    "Eligibility is limited to current user-confirmed machine-local pure HTTPS-backed bytes.",
+    "Registry, vault, source, base or manifest drift fails closed before update mutation.",
+    "Background, cross-source, local-file/ZIP/chat update and public restore remain out of scope."
   ]
 }

@@ -45,6 +45,14 @@ function register(overrides: Record<string, unknown> = {}) {
         warnings: ["untrusted_remote_source"]
       }
     }),
+    stageUpdate: (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      skillId: request.skillId,
+      status: "current",
+      registry: registry(2)
+    }),
     installStaged: (request) => ({ status: "committed", requestId: request.requestId, registry: registry(3) }),
     discardStaged: (request) => ({ status: "discarded", requestId: request.requestId }),
     disable: () => ({ status: "committed", registry: registry(3) }),
@@ -72,6 +80,9 @@ describe("registerSkillsIpc", () => {
       sourceUrl: "https://example.com/SKILL.md"
     });
     expect(stage).toMatchObject({ status: "ready", requestId });
+
+    const update = await handlers.get("skills.stageUpdate")?.({}, lifecycleRequest());
+    expect(update).toMatchObject({ status: "current", requestId: lifecycleRequestId });
 
     const install = await handlers.get("skills.installStaged")?.({}, {
       apiVersion: 1,
@@ -127,15 +138,19 @@ describe("registerSkillsIpc", () => {
 
     const blockedEnable = vi.fn();
     const blockedUninstall = vi.fn();
+    const blockedUpdate = vi.fn();
     const changed = register({
       getActiveVaultId: () => "vault_20260728_other",
       enable: blockedEnable,
-      uninstall: blockedUninstall
+      uninstall: blockedUninstall,
+      stageUpdate: blockedUpdate
     });
     expect(await changed.handlers.get("skills.uninstall")?.({}, request)).toMatchObject({ status: "failed" });
     expect(JSON.stringify(await changed.handlers.get("skills.enable")?.({}, request))).not.toContain("other");
     expect(blockedEnable).not.toHaveBeenCalled();
     expect(blockedUninstall).not.toHaveBeenCalled();
+    expect(await changed.handlers.get("skills.stageUpdate")?.({}, request)).toMatchObject({ status: "failed" });
+    expect(blockedUpdate).not.toHaveBeenCalled();
     expect(changed.publishRegistryChanged).not.toHaveBeenCalled();
   });
 

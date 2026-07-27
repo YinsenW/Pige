@@ -15,6 +15,7 @@ import {
   SkillRegistryService,
   parseSkillManifest
 } from "../../apps/desktop/src/main/services/skill-registry-service";
+import { SkillRegistryLifecycleStore } from "../../apps/desktop/src/main/services/skill-registry-lifecycle-store";
 
 const timestamp = "2026-07-18T12:00:00.000Z";
 const temporaryRoots: string[] = [];
@@ -63,7 +64,8 @@ describe("SkillRegistryService", () => {
         license: "Apache-2.0",
         canEnable: false,
         canUninstall: true,
-        canExport: true
+        canExport: true,
+        canUpdate: false
       }]
     });
     expect(SkillRegistrySummarySchema.parse(summary)).toEqual(summary);
@@ -384,6 +386,53 @@ describe("SkillRegistryService", () => {
       .toMatchObject({ revision: 4, skills: [] });
     expect(JSON.parse(fs.readFileSync(path.join(
       root, "skills", "trash", request.requestId, ".pige-uninstall.json"
+    ), "utf8"))).toMatchObject({ state: "committed", committedRegistryRevision: 4 });
+  });
+
+  it("adopts one prepared source update after restart without duplicating its registry transition", () => {
+    const root = createRoot();
+    const oldSource = manifest({
+      id: "update-recovery", name: "Update Recovery", version: "1", description: "A recoverable source update.",
+      capabilities: ["read_current_source"],
+      extra: ["sourceUrl: https://example.com/SKILL.md", "updatedAt: 2026-07-27T10:00:00.000Z"],
+      body: "## Procedure\n\nRead only."
+    });
+    const newSource = manifest({
+      id: "update-recovery", name: "Update Recovery", version: "2", description: "A recoverable source update.",
+      capabilities: ["read_current_source"],
+      extra: ["sourceUrl: https://example.com/SKILL.md", "updatedAt: 2026-07-28T10:00:00.000Z"],
+      body: "## Procedure\n\nRead and summarize."
+    });
+    seedInstalledSkill(root, oldSource, true);
+    const current = SkillRegistryFileSchema.parse(JSON.parse(
+      fs.readFileSync(path.join(root, "skills", "registry.json"), "utf8")
+    ));
+    new SkillRegistryLifecycleStore(fs.realpathSync.native(root)).prepareUpdate({
+      requestId: "skillreq_updaterecovery012345",
+      stagingId: "skillstage_0123456789abcdef0123456789abcdef",
+      activeVaultId: "vault_20260728_updaterecovery",
+      expectedRegistryRevision: current.revision,
+      oldRecord: current.skills[0]!,
+      newManifestSha256: digest(newSource),
+      newVersion: "2",
+      enabled: true,
+      bytes: Buffer.from(newSource, "utf8"),
+      createdAt: "2026-07-28T10:00:00.000Z"
+    });
+    expect(fs.readFileSync(path.join(root, "skills", "installed", "update-recovery", "SKILL.md"), "utf8"))
+      .toBe(newSource);
+    expect(current.revision).toBe(3);
+
+    expect(readySummary(new SkillRegistryService(root, { recoverOrphanedMutationLock: true }))).toMatchObject({
+      revision: 4,
+      skills: [{ id: "update-recovery", version: "2", enabled: true, canUpdate: true }]
+    });
+    expect(readySummary(new SkillRegistryService(root, { recoverOrphanedMutationLock: true }))).toMatchObject({
+      revision: 4,
+      skills: [{ id: "update-recovery", version: "2" }]
+    });
+    expect(JSON.parse(fs.readFileSync(path.join(
+      root, "skills", "trash", "updates", "skillreq_updaterecovery012345", ".pige-update.json"
     ), "utf8"))).toMatchObject({ state: "committed", committedRegistryRevision: 4 });
   });
 

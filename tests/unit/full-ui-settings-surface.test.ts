@@ -1158,6 +1158,210 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("stages one eligible source update for review and installs it without changing enabled state", async () => {
+    const dom = createDom();
+    const vaultId = "vault_20260728_skillupdate";
+    const updateable = {
+      ...skillRegistry(20, false).skills[0]!,
+      version: "1.2.0",
+      canUpdate: true
+    };
+    const fixed = {
+      ...updateable,
+      id: "built-in-review",
+      name: "Built-in review",
+      scope: "built_in" as const,
+      trust: "built_in" as const,
+      canEnable: false,
+      canUninstall: false,
+      canExport: false,
+      canUpdate: false
+    };
+    const initialRegistry = skillRegistry(20, false, 0, [updateable, fixed]);
+    const updatedRegistry = skillRegistry(21, false, 0, [{
+      ...updateable,
+      version: "1.3.0"
+    }, fixed]);
+    const staged = {
+      stagingId: "skillstage_abcdef0123456789abcdef0123456789" as const,
+      manifestSha256: `sha256:${"c".repeat(64)}` as const,
+      registryRevision: 20,
+      expiresAt: "2026-07-28T12:00:00.000Z",
+      sourceUrl: "https://example.com/SKILL.md" as const,
+      id: "review-notes",
+      name: "Review notes",
+      version: "1.3.0",
+      description: "Summarizes the current source with the reviewed update.",
+      scope: "machine_local" as const,
+      kind: "pure" as const,
+      capabilities: ["read_current_source" as const],
+      dataBoundaries: ["local" as const],
+      author: "Pige Labs",
+      license: "MIT",
+      files: [{ relativePath: "SKILL.md" as const, utf8ByteSize: 2304, sha256: `sha256:${"d".repeat(64)}` as const }],
+      warnings: ["untrusted_remote_source" as const]
+    };
+    const stageUpdate = vi.fn(async (request: {
+      requestId: `skill_lifecycle_request_${string}`;
+      activeVaultId: string;
+      skillId: string;
+    }) => ({
+      apiVersion: 1 as const,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      skillId: request.skillId,
+      status: "ready" as const,
+      staged
+    }));
+    const installStaged = vi.fn(async (request: { requestId: string }) => ({
+      status: "committed" as const,
+      requestId: request.requestId,
+      registry: updatedRegistry
+    }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        skills: {
+          summary: async () => ({ status: "ready" as const, registry: initialRegistry }),
+          stageUpdate,
+          installStaged,
+          discardStaged: vi.fn(),
+          disable: vi.fn(),
+          onChanged: () => () => undefined
+        },
+        vault: { current: async () => ({ vaultId }) }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(SkillsSettingsPanel, { t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-skills"));
+    const row = requireElement(page.querySelector<HTMLElement>('[data-skill-id="review-notes"]'));
+    expect(buttonNamed(row, "Update: Review notes").disabled).toBe(false);
+    expect(page.querySelector('[aria-label="Update: Built-in review"]')).toBeNull();
+
+    await act(async () => {
+      const update = buttonNamed(row, "Update: Review notes");
+      update.click();
+      update.click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(stageUpdate).toHaveBeenCalledOnce();
+    expect(stageUpdate).toHaveBeenCalledWith({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^skill_lifecycle_request_[a-z0-9]{16,64}$/u),
+      activeVaultId: vaultId,
+      skillId: "review-notes",
+      expectedRegistryRevision: 20
+    });
+    expect(page.textContent).toContain("v1.3.0");
+    expect(page.textContent).toContain("This Skill comes from a remote source you must review.");
+    expect(page.textContent).not.toContain(staged.stagingId);
+    expect(page.textContent).not.toContain(staged.manifestSha256);
+    const confirmUpdate = buttonNamed(page, "Update Skill");
+    expect(dom.window.document.activeElement).toBe(confirmUpdate);
+
+    await act(async () => {
+      confirmUpdate.click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(installStaged).toHaveBeenCalledWith({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
+      stagingId: staged.stagingId,
+      manifestSha256: staged.manifestSha256,
+      expectedRegistryRevision: 20,
+      enabled: false
+    });
+    expect(row.textContent).toContain("v1.3.0");
+    expect(row.textContent).toContain("Disabled");
+    expect(page.textContent).toContain("The reviewed Skill update was installed.");
+    expect(page.querySelector("#skill-url-install")).toBeNull();
+    expect(dom.window.document.activeElement).toBe(buttonNamed(row, "Update: Review notes"));
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("adopts authoritative Skill state for current, stale, and missing update checks", async () => {
+    const dom = createDom();
+    const vaultId = "vault_20260728_skillupdateclosed";
+    const registries = [
+      skillRegistry(31, true),
+      skillRegistry(32, true),
+      skillRegistry(33, true, 0, [])
+    ];
+    let resultIndex = 0;
+    const stageUpdate = vi.fn(async (request: {
+      requestId: `skill_lifecycle_request_${string}`;
+      activeVaultId: string;
+      skillId: string;
+    }) => {
+      const status = (["current", "stale", "not_found"] as const)[resultIndex]!;
+      const registry = registries[resultIndex++]!;
+      return {
+        apiVersion: 1 as const,
+        requestId: request.requestId,
+        activeVaultId: request.activeVaultId,
+        skillId: request.skillId,
+        status,
+        registry
+      };
+    });
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        skills: {
+          summary: async () => ({ status: "ready" as const, registry: skillRegistry(30, true) }),
+          stageUpdate,
+          disable: vi.fn(),
+          onChanged: () => () => undefined
+        },
+        vault: { current: async () => ({ vaultId }) }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(SkillsSettingsPanel, { t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-skills"));
+    const update = (): HTMLButtonElement => buttonNamed(page, "Update: Review notes");
+
+    await act(async () => {
+      update().click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(page.textContent).toContain("This Skill is already current.");
+    expect(page.querySelector("[data-skill-registry-revision]")?.getAttribute("data-skill-registry-revision")).toBe("31");
+    expect(dom.window.document.activeElement).toBe(update());
+
+    await act(async () => {
+      update().click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(page.textContent).toContain("The Skill Registry changed");
+    expect(page.querySelector("[data-skill-registry-revision]")?.getAttribute("data-skill-registry-revision")).toBe("32");
+
+    await act(async () => {
+      update().click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(page.textContent).toContain("This Skill is no longer available for update.");
+    expect(page.textContent).toContain("No Skills installed");
+    expect(stageUpdate).toHaveBeenCalledTimes(3);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("stages one exact Skill URL for review, installs with the frozen identity, and discards without installing", async () => {
     const dom = createDom();
     const initialRegistry = skillRegistry(3, false, 0, []);
@@ -2474,7 +2678,8 @@ function skillRegistry(
     dataBoundaries: ["local"],
     canEnable: !enabled,
     canUninstall: true,
-    canExport: true
+    canExport: true,
+    canUpdate: true
   }]
 ): SkillRegistrySummary {
   return { apiVersion: 1, revision, invalidManifestCount, skills };

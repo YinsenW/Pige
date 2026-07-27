@@ -1430,7 +1430,8 @@ export const SkillSummarySchema = z.object({
   license: z.string().min(1).max(120).optional(),
   canEnable: z.boolean(),
   canUninstall: z.boolean(),
-  canExport: z.boolean()
+  canExport: z.boolean(),
+  canUpdate: z.boolean()
 }).strict().superRefine((skill, context) => {
   const userManaged = skill.scope === "machine_local" && skill.kind === "pure" &&
     skill.trust === "user_confirmed";
@@ -1442,6 +1443,9 @@ export const SkillSummarySchema = z.object({
   }
   if (skill.canExport && !userManaged) {
     context.addIssue({ code: "custom", path: ["canExport"], message: "Skill export eligibility is invalid." });
+  }
+  if (skill.canUpdate && !userManaged) {
+    context.addIssue({ code: "custom", path: ["canUpdate"], message: "Skill update eligibility is invalid." });
   }
 });
 
@@ -1546,6 +1550,14 @@ const SkillInstalledLifecycleRequestIdentitySchema = z.object({
 export const SkillEnableRequestSchema = SkillInstalledLifecycleRequestIdentitySchema;
 export const SkillUninstallRequestSchema = SkillInstalledLifecycleRequestIdentitySchema;
 export const SkillExportRequestSchema = SkillInstalledLifecycleRequestIdentitySchema;
+export const SkillStageUpdateRequestSchema = SkillInstalledLifecycleRequestIdentitySchema;
+
+const SkillInstalledLifecycleResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SkillLifecycleRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  skillId: SkillIdSchema
+}).strict();
 
 const SkillRegistryErrorSummarySchema = PigeErrorCoreSchema.strict()
   .superRefine(requireErrorDomainMatchesCode);
@@ -1568,6 +1580,30 @@ export const SkillStageFromUrlResultSchema = z.discriminatedUnion("status", [
     error: SkillRegistryErrorSummarySchema
   }).strict()
 ]);
+
+export const SkillStageUpdateResultSchema = z.discriminatedUnion("status", [
+  SkillInstalledLifecycleResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    staged: SkillStagedSummarySchema
+  }).strict(),
+  SkillInstalledLifecycleResultIdentitySchema.extend({
+    status: z.literal("current"),
+    registry: SkillRegistrySummarySchema
+  }).strict(),
+  SkillInstalledLifecycleResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    registry: SkillRegistrySummarySchema
+  }).strict(),
+  SkillInstalledLifecycleResultIdentitySchema.extend({
+    status: z.literal("not_found"),
+    registry: SkillRegistrySummarySchema
+  }).strict(),
+  SkillInstalledLifecycleResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status === "ready" && result.staged.id !== result.skillId) {
+    context.addIssue({ code: "custom", path: ["staged", "id"], message: "Staged update Skill identity must match." });
+  }
+});
 
 export const SkillInstallStagedResultSchema = z.discriminatedUnion("status", [
   SkillInstallResultIdentitySchema.extend({
@@ -1607,29 +1643,23 @@ export const SkillRegistryMutationResultSchema = z.discriminatedUnion("status", 
   z.object({ status: z.literal("failed"), error: SkillRegistryErrorSummarySchema }).strict()
 ]);
 
-const SkillLifecycleMutationResultIdentitySchema = z.object({
-  apiVersion: z.literal(1),
-  requestId: SkillLifecycleRequestIdSchema,
-  activeVaultId: VaultIdSchema,
-  skillId: SkillIdSchema
-}).strict();
 export const SkillLifecycleMutationResultSchema = z.discriminatedUnion("status", [
-  SkillLifecycleMutationResultIdentitySchema.extend({
+  SkillInstalledLifecycleResultIdentitySchema.extend({
     status: z.literal("committed"),
     registry: SkillRegistrySummarySchema
   }).strict(),
-  SkillLifecycleMutationResultIdentitySchema.extend({
+  SkillInstalledLifecycleResultIdentitySchema.extend({
     status: z.literal("stale"),
     registry: SkillRegistrySummarySchema
   }).strict(),
-  SkillLifecycleMutationResultIdentitySchema.extend({
+  SkillInstalledLifecycleResultIdentitySchema.extend({
     status: z.literal("not_found"),
     registry: SkillRegistrySummarySchema
   }).strict(),
-  SkillLifecycleMutationResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+  SkillInstalledLifecycleResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 
-const SkillExportResultIdentitySchema = SkillLifecycleMutationResultIdentitySchema.extend({
+const SkillExportResultIdentitySchema = SkillInstalledLifecycleResultIdentitySchema.extend({
   registryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 }).strict();
 export const SkillExportResultSchema = z.discriminatedUnion("status", [
@@ -4732,6 +4762,8 @@ export type SkillUninstallRequest = z.infer<typeof SkillUninstallRequestSchema>;
 export type SkillExportRequest = z.infer<typeof SkillExportRequestSchema>;
 export type SkillLifecycleMutationResult = z.infer<typeof SkillLifecycleMutationResultSchema>;
 export type SkillExportResult = z.infer<typeof SkillExportResultSchema>;
+export type SkillStageUpdateRequest = z.infer<typeof SkillStageUpdateRequestSchema>;
+export type SkillStageUpdateResult = z.infer<typeof SkillStageUpdateResultSchema>;
 export type SkillStagingId = z.infer<typeof SkillStagingIdSchema>;
 export type SkillInstallUrl = z.infer<typeof SkillInstallUrlSchema>;
 export type SkillStageInvalidReason = z.infer<typeof SkillStageInvalidReasonSchema>;
