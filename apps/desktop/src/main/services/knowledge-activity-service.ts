@@ -26,6 +26,7 @@ export interface KnowledgeActivityVaultPort {
   activeVaultPath(): string | undefined;
 }
 export interface KnowledgeActivityCollectionPort { activitySummary(operation: OperationRecord, undo?: OperationRecord): KnowledgeActivitySummary | undefined; findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined; undo(operation: OperationRecord, expectedRevisionId?: string): Promise<KnowledgeActivityUndoResult>; recoverIncompleteOperations(): KnowledgeActivityRecoveryResult; }
+export interface KnowledgeActivityEditorPort { activitySummary(operation: OperationRecord, undo?: OperationRecord): KnowledgeActivitySummary | undefined; findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined; undo(operation: OperationRecord, expectedRevisionId?: string): KnowledgeActivityUndoResult; recoverIncompleteOperations(): KnowledgeActivityRecoveryResult; }
 export interface KnowledgeActivityRecoveryResult {
   readonly recovered: number;
   readonly failed: number;
@@ -34,12 +35,10 @@ interface OperationScanResult {
   readonly operations: readonly OperationRecord[];
   readonly invalidOperationCount: number;
 }
-
 interface PrivateFileSnapshot {
   readonly bytes: Buffer;
   readonly stat: fs.Stats;
 }
-
 interface GeneratedIndexUpdate {
   readonly indexPath: string;
   readonly basePath: string;
@@ -47,7 +46,6 @@ interface GeneratedIndexUpdate {
   readonly originalContent: string;
   readonly content: string;
 }
-
 const DEFAULT_ACTIVITY_LIMIT = 5;
 const MAX_ACTIVITY_LIMIT = 20;
 const MAX_OPERATION_SCAN_ENTRIES = 10_000;
@@ -59,12 +57,10 @@ const GENERATED_PAGE_ID = /^page_\d{8}_[a-z0-9]{8,}$/u;
 const GENERATED_PAGE_PATH = /^wiki\/generated\/\d{4}\/page_\d{8}_[a-z0-9]{8,}\.md$/u;
 const OPERATION_ID = /^op_\d{8}_[a-z0-9]{8,}$/u;
 const CONTENT_HASH = /^sha256:[a-f0-9]{64}$/u;
-
 export class KnowledgeActivityService {
-  readonly #vaults: KnowledgeActivityVaultPort;
-  readonly #collections: KnowledgeActivityCollectionPort | undefined;
-  constructor(vaults: KnowledgeActivityVaultPort, collections?: KnowledgeActivityCollectionPort) {
-    this.#vaults = vaults; this.#collections = collections;
+  readonly #vaults: KnowledgeActivityVaultPort; readonly #collections: KnowledgeActivityCollectionPort | undefined; readonly #editor: KnowledgeActivityEditorPort | undefined;
+  constructor(vaults: KnowledgeActivityVaultPort, collections?: KnowledgeActivityCollectionPort, editor?: KnowledgeActivityEditorPort) {
+    this.#vaults = vaults; this.#collections = collections; this.#editor = editor;
   }
   list(request: KnowledgeActivityListRequest = {}): KnowledgeActivityListResult {
     if (!request || typeof request !== "object") {
@@ -75,7 +71,7 @@ export class KnowledgeActivityService {
     const scan = readOperationRecords(vaultPath);
     const undoByOperationId = createUndoOperationMap(scan.operations);
     const activities = scan.operations
-      .filter((operation) => isKnowledgeActivityOperation(operation) || (
+      .filter((operation) => !!this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations)) || isKnowledgeActivityOperation(operation) || (
         operation.kind === "update_collection_cell" && !!this.#collections?.activitySummary(
           operation, this.#collections.findUndoOperation(operation, scan.operations)
         )))
@@ -89,6 +85,8 @@ export class KnowledgeActivityService {
       activities: activities
         .slice(0, clampLimit(request.limit))
         .map((operation) => {
+          const editor = this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations));
+          if (editor) return editor;
           if (operation.kind === "update_collection_cell" && this.#collections) {
             return this.#collections.activitySummary(operation, this.#collections.findUndoOperation(operation, scan.operations))!;
           }
@@ -108,9 +106,11 @@ export class KnowledgeActivityService {
     const vaultPath = this.#requireActiveVaultPath();
     const scan = readOperationRecords(vaultPath);
     const operation = scan.operations.find((candidate) => candidate.id === request.operationId);
-    if (!operation || (!isKnowledgeActivityOperation(operation) && operation.kind !== "update_collection_cell")) {
+    const editor = operation && this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations));
+    if (!operation || (!editor && !isKnowledgeActivityOperation(operation) && operation.kind !== "update_collection_cell")) {
       throw new PigeDomainError("activity.not_allowed", "This Activity cannot be undone by the current bounded path.");
     }
+    if (editor) return this.#editor!.undo(operation, request.expectedRevisionId);
     if (operation.kind === "update_collection_cell") {
       if (!this.#collections) throw new PigeDomainError("activity.not_allowed", "Collection Activity is unavailable.");
       return this.#collections.undo(operation, request.expectedRevisionId);
@@ -183,7 +183,7 @@ export class KnowledgeActivityService {
         failed += 1;
       }
     }
-    const collections = this.#collections?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; return { recovered: recovered + collections.recovered, failed: failed + collections.failed };
+    const collections = this.#collections?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const editor = this.#editor?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; return { recovered: recovered + collections.recovered + editor.recovered, failed: failed + collections.failed + editor.failed };
   }
   #requireActiveVault(): VaultSummary {
     const activeVault = this.#vaults.current();

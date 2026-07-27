@@ -447,29 +447,36 @@ Queries:
 - `library.related`
 - `notes.get`
 - `notes.render`
+- `notes.openEditor`
 - `notes.resolveInlineReference`
 - `notes.openSourceReference`
 
+Commands:
+
+- `notes.saveEditor`
+
 Current bridge queries:
 
-- `library.list/tree/related` returns bounded stable-ID summaries/aggregates from index or
-  active-vault Markdown fallback; invalid/unresolved data degrades without renderer file access.
-- `notes.get/render` resolve stable page ID to safe Markdown/HTML. `renderContextId` authorizes
-  only bounded href/selection resolution for that sender/render, never filesystem access.
-- Main owns Markdown/filesystem access; arbitrary paths, private source locations, prompts,
-  responses, secrets, raw frontmatter/HTML/script and unsafe links never cross.
+- Library queries return bounded stable-ID summaries from index/Markdown fallback; invalid data
+  degrades without renderer file access. Notes resolve page ID to safe Markdown/HTML.
+- `renderContextId` authorizes only bounded sender/render resolution. Main retains filesystem,
+  paths, private locations, prompts/responses, secrets, raw frontmatter/script and unsafe links.
+
+Reader edit contract:
+
+- `notes.openEditor` binds version/request/vault/page/render; `ready` returns exact bounded Markdown
+  plus opaque revision. `notes.saveEditor` adds that revision and exact untrimmed draft.
+- Main revalidates no-follow page/frontmatter/link/citation identity, CAS-writes, records reversible
+  `update_page`, and returns revision/Operation/render. Stale returns current revision and preserves
+  draft/Reader; invalid has a closed reason; other failures are body-free.
+- Source pages, lifecycle, merge/rich text and path/hash/error projection are absent.
 
 Reader reference query contract:
 
-- Inline resolution keeps its bounded href. `notes.openSourceReference` accepts
-  strict `{apiVersion:1,requestId,activeVaultId,currentPageId,renderContextId,sourceId}`; no fake href.
-- `NotesService` proves sender scope, note source membership, stable Source Record,
-  `knowledgePageId`/path, and reread `source`-page binding, then rechecks scope/identity.
-- `resolved` exposes only version/request/status/`target.pageId`; body-free `unresolved | not_found |
-  stale | mismatch | changed` exposes only version/request/status; others retain Reader.
-- Main stays composition-only; `apps/desktop/src/main/register-reader-ipc.ts` owns typed Notes
-  registration/tests. No path/body/record/locator/hash/candidates/error crosses; no
-  reveal/edit/reconnect, filesystem-open, Agent, or permission authority.
+- `notes.openSourceReference` accepts version/request/vault/current page/render/source ID;
+  NotesService rereads page membership, Source Record and source page.
+- `resolved` adds `target.pageId`; body-free `unresolved | not_found | stale | mismatch | changed`
+  retains Reader. The registrar exposes no record/locator/hash/candidate/error or ambient authority.
 
 Reader selection uses queries `readerSelection.resolve`, `readerSelection.currentProposal`
 and commands `readerSelection.submitAction`, `readerSelection.submitTransform`,

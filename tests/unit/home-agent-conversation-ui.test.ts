@@ -27,6 +27,10 @@ import type {
   ModelProviderSettingsSummary,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteEditorOpenRequest,
+  NoteEditorOpenResult,
+  NoteEditorSaveRequest,
+  NoteEditorSaveResult,
   NoteRenderResult,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
@@ -3278,6 +3282,90 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("edits a Home-opened Reader through the shared canonical editor and adopts the committed render without refetch", async () => {
+    const dom = createDom();
+    const harness = createHarness(completedGroundedTimeline());
+    let renderCount = 0;
+    let saveCount = 0;
+    harness.renderNote = async (pageId) => {
+      renderCount += 1;
+      return {
+        ...testRenderedNote(pageId),
+        renderContextId: renderCount === 1 ? `notectx_${"a".repeat(32)}` : `notectx_${"e".repeat(32)}`
+      };
+    };
+    harness.openEditor = async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      pageId: request.pageId,
+      status: "ready",
+      renderContextId: request.renderContextId,
+      revision: request.renderContextId === `notectx_${"e".repeat(32)}`
+        ? `noteeditrev_${"b".repeat(32)}`
+        : `noteeditrev_${"a".repeat(32)}`,
+      markdown: "# Note A\n\nAuthoritative body\n"
+    });
+    harness.saveEditor = async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      pageId: request.pageId,
+      ...(++saveCount === 1
+        ? { status: "stale" as const, revision: `noteeditrev_${"b".repeat(32)}` }
+        : {
+            status: "committed" as const,
+            revision: `noteeditrev_${"c".repeat(32)}`,
+            operationId: "operation_home_editor",
+            render: {
+              ...testRenderedNote(request.pageId),
+              html: "<h1>Note A</h1><p>Edited Home body</p>",
+              byteSize: 42,
+              renderContextId: `notectx_${"d".repeat(32)}`
+            }
+          })
+    });
+    const mount = await mountHome(dom, makePigeApi(harness));
+    await clickElement(dom, requireElement(mount.container.querySelector<HTMLButtonElement>(".conversation-citations .citation-row")));
+    await waitFor(dom, () => mount.container.querySelector(".note-reader") !== null);
+
+    await clickButton(dom, mount.container, enMessages["note.edit"]);
+    await waitFor(dom, () => mount.container.querySelector("#note-markdown-editor-input") !== null);
+    expect(harness.editorOpenRequests[0]).toMatchObject({
+      activeVaultId: "vault_home_conversation",
+      pageId: "page_20260715_note0001",
+      renderContextId: `notectx_${"a".repeat(32)}`
+    });
+    const editor = requireElement(mount.container.querySelector<HTMLTextAreaElement>("#note-markdown-editor-input"));
+    const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value")?.set;
+    await act(async () => {
+      setter?.call(editor, "# Note A\n\nEdited Home body\n");
+      editor.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+      editor.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      await settle(dom);
+    });
+    await clickButton(dom, mount.container, enMessages["note.editor.save"]);
+    await waitFor(dom, () => mount.container.textContent?.includes(enMessages["note.editor.stale"]) === true);
+    expect(editor.value).toBe("# Note A\n\nEdited Home body\n");
+    await clickButton(dom, mount.container, enMessages["note.editor.reload"]);
+    await waitFor(dom, () => harness.editorOpenRequests.length === 2);
+    expect(harness.editorOpenRequests[1]?.renderContextId).toBe(`notectx_${"e".repeat(32)}`);
+    expect(editor.value).toBe("# Note A\n\nEdited Home body\n");
+    await clickButton(dom, mount.container, enMessages["note.editor.save"]);
+    await waitFor(dom, () => mount.container.textContent?.includes("Edited Home body") === true);
+    expect(harness.editorSaveRequests[1]).toMatchObject({
+      activeVaultId: "vault_home_conversation",
+      pageId: "page_20260715_note0001",
+      renderContextId: `notectx_${"e".repeat(32)}`,
+      expectedRevision: `noteeditrev_${"b".repeat(32)}`,
+      markdown: "# Note A\n\nEdited Home body\n"
+    });
+    expect(harness.noteRenderRequests).toEqual(["page_20260715_note0001", "page_20260715_note0001"]);
+
+    await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
   it("enables one staged source turn after a completed grounded Reader roundtrip despite a stale running Job", async () => {
     const dom = createDom();
     const completed = completedGroundedTimeline();
@@ -4181,7 +4269,11 @@ interface ConversationHarness {
   readonly noteRenderRequests: string[];
   readonly sourceReferenceRequests: NoteOpenSourceReferenceRequest[];
   readonly inlineReferenceRequests: NoteResolveInlineReferenceRequest[];
+  readonly editorOpenRequests: NoteEditorOpenRequest[];
+  readonly editorSaveRequests: NoteEditorSaveRequest[];
   renderNote: (pageId: string) => Promise<NoteRenderResult>;
+  openEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
+  saveEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
   openSourceReference: (request: NoteOpenSourceReferenceRequest) => Promise<NoteOpenSourceReferenceResult>;
   resolveInlineReference: (request: NoteResolveInlineReferenceRequest) => Promise<NoteResolveInlineReferenceResult>;
   loadAppearance: () => Promise<AppearanceSettingsSummary>;
@@ -4261,7 +4353,26 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     noteRenderRequests: [],
     sourceReferenceRequests: [],
     inlineReferenceRequests: [],
+    editorOpenRequests: [],
+    editorSaveRequests: [],
     renderNote: async (pageId) => testRenderedNote(pageId),
+    openEditor: async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      pageId: request.pageId,
+      status: "ready",
+      renderContextId: request.renderContextId,
+      revision: `noteeditrev_${"a".repeat(32)}`,
+      markdown: "# Note A\n\nOriginal body\n"
+    }),
+    saveEditor: async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      pageId: request.pageId,
+      status: "failed"
+    }),
     openSourceReference: async (request) => ({
       apiVersion: 1,
       requestId: request.requestId,
@@ -4743,6 +4854,14 @@ function makePigeApi(harness: ConversationHarness): object {
       openSourceReference: async (request: NoteOpenSourceReferenceRequest) => {
         harness.sourceReferenceRequests.push(request);
         return harness.openSourceReference(request);
+      },
+      openEditor: async (request: NoteEditorOpenRequest) => {
+        harness.editorOpenRequests.push(request);
+        return harness.openEditor(request);
+      },
+      saveEditor: async (request: NoteEditorSaveRequest) => {
+        harness.editorSaveRequests.push(request);
+        return harness.saveEditor(request);
       }
     }
   };

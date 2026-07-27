@@ -4,6 +4,10 @@ import path from "node:path";
 import type {
   LibraryPageSummary,
   NoteDocument,
+  NoteEditorOpenRequest,
+  NoteEditorOpenResult,
+  NoteEditorSaveRequest,
+  NoteEditorSaveResult,
   NoteGetRequest,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
@@ -35,6 +39,7 @@ import {
   readMarkdownPageContentAtSignature,
   readMarkdownPageByRelativePath
 } from "./markdown-page-index";
+import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16;
 const MAX_RENDER_CONTEXT_HREFS = 128;
@@ -109,6 +114,11 @@ interface SourceRecordSnapshot {
   readonly identity: FileIdentity;
 }
 
+interface NoteEditorBinding {
+  readonly privateRenderIdentity: string;
+  readonly privateRevision: string;
+}
+
 type SourceReferenceResolution =
   | { readonly status: "resolved"; readonly pageId: string }
   | {
@@ -125,17 +135,21 @@ export class NotesService {
   readonly #vaults: NotesVaultPort;
   readonly #referenceIndex: NotesInlineReferenceIndexPort | undefined;
   readonly #renderMarkdown: NotesMarkdownRenderer;
+  readonly #editor: NoteMarkdownEditorService | undefined;
   readonly #renderContexts = new Map<string, Map<string, NoteRenderContext>>();
+  readonly #editorBindings = new Map<string, NoteEditorBinding>();
   readonly #ownerEpochs = new Map<string, number>();
 
   constructor(
     vaults: NotesVaultPort,
     referenceIndex?: NotesInlineReferenceIndexPort,
-    renderMarkdown: NotesMarkdownRenderer = renderPigeMarkdownToHtml
+    renderMarkdown: NotesMarkdownRenderer = renderPigeMarkdownToHtml,
+    editor?: NoteMarkdownEditorService
   ) {
     this.#vaults = vaults;
     this.#referenceIndex = referenceIndex;
     this.#renderMarkdown = renderMarkdown;
+    this.#editor = editor;
   }
 
   get(request: NoteGetRequest): NoteDocument {
@@ -180,10 +194,86 @@ export class NotesService {
           ...(referenceIndexRevision ? { referenceIndexRevision } : {})
         });
     return {
-      summary: stable.document.summary,
+      summary: {
+        ...stable.document.summary,
+        sourceIds: [...stable.document.summary.sourceIds]
+      },
       html: rendered.html,
       byteSize: stable.document.byteSize,
       ...(renderContextId ? { renderContextId } : {})
+    };
+  }
+
+  openEditor(ownerId: string, request: NoteEditorOpenRequest): NoteEditorOpenResult {
+    const identity = editorIdentity(request);
+    const context = this.#readRenderContext(ownerId, request.renderContextId);
+    if (!this.#editor || !context || !this.#matchesEditorContext(ownerId, context, request)) {
+      return { ...identity, status: "stale" };
+    }
+    const opened = this.#editor.open({ activeVaultId: request.activeVaultId, pageId: request.pageId });
+    if (opened.status === "not_found") return { ...identity, status: "not_found" };
+    if (
+      opened.status !== "opened" ||
+      opened.revisionId !== context.pageContentHash ||
+      opened.markdown !== context.markdown
+    ) {
+      return { ...identity, status: "failed" };
+    }
+    this.#editorBindings.set(editorBindingKey(ownerId, request.renderContextId), {
+      privateRenderIdentity: opened.renderIdentity,
+      privateRevision: opened.revisionId
+    });
+    return {
+      ...identity,
+      status: "ready",
+      renderContextId: request.renderContextId,
+      revision: publicEditorRevision(opened.revisionId),
+      markdown: opened.markdown
+    };
+  }
+
+  async saveEditor(ownerId: string, request: NoteEditorSaveRequest): Promise<NoteEditorSaveResult> {
+    const identity = editorIdentity(request);
+    const context = this.#readRenderContext(ownerId, request.renderContextId);
+    const binding = this.#editorBindings.get(editorBindingKey(ownerId, request.renderContextId));
+    if (!this.#editor || !context || !binding || !this.#matchesEditorContext(ownerId, context, request)) {
+      return { ...identity, status: "stale", revision: request.expectedRevision };
+    }
+    if (publicEditorRevision(binding.privateRevision) !== request.expectedRevision) {
+      return { ...identity, status: "stale", revision: publicEditorRevision(binding.privateRevision) };
+    }
+    const saved = this.#editor.save({
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      pageId: request.pageId,
+      expectedRevisionId: binding.privateRevision,
+      renderIdentity: binding.privateRenderIdentity,
+      markdown: request.markdown
+    });
+    if (saved.status === "not_found") return { ...identity, status: "not_found" };
+    if (saved.status === "invalid") return { ...identity, status: "invalid", reason: "invalid_frontmatter" };
+    if (saved.status === "failed") return { ...identity, status: "failed" };
+    if (saved.status === "stale") {
+      return { ...identity, status: "stale", revision: request.expectedRevision };
+    }
+    if (saved.status !== "committed") return { ...identity, status: "failed" };
+
+    const render = await this.render({ pageId: request.pageId }, ownerId);
+    if (!render.renderContextId) return { ...identity, status: "failed" };
+    const reopened = this.#editor.open({ activeVaultId: request.activeVaultId, pageId: request.pageId });
+    if (reopened.status !== "opened" || reopened.revisionId !== saved.revisionId) {
+      return { ...identity, status: "failed" };
+    }
+    this.#editorBindings.set(editorBindingKey(ownerId, render.renderContextId), {
+      privateRenderIdentity: reopened.renderIdentity,
+      privateRevision: reopened.revisionId
+    });
+    return {
+      ...identity,
+      status: "committed",
+      revision: publicEditorRevision(saved.revisionId),
+      operationId: saved.operationId,
+      render: { ...render, renderContextId: render.renderContextId }
     };
   }
 
@@ -357,6 +447,21 @@ export class NotesService {
   releaseOwner(ownerId: string): void {
     this.#renderContexts.delete(ownerId);
     this.#ownerEpochs.delete(ownerId);
+    for (const key of this.#editorBindings.keys()) {
+      if (key.startsWith(`${ownerId}\0`)) this.#editorBindings.delete(key);
+    }
+  }
+
+  #matchesEditorContext(
+    ownerId: string,
+    context: NoteRenderContext,
+    request: Pick<NoteEditorOpenRequest, "activeVaultId" | "pageId" | "renderContextId">
+  ): boolean {
+    return context.id === request.renderContextId &&
+      context.vaultId === request.activeVaultId &&
+      context.pageId === request.pageId &&
+      this.#ownerEpochs.get(ownerId) === context.ownerEpoch &&
+      this.#matchesCurrentPage(context);
   }
 
   #resolvePageReference(
@@ -550,6 +655,25 @@ export class NotesService {
     }
     return vaultPath;
   }
+}
+
+function editorIdentity(request: Pick<NoteEditorOpenRequest, "apiVersion" | "requestId" | "activeVaultId" | "pageId">) {
+  return {
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    pageId: request.pageId
+  } as const;
+}
+
+function editorBindingKey(ownerId: string, renderContextId: string): string {
+  return `${ownerId}\0${renderContextId}`;
+}
+
+function publicEditorRevision(privateRevision: string): `noteeditrev_${string}` {
+  const match = /^sha256:([a-f0-9]{64})$/u.exec(privateRevision);
+  if (!match) throw new Error("The private editor revision is invalid.");
+  return `noteeditrev_${match[1]}`;
 }
 
 function extractRenderedInternalHrefs(html: string): ReadonlySet<string> | undefined {

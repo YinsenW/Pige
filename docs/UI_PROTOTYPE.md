@@ -592,29 +592,25 @@ Reading mode:
 
 Editing mode:
 
-- A simple edit action can switch the note into Markdown source editing.
-- v0.1 does not need a full block editor, but it must preserve clean Markdown.
-- Preview/read mode and edit mode should keep roughly the same scroll position when possible.
-- Saving should validate frontmatter, wiki links, and citations before applying changes.
-- Pige-managed sections remain editable; Agent rewrites use base hashes/history/Undo and pause only at exceptions.
+- An eligible note has one Edit action and plain Markdown textarea; source pages and rich text stay read-only.
+- Save validates exact draft/frontmatter/page ID/links/citations and adopts refreshed render. Stale
+  keeps Reader/draft with Reload and no merge. Cancel restores focus; Cmd/Ctrl+Enter excludes IME.
+- Undo writes prior bytes forward. No restyle, reveal, page lifecycle or merge UI is added.
 
 Phase 2/3 bridge:
 
-- Opening a Library row shows a minimal rendered reader.
-- The reader hides frontmatter and shows compact metadata derived from frontmatter.
-- Markdown rendering supports GFM, sanitized HTML, Pige links, code/table overflow, and confined relative raster images; remote/protocol/traversal resources and Electron navigation are denied.
+- Library rows open a minimal reader with hidden frontmatter and compact metadata.
+- Rendering supports GFM, sanitized HTML, Pige links, overflow and confined relative raster images;
+  remote/protocol/traversal resources and Electron navigation are denied.
 
 Current Phase 4 reader context foundation:
 
-- Library/Home results expose outgoing links and backlinks through `library.related`.
-- Related pages open by stable ID; the renderer gets neither arbitrary paths nor note bodies.
-- The context rail is right-side when wide and below Markdown when narrow.
-- The metadata title is the sole primary H1; hide only an equal normalized leading body H1.
-- Internal links keep their typed href resolver; saved-source rows retain appearance and call
-  `notes.openSourceReference` with request/vault/page/render/source IDs, never a fake href.
-- Only `resolved.target.pageId` navigates; others retain Reader with one localized body-free status.
-- Extract `NoteReader` source UI/tests without restyle/redesign; reveal/reconnect/edit,
-  filesystem-open, Agent, permission, event, and parallel navigation remain absent.
+- `library.related` exposes stable-ID links/backlinks without paths/bodies; the context rail is
+  right-side when wide and below Markdown when narrow.
+- Metadata supplies the sole H1; only an equal normalized leading body H1 hides. Internal links
+  retain typed href resolution; saved-source rows call the strict source-open query, never fake hrefs.
+- Only `resolved.target.pageId` navigates; closed states retain Reader with body-free status.
+  `NoteReader` adds no reveal/reconnect/filesystem/Agent/permission/event navigation.
 
 ### 8.2 Note Agent Panel
 

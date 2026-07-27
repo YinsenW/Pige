@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { VaultSummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import { LocalDatabaseService } from "../../apps/desktop/src/main/services/local-database-service";
+import { NoteMarkdownEditorService } from "../../apps/desktop/src/main/services/note-markdown-editor-service";
 import { NotesService } from "../../apps/desktop/src/main/services/notes-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 
@@ -130,6 +131,46 @@ afterEach(() => {
 });
 
 describe("notes service", () => {
+  it("opens and commits an owner-bound editor session with a refreshed canonical render", async () => {
+    const { vaultPath, vault } = makeVault();
+    const pageId = "page_20260709_editable1234";
+    writePage({ vaultPath, fileName: "editable.md", pageId, title: "Editable", body: "Before" });
+    const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
+    const operations: string[] = [];
+    const editor = new NoteMarkdownEditorService(vaults, {
+      recordPageUpdate: ({ operation }) => { operations.push(operation.id); }
+    });
+    const notes = new NotesService(vaults, undefined, undefined, editor);
+    const rendered = await notes.render({ pageId }, OWNER_ID);
+    const open = notes.openEditor(OWNER_ID, {
+      apiVersion: 1,
+      requestId: "noteeditreq_open1234",
+      activeVaultId: vault.vaultId,
+      pageId,
+      renderContextId: rendered.renderContextId!
+    });
+    expect(open.status).toBe("ready");
+    if (open.status !== "ready") throw new Error("Expected an editor-ready result.");
+    const draft = open.markdown
+      .replace('updated_at: "2026-07-09T12:00:00.000Z"', 'updated_at: "2026-07-09T12:01:00.000Z"')
+      .replace("Before", "After");
+    const saved = await notes.saveEditor(OWNER_ID, {
+      apiVersion: 1,
+      requestId: "noteeditreq_save1234",
+      activeVaultId: vault.vaultId,
+      pageId,
+      renderContextId: open.renderContextId,
+      expectedRevision: open.revision,
+      markdown: draft
+    });
+    expect(saved.status).toBe("committed");
+    if (saved.status !== "committed") throw new Error("Expected a committed editor result.");
+    expect(saved.render.html).toContain("After");
+    expect(saved.render.summary.pageId).toBe(pageId);
+    expect(saved.render.renderContextId).not.toBe(open.renderContextId);
+    expect(operations).toEqual([saved.operationId]);
+  });
+
   it("reads and renders a vault Markdown page by stable page ID", async () => {
     const { vaultPath, vault } = makeVault();
     const notes = makeNotes(vaultPath, vault);

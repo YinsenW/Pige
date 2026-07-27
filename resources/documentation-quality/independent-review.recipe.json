@@ -39,14 +39,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review of the first PIGE-SKILL-001 URL-install slice: Settings stages one bounded pure machine-local Skill from an explicit safe HTTPS URL, projects only reviewed metadata, and installs or discards the exact private stage under digest and registry CAS; statuses remain unchanged.",
+    "scope": "Independent Product Planning review of the first B6.13/E6.08 note-only Markdown editor: the current Reader render opens one exact bounded portable draft; save is revision/CAS fenced, returns the canonical safe render, records a reversible update_page Operation, and preserves the draft and live file on stale; statuses remain unchanged.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 30,
-    "reviewedSha256": "6a81e009164fec113bd054e50de93a0380d034ae64a3b3110c9c848272517bb6"
+    "reviewedSha256": "0198bd5e1570abe27a33037a5519dded4013f8d0abc031f247a5e1a2bfb58920"
   },
   "reviewers": [{
-    "reviewerId": "pure-skill-url-install-review",
-    "task": "Pure Skill URL stage and install contract",
+    "reviewerId": "reader-markdown-editor-review",
+    "task": "Reader Markdown revision editor",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -54,33 +54,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Product Planning reviewed Skill lifecycle, IPC, security, Decision and trace owners against the combined service/registrar/Settings implementation; Development and UI own those product and focused-test bytes."
+    "independence": "Product Planning reviewed Markdown, API, UI, sync, recovery, Decision and trace owners against the combined service/registrar/Reader implementation; Development and UI own those product and focused-test bytes."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"pure-skill-url-install-review","blockerCount":0,"summary":"One explicit URL creates a private expiring stage; exact install or discard consumes that identity without exposing stage bytes or paths."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"pure-skill-url-install-review","blockerCount":0,"summary":"Skill, API, security and Decision owners agree on pure-content bounds, safe projection, digest binding, registry CAS and body-free failure."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"pure-skill-url-install-review","blockerCount":0,"summary":"PIGE-SKILL-001 and E8.01 record the usable URL slice while broader lifecycle acceptance remains planned without status promotion."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"pure-skill-url-install-review","blockerCount":0,"summary":"Canonical schemas, five registrar channels and safe Settings states give Development and UI one bounded lifecycle surface."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"pure-skill-url-install-review","blockerCount":0,"summary":"Existing Skill, API, security, Decision and trace owners bind the slice without a new document or generic package-install framework."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"reader-markdown-editor-review","blockerCount":0,"summary":"The same stable note page moves from Reader render to exact draft and back to a refreshed canonical render; source pages remain read-only."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"reader-markdown-editor-review","blockerCount":0,"summary":"Markdown, API, sync, recovery and Decision owners agree on render/revision identity, exact draft CAS, atomic replace, reversible update_page and stale behavior."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"reader-markdown-editor-review","blockerCount":0,"summary":"PIGE-UI-001 and E6.05 remain partial and E6.08 remains planned while the first note-only editor evidence is bound without status promotion."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"reader-markdown-editor-review","blockerCount":0,"summary":"Canonical schemas, exact Reader registrar channels and closed save outcomes give Development and UI one bounded note-editing surface."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"reader-markdown-editor-review","blockerCount":0,"summary":"Existing Markdown, API, UI, sync, recovery, Decision and trace owners bind the slice without a new document or merge framework."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Skill lifecycle schemas, exact registrar channels and body/path-free ownership remain canonical."},
-    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Skill, API, security and accepted-decision owners pass without a new document."},
-    {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Planned Skill acceptance stays synchronized and the protected registrar/service inventory covers the final combined source."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Editor schemas and exact Reader registrar channels remain canonical and body/path-free."},
+    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Markdown, API, UI, sync, recovery and accepted-decision owners pass without a new document."},
+    {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Unchanged-status note-editing acceptance stays synchronized and the protected registrar/service inventory covers the final combined source."}
   ],
   "coordination": {
-    "taskId": "pure-skill-url-install-20260727",
-    "taskTitle": "Pure Skill URL stage and install contract",
+    "taskId": "reader-markdown-revision-editor-20260727",
+    "taskTitle": "Reader Markdown revision editor",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing installed Skill registry records remain readable; the URL flow adds an exact staged install path without changing direct built-in or prior registry entries.",
-    "acknowledgement": "Planning binds explicit pure URL stage, review, install and discard only; local-file, ZIP, chat, vault, external-web, update, uninstall, export and runtime permission acceptance stay planned."
+    "compatibility": "Existing notes, Reader rendering and Activity history remain readable; new saves add opaque revision fencing and a reversible update_page Operation without migrating prior pages.",
+    "acknowledgement": "Planning binds the first note-only Markdown editor; source-page editing, create/rename/delete, rich text, automatic merge and broader platform acceptance stay open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Development must retain exact stage expiry, digest/currentness adoption, redirect policy and registry CAS with synthetic network fixtures.",
-    "UI must keep URL input and reviewed metadata body/path-free and must not imply install before exact commit.",
-    "Local-file, ZIP, chat, vault, external-web, update, uninstall, export and runtime permission flows remain outside this slice."
+    "Real Electron IME, long-page and platform behavior remain acceptance work.",
+    "External-editor races and restart recovery must preserve the live file and exact local draft without automatic merge.",
+    "Source-page editing and broader page lifecycle actions remain outside this slice."
   ]
 }

@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { IpcMain, WebContents } from "electron";
 import type {
   NoteGetRequest,
+  NoteEditorOpenRequest,
+  NoteEditorOpenResult,
+  NoteEditorSaveRequest,
+  NoteEditorSaveResult,
   NoteOpenSourceReferenceRequest,
   NoteRenderRequest,
   NoteResolveInlineReferenceRequest,
@@ -13,6 +17,10 @@ import type {
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
+  NoteEditorOpenRequestSchema,
+  NoteEditorOpenResultSchema,
+  NoteEditorSaveRequestSchema,
+  NoteEditorSaveResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   NoteResolveInlineReferenceRequestSchema,
@@ -38,6 +46,43 @@ interface RegisterReaderIpcOptions {
   readonly getNotesService: () => NotesService;
   readonly getReaderSelectionActionService: () => ReaderSelectionActionService;
   readonly getReaderSelectionProposalService: () => ReaderSelectionProposalService;
+}
+
+function failedEditorOpen(request: NoteEditorOpenRequest): NoteEditorOpenResult {
+  return {
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    pageId: request.pageId,
+    status: "failed"
+  };
+}
+
+function staleEditorOpen(request: NoteEditorOpenRequest): NoteEditorOpenResult {
+  return { ...failedEditorOpen(request), status: "stale" };
+}
+
+function failedEditorSave(request: NoteEditorSaveRequest): NoteEditorSaveResult {
+  return {
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    pageId: request.pageId,
+    status: "failed"
+  };
+}
+
+function assertEditorResultIdentity(
+  request: NoteEditorOpenRequest | NoteEditorSaveRequest,
+  result: NoteEditorOpenResult | NoteEditorSaveResult
+): void {
+  if (
+    result.requestId !== request.requestId ||
+    result.activeVaultId !== request.activeVaultId ||
+    result.pageId !== request.pageId
+  ) {
+    throw new Error("Note editor response identity did not match the request.");
+  }
 }
 
 export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
@@ -71,6 +116,40 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       }
       return result;
     });
+  });
+  options.ipcMain.handle("notes.openEditor", (event, request: unknown) => {
+    const parsed = NoteEditorOpenRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) return staleEditorOpen(parsed);
+
+    let rawResult: NoteEditorOpenResult;
+    try {
+      rawResult = options.getNotesService().openEditor(ownerId, parsed);
+    } catch {
+      return failedEditorOpen(parsed);
+    }
+    const result = NoteEditorOpenResultSchema.parse(rawResult);
+    assertEditorResultIdentity(parsed, result);
+    return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+      ? result
+      : staleEditorOpen(parsed);
+  });
+  options.ipcMain.handle("notes.saveEditor", async (event, request: unknown) => {
+    const parsed = NoteEditorSaveRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) return failedEditorSave(parsed);
+
+    let rawResult: NoteEditorSaveResult;
+    try {
+      rawResult = await options.getNotesService().saveEditor(ownerId, parsed);
+    } catch {
+      return failedEditorSave(parsed);
+    }
+    const result = NoteEditorSaveResultSchema.parse(rawResult);
+    assertEditorResultIdentity(parsed, result);
+    return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+      ? result
+      : failedEditorSave(parsed);
   });
   options.ipcMain.handle("notes.resolveInlineReference", (
     event,

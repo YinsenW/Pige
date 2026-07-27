@@ -184,6 +184,10 @@ import { createFirstPartyCommandCapabilityAdapter } from "./services/command-cap
 import { createPiPackageInstallCapabilityAdapter } from "./services/pi-package-capability-adapter";
 import { PiPackageManagerService } from "./services/pi-package-manager-service";
 import { NotesService } from "./services/notes-service";
+import {
+  NoteMarkdownEditorActivityAdapter,
+  NoteMarkdownEditorService
+} from "./services/note-markdown-editor-service";
 import { OcrService } from "./services/ocr-service";
 import { MacOSSpeechAdapter } from "./services/macos-speech-adapter";
 import { ProposalService } from "./services/proposal-service";
@@ -248,6 +252,8 @@ let knowledgeActivityService: KnowledgeActivityService | undefined;
 let managedCollectionService: ManagedCollectionService | undefined;
 let libraryService: LibraryService | undefined;
 let notesService: NotesService | undefined;
+let noteMarkdownEditorActivityAdapter: NoteMarkdownEditorActivityAdapter | undefined;
+let noteMarkdownEditorService: NoteMarkdownEditorService | undefined;
 let readerSelectionActionService: ReaderSelectionActionService | undefined;
 let readerSelectionProposalService: ReaderSelectionProposalService | undefined;
 let proposalService: ProposalService | undefined;
@@ -1145,9 +1151,31 @@ const getLibraryService = (): LibraryService => {
 
 const getNotesService = (): NotesService => {
   if (!notesService) {
-    notesService = new NotesService(getVaultService(), getLocalDatabaseService());
+    notesService = new NotesService(
+      getVaultService(),
+      getLocalDatabaseService(),
+      undefined,
+      getNoteMarkdownEditorService()
+    );
   }
   return notesService;
+};
+
+const getNoteMarkdownEditorActivityAdapter = (): NoteMarkdownEditorActivityAdapter => {
+  if (!noteMarkdownEditorActivityAdapter) {
+    noteMarkdownEditorActivityAdapter = new NoteMarkdownEditorActivityAdapter(getVaultService());
+  }
+  return noteMarkdownEditorActivityAdapter;
+};
+
+const getNoteMarkdownEditorService = (): NoteMarkdownEditorService => {
+  if (!noteMarkdownEditorService) {
+    noteMarkdownEditorService = new NoteMarkdownEditorService(
+      getVaultService(),
+      getNoteMarkdownEditorActivityAdapter()
+    );
+  }
+  return noteMarkdownEditorService;
 };
 
 const getReaderSelectionActionService = (): ReaderSelectionActionService => {
@@ -1205,7 +1233,8 @@ const getKnowledgeActivityService = (): KnowledgeActivityService => {
   if (!knowledgeActivityService) {
     knowledgeActivityService = new KnowledgeActivityService(
       getVaultService(),
-      getManagedCollectionService()
+      getManagedCollectionService(),
+      getNoteMarkdownEditorActivityAdapter()
     );
   }
   return knowledgeActivityService;
@@ -2222,9 +2251,15 @@ app.whenReady().then(async () => {
   );
   proposalService = new ProposalService(getVaultService());
   managedCollectionService = new ManagedCollectionService(getVaultService());
+  noteMarkdownEditorActivityAdapter = new NoteMarkdownEditorActivityAdapter(getVaultService());
+  noteMarkdownEditorService = new NoteMarkdownEditorService(
+    getVaultService(),
+    noteMarkdownEditorActivityAdapter
+  );
   knowledgeActivityService = new KnowledgeActivityService(
     getVaultService(),
-    managedCollectionService
+    managedCollectionService,
+    noteMarkdownEditorActivityAdapter
   );
   agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
     snapshot: getAgentCapabilitySnapshot

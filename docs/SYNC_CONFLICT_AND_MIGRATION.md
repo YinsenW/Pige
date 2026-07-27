@@ -189,7 +189,7 @@ Conflict cases:
 
 | Case | Example | v0.1 behavior |
 | --- | --- | --- |
-| Same ID, same path, different content | User edited Markdown during an Operation. | Lossless base/current/proposed merge; otherwise stage conflict. |
+| Same ID/path, different revision | Reader draft raced an external edit. | Editor CAS returns stale/current opaque revision, preserves draft/live file and requires explicit Reload; it never auto-merges. |
 | Dataset revision/schema changed | Collection row/schema or analytical snapshot changed after a query/Operation base. | Revalidate exact revision and typed base; apply a lossless revisioned change or preserve both/stage conflict. |
 | Same ID, moved path | User moved note outside Pige. | Rebind safely or preserve both; unresolved conflict stages. |
 | Different IDs, same slug/title | Imported duplicate topic. | Keep both; merge only with proven identity and recovery. |

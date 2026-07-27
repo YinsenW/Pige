@@ -10,7 +10,7 @@ function makeSender(id: number): WebContents {
   const events = new EventEmitter();
   return {
     id,
-    isDestroyed: () => false,
+    isDestroyed: vi.fn(() => false),
     once: events.once.bind(events),
     send: vi.fn()
   } as unknown as WebContents;
@@ -41,6 +41,8 @@ describe("registerReaderIpc", () => {
     expect([...handlers.keys()]).toEqual([
       "notes.get",
       "notes.render",
+      "notes.openEditor",
+      "notes.saveEditor",
       "notes.resolveInlineReference",
       "notes.openSourceReference",
       "readerSelection.resolve",
@@ -49,6 +51,106 @@ describe("registerReaderIpc", () => {
       "readerSelection.currentProposal",
       "readerSelection.decideProposal"
     ]);
+  });
+
+  it("fails closed when Markdown editor requests have no active Reader owner", async () => {
+    const openEditor = vi.fn();
+    const saveEditor = vi.fn();
+    const handlers = makeHarness({ openEditor, saveEditor } as Partial<NotesService>);
+    const identity = {
+      apiVersion: 1,
+      requestId: "noteeditreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260727_abcdefgh",
+      pageId: "page_20260727_editor1234"
+    } as const;
+
+    expect(handlers.get("notes.openEditor")!({ sender: makeSender(10) } as IpcMainInvokeEvent, {
+      ...identity,
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef"
+    })).toEqual({ ...identity, status: "stale" });
+    await expect(handlers.get("notes.saveEditor")!({ sender: makeSender(11) } as IpcMainInvokeEvent, {
+      ...identity,
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(32)}`,
+      markdown: "# Draft\n"
+    })).resolves.toEqual({ ...identity, status: "failed" });
+    expect(openEditor).not.toHaveBeenCalled();
+    expect(saveEditor).not.toHaveBeenCalled();
+  });
+
+  it("strictly parses Markdown editor requests and results under the tracked Reader owner", async () => {
+    const renderContextId = "notectx_0123456789abcdef0123456789abcdef";
+    const revision = `noteeditrev_${"a".repeat(32)}`;
+    const identity = {
+      apiVersion: 1,
+      requestId: "noteeditreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260727_abcdefgh",
+      pageId: "page_20260727_editor1234"
+    } as const;
+    const renderResult = {
+      summary: {
+        pageId: identity.pageId,
+        title: "Editor",
+        pageType: "note",
+        status: "active",
+        pagePath: "notes/editor.md",
+        createdAt: "2026-07-27T10:00:00.000Z",
+        updatedAt: "2026-07-27T10:00:00.000Z",
+        sourceIds: []
+      },
+      html: "<h1>Editor</h1>",
+      byteSize: 9,
+      renderContextId
+    } as const;
+    const render = vi.fn().mockResolvedValue(renderResult);
+    const openEditor = vi.fn().mockReturnValue({
+      ...identity,
+      status: "ready",
+      renderContextId,
+      revision,
+      markdown: "# Editor\n"
+    });
+    const saveEditor = vi.fn().mockResolvedValue({
+      ...identity,
+      status: "stale",
+      revision: `noteeditrev_${"b".repeat(32)}`
+    });
+    const handlers = makeHarness({ render, openEditor, saveEditor } as Partial<NotesService>);
+    const sender = makeSender(12);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: identity.pageId });
+
+    const openRequest = { ...identity, renderContextId } as const;
+    expect(handlers.get("notes.openEditor")!({ sender } as IpcMainInvokeEvent, openRequest))
+      .toMatchObject({ status: "ready", revision, markdown: "# Editor\n" });
+    const saveRequest = {
+      ...identity,
+      renderContextId,
+      expectedRevision: revision,
+      markdown: "# Updated\n"
+    } as const;
+    await expect(handlers.get("notes.saveEditor")!({ sender } as IpcMainInvokeEvent, saveRequest))
+      .resolves.toMatchObject({ status: "stale", revision: `noteeditrev_${"b".repeat(32)}` });
+    expect(openEditor).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), openRequest);
+    expect(saveEditor).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), saveRequest);
+
+    expect(() => handlers.get("notes.openEditor")!({ sender } as IpcMainInvokeEvent, {
+      ...openRequest,
+      path: "/private/editor.md"
+    })).toThrow();
+    saveEditor.mockResolvedValueOnce({ ...identity, status: "failed", error: "raw" });
+    await expect(handlers.get("notes.saveEditor")!({ sender } as IpcMainInvokeEvent, saveRequest))
+      .rejects.toThrow();
+
+    saveEditor.mockResolvedValueOnce({
+      ...identity,
+      status: "committed",
+      revision: `noteeditrev_${"c".repeat(32)}`,
+      operationId: "op_20260727_editor1234",
+      render: renderResult
+    });
+    vi.mocked(sender.isDestroyed).mockReturnValueOnce(false).mockReturnValueOnce(true);
+    await expect(handlers.get("notes.saveEditor")!({ sender } as IpcMainInvokeEvent, saveRequest))
+      .resolves.toEqual({ ...identity, status: "failed" });
   });
 
   it("returns body-free stale before a renderer owns a render context", () => {

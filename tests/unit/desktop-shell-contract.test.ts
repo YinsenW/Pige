@@ -92,6 +92,8 @@ describe("desktop shell build contract", () => {
 
     expect(contractsSource).toContain("readonly resolveInlineReference:");
     expect(contractsSource).toContain("readonly openSourceReference:");
+    expect(contractsSource).toContain("readonly openEditor:");
+    expect(contractsSource).toContain("readonly saveEditor:");
     expect(mainSource).toContain("registerReaderIpc({");
     expect(mainSource).not.toContain('ipcMain.handle("notes.resolveInlineReference"');
     expect(readerIpcSource).toContain('ipcMain.handle("notes.resolveInlineReference"');
@@ -100,12 +102,24 @@ describe("desktop shell build contract", () => {
     expect(readerIpcSource).toContain('ipcMain.handle("notes.openSourceReference"');
     expect(readerIpcSource).toContain("NoteOpenSourceReferenceRequestSchema.parse(request)");
     expect(readerIpcSource).toContain("NoteOpenSourceReferenceResultSchema.parse(");
+    expect(readerIpcSource).toContain('ipcMain.handle("notes.openEditor"');
+    expect(readerIpcSource).toContain("NoteEditorOpenRequestSchema.parse(request)");
+    expect(readerIpcSource).toContain("NoteEditorOpenResultSchema.parse(rawResult)");
+    expect(readerIpcSource).toContain('ipcMain.handle("notes.saveEditor"');
+    expect(readerIpcSource).toContain("NoteEditorSaveRequestSchema.parse(request)");
+    expect(readerIpcSource).toContain("NoteEditorSaveResultSchema.parse(rawResult)");
     expect(preloadSource).toContain('ipcRenderer.invoke(\n          "notes.resolveInlineReference"');
     expect(preloadSource).toContain("NoteResolveInlineReferenceRequestSchema.parse(request)");
     expect(preloadSource).toContain("NoteResolveInlineReferenceResultSchema.parse(");
     expect(preloadSource).toContain('ipcRenderer.invoke(\n          "notes.openSourceReference"');
     expect(preloadSource).toContain("NoteOpenSourceReferenceRequestSchema.parse(request)");
     expect(preloadSource).toContain("NoteOpenSourceReferenceResultSchema.parse(");
+    expect(preloadSource).toContain('ipcRenderer.invoke(\n          "notes.openEditor"');
+    expect(preloadSource).toContain("NoteEditorOpenRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteEditorOpenResultSchema.parse(");
+    expect(preloadSource).toContain('ipcRenderer.invoke(\n          "notes.saveEditor"');
+    expect(preloadSource).toContain("NoteEditorSaveRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteEditorSaveResultSchema.parse(");
     expect(contractsSource).not.toContain("InlineReferencePath");
     expect(contractsSource).not.toContain("candidatePageIds");
   });
