@@ -22,6 +22,7 @@ function register(overrides: Record<string, unknown> = {}) {
     ipcMain: { handle: (channel, handler) => void handlers.set(channel, handler) },
     getActiveVaultId: () => activeVaultId,
     getWindow: () => ({}) as never,
+    showOpenDialog: async () => ({ canceled: false, filePaths: ["/tmp/local-SKILL.md"] }),
     showSaveDialog: async () => ({ canceled: false, filePath: "/tmp/exported-SKILL.md" }),
     summary: () => ({ status: "ready", registry: registry(2) }),
     stageFromUrl: (request) => ({
@@ -43,6 +44,28 @@ function register(overrides: Record<string, unknown> = {}) {
         dataBoundaries: ["local"],
         files: [{ relativePath: "SKILL.md", utf8ByteSize: 512, sha256: manifestSha256 }],
         warnings: ["untrusted_remote_source"]
+      }
+    }),
+    stageFromMarkdown: (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      status: "ready",
+      staged: {
+        stagingId,
+        manifestSha256,
+        registryRevision: 2,
+        expiresAt: "2026-07-27T12:30:00.000Z",
+        id: "paper-reading",
+        name: "Paper Reading",
+        version: "1",
+        description: "Create source-backed research notes.",
+        scope: "machine_local",
+        kind: "pure",
+        capabilities: ["read_current_source"],
+        dataBoundaries: ["local"],
+        files: [{ relativePath: "SKILL.md", utf8ByteSize: 512, sha256: manifestSha256 }],
+        warnings: []
       }
     }),
     stageUpdate: (request) => ({
@@ -72,6 +95,36 @@ function register(overrides: Record<string, unknown> = {}) {
 }
 
 describe("registerSkillsIpc", () => {
+  it("owns pathless local Markdown selection and fences vault identity across the dialog", async () => {
+    const successful = register();
+    const request = { apiVersion: 1 as const, requestId, activeVaultId };
+    const result = await successful.handlers.get("skills.stageFromMarkdown")?.({ sender: {} }, request);
+    expect(result).toMatchObject({ ...request, status: "ready", staged: { id: "paper-reading" } });
+    expect(JSON.stringify(result)).not.toContain("/tmp/local-SKILL.md");
+
+    const cancelledStage = vi.fn();
+    const cancelled = register({
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }), stageFromMarkdown: cancelledStage
+    });
+    expect(await cancelled.handlers.get("skills.stageFromMarkdown")?.({ sender: {} }, request))
+      .toMatchObject({ status: "cancelled" });
+    expect(cancelledStage).not.toHaveBeenCalled();
+
+    let active = activeVaultId;
+    const driftedStage = vi.fn();
+    const drifted = register({
+      getActiveVaultId: () => active,
+      showOpenDialog: async () => {
+        active = "vault_20260728_otherid";
+        return { canceled: false, filePaths: ["/tmp/forbidden.md"] };
+      },
+      stageFromMarkdown: driftedStage
+    });
+    expect(await drifted.handlers.get("skills.stageFromMarkdown")?.({ sender: {} }, request))
+      .toMatchObject({ status: "failed" });
+    expect(driftedStage).not.toHaveBeenCalled();
+  });
+
   it("parses lifecycle requests and publishes only committed registry changes", async () => {
     const { handlers, publishRegistryChanged } = register();
     const stage = await handlers.get("skills.stageFromUrl")?.({}, {

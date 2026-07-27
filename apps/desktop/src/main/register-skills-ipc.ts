@@ -1,4 +1,4 @@
-import type { BrowserWindow, IpcMain, SaveDialogOptions, WebContents } from "electron";
+import type { BrowserWindow, IpcMain, OpenDialogOptions, SaveDialogOptions, WebContents } from "electron";
 import {
   SkillDiscardStagedRequestSchema,
   SkillDiscardStagedResultSchema,
@@ -11,6 +11,8 @@ import {
   SkillLifecycleMutationResultSchema,
   SkillRegistryMutationResultSchema,
   SkillRegistryQueryResultSchema,
+  SkillStageFromMarkdownRequestSchema,
+  SkillStageFromMarkdownResultSchema,
   SkillStageFromUrlRequestSchema,
   SkillStageFromUrlResultSchema,
   SkillStageUpdateRequestSchema,
@@ -27,6 +29,8 @@ import {
   type SkillLifecycleMutationResult,
   type SkillRegistryMutationResult,
   type SkillRegistryQueryResult,
+  type SkillStageFromMarkdownRequest,
+  type SkillStageFromMarkdownResult,
   type SkillStageFromUrlRequest,
   type SkillStageFromUrlResult,
   type SkillStageUpdateRequest,
@@ -42,10 +46,18 @@ interface RegisterSkillsIpcOptions {
     readonly canceled: boolean;
     readonly filePath?: string;
   }>;
+  readonly showOpenDialog: (window: BrowserWindow, options: OpenDialogOptions) => Promise<{
+    readonly canceled: boolean;
+    readonly filePaths: string[];
+  }>;
   readonly summary: () => SkillRegistryQueryResult | Promise<SkillRegistryQueryResult>;
   readonly stageFromUrl: (
     request: SkillStageFromUrlRequest
   ) => SkillStageFromUrlResult | Promise<SkillStageFromUrlResult>;
+  readonly stageFromMarkdown: (
+    request: SkillStageFromMarkdownRequest,
+    sourcePath: string
+  ) => SkillStageFromMarkdownResult | Promise<SkillStageFromMarkdownResult>;
   readonly stageUpdate: (
     request: SkillStageUpdateRequest
   ) => SkillStageUpdateResult | Promise<SkillStageUpdateResult>;
@@ -89,6 +101,34 @@ export function registerSkillsIpc(options: RegisterSkillsIpcOptions): void {
     const result = SkillStageFromUrlResultSchema.parse(await options.stageFromUrl(parsed));
     assertRequestIdentity(parsed, result);
     return result;
+  });
+  options.ipcMain.handle("skills.stageFromMarkdown", async (event, request: unknown) => {
+    const parsed = SkillStageFromMarkdownRequestSchema.parse(request);
+    if (!hasActiveVault(options, parsed.activeVaultId)) return markdownStatus(parsed, "failed");
+    const window = options.getWindow(event.sender);
+    if (!window) return markdownStatus(parsed, "failed");
+    let selection: { readonly canceled: boolean; readonly filePaths: string[] };
+    try {
+      selection = await options.showOpenDialog(window, {
+        title: "Import Skill",
+        properties: ["openFile"],
+        filters: [{ name: "Markdown", extensions: ["md"] }]
+      });
+    } catch {
+      return markdownStatus(parsed, "failed");
+    }
+    if (!hasActiveVault(options, parsed.activeVaultId)) return markdownStatus(parsed, "failed");
+    if (selection.canceled) return markdownStatus(parsed, "cancelled");
+    if (selection.filePaths.length !== 1) return markdownStatus(parsed, "failed");
+    try {
+      const result = SkillStageFromMarkdownResultSchema.parse(
+        await options.stageFromMarkdown(parsed, selection.filePaths[0]!)
+      );
+      assertMarkdownIdentity(parsed, result);
+      return result;
+    } catch {
+      return markdownStatus(parsed, "failed");
+    }
   });
   options.ipcMain.handle("skills.stageUpdate", async (_event, request: unknown) => {
     const parsed = SkillStageUpdateRequestSchema.parse(request);
@@ -143,6 +183,13 @@ export function registerSkillsIpc(options: RegisterSkillsIpcOptions): void {
       return exportStatus(parsed, "failed");
     }
   });
+}
+
+function assertMarkdownIdentity(request: SkillStageFromMarkdownRequest, result: SkillStageFromMarkdownResult): void {
+  if (result.apiVersion !== request.apiVersion || result.requestId !== request.requestId ||
+    result.activeVaultId !== request.activeVaultId) {
+    throw new Error("Skill Markdown stage response identity did not match the request.");
+  }
 }
 
 type InstalledRequest = SkillEnableRequest | SkillUninstallRequest;
@@ -202,6 +249,18 @@ function exportStatus(request: SkillExportRequest, status: "cancelled" | "failed
     activeVaultId: request.activeVaultId,
     skillId: request.skillId,
     registryRevision: request.expectedRegistryRevision,
+    status
+  });
+}
+
+function markdownStatus(
+  request: SkillStageFromMarkdownRequest,
+  status: "cancelled" | "failed"
+): SkillStageFromMarkdownResult {
+  return SkillStageFromMarkdownResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
     status
   });
 }
