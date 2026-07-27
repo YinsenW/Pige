@@ -1133,9 +1133,9 @@ Inference engine: Built in
 
 Embedding model
 Qwen3 Embedding 0.6B GGUF
-  Status: Installed
-  Rebuild Index
-  Test Retrieval
+  Not installed · 639 MB · Install
+  Ready · Disable · Remove
+  Disabled · Enable · Remove
 
 Reranker model
 Qwen3 Reranker 0.6B
@@ -1167,7 +1167,12 @@ Test OCR
 Choose Image
 ```
 
-Local Tools should feel like Settings, not a plugin marketplace. The user should only see tools that explain a concrete capability, current status, privacy boundary, and install/remove action. Bundled tools should mostly read as "Ready"; repair details appear only when something is missing or blocked. RAG should feel automatic unless a model needs download, indexing is running, or retrieval quality needs troubleshooting.
+Local Tools is Settings, not a marketplace: show capability, status, privacy and relevant
+actions. Bundled tools read "Ready"; show repair only when blocked, and RAG detail only
+for download, indexing or retrieval troubleshooting.
+
+B6.05 shows only this lifecycle. `Ready` means verified bytes, not vector readiness;
+lexical remains. Hide provider/routing, path, URL and checksum.
 
 ### Pi Packages Settings
 

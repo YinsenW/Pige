@@ -933,59 +933,26 @@ type RankedResult = {
 
 ### 5.6.1 Local RAG Engine Service
 
-Responsibilities:
+The engine keeps embedding/reranking local, exposes only an internal embedding API, and
+builds rebuildable chunk/vector indexes for Search, Home, Note Agent and ingest. Chunks
+bind page/source/heading/range/citation identity; restore, schema, model or parser changes
+can rebuild them. Lexical retrieval remains available without model files.
 
-- Manage local embedding and reranking runtime used by Search, Home knowledge retrieval, Note Agent, and Agent ingest workflows.
-- Keep RAG fully local by default.
-- Provide an internal embedding API to other services without exposing model-provider configuration to the user.
-- Download, verify, load, unload, and update local RAG model files through the Bundled Toolchain And Local Tool Service.
-- Chunk Markdown pages, source pages, OCR artifacts, extracted text, and selected source-derived artifacts.
-- Store chunk metadata with page IDs, source IDs, heading paths, byte offsets, and citation references.
-- Write lexical, vector, and chunk indexes as rebuildable derived caches.
-- Rebuild indexes after restore, schema changes, model changes, or parser improvements.
-- Keep lexical search available when local model files are missing.
+The Main-owned Local RAG Asset Service—not ordinary Local Tool limits—owns the pinned
+`rag.qwen3-embedding-0.6b-q8_0` lifecycle and dimension 1024. B6.05 Install
+verifies/atomically publishes; Enable re-verifies;
+Disable retains bytes; Remove withdraws then quarantines/deletes them. Descriptor,
+revision, size and checksum fence restart adoption. `ready` means enabled verified bytes,
+not a working vector runtime; every other state stays lexical. B6.06 separately owns a
+proven GGUF runtime/vector path. Reranking stays optional and uninstalled by default.
 
-Default model plan:
+Derived `.pige/indexes/{fts,vectors,chunks}` and `rag-manifest.json` record versions,
+model identity/dimension, counts, warnings and lifecycle status.
 
-- Embeddings: `Qwen3-Embedding-0.6B-Q8_0.gguf` from `Qwen/Qwen3-Embedding-0.6B-GGUF`.
-- Embedding dimension: 1024.
-- Runtime: built-in GGUF-capable engine; llama.cpp or node-llama-cpp is the first architecture candidate.
-- Reranker: `Qwen/Qwen3-Reranker-0.6B` or a stable GGUF-compatible variant when supported by the chosen runtime; offered through advanced retrieval settings or after the vault exceeds 1,000 chunks.
-
-Index layout:
-
-```txt
-.pige/indexes/
-  fts/
-  vectors/
-  chunks/
-  rag-manifest.json
-```
-
-Local RAG manifest:
-
-```ts
-type RagManifest = {
-  schemaVersion: number; chunkerVersion: string; indexedAt?: string;
-  embeddingModelId?: string; embeddingModelVersion?: string;
-  embeddingModelSha256?: string; embeddingDimension?: number;
-  rerankerModelId?: string; rerankerModelVersion?: string;
-  pageCount: number; chunkCount: number;
-  status: "not_installed" | "indexing" | "ready" | "needs_rebuild" | "error";
-  warnings: string[];
-};
-```
-
-Persisted chunk metadata comprises stable chunk/owner identity, page path/type, sorted
-source IDs, heading path, raw-body range, redacted text digest, token estimate and chunker
-version. `pige-markdown-v1` uses heading-aware 1,200-character chunks/120 overlap and
-stores no body. Embeddings/vectors remain future caches.
-
-Privacy boundary:
-
-- Embedding and reranking run on local text artifacts.
-- Full vault content is not sent to cloud providers for retrieval.
-- The query language model receives only selected snippets, citations, and summaries needed for synthesis.
+`pige-markdown-v1` stores no body: only stable owner/page/source/heading/range identity,
+redacted digest, token estimate and chunker version, using 1,200 characters/120 overlap.
+Embedding/reranking stays local; cloud synthesis receives only selected cited snippets
+and summaries, never the full vault.
 
 ### 5.6.2 Agent Memory Service
 
@@ -1854,8 +1821,7 @@ Waiver rules:
 
 | Dependency | Status | Pige usage | Upstream source | Pin/update policy | Data boundary and notes |
 | --- | --- | --- | --- | --- | --- |
-| Qwen3 Embedding 0.6B GGUF | optional | Default local embedding model repository. | https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF | Download only after user consent; record file name, size, checksum when available. | Local model asset outside vault. |
-| `Qwen3-Embedding-0.6B-Q8_0.gguf` | optional | Required v0.1 default embedding file. | https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/tree/main | Pin exact file name per release. | Local semantic retrieval; no embedding API key needed. |
+| Qwen3 Embedding 0.6B Q8_0 GGUF (`rag.qwen3-embedding-0.6b-q8_0`) | optional | Single v0.1 local embedding asset. | https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/tree/c2602621d50895a7b8277ddd4a8c31e699c9d002 | Explicit download only; dependency manifest pins file, revision, 639,150,592 bytes and SHA-256. | Machine-local asset outside vault; renderer receives no URL, checksum or path; B6.06 runtime remains open. |
 | Qwen3 Reranker 0.6B | optional | Advanced local reranking after large vault threshold or explicit settings action. | https://huggingface.co/Qwen/Qwen3-Reranker-0.6B | Do not auto-download in v0.1. | Local model asset outside vault. |
 | llama.cpp | recommended | GGUF-capable local inference runtime candidate for embeddings/reranking. | https://github.com/ggml-org/llama.cpp | Bundle/pin binary or library version if adopted. | Runs locally; constrain model paths to app data. |
 | node-llama-cpp | candidate | Node/Electron integration layer for llama.cpp. | https://node-llama-cpp.withcat.ai/guide/electron | Use only after Electron packaging validation. | Main/worker process only. |
