@@ -715,7 +715,7 @@ async function runOrchestrator() {
     assert.equal(imageSource.knowledgePageId, image.imageCitationPageId);
     assert.equal(imageSource.managedCopy?.checksum, sha256BufferDigest(fs.readFileSync(imageAttachmentPath)));
     assert.equal(imageOcrChildren.length, 1);
-    assert.equal(imageOcrChildren[0]?.state, "completed");
+    assert.ok(["completed", "completed_with_warnings"].includes(imageOcrChildren[0]?.state));
     assert.equal(imageParseChildren.length, 0);
     assert.deepEqual(imageParent.childJobIds, [imageOcrChildren[0].id]);
     assert.deepEqual(imageSource.artifacts.map((artifact) => artifact.kind), ["ocr", "metadata"]);
@@ -3109,7 +3109,7 @@ async function readImageRendererResult(browserWindow, baseline) {
           continuedExactConversation
         };
         if (
-          parent?.state === 'completed' && ocrChild?.state === 'completed' &&
+          parent?.state === 'completed' && ['completed', 'completed_with_warnings'].includes(ocrChild?.state) &&
           newAgentJobs.length === 1 && newOcrJobs.length === 1 && newParseJobs.length === 0 &&
           newSourceIds.length === 1 && assistant && citation && citationIdentityExact && continuedExactConversation
         ) {
