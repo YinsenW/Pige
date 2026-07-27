@@ -164,10 +164,18 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 - Keep page count and per-page warnings.
 - Current Phase 5 foundation pins `pdfjs-dist` `6.1.200` and `@napi-rs/canvas` `1.0.2`. One bounded worker extracts embedded text; a separate explicit page-materializer worker rasterizes only verified OCR candidate pages. Neither path has network access or task-time downloads.
 - The embedded-text worker caps input at 200 MiB, pages at 2,000, execution at 60 seconds, and old-generation memory at 512 MiB.
-- The parser writes one normalized `artifacts/extracted-text/YYYY/MM/<source-id>.txt` file and one text-free `artifacts/metadata/YYYY/MM/<source-id>.pdf.json` sidecar containing parser version, page locators, exact `characterStart`/`characterEnd` spans for text-bearing pages, page character counts, warnings, coverage, page-limit truncation, and OCR candidate pages. Evidence Assembly uses offsets first; marker-based splitting is legacy compatibility only.
+- The parser writes normalized text and a text-free metadata sidecar with parser version,
+  page locators/spans/counts, warnings, coverage, truncation and OCR candidates. Evidence
+  Assembly uses offsets first; marker splitting is legacy only.
 - A deterministic, idempotent `create_artifact` Operation Record references the parse job, source, and artifact paths without copying PDF text into operational history.
-- Medium/high native coverage returns to the same Agent run. Sparse/image-only or low/no coverage returns typed `needs_ocr`; only a subsequent Pi OCR call starts the bounded PDF path below. Unavailable or empty OCR waits without a note. Native and OCR bodies remain separate checksummed Artifacts.
-- Source-page refresh uses stored checksums and a durable pending checksum record. A restart can finish Pige's own interrupted write, while a user-edited Markdown source page is preserved and marked conflicted instead of overwritten.
+- Medium/high native coverage returns to Pi; low/no returns `needs_ocr`. Only Pi calls OCR;
+  unavailable/empty waits, and native/OCR Artifacts stay separate. Successful inspect may
+  expose `citation_11`/`[11]` with current `knowledgePageId`, title, `source`, `source_page`.
+  Source Record/catalog/vault/revision/page drift or parse/OCR/source mutation clears it
+  until reinspection; only
+  the opaque ref and safe presentation return, never source ID, body, path or checksum.
+- Source-page checksums and a pending checksum complete interrupted writes; user-edited
+  Markdown is preserved and marked conflicted.
 - On supported macOS 26 systems, a fully inspected PDF with at most 20 ordered parser-selected OCR candidates can continue through `PdfPageRendererService` to Apple Vision OCR. Image-only targets must cover every page; mixed-text targets render only sparse candidate pages. Parser-truncated PDFs, incomplete or changed target lists, and larger candidate sets remain visibly waiting or fail closed rather than replacing or omitting native evidence.
 - The materializer caps the source at 200 MiB, selected pages at 20, each edge at 3,072 pixels, each page at 9,437,184 pixels and 16 MiB encoded PNG, aggregate PNG output at 64 MiB, worker old-generation memory at 512 MiB, and execution at 120 seconds. It disables PDF.js network fetch, XFA, system fonts, range/stream/autofetch, annotations, and WASM, rejects symlinks, and returns pixel data only; the main process owns Artifact writes.
 - Rendered pages use deterministic `rendered_page` Artifacts under `artifacts/rendered-pages/`; render and OCR sidecars are text-free and checksummed. Both sidecars bind the parser-metadata Artifact ID/checksum, target mode, exact requested page set, and native-text readiness. PDF OCR text is stored once with `page:N/ocr:block:M` locators, character spans, normalized top-left geometry, confidence, language, engine, and rendered-Artifact provenance.

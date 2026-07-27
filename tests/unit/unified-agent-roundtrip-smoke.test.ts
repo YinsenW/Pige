@@ -218,4 +218,44 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain("assert.deepEqual(urlRestart.durableSnapshot, url.durableSnapshot)");
     expect(source).toContain("assert.equal(requests.length, requestCountBeforeUrlRestart)");
   });
+
+  it("stages one native-text PDF, parses and cites it, then restarts without replay", () => {
+    const urlRestart = source.indexOf('await runChild("url_restart"');
+    const pdf = source.indexOf('await runChild("pdf"', urlRestart);
+    const pdfRestart = source.indexOf('await runChild("pdf_restart"', pdf);
+    const cleanup = source.indexOf("fs.rmSync(rootPath, { recursive: true, force: true });", pdfRestart);
+    const pdfPhase = source.indexOf('phase === "pdf"');
+    const genericPicker = source.indexOf(
+      "await stageAndSubmitSourceRenderer(browserWindow, pdfAttachmentPath",
+      pdfPhase
+    );
+
+    expect(pdf).toBeGreaterThan(urlRestart);
+    expect(pdfRestart).toBeGreaterThan(pdf);
+    expect(cleanup).toBeGreaterThan(pdfRestart);
+    expect(source).toContain('const PDF_ATTACHMENT_NAME = "native-text-roundtrip.pdf"');
+    expect(source).toContain("createRoundtripPdf([PDF_NATIVE_TEXT]");
+    expect(genericPicker).toBeGreaterThan(pdfPhase);
+    expect(source).toContain("sourceRecordCountBeforePdf");
+    expect(source).toContain("pdf.sourceRecordCountBeforePdf + 1");
+    expect(source).toContain('writeToolCallResponse(response, "pige_inspect_source", "call_pdf_inspect_before"');
+    expect(source).toContain('writeToolCallResponse(response, "pige_parse_source", "call_pdf_parse"');
+    expect(source).toContain('writeToolCallResponse(response, "pige_inspect_source", "call_pdf_inspect_after"');
+    expect(source).toContain('writeTextResponse(response, PDF_ANSWER, "pdf-final-1")');
+    expect(source).toContain("assert.equal(pdfProviderRequests.length, 4)");
+    expect(source).toContain("request.receivedAt < pdf.stagedAt || request.receivedAt >= pdf.submittedAt");
+    expect(source).toContain("item.refId === 'citation_11'");
+    expect(source).toContain("sourcePage?.pageId === citation.pageId");
+    expect(source).toContain(".conversation-citations .citation-row:not(:disabled)");
+    expect(source).toContain("if (!button) {\n            await new Promise((resolve) => setTimeout(resolve, 50));\n            continue;");
+    expect(source).not.toContain("if (!button) throw new Error('PDF citation navigation action is unavailable.');");
+    expect(source).toContain("assert.equal(pdfSource.knowledgePageId, pdf.pdfCitationPageId)");
+    expect(source).toContain('assert.equal(pdfSource.kind, "pdf_file")');
+    expect(source).toContain('job.class === "parse" && job.parentJobId === pdf.pdfJobId');
+    expect(source).toContain('assert.deepEqual(pdfSource.artifacts.map((artifact) => artifact.kind), ["extracted_text", "metadata"])');
+    expect(source).toContain('assert.equal(pdfMetadata.pages?.[0]?.locator, "page:1")');
+    expect(source).toContain("assert.equal(artifact.checksum, sha256BufferDigest(artifactBytes))");
+    expect(source).toContain("assert.deepEqual(pdfRestart.durableSnapshot, pdf.durableSnapshot)");
+    expect(source).toContain("assert.equal(requests.length, requestCountBeforePdfRestart)");
+  });
 });

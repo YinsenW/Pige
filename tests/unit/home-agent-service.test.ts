@@ -37,6 +37,7 @@ import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
 import { AgentIngestService } from "../../apps/desktop/src/main/services/agent-ingest-service";
 import { CaptureService } from "../../apps/desktop/src/main/services/capture-service";
+import { SourcePageService } from "../../apps/desktop/src/main/services/source-page-service";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
 import { PermissionedExternalCapabilityRegistry } from "../../apps/desktop/src/main/services/permissioned-external-capability-service";
 import { createFirstPartyCommandCapabilityAdapter } from "../../apps/desktop/src/main/services/command-capability-adapter";
@@ -219,7 +220,73 @@ describe("Home Pi Agent service", () => {
     });
   });
 
-  it("projects only an explicitly selected current source-session citation", async () => {
+  it("projects only an explicitly selected current source-page citation", async () => {
+    const fixture = makeFixture();
+    const models = makeModels();
+    const runtime = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+        { kind: "text", text: "The inspected current source is durable. [citation_11]" }
+      ]
+    });
+    const service = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults, new AgentIngestService(models, runtime)),
+      runtime
+    );
+    const sourcePath = path.join(path.dirname(fixture.vaultPath), "current-source-citation.txt");
+    fs.writeFileSync(sourcePath, "The current source page remains durable after inspection.\n", "utf8");
+    const prepared = service.prepareSourceTurn({
+      text: "Inspect and cite this current source.",
+      inputKind: "file_picker",
+      locale: "en",
+      clientTurnId: "turn_20260727_currentsourcecitation"
+    });
+    await new CaptureService(fixture.vaults).preserveFilesForAgentTurn({
+      filePaths: [sourcePath],
+      inputKind: "file_picker",
+      userIntent: "unknown",
+      locale: "en"
+    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+    const source = ensureCurrentSourcePage(fixture.vaultPath, prepared.sourceId, prepared.jobId);
+
+    const outcome = await service.submitPreparedSourceTurn(prepared);
+
+    expect(outcome).toMatchObject({
+      state: "completed",
+      answer: {
+        grounding: "local_knowledge",
+        citations: [{
+          refId: "citation_11",
+          pageId: source.knowledgePageId,
+          title: "current-source-citation",
+          pageType: "source",
+          locator: "source_page"
+        }]
+      }
+    });
+    if (outcome.state !== "completed") throw new Error("Expected the current-source citation turn to complete.");
+    let restartedRuntimeCalls = 0;
+    const restarted = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      { run: async () => {
+        restartedRuntimeCalls += 1;
+        throw new Error("Reading a durable current-source citation must not replay the Provider.");
+      } }
+    );
+    expect(restarted.conversation({ conversationId: outcome.conversationId }).messages.at(-1)).toMatchObject({
+      role: "assistant",
+      answer: { citations: [{ refId: "citation_11", pageId: source.knowledgePageId }] }
+    });
+    expect(restartedRuntimeCalls).toBe(0);
+  });
+
+  it("shifts related source-session citations after the current source slot", async () => {
     const fixture = makeFixture();
     const models = makeModels();
     const sourceRetrieval = {
@@ -236,7 +303,7 @@ describe("Home Pi Agent service", () => {
           toolName: "pige_search_knowledge",
           args: { query: "launch date" }
         },
-        { kind: "text", text: "The local launch note supports this source. [citation_11]" }
+        { kind: "text", text: "The local launch note supports this source. [citation_12]" }
       ]
     });
     const ingest = new AgentIngestService(
@@ -269,6 +336,7 @@ describe("Home Pi Agent service", () => {
       userIntent: "unknown",
       locale: "en"
     }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+    ensureCurrentSourcePage(fixture.vaultPath, prepared.sourceId, prepared.jobId);
 
     const outcome = await service.submitPreparedSourceTurn(prepared);
 
@@ -277,7 +345,7 @@ describe("Home Pi Agent service", () => {
       answer: {
         grounding: "local_knowledge",
         citations: [{
-          refId: "citation_11",
+          refId: "citation_12",
           pageId: HOME_PAGE_ID,
           title: "Launch plan",
           locator: "snippet:1"
@@ -301,7 +369,7 @@ describe("Home Pi Agent service", () => {
     expect(restarted.conversation({ conversationId: outcome.conversationId }).messages.at(-1)).toMatchObject({
       role: "assistant",
       answer: {
-        citations: [{ refId: "citation_11", pageId: HOME_PAGE_ID }]
+        citations: [{ refId: "citation_12", pageId: HOME_PAGE_ID }]
       }
     });
     expect(restartedRuntimeCalls).toBe(0);
@@ -4751,6 +4819,28 @@ function readRecords<T>(root: string): T[] {
     }
   }
   return records.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+}
+
+function ensureCurrentSourcePage(vaultPath: string, sourceId: string, jobId: string): SourceRecord {
+  const recordPath = findRecordPath(path.join(vaultPath, ".pige", "source-records"), `${sourceId}.json`);
+  const source = SourceRecordSchema.parse(JSON.parse(fs.readFileSync(recordPath, "utf8")));
+  new SourcePageService().createForSource(vaultPath, source, recordPath, jobId);
+  return SourceRecordSchema.parse(JSON.parse(fs.readFileSync(recordPath, "utf8")));
+}
+
+function findRecordPath(root: string, fileName: string): string {
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const absolutePath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      try {
+        return findRecordPath(absolutePath, fileName);
+      } catch {
+        continue;
+      }
+    }
+    if (entry.isFile() && entry.name === fileName) return absolutePath;
+  }
+  throw new Error(`Missing record ${fileName}.`);
 }
 
 async function waitForValue<T>(read: () => T | undefined): Promise<T> {

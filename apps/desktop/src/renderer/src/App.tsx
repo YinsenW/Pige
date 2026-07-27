@@ -25,6 +25,7 @@ import {
   isTerminalConversationTurn,
   selectCurrentNoSourceTurn,
   terminalTurnOwnsComposerSubmission,
+  useHomeAcceptedTurnProjection,
   type HomeComposerSubmissionBinding,
   type HomeConversationTurnState
 } from "./components/HomeConversationTurnState";
@@ -3746,6 +3747,13 @@ function HomeComposer(props: {
     return result.status === "adopted" ? result.timeline : undefined;
   };
 
+  const acceptedTurnProjection = useHomeAcceptedTurnProjection({
+    activeVaultId: props.activeVault?.vaultId,
+    timeline: conversationTimeline,
+    refreshConversation: (conversationId) => refreshConversationResult(conversationId),
+    onExhausted: () => setCaptureError(props.t("error.generic"))
+  });
+
   useEffect(() => {
     const items = stagedComposerItems;
     const vaultId = props.activeVault?.vaultId;
@@ -3836,6 +3844,7 @@ function HomeComposer(props: {
     setAgentError(null);
     setAgentModelUsage("none");
     setActiveSourceTurn(null);
+    acceptedTurnProjection.clear();
     setAgentRunState("idle");
     if (props.activeVault?.vaultId) void refreshConversation();
     return () => {
@@ -3914,6 +3923,8 @@ function HomeComposer(props: {
       return;
     }
     if (hasAttachments) {
+      const submittedVaultId = activeVaultIdRef.current;
+      if (!submittedVaultId) return;
       const submittedItems = stagedComposerItems;
       const submittedText = text;
       const submittedDraftRevision = draftRevisionRef.current;
@@ -4005,6 +4016,15 @@ function HomeComposer(props: {
           pending: false,
           sourceDisplayName
         });
+        if (activeVaultIdRef.current === submittedVaultId) {
+          acceptedTurnProjection.bind({
+            activeVaultId: submittedVaultId,
+            clientTurnId,
+            conversationId: outcome.conversationId,
+            conversationEventId: outcome.conversationEventId,
+            jobId: outcome.jobId
+          });
+        }
         setOptimisticConversationTurns((current) => current.map((turn) =>
           turn.clientTurnId === clientTurnId
             ? {
