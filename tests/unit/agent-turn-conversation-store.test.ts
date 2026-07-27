@@ -17,6 +17,44 @@ afterEach(() => {
 });
 
 describe("Agent turn conversation store", () => {
+  it("persists authored task intent and fails legacy or malformed source metadata closed", () => {
+    const vaultPath = makeVault();
+    const service = new AgentTurnConversationStore();
+    const explicit = service.appendUserTurn(vaultPath, "Organize this submitted file.", {
+      inputKind: "file_picker",
+      locale: "en",
+      authoredTaskIntent: "explicit_user_task"
+    }, { clientTurnId: "turn_20260727_authoredintent" });
+
+    expect(service.readUserTurn(
+      vaultPath,
+      explicit.locator,
+      explicit.event.id,
+      explicit.inputHash
+    ).metadata).toMatchObject({ authoredTaskIntent: "explicit_user_task" });
+    expect(readConversationFile(vaultPath, explicit.locator)).toContain(
+      '"authoredTaskIntent":"explicit_user_task"'
+    );
+
+    const legacy = service.appendUserTurn(vaultPath, "Use only the attached file(s) as source material.", {
+      inputKind: "file_picker",
+      locale: "en"
+    }, { clientTurnId: "turn_20260727_legacyintent1" });
+    const legacyPath = conversationPath(vaultPath, legacy.locator);
+    const legacyEvent = JSON.parse(fs.readFileSync(legacyPath, "utf8")) as Record<string, unknown>;
+    fs.writeFileSync(legacyPath, `${JSON.stringify({
+      ...legacyEvent,
+      authoredTaskIntent: "corrupt_model_inference"
+    })}\n`, "utf8");
+
+    expect(service.readUserTurn(
+      vaultPath,
+      legacy.locator,
+      legacy.event.id,
+      legacy.inputHash
+    ).metadata).toEqual({ inputKind: "file_picker", locale: "en" });
+  });
+
   it("persists and reads back a user turn bound to its domain-separated hash", () => {
     const vaultPath = makeVault();
     const service = new AgentTurnConversationStore();

@@ -42,6 +42,7 @@ import { z } from "zod";
 import { buildAgentRuntimePolicyContext } from "./agent-policy-context";
 import {
   AgentTurnConversationStore,
+  type AgentTurnAuthoredTaskIntent,
   type AgentTurnConversationBinding,
   type AgentTurnConversationContextMessage,
   type PreservedAgentTurn
@@ -375,6 +376,9 @@ export class HomeAgentService {
       throw new PigeDomainError("agent_runtime.turn_binding_invalid", "A prepared source turn cannot use current-note scope.");
     }
     const authoredText = validatedRequest.text?.trim() ? validatedRequest.text : undefined;
+    const authoredTaskIntent: AgentTurnAuthoredTaskIntent = authoredText
+      ? "explicit_user_task"
+      : "neutral_attachment";
     const normalizedRequest: AgentSubmitTurnRequest = {
       schemaVersion: 1,
       inputKind: validatedRequest.inputKind,
@@ -404,7 +408,8 @@ export class HomeAgentService {
     }
     const preservedTurn = this.#conversations.appendUserTurn(vaultPath, query, {
       inputKind: validatedRequest.inputKind,
-      locale: validatedRequest.locale
+      locale: validatedRequest.locale,
+      authoredTaskIntent
     }, createConversationBinding(validatedRequest));
     const job = this.#jobs.createAgentTurnJob({
       conversationEventId: preservedTurn.event.id,
@@ -506,6 +511,11 @@ export class HomeAgentService {
       const query = validatedRequest.text?.trim()
         ? validatedRequest.text
         : defaultAttachmentUserIntent(validatedRequest.locale);
+      const authoredTaskIntent: AgentTurnAuthoredTaskIntent = sourceTurn
+        ? validatedRequest.text?.trim()
+          ? "explicit_user_task"
+          : "neutral_attachment"
+        : "explicit_user_task";
       const activeVault = this.#vaults.current();
       const vaultPath = this.#vaults.activeVaultPath();
       if (!activeVault || !vaultPath) {
@@ -541,6 +551,7 @@ export class HomeAgentService {
         preservedTurn = this.#conversations.appendUserTurn(vaultPath, query, {
           inputKind: validatedRequest.inputKind,
           locale: validatedRequest.locale,
+          authoredTaskIntent,
           ...(validatedRequest.scope ? { scope: validatedRequest.scope } : {}),
           ...(inputPresentation ? { inputPresentation } : {})
         }, createConversationBinding(validatedRequest));
@@ -679,6 +690,7 @@ export class HomeAgentService {
               inputKind: validatedRequest.inputKind,
               locale: validatedRequest.locale,
               clientTurnId: requirePreservedClientTurnId(activeTurn),
+              authoredTaskIntent: resolveDurableAuthoredTaskIntent(activeTurn.metadata),
               ...(validatedRequest.scope ? { scope: validatedRequest.scope } : {})
             },
             activeVault,
@@ -968,6 +980,7 @@ export class HomeAgentService {
               inputKind: preservedMetadata.inputKind,
               locale: preservedMetadata.locale,
               clientTurnId: requirePreservedClientTurnId(currentPreserved),
+              authoredTaskIntent: resolveDurableAuthoredTaskIntent(preservedMetadata),
               ...(preservedMetadata.scope ? { scope: preservedMetadata.scope } : {})
             },
             activeVault,
@@ -1052,7 +1065,11 @@ export class HomeAgentService {
   }
 
   async #run(
-    request: AgentSubmitTurnRequest & { readonly text: string; readonly clientTurnId: string },
+    request: AgentSubmitTurnRequest & {
+      readonly text: string;
+      readonly clientTurnId: string;
+      readonly authoredTaskIntent: AgentTurnAuthoredTaskIntent;
+    },
     activeVault: VaultSummary,
     vaultPath: string,
     session: HomeAgentJobSession,
@@ -1265,7 +1282,10 @@ export class HomeAgentService {
         evidenceLedger.assertVisible("dataset_catalog", modelTurnSequence);
       }
     };
-    const registeredExternalTools = currentNoteScope || sourceSession ? [] : this.#externalCapabilities?.toolsForTurn({
+    const registeredExternalTools = currentNoteScope ||
+      (sourceSession && request.authoredTaskIntent !== "explicit_user_task")
+      ? []
+      : this.#externalCapabilities?.toolsForTurn({
       vaultPath,
       vaultId: activeVault.vaultId,
       jobId,
@@ -2754,6 +2774,18 @@ function defaultAttachmentUserIntent(locale: AgentSubmitTurnRequest["locale"]): 
     case "de": return "Nur die angehängten Dateien als Quellmaterial verwenden.";
     default: return "Use only the attached file(s) as source material.";
   }
+}
+
+function resolveDurableAuthoredTaskIntent(
+  metadata: PreservedAgentTurn["metadata"]
+): AgentTurnAuthoredTaskIntent {
+  if (metadata?.authoredTaskIntent === "explicit_user_task" ||
+    metadata?.authoredTaskIntent === "neutral_attachment") {
+    return metadata.authoredTaskIntent;
+  }
+  return metadata?.inputKind === "file_drop" || metadata?.inputKind === "file_picker"
+    ? "neutral_attachment"
+    : "explicit_user_task";
 }
 
 function createErrorSummary(
