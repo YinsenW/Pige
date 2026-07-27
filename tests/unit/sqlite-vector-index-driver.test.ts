@@ -78,6 +78,38 @@ describe("SqliteVectorIndexDriver", () => {
     )).rejects.toThrow("canonical regular file");
   });
 
+  it("maps an Electron ASAR package URL only to its exact unpacked native extension", async () => {
+    const { vaultRoot, vectorRoot } = tempPaths();
+    const packagedPath = path.join(
+      vaultRoot,
+      "Pige.app",
+      "Contents",
+      "Resources",
+      "app.asar",
+      "node_modules",
+      "sqlite-vec-darwin-arm64",
+      "vec0.dylib"
+    );
+    const unpackedPath = packagedPath.replace(
+      `${path.sep}app.asar${path.sep}`,
+      `${path.sep}app.asar.unpacked${path.sep}`
+    );
+    fs.mkdirSync(path.dirname(unpackedPath), { recursive: true });
+    fs.writeFileSync(unpackedPath, "test seam");
+    const activateExtension = vi.fn(() => testVectorOperations);
+    const driver = await createPackagedSqliteVectorIndexDriver(
+      { rootPath: vectorRoot },
+      {
+        importModule: async () => ({ getLoadablePath: () => packagedPath }),
+        activateExtension
+      }
+    );
+
+    expect(driver.rebuild({ metadata, entries: [{ chunkId: "chunk:a", vector: unitVector(0) }] }))
+      .toEqual({ status: "ready", count: 1 });
+    expect(activateExtension.mock.calls.every((call) => call[1] === unpackedPath)).toBe(true);
+  });
+
   it("atomically replaces a staged index and returns deterministic distance and chunk ordering", () => {
     const { driver, root } = harness();
     expect(driver.rebuild({

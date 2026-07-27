@@ -218,3 +218,24 @@ function normalizeEmbedding(input: readonly number[]): Float32Array {
 
 export const LOCAL_SEMANTIC_EMBEDDING_DIMENSION = EMBEDDING_DIMENSION;
 export const LOCAL_SEMANTIC_QUERY_INSTRUCTION = QUERY_INSTRUCTION;
+
+export async function probePackagedLocalSemanticRuntime(): Promise<{
+  readonly buildType: "prebuilt";
+  readonly backend: "metal" | "cpu";
+}> {
+  process.env.NODE_LLAMA_CPP_SKIP_DOWNLOAD = "true";
+  const { getLlama } = await import("node-llama-cpp");
+  const expected = expectedGpuBackend();
+  const llama = await getLlama({ gpu: expected.requested });
+  try {
+    if (llama.buildType !== "prebuilt" || llama.gpu !== expected.actual) {
+      throw new Error("The packaged embedding runtime is not the reviewed prebuilt.");
+    }
+    return {
+      buildType: "prebuilt",
+      backend: expected.actual === "metal" ? "metal" : "cpu"
+    };
+  } finally {
+    await llama.dispose();
+  }
+}

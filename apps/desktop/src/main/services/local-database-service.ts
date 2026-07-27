@@ -30,7 +30,6 @@ import {
   createMarkdownPageReferenceKeys,
   MARKDOWN_FRONTMATTER_READ_LIMIT_BYTES,
   readMarkdownPageBody,
-  readMarkdownPageBodyAtSignature,
   scanMarkdownFileSignatures,
   scanMarkdownPages,
   type MarkdownPageRecord
@@ -41,7 +40,24 @@ import {
   type LocalDatabaseRebuildPort,
   type LocalDatabaseRebuildProgress
 } from "./local-database-rebuild-types";
-import { createMarkdownRagChunks, RAG_CHUNKER_VERSION } from "./rag-chunker";
+import { createMarkdownRagChunks } from "./rag-chunker";
+import {
+  readSemanticChunkBatch,
+  readSemanticChunkIndexStatus,
+  readSemanticChunksById,
+  type LocalDatabaseChunkIndexStatus,
+  type LocalDatabaseSemanticChunkBatch,
+  type LocalDatabaseSemanticChunkBatchRequest,
+  type LocalDatabaseSemanticChunksByIdRequest,
+  type LocalDatabaseSemanticReadPort
+} from "./local-database-semantic-chunks";
+export type {
+  LocalDatabaseChunkIndexStatus,
+  LocalDatabaseSemanticChunk,
+  LocalDatabaseSemanticChunkBatch,
+  LocalDatabaseSemanticChunkBatchRequest,
+  LocalDatabaseSemanticChunksByIdRequest
+} from "./local-database-semantic-chunks";
 import {
   createCjkSearchAugmentation,
   createQueryTerms,
@@ -82,7 +98,6 @@ export interface LocalDatabaseDriver {
 export interface LocalDatabaseRebuildCallbacks {
   readonly onProgress?: (progress: LocalDatabaseRebuildProgress) => void;
 }
-
 export class PendingSqliteDriver implements LocalDatabaseDriver {
   readonly id = "pending_sqlite_driver";
 
@@ -103,45 +118,16 @@ export class PendingSqliteDriver implements LocalDatabaseDriver {
     };
   }
 
-  rebuild(): undefined {
-    return undefined;
-  }
-
-  listPages(): undefined {
-    return undefined;
-  }
-
-  searchPages(): undefined {
-    return undefined;
-  }
-
-  relatedPages(): undefined {
-    return undefined;
-  }
-
-  knowledgeTree(): undefined {
-    return undefined;
-  }
-
-  chunkIndexStatus(): undefined {
-    return undefined;
-  }
-
-  semanticChunkBatch(): undefined {
-    return undefined;
-  }
-
-  semanticChunksById(): undefined {
-    return undefined;
-  }
-
-  inlineReferenceRevision(): undefined {
-    return undefined;
-  }
-
-  inlineReferenceCandidates(): undefined {
-    return undefined;
-  }
+  rebuild(): undefined { return undefined; }
+  listPages(): undefined { return undefined; }
+  searchPages(): undefined { return undefined; }
+  relatedPages(): undefined { return undefined; }
+  knowledgeTree(): undefined { return undefined; }
+  chunkIndexStatus(): undefined { return undefined; }
+  semanticChunkBatch(): undefined { return undefined; }
+  semanticChunksById(): undefined { return undefined; }
+  inlineReferenceRevision(): undefined { return undefined; }
+  inlineReferenceCandidates(): undefined { return undefined; }
 }
 
 export interface LocalDatabasePageList {
@@ -162,40 +148,6 @@ export interface LocalDatabaseRelatedPages {
   readonly invalidPageCount: number;
   readonly outgoing: readonly LibraryRelatedPage[];
   readonly backlinks: readonly LibraryRelatedPage[];
-}
-
-export interface LocalDatabaseChunkIndexStatus {
-  readonly indexedPageCount: number;
-  readonly chunkCount: number;
-  readonly chunkerVersion: string;
-  readonly indexRevision: number;
-  readonly indexGeneration: string;
-}
-
-export interface LocalDatabaseSemanticChunkBatchRequest {
-  readonly expectedGeneration?: string;
-  readonly afterChunkId?: string;
-  readonly limit: number;
-}
-
-export interface LocalDatabaseSemanticChunksByIdRequest {
-  readonly expectedGeneration: string;
-  readonly chunkIds: readonly string[];
-}
-
-export interface LocalDatabaseSemanticChunk {
-  readonly chunkId: string;
-  readonly text: string;
-  readonly textHash: string;
-  readonly summary: LibraryPageSummary;
-}
-
-export interface LocalDatabaseSemanticChunkBatch {
-  readonly indexRevision: number;
-  readonly indexGeneration: string;
-  readonly chunkerVersion: string;
-  readonly chunks: readonly LocalDatabaseSemanticChunk[];
-  readonly nextAfterChunkId?: string;
 }
 
 export interface LocalDatabaseInlineReferenceLookup {
@@ -514,115 +466,30 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
   }
 
   chunkIndexStatus(vaultPath: string): LocalDatabaseChunkIndexStatus | undefined {
-    if (!this.ensureReady(vaultPath)) return undefined;
-    const db = openVaultDatabase(vaultPath);
-    try {
-      const row = db.prepare(`
-        SELECT COUNT(*) AS chunk_count, COUNT(DISTINCT owner_id) AS page_count,
-          MIN(chunker_version) AS min_version, MAX(chunker_version) AS max_version
-        FROM chunks
-      `).get();
-      const minimumVersion = String(row?.min_version ?? RAG_CHUNKER_VERSION);
-      const maximumVersion = String(row?.max_version ?? RAG_CHUNKER_VERSION);
-      const state = readSemanticIndexState(db);
-      if (!state || minimumVersion !== maximumVersion || maximumVersion !== RAG_CHUNKER_VERSION) return undefined;
-      return {
-        indexedPageCount: toNumber(row?.page_count),
-        chunkCount: toNumber(row?.chunk_count),
-        chunkerVersion: maximumVersion,
-        indexRevision: state.indexRevision,
-        indexGeneration: state.indexGeneration
-      };
-    } finally {
-      db.close();
-    }
+    return readSemanticChunkIndexStatus(this.#semanticReadPort(), vaultPath);
   }
 
   semanticChunkBatch(
     vaultPath: string,
     request: LocalDatabaseSemanticChunkBatchRequest
   ): LocalDatabaseSemanticChunkBatch | undefined {
-    if (
-      !Number.isSafeInteger(request.limit) ||
-      request.limit < 1 ||
-      request.limit > 16 ||
-      (request.afterChunkId !== undefined && !/^chunk_[a-f0-9]{32}$/u.test(request.afterChunkId))
-    ) {
-      return undefined;
-    }
-    if (!this.ensureReady(vaultPath)) return undefined;
-    const db = openVaultDatabase(vaultPath);
-    try {
-      const state = readSemanticIndexState(db);
-      if (!state || (request.expectedGeneration && request.expectedGeneration !== state.indexGeneration)) {
-        return undefined;
-      }
-      const rows = db.prepare(`
-        SELECT c.*, p.*, v.size_bytes, v.mtime_ms, v.ctime_ms, v.device_id, v.file_id
-        FROM chunks c
-        JOIN pages p ON p.page_id = c.owner_id
-        JOIN vault_files v ON v.page_id = p.page_id AND v.path = c.page_path
-        WHERE c.chunk_id > ?
-        ORDER BY c.chunk_id ASC
-        LIMIT ?
-      `).all(request.afterChunkId ?? "", request.limit + 1);
-      const chunks = readCurrentSemanticChunkRows(vaultPath, rows.slice(0, request.limit));
-      const current = readSemanticIndexState(db);
-      if (!chunks || !current || current.indexGeneration !== state.indexGeneration || this.needsRebuild(vaultPath)) {
-        return undefined;
-      }
-      return {
-        ...state,
-        chunks,
-        ...(rows.length > request.limit && chunks.length > 0
-          ? { nextAfterChunkId: chunks[chunks.length - 1]!.chunkId }
-          : {})
-      };
-    } catch {
-      return undefined;
-    } finally {
-      db.close();
-    }
+    return readSemanticChunkBatch(this.#semanticReadPort(), vaultPath, request);
   }
 
   semanticChunksById(
     vaultPath: string,
     request: LocalDatabaseSemanticChunksByIdRequest
   ): LocalDatabaseSemanticChunkBatch | undefined {
-    const chunkIds = [...new Set(request.chunkIds)];
-    if (
-      chunkIds.length === 0 ||
-      chunkIds.length > 64 ||
-      chunkIds.some((chunkId) => !/^chunk_[a-f0-9]{32}$/u.test(chunkId))
-    ) {
-      return undefined;
-    }
-    if (!this.ensureReady(vaultPath)) return undefined;
-    const db = openVaultDatabase(vaultPath);
-    try {
-      const state = readSemanticIndexState(db);
-      if (!state || state.indexGeneration !== request.expectedGeneration) return undefined;
-      const placeholders = chunkIds.map(() => "?").join(", ");
-      const rows = db.prepare(`
-        SELECT c.*, p.*, v.size_bytes, v.mtime_ms, v.ctime_ms, v.device_id, v.file_id
-        FROM chunks c
-        JOIN pages p ON p.page_id = c.owner_id
-        JOIN vault_files v ON v.page_id = p.page_id AND v.path = c.page_path
-        WHERE c.chunk_id IN (${placeholders})
-        ORDER BY c.chunk_id ASC
-      `).all(...chunkIds);
-      if (rows.length !== chunkIds.length) return undefined;
-      const chunks = readCurrentSemanticChunkRows(vaultPath, rows);
-      const current = readSemanticIndexState(db);
-      if (!chunks || !current || current.indexGeneration !== state.indexGeneration || this.needsRebuild(vaultPath)) {
-        return undefined;
-      }
-      return { ...state, chunks };
-    } catch {
-      return undefined;
-    } finally {
-      db.close();
-    }
+    return readSemanticChunksById(this.#semanticReadPort(), vaultPath, request);
+  }
+
+  #semanticReadPort(): LocalDatabaseSemanticReadPort {
+    return {
+      openDatabase: openVaultDatabase,
+      ensureReady: (vaultPath) => this.ensureReady(vaultPath),
+      needsRebuild: (vaultPath) => this.needsRebuild(vaultPath),
+      rowToSummary
+    };
   }
 
   inlineReferenceRevision(vaultPath: string): string | undefined {
@@ -794,7 +661,6 @@ interface InlineReferenceWatchState {
 export class LocalDatabaseService {
   readonly #backgroundRebuilder: LocalDatabaseRebuildPort | undefined;
   readonly #driver: LocalDatabaseDriver;
-
   constructor(
     driver: LocalDatabaseDriver = new NodeSqliteDriver(),
     backgroundRebuilder?: LocalDatabaseRebuildPort
@@ -808,13 +674,8 @@ export class LocalDatabaseService {
     return this.#driver.status(vaultPath);
   }
 
-  status(vaultPath: string): LocalDatabaseStatus {
-    return this.#driver.status(vaultPath);
-  }
-
-  rebuild(vaultPath: string): LocalDatabaseRebuildResult | undefined {
-    return this.#driver.rebuild(vaultPath);
-  }
+  status(vaultPath: string): LocalDatabaseStatus { return this.#driver.status(vaultPath); }
+  rebuild(vaultPath: string): LocalDatabaseRebuildResult | undefined { return this.#driver.rebuild(vaultPath); }
 
   rebuildInWorker(
     vaultPath: string,
@@ -832,19 +693,13 @@ export class LocalDatabaseService {
   listPages(vaultPath: string, request?: LibraryListRequest): LocalDatabasePageList | undefined {
     return this.#driver.listPages(vaultPath, request);
   }
-
   searchPages(vaultPath: string, request: RetrievalSearchRequest): LocalDatabaseSearchResult | undefined {
     return this.#driver.searchPages(vaultPath, request);
   }
-
   relatedPages(vaultPath: string, request: LibraryRelatedRequest): LocalDatabaseRelatedPages | undefined {
     return this.#driver.relatedPages(vaultPath, request);
   }
-
-  knowledgeTree(vaultPath: string): KnowledgeTreeSnapshot | undefined {
-    return this.#driver.knowledgeTree(vaultPath);
-  }
-
+  knowledgeTree(vaultPath: string): KnowledgeTreeSnapshot | undefined { return this.#driver.knowledgeTree(vaultPath); }
   chunkIndexStatus(vaultPath: string): LocalDatabaseChunkIndexStatus | undefined {
     return this.#driver.chunkIndexStatus(vaultPath);
   }
@@ -863,9 +718,7 @@ export class LocalDatabaseService {
     return this.#driver.semanticChunksById(vaultPath, request);
   }
 
-  inlineReferenceRevision(vaultPath: string): string | undefined {
-    return this.#driver.inlineReferenceRevision(vaultPath);
-  }
+  inlineReferenceRevision(vaultPath: string): string | undefined { return this.#driver.inlineReferenceRevision(vaultPath); }
 
   inlineReferenceCandidates(
     vaultPath: string,
@@ -1261,64 +1114,6 @@ function readInlineReferenceRevisionFromDatabase(db: DatabaseSync): string | und
   const row = db.prepare("SELECT rebuilt_at FROM index_state WHERE id = 1").get();
   const rebuiltAt = typeof row?.rebuilt_at === "string" ? row.rebuilt_at : undefined;
   return rebuiltAt ? `${CURRENT_INDEX_REVISION}:${rebuiltAt}` : undefined;
-}
-
-function readSemanticIndexState(db: DatabaseSync): Pick<
-  LocalDatabaseSemanticChunkBatch,
-  "indexRevision" | "indexGeneration" | "chunkerVersion"
-> | undefined {
-  const indexRevision = readUserVersion(db);
-  if (indexRevision !== CURRENT_INDEX_REVISION) return undefined;
-  const state = db.prepare("SELECT rebuilt_at FROM index_state WHERE id = 1").get();
-  const version = db.prepare(`
-    SELECT MIN(chunker_version) AS minimum, MAX(chunker_version) AS maximum FROM chunks
-  `).get();
-  const indexGeneration = typeof state?.rebuilt_at === "string" ? state.rebuilt_at : undefined;
-  const minimum = version?.minimum === null ? RAG_CHUNKER_VERSION : String(version?.minimum ?? "");
-  const maximum = version?.maximum === null ? RAG_CHUNKER_VERSION : String(version?.maximum ?? "");
-  if (!indexGeneration || minimum !== RAG_CHUNKER_VERSION || maximum !== RAG_CHUNKER_VERSION) {
-    return undefined;
-  }
-  return { indexRevision, indexGeneration, chunkerVersion: RAG_CHUNKER_VERSION };
-}
-
-function readCurrentSemanticChunkRows(
-  vaultPath: string,
-  rows: readonly Record<string, unknown>[]
-): readonly LocalDatabaseSemanticChunk[] | undefined {
-  const bodyByPage = new Map<string, string>();
-  const chunks: LocalDatabaseSemanticChunk[] = [];
-  for (const row of rows) {
-    const pagePath = String(row.page_path);
-    let body = bodyByPage.get(pagePath);
-    if (body === undefined) {
-      body = readMarkdownPageBodyAtSignature(vaultPath, {
-        absolutePath: path.resolve(vaultPath, pagePath),
-        pagePath,
-        sizeBytes: toNumber(row.size_bytes),
-        mtimeMs: toNumber(row.mtime_ms),
-        ctimeMs: toNumber(row.ctime_ms),
-        deviceId: String(row.device_id),
-        fileId: String(row.file_id)
-      }, MAX_INDEXED_BODY_BYTES).slice(0, MAX_INDEXED_BODY_CHARS);
-      bodyByPage.set(pagePath, body);
-    }
-    const start = toNumber(row.character_start);
-    const end = toNumber(row.character_end);
-    const text = sanitizeSearchBody(body.slice(start, end));
-    const textHash = String(row.text_hash);
-    if (
-      String(row.chunker_version) !== RAG_CHUNKER_VERSION ||
-      start < 0 ||
-      end <= start ||
-      end > body.length ||
-      `sha256:${createHash("sha256").update(text).digest("hex")}` !== textHash
-    ) {
-      return undefined;
-    }
-    chunks.push({ chunkId: String(row.chunk_id), text, textHash, summary: rowToSummary(row) });
-  }
-  return chunks;
 }
 
 function indexPageKnowledge(db: DatabaseSync, pages: readonly MarkdownPageRecord[]): void {

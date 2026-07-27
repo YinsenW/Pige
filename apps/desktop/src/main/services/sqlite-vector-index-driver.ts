@@ -78,7 +78,7 @@ export async function createPackagedSqliteVectorIndexDriver(
   const imported = await (testSeams.importModule ?? importPackagedSqliteVec)();
   const packaged = parsePackagedSqliteVecModule(imported);
   const exactExtensionPath = canonicalRegularFile(
-    packaged.getLoadablePath(),
+    resolveElectronUnpackedPath(packaged.getLoadablePath()),
     "Packaged SQLite vector extension"
   );
   const activate = testSeams.activateExtension ?? activateNativeSqliteVec;
@@ -92,6 +92,23 @@ export async function createPackagedSqliteVectorIndexDriver(
       return activate(database, exactExtensionPath);
     }
   });
+}
+
+export async function probePackagedSqliteVectorRuntime(): Promise<boolean> {
+  const packaged = parsePackagedSqliteVecModule(await importPackagedSqliteVec());
+  const exactExtensionPath = canonicalRegularFile(
+    resolveElectronUnpackedPath(packaged.getLoadablePath()),
+    "Packaged SQLite vector extension"
+  );
+  const database = new DatabaseSync(":memory:", { allowExtension: true });
+  try {
+    activateNativeSqliteVec(database, exactExtensionPath);
+    database.enableLoadExtension(false);
+    const version = database.prepare("SELECT vec_version() AS version").get()?.version;
+    return typeof version === "string" && version === "v0.1.9";
+  } finally {
+    database.close();
+  }
 }
 
 export class SqliteVectorIndexDriver {
@@ -559,6 +576,15 @@ function parsePackagedSqliteVecModule(value: unknown): PackagedSqliteVecModule {
     throw new Error("The reviewed sqlite-vec 0.1.9 package is unavailable.");
   }
   return { getLoadablePath: value.getLoadablePath.bind(value) as () => string };
+}
+
+function resolveElectronUnpackedPath(candidatePath: string): string {
+  const asarSegment = `${path.sep}app.asar${path.sep}`;
+  if (!candidatePath.includes(asarSegment)) return candidatePath;
+  if (candidatePath.indexOf(asarSegment) !== candidatePath.lastIndexOf(asarSegment)) {
+    throw new Error("Packaged SQLite vector extension path is ambiguous.");
+  }
+  return candidatePath.replace(asarSegment, `${path.sep}app.asar.unpacked${path.sep}`);
 }
 
 function ensureCanonicalVectorRoot(rootPath: string): string {

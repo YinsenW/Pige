@@ -194,9 +194,15 @@ import { handleRetrievalSearchIpc } from "./services/retrieval-search-ipc";
 import { RetrievalService } from "./services/retrieval-service";
 import { JsonSecretStore } from "./services/secret-store";
 import { LocalRagEngineService } from "./services/local-rag-engine-service";
-import { LocalSemanticEmbeddingRuntime } from "./services/local-semantic-embedding-runtime";
+import {
+  LocalSemanticEmbeddingRuntime,
+  probePackagedLocalSemanticRuntime
+} from "./services/local-semantic-embedding-runtime";
 import { LocalSemanticRetrievalService } from "./services/local-semantic-retrieval-service";
-import { createPackagedSqliteVectorIndexDriver } from "./services/sqlite-vector-index-driver";
+import {
+  createPackagedSqliteVectorIndexDriver,
+  probePackagedSqliteVectorRuntime
+} from "./services/sqlite-vector-index-driver";
 import { guardSettingAction, type SettingActionConfirmation } from "./services/setting-action-guard";
 import { getSettingsRegistry } from "./services/settings-registry";
 import { ToolchainService } from "./services/toolchain-service";
@@ -326,6 +332,7 @@ let indexRebuildDrainer: CoalescedBatchDrainer<ProcessQueuedIndexRebuildResult> 
 
 type PackagedRuntimeSmokeStage =
   | "runtime_import"
+  | "native_semantic_runtime"
   | "pi_runtime"
   | "home_runtime"
   | "renderer_window"
@@ -2223,6 +2230,13 @@ app.whenReady().then(async () => {
     let smokeWindow: BrowserWindow | undefined;
     let smokeStage: PackagedRuntimeSmokeStage = "runtime_import";
     try {
+      smokeStage = "native_semantic_runtime";
+      const semanticRuntime = {
+        embedding: await probePackagedLocalSemanticRuntime(),
+        sqliteVec: await probePackagedSqliteVectorRuntime()
+      };
+      if (!semanticRuntime.sqliteVec) throw new Error("The packaged sqlite-vec runtime is unavailable.");
+      smokeStage = "runtime_import";
       const smoke = await import(pathToFileURL(join(__dirname, "pi-agent-runtime-smoke.js")).href);
       smokeStage = "pi_runtime";
       const pi = await smoke.runPiAgentRuntimeSmoke();
@@ -2242,6 +2256,7 @@ app.whenReady().then(async () => {
         schemaVersion: 1,
         status: "passed",
         runtimeIdentity,
+        semanticRuntime,
         pi,
         home,
         renderer
