@@ -842,6 +842,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "update_collection_cell",
     "add_collection_row",
     "add_collection_column",
+    "trash_collection_row",
     "update_memory",
     "trash_memory",
     "restore_memory"
@@ -2601,6 +2602,17 @@ export const DatasetRevisionSchema = z.object({
       tableId: TableIdSchema,
       columnId: ColumnIdSchema,
       undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_row_trash"),
+      tableId: TableIdSchema,
+      rowId: RowIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_row_trash_undo"),
+      tableId: TableIdSchema,
+      rowId: RowIdSchema,
+      undoOfOperationId: OperationIdSchema
     }).strict()
   ]).optional(),
   createdAt: z.string().datetime({ offset: true })
@@ -2699,7 +2711,8 @@ export const CollectionCellSchema = z.object({
 
 export const CollectionRowSchema = z.object({
   rowId: DatasetQueryRowIdSchema,
-  cells: z.array(CollectionCellSchema).max(32)
+  cells: z.array(CollectionCellSchema).max(32),
+  canTrash: z.boolean()
 }).strict();
 
 export const CollectionSnapshotSchema = z.object({
@@ -2798,6 +2811,16 @@ export const CollectionAppendDefaultRowRequestSchema = z.object({
   datasetId: DatasetQueryDatasetIdSchema,
   tableId: DatasetQueryTableIdSchema,
   expectedRevisionId: DatasetQueryRevisionIdSchema
+}).strict();
+
+export const CollectionTrashRowRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  rowId: DatasetQueryRowIdSchema
 }).strict();
 
 export const CollectionAddNullableColumnRequestSchema = z.object({
@@ -2899,6 +2922,41 @@ export const CollectionAddNullableColumnResultSchema = z.discriminatedUnion("sta
       code: "custom",
       path: ["columnId"],
       message: "Committed Collection columns must appear in the authoritative snapshot."
+    });
+  }
+});
+
+const CollectionTrashRowResultIdentitySchema = CollectionResultIdentitySchema.extend({
+  rowId: DatasetQueryRowIdSchema
+}).strict();
+
+export const CollectionTrashRowResultSchema = z.discriminatedUnion("status", [
+  CollectionTrashRowResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionTrashRowResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionTrashRowResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionTrashRowResultIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
+  CollectionTrashRowResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "committed" && result.status !== "stale") return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({
+      code: "custom",
+      path: ["snapshot"],
+      message: "Collection row-trash snapshots must match the request identity."
+    });
+  }
+  if (result.status === "committed" && result.snapshot.rows.some((row) => row.rowId === result.rowId)) {
+    context.addIssue({
+      code: "custom",
+      path: ["rowId"],
+      message: "A committed Collection row trash must remove the row from the authoritative snapshot."
     });
   }
 });
@@ -4291,6 +4349,7 @@ export const OperationRecordSchema = z.object({
     "update_collection_cell",
     "add_collection_row",
     "add_collection_column",
+    "trash_collection_row",
     "trash_artifact",
     "restore_artifact",
     "create_page",
@@ -4767,6 +4826,8 @@ export type CollectionAppendDefaultRowRequest = z.infer<typeof CollectionAppendD
 export type CollectionAppendDefaultRowResult = z.infer<typeof CollectionAppendDefaultRowResultSchema>;
 export type CollectionAddNullableColumnRequest = z.infer<typeof CollectionAddNullableColumnRequestSchema>;
 export type CollectionAddNullableColumnResult = z.infer<typeof CollectionAddNullableColumnResultSchema>;
+export type CollectionTrashRowRequest = z.infer<typeof CollectionTrashRowRequestSchema>;
+export type CollectionTrashRowResult = z.infer<typeof CollectionTrashRowResultSchema>;
 export type CollectionCellReadOnlyReason = z.infer<typeof CollectionCellReadOnlyReasonSchema>;
 export type CollectionColumnSummary = z.infer<typeof CollectionColumnSummarySchema>;
 export type CollectionOpenRequest = z.infer<typeof CollectionOpenRequestSchema>;

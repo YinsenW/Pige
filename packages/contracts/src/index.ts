@@ -29,6 +29,8 @@ import type {
   CollectionOpenResult,
   CollectionAppendDefaultRowRequest,
   CollectionAppendDefaultRowResult,
+  CollectionTrashRowRequest,
+  CollectionTrashRowResult,
   ConfirmationProposal,
   DatasetLogicalType,
   EffectiveAppearanceTheme,
@@ -811,6 +813,7 @@ export interface KnowledgeActivitySummary {
     | "update_collection_cell"
     | "add_collection_row"
     | "add_collection_column"
+    | "trash_collection_row"
     | "update_memory"
     | "trash_memory"
     | "restore_memory";
@@ -1513,6 +1516,7 @@ export interface PigeDesktopApi {
     readonly addNullableColumn: (
       request: CollectionAddNullableColumnRequest
     ) => Promise<CollectionAddNullableColumnResult>;
+    readonly trashRow: (request: CollectionTrashRowRequest) => Promise<CollectionTrashRowResult>;
   };
   readonly activity: {
     readonly list: (request?: KnowledgeActivityListRequest) => Promise<KnowledgeActivityListResult>;

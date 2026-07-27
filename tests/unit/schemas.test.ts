@@ -10,6 +10,8 @@ import {
   ConfirmationProposalSchema,
   CollectionAppendDefaultRowRequestSchema,
   CollectionAppendDefaultRowResultSchema,
+  CollectionTrashRowRequestSchema,
+  CollectionTrashRowResultSchema,
   ConversationEventSchema,
   FixtureManifestSchema,
   HighRiskConfirmationSummarySchema,
@@ -239,6 +241,79 @@ describe("schemas", () => {
         ...unsafe
       })).toThrow();
     }
+  });
+
+  it("keeps Collection row trash explicit, reversible, revision-bound, and body-free", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "collection_request_bcdefghijklmnopq",
+      activeVaultId: "vault_20260728_abcdefgh",
+      datasetId: "dataset_20260728_abcdef123456",
+      tableId: "table_abcdef123456",
+      expectedRevisionId: "dataset_rev_20260728_abcdef123456",
+      rowId: "row_abcdef123456"
+    } as const;
+    const identity = {
+      apiVersion: request.apiVersion,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      datasetId: request.datasetId,
+      tableId: request.tableId,
+      rowId: request.rowId
+    } as const;
+    const currentRow = {
+      rowId: request.rowId,
+      canTrash: true,
+      cells: [{ columnId: "column_abcdef123456", value: "Keep prior bytes", editable: true }]
+    } as const;
+    const snapshot = {
+      datasetId: request.datasetId,
+      revisionId: "dataset_rev_20260728_bcdefa123456",
+      title: "Reading list",
+      tableId: request.tableId,
+      tableName: "Items",
+      columns: [{ columnId: "column_abcdef123456", label: "Notes", logicalType: "string" }],
+      rows: [currentRow],
+      totalRowCount: 1,
+      returnedRowCount: 1,
+      truncated: false,
+      canAppendDefaultRow: true,
+      canAddColumn: true
+    } as const;
+
+    expect(CollectionTrashRowRequestSchema.parse(request)).toEqual(request);
+    expect(CollectionTrashRowResultSchema.parse({
+      ...identity,
+      status: "committed",
+      operationId: "op_20260728_bcdefa12",
+      snapshot: { ...snapshot, rows: [], totalRowCount: 0, returnedRowCount: 0 }
+    })).toMatchObject({ status: "committed", operationId: "op_20260728_bcdefa12" });
+    expect(CollectionTrashRowResultSchema.parse({ ...identity, status: "stale", snapshot }))
+      .toMatchObject({ status: "stale", snapshot: { rows: [{ canTrash: true }] } });
+    for (const status of ["not_found", "ineligible", "failed"] as const) {
+      expect(CollectionTrashRowResultSchema.parse({ ...identity, status }).status).toBe(status);
+    }
+
+    for (const unsafe of [
+      { row: currentRow },
+      { values: ["private"] },
+      { path: "/private/collection.sqlite" },
+      { body: "private" },
+      { sql: "DELETE FROM rows" }
+    ]) {
+      expect(() => CollectionTrashRowRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+    }
+    expect(() => CollectionTrashRowResultSchema.parse({
+      ...identity,
+      status: "committed",
+      operationId: "op_20260728_bcdefa12",
+      snapshot
+    })).toThrow("remove the row");
+    expect(() => CollectionTrashRowResultSchema.parse({
+      ...identity,
+      status: "stale",
+      snapshot: { ...snapshot, datasetId: "dataset_20260728_bcdefa123456" }
+    })).toThrow("request identity");
   });
 
   it("keeps Knowledge Health report-only, generation-bound, bounded, ordered, and renderer-safe", () => {
@@ -1179,6 +1254,25 @@ describe("schemas", () => {
         canUndo: true
       }]
     }).activities[0]?.kind).toBe("add_collection_column");
+    expect(KnowledgeActivityListResultSchema.parse({
+      scannedAt: "2026-07-28T00:00:00.000Z",
+      activeVaultId: "vault_20260728_activitysafe",
+      total: 1,
+      invalidOperationCount: 0,
+      activities: [{
+        operationId: "op_20260728_rowtrash",
+        kind: "trash_collection_row",
+        createdAt: "2026-07-28T00:00:00.000Z",
+        target: {
+          kind: "collection",
+          datasetId: "dataset_20260728_abcdef123456",
+          tableId: "table_abcdef123456",
+          revisionId: "dataset_rev_20260728_defabc123456"
+        },
+        status: "applied",
+        canUndo: true
+      }]
+    }).activities[0]?.kind).toBe("trash_collection_row");
     expect(() => KnowledgeActivityListResultSchema.parse({
       ...result,
       activities: [{ ...result.activities[0], path: "/private/vault/page.md" }]

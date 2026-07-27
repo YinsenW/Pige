@@ -1066,6 +1066,7 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain('| "update_collection_cell"');
     expect(contractsSource).toContain('| "add_collection_row"');
     expect(contractsSource).toContain('| "add_collection_column"');
+    expect(contractsSource).toContain('| "trash_collection_row"');
     expect(contractsSource).toContain('| "update_memory"');
     expect(contractsSource).toContain('| "trash_memory"');
     expect(contractsSource).toContain('| "restore_memory"');
@@ -1272,6 +1273,7 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.editCell", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.appendDefaultRow", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.addNullableColumn", parsedRequest)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("collections.trashRow", parsedRequest)');
     expect(preloadSource).toContain("CollectionOpenRequestSchema.parse(request)");
     expect(preloadSource).toContain("CollectionOpenResultSchema.parse(");
     expect(preloadSource).toContain("CollectionCellEditRequestSchema.parse(request)");
@@ -1280,10 +1282,14 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain("CollectionAppendDefaultRowResultSchema.parse(");
     expect(preloadSource).toContain("CollectionAddNullableColumnRequestSchema.parse(request)");
     expect(preloadSource).toContain("CollectionAddNullableColumnResultSchema.parse(");
+    expect(preloadSource).toContain("CollectionTrashRowRequestSchema.parse(request)");
+    expect(preloadSource).toContain("CollectionTrashRowResultSchema.parse(");
     expect(contractsSource).toContain("readonly appendDefaultRow:");
     expect(contractsSource).toContain("CollectionAppendDefaultRowRequest");
     expect(contractsSource).toContain("readonly addNullableColumn:");
     expect(contractsSource).toContain("CollectionAddNullableColumnRequest");
+    expect(contractsSource).toContain("readonly trashRow:");
+    expect(contractsSource).toContain("CollectionTrashRowRequest");
   });
 
   it("wires onboarding readiness to the non-secret provider runtime binding check", () => {
