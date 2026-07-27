@@ -23,6 +23,10 @@ import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDia
 import { TaskExecutionInteractionStatus } from "./components/TaskExecutionInteraction";
 import { AgentMemorySettingsPanel } from "./components/AgentMemorySettingsPanel";
 import { ManagedCollectionPanel } from "./components/ManagedCollectionPanel";
+import {
+  LocalSemanticRetrievalSettingsPanel,
+  type LocalSemanticRetrievalApi
+} from "./components/LocalSemanticRetrievalSettingsPanel";
 import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 import {
   homeConversationStateForJob,
@@ -129,6 +133,7 @@ import {
   type ProviderEndpointProtocol,
 } from "@pige/schemas";
 export { AgentMemorySettingsPanel } from "./components/AgentMemorySettingsPanel";
+export { LocalSemanticRetrievalSettingsPanel } from "./components/LocalSemanticRetrievalSettingsPanel";
 export { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 type View = "home" | "library" | "knowledgeTree";
 type ActiveCollection = {
@@ -2023,6 +2028,7 @@ export function App(): React.JSX.Element {
             />
           ) : settingsSection === "capabilities" ? (
             <LocalCapabilitiesSettingsPanel
+              semanticRetrievalApi={window.pige.retrieval}
               toolchainHealth={toolchainHealth}
               speechAvailability={speechAvailability}
               speechAvailabilityLoading={speechAvailabilityLoading}
@@ -6502,6 +6508,7 @@ export function PermissionsPrivacySettingsPanel(props: {
 }
 
 export function LocalCapabilitiesSettingsPanel(props: {
+  readonly semanticRetrievalApi: LocalSemanticRetrievalApi;
   readonly toolchainHealth: ToolchainHealth | null;
   readonly speechAvailability: SpeechAvailabilityResult | null;
   readonly speechAvailabilityLoading: boolean;
@@ -6636,29 +6643,7 @@ export function LocalCapabilitiesSettingsPanel(props: {
         </p>
       </section>
 
-      <section className="settings-section" aria-labelledby="capabilities-retrieval-title">
-        <h2 className="settings-section-title" id="capabilities-retrieval-title">
-          {props.t("capabilities.localRetrieval")}
-        </h2>
-        <div className="settings-card">
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("capabilities.embeddingTitle")}</strong>
-              <span>{props.t("capabilities.embeddingDescription")}</span>
-            </div>
-            <span className="settings-status neutral">{props.t("capabilities.notReported")}</span>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("capabilities.rerankerTitle")}</strong>
-              <span>{props.t("capabilities.rerankerDescription")}</span>
-            </div>
-            <button className="settings-button" type="button" onClick={props.onDevelopment}>
-              {props.t("capabilities.manage")}
-            </button>
-          </div>
-        </div>
-      </section>
+      <LocalSemanticRetrievalSettingsPanel api={props.semanticRetrievalApi} t={props.t} />
 
       <section className="settings-section" aria-labelledby="capabilities-input-title">
         <h2 className="settings-section-title" id="capabilities-input-title">

@@ -532,21 +532,27 @@ Commands:
 - `retrieval.ask`
 - `retrieval.saveAnswer`
 
-Queries:
-
-- `agent.conversation`
-- `retrieval.search`
+Queries: `agent.conversation`, `retrieval.search`, `retrieval.localSemanticStatus`.
+Asset commands: `retrieval.installLocalSemanticAsset`,
+`retrieval.enableLocalSemanticAsset`, `retrieval.disableLocalSemanticAsset`,
+`retrieval.removeLocalSemanticAsset`.
 
 Events:
 
 - `agent.turnDraft`
 
-Library `retrieval.search` accepts active-vault scope, at most 320 Unicode code points and
-optional limit/page types. Preload/main validate and fence active vault before/after work
-and on result. Responses bound IDs, relative Markdown paths, snippets and match reasons;
-body-free errors exclude bodies, absolute paths, vector/policy details and uncalibrated
-scores. Other DTOs follow
-`docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`.
+`retrieval.search` accepts active vault, <=320 Unicode code points and optional limit/page
+types. Preload/Main fence the vault; results contain bound IDs, relative Markdown paths,
+snippets/reasons, never bodies, absolute paths, vector/policy internals or uncalibrated
+scores. Other DTOs follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`.
+
+`LocalSemanticRetrieval*Schema` owns one literal asset. Status is `{apiVersion:1}`;
+mutations add request ID/revision and accept no URL/checksum/path/provider/model. It
+returns asset state/fixed bytes, lexical availability and only an install/verify Job.
+Install is `accepted|already_installed|stale|failed`; Enable adds
+`already_enabled|not_found`; Disable/Remove are `committed|stale|not_found|failed`.
+Main verifies/publishes privately; Enable re-verifies, Disable keeps bytes, Remove
+withdraws/deletes. `ready` is asset-only, not B6.06 runtime; drift stays lexical.
 
 Schema-v1 `agent.submitTurn` binds optional client/conversation/tail IDs and strict
 `current_note` scope; preload projects no path. `agent.conversation` returns at most 100

@@ -690,6 +690,33 @@ describe("desktop shell build contract", () => {
     );
   });
 
+  it("strictly exposes the local semantic asset lifecycle through one Main registrar", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const registrarSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-local-semantic-retrieval-ipc.ts"),
+      "utf8"
+    );
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const channels = [
+      "retrieval.localSemanticStatus",
+      "retrieval.installLocalSemanticAsset",
+      "retrieval.enableLocalSemanticAsset",
+      "retrieval.disableLocalSemanticAsset",
+      "retrieval.removeLocalSemanticAsset"
+    ];
+
+    expect(mainSource).toContain("registerLocalSemanticRetrievalIpc({");
+    for (const channel of channels) {
+      expect(registrarSource).toContain(`options.ipcMain.handle("${channel}"`);
+      expect(preloadSource).toContain(`ipcRenderer.invoke(\n          "${channel}"`);
+    }
+    expect(registrarSource).toContain("LocalSemanticRetrievalStatusRequestSchema.parse(request)");
+    expect(registrarSource).toContain("LocalSemanticRetrievalStatusSchema.parse(await options.status(parsed))");
+    expect(registrarSource).not.toContain("path:");
+    expect(registrarSource).not.toContain("sha256:");
+    expect(registrarSource).not.toContain("url:");
+  });
+
   it("exposes one canonical high-risk confirmation with strict query, event, and resolve parsing", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");

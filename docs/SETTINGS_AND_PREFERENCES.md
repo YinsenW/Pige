@@ -171,7 +171,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Provider model inventory: exact ID, source, enabled state, optional alias/capabilities | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `none` | Journaled Refresh; atomic manual/alias/enabled updates |
 | Provider discovery/generation health | Models | `runtime_transient` | Model Provider Registry, Renderer | None | No | `none` | Session-local; discovery and generation truth remain separate |
 | Global Default Pi Agent model | Models | `machine_local` | Model Provider Registry, Agent Orchestrator | OS app data | No by default | `none` | New calls; must reference an enabled model |
-| Local embedding model status | Local Capabilities | `derived_status` plus machine asset | Local RAG Engine, Local Tool Service | OS app data | No | `permission_and_confirmation` | After download/remove job |
+| Local embedding model lifecycle | Local Capabilities | `derived_status` plus machine asset | Local RAG Asset Service | OS app data | No | `permission_and_confirmation` | Exact Install Job; Enable/Disable CAS; Remove owned bytes; every non-ready state keeps lexical retrieval |
 | OCR engine preference | Local Capabilities | `machine_local` | OCR Service | OS app data | No | `none` | New OCR jobs |
 | OCR language hints | Local Capabilities | `machine_local` | OCR Service, I18N Service | OS app data | No | `none` | New OCR jobs |
 | Speech input availability | Local Capabilities | `derived_status` | Speech Service | None | No | `os_permission` on start | Re-probe per language; not persisted |

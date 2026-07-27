@@ -92,6 +92,7 @@ import { registerReaderIpc } from "./register-reader-ipc";
 import { registerBackupRestoreIpc } from "./register-backup-restore-ipc";
 import { registerTaskExecutionIpc } from "./register-task-execution-ipc";
 import { registerManagedCollectionIpc } from "./register-managed-collection-ipc";
+import { registerLocalSemanticRetrievalIpc } from "./register-local-semantic-retrieval-ipc";
 import { registerMemoryIpc } from "./register-memory-ipc";
 import { registerSkillsIpc } from "./register-skills-ipc";
 import {
@@ -192,6 +193,7 @@ import { writeBackupCreatedOperation } from "./services/restore-job-store";
 import { handleRetrievalSearchIpc } from "./services/retrieval-search-ipc";
 import { RetrievalService } from "./services/retrieval-service";
 import { JsonSecretStore } from "./services/secret-store";
+import { LocalSemanticRetrievalService } from "./services/local-semantic-retrieval-service";
 import { guardSettingAction, type SettingActionConfirmation } from "./services/setting-action-guard";
 import { getSettingsRegistry } from "./services/settings-registry";
 import { ToolchainService } from "./services/toolchain-service";
@@ -253,6 +255,7 @@ let readerSelectionActionService: ReaderSelectionActionService | undefined;
 let readerSelectionProposalService: ReaderSelectionProposalService | undefined;
 let proposalService: ProposalService | undefined;
 let retrievalService: RetrievalService | undefined;
+let localSemanticRetrievalService: LocalSemanticRetrievalService | undefined;
 let documentParserService: DocumentParserService | undefined;
 let datasetQueryService: DatasetQueryService | undefined;
 let datasetService: DatasetService | undefined;
@@ -1130,7 +1133,7 @@ const getAgentCapabilitySnapshot = (): AgentIngestCapabilitySnapshot => {
       getDatasetService().canMaterialize("sqlite_file"),
     ocrEngines: imageOcrReady && process.platform === "darwin" ? ["apple_vision"] : [],
     speechInputAvailable: false,
-    embeddingModelInstalled: false,
+    embeddingModelInstalled: getLocalSemanticRetrievalService().embeddingModelInstalled(),
     lexicalSearchAvailable: localDatabaseStatus === "ready",
     vectorSearchAvailable: false,
     rerankerAvailable: false
@@ -1248,6 +1251,16 @@ const getRetrievalService = (): RetrievalService => {
     retrievalService = new RetrievalService(getVaultService(), getLocalDatabaseService());
   }
   return retrievalService;
+};
+
+const getLocalSemanticRetrievalService = (): LocalSemanticRetrievalService => {
+  if (!localSemanticRetrievalService) {
+    localSemanticRetrievalService = new LocalSemanticRetrievalService({
+      appDataRoot: app.getPath("userData")
+    });
+    void localSemanticRetrievalService.recover();
+  }
+  return localSemanticRetrievalService;
 };
 
 const getDiagnosticsService = (): DiagnosticsService => {
@@ -1855,6 +1868,14 @@ registerManagedCollectionIpc({
   getActiveVaultId: () => getVaultService().current()?.vaultId,
   openCollection: (request) => getManagedCollectionService().open(request),
   editCollectionCell: (request) => getManagedCollectionService().editCell(request)
+});
+registerLocalSemanticRetrievalIpc({
+  ipcMain,
+  status: (request) => getLocalSemanticRetrievalService().status(request),
+  install: (request) => getLocalSemanticRetrievalService().install(request),
+  enable: (request) => getLocalSemanticRetrievalService().enable(request),
+  disable: (request) => getLocalSemanticRetrievalService().disable(request),
+  remove: (request) => getLocalSemanticRetrievalService().remove(request)
 });
 registerSkillsIpc({
   ipcMain,

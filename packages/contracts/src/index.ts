@@ -33,6 +33,16 @@ import type {
   HighRiskConfirmationResolveRequest,
   HighRiskConfirmationResolveResult,
   Locale,
+  LocalSemanticRetrievalDisableRequest,
+  LocalSemanticRetrievalDisableResult,
+  LocalSemanticRetrievalEnableRequest,
+  LocalSemanticRetrievalEnableResult,
+  LocalSemanticRetrievalInstallRequest,
+  LocalSemanticRetrievalInstallResult,
+  LocalSemanticRetrievalRemoveRequest,
+  LocalSemanticRetrievalRemoveResult,
+  LocalSemanticRetrievalStatus,
+  LocalSemanticRetrievalStatusRequest,
   MemoryDeleteRequest,
   MemoryDisableRequest,
   MemoryEnableRequest,
@@ -211,6 +221,19 @@ export type {
   ReaderSelectionResolveResult,
   ReaderSelectionSegmentId,
   ReaderSelectionUtf8ByteSpan,
+  LocalSemanticRetrievalAssetState,
+  LocalSemanticRetrievalDisableRequest,
+  LocalSemanticRetrievalDisableResult,
+  LocalSemanticRetrievalEnableRequest,
+  LocalSemanticRetrievalEnableResult,
+  LocalSemanticRetrievalInstallRequest,
+  LocalSemanticRetrievalInstallResult,
+  LocalSemanticRetrievalMutationResult,
+  LocalSemanticRetrievalRemoveRequest,
+  LocalSemanticRetrievalRemoveResult,
+  LocalSemanticRetrievalRequestId,
+  LocalSemanticRetrievalStatus,
+  LocalSemanticRetrievalStatusRequest,
   RetrievalSearchRequest,
   RetrievalSearchResult,
   RetrievalSearchResultItem,
@@ -1484,6 +1507,21 @@ export interface PigeDesktopApi {
   };
   readonly retrieval: {
     readonly search: (request: RetrievalSearchRequest) => Promise<RetrievalSearchResult>;
+    readonly localSemanticStatus: (
+      request: LocalSemanticRetrievalStatusRequest
+    ) => Promise<LocalSemanticRetrievalStatus>;
+    readonly installLocalSemanticAsset: (
+      request: LocalSemanticRetrievalInstallRequest
+    ) => Promise<LocalSemanticRetrievalInstallResult>;
+    readonly enableLocalSemanticAsset: (
+      request: LocalSemanticRetrievalEnableRequest
+    ) => Promise<LocalSemanticRetrievalEnableResult>;
+    readonly disableLocalSemanticAsset: (
+      request: LocalSemanticRetrievalDisableRequest
+    ) => Promise<LocalSemanticRetrievalDisableResult>;
+    readonly removeLocalSemanticAsset: (
+      request: LocalSemanticRetrievalRemoveRequest
+    ) => Promise<LocalSemanticRetrievalRemoveResult>;
   };
   readonly vault: {
     readonly current: () => Promise<VaultSummary | undefined>;
