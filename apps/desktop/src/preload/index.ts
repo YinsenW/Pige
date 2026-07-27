@@ -103,6 +103,10 @@ import type {
   SpeechStartRequest,
   SpeechStartResult,
   SpeechStopResult,
+  TaskInteractionChangedEvent,
+  TaskInteractionOpenRequest,
+  TaskInteractionOpenResult,
+  TaskInteractionPendingResult,
   SkillDisableRequest,
   SkillRegistryMutationResult,
   SkillRegistryQueryResult,
@@ -168,6 +172,10 @@ import {
   SpeechStartRequestSchema,
   SpeechStartResultSchema,
   SpeechStopResultSchema,
+  TaskInteractionChangedEventSchema,
+  TaskInteractionOpenRequestSchema,
+  TaskInteractionOpenResultSchema,
+  TaskInteractionPendingResultSchema,
   UpdateCheckRequestSchema,
   UpdateCheckResultSchema,
   UpdateStatusEventSchema,
@@ -483,6 +491,29 @@ const api: PigeDesktopApi = {
       };
       ipcRenderer.on("confirmations.changed", handler);
       return () => ipcRenderer.removeListener("confirmations.changed", handler);
+    }
+  },
+  taskExecution: {
+    interaction: async (): Promise<TaskInteractionPendingResult> =>
+      TaskInteractionPendingResultSchema.parse(
+        await ipcRenderer.invoke("taskExecution.interaction")
+      ),
+    openInteraction: async (
+      request: TaskInteractionOpenRequest
+    ): Promise<TaskInteractionOpenResult> =>
+      TaskInteractionOpenResultSchema.parse(await ipcRenderer.invoke(
+        "taskExecution.openInteraction",
+        TaskInteractionOpenRequestSchema.parse(request)
+      )),
+    onInteractionChanged: (
+      listener: (event: TaskInteractionChangedEvent) => void
+    ): (() => void) => {
+      const handler = (_event: IpcRendererEvent, value: unknown): void => {
+        const parsed = TaskInteractionChangedEventSchema.safeParse(value);
+        if (parsed.success) listener(parsed.data);
+      };
+      ipcRenderer.on("taskExecution.interactionChanged", handler);
+      return () => ipcRenderer.removeListener("taskExecution.interactionChanged", handler);
     }
   },
   skills: {

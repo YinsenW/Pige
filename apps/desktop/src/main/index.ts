@@ -94,6 +94,7 @@ import {
 import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
 import { registerReaderIpc } from "./register-reader-ipc";
 import { registerBackupRestoreIpc } from "./register-backup-restore-ipc";
+import { registerTaskExecutionIpc } from "./register-task-execution-ipc";
 import {
   AgentIngestService,
   type AgentIngestCapabilitySnapshot,
@@ -191,6 +192,7 @@ import { guardSettingAction, type SettingActionConfirmation } from "./services/s
 import { getSettingsRegistry } from "./services/settings-registry";
 import { ToolchainService } from "./services/toolchain-service";
 import { SpeechService } from "./services/speech-service";
+import { TaskProcessSessionService } from "./services/task-process-session-service";
 import { NoNetworkUpdateCheckAdapter, UpdateService } from "./services/update-service";
 import { SkillRegistryService } from "./services/skill-registry-service";
 import { VaultService } from "./services/vault-service";
@@ -238,6 +240,8 @@ let ocrService: OcrService | undefined;
 let speechService: SpeechService | undefined;
 let updateService: UpdateService | undefined;
 let skillRegistryService: SkillRegistryService | undefined;
+let taskProcessSessionService: TaskProcessSessionService | undefined;
+let taskExecutionIpcUnsubscribe: (() => void) | undefined;
 let latestSupportBundlePreview: SupportBundlePreview | undefined;
 const activeSupportBundleExports = new Map<string, {
   readonly senderId: number;
@@ -657,6 +661,15 @@ const getPermissionBrokerService = (): PermissionBrokerService => {
     });
   }
   return permissionBrokerService;
+};
+
+const getTaskProcessSessionService = (): TaskProcessSessionService => {
+  taskProcessSessionService ??= new TaskProcessSessionService({
+    openBrowserOAuth: async ({ url }) => {
+      await shell.openExternal(url);
+    }
+  });
+  return taskProcessSessionService;
 };
 
 const getJobsService = (): JobsService => {
@@ -1610,6 +1623,7 @@ ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
 });
 ipcMain.handle("jobs.list", (_event, request?: JobsListRequest) => getJobsService().list(request));
 ipcMain.handle("jobs.cancel", async (_event, request: JobActionRequest): Promise<JobActionResult> => {
+  getTaskProcessSessionService().cancelJob(request.jobId);
   const jobs = getJobsService();
   const jobClass = jobs.readJobClass(request.jobId);
   const executor = jobClass ? getJobClassExecutorRegistry().require(jobClass) : undefined;
@@ -1633,6 +1647,12 @@ ipcMain.handle("confirmations.resolve", async (_event, request: HighRiskConfirma
   return HighRiskConfirmationResolveResultSchema.parse(
     await getHighRiskConfirmationService().resolve(parsed)
   );
+});
+taskExecutionIpcUnsubscribe = registerTaskExecutionIpc({
+  ipcMain,
+  readInteraction: () => getTaskProcessSessionService().interaction(),
+  openInteraction: (request) => getTaskProcessSessionService().openInteraction(request),
+  subscribeInteractionChanged: (listener) => getTaskProcessSessionService().onInteractionChanged(listener)
 });
 ipcMain.handle("skills.summary", () =>
   SkillRegistryQueryResultSchema.parse(getSkillRegistryService().summary())
@@ -2048,6 +2068,8 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  taskExecutionIpcUnsubscribe?.();
+  taskExecutionIpcUnsubscribe = undefined;
   appearanceServiceUnsubscribe?.();
   appearanceServiceUnsubscribe = undefined;
   appearanceService?.dispose();

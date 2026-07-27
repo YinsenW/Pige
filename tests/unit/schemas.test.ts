@@ -17,6 +17,11 @@ import {
   RequirementIdSchema,
   SetThemeRequestSchema,
   SourceRecordSchema,
+  TaskExecutionPlanSchema,
+  TaskExecutionPlanSummarySchema,
+  TaskInteractionOpenRequestSchema,
+  TaskInteractionOpenResultSchema,
+  TaskInteractionPendingResultSchema,
   ToolchainManifestSchema,
   VaultConfigSchema,
   VaultManifestSchema,
@@ -26,6 +31,133 @@ import {
 } from "@pige/schemas";
 
 describe("schemas", () => {
+  it("keeps reviewed task plans private and browser interactions renderer-safe", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
+    const planId = "plan_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const jobId = "job_20260727_abcdefgh";
+    const summary = {
+      planId,
+      toolLabel: "Feishu CLI",
+      resolvedVersion: "1.0.77",
+      sourceOrigin: "https://registry.npmjs.org",
+      integrities: [digest],
+      stepCount: 6,
+      destinationRoots: ["Pige managed tools", "Private Feishu config"],
+      skillCount: 27,
+      targetAgents: ["Codex", "Claude Code"],
+      requiresBrowserOAuth: true
+    } as const;
+    expect(TaskExecutionPlanSummarySchema.parse(summary)).toEqual(summary);
+    for (const unsafe of [
+      { url: "https://accounts.feishu.cn/device" },
+      { deviceCode: "PRIVATE-CODE" },
+      { path: "/Users/private/.config" },
+      { body: "PRIVATE OUTPUT" }
+    ]) {
+      expect(() => TaskExecutionPlanSummarySchema.parse({ ...summary, ...unsafe })).toThrow();
+    }
+    expect(() => TaskExecutionPlanSummarySchema.parse({
+      ...summary,
+      sourceOrigin: "https://registry.npmjs.org/package/path"
+    })).toThrow();
+
+    const plan = {
+      planId,
+      vaultId: "vault_20260709_abcdefgh",
+      jobId,
+      clientTurnId: "turn_20260727_abcdefghijkl",
+      authoredTaskIntent: "explicit_user_task",
+      policyHash: digest,
+      toolCatalogHash: digest,
+      recipeId: "official.feishu-cli.install-config-auth-status",
+      recipeVersion: "1",
+      recipeDigest: digest,
+      actorId: "pige.task-execution",
+      actorVersion: "1",
+      actorDigest: digest,
+      environment: {
+        controlledHomeRoot: "/private/pige/home",
+        configRoot: "/private/pige/config",
+        sanitizedPathEntries: ["/private/pige/tools/bin"],
+        descendantExecutableIdentities: ["/private/pige/tools/lark-cli"],
+        canonicalWorkingDirectory: "/private/pige/task",
+        temporaryDirectoryPolicy: "task_scoped",
+        localeProfile: "en-US",
+        npmRegistry: "https://registry.npmjs.org",
+        npmPrefix: "/private/pige/npm-prefix",
+        npmCache: "/private/pige/npm-cache",
+        npmConfigProvenance: "/private/pige/npmrc",
+        targetAgentRoots: ["/private/pige/agents/codex"],
+        networkOrigins: ["https://registry.npmjs.org"],
+        destinations: ["/private/pige/tools"],
+        secretHandleVersions: { "feishu.oauth": "1" }
+      },
+      planDigest: digest,
+      summary: { ...summary, stepCount: 1 },
+      steps: [{
+        ordinal: 1,
+        adapterId: "pige.package-install",
+        adapterVersion: "1",
+        adapterDigest: digest,
+        actionId: "install_cli_package",
+        normalizedExecutableIdentity: "/private/pige/npm",
+        argv: ["install", "@larksuite/cli@1.0.77"],
+        canonicalWorkingDirectory: "/private/pige/task",
+        environmentProfileHash: digest,
+        networkOrigins: ["https://registry.npmjs.org"],
+        destinations: ["/private/pige/tools"],
+        interactionProtocol: "none",
+        timeoutMs: 600_000,
+        inputHash: digest,
+        postconditionProbeId: "installed-cli-version",
+        recoveryMode: "probe_then_adopt"
+      }]
+    } as const;
+    expect(TaskExecutionPlanSchema.parse(plan)).toEqual(plan);
+    expect(() => TaskExecutionPlanSchema.parse({
+      ...plan,
+      steps: [{ ...plan.steps[0], ordinal: 2 }]
+    })).toThrow();
+
+    const pending = {
+      status: "browser_oauth",
+      interactionId: "interaction_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      planId,
+      jobId,
+      stepOrdinal: 5,
+      origin: "https://accounts.feishu.cn",
+      revision: 3
+    } as const;
+    expect(TaskInteractionPendingResultSchema.parse(pending)).toEqual(pending);
+    expect(TaskInteractionPendingResultSchema.parse({ status: "none" }))
+      .toEqual({ status: "none" });
+    for (const unsafe of [
+      { url: "https://accounts.feishu.cn/device" },
+      { deviceCode: "PRIVATE-CODE" },
+      { path: "/private/config" },
+      { body: "PRIVATE OUTPUT" }
+    ]) {
+      expect(() => TaskInteractionPendingResultSchema.parse({ ...pending, ...unsafe })).toThrow();
+    }
+
+    const openRequest = {
+      interactionId: pending.interactionId,
+      planId,
+      jobId,
+      stepOrdinal: 5,
+      expectedRevision: 3
+    } as const;
+    expect(TaskInteractionOpenRequestSchema.parse(openRequest)).toEqual(openRequest);
+    for (const status of ["opened", "stale", "not_found", "failed"] as const) {
+      const result = status === "not_found" ? { status } : { status, revision: 3 };
+      expect(TaskInteractionOpenResultSchema.parse(result)).toEqual(result);
+    }
+    expect(() => TaskInteractionOpenRequestSchema.parse({
+      ...openRequest,
+      url: "https://accounts.feishu.cn/device"
+    })).toThrow();
+  });
+
   it("keeps Backup reconnect identity strict and body-free", () => {
     const request = {
       apiVersion: 1,

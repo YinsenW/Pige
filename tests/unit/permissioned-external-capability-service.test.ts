@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
+import { type ChildProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
@@ -17,6 +20,12 @@ import type {
   PigeAgentToolDefinition,
   PigeAgentToolResult
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
+import {
+  CommandExecutionService,
+  type CommandProcessLauncher
+} from "../../apps/desktop/src/main/services/command-execution-service";
+import { createTaskExecutionPlanCapabilityAdapter } from "../../apps/desktop/src/main/services/task-execution-plan-capability-adapter";
+import { TaskProcessSessionService } from "../../apps/desktop/src/main/services/task-process-session-service";
 
 const roots: string[] = [];
 const VAULT_ID = "vault_20260722_external01";
@@ -146,6 +155,137 @@ describe("PermissionedExternalCapabilityRegistry AR1 authority", () => {
     await expect(call(tool)).rejects.toMatchObject({ code: "permission.high_risk_classification_required" });
     expect(fixture.execute).toHaveBeenCalledTimes(0);
     expect(fixture.confirmations.pending()).toMatchObject({ status: "none" });
+  });
+
+  it("executes an exact reviewed plan ordinal without a second confirmation", async () => {
+    const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-reviewed-plan-")));
+    roots.push(root);
+    const child = Object.assign(new EventEmitter(), {
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      pid: undefined as undefined,
+      kill: vi.fn(() => true)
+    });
+    const launch = vi.fn<CommandProcessLauncher["spawn"]>(() => child as unknown as ChildProcess);
+    const sessions = new TaskProcessSessionService({
+      launcher: { spawn: launch },
+      openBrowserOAuth: vi.fn(),
+      terminateProcessTree: vi.fn()
+    });
+    const command = new CommandExecutionService().normalize({
+      executable: process.execPath,
+      args: ["--version"],
+      workingDirectory: root
+    });
+    const assertAuthority = vi.fn();
+    const adapter = createTaskExecutionPlanCapabilityAdapter({
+      metadata: {
+        planId: "plan_0123456789abcdef0123456789abcdef",
+        jobId: JOB_ID,
+        stepOrdinal: 1,
+        planDigest: digest("reviewed plan"),
+        adapterId: "pige.task-execution-plan",
+        adapterVersion: "1.0.0",
+        adapterDigest: digest("task adapter"),
+        actionId: "task_plan.install_cli",
+        toolName: "pige_run_reviewed_plan_step",
+        toolLabel: "Install Feishu CLI",
+        capability: "install_local_tool",
+        dataBoundary: "network",
+        resourceScope: "current_action",
+        readOnlyProbe: false
+      },
+      process: {
+        planId: "plan_0123456789abcdef0123456789abcdef",
+        jobId: JOB_ID,
+        stepOrdinal: 1,
+        revision: 3,
+        command,
+        environment: { HOME: root, PATH: path.dirname(process.execPath) },
+        assertCurrent: vi.fn()
+      },
+      sessions,
+      assertAuthority
+    });
+    const fixture = createFixture(adapter);
+    const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
+
+    const execution = call(tool, "tool_call_reviewed_step");
+    await vi.waitFor(() => expect(launch).toHaveBeenCalledOnce());
+    child.emit("close", 0, null);
+    await expect(execution).resolves.toMatchObject({ details: { status: "completed" } });
+    expect(fixture.confirmations.pending()).toEqual({ apiVersion: 1, status: "none", revision: 0 });
+    expect(assertAuthority).toHaveBeenCalledWith(expect.objectContaining({
+      planId: "plan_0123456789abcdef0123456789abcdef",
+      jobId: JOB_ID,
+      stepOrdinal: 1,
+      planDigest: digest("reviewed plan"),
+      disposition: "execute"
+    }));
+
+    await expect(call(tool, "tool_call_reviewed_step")).resolves.toMatchObject({
+      details: { status: "completed" }
+    });
+    expect(launch).toHaveBeenCalledOnce();
+    expect(assertAuthority).toHaveBeenLastCalledWith(expect.objectContaining({ disposition: "adopt" }));
+  });
+
+  it("uses reviewed metadata for read-only probes and rejects stale plan authority before spawn", async () => {
+    const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-reviewed-probe-")));
+    roots.push(root);
+    const launch = vi.fn<CommandProcessLauncher["spawn"]>();
+    const sessions = new TaskProcessSessionService({
+      launcher: { spawn: launch },
+      openBrowserOAuth: vi.fn(),
+      terminateProcessTree: vi.fn()
+    });
+    const command = new CommandExecutionService().normalize({
+      executable: process.execPath,
+      args: ["-e", "process.stdout.write('arbitrary-looking text is not authority')"],
+      workingDirectory: root
+    });
+    const adapter = createTaskExecutionPlanCapabilityAdapter({
+      metadata: {
+        planId: "plan_fedcba9876543210fedcba9876543210",
+        jobId: JOB_ID,
+        stepOrdinal: 6,
+        planDigest: digest("reviewed probe"),
+        adapterId: "pige.task-execution-plan",
+        adapterVersion: "1.0.0",
+        adapterDigest: digest("task adapter"),
+        actionId: "task_plan.auth_status",
+        toolName: "pige_probe_reviewed_plan_step",
+        toolLabel: "Check Feishu status",
+        capability: "external_network",
+        dataBoundary: "network",
+        resourceScope: "current_action",
+        readOnlyProbe: true
+      },
+      process: {
+        planId: "plan_fedcba9876543210fedcba9876543210",
+        jobId: JOB_ID,
+        stepOrdinal: 6,
+        revision: 2,
+        command,
+        environment: { HOME: root },
+        assertCurrent: vi.fn()
+      },
+      sessions,
+      assertAuthority: () => { throw Object.assign(new Error("stale plan"), { code: "task_plan.stale" }); }
+    });
+    const fixture = createFixture(adapter);
+    const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
+    expect(tool).toMatchObject({
+      effect: "read_only",
+      execution: "parallel_read_only",
+      idempotency: { mode: "idempotent", scope: "tool_call" }
+    });
+
+    await expect(call(tool, "tool_call_stale_probe")).rejects.toMatchObject({
+      code: "permission.reviewed_plan_invalid"
+    });
+    expect(launch).not.toHaveBeenCalled();
+    expect(fixture.confirmations.pending()).toEqual({ apiVersion: 1, status: "none", revision: 0 });
   });
 });
 

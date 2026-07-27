@@ -79,6 +79,10 @@ import type {
   SpeechStartRequest,
   SpeechStartResult,
   SpeechStopResult,
+  TaskInteractionChangedEvent,
+  TaskInteractionOpenRequest,
+  TaskInteractionOpenResult,
+  TaskInteractionPendingResult,
   SkillDisableRequest,
   SkillRegistryQueryResult,
   SkillRegistryMutationResult,
@@ -186,6 +190,11 @@ export type {
   SpeechStartRequest,
   SpeechStartResult,
   SpeechStopResult,
+  TaskExecutionPlanSummary,
+  TaskInteractionChangedEvent,
+  TaskInteractionOpenRequest,
+  TaskInteractionOpenResult,
+  TaskInteractionPendingResult,
   SkillCapability,
   SkillDataBoundary,
   SkillDisableRequest,
@@ -1312,6 +1321,15 @@ export interface PigeDesktopApi {
     ) => Promise<HighRiskConfirmationResolveResult>;
     readonly onChanged: (
       listener: (event: HighRiskConfirmationChangedEvent) => void
+    ) => () => void;
+  };
+  readonly taskExecution: {
+    readonly interaction: () => Promise<TaskInteractionPendingResult>;
+    readonly openInteraction: (
+      request: TaskInteractionOpenRequest
+    ) => Promise<TaskInteractionOpenResult>;
+    readonly onInteractionChanged: (
+      listener: (event: TaskInteractionChangedEvent) => void
     ) => () => void;
   };
   readonly skills: {
