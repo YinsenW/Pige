@@ -10,9 +10,12 @@ import type {
   CollectionAppendDefaultRowResult,
   CollectionCellEditRequest,
   CollectionCellEditResult,
+  CollectionCreateViewRequest,
+  CollectionCreateViewResult,
   CollectionRenameColumnRequest,
   CollectionRenameColumnResult,
   CollectionSnapshot,
+  CollectionViewSummary,
   CollectionTrashColumnRequest,
   CollectionTrashColumnResult,
   CollectionTrashRowRequest,
@@ -66,6 +69,8 @@ describe("ManagedCollectionPanel", () => {
         onAddNullableColumn: notFoundColumnResult,
         onRenameColumn: notFoundRenameResult,
         onTrashColumn: notFoundTrashColumnResult,
+        onOpenView: async () => null,
+        onCreateView: notFoundCreateViewResult,
         onAppendDefaultRow: notFoundAppendResult,
         onTrashRow: notFoundTrashResult,
         onAdoptSnapshot: () => false,
@@ -126,6 +131,8 @@ describe("ManagedCollectionPanel", () => {
         onAddNullableColumn: notFoundColumnResult,
         onRenameColumn: notFoundRenameResult,
         onTrashColumn: notFoundTrashColumnResult,
+        onOpenView: async () => null,
+        onCreateView: notFoundCreateViewResult,
         onAppendDefaultRow: notFoundAppendResult,
         onTrashRow: notFoundTrashResult,
         onAdoptSnapshot: () => false,
@@ -523,6 +530,8 @@ describe("ManagedCollectionPanel", () => {
           request = nextRequest;
           return new Promise((resolve) => { resolveResult = resolve; });
         },
+        onOpenView: async () => null,
+        onCreateView: notFoundCreateViewResult,
         onAppendDefaultRow: notFoundAppendResult,
         onTrashRow: notFoundTrashResult,
         onAdoptSnapshot: () => { adoptCount += 1; return true; },
@@ -556,6 +565,169 @@ describe("ManagedCollectionPanel", () => {
     expect(container.textContent).toContain("Replacement");
     expect(container.querySelector('[data-collection-column-id="column_name000001"]')).not.toBeNull();
     expect(container.textContent).not.toContain("Field moved to trash.");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("switches between All rows and one saved view through authoritative open results", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const view = savedView("view_20260728_priority01", "Priority items");
+    const allRows = withViews(collectionSnapshot("dataset_rev_20260728_revision0001", "Alpha"), [view]);
+    const filtered = withViews(
+      { ...collectionSnapshot("dataset_rev_20260728_revision0001", "Priority Alpha"), rows: collectionSnapshot("dataset_rev_20260728_revision0001", "Priority Alpha").rows },
+      [view],
+      view.viewId
+    );
+    const opened: Array<string | undefined> = [];
+    await act(async () => {
+      root.render(createElement(CollectionViewHarness, {
+        initialSnapshot: allRows,
+        onOpen: async (viewId) => {
+          opened.push(viewId);
+          return viewId ? filtered : allRows;
+        },
+        onCreate: notFoundCreateViewResult
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const selector = requireElement(container.querySelector<HTMLSelectElement>("#collection-view-select"));
+    expect(Array.from(selector.options).map((option) => option.textContent)).toEqual(["All rows", "Priority items"]);
+    await selectValue(dom, selector, view.viewId);
+    expect(opened).toEqual([view.viewId]);
+    expect(selector.value).toBe(view.viewId);
+    expect(container.textContent).toContain("Priority Alpha");
+    expect(dom.window.document.activeElement).toBe(selector);
+
+    await selectValue(dom, selector, "");
+    expect(opened).toEqual([view.viewId, undefined]);
+    expect(selector.value).toBe("");
+    expect(container.textContent).toContain("Alpha");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("creates one typed filtered and sorted view with CAS, preserves stale draft, and focuses the active view", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: CollectionCreateViewRequest[] = [];
+    const staleSnapshot = collectionSnapshot("dataset_rev_20260728_revision0002", "Alpha");
+    const view = savedView("view_20260728_highvalue1", "High value", {
+      operator: "eq",
+      columnId: "column_name000001",
+      value: "Alpha"
+    }, {
+      columnId: "column_total00001",
+      direction: "desc"
+    });
+    const committedSnapshot = withViews(
+      collectionSnapshot("dataset_rev_20260728_revision0003", "Alpha"),
+      [view],
+      view.viewId
+    );
+    await act(async () => {
+      root.render(createElement(CollectionViewHarness, {
+        initialSnapshot: collectionSnapshot("dataset_rev_20260728_revision0001", "Alpha"),
+        onOpen: async () => null,
+        onCreate: async (request) => {
+          requests.push(request);
+          return requests.length === 1
+            ? { ...createViewIdentity(request), status: "stale", snapshot: staleSnapshot }
+            : {
+              ...createViewIdentity(request),
+              status: "committed",
+              viewId: view.viewId,
+              operationId: "op_20260728_collectionview01",
+              snapshot: committedSnapshot
+            };
+        }
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Create view"));
+    const name = requireElement(container.querySelector<HTMLInputElement>("#collection-view-name"));
+    await inputText(dom, name, "  High value  ");
+    const filterValue = requireElement(container.querySelector<HTMLInputElement>("#collection-view-filter-value"));
+    await act(async () => { filterValue.focus(); await settle(dom); });
+    await inputText(dom, filterValue, "Alpha");
+    await selectValue(dom, requireElement(container.querySelector<HTMLSelectElement>("#collection-view-sort-column")), "column_total00001");
+    await selectValue(dom, requireElement(container.querySelector<HTMLSelectElement>("#collection-view-sort-direction")), "desc");
+
+    expect(buttonNamed(container, "Save").disabled).toBe(false);
+    await act(async () => {
+      const save = buttonNamed(container, "Save");
+      save.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      save.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(requests).toEqual([expect.objectContaining({
+      expectedRevisionId: "dataset_rev_20260728_revision0001",
+      name: "High value",
+      filter: { operator: "eq", columnId: "column_name000001", value: "Alpha" },
+      sort: { columnId: "column_total00001", direction: "desc" }
+    })]);
+    expect(container.textContent).toContain("The collection changed. Your view draft is preserved.");
+    expect(name.value).toBe("  High value  ");
+    expect(dom.window.document.activeElement).toBe(name);
+
+    await click(dom, buttonNamed(container, "Save"));
+    expect(requests.map(({ expectedRevisionId }) => expectedRevisionId)).toEqual([
+      "dataset_rev_20260728_revision0001",
+      "dataset_rev_20260728_revision0002"
+    ]);
+    const selector = requireElement(container.querySelector<HTMLSelectElement>("#collection-view-select"));
+    expect(selector.value).toBe(view.viewId);
+    expect(container.textContent).toContain("View saved as a new revision.");
+    expect(dom.window.document.activeElement).toBe(selector);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps the view form and current view on duplicate, ineligible, and failed results", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const currentView = savedView("view_20260728_current001", "Current view");
+    const snapshots = [
+      withViews(collectionSnapshot("dataset_rev_20260728_revision0002", "Alpha"), [currentView], currentView.viewId),
+      withViews(collectionSnapshot("dataset_rev_20260728_revision0003", "Alpha"), [currentView], currentView.viewId)
+    ];
+    let callCount = 0;
+    await act(async () => {
+      root.render(createElement(CollectionViewHarness, {
+        initialSnapshot: withViews(
+          collectionSnapshot("dataset_rev_20260728_revision0001", "Alpha"), [currentView], currentView.viewId
+        ),
+        onOpen: async () => null,
+        onCreate: async (request) => {
+          callCount += 1;
+          if (callCount === 1) return { ...createViewIdentity(request), status: "duplicate", snapshot: snapshots[0] };
+          if (callCount === 2) return { ...createViewIdentity(request), status: "ineligible", snapshot: snapshots[1] };
+          return { ...createViewIdentity(request), status: "failed" };
+        }
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Create view"));
+    const name = requireElement(container.querySelector<HTMLInputElement>("#collection-view-name"));
+    await inputText(dom, name, "Kept draft");
+    for (const expected of [
+      "A view with this name already exists.",
+      "This view can no longer be created.",
+      "Pige could not create the view. Nothing was changed."
+    ]) {
+      await click(dom, buttonNamed(container, "Save"));
+      expect(container.textContent).toContain(expected);
+      expect(name.value).toBe("Kept draft");
+      expect(requireElement(container.querySelector<HTMLSelectElement>("#collection-view-select")).value)
+        .toBe(currentView.viewId);
+    }
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -875,6 +1047,45 @@ describe("ManagedCollectionPanel", () => {
     await act(async () => root.unmount());
     dom.window.close();
   });
+
+  it("labels a created collection view and keeps forward Undo available through Activity", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const undone: string[] = [];
+    await act(async () => {
+      root.render(createElement(ActivityHistorySettingsPanel, {
+        activities: [{
+          operationId: "op_20260728_collectionview01",
+          kind: "create_collection_view",
+          createdAt: "2026-07-28T08:00:00.000Z",
+          targetLabel: "Priority items",
+          target: {
+            kind: "collection",
+            datasetId: "dataset_20260727_collection01",
+            tableId: "table_collection01",
+            revisionId: "dataset_rev_20260728_revision0002"
+          },
+          status: "applied",
+          canUndo: true
+        }],
+        undoingId: null,
+        openingId: null,
+        blockedIds: [],
+        locale: "en",
+        onOpen: async () => undefined,
+        onUndo: async (operationId) => { undone.push(operationId); },
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    expect(container.textContent).toContain("Collection view created: Priority items");
+    await click(dom, buttonNamed(container, "Undo"));
+    expect(undone).toEqual(["op_20260728_collectionview01"]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
 });
 
 function CollectionAppendHarness(props: {
@@ -892,6 +1103,8 @@ function CollectionAppendHarness(props: {
     onAddNullableColumn: notFoundColumnResult,
     onRenameColumn: notFoundRenameResult,
     onTrashColumn: notFoundTrashColumnResult,
+    onOpenView: async () => null,
+    onCreateView: notFoundCreateViewResult,
     onAppendDefaultRow: props.onAppend,
     onTrashRow: notFoundTrashResult,
     onAdoptSnapshot: (next, expectedRevisionId) => {
@@ -918,6 +1131,8 @@ function CollectionTrashHarness(props: {
     onAddNullableColumn: notFoundColumnResult,
     onRenameColumn: notFoundRenameResult,
     onTrashColumn: notFoundTrashColumnResult,
+    onOpenView: async () => null,
+    onCreateView: notFoundCreateViewResult,
     onAppendDefaultRow: notFoundAppendResult,
     onTrashRow: props.onTrash,
     onAdoptSnapshot: (next, expectedRevisionId) => {
@@ -946,6 +1161,8 @@ function CollectionColumnHarness(props: {
     onAddNullableColumn: props.onAddColumn,
     onRenameColumn: notFoundRenameResult,
     onTrashColumn: notFoundTrashColumnResult,
+    onOpenView: async () => null,
+    onCreateView: notFoundCreateViewResult,
     onAppendDefaultRow: notFoundAppendResult,
     onTrashRow: notFoundTrashResult,
     onAdoptSnapshot: (next, expectedRevisionId) => {
@@ -974,6 +1191,8 @@ function CollectionRenameHarness(props: {
     onAddNullableColumn: notFoundColumnResult,
     onRenameColumn: props.onRename,
     onTrashColumn: notFoundTrashColumnResult,
+    onOpenView: async () => null,
+    onCreateView: notFoundCreateViewResult,
     onAppendDefaultRow: notFoundAppendResult,
     onTrashRow: notFoundTrashResult,
     onAdoptSnapshot: (next, expectedRevisionId) => {
@@ -1002,6 +1221,40 @@ function CollectionTrashColumnHarness(props: {
     onAddNullableColumn: notFoundColumnResult,
     onRenameColumn: notFoundRenameResult,
     onTrashColumn: props.onTrashColumn,
+    onOpenView: async () => null,
+    onCreateView: notFoundCreateViewResult,
+    onAppendDefaultRow: notFoundAppendResult,
+    onTrashRow: notFoundTrashResult,
+    onAdoptSnapshot: (next, expectedRevisionId) => {
+      if (snapshot.revisionId !== expectedRevisionId) return false;
+      setSnapshot(next);
+      return true;
+    },
+    onEditCell: async (request) => ({ ...editIdentity(request), status: "failed" }),
+    onReload: async () => snapshot,
+    t
+  });
+}
+
+function CollectionViewHarness(props: {
+  readonly initialSnapshot: CollectionSnapshot;
+  readonly onOpen: (viewId?: string) => Promise<CollectionSnapshot | null>;
+  readonly onCreate: (request: CollectionCreateViewRequest) => Promise<CollectionCreateViewResult>;
+}): React.JSX.Element {
+  const [snapshot, setSnapshot] = useState(props.initialSnapshot);
+  return createElement(ManagedCollectionPanel, {
+    activeVaultId: "vault_20260727_collection01",
+    snapshot,
+    onClose: () => undefined,
+    onAddNullableColumn: notFoundColumnResult,
+    onRenameColumn: notFoundRenameResult,
+    onTrashColumn: notFoundTrashColumnResult,
+    onOpenView: async (viewId) => {
+      const next = await props.onOpen(viewId);
+      if (next) setSnapshot(next);
+      return next;
+    },
+    onCreateView: props.onCreate,
     onAppendDefaultRow: notFoundAppendResult,
     onTrashRow: notFoundTrashResult,
     onAdoptSnapshot: (next, expectedRevisionId) => {
@@ -1046,8 +1299,26 @@ function collectionSnapshot(
     returnedRowCount: 1,
     truncated: false,
     canAppendDefaultRow,
-    canAddColumn
+    canAddColumn,
+    views: []
   };
+}
+
+function savedView(
+  viewId: string,
+  name: string,
+  filter: CollectionViewSummary["filter"] = { operator: "is_null", columnId: "column_name000001" },
+  sort: CollectionViewSummary["sort"] = { columnId: "column_name000001", direction: "asc" }
+): CollectionViewSummary {
+  return { viewId, viewRevision: 1, name, filter, sort };
+}
+
+function withViews(
+  snapshot: CollectionSnapshot,
+  views: readonly CollectionViewSummary[],
+  activeViewId?: string
+): CollectionSnapshot {
+  return { ...snapshot, views: [...views], activeViewId };
 }
 
 function withNullableColumn(
@@ -1169,6 +1440,16 @@ function trashColumnIdentity(request: CollectionTrashColumnRequest) {
   };
 }
 
+function createViewIdentity(request: CollectionCreateViewRequest) {
+  return {
+    apiVersion: 1 as const,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId
+  };
+}
+
 async function notFoundAppendResult(
   request: CollectionAppendDefaultRowRequest
 ): Promise<CollectionAppendDefaultRowResult> {
@@ -1208,6 +1489,12 @@ async function notFoundTrashColumnResult(
   request: CollectionTrashColumnRequest
 ): Promise<CollectionTrashColumnResult> {
   return { ...trashColumnIdentity(request), status: "not_found" };
+}
+
+async function notFoundCreateViewResult(
+  request: CollectionCreateViewRequest
+): Promise<CollectionCreateViewResult> {
+  return { ...createViewIdentity(request), status: "not_found" };
 }
 
 function committedResult(

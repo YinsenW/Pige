@@ -130,6 +130,8 @@ import {
   type CollectionAppendDefaultRowResult,
   type CollectionCellEditRequest,
   type CollectionCellEditResult,
+  type CollectionCreateViewRequest,
+  type CollectionCreateViewResult,
   type CollectionRenameColumnRequest,
   type CollectionRenameColumnResult,
   type CollectionTrashColumnRequest,
@@ -921,14 +923,16 @@ export function App(): React.JSX.Element {
     datasetId: string,
     tableId: string,
     originVaultId: string,
-    sequence: number
+    sequence: number,
+    viewId?: string
   ): Promise<CollectionSnapshot | null> => {
     const request: CollectionOpenRequest = {
       apiVersion: 1,
       requestId: createCollectionRequestId(),
       activeVaultId: originVaultId,
       datasetId,
-      tableId
+      tableId,
+      ...(viewId ? { viewId } : {})
     };
     try {
       const result = await window.pige.collections.open(request);
@@ -938,7 +942,8 @@ export function App(): React.JSX.Element {
         !collectionOpenIdentityMatches(request, result) ||
         result.status !== "ready" ||
         result.snapshot.datasetId !== request.datasetId ||
-        result.snapshot.tableId !== request.tableId
+        result.snapshot.tableId !== request.tableId ||
+        result.snapshot.activeViewId !== request.viewId
       ) return null;
       return result.snapshot;
     } catch {
@@ -991,7 +996,8 @@ export function App(): React.JSX.Element {
       current.snapshot.datasetId,
       current.snapshot.tableId,
       current.vaultId,
-      sequence
+      sequence,
+      current.snapshot.activeViewId
     );
     if (!snapshot) return null;
     setSelectedCollection((active) => active?.vaultId === current.vaultId &&
@@ -1007,6 +1013,35 @@ export function App(): React.JSX.Element {
   ): Promise<CollectionCellEditResult> => {
     const result = await window.pige.collections.editCell(request);
     if (result.status === "committed") void refreshVaultState();
+    return result;
+  };
+
+  const openCollectionView = async (viewId?: string): Promise<CollectionSnapshot | null> => {
+    const current = selectedCollectionRef.current;
+    if (!current || current.vaultId !== activeVaultIdRef.current) return null;
+    const sequence = collectionOpenSequence.current + 1;
+    collectionOpenSequence.current = sequence;
+    const snapshot = await readCollection(
+      current.snapshot.datasetId,
+      current.snapshot.tableId,
+      current.vaultId,
+      sequence,
+      viewId
+    );
+    if (!snapshot) return null;
+    setSelectedCollection((active) => active?.vaultId === current.vaultId &&
+      active.snapshot.datasetId === current.snapshot.datasetId &&
+      active.snapshot.tableId === current.snapshot.tableId
+      ? { ...active, snapshot }
+      : active);
+    return snapshot;
+  };
+
+  const createCollectionView = async (
+    request: CollectionCreateViewRequest
+  ): Promise<CollectionCreateViewResult> => {
+    const result = await window.pige.collections.createView(request);
+    if (collectionCreateViewIdentityMatches(request, result) && result.status === "committed") void refreshVaultState();
     return result;
   };
 
@@ -1826,6 +1861,8 @@ export function App(): React.JSX.Element {
             onAddNullableColumn={addCollectionNullableColumn}
             onRenameColumn={renameCollectionColumn}
             onTrashColumn={trashCollectionColumn}
+            onOpenView={openCollectionView}
+            onCreateView={createCollectionView}
             onAppendDefaultRow={appendCollectionDefaultRow}
             onTrashRow={trashCollectionRow}
             onAdoptSnapshot={adoptCollectionSnapshot}
@@ -5716,6 +5753,16 @@ function collectionOpenIdentityMatches(
     result.tableId === request.tableId;
 }
 
+function collectionCreateViewIdentityMatches(
+  request: CollectionCreateViewRequest,
+  result: CollectionCreateViewResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.datasetId === request.datasetId &&
+    result.tableId === request.tableId;
+}
+
 function collectionAppendIdentityMatches(
   request: CollectionAppendDefaultRowRequest,
   result: CollectionAppendDefaultRowResult
@@ -7039,6 +7086,8 @@ export function ActivityHistorySettingsPanel(props: {
                   ? "activity.trashedCollectionRow"
                 : activity.kind === "trash_collection_column"
                   ? "activity.trashedCollectionColumn"
+                : activity.kind === "create_collection_view"
+                  ? "activity.createdCollectionView"
                 : activity.kind === "update_page"
                   ? "activity.updatedPage"
                   : "activity.createdPage";
