@@ -677,9 +677,10 @@ describe("desktop shell build contract", () => {
     );
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
 
-    expect(mainSource).toContain("handleRetrievalSearchIpc(request, getRetrievalService())");
+    expect(mainSource).toContain("handleRetrievalSearchIpc(request, {");
+    expect(mainSource).toContain("search: (parsed) => getRetrievalService().searchCurrent(parsed)");
     expect(ipcSource).toContain("RetrievalSearchRequestSchema.safeParse(request)");
-    expect(ipcSource).toContain("rawResult = retrieval.search(parsedRequest.data)");
+    expect(ipcSource).toContain("rawResult = await retrieval.search(parsedRequest.data)");
     expect(ipcSource).toContain('PigeDomainError("rag.search_unavailable"');
     expect(ipcSource).toContain("RetrievalSearchResultSchema.safeParse(rawResult)");
     expect(preloadSource).toContain("RetrievalSearchRequestSchema.safeParse(request)");
