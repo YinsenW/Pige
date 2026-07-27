@@ -4,8 +4,10 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { OperationRecord } from "@pige/schemas";
 import {
+  NoteMarkdownEditorActivityAdapter,
   NoteMarkdownEditorService,
-  type NoteMarkdownEditorActivityPort
+  type NoteMarkdownEditorActivityPort,
+  type NoteMarkdownEditorVaultPort
 } from "../../apps/desktop/src/main/services/note-markdown-editor-service";
 
 const PAGE_ID = "page_20260727_markdowneditor";
@@ -172,6 +174,119 @@ describe("NoteMarkdownEditorService", () => {
   });
 });
 
+describe("NoteMarkdownEditorActivityAdapter", () => {
+  it("persists and idempotently adopts one exact before-image and user update_page Operation", () => {
+    const fixture = createAdapterFixture();
+    const committed = commitEdit(fixture);
+    const operation = readOperation(fixture.vaultPath, committed.operationId);
+    const beforePath = resolveRelative(fixture.vaultPath, operation.before?.path);
+
+    expect(fs.readFileSync(beforePath, "utf8")).toBe(fixture.markdown);
+    expect(operation).toMatchObject({
+      actor: { kind: "user", runtimeKind: "desktop_local" },
+      kind: "update_page",
+      sourceRefs: [],
+      reversible: "yes"
+    });
+    expect(() => fixture.adapter.recordPageUpdate({
+      vaultPath: fixture.vaultPath,
+      operation,
+      beforeMarkdown: fixture.markdown,
+      afterMarkdown: committed.markdown
+    })).not.toThrow();
+    expect(() => fixture.adapter.recordPageUpdate({
+      vaultPath: fixture.vaultPath,
+      operation,
+      beforeMarkdown: fixture.markdown.replace("Original body.", "Wrong before body."),
+      afterMarkdown: committed.markdown
+    })).toThrow("invalid");
+    expect(listOperationFiles(fixture.vaultPath)).toHaveLength(1);
+  });
+
+  it("projects a safe Activity and restores exact bytes through one forward user update", () => {
+    const fixture = createAdapterFixture();
+    const committed = commitEdit(fixture);
+    const operation = readOperation(fixture.vaultPath, committed.operationId);
+    const summary = fixture.adapter.activitySummary(operation);
+
+    expect(summary).toEqual({
+      operationId: operation.id,
+      kind: "update_page",
+      createdAt: operation.createdAt,
+      targetLabel: "Markdown editor fixture",
+      target: { kind: "page", pageId: PAGE_ID },
+      status: "applied",
+      canUndo: true
+    });
+    expect(JSON.stringify(summary)).not.toContain("wiki/");
+    expect(JSON.stringify(summary)).not.toContain("sha256:");
+    expect(JSON.stringify(summary)).not.toContain("Edited body");
+
+    const undone = fixture.adapter.undo(operation, committed.revisionId);
+    expect(undone).toMatchObject({
+      status: "undone",
+      operationId: operation.id,
+      revisionId: operation.before?.id
+    });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
+    const undo = readOperation(fixture.vaultPath, requireValue(undone.undoOperationId));
+    expect(undo).toMatchObject({
+      actor: { kind: "user" },
+      kind: "update_page",
+      sourceRefs: [{ kind: "operation", id: operation.id }],
+      before: { id: operation.after?.id },
+      after: { id: operation.before?.id },
+      reversible: "best_effort"
+    });
+    expect(fixture.adapter.findUndoOperation(operation, [operation, undo])).toEqual(undo);
+    expect(fixture.adapter.activitySummary(operation, undo)).toMatchObject({
+      status: "undone",
+      canUndo: false,
+      undoUnavailableReason: "already_undone"
+    });
+    expect(fixture.adapter.undo(operation, committed.revisionId)).toMatchObject({
+      status: "already_undone",
+      undoOperationId: undo.id
+    });
+  });
+
+  it("recovers only an exact interrupted forward Undo and remains idempotent", () => {
+    const fixture = createAdapterFixture();
+    const committed = commitEdit(fixture);
+    const operation = readOperation(fixture.vaultPath, committed.operationId);
+    const undone = fixture.adapter.undo(operation, committed.revisionId);
+    const undoOperationId = requireValue(undone.undoOperationId);
+    fs.unlinkSync(operationPath(fixture.vaultPath, undoOperationId));
+
+    expect(fixture.adapter.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    const recoveredUndo = readOperation(fixture.vaultPath, undoOperationId);
+    expect(fixture.adapter.findUndoOperation(operation, [operation, recoveredUndo])).toEqual(recoveredUndo);
+    expect(fixture.adapter.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
+  });
+
+  it("rejects malformed or non-user update operations without granting Activity or Undo authority", () => {
+    const fixture = createAdapterFixture();
+    const committed = commitEdit(fixture);
+    const operation = readOperation(fixture.vaultPath, committed.operationId);
+    const malformed = {
+      ...operation,
+      sourceRefs: [{ kind: "operation" as const, id: "op_20260727_untrustedref" }]
+    };
+
+    expect(fixture.adapter.activitySummary(malformed)).toBeUndefined();
+    expect(fixture.adapter.findUndoOperation(malformed, [])).toBeUndefined();
+    expect(fixture.adapter.undo(malformed)).toEqual({ status: "not_found", operationId: operation.id });
+    expect(() => fixture.adapter.recordPageUpdate({
+      vaultPath: fixture.vaultPath,
+      operation: malformed,
+      beforeMarkdown: fixture.markdown,
+      afterMarkdown: committed.markdown
+    })).toThrow("invalid");
+    expect(listOperationFiles(fixture.vaultPath)).toHaveLength(1);
+  });
+});
+
 interface ActivityRecord {
   readonly vaultPath: string;
   readonly operation: OperationRecord;
@@ -185,6 +300,7 @@ function createFixture(): {
   readonly pagePath: string;
   readonly markdown: string;
   readonly records: ActivityRecord[];
+  readonly vaults: NoteMarkdownEditorVaultPort;
   readonly service: NoteMarkdownEditorService;
 } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-note-markdown-editor-"));
@@ -198,27 +314,103 @@ function createFixture(): {
   const activity: NoteMarkdownEditorActivityPort = {
     recordPageUpdate: (input) => records.push(input)
   };
+  const vaults = createVaultPort(vaultPath);
   const service = new NoteMarkdownEditorService(
-    {
-      current: () => ({
-        vaultId: VAULT_ID,
-        name: "Markdown editor vault",
-        activeVaultPathDisplay: "Markdown editor vault",
-        knowledgeRootDisplay: "Markdown editor vault",
-        sourceAssetRootDisplay: "Markdown editor sources",
-        sourceAssetRootKind: "vault_internal",
-        defaultSourceStorageStrategy: "managed_copy",
-        schemaVersion: 1
-      }),
-      activeVaultPath: () => vaultPath
-    },
+    vaults,
     activity,
     {
       now: () => new Date("2026-07-27T12:00:00.000Z"),
       randomId: () => "fixture-random-id"
     }
   );
-  return { root, vaultPath, pagePath, markdown, records, service };
+  return { root, vaultPath, pagePath, markdown, records, vaults, service };
+}
+
+function createAdapterFixture() {
+  const fixture = createFixture();
+  const adapter = new NoteMarkdownEditorActivityAdapter(fixture.vaults);
+  const service = new NoteMarkdownEditorService(
+    fixture.vaults,
+    adapter,
+    {
+      now: () => new Date("2026-07-27T12:00:00.000Z"),
+      randomId: () => "adapter-fixture-random-id"
+    }
+  );
+  return { ...fixture, adapter, service };
+}
+
+function commitEdit(fixture: ReturnType<typeof createAdapterFixture>) {
+  const opened = requireOpened(fixture.service);
+  const markdown = opened.markdown.replace("Original body.", "Edited body.");
+  const committed = fixture.service.save({
+    requestId: "request_activity_adapter_save",
+    activeVaultId: VAULT_ID,
+    pageId: PAGE_ID,
+    expectedRevisionId: opened.revisionId,
+    renderIdentity: opened.renderIdentity,
+    markdown
+  });
+  if (committed.status !== "committed") throw new Error("Expected the adapter edit to commit.");
+  return { ...committed, markdown };
+}
+
+function createVaultPort(vaultPath: string): NoteMarkdownEditorVaultPort {
+  return {
+    current: () => ({
+      vaultId: VAULT_ID,
+      name: "Markdown editor vault",
+      activeVaultPathDisplay: "Markdown editor vault",
+      knowledgeRootDisplay: "Markdown editor vault",
+      sourceAssetRootDisplay: "Markdown editor sources",
+      sourceAssetRootKind: "vault_internal",
+      defaultSourceStorageStrategy: "managed_copy",
+      schemaVersion: 1
+    }),
+    activeVaultPath: () => vaultPath
+  };
+}
+
+function readOperation(vaultPath: string, operationId: string): OperationRecord {
+  return JSON.parse(fs.readFileSync(operationPath(vaultPath, operationId), "utf8")) as OperationRecord;
+}
+
+function operationPath(vaultPath: string, operationId: string): string {
+  const dateKey = /^op_(\d{8})_/u.exec(operationId)?.[1];
+  if (!dateKey) throw new Error("Invalid Operation fixture identity.");
+  return path.join(
+    vaultPath,
+    ".pige",
+    "operations",
+    dateKey.slice(0, 4),
+    dateKey.slice(4, 6),
+    `${operationId}.json`
+  );
+}
+
+function listOperationFiles(vaultPath: string): readonly string[] {
+  const root = path.join(vaultPath, ".pige", "operations");
+  if (!fs.existsSync(root)) return [];
+  const files: string[] = [];
+  const visit = (directory: string): void => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const entryPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) visit(entryPath);
+      else if (entry.isFile() && entry.name.endsWith(".json")) files.push(entryPath);
+    }
+  };
+  visit(root);
+  return files;
+}
+
+function resolveRelative(vaultPath: string, relativePath: string | undefined): string {
+  if (!relativePath) throw new Error("Expected a private relative path.");
+  return path.join(vaultPath, ...relativePath.split("/"));
+}
+
+function requireValue<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Expected a value.");
+  return value;
 }
 
 function requireOpened(service: NoteMarkdownEditorService) {

@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { VaultSummary } from "@pige/contracts";
+import type {
+  KnowledgeActivitySummary,
+  KnowledgeActivityUndoResult,
+  VaultSummary
+} from "@pige/contracts";
 import {
   extractPigeMarkdownLinkRefs,
   normalizePigeTag,
@@ -17,6 +21,11 @@ import {
 } from "@pige/schemas";
 import { flushDirectoryWhereSupported } from "./durable-directory-sync";
 import {
+  createGeneratedNoteExclusive,
+  readGeneratedNoteExact,
+  replaceGeneratedNoteExact
+} from "./generated-note-file";
+import {
   assertMarkdownPagePathConfined,
   findMarkdownPageByIdAtSignature,
   readMarkdownPageContentAtSignature,
@@ -27,6 +36,7 @@ export const MAX_NOTE_MARKDOWN_EDITOR_BYTES = 4 * 1024 * 1024;
 const MAX_RENDER_BINDINGS = 64;
 const MAX_REQUEST_ID_LENGTH = 128;
 const MAX_REFERENCE_LENGTH = 256;
+const MAX_OPERATION_BYTES = 256 * 1024;
 const UNSAFE_TEXT_PATTERN = /[\u0000\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
 const SOURCE_CITATION_PATTERN = /^source:src_\d{8}_[a-z0-9]{8,}(?:#[^\s\]\u0000-\u001f\u007f-\u009f]{1,256})?$/u;
 
@@ -99,6 +109,11 @@ interface RenderBinding {
 interface NoteMarkdownEditorDependencies {
   readonly now?: () => Date;
   readonly randomId?: () => string;
+}
+
+export interface NoteMarkdownEditorActivityRecoveryResult {
+  readonly recovered: number;
+  readonly failed: number;
 }
 
 export class NoteMarkdownEditorService {
@@ -349,6 +364,210 @@ export class NoteMarkdownEditorService {
   }
 }
 
+interface UserPageUpdateBinding {
+  readonly pageId: string;
+  readonly pagePath: string;
+  readonly beforeHash: string;
+  readonly beforePath: string;
+  readonly afterHash: string;
+}
+
+/**
+ * Private Activity adapter for direct user Markdown edits. Main can compose this
+ * behind the shared Activity owner without exposing paths or content to the renderer.
+ */
+export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActivityPort {
+  readonly #vaults: NoteMarkdownEditorVaultPort;
+
+  constructor(vaults: NoteMarkdownEditorVaultPort) {
+    this.#vaults = vaults;
+  }
+
+  recordPageUpdate(input: {
+    readonly vaultPath: string;
+    readonly operation: OperationRecord;
+    readonly beforeMarkdown: string;
+    readonly afterMarkdown: string;
+  }): void {
+    const binding = readUserPageUpdateBinding(input.operation);
+    if (
+      !binding ||
+      hashMarkdown(input.beforeMarkdown) !== binding.beforeHash ||
+      hashMarkdown(input.afterMarkdown) !== binding.afterHash ||
+      !validatePortableMarkdown(input.beforeMarkdown, binding.pageId) ||
+      !validatePortableMarkdown(input.afterMarkdown, binding.pageId)
+    ) {
+      throw new Error("The Markdown Activity update binding is invalid.");
+    }
+    const active = this.#activeVaultPath();
+    if (!active || active !== path.resolve(input.vaultPath)) {
+      throw new Error("The Markdown Activity vault binding is stale.");
+    }
+    const livePath = resolvePrivateVaultPath(active, binding.pagePath);
+    const live = readGeneratedNoteExact(active, livePath, MAX_NOTE_MARKDOWN_EDITOR_BYTES);
+    if (live === undefined || hashMarkdown(live) !== binding.afterHash) {
+      throw new Error("The Markdown Activity target does not match its committed revision.");
+    }
+
+    persistExactPrivateFile(active, binding.beforePath, input.beforeMarkdown, MAX_NOTE_MARKDOWN_EDITOR_BYTES);
+    persistExactOperation(active, input.operation);
+  }
+
+  activitySummary(
+    operation: OperationRecord,
+    undoOperation?: OperationRecord
+  ): KnowledgeActivitySummary | undefined {
+    const binding = readUserPageUpdateBinding(operation);
+    if (!binding) return undefined;
+    if (undoOperation && !isMatchingUserPageUpdateUndo(operation, undoOperation)) return undefined;
+    const vaultPath = this.#activeVaultPath();
+    const current = vaultPath
+      ? readPrivateTextOrUndefined(vaultPath, binding.pagePath, MAX_NOTE_MARKDOWN_EDITOR_BYTES)
+      : undefined;
+    const targetMissing = !undoOperation && current === undefined;
+    const contentChanged = !undoOperation && current !== undefined && hashMarkdown(current) !== binding.afterHash;
+    const targetLabel = current ? safePageTitle(current, binding.pageId) : undefined;
+    return {
+      operationId: operation.id,
+      kind: "update_page",
+      createdAt: operation.createdAt,
+      ...(targetLabel ? { targetLabel } : {}),
+      target: { kind: "page", pageId: binding.pageId },
+      status: undoOperation ? "undone" : "applied",
+      canUndo: !undoOperation && !targetMissing && !contentChanged,
+      ...(undoOperation
+        ? { undoUnavailableReason: "already_undone" as const }
+        : targetMissing
+          ? { undoUnavailableReason: "target_missing" as const }
+          : contentChanged
+            ? { undoUnavailableReason: "content_changed" as const }
+            : {})
+    };
+  }
+
+  findUndoOperation(
+    operation: OperationRecord,
+    operations: readonly OperationRecord[]
+  ): OperationRecord | undefined {
+    if (!readUserPageUpdateBinding(operation)) return undefined;
+    const candidate = operations.find((entry) => entry.id === createUserPageUpdateUndoOperationId(operation.id));
+    return candidate && isMatchingUserPageUpdateUndo(operation, candidate) ? candidate : undefined;
+  }
+
+  undo(operation: OperationRecord, expectedRevisionId?: string): KnowledgeActivityUndoResult {
+    const binding = readUserPageUpdateBinding(operation);
+    if (!binding) return { status: "not_found", operationId: operation.id };
+    const vaultPath = this.#activeVaultPath();
+    if (!vaultPath) return { status: "not_found", operationId: operation.id };
+    if (expectedRevisionId !== undefined && expectedRevisionId !== binding.afterHash) {
+      const current = readPrivateTextOrUndefined(vaultPath, binding.pagePath, MAX_NOTE_MARKDOWN_EDITOR_BYTES);
+      return {
+        status: "stale",
+        operationId: operation.id,
+        ...(current ? { currentRevisionId: hashMarkdown(current) } : {})
+      };
+    }
+
+    const existing = readOperationOrUndefined(vaultPath, createUserPageUpdateUndoOperationId(operation.id));
+    if (existing) {
+      if (!isMatchingUserPageUpdateUndo(operation, existing)) {
+        throw new Error("The deterministic Markdown Undo identity is occupied.");
+      }
+      return {
+        status: "already_undone",
+        operationId: operation.id,
+        undoOperationId: existing.id,
+        revisionId: binding.beforeHash
+      };
+    }
+
+    const live = readPrivateTextOrUndefined(vaultPath, binding.pagePath, MAX_NOTE_MARKDOWN_EDITOR_BYTES);
+    if (live === undefined) return { status: "not_found", operationId: operation.id };
+    const currentRevisionId = hashMarkdown(live);
+    if (currentRevisionId !== binding.afterHash) {
+      return { status: "stale", operationId: operation.id, currentRevisionId };
+    }
+    const before = requireExactPrivateFile(
+      vaultPath,
+      binding.beforePath,
+      binding.beforeHash,
+      MAX_NOTE_MARKDOWN_EDITOR_BYTES
+    );
+    if (!validatePortableMarkdown(before, binding.pageId)) {
+      throw new Error("The Markdown Activity before-image is invalid.");
+    }
+
+    const undo = createUserPageUpdateUndoOperation(operation, binding);
+    const undoBinding = readUserPageUpdateUndoBinding(undo);
+    if (!undoBinding) throw new Error("The Markdown Undo operation is invalid.");
+    persistExactPrivateFile(vaultPath, undoBinding.beforePath, live, MAX_NOTE_MARKDOWN_EDITOR_BYTES);
+    persistExactPrivateFile(vaultPath, undoBinding.stagedPath, before, MAX_NOTE_MARKDOWN_EDITOR_BYTES);
+    replaceGeneratedNoteExact(
+      vaultPath,
+      resolvePrivateVaultPath(vaultPath, binding.pagePath),
+      resolvePrivateVaultPath(vaultPath, undoBinding.stagedPath),
+      {
+        beforeHash: binding.afterHash,
+        afterHash: binding.beforeHash,
+        maximumBytes: MAX_NOTE_MARKDOWN_EDITOR_BYTES
+      }
+    );
+    persistExactOperation(vaultPath, undo);
+    return {
+      status: "undone",
+      operationId: operation.id,
+      undoOperationId: undo.id,
+      revisionId: binding.beforeHash
+    };
+  }
+
+  recoverIncompleteOperations(): NoteMarkdownEditorActivityRecoveryResult {
+    const vaultPath = this.#activeVaultPath();
+    if (!vaultPath) return { recovered: 0, failed: 0 };
+    let recovered = 0;
+    let failed = 0;
+    for (const operation of readUserPageUpdateOperations(vaultPath)) {
+      const binding = readUserPageUpdateBinding(operation);
+      if (!binding) continue;
+      try {
+        const undoId = createUserPageUpdateUndoOperationId(operation.id);
+        const existing = readOperationOrUndefined(vaultPath, undoId);
+        if (existing) {
+          if (!isMatchingUserPageUpdateUndo(operation, existing)) throw new Error("Invalid Markdown Undo record.");
+          continue;
+        }
+        const undo = createUserPageUpdateUndoOperation(operation, binding);
+        const undoBinding = readUserPageUpdateUndoBinding(undo);
+        if (!undoBinding) throw new Error("Invalid Markdown Undo binding.");
+        const live = readPrivateTextOrUndefined(vaultPath, binding.pagePath, MAX_NOTE_MARKDOWN_EDITOR_BYTES);
+        const undoBefore = readPrivateTextOrUndefined(
+          vaultPath,
+          undoBinding.beforePath,
+          MAX_NOTE_MARKDOWN_EDITOR_BYTES
+        );
+        if (
+          live !== undefined &&
+          hashMarkdown(live) === binding.beforeHash &&
+          undoBefore !== undefined &&
+          hashMarkdown(undoBefore) === binding.afterHash
+        ) {
+          persistExactOperation(vaultPath, undo);
+          recovered += 1;
+        }
+      } catch {
+        failed += 1;
+      }
+    }
+    return { recovered, failed };
+  }
+
+  #activeVaultPath(): string | undefined {
+    const vault = this.#vaults.current();
+    const vaultPath = this.#vaults.activeVaultPath();
+    return vault && vaultPath ? path.resolve(vaultPath) : undefined;
+  }
+}
+
 class StaleMarkdownPageError extends Error {}
 
 function isValidSaveRequest(request: NoteMarkdownEditorSaveRequest): boolean {
@@ -476,6 +695,278 @@ function createUpdateOperation(input: {
     rollbackHint: "Restore the exact private before-image while the current page revision still matches.",
     warnings: []
   });
+}
+
+function readUserPageUpdateBinding(operation: OperationRecord): UserPageUpdateBinding | undefined {
+  const target = operation.targetRefs[0];
+  const before = operation.before;
+  const after = operation.after;
+  if (
+    operation.kind !== "update_page" ||
+    operation.actor.kind !== "user" ||
+    operation.actor.runtimeKind !== "desktop_local" ||
+    operation.sourceRefs.length !== 0 ||
+    operation.targetRefs.length !== 1 ||
+    target?.kind !== "page" ||
+    !PageIdSchema.safeParse(target.id).success ||
+    !isSafePagePath(target.path, target.id) ||
+    before?.kind !== "page" ||
+    !isSha256(before.id) ||
+    before.path !== createUserPageUpdateBeforePath(operation.id) ||
+    after?.kind !== "page" ||
+    !isSha256(after.id) ||
+    after.path !== target.path ||
+    operation.reversible !== "yes" ||
+    operation.jobId !== undefined ||
+    operation.proposalId !== undefined ||
+    operation.modelProfileId !== undefined ||
+    operation.skillId !== undefined ||
+    operation.packageId !== undefined ||
+    operation.policyAudit !== undefined
+  ) return undefined;
+  return {
+    pageId: target.id,
+    pagePath: target.path!,
+    beforeHash: before.id,
+    beforePath: before.path,
+    afterHash: after.id
+  };
+}
+
+function readUserPageUpdateUndoBinding(operation: OperationRecord): {
+  readonly originalOperationId: string;
+  readonly pageId: string;
+  readonly pagePath: string;
+  readonly beforeHash: string;
+  readonly beforePath: string;
+  readonly afterHash: string;
+  readonly stagedPath: string;
+} | undefined {
+  const target = operation.targetRefs[0];
+  const source = operation.sourceRefs[0];
+  const before = operation.before;
+  const after = operation.after;
+  if (
+    operation.kind !== "update_page" ||
+    operation.actor.kind !== "user" ||
+    operation.actor.runtimeKind !== "desktop_local" ||
+    operation.targetRefs.length !== 1 ||
+    target?.kind !== "page" ||
+    !PageIdSchema.safeParse(target.id).success ||
+    !isSafePagePath(target.path, target.id) ||
+    operation.sourceRefs.length !== 1 ||
+    source?.kind !== "operation" ||
+    !/^op_\d{8}_[a-z0-9]{8,}$/u.test(source.id) ||
+    operation.id !== createUserPageUpdateUndoOperationId(source.id) ||
+    before?.kind !== "page" ||
+    !isSha256(before.id) ||
+    before.path !== createUserPageUpdateBeforePath(operation.id) ||
+    after?.kind !== "page" ||
+    !isSha256(after.id) ||
+    after.path !== target.path ||
+    operation.reversible !== "best_effort"
+  ) return undefined;
+  return {
+    originalOperationId: source.id,
+    pageId: target.id,
+    pagePath: target.path!,
+    beforeHash: before.id,
+    beforePath: before.path,
+    afterHash: after.id,
+    stagedPath: createUserPageUpdateStagedPath(operation.id)
+  };
+}
+
+function createUserPageUpdateUndoOperation(
+  original: OperationRecord,
+  binding: UserPageUpdateBinding
+): OperationRecord {
+  const operationId = createUserPageUpdateUndoOperationId(original.id);
+  return OperationRecordSchema.parse({
+    id: operationId,
+    schemaVersion: 1,
+    createdAt: new Date().toISOString(),
+    actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+    kind: "update_page",
+    targetRefs: [{ kind: "page", id: binding.pageId, path: binding.pagePath }],
+    sourceRefs: [{ kind: "operation", id: original.id }],
+    before: { kind: "page", id: binding.afterHash, path: createUserPageUpdateBeforePath(operationId) },
+    after: { kind: "page", id: binding.beforeHash, path: binding.pagePath },
+    summary: "Restored a Markdown knowledge page through a forward user update.",
+    reversible: "best_effort",
+    rollbackHint: "Create another user edit only while the restored page revision remains current.",
+    warnings: []
+  });
+}
+
+function isMatchingUserPageUpdateUndo(original: OperationRecord, candidate: OperationRecord): boolean {
+  const originalBinding = readUserPageUpdateBinding(original);
+  const undoBinding = readUserPageUpdateUndoBinding(candidate);
+  return !!originalBinding && !!undoBinding &&
+    undoBinding.originalOperationId === original.id &&
+    undoBinding.pageId === originalBinding.pageId &&
+    undoBinding.pagePath === originalBinding.pagePath &&
+    undoBinding.beforeHash === originalBinding.afterHash &&
+    undoBinding.afterHash === originalBinding.beforeHash;
+}
+
+function createUserPageUpdateUndoOperationId(operationId: string): string {
+  const dateKey = /^op_(\d{8})_[a-z0-9]{8,}$/u.exec(operationId)?.[1];
+  if (!dateKey) throw new Error("The Markdown Activity operation identity is invalid.");
+  const suffix = createHash("sha256")
+    .update(`pige.note-markdown-editor.undo.v1\0${operationId}`, "utf8")
+    .digest("hex")
+    .slice(0, 16);
+  return `op_${dateKey}_${suffix}`;
+}
+
+function createUserPageUpdateBeforePath(operationId: string): string {
+  const dateKey = /^op_(\d{8})_[a-z0-9]{8,}$/u.exec(operationId)?.[1];
+  if (!dateKey) throw new Error("The Markdown Activity operation identity is invalid.");
+  return `.pige/operations/${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}/${operationId}.before.md`;
+}
+
+function createUserPageUpdateStagedPath(operationId: string): string {
+  const dateKey = /^op_(\d{8})_[a-z0-9]{8,}$/u.exec(operationId)?.[1];
+  if (!dateKey) throw new Error("The Markdown Activity operation identity is invalid.");
+  return `.pige/operations/${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}/${operationId}.after.pending.md`;
+}
+
+function persistExactPrivateFile(
+  vaultPath: string,
+  relativePath: string,
+  content: string,
+  maximumBytes: number
+): void {
+  if (Buffer.byteLength(content, "utf8") > maximumBytes) {
+    throw new Error("The Markdown Activity private file exceeds its bound.");
+  }
+  const filePath = resolvePrivateVaultPath(vaultPath, relativePath);
+  const result = createGeneratedNoteExclusive(vaultPath, filePath, content);
+  if (result === "exists") {
+    const existing = readGeneratedNoteExact(vaultPath, filePath, maximumBytes);
+    if (existing !== content) throw new Error("The Markdown Activity private identity is occupied.");
+  }
+}
+
+function requireExactPrivateFile(
+  vaultPath: string,
+  relativePath: string,
+  expectedHash: string,
+  maximumBytes: number
+): string {
+  const content = readPrivateTextOrUndefined(vaultPath, relativePath, maximumBytes);
+  if (content === undefined || hashMarkdown(content) !== expectedHash) {
+    throw new Error("The Markdown Activity private file is missing or changed.");
+  }
+  return content;
+}
+
+function persistExactOperation(vaultPath: string, operation: OperationRecord): void {
+  const serialized = `${JSON.stringify(OperationRecordSchema.parse(operation), null, 2)}\n`;
+  persistExactPrivateFile(vaultPath, operationRelativePath(operation.id), serialized, MAX_OPERATION_BYTES);
+  const current = readOperationOrUndefined(vaultPath, operation.id);
+  if (!current || stableJson(current) !== stableJson(operation)) {
+    throw new Error("The Markdown Activity Operation could not be adopted exactly.");
+  }
+}
+
+function readOperationOrUndefined(vaultPath: string, operationId: string): OperationRecord | undefined {
+  const content = readPrivateTextOrUndefined(vaultPath, operationRelativePath(operationId), MAX_OPERATION_BYTES);
+  if (content === undefined) return undefined;
+  try {
+    return OperationRecordSchema.parse(JSON.parse(content));
+  } catch {
+    throw new Error("The Markdown Activity Operation is malformed.");
+  }
+}
+
+function readUserPageUpdateOperations(vaultPath: string): readonly OperationRecord[] {
+  const root = resolvePrivateVaultPath(vaultPath, ".pige/operations");
+  if (!pathStillExists(root)) return [];
+  const operations: OperationRecord[] = [];
+  for (const year of readSafeDirectories(root, /^\d{4}$/u)) {
+    for (const month of readSafeDirectories(path.join(root, year), /^\d{2}$/u)) {
+      const directory = path.join(root, year, month);
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        if (!entry.isFile() || !/^op_\d{8}_[a-z0-9]{8,}\.json$/u.test(entry.name)) continue;
+        try {
+          const operation = readOperationOrUndefined(vaultPath, entry.name.slice(0, -5));
+          if (operation && readUserPageUpdateBinding(operation)) operations.push(operation);
+        } catch {
+          // A malformed record cannot gain recovery authority.
+        }
+      }
+    }
+  }
+  return operations;
+}
+
+function readSafeDirectories(root: string, namePattern: RegExp): readonly string[] {
+  const rootStat = fs.lstatSync(root);
+  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) throw new Error("Unsafe Activity directory.");
+  return fs.readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink() && namePattern.test(entry.name))
+    .map((entry) => entry.name)
+    .sort((left, right) => left.localeCompare(right, "en-US"));
+}
+
+function readPrivateTextOrUndefined(
+  vaultPath: string,
+  relativePath: string,
+  maximumBytes: number
+): string | undefined {
+  try {
+    return readGeneratedNoteExact(vaultPath, resolvePrivateVaultPath(vaultPath, relativePath), maximumBytes);
+  } catch {
+    return undefined;
+  }
+}
+
+function operationRelativePath(operationId: string): string {
+  const dateKey = /^op_(\d{8})_[a-z0-9]{8,}$/u.exec(operationId)?.[1];
+  if (!dateKey) throw new Error("The Markdown Activity operation identity is invalid.");
+  return `.pige/operations/${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}/${operationId}.json`;
+}
+
+function resolvePrivateVaultPath(vaultPath: string, relativePath: string): string {
+  if (
+    path.isAbsolute(relativePath) ||
+    relativePath.includes("\\") ||
+    relativePath.split("/").some((segment) => !segment || segment === "." || segment === "..")
+  ) throw new Error("The Markdown Activity path is invalid.");
+  const root = path.resolve(vaultPath);
+  const resolved = path.resolve(root, ...relativePath.split("/"));
+  if (!resolved.startsWith(`${root}${path.sep}`)) throw new Error("The Markdown Activity path escaped its vault.");
+  return resolved;
+}
+
+function isSafePagePath(value: string | undefined, pageId: string): value is string {
+  if (!value || !/^(?:wiki|sources)\/.+\.md$/u.test(value)) return false;
+  if (value.includes("\\") || value.split("/").some((part) => !part || part === "." || part === "..")) return false;
+  return path.posix.basename(value).length > 3 && PageIdSchema.safeParse(pageId).success;
+}
+
+function safePageTitle(markdown: string, pageId: string): string | undefined {
+  const frontmatter = parsePigeFrontmatter(markdown)?.frontmatter;
+  return frontmatter?.id === pageId && isNonemptyBoundedString(frontmatter.title, 256)
+    ? frontmatter.title.replace(/\s+/gu, " ").trim()
+    : undefined;
+}
+
+function isSha256(value: string): boolean {
+  return /^sha256:[a-f0-9]{64}$/u.test(value);
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right, "en-US"))
+      .map(([key, child]) => `${JSON.stringify(key)}:${stableJson(child)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function createOperationId(
