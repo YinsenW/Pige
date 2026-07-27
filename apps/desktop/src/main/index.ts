@@ -1258,7 +1258,7 @@ const getLocalSemanticRetrievalService = (): LocalSemanticRetrievalService => {
     localSemanticRetrievalService = new LocalSemanticRetrievalService({
       appDataRoot: app.getPath("userData")
     });
-    localSemanticRetrievalService.recover();
+    void localSemanticRetrievalService.recover();
   }
   return localSemanticRetrievalService;
 };

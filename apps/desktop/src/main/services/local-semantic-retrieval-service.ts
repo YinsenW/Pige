@@ -94,7 +94,7 @@ export class LocalSemanticRetrievalService {
     return { apiVersion: 1, requestId: request.requestId, revision: accepted.revision, status: "accepted", jobId };
   }
 
-  enable(request: LocalSemanticRetrievalEnableRequest): LocalSemanticRetrievalEnableResult {
+  async enable(request: LocalSemanticRetrievalEnableRequest): Promise<LocalSemanticRetrievalEnableResult> {
     const record = this.#read();
     const prior = receiptFor(record, request.requestId, "enable");
     if (prior) return mutationResult(request, prior.revision, prior.status as "committed" | "already_enabled");
@@ -107,7 +107,7 @@ export class LocalSemanticRetrievalService {
       return this.#recordMutation(record, request, "enable", "already_enabled");
     }
     try {
-      this.#verifiedBinding = this.#store.verify();
+      this.#verifiedBinding = await this.#store.verify();
       return this.#recordMutation(record, request, "enable", "committed", "ready");
     } catch {
       this.#verifiedBinding = undefined;
@@ -157,7 +157,7 @@ export class LocalSemanticRetrievalService {
     return record.state === "ready" && this.#store.stillMatches(this.#verifiedBinding);
   }
 
-  recover(): void {
+  async recover(): Promise<void> {
     let record: LocalSemanticAssetRecord;
     try { record = this.#read(); } catch {
       this.#verifiedBinding = undefined;
@@ -170,7 +170,7 @@ export class LocalSemanticRetrievalService {
         this.#store.discardStaging();
         return;
       }
-      this.#verifiedBinding = this.#store.verify();
+      this.#verifiedBinding = await this.#store.verify();
       if (record.state === "installing" || record.state === "verifying" || record.state === "needs_repair") {
         record = nextRecord(record, this.#now(), { state: "ready", receipts: record.receipts });
         this.#store.write(record);
@@ -191,8 +191,8 @@ export class LocalSemanticRetrievalService {
       if (!sameActiveInstall(installing, requestId, jobId)) throw new Error("Install ownership changed.");
       const verifying = nextRecord(installing, this.#now(), { state: "verifying", receipts: installing.receipts });
       this.#store.write(verifying);
-      this.#store.verify(stagingPath);
-      this.#verifiedBinding = this.#store.publish(stagingPath);
+      await this.#store.verify(stagingPath);
+      this.#verifiedBinding = await this.#store.publish(stagingPath);
       const current = this.#read();
       if (!sameActiveInstall(current, requestId, jobId)) throw new Error("Install ownership changed.");
       this.#store.write(nextRecord(current, this.#now(), { state: "ready", receipts: current.receipts }));

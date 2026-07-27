@@ -32,7 +32,7 @@ class FakeAssetStore implements LocalSemanticRetrievalAssetStorePort {
   read(): LocalSemanticAssetRecord { return structuredClone(this.record); }
   write(record: LocalSemanticAssetRecord): void { this.record = structuredClone(record); }
   createStagingPath(requestId: string): string { return `/private/pige/staging/${requestId}.download`; }
-  verify(pathInput?: string): VerifiedLocalSemanticAsset {
+  async verify(pathInput?: string): Promise<VerifiedLocalSemanticAsset> {
     if (pathInput?.includes("staging")) {
       if (!this.stagingValid) throw new Error("invalid staging");
       return { ...this.binding, path: pathInput };
@@ -43,7 +43,7 @@ class FakeAssetStore implements LocalSemanticRetrievalAssetStorePort {
   stillMatches(binding: VerifiedLocalSemanticAsset | undefined): boolean {
     return this.assetPresent && this.bindingMatches && binding?.ino === this.binding.ino;
   }
-  publish(): VerifiedLocalSemanticAsset {
+  async publish(): Promise<VerifiedLocalSemanticAsset> {
     if (!this.stagingValid) throw new Error("invalid staging");
     this.assetPresent = true;
     this.bindingMatches = true;
@@ -82,10 +82,10 @@ describe("LocalSemanticRetrievalService", () => {
     expect(JSON.stringify(service.status(STATUS_REQUEST))).not.toMatch(/sha256|huggingface|\.gguf|private/u);
   });
 
-  it("enforces revision CAS while disable, enable, and remove preserve lexical fallback", () => {
+  it("enforces revision CAS while disable, enable, and remove preserve lexical fallback", async () => {
     const store = readyStore();
     const service = makeService(store);
-    service.recover();
+    await service.recover();
 
     expect(service.disable(request("disable000000001", 99))).toMatchObject({ status: "stale", revision: 0 });
     const disabled = service.disable(request("disable000000002", store.record.revision));
@@ -93,7 +93,7 @@ describe("LocalSemanticRetrievalService", () => {
     expect(service.status(STATUS_REQUEST)).toMatchObject({ assetState: "disabled", lexicalSearchRemainsAvailable: true });
     expect(service.embeddingModelInstalled()).toBe(false);
 
-    const enabled = service.enable(request("enable0000000001", store.record.revision));
+    const enabled = await service.enable(request("enable0000000001", store.record.revision));
     expect(enabled.status).toBe("committed");
     expect(service.embeddingModelInstalled()).toBe(true);
     const removed = service.remove(request("remove0000000001", store.record.revision));
@@ -101,17 +101,17 @@ describe("LocalSemanticRetrievalService", () => {
     expect(service.status(STATUS_REQUEST)).toMatchObject({ assetState: "not_installed", lexicalSearchRemainsAvailable: true });
   });
 
-  it("adopts a verified published asset after restart and fails corrupt bytes closed", () => {
+  it("adopts a verified published asset after restart and fails corrupt bytes closed", async () => {
     const adoptedStore = readyStore("verifying");
     const adopted = makeService(adoptedStore);
-    adopted.recover();
+    await adopted.recover();
     expect(adopted.status(STATUS_REQUEST).assetState).toBe("ready");
     expect(adopted.embeddingModelInstalled()).toBe(true);
 
     const corruptStore = readyStore();
     corruptStore.assetPresent = false;
     const corrupt = makeService(corruptStore);
-    corrupt.recover();
+    await corrupt.recover();
     expect(corrupt.status(STATUS_REQUEST)).toMatchObject({ assetState: "needs_repair", lexicalSearchRemainsAvailable: true });
     expect(corrupt.embeddingModelInstalled()).toBe(false);
   });

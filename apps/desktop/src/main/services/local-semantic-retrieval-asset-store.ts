@@ -47,9 +47,9 @@ export interface LocalSemanticRetrievalAssetStorePort {
   read(now: string): LocalSemanticAssetRecord;
   write(record: LocalSemanticAssetRecord): void;
   createStagingPath(requestId: string): string;
-  verify(pathInput?: string): VerifiedLocalSemanticAsset;
+  verify(pathInput?: string): Promise<VerifiedLocalSemanticAsset>;
   stillMatches(binding: VerifiedLocalSemanticAsset | undefined): boolean;
-  publish(stagingPath: string): VerifiedLocalSemanticAsset;
+  publish(stagingPath: string): Promise<VerifiedLocalSemanticAsset>;
   removeAsset(): void;
   discardStaging(): void;
   assetPath(): string;
@@ -117,10 +117,10 @@ export class LocalSemanticRetrievalAssetStore implements LocalSemanticRetrievalA
     return path.join(this.#stagingRoot, `${requestId}.${randomUUID()}.download`);
   }
 
-  verify(pathInput = this.assetPath()): VerifiedLocalSemanticAsset {
-    const descriptor = fs.openSync(pathInput, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  async verify(pathInput = this.assetPath()): Promise<VerifiedLocalSemanticAsset> {
+    const descriptor = await fs.promises.open(pathInput, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
     try {
-      const before = fs.fstatSync(descriptor);
+      const before = await descriptor.stat();
       if (!before.isFile() || before.size !== LOCAL_SEMANTIC_RETRIEVAL_ASSET_BYTES) {
         throw new Error("Local semantic asset size is invalid.");
       }
@@ -128,12 +128,14 @@ export class LocalSemanticRetrievalAssetStore implements LocalSemanticRetrievalA
       const buffer = Buffer.allocUnsafe(1024 * 1024);
       let position = 0;
       while (position < before.size) {
-        const bytesRead = fs.readSync(descriptor, buffer, 0, Math.min(buffer.length, before.size - position), position);
+        const { bytesRead } = await descriptor.read(
+          buffer, 0, Math.min(buffer.length, before.size - position), position
+        );
         if (bytesRead <= 0) throw new Error("Local semantic asset ended unexpectedly.");
         hash.update(buffer.subarray(0, bytesRead));
         position += bytesRead;
       }
-      const after = fs.fstatSync(descriptor);
+      const after = await descriptor.stat();
       if (!sameStat(before, after)) throw new Error("Local semantic asset changed during verification.");
       if (`sha256:${hash.digest("hex")}` !== LOCAL_SEMANTIC_RETRIEVAL_ASSET_SHA256) {
         throw new Error("Local semantic asset checksum is invalid.");
@@ -146,7 +148,7 @@ export class LocalSemanticRetrievalAssetStore implements LocalSemanticRetrievalA
         mtimeMs: after.mtimeMs
       };
     } finally {
-      fs.closeSync(descriptor);
+      await descriptor.close();
     }
   }
 
@@ -161,10 +163,10 @@ export class LocalSemanticRetrievalAssetStore implements LocalSemanticRetrievalA
     }
   }
 
-  publish(stagingPath: string): VerifiedLocalSemanticAsset {
+  async publish(stagingPath: string): Promise<VerifiedLocalSemanticAsset> {
     const resolved = path.resolve(stagingPath);
     if (!resolved.startsWith(`${this.#stagingRoot}${path.sep}`)) throw new Error("Asset staging escaped its owner.");
-    const verified = this.verify(resolved);
+    await this.verify(resolved);
     if (fs.existsSync(this.assetPath())) fs.rmSync(this.assetPath(), { force: true });
     fs.renameSync(resolved, this.assetPath());
     fsyncDirectory(this.#assetRoot);
