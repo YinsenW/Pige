@@ -615,8 +615,8 @@ Build:
 - [B7.08 -> E7.03] Conversation-history browsing and job references.
 - [B7.09 -> E7.04] Conversation-retention compaction for successful job detail.
 - [B7.10 -> E7.06] Managed Collections with typed fields, views, relations/formulas, and
-  reversible Agent row/schema/view Activity/Undo. Foundation: same Dataset, CAS cell edit or
-  eligible default-row append with revision/Operation/Undo; rest stays open.
+  reversible Agent row/schema/view Activity/Undo. Foundation: same Dataset, CAS cell edit,
+  eligible default-row append or nullable typed-field add with revision/Operation/Undo; rest stays open.
 
 Deferred from this phase:
 

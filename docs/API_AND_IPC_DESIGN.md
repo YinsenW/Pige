@@ -442,7 +442,7 @@ base hash or Operation internals.
 
 #### 6.4.1 Knowledge Activity And Undo
 
-`activity.list` may project `{kind:"collection",datasetId,tableId,revisionId}` for cell/row
+`activity.list` may project `{kind:"collection",datasetId,tableId,revisionId}` for cell/row/column
 updates. `activity.undo` binds its exact revision and writes forward or returns stale; page
 Undo and the body/path/hash ban remain.
 
@@ -513,22 +513,20 @@ and commands `readerSelection.submitAction`, `readerSelection.submitTransform`,
 
 Current Home Dataset read boundary:
 
-- Existing `agent.submitTurn` may return one bounded Dataset result preview and exact
-  Dataset citation after Pi selects the typed local query tool; `agent.conversation`
-  restores that checksum-bound result after restart. Renderer receives display columns,
-  bounded typed rows, counts, truncation, and citations—not paths, database handles, SQL,
-  query-engine metadata, payload bytes, or whole tables.
-- Main binds vault, manifest/revision/schema/payload and source privacy revision; corrupt,
-  unsafe or stale evidence fails closed before another model turn.
+- After Pi selects the typed query tool, `agent.submitTurn` may return one bounded Dataset
+  preview/citation; `agent.conversation` restores it checksum-bound. Renderer gets display
+  columns, bounded rows/counts/truncation/citations, never storage or query internals.
 - `collections.open` binds request/vault/Dataset/table and returns `ready | stale |
   not_found | failed`; ready is current, <=32 columns, 50 rows, 4 KiB/string and 64 KiB total.
-- `collections.editCell` binds expected revision/row/column/scalar; committed returns revision/
-  Operation, while stale, missing, formula/type/value and failure outcomes are closed.
-- `collections.appendDefaultRow` binds only expected revision. Main sets
-  `canAppendDefaultRow` when the full table accepts deterministic nulls, creates row ID,
-  and returns committed row/Operation/snapshot, stale snapshot or `not_found`.
-- Renderer sends no default values/row ID. Results expose no source/path/hash/payload/formula/
-  SQL/engine/query plan/raw error/value; deletion, schema, formulas, views and relations stay open.
+- `collections.editCell` binds revision/row/column/scalar. `appendDefaultRow` binds only the
+  revision; `canAppendDefaultRow` gates eligibility and Main creates the row ID. Both return
+  closed committed/stale/missing/invalid outcomes with authoritative identities or snapshot.
+- `collections.addNullableColumn` binds expected revision, bounded label and one of string/
+  integer/number/boolean/date/datetime. Main gates `canAddColumn`, creates column ID and null
+  cells; committed returns column/Operation/snapshot, stale returns snapshot, and duplicate,
+  limit or type invalidity fails closed.
+- Main fences vault/manifest/revision/schema/payload. Renderer sends no generated ID, default or
+  formula; results expose no source/storage/query/error/value internals. Broader schema stays open.
 
 ### 6.6 Retrieval
 
