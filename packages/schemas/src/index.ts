@@ -811,21 +811,34 @@ export const KnowledgeActivityPageTargetSchema = z.object({
   pageId: PageIdSchema
 }).strict();
 
+export const KnowledgeActivityCollectionTargetSchema = z.object({
+  kind: z.literal("collection"),
+  datasetId: z.string().regex(/^dataset_\d{8}_[a-z0-9]{12,}$/),
+  tableId: z.string().regex(/^table_[a-z0-9]{12,}$/),
+  revisionId: z.string().regex(/^dataset_rev_\d{8}_[a-z0-9]{12,}$/)
+}).strict();
+
+export const KnowledgeActivityTargetSchema = z.union([
+  KnowledgeActivityPageTargetSchema,
+  KnowledgeActivityCollectionTargetSchema
+]);
+
 export const KnowledgeActivityListRequestSchema = z.object({
   limit: z.number().int().min(1).max(20).optional()
 }).strict();
 
 export const KnowledgeActivitySummarySchema = z.object({
   operationId: OperationIdSchema,
-  kind: z.enum(["create_page", "update_page"]),
+  kind: z.enum(["create_page", "update_page", "update_collection_cell"]),
   createdAt: z.string().datetime({ offset: true }),
   targetLabel: z.string().min(1).max(120).optional(),
-  target: KnowledgeActivityPageTargetSchema.optional(),
+  target: KnowledgeActivityTargetSchema.optional(),
   status: z.enum(["applied", "undone"]),
   canUndo: z.boolean(),
   undoUnavailableReason: z.enum([
     "already_undone",
     "content_changed",
+    "revision_changed",
     "legacy_record",
     "target_missing"
   ]).optional()
@@ -1970,8 +1983,36 @@ export const DatasetRevisionSchema = z.object({
   }).strict(),
   warnings: z.array(z.string().min(1).max(160)).max(64),
   operationId: OperationIdSchema,
+  change: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("initial_import") }).strict(),
+    z.object({
+      kind: z.literal("collection_cell_edit"),
+      tableId: TableIdSchema,
+      rowId: RowIdSchema,
+      columnId: ColumnIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_cell_undo"),
+      tableId: TableIdSchema,
+      rowId: RowIdSchema,
+      columnId: ColumnIdSchema,
+      undoOfOperationId: OperationIdSchema
+    }).strict()
+  ]).optional(),
   createdAt: z.string().datetime({ offset: true })
-}).passthrough();
+}).passthrough().superRefine((revision, context) => {
+  if (
+    revision.change?.kind !== undefined &&
+    revision.change.kind !== "initial_import" &&
+    revision.payload.path !== `data/revisions/${revision.id}.sqlite`
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["payload", "path"],
+      message: "Collection mutations require a unique revision-bound SQLite payload."
+    });
+  }
+});
 
 export const DatasetManifestSchema = z.object({
   format: z.literal("pige-dataset"),
@@ -1980,6 +2021,7 @@ export const DatasetManifestSchema = z.object({
   profile: z.literal("managed_collection"),
   title: z.string().min(1).max(240),
   sourceId: SourceIdSchema,
+  initialRevision: DatasetRevisionIdSchema.optional(),
   activeRevision: DatasetRevisionIdSchema,
   revision: DatasetFileRefSchema,
   schema: DatasetFileRefSchema,
@@ -2011,6 +2053,155 @@ export const DatasetQueryScalarSchema = z.union([
   z.number().finite(),
   z.boolean(),
   z.null()
+]);
+
+export const CollectionRequestIdSchema = z.string().regex(/^collection_request_[a-z0-9]{16,64}$/);
+export const CollectionScalarValueSchema = DatasetQueryScalarSchema;
+export const CollectionCellReadOnlyReasonSchema = z.enum(["formula", "unsupported_type"]);
+
+export const CollectionColumnSummarySchema = z.object({
+  columnId: DatasetQueryColumnIdSchema,
+  label: z.string().min(1).max(512),
+  logicalType: DatasetLogicalTypeSchema
+}).strict();
+
+export const CollectionCellSchema = z.object({
+  columnId: DatasetQueryColumnIdSchema,
+  value: CollectionScalarValueSchema,
+  editable: z.boolean(),
+  readOnlyReason: CollectionCellReadOnlyReasonSchema.optional()
+}).strict().superRefine((cell, context) => {
+  if (cell.editable === (cell.readOnlyReason !== undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: ["readOnlyReason"],
+      message: "Collection cells require a read-only reason exactly when they are not editable."
+    });
+  }
+});
+
+export const CollectionRowSchema = z.object({
+  rowId: DatasetQueryRowIdSchema,
+  cells: z.array(CollectionCellSchema).max(32)
+}).strict();
+
+export const CollectionSnapshotSchema = z.object({
+  datasetId: DatasetQueryDatasetIdSchema,
+  revisionId: DatasetQueryRevisionIdSchema,
+  title: z.string().min(1).max(240),
+  tableId: DatasetQueryTableIdSchema,
+  tableName: z.string().min(1).max(512),
+  columns: z.array(CollectionColumnSummarySchema).min(1).max(32),
+  rows: z.array(CollectionRowSchema).max(50),
+  totalRowCount: DatasetQueryCountSchema,
+  returnedRowCount: DatasetQueryCountSchema,
+  truncated: z.boolean()
+}).strict().superRefine((snapshot, context) => {
+  if (snapshot.returnedRowCount !== snapshot.rows.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["returnedRowCount"],
+      message: "Collection returnedRowCount must match the number of projected rows."
+    });
+  }
+  if (snapshot.totalRowCount < snapshot.returnedRowCount) {
+    context.addIssue({
+      code: "custom",
+      path: ["totalRowCount"],
+      message: "Collection totalRowCount must include every projected row."
+    });
+  }
+  if (snapshot.truncated !== (snapshot.totalRowCount > snapshot.returnedRowCount)) {
+    context.addIssue({
+      code: "custom",
+      path: ["truncated"],
+      message: "Collection truncation must agree with total and returned row counts."
+    });
+  }
+  if (new TextEncoder().encode(JSON.stringify(snapshot)).byteLength > 64 * 1024) {
+    context.addIssue({
+      code: "custom",
+      message: "Collection snapshots must not exceed 64 KiB."
+    });
+  }
+});
+
+export const CollectionOpenRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema
+}).strict();
+
+const CollectionResultIdentitySchema = CollectionOpenRequestSchema.pick({
+  apiVersion: true,
+  requestId: true,
+  activeVaultId: true,
+  datasetId: true,
+  tableId: true
+});
+
+export const CollectionOpenResultSchema = z.discriminatedUnion("status", [
+  CollectionResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  CollectionResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+
+export const CollectionCellEditRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  rowId: DatasetQueryRowIdSchema,
+  columnId: DatasetQueryColumnIdSchema,
+  value: CollectionScalarValueSchema
+}).strict().superRefine((request, context) => {
+  if (typeof request.value === "string" && new TextEncoder().encode(request.value).byteLength > 4096) {
+    context.addIssue({
+      code: "custom",
+      path: ["value"],
+      message: "Collection string values must not exceed 4 KiB."
+    });
+  }
+});
+
+const CollectionEditResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  rowId: DatasetQueryRowIdSchema,
+  columnId: DatasetQueryColumnIdSchema
+}).strict();
+
+export const CollectionCellEditResultSchema = z.discriminatedUnion("status", [
+  CollectionEditResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    revisionId: DatasetQueryRevisionIdSchema,
+    operationId: OperationIdSchema
+  }).strict(),
+  CollectionEditResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    currentRevisionId: DatasetQueryRevisionIdSchema
+  }).strict(),
+  CollectionEditResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionEditResultIdentitySchema.extend({
+    status: z.literal("not_editable"),
+    reason: CollectionCellReadOnlyReasonSchema
+  }).strict(),
+  CollectionEditResultIdentitySchema.extend({
+    status: z.literal("invalid"),
+    reason: z.enum(["type_mismatch", "value_too_large"])
+  }).strict(),
+  CollectionEditResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 
 const DatasetEvidenceRangeSchema = z.object({
@@ -2395,6 +2586,8 @@ export const JobRefSchema = z.object({
     "dataset",
     "dataset_revision",
     "table",
+    "row",
+    "column",
     "page",
     "conversation",
     "proposal",
@@ -3285,6 +3478,7 @@ export const OperationRecordSchema = z.object({
     "restore_source_asset",
     "create_artifact",
     "create_dataset_revision",
+    "update_collection_cell",
     "trash_artifact",
     "restore_artifact",
     "create_page",
@@ -3754,6 +3948,17 @@ export type CaptureFileRejectionReason = z.output<typeof CaptureFileRejectionRea
 export type AgentAnswerCitation = z.infer<typeof AgentAnswerCitationSchema>;
 export type DatasetAnswerCitation = z.infer<typeof DatasetAnswerCitationSchema>;
 export type DatasetColumn = z.infer<typeof DatasetColumnSchema>;
+export type CollectionCell = z.infer<typeof CollectionCellSchema>;
+export type CollectionCellEditRequest = z.infer<typeof CollectionCellEditRequestSchema>;
+export type CollectionCellEditResult = z.infer<typeof CollectionCellEditResultSchema>;
+export type CollectionCellReadOnlyReason = z.infer<typeof CollectionCellReadOnlyReasonSchema>;
+export type CollectionColumnSummary = z.infer<typeof CollectionColumnSummarySchema>;
+export type CollectionOpenRequest = z.infer<typeof CollectionOpenRequestSchema>;
+export type CollectionOpenResult = z.infer<typeof CollectionOpenResultSchema>;
+export type CollectionRequestId = z.infer<typeof CollectionRequestIdSchema>;
+export type CollectionRow = z.infer<typeof CollectionRowSchema>;
+export type CollectionScalarValue = z.infer<typeof CollectionScalarValueSchema>;
+export type CollectionSnapshot = z.infer<typeof CollectionSnapshotSchema>;
 export type DatasetEvidenceRef = z.infer<typeof DatasetEvidenceRefSchema>;
 export type DatasetLogicalType = z.infer<typeof DatasetLogicalTypeSchema>;
 export type DatasetManifest = z.infer<typeof DatasetManifestSchema>;
@@ -3785,6 +3990,8 @@ export type HighRiskConfirmationTarget = z.infer<typeof HighRiskConfirmationTarg
 export type HighRiskEffect = z.infer<typeof HighRiskEffectSchema>;
 export type RendererSafeSubjectLabel = z.infer<typeof RendererSafeSubjectLabelSchema>;
 export type KnowledgeActivityPageTarget = z.infer<typeof KnowledgeActivityPageTargetSchema>;
+export type KnowledgeActivityCollectionTarget = z.infer<typeof KnowledgeActivityCollectionTargetSchema>;
+export type KnowledgeActivityTarget = z.infer<typeof KnowledgeActivityTargetSchema>;
 export type KnowledgeActivitySummary = z.infer<typeof KnowledgeActivitySummarySchema>;
 export type KnowledgeActivityListRequest = z.infer<typeof KnowledgeActivityListRequestSchema>;
 export type KnowledgeActivityListResult = z.infer<typeof KnowledgeActivityListResultSchema>;

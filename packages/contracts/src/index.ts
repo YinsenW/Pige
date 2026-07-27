@@ -659,6 +659,7 @@ export interface KnowledgeActivityListRequest {
 export type KnowledgeActivityUndoUnavailableReason =
   | "already_undone"
   | "content_changed"
+  | "revision_changed"
   | "legacy_record"
   | "target_missing";
 
@@ -667,12 +668,21 @@ export interface KnowledgeActivityPageTarget {
   readonly pageId: string;
 }
 
+export interface KnowledgeActivityCollectionTarget {
+  readonly kind: "collection";
+  readonly datasetId: string;
+  readonly tableId: string;
+  readonly revisionId: string;
+}
+
+export type KnowledgeActivityTarget = KnowledgeActivityPageTarget | KnowledgeActivityCollectionTarget;
+
 export interface KnowledgeActivitySummary {
   readonly operationId: string;
-  readonly kind: "create_page" | "update_page";
+  readonly kind: "create_page" | "update_page" | "update_collection_cell";
   readonly createdAt: string;
   readonly targetLabel?: string;
-  readonly target?: KnowledgeActivityPageTarget;
+  readonly target?: KnowledgeActivityTarget;
   readonly status: "applied" | "undone";
   readonly canUndo: boolean;
   readonly undoUnavailableReason?: KnowledgeActivityUndoUnavailableReason;
@@ -688,12 +698,15 @@ export interface KnowledgeActivityListResult {
 
 export interface KnowledgeActivityUndoRequest {
   readonly operationId: string;
+  readonly expectedRevisionId?: string;
 }
 
 export interface KnowledgeActivityUndoResult {
-  readonly status: "undone" | "already_undone";
+  readonly status: "undone" | "already_undone" | "stale" | "not_found";
   readonly operationId: string;
-  readonly undoOperationId: string;
+  readonly undoOperationId?: string;
+  readonly revisionId?: string;
+  readonly currentRevisionId?: string;
 }
 
 export interface ProposalsListRequest {

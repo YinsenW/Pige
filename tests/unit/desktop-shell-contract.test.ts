@@ -935,7 +935,11 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('"activity.list",');
     expect(preloadSource).toContain("KnowledgeActivityListResultSchema.parse");
     expect(preloadSource).toContain('ipcRenderer.invoke("activity.undo", request)');
-    expect(contractsSource).toContain('readonly kind: "create_page" | "update_page";');
+    expect(contractsSource).toContain(
+      'readonly kind: "create_page" | "update_page" | "update_collection_cell";'
+    );
+    expect(contractsSource).toContain("export interface KnowledgeActivityCollectionTarget");
+    expect(contractsSource).toContain("readonly expectedRevisionId?: string;");
     expect(rendererSource).toContain('window.pige.activity.list({ limit: 20 })');
     expect(rendererSource).toContain('className="settings-page settings-history-page"');
     expect(rendererSource).toContain('activity.kind === "update_page"');
