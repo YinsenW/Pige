@@ -1028,31 +1028,16 @@ mechanical; no Settings mode, argv/output/reason, second prompt, or restyle.
 ### Agent And Memory Settings
 
 ```txt
-Memory
-
-Status
-Agent Memory: On
-Vault-scoped memory: 12 active memories
-
-Recent
-Prefers concise source summaries
-  Learned from accepted correction
-  Disable  Delete
-
-Use memory for
-[x] Capture and summarization style
-[x] Note naming and linking conventions
-[x] Autonomous organization style
-[x] Avoiding repeated Agent mistakes
-
-Controls
-Inspect Memory
-Export Memory
-Reset Memory
+Remembered preferences
+Concise source summaries
+  Keep source summaries concise and preserve citations.
+  Preference · Active · Explicit request · Disable
 ```
 
-Show what Pige remembers, why/from where, and disable/delete/Undo. Secret-scanned scoped
-memory grows autonomously; sensitive/authority changes intervene.
+Load the strict active-vault summary. Show only bounded content/status/time and safe
+provenance; never private IDs. Exact revision CAS disables, adopts returned state, and
+uses body-free stale/not-found copy. No autonomous/edit/re-enable/delete/export/reset
+control ships in this slice; the fuller v0.1 lifecycle remains planned.
 
 ### Skills Settings
 

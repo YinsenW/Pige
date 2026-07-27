@@ -108,6 +108,10 @@ import type {
   TaskInteractionOpenResult,
   TaskInteractionPendingResult,
   SkillDisableRequest,
+  MemoryDisableRequest,
+  MemoryListRequest,
+  MemoryMutationResult,
+  MemorySummary,
   SkillRegistryMutationResult,
   SkillRegistryQueryResult,
   SkillRegistrySummary,
@@ -182,6 +186,10 @@ import {
   UpdateSummarySchema,
   SkillDisableRequestSchema,
   SkillRegistryMutationResultSchema,
+  MemoryDisableRequestSchema,
+  MemoryListRequestSchema,
+  MemoryMutationResultSchema,
+  MemorySummarySchema,
   SkillRegistryQueryResultSchema,
   SkillRegistrySummarySchema,
   SetLocaleRequestSchema,
@@ -531,6 +539,23 @@ const api: PigeDesktopApi = {
       };
       ipcRenderer.on("skills.changed", handler);
       return () => ipcRenderer.removeListener("skills.changed", handler);
+    }
+  },
+  memory: {
+    list: async (request: MemoryListRequest): Promise<MemorySummary> =>
+      MemorySummarySchema.parse(await ipcRenderer.invoke("memory.list", MemoryListRequestSchema.parse(request))),
+    disable: async (request: MemoryDisableRequest): Promise<MemoryMutationResult> =>
+      MemoryMutationResultSchema.parse(await ipcRenderer.invoke(
+        "memory.disable",
+        MemoryDisableRequestSchema.parse(request)
+      )),
+    onChanged: (listener: (summary: MemorySummary) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, value: unknown): void => {
+        const parsed = MemorySummarySchema.safeParse(value);
+        if (parsed.success) listener(parsed.data);
+      };
+      ipcRenderer.on("memory.changed", handler);
+      return () => ipcRenderer.removeListener("memory.changed", handler);
     }
   },
   activity: {

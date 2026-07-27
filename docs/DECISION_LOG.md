@@ -3328,6 +3328,38 @@ References:
 - `docs/SOURCE_STORAGE_STRATEGY.md`
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 
+### D-20260727-Explicit-Vault-Memory-Foundation
+
+Status: Accepted
+Date: 2026-07-27
+
+Decision:
+
+With vault memory enabled, durable explicit-user-task provenance may expose Pi's typed
+remember-preference tool. One user event owns one secret-scanned atomic L0/L1 effect and
+private conversation/event/Job binding. Bounded active recall is lower-authority user
+context; Settings receives a safe summary and may CAS-disable.
+
+Rationale:
+
+This closes one useful loop without autonomous inference, hidden provenance, system-prompt
+authority, duplicate effects or a second mutation owner.
+
+Consequences:
+
+- Neutral/legacy/current-note and source/model/tool content cannot register writes; secret
+  rejection writes nothing. Registry load rejects unbound or mismatched L0/L1 provenance.
+- Retry adopts the event-bound effect; unique fsynced temp/rename/directory sync prevents
+  stale temp wedges. Renderer gets no private IDs or create/edit authority.
+- Global/autonomous memory and the remaining lifecycle/status evidence stay separate.
+
+References:
+
+- `docs/AGENT_MEMORY_DESIGN.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
+- `docs/UI_PROTOTYPE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

@@ -677,6 +677,7 @@ Commands:
 - `models.addManualModel`
 - `models.updateModel`
 - `models.setDefaultModel`
+- `memory.disable`
 - `skills.disable`
 - `tools.install`
 - `tools.remove`
@@ -686,17 +687,26 @@ Queries:
 - `settings.registry`
 - `settings.appearance`
 - `models.summary`
+- `memory.list`
 - `skills.summary`
 - `system.toolchainHealth`
 
 Events:
 
 - `settings.appearanceChanged`
+- `memory.changed`
 
 `skills.summary`, owner-token/CAS `skills.disable({apiVersion:1,skillId,expectedRevision})`, and
 `skills.changed` are schema-validated. Summary is `ready {registry}` or body-free `failed {error}`.
 Main projects checksum-safe identity/count; disable reduces authority. Singleton recovery and
 token/inode release protect successor locks.
+
+`memory.list({apiVersion:1,activeVaultId})` returns `MemorySummarySchema`: vault, revision
+and at most 1,000 bounded safe records (`id/kind/title/body/status/timestamps` plus
+`explicit_user_request/occurredAt`); private conversation/event/Job IDs stay in Main.
+`memory.disable({apiVersion:1,requestId,activeVaultId,memoryId,expectedRevision})` returns
+`committed | stale | not_found` plus the current summary. `memory.changed` emits that safe
+summary. Main fences vault/CAS; renderer cannot create memory or submit provenance.
 
 Provider/model DTOs:
 

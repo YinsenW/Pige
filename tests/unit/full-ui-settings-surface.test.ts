@@ -25,6 +25,7 @@ import type {
   SkillRegistrySummary,
   SpeechAvailabilityResult
 } from "@pige/contracts";
+import type { MemoryMutationResult, MemorySummary } from "@pige/schemas";
 
 const globalKeys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLSelectElement", "Event", "KeyboardEvent", "MouseEvent"] as const;
 const originalDescriptors = new Map<PropertyKey, PropertyDescriptor | undefined>();
@@ -1297,63 +1298,67 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("renders the complete memory surface without fabricating records or accessing an absent service", async () => {
+  it("loads vault memory and disables an active record with exact CAS", async () => {
     const dom = createDom();
-    let ipcRead = false;
+    const activeSummary = memorySummary(4, "active");
+    const disabledSummary = memorySummary(5, "disabled");
+    let resolveList!: (summary: MemorySummary) => void;
+    const list = vi.fn(() => new Promise<MemorySummary>((resolve) => {
+      resolveList = resolve;
+    }));
+    const disable = vi.fn(async (): Promise<MemoryMutationResult> => ({
+      status: "committed",
+      summary: disabledSummary
+    }));
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
-      get() {
-        ipcRead = true;
-        throw new Error("The development memory surface must not access IPC.");
-      }
+      value: { memory: { list, disable } }
     });
-    const onDevelopment = vi.fn();
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
-      root.render(createElement(AgentMemorySettingsPanel, { onDevelopment, t }));
+      root.render(createElement(AgentMemorySettingsPanel, {
+        activeVaultId: "vault_20260727_memoryfixture",
+        t
+      }));
       await settle(dom);
     });
 
     const container = dom.window.document.querySelector("#root")!;
     expect(container.querySelector("h1")?.textContent).toBe("Agent & Memory");
-    expect(container.textContent).toContain("PIGE.md");
-    expect(container.textContent).toContain("Memory management is in development");
-    expect(container.textContent).toContain(
-      "Existing vault-scoped memory stays local and is included in backups by default. Management controls remain unavailable until the Agent Memory owner is connected."
-    );
-    expect(container.textContent).not.toContain("12 active memories");
-    expect(container.textContent).not.toContain("Prefers concise source summaries");
-
-    expect(container.querySelector('select[aria-label="High-impact changes"]')).toBeNull();
-    expect(container.querySelector('button[role="switch"][aria-label="Vault memory"]')).toBeNull();
-    expect(container.querySelector('button[role="checkbox"]')).toBeNull();
-    expect(container.textContent).not.toContain("Always confirm");
-    const controls = Array.from(container.querySelectorAll<HTMLButtonElement>("[data-memory-control]"));
-    expect(controls.map((control) => control.dataset.memoryControl)).toEqual([
-      "pige-policy",
-      "high-impact-policy",
-      "vault-memory"
-    ]);
-    expect(controls.every((control) => control.textContent === "In development")).toBe(true);
-    const scopes = Array.from(container.querySelectorAll<HTMLButtonElement>("[data-memory-scope]"));
-    expect(scopes).toHaveLength(4);
-    expect(scopes.every((scope) => scope.textContent?.includes("In development"))).toBe(true);
-
-    const reset = buttonNamed(container, "Reset memory...");
-    expect(reset.disabled).toBe(true);
-    expect(reset.title).toContain("unavailable");
+    expect(container.textContent).toContain("Loading memories");
+    expect(list).toHaveBeenCalledWith({ apiVersion: 1, activeVaultId: "vault_20260727_memoryfixture" });
 
     await act(async () => {
-      for (const control of controls) control.click();
-      for (const scope of scopes) scope.click();
-      buttonNamed(container, "Inspect memory").click();
-      buttonNamed(container, "Export").click();
+      resolveList(activeSummary);
       await settle(dom);
     });
-    expect(onDevelopment).toHaveBeenCalledTimes(9);
-    expect(controls.every((control) => control.textContent === "In development")).toBe(true);
-    expect(scopes.every((scope) => scope.textContent?.includes("In development"))).toBe(true);
-    expect(ipcRead).toBe(false);
+
+    const row = requireElement(container.querySelector<HTMLElement>('[data-memory-id="memory_20260727_concisestyle"]'));
+    expect(container.querySelector("[data-memory-revision]")?.getAttribute("data-memory-revision")).toBe("4");
+    expect(row.textContent).toContain("Concise source summaries");
+    expect(row.textContent).toContain("Keep source summaries concise and preserve citations.");
+    expect(row.textContent).toContain("Preference");
+    expect(row.textContent).toContain("Active");
+    expect(row.textContent).toContain("Explicit request");
+    expect(row.textContent).not.toContain("conv_20260727_memorysource");
+    expect(row.textContent).not.toContain("evt_20260727_memorysourceevent");
+    expect(container.textContent).not.toContain("Export");
+    expect(container.textContent).not.toContain("Reset memory");
+
+    await act(async () => {
+      buttonNamed(row, "Disable: Concise source summaries").click();
+      await settle(dom);
+    });
+    expect(disable).toHaveBeenCalledWith(expect.objectContaining({
+      apiVersion: 1,
+      activeVaultId: "vault_20260727_memoryfixture",
+      memoryId: "memory_20260727_concisestyle",
+      expectedRevision: 4
+    }));
+    expect(disable.mock.calls[0]?.[0].requestId).toMatch(/^memory_request_[a-z0-9]{16,64}$/u);
+    expect(row.textContent).toContain("Disabled");
+    expect(buttonNamed(row, "Disable: Concise source summaries").disabled).toBe(true);
+    expect(container.textContent).toContain("The memory is disabled for future Agent turns.");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -1431,6 +1436,24 @@ function skillRegistry(
   }]
 ): SkillRegistrySummary {
   return { apiVersion: 1, revision, invalidManifestCount, skills };
+}
+
+function memorySummary(revision: number, status: "active" | "disabled"): MemorySummary {
+  return {
+    apiVersion: 1,
+    activeVaultId: "vault_20260727_memoryfixture",
+    revision,
+    records: [{
+      id: "memory_20260727_concisestyle",
+      kind: "preference",
+      title: "Concise source summaries",
+      body: "Keep source summaries concise and preserve citations.",
+      status,
+      provenance: { kind: "explicit_user_request", occurredAt: "2026-07-27T08:00:00.000Z" },
+      createdAt: "2026-07-27T08:00:00.000Z",
+      updatedAt: status === "active" ? "2026-07-27T08:00:00.000Z" : "2026-07-27T09:00:00.000Z"
+    }]
+  };
 }
 
 function t(key: string): string {
