@@ -123,6 +123,13 @@ describe("Home Pi Agent service", () => {
       pageType: "source",
       locator: "snippet:1"
     };
+    const secondSourceSession: RetrievalAnswerCitation = {
+      ...sourceSession,
+      refId: "citation_12",
+      label: "[12]",
+      pageId: "page_20260727_secondsource",
+      title: "Second source candidate"
+    };
     const inspectedUrl: RetrievalAnswerCitation = {
       refId: "citation_17",
       label: "[17]",
@@ -136,15 +143,24 @@ describe("Home Pi Agent service", () => {
       [currentNote],
       [homeSearch],
       [DATASET_CITATION],
-      [sourceSession],
+      [sourceSession, secondSourceSession],
       [inspectedUrl]
     ).map(({ refId }) => refId)).toEqual([
       "citation_1",
       "citation_2",
       "citation_10",
       "citation_11",
+      "citation_12",
       "citation_17"
     ]);
+    expect(mergeHomeCitationCandidates(
+      [sourceSession],
+      [{ ...sourceSession }]
+    )).toEqual([sourceSession]);
+    expect(() => mergeHomeCitationCandidates(
+      [sourceSession],
+      [{ ...sourceSession, pageId: secondSourceSession.pageId }]
+    )).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_conflict" }));
     expect(mergeHomeCitationCandidates([inspectedUrl], [{ ...inspectedUrl }])).toEqual([inspectedUrl]);
     expect(() => mergeHomeCitationCandidates([inspectedUrl], [{
       ...inspectedUrl,
