@@ -27,6 +27,7 @@ export interface KnowledgeActivityVaultPort {
 }
 export interface KnowledgeActivityCollectionPort { activitySummary(operation: OperationRecord, undo?: OperationRecord): KnowledgeActivitySummary | undefined; findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined; undo(operation: OperationRecord, expectedRevisionId?: string): Promise<KnowledgeActivityUndoResult>; recoverIncompleteOperations(): KnowledgeActivityRecoveryResult; }
 export interface KnowledgeActivityEditorPort { activitySummary(operation: OperationRecord, undo?: OperationRecord): KnowledgeActivitySummary | undefined; findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined; undo(operation: OperationRecord, expectedRevisionId?: string): KnowledgeActivityUndoResult; recoverIncompleteOperations(): KnowledgeActivityRecoveryResult; }
+export interface KnowledgeActivityMemoryPort { activitySummary(operation: OperationRecord, undo?: OperationRecord): KnowledgeActivitySummary | undefined; findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined; undo(operation: OperationRecord, expectedRevisionId?: string): KnowledgeActivityUndoResult; recoverIncompleteOperations(): KnowledgeActivityRecoveryResult; }
 export interface KnowledgeActivityRecoveryResult {
   readonly recovered: number;
   readonly failed: number;
@@ -58,9 +59,9 @@ const GENERATED_PAGE_PATH = /^wiki\/generated\/\d{4}\/page_\d{8}_[a-z0-9]{8,}\.m
 const OPERATION_ID = /^op_\d{8}_[a-z0-9]{8,}$/u;
 const CONTENT_HASH = /^sha256:[a-f0-9]{64}$/u;
 export class KnowledgeActivityService {
-  readonly #vaults: KnowledgeActivityVaultPort; readonly #collections: KnowledgeActivityCollectionPort | undefined; readonly #editor: KnowledgeActivityEditorPort | undefined;
-  constructor(vaults: KnowledgeActivityVaultPort, collections?: KnowledgeActivityCollectionPort, editor?: KnowledgeActivityEditorPort) {
-    this.#vaults = vaults; this.#collections = collections; this.#editor = editor;
+  readonly #vaults: KnowledgeActivityVaultPort; readonly #collections: KnowledgeActivityCollectionPort | undefined; readonly #editor: KnowledgeActivityEditorPort | undefined; readonly #memory: KnowledgeActivityMemoryPort | undefined;
+  constructor(vaults: KnowledgeActivityVaultPort, collections?: KnowledgeActivityCollectionPort, editor?: KnowledgeActivityEditorPort, memory?: KnowledgeActivityMemoryPort) {
+    this.#vaults = vaults; this.#collections = collections; this.#editor = editor; this.#memory = memory;
   }
   list(request: KnowledgeActivityListRequest = {}): KnowledgeActivityListResult {
     if (!request || typeof request !== "object") {
@@ -71,12 +72,11 @@ export class KnowledgeActivityService {
     const scan = readOperationRecords(vaultPath);
     const undoByOperationId = createUndoOperationMap(scan.operations);
     const activities = scan.operations
-      .filter((operation) => !!this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations)) || isKnowledgeActivityOperation(operation) || (
+      .filter((operation) => !!this.#memory?.activitySummary(operation, this.#memory.findUndoOperation(operation, scan.operations)) || !!this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations)) || isKnowledgeActivityOperation(operation) || (
         operation.kind === "update_collection_cell" && !!this.#collections?.activitySummary(
           operation, this.#collections.findUndoOperation(operation, scan.operations)
         )))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id));
-
     return {
       scannedAt: new Date().toISOString(),
       activeVaultId: activeVault.vaultId,
@@ -85,8 +85,8 @@ export class KnowledgeActivityService {
       activities: activities
         .slice(0, clampLimit(request.limit))
         .map((operation) => {
-          const editor = this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations));
-          if (editor) return editor;
+          const memory = this.#memory?.activitySummary(operation, this.#memory.findUndoOperation(operation, scan.operations)); const editor = this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations));
+          if (memory) return memory; if (editor) return editor;
           if (operation.kind === "update_collection_cell" && this.#collections) {
             return this.#collections.activitySummary(operation, this.#collections.findUndoOperation(operation, scan.operations))!;
           }
@@ -106,11 +106,11 @@ export class KnowledgeActivityService {
     const vaultPath = this.#requireActiveVaultPath();
     const scan = readOperationRecords(vaultPath);
     const operation = scan.operations.find((candidate) => candidate.id === request.operationId);
-    const editor = operation && this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations));
-    if (!operation || (!editor && !isKnowledgeActivityOperation(operation) && operation.kind !== "update_collection_cell")) {
+    const memory = operation && this.#memory?.activitySummary(operation, this.#memory.findUndoOperation(operation, scan.operations)); const editor = operation && this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations));
+    if (!operation || (!memory && !editor && !isKnowledgeActivityOperation(operation) && operation.kind !== "update_collection_cell")) {
       throw new PigeDomainError("activity.not_allowed", "This Activity cannot be undone by the current bounded path.");
     }
-    if (editor) return this.#editor!.undo(operation, request.expectedRevisionId);
+    if (memory) return this.#memory!.undo(operation, request.expectedRevisionId); if (editor) return this.#editor!.undo(operation, request.expectedRevisionId);
     if (operation.kind === "update_collection_cell") {
       if (!this.#collections) throw new PigeDomainError("activity.not_allowed", "Collection Activity is unavailable.");
       return this.#collections.undo(operation, request.expectedRevisionId);
@@ -183,7 +183,7 @@ export class KnowledgeActivityService {
         failed += 1;
       }
     }
-    const collections = this.#collections?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const editor = this.#editor?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; return { recovered: recovered + collections.recovered + editor.recovered, failed: failed + collections.failed + editor.failed };
+    const collections = this.#collections?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const editor = this.#editor?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const memory = this.#memory?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; return { recovered: recovered + collections.recovered + editor.recovered + memory.recovered, failed: failed + collections.failed + editor.failed + memory.failed };
   }
   #requireActiveVault(): VaultSummary {
     const activeVault = this.#vaults.current();
