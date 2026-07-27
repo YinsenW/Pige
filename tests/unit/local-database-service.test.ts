@@ -30,6 +30,14 @@ afterEach(() => {
 });
 
 describe("local database service", () => {
+  it("does not create index state when Knowledge Health is unavailable", () => {
+    const vaultPath = makeVaultRoot();
+
+    expect(new LocalDatabaseService().knowledgeHealth(vaultPath)).toBeUndefined();
+    expect(fs.existsSync(path.join(vaultPath, ".pige/db/vault.sqlite"))).toBe(false);
+    expect(fs.existsSync(path.join(vaultPath, ".pige/db/schema-state.json"))).toBe(false);
+  });
+
   it("initializes the node sqlite migration state behind the driver abstraction", () => {
     const vaultPath = makeVaultRoot();
     const service = new LocalDatabaseService();
@@ -141,6 +149,113 @@ describe("local database service", () => {
       normalizedKey: "collision",
       expectedRevision: successorRevision!
     })).toHaveLength(2);
+  });
+
+  it("keeps ambiguous title and alias links unresolved while resolving unique links", () => {
+    const vaultPath = makeVaultRoot();
+    const service = new LocalDatabaseService();
+    writePage(vaultPath, "wiki/first.md", {
+      id: "page_20260727_firstlink1",
+      title: "Shared Title",
+      aliases: ["Shared Alias"],
+      body: "First."
+    });
+    writePage(vaultPath, "wiki/second.md", {
+      id: "page_20260727_secondlink",
+      title: "shared   title",
+      aliases: ["shared alias"],
+      body: "Second."
+    });
+    writePage(vaultPath, "wiki/unique.md", {
+      id: "page_20260727_uniquelink",
+      title: "Unique Target",
+      body: "Unique."
+    });
+    writePage(vaultPath, "wiki/origin.md", {
+      id: "page_20260727_originlink",
+      title: "Origin",
+      body: "[[Shared Title]] [[Shared Alias]] [[Unique Target]]"
+    });
+
+    service.rebuild(vaultPath);
+    expect(service.relatedPages(vaultPath, {
+      pageId: "page_20260727_originlink",
+      limit: 10
+    })?.outgoing.map(({ summary }) => summary.pageId)).toEqual(["page_20260727_uniquelink"]);
+    expect(service.knowledgeHealth(vaultPath)?.issues).toContainEqual({
+      kind: "broken_link",
+      page: { pageId: "page_20260727_originlink", title: "Origin" },
+      unresolvedLinkCount: 2
+    });
+  });
+
+  it("derives the four stable Knowledge Health issue classes with partial coverage", () => {
+    const vaultPath = makeVaultRoot();
+    const service = new LocalDatabaseService();
+    writePage(vaultPath, "wiki/topic-a.md", {
+      id: "page_20260727_topicaaaa",
+      title: "Agent   Systems",
+      type: "topic",
+      aliases: ["Common Topic"],
+      body: "Topic A."
+    });
+    writePage(vaultPath, "wiki/topic-b.md", {
+      id: "page_20260727_topicbbbb",
+      title: "agent systems",
+      type: "topic",
+      aliases: ["common topic"],
+      body: "Topic B."
+    });
+    writePage(vaultPath, "wiki/claim.md", {
+      id: "page_20260727_claimaaaa",
+      title: "Unsourced Claim",
+      type: "claim",
+      body: "A claim."
+    });
+    writePage(vaultPath, "wiki/sourced-claim.md", {
+      id: "page_20260727_claimbbbb",
+      title: "Sourced Claim",
+      type: "claim",
+      sourceIds: ["src_20260727_abcdefghijk1"],
+      body: "A sourced claim."
+    });
+    writePage(vaultPath, "wiki/origin.md", {
+      id: "page_20260727_healthorig",
+      title: "Health Origin",
+      body: "[[Missing Page]]"
+    });
+    writeRawPage(vaultPath, "wiki/invalid.md", "page_20260727_invalidxx", "tags: invalid");
+
+    service.rebuild(vaultPath);
+    const report = service.knowledgeHealth(vaultPath);
+
+    expect(report).toMatchObject({ invalidPageCount: 1 });
+    expect(report?.issues).toContainEqual({
+      kind: "broken_link",
+      page: { pageId: "page_20260727_healthorig", title: "Health Origin" },
+      unresolvedLinkCount: 1
+    });
+    expect(report?.issues).toContainEqual({
+      kind: "unsourced_claim",
+      page: { pageId: "page_20260727_claimaaaa", title: "Unsourced Claim" }
+    });
+    expect(report?.issues.filter(({ kind }) => kind === "duplicate_topic")).toEqual([{
+      kind: "duplicate_topic",
+      candidatePageCount: 2,
+      pages: [
+        { pageId: "page_20260727_topicaaaa", title: "Agent Systems" },
+        { pageId: "page_20260727_topicbbbb", title: "agent systems" }
+      ]
+    }]);
+    expect(report?.issues.some((issue) => issue.kind === "orphan_page")).toBe(true);
+    expect(report?.counts.unsourcedClaimCount).toBe(1);
+
+    writePage(vaultPath, "wiki/new.md", {
+      id: "page_20260727_healthnew1",
+      title: "Changed after rebuild",
+      body: "The durable source changed."
+    });
+    expect(service.knowledgeHealth(vaultPath)).toBeUndefined();
   });
 
   it("rebuilds exact-range chunk metadata without persisting chunk text", () => {
@@ -628,6 +743,8 @@ function writePage(vaultPath: string, relativePath: string, input: {
   readonly tags?: readonly string[];
   readonly sourceIds?: readonly string[];
   readonly aliases?: readonly string[];
+  readonly topics?: readonly string[];
+  readonly status?: string;
 }): void {
   const filePath = path.join(vaultPath, ...relativePath.split("/"));
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -638,10 +755,11 @@ title: "${input.title}"
 type: "${input.type ?? "note"}"
 created_at: "2026-07-09T12:00:00.000Z"
 updated_at: "2026-07-09T12:00:00.000Z"
-status: "active"
+status: "${input.status ?? "active"}"
 language: "${input.language ?? "en"}"
 tags: ${JSON.stringify(input.tags ?? [])}
 aliases: ${JSON.stringify(input.aliases ?? [])}
+topics: ${JSON.stringify(input.topics ?? [])}
 source_ids: ${JSON.stringify(input.sourceIds ?? [])}
 ---
 

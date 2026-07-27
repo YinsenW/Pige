@@ -93,6 +93,7 @@ import { registerBackupRestoreIpc } from "./register-backup-restore-ipc";
 import { registerTaskExecutionIpc } from "./register-task-execution-ipc";
 import { registerManagedCollectionIpc } from "./register-managed-collection-ipc";
 import { registerLocalSemanticRetrievalIpc } from "./register-local-semantic-retrieval-ipc";
+import { registerKnowledgeHealthIpc } from "./register-knowledge-health-ipc";
 import { registerMemoryIpc } from "./register-memory-ipc";
 import { registerSkillsIpc } from "./register-skills-ipc";
 import {
@@ -142,6 +143,7 @@ import {
 } from "./services/job-class-executor-registry";
 import { LibraryService } from "./services/library-service";
 import { KnowledgeActivityService } from "./services/knowledge-activity-service";
+import { KnowledgeHealthService } from "./services/knowledge-health-service";
 import { ManagedCollectionService } from "./services/managed-collection-service";
 import {
   HomeAgentService,
@@ -255,6 +257,7 @@ let homeAgentAttachmentService: HomeAgentAttachmentService | undefined;
 let jobsService: JobsService | undefined;
 let jobClassExecutorRegistry: JobClassExecutorRegistry | undefined;
 let knowledgeActivityService: KnowledgeActivityService | undefined;
+let knowledgeHealthService: KnowledgeHealthService | undefined;
 let managedCollectionService: ManagedCollectionService | undefined;
 let libraryService: LibraryService | undefined;
 let notesService: NotesService | undefined;
@@ -1322,6 +1325,11 @@ const getLocalDatabaseService = (): LocalDatabaseService => {
   return localDatabaseService;
 };
 
+const getKnowledgeHealthService = (): KnowledgeHealthService => {
+  if (!knowledgeHealthService) knowledgeHealthService = new KnowledgeHealthService(getLocalDatabaseService());
+  return knowledgeHealthService;
+};
+
 const getIndexRebuildJobExecutor = (): IndexRebuildJobExecutor =>
   getJobsService().indexRebuildExecutor();
 
@@ -1913,6 +1921,15 @@ registerManagedCollectionIpc({
   getActiveVaultId: () => getVaultService().current()?.vaultId,
   openCollection: (request) => getManagedCollectionService().open(request),
   editCollectionCell: (request) => getManagedCollectionService().editCell(request)
+});
+registerKnowledgeHealthIpc({
+  ipcMain,
+  getActiveVaultBinding: () => {
+    const vault = getVaultService().current();
+    const vaultPath = getVaultService().activeVaultPath();
+    return vault && vaultPath ? { vaultId: vault.vaultId, vaultPath } : undefined;
+  },
+  runKnowledgeHealth: (vaultPath, request) => getKnowledgeHealthService().run(vaultPath, request)
 });
 registerLocalSemanticRetrievalIpc({
   ipcMain,

@@ -144,6 +144,28 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).not.toContain("candidatePageIds");
   });
 
+  it("keeps Knowledge Health behind a strict registrar and body-free preload boundary", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const registrarSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-knowledge-health-ipc.ts"),
+      "utf8"
+    );
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+
+    expect(mainSource).toContain("registerKnowledgeHealthIpc({");
+    expect(mainSource).not.toContain('ipcMain.handle("maintenance.runKnowledgeHealth"');
+    expect(registrarSource).toContain('ipcMain.handle("maintenance.runKnowledgeHealth"');
+    expect(registrarSource).toContain("KnowledgeHealthRunRequestSchema.parse(request)");
+    expect(registrarSource).toContain("KnowledgeHealthRunResultSchema.parse(");
+    expect(registrarSource).toContain("getActiveVaultBinding");
+    expect(preloadSource).toContain('ipcRenderer.invoke("maintenance.runKnowledgeHealth"');
+    expect(preloadSource).toContain("KnowledgeHealthRunRequestSchema.parse(request)");
+    expect(preloadSource).toContain("KnowledgeHealthRunResultSchema.parse(");
+    for (const privateField of ["pagePath", "target", "sourceIds", "error", "body"]) {
+      expect(registrarSource).not.toContain(`${privateField}:`);
+    }
+  });
+
   it("keeps Reader selection identity resolution main-owned and schema-validated", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
