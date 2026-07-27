@@ -7,6 +7,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { createCanvas } from "@napi-rs/canvas";
 import { ZipFile } from "yazl";
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -50,6 +51,10 @@ const MULTI_FILE_SECOND_TEXT = "Cobalt source: the launch checklist requires a c
 const MULTI_FILE_ANSWER = "The amber source requires an offline archive [citation_11], while the cobalt source adds a checksum review [citation_12].";
 const MULTI_FILE_FIRST_NAME = "multi-file-amber.txt";
 const MULTI_FILE_SECOND_NAME = "multi-file-cobalt.txt";
+const IMAGE_PROMPT = "Read this screenshot with local OCR and cite its durable source page.";
+const IMAGE_OCR_TEXT = "PIGE IMAGE OCR";
+const IMAGE_ANSWER = "The screenshot reads PIGE IMAGE OCR and remains available as durable local evidence. [citation_11]";
+const IMAGE_ATTACHMENT_NAME = "image-ocr-roundtrip.png";
 const CHILD_RESULT_PREFIX = "PIGE_ROUNDTRIP_RESULT ";
 const MAX_CHILD_MS = 90_000;
 const highRiskOnly = process.argv.includes("--high-risk-only");
@@ -74,6 +79,7 @@ async function runOrchestrator() {
   const docxAttachmentPath = path.join(rootPath, DOCX_ATTACHMENT_NAME);
   const multiFileFirstPath = path.join(rootPath, MULTI_FILE_FIRST_NAME);
   const multiFileSecondPath = path.join(rootPath, MULTI_FILE_SECOND_NAME);
+  const imageAttachmentPath = path.join(rootPath, IMAGE_ATTACHMENT_NAME);
   const deniedCommandSentinelPath = path.join(rootPath, "denied-command-must-not-exist.txt");
   fs.writeFileSync(attachmentPath, "Synthetic unified Agent attachment evidence.\n", "utf8");
   fs.writeFileSync(markdownAttachmentPath, "# Synthetic Markdown evidence\n\nThe Markdown source crosses the real file ingress.\n", "utf8");
@@ -84,6 +90,7 @@ async function runOrchestrator() {
   fs.writeFileSync(docxAttachmentPath, await createRoundtripDocx());
   fs.writeFileSync(multiFileFirstPath, `${MULTI_FILE_FIRST_TEXT}\n`, "utf8");
   fs.writeFileSync(multiFileSecondPath, `${MULTI_FILE_SECOND_TEXT}\n`, "utf8");
+  fs.writeFileSync(imageAttachmentPath, createRoundtripOcrImage());
   const syntheticToken = `synthetic-${crypto.randomBytes(24).toString("hex")}`;
   const requests = [];
   const streamTiming = {};
@@ -655,6 +662,97 @@ async function runOrchestrator() {
     assert.deepEqual(multiFileRestart.durableSnapshot, multiFile.durableSnapshot);
     assert.equal(requests.length, requestCountBeforeMultiFileRestart);
 
+    const requestCountBeforeImage = requests.length;
+    const image = await runChild("image", {
+      rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
+      activityAttachmentPath, datasetAttachmentPath, dropAttachmentPath, deniedCommandSentinelPath,
+      highRiskOnly: false
+    });
+    assert.equal(image.imageAnswerVisible, true);
+    assert.equal(image.imageCitationVisible, true);
+    assert.equal(image.imageCitationIdentityExact, true);
+    assert.equal(image.imageCitationOpenedReader, true);
+    assert.equal(image.continuedExactConversation, true);
+    assert.equal(image.agentTurnDelta, 1);
+    assert.equal(image.sourceDelta, 1);
+    assert.equal(image.ocrChildDelta, 1);
+    assert.equal(image.parseChildDelta, 0);
+    assert.equal(countRoundtripSourceRecords(rootPath), image.sourceRecordCountBeforeImage + 1);
+    assert.equal(image.durableSnapshot.relevantJobs.length, multiFileRestart.durableSnapshot.relevantJobs.length + 1);
+    assert.equal(image.durableSnapshot.sourceIds.length, multiFileRestart.durableSnapshot.sourceIds.length + 1);
+    assert.equal(image.durableSnapshot.nonterminalJobIds.length, 0);
+    assert.equal(image.durableSnapshot.failedRetryableJobIds.length, 0);
+    assertUniqueIdentities(image.durableSnapshot.messageIdentities.map((message) => message.id), "conversation event after image OCR");
+    assertUniqueIdentities(image.durableSnapshot.relevantJobs.map((job) => job.id), "Job after image OCR");
+    assertUniqueIdentities(image.durableSnapshot.sourceIds, "source after image OCR");
+    const imageProviderRequests = requests.slice(requestCountBeforeImage)
+      .filter((request) => request.method === "POST" && request.path === "/v1/responses");
+    assert.equal(imageProviderRequests.length, 4);
+    assert.ok(imageProviderRequests[0]?.body.includes('"name":"pige_inspect_source"'));
+    assert.ok(imageProviderRequests[1]?.body.includes('"call_id":"call_image_inspect_before"'));
+    assert.ok(imageProviderRequests[1]?.body.includes('"name":"pige_ocr_source"'));
+    assert.ok(imageProviderRequests[2]?.body.includes('"call_id":"call_image_ocr"'));
+    assert.ok(imageProviderRequests[2]?.body.includes('"name":"pige_inspect_source"'));
+    assert.ok(imageProviderRequests[3]?.body.includes('"call_id":"call_image_inspect_after"'));
+    assert.ok(requests.every((request) =>
+      request.method !== "POST" || request.path !== "/v1/responses" ||
+      request.receivedAt < image.stagedAt || request.receivedAt >= image.submittedAt
+    ));
+
+    const imageSource = readRoundtripRecord(vaultPath, "source-records", image.imageSourceId);
+    const imageParent = readRoundtripRecord(vaultPath, "jobs", image.imageJobId);
+    const imageJobs = readRoundtripRecords(vaultPath, "jobs");
+    const imageOcrChildren = imageJobs.filter((job) =>
+      job.class === "ocr" && job.parentJobId === image.imageJobId && job.sourceId === image.imageSourceId
+    );
+    const imageParseChildren = imageJobs.filter((job) =>
+      job.class === "parse" && job.parentJobId === image.imageJobId && job.sourceId === image.imageSourceId
+    );
+    assert.equal(imageSource.kind, "image_file");
+    assert.equal(imageSource.semanticOrchestration, "agent_turn");
+    assert.equal(imageSource.metadata?.inputKind, "file_picker");
+    assert.equal(imageSource.metadata?.agentTurnJobId, image.imageJobId);
+    assert.equal(imageSource.knowledgePageId, image.imageCitationPageId);
+    assert.equal(imageSource.managedCopy?.checksum, sha256BufferDigest(fs.readFileSync(imageAttachmentPath)));
+    assert.equal(imageOcrChildren.length, 1);
+    assert.ok(["completed", "completed_with_warnings"].includes(imageOcrChildren[0]?.state));
+    assert.equal(imageParseChildren.length, 0);
+    assert.deepEqual(imageParent.childJobIds, [imageOcrChildren[0].id]);
+    assert.deepEqual(imageSource.artifacts.map((artifact) => artifact.kind), ["ocr", "metadata"]);
+    for (const artifact of imageSource.artifacts) {
+      const artifactPath = path.resolve(vaultPath, artifact.path);
+      const artifactBytes = fs.readFileSync(artifactPath);
+      assert.equal(artifact.checksum, sha256BufferDigest(artifactBytes));
+      assert.equal(artifact.size, artifactBytes.byteLength);
+    }
+    const imageOcrArtifact = imageSource.artifacts.find((artifact) => artifact.kind === "ocr");
+    const imageMetadataArtifact = imageSource.artifacts.find((artifact) => artifact.kind === "metadata");
+    const recognizedText = fs.readFileSync(path.resolve(vaultPath, imageOcrArtifact.path), "utf8")
+      .replace(/\s+/gu, " ")
+      .toLocaleUpperCase();
+    assert.ok(recognizedText.includes("PIGE"));
+    assert.ok(recognizedText.includes("OCR"));
+    const imageMetadata = JSON.parse(fs.readFileSync(path.resolve(vaultPath, imageMetadataArtifact.path), "utf8"));
+    assert.equal(imageMetadata.adapter?.id, "macos_vision_ocr");
+    assert.equal(imageMetadata.units?.[0]?.locator, "ocr:block:1");
+    assert.equal(imageMetadata.ocrTextChecksum, imageOcrArtifact.checksum);
+
+    const requestCountBeforeImageRestart = requests.length;
+    const imageRestart = await runChild("image_restart", {
+      rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
+      activityAttachmentPath, datasetAttachmentPath, dropAttachmentPath, deniedCommandSentinelPath,
+      highRiskOnly: false
+    });
+    assert.equal(imageRestart.imageAnswerVisible, true);
+    assert.equal(imageRestart.imageCitationVisible, true);
+    assert.equal(imageRestart.imageCitationIdentityExact, true);
+    assert.equal(imageRestart.imageCitationPageId, image.imageCitationPageId);
+    assert.deepEqual(imageRestart.durableSnapshot, image.durableSnapshot);
+    assert.equal(requests.length, requestCountBeforeImageRestart);
+    assert.equal(readRoundtripRecords(vaultPath, "jobs").filter((job) =>
+      job.class === "ocr" && job.parentJobId === image.imageJobId && job.sourceId === image.imageSourceId
+    ).length, 1);
+
     const secretsPath = path.join(userDataPath, "secrets.json");
     const secrets = JSON.parse(fs.readFileSync(secretsPath, "utf8"));
     const providers = JSON.parse(fs.readFileSync(path.join(userDataPath, "provider-profiles.json"), "utf8"));
@@ -681,7 +779,8 @@ async function runOrchestrator() {
       `one inspected URL citation, one native-text PDF parse/citation with stable Reader navigation, ` +
       `one semantic DOCX parse/citation with stable Reader navigation, ` +
       `one ordered two-file comparative turn with two stable Reader citations, ` +
-      `and exact restart retention without another Provider or parser call.`
+      `one production Vision image OCR/citation with stable Reader navigation, ` +
+      `and exact restart retention without another Provider, parser, or OCR call.`
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));
@@ -707,6 +806,7 @@ async function runChild(phase, values) {
       PIGE_ROUNDTRIP_DOCX_ATTACHMENT_PATH: path.join(values.rootPath, DOCX_ATTACHMENT_NAME),
       PIGE_ROUNDTRIP_MULTI_FILE_FIRST_PATH: path.join(values.rootPath, MULTI_FILE_FIRST_NAME),
       PIGE_ROUNDTRIP_MULTI_FILE_SECOND_PATH: path.join(values.rootPath, MULTI_FILE_SECOND_NAME),
+      PIGE_ROUNDTRIP_IMAGE_ATTACHMENT_PATH: path.join(values.rootPath, IMAGE_ATTACHMENT_NAME),
       PIGE_ROUNDTRIP_DENY_SENTINEL_PATH: values.deniedCommandSentinelPath,
       PIGE_ROUNDTRIP_HIGH_RISK_ONLY: values.highRiskOnly ? "1" : "0",
       PIGE_ROUNDTRIP_STAGE_PATH: path.join(values.rootPath, `stage-${phase}.txt`)
@@ -822,6 +922,17 @@ function sha256Digest(value) {
 
 function sha256BufferDigest(value) {
   return `sha256:${crypto.createHash("sha256").update(value).digest("hex")}`;
+}
+
+function createRoundtripOcrImage() {
+  const canvas = createCanvas(1600, 500);
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "#111111";
+  context.font = "bold 112px Helvetica";
+  context.fillText(IMAGE_OCR_TEXT, 90, 300);
+  return canvas.toBuffer("image/png");
 }
 
 async function createRoundtripDocx() {
@@ -977,6 +1088,7 @@ async function runElectronPhase() {
   const docxAttachmentPath = requireEnv("PIGE_ROUNDTRIP_DOCX_ATTACHMENT_PATH");
   const multiFileFirstPath = requireEnv("PIGE_ROUNDTRIP_MULTI_FILE_FIRST_PATH");
   const multiFileSecondPath = requireEnv("PIGE_ROUNDTRIP_MULTI_FILE_SECOND_PATH");
+  const imageAttachmentPath = requireEnv("PIGE_ROUNDTRIP_IMAGE_ATTACHMENT_PATH");
   const deniedCommandSentinelPath = requireEnv("PIGE_ROUNDTRIP_DENY_SENTINEL_PATH");
   const runHighRiskOnly = requireEnv("PIGE_ROUNDTRIP_HIGH_RISK_ONLY") === "1";
   const stagePath = requireEnv("PIGE_ROUNDTRIP_STAGE_PATH");
@@ -1014,7 +1126,9 @@ async function runElectronPhase() {
       phase !== "docx" &&
       phase !== "docx_restart" &&
       phase !== "multi_file" &&
-      phase !== "multi_file_restart"
+      phase !== "multi_file_restart" &&
+      phase !== "image" &&
+      phase !== "image_restart"
     ) {
       throw new Error("Unknown unified Agent roundtrip phase.");
     }
@@ -1140,9 +1254,25 @@ async function runElectronPhase() {
         submittedAt: staging.submittedAt,
         sourceRecordCountBeforeMultiFile
       };
-    } else {
+    } else if (phase === "multi_file_restart") {
       markStage("renderer_multi_file_restart");
       result = await runMultiFileRestartRenderer(browserWindow);
+    } else if (phase === "image") {
+      markStage("renderer_image_prepare");
+      const sourceRecordCountBeforeImage = countRoundtripSourceRecords(rootPath);
+      const imageBaseline = await readImageBaselineRenderer(browserWindow);
+      await prepareSourceRenderer(browserWindow, IMAGE_PROMPT);
+      const staging = await stageAndSubmitSourceRenderer(browserWindow, imageAttachmentPath, markStage, "renderer_image");
+      markStage("renderer_image_result");
+      result = {
+        ...(await readImageRendererResult(browserWindow, imageBaseline)),
+        stagedAt: staging.stagedAt,
+        submittedAt: staging.submittedAt,
+        sourceRecordCountBeforeImage
+      };
+    } else {
+      markStage("renderer_image_restart");
+      result = await runImageRestartRenderer(browserWindow);
     }
     if (phase === "connect" && runHighRiskOnly) {
       markStage("renderer_high_risk_deny");
@@ -2752,6 +2882,10 @@ async function readMultiFileBaselineRenderer(browserWindow) {
   `, true);
 }
 
+async function readImageBaselineRenderer(browserWindow) {
+  return readPdfBaselineRenderer(browserWindow);
+}
+
 async function readMultiFileRendererResult(browserWindow, baseline) {
   return browserWindow.webContents.executeJavaScript(`
     (async () => {
@@ -2925,6 +3059,138 @@ async function runMultiFileRestartRenderer(browserWindow) {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
       throw new Error('Timed out waiting for restarted two-file comparative evidence.');
+    })()
+  `, true).then(async (result) => ({
+    ...result,
+    durableSnapshot: await readDurableRestartSnapshot(browserWindow)
+  }));
+}
+
+async function readImageRendererResult(browserWindow, baseline) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'image_result_wait';
+      console.info('PIGE_ROUNDTRIP_STAGE image_result_wait');
+      const deadline = Date.now() + 60000;
+      const expected = ${JSON.stringify(baseline)};
+      const baselineJobIds = new Set(expected.jobIds);
+      const baselineSourceIds = new Set(expected.sourceIds);
+      while (Date.now() < deadline) {
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const library = await window.pige.library.list({ limit: 100 });
+        const newAgentJobs = jobs.jobs.filter((job) => job.class === 'agent_turn' && !baselineJobIds.has(job.id));
+        const newOcrJobs = jobs.jobs.filter((job) => job.class === 'ocr' && !baselineJobIds.has(job.id));
+        const newParseJobs = jobs.jobs.filter((job) => job.class === 'parse' && !baselineJobIds.has(job.id));
+        const newSourceIds = [...new Set(library.pages.flatMap((page) => page.sourceIds).filter((id) => !baselineSourceIds.has(id)))];
+        const assistant = timeline?.messages.find((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(IMAGE_ANSWER)})
+        );
+        const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_11');
+        const sourcePage = library.pages.find((page) =>
+          citation?.pageId === page.pageId && newSourceIds.some((sourceId) => page.sourceIds.includes(sourceId))
+        );
+        const parent = newAgentJobs.length === 1 ? newAgentJobs[0] : undefined;
+        const ocrChild = newOcrJobs.length === 1 ? newOcrJobs[0] : undefined;
+        const continuedExactConversation = timeline?.conversationId === expected.conversationId &&
+          timeline?.messages.some((message) => message.id === expected.tailEventId) === true &&
+          timeline.messages.length === expected.messageCount + 2;
+        const citationIdentityExact = Boolean(citation?.pageId && sourcePage?.pageId === citation.pageId);
+        globalThis.__pigeRoundtripWaitState = {
+          agentTurnDelta: newAgentJobs.length,
+          ocrChildDelta: newOcrJobs.length,
+          parseChildDelta: newParseJobs.length,
+          sourceDelta: newSourceIds.length,
+          parentState: parent?.state ?? 'none',
+          ocrState: ocrChild?.state ?? 'none',
+          answerVisible: Boolean(assistant),
+          citationVisible: Boolean(citation),
+          citationIdentityExact,
+          continuedExactConversation
+        };
+        if (
+          parent?.state === 'completed' && ['completed', 'completed_with_warnings'].includes(ocrChild?.state) &&
+          newAgentJobs.length === 1 && newOcrJobs.length === 1 && newParseJobs.length === 0 &&
+          newSourceIds.length === 1 && assistant && citation && citationIdentityExact && continuedExactConversation
+        ) {
+          const button = Array.from(document.querySelectorAll('.conversation-citations .citation-row:not(:disabled)'))
+            .find((item) => item.textContent?.includes('[11]'));
+          if (!button) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            continue;
+          }
+          button.click();
+          while (Date.now() < deadline && !document.querySelector('.note-reader')) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          if (!document.querySelector('.note-reader')) throw new Error('Image OCR citation did not open the Reader.');
+          return {
+            imageAnswerVisible: true,
+            imageCitationVisible: true,
+            imageCitationIdentityExact: true,
+            imageCitationOpenedReader: true,
+            imageCitationPageId: citation.pageId,
+            imageJobId: parent.id,
+            imageSourceId: newSourceIds[0],
+            continuedExactConversation,
+            agentTurnDelta: 1,
+            ocrChildDelta: 1,
+            parseChildDelta: 0,
+            sourceDelta: 1
+          };
+        }
+        if ([...newAgentJobs, ...newOcrJobs, ...newParseJobs].some((job) =>
+          job.state === 'failed_retryable' || job.state === 'failed_final'
+        )) {
+          throw new Error('Image OCR source turn reached a durable failure state.');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for image OCR convergence.');
+    })()
+  `, true).then(async (result) => ({
+    ...result,
+    durableSnapshot: await readDurableRestartSnapshot(browserWindow)
+  }));
+}
+
+async function runImageRestartRenderer(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'image_restart_wait';
+      console.info('PIGE_ROUNDTRIP_STAGE image_restart_wait');
+      const deadline = Date.now() + 60000;
+      while (Date.now() < deadline) {
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const library = await window.pige.library.list({ limit: 100 });
+        const assistant = timeline?.messages.find((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(IMAGE_ANSWER)})
+        );
+        const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_11');
+        const sourcePage = library.pages.find((page) =>
+          page.pageId === citation?.pageId && page.sourceIds.length === 1
+        );
+        const activeJobs = jobs.jobs.filter((job) =>
+          ['queued', 'running', 'waiting_dependency', 'awaiting_review', 'cancel_requested', 'failed_retryable'].includes(job.state)
+        );
+        globalThis.__pigeRoundtripWaitState = {
+          answerVisible: Boolean(assistant),
+          citationVisible: Boolean(citation),
+          citationIdentityExact: Boolean(citation?.pageId && sourcePage?.pageId === citation.pageId),
+          activeJobCount: activeJobs.length
+        };
+        if (assistant && citation?.pageId && sourcePage?.pageId === citation.pageId && activeJobs.length === 0) {
+          return {
+            imageAnswerVisible: true,
+            imageCitationVisible: true,
+            imageCitationIdentityExact: true,
+            imageCitationPageId: citation.pageId
+          };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for restarted image OCR evidence.');
     })()
   `, true).then(async (result) => ({
     ...result,
@@ -3583,6 +3849,22 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
     }
     if (latestUserText.includes(MULTI_FILE_PROMPT) && serializedTools.includes("pige_list_attachments")) {
       writeToolCallResponse(response, "pige_list_attachments", "call_multi_list", "multi-file-list-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_image_inspect_after"') && serializedInput.includes("function_call_output")) {
+      writeTextResponse(response, IMAGE_ANSWER, "image-final-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_image_ocr"') && serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_inspect_source", "call_image_inspect_after", "image-inspect-after-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_image_inspect_before"') && serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_ocr_source", "call_image_ocr", "image-ocr-1");
+      return;
+    }
+    if (latestUserText.includes(IMAGE_PROMPT) && serializedTools.includes("pige_inspect_source")) {
+      writeToolCallResponse(response, "pige_inspect_source", "call_image_inspect_before", "image-inspect-before-1");
       return;
     }
     if (serializedInput.includes('"call_id":"call_source_inspect"') && serializedInput.includes("function_call_output")) {

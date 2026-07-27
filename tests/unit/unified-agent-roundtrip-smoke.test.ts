@@ -348,4 +348,47 @@ describe("unified Agent assembled smoke navigation", () => {
     expect(source).toContain('phase !== "docx"');
     expect(source).toContain('phase !== "docx_restart"');
   });
+
+  it("stages one deterministic image, runs production OCR once, cites it, and restarts without replay", () => {
+    const multiFileRestart = source.indexOf('await runChild("multi_file_restart"');
+    const image = source.indexOf('await runChild("image"', multiFileRestart);
+    const imageRestart = source.indexOf('await runChild("image_restart"', image);
+    const cleanup = source.indexOf("fs.rmSync(rootPath, { recursive: true, force: true });", imageRestart);
+    const imagePhase = source.indexOf('phase === "image"');
+    const genericPicker = source.indexOf(
+      "await stageAndSubmitSourceRenderer(browserWindow, imageAttachmentPath",
+      imagePhase
+    );
+
+    expect(image).toBeGreaterThan(multiFileRestart);
+    expect(imageRestart).toBeGreaterThan(image);
+    expect(cleanup).toBeGreaterThan(imageRestart);
+    expect(source).toContain('import { createCanvas } from "@napi-rs/canvas"');
+    expect(source).toContain('const IMAGE_ATTACHMENT_NAME = "image-ocr-roundtrip.png"');
+    expect(source).toContain("fs.writeFileSync(imageAttachmentPath, createRoundtripOcrImage())");
+    expect(source).toContain('context.fillText(IMAGE_OCR_TEXT, 90, 300)');
+    expect(genericPicker).toBeGreaterThan(imagePhase);
+    expect(source).toContain("sourceRecordCountBeforeImage");
+    expect(source).toContain("image.sourceRecordCountBeforeImage + 1");
+    expect(source).toContain('writeToolCallResponse(response, "pige_inspect_source", "call_image_inspect_before"');
+    expect(source).toContain('writeToolCallResponse(response, "pige_ocr_source", "call_image_ocr"');
+    expect(source).toContain('writeToolCallResponse(response, "pige_inspect_source", "call_image_inspect_after"');
+    expect(source).toContain('writeTextResponse(response, IMAGE_ANSWER, "image-final-1")');
+    expect(source).toContain("assert.equal(imageProviderRequests.length, 4)");
+    expect(source).toContain("request.receivedAt < image.stagedAt || request.receivedAt >= image.submittedAt");
+    expect(source).toContain("item.refId === 'citation_11'");
+    expect(source).toContain("sourcePage?.pageId === citation.pageId");
+    expect(source).toContain(".conversation-citations .citation-row:not(:disabled)");
+    expect(source).toContain("assert.equal(imageSource.knowledgePageId, image.imageCitationPageId)");
+    expect(source).toContain('assert.equal(imageSource.kind, "image_file")');
+    expect(source).toContain('job.class === "ocr" && job.parentJobId === image.imageJobId');
+    expect(source).toContain('assert.equal(imageParseChildren.length, 0)');
+    expect(source).toContain('assert.deepEqual(imageSource.artifacts.map((artifact) => artifact.kind), ["ocr", "metadata"])');
+    expect(source).toContain('assert.equal(imageMetadata.units?.[0]?.locator, "ocr:block:1")');
+    expect(source).toContain("assert.equal(artifact.checksum, sha256BufferDigest(artifactBytes))");
+    expect(source).toContain("assert.deepEqual(imageRestart.durableSnapshot, image.durableSnapshot)");
+    expect(source).toContain("assert.equal(requests.length, requestCountBeforeImageRestart)");
+    expect(source).toContain('phase !== "image"');
+    expect(source).toContain('phase !== "image_restart"');
+  });
 });
