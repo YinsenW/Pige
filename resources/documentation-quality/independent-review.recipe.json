@@ -20,6 +20,7 @@
       "docs/UI_PROTOTYPE.md",
       "docs/API_AND_IPC_DESIGN.md",
       "docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md",
+      "docs/AGENT_MEMORY_DESIGN.md",
       "docs/DATA_ARCHITECTURE.md",
       "docs/SOURCE_STORAGE_STRATEGY.md",
       "docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md",
@@ -38,14 +39,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Product Planning review of the next private ingress snapshot slice on the reviewed-task baseline: post-Send accepted files bind exact Job/source/ordinal/checksum bytes, reference-original body readers never use live paths, recovery-safe cleanup is proven, authored ambient intent remains separately reviewed, and statuses remain unchanged.",
+    "scope": "Independent Product Planning review of PR #189 explicit vault memory: enabled explicit-task turns bind one secret-scanned L0/L1 effect per durable event; retry adopts its receipt before changed-body validation; registry writes and bindings fail closed; recall is bounded lower-authority user context; Settings safely inspects/CAS-disables; statuses remain unchanged.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 30,
-    "reviewedSha256": "36151b79d893390681289ad10badd44569e06cecb1c6a6baaa7200612755214d"
+    "reviewedSha256": "0a29840db25e7d190eb6607e11adb81547a036d1d45997497f6a0a5cbe34e7c3"
   },
   "reviewers": [{
-    "reviewerId": "private-ingress-snapshot-review",
-    "task": "Private ingress snapshot lifecycle on reviewed-task baseline",
+    "reviewerId": "explicit-vault-memory-review",
+    "task": "Explicit vault-memory foundation",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -53,33 +54,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Product Planning reviewed Source Storage, Job, Data, Security, architecture, decision and trace owners against the read-only body-access call graph; Development owns snapshot, promotion, resolution and recovery implementation."
+    "independence": "Product Planning reviewed Agent Memory, context, IPC, UI, decision and trace owners against the frozen Development/UI interfaces and tests; Development owns service, Home tool, IPC and renderer implementation."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"private-ingress-snapshot-review","blockerCount":0,"summary":"Post-Send descriptor/file ownership, managed-copy adoption, reference-original reads, restart retention and terminal cleanup have one bounded lifecycle."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"private-ingress-snapshot-review","blockerCount":0,"summary":"Source, Job, Data, Security and architecture agree on private identity, no live-path body input and authored ambient intent as a separate authority."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"private-ingress-snapshot-review","blockerCount":0,"summary":"Vault, Job and Security requirements plus E2 gaps bind executable proof without Requirement, Exit or Phase promotion."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"private-ingress-snapshot-review","blockerCount":0,"summary":"Development has bounded Capture, shared source-file-access and Job cleanup owners plus failure/restart tests without public schema or UI work."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"private-ingress-snapshot-review","blockerCount":0,"summary":"Existing owners and one decision carry the next slice with no new document, public DTO, status or permission mode."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"explicit-vault-memory-review","blockerCount":0,"summary":"One revisioned registry owns atomic L0/L1 truth; inspectable atoms, bounded recall and CAS-disable have explicit adoption boundaries."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"explicit-vault-memory-review","blockerCount":0,"summary":"Memory, context, API and UI agree on explicit intent, secret-before-write, private provenance, safe projection and current-instruction precedence."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"explicit-vault-memory-review","blockerCount":0,"summary":"PIGE-MEM-001 remains planned while its target records the remaining lifecycle beyond the bounded explicit foundation."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"explicit-vault-memory-review","blockerCount":0,"summary":"Development has exact schema, service, Home, IPC and Settings contracts plus focused secret, idempotency, recall and CAS tests."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"explicit-vault-memory-review","blockerCount":0,"summary":"Five existing owners, one decision and mechanical trace facts bind the slice without a new document or broader memory framework."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Source strategy, Job recovery, private-path and authored-intent boundaries remain single-owned without new IPC/schema values."},
-    {"command":"npm run verify:docs && npm run verify:decisions && npm run verify:documentation-leanness","status":"passed","evidence":"Owner links, lifecycle decision and governed byte limits pass without a new document."},
-    {"command":"npm run verify:traceability","status":"passed","evidence":"PIGE-VAULT-003, PIGE-JOB-002, PIGE-SEC-003 and E2 gaps bind planned implementation proof without status promotion."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict memory list/disable schemas, safe summary event and renderer/Main ownership remain one canonical IPC contract."},
+    {"command":"npm run verify:docs && npm run verify:decisions && npm run verify:documentation-leanness","status":"passed","evidence":"Memory owner links, accepted bounded decision and governed byte limits pass without a new document."},
+    {"command":"npm run verify:traceability","status":"passed","evidence":"The PIGE-MEM-001 planned target and its single semantic digest remain synchronized without Requirement, Exit or Phase promotion."}
   ],
   "coordination": {
-    "taskId": "private-ingress-snapshot-lifecycle-20260727",
-    "taskTitle": "Private ingress snapshot lifecycle",
+    "taskId": "explicit-vault-memory-20260727",
+    "taskTitle": "Explicit vault-memory foundation",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Neutral attachments keep exact-source snapshot tools; explicit authored tasks may request precise ambient confirmation/plans with or without attachments. Raw Shell remains per-effect and no saved grant/YOLO exists.",
-    "acknowledgement": "Planning freezes accepted-file snapshot/promotion/body-resolution/recovery semantics only; implementation, executable evidence, UI and status promotion remain outside."
+    "compatibility": "Only durable explicit-user-task provenance registers memory write; neutral/legacy/current-note and source/model/tool content remain unable to create memory. Current instruction always outranks recalled atoms.",
+    "acknowledgement": "Planning binds the explicit remember, inspect, bounded recall and CAS-disable foundation only; autonomous memory and the remaining lifecycle stay planned."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Development must prove no accepted reference-original body reader bypasses shared source-file access to consume a live original path.",
-    "Crash, cancellation, partial rejection, drift and cleanup tests must retain needed snapshots and reap only revalidated terminal/orphan ownership.",
-    "The reviewed-task implementation remains independent; attachment presence neither grants nor forbids its explicit authored-intent boundary."
+    "Restart, backup, 1,000-record and real-Electron evidence remain required before memory acceptance can advance.",
+    "Edit, re-enable, delete, export, reset, autonomous provenance/Undo and exception handling remain outside this slice.",
+    "Future semantic recall must preserve the same secret, authority, provenance and current-instruction boundaries."
   ]
 }

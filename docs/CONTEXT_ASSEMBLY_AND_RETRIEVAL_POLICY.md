@@ -468,7 +468,10 @@ Current unified Home foundation:
   fetch/preserve is Pi-selected. Legacy `agent.ask`/retrieval records remain readable.
 - Vector retrieval and reranking improve ranking when installed but are not required for basic answers.
 - Citation refs survive prompt assembly, model output validation, conversation compaction, and job retry.
-- Memory injection is scoped, ranked, secret-scanned, and lower authority than explicit user instruction.
+- When enabled, vault memory contributes at most eight recent active, secret-scanned
+  preferences as bounded lower-authority user context, never system policy. Disabled atoms
+  leave the next assembly; current instruction, `PIGE.md`, settings and safety win. No full
+  registry or private provenance enters the prompt.
 - Current follow-up uses at most 16 integrity-checked prior user/assistant messages and
   64 KiB UTF-8; older-turn compaction/indexing remains B7.09.
 - Diagnostic prompt-snapshot artifacts exclude Provider credentials and raw bodies; this
