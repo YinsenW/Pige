@@ -7,6 +7,7 @@ import {
   ConfirmationProposalSchema,
   ConversationEventSchema,
   FixtureManifestSchema,
+  HighRiskConfirmationSummarySchema,
   JobRecordSchema,
   KnowledgeActivityListResultSchema,
   MachineLocalSettingsSchema,
@@ -59,6 +60,26 @@ describe("schemas", () => {
     expect(() => TaskExecutionPlanSummarySchema.parse({
       ...summary,
       sourceOrigin: "https://registry.npmjs.org/package/path"
+    })).toThrow();
+
+    const confirmation = {
+      apiVersion: 1,
+      confirmationId: "confirm_20260727_abcdefghijklmnop",
+      effect: "reviewed_execution_plan",
+      presentation: {
+        action: "execute_reviewed_plan",
+        target: "local_toolchain",
+        subject: { kind: "reviewed_execution_plan", value: "Feishu CLI", plan: summary }
+      },
+      owner: { kind: "agent_turn", clientTurnId: "turn_20260727_abcdefghijkl" }
+    } as const;
+    expect(HighRiskConfirmationSummarySchema.parse(confirmation)).toEqual(confirmation);
+    expect(() => HighRiskConfirmationSummarySchema.parse({
+      ...confirmation,
+      presentation: {
+        ...confirmation.presentation,
+        subject: { ...confirmation.presentation.subject, argv: ["install", "secret"] }
+      }
     })).toThrow();
 
     const plan = {

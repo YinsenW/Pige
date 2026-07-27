@@ -555,6 +555,7 @@ export const HighRiskEffectSchema = z.enum([
   "write_outside_authorized_root",
   "arbitrary_shell",
   "install_unreviewed_package",
+  "reviewed_execution_plan",
   "export_secret",
   "risky_agent_edit",
   "authority_boundary_change"
@@ -565,6 +566,7 @@ export const HighRiskConfirmationActionSchema = z.enum([
   "write_external_item",
   "run_shell_command",
   "install_package",
+  "execute_reviewed_plan",
   "export_credential",
   "apply_risky_edit",
   "change_authority_boundary"
@@ -648,7 +650,12 @@ export const HighRiskConfirmationSubjectSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("item_count"), count: z.number().int().min(1).max(8) }).strict(),
   z.object({ kind: z.literal("display_name"), value: RendererSafeSubjectLabelSchema }).strict(),
   z.object({ kind: z.literal("package_name"), value: z.string().refine(isSafePackageSpec) }).strict(),
-  z.object({ kind: z.literal("executable_name"), value: z.string().refine(isSafeExecutableName) }).strict()
+  z.object({ kind: z.literal("executable_name"), value: z.string().refine(isSafeExecutableName) }).strict(),
+  z.object({
+    kind: z.literal("reviewed_execution_plan"),
+    value: RendererSafeSubjectLabelSchema,
+    plan: TaskExecutionPlanSummarySchema
+  }).strict()
 ]);
 const HighRiskDisplayNameSubjectSchema = z.object({
   kind: z.literal("display_name"),
@@ -711,6 +718,19 @@ export const HighRiskConfirmationSummarySchema = z.discriminatedUnion("effect", 
     presentation: z.object({
       action: z.literal("install_package"), target: z.literal("local_toolchain"),
       subject: z.object({ kind: z.literal("package_name"), value: z.string().refine(isSafePackageSpec) }).strict()
+    }).strict(),
+    owner: HighRiskConfirmationOwnerSchema
+  }).strict(),
+  HighRiskConfirmationSummaryBaseSchema.extend({
+    effect: z.literal("reviewed_execution_plan"),
+    presentation: z.object({
+      action: z.literal("execute_reviewed_plan"),
+      target: z.literal("local_toolchain"),
+      subject: z.object({
+        kind: z.literal("reviewed_execution_plan"),
+        value: RendererSafeSubjectLabelSchema,
+        plan: TaskExecutionPlanSummarySchema
+      }).strict()
     }).strict(),
     owner: HighRiskConfirmationOwnerSchema
   }).strict(),
