@@ -21,9 +21,8 @@ import {
   type DatasetLogicalType, type DatasetRevision, type DatasetSchemaRecord, type OperationRecord
 } from "@pige/schemas";
 import {
-  MAX_COLLECTION_JSON_BYTES, adoptColumnRenameMutation, adoptNullableColumnMutation, assertSafeVaultRoot,
-  collectionCellReadOnlyReason, commitColumnRenameUndo, commitNullableColumnAdd,
-  commitNullableColumnUndo, createNullableColumnId, executeColumnRename, fileRef, hashCanonical, normalizeColumnLabel,
+  MAX_COLLECTION_JSON_BYTES, adoptNullableColumnMutation, assertSafeVaultRoot, collectionCellReadOnlyReason,
+  createNullableColumnId, fileRef, hashCanonical,
   openReadOnlyPayload, operationConflict, operationPathFor, payloadInvalid, publishImmutableFile,
   parseCollectionCellValue, readAllBundles, readBundle, readCollectionCell, readCollectionCellFromRevision,
   readCollectionSnapshot, readJsonBounded, readJsonRef, readOperationRecords, readRevisionById,
@@ -31,6 +30,7 @@ import {
   writeJsonExclusive, writeJsonImmutable,
   type BundleBinding, type CollectionCellBinding
 } from "./managed-collection-storage";
+import { commitColumnRenameUndo, commitNullableColumnAdd, commitNullableColumnUndo, executeColumnRename, normalizeColumnLabel } from "./managed-collection-column-storage";
 import {
   adoptDefaultRowAppend,
   commitDefaultRowAppend,
