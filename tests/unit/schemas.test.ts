@@ -13,6 +13,8 @@ import {
   KNOWLEDGE_HEALTH_MAX_ISSUE_SUMMARIES,
   KnowledgeHealthRunRequestSchema,
   KnowledgeHealthRunResultSchema,
+  KnowledgeHealthRepairRequestSchema,
+  KnowledgeHealthRepairResultSchema,
   LOCAL_SEMANTIC_RETRIEVAL_ASSET_BYTES,
   LOCAL_SEMANTIC_RETRIEVAL_ASSET_ID,
   LocalSemanticRetrievalDisableRequestSchema,
@@ -150,6 +152,108 @@ describe("schemas", () => {
           { pageId: "page_20260727_topic001", title: "Local RAG" }
         ]
       }]
+    })).toThrow();
+  });
+
+  it("binds only one deterministic broken-reference unlink repair without exposing content authority", () => {
+    const repairContextId = `knowledge_health_repair_context_${"a".repeat(32)}`;
+    const indexGeneration = "2026-07-27T11:59:00.000Z#0123456789abcdef0123456789abcdef";
+    const reportRequest = {
+      apiVersion: 1,
+      requestId: "knowledge_health_request_abcdefghijklmnop",
+      activeVaultId: "vault_20260727_abcdefgh"
+    } as const;
+    const eligibleReport = {
+      ...reportRequest,
+      status: "ready",
+      checkedAt: "2026-07-27T12:00:00.000Z",
+      indexGeneration,
+      coverage: "complete",
+      invalidPageCount: 0,
+      counts: {
+        totalIssueCount: 1,
+        brokenLinkPageCount: 1,
+        unresolvedLinkCount: 1,
+        orphanPageCount: 0,
+        duplicateTopicGroupCount: 0,
+        unsourcedClaimCount: 0
+      },
+      issues: [{
+        kind: "broken_link",
+        page: { pageId: "page_20260727_broken01", title: "Broken link" },
+        unresolvedLinkCount: 1,
+        repairContextId
+      }],
+      truncated: false
+    } as const;
+    expect(KnowledgeHealthRunResultSchema.parse(eligibleReport)).toEqual(eligibleReport);
+    expect(() => KnowledgeHealthRunResultSchema.parse({
+      ...eligibleReport,
+      coverage: "partial",
+      invalidPageCount: 1
+    })).toThrow();
+    expect(() => KnowledgeHealthRunResultSchema.parse({
+      ...eligibleReport,
+      counts: { ...eligibleReport.counts, unresolvedLinkCount: 2 },
+      issues: [{ ...eligibleReport.issues[0], unresolvedLinkCount: 2 }]
+    })).toThrow();
+    expect(() => KnowledgeHealthRunResultSchema.parse({
+      ...eligibleReport,
+      counts: {
+        ...eligibleReport.counts,
+        brokenLinkPageCount: 0,
+        unresolvedLinkCount: 0,
+        orphanPageCount: 1
+      },
+      issues: [{
+        kind: "orphan_page",
+        page: eligibleReport.issues[0].page,
+        repairContextId
+      }]
+    })).toThrow();
+
+    const request = {
+      apiVersion: 1,
+      requestId: "knowledge_health_repair_request_abcdefghijklmnop",
+      activeVaultId: reportRequest.activeVaultId,
+      indexGeneration,
+      issueKind: "broken_link",
+      pageId: eligibleReport.issues[0].page.pageId,
+      action: "unlink_broken_reference",
+      repairContextId
+    } as const;
+    expect(KnowledgeHealthRepairRequestSchema.parse(request)).toEqual(request);
+    const committed = {
+      ...request,
+      status: "committed",
+      revision: `noteeditrev_${"b".repeat(32)}`,
+      operationId: "op_20260727_abcdefghijklmnop"
+    } as const;
+    expect(KnowledgeHealthRepairResultSchema.parse(committed)).toEqual(committed);
+    expect(KnowledgeHealthRepairResultSchema.parse({
+      ...request,
+      status: "stale",
+      revision: committed.revision
+    })).toMatchObject({ status: "stale", revision: committed.revision });
+    for (const status of ["not_found", "ineligible", "failed"] as const) {
+      expect(KnowledgeHealthRepairResultSchema.parse({ ...request, status }).status).toBe(status);
+    }
+    for (const unsafe of [
+      { body: "[[secret]]" },
+      { path: "/private/vault/wiki/note.md" },
+      { rawTarget: "../secret.md" },
+      { replacement: "secret" }
+    ]) {
+      expect(() => KnowledgeHealthRepairRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+      expect(() => KnowledgeHealthRepairResultSchema.parse({ ...committed, ...unsafe })).toThrow();
+    }
+    expect(() => KnowledgeHealthRepairRequestSchema.parse({
+      ...request,
+      action: "repair_all"
+    })).toThrow();
+    expect(() => KnowledgeHealthRepairRequestSchema.parse({
+      ...request,
+      issueKind: "orphan_page"
     })).toThrow();
   });
 

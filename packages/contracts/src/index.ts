@@ -34,6 +34,8 @@ import type {
   HighRiskConfirmationResolveResult,
   KnowledgeHealthRunRequest,
   KnowledgeHealthRunResult,
+  KnowledgeHealthRepairRequest,
+  KnowledgeHealthRepairResult,
   Locale,
   LocalSemanticRetrievalDisableRequest,
   LocalSemanticRetrievalDisableResult,
@@ -190,6 +192,11 @@ export type {
   KnowledgeHealthRequestId,
   KnowledgeHealthRunRequest,
   KnowledgeHealthRunResult,
+  KnowledgeHealthRepairAction,
+  KnowledgeHealthRepairContextId,
+  KnowledgeHealthRepairRequestId,
+  KnowledgeHealthRepairRequest,
+  KnowledgeHealthRepairResult,
   RendererSafeSubjectLabel,
   SetLocaleRequest,
   SetThemeRequest,
@@ -1553,6 +1560,9 @@ export interface PigeDesktopApi {
     readonly runKnowledgeHealth: (
       request: KnowledgeHealthRunRequest
     ) => Promise<KnowledgeHealthRunResult>;
+    readonly repairKnowledgeHealth: (
+      request: KnowledgeHealthRepairRequest
+    ) => Promise<KnowledgeHealthRepairResult>;
   };
   readonly diagnostics: {
     readonly health: () => Promise<DiagnosticsHealth>;

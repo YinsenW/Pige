@@ -36,6 +36,8 @@ import type {
   KnowledgeActivityUndoResult,
   KnowledgeHealthRunRequest,
   KnowledgeHealthRunResult,
+  KnowledgeHealthRepairRequest,
+  KnowledgeHealthRepairResult,
   KnowledgeTreeResult,
   LibraryListRequest,
   LibraryListResult,
@@ -176,6 +178,8 @@ import {
   KnowledgeActivityListResultSchema,
   KnowledgeHealthRunRequestSchema,
   KnowledgeHealthRunResultSchema,
+  KnowledgeHealthRepairRequestSchema,
+  KnowledgeHealthRepairResultSchema,
   HighRiskConfirmationChangedEventSchema,
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
@@ -891,6 +895,14 @@ const api: PigeDesktopApi = {
       const parsedRequest = KnowledgeHealthRunRequestSchema.parse(request);
       return KnowledgeHealthRunResultSchema.parse(
         await ipcRenderer.invoke("maintenance.runKnowledgeHealth", parsedRequest)
+      );
+    },
+    repairKnowledgeHealth: async (
+      request: KnowledgeHealthRepairRequest
+    ): Promise<KnowledgeHealthRepairResult> => {
+      const parsedRequest = KnowledgeHealthRepairRequestSchema.parse(request);
+      return KnowledgeHealthRepairResultSchema.parse(
+        await ipcRenderer.invoke("maintenance.repairKnowledgeHealth", parsedRequest)
       );
     }
   },
