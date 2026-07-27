@@ -702,6 +702,229 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("repairs only eligible broken references and refreshes the authoritative report", async () => {
+    const dom = createDom();
+    const repairContextId = `knowledge_health_repair_context_${"a".repeat(32)}`;
+    const readyReport = (request: { readonly requestId: string; readonly activeVaultId: string }, issues: unknown[]) => ({
+      ...request,
+      apiVersion: 1,
+      status: "ready",
+      checkedAt: "2026-07-27T12:00:00.000Z",
+      indexGeneration: "index:repair:4",
+      coverage: "complete",
+      invalidPageCount: 0,
+      counts: {
+        totalIssueCount: issues.length,
+        brokenLinkPageCount: 2,
+        unresolvedLinkCount: 3,
+        orphanPageCount: 1,
+        duplicateTopicGroupCount: 0,
+        unsourcedClaimCount: 0
+      },
+      issues,
+      truncated: false
+    });
+    const issues = [
+      {
+        kind: "broken_link",
+        page: { pageId: "page_health_repairable", title: "Repairable page" },
+        unresolvedLinkCount: 1,
+        repairContextId
+      },
+      {
+        kind: "broken_link",
+        page: { pageId: "page_health_manual", title: "Manual page" },
+        unresolvedLinkCount: 2
+      },
+      { kind: "orphan_page", page: { pageId: "page_health_orphan_repair", title: "Orphan page" } }
+    ];
+    const runKnowledgeHealth = vi.fn()
+      .mockImplementationOnce(async (request) => readyReport(request, issues))
+      .mockImplementationOnce(async (request) => ({
+        ...readyReport(request, []),
+        indexGeneration: "index:repair:5",
+        counts: {
+          totalIssueCount: 0,
+          brokenLinkPageCount: 0,
+          unresolvedLinkCount: 0,
+          orphanPageCount: 0,
+          duplicateTopicGroupCount: 0,
+          unsourcedClaimCount: 0
+        }
+      }));
+    const repairKnowledgeHealth = vi.fn()
+      .mockImplementationOnce(async (request) => ({
+        ...request,
+        status: "stale",
+        revision: `noteeditrev_${"b".repeat(32)}`
+      }))
+      .mockImplementationOnce(async (request) => ({
+        ...request,
+        status: "committed",
+        revision: `noteeditrev_${"c".repeat(32)}`,
+        operationId: `operation_${"d".repeat(32)}`
+      }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        maintenance: {
+          runKnowledgeHealth,
+          repairKnowledgeHealth,
+          rebuildLocalDatabase: vi.fn(),
+          resetLocalDatabase: vi.fn()
+        }
+      }
+    });
+    const onOpenPage = vi.fn(async () => true);
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(MaintenanceSettingsPanel, {
+        activeVaultId: "vault_20260727_healthrepair",
+        locale: "en",
+        error: null,
+        localDatabaseStatus: null,
+        onRefresh: vi.fn(async () => undefined),
+        onRefreshDiagnostics: vi.fn(async () => undefined),
+        onOpenPage,
+        onError: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(dom.window.document, "Run Check").click();
+      await settle(dom);
+    });
+
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".maintenance-settings-page"));
+    expect([...page.querySelectorAll("button")].filter((button) => button.textContent === "Repair")).toHaveLength(1);
+    expect(page.textContent).toContain("Manual page");
+    expect(page.textContent).toContain("Orphan page");
+
+    await act(async () => {
+      const repairButton = buttonNamed(page, "Repair");
+      repairButton.click();
+      repairButton.click();
+      await settle(dom);
+    });
+    expect(repairKnowledgeHealth).toHaveBeenCalledOnce();
+    const firstRepair = repairKnowledgeHealth.mock.calls[0]![0];
+    expect(firstRepair).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_20260727_healthrepair",
+      indexGeneration: "index:repair:4",
+      issueKind: "broken_link",
+      pageId: "page_health_repairable",
+      action: "unlink_broken_reference",
+      repairContextId
+    });
+    expect(firstRepair.requestId).toMatch(/^knowledge_health_repair_request_[a-z0-9]{16,64}$/);
+    expect(page.textContent).toContain("That issue changed or is no longer available");
+    expect(page.textContent).toContain("Repairable page");
+    expect(onOpenPage).not.toHaveBeenCalled();
+
+    await act(async () => {
+      buttonNamed(page, "Repair").click();
+      await settle(dom);
+    });
+    expect(repairKnowledgeHealth).toHaveBeenCalledTimes(2);
+    expect(runKnowledgeHealth).toHaveBeenCalledTimes(2);
+    expect(page.textContent).toContain("Broken reference removed");
+    expect(page.textContent).toContain("No issues found.");
+    expect(page.textContent).not.toContain("Repairable page");
+    expect(page.textContent).not.toContain("operation_");
+    expect(page.textContent).not.toContain("repair_context");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("ignores a Knowledge Health repair result after the vault identity changes", async () => {
+    const dom = createDom();
+    let resolveRepair!: (result: unknown) => void;
+    const repairContextId = `knowledge_health_repair_context_${"e".repeat(32)}`;
+    const runKnowledgeHealth = vi.fn(async (request) => ({
+      ...request,
+      status: "ready",
+      checkedAt: "2026-07-27T12:30:00.000Z",
+      indexGeneration: "index:fenced:1",
+      coverage: "complete",
+      invalidPageCount: 0,
+      counts: {
+        totalIssueCount: 1,
+        brokenLinkPageCount: 1,
+        unresolvedLinkCount: 1,
+        orphanPageCount: 0,
+        duplicateTopicGroupCount: 0,
+        unsourcedClaimCount: 0
+      },
+      issues: [{
+        kind: "broken_link",
+        page: { pageId: "page_health_fenced", title: "Fenced page" },
+        unresolvedLinkCount: 1,
+        repairContextId
+      }],
+      truncated: false
+    }));
+    const repairKnowledgeHealth = vi.fn(() => new Promise((resolve) => { resolveRepair = resolve; }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        maintenance: {
+          runKnowledgeHealth,
+          repairKnowledgeHealth,
+          rebuildLocalDatabase: vi.fn(),
+          resetLocalDatabase: vi.fn()
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const renderPanel = async (activeVaultId: string): Promise<void> => {
+      root.render(createElement(MaintenanceSettingsPanel, {
+        activeVaultId,
+        locale: "en",
+        error: null,
+        localDatabaseStatus: null,
+        onRefresh: vi.fn(async () => undefined),
+        onRefreshDiagnostics: vi.fn(async () => undefined),
+        onOpenPage: vi.fn(async () => true),
+        onError: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    };
+
+    await act(async () => {
+      await renderPanel("vault_20260727_repairfirst");
+    });
+    await act(async () => {
+      buttonNamed(dom.window.document, "Run Check").click();
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(dom.window.document, "Repair").click();
+      await settle(dom);
+    });
+    const repairRequest = repairKnowledgeHealth.mock.calls[0]![0];
+    await act(async () => renderPanel("vault_20260727_repairsecond"));
+    await act(async () => {
+      resolveRepair({
+        ...repairRequest,
+        status: "committed",
+        revision: `noteeditrev_${"f".repeat(32)}`,
+        operationId: `operation_${"g".repeat(32)}`
+      });
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".maintenance-settings-page"));
+    expect(page.textContent).toContain("No check has been run yet.");
+    expect(page.textContent).not.toContain("Broken reference removed");
+    expect(runKnowledgeHealth).toHaveBeenCalledOnce();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("renders verified Skills, disables with exact CAS, and ignores stale registry events", async () => {
     const dom = createDom();
     let resolveSummary!: (result: SkillRegistryQueryResult) => void;
