@@ -203,7 +203,7 @@
   "home.largePasteRejectedItemTooLarge": "Ce texte collé est trop volumineux pour un message. Il reste conservé localement.",
   "home.largePasteRejectedAggregateLimit": "La limite de texte collé est atteinte. Cet élément reste conservé localement.",
   "home.largePasteRejectedSubmissionBlocked": "Retirez ou ajustez le texte collé refusé avant l’envoi. Votre message et vos éléments restent inchangés.",
-  "home.organizeAttachedFilesIntent": "Organiser ces fichiers",
+  "home.useAttachedFilesAsSourceIntent": "Utiliser uniquement les fichiers joints comme documents sources.",
   "home.captureQueued": "Capture mise en file",
   "home.cancelJob": "Annuler",
   "home.composerAria": "Capturer ou demander",

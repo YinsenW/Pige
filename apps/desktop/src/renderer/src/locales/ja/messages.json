@@ -203,7 +203,7 @@
   "home.largePasteRejectedItemTooLarge": "この貼り付けテキストは1件のメッセージには大きすぎます。ローカルに保持されています。",
   "home.largePasteRejectedAggregateLimit": "貼り付けテキストの上限に達しました。この項目はローカルに保持されています。",
   "home.largePasteRejectedSubmissionBlocked": "送信前に拒否された貼り付けテキストを削除または調整してください。メッセージと項目は変更されていません。",
-  "home.organizeAttachedFilesIntent": "これらのファイルを整理する",
+  "home.useAttachedFilesAsSourceIntent": "添付されたファイルのみを資料として使用する。",
   "home.captureQueued": "保存をキューに追加しました",
   "home.cancelJob": "取消",
   "home.composerAria": "保存または質問",

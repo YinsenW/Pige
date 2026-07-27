@@ -2484,7 +2484,7 @@ describe("Home durable Agent conversation UI", () => {
     expect(harness.submitRequests[0]).toMatchObject({ inputKind: "file_picker" });
     expect(harness.submitRequests[0]?.text).toBeUndefined();
     expect(harness.submittedFileNames).toEqual([["offline-source.md"]]);
-    expect(container.textContent).toContain("Organize these files");
+    expect(container.textContent).toContain("Use only the attached file(s) as source material.");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -4085,7 +4085,7 @@ describe("Home durable Agent conversation UI", () => {
     expect(submitFiles).not.toContain("text: text.trim()");
     expect(submitFiles).not.toContain("conversationId:");
     expect(submitHomeInput).toContain("const submittedText = text;");
-    expect(submitHomeInput).toContain('const turnText = hasText ? submittedText : props.t("home.organizeAttachedFilesIntent")');
+    expect(submitHomeInput).toContain('const turnText = hasText ? submittedText : props.t("home.useAttachedFilesAsSourceIntent")');
     expect(submitHomeInput).not.toContain("const submittedText = text.trim()");
     expect(submitHomeInput).toContain("const stagedItems = toAgentStagedItems(submittedItems)");
     expect(submitHomeInput).toContain("stagedItems,");

@@ -203,7 +203,7 @@
   "home.largePasteRejectedItemTooLarge": "这段粘贴文本过大，无法放入一条消息。它仍保留在本地。",
   "home.largePasteRejectedAggregateLimit": "粘贴文本总量已达上限。这个项目仍保留在本地。",
   "home.largePasteRejectedSubmissionBlocked": "发送前请移除或调整被拒绝的粘贴文本。你的消息和项目均保持不变。",
-  "home.organizeAttachedFilesIntent": "整理这些文件",
+  "home.useAttachedFilesAsSourceIntent": "仅使用所附文件作为来源材料。",
   "home.captureQueued": "捕获已排队",
   "home.cancelJob": "取消",
   "home.composerAria": "捕获或提问",

@@ -203,7 +203,7 @@
   "home.largePasteRejectedItemTooLarge": "이 붙여넣기 텍스트는 한 메시지에 담기에는 너무 큽니다. 로컬에 유지됩니다.",
   "home.largePasteRejectedAggregateLimit": "붙여넣기 텍스트 한도에 도달했습니다. 이 항목은 로컬에 유지됩니다.",
   "home.largePasteRejectedSubmissionBlocked": "전송 전에 거부된 붙여넣기 텍스트를 제거하거나 조정하세요. 메시지와 항목은 변경되지 않았습니다.",
-  "home.organizeAttachedFilesIntent": "이 파일들을 정리해 줘",
+  "home.useAttachedFilesAsSourceIntent": "첨부된 파일만 소스 자료로 사용하세요.",
   "home.captureQueued": "캡처가 대기열에 추가됨",
   "home.cancelJob": "취소",
   "home.composerAria": "캡처 또는 질문",
