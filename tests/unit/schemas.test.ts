@@ -10,6 +10,10 @@ import {
   ConfirmationProposalSchema,
   CollectionAppendDefaultRowRequestSchema,
   CollectionAppendDefaultRowResultSchema,
+  CollectionCreateViewRequestSchema,
+  CollectionCreateViewResultSchema,
+  CollectionOpenRequestSchema,
+  CollectionOpenResultSchema,
   CollectionRenameColumnRequestSchema,
   CollectionRenameColumnResultSchema,
   CollectionTrashColumnRequestSchema,
@@ -87,6 +91,169 @@ import {
 } from "@pige/schemas";
 
 describe("schemas", () => {
+  it("keeps one saved Collection view stable, bounded, reversible, and body-free", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "collection_request_viewabcdefghijkl",
+      activeVaultId: "vault_20260728_abcdefgh",
+      datasetId: "dataset_20260728_abcdef123456",
+      tableId: "table_abcdef123456",
+      expectedRevisionId: "dataset_rev_20260728_abcdef123456",
+      name: " Unread notes ",
+      filter: {
+        operator: "eq",
+        columnId: "column_abcdef123456",
+        value: "unread"
+      },
+      sort: {
+        columnId: "column_bcdefa123456",
+        direction: "desc"
+      }
+    } as const;
+    const parsedRequest = CollectionCreateViewRequestSchema.parse(request);
+    expect(parsedRequest.name).toBe("Unread notes");
+    expect(CollectionCreateViewRequestSchema.parse({
+      ...request,
+      filter: { operator: "is_null", columnId: "column_abcdef123456" },
+      sort: undefined
+    }).filter).toEqual({ operator: "is_null", columnId: "column_abcdef123456" });
+
+    const view = {
+      viewId: "view_abcdef123456",
+      viewRevision: 1,
+      name: "Unread notes",
+      filter: parsedRequest.filter,
+      sort: parsedRequest.sort
+    } as const;
+    const snapshot = {
+      datasetId: request.datasetId,
+      revisionId: request.expectedRevisionId,
+      title: "Reading list",
+      tableId: request.tableId,
+      tableName: "Items",
+      columns: [
+        { columnId: "column_abcdef123456", label: "Status", logicalType: "string", canRename: true, canTrash: true },
+        { columnId: "column_bcdefa123456", label: "Updated", logicalType: "datetime", canRename: true, canTrash: true }
+      ],
+      rows: [],
+      totalRowCount: 0,
+      returnedRowCount: 0,
+      truncated: false,
+      canAppendDefaultRow: true,
+      canAddColumn: true,
+      views: [view],
+      activeViewId: view.viewId
+    } as const;
+    const identity = {
+      apiVersion: request.apiVersion,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      datasetId: request.datasetId,
+      tableId: request.tableId
+    } as const;
+
+    expect(CollectionCreateViewResultSchema.parse({
+      ...identity,
+      status: "committed",
+      viewId: view.viewId,
+      operationId: "op_20260728_viewabcd1",
+      snapshot
+    })).toMatchObject({ status: "committed", viewId: view.viewId });
+    for (const status of ["stale", "duplicate", "ineligible"] as const) {
+      expect(CollectionCreateViewResultSchema.parse({ ...identity, status, snapshot }).status)
+        .toBe(status);
+    }
+    for (const status of ["not_found", "failed"] as const) {
+      expect(CollectionCreateViewResultSchema.parse({ ...identity, status }).status).toBe(status);
+    }
+
+    const openRequest = CollectionOpenRequestSchema.parse({
+      apiVersion: 1,
+      requestId: "collection_request_openviewabcdefgh",
+      activeVaultId: request.activeVaultId,
+      datasetId: request.datasetId,
+      tableId: request.tableId,
+      viewId: view.viewId
+    });
+    expect(CollectionOpenResultSchema.parse({
+      ...identity,
+      requestId: openRequest.requestId,
+      status: "ready",
+      snapshot
+    }).status).toBe("ready");
+
+    for (const unsafe of [
+      { path: "/private/datasets/views/view.json" },
+      { body: "private" },
+      { sql: "ORDER BY private" },
+      { viewId: "view_renderer_owned" },
+      { filter: { operator: "eq", columnId: "column_abcdef123456", value: null } },
+      { filter: { operator: "contains", columnId: "column_abcdef123456", value: "x" } },
+      { sort: { columnId: "column_abcdef123456", direction: "random" } }
+    ]) {
+      expect(() => CollectionCreateViewRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+    }
+    expect(() => CollectionCreateViewRequestSchema.parse({
+      ...request,
+      filter: { operator: "eq", columnId: "column_abcdef123456", value: "x".repeat(4097) }
+    })).toThrow("4096 UTF-8 bytes");
+    expect(() => CollectionCreateViewResultSchema.parse({
+      ...identity,
+      status: "committed",
+      viewId: view.viewId,
+      operationId: "op_20260728_viewabcd1",
+      snapshot: { ...snapshot, activeViewId: undefined }
+    })).toThrow("present and active");
+    expect(() => CollectionCreateViewResultSchema.parse({
+      ...identity,
+      status: "stale",
+      snapshot: {
+        ...snapshot,
+        views: [{
+          ...view,
+          filter: { operator: "eq", columnId: "column_cdefab123456", value: "unread" }
+        }]
+      }
+    })).toThrow("current stable columns");
+
+    expect(OperationRecordSchema.parse({
+      id: "op_20260728_viewabcd1",
+      schemaVersion: 1,
+      createdAt: "2026-07-28T00:00:00.000Z",
+      actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+      kind: "create_collection_view",
+      targetRefs: [
+        { kind: "dataset", id: request.datasetId },
+        { kind: "table", id: request.tableId },
+        { kind: "view", id: view.viewId }
+      ],
+      sourceRefs: [{ kind: "dataset", id: request.datasetId }],
+      summary: "Created one Managed Collection saved view.",
+      reversible: "yes",
+      warnings: []
+    }).kind).toBe("create_collection_view");
+    expect(KnowledgeActivityListResultSchema.parse({
+      scannedAt: "2026-07-28T00:00:00.000Z",
+      activeVaultId: request.activeVaultId,
+      total: 1,
+      invalidOperationCount: 0,
+      activities: [{
+        operationId: "op_20260728_viewabcd1",
+        kind: "create_collection_view",
+        createdAt: "2026-07-28T00:00:00.000Z",
+        targetLabel: view.name,
+        target: {
+          kind: "collection",
+          datasetId: request.datasetId,
+          tableId: request.tableId,
+          revisionId: request.expectedRevisionId
+        },
+        status: "applied",
+        canUndo: true
+      }]
+    }).activities[0]?.kind).toBe("create_collection_view");
+  });
+
   it("keeps default-row append Main-owned, CAS-bound, and renderer-safe", () => {
     const request = {
       apiVersion: 1,
@@ -108,7 +275,8 @@ describe("schemas", () => {
       returnedRowCount: 0,
       truncated: false,
       canAppendDefaultRow: true,
-      canAddColumn: true
+      canAddColumn: true,
+      views: []
     } as const;
     const identity = {
       apiVersion: request.apiVersion,
@@ -193,7 +361,8 @@ describe("schemas", () => {
       returnedRowCount: 0,
       truncated: false,
       canAppendDefaultRow: true,
-      canAddColumn: true
+      canAddColumn: true,
+      views: []
     } as const;
     const identity = {
       apiVersion: request.apiVersion,
@@ -281,7 +450,8 @@ describe("schemas", () => {
       returnedRowCount: 0,
       truncated: false,
       canAppendDefaultRow: true,
-      canAddColumn: true
+      canAddColumn: true,
+      views: []
     } as const;
     expect(CollectionRenameColumnResultSchema.parse({
       ...identity,
@@ -374,7 +544,8 @@ describe("schemas", () => {
       returnedRowCount: 0,
       truncated: false,
       canAppendDefaultRow: true,
-      canAddColumn: true
+      canAddColumn: true,
+      views: []
     } as const;
     expect(CollectionTrashColumnRequestSchema.parse(request)).toEqual(request);
     expect(CollectionTrashColumnResultSchema.parse({
@@ -463,7 +634,8 @@ describe("schemas", () => {
       returnedRowCount: 1,
       truncated: false,
       canAppendDefaultRow: true,
-      canAddColumn: true
+      canAddColumn: true,
+      views: []
     } as const;
 
     expect(CollectionTrashRowRequestSchema.parse(request)).toEqual(request);

@@ -516,15 +516,13 @@ Current Home Dataset read boundary:
 - After Pi selects the typed query tool, `agent.submitTurn` may return one bounded Dataset
   preview/citation; `agent.conversation` restores it checksum-bound. Renderer gets display
   columns, bounded rows/counts/truncation/citations, never storage or query internals.
-- `collections.open` binds request/vault/Dataset/table and returns `ready | stale |
-  not_found | failed`; ready is current, <=32 columns, 50 rows, 4 KiB/string and 64 KiB total.
-- `editCell` binds revision/row/column/scalar; `appendDefaultRow` lets Main create the row ID;
-  `trashRow` requires exact `canTrash`. Old revisions retain a trashed row for Undo.
-- `addNullableColumn` binds revision/label/type and lets Main create the ID/null cells.
-  `renameColumn` binds stable column/label; `trashColumn` binds stable column only. Exact
-  `canRename`/`canTrash` gates them; closed snapshots expose duplicate/ineligible/stale truth.
-- Main fences vault/manifest/revision/schema/payload. Renderer sends no generated ID, default,
-  formula or row body; results expose no source/storage/query/error/value internals.
+- `collections.open` binds vault/Dataset/table and optional stable view; ready is current,
+  <=32 columns/views, 50 rows, 4 KiB/string and 64 KiB total. Other results are body-free.
+- Cell/row/column changes bind exact revision/IDs/capabilities; Main generates IDs/defaults.
+  Closed snapshots expose stale/ineligible/duplicate truth and retained revisions enable Undo.
+- `createView` binds revision/name and one optional typed filter/sort; Main generates the ID,
+  returns it active and records reversible Activity without changing Dataset rows/revision.
+- Main fences vault/manifest/schema/payload. Renderer receives no storage/query/error/value internals.
 
 ### 6.6 Retrieval
 

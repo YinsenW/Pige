@@ -6,6 +6,8 @@ import type {
   CollectionAppendDefaultRowResult,
   CollectionCellEditRequest,
   CollectionCellEditResult,
+  CollectionCreateViewRequest,
+  CollectionCreateViewResult,
   CollectionRenameColumnRequest,
   CollectionRenameColumnResult,
   CollectionScalarValue,
@@ -21,6 +23,7 @@ import {
   ManagedCollectionColumnActions,
   type CollectionColumnActionNotice
 } from "./ManagedCollectionColumnActions";
+import { ManagedCollectionViewControls } from "./ManagedCollectionViewControls";
 
 type CellIdentity = {
   readonly rowId: string;
@@ -83,6 +86,10 @@ export function ManagedCollectionPanel(props: {
   readonly onTrashColumn: (
     request: CollectionTrashColumnRequest
   ) => Promise<CollectionTrashColumnResult>;
+  readonly onOpenView: (viewId?: string) => Promise<CollectionSnapshot | null>;
+  readonly onCreateView: (
+    request: CollectionCreateViewRequest
+  ) => Promise<CollectionCreateViewResult>;
   readonly onAdoptSnapshot: (snapshot: CollectionSnapshot, expectedRevisionId: string) => boolean;
   readonly onEditCell: (request: CollectionCellEditRequest) => Promise<CollectionCellEditResult>;
   readonly onReload: () => Promise<CollectionSnapshot | null>;
@@ -93,6 +100,7 @@ export function ManagedCollectionPanel(props: {
   const [notice, setNotice] = useState<EditNotice | null>(null);
   const [busy, setBusy] = useState(false);
   const [columnActionsBusy, setColumnActionsBusy] = useState(false);
+  const [viewControlsBusy, setViewControlsBusy] = useState(false);
   const [columnFocusRequest, setColumnFocusRequest] = useState<string | null>(null);
   const requestSequence = useRef(0);
   const appendActiveRef = useRef<number | null>(null);
@@ -103,6 +111,7 @@ export function ManagedCollectionPanel(props: {
   const columnTriggerRef = useRef<HTMLButtonElement | null>(null);
   const columnLabelRef = useRef<HTMLInputElement | null>(null);
   const columnActionsActiveRef = useRef(false);
+  const viewControlsActiveRef = useRef(false);
   const editTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
   const pendingFocusRef = useRef<CellIdentity | null>(null);
@@ -128,6 +137,7 @@ export function ManagedCollectionPanel(props: {
     trashActiveRef.current = null;
     columnActiveRef.current = null;
     columnActionsActiveRef.current = false;
+    viewControlsActiveRef.current = false;
     pendingFocusRef.current = null;
     pendingAppendFocusRef.current = false;
     pendingRowFocusRef.current = null;
@@ -139,6 +149,7 @@ export function ManagedCollectionPanel(props: {
     setNotice(null);
     setBusy(false);
     setColumnActionsBusy(false);
+    setViewControlsBusy(false);
     setColumnFocusRequest(null);
   }, [ownerKey]);
 
@@ -208,7 +219,7 @@ export function ManagedCollectionPanel(props: {
   };
 
   const submitEdit = async (): Promise<void> => {
-    if (!edit || busy || columnActionsActiveRef.current) return;
+    if (!edit || busy || columnActionsActiveRef.current || viewControlsActiveRef.current) return;
     const value = parseCollectionScalar(edit.draft, edit.logicalType, edit.originalValue);
     if (value === undefined) {
       setNotice({ kind: "invalid" });
@@ -303,7 +314,7 @@ export function ManagedCollectionPanel(props: {
   };
 
   const appendDefaultRow = async (): Promise<void> => {
-    if (!props.snapshot.canAppendDefaultRow || busy || edit || columnDraft || columnActionsActiveRef.current || appendActiveRef.current !== null || trashActiveRef.current) return;
+    if (!props.snapshot.canAppendDefaultRow || busy || edit || columnDraft || columnActionsActiveRef.current || viewControlsActiveRef.current || appendActiveRef.current !== null || trashActiveRef.current) return;
     const sequence = requestSequence.current + 1;
     requestSequence.current = sequence;
     appendActiveRef.current = sequence;
@@ -347,7 +358,7 @@ export function ManagedCollectionPanel(props: {
 
   const trashRow = async (rowId: string, rowIndex: number): Promise<void> => {
     const row = props.snapshot.rows.find((candidate) => candidate.rowId === rowId);
-    if (!row?.canTrash || busy || edit || columnDraft || columnActionsActiveRef.current || trashActiveRef.current) return;
+    if (!row?.canTrash || busy || edit || columnDraft || columnActionsActiveRef.current || viewControlsActiveRef.current || trashActiveRef.current) return;
     const sequence = requestSequence.current + 1;
     requestSequence.current = sequence;
     trashActiveRef.current = { sequence, rowId };
@@ -405,7 +416,7 @@ export function ManagedCollectionPanel(props: {
   const hasTrashActions = props.snapshot.rows.some((row) => row.canTrash);
 
   const addNullableColumn = async (): Promise<void> => {
-    if (!columnDraft || busy || columnActionsActiveRef.current || columnActiveRef.current !== null) return;
+    if (!columnDraft || busy || columnActionsActiveRef.current || viewControlsActiveRef.current || columnActiveRef.current !== null) return;
     const sequence = requestSequence.current + 1;
     requestSequence.current = sequence;
     columnActiveRef.current = sequence;
@@ -502,7 +513,7 @@ export function ManagedCollectionPanel(props: {
               ref={appendTriggerRef}
               type="button"
               className="settings-button"
-              disabled={busy || columnActionsBusy || edit !== null || columnDraft !== null}
+              disabled={busy || columnActionsBusy || viewControlsBusy || edit !== null || columnDraft !== null}
               onClick={() => void appendDefaultRow()}
             >
               {props.t(busy && appendActiveRef.current !== null ? "collection.addingRow" : "collection.addRow")}
@@ -513,9 +524,9 @@ export function ManagedCollectionPanel(props: {
               ref={columnTriggerRef}
               type="button"
               className="settings-button"
-              disabled={busy || columnActionsBusy || edit !== null || appendActiveRef.current !== null}
+              disabled={busy || columnActionsBusy || viewControlsBusy || edit !== null || appendActiveRef.current !== null}
               onClick={() => {
-                if (busy || columnActionsActiveRef.current || edit || appendActiveRef.current !== null || columnActiveRef.current !== null) return;
+                if (busy || columnActionsActiveRef.current || viewControlsActiveRef.current || edit || appendActiveRef.current !== null || columnActiveRef.current !== null) return;
                 setNotice(null);
                 setColumnDraft({
                   expectedRevisionId: props.snapshot.revisionId,
@@ -530,6 +541,19 @@ export function ManagedCollectionPanel(props: {
           ) : null}
         </div>
       </header>
+      <ManagedCollectionViewControls
+        activeVaultId={props.activeVaultId}
+        snapshot={props.snapshot}
+        blocked={busy || columnActionsBusy || edit !== null || columnDraft !== null}
+        onOpenView={props.onOpenView}
+        onCreateView={props.onCreateView}
+        onAdoptSnapshot={props.onAdoptSnapshot}
+        onBusyChange={(active) => {
+          viewControlsActiveRef.current = active;
+          setViewControlsBusy(active);
+        }}
+        t={props.t}
+      />
       {columnDraft ? (
         <form
           className="settings-card settings-row tall"
@@ -613,7 +637,7 @@ export function ManagedCollectionPanel(props: {
             <ManagedCollectionColumnActions
               activeVaultId={props.activeVaultId}
               snapshot={props.snapshot}
-              blocked={busy || edit !== null || columnDraft !== null}
+              blocked={busy || viewControlsBusy || edit !== null || columnDraft !== null}
               hasRowActions={hasTrashActions}
               requestedFocusColumnId={columnFocusRequest}
               onFocusHandled={() => setColumnFocusRequest(null)}
@@ -683,14 +707,14 @@ export function ManagedCollectionPanel(props: {
                         <button
                           type="button"
                           className="ghost"
-                          disabled={busy || columnActionsBusy || columnDraft !== null}
+                          disabled={busy || columnActionsBusy || viewControlsBusy || columnDraft !== null}
                           ref={(element) => {
                             if (element) editTriggerRefs.current.set(cellKey(identity), element);
                             else editTriggerRefs.current.delete(cellKey(identity));
                           }}
                           aria-label={`${props.t("collection.edit")}: ${column.label}, ${props.t("collection.row")} ${rowIndex + 1}`}
                           onClick={() => {
-                            if (busy || columnActionsActiveRef.current || columnDraft || appendActiveRef.current !== null || columnActiveRef.current !== null || trashActiveRef.current) return;
+                            if (busy || columnActionsActiveRef.current || viewControlsActiveRef.current || columnDraft || appendActiveRef.current !== null || columnActiveRef.current !== null || trashActiveRef.current) return;
                             setNotice(null);
                             setEdit({
                               ...identity,
@@ -715,7 +739,7 @@ export function ManagedCollectionPanel(props: {
                       <button
                         type="button"
                         className="ghost"
-                        disabled={busy || columnActionsBusy || edit !== null || columnDraft !== null}
+                        disabled={busy || columnActionsBusy || viewControlsBusy || edit !== null || columnDraft !== null}
                         ref={(element) => {
                           if (element) trashTriggerRefs.current.set(row.rowId, element);
                           else trashTriggerRefs.current.delete(row.rowId);

@@ -6,6 +6,8 @@ import {
   CollectionAppendDefaultRowResultSchema,
   CollectionCellEditRequestSchema,
   CollectionCellEditResultSchema,
+  CollectionCreateViewRequestSchema,
+  CollectionCreateViewResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
   CollectionRenameColumnRequestSchema,
@@ -18,6 +20,8 @@ import {
   type CollectionAddNullableColumnResult,
   type CollectionCellEditRequest,
   type CollectionCellEditResult,
+  type CollectionCreateViewRequest,
+  type CollectionCreateViewResult,
   type CollectionAppendDefaultRowRequest,
   type CollectionAppendDefaultRowResult,
   type CollectionOpenRequest,
@@ -49,6 +53,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly renameCollectionColumn: (
     request: CollectionRenameColumnRequest
   ) => CollectionRenameColumnResult | Promise<CollectionRenameColumnResult>;
+  readonly createCollectionView: (
+    request: CollectionCreateViewRequest
+  ) => CollectionCreateViewResult | Promise<CollectionCreateViewResult>;
   readonly trashCollectionColumn: (
     request: CollectionTrashColumnRequest
   ) => CollectionTrashColumnResult | Promise<CollectionTrashColumnResult>;
@@ -141,6 +148,17 @@ function failedTrashColumn(request: CollectionTrashColumnRequest): CollectionTra
   });
 }
 
+function failedCreateView(request: CollectionCreateViewRequest): CollectionCreateViewResult {
+  return CollectionCreateViewResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    status: "failed"
+  });
+}
+
 function assertOpenIdentity(
   request: CollectionOpenRequest,
   result: CollectionOpenResult
@@ -152,6 +170,9 @@ function assertOpenIdentity(
     result.tableId !== request.tableId
   ) {
     throw new Error("Managed Collection open response identity did not match the request.");
+  }
+  if (result.status === "ready" && result.snapshot.activeViewId !== request.viewId) {
+    throw new Error("Managed Collection open response view identity did not match the request.");
   }
   return result;
 }
@@ -262,6 +283,29 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
     return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
       ? result
       : failedRenameColumn(parsed);
+  });
+
+  options.ipcMain.handle("collections.createView", async (event, request: unknown) => {
+    const parsed = CollectionCreateViewRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId) {
+      return failedCreateView(parsed);
+    }
+    let rawResult: CollectionCreateViewResult;
+    try {
+      rawResult = await options.createCollectionView(parsed);
+    } catch {
+      return failedCreateView(parsed);
+    }
+    const result = CollectionCreateViewResultSchema.parse(rawResult);
+    if (
+      result.requestId !== parsed.requestId ||
+      result.activeVaultId !== parsed.activeVaultId ||
+      result.datasetId !== parsed.datasetId ||
+      result.tableId !== parsed.tableId
+    ) throw new Error("Managed Collection view-creation response identity did not match the request.");
+    return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
+      ? result
+      : failedCreateView(parsed);
   });
 
   options.ipcMain.handle("collections.trashColumn", async (event, request: unknown) => {

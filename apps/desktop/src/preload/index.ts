@@ -183,6 +183,8 @@ import {
   CollectionAddNullableColumnResultSchema,
   CollectionCellEditRequestSchema,
   CollectionCellEditResultSchema,
+  CollectionCreateViewRequestSchema,
+  CollectionCreateViewResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
   CollectionAppendDefaultRowRequestSchema,
@@ -295,6 +297,8 @@ import type {
   CollectionAddNullableColumnResult,
   CollectionCellEditRequest,
   CollectionCellEditResult,
+  CollectionCreateViewRequest,
+  CollectionCreateViewResult,
   CollectionOpenRequest,
   CollectionOpenResult,
   CollectionAppendDefaultRowRequest,
@@ -366,6 +370,12 @@ async function invokeCollectionOpen(request: CollectionOpenRequest): Promise<Col
     result.tableId !== parsedRequest.tableId
   ) {
     throw new Error("Invalid Managed Collection open response identity.");
+  }
+  if (
+    result.status === "ready" &&
+    result.snapshot.activeViewId !== parsedRequest.viewId
+  ) {
+    throw new Error("Invalid Managed Collection open response view identity.");
   }
   return result;
 }
@@ -460,6 +470,24 @@ async function invokeCollectionTrashColumn(
     result.columnId !== parsedRequest.columnId
   ) {
     throw new Error("Invalid Managed Collection column-trash response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionCreateView(
+  request: CollectionCreateViewRequest
+): Promise<CollectionCreateViewResult> {
+  const parsedRequest = CollectionCreateViewRequestSchema.parse(request);
+  const result = CollectionCreateViewResultSchema.parse(
+    await ipcRenderer.invoke("collections.createView", parsedRequest)
+  );
+  if (
+    result.requestId !== parsedRequest.requestId ||
+    result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.datasetId !== parsedRequest.datasetId ||
+    result.tableId !== parsedRequest.tableId
+  ) {
+    throw new Error("Invalid Managed Collection view-creation response identity.");
   }
   return result;
 }
@@ -865,6 +893,7 @@ const api: PigeDesktopApi = {
     appendDefaultRow: invokeCollectionAppendDefaultRow,
     addNullableColumn: invokeCollectionAddNullableColumn,
     renameColumn: invokeCollectionRenameColumn,
+    createView: invokeCollectionCreateView,
     trashColumn: invokeCollectionTrashColumn,
     trashRow: invokeCollectionTrashRow
   },
