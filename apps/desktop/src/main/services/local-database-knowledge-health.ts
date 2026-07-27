@@ -86,12 +86,13 @@ export function readKnowledgeHealthSnapshot(
   const invalidPageCount = toNonnegativeInteger(state?.invalid_page_count);
 
   const brokenRows = db.prepare(`
-    SELECT p.page_id, p.title, COUNT(*) AS unresolved_count, MIN(l.target) AS unresolved_target
+    SELECT p.page_id, p.title, p.page_path, COUNT(*) AS unresolved_count,
+      MIN(l.target) AS unresolved_target
     FROM links l
     JOIN pages p ON p.page_id = l.from_page_id
     WHERE l.to_page_id IS NULL AND p.status = 'active' AND p.page_type <> 'source'
       AND p.page_path LIKE 'wiki/%'
-    GROUP BY p.page_id, p.title
+    GROUP BY p.page_id, p.title, p.page_path
     ORDER BY p.page_id ASC
   `).all();
   const orphanRows = db.prepare(`
@@ -162,7 +163,8 @@ export function readKnowledgeHealthSnapshot(
     issues,
     repairTargetsByPageId: new Map(brokenRows.flatMap((row) =>
       toPositiveInteger(row.unresolved_count) === 1 && typeof row.unresolved_target === "string" &&
-        hasNoIndexedReferenceCandidate(db, row.unresolved_target)
+        typeof row.page_path === "string" &&
+        hasNoIndexedReferenceCandidate(db, row.page_path, row.unresolved_target)
         ? [[String(row.page_id), row.unresolved_target] as const]
         : []
     )),
@@ -172,15 +174,25 @@ export function readKnowledgeHealthSnapshot(
   };
 }
 
-function hasNoIndexedReferenceCandidate(db: DatabaseSync, target: string): boolean {
-  const normalized = normalizeLocalReference(target);
-  if (!normalized) return false;
-  const row = db.prepare(`
+function hasNoIndexedReferenceCandidate(
+  db: DatabaseSync,
+  fromPagePath: string,
+  target: string
+): boolean {
+  const readCandidateCount = db.prepare(`
     SELECT COUNT(DISTINCT page_id) AS candidate_count
     FROM page_reference_keys
     WHERE normalized_key = ?
-  `).get(normalized);
-  return toNonnegativeInteger(row?.candidate_count) === 0;
+  `);
+  return createLinkTargetCandidates(fromPagePath, {
+    kind: "markdown_link",
+    target,
+    label: target
+  }).every((candidate) => {
+    const normalized = normalizeLocalReference(candidate);
+    if (!normalized) return false;
+    return toNonnegativeInteger(readCandidateCount.get(normalized)?.candidate_count) === 0;
+  });
 }
 
 export function readKnowledgeHealthIndexGeneration(db: DatabaseSync): string | undefined {
