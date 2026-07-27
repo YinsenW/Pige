@@ -177,18 +177,39 @@ describe("ManagedCollectionViewService", () => {
 
     const beforeUndoManifest = fs.readFileSync(path.join(fixture.bundlePath, "dataset.json"));
     const beforeUndoPayload = fs.readFileSync(path.join(fixture.bundlePath, manifest.payload.path));
-    const undone = await service.undoCreateView({
-      activeVaultId: vault.vaultId,
-      datasetId: manifest.datasetId,
-      tableId: table.id,
-      viewId: committed.viewId,
-      expectedViewRevision: 1
+    expect(service.activitySummary(operation)).toMatchObject({
+      operationId: operation.id,
+      kind: "create_collection_view",
+      targetLabel: "Grace only",
+      target: {
+        kind: "collection",
+        datasetId: manifest.datasetId,
+        tableId: table.id,
+        revisionId: manifest.activeRevision
+      },
+      status: "applied",
+      canUndo: true
     });
-    expect(undone).toMatchObject({
-      revisionId: manifest.activeRevision,
-      totalRowCount: 3,
-      returnedRowCount: 3,
-      views: []
+    await expect(service.undo(operation, "dataset_rev_20260728_ffffffffffff")).resolves.toMatchObject({
+      status: "stale",
+      operationId: operation.id,
+      currentRevisionId: manifest.activeRevision
+    });
+    await expect(service.undo(operation, manifest.activeRevision)).resolves.toMatchObject({
+      status: "undone",
+      operationId: operation.id,
+      undoOperationId: expect.stringMatching(/^op_\d{8}_[a-z0-9]{8,}$/),
+      revisionId: manifest.activeRevision
+    });
+    const undoOperation = OperationRecordSchema.parse(readJson(findFileBy(
+      path.join(fixture.vaultPath, ".pige/operations"),
+      (candidate) => candidate.sourceRefs.some((ref) => ref.kind === "operation" && ref.id === operation.id)
+    )));
+    expect(service.findUndoOperation(operation, [operation, undoOperation])).toEqual(undoOperation);
+    expect(service.activitySummary(operation, undoOperation)).toMatchObject({
+      status: "undone",
+      canUndo: false,
+      undoUnavailableReason: "already_undone"
     });
     expect(readJson(pointerPath)).toMatchObject({ activeRevision: 2 });
     expect(fs.existsSync(path.join(
@@ -357,6 +378,19 @@ function findFile(root: string, name: string): string {
     } else if (entry.name === name) return candidate;
   }
   return "";
+}
+
+function findFileBy(root: string, predicate: (operation: ReturnType<typeof OperationRecordSchema.parse>) => boolean): string {
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const absolute = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      try { return findFileBy(absolute, predicate); } catch { /* Continue searching. */ }
+    } else if (entry.isFile() && entry.name.endsWith(".json")) {
+      const operation = OperationRecordSchema.safeParse(readJson(absolute));
+      if (operation.success && predicate(operation.data)) return absolute;
+    }
+  }
+  throw new Error("Operation not found");
 }
 
 function required<T>(value: T | undefined): T {
