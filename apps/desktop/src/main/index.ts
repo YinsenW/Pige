@@ -36,8 +36,6 @@ import type {
   SetThemeRequest,
   SetSidebarOpenRequest,
   SetWindowModeRequest,
-  MemoryDisableRequest,
-  MemoryListRequest,
   SpeechAvailabilityRequest,
   SpeechAssetInstallRequest,
   SpeechCancelRequest,
@@ -83,10 +81,6 @@ import {
   UpdateCheckResultSchema,
   UpdateStatusEventSchema,
   UpdateSummarySchema,
-  MemoryDisableRequestSchema,
-  MemoryListRequestSchema,
-  MemoryMutationResultSchema,
-  MemorySummarySchema,
   SetLocaleRequestSchema,
   SetThemeRequestSchema,
   WindowLayoutRequestSchema,
@@ -98,6 +92,7 @@ import { registerReaderIpc } from "./register-reader-ipc";
 import { registerBackupRestoreIpc } from "./register-backup-restore-ipc";
 import { registerTaskExecutionIpc } from "./register-task-execution-ipc";
 import { registerManagedCollectionIpc } from "./register-managed-collection-ipc";
+import { registerMemoryIpc } from "./register-memory-ipc";
 import { registerSkillsIpc } from "./register-skills-ipc";
 import {
   AgentIngestService,
@@ -1234,7 +1229,8 @@ const getKnowledgeActivityService = (): KnowledgeActivityService => {
     knowledgeActivityService = new KnowledgeActivityService(
       getVaultService(),
       getManagedCollectionService(),
-      getNoteMarkdownEditorActivityAdapter()
+      getNoteMarkdownEditorActivityAdapter(),
+      getAgentMemoryService()
     );
   }
   return knowledgeActivityService;
@@ -1874,29 +1870,27 @@ registerSkillsIpc({
     }
   }
 });
-ipcMain.handle("memory.list", (_event, request: MemoryListRequest) => {
-  const parsed = MemoryListRequestSchema.parse(request);
-  const vault = getVaultService().current();
-  const vaultPath = getVaultService().activeVaultPath();
-  if (!vault || !vaultPath || vault.vaultId !== parsed.activeVaultId) {
-    throw new PigeDomainError("vault.binding_changed", "The active vault changed before memory inspection.");
-  }
-  return MemorySummarySchema.parse(getAgentMemoryService().list(vaultPath, vault.vaultId));
-});
-ipcMain.handle("memory.disable", (_event, request: MemoryDisableRequest) => {
-  const parsed = MemoryDisableRequestSchema.parse(request);
-  const vault = getVaultService().current();
-  const vaultPath = getVaultService().activeVaultPath();
-  if (!vault || !vaultPath || vault.vaultId !== parsed.activeVaultId) {
-    throw new PigeDomainError("vault.binding_changed", "The active vault changed before memory mutation.");
-  }
-  const result = MemoryMutationResultSchema.parse(getAgentMemoryService().disable(vaultPath, parsed));
-  if (result.status === "committed") {
+registerMemoryIpc({
+  ipcMain,
+  getWindow: (sender) => BrowserWindow.fromWebContents(sender) ?? undefined,
+  showSaveDialog: (window, options) => dialog.showSaveDialog(window, options),
+  getActiveVaultBinding: () => {
+    const vault = getVaultService().current();
+    const vaultPath = getVaultService().activeVaultPath();
+    return vault && vaultPath ? { vaultId: vault.vaultId, vaultPath } : undefined;
+  },
+  listMemory: (binding) => getAgentMemoryService().list(binding.vaultPath, binding.vaultId),
+  disableMemory: (binding, request) => getAgentMemoryService().disable(binding.vaultPath, request),
+  enableMemory: (binding, request) => getAgentMemoryService().enable(binding.vaultPath, request),
+  deleteMemory: (binding, request) => getAgentMemoryService().delete(binding.vaultPath, request),
+  exportMemory: (binding, request, destinationPath) =>
+    getAgentMemoryService().export(binding.vaultPath, request, destinationPath),
+  resetMemory: (binding, request) => getAgentMemoryService().reset(binding.vaultPath, request),
+  publishMemoryChanged: (summary) => {
     for (const window of mainWindows) {
-      if (!window.isDestroyed()) window.webContents.send("memory.changed", result.summary);
+      if (!window.isDestroyed()) window.webContents.send("memory.changed", summary);
     }
   }
-  return result;
 });
 ipcMain.handle("activity.list", (_event, request?: KnowledgeActivityListRequest) =>
   (() => {
@@ -2259,7 +2253,8 @@ app.whenReady().then(async () => {
   knowledgeActivityService = new KnowledgeActivityService(
     getVaultService(),
     managedCollectionService,
-    noteMarkdownEditorActivityAdapter
+    noteMarkdownEditorActivityAdapter,
+    getAgentMemoryService()
   );
   agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
     snapshot: getAgentCapabilitySnapshot
