@@ -840,6 +840,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "create_page",
     "update_page",
     "update_collection_cell",
+    "add_collection_row",
     "update_memory",
     "trash_memory",
     "restore_memory"
@@ -2577,6 +2578,17 @@ export const DatasetRevisionSchema = z.object({
       rowId: RowIdSchema,
       columnId: ColumnIdSchema,
       undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_row_add"),
+      tableId: TableIdSchema,
+      rowId: RowIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_row_add_undo"),
+      tableId: TableIdSchema,
+      rowId: RowIdSchema,
+      undoOfOperationId: OperationIdSchema
     }).strict()
   ]).optional(),
   createdAt: z.string().datetime({ offset: true })
@@ -2675,7 +2687,8 @@ export const CollectionSnapshotSchema = z.object({
   rows: z.array(CollectionRowSchema).max(50),
   totalRowCount: DatasetQueryCountSchema,
   returnedRowCount: DatasetQueryCountSchema,
-  truncated: z.boolean()
+  truncated: z.boolean(),
+  canAppendDefaultRow: z.boolean()
 }).strict().superRefine((snapshot, context) => {
   if (snapshot.returnedRowCount !== snapshot.rows.length) {
     context.addIssue({
@@ -2752,6 +2765,15 @@ export const CollectionCellEditRequestSchema = z.object({
   }
 });
 
+export const CollectionAppendDefaultRowRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema
+}).strict();
+
 const CollectionEditResultIdentitySchema = z.object({
   apiVersion: z.literal(1),
   requestId: CollectionRequestIdSchema,
@@ -2783,6 +2805,29 @@ export const CollectionCellEditResultSchema = z.discriminatedUnion("status", [
   }).strict(),
   CollectionEditResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
+
+export const CollectionAppendDefaultRowResultSchema = z.discriminatedUnion("status", [
+  CollectionResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    rowId: DatasetQueryRowIdSchema,
+    operationId: OperationIdSchema,
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionResultIdentitySchema.extend({ status: z.literal("not_found") }).strict()
+]).superRefine((result, context) => {
+  if (result.status === "not_found") return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({
+      code: "custom",
+      path: ["snapshot"],
+      message: "Collection default-row append snapshots must match the request identity."
+    });
+  }
+});
 
 const DatasetEvidenceRangeSchema = z.object({
   startRow: DatasetQueryCountSchema,
@@ -4170,6 +4215,7 @@ export const OperationRecordSchema = z.object({
     "create_artifact",
     "create_dataset_revision",
     "update_collection_cell",
+    "add_collection_row",
     "trash_artifact",
     "restore_artifact",
     "create_page",
@@ -4642,6 +4688,8 @@ export type DatasetColumn = z.infer<typeof DatasetColumnSchema>;
 export type CollectionCell = z.infer<typeof CollectionCellSchema>;
 export type CollectionCellEditRequest = z.infer<typeof CollectionCellEditRequestSchema>;
 export type CollectionCellEditResult = z.infer<typeof CollectionCellEditResultSchema>;
+export type CollectionAppendDefaultRowRequest = z.infer<typeof CollectionAppendDefaultRowRequestSchema>;
+export type CollectionAppendDefaultRowResult = z.infer<typeof CollectionAppendDefaultRowResultSchema>;
 export type CollectionCellReadOnlyReason = z.infer<typeof CollectionCellReadOnlyReasonSchema>;
 export type CollectionColumnSummary = z.infer<typeof CollectionColumnSummarySchema>;
 export type CollectionOpenRequest = z.infer<typeof CollectionOpenRequestSchema>;
