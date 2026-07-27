@@ -60,7 +60,10 @@ describe("SkillRegistryService", () => {
         capabilities: ["read_current_source", "suggest_note", "create_review_proposal"],
         dataBoundaries: ["local"],
         author: "Example Author",
-        license: "Apache-2.0"
+        license: "Apache-2.0",
+        canEnable: false,
+        canUninstall: true,
+        canExport: true
       }]
     });
     expect(SkillRegistrySummarySchema.parse(summary)).toEqual(summary);
@@ -233,6 +236,14 @@ describe("SkillRegistryService", () => {
       body: "## Procedure\n\nDo nothing."
     });
     seedInstalledSkill(root, unconfirmed, true, { trust: "built_in" });
+    seedInstalledSkill(root, manifest({
+      id: "package-managed-skill",
+      name: "Package Managed Skill",
+      version: "1",
+      description: "Owned by a package lifecycle.",
+      capabilities: ["read_current_source"],
+      body: "## Procedure\n\nDo nothing."
+    }), false, { trust: "package_managed" });
     const malformed = manifest({
       id: "malformed-skill",
       name: "Malformed Skill",
@@ -246,7 +257,10 @@ describe("SkillRegistryService", () => {
 
     const summary = readySummary(new SkillRegistryService(root));
     expect(summary.skills.map((skill) => skill.id)).toEqual(["valid-skill"]);
-    expect(summary.invalidManifestCount).toBe(3);
+    expect(summary.invalidManifestCount).toBe(4);
+    const service = new SkillRegistryService(root);
+    expect(service.enable(lifecycleRequest("package-managed-skill", 3))).toMatchObject({ status: "not_found" });
+    expect(service.uninstall(lifecycleRequest("unconfirmed-skill", 3))).toMatchObject({ status: "not_found" });
   });
 
   it("rejects symlinked manifests without exposing their target", () => {
@@ -303,6 +317,126 @@ describe("SkillRegistryService", () => {
       skills: [{ id: "disable-me", enabled: false }]
     });
     expect(fs.readdirSync(path.join(root, "skills")).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+  });
+
+  it("enables only a current disabled user-confirmed machine-local pure Skill", () => {
+    const root = createRoot();
+    seedInstalledSkill(root, manifest({
+      id: "enable-me", name: "Enable Me", version: "1", description: "A disabled local workflow.",
+      capabilities: ["read_current_source"], body: "## Procedure\n\nRead only."
+    }), false);
+    const service = new SkillRegistryService(root);
+    const identity = lifecycleRequest("enable-me", 3);
+
+    expect(service.enable({ ...identity, expectedRegistryRevision: 2 })).toMatchObject({ status: "stale" });
+    expect(service.enable({ ...identity, skillId: "missing-skill" })).toMatchObject({ status: "not_found" });
+    expect(service.enable(identity)).toMatchObject({
+      status: "committed",
+      registry: { revision: 4, skills: [{ id: "enable-me", enabled: true, canEnable: false }] }
+    });
+    expect(service.enable({ ...identity, expectedRegistryRevision: 4 })).toMatchObject({ status: "not_found" });
+  });
+
+  it("moves an eligible Skill to durable private trash before committing its registry removal", () => {
+    const root = createRoot();
+    const source = manifest({
+      id: "trash-me", name: "Trash Me", version: "1", description: "A recoverable local workflow.",
+      capabilities: ["read_current_source"], body: "## Procedure\n\nRead only."
+    });
+    seedInstalledSkill(root, source, true);
+    const request = lifecycleRequest("trash-me", 3);
+
+    expect(new SkillRegistryService(root).uninstall(request)).toMatchObject({
+      status: "committed", registry: { revision: 4, skills: [] }
+    });
+    const trashEntry = path.join(root, "skills", "trash", request.requestId);
+    expect(fs.readFileSync(path.join(trashEntry, "skill", "SKILL.md"), "utf8")).toBe(source);
+    expect(JSON.parse(fs.readFileSync(path.join(trashEntry, ".pige-uninstall.json"), "utf8")))
+      .toMatchObject({ state: "committed", skillId: "trash-me", committedRegistryRevision: 4 });
+    expect(fs.existsSync(path.join(root, "skills", "installed", "trash-me"))).toBe(false);
+    expect(new SkillRegistryService(root).uninstall(request)).toMatchObject({ status: "committed" });
+  });
+
+  it("finishes the exact uninstall CAS after a crash moved the Skill but did not write registry state", () => {
+    const root = createRoot();
+    seedInstalledSkill(root, manifest({
+      id: "crash-adopt", name: "Crash Adopt", version: "1", description: "A recoverable local workflow.",
+      capabilities: ["read_current_source"], body: "## Procedure\n\nRead only."
+    }), true);
+    const request = lifecycleRequest("crash-adopt", 3);
+    const rename = fs.renameSync.bind(fs);
+    const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation((source, destination) => {
+      if (String(source).includes(".registry.") && String(destination).endsWith("registry.json")) {
+        const failure = new Error("simulated registry commit crash") as NodeJS.ErrnoException;
+        failure.code = "EIO";
+        throw failure;
+      }
+      return rename(source, destination);
+    });
+    expect(new SkillRegistryService(root).uninstall(request)).toMatchObject({ status: "failed" });
+    renameSpy.mockRestore();
+    expect(fs.existsSync(path.join(root, "skills", "installed", "crash-adopt"))).toBe(false);
+    expect(JSON.parse(fs.readFileSync(path.join(
+      root, "skills", "trash", request.requestId, ".pige-uninstall.json"
+    ), "utf8"))).toMatchObject({ state: "prepared" });
+
+    expect(readySummary(new SkillRegistryService(root, { recoverOrphanedMutationLock: true })))
+      .toMatchObject({ revision: 4, skills: [] });
+    expect(JSON.parse(fs.readFileSync(path.join(
+      root, "skills", "trash", request.requestId, ".pige-uninstall.json"
+    ), "utf8"))).toMatchObject({ state: "committed", committedRegistryRevision: 4 });
+  });
+
+  it("leaves prepared trash intact when crash recovery finds an unequal registry record", () => {
+    const root = createRoot();
+    const source = manifest({
+      id: "recovery-conflict", name: "Recovery Conflict", version: "1",
+      description: "A conflict-fenced local workflow.", capabilities: ["read_current_source"],
+      body: "## Procedure\n\nRead only."
+    });
+    seedInstalledSkill(root, source, true);
+    const request = lifecycleRequest("recovery-conflict", 3);
+    const rename = fs.renameSync.bind(fs);
+    const spy = vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      if (String(from).includes(".registry.") && String(to).endsWith("registry.json")) throw new Error("crash");
+      return rename(from, to);
+    });
+    expect(new SkillRegistryService(root).uninstall(request)).toMatchObject({ status: "failed" });
+    spy.mockRestore();
+    const registry = SkillRegistryFileSchema.parse(JSON.parse(fs.readFileSync(path.join(root, "skills", "registry.json"), "utf8")));
+    writeRegistry(root, [{ ...registry.skills[0]!, version: "2" }], registry.revision);
+
+    expect(readySummary(new SkillRegistryService(root, { recoverOrphanedMutationLock: true })))
+      .toMatchObject({ revision: 3, invalidManifestCount: 1 });
+    const trashEntry = path.join(root, "skills", "trash", request.requestId);
+    expect(fs.existsSync(path.join(trashEntry, "skill", "SKILL.md"))).toBe(true);
+    expect(JSON.parse(fs.readFileSync(path.join(trashEntry, ".pige-uninstall.json"), "utf8")))
+      .toMatchObject({ state: "prepared" });
+  });
+
+  it("exports only verified portable SKILL.md bytes and fails stale, missing, and symlink paths closed", () => {
+    const root = createRoot();
+    const source = manifest({
+      id: "export-me", name: "Export Me", version: "1", description: "A portable local workflow.",
+      capabilities: ["read_current_source"], body: "## Procedure\n\nRead only."
+    });
+    seedInstalledSkill(root, source, true);
+    const service = new SkillRegistryService(root);
+    const request = lifecycleRequest("export-me", 3);
+    const destination = path.join(fs.realpathSync.native(root), "portable-SKILL.md");
+
+    expect(service.export({ ...request, expectedRegistryRevision: 2 }, destination)).toMatchObject({ status: "stale" });
+    expect(service.export({ ...request, skillId: "missing-skill" }, destination)).toMatchObject({ status: "not_found" });
+    expect(service.export(request, destination)).toMatchObject({ status: "exported", registryRevision: 3 });
+    expect(fs.readFileSync(destination, "utf8")).toBe(source);
+    if (process.platform !== "win32") {
+      const outside = path.join(root, "outside.md");
+      const linked = path.join(root, "linked-export.md");
+      fs.writeFileSync(outside, "unchanged");
+      fs.symlinkSync(outside, linked);
+      expect(service.export(request, linked)).toMatchObject({ status: "failed" });
+      expect(fs.readFileSync(outside, "utf8")).toBe("unchanged");
+    }
   });
 
   it("fails body-free while another process owns the registry mutation lock, then rechecks and commits", async () => {
@@ -511,6 +645,16 @@ function readySummary(service: SkillRegistryService): SkillRegistrySummary {
   return result.registry;
 }
 
+function lifecycleRequest(skillId: string, expectedRegistryRevision: number) {
+  return {
+    apiVersion: 1 as const,
+    requestId: "skill_lifecycle_request_0123456789abcdef",
+    activeVaultId: "vault_20260728_skilltest",
+    skillId,
+    expectedRegistryRevision
+  };
+}
+
 function manifest(input: {
   readonly id: string;
   readonly name: string;
@@ -543,7 +687,10 @@ function seedInstalledSkill(
   root: string,
   source: string,
   enabled: boolean,
-  overrides: Partial<{ readonly manifestSha256: string; readonly trust: "built_in" | "user_confirmed" }> = {}
+  overrides: Partial<{
+    readonly manifestSha256: string;
+    readonly trust: "built_in" | "user_confirmed" | "package_managed";
+  }> = {}
 ): void {
   const parsed = parseSkillManifest(source);
   const directory = path.join(root, "skills", "installed", parsed.id);

@@ -6,35 +6,50 @@ import {
   PermissionCapabilitySchema,
   SkillManifestSchema,
   SkillDiscardStagedResultSchema,
+  SkillEnableRequestSchema,
+  SkillExportRequestSchema,
+  SkillExportResultSchema,
   SkillInstallStagedResultSchema,
+  SkillLifecycleMutationResultSchema,
   SkillRegistryFileSchema,
   SkillRegistryMutationResultSchema,
   SkillRegistryQueryResultSchema,
   SkillRegistrySummarySchema,
+  SkillUninstallRequestSchema,
   type SkillCapability,
   type SkillDataBoundary,
   type SkillDisableRequest,
   type SkillDiscardStagedRequest,
   type SkillDiscardStagedResult,
+  type SkillEnableRequest,
+  type SkillExportRequest,
+  type SkillExportResult,
   type SkillInstallStagedRequest,
   type SkillInstallStagedResult,
+  type SkillLifecycleMutationResult,
   type SkillManifest,
   type SkillRegistryFile,
   type SkillRegistryMutationResult,
   type SkillRegistryQueryResult,
   type SkillRegistryRecord,
   type SkillRegistrySummary,
-  type SkillSummary
+  type SkillSummary,
+  type SkillUninstallRequest
 } from "@pige/schemas";
 import { containsRestrictedModelContent } from "./model-egress-content";
 import { hasObjectErrorCode as isErrno } from "./object-error-code";
+import {
+  lifecycleRequestIdentity as skillLifecycleIdentity,
+  matchesUninstallRequest as sameLifecycleRequest,
+  SkillRegistryLifecycleStore,
+  type SkillInstallReceipt,
+  type SkillUninstallReceipt
+} from "./skill-registry-lifecycle-store";
 
 const MAX_REGISTRY_BYTES = 1024 * 1024;
 const MAX_MANIFEST_BYTES = 256 * 1024;
 const MAX_FRONTMATTER_BYTES = 32 * 1024;
 const MAX_REGISTRY_LOCK_BYTES = 512;
-const MAX_INSTALL_RECEIPT_BYTES = 4096;
-const INSTALL_RECEIPT_NAME = ".pige-install.json";
 const ACTIVE_SKILL_REGISTRY_LOCK_PATHS = new Set<string>();
 const ARRAY_FIELDS = new Set(["capabilities", "triggers", "dataBoundary"]);
 const MANIFEST_FIELDS = new Set([
@@ -77,20 +92,12 @@ export interface SkillStagingStorePort {
   discardExact(stagingId: string, manifestSha256: string): "discarded" | "stale" | "not_found";
 }
 
-interface SkillInstallReceipt {
-  readonly schemaVersion: 1;
-  readonly requestId: string;
-  readonly stagingId: string;
-  readonly manifestSha256: string;
-  readonly enabled: boolean;
-}
-
 export class SkillRegistryService {
   readonly #appDataRoot: string;
   readonly #rootPath: string;
-  readonly #installedRoot: string;
   readonly #registryPath: string;
   readonly #registryLockPath: string;
+  readonly #lifecycleStore: SkillRegistryLifecycleStore;
 
   constructor(appDataRoot: string, options: { readonly recoverOrphanedMutationLock?: boolean } = {}) {
     if (!path.isAbsolute(appDataRoot)) {
@@ -110,12 +117,17 @@ export class SkillRegistryService {
     }
     this.#appDataRoot = canonicalRoot;
     this.#rootPath = path.join(canonicalRoot, "skills");
-    this.#installedRoot = path.join(this.#rootPath, "installed");
     this.#registryPath = path.join(this.#rootPath, "registry.json");
     this.#registryLockPath = path.join(this.#rootPath, ".registry.lock");
+    this.#lifecycleStore = new SkillRegistryLifecycleStore(canonicalRoot);
     if (options.recoverOrphanedMutationLock) {
       try {
         this.#recoverOrphanedMutationLock();
+        const pending = this.#lifecycleStore.listPreparedUninstalls();
+        if (pending.length > 0) {
+          const mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
+          try { this.#recoverPreparedUninstalls(pending, mutationLock); } finally { mutationLock.release(); }
+        }
       } catch {
         // An unsafe lock blocks mutation but must not prevent the desktop from opening.
       }
@@ -149,6 +161,7 @@ export class SkillRegistryService {
     try {
       this.#prepare();
       mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
+      this.#recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock);
       const current = this.#readRegistry();
       const replay = this.#findInstallReplay(request, current);
       if (replay === "conflict") return skillInstallFailed(request.requestId, "unavailable");
@@ -181,7 +194,7 @@ export class SkillRegistryService {
         manifestSha256: request.manifestSha256,
         enabled: request.enabled
       };
-      this.#publishInstalledDirectory(parsed.id, candidate.bytes, receipt);
+      this.#lifecycleStore.publishInstalled(parsed.id, candidate.bytes, receipt);
       if (current.revision === Number.MAX_SAFE_INTEGER) throw skillError("skill.registry_revision_exhausted", "Skill Registry revision is exhausted.");
       const now = new Date().toISOString();
       const next = SkillRegistryFileSchema.parse({
@@ -227,6 +240,7 @@ export class SkillRegistryService {
     try {
       this.#prepare();
       mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
+      this.#recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock);
       const current = this.#readRegistry();
       if (request.expectedRevision !== current.revision) {
         return SkillRegistryMutationResultSchema.parse({ status: "stale", registry: this.#project(current) });
@@ -254,6 +268,121 @@ export class SkillRegistryService {
       return SkillRegistryMutationResultSchema.parse({ status: "committed", registry: this.#project(next) });
     } catch (caught) {
       return skillMutationFailed(isErrno(caught, "EEXIST") ? "busy" : "unavailable");
+    } finally {
+      mutationLock?.release();
+    }
+  }
+
+  enable(request: SkillEnableRequest): SkillLifecycleMutationResult {
+    const parsed = SkillEnableRequestSchema.parse(request);
+    let mutationLock: SkillRegistryMutationLock | undefined;
+    try {
+      this.#prepare();
+      mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
+      this.#recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock);
+      const current = this.#readRegistry();
+      if (parsed.expectedRegistryRevision !== current.revision) {
+        return SkillLifecycleMutationResultSchema.parse({
+          ...skillLifecycleIdentity(parsed), status: "stale", registry: this.#project(current)
+        });
+      }
+      const index = current.skills.findIndex((record) => record.id === parsed.skillId);
+      if (index < 0 || current.skills[index]!.enabled || !this.#isLifecycleEligible(current.skills[index]!)) {
+        return SkillLifecycleMutationResultSchema.parse({
+          ...skillLifecycleIdentity(parsed), status: "not_found", registry: this.#project(current)
+        });
+      }
+      const nextSkills = [...current.skills];
+      nextSkills[index] = { ...nextSkills[index]!, enabled: true, updatedAt: new Date().toISOString() };
+      const next = this.#nextRegistry(current, nextSkills);
+      mutationLock.assertOwned();
+      this.#writeRegistry(next);
+      return SkillLifecycleMutationResultSchema.parse({
+        ...skillLifecycleIdentity(parsed), status: "committed", registry: this.#project(next)
+      });
+    } catch {
+      return SkillLifecycleMutationResultSchema.parse({ ...skillLifecycleIdentity(parsed), status: "failed" });
+    } finally {
+      mutationLock?.release();
+    }
+  }
+
+  uninstall(request: SkillUninstallRequest): SkillLifecycleMutationResult {
+    const parsed = SkillUninstallRequestSchema.parse(request);
+    let mutationLock: SkillRegistryMutationLock | undefined;
+    try {
+      this.#prepare();
+      mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
+      this.#recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock);
+      let current = this.#readRegistry();
+      const replay = this.#lifecycleStore.readUninstallReceipt(parsed.requestId);
+      if (replay) {
+        if (!sameLifecycleRequest(replay, parsed)) throw skillError("skill.uninstall_receipt_conflict", "Skill uninstall receipt identity changed.");
+        if (replay.state === "prepared") {
+          this.#recoverPreparedUninstalls([replay], mutationLock);
+          current = this.#readRegistry();
+        }
+        if (!current.skills.some((record) => record.id === parsed.skillId)) {
+          return SkillLifecycleMutationResultSchema.parse({
+            ...skillLifecycleIdentity(parsed), status: "committed", registry: this.#project(current)
+          });
+        }
+        throw skillError("skill.uninstall_receipt_conflict", "Skill uninstall receipt conflicts with current registry state.");
+      }
+      if (parsed.expectedRegistryRevision !== current.revision) {
+        return SkillLifecycleMutationResultSchema.parse({
+          ...skillLifecycleIdentity(parsed), status: "stale", registry: this.#project(current)
+        });
+      }
+      const record = current.skills.find((candidate) => candidate.id === parsed.skillId);
+      if (!record || !this.#isLifecycleEligible(record)) {
+        return SkillLifecycleMutationResultSchema.parse({
+          ...skillLifecycleIdentity(parsed), status: "not_found", registry: this.#project(current)
+        });
+      }
+      const receipt = this.#lifecycleStore.prepareUninstall({
+        ...skillLifecycleIdentity(parsed), expectedRegistryRevision: parsed.expectedRegistryRevision,
+        record, createdAt: new Date().toISOString()
+      });
+      const next = this.#nextRegistry(current, current.skills.filter((candidate) => candidate.id !== record.id));
+      mutationLock.assertOwned();
+      this.#writeRegistry(next);
+      this.#lifecycleStore.markUninstallCommitted(receipt, next.revision);
+      return SkillLifecycleMutationResultSchema.parse({
+        ...skillLifecycleIdentity(parsed), status: "committed", registry: this.#project(next)
+      });
+    } catch {
+      return SkillLifecycleMutationResultSchema.parse({ ...skillLifecycleIdentity(parsed), status: "failed" });
+    } finally {
+      mutationLock?.release();
+    }
+  }
+
+  export(request: SkillExportRequest, destinationPath: string): SkillExportResult {
+    const parsed = SkillExportRequestSchema.parse(request);
+    let mutationLock: SkillRegistryMutationLock | undefined;
+    try {
+      this.#prepare();
+      mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
+      this.#recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock);
+      const current = this.#readRegistry();
+      const resultIdentity = { ...skillLifecycleIdentity(parsed), registryRevision: current.revision };
+      if (parsed.expectedRegistryRevision !== current.revision) {
+        return SkillExportResultSchema.parse({ ...resultIdentity, status: "stale" });
+      }
+      const record = current.skills.find((candidate) => candidate.id === parsed.skillId);
+      if (!record || !this.#isLifecycleEligible(record)) {
+        return SkillExportResultSchema.parse({ ...resultIdentity, status: "not_found" });
+      }
+      mutationLock.assertOwned();
+      this.#lifecycleStore.exportInstalled(record.id, record.manifestSha256, destinationPath);
+      return SkillExportResultSchema.parse({ ...resultIdentity, status: "exported" });
+    } catch {
+      let registryRevision = parsed.expectedRegistryRevision;
+      try { registryRevision = this.#readRegistry().revision; } catch { /* body-free failure */ }
+      return SkillExportResultSchema.parse({
+        ...skillLifecycleIdentity(parsed), registryRevision, status: "failed"
+      });
     } finally {
       mutationLock?.release();
     }
@@ -335,8 +464,55 @@ export class SkillRegistryService {
       capabilities: loaded.manifest.capabilities,
       dataBoundaries: deriveDataBoundaries(loaded.manifest.capabilities),
       ...(loaded.manifest.author ? { author: loaded.manifest.author } : {}),
-      ...(loaded.manifest.license ? { license: loaded.manifest.license } : {})
+      ...(loaded.manifest.license ? { license: loaded.manifest.license } : {}),
+      canEnable: !record.enabled && loaded.manifest.kind === "pure",
+      canUninstall: loaded.manifest.kind === "pure",
+      canExport: loaded.manifest.kind === "pure"
     };
+  }
+
+  #isLifecycleEligible(record: SkillRegistryRecord): boolean {
+    try {
+      const loaded = this.#readManifest(record.id);
+      return record.trust === "user_confirmed" && loaded.sha256 === record.manifestSha256 &&
+        loaded.manifest.id === record.id && loaded.manifest.version === record.version &&
+        loaded.manifest.scope === "machine_local" && loaded.manifest.kind === "pure";
+    } catch {
+      return false;
+    }
+  }
+
+  #nextRegistry(current: SkillRegistryFile, skills: readonly SkillRegistryRecord[]): SkillRegistryFile {
+    if (current.revision === Number.MAX_SAFE_INTEGER) {
+      throw skillError("skill.registry_revision_exhausted", "Skill Registry revision is exhausted.");
+    }
+    return SkillRegistryFileSchema.parse({ schemaVersion: 1, revision: current.revision + 1, skills });
+  }
+
+  #recoverPreparedUninstalls(
+    receipts: readonly SkillUninstallReceipt[],
+    mutationLock: SkillRegistryMutationLock
+  ): void {
+    for (const receipt of receipts) {
+      const current = this.#readRegistry();
+      const index = current.skills.findIndex((record) => record.id === receipt.skillId);
+      if (current.revision === receipt.expectedRegistryRevision) {
+        if (index < 0 || JSON.stringify(current.skills[index]) !== JSON.stringify(receipt.record)) {
+          throw skillError("skill.uninstall_recovery_conflict", "Skill uninstall recovery conflicts with current state.");
+        }
+        this.#lifecycleStore.ensureTrashed(receipt);
+        const next = this.#nextRegistry(current, current.skills.filter((record) => record.id !== receipt.skillId));
+        mutationLock.assertOwned();
+        this.#writeRegistry(next);
+        this.#lifecycleStore.markUninstallCommitted(receipt, next.revision);
+        continue;
+      }
+      if (current.revision === receipt.expectedRegistryRevision + 1 && index < 0) {
+        this.#lifecycleStore.markUninstallCommitted(receipt, current.revision);
+        continue;
+      }
+      throw skillError("skill.uninstall_recovery_conflict", "Skill uninstall recovery cannot adopt current state.");
+    }
   }
 
   #readRegistry(): SkillRegistryFile {
@@ -383,80 +559,25 @@ export class SkillRegistryService {
   }
 
   #readManifest(skillId: string): { readonly manifest: SkillManifest; readonly sha256: string } {
-    this.#prepare();
-    const skillDirectory = path.join(this.#installedRoot, skillId);
-    assertOwnedDirectory(this.#installedRoot, skillDirectory);
-    const manifestPath = path.join(skillDirectory, "SKILL.md");
-    let descriptor: number | undefined;
     try {
-      descriptor = fs.openSync(manifestPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
-      const before = fs.fstatSync(descriptor);
-      if (!before.isFile() || before.size <= 0 || before.size > MAX_MANIFEST_BYTES) {
-        throw skillError("skill.manifest_invalid", "Installed Skill manifest is unsafe or oversized.");
-      }
-      const bytes = fs.readFileSync(descriptor);
-      const after = fs.fstatSync(descriptor);
-      if (!sameFileIdentity(before, after)) {
-        throw skillError("skill.manifest_changed", "Installed Skill manifest changed while being read.");
-      }
+      const { bytes, sha256 } = this.#lifecycleStore.readInstalled(skillId);
       const source = bytes.toString("utf8");
-      if (source.includes("\uFFFD")) {
-        throw skillError("skill.manifest_invalid", "Installed Skill manifest is not valid UTF-8.");
-      }
-      return {
-        manifest: parseSkillManifest(source),
-        sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}`
-      };
+      if (source.includes("\uFFFD")) throw skillError("skill.manifest_invalid", "Installed Skill manifest is not valid UTF-8.");
+      return { manifest: parseSkillManifest(source), sha256 };
     } catch (caught) {
       if (caught instanceof PigeDomainError) throw caught;
       throw skillError("skill.manifest_invalid", "Installed Skill manifest is unavailable or invalid.");
-    } finally {
-      if (descriptor !== undefined) fs.closeSync(descriptor);
     }
   }
 
   #findInstallReplay(request: SkillInstallStagedRequest, registry: SkillRegistryFile): boolean | "conflict" {
     for (const record of registry.skills) {
-      const receipt = this.#readInstallReceipt(record.id);
+      const receipt = this.#lifecycleStore.readInstallReceipt(record.id);
       if (!receipt || receipt.requestId !== request.requestId) continue;
       return receipt.stagingId === request.stagingId && receipt.manifestSha256 === request.manifestSha256 &&
         receipt.enabled === request.enabled && record.manifestSha256 === request.manifestSha256 ? true : "conflict";
     }
     return false;
-  }
-
-  #publishInstalledDirectory(skillId: string, bytes: Buffer, receipt: SkillInstallReceipt): void {
-    const destination = path.join(this.#installedRoot, skillId);
-    if (fs.existsSync(destination)) {
-      const existing = this.#readInstallReceipt(skillId);
-      const loaded = this.#readManifest(skillId);
-      if (!existing || JSON.stringify(existing) !== JSON.stringify(receipt) || loaded.sha256 !== receipt.manifestSha256) {
-        throw skillError("skill.install_collision", "Installed Skill destination has unequal ownership.");
-      }
-      return;
-    }
-    const temporaryPath = path.join(this.#installedRoot, `.install.${skillId}.${randomUUID()}.tmp`);
-    let renamed = false;
-    try {
-      fs.mkdirSync(temporaryPath, { mode: 0o700 });
-      writePrivateFile(path.join(temporaryPath, "SKILL.md"), bytes);
-      writePrivateFile(path.join(temporaryPath, INSTALL_RECEIPT_NAME), Buffer.from(`${JSON.stringify(receipt)}\n`, "utf8"));
-      fsyncDirectory(temporaryPath);
-      fs.renameSync(temporaryPath, destination);
-      renamed = true;
-      fsyncDirectory(this.#installedRoot);
-    } finally {
-      if (!renamed) fs.rmSync(temporaryPath, { recursive: true, force: true });
-    }
-  }
-
-  #readInstallReceipt(skillId: string): SkillInstallReceipt | undefined {
-    const directory = path.join(this.#installedRoot, skillId);
-    if (!fs.existsSync(directory)) return undefined;
-    assertOwnedDirectory(this.#installedRoot, directory);
-    const source = readBoundedNoFollow(path.join(directory, INSTALL_RECEIPT_NAME), MAX_INSTALL_RECEIPT_BYTES);
-    if (source === undefined) return undefined;
-    return parseInstallReceipt(source);
   }
 
   #prepare(): void {
@@ -465,7 +586,7 @@ export class SkillRegistryService {
       throw skillError("skill.registry_root_invalid", "Skill Registry app-data root is unsafe.");
     }
     createOwnedDirectory(this.#rootPath);
-    createOwnedDirectory(this.#installedRoot);
+    this.#lifecycleStore.prepare();
   }
 }
 
@@ -654,18 +775,6 @@ function createOwnedDirectory(directoryPath: string): void {
   }
 }
 
-function assertOwnedDirectory(rootPath: string, directoryPath: string): void {
-  const resolvedRoot = path.resolve(rootPath);
-  const resolvedDirectory = path.resolve(directoryPath);
-  if (!resolvedDirectory.startsWith(`${resolvedRoot}${path.sep}`)) {
-    throw skillError("skill.registry_path_escape", "Skill Registry path escapes its owned root.");
-  }
-  const stats = fs.lstatSync(resolvedDirectory);
-  if (!stats.isDirectory() || stats.isSymbolicLink()) {
-    throw skillError("skill.manifest_invalid", "Installed Skill directory is unsafe.");
-  }
-}
-
 function sameFileIdentity(left: fs.Stats, right: fs.Stats): boolean {
   return left.dev === right.dev && left.ino === right.ino && left.size === right.size && left.mtimeMs === right.mtimeMs;
 }
@@ -705,24 +814,6 @@ function normalizeTrigger(value: string): string {
 
 function digestBytes(bytes: Buffer): string {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
-}
-
-function writePrivateFile(filePath: string, bytes: Buffer): void {
-  const descriptor = fs.openSync(filePath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0), 0o600);
-  try { fs.writeFileSync(descriptor, bytes); fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
-}
-
-function parseInstallReceipt(source: string): SkillInstallReceipt {
-  let value: unknown;
-  try { value = JSON.parse(source); } catch { throw skillError("skill.install_receipt_invalid", "Skill install receipt is invalid."); }
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw skillError("skill.install_receipt_invalid", "Skill install receipt is invalid.");
-  const record = value as Record<string, unknown>;
-  if (Object.keys(record).sort().join(",") !== "enabled,manifestSha256,requestId,schemaVersion,stagingId" ||
-    record.schemaVersion !== 1 || typeof record.requestId !== "string" || typeof record.stagingId !== "string" ||
-    typeof record.manifestSha256 !== "string" || typeof record.enabled !== "boolean") {
-    throw skillError("skill.install_receipt_invalid", "Skill install receipt is invalid.");
-  }
-  return record as unknown as SkillInstallReceipt;
 }
 
 function skillErrorSummary(reason: "busy" | "unavailable") {

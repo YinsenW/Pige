@@ -866,7 +866,7 @@ describe("desktop shell build contract", () => {
     expect(activityPreload).not.toContain("path");
   });
 
-  it("exposes the machine-local Skill inventory and authority-reducing disable through strict IPC", () => {
+  it("exposes pathless verified machine-local Skill lifecycle operations through strict IPC", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
@@ -890,6 +890,9 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly installStaged: (request: SkillInstallStagedRequest)");
     expect(contractsSource).toContain("readonly discardStaged: (request: SkillDiscardStagedRequest)");
     expect(contractsSource).toContain("readonly disable: (request: SkillDisableRequest)");
+    expect(contractsSource).toContain("readonly enable: (request: SkillEnableRequest)");
+    expect(contractsSource).toContain("readonly uninstall: (request: SkillUninstallRequest)");
+    expect(contractsSource).toContain("readonly export: (request: SkillExportRequest)");
     expect(contractsSource).toContain("readonly onChanged: (listener: (summary: SkillRegistrySummary)");
     expect(mainSource).toContain("registerSkillsIpc({");
     expect(handlers).toContain('options.ipcMain.handle("skills.summary"');
@@ -898,6 +901,11 @@ describe("desktop shell build contract", () => {
     expect(handlers).toContain('options.ipcMain.handle("skills.discardStaged"');
     expect(handlers).toContain("SkillDisableRequestSchema.parse(request)");
     expect(handlers).toContain("SkillRegistryMutationResultSchema.parse(await options.disable(parsed))");
+    expect(handlers).toContain('registerInstalledMutation(options, "skills.enable"');
+    expect(handlers).toContain('registerInstalledMutation(options, "skills.uninstall"');
+    expect(handlers).toContain('options.ipcMain.handle("skills.export"');
+    expect(handlers).toContain("await options.showSaveDialog(window");
+    expect(handlers).toContain("options.getActiveVaultId() !== parsed.activeVaultId");
     expect(handlers).toContain("options.publishRegistryChanged(result)");
     expect(preloadApi).toContain('ipcRenderer.invoke("skills.summary")');
     expect(preloadApi).toContain('"skills.stageFromUrl"');
@@ -910,6 +918,13 @@ describe("desktop shell build contract", () => {
     expect(preloadApi).toContain('ipcRenderer.invoke(\n        "skills.disable"');
     expect(preloadApi).toContain("SkillDisableRequestSchema.parse(request)");
     expect(preloadApi).toContain("SkillRegistryMutationResultSchema.parse(");
+    expect(preloadApi).toContain('"skills.enable"');
+    expect(preloadApi).toContain('"skills.uninstall"');
+    expect(preloadApi).toContain('"skills.export"');
+    expect(preloadApi).toContain("SkillEnableRequestSchema.parse(request)");
+    expect(preloadApi).toContain("SkillUninstallRequestSchema.parse(request)");
+    expect(preloadApi).toContain("SkillExportRequestSchema.parse(request)");
+    expect(preloadApi).toContain("SkillExportResultSchema.parse(");
     expect(preloadApi).toContain('ipcRenderer.on("skills.changed", handler)');
     expect(preloadApi).toContain("SkillRegistrySummarySchema.safeParse(value)");
     expect(preloadApi).toContain('ipcRenderer.removeListener("skills.changed", handler)');

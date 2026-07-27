@@ -4,12 +4,25 @@ import { registerSkillsIpc } from "../../apps/desktop/src/main/register-skills-i
 const requestId = "skillreq_0123456789abcdef";
 const stagingId = "skillstage_0123456789abcdef0123456789abcdef";
 const manifestSha256 = `sha256:${"a".repeat(64)}`;
+const lifecycleRequestId = "skill_lifecycle_request_0123456789abcdef";
+const activeVaultId = "vault_20260728_skillipc";
 
 function register(overrides: Record<string, unknown> = {}) {
   const handlers = new Map<string, (_event: unknown, request?: unknown) => unknown>();
   const publishRegistryChanged = vi.fn();
+  const exportSkill = vi.fn((request) => ({
+    apiVersion: 1 as const,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    skillId: request.skillId,
+    registryRevision: 2,
+    status: "exported" as const
+  }));
   registerSkillsIpc({
     ipcMain: { handle: (channel, handler) => void handlers.set(channel, handler) },
+    getActiveVaultId: () => activeVaultId,
+    getWindow: () => ({}) as never,
+    showSaveDialog: async () => ({ canceled: false, filePath: "/tmp/exported-SKILL.md" }),
     summary: () => ({ status: "ready", registry: registry(2) }),
     stageFromUrl: (request) => ({
       status: "ready",
@@ -35,10 +48,19 @@ function register(overrides: Record<string, unknown> = {}) {
     installStaged: (request) => ({ status: "committed", requestId: request.requestId, registry: registry(3) }),
     discardStaged: (request) => ({ status: "discarded", requestId: request.requestId }),
     disable: () => ({ status: "committed", registry: registry(3) }),
+    enable: (request) => ({
+      apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId,
+      skillId: request.skillId, status: "committed", registry: registry(3)
+    }),
+    uninstall: (request) => ({
+      apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId,
+      skillId: request.skillId, status: "committed", registry: registry(3)
+    }),
+    exportSkill,
     publishRegistryChanged,
     ...overrides
   });
-  return { handlers, publishRegistryChanged };
+  return { handlers, publishRegistryChanged, exportSkill };
 }
 
 describe("registerSkillsIpc", () => {
@@ -91,8 +113,79 @@ describe("registerSkillsIpc", () => {
     })).rejects.toThrow();
     expect(publishRegistryChanged).not.toHaveBeenCalled();
   });
+
+  it("vault-fences installed lifecycle mutations and publishes only exact committed identities", async () => {
+    const enable = vi.fn((request) => ({
+      apiVersion: 1 as const, requestId: request.requestId, activeVaultId: request.activeVaultId,
+      skillId: request.skillId, status: "committed" as const, registry: registry(3)
+    }));
+    const { handlers, publishRegistryChanged } = register({ enable });
+    const request = lifecycleRequest();
+    expect(await handlers.get("skills.enable")?.({}, request)).toMatchObject({ status: "committed" });
+    expect(enable).toHaveBeenCalledOnce();
+    expect(publishRegistryChanged).toHaveBeenCalledOnce();
+
+    const blockedEnable = vi.fn();
+    const blockedUninstall = vi.fn();
+    const changed = register({
+      getActiveVaultId: () => "vault_20260728_other",
+      enable: blockedEnable,
+      uninstall: blockedUninstall
+    });
+    expect(await changed.handlers.get("skills.uninstall")?.({}, request)).toMatchObject({ status: "failed" });
+    expect(JSON.stringify(await changed.handlers.get("skills.enable")?.({}, request))).not.toContain("other");
+    expect(blockedEnable).not.toHaveBeenCalled();
+    expect(blockedUninstall).not.toHaveBeenCalled();
+    expect(changed.publishRegistryChanged).not.toHaveBeenCalled();
+  });
+
+  it("owns the pathless export dialog and rechecks vault identity after await", async () => {
+    const request = lifecycleRequest();
+    const blockedDialog = vi.fn();
+    const blocked = register({
+      getActiveVaultId: () => "vault_20260728_other",
+      showSaveDialog: blockedDialog
+    });
+    expect(await blocked.handlers.get("skills.export")?.({ sender: {} }, request))
+      .toMatchObject({ status: "failed" });
+    expect(blockedDialog).not.toHaveBeenCalled();
+    expect(blocked.exportSkill).not.toHaveBeenCalled();
+
+    const successful = register();
+    const result = await successful.handlers.get("skills.export")?.({ sender: {} }, request);
+    expect(result).toMatchObject({ status: "exported", skillId: request.skillId });
+    expect(JSON.stringify(result)).not.toContain("/tmp/exported-SKILL.md");
+    expect(successful.exportSkill).toHaveBeenCalledWith(request, "/tmp/exported-SKILL.md");
+
+    const cancelled = register({ showSaveDialog: async () => ({ canceled: true }) });
+    expect(await cancelled.handlers.get("skills.export")?.({ sender: {} }, request))
+      .toMatchObject({ status: "cancelled" });
+    expect(cancelled.exportSkill).not.toHaveBeenCalled();
+
+    let active = activeVaultId;
+    const drifted = register({
+      getActiveVaultId: () => active,
+      showSaveDialog: async () => {
+        active = "vault_20260728_other";
+        return { canceled: false, filePath: "/tmp/forbidden.md" };
+      }
+    });
+    expect(await drifted.handlers.get("skills.export")?.({ sender: {} }, request))
+      .toMatchObject({ status: "failed" });
+    expect(drifted.exportSkill).not.toHaveBeenCalled();
+  });
 });
 
 function registry(revision: number) {
   return { apiVersion: 1 as const, revision, invalidManifestCount: 0, skills: [] };
+}
+
+function lifecycleRequest() {
+  return {
+    apiVersion: 1 as const,
+    requestId: lifecycleRequestId,
+    activeVaultId,
+    skillId: "paper-reading",
+    expectedRegistryRevision: 2
+  };
 }
