@@ -44,6 +44,10 @@ import type {
   LocalDatabaseResetResult,
   ModelProviderSettingsSummary,
   ProviderConnectResult,
+  NoteEditorOpenRequest,
+  NoteEditorOpenResult,
+  NoteEditorSaveRequest,
+  NoteEditorSaveResult,
   NoteDocument,
   NoteGetRequest,
   NoteOpenSourceReferenceRequest,
@@ -158,6 +162,10 @@ import {
   HighRiskConfirmationResolveResultSchema,
   RetrievalSearchRequestSchema,
   RetrievalSearchResultSchema,
+  NoteEditorOpenRequestSchema,
+  NoteEditorOpenResultSchema,
+  NoteEditorSaveRequestSchema,
+  NoteEditorSaveResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   NoteResolveInlineReferenceRequestSchema,
@@ -662,6 +670,20 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("notes.get", request) as Promise<NoteDocument>,
     render: async (request: NoteRenderRequest): Promise<NoteRenderResult> =>
       ipcRenderer.invoke("notes.render", request) as Promise<NoteRenderResult>,
+    openEditor: async (request: NoteEditorOpenRequest): Promise<NoteEditorOpenResult> =>
+      NoteEditorOpenResultSchema.parse(
+        await ipcRenderer.invoke(
+          "notes.openEditor",
+          NoteEditorOpenRequestSchema.parse(request)
+        )
+      ),
+    saveEditor: async (request: NoteEditorSaveRequest): Promise<NoteEditorSaveResult> =>
+      NoteEditorSaveResultSchema.parse(
+        await ipcRenderer.invoke(
+          "notes.saveEditor",
+          NoteEditorSaveRequestSchema.parse(request)
+        )
+      ),
     resolveInlineReference: async (
       request: NoteResolveInlineReferenceRequest
     ): Promise<NoteResolveInlineReferenceResult> =>
