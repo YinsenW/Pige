@@ -28,6 +28,7 @@ import {
   type LocalSemanticRetrievalApi
 } from "./components/LocalSemanticRetrievalSettingsPanel";
 import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
+import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
 import {
   homeConversationStateForJob,
   isTerminalConversationTurn,
@@ -135,6 +136,7 @@ import {
 export { AgentMemorySettingsPanel } from "./components/AgentMemorySettingsPanel";
 export { LocalSemanticRetrievalSettingsPanel } from "./components/LocalSemanticRetrievalSettingsPanel";
 export { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
+export { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
 type View = "home" | "library" | "knowledgeTree";
 type ActiveCollection = {
   readonly vaultId: string;
@@ -1993,11 +1995,24 @@ export function App(): React.JSX.Element {
           ) : settingsSection === "maintenance" ? (
             activeVault ? (
               <MaintenanceSettingsPanel
+                activeVaultId={activeVault.vaultId}
                 locale={locale}
                 error={error}
                 localDatabaseStatus={localDatabaseStatus}
                 onRefresh={refreshVaultState}
                 onRefreshDiagnostics={refreshDiagnostics}
+                onOpenPage={async (pageId) => {
+                  const opened = await openNoteTarget(pageId);
+                  if (!opened) return false;
+                  setView("library");
+                  setSettingsOpen(false);
+                  setDevelopmentNotice(null);
+                  settingsOpenerRef.current = null;
+                  window.requestAnimationFrame(() => {
+                    document.querySelector<HTMLElement>(".note-reader")?.focus();
+                  });
+                  return true;
+                }}
                 onError={setError}
                 t={t}
               />
@@ -7323,222 +7338,6 @@ export function SystemSettingsPanel(props: {
         <p className="settings-note">{props.t("system.localOnlyNote")}</p>
       </section>
       )}
-    </section>
-  );
-}
-
-interface MaintenanceSettingsPanelProps {
-  readonly locale: Locale;
-  readonly error: string | null;
-  readonly localDatabaseStatus: LocalDatabaseStatus | null;
-  readonly onRefresh: () => Promise<void>;
-  readonly onRefreshDiagnostics: () => Promise<void>;
-  readonly onError: (error: string | null) => void;
-  readonly t: (key: string) => string;
-}
-
-function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): React.JSX.Element {
-  const [maintenanceBusy, setMaintenanceBusy] = useState<"check" | "rebuild" | "reset" | null>(null);
-  const [maintenanceNotice, setMaintenanceNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
-  const [resetConfirming, setResetConfirming] = useState(false);
-  const resetDatabaseButtonRef = useRef<HTMLButtonElement>(null);
-  const cancelResetButtonRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    let active = true;
-    void props.onRefreshDiagnostics().catch(() => {
-      if (active) setMaintenanceNotice({ kind: "error", key: "error.generic" });
-    });
-    return () => { active = false; };
-  }, []);
-  const runMaintenanceAction = async (
-    kind: "check" | "rebuild" | "reset",
-    action: () => Promise<void>,
-    successKey: string
-  ): Promise<void> => {
-    if (maintenanceBusy) return;
-    props.onError(null);
-    setMaintenanceBusy(kind);
-    setMaintenanceNotice(null);
-    try {
-      await action();
-      setMaintenanceNotice({ kind: "success", key: successKey });
-    } catch {
-      setMaintenanceNotice({ kind: "error", key: "error.generic" });
-    } finally {
-      setMaintenanceBusy(null);
-    }
-  };
-
-  const refreshMaintenance = async (): Promise<void> =>
-    runMaintenanceAction("check", props.onRefreshDiagnostics, "maintenance.checkCompleted");
-
-  const resetLocalDatabase = async (): Promise<void> => {
-    setResetConfirming(false);
-    await runMaintenanceAction("reset", async () => {
-      await window.pige.maintenance.resetLocalDatabase();
-      await props.onRefresh();
-      await props.onRefreshDiagnostics();
-    }, "maintenance.resetCompleted");
-    window.requestAnimationFrame(() => resetDatabaseButtonRef.current?.focus());
-  };
-
-  const rebuildLocalDatabase = async (): Promise<void> =>
-    runMaintenanceAction("rebuild", async () => {
-      await window.pige.maintenance.rebuildLocalDatabase();
-      await props.onRefresh();
-      await props.onRefreshDiagnostics();
-    }, "maintenance.rebuildStarted");
-
-  const beginResetConfirmation = (): void => {
-    if (maintenanceBusy) return;
-    setMaintenanceNotice(null);
-    setResetConfirming(true);
-    window.requestAnimationFrame(() => cancelResetButtonRef.current?.focus());
-  };
-
-  const cancelResetConfirmation = (): void => {
-    setResetConfirming(false);
-    window.requestAnimationFrame(() => resetDatabaseButtonRef.current?.focus());
-  };
-
-  const databaseStatus = props.localDatabaseStatus?.status ?? "checking";
-  const databaseStatusClass = databaseStatus === "error"
-    ? " error"
-    : databaseStatus === "needs_rebuild" || databaseStatus === "not_initialized"
-      ? " warning"
-      : "";
-  const databaseUpdatedAt = props.localDatabaseStatus?.updatedAt
-    ? new Date(props.localDatabaseStatus.updatedAt)
-    : null;
-  const databaseUpdatedLabel = databaseUpdatedAt && !Number.isNaN(databaseUpdatedAt.getTime())
-    ? new Intl.DateTimeFormat(props.locale === "zh-Hans" ? "zh-CN" : props.locale, {
-      dateStyle: "medium",
-      timeStyle: "short"
-    }).format(databaseUpdatedAt)
-    : props.t("maintenance.timeUnavailable");
-  return (
-    <section className="settings-page maintenance-settings-page" aria-labelledby="settings-maintenance-title">
-      <header className="settings-panel-header">
-        <h1 id="settings-maintenance-title">{props.t("maintenance.title")}</h1>
-        <p>{props.t("maintenance.subtitle")}</p>
-      </header>
-<section className="settings-section" aria-labelledby="maintenance-index-title">
-          <h2 className="settings-section-title" id="maintenance-index-title">{props.t("maintenance.indexSection")}</h2>
-          <div className="settings-card" aria-busy={maintenanceBusy ? "true" : undefined}>
-            <div className="settings-row">
-              <div className="settings-row-copy">
-                <strong>{props.t("maintenance.indexStatus")}</strong>
-                <span>{props.t("maintenance.statusDescription." + databaseStatus)}</span>
-              </div>
-              <span className={"settings-status" + databaseStatusClass}>
-                {props.t("maintenance.status." + databaseStatus)}
-              </span>
-            </div>
-            <div className="settings-row">
-              <div className="settings-row-copy">
-                <strong>{props.t("maintenance.lastChecked")}</strong>
-                <span>
-                  {databaseUpdatedLabel}
-                  {props.localDatabaseStatus
-                    ? " · " + props.t("maintenance.migrations") + ": " + props.localDatabaseStatus.appliedMigrationCount
-                    : ""}
-                </span>
-              </div>
-              <button
-                className="settings-button settings-action"
-                type="button"
-                disabled={maintenanceBusy !== null}
-                onClick={() => void refreshMaintenance()}
-              >
-                {props.t(maintenanceBusy === "check" ? "maintenance.checking" : "maintenance.checkIndex")}
-              </button>
-            </div>
-            <div className="settings-row">
-              <div className="settings-row-copy">
-                <strong>{props.t("maintenance.rebuildIndex")}</strong>
-                <span>{props.t("maintenance.rebuildDescription")}</span>
-              </div>
-              <button
-                className="settings-button settings-action"
-                type="button"
-                disabled={maintenanceBusy !== null}
-                onClick={() => void rebuildLocalDatabase()}
-              >
-                {props.t(maintenanceBusy === "rebuild" ? "maintenance.rebuilding" : "maintenance.rebuild")}
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section className="settings-section" aria-labelledby="maintenance-repair-title">
-          <h2 className="settings-section-title" id="maintenance-repair-title">{props.t("maintenance.repairSection")}</h2>
-          <div className="settings-card">
-            <div className="settings-row">
-              <div className="settings-row-copy">
-                <strong>{props.t("maintenance.resetDatabase")}</strong>
-                <span>{props.t("maintenance.resetCopy")}</span>
-              </div>
-              <button
-                ref={resetDatabaseButtonRef}
-                className="settings-button danger settings-action"
-                type="button"
-                aria-expanded={resetConfirming}
-                aria-controls="maintenance-reset-preview"
-                disabled={maintenanceBusy !== null}
-                onClick={beginResetConfirmation}
-              >
-                {props.t("maintenance.previewReset")}
-              </button>
-            </div>
-            {resetConfirming ? (
-              <div
-                className="settings-row tall maintenance-reset-preview"
-                id="maintenance-reset-preview"
-                role="group"
-                aria-labelledby="maintenance-reset-preview-title"
-                onKeyDown={(event) => {
-                  if (event.key !== "Escape") return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  cancelResetConfirmation();
-                }}
-              >
-                <div className="settings-row-copy">
-                  <strong id="maintenance-reset-preview-title">{props.t("maintenance.confirmResetTitle")}</strong>
-                  <span>{props.t("maintenance.confirmResetDescription")}</span>
-                </div>
-                <div className="settings-row-control">
-                  <button
-                    ref={cancelResetButtonRef}
-                    className="settings-button"
-                    type="button"
-                    onClick={cancelResetConfirmation}
-                  >
-                    {props.t("backup.restoreCancel")}
-                  </button>
-                  <button
-                    className="settings-button danger"
-                    type="button"
-                    onClick={() => void resetLocalDatabase()}
-                  >
-                    {props.t("maintenance.confirmReset")}
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </section>
-        {maintenanceNotice ? (
-          <p
-            className={maintenanceNotice.kind === "error" ? "error" : "settings-note"}
-            role={maintenanceNotice.kind === "error" ? "alert" : "status"}
-            aria-live="polite"
-          >
-            {props.t(maintenanceNotice.key)}
-          </p>
-        ) : null}
-
-      {props.error ? <p className="error">{props.error}</p> : null}
     </section>
   );
 }

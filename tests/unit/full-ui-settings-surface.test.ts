@@ -10,6 +10,7 @@ import {
   AppearanceSettingsPanel,
   GeneralSettingsPanel,
   LocalCapabilitiesSettingsPanel,
+  MaintenanceSettingsPanel,
   PiPackagesSettingsPanel,
   PermissionsPrivacySettingsPanel,
   SettingsSurface,
@@ -461,6 +462,241 @@ describe("full UI Settings surface", () => {
       dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     });
     expect(close).toHaveBeenCalledOnce();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("runs Knowledge Health from Maintenance, groups safe results, and preserves Run Check focus", async () => {
+    const dom = createDom();
+    let resolveFirst!: (result: unknown) => void;
+    let resolveSecond!: (result: unknown) => void;
+    const runKnowledgeHealth = vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }))
+      .mockImplementationOnce(async (request) => ({
+        ...request,
+        status: "ready",
+        checkedAt: "2026-07-27T10:02:00.000Z",
+        indexGeneration: "index:8",
+        coverage: "complete",
+        invalidPageCount: 0,
+        counts: {
+          totalIssueCount: 0,
+          brokenLinkPageCount: 0,
+          unresolvedLinkCount: 0,
+          orphanPageCount: 0,
+          duplicateTopicGroupCount: 0,
+          unsourcedClaimCount: 0
+        },
+        issues: [],
+        truncated: false
+      }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        maintenance: {
+          runKnowledgeHealth,
+          rebuildLocalDatabase: vi.fn(),
+          resetLocalDatabase: vi.fn()
+        }
+      }
+    });
+    const onOpenPage = vi.fn()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+
+    await act(async () => {
+      root.render(createElement(MaintenanceSettingsPanel, {
+        activeVaultId: "vault_20260727_healthfixture",
+        locale: "en",
+        error: null,
+        localDatabaseStatus: {
+          driver: "node_sqlite",
+          appSchemaVersion: 1,
+          appliedMigrationCount: 2,
+          status: "ready",
+          updatedAt: "2026-07-27T10:00:00.000Z"
+        },
+        onRefresh: vi.fn(async () => undefined),
+        onRefreshDiagnostics: vi.fn(async () => undefined),
+        onOpenPage,
+        onError: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".maintenance-settings-page"));
+    expect(page.textContent).toContain("No check has been run yet.");
+    expect(page.textContent).not.toContain("/Users/private");
+    const runButton = buttonNamed(page, "Run Check");
+    runButton.focus();
+    await act(async () => {
+      runButton.click();
+      await settle(dom);
+    });
+    expect(runButton.disabled).toBe(true);
+    expect(page.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(page.textContent).not.toContain("Latest check");
+    const firstRequest = runKnowledgeHealth.mock.calls[0]![0];
+    expect(firstRequest).toMatchObject({ apiVersion: 1, activeVaultId: "vault_20260727_healthfixture" });
+    expect(firstRequest.requestId).toMatch(/^knowledge_health_request_[a-z0-9]{16,64}$/);
+
+    await act(async () => {
+      resolveFirst({
+        ...firstRequest,
+        status: "ready",
+        checkedAt: "2026-07-27T10:01:00.000Z",
+        indexGeneration: "index:7",
+        coverage: "partial",
+        invalidPageCount: 2,
+        counts: {
+          totalIssueCount: 7,
+          brokenLinkPageCount: 1,
+          unresolvedLinkCount: 3,
+          orphanPageCount: 1,
+          duplicateTopicGroupCount: 1,
+          unsourcedClaimCount: 4
+        },
+        issues: [
+          { kind: "broken_link", page: { pageId: "page_health_broken", title: "Broken page" }, unresolvedLinkCount: 3 },
+          { kind: "orphan_page", page: { pageId: "page_health_orphan", title: "Orphan page" } },
+          {
+            kind: "duplicate_topic",
+            candidatePageCount: 3,
+            pages: [
+              { pageId: "page_health_topic_a", title: "Topic A" },
+              { pageId: "page_health_topic_b", title: "Topic B" }
+            ]
+          },
+          { kind: "unsourced_claim", page: { pageId: "page_health_claim", title: "Unsupported claim" } }
+        ],
+        truncated: true
+      });
+      await settle(dom);
+    });
+
+    expect(dom.window.document.activeElement).toBe(runButton);
+    expect(page.textContent).toContain("7 issues found");
+    expect(page.textContent).toContain("Partial");
+    expect(page.textContent).toContain("2 pages could not be checked");
+    expect(page.textContent).toContain("More results are available");
+    const groupText = ["Broken links", "Orphan pages", "Duplicate topics", "Claims without sources"];
+    expect(groupText.map((label) => page.textContent!.indexOf(label))).toEqual(
+      [...groupText].map((label) => page.textContent!.indexOf(label)).sort((a, b) => a - b)
+    );
+    expect(page.textContent).not.toContain("sourceId");
+    expect(page.textContent).not.toContain("checksum");
+
+    await act(async () => {
+      buttonNamed(page, "Broken page").click();
+      await settle(dom);
+    });
+    expect(onOpenPage).toHaveBeenCalledWith("page_health_broken");
+
+    await act(async () => {
+      buttonNamed(page, "Orphan page").click();
+      await settle(dom);
+    });
+    expect(onOpenPage).toHaveBeenCalledWith("page_health_orphan");
+    expect(page.querySelector('[role="alert"]')?.textContent).toContain("The current Reader was not changed");
+
+    await act(async () => {
+      runButton.click();
+      await settle(dom);
+    });
+    expect(page.textContent).not.toContain("Broken page");
+    const secondRequest = runKnowledgeHealth.mock.calls[1]![0];
+    await act(async () => {
+      resolveSecond({ ...secondRequest, status: "unavailable" });
+      await settle(dom);
+    });
+    expect(page.textContent).toContain("Knowledge Health is unavailable until the local index is ready.");
+
+    await act(async () => {
+      runButton.click();
+      await settle(dom);
+    });
+    expect(page.textContent).toContain("No issues found.");
+    expect(page.textContent).toContain("Complete");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("fences stale Knowledge Health responses by vault and reports current failures body-free", async () => {
+    const dom = createDom();
+    let resolveStale!: (result: unknown) => void;
+    const runKnowledgeHealth = vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveStale = resolve; }))
+      .mockRejectedValueOnce(new Error("/Users/private/health.sqlite"));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        maintenance: {
+          runKnowledgeHealth,
+          rebuildLocalDatabase: vi.fn(),
+          resetLocalDatabase: vi.fn()
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const renderPanel = async (activeVaultId: string): Promise<void> => {
+      root.render(createElement(MaintenanceSettingsPanel, {
+        activeVaultId,
+        locale: "en",
+        error: null,
+        localDatabaseStatus: null,
+        onRefresh: vi.fn(async () => undefined),
+        onRefreshDiagnostics: vi.fn(async () => undefined),
+        onOpenPage: vi.fn(async () => false),
+        onError: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    };
+
+    await act(async () => renderPanel("vault_20260727_healthfirst"));
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".maintenance-settings-page"));
+    await act(async () => {
+      buttonNamed(page, "Run Check").click();
+      await settle(dom);
+    });
+    const staleRequest = runKnowledgeHealth.mock.calls[0]![0];
+    await act(async () => renderPanel("vault_20260727_healthsecond"));
+    expect(page.textContent).toContain("No check has been run yet.");
+    await act(async () => {
+      resolveStale({
+        ...staleRequest,
+        status: "ready",
+        checkedAt: "2026-07-27T11:00:00.000Z",
+        indexGeneration: "index:8",
+        coverage: "complete",
+        invalidPageCount: 0,
+        counts: {
+          totalIssueCount: 0,
+          brokenLinkPageCount: 0,
+          unresolvedLinkCount: 0,
+          orphanPageCount: 0,
+          duplicateTopicGroupCount: 0,
+          unsourcedClaimCount: 0
+        },
+        issues: [],
+        truncated: false
+      });
+      await settle(dom);
+    });
+    expect(page.textContent).toContain("No check has been run yet.");
+    expect(page.textContent).not.toContain("No issues found.");
+
+    await act(async () => {
+      buttonNamed(page, "Run Check").click();
+      await settle(dom);
+    });
+    expect(page.querySelector('[role="alert"]')?.textContent).toContain("Knowledge Health could not complete");
+    expect(page.textContent).not.toContain("/Users/private");
 
     await act(async () => root.unmount());
     dom.window.close();
