@@ -1305,11 +1305,10 @@ Responsibilities:
   integrities before its one confirmation; it grants no later runtime authority.
 - Show update diffs for version, permissions, and data boundary when possible.
 
-The bounded `PiPackageManagerService` is install-only: exact public npm identity,
-`install_package`, SHA-512, pinned bounded link-free extraction, unsafe-input rejection,
-PID-aware recovery and immutable `installed_disabled` publication. Request-bound revisions
-keep adoption stable; uncertain commits preserve owned bytes for startup reconciliation.
-Catalog, renderer, runtime and remaining lifecycle owners are absent.
+`PiPackageManagerService` uses SHA-512/bounded link-free extraction to install one exact public npm
+identity as `installed_disabled`. Separately confirmed request/package/revision CAS moves its
+verified tree to private trash and restart-adopts once. Neither path executes code or exposes paths;
+catalog, enable/runtime, update, pin, rollback and public restore remain absent.
 
 Package metadata, categories, trust tiers, capability declarations, and lifecycle are
 owned by [`SKILL_EXTENSION_DESIGN.md`](SKILL_EXTENSION_DESIGN.md#10-relationship-to-pi-packages)

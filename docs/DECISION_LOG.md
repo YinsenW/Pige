@@ -3616,6 +3616,28 @@ References:
 
 - `docs/SKILL_EXTENSION_DESIGN.md`
 
+### D-20260728-Pi-Package-Trash-Uninstall
+
+Status: Accepted
+Date: 2026-07-28
+
+Decision:
+
+Main-confirmed request/package/revision CAS moves one verified disabled package to private trash;
+restart adopts once.
+
+Rationale:
+
+Remove without runtime authority.
+
+Consequences:
+
+- No code/link/path/body crosses IPC; no Restore UI; other lifecycle stays open.
+
+References:
+
+- `docs/SKILL_EXTENSION_DESIGN.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

@@ -310,18 +310,16 @@ flags `update_available | deprecated | repair_needed` are independent from trust
   before one plan confirmation Main resolves packages/assets/redirects/Skills and fixed
   destinations. Pi cannot choose dependencies or alter steps.
 
-Current foundation permits that exact public npm request only after current-action
-`install_package`; SHA-512 and bounded path-safe extraction are required, while hooks,
-executable/native metadata/content, and runtime dependencies fail closed. Success is an
-immutable machine-local `installed_disabled` record only. It adds no trust, catalog, UI,
-enable/runtime tool, update, rollback, or uninstall authority.
+Current Settings lists the machine registry and, after confirmation, installs one exact public npm
+package/version as immutable `installed_disabled` bytes. SHA-512, bounded link-free extraction and
+hook/dependency/executable/native rejection remain mandatory. Only that state can be removed: Main
+confirms again, then request/package/revision CAS moves verified bytes to private durable trash and
+adopts once across restart. No package code runs; paths/bodies stay private and no Restore UI ships.
+Enable/runtime, update, catalog, pin and rollback remain open.
 
-The planned official Feishu fixture is data, not Feishu-only execution code. Its registered
-recipe resolves CLI/package/native identities and an exact 27-Skill/444-file projection
-before confirmation. It hashes every file, fixes target agents/destinations/link/overwrite
-policy, disables installer telemetry, and uses controlled npm/HOME/PATH/config. Opaque
-`npx skills add`, moving/fallback sources, arbitrary stdin and post-Allow discovery are not
-steps. Fixed adapters then install/configure, hand off browser OAuth, and probe status.
+The official Feishu fixture is recipe data: before confirmation it binds CLI/package/native and
+27-Skill/444-file identities, hashes, destinations/link/overwrite policy and controlled environment.
+Opaque `npx`, moving sources, arbitrary stdin and post-Allow discovery stay outside the plan.
 
 ## 11. v0.1 Scope
 
