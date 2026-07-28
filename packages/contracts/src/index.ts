@@ -1226,6 +1226,7 @@ export type AgentSubmitTurnResult =
       readonly conversationId: string;
       readonly tailEventId: string;
       readonly state: "completed";
+      readonly currentNoteAppendApplied?: true;
       readonly modelUsage: HomeAgentModelUsage;
       readonly sourceIds: readonly string[];
       readonly rejectedFiles?: readonly CaptureFileRejection[];
@@ -1298,6 +1299,7 @@ export interface AgentConversationTurnSummary {
   readonly userEventId: string;
   readonly state: JobState;
   readonly proposalId?: string | undefined;
+  readonly currentNoteAppendApplied?: true;
   readonly error?: PigeErrorSummary;
 }
 

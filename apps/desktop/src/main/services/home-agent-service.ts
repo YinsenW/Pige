@@ -413,6 +413,7 @@ export class HomeAgentService {
           jobId: job.id,
           userEventId: job.conversationEventId,
           state: job.state,
+          ...(hasCurrentNoteAppendOperation(job) ? { currentNoteAppendApplied: true as const } : {}),
           ...(job.state === "awaiting_review" && job.proposalIds?.length === 1
             ? { proposalId: job.proposalIds[0] }
             : {}),
@@ -830,6 +831,7 @@ export class HomeAgentService {
         conversationId: preservedTurn.event.conversationId,
         tailEventId: assistantEvent.id,
         state: "completed",
+        ...(hasCurrentNoteAppendOperation(activeSession.current) ? { currentNoteAppendApplied: true } : {}),
         modelUsage: actualHomeModelUsage(activeSession),
         sourceIds: completedSourceIds,
         answer: execution.answer
@@ -904,6 +906,7 @@ export class HomeAgentService {
           conversationId: preservedTurn.event.conversationId,
           tailEventId: recoveredReaderPublication.assistant.id,
           state: "completed",
+          ...(hasCurrentNoteAppendOperation(session.current) ? { currentNoteAppendApplied: true } : {}),
           modelUsage: actualHomeModelUsage(session),
           sourceIds: durableSourceIds,
           answer: recoveredReaderPublication.answer
@@ -920,6 +923,9 @@ export class HomeAgentService {
           state: "waiting",
           modelUsage: actualHomeModelUsage(session),
           sourceIds: durableSourceIds,
+          ...(singleReviewProposalId(session.current) ? {
+            proposalId: singleReviewProposalId(session.current)
+          } : {}),
           error: readerReviewRequired
             ? createErrorSummary(
                 "agent_runtime.review_required",
@@ -1630,6 +1636,14 @@ export class HomeAgentService {
           if (!currentNoteEvidence || !currentNoteScope || !this.#currentNoteAppends) {
             throw new PigeDomainError("agent_runtime.tool_input_invalid", "Read the exact current note before appending to it.");
           }
+          if (signal?.aborted) {
+            throw new PigeDomainError("agent_runtime.turn_cancelled", "The current-note append Job was cancelled before publication.");
+          }
+          const currentJob = this.#jobs.readAgentTurnJob(jobId);
+          if (!currentJob || currentJob.state !== "running" || currentJob.activeVaultId !== activeVault.vaultId) {
+            throw new PigeDomainError("agent_runtime.turn_conflict", "The current-note append Job is no longer the exact running turn.");
+          }
+          session.current = currentJob;
           const publication = this.#currentNoteAppends.publish({
             vaultPath,
             activeVaultId: activeVault.vaultId,
@@ -2073,6 +2087,12 @@ function hasCurrentNoteAppendPublicationRef(
   return publication.status === "applied"
     ? job.operationIds?.includes(publication.operationId) === true
     : job.proposalIds?.includes(publication.proposalId) === true;
+}
+
+function hasCurrentNoteAppendOperation(job: JobRecord): boolean {
+  return job.outputRefs?.some((ref) =>
+    ref.kind === "operation" && ref.role === "current_note_append_operation"
+  ) === true;
 }
 
 function currentNoteAppendPublicationFacts(

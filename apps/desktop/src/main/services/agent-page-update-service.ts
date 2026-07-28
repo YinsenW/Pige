@@ -562,6 +562,7 @@ export function readAgentPageUpdateOperationBinding(
   const readerSelectionRefs = operation.sourceRefs.filter(
     (ref) => ref.kind === "artifact" && /^art_(?:reader_selection|current_note_append)_[a-f0-9]{16}$/u.test(ref.id)
   );
+  const hasCurrentNoteAppendProvenance = readerSelectionRefs[0]?.id.startsWith("art_current_note_append_") === true;
   const hasReaderSelectionProvenance =
     readerSelectionRefs.length === 1 &&
     sourceRefs.length === 0 &&
@@ -576,7 +577,7 @@ export function readAgentPageUpdateOperationBinding(
     target?.kind !== "page" ||
     !/^page_\d{8}_[a-z0-9]{8,}$/u.test(target.id) ||
     !target.path ||
-    !target.path.startsWith("wiki/") || path.posix.isAbsolute(target.path) || target.path.includes("\\") || target.path.split("/").some((segment) => !segment || segment === "." || segment === "..") ||
+    !target.path.startsWith("wiki/") || path.posix.isAbsolute(target.path) || target.path.includes("\\") || target.path.split("/").some((segment) => !segment || segment === "." || segment === "..") || (!hasCurrentNoteAppendProvenance && target.path !== createGeneratedNotePath(target.id)) ||
     before?.kind !== "page" ||
     !isContentHash(before.id) ||
     before.path !== createAgentPageUpdateBeforePath(operation.id) ||
@@ -611,7 +612,6 @@ export function readAgentPageUpdateOperationBinding(
     } : {})
   };
 }
-
 export function createAgentPageUpdateUndoOperationId(operationId: string): string {
   const dateKey = /^op_(\d{8})_/.exec(operationId)?.[1] ?? "19700101";
   const suffix = createHash("sha256")

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { JobRecord } from "@pige/schemas";
+import type { JobRecord, OperationRecord } from "@pige/schemas";
 import {
   finalizeAgentPageUpdateUndo,
   readAgentPageUpdateOperationBinding
@@ -45,6 +45,18 @@ describe("CurrentNoteAppendService", () => {
       reversible: "yes"
     });
     expect(readAgentPageUpdateOperationBinding(result.operation)).toMatchObject({ pageId: PAGE_ID, pagePath: PAGE_PATH });
+    const manualPathOperation: OperationRecord = {
+      ...result.operation,
+      targetRefs: [{ kind: "page", id: PAGE_ID, path: "wiki/manual-note.md" }],
+      after: { ...result.operation.after!, path: "wiki/manual-note.md" }
+    };
+    expect(readAgentPageUpdateOperationBinding(manualPathOperation)).toMatchObject({ pagePath: "wiki/manual-note.md" });
+    expect(readAgentPageUpdateOperationBinding({
+      ...manualPathOperation,
+      sourceRefs: manualPathOperation.sourceRefs.map((ref) => ref.kind === "artifact"
+        ? { ...ref, id: "art_reader_selection_0123456789abcdef" }
+        : ref)
+    })).toBeUndefined();
 
     const appended = fs.readFileSync(fixture.pagePath, "utf8");
     expect(appended).toContain(`<!-- pige:managed:start agent-note-append ${result.operation.id} -->`);
@@ -131,10 +143,70 @@ describe("CurrentNoteAppendService", () => {
     expect(decided.status).toBe("applied");
     if (decided.status !== "applied") throw new Error("Expected an applied proposal.");
     expect(decided.proposal.state).toBe("applied");
+    expect(fixture.service.decideProposal({
+      vaultPath: fixture.vaultPath,
+      activeVaultId: VAULT_ID,
+      pageId: PAGE_ID,
+      jobId: JOB_ID,
+      proposalId: staged.proposal.proposalId,
+      expectedRevision: staged.proposal.revision,
+      decision: "approve"
+    })).toMatchObject({ status: "applied", operation: { id: decided.operation.id } });
+    expect(() => fixture.service.decideProposal({
+      vaultPath: fixture.vaultPath,
+      activeVaultId: VAULT_ID,
+      pageId: PAGE_ID,
+      jobId: JOB_ID,
+      proposalId: staged.proposal.proposalId,
+      expectedRevision: staged.proposal.revision,
+      decision: "reject"
+    })).toThrow("another durable decision");
     const committed = fs.readFileSync(fixture.pagePath, "utf8");
     expect(committed).toContain("External durable body.");
     expect(committed).toContain("A concise durable conclusion.");
     expect(countManagedBlocks(committed)).toBe(1);
+  });
+
+  it("rejects cancelled Jobs and tampered private intent before writing note bytes", () => {
+    const cancelled = createFixture();
+    expect(() => cancelled.service.append({
+      ...cancelled.request,
+      job: {
+        ...cancelled.request.job,
+        state: "cancel_requested",
+        cancellation: {
+          requestedAt: "2026-07-28T10:00:01.000Z",
+          requestedBy: "user",
+          durableWritesApplied: false
+        }
+      }
+    })).toThrow("not bound to one successful current-note inspection");
+    expect(fs.readFileSync(cancelled.pagePath, "utf8")).toBe(cancelled.initialMarkdown);
+    expect(fs.existsSync(path.join(cancelled.vaultPath, ".pige"))).toBe(false);
+
+    const tampered = createFixture({ jobId: "job_20260728_noteappend03" });
+    fs.writeFileSync(
+      tampered.pagePath,
+      tampered.initialMarkdown.replace("Initial durable body.", "External review base."),
+      "utf8"
+    );
+    const staged = requireReview(tampered.service.append(tampered.request));
+    const intentFile = listPrivateFiles(tampered.vaultPath).find((file) => file.endsWith(".intent.json"));
+    if (!intentFile) throw new Error("Expected one private append intent fixture.");
+    const intent = JSON.parse(fs.readFileSync(intentFile, "utf8")) as Record<string, unknown>;
+    fs.writeFileSync(intentFile, `${JSON.stringify({ ...intent, activeVaultId: "vault_20260728_tampered" }, null, 2)}\n`, "utf8");
+    const beforeDecision = fs.readFileSync(tampered.pagePath, "utf8");
+    expect(() => tampered.service.decideProposal({
+      vaultPath: tampered.vaultPath,
+      activeVaultId: VAULT_ID,
+      pageId: PAGE_ID,
+      jobId: tampered.request.job.id,
+      proposalId: staged.proposal.proposalId,
+      expectedRevision: staged.proposal.revision,
+      decision: "approve"
+    })).toThrow("immutable Job, page, and intent binding");
+    expect(fs.readFileSync(tampered.pagePath, "utf8")).toBe(beforeDecision);
+    expect(listOperationFiles(tampered.vaultPath)).toEqual([]);
   });
 
   it("fails a second drift closed and records rejection without writing the page", () => {
@@ -299,4 +371,19 @@ function listOperationFiles(vaultPath: string): readonly string[] {
   };
   visit(root);
   return result;
+}
+
+function listPrivateFiles(vaultPath: string): readonly string[] {
+  const root = path.join(vaultPath, ".pige", "agent");
+  if (!fs.existsSync(root)) return [];
+  const files: string[] = [];
+  const visit = (directory: string): void => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) visit(target);
+      else if (entry.isFile()) files.push(target);
+    }
+  };
+  visit(root);
+  return files;
 }

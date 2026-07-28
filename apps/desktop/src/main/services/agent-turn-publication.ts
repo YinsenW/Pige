@@ -447,6 +447,7 @@ export function readDurableTurnResult(input: {
       conversationId: input.preservedTurn.event.conversationId,
       tailEventId: assistant.id,
       state: "completed",
+      ...(hasCurrentNoteAppendOperation(input.session.current) ? { currentNoteAppendApplied: true } : {}),
       modelUsage: actualHomeModelUsage(input.session),
       sourceIds: collectAgentTurnSourceIds(input.session.current, input.sourceIds),
       answer
@@ -578,6 +579,12 @@ export function recoverDurableAssistantPublication(input: {
     }
   });
   return "completed";
+}
+
+function hasCurrentNoteAppendOperation(job: JobRecord): boolean {
+  return job.outputRefs?.some((ref) =>
+    ref.kind === "operation" && ref.role === "current_note_append_operation"
+  ) === true;
 }
 
 export function actualHomeModelUsage(session: HomeAgentJobSession | undefined): HomeAgentModelUsage {

@@ -65,6 +65,7 @@ export function CurrentNoteAgent(props: {
   const loadSequenceRef = useRef(0);
   const appendProposalSequenceRef = useRef(0);
   const appendProposalDecisionInFlightRef = useRef(false);
+  const resolvedAppendJobIdRef = useRef<string | null>(null);
   const reportedTerminalJobsRef = useRef(new Set<string>());
   const activePageIdRef = useRef<string | null>(props.pageId);
   const activeVaultIdRef = useRef<string | null>(props.vaultId);
@@ -147,6 +148,7 @@ export function CurrentNoteAgent(props: {
     setDismissedAppendProposalId(null);
     appendProposalSequenceRef.current += 1;
     appendProposalDecisionInFlightRef.current = false;
+    resolvedAppendJobIdRef.current = null;
     reportedTerminalJobsRef.current.clear();
     modelSwitchInFlightRef.current = false;
     void refreshTimeline();
@@ -199,7 +201,7 @@ export function CurrentNoteAgent(props: {
     };
   }, [appendProposalBinding?.jobId, appendProposalBinding?.proposalId, dismissedAppendProposalId, props.pageId, props.vaultId]);
 
-  const terminalJobId = terminalSuccessfulJobId(latestTurn, currentOutcome);
+  const terminalJobId = terminalSuccessfulJobId(latestTurn, currentOutcome, resolvedAppendJobIdRef.current);
   useEffect(() => {
     if (!terminalJobId || reportedTerminalJobsRef.current.has(terminalJobId)) return;
     reportedTerminalJobsRef.current.add(terminalJobId);
@@ -384,6 +386,7 @@ export function CurrentNoteAgent(props: {
       activePageIdRef.current !== pageId
     ) return;
     applyAppendProposalDecisionResult(result, current, vaultId, pageId, setAppendProposal);
+    if (result.status === "applied") resolvedAppendJobIdRef.current = current.preview.jobId;
     if (result.status === "applied" || result.status === "rejected") await refreshTimeline();
   };
 
@@ -563,10 +566,17 @@ function currentNoteAppendProposalBinding(
 
 function terminalSuccessfulJobId(
   latestTurn: AgentConversationInitialTimeline["latestTurn"],
-  currentOutcome: AgentSubmitTurnResult | null
+  currentOutcome: AgentSubmitTurnResult | null,
+  resolvedAppendJobId: string | null
 ): string | null {
-  if (latestTurn?.state === "completed" || latestTurn?.state === "completed_with_warnings") return latestTurn.jobId;
-  return currentOutcome?.state === "completed" ? currentOutcome.jobId : null;
+  if (
+    (latestTurn?.state === "completed" || latestTurn?.state === "completed_with_warnings") &&
+    latestTurn.currentNoteAppendApplied === true &&
+    (latestTurn.jobId === currentOutcome?.jobId || latestTurn.jobId === resolvedAppendJobId)
+  ) return latestTurn.jobId;
+  return currentOutcome?.state === "completed" && currentOutcome.currentNoteAppendApplied === true
+    ? currentOutcome.jobId
+    : null;
 }
 
 function currentNoteAppendProposalMatches(

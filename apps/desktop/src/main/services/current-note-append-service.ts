@@ -107,7 +107,6 @@ interface AppendIntentRecord {
   readonly artifactId: string;
   readonly artifactChecksum: string;
 }
-
 interface AppendProposalRecord {
   readonly schemaVersion: 1;
   readonly kind: "current_note_append_proposal";
@@ -121,7 +120,6 @@ interface AppendProposalRecord {
   readonly createdAt: string;
   readonly preview: CurrentNoteAppendProposalPreview["lines"];
 }
-
 interface ProposalDecisionRecord {
   readonly schemaVersion: 1;
   readonly kind: "current_note_append_decision";
@@ -130,7 +128,6 @@ interface ProposalDecisionRecord {
   readonly decision: "approve" | "reject";
   readonly decidedAt: string;
 }
-
 interface ProposalOutcomeRecord {
   readonly schemaVersion: 1;
   readonly kind: "current_note_append_outcome";
@@ -140,7 +137,6 @@ interface ProposalOutcomeRecord {
   readonly operationId?: string;
   readonly completedAt: string;
 }
-
 interface AppendReceiptRecord {
   readonly schemaVersion: 1;
   readonly kind: "current_note_append_receipt";
@@ -149,7 +145,6 @@ interface AppendReceiptRecord {
   readonly afterHash: string;
   readonly committedAt: string;
 }
-
 export class CurrentNoteAppendService {
   publish(request: CurrentNoteAppendRequest): CurrentNoteAppendPublicationStatus {
     const result = this.append(request);
@@ -157,7 +152,6 @@ export class CurrentNoteAppendService {
       ? { status: "applied", operationId: result.operation.id }
       : { status: "review_required", proposalId: result.proposal.proposalId };
   }
-
   append(request: CurrentNoteAppendRequest): CurrentNoteAppendResult {
     const job = assertAppendJob(request);
     const intent = createIntent(request, job);
@@ -185,11 +179,9 @@ export class CurrentNoteAppendService {
     }
     return this.#commit(request.vaultPath, durableIntent, intentHash, current.markdown, durableIntent.beforeHash, false);
   }
-
   recover(request: CurrentNoteAppendRequest): CurrentNoteAppendResult {
     return this.append(request);
   }
-
   readPublication(input: {
     readonly vaultPath: string;
     readonly activeVaultId: string;
@@ -265,28 +257,35 @@ export class CurrentNoteAppendService {
     const proposal = readProposal(input.vaultPath, input.proposalId);
     if (!proposal || proposal.activeVaultId !== input.activeVaultId || proposal.pageId !== input.pageId || proposal.jobId !== input.jobId) return { status: "not_found" };
     const operationId = createAgentPageUpdateOperationId(input.jobId, input.pageId);
+    const binding = readJobBinding(input.vaultPath, input.jobId);
     const intent = readRequiredIntent(input.vaultPath, operationId);
     const intentHash = hashJson(intent);
-    if (proposal.intentHash !== intentHash) throw turnConflict("The current-note append proposal no longer matches its immutable intent.");
-    const currentPreview = this.#preview(input.vaultPath, proposal, intent);
-    if (currentPreview.revision !== input.expectedRevision || currentPreview.state !== "ready") {
-      return { status: "stale", proposal: currentPreview };
+    if (
+      !binding || binding.jobId !== input.jobId || binding.pageId !== input.pageId ||
+      binding.operationId !== operationId || intent.activeVaultId !== input.activeVaultId ||
+      intent.jobId !== input.jobId || intent.pageId !== input.pageId ||
+      intent.operationId !== operationId || intent.pagePath !== proposal.pagePath ||
+      proposal.intentHash !== intentHash
+    ) {
+      throw turnConflict("The current-note append proposal no longer matches its immutable Job, page, and intent binding.");
     }
-    const decision: ProposalDecisionRecord = {
-      schemaVersion: 1,
-      kind: "current_note_append_decision",
-      proposalId: proposal.proposalId,
-      intentHash,
-      decision: input.decision,
-      decidedAt: new Date().toISOString()
-    };
-    persistExactJson(input.vaultPath, decisionPath(proposal.proposalId), decision, proposalDecisionIdentity);
-    const durableDecision = readRequiredDecision(input.vaultPath, proposal.proposalId);
-    if (durableDecision.decision !== input.decision || durableDecision.intentHash !== intentHash) {
-      throw turnConflict("The current-note append proposal already has another durable decision.");
-    }
+    const existingDecision = readDecision(input.vaultPath, proposal.proposalId);
     const existingOutcome = readOutcome(input.vaultPath, proposal.proposalId);
+    if (existingDecision && (existingDecision.intentHash !== intentHash || existingDecision.decision !== input.decision)) throw turnConflict("The current-note append proposal already has another durable decision.");
     if (existingOutcome) return this.#decisionResult(input.vaultPath, proposal, intent, existingOutcome);
+    if (!existingDecision) {
+      const currentPreview = this.#preview(input.vaultPath, proposal, intent);
+      if (currentPreview.revision !== input.expectedRevision || currentPreview.state !== "ready") {
+        return { status: "stale", proposal: currentPreview };
+      }
+      persistExactJson(input.vaultPath, decisionPath(proposal.proposalId), {
+        schemaVersion: 1, kind: "current_note_append_decision",
+        proposalId: proposal.proposalId, intentHash, decision: input.decision,
+        decidedAt: new Date().toISOString()
+      } satisfies ProposalDecisionRecord, proposalDecisionIdentity);
+    }
+    const durableDecision = readRequiredDecision(input.vaultPath, proposal.proposalId);
+    if (durableDecision.decision !== input.decision || durableDecision.intentHash !== intentHash) throw turnConflict("The current-note append proposal already has another durable decision.");
     if (input.decision === "reject") {
       const outcome = commitOutcome(input.vaultPath, proposal, intentHash, "rejected");
       return { status: "rejected", proposal: this.#preview(input.vaultPath, proposal, intent, outcome) };
@@ -427,6 +426,7 @@ function assertAppendJob(request: CurrentNoteAppendRequest): JobRecord {
   const scope = scopeRefs[0];
   if (
     job.class !== "agent_turn" ||
+    job.state !== "running" ||
     job.activeVaultId !== request.activeVaultId ||
     !job.policyContextId ||
     !job.policyHash ||

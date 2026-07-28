@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  AgentConversationTurnSummarySchema,
+  AgentSubmitTurnResultSchema,
   AppearanceSettingsSummarySchema,
   AppearanceThemeMutationResultSchema,
   BackupReconnectDependencyRequestSchema,
@@ -20,6 +22,7 @@ import {
   CollectionTrashColumnResultSchema,
   CollectionTrashRowRequestSchema,
   CollectionTrashRowResultSchema,
+  CurrentNoteAppendProposalDecisionResultSchema,
   ConversationEventSchema,
   FixtureManifestSchema,
   HighRiskConfirmationSummarySchema,
@@ -107,6 +110,69 @@ import {
 } from "@pige/schemas";
 
 describe("schemas", () => {
+  it("fences current-note append review and completion projections to exact states", () => {
+    const turn = {
+      jobId: "job_20260728_schemaappend01",
+      userEventId: "evt_20260728_schemaappend01",
+      state: "completed"
+    } as const;
+    expect(AgentConversationTurnSummarySchema.parse({ ...turn, currentNoteAppendApplied: true }))
+      .toEqual({ ...turn, currentNoteAppendApplied: true });
+    expect(() => AgentConversationTurnSummarySchema.parse({ ...turn, proposalId: "proposal_20260728_schemaappend01" })).toThrow();
+    expect(() => AgentConversationTurnSummarySchema.parse({ ...turn, state: "awaiting_review" })).toThrow();
+    expect(() => AgentConversationTurnSummarySchema.parse({ ...turn, state: "running", currentNoteAppendApplied: true })).toThrow();
+
+    const waiting = {
+      requestId: "schema-current-note-append",
+      jobId: turn.jobId,
+      conversationEventId: turn.userEventId,
+      conversationId: "conv_20260728_schemaappend01",
+      tailEventId: "evt_20260728_schemaappend02",
+      state: "waiting",
+      modelUsage: "none",
+      sourceIds: [],
+      error: {
+        code: "agent_runtime.review_required",
+        domain: "agent_runtime",
+        messageKey: "errors.agent_runtime.review_required",
+        retryable: false,
+        severity: "info",
+        userAction: "review_proposal"
+      }
+    } as const;
+    expect(() => AgentSubmitTurnResultSchema.parse(waiting)).toThrow();
+    expect(AgentSubmitTurnResultSchema.parse({ ...waiting, proposalId: "proposal_20260728_schemaappend01" }))
+      .toMatchObject({ state: "waiting", proposalId: "proposal_20260728_schemaappend01" });
+    expect(() => AgentSubmitTurnResultSchema.parse({
+      ...waiting,
+      proposalId: "proposal_20260728_schemaappend01",
+      error: { ...waiting.error, code: "agent_runtime.turn_in_progress", messageKey: "errors.agent_runtime.turn_in_progress" }
+    })).toThrow();
+
+    const proposal = {
+      proposalId: "proposal_20260728_schemaappend01",
+      kind: "append_current_note",
+      state: "ready",
+      revision: 1,
+      activeVaultId: "vault_20260728_schemaappend",
+      pageId: "page_20260728_schemaappend",
+      jobId: turn.jobId,
+      lines: [{ kind: "added", text: "Safe appended text" }]
+    } as const;
+    expect(() => CurrentNoteAppendProposalDecisionResultSchema.parse({
+      apiVersion: 1,
+      status: "applied",
+      proposal,
+      operationId: "op_20260728_schemaappend01"
+    })).toThrow();
+    expect(CurrentNoteAppendProposalDecisionResultSchema.parse({
+      apiVersion: 1,
+      status: "applied",
+      proposal: { ...proposal, state: "applied" },
+      operationId: "op_20260728_schemaappend01"
+    })).toMatchObject({ status: "applied", proposal: { state: "applied" } });
+  });
+
   it("keeps one saved Collection view stable, bounded, reversible, and body-free", () => {
     const request = {
       apiVersion: 1,

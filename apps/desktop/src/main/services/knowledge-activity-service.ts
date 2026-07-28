@@ -363,6 +363,7 @@ function readActivityPageTarget(
   operation: OperationRecord
 ): { readonly kind: "page"; readonly pageId: string } | undefined {
   const updateBinding = readAgentPageUpdateOperationBinding(operation);
+  const isCurrentNoteAppend = !!updateBinding && operation.sourceRefs.some((ref) => ref.kind === "artifact" && /^art_current_note_append_[a-f0-9]{16}$/u.test(ref.id));
   const operationTarget = operation.targetRefs[0];
   const pageId = updateBinding?.pageId ?? operationTarget?.id;
   const pagePath = updateBinding?.pagePath ?? operationTarget?.path;
@@ -370,8 +371,9 @@ function readActivityPageTarget(
     !pageId ||
     !pagePath ||
     !GENERATED_PAGE_ID.test(pageId) ||
-    !GENERATED_PAGE_PATH.test(pagePath) ||
-    path.posix.basename(pagePath) !== `${pageId}.md`
+    (!isCurrentNoteAppend && (
+      !GENERATED_PAGE_PATH.test(pagePath) || path.posix.basename(pagePath) !== `${pageId}.md`
+    ))
   ) {
     return undefined;
   }
@@ -734,8 +736,6 @@ function isAgentPageUpdateOperation(operation: OperationRecord): boolean {
 function isKnowledgeActivityOperation(operation: OperationRecord): boolean {
   return isGeneratedCreatePageOperation(operation) || isAgentPageUpdateOperation(operation);
 }
-
-
 function createUndoOperationMap(operations: readonly OperationRecord[]): Map<string, OperationRecord> {
   const result = new Map<string, OperationRecord>();
   const byId = new Map(operations.map((operation) => [operation.id, operation]));

@@ -4033,8 +4033,17 @@ export const AgentConversationTurnSummarySchema = z.object({
   userEventId: ConversationEventIdSchema,
   state: JobStateSchema,
   proposalId: ProposalIdSchema.optional(),
+  currentNoteAppendApplied: z.literal(true).optional(),
   error: PigeErrorSummarySchema.optional()
-}).strict();
+}).strict().superRefine((value, context) => {
+  const ownsReview = value.state === "awaiting_review";
+  if (ownsReview !== (value.proposalId !== undefined)) {
+    context.addIssue({ code: "custom", path: ["proposalId"], message: "proposalId must exactly match awaiting_review ownership." });
+  }
+  if (value.currentNoteAppendApplied && value.state !== "completed" && value.state !== "completed_with_warnings") {
+    context.addIssue({ code: "custom", path: ["currentNoteAppendApplied"], message: "A current-note append projection requires a completed turn." });
+  }
+});
 export const AgentConversationInitialRequestSchema = z.object({
   conversationId: ConversationIdSchema.optional(),
   scope: AgentTurnCurrentNoteScopeSchema.optional(),
@@ -4139,6 +4148,7 @@ export const AgentSubmitTurnResultSchema = z.discriminatedUnion("state", [
     conversationId: ConversationIdSchema,
     tailEventId: ConversationEventIdSchema,
     state: z.literal("completed"),
+    currentNoteAppendApplied: z.literal(true).optional(),
     answer: AgentTurnAnswerSchema
   }).strict(),
   AgentSubmitTurnResultBaseSchema.extend({
@@ -4149,7 +4159,12 @@ export const AgentSubmitTurnResultSchema = z.discriminatedUnion("state", [
     state: z.literal("waiting"),
     proposalId: ProposalIdSchema.optional(),
     error: PigeErrorSummarySchema
-  }).strict(),
+  }).strict().superRefine((value, context) => {
+    const ownsReview = value.error.code === "agent_runtime.review_required";
+    if (ownsReview !== (value.proposalId !== undefined)) {
+      context.addIssue({ code: "custom", path: ["proposalId"], message: "proposalId must exactly match review_required ownership." });
+    }
+  }),
   AgentSubmitTurnFailedResultSchema
 ]);
 export const AgentStagedSubmitTurnResultSchema = z.union([
@@ -4210,18 +4225,18 @@ export const CurrentNoteAppendProposalDecisionResultSchema = z.discriminatedUnio
   z.object({
     apiVersion: z.literal(1),
     status: z.literal("applied"),
-    proposal: CurrentNoteAppendProposalPreviewSchema,
+    proposal: CurrentNoteAppendProposalPreviewSchema.extend({ state: z.literal("applied") }),
     operationId: OperationIdSchema
   }).strict(),
   z.object({
     apiVersion: z.literal(1),
     status: z.literal("rejected"),
-    proposal: CurrentNoteAppendProposalPreviewSchema
+    proposal: CurrentNoteAppendProposalPreviewSchema.extend({ state: z.literal("rejected") })
   }).strict(),
   z.object({
     apiVersion: z.literal(1),
     status: z.literal("conflicted"),
-    proposal: CurrentNoteAppendProposalPreviewSchema
+    proposal: CurrentNoteAppendProposalPreviewSchema.extend({ state: z.literal("conflicted") })
   }).strict(),
   z.object({
     apiVersion: z.literal(1),

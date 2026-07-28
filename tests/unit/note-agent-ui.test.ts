@@ -135,7 +135,7 @@ describe("Note Agent production UI", () => {
     };
     const conversation = vi.fn()
       .mockResolvedValueOnce(noteAppendReviewTimeline(pageId, jobId, proposalId))
-      .mockResolvedValue(notePageTimeline(pageId, "The cited append was applied.", jobId));
+      .mockResolvedValue(notePageTimeline(pageId, "The cited append was applied.", jobId, true));
     const currentNoteAppendProposal = vi.fn().mockResolvedValue({ apiVersion: 1, status: "available", proposal: preview });
     const decideCurrentNoteAppendProposal = vi.fn().mockResolvedValue({
       apiVersion: 1,
@@ -197,6 +197,66 @@ describe("Note Agent production UI", () => {
       await settle(dom);
     });
     expect(completed).toHaveLength(1);
+    await unmount(dom, root);
+  });
+
+  it("does not report an ordinary completed current-note turn as a durable append", async () => {
+    const dom = createDom();
+    const pageId = "page_current_note_read_only";
+    const completed = vi.fn();
+    const conversation = vi.fn().mockResolvedValue(notePageTimeline(
+      pageId,
+      "This answer only explains the note.",
+      "job_current_note_read_only"
+    ));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: noteAgentApi(conversation)
+    });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, {
+        ...currentNoteAgentProps(pageId),
+        onDurableTurnCompleted: completed
+      }));
+      await settle(dom);
+    });
+
+    await waitFor(dom, () => container.textContent?.includes("This answer only explains the note.") === true);
+    expect(completed).not.toHaveBeenCalled();
+    await unmount(dom, root);
+  });
+
+  it("does not replay a historical append completion callback on mount", async () => {
+    const dom = createDom();
+    const pageId = "page_current_note_historical_append";
+    const completed = vi.fn();
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: noteAgentApi(vi.fn().mockResolvedValue(notePageTimeline(
+        pageId,
+        "This append completed before the panel mounted.",
+        "job_current_note_historical_append",
+        true
+      )))
+    });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, {
+        ...currentNoteAgentProps(pageId),
+        onDurableTurnCompleted: completed
+      }));
+      await settle(dom);
+    });
+
+    await waitFor(dom, () => container.textContent?.includes("This append completed before the panel mounted.") === true);
+    expect(completed).not.toHaveBeenCalled();
     await unmount(dom, root);
   });
 
@@ -1609,7 +1669,12 @@ function noteRecoveryTimeline(state: "waiting_dependency" | "queued" | "running"
   };
 }
 
-function notePageTimeline(pageId: string, answer: string, jobId = `job_${pageId}`): Record<string, unknown> {
+function notePageTimeline(
+  pageId: string,
+  answer: string,
+  jobId = `job_${pageId}`,
+  currentNoteAppendApplied = false
+): Record<string, unknown> {
   return {
     conversationId: `conversation_${pageId}`,
     tailEventId: `event_assistant_${pageId}`,
@@ -1633,7 +1698,8 @@ function notePageTimeline(pageId: string, answer: string, jobId = `job_${pageId}
     latestTurn: {
       jobId,
       userEventId: `event_user_${pageId}`,
-      state: "completed"
+      state: "completed",
+      ...(currentNoteAppendApplied ? { currentNoteAppendApplied: true } : {})
     }
   };
 }
