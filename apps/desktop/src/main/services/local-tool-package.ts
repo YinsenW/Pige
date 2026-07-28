@@ -56,12 +56,19 @@ export interface StagedLocalToolPackage {
   readonly sizeBytes: number;
 }
 
-export const DEFAULT_LOCAL_TOOL_PACKAGE_LIMITS: LocalToolPackageLimits = {
+export const DEFAULT_LOCAL_TOOL_PACKAGE_LIMITS: LocalToolPackageLimits = Object.freeze({
   maxManifestBytes: 256 * 1024,
   maxFileBytes: 32 * 1024 * 1024,
   maxTotalBytes: 64 * 1024 * 1024,
   maxFiles: 256
-};
+});
+
+export const MAX_LOCAL_TOOL_PACKAGE_LIMITS: LocalToolPackageLimits = Object.freeze({
+  maxManifestBytes: 8 * 1024 * 1024,
+  maxFileBytes: 1024 * 1024 * 1024,
+  maxTotalBytes: 4 * 1024 * 1024 * 1024,
+  maxFiles: 50_000
+});
 
 export class LocalToolPackageError extends Error {
   readonly code: string;
@@ -79,7 +86,7 @@ export function stageLocalToolPackage(input: {
   readonly expected: LocalToolPackageIdentity;
   readonly limits?: LocalToolPackageLimits;
 }): StagedLocalToolPackage {
-  const limits = input.limits ?? DEFAULT_LOCAL_TOOL_PACKAGE_LIMITS;
+  const limits = resolveLocalToolPackageLimits(input.limits);
   const candidate = inspectPackageDirectory(input.candidatePath, limits);
   assertPackageIdentity(candidate, input.expected);
   createPrivateDirectory(input.stagingPath);
@@ -106,7 +113,7 @@ export function verifyLocalToolPackageDirectory(
   expected: LocalToolPackageIdentity,
   limits: LocalToolPackageLimits = DEFAULT_LOCAL_TOOL_PACKAGE_LIMITS
 ): StagedLocalToolPackage {
-  const inspected = inspectPackageDirectory(packagePath, limits);
+  const inspected = inspectPackageDirectory(packagePath, resolveLocalToolPackageLimits(limits));
   assertPackageIdentity(inspected, expected);
   return {
     stagingPath: packagePath,
@@ -120,13 +127,14 @@ export function computeLocalToolPackageSha256(
   packagePath: string,
   limits: LocalToolPackageLimits = DEFAULT_LOCAL_TOOL_PACKAGE_LIMITS
 ): string {
-  return inspectPackageDirectory(packagePath, limits).packageSha256;
+  return inspectPackageDirectory(packagePath, resolveLocalToolPackageLimits(limits)).packageSha256;
 }
 
 export function parseLocalToolPackageManifest(
   value: unknown,
   limits: LocalToolPackageLimits = DEFAULT_LOCAL_TOOL_PACKAGE_LIMITS
 ): LocalToolPackageManifest {
+  limits = resolveLocalToolPackageLimits(limits);
   const record = requireObject(value, "manifest");
   assertExactKeys(record, [
     "schemaVersion",
@@ -188,6 +196,37 @@ export function parseLocalToolPackageManifest(
     license,
     files
   };
+}
+
+export function resolveLocalToolPackageLimits(
+  value: LocalToolPackageLimits = DEFAULT_LOCAL_TOOL_PACKAGE_LIMITS
+): LocalToolPackageLimits {
+  if (!isExactLimitRecord(value)) {
+    fail("settings.local_tool_package_limits_invalid", "Local-tool package limits are invalid.");
+  }
+  const limits = value as unknown as Record<keyof LocalToolPackageLimits, unknown>;
+  for (const key of Object.keys(MAX_LOCAL_TOOL_PACKAGE_LIMITS) as (keyof LocalToolPackageLimits)[]) {
+    const candidate = limits[key];
+    if (!Number.isSafeInteger(candidate) || (candidate as number) <= 0 ||
+      (candidate as number) > MAX_LOCAL_TOOL_PACKAGE_LIMITS[key]) {
+      fail("settings.local_tool_package_limits_invalid", "Local-tool package limits exceed supported bounds.");
+    }
+  }
+  if ((limits.maxFileBytes as number) > (limits.maxTotalBytes as number)) {
+    fail("settings.local_tool_package_limits_invalid", "Local-tool file limits cannot exceed the package limit.");
+  }
+  return Object.freeze({
+    maxManifestBytes: limits.maxManifestBytes as number,
+    maxFileBytes: limits.maxFileBytes as number,
+    maxTotalBytes: limits.maxTotalBytes as number,
+    maxFiles: limits.maxFiles as number
+  });
+}
+
+function isExactLimitRecord(value: unknown): value is LocalToolPackageLimits {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const keys = Object.keys(value).sort();
+  return keys.join("\0") === ["maxFileBytes", "maxFiles", "maxManifestBytes", "maxTotalBytes"].join("\0");
 }
 
 function inspectPackageDirectory(

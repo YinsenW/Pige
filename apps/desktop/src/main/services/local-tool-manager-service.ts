@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
 import { JobRecordSchema, type JobRecord, type JobRef } from "@pige/schemas";
-import { LocalToolPackageError, stageLocalToolPackage, verifyLocalToolPackageDirectory,
-  type LocalToolPackageIdentity } from "./local-tool-package";
+import { LocalToolPackageError, resolveLocalToolPackageLimits, stageLocalToolPackage,
+  verifyLocalToolPackageDirectory, type LocalToolPackageIdentity } from "./local-tool-package";
 import { LocalToolLifecycleStore, LocalToolLifecycleStoreError } from "./local-tool-lifecycle-store";
 import { JobExecutionCoordinator, type JobExecutionOutcome } from "./job-execution-coordinator";
 import type { JobRecordSnapshot } from "./job-record-store";
@@ -146,7 +146,7 @@ export class LocalToolManagerService {
     const rootPath = this.#store.verifiedOwnedPath(requireValue(active.activeRelativePath));
     try {
       assertTargetMetadataMatchesDefinition(active, tool);
-      verifyLocalToolPackageDirectory(rootPath, identityFromRecord(toolId, undefined, active, tool));
+      verifyLocalToolPackageDirectory(rootPath, identityFromRecord(toolId, undefined, active, tool), tool.packageLimits);
       assertRecordUnchanged(record, this.#store.read(toolId));
     } catch {
       throw new PigeDomainError("settings.local_tool_repair_required", "Local tool package identity is not current.");
@@ -155,7 +155,7 @@ export class LocalToolManagerService {
     try {
       const result = await callback({ toolId, rootPath, version: inspection.activeVersion,
         manifestSha256: inspection.manifestSha256 });
-      try { verifyLocalToolPackageDirectory(rootPath, identityFromRecord(toolId, undefined, active, tool));
+      try { verifyLocalToolPackageDirectory(rootPath, identityFromRecord(toolId, undefined, active, tool), tool.packageLimits);
         assertRecordUnchanged(record, this.#store.read(toolId)); }
       catch { throw new PigeDomainError("settings.local_tool_repair_required", "Local tool package changed during use."); } return result;
     } finally {
@@ -165,8 +165,7 @@ export class LocalToolManagerService {
     }
   }
 
-  install(request: LocalToolCandidateActionRequest): Promise<LocalToolLifecycleResult> {
-    return this.#applyCandidate("install", request); }
+  install(request: LocalToolCandidateActionRequest): Promise<LocalToolLifecycleResult> { return this.#applyCandidate("install", request); }
   update(request: LocalToolCandidateActionRequest): Promise<LocalToolLifecycleResult> {
     return this.#applyCandidate("update", request); }
   repair(request: LocalToolCandidateActionRequest): Promise<LocalToolLifecycleResult> {
@@ -194,9 +193,9 @@ export class LocalToolManagerService {
       let staged: ReturnType<typeof stageLocalToolPackage>;
       try {
         staged = stageLocalToolPackage({
-          candidatePath: absolutePath,
-          stagingPath: this.#store.stagingPath(request.requestId),
-          expected: identity
+          candidatePath: absolutePath, stagingPath: this.#store.stagingPath(request.requestId),
+          expected: identity,
+          limits: resolveLocalToolPackageLimits(target.target.packageLimits)
         });
       } catch (caught) {
         healthFailureDetected = caught instanceof LocalToolPackageError;
@@ -397,9 +396,9 @@ export class LocalToolManagerService {
       this.#store.prepare();
       const stagingPath = this.#store.stagingPath(request.requestId);
       const staged = stageLocalToolPackage({
-        candidatePath: request.candidatePath,
-        stagingPath,
-        expected: target.target
+        candidatePath: request.candidatePath, stagingPath,
+        expected: target.target,
+        limits: resolveLocalToolPackageLimits(target.target.packageLimits)
       });
       stagingOwned = true;
       this.#inject("verify");
@@ -416,7 +415,7 @@ export class LocalToolManagerService {
       this.#inject("publish");
       if (fs.existsSync(publishedPath)) {
         try {
-          verifyLocalToolPackageDirectory(publishedPath, target.target);
+          verifyLocalToolPackageDirectory(publishedPath, target.target, target.target.packageLimits);
           this.#store.discardStaging(request.requestId);
           stagingOwned = false;
         } catch (caught) {
@@ -435,7 +434,7 @@ export class LocalToolManagerService {
         publishedNew = true;
         stagingOwned = false;
       }
-      verifyLocalToolPackageDirectory(publishedPath, target.target);
+      verifyLocalToolPackageDirectory(publishedPath, target.target, target.target.packageLimits);
 
       const latestRecord = this.#store.read(request.toolId);
       assertRecordUnchanged(beforeRecord, latestRecord);
@@ -783,7 +782,8 @@ export class LocalToolManagerService {
         );
       }
       const identity = identityFromRecord(tool.toolId, assetId, targetRecord, definition);
-      verifyLocalToolPackageDirectory(this.#store.verifiedOwnedPath(targetRecord.activeRelativePath), identity);
+      verifyLocalToolPackageDirectory(this.#store.verifiedOwnedPath(targetRecord.activeRelativePath),
+        identity, definition.packageLimits);
       packageHealthy = targetRecord.health === "pass";
     } catch {
       packageHealthy = false;
@@ -855,36 +855,36 @@ export class LocalToolManagerService {
 function validateCatalog(catalog: LocalToolCatalog): ReadonlyMap<string, LocalToolDefinition> {
   const tools = new Map<string, LocalToolDefinition>();
   for (const tool of catalog.tools) {
-    validateDefinition(tool, undefined);
     if (tools.has(tool.toolId)) throw new Error(`Duplicate local-tool catalog ID: ${tool.toolId}`);
     const assets = new Set<string>();
-    for (const asset of tool.assets ?? []) {
-      validateDefinition(asset, tool.toolId);
+    const normalizedAssets = (tool.assets ?? []).map((asset) => {
       if (assets.has(asset.assetId)) throw new Error(`Duplicate local-tool asset ID: ${asset.assetId}`);
-      assets.add(asset.assetId);
-    }
-    tools.set(tool.toolId, tool);
+      assets.add(asset.assetId); return validateDefinition(asset, tool.toolId);
+    });
+    tools.set(tool.toolId, validateDefinition({ ...tool, assets: Object.freeze(normalizedAssets) }, undefined));
   }
   return tools;
 }
 
-function validateDefinition(
-  definition: LocalToolDefinition | LocalToolAssetDefinition,
-  parentToolId: string | undefined
-): void {
+function validateDefinition<T extends LocalToolDefinition | LocalToolAssetDefinition>(
+  definition: T, parentToolId: string | undefined): T {
   if (!/^[a-z0-9][a-z0-9._-]{0,79}$/.test(definition.toolId)) throw new Error("Invalid local-tool catalog ID.");
   if (parentToolId && definition.toolId !== parentToolId) throw new Error("Local-tool asset parent identity mismatch.");
-  if (parentToolId && !("assetId" in definition) || parentToolId && !definition.assetId) {
+  if (parentToolId && (!("assetId" in definition) || !definition.assetId))
     throw new Error("Local-tool assets require independent asset IDs.");
-  }
   if (!/^[0-9A-Za-z][0-9A-Za-z._+-]{0,79}$/.test(definition.version)) throw new Error("Invalid local-tool version.");
   if (!SHA256_PATTERN.test(definition.expectedSha256)) throw new Error("Invalid local-tool package checksum.");
   if (!Number.isSafeInteger(definition.expectedSizeBytes) || definition.expectedSizeBytes < 0) {
     throw new Error("Invalid local-tool package size.");
   }
-  if (definition.capabilities.length === 0 || new Set(definition.capabilities).size !== definition.capabilities.length) {
+  if (definition.capabilities.length === 0 ||
+    new Set(definition.capabilities).size !== definition.capabilities.length)
     throw new Error("Local-tool capabilities must be non-empty and unique.");
-  }
+  const packageLimits = resolveLocalToolPackageLimits(definition.packageLimits);
+  if (definition.expectedSizeBytes > packageLimits.maxTotalBytes)
+    throw new Error("Local-tool package size exceeds its catalog limits.");
+  return Object.freeze({ ...definition, capabilities: Object.freeze([...definition.capabilities]),
+    license: Object.freeze({ ...definition.license }), packageLimits }) as unknown as T;
 }
 
 function installedTargetRecord(

@@ -19,6 +19,7 @@ import type {
   LocalToolSelfTestResult
 } from "../../apps/desktop/src/main/services/local-tool-manager-types";
 import type { JobRecordSnapshot } from "../../apps/desktop/src/main/services/job-record-store";
+import type { LocalToolPackageLimits } from "../../apps/desktop/src/main/services/local-tool-package";
 import {
   createFakeLocalToolFixture,
   hashTree,
@@ -293,6 +294,82 @@ describe("local tool manager service", () => {
     expect(harness.service.inspect("fake_ocr").routable).toBe(true);
     expect(hashTree(harness.localToolRoot)).toBe(beforeHealth);
     expect(harness.selfTest.calls).toHaveLength(selfTestsBefore);
+  });
+
+  it("uses immutable catalog-scoped limits across install, inspect, test, and runtime leases", async () => {
+    const files = Object.fromEntries(Array.from({ length: 257 }, (_, index) => [
+      `python/site-packages/paddle/file-${String(index).padStart(3, "0")}.py`,
+      `# paddle fixture ${index}\n`
+    ]));
+    const packageLimits = {
+      maxManifestBytes: 512 * 1024,
+      maxFileBytes: 64 * 1024 * 1024,
+      maxTotalBytes: 128 * 1024 * 1024,
+      maxFiles: 512
+    } satisfies LocalToolPackageLimits;
+    const fixture = createFakeLocalToolFixture(path.join(makeTempRoot("paddle-limits"), "fixture"), {
+      toolId: "paddleocr_local",
+      files,
+      packageLimits
+    });
+    const approvedDefinition = toToolDefinition(fixture, { label: "PaddleOCR" });
+    const mutableCatalogLimits = { ...packageLimits };
+    const scopedDefinition = { ...approvedDefinition, packageLimits: mutableCatalogLimits };
+    const { packageLimits: _packageLimits, ...ordinaryDefinition } = approvedDefinition;
+    const ordinary = makeHarness({ tools: [ordinaryDefinition] });
+
+    const rejected = await ordinary.service.install(installRequest(fixture, "request-paddle-default-limits"));
+    expect(rejected.job).toMatchObject({
+      state: "failed_final",
+      error: { code: "settings.local_tool_size_exceeded" }
+    });
+    expect(findVersionDirectories(ordinary.localToolRoot)).toEqual([]);
+
+    const root = makeTempRoot("paddle-scoped-limits");
+    const localToolRoot = path.join(root, "app-data", "local-tools");
+    const installed = makeHarness({ tools: [scopedDefinition] }, { localToolRoot });
+    mutableCatalogLimits.maxFiles = 1;
+    expect((await installed.service.install(installRequest(fixture, "request-paddle-scoped-limits"))).job.state)
+      .toBe("completed");
+    expect(installed.service.inspect("paddleocr_local")).toMatchObject({ healthy: true, routable: true });
+    expect((await installed.service.test({
+      ...targetRequest(fixture, "request-paddle-scoped-test")
+    })).job.state).toBe("completed");
+
+    const restarted = makeHarness({ tools: [approvedDefinition] }, { localToolRoot });
+    expect(restarted.service.inspect("paddleocr_local")).toMatchObject({ healthy: true, routable: true });
+    expect(await restarted.service.withVerifiedRuntime("paddleocr_local", ({ rootPath }) =>
+      fs.readdirSync(path.join(rootPath, "python", "site-packages", "paddle")).length)).toBe(257);
+  });
+
+  it.each([
+    ["zero", { maxManifestBytes: 0, maxFileBytes: 1, maxTotalBytes: 1, maxFiles: 1 }],
+    ["incoherent", { maxManifestBytes: 1, maxFileBytes: 2, maxTotalBytes: 1, maxFiles: 1 }],
+    ["excessive", { maxManifestBytes: 1, maxFileBytes: 1, maxTotalBytes: 1, maxFiles: 50_001 }],
+    ["unknown-field", {
+      maxManifestBytes: 1, maxFileBytes: 1, maxTotalBytes: 1, maxFiles: 1, unreviewedLimit: 1
+    }]
+  ])("rejects %s catalog package limits before filesystem work", (_label, packageLimits) => {
+    const fixture = createFakeLocalToolFixture(path.join(makeTempRoot(`catalog-limit-${_label}`), "fixture"));
+    const definition = { ...toToolDefinition(fixture), packageLimits } as ReturnType<typeof toToolDefinition>;
+    expect(() => makeHarness({ tools: [definition] })).toThrowError(expect.objectContaining({
+      code: "settings.local_tool_package_limits_invalid"
+    }));
+  });
+
+  it("rejects excessive asset-scoped limits during catalog construction", () => {
+    const root = makeTempRoot("asset-package-limits");
+    const tool = createFakeLocalToolFixture(path.join(root, "tool"), { toolId: "paddleocr_local" });
+    const asset = createFakeLocalToolFixture(path.join(root, "asset"), {
+      toolId: "paddleocr_local",
+      assetId: "zh_models"
+    });
+    const invalidAsset = {
+      ...toAssetDefinition(asset),
+      packageLimits: { maxManifestBytes: 1, maxFileBytes: 1, maxTotalBytes: 1, maxFiles: 50_001 }
+    };
+    expect(() => makeHarness({ tools: [toToolDefinition(tool, { assets: [invalidAsset] })] }))
+      .toThrowError(expect.objectContaining({ code: "settings.local_tool_package_limits_invalid" }));
   });
 
   it("leases only a verified enabled runtime with its private package identity", async () => {
