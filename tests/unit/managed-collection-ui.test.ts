@@ -1086,6 +1086,94 @@ describe("ManagedCollectionPanel", () => {
     await act(async () => root.unmount());
     dom.window.close();
   });
+
+  it("loads bounded row pages without replacing existing row identities and preserves focus on failure", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const initial = { ...collectionSnapshot("dataset_rev_20260729_page0001", "Alpha"), totalRowCount: 3, truncated: true };
+    const calls: string[] = [];
+    await act(async () => {
+      root.render(createElement(ManagedCollectionPanel, {
+        activeVaultId: "vault_20260727_collection01",
+        snapshot: initial,
+        nextRowCursor: "collection_row_cursor_page_2",
+        onClose: () => undefined,
+        onAddNullableColumn: notFoundColumnResult,
+        onRenameColumn: notFoundRenameResult,
+        onTrashColumn: notFoundTrashColumnResult,
+        onOpenView: async () => null,
+        onCreateView: notFoundCreateViewResult,
+        onAppendDefaultRow: notFoundAppendResult,
+        onTrashRow: notFoundTrashResult,
+        onAdoptSnapshot: () => false,
+        onEditCell: async (request) => ({ ...editIdentity(request), status: "failed" }),
+        onReload: async () => initial,
+        onLoadMoreRows: async (cursor) => {
+          calls.push(cursor);
+          if (calls.length > 1) return null;
+          const duplicate = { ...initial.rows[0]!, cells: initial.rows[0]!.cells.map((cell) =>
+            cell.columnId === "column_name000001" ? { ...cell, value: "Server replacement" } : cell) };
+          const appended = { ...initial.rows[0]!, rowId: "row_customer0002", cells: initial.rows[0]!.cells.map((cell) =>
+            cell.columnId === "column_name000001" ? { ...cell, value: "Beta" } : cell) };
+          return {
+            apiVersion: 1,
+            requestId: "collection_request_page_2",
+            activeVaultId: "vault_20260727_collection01",
+            datasetId: initial.datasetId,
+            tableId: initial.tableId,
+            status: "ready",
+            snapshot: { ...initial, rows: [duplicate, appended], returnedRowCount: 2 },
+            nextRowCursor: "collection_row_cursor_page_3"
+          };
+        },
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const trigger = buttonNamed(container, "Load more rows");
+    await click(dom, trigger);
+    expect(calls).toEqual(["collection_row_cursor_page_2"]);
+    expect(container.textContent).toContain("Alpha");
+    expect(container.textContent).not.toContain("Server replacement");
+    expect(container.textContent).toContain("Beta");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Load more rows"));
+
+    await click(dom, buttonNamed(container, "Load more rows"));
+    expect(container.textContent).toContain("Current rows are unchanged");
+    expect(container.textContent).toContain("Alpha");
+    expect(container.textContent).toContain("Beta");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Load more rows"));
+
+    const changedRevision = { ...collectionSnapshot("dataset_rev_20260729_page0002", "Gamma"), totalRowCount: 2, truncated: true };
+    await act(async () => {
+      root.render(createElement(ManagedCollectionPanel, {
+        activeVaultId: "vault_20260727_collection01",
+        snapshot: changedRevision,
+        nextRowCursor: "collection_row_cursor_new_revision",
+        onClose: () => undefined,
+        onAddNullableColumn: notFoundColumnResult,
+        onRenameColumn: notFoundRenameResult,
+        onTrashColumn: notFoundTrashColumnResult,
+        onOpenView: async () => null,
+        onCreateView: notFoundCreateViewResult,
+        onAppendDefaultRow: notFoundAppendResult,
+        onTrashRow: notFoundTrashResult,
+        onAdoptSnapshot: () => false,
+        onEditCell: async (request) => ({ ...editIdentity(request), status: "failed" }),
+        onReload: async () => changedRevision,
+        onLoadMoreRows: async () => null,
+        t
+      }));
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Gamma");
+    expect(container.textContent).not.toContain("Beta");
+    expect(container.textContent).not.toContain("Current rows are unchanged");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
 });
 
 function CollectionAppendHarness(props: {

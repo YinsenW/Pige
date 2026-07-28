@@ -23,6 +23,7 @@ import type {
   RetrievalSearchRequest,
   RetrievalSearchResult
 } from "@pige/contracts";
+import type { CollectionListResult } from "@pige/schemas";
 import { filterLibraryPages, LibraryPanel } from "../../apps/desktop/src/renderer/src/App";
 import { NoteReader } from "../../apps/desktop/src/renderer/src/components/NoteReader";
 import type { ReaderInlineReferenceActivation } from "../../apps/desktop/src/renderer/src/components/ReaderInlineReferenceSurface";
@@ -125,6 +126,68 @@ describe("full UI Library", () => {
     expect(buttonNamed(container, "Topics").getAttribute("aria-selected")).toBe("true");
     expect(container.textContent).not.toContain("Alpha plan");
     expect(container.textContent).toContain("Interface design");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("discovers datasets inside Library while summaries only select an exact table", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const opened: Array<{ datasetId: string; tableId: string }> = [];
+    const catalog: CollectionListResult = {
+      apiVersion: 1,
+      activeVaultId: "vault_20260715_fullui01",
+      status: "ready",
+      datasets: [{
+        datasetId: "dataset_20260729_library01",
+        title: "Customer research",
+        activeRevisionId: "dataset_rev_20260729_library01",
+        tableCount: 1,
+        tables: [{ tableId: "table_customers01", tableName: "Customers", columnCount: 3, rowCount: 72, canOpen: true }],
+        tablesTruncated: false
+      }],
+      totalDatasetCount: 1,
+      hasMore: false
+    };
+    await act(async () => {
+      root.render(createElement(LibraryPanel, {
+        libraryList: libraryList(),
+        collectionCatalog: catalog,
+        collectionCatalogLoading: false,
+        onRefreshCollectionCatalog: async () => undefined,
+        onLoadMoreCollections: async () => undefined,
+        onOpenCollection: async (datasetId, tableId) => {
+          opened.push({ datasetId, tableId });
+          return true;
+        },
+        selectedNote: null,
+        selectedNoteRelated: null,
+        noteLoadingPageId: null,
+        error: null,
+        onGoHome: () => undefined,
+        onRefresh: async () => undefined,
+        onSearch: async () => searchResult("unused", []),
+        searchFocusRequest: 0,
+        onOpenNote: async () => undefined,
+        onCloseNote: () => undefined,
+        noteAgentOpen: false,
+        onToggleNoteAgent: () => undefined,
+        noteAgentToggleRef: { current: null },
+        developmentNotice: null,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    expect(container.textContent).toContain("Customer research");
+    expect(container.textContent).toContain("Rows: 72");
+    await act(async () => {
+      requireElement(container.querySelector<HTMLButtonElement>('[aria-label="Open collection: Customers"]')).click();
+      await settle(dom);
+    });
+    expect(opened).toEqual([{ datasetId: "dataset_20260729_library01", tableId: "table_customers01" }]);
 
     await act(async () => root.unmount());
     dom.window.close();
