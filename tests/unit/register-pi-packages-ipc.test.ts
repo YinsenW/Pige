@@ -93,7 +93,6 @@ describe("registerPiPackagesIpc", () => {
       apiVersion: 1,
       requestId: request.requestId,
       taskId: "pi_package_task_abcdefghijklmnop",
-      registry,
       status: "failed"
     });
     expect(JSON.stringify(result)).not.toMatch(/error|path|ENOENT|private/u);
@@ -125,7 +124,6 @@ describe("registerPiPackagesIpc", () => {
       apiVersion: 1,
       requestId: request.requestId,
       taskId: "pi_package_task_abcdefghijklmnop",
-      registry,
       status: "failed"
     });
     expect(harness.install).toHaveBeenCalledOnce();
@@ -139,6 +137,17 @@ describe("registerPiPackagesIpc", () => {
 
     const throwing = makeHarness({ summary: () => { throw new Error("/private/package-registry.json"); } });
     await expect(call(throwing, "piPackages.summary")).resolves.toEqual({ status: "failed" });
+
+    const failedInstall = makeHarness({
+      install: () => { throw new Error("ENOENT /private/package-registry.json"); }
+    });
+    await expect(call(failedInstall, "piPackages.install", request)).resolves.toEqual({
+      apiVersion: 1,
+      requestId: request.requestId,
+      taskId: "pi_package_task_abcdefghijklmnop",
+      status: "failed"
+    });
+    expect(failedInstall.summary).not.toHaveBeenCalled();
   });
 });
 

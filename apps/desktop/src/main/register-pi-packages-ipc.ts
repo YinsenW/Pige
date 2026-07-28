@@ -3,11 +3,9 @@ import {
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
   PiPackageRegistryQueryResultSchema,
-  PiPackageRegistrySummarySchema,
   type PiPackageInstallRequest,
   type PiPackageInstallResult,
-  type PiPackageRegistryQueryResult,
-  type PiPackageRegistrySummary
+  type PiPackageRegistryQueryResult
 } from "@pige/schemas";
 
 type Awaitable<T> = T | Promise<T>;
@@ -32,18 +30,18 @@ export function registerPiPackagesIpc(options: RegisterPiPackagesIpcOptions): vo
   options.ipcMain.handle("piPackages.install", async (event, request: unknown) => {
     const parsed = PiPackageInstallRequestSchema.parse(request);
     const vaultId = trustedActiveVault(options, event.sender);
-    if (!vaultId) return failedInstallWithoutOwner(parsed);
+    if (!vaultId) return failedInstall(parsed);
 
     let result: PiPackageInstallResult;
     try {
       result = PiPackageInstallResultSchema.parse(await options.install(parsed));
       assertInstallIdentity(parsed, result);
     } catch {
-      return failedInstall(options, parsed);
+      return failedInstall(parsed);
     }
 
     if (trustedActiveVault(options, event.sender) !== vaultId) {
-      return failedInstall(options, parsed, result.taskId, result.registry);
+      return failedInstall(parsed, result.taskId);
     }
     return result;
   });
@@ -72,53 +70,15 @@ function failedSummary(): PiPackageRegistryQueryResult {
   return PiPackageRegistryQueryResultSchema.parse({ status: "failed" });
 }
 
-async function failedInstall(
-  options: Pick<RegisterPiPackagesIpcOptions, "summary">,
+function failedInstall(
   request: PiPackageInstallRequest,
-  taskId = fallbackTaskId(request),
-  knownRegistry?: PiPackageRegistrySummary
-): Promise<PiPackageInstallResult> {
-  const registry = knownRegistry ?? await fallbackRegistry(options, request.expectedRegistryRevision);
-  return failedInstallResult(request, taskId, registry);
-}
-
-function failedInstallWithoutOwner(request: PiPackageInstallRequest): PiPackageInstallResult {
-  return failedInstallResult(
-    request,
-    fallbackTaskId(request),
-    emptyRegistry(request.expectedRegistryRevision)
-  );
-}
-
-function failedInstallResult(
-  request: PiPackageInstallRequest,
-  taskId: string,
-  registry: PiPackageRegistrySummary
+  taskId = fallbackTaskId(request)
 ): PiPackageInstallResult {
   return PiPackageInstallResultSchema.parse({
     apiVersion: request.apiVersion,
     requestId: request.requestId,
     taskId,
-    registry,
     status: "failed"
-  });
-}
-
-async function fallbackRegistry(
-  options: Pick<RegisterPiPackagesIpcOptions, "summary">,
-  expectedRevision: number
-): Promise<PiPackageRegistrySummary> {
-  const summary = await readSummary(options);
-  return summary.status === "ready"
-    ? summary.registry
-    : emptyRegistry(expectedRevision);
-}
-
-function emptyRegistry(expectedRevision: number): PiPackageRegistrySummary {
-  return PiPackageRegistrySummarySchema.parse({
-    apiVersion: 1,
-    revision: expectedRevision,
-    packages: []
   });
 }
 

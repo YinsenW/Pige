@@ -181,7 +181,9 @@ describe("PiPackageInstallTaskService", () => {
       decision: "allow"
     });
 
-    await expect(execution).resolves.toMatchObject({ status: "failed", registry: { revision: 1 } });
+    const result = await execution;
+    expect(result).toMatchObject({ status: "failed" });
+    expect(result).not.toHaveProperty("registry");
     expect(fixture.execute).not.toHaveBeenCalled();
   });
 });

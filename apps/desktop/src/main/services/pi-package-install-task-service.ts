@@ -221,9 +221,11 @@ export class PiPackageInstallTaskService {
     requestId: string,
     taskId: string,
     status: InstallStatus,
-    registry: PiPackageRegistrySummary = this.#registry()
+    registry?: PiPackageRegistrySummary
   ): PiPackageInstallResult {
-    return PiPackageInstallResultSchema.parse({ apiVersion: 1, requestId, taskId, status, registry });
+    return PiPackageInstallResultSchema.parse(status === "failed"
+      ? { apiVersion: 1, requestId, taskId, status }
+      : { apiVersion: 1, requestId, taskId, status, registry: registry ?? this.#registry() });
   }
 
   #registry(): PiPackageRegistrySummary {
