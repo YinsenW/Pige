@@ -29,6 +29,7 @@ jobs:
     outputs:
       commit: ${{ steps.identity.outputs.commit }}
       tag: ${{ steps.identity.outputs.tag }}
+      release_commit: ${{ steps.identity.outputs.release_commit }}
     steps:
       - name: Checkout exact requested commit
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -58,6 +59,7 @@ jobs:
           test "$manifest_target" = "$release_commit"
           printf 'commit=%s\n' "$PIGE_REQUESTED_COMMIT" >> "$GITHUB_OUTPUT"
           printf 'tag=%s\n' "$PIGE_REQUESTED_TAG" >> "$GITHUB_OUTPUT"
+          printf 'release_commit=%s\n' "$release_commit" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build and verify ${{ matrix.platform }}
@@ -74,6 +76,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           ref: ${{ needs.validate.outputs.commit }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Node
@@ -100,10 +103,16 @@ jobs:
           --record=${{ runner.temp }}/paddleocr-inputs/${{ matrix.platform }}.inputs.json
           --github-output=$GITHUB_OUTPUT
 
+      - name: Materialize immutable release-source manifest
+        run: >-
+          git show
+          "${{ needs.validate.outputs.release_commit }}:resources/parser-manifests/paddleocr-local.parser.manifest.json"
+          > "${{ runner.temp }}/paddleocr-release-source.manifest.json"
+
       - name: Build deterministic LocalTool bundle
         run: >-
           npm run release:paddleocr:build --
-          --parser-manifest=resources/parser-manifests/paddleocr-local.parser.manifest.json
+          --parser-manifest=${{ runner.temp }}/paddleocr-release-source.manifest.json
           --wheel-lock=${{ runner.temp }}/paddleocr-inputs/${{ matrix.platform }}.builder-lock.json
           --artifacts=${{ runner.temp }}/paddleocr-inputs/${{ matrix.platform }}
           --legal=resources/licenses/paddleocr/${{ matrix.platform }}

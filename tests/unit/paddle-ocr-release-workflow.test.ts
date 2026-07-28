@@ -181,6 +181,10 @@ describe("PaddleOCR release workflow sidecar", () => {
     expect(workflow).toContain("environment: production-release");
     expect(workflow).toContain("PIGE_PADDLEOCR_BUNDLE_SIGNING_KEY_PEM");
     expect(workflow).toContain('test "$manifest_target" = "$release_commit"');
+    expect(workflow).toContain('printf \'release_commit=%s\\n\' "$release_commit"');
+    expect(workflow).toContain('paddleocr-release-source.manifest.json');
+    expect(workflow).toContain('"${{ needs.validate.outputs.release_commit }}:resources/parser-manifests/paddleocr-local.parser.manifest.json"');
+    expect(workflow).toContain('--parser-manifest=${{ runner.temp }}/paddleocr-release-source.manifest.json');
     expect(workflow).toContain("Existing immutable PaddleOCR prerelease matches the reviewed rebuild.");
     expect(workflow).toContain('cmp --silent "$archive"');
     expect(workflow).not.toContain('test "$(git rev-parse "refs/tags/$PIGE_REQUESTED_TAG^{commit}")" = "$PIGE_REQUESTED_COMMIT"');
