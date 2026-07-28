@@ -34,9 +34,7 @@ describe("PaddleOcrAdapter", () => {
       engineVersion: "3.7.0",
       text: "Verified local text."
     });
-    expect(fixture.leases.acquireCalls).toBe(1);
-    expect(fixture.lease.assertCurrentCalls).toBe(2);
-    expect(fixture.lease.releaseCalls).toBe(1);
+    expect(fixture.leases.leaseCalls).toBe(1);
     expect(runner.calls).toHaveLength(1);
     const call = runner.calls[0]!;
     expect(call.executablePath).toBe(fs.realpathSync(fixture.pythonPath));
@@ -88,14 +86,14 @@ describe("PaddleOcrAdapter", () => {
     const adapter = new PaddleOcrAdapter(fixture.leases, runner);
 
     await expect(adapter.recognize(fixture.inputPath, [])).rejects.toMatchObject({ code: "ocr.input_too_large" });
-    expect(fixture.leases.acquireCalls).toBe(0);
+    expect(fixture.leases.leaseCalls).toBe(0);
     expect(runner.calls).toHaveLength(0);
   });
 
   it.each([
     ["timeout", new PigeDomainError("ocr.helper_timeout", "private timeout detail"), "ocr.helper_timeout"],
     ["process failure", new Error("/private/runtime/python failed"), "ocr.helper_failed"]
-  ])("fails closed on %s and releases the lease", async (_label, failure, expectedCode) => {
+  ])("fails closed on %s inside the verified lease", async (_label, failure, expectedCode) => {
     const fixture = createFixture();
     const adapter = new PaddleOcrAdapter(
       fixture.leases,
@@ -105,8 +103,7 @@ describe("PaddleOcrAdapter", () => {
     const error = await adapter.recognize(fixture.inputPath, []).catch((caught: unknown) => caught);
     expect(error).toMatchObject({ code: expectedCode });
     expect(String((error as Error).message)).not.toContain("private");
-    expect(fixture.leases.acquireCalls).toBe(1);
-    expect(fixture.lease.releaseCalls).toBe(1);
+    expect(fixture.leases.leaseCalls).toBe(1);
   });
 
   it("rejects mismatched identity and dimensions beyond the helper contract", async () => {
@@ -142,26 +139,16 @@ class RecordingRunner implements PaddleOcrProcessRunner {
 }
 
 class FakeLease implements PaddleOcrRuntimeLease {
-  assertCurrentCalls = 0;
-  releaseCalls = 0;
-
   constructor(
     readonly runtimeRoot: string,
     readonly pythonExecutablePath: string,
     readonly engineVersion = "3.7.0"
   ) {}
 
-  assertCurrent(): void {
-    this.assertCurrentCalls += 1;
-  }
-
-  release(): void {
-    this.releaseCalls += 1;
-  }
 }
 
 class FakeLeasePort implements PaddleOcrRuntimeLeasePort {
-  acquireCalls = 0;
+  leaseCalls = 0;
 
   constructor(readonly lease: PaddleOcrRuntimeLease) {}
 
@@ -169,9 +156,9 @@ class FakeLeasePort implements PaddleOcrRuntimeLeasePort {
     return true;
   }
 
-  async acquire(): Promise<PaddleOcrRuntimeLease> {
-    this.acquireCalls += 1;
-    return this.lease;
+  async withVerifiedRuntime<T>(callback: (runtime: PaddleOcrRuntimeLease) => Promise<T>): Promise<T> {
+    this.leaseCalls += 1;
+    return callback(this.lease);
   }
 }
 

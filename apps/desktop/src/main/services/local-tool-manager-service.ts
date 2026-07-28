@@ -153,11 +153,11 @@ export class LocalToolManagerService {
     }
     this.#runtimeLeases.set(toolId, (this.#runtimeLeases.get(toolId) ?? 0) + 1);
     try {
-      return await callback({
-        toolId, rootPath,
-        version: inspection.activeVersion,
-        manifestSha256: inspection.manifestSha256
-      });
+      const result = await callback({ toolId, rootPath, version: inspection.activeVersion,
+        manifestSha256: inspection.manifestSha256 });
+      try { verifyLocalToolPackageDirectory(rootPath, identityFromRecord(toolId, undefined, active, tool));
+        assertRecordUnchanged(record, this.#store.read(toolId)); }
+      catch { throw new PigeDomainError("settings.local_tool_repair_required", "Local tool package changed during use."); } return result;
     } finally {
       const remaining = (this.#runtimeLeases.get(toolId) ?? 1) - 1;
       if (remaining === 0) this.#runtimeLeases.delete(toolId);
@@ -832,7 +832,7 @@ export class LocalToolManagerService {
   }
 
   #assertRuntimeMutationAllowed(
-    action: "update" | "repair" | "remove" | "set_enabled",
+    action: "install" | "update" | "repair" | "remove" | "set_enabled",
     request: LocalToolMutationIdentity
   ): void {
     if (!this.#runtimeLeases.has(request.toolId)) return;

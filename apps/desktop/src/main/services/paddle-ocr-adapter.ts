@@ -29,13 +29,13 @@ export interface PaddleOcrRuntimeLease {
   readonly runtimeRoot: string;
   readonly pythonExecutablePath: string;
   readonly engineVersion: string;
-  assertCurrent(): void | Promise<void>;
-  release(): void | Promise<void>;
 }
 
 export interface PaddleOcrRuntimeLeasePort {
   isAvailable(): boolean;
-  acquire(): Promise<PaddleOcrRuntimeLease | undefined>;
+  withVerifiedRuntime<T>(
+    callback: (runtime: PaddleOcrRuntimeLease) => Promise<T>
+  ): Promise<T>;
 }
 
 export interface PaddleOcrProcessRequest {
@@ -97,11 +97,8 @@ export class PaddleOcrAdapter implements NativeImageOcrAdapterPort {
   ): Promise<NativeOcrResult> {
     if (signal?.aborted) throw new JobCancellationError();
     const verifiedInputPath = await validateInputFile(inputPath);
-    const lease = await this.#leases.acquire();
-    if (!lease) throw helperUnavailable();
-
-    try {
-      await lease.assertCurrent();
+    if (!this.#leases.isAvailable()) throw helperUnavailable();
+    return this.#leases.withVerifiedRuntime(async (lease) => {
       const runtime = await validateRuntimeLease(lease);
       const requestId = `ocr_${randomUUID().replaceAll("-", "")}`;
       const helperRequest: PaddleOcrHelperRequest = {
@@ -141,11 +138,8 @@ export class PaddleOcrAdapter implements NativeImageOcrAdapterPort {
       if (Buffer.byteLength(processResult.stdout, "utf8") > OCR_HELPER_MAX_OUTPUT_BYTES) {
         throw outputTooLarge();
       }
-      await lease.assertCurrent();
       return parseRecognitionResponse(processResult.stdout, requestId, lease.engineVersion);
-    } finally {
-      await lease.release();
-    }
+    });
   }
 
   async #run(request: PaddleOcrProcessRequest): Promise<PaddleOcrProcessResult> {
