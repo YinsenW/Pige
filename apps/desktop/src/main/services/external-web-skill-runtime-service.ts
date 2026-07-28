@@ -105,7 +105,7 @@ function createAdapter(
       type: "skill",
       id: `skill:${identity.skillId}`,
       displayName: selected.name,
-      version: "1",
+      version: identity.skillVersion,
       digest: identity.runtimeIdentityHash
     },
     action: { id: "external_web.read_https", version: "1", labelKey: "permissions.actions.external_web_read" },
