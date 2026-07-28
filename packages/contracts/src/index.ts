@@ -31,6 +31,8 @@ import type {
   CollectionCellEditResult,
   CollectionCreateViewRequest,
   CollectionCreateViewResult,
+  CollectionListRequest,
+  CollectionListResult,
   CollectionOpenRequest,
   CollectionOpenResult,
   CollectionAppendDefaultRowRequest,
@@ -244,6 +246,12 @@ export type {
   BackupReconnectDependencyResult,
   CaptureFileRejection,
   CaptureFileRejectionReason,
+  CollectionCatalogCursor,
+  CollectionDatasetSummary,
+  CollectionDatasetTableSummary,
+  CollectionListRequest,
+  CollectionListResult,
+  CollectionRowCursor,
   DiagnosticError,
   PigeError,
   PigeErrorAction,
@@ -1681,6 +1689,7 @@ export interface PigeDesktopApi {
     readonly onChanged: (listener: (summary: MemorySummary) => void) => () => void;
   };
   readonly collections: {
+    readonly list: (request: CollectionListRequest) => Promise<CollectionListResult>;
     readonly open: (request: CollectionOpenRequest) => Promise<CollectionOpenResult>;
     readonly editCell: (request: CollectionCellEditRequest) => Promise<CollectionCellEditResult>;
     readonly appendDefaultRow: (

@@ -532,10 +532,8 @@ Behavior:
   highlighted evidence in Library. Drafts carry none. Never expose SQL, engine names,
   query hashes, schema IDs, or internal paths.
 
-Current Home can render one Agent-selected Dataset result as an escaped accessible table
-with exact citations inside the conversation. Independent Dataset browsing/paging,
-citation-open highlighting, formula/warning detail, large-table polish, and packaged
-platform proof remain open; the Playbook and acceptance manifest own delivery evidence.
+Home renders cited Dataset results. Library lists pathless Datasets and pages exact
+tables/views; citation highlighting, formula detail, scale and packaged proof stay open.
 
 ## 8. Note Reader
 
@@ -660,15 +658,10 @@ Action behavior:
 
 ### 8.4 Structured Knowledge Surface
 
-Datasets open from Home citations, Activity, Library, or the preserved Source inside the
-existing content pane; this is not a new navigation destination.
-
-v0.1 shows a read-only CSV/XLSX/SQLite Dataset with a compact title, source, revision and
-warning header; stable keyboard/screen-reader table semantics; bounded paging/scrolling;
-and exact cited rows, ranges, columns, or aggregates highlighted. Formula cells show the
-cached value plus a quiet formula/stale-cache indicator. Warnings are localized and
-never raw adapter errors. The original remains separately revealable. Do not flatten
-rows into Markdown or expose storage/query-engine terminology.
+Datasets are Library content, not a new destination. It lists bounded pathless summaries
+and opens <=50-row table/view pages. Load More appends only an authoritative cursor page;
+failure preserves rows/focus. Citation row/range/aggregate highlighting, formula/cache
+warnings and packaged proof stay open. Never flatten rows or expose storage/query terms.
 
 The first P1 slice edits a scalar, adds/trashes a row/field, or saves one named view with one
 optional filter/sort. Open/commit adopts the stable-ID snapshot; stale/failure preserves the

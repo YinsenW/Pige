@@ -296,6 +296,28 @@ References:
 - `docs/LOCAL_DATABASE_DESIGN.md`
 - `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
 
+### D-20260729-Dataset-Discovery-Paging
+
+Status: Accepted
+Date: 2026-07-29
+
+Decision:
+
+Library lists pathless Datasets and cursor-pages one exact table/view.
+
+Rationale:
+
+Browse large tables without leaking storage or mixing revisions.
+
+Consequences:
+
+- Cursor presence alone means more; drift is stale before append. Mutation CAS stays
+  unchanged; citation, analytical and platform proof stays open.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`; `docs/DATA_ARCHITECTURE.md`
+
 ### D-20260709-Reference-Based-Conversation-History
 
 Status: Accepted

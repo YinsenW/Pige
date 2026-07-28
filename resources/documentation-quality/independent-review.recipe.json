@@ -51,14 +51,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of bounded Home conversation-history browsing.",
+    "scope": "Independent Planning review of bounded Library Dataset discovery and row paging.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "9b1bf90a397c6903b79536562fb48d4f9b2226ef8499506cd0808f159722a177"
+    "reviewedSha256": "00ae5f30b874e8fe1e75c37285b6e458952374cf7bb757f744d90a6116618ac3"
   },
   "reviewers": [{
-    "reviewerId": "conversation-history-review",
-    "task": "Home conversation-history browsing",
+    "reviewerId": "dataset-discovery-review",
+    "task": "Library Dataset discovery and paging",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -66,33 +66,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed the history and authority boundary; Development and UI independently supplied implementation evidence."
+    "independence": "Planning reviewed the Dataset cursor and authority boundary; Development and UI independently supplied implementation evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"conversation-history-review","blockerCount":0,"summary":"Home browses and returns to exact durable conversations without fabricating identity."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"conversation-history-review","blockerCount":0,"summary":"API, Job and UI owners share one vault-, snapshot- and tail-bound history contract."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"conversation-history-review","blockerCount":0,"summary":"B7.08 evidence is bound while cross-process, packaged and compaction exits stay open."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"conversation-history-review","blockerCount":0,"summary":"Ordering, cursor tamper, vault drift, symlink confinement and selected polling are tested."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"conversation-history-review","blockerCount":0,"summary":"Existing API, Job, UI, Playbook, Decision and trace owners absorb the slice."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"dataset-discovery-review","blockerCount":0,"summary":"Library discovers Datasets and appends exact current table/view pages without a new destination."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"dataset-discovery-review","blockerCount":0,"summary":"API, data and UI owners share one vault-, revision-, view- and boundary-bound cursor contract."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"dataset-discovery-review","blockerCount":0,"summary":"B6.16 browsing is bound while E6.11 citation, analytical, scale and platform proof stays planned."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"dataset-discovery-review","blockerCount":0,"summary":"Ordering, cursor tamper, checksum drift, final-page truth and stale-before-append are tested."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"dataset-discovery-review","blockerCount":0,"summary":"Existing API, data, UI, Playbook, Decision and trace owners absorb the slice."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"History DTOs remain strict, bounded, pathless and selection-only."},
-    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision and trace locks preserve the partial B7.08/E7.03 scope."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"The exact 332-LOC history owner is protected and reviewed bytes are hash-bound."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Dataset summaries and pages remain strict, bounded, pathless and read-only."},
+    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision and trace locks preserve planned E6.11 and its explicit open proof."},
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"The exact 281-LOC discovery owner is protected and reviewed bytes are hash-bound."}
   ],
   "coordination": {
-    "taskId": "conversation-history-20260729",
-    "taskTitle": "Home conversation-history browsing",
+    "taskId": "dataset-discovery-20260729",
+    "taskTitle": "Library Dataset discovery and paging",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing conversation open, pagination, follow-up and current-turn paths remain compatible.",
-    "acknowledgement": "Planning binds selection-only browsing; compaction and packaged restart proof remain separate."
+    "compatibility": "Existing Collection open, views and mutation CAS remain compatible.",
+    "acknowledgement": "Planning binds read-only browsing; citation highlighting and complete E6.11 proof remain separate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Cross-process kill/reopen and packaged reference-history proof remain open.",
-    "Conversation compaction must preserve stable event, source, Job and Operation refs.",
-    "History summaries and cursors must never become follow-up authority."
+    "Citation-open row/range/aggregate highlighting remains open.",
+    "Analytical snapshots, joins, large-scale and signed-platform proof remain open.",
+    "Dataset summaries and cursors must never become mutation or query authority."
   ]
 }

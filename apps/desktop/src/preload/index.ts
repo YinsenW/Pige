@@ -231,6 +231,8 @@ import {
   CollectionCreateViewResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
+  CollectionListRequestSchema,
+  CollectionListResultSchema,
   CollectionAppendDefaultRowRequestSchema,
   CollectionAppendDefaultRowResultSchema,
   CollectionRenameColumnRequestSchema,
@@ -377,6 +379,8 @@ import type {
   CollectionCreateViewResult,
   CollectionOpenRequest,
   CollectionOpenResult,
+  CollectionListRequest,
+  CollectionListResult,
   CollectionAppendDefaultRowRequest,
   CollectionAppendDefaultRowResult,
   CollectionRenameColumnRequest,
@@ -452,6 +456,17 @@ async function invokeCollectionOpen(request: CollectionOpenRequest): Promise<Col
     result.snapshot.activeViewId !== parsedRequest.viewId
   ) {
     throw new Error("Invalid Managed Collection open response view identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionList(request: CollectionListRequest): Promise<CollectionListResult> {
+  const parsedRequest = CollectionListRequestSchema.parse(request);
+  const result = CollectionListResultSchema.parse(
+    await ipcRenderer.invoke("collections.list", parsedRequest)
+  );
+  if (result.activeVaultId !== parsedRequest.activeVaultId) {
+    throw new Error("Invalid Managed Collection list response identity.");
   }
   return result;
 }
@@ -1036,6 +1051,7 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("activity.undo", request) as Promise<KnowledgeActivityUndoResult>
   },
   collections: {
+    list: invokeCollectionList,
     open: invokeCollectionOpen,
     editCell: invokeCollectionCellEdit,
     appendDefaultRow: invokeCollectionAppendDefaultRow,

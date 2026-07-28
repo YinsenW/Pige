@@ -2157,6 +2157,7 @@ registerManagedCollectionIpc({
     return !!window && mainWindows.has(window);
   },
   getActiveVaultId: () => getVaultService().current()?.vaultId,
+  listCollections: (request) => getManagedCollectionViewService().list(request),
   openCollection: (request) => getManagedCollectionViewService().open(request),
   editCollectionCell: (request) => getManagedCollectionService().editCell(request),
   appendDefaultCollectionRow: (request) => getManagedCollectionService().appendDefaultRow(request),

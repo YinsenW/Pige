@@ -12,6 +12,11 @@ const openRequest = {
   datasetId: "dataset_20260727_abcdefghijkl",
   tableId: "table_abcdefghijkl"
 } as const;
+const listRequest = {
+  apiVersion: 1,
+  activeVaultId,
+  limit: 20
+} as const;
 const editRequest = {
   ...openRequest,
   requestId: "collection_request_qrstuvwxyzabcdef",
@@ -63,6 +68,7 @@ const trashRowRequest = {
 function makeHarness(options: {
   readonly getActiveVaultId?: () => string | undefined;
   readonly isTrustedSender?: () => boolean;
+  readonly listCollections?: (request: typeof listRequest) => unknown;
   readonly openCollection?: (request: typeof openRequest) => unknown;
   readonly editCollectionCell?: (request: typeof editRequest) => unknown;
   readonly appendDefaultCollectionRow?: (request: typeof appendRequest) => unknown;
@@ -73,6 +79,14 @@ function makeHarness(options: {
   readonly trashCollectionRow?: (request: typeof trashRowRequest) => unknown;
 } = {}) {
   const handlers = new Map<string, IpcHandler>();
+  const listCollections = vi.fn(options.listCollections ?? ((request) => ({
+    apiVersion: request.apiVersion,
+    activeVaultId: request.activeVaultId,
+    status: "ready",
+    datasets: [],
+    totalDatasetCount: 0,
+    hasMore: false
+  })));
   const openCollection = vi.fn(options.openCollection ?? ((request) => ({
     ...request,
     status: "ready",
@@ -166,6 +180,7 @@ function makeHarness(options: {
     } as Pick<IpcMain, "handle">,
     isTrustedSender: options.isTrustedSender ?? (() => true),
     getActiveVaultId: options.getActiveVaultId ?? (() => activeVaultId),
+    listCollections,
     openCollection,
     editCollectionCell,
     appendDefaultCollectionRow,
@@ -177,6 +192,7 @@ function makeHarness(options: {
   });
   return {
     handlers,
+    listCollections,
     openCollection,
     editCollectionCell,
     appendDefaultCollectionRow,
@@ -191,6 +207,7 @@ function makeHarness(options: {
 describe("registerManagedCollectionIpc", () => {
   it("registers the bounded collection channels", () => {
     expect([...makeHarness().handlers.keys()]).toEqual([
+      "collections.list",
       "collections.open",
       "collections.editCell",
       "collections.appendDefaultRow",
@@ -286,6 +303,39 @@ describe("registerManagedCollectionIpc", () => {
     expect(createCollectionView).toHaveBeenCalledWith(createViewRequest);
     expect(trashCollectionColumn).toHaveBeenCalledWith(trashColumnRequest);
     expect(trashCollectionRow).toHaveBeenCalledWith(trashRowRequest);
+  });
+
+  it("fails catalog reads closed on vault and response identity drift", async () => {
+    let currentVaultId: string | undefined = activeVaultId;
+    const changed = makeHarness({
+      getActiveVaultId: () => currentVaultId,
+      listCollections: (request) => {
+        currentVaultId = "vault_20260727_changed";
+        return {
+          apiVersion: request.apiVersion,
+          activeVaultId: request.activeVaultId,
+          status: "ready",
+          datasets: [],
+          totalDatasetCount: 0,
+          hasMore: false
+        };
+      }
+    });
+    await expect(changed.handlers.get("collections.list")!({} as IpcMainInvokeEvent, listRequest))
+      .resolves.toEqual({ apiVersion: 1, activeVaultId, status: "failed" });
+
+    const mismatched = makeHarness({
+      listCollections: () => ({
+        apiVersion: 1,
+        activeVaultId: "vault_20260727_changed",
+        status: "ready",
+        datasets: [],
+        totalDatasetCount: 0,
+        hasMore: false
+      })
+    });
+    await expect(mismatched.handlers.get("collections.list")!({} as IpcMainInvokeEvent, listRequest))
+      .resolves.toEqual({ apiVersion: 1, activeVaultId, status: "failed" });
   });
 
   it("fails closed before service access when the active vault does not match", async () => {

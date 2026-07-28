@@ -11,6 +11,7 @@ import {
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
   COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES,
+  COLLECTION_LIST_CHANNEL,
   CollectionAddNullableColumnRequestSchema,
   CollectionAddNullableColumnResultSchema,
   ConfirmationProposalSchema,
@@ -18,6 +19,8 @@ import {
   CollectionAppendDefaultRowResultSchema,
   CollectionCreateViewRequestSchema,
   CollectionCreateViewResultSchema,
+  CollectionListRequestSchema,
+  CollectionListResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
   CollectionRenameColumnRequestSchema,
@@ -287,6 +290,214 @@ describe("schemas", () => {
       proposal: { ...proposal, state: "applied" },
       operationId: "op_20260728_schemaappend01"
     })).toMatchObject({ status: "applied", proposal: { state: "applied" } });
+  });
+
+  it("keeps Dataset discovery and Collection row paging bounded, ordered, and body-free", () => {
+    expect(COLLECTION_LIST_CHANNEL).toBe("collections.list");
+    const activeVaultId = "vault_20260729_datasetbrowse01";
+    const listRequest = {
+      apiVersion: 1,
+      activeVaultId,
+      limit: 20,
+      cursor: `collection_catalog_${"a".repeat(64)}`
+    } as const;
+    expect(CollectionListRequestSchema.parse(listRequest)).toEqual(listRequest);
+
+    const datasets = [
+      {
+        datasetId: "dataset_20260729_alphabrowse01",
+        title: " Alpha ",
+        activeRevisionId: "dataset_rev_20260729_alphabrowse01",
+        tableCount: 1,
+        tables: [{
+          tableId: "table_alphabrowse01",
+          tableName: "Items",
+          columnCount: 2,
+          rowCount: 75,
+          canOpen: true
+        }],
+        tablesTruncated: false
+      },
+      {
+        datasetId: "dataset_20260729_betabrowse001",
+        title: "beta",
+        activeRevisionId: "dataset_rev_20260729_betabrowse001",
+        tableCount: 2,
+        tables: [{
+          tableId: "table_betabrowse001",
+          tableName: "Sheet 1",
+          columnCount: 1,
+          rowCount: 3,
+          canOpen: true
+        }],
+        tablesTruncated: true
+      }
+    ] as const;
+    const ready = {
+      apiVersion: 1,
+      activeVaultId,
+      status: "ready",
+      datasets,
+      totalDatasetCount: 3,
+      hasMore: true,
+      nextCursor: `collection_catalog_${"b".repeat(64)}`
+    } as const;
+    const parsedReady = CollectionListResultSchema.parse(ready);
+    expect(parsedReady).toMatchObject({ status: "ready", hasMore: true });
+    expect(parsedReady.status === "ready" ? parsedReady.datasets[0]?.title : undefined).toBe("Alpha");
+    expect(CollectionListResultSchema.parse({
+      apiVersion: 1,
+      activeVaultId,
+      status: "failed"
+    })).toEqual({ apiVersion: 1, activeVaultId, status: "failed" });
+    expect(() => CollectionListResultSchema.parse({ ...ready, datasets: [...datasets].reverse() }))
+      .toThrow("normalized title then Dataset ID order");
+    expect(() => CollectionListResultSchema.parse({ ...ready, datasets: [datasets[0], datasets[0]] }))
+      .toThrow("unique stable Dataset IDs");
+    expect(() => CollectionListResultSchema.parse({ ...ready, nextCursor: undefined }))
+      .toThrow("agree with hasMore");
+    for (const unsafe of [
+      { sourceId: "source_private" },
+      { path: "/private/datasets/alpha/dataset.json" },
+      { checksum: `sha256:${"e".repeat(64)}` },
+      { query: "SELECT * FROM private" },
+      { storage: "sqlite" }
+    ]) {
+      expect(() => CollectionListResultSchema.parse({
+        ...ready,
+        datasets: [{ ...datasets[0], ...unsafe }]
+      })).toThrow();
+    }
+    expect(() => CollectionListRequestSchema.parse({ ...listRequest, limit: 51 })).toThrow();
+    expect(() => CollectionListRequestSchema.parse({ ...listRequest, cursor: "collection_catalog_tampered" }))
+      .toThrow();
+
+    const openRequest = {
+      apiVersion: 1,
+      requestId: "collection_request_pageabcdefghijkl",
+      activeVaultId,
+      datasetId: datasets[0].datasetId,
+      tableId: datasets[0].tables[0].tableId,
+      viewId: "view_alphabrowse01",
+      limit: 25,
+      rowCursor: `collection_rows_${"c".repeat(64)}`
+    } as const;
+    expect(CollectionOpenRequestSchema.parse(openRequest)).toEqual(openRequest);
+    const firstPageRequest = {
+      apiVersion: openRequest.apiVersion,
+      requestId: openRequest.requestId,
+      activeVaultId: openRequest.activeVaultId,
+      datasetId: openRequest.datasetId,
+      tableId: openRequest.tableId,
+      viewId: openRequest.viewId,
+      limit: openRequest.limit
+    } as const;
+    expect(CollectionOpenRequestSchema.parse(firstPageRequest)).toEqual(firstPageRequest);
+    const snapshot = {
+      datasetId: openRequest.datasetId,
+      revisionId: datasets[0].activeRevisionId,
+      title: "Alpha",
+      tableId: openRequest.tableId,
+      tableName: "Items",
+      columns: [{
+        columnId: "column_alphabrowse01",
+        label: "Name",
+        logicalType: "string",
+        canRename: true,
+        canTrash: true
+      }],
+      rows: [{
+        rowId: "row_alphabrowse0001",
+        cells: [{ columnId: "column_alphabrowse01", value: "one", editable: true }],
+        canTrash: true
+      }],
+      totalRowCount: 75,
+      returnedRowCount: 1,
+      truncated: true,
+      canAppendDefaultRow: true,
+      canAddColumn: true,
+      views: [{ viewId: openRequest.viewId, viewRevision: 1, name: "Current" }],
+      activeViewId: openRequest.viewId
+    } as const;
+    const openIdentity = {
+      apiVersion: 1,
+      requestId: openRequest.requestId,
+      activeVaultId,
+      datasetId: openRequest.datasetId,
+      tableId: openRequest.tableId
+    } as const;
+    const continuationCursor = `collection_rows_${"d".repeat(64)}`;
+    expect(CollectionOpenResultSchema.parse({
+      ...openIdentity,
+      status: "ready",
+      snapshot,
+      nextRowCursor: continuationCursor
+    })).toMatchObject({ status: "ready", snapshot: { returnedRowCount: 1 } });
+
+    const middlePage = {
+      ...snapshot,
+      rows: [{
+        rowId: "row_alphabrowse0026",
+        cells: [{ columnId: "column_alphabrowse01", value: "twenty-six", editable: true }],
+        canTrash: true
+      }]
+    } as const;
+    expect(CollectionOpenResultSchema.parse({
+      ...openIdentity,
+      status: "ready",
+      snapshot: middlePage,
+      nextRowCursor: continuationCursor
+    })).toMatchObject({ status: "ready", snapshot: { truncated: true } });
+
+    const finalRows = Array.from({ length: 10 }, (_, index) => ({
+      rowId: `row_alphabrowse${String(index + 51).padStart(4, "0")}`,
+      cells: [{ columnId: "column_alphabrowse01", value: `row-${index + 51}`, editable: true }],
+      canTrash: true
+    }));
+    const finalLaterPage = {
+      ...snapshot,
+      rows: finalRows,
+      totalRowCount: 60,
+      returnedRowCount: 10,
+      truncated: false
+    };
+    expect(CollectionOpenResultSchema.parse({
+      ...openIdentity,
+      status: "ready",
+      snapshot: finalLaterPage
+    })).toMatchObject({
+      status: "ready",
+      snapshot: { totalRowCount: 60, returnedRowCount: 10, truncated: false }
+    });
+
+    const emptyPage = {
+      ...snapshot,
+      rows: [],
+      totalRowCount: 0,
+      returnedRowCount: 0,
+      truncated: false
+    } as const;
+    expect(CollectionOpenResultSchema.parse({
+      ...openIdentity,
+      status: "ready",
+      snapshot: emptyPage
+    })).toMatchObject({ status: "ready", snapshot: { returnedRowCount: 0, truncated: false } });
+
+    expect(() => CollectionOpenResultSchema.parse({ ...openIdentity, status: "ready", snapshot }))
+      .toThrow("agree with snapshot truncation");
+    expect(() => CollectionOpenResultSchema.parse({
+      ...openIdentity,
+      status: "ready",
+      snapshot: finalLaterPage,
+      nextRowCursor: continuationCursor
+    })).toThrow("agree with snapshot truncation");
+    expect(() => CollectionOpenRequestSchema.parse({ ...openRequest, rowCursor: "collection_rows_tampered" }))
+      .toThrow();
+    expect(() => CollectionOpenResultSchema.parse({
+      ...openIdentity,
+      status: "stale",
+      rows: snapshot.rows
+    })).toThrow();
   });
 
   it("keeps one saved Collection view stable, bounded, reversible, and body-free", () => {

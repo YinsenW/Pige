@@ -504,13 +504,16 @@ Current Home Dataset read boundary:
 - After Pi selects the typed query tool, `agent.submitTurn` may return one bounded Dataset
   preview/citation; `agent.conversation` restores it checksum-bound. Renderer gets display
   columns, bounded rows/counts/truncation/citations, never storage or query internals.
-- `collections.open` binds vault/Dataset/table and optional stable view; ready is current,
-  <=32 columns/views, 50 rows, 4 KiB/string and 64 KiB total. Other results are body-free.
+- `collections.list` returns <=50 pathless summaries ordered by normalized title/ID; its
+  cursor binds vault/catalog snapshot/boundary.
+- `collections.open` returns <=50 rows/64 KiB. Its cursor binds vault/Dataset/revision/
+  table/view plan/row boundary; presence alone means more, and drift is stale before append.
 - Cell/row/column changes bind exact revision/IDs/capabilities; Main generates IDs/defaults.
   Closed snapshots expose stale/ineligible/duplicate truth and retained revisions enable Undo.
 - `createView` binds revision/name and one optional typed filter/sort; Main generates the ID,
   returns it active and records reversible Activity without changing Dataset rows/revision.
-- Main fences vault/manifest/schema/payload. Renderer receives no storage/query/error/value internals.
+- Main fences vault/manifest/schema/payload. Lists/pages grant no mutation/query authority
+  and expose no storage/query/error/value internals.
 
 ### 6.6 Retrieval
 

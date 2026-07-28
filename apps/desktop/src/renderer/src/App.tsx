@@ -133,6 +133,7 @@ import {
   type CollectionCellEditResult,
   type CollectionCreateViewRequest,
   type CollectionCreateViewResult,
+  type CollectionListResult,
   type CollectionRenameColumnRequest,
   type CollectionRenameColumnResult,
   type CollectionTrashColumnRequest,
@@ -156,6 +157,7 @@ type View = "home" | "library" | "knowledgeTree";
 type ActiveCollection = {
   readonly vaultId: string;
   readonly snapshot: CollectionSnapshot;
+  readonly nextRowCursor?: string;
   readonly returnView: View;
 };
 export type SettingsSection =
@@ -341,6 +343,8 @@ export function App(): React.JSX.Element {
   const [activityOpeningId, setActivityOpeningId] = useState<string | null>(null);
   const [activityBlockedIds, setActivityBlockedIds] = useState<readonly string[]>([]);
   const [libraryList, setLibraryList] = useState<LibraryListResult | null>(null);
+  const [collectionCatalog, setCollectionCatalog] = useState<CollectionListResult | null>(null);
+  const [collectionCatalogLoading, setCollectionCatalogLoading] = useState(false);
   const [librarySearchFocusRequest, setLibrarySearchFocusRequest] = useState(0);
   const [librarySidebarExpandedGroups, setLibrarySidebarExpandedGroups] = useState<ReadonlySet<string>>(
     () => new Set(["family:knowledge", "family:sources"])
@@ -354,6 +358,7 @@ export function App(): React.JSX.Element {
   const [selectedCollection, setSelectedCollection] = useState<ActiveCollection | null>(null);
   const noteOpenSequence = useRef(0);
   const collectionOpenSequence = useRef(0);
+  const collectionCatalogSequence = useRef(0);
   const inlineReferenceSequence = useRef(0);
   const activityOpenSequence = useRef(0);
   const activityOpenInFlightRef = useRef<string | null>(null);
@@ -860,6 +865,47 @@ export function App(): React.JSX.Element {
     }
   };
 
+  const refreshCollectionCatalog = async (append = false): Promise<void> => {
+    const vaultId = activeVaultIdRef.current;
+    if (!vaultId) return;
+    const current = collectionCatalog?.status === "ready" && collectionCatalog.activeVaultId === vaultId
+      ? collectionCatalog
+      : null;
+    const cursor = append ? current?.nextCursor : undefined;
+    if (append && !cursor) return;
+    const sequence = collectionCatalogSequence.current + 1;
+    collectionCatalogSequence.current = sequence;
+    setCollectionCatalogLoading(true);
+    try {
+      const result = await window.pige.collections.list({
+        apiVersion: 1,
+        activeVaultId: vaultId,
+        limit: 50,
+        ...(cursor ? { cursor } : {})
+      });
+      if (sequence !== collectionCatalogSequence.current || activeVaultIdRef.current !== vaultId) return;
+      if (result.status !== "ready") {
+        if (!append) setCollectionCatalog(result);
+        return;
+      }
+      if (!append || !current) {
+        setCollectionCatalog(result);
+        return;
+      }
+      const known = new Set(current.datasets.map(({ datasetId }) => datasetId));
+      setCollectionCatalog({
+        ...result,
+        datasets: [...current.datasets, ...result.datasets.filter(({ datasetId }) => !known.has(datasetId))]
+      });
+    } catch {
+      if (sequence === collectionCatalogSequence.current && !append) {
+        setCollectionCatalog({ apiVersion: 1, activeVaultId: vaultId, status: "failed" });
+      }
+    } finally {
+      if (sequence === collectionCatalogSequence.current) setCollectionCatalogLoading(false);
+    }
+  };
+
   const refreshKnowledgeTree = async (): Promise<void> => {
     setLibraryError(null);
     setKnowledgeTree(null);
@@ -944,15 +990,18 @@ export function App(): React.JSX.Element {
     tableId: string,
     originVaultId: string,
     sequence: number,
-    viewId?: string
-  ): Promise<CollectionSnapshot | null> => {
+    viewId?: string,
+    rowCursor?: string
+  ): Promise<{ readonly snapshot: CollectionSnapshot; readonly nextRowCursor?: string } | null> => {
     const request: CollectionOpenRequest = {
       apiVersion: 1,
       requestId: createCollectionRequestId(),
       activeVaultId: originVaultId,
       datasetId,
       tableId,
-      ...(viewId ? { viewId } : {})
+      limit: 50,
+      ...(viewId ? { viewId } : {}),
+      ...(rowCursor ? { rowCursor } : {})
     };
     try {
       const result = await window.pige.collections.open(request);
@@ -965,7 +1014,10 @@ export function App(): React.JSX.Element {
         result.snapshot.tableId !== request.tableId ||
         result.snapshot.activeViewId !== request.viewId
       ) return null;
-      return result.snapshot;
+      return {
+        snapshot: result.snapshot,
+        ...(result.nextRowCursor ? { nextRowCursor: result.nextRowCursor } : {})
+      };
     } catch {
       return null;
     }
@@ -981,8 +1033,8 @@ export function App(): React.JSX.Element {
     const sequence = collectionOpenSequence.current + 1;
     collectionOpenSequence.current = sequence;
     setLibraryError(null);
-    const snapshot = await readCollection(datasetId, tableId, vaultId, sequence);
-    if (!snapshot) {
+    const opened = await readCollection(datasetId, tableId, vaultId, sequence);
+    if (!opened) {
       if (sequence === collectionOpenSequence.current) setLibraryError(t("collection.failed"));
       return false;
     }
@@ -1002,7 +1054,7 @@ export function App(): React.JSX.Element {
     setSelectedNote(null);
     setSelectedNoteRelated(null);
     setNoteAgentOpen(false);
-    setSelectedCollection({ vaultId, snapshot, returnView });
+    setSelectedCollection({ vaultId, snapshot: opened.snapshot, returnView, ...(opened.nextRowCursor ? { nextRowCursor: opened.nextRowCursor } : {}) });
     window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".managed-collection-panel")?.focus());
     return true;
   };
@@ -1012,20 +1064,21 @@ export function App(): React.JSX.Element {
     if (!current || current.vaultId !== activeVaultIdRef.current) return null;
     const sequence = collectionOpenSequence.current + 1;
     collectionOpenSequence.current = sequence;
-    const snapshot = await readCollection(
+    const opened = await readCollection(
       current.snapshot.datasetId,
       current.snapshot.tableId,
       current.vaultId,
       sequence,
       current.snapshot.activeViewId
     );
-    if (!snapshot) return null;
-    setSelectedCollection((active) => active?.vaultId === current.vaultId &&
-      active.snapshot.datasetId === current.snapshot.datasetId &&
-      active.snapshot.tableId === current.snapshot.tableId
-      ? { ...active, snapshot }
-      : active);
-    return snapshot;
+    if (!opened) return null;
+    setSelectedCollection((active) => {
+      if (active?.vaultId !== current.vaultId || active.snapshot.datasetId !== current.snapshot.datasetId ||
+          active.snapshot.tableId !== current.snapshot.tableId) return active;
+      const { nextRowCursor: _discardedCursor, ...identity } = active;
+      return { ...identity, snapshot: opened.snapshot, ...(opened.nextRowCursor ? { nextRowCursor: opened.nextRowCursor } : {}) };
+    });
+    return opened.snapshot;
   };
 
   const editCollectionCell = async (
@@ -1041,20 +1094,62 @@ export function App(): React.JSX.Element {
     if (!current || current.vaultId !== activeVaultIdRef.current) return null;
     const sequence = collectionOpenSequence.current + 1;
     collectionOpenSequence.current = sequence;
-    const snapshot = await readCollection(
+    const opened = await readCollection(
       current.snapshot.datasetId,
       current.snapshot.tableId,
       current.vaultId,
       sequence,
       viewId
     );
-    if (!snapshot) return null;
-    setSelectedCollection((active) => active?.vaultId === current.vaultId &&
-      active.snapshot.datasetId === current.snapshot.datasetId &&
-      active.snapshot.tableId === current.snapshot.tableId
-      ? { ...active, snapshot }
-      : active);
-    return snapshot;
+    if (!opened) return null;
+    setSelectedCollection((active) => {
+      if (active?.vaultId !== current.vaultId || active.snapshot.datasetId !== current.snapshot.datasetId ||
+          active.snapshot.tableId !== current.snapshot.tableId) return active;
+      const { nextRowCursor: _discardedCursor, ...identity } = active;
+      return { ...identity, snapshot: opened.snapshot, ...(opened.nextRowCursor ? { nextRowCursor: opened.nextRowCursor } : {}) };
+    });
+    return opened.snapshot;
+  };
+
+  const loadMoreCollectionRows = async (rowCursor: string): Promise<CollectionOpenResult | null> => {
+    const current = selectedCollectionRef.current;
+    if (!current || current.vaultId !== activeVaultIdRef.current || current.nextRowCursor !== rowCursor) return null;
+    const request: CollectionOpenRequest = {
+      apiVersion: 1,
+      requestId: createCollectionRequestId(),
+      activeVaultId: current.vaultId,
+      datasetId: current.snapshot.datasetId,
+      tableId: current.snapshot.tableId,
+      limit: 50,
+      rowCursor,
+      ...(current.snapshot.activeViewId ? { viewId: current.snapshot.activeViewId } : {})
+    };
+    try {
+      const result = await window.pige.collections.open(request);
+      const active = selectedCollectionRef.current;
+      if (
+        !active || active.vaultId !== current.vaultId || active.snapshot.datasetId !== request.datasetId ||
+        active.snapshot.tableId !== request.tableId || active.snapshot.revisionId !== current.snapshot.revisionId ||
+        active.snapshot.activeViewId !== request.viewId || active.nextRowCursor !== rowCursor ||
+        !collectionOpenIdentityMatches(request, result)
+      ) return null;
+      if (result.status === "ready") {
+        if (
+          result.snapshot.datasetId !== current.snapshot.datasetId ||
+          result.snapshot.tableId !== current.snapshot.tableId ||
+          result.snapshot.revisionId !== current.snapshot.revisionId ||
+          result.snapshot.activeViewId !== current.snapshot.activeViewId
+        ) return null;
+        setSelectedCollection((selected) => {
+          if (selected !== active) return selected;
+          const { nextRowCursor: _discardedCursor, ...identity } = selected;
+          return { ...identity, ...(result.nextRowCursor ? { nextRowCursor: result.nextRowCursor } : {}) };
+        });
+      }
+      return result;
+    } catch {
+      return null;
+    }
   };
 
   const createCollectionView = async (
@@ -1114,7 +1209,8 @@ export function App(): React.JSX.Element {
       active.snapshot.tableId !== snapshot.tableId ||
       active.snapshot.revisionId !== expectedRevisionId
     ) return false;
-    setSelectedCollection({ ...active, snapshot });
+    const { nextRowCursor: _discardedCursor, ...identity } = active;
+    setSelectedCollection({ ...identity, snapshot });
     return true;
   };
 
@@ -1476,6 +1572,14 @@ export function App(): React.JSX.Element {
     if (!sidebarOpen || !activeVault || libraryList) return;
     void refreshLibrary();
   }, [activeVault?.vaultId, libraryList, sidebarOpen]);
+
+  useEffect(() => {
+    if (view !== "library" || !activeVault) return;
+    const currentVaultId = collectionCatalog?.activeVaultId;
+    if (currentVaultId === activeVault.vaultId) return;
+    setCollectionCatalog(null);
+    void refreshCollectionCatalog();
+  }, [activeVault?.vaultId, collectionCatalog?.activeVaultId, view]);
 
   useEffect(() => {
     if (!selectedNote || selectedNoteVaultId === activeVault?.vaultId) return;
@@ -1888,6 +1992,7 @@ export function App(): React.JSX.Element {
           <ManagedCollectionPanel
             activeVaultId={activeVault.vaultId}
             snapshot={selectedCollection.snapshot}
+            {...(selectedCollection.nextRowCursor ? { nextRowCursor: selectedCollection.nextRowCursor } : {})}
             onClose={() => {
               collectionOpenSequence.current += 1;
               const returnView = selectedCollection.returnView;
@@ -1907,11 +2012,17 @@ export function App(): React.JSX.Element {
             onAdoptSnapshot={adoptCollectionSnapshot}
             onEditCell={editCollectionCell}
             onReload={reloadSelectedCollection}
+            onLoadMoreRows={loadMoreCollectionRows}
             t={t}
           />
         ) : view === "library" && activeVault ? (
           <LibraryPanel
             libraryList={libraryList}
+            collectionCatalog={collectionCatalog}
+            collectionCatalogLoading={collectionCatalogLoading}
+            onRefreshCollectionCatalog={() => refreshCollectionCatalog(false)}
+            onLoadMoreCollections={() => refreshCollectionCatalog(true)}
+            onOpenCollection={(datasetId, tableId) => openCollection(datasetId, tableId, "library")}
             activeVaultId={activeVault.vaultId}
             onResolveReaderSelection={resolveReaderSelection}
             onSubmitReaderSelectionAction={submitReaderSelectionAction}
@@ -1926,7 +2037,9 @@ export function App(): React.JSX.Element {
             noteLoadingPageId={noteLoadingPageId}
             error={libraryError}
             onGoHome={navigateHome}
-            onRefresh={refreshLibrary}
+            onRefresh={async () => {
+              await Promise.all([refreshLibrary(), refreshCollectionCatalog(false)]);
+            }}
             onSearch={(request) => window.pige.retrieval.search(request)}
             onOpenSourceReference={(request) => window.pige.notes.openSourceReference(request)}
             searchFocusRequest={librarySearchFocusRequest}
@@ -2431,6 +2544,11 @@ function LibrarySidebarTree(props: {
 
 export function LibraryPanel(props: {
   readonly libraryList: LibraryListResult | null;
+  readonly collectionCatalog?: CollectionListResult | null;
+  readonly collectionCatalogLoading?: boolean;
+  readonly onRefreshCollectionCatalog?: () => Promise<void>;
+  readonly onLoadMoreCollections?: () => Promise<void>;
+  readonly onOpenCollection?: (datasetId: string, tableId: string) => Promise<boolean>;
   readonly selectedNote: NoteRenderResult | null;
   readonly selectedNoteRelated: NoteRelatedState;
   readonly noteLoadingPageId: string | null;
@@ -2775,6 +2893,59 @@ export function LibraryPanel(props: {
       </header>
 
       <div className="library-search-content">
+        {props.collectionCatalog !== undefined ? (
+          <section className="search-group" aria-labelledby="library-datasets-heading">
+            <h2 id="library-datasets-heading">{props.t("collection.datasets")}</h2>
+            {props.collectionCatalog?.status === "failed" ? (
+              <div className="library-state inline-unavailable" role="alert">
+                <div className="state-copy">
+                  <p>{props.t("collection.datasetsFailed")}</p>
+                  <button type="button" className="primary-button" onClick={() => void props.onRefreshCollectionCatalog?.()}>
+                    {props.t("library.refresh")}
+                  </button>
+                </div>
+              </div>
+            ) : !props.collectionCatalog || props.collectionCatalogLoading && props.collectionCatalog.status !== "ready" ? (
+              <p role="status" aria-busy="true">{props.t("collection.datasetsLoading")}</p>
+            ) : props.collectionCatalog.datasets.length === 0 ? (
+              <p className="search-empty visible">{props.t("collection.datasetsEmpty")}</p>
+            ) : (
+              <>
+                {props.collectionCatalog.datasets.map((dataset) => (
+                  <section key={dataset.datasetId} aria-label={dataset.title}>
+                    <h3>{dataset.title}</h3>
+                    {dataset.tables.map((table) => (
+                      <button
+                        type="button"
+                        className="search-result"
+                        key={table.tableId}
+                        disabled={!table.canOpen}
+                        aria-label={`${props.t("collection.open")}: ${table.tableName}`}
+                        onClick={() => void props.onOpenCollection?.(dataset.datasetId, table.tableId)}
+                      >
+                        <span className="search-result-copy">
+                          <strong>{table.tableName}</strong>
+                          <span>{props.t("dataset.rows")}: {table.rowCount}</span>
+                        </span>
+                        <small>{props.t("collection.open")}</small>
+                      </button>
+                    ))}
+                  </section>
+                ))}
+                {props.collectionCatalog.hasMore ? (
+                  <button
+                    type="button"
+                    className="settings-button"
+                    disabled={props.collectionCatalogLoading}
+                    onClick={() => void props.onLoadMoreCollections?.()}
+                  >
+                    {props.t(props.collectionCatalogLoading ? "collection.datasetsLoading" : "collection.loadMoreDatasets")}
+                  </button>
+                ) : null}
+              </>
+            )}
+          </section>
+        ) : null}
         <label className="library-search-field">
           <PigeIcon name="search" size={15} />
           <input

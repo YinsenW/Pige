@@ -3327,6 +3327,11 @@ export const DatasetQueryScalarSchema = z.union([
 ]);
 
 export const CollectionRequestIdSchema = z.string().regex(/^collection_request_[a-z0-9]{16,64}$/);
+export const CollectionCatalogCursorSchema = z.string().regex(/^collection_catalog_[a-f0-9]{64}$/);
+export const CollectionRowCursorSchema = z.string().regex(/^collection_rows_[a-f0-9]{64}$/);
+export const COLLECTION_LIST_CHANNEL = "collections.list" as const;
+export const COLLECTION_LIST_MAX_LIMIT = 50;
+export const COLLECTION_ROW_PAGE_MAX_LIMIT = 50;
 export const CollectionScalarValueSchema = DatasetQueryScalarSchema;
 export const CollectionCellReadOnlyReasonSchema = z.enum(["formula", "unsupported_type"]);
 export const COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES = 256;
@@ -3409,6 +3414,116 @@ export const CollectionRowSchema = z.object({
   canTrash: z.boolean()
 }).strict();
 
+export const CollectionDatasetTableSummarySchema = z.object({
+  tableId: DatasetQueryTableIdSchema,
+  tableName: z.string().trim().min(1).max(512),
+  columnCount: DatasetQueryCountSchema.max(32),
+  rowCount: DatasetQueryCountSchema,
+  canOpen: z.boolean()
+}).strict();
+
+export const CollectionDatasetSummarySchema = z.object({
+  datasetId: DatasetQueryDatasetIdSchema,
+  title: z.string().trim().min(1).max(240),
+  activeRevisionId: DatasetQueryRevisionIdSchema,
+  tableCount: DatasetQueryCountSchema,
+  tables: z.array(CollectionDatasetTableSummarySchema).max(32),
+  tablesTruncated: z.boolean()
+}).strict().superRefine((summary, context) => {
+  if (summary.tableCount < summary.tables.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["tableCount"],
+      message: "Collection Dataset tableCount must include every projected table."
+    });
+  }
+  if (summary.tablesTruncated !== (summary.tableCount > summary.tables.length)) {
+    context.addIssue({
+      code: "custom",
+      path: ["tablesTruncated"],
+      message: "Collection Dataset table truncation must agree with the projected table count."
+    });
+  }
+  if (new Set(summary.tables.map(({ tableId }) => tableId)).size !== summary.tables.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["tables"],
+      message: "Collection Dataset table summaries must have unique stable IDs."
+    });
+  }
+});
+
+function normalizeCollectionCatalogTitle(value: string): string {
+  return value.normalize("NFKC").trim().replace(/\s+/gu, " ").toLocaleLowerCase("en-US");
+}
+
+export const CollectionListRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  limit: z.number().int().min(1).max(COLLECTION_LIST_MAX_LIMIT),
+  cursor: CollectionCatalogCursorSchema.optional()
+}).strict();
+
+const CollectionListIdentitySchema = CollectionListRequestSchema.pick({
+  apiVersion: true,
+  activeVaultId: true
+});
+
+export const CollectionListResultSchema = z.discriminatedUnion("status", [
+  CollectionListIdentitySchema.extend({
+    status: z.literal("ready"),
+    datasets: z.array(CollectionDatasetSummarySchema).max(COLLECTION_LIST_MAX_LIMIT),
+    totalDatasetCount: DatasetQueryCountSchema,
+    hasMore: z.boolean(),
+    nextCursor: CollectionCatalogCursorSchema.optional()
+  }).strict(),
+  CollectionListIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "ready") return;
+  if (result.totalDatasetCount < result.datasets.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["totalDatasetCount"],
+      message: "Collection catalog totalDatasetCount must include every projected Dataset."
+    });
+  }
+  if (result.hasMore !== (result.nextCursor !== undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: ["nextCursor"],
+      message: "Collection catalog continuation must agree with hasMore."
+    });
+  }
+  if (new Set(result.datasets.map(({ datasetId }) => datasetId)).size !== result.datasets.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["datasets"],
+      message: "Collection catalog summaries must have unique stable Dataset IDs."
+    });
+  }
+  for (let index = 1; index < result.datasets.length; index += 1) {
+    const previous = result.datasets[index - 1]!;
+    const current = result.datasets[index]!;
+    const previousTitle = normalizeCollectionCatalogTitle(previous.title);
+    const currentTitle = normalizeCollectionCatalogTitle(current.title);
+    if (previousTitle > currentTitle ||
+        (previousTitle === currentTitle && previous.datasetId >= current.datasetId)) {
+      context.addIssue({
+        code: "custom",
+        path: ["datasets", index],
+        message: "Collection catalog summaries must use normalized title then Dataset ID order."
+      });
+      break;
+    }
+  }
+  if (new TextEncoder().encode(JSON.stringify(result)).byteLength > 64 * 1024) {
+    context.addIssue({
+      code: "custom",
+      message: "Collection catalog results must not exceed 64 KiB."
+    });
+  }
+});
+
 export const CollectionSnapshotSchema = z.object({
   datasetId: DatasetQueryDatasetIdSchema,
   revisionId: DatasetQueryRevisionIdSchema,
@@ -3437,13 +3552,6 @@ export const CollectionSnapshotSchema = z.object({
       code: "custom",
       path: ["totalRowCount"],
       message: "Collection totalRowCount must include every projected row."
-    });
-  }
-  if (snapshot.truncated !== (snapshot.totalRowCount > snapshot.returnedRowCount)) {
-    context.addIssue({
-      code: "custom",
-      path: ["truncated"],
-      message: "Collection truncation must agree with total and returned row counts."
     });
   }
   const columnIds = new Set(snapshot.columns.map(({ columnId }) => columnId));
@@ -3491,7 +3599,9 @@ export const CollectionOpenRequestSchema = z.object({
   activeVaultId: VaultIdSchema,
   datasetId: DatasetQueryDatasetIdSchema,
   tableId: DatasetQueryTableIdSchema,
-  viewId: ViewIdSchema.optional()
+  viewId: ViewIdSchema.optional(),
+  limit: z.number().int().min(1).max(COLLECTION_ROW_PAGE_MAX_LIMIT).optional(),
+  rowCursor: CollectionRowCursorSchema.optional()
 }).strict();
 
 const CollectionResultIdentitySchema = CollectionOpenRequestSchema.pick({
@@ -3505,12 +3615,22 @@ const CollectionResultIdentitySchema = CollectionOpenRequestSchema.pick({
 export const CollectionOpenResultSchema = z.discriminatedUnion("status", [
   CollectionResultIdentitySchema.extend({
     status: z.literal("ready"),
-    snapshot: CollectionSnapshotSchema
+    snapshot: CollectionSnapshotSchema,
+    nextRowCursor: CollectionRowCursorSchema.optional()
   }).strict(),
   CollectionResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
   CollectionResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
   CollectionResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
-]);
+]).superRefine((result, context) => {
+  if (result.status === "ready" &&
+      result.snapshot.truncated !== (result.nextRowCursor !== undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: ["nextRowCursor"],
+      message: "Collection row continuation must agree with snapshot truncation."
+    });
+  }
+});
 
 export const CollectionCellEditRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -6125,8 +6245,13 @@ export type AgentAnswerCitation = z.infer<typeof AgentAnswerCitationSchema>;
 export type DatasetAnswerCitation = z.infer<typeof DatasetAnswerCitationSchema>;
 export type DatasetColumn = z.infer<typeof DatasetColumnSchema>;
 export type CollectionCell = z.infer<typeof CollectionCellSchema>;
+export type CollectionCatalogCursor = z.infer<typeof CollectionCatalogCursorSchema>;
 export type CollectionCellEditRequest = z.infer<typeof CollectionCellEditRequestSchema>;
 export type CollectionCellEditResult = z.infer<typeof CollectionCellEditResultSchema>;
+export type CollectionDatasetSummary = z.infer<typeof CollectionDatasetSummarySchema>;
+export type CollectionDatasetTableSummary = z.infer<typeof CollectionDatasetTableSummarySchema>;
+export type CollectionListRequest = z.infer<typeof CollectionListRequestSchema>;
+export type CollectionListResult = z.infer<typeof CollectionListResultSchema>;
 export type CollectionAppendDefaultRowRequest = z.infer<typeof CollectionAppendDefaultRowRequestSchema>;
 export type CollectionAppendDefaultRowResult = z.infer<typeof CollectionAppendDefaultRowResultSchema>;
 export type CollectionAddNullableColumnRequest = z.infer<typeof CollectionAddNullableColumnRequestSchema>;
@@ -6144,6 +6269,7 @@ export type CollectionColumnSummary = z.infer<typeof CollectionColumnSummarySche
 export type CollectionOpenRequest = z.infer<typeof CollectionOpenRequestSchema>;
 export type CollectionOpenResult = z.infer<typeof CollectionOpenResultSchema>;
 export type CollectionRequestId = z.infer<typeof CollectionRequestIdSchema>;
+export type CollectionRowCursor = z.infer<typeof CollectionRowCursorSchema>;
 export type CollectionRow = z.infer<typeof CollectionRowSchema>;
 export type CollectionScalarValue = z.infer<typeof CollectionScalarValueSchema>;
 export type CollectionSnapshot = z.infer<typeof CollectionSnapshotSchema>;

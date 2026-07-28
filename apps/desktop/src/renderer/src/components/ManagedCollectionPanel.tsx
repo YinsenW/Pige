@@ -8,6 +8,7 @@ import type {
   CollectionCellEditResult,
   CollectionCreateViewRequest,
   CollectionCreateViewResult,
+  CollectionOpenResult,
   CollectionRenameColumnRequest,
   CollectionRenameColumnResult,
   CollectionScalarValue,
@@ -72,6 +73,7 @@ type EditNotice =
 export function ManagedCollectionPanel(props: {
   readonly activeVaultId: string;
   readonly snapshot: CollectionSnapshot;
+  readonly nextRowCursor?: string;
   readonly onClose: () => void;
   readonly onAppendDefaultRow: (
     request: CollectionAppendDefaultRowRequest
@@ -93,6 +95,7 @@ export function ManagedCollectionPanel(props: {
   readonly onAdoptSnapshot: (snapshot: CollectionSnapshot, expectedRevisionId: string) => boolean;
   readonly onEditCell: (request: CollectionCellEditRequest) => Promise<CollectionCellEditResult>;
   readonly onReload: () => Promise<CollectionSnapshot | null>;
+  readonly onLoadMoreRows?: (rowCursor: string) => Promise<CollectionOpenResult | null>;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const [edit, setEdit] = useState<CellEdit | null>(null);
@@ -102,6 +105,10 @@ export function ManagedCollectionPanel(props: {
   const [columnActionsBusy, setColumnActionsBusy] = useState(false);
   const [viewControlsBusy, setViewControlsBusy] = useState(false);
   const [columnFocusRequest, setColumnFocusRequest] = useState<string | null>(null);
+  const [visibleRows, setVisibleRows] = useState<CollectionSnapshot["rows"]>(props.snapshot.rows);
+  const [nextRowCursor, setNextRowCursor] = useState(props.nextRowCursor);
+  const [rowsLoading, setRowsLoading] = useState(false);
+  const [rowsLoadFailed, setRowsLoadFailed] = useState(false);
   const requestSequence = useRef(0);
   const appendActiveRef = useRef<number | null>(null);
   const appendTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -125,11 +132,18 @@ export function ManagedCollectionPanel(props: {
   const pendingColumnEditorFocusRef = useRef(false);
   const editorRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const rowsLoadActiveRef = useRef(false);
+  const pendingRowsFocusRef = useRef<{ readonly paginationKey: string; readonly scrollTop: number } | null>(null);
   const ownerKey = `${props.activeVaultId}:${props.snapshot.datasetId}:${props.snapshot.tableId}`;
+  const paginationKey = collectionPaginationIdentity(props.activeVaultId, props.snapshot);
+  const paginationKeyRef = useRef(paginationKey);
   const ownerKeyRef = useRef(ownerKey);
   const snapshotRevisionRef = useRef(props.snapshot.revisionId);
   ownerKeyRef.current = ownerKey;
   snapshotRevisionRef.current = props.snapshot.revisionId;
+  paginationKeyRef.current = paginationKey;
 
   useEffect(() => {
     requestSequence.current += 1;
@@ -152,6 +166,14 @@ export function ManagedCollectionPanel(props: {
     setViewControlsBusy(false);
     setColumnFocusRequest(null);
   }, [ownerKey]);
+
+  useEffect(() => {
+    rowsLoadActiveRef.current = false;
+    setVisibleRows(props.snapshot.rows);
+    setNextRowCursor(props.nextRowCursor);
+    setRowsLoading(false);
+    setRowsLoadFailed(false);
+  }, [paginationKey]);
 
   useEffect(() => {
     if (edit) editorRef.current?.focus();
@@ -193,7 +215,19 @@ export function ManagedCollectionPanel(props: {
     if (!pendingAppendFocusRef.current) return;
     pendingAppendFocusRef.current = false;
     (appendTriggerRef.current ?? panelRef.current)?.focus();
-  }, [busy, notice, props.snapshot.revisionId]);
+  }, [busy, notice, props.snapshot.revisionId, visibleRows]);
+
+  useLayoutEffect(() => {
+    const pending = pendingRowsFocusRef.current;
+    if (!pending || pending.paginationKey !== paginationKey) return;
+    pendingRowsFocusRef.current = null;
+    if (tableScrollRef.current) tableScrollRef.current.scrollTop = pending.scrollTop;
+    loadMoreTriggerRef.current?.focus({ preventScroll: true });
+  }, [paginationKey, visibleRows]);
+
+  useLayoutEffect(() => {
+    if (rowsLoadFailed && !rowsLoading) loadMoreTriggerRef.current?.focus({ preventScroll: true });
+  }, [rowsLoadFailed, rowsLoading]);
 
   useLayoutEffect(() => {
     if (busy) return;
@@ -357,7 +391,7 @@ export function ManagedCollectionPanel(props: {
   };
 
   const trashRow = async (rowId: string, rowIndex: number): Promise<void> => {
-    const row = props.snapshot.rows.find((candidate) => candidate.rowId === rowId);
+    const row = visibleRows.find((candidate) => candidate.rowId === rowId);
     if (!row?.canTrash || busy || edit || columnDraft || columnActionsActiveRef.current || viewControlsActiveRef.current || trashActiveRef.current) return;
     const sequence = requestSequence.current + 1;
     requestSequence.current = sequence;
@@ -413,7 +447,41 @@ export function ManagedCollectionPanel(props: {
     }
   };
 
-  const hasTrashActions = props.snapshot.rows.some((row) => row.canTrash);
+  const hasTrashActions = visibleRows.some((row) => row.canTrash);
+
+  const loadMoreRows = async (): Promise<void> => {
+    const cursor = nextRowCursor;
+    if (!cursor || !props.onLoadMoreRows || rowsLoadActiveRef.current || busy || columnActionsBusy || viewControlsBusy || edit || columnDraft) return;
+    const expectedPaginationKey = paginationKey;
+    const scrollTop = tableScrollRef.current?.scrollTop ?? 0;
+    rowsLoadActiveRef.current = true;
+    setRowsLoading(true);
+    setRowsLoadFailed(false);
+    try {
+      const result = await props.onLoadMoreRows(cursor);
+      if (paginationKeyRef.current !== expectedPaginationKey) return;
+      if (
+        !result || result.status !== "ready" ||
+        collectionPaginationIdentity(props.activeVaultId, result.snapshot) !== expectedPaginationKey
+      ) {
+        setRowsLoadFailed(true);
+        return;
+      }
+      setVisibleRows((current) => {
+        const known = new Set(current.map(({ rowId }) => rowId));
+        return [...current, ...result.snapshot.rows.filter(({ rowId }) => !known.has(rowId))];
+      });
+      setNextRowCursor(result.nextRowCursor);
+      pendingRowsFocusRef.current = { paginationKey: expectedPaginationKey, scrollTop };
+    } catch {
+      if (paginationKeyRef.current === expectedPaginationKey) setRowsLoadFailed(true);
+    } finally {
+      if (paginationKeyRef.current === expectedPaginationKey) {
+        rowsLoadActiveRef.current = false;
+        setRowsLoading(false);
+      }
+    }
+  };
 
   const addNullableColumn = async (): Promise<void> => {
     if (!columnDraft || busy || columnActionsActiveRef.current || viewControlsActiveRef.current || columnActiveRef.current !== null) return;
@@ -506,7 +574,7 @@ export function ManagedCollectionPanel(props: {
         </div>
         <div>
           <p className="muted dataset-answer-count">
-            {props.t("dataset.rows")}: {props.snapshot.returnedRowCount}/{props.snapshot.totalRowCount}
+            {props.t("dataset.rows")}: {visibleRows.length}/{props.snapshot.totalRowCount}
           </p>
           {props.snapshot.canAppendDefaultRow ? (
             <button
@@ -630,7 +698,7 @@ export function ManagedCollectionPanel(props: {
           ) : null}
         </div>
       ) : null}
-      <div className="dataset-table-scroll" tabIndex={0} aria-label={props.t("collection.table")}>
+      <div ref={tableScrollRef} className="dataset-table-scroll" tabIndex={0} aria-label={props.t("collection.table")}>
         <table className="dataset-table">
           <caption>{props.snapshot.tableName}</caption>
           <thead>
@@ -654,7 +722,7 @@ export function ManagedCollectionPanel(props: {
             />
           </thead>
           <tbody>
-            {props.snapshot.rows.map((row, rowIndex) => (
+            {visibleRows.map((row, rowIndex) => (
               <tr
                 key={row.rowId}
                 ref={(element) => {
@@ -759,10 +827,36 @@ export function ManagedCollectionPanel(props: {
           </tbody>
         </table>
       </div>
-      {props.snapshot.rows.length === 0 ? <p className="muted">{props.t("collection.empty")}</p> : null}
-      {props.snapshot.truncated ? <p className="muted retrieval-warning">{props.t("dataset.truncated")}</p> : null}
+      {visibleRows.length === 0 ? <p className="muted">{props.t("collection.empty")}</p> : null}
+      {rowsLoadFailed ? <p className="muted retrieval-warning" role="status">{props.t("collection.rowsLoadFailed")}</p> : null}
+      {nextRowCursor ? (
+        <button
+          ref={loadMoreTriggerRef}
+          type="button"
+          className="settings-button"
+          disabled={rowsLoading || busy || columnActionsBusy || viewControlsBusy || edit !== null || columnDraft !== null}
+          onClick={() => void loadMoreRows()}
+        >
+          {props.t(rowsLoading ? "collection.rowsLoading" : "collection.loadMoreRows")}
+        </button>
+      ) : props.snapshot.truncated && visibleRows.length < props.snapshot.totalRowCount ? (
+        <p className="muted retrieval-warning">{props.t("dataset.truncated")}</p>
+      ) : null}
     </section>
   );
+}
+
+function collectionPaginationIdentity(activeVaultId: string, snapshot: CollectionSnapshot): string {
+  const activeView = snapshot.views.find(({ viewId }) => viewId === snapshot.activeViewId);
+  return JSON.stringify([
+    activeVaultId,
+    snapshot.datasetId,
+    snapshot.revisionId,
+    snapshot.tableId,
+    snapshot.activeViewId ?? null,
+    activeView?.filter ?? null,
+    activeView?.sort ?? null
+  ]);
 }
 
 function CollectionValueEditor(props: {
