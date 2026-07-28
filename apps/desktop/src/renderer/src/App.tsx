@@ -28,6 +28,7 @@ import {
   type LocalSemanticRetrievalApi
 } from "./components/LocalSemanticRetrievalSettingsPanel";
 import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
+import { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
 import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
 import {
   homeConversationStateForJob,
@@ -148,6 +149,7 @@ import {
 export { AgentMemorySettingsPanel } from "./components/AgentMemorySettingsPanel";
 export { LocalSemanticRetrievalSettingsPanel } from "./components/LocalSemanticRetrievalSettingsPanel";
 export { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
+export { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
 export { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
 type View = "home" | "library" | "knowledgeTree";
 type ActiveCollection = {
@@ -192,7 +194,6 @@ export type DevelopmentCapability =
   | "agent_memory"
   | "permissions_privacy"
   | "skills"
-  | "packages"
   | "updates";
 export type DevelopmentNotice = {
   readonly surface: DevelopmentSurface;
@@ -2176,7 +2177,7 @@ export function App(): React.JSX.Element {
             />
           ) : settingsSection === "packages" ? (
             <PiPackagesSettingsPanel
-              onDevelopment={() => showDevelopmentCapability("settings", "packages")}
+              api={window.pige.piPackages}
               t={t}
             />
           ) : settingsSection === "history" ? (
@@ -6155,7 +6156,7 @@ const settingsSections: readonly {
   { id: "memory", icon: "memory", status: "development" },
   { id: "privacy", icon: "shield", status: "partial" },
   { id: "skills", icon: "skill", status: "partial" },
-  { id: "packages", icon: "package", status: "development", capability: "packages" },
+  { id: "packages", icon: "package", status: "partial" },
   { id: "history", icon: "activity", status: "real" },
   { id: "updates", icon: "package", status: "partial" },
   { id: "diagnostics", icon: "wrench", status: "real" }
@@ -6932,70 +6933,6 @@ function DevelopmentSettingsSection(props: {
         <h1 id={`settings-${props.section}-title`}>{props.t(`settings.section.${props.section}`)}</h1>
         <p className="muted">{props.t("development.settingsDescription")}</p>
       </div>
-    </section>
-  );
-}
-
-export function PiPackagesSettingsPanel(props: {
-  readonly onDevelopment: () => void;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  return (
-    <section className="settings-page settings-packages" aria-labelledby="settings-packages-title">
-      <header className="settings-panel-header">
-        <h1 id="settings-packages-title">{props.t("packages.title")}</h1>
-        <p>{props.t("packages.subtitle")}</p>
-      </header>
-
-      <section className="settings-section" role="group" aria-labelledby="packages-registry-title">
-        <h2 className="settings-section-title" id="packages-registry-title">{props.t("packages.registryTitle")}</h2>
-        <div className="settings-card skills-empty-card">
-          <span className="skills-empty-icon" aria-hidden="true"><PigeIcon name="package" size={19} /></span>
-          <div className="settings-row-copy">
-            <strong>{props.t("packages.unavailableTitle")}</strong>
-            <span>{props.t("packages.unavailableDescription")}</span>
-          </div>
-        </div>
-        <div className="settings-inline-actions">
-          <button className="settings-button primary settings-action" type="button" onClick={props.onDevelopment}>
-            <PigeIcon name="link" size={15} aria-hidden="true" />
-            {props.t("packages.installFromSource")}
-          </button>
-          <button className="settings-button settings-action" type="button" onClick={props.onDevelopment}>
-            <PigeIcon name="search" size={15} aria-hidden="true" />
-            {props.t("packages.searchCatalog")}
-          </button>
-        </div>
-      </section>
-
-      <section className="settings-section" role="group" aria-labelledby="packages-review-title">
-        <h2 className="settings-section-title" id="packages-review-title">{props.t("packages.reviewTitle")}</h2>
-        <div className="settings-card">
-          <div className="settings-row tall skills-information-row">
-            <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="shield" size={17} /></span>
-            <div className="settings-row-copy">
-              <strong>{props.t("packages.reviewIdentity")}</strong>
-              <span>{props.t("packages.reviewIdentityDescription")}</span>
-            </div>
-          </div>
-          <div className="settings-row tall skills-information-row">
-            <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="shield" size={17} /></span>
-            <div className="settings-row-copy">
-              <strong>{props.t("packages.reviewPermissions")}</strong>
-              <span>{props.t("packages.reviewPermissionsDescription")}</span>
-            </div>
-          </div>
-          <div className="settings-row tall skills-information-row">
-            <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="activity" size={17} /></span>
-            <div className="settings-row-copy">
-              <strong>{props.t("packages.lifecycleTitle")}</strong>
-              <span>{props.t("packages.lifecycleDescription")}</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <p className="settings-note">{props.t("packages.partialNote")}</p>
     </section>
   );
 }
