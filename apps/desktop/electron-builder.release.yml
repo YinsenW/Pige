@@ -19,6 +19,8 @@ extraResources:
     to: licenses
   - from: ../../resources/toolchain-manifest
     to: toolchain-manifest
+  - from: ../../resources/parser-manifests
+    to: parser-manifests
   - from: ../../artifacts/release-packageability/package-resources
     to: release
 generateUpdatesFilesForAllChannels: true
