@@ -240,7 +240,7 @@ function parseWheels(value, platform) {
     const name = normalizePythonName(requireString(wheel.name, "wheel name", 1, 120));
     const version = requireString(wheel.version, "wheel version", 1, 80);
     const filename = requireSafeFilename(wheel.filename, "wheel filename");
-    assertWheelFilename(filename, name, version, platform);
+    assertPaddleOcrWheelFilename(filename, name, version, platform);
     const dependencies = requireStringList(wheel.dependencies, "wheel dependencies", 128, true)
       .map(normalizePythonName)
       .sort(compareText);
@@ -838,7 +838,7 @@ function assertWheelMetadata(content, wheel) {
   }
 }
 
-function assertWheelFilename(filename, name, version, platform) {
+export function assertPaddleOcrWheelFilename(filename, name, version, platform) {
   if (!filename.endsWith(".whl")) fail("Selected artifacts must be wheels; sdists and source archives are forbidden.");
   const prefix = `${name.replaceAll("-", "_")}-${version.replaceAll("-", "_")}-`;
   if (!filename.toLocaleLowerCase("en-US").startsWith(prefix.toLocaleLowerCase("en-US"))) {
@@ -852,7 +852,7 @@ function assertWheelFilename(filename, name, version, platform) {
   const pythonCompatible = pythonTags.some((tag) =>
     (tag === "py3" && abiTags.includes("none")) ||
     (tag === "cp313" && abiTags.some((abi) => abi === "cp313" || abi === "abi3" || abi === "none")) ||
-    (/^cp(?:3[89]|31[0-2])$/u.test(tag) && abiTags.includes("abi3"))
+    (/^cp(?:3[2-9]|31[0-3])$/u.test(tag) && abiTags.includes("abi3"))
   );
   const platformCompatible = platformTag.split(".").every((tag) => tag === "any" || (platform === "macos-arm64"
     ? /^macosx_[0-9_]+_(?:arm64|universal2)$/u.test(tag)

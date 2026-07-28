@@ -6,6 +6,7 @@ import * as tar from "tar";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ZipFile } from "yazl";
 import {
+  assertPaddleOcrWheelFilename,
   buildPaddleOcrReleaseBundle,
   parseReviewedPaddleOcrManifest,
   parseSelectedWheelLock
@@ -23,6 +24,33 @@ afterEach(() => {
 });
 
 describe("PaddleOCR release bundle builder", () => {
+  it("accepts reviewed stable-ABI wheels that predate CPython 3.13 without weakening platform tags", () => {
+    expect(() => assertPaddleOcrWheelFilename(
+      "opencv_contrib_python-4.10.0.84-cp37-abi3-macosx_11_0_arm64.whl",
+      "opencv-contrib-python",
+      "4.10.0.84",
+      "macos-arm64"
+    )).not.toThrow();
+    expect(() => assertPaddleOcrWheelFilename(
+      "psutil-7.2.2-cp36-abi3-macosx_11_0_arm64.whl",
+      "psutil",
+      "7.2.2",
+      "macos-arm64"
+    )).not.toThrow();
+    expect(() => assertPaddleOcrWheelFilename(
+      "opencv_contrib_python-4.10.0.84-cp37-abi3-win_amd64.whl",
+      "opencv-contrib-python",
+      "4.10.0.84",
+      "windows-x64"
+    )).not.toThrow();
+    expect(() => assertPaddleOcrWheelFilename(
+      "opencv_contrib_python-4.10.0.84-cp37-abi3-win32.whl",
+      "opencv-contrib-python",
+      "4.10.0.84",
+      "windows-x64"
+    )).toThrow(/incompatible/u);
+  });
+
   it("builds the same complete offline LocalTool package from exact locked inputs", async () => {
     vi.stubGlobal("fetch", () => {
       throw new Error("release bundle tests must not access the network");
