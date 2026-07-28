@@ -100,6 +100,8 @@ import type {
   ProposalTrustLevel,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
+  ReaderSelectionLinkRequest,
+  ReaderSelectionLinkResult,
   ReaderSelectionReadAction,
   ReaderSelectionTransformAction,
   ReaderSelectionTransformRequest,
@@ -257,6 +259,8 @@ export type {
   ReaderSelectionActionRequest,
   ReaderSelectionActionRequestId,
   ReaderSelectionActionResult,
+  ReaderSelectionLinkRequest,
+  ReaderSelectionLinkResult,
   ReaderSelectionIdentity,
   ReaderSelectionReadAction,
   ReaderSelectionTransformAction,
@@ -1239,7 +1243,7 @@ export interface AgentConversationMessage {
 export type AgentConversationInputPresentation =
   | {
       readonly kind: "reader_selection_action";
-      readonly action: ReaderSelectionReadAction;
+      readonly action: ReaderSelectionReadAction | "link";
     }
   | {
       readonly kind: "reader_selection_transform";
@@ -1572,6 +1576,9 @@ export interface PigeDesktopApi {
     readonly submitAction: (
       request: ReaderSelectionActionRequest
     ) => Promise<ReaderSelectionActionResult>;
+    readonly submitLink: (
+      request: ReaderSelectionLinkRequest
+    ) => Promise<ReaderSelectionLinkResult>;
     readonly submitTransform: (
       request: ReaderSelectionTransformRequest
     ) => Promise<ReaderSelectionTransformResult>;

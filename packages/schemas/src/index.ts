@@ -257,7 +257,7 @@ export const AgentTurnCurrentNoteScopeSchema = z.object({
 export const AgentConversationInputPresentationSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("reader_selection_action"),
-    action: z.enum(["explain", "summarize"])
+    action: z.enum(["explain", "summarize", "link"])
   }).strict(),
   z.object({
     kind: z.literal("reader_selection_transform"),
@@ -4078,6 +4078,77 @@ export const ReaderSelectionActionResultSchema = z.discriminatedUnion("status", 
   }).strict()
 ]);
 
+export const ReaderSelectionLinkRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: ReaderSelectionActionRequestIdSchema,
+  action: z.literal("link"),
+  activeVaultId: VaultIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  selection: ReaderSelectionIdentitySchema,
+  locale: LocaleSchema,
+  clientTurnId: AgentClientTurnIdSchema
+}).strict();
+export const ReaderSelectionLinkResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionActionRequestIdSchema,
+    status: z.literal("applied"),
+    jobId: JobIdSchema,
+    conversationEventId: ConversationEventIdSchema,
+    conversationId: ConversationIdSchema,
+    tailEventId: ConversationEventIdSchema,
+    operationId: OperationIdSchema,
+    currentPageId: PageIdSchema,
+    targetPageId: PageIdSchema
+  }).strict().superRefine((result, context) => {
+    if (result.currentPageId === result.targetPageId) {
+      context.addIssue({
+        code: "custom",
+        message: "A Reader selection link target must differ from the current page.",
+        path: ["targetPageId"]
+      });
+    }
+  }),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionActionRequestIdSchema,
+    status: z.literal("waiting"),
+    jobId: JobIdSchema,
+    conversationEventId: ConversationEventIdSchema,
+    conversationId: ConversationIdSchema,
+    tailEventId: ConversationEventIdSchema,
+    error: PigeErrorSummarySchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionActionRequestIdSchema,
+    status: z.literal("failed"),
+    jobId: JobIdSchema.optional(),
+    conversationEventId: ConversationEventIdSchema.optional(),
+    conversationId: ConversationIdSchema.optional(),
+    tailEventId: ConversationEventIdSchema.optional(),
+    error: PigeErrorSummarySchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionActionRequestIdSchema,
+    status: z.literal("invalid"),
+    reason: z.enum([
+      "vault_unavailable",
+      "page_changed",
+      "render_context_changed",
+      "selection_changed",
+      "selection_too_large",
+      "mutation_ineligible",
+      "target_not_found",
+      "target_ambiguous",
+      "target_self",
+      "target_already_linked",
+      "target_changed"
+    ])
+  }).strict()
+]);
+
 export const ReaderSelectionTransformActionSchema = z.enum(["translate", "polish", "expand"]);
 export const ReaderSelectionProposalIdSchema = ProposalIdSchema;
 export const ReaderSelectionProposalStateSchema = z.enum([
@@ -5291,6 +5362,8 @@ export type ReaderSelectionEndpoint = z.infer<typeof ReaderSelectionEndpointSche
 export type ReaderSelectionActionRequestId = z.infer<typeof ReaderSelectionActionRequestIdSchema>;
 export type ReaderSelectionActionRequest = z.infer<typeof ReaderSelectionActionRequestSchema>;
 export type ReaderSelectionActionResult = z.infer<typeof ReaderSelectionActionResultSchema>;
+export type ReaderSelectionLinkRequest = z.infer<typeof ReaderSelectionLinkRequestSchema>;
+export type ReaderSelectionLinkResult = z.infer<typeof ReaderSelectionLinkResultSchema>;
 export type ReaderSelectionIdentity = z.infer<typeof ReaderSelectionIdentitySchema>;
 export type ReaderSelectionReadAction = z.infer<typeof ReaderSelectionReadActionSchema>;
 export type ReaderSelectionTransformAction = z.infer<typeof ReaderSelectionTransformActionSchema>;

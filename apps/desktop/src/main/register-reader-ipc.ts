@@ -27,6 +27,8 @@ import {
   NoteResolveInlineReferenceResultSchema,
   ReaderSelectionActionRequestSchema,
   ReaderSelectionActionResultSchema,
+  ReaderSelectionLinkRequestSchema,
+  ReaderSelectionLinkResultSchema,
   ReaderSelectionProposalDecisionRequestSchema,
   ReaderSelectionProposalDecisionResultSchema,
   ReaderSelectionProposalGetRequestSchema,
@@ -198,6 +200,45 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     try {
       return ReaderSelectionActionResultSchema.parse(
         await options.getReaderSelectionActionService().submit(parsed, {
+          onDraft: (draft) => draftPublisher.publish(draft)
+        })
+      );
+    } finally {
+      draftPublisher.close();
+    }
+  });
+  options.ipcMain.handle("readerSelection.submitLink", async (
+    event,
+    request: unknown
+  ) => {
+    const parsed = ReaderSelectionLinkRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return ReaderSelectionLinkResultSchema.parse({
+        apiVersion: 1,
+        requestId: parsed.requestId,
+        status: "invalid",
+        reason: "render_context_changed"
+      });
+    }
+    const renderContextCurrent = (): boolean =>
+      notesTrackedSenders.get(event.sender.id) === ownerId &&
+      !event.sender.isDestroyed() &&
+      options.getNotesService().isRenderContextCurrent(ownerId, {
+        activeVaultId: parsed.activeVaultId,
+        pageId: parsed.selection.pageId,
+        renderContextId: parsed.renderContextId
+      });
+    const draftPublisher = new AgentTurnDraftPublisher({
+      clientTurnId: parsed.clientTurnId,
+      send: (draft) => {
+        if (!event.sender.isDestroyed()) event.sender.send("agent.turnDraft", draft);
+      }
+    });
+    try {
+      return ReaderSelectionLinkResultSchema.parse(
+        await options.getReaderSelectionActionService().submitLink(parsed, {
+          renderContextCurrent,
           onDraft: (draft) => draftPublisher.publish(draft)
         })
       );

@@ -847,14 +847,14 @@ Current shell: Home + Knowledge Tree are primary; Library sits below; Settings o
 vault/profile; Models is only a Settings/Home repair target. Vault owns storage/Backup/
 Restore; Index & Maintenance owns index/diagnostics/support. Real surfaces include Home,
 Library/Reader, Knowledge Tree, Models, Vault, Backup/Restore, maintenance, current-note
-Agent, Reader copy, composer processing, compact Activity/Undo, locale/window pin and
+Agent, Reader copy/Link, composer processing, compact Activity/Undo, locale/window pin and
 current-action prompts. Settings framing and Reader related context remain partial.
 Compact Settings owns focus/inert state; Escape closes its navigator before the dialog
 and restores trigger focus.
 Appearance, local capabilities, reusable permission policy, Skills, Pi
-Packages, updates/voice, Reader mutations and unbound Knowledge evidence/backlink/
-relationship actions remain localized unavailable without IPC, Job, persistence, fake
-result/progress or status credit. Until a
+Packages, updates/voice, Reader mutations beyond bounded Link and unbound Knowledge
+evidence/backlink/relationship actions remain localized unavailable without IPC, Job,
+persistence, fake result/progress/status credit. Until a
 separate `BrowserWindow` owner exists, Settings remains an in-app focus-trapped dialog
 with Escape/exact-invoker restoration and no outer-window resize.
 

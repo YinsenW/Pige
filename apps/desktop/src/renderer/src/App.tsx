@@ -90,6 +90,8 @@ import type {
   NoteResolveInlineReferenceRequest,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
+  ReaderSelectionLinkRequest,
+  ReaderSelectionLinkResult,
   ReaderSelectionProposalDecisionResult,
   ReaderSelectionTransformRequest,
   ReaderSelectionTransformResult,
@@ -1552,6 +1554,20 @@ export function App(): React.JSX.Element {
     });
   };
 
+  const refreshReaderSelectionLink = async (
+    result: Extract<ReaderSelectionLinkResult, { status: "applied" }>
+  ): Promise<boolean> => {
+    const vaultId = activeVaultIdRef.current;
+    const note = selectedNoteRef.current;
+    if (
+      !vaultId ||
+      selectedNoteVaultIdRef.current !== vaultId ||
+      !note ||
+      note.summary.pageId !== result.currentPageId
+    ) return false;
+    return openNoteTarget(result.currentPageId);
+  };
+
   const decideReaderSelectionProposal = async (
     proposalId: string,
     action: "reject" | "later" | "apply"
@@ -1877,9 +1893,11 @@ export function App(): React.JSX.Element {
             activeVaultId={activeVault.vaultId}
             onResolveReaderSelection={resolveReaderSelection}
             onSubmitReaderSelectionAction={submitReaderSelectionAction}
+            onSubmitReaderSelectionLink={submitReaderSelectionLink}
             onSubmitReaderSelectionTransform={submitReaderSelectionTransform}
             locale={locale}
             onReaderSelectionAction={revealReaderSelectionAction}
+            onReaderSelectionLinkApplied={refreshReaderSelectionLink}
             onReaderSelectionTransform={revealReaderSelectionTransform}
             selectedNote={selectedNote}
             selectedNoteRelated={selectedNoteRelated}
@@ -1920,9 +1938,11 @@ export function App(): React.JSX.Element {
               activeVaultId={activeVault.vaultId}
               onResolveReaderSelection={resolveReaderSelection}
               onSubmitReaderSelectionAction={submitReaderSelectionAction}
+              onSubmitReaderSelectionLink={submitReaderSelectionLink}
               onSubmitReaderSelectionTransform={submitReaderSelectionTransform}
               locale={locale}
               onReaderSelectionAction={revealReaderSelectionAction}
+              onReaderSelectionLinkApplied={refreshReaderSelectionLink}
               onReaderSelectionTransform={revealReaderSelectionTransform}
               selectedNote={selectedNote}
               selectedNoteRelated={selectedNoteRelated}
@@ -2414,9 +2434,13 @@ export function LibraryPanel(props: {
   readonly activeVaultId?: string;
   readonly onResolveReaderSelection?: (request: ReaderSelectionResolveRequest) => Promise<ReaderSelectionResolveResult>;
   readonly onSubmitReaderSelectionAction?: (request: ReaderSelectionActionRequest) => Promise<ReaderSelectionActionResult>;
+  readonly onSubmitReaderSelectionLink?: (request: ReaderSelectionLinkRequest) => Promise<ReaderSelectionLinkResult>;
   readonly onSubmitReaderSelectionTransform?: (request: ReaderSelectionTransformRequest) => Promise<ReaderSelectionTransformResult>;
   readonly locale?: Locale;
   readonly onReaderSelectionAction?: (result: ReaderSelectionActionResult) => void;
+  readonly onReaderSelectionLinkApplied?: (
+    result: Extract<ReaderSelectionLinkResult, { status: "applied" }>
+  ) => Promise<boolean>;
   readonly onReaderSelectionTransform?: (result: ReaderSelectionTransformResult) => void;
   readonly onActivateInlineReference?: (href: string) => Promise<ReaderInlineReferenceActivation>;
   readonly onDevelopment: (capability: DevelopmentCapability) => void;
@@ -2677,9 +2701,11 @@ export function LibraryPanel(props: {
           {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
           {...(props.onResolveReaderSelection ? { onResolveSelection: props.onResolveReaderSelection } : {})}
           {...(props.onSubmitReaderSelectionAction ? { onSubmitSelectionAction: props.onSubmitReaderSelectionAction } : {})}
+          {...(props.onSubmitReaderSelectionLink ? { onSubmitSelectionLink: props.onSubmitReaderSelectionLink } : {})}
           {...(props.onSubmitReaderSelectionTransform ? { onSubmitSelectionTransform: props.onSubmitReaderSelectionTransform } : {})}
           {...(props.locale ? { locale: props.locale } : {})}
           {...(props.onReaderSelectionAction ? { onSelectionActionResult: props.onReaderSelectionAction } : {})}
+          {...(props.onReaderSelectionLinkApplied ? { onSelectionLinkApplied: props.onReaderSelectionLinkApplied } : {})}
           {...(props.onReaderSelectionTransform ? { onSelectionTransformResult: props.onReaderSelectionTransform } : {})}
           related={props.selectedNoteRelated}
           relatedLoadingPageId={props.noteLoadingPageId}
@@ -3097,6 +3123,10 @@ function resolveReaderSelection(request: ReaderSelectionResolveRequest): Promise
 
 function submitReaderSelectionAction(request: ReaderSelectionActionRequest): Promise<ReaderSelectionActionResult> {
   return window.pige.readerSelection.submitAction(request);
+}
+
+function submitReaderSelectionLink(request: ReaderSelectionLinkRequest): Promise<ReaderSelectionLinkResult> {
+  return window.pige.readerSelection.submitLink(request);
 }
 
 function submitReaderSelectionTransform(request: ReaderSelectionTransformRequest): Promise<ReaderSelectionTransformResult> {
@@ -5223,6 +5253,9 @@ function HomeComposer(props: {
                   activeVaultId: props.activeVault.vaultId,
                   onResolveSelection: resolveReaderSelection,
                   onSubmitSelectionAction: submitReaderSelectionAction,
+                  onSubmitSelectionLink: submitReaderSelectionLink,
+                  onSelectionLinkApplied: async (result: Extract<ReaderSelectionLinkResult, { status: "applied" }>) =>
+                    openResultTarget(result.currentPageId),
                   onOpenSourceReference: (request) => window.pige.notes.openSourceReference(request),
                   onOpenSourcePage: openResult
                 } : {})}

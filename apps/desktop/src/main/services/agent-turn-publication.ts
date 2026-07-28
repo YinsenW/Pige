@@ -37,6 +37,7 @@ import {
 } from "./generated-note-file";
 import {
   createReaderSelectionPublicationArtifact,
+  readReaderSelectionLinkBinding,
   readReaderSelectionTransformBinding
 } from "./reader-selection-job-binding";
 
@@ -52,7 +53,7 @@ export interface HomeAgentTurnJobPort {
 }
 
 export type HomeAgentReaderSelectionPublication =
-  | { readonly status: "applied"; readonly operationId: string; readonly pageContentHash: string }
+  | { readonly status: "applied"; readonly operationId: string; readonly pageContentHash: string; readonly targetPageId?: string }
   | { readonly status: "review_required"; readonly proposalId: string }
   | { readonly status: "resolved"; readonly proposalId: string };
 
@@ -71,6 +72,25 @@ export interface HomeAgentReaderSelectionMutationPort {
     readonly replacement: string;
     readonly action: ReaderSelectionTransformAction;
   }): HomeAgentReaderSelectionPublication | undefined;
+  publishLink(input: {
+    readonly vaultPath: string;
+    readonly job: JobRecord;
+    readonly selection: ReaderSelectionIdentity;
+    readonly target: ReaderSelectionLinkTarget;
+  }): HomeAgentReaderSelectionPublication;
+  readLinkPublication(input: {
+    readonly vaultPath: string;
+    readonly job: JobRecord;
+    readonly selection: ReaderSelectionIdentity;
+    readonly target: ReaderSelectionLinkTarget;
+  }): HomeAgentReaderSelectionPublication | undefined;
+}
+
+export interface ReaderSelectionLinkTarget {
+  readonly pageId: string;
+  readonly pagePath: string;
+  readonly contentHash: string;
+  readonly title: string;
 }
 
 export function requireReaderSelectionMutationPort(
@@ -101,6 +121,14 @@ interface ReaderSelectionPublicationIntent {
   readonly selection: ReaderSelectionIdentity;
   readonly action: ReaderSelectionTransformAction;
   readonly replacement: string;
+}
+
+interface ReaderSelectionLinkPublicationIntent {
+  readonly schemaVersion: 1;
+  readonly kind: "link";
+  readonly jobId: string;
+  readonly selection: ReaderSelectionIdentity;
+  readonly target: ReaderSelectionLinkTarget;
 }
 
 const MAX_READER_SELECTION_INTENT_BYTES = 24 * 1024;
@@ -135,6 +163,32 @@ export function stageReaderSelectionPublicationIntent(
   }
 }
 
+export function stageReaderSelectionLinkPublicationIntent(
+  vaultPath: string,
+  job: JobRecord,
+  target: ReaderSelectionLinkTarget
+): void {
+  const binding = readReaderSelectionLinkBinding(job);
+  if (!binding || target.pageId === binding.selection.pageId) {
+    throw publicationConflict("The Reader link publication intent is invalid.");
+  }
+  const intent: ReaderSelectionLinkPublicationIntent = {
+    schemaVersion: 1,
+    kind: "link",
+    jobId: job.id,
+    selection: binding.selection,
+    target
+  };
+  const serialized = `${JSON.stringify(intent, null, 2)}\n`;
+  const intentPath = readerSelectionIntentPath(vaultPath, job.id);
+  const result = createGeneratedNoteExclusive(vaultPath, intentPath, serialized);
+  if (result === "created") return;
+  const existing = readGeneratedNoteExact(vaultPath, intentPath, MAX_READER_SELECTION_INTENT_BYTES);
+  if (existing !== serialized) {
+    throw publicationConflict("The Reader link publication intent changed before commit.");
+  }
+}
+
 export function readReaderSelectionPublicationIntent(
   vaultPath: string,
   job: JobRecord
@@ -158,6 +212,32 @@ export function readReaderSelectionPublicationIntent(
     JSON.stringify(value.selection) !== JSON.stringify(binding.selection) ||
     value.action !== binding.action) {
     throw publicationConflict("The Reader transform publication intent does not match its Job binding.");
+  }
+  return value;
+}
+
+export function readReaderSelectionLinkPublicationIntent(
+  vaultPath: string,
+  job: JobRecord
+): ReaderSelectionLinkPublicationIntent | undefined {
+  const binding = readReaderSelectionLinkBinding(job);
+  if (!binding) return undefined;
+  const serialized = readGeneratedNoteExact(
+    vaultPath,
+    readerSelectionIntentPath(vaultPath, job.id),
+    MAX_READER_SELECTION_INTENT_BYTES
+  );
+  if (serialized === undefined) return undefined;
+  let value: unknown;
+  try {
+    value = JSON.parse(serialized);
+  } catch {
+    throw publicationConflict("The Reader link publication intent is invalid.");
+  }
+  if (!isReaderSelectionLinkPublicationIntent(value) ||
+    value.jobId !== job.id ||
+    JSON.stringify(value.selection) !== JSON.stringify(binding.selection)) {
+    throw publicationConflict("The Reader link publication intent does not match its Job binding.");
   }
   return value;
 }
@@ -196,6 +276,21 @@ export function readReaderSelectionTransformPublication(
   });
 }
 
+export function readReaderSelectionLinkPublication(
+  mutations: HomeAgentReaderSelectionMutationPort | undefined,
+  vaultPath: string,
+  job: JobRecord
+): HomeAgentReaderSelectionPublication | undefined {
+  const intent = readReaderSelectionLinkPublicationIntent(vaultPath, job);
+  if (!intent) return undefined;
+  return requireReaderSelectionMutationPort(mutations).readLinkPublication({
+    vaultPath,
+    job,
+    selection: intent.selection,
+    target: intent.target
+  });
+}
+
 export function settleJobAfterAssistant(input: {
   readonly session: HomeAgentJobSession;
   readonly jobs: HomeAgentTurnJobPort;
@@ -210,7 +305,7 @@ export function settleJobAfterAssistant(input: {
     input.mutations,
     input.vaultPath,
     input.session.current
-  );
+  ) ?? readReaderSelectionLinkPublication(input.mutations, input.vaultPath, input.session.current);
   if (publication?.status === "review_required") {
     input.session.current = input.jobs.settleAgentTurnJob(input.session.current, {
       kind: "waiting",
@@ -658,6 +753,20 @@ function isReaderSelectionPublicationIntent(value: unknown): value is ReaderSele
     ["translate", "polish", "expand"].includes(record.action) &&
     typeof record.selection === "object" &&
     record.selection !== null;
+}
+
+function isReaderSelectionLinkPublicationIntent(value: unknown): value is ReaderSelectionLinkPublicationIntent {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const target = record.target as Record<string, unknown> | undefined;
+  return Object.keys(record).sort().join(",") === "jobId,kind,schemaVersion,selection,target" &&
+    record.schemaVersion === 1 && record.kind === "link" && typeof record.jobId === "string" &&
+    typeof record.selection === "object" && record.selection !== null &&
+    !!target && Object.keys(target).sort().join(",") === "contentHash,pageId,pagePath,title" &&
+    typeof target.pageId === "string" && /^page_\d{8}_[a-z0-9]{8,}$/u.test(target.pageId) &&
+    typeof target.pagePath === "string" && target.pagePath.endsWith(`/${target.pageId}.md`) &&
+    typeof target.contentHash === "string" && /^sha256:[a-f0-9]{64}$/u.test(target.contentHash) &&
+    typeof target.title === "string" && target.title.length > 0 && target.title.length <= 240;
 }
 
 function hashPublicationText(value: string): string {

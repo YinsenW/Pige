@@ -336,6 +336,27 @@ export class NotesService {
     }
   }
 
+  isRenderContextCurrent(ownerId: string, input: {
+    readonly activeVaultId: string;
+    readonly pageId: string;
+    readonly renderContextId: string;
+  }): boolean {
+    const vault = this.#vaults.current();
+    const vaultPath = this.#vaults.activeVaultPath();
+    const context = this.#readRenderContext(ownerId, input.renderContextId);
+    return Boolean(
+      vault &&
+      vaultPath &&
+      vault.vaultId === input.activeVaultId &&
+      context &&
+      context.vaultId === input.activeVaultId &&
+      context.vaultPath === vaultPath &&
+      context.pageId === input.pageId &&
+      this.#ownerEpochs.get(ownerId) === context.ownerEpoch &&
+      this.#matchesCurrentPage(context)
+    );
+  }
+
   openSourceReference(
     ownerId: string,
     request: NoteOpenSourceReferenceRequest

@@ -81,6 +81,7 @@ import {
 
 const tempRoots: string[] = [];
 const HOME_PAGE_ID = "page_20260711_launchabc";
+const READER_LINK_TARGET_PAGE_ID = "page_20260711_linktarget";
 
 class TestHomeAgentService extends HomeAgentService {
   submitQuery(request: {
@@ -3680,6 +3681,194 @@ SYNTHETIC_DISTRACTOR_BODY
     expect(JSON.stringify(timeline)).not.toContain(selected);
   });
 
+  it("publishes a Reader link to the exact current search target without copying selection text into conversation", async () => {
+    const fixture = makeFixture();
+    const selected = "Selected private link passage token.";
+    const currentPagePath = writeGeneratedKnowledgePage(fixture.vaultPath, selected);
+    const selection = createReaderSelectionForPage(currentPagePath, HOME_PAGE_ID, selected);
+    const targetPagePath = writeReaderLinkTargetPage(fixture.vaultPath);
+    const targetMarkdown = fs.readFileSync(targetPagePath, "utf8");
+    const target = {
+      pageId: READER_LINK_TARGET_PAGE_ID,
+      pagePath: `wiki/generated/2026/${READER_LINK_TARGET_PAGE_ID}.md`,
+      contentHash: `sha256:${createHash("sha256").update(targetMarkdown).digest("hex")}`,
+      title: "Related target"
+    };
+    const searchResult = makeReaderLinkSearchResult(fixture.vault.vaultId, selected);
+    let observedSearch: RetrievalSearchRequest | undefined;
+    let currentNoteToolText = "";
+    const invokedTools: string[] = [];
+    const publishLink = vi.fn(() => ({
+      status: "applied" as const,
+      operationId: "op_20260728_readerlink01",
+      pageContentHash: `sha256:${"a".repeat(64)}`,
+      targetPageId: READER_LINK_TARGET_PAGE_ID
+    }));
+    const readLinkPublication = vi.fn(() => undefined);
+    const service = new TestHomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId, {
+        result: searchResult,
+        onSearch: (request) => { observedSearch = request; }
+      }),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          expect(request.tools.map((tool) => tool.name)).toEqual([
+            "pige_read_current_note",
+            "pige_search_knowledge",
+            "pige_link_reader_selection"
+          ]);
+          const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
+          const searchTool = request.tools.find((tool) => tool.name === "pige_search_knowledge");
+          const linkTool = request.tools.find((tool) => tool.name === "pige_link_reader_selection");
+          if (!readTool || !searchTool || !linkTool) throw new Error("Missing Reader link tools.");
+          const signal = new AbortController().signal;
+          await request.beforeModelTurn?.();
+          currentNoteToolText = readPiToolText(await readTool.execute({}, signal, {
+            toolCallId: "pi_tool_reader_link_read",
+            signal
+          }));
+          invokedTools.push(readTool.name);
+          await searchTool.execute({}, signal, { toolCallId: "pi_tool_reader_link_search", signal });
+          invokedTools.push(searchTool.name);
+          await linkTool.execute({ targetRef: "citation_2" }, signal, {
+            toolCallId: "pi_tool_reader_link_select",
+            signal
+          });
+          invokedTools.push(linkTool.name);
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, invokedTools, {
+            answer: "The related note was linked.",
+            citationRefs: []
+          });
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        publish: vi.fn(() => { throw new Error("Unexpected Reader transform publication."); }),
+        readPublication: vi.fn(() => undefined),
+        publishLink,
+        readLinkPublication
+      }
+    );
+    const instruction = "Read the selected passage, search for one current related note, and link it.";
+
+    const outcome = await service.submitTurn({
+      text: instruction,
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260728_readerlink01"
+    }, {
+      currentNoteSelection: selection,
+      currentNoteLinkAction: "link"
+    });
+
+    expect(outcome, JSON.stringify(outcome)).toMatchObject({
+      state: "completed",
+      answer: { answer: "The related note was linked." }
+    });
+    expect(invokedTools).toEqual([
+      "pige_read_current_note",
+      "pige_search_knowledge",
+      "pige_link_reader_selection"
+    ]);
+    expect(currentNoteToolText).toContain(selected);
+    expect(observedSearch).toEqual({
+      scope: { kind: "active_vault", vaultId: fixture.vault.vaultId },
+      query: selected,
+      limit: 8
+    });
+    expect(readLinkPublication).toHaveBeenCalledWith(expect.objectContaining({ selection, target }));
+    expect(publishLink).toHaveBeenCalledOnce();
+    expect(publishLink).toHaveBeenCalledWith(expect.objectContaining({ selection, target }));
+    const timeline = service.conversation({ scope: { kind: "current_note", pageId: HOME_PAGE_ID } });
+    expect(timeline?.messages[0]?.text).toBe(instruction);
+    expect(JSON.stringify(timeline)).not.toContain(selected);
+  });
+
+  it.each(["unknown target ref", "target drift"] as const)(
+    "fails a Reader link closed for %s without publication",
+    async (failureMode) => {
+      const fixture = makeFixture();
+      const selected = "Selected failed link passage token.";
+      const currentPagePath = writeGeneratedKnowledgePage(fixture.vaultPath, selected);
+      const selection = createReaderSelectionForPage(currentPagePath, HOME_PAGE_ID, selected);
+      const targetPagePath = writeReaderLinkTargetPage(fixture.vaultPath);
+      const publishLink = vi.fn();
+      const readLinkPublication = vi.fn(() => undefined);
+      const service = new TestHomeAgentService(
+        fixture.vaults,
+        makeModels(),
+        makeRetrievalPort(fixture.vault.vaultId, {
+          result: makeReaderLinkSearchResult(fixture.vault.vaultId, selected)
+        }),
+        new JobsService(fixture.vaults),
+        {
+          run: async (request) => {
+            const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
+            const searchTool = request.tools.find((tool) => tool.name === "pige_search_knowledge");
+            const linkTool = request.tools.find((tool) => tool.name === "pige_link_reader_selection");
+            if (!readTool || !searchTool || !linkTool) throw new Error("Missing Reader link tools.");
+            const signal = new AbortController().signal;
+            await request.beforeModelTurn?.();
+            await readTool.execute({}, signal, { toolCallId: "pi_tool_reader_link_fail_read", signal });
+            await searchTool.execute({}, signal, { toolCallId: "pi_tool_reader_link_fail_search", signal });
+            await linkTool.execute({
+              targetRef: failureMode === "unknown target ref" ? "citation_9" : "citation_2"
+            }, signal, { toolCallId: "pi_tool_reader_link_fail_select", signal });
+            if (failureMode === "target drift") {
+              fs.appendFileSync(targetPagePath, "\nDrifted after selection.\n", "utf8");
+              await request.beforeModelTurn?.();
+            }
+            return makeRuntimeResult(request, [
+              "pige_read_current_note",
+              "pige_search_knowledge",
+              "pige_link_reader_selection"
+            ], {
+              answer: "This final must not publish.",
+              citationRefs: []
+            });
+          }
+        },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          publish: vi.fn(() => { throw new Error("Unexpected Reader transform publication."); }),
+          readPublication: vi.fn(() => undefined),
+          publishLink,
+          readLinkPublication
+        }
+      );
+
+      const outcome = await service.submitTurn({
+        text: "Link the selected passage to one current related note.",
+        inputKind: "typed_text",
+        scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+        locale: "en",
+        clientTurnId: failureMode === "unknown target ref"
+          ? "turn_20260728_readerlink02"
+          : "turn_20260728_readerlink03"
+      }, {
+        currentNoteSelection: selection,
+        currentNoteLinkAction: "link"
+      });
+
+      expect(outcome.state).toBe("failed");
+      expect(publishLink).not.toHaveBeenCalled();
+      expect(readLinkPublication).not.toHaveBeenCalled();
+    }
+  );
+
   it("settles an exceptional Reader transform at awaiting_review without applying note bytes", async () => {
     const fixture = makeFixture();
     const selected = "SELECTED_REVIEW_PASSAGE";
@@ -5393,6 +5582,60 @@ note:
 ${body}
 `, "utf8");
   return pagePath;
+}
+
+function writeReaderLinkTargetPage(vaultPath: string): string {
+  const pagePath = path.join(vaultPath, "wiki", "generated", "2026", `${READER_LINK_TARGET_PAGE_ID}.md`);
+  fs.mkdirSync(path.dirname(pagePath), { recursive: true });
+  fs.writeFileSync(pagePath, `---
+id: "${READER_LINK_TARGET_PAGE_ID}"
+schema_version: 1
+title: "Related target"
+type: "note"
+created_at: "2026-07-10T00:00:00.000Z"
+updated_at: "2026-07-11T00:00:00.000Z"
+status: "active"
+language: "en"
+aliases: []
+tags: []
+topics: []
+entities: []
+source_ids: []
+related_page_ids: []
+provenance:
+  generated_by: "pige"
+  last_job_id: "job_20260710_seedlink01"
+  model_profile_id: "model_reader_link"
+  confidence: "high"
+note:
+  note_kind: "summary"
+  review_state: "clean"
+---
+
+A related target note.
+`, "utf8");
+  return pagePath;
+}
+
+function makeReaderLinkSearchResult(vaultId: string, query: string): RetrievalSearchResult {
+  return {
+    ...makeSearchResult(vaultId, { query }),
+    results: [{
+      summary: {
+        pageId: READER_LINK_TARGET_PAGE_ID,
+        title: "Related target",
+        pageType: "note",
+        status: "active",
+        pagePath: `wiki/generated/2026/${READER_LINK_TARGET_PAGE_ID}.md`,
+        createdAt: "2026-07-10T00:00:00.000Z",
+        updatedAt: "2026-07-11T00:00:00.000Z",
+        sourceIds: []
+      },
+      score: 12,
+      snippets: ["A related target note."],
+      matchReasons: ["body"]
+    }]
+  };
 }
 
 function createReaderSelectionForPage(

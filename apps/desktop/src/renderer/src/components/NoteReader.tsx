@@ -9,6 +9,8 @@ import type {
   ReaderSelectionActionResult,
   ReaderSelectionEndpoint,
   ReaderSelectionIdentity,
+  ReaderSelectionLinkRequest,
+  ReaderSelectionLinkResult,
   ReaderSelectionResolveRequest,
   ReaderSelectionResolveResult,
   ReaderSelectionTransformRequest,
@@ -87,6 +89,10 @@ export function NoteReader(props: {
   readonly activeVaultId?: string;
   readonly onResolveSelection?: (request: ReaderSelectionResolveRequest) => Promise<ReaderSelectionResolveResult>;
   readonly onSubmitSelectionAction?: (request: ReaderSelectionActionRequest) => Promise<ReaderSelectionActionResult>;
+  readonly onSubmitSelectionLink?: (request: ReaderSelectionLinkRequest) => Promise<ReaderSelectionLinkResult>;
+  readonly onSelectionLinkApplied?: (
+    result: Extract<ReaderSelectionLinkResult, { status: "applied" }>
+  ) => Promise<boolean>;
   readonly onSubmitSelectionTransform?: (request: ReaderSelectionTransformRequest) => Promise<ReaderSelectionTransformResult>;
   readonly locale?: Locale;
   readonly onSelectionActionResult?: (result: ReaderSelectionActionResult) => void;
@@ -113,6 +119,7 @@ export function NoteReader(props: {
   const selectionFocusOwnerRef = useRef<HTMLElement | null>(null);
   const selectionTextRef = useRef("");
   const selectionResolveSequence = useRef(0);
+  const selectionLinkInFlightRef = useRef(false);
   const sourceReferenceSequence = useRef(0);
   const sourceReferenceInFlightRef = useRef<string | null>(null);
   const [sourceReferenceState, setSourceReferenceState] = useState<SourceReferenceState | null>(null);
@@ -145,7 +152,9 @@ export function NoteReader(props: {
   useEffect(() => {
     sourceReferenceSequence.current += 1;
     sourceReferenceInFlightRef.current = null;
+    selectionLinkInFlightRef.current = false;
     setSourceReferenceState(null);
+    setSelectionActionPending(false);
   }, [props.activeVaultId, props.note.renderContextId, summary.pageId]);
 
   const openSourceReference = async (sourceId: string): Promise<void> => {
@@ -521,6 +530,54 @@ export function NoteReader(props: {
     }
   };
 
+  const submitSelectionLink = async (selection: ReaderSelectionIdentity): Promise<void> => {
+    if (selectionActionPending || selectionLinkInFlightRef.current) return;
+    const resolveSequence = selectionResolveSequence.current;
+    const activeVaultId = props.activeVaultId;
+    const renderContextId = props.note.renderContextId;
+    const submitLink = props.onSubmitSelectionLink;
+    if (!activeVaultId || !renderContextId || !submitLink) return;
+    const request: ReaderSelectionLinkRequest = {
+      apiVersion: 1,
+      requestId: createReaderSelectionActionRequestId(),
+      action: "link",
+      activeVaultId,
+      renderContextId,
+      selection,
+      locale: props.locale ?? "en",
+      clientTurnId: createAgentClientTurnId()
+    };
+    selectionLinkInFlightRef.current = true;
+    setSelectionActionPending(true);
+    setSelectionFeedback(null);
+    try {
+      const result = await submitLink(request);
+      if (
+        resolveSequence !== selectionResolveSequence.current ||
+        result.requestId !== request.requestId ||
+        props.activeVaultId !== activeVaultId ||
+        props.note.renderContextId !== renderContextId ||
+        props.note.summary.pageId !== selection.pageId
+      ) return;
+      if (result.status !== "applied" || result.currentPageId !== selection.pageId) {
+        setSelectionFeedback(props.t("note.selection.actionFailed"));
+        return;
+      }
+      closeSelectionToolbar(true);
+      const refreshed = props.onSelectionLinkApplied ? await props.onSelectionLinkApplied(result) : false;
+      setSelectionFeedback(props.t(refreshed === false ? "note.selection.actionFailed" : "note.selection.applied"));
+    } catch {
+      if (resolveSequence === selectionResolveSequence.current) {
+        setSelectionFeedback(props.t("note.selection.actionFailed"));
+      }
+    } finally {
+      if (resolveSequence === selectionResolveSequence.current) {
+        selectionLinkInFlightRef.current = false;
+        setSelectionActionPending(false);
+      }
+    }
+  };
+
   const submitSelectionTransform = async (
     action: "translate" | "polish" | "expand",
     selection: ReaderSelectionIdentity
@@ -614,6 +671,15 @@ export function NoteReader(props: {
                 }
                 if ((action === "explain" || action === "summarize") && selectionResolution.kind === "resolved") {
                   void submitSelectionAction(action, selectionResolution.selection);
+                  return;
+                }
+                if (action === "link" && selectionResolution.kind === "resolved") {
+                  if (props.onSubmitSelectionLink && props.onSelectionLinkApplied) {
+                    void submitSelectionLink(selectionResolution.selection);
+                  } else {
+                    closeSelectionToolbar(true);
+                    props.onDevelopment("reader_link");
+                  }
                   return;
                 }
                 closeSelectionToolbar(true);

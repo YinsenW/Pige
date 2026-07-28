@@ -24,12 +24,14 @@ export interface ReaderSelectionJobScope {
   readonly bindingHash: string;
   readonly selection?: ReaderSelectionIdentity;
   readonly transformAction?: ReaderSelectionTransformAction;
+  readonly linkAction?: "link";
 }
 
 export interface ReaderSelectionTurnContext {
   readonly currentNoteSelection?: ReaderSelectionIdentity;
   readonly currentNoteReadAction?: ReaderSelectionReadAction;
   readonly currentNoteTransformAction?: ReaderSelectionTransformAction;
+  readonly currentNoteLinkAction?: "link";
 }
 
 type JobRef = NonNullable<JobRecord["inputRefs"]>[number];
@@ -37,6 +39,7 @@ type JobRef = NonNullable<JobRecord["inputRefs"]>[number];
 const SCOPE_ROLE = "agent_turn_current_note_scope";
 const SELECTION_ROLE = "agent_turn_reader_selection";
 const TRANSFORM_ROLE = "agent_turn_reader_transform";
+const LINK_ROLE = "agent_turn_reader_link";
 
 export function createReaderSelectionPublicationIntentHash(
   jobId: string,
@@ -78,16 +81,17 @@ export function validateReaderSelectionTurnContext(input: {
       "A Reader selection action requires the exact current-note scope."
     );
   }
-  if ((context.currentNoteReadAction || context.currentNoteTransformAction) && !context.currentNoteSelection) {
+  if ((context.currentNoteReadAction || context.currentNoteTransformAction || context.currentNoteLinkAction) && !context.currentNoteSelection) {
     throw new PigeDomainError(
       "agent_runtime.turn_binding_invalid",
       "A Reader selection presentation requires an exact selection identity."
     );
   }
-  if (context.currentNoteReadAction && context.currentNoteTransformAction) {
+  if ([context.currentNoteReadAction, context.currentNoteTransformAction, context.currentNoteLinkAction]
+    .filter(Boolean).length > 1) {
     throw new PigeDomainError(
       "agent_runtime.turn_binding_invalid",
-      "One Reader selection turn cannot bind read and transform actions together."
+      "One Reader selection turn cannot bind multiple actions together."
     );
   }
 }
@@ -125,6 +129,9 @@ export function createReaderSelectionJobScope(
     ...(context.currentNoteSelection ? { selection: context.currentNoteSelection } : {}),
     ...(context.currentNoteSelection && context.currentNoteTransformAction
       ? { transformAction: context.currentNoteTransformAction }
+      : {}),
+    ...(context.currentNoteSelection && context.currentNoteLinkAction
+      ? { linkAction: context.currentNoteLinkAction }
       : {})
   };
 }
@@ -200,6 +207,45 @@ export function readReaderSelectionTransformBinding(job: JobRecord): {
   return { selection: parsed.data, action: actionMatch[1] as ReaderSelectionTransformAction };
 }
 
+export function readReaderSelectionLinkBinding(job: JobRecord): {
+  readonly selection: ReaderSelectionIdentity;
+  readonly action: "link";
+} | undefined {
+  const refs = job.inputRefs ?? [];
+  const linkRefs = refs.filter((ref) => ref.role === LINK_ROLE);
+  if (linkRefs.length === 0) return undefined;
+  const scopeRefs = refs.filter((ref) => ref.role === SCOPE_ROLE);
+  const selectionRefs = refs.filter((ref) => ref.role === SELECTION_ROLE);
+  const link = linkRefs[0];
+  const scope = scopeRefs[0];
+  const selection = selectionRefs[0];
+  const locatorMatch = /^utf8_bytes:(\d+):(\d+)$/u.exec(selection?.locator ?? "");
+  const parsed = ReaderSelectionIdentitySchema.safeParse({
+    pageId: scope?.id,
+    pageContentHash: link?.checksum,
+    span: {
+      unit: "utf8_bytes",
+      start: Number(locatorMatch?.[1]),
+      endExclusive: Number(locatorMatch?.[2])
+    },
+    selectedContentHash: selection?.checksum
+  });
+  if (
+    linkRefs.length !== 1 ||
+    scopeRefs.length !== 1 ||
+    selectionRefs.length !== 1 ||
+    link?.kind !== "tool" ||
+    link.id !== "reader_selection_link" ||
+    selection?.kind !== "page" ||
+    selection.id !== scope?.id ||
+    !locatorMatch ||
+    !parsed.success
+  ) {
+    throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The durable Reader link binding is invalid.");
+  }
+  return { selection: parsed.data, action: "link" };
+}
+
 export function isValidReaderSelectionJobScope(
   scope: ReaderSelectionJobScope,
   hasSourceBinding: boolean
@@ -214,6 +260,8 @@ export function isValidReaderSelectionJobScope(
       scope.selection !== undefined &&
       ["translate", "polish", "expand"].includes(scope.transformAction)
     )) &&
+    (scope.linkAction === undefined || (scope.selection !== undefined && scope.linkAction === "link")) &&
+    !(scope.transformAction && scope.linkAction) &&
     !hasSourceBinding;
 }
 
@@ -228,7 +276,8 @@ export function createReaderSelectionJobRefs(scope: ReaderSelectionJobScope): Jo
     ...(scope.selection ? [createSelectionRef(scope.selection)] : []),
     ...(scope.selection && scope.transformAction
       ? [createTransformRef(scope.selection, scope.transformAction)]
-      : [])
+      : []),
+    ...(scope.selection && scope.linkAction ? [createLinkRef(scope.selection)] : [])
   ];
 }
 
@@ -240,15 +289,18 @@ export function assertReaderSelectionJobBinding(
   const scopeRefs = refs.filter((ref) => ref.role === SCOPE_ROLE);
   const selectionRefs = refs.filter((ref) => ref.role === SELECTION_ROLE);
   const transformRefs = refs.filter((ref) => ref.role === TRANSFORM_ROLE);
+  const linkRefs = refs.filter((ref) => ref.role === LINK_ROLE);
   const expected = scope ? createReaderSelectionJobRefs(scope) : [];
   const expectedScope = expected.find((ref) => ref.role === SCOPE_ROLE);
   const expectedSelection = expected.find((ref) => ref.role === SELECTION_ROLE);
   const expectedTransform = expected.find((ref) => ref.role === TRANSFORM_ROLE);
+  const expectedLink = expected.find((ref) => ref.role === LINK_ROLE);
 
   if (
     (expectedScope && !scopeRefs[0]) ||
     (expectedSelection && !selectionRefs[0]) ||
-    (expectedTransform && !transformRefs[0])
+    (expectedTransform && !transformRefs[0]) ||
+    (expectedLink && !linkRefs[0])
   ) {
     throw new PigeDomainError(
       "agent_runtime.turn_binding_invalid",
@@ -259,9 +311,11 @@ export function assertReaderSelectionJobBinding(
     scopeRefs.length > 1 ||
     selectionRefs.length > 1 ||
     transformRefs.length > 1 ||
+    linkRefs.length > 1 ||
     !isDeepStrictEqual(scopeRefs[0], expectedScope) ||
     !isDeepStrictEqual(selectionRefs[0], expectedSelection) ||
-    !isDeepStrictEqual(transformRefs[0], expectedTransform)
+    !isDeepStrictEqual(transformRefs[0], expectedTransform) ||
+    !isDeepStrictEqual(linkRefs[0], expectedLink)
   ) {
     throw new PigeDomainError(
       "agent_runtime.turn_conflict",
@@ -312,6 +366,15 @@ function createTransformRef(
     kind: "tool",
     id: `reader_selection_${action}`,
     role: TRANSFORM_ROLE,
+    checksum: selection.pageContentHash
+  };
+}
+
+function createLinkRef(selection: ReaderSelectionIdentity): JobRef {
+  return {
+    kind: "tool",
+    id: "reader_selection_link",
+    role: LINK_ROLE,
     checksum: selection.pageContentHash
   };
 }

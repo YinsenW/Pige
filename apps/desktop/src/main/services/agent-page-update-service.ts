@@ -565,9 +565,8 @@ export function readAgentPageUpdateOperationBinding(
   const hasReaderSelectionProvenance =
     readerSelectionRefs.length === 1 &&
     sourceRefs.length === 0 &&
-    relationshipRefs.length === 0 &&
     jobRefs.length === 1 &&
-    operation.sourceRefs.length === 2 &&
+    operation.sourceRefs.length === 2 + relationshipRefs.length &&
     /^sha256:[a-f0-9]{64}$/u.test(readerSelectionRefs[0]?.checksum ?? "");
   if (
     operation.kind !== "update_page" ||

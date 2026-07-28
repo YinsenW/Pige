@@ -132,12 +132,12 @@ Parent progress binds source/revision/page; retry/restart adopts without duplica
 Source/Page/Job. Child checkpoints are reliability, not Host semantic routing.
 
 Reader selection binds checksummed page/span/content/action refs; Job/instruction omit body
-and UI localizes presentation. Only Pi's explicit typed replacement call may persist the
-exact private Job/action/selection/replacement checkpoint; it creates no page change/proposal.
-Host publishes only after checksum-bound final assistant. Recovery adopts matching
-checkpoint/Operation/proposal, reconciles terminal proposal to the same Job, and never
-replays model/effect work. Missing/corrupt/drifted/mismatched evidence fails closed with the
-owner's body-free error; assistant prose never supplies replacement bytes.
+and UI localizes presentation. Pi's explicit typed replacement may persist the private
+selection/replacement checkpoint without changing a page. Reader Link instead persists one
+opaque selected-target checkpoint, then fences both current notes and publishes one reversible
+`update_page`. Recovery adopts the matching checkpoint/Operation/proposal or link and never
+replays model/effect work or duplicates an edge. Missing, ambiguous, self, existing, corrupt
+or drifted evidence fails body-free; assistant prose supplies neither replacement nor target.
 
 Home `draft_replace` remains temporary UI state, never recovery or assistant truth;
 cancellation/failure cannot promote it.
