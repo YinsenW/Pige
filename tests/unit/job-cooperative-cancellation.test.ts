@@ -803,6 +803,7 @@ function deferred<T>(): { readonly promise: Promise<T>; readonly resolve: (value
 
 function validOcrResult(text: string): NativeOcrResult {
   return {
+    adapterId: "macos_vision_ocr",
     engine: "macos_vision_document",
     engineVersion: "revision1",
     adapterVersion: "1.0.0",

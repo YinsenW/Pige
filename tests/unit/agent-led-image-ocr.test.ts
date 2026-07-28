@@ -422,6 +422,7 @@ function groundedOutput(title: string) {
 
 function validNativeOcrResult(text: string, overrides: Partial<NativeOcrResult> = {}): NativeOcrResult {
   return {
+    adapterId: "macos_vision_ocr",
     engine: "macos_vision_document",
     engineVersion: "revision1",
     adapterVersion: "1.0.0",
