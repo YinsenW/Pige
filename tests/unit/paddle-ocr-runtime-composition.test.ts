@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 describe("PaddleOCR runtime composition", () => {
-  it("keeps the reviewed production catalog unsupported while preserving native-first OCR", async () => {
+  it("exposes the reviewed production bundle while preserving native-first OCR", async () => {
     const native = new RecordingNativeAdapter(true);
     const composition = createPaddleOcrRuntimeComposition({
       appDataRoot: tempRoot("paddle-unavailable"),
@@ -44,12 +44,15 @@ describe("PaddleOCR runtime composition", () => {
 
     expect(composition.lifecycle.summary({ apiVersion: 1 })).toMatchObject({
       engineId: PADDLE_OCR_ENGINE_ID,
-      state: "unsupported",
-      canInstall: false,
+      state: "not_installed",
+      canInstall: true,
       nativeOcrPreferred: true,
       hiddenDownloadsAllowed: false
     });
-    expect(composition.recoverStaging()).toBeUndefined();
+    expect(composition.recoverStaging()).toMatchObject({
+      recoveredEntries: 0,
+      job: { class: "tool_install", state: "completed" }
+    });
     await expect(composition.adapter.recognize("/private/native.png", ["en"]))
       .resolves.toEqual(NATIVE_RESULT);
     expect(native.calls).toBe(1);
