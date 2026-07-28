@@ -54,7 +54,7 @@ export async function buildPaddleOcrReleaseBundle(input) {
       version: parserManifest.engineVersion,
       platform: wheelLock.platform === "macos-arm64" ? "macos" : "windows",
       architecture: wheelLock.platform === "macos-arm64" ? "arm64" : "x64",
-      capabilities: [...parserManifest.capabilities].sort(compareText),
+      capabilities: ["ocr.image"],
       license: wheelLock.bundleLicense,
       files
     };

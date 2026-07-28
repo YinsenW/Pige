@@ -77,6 +77,7 @@ describe("PaddleOCR release bundle builder", () => {
       version: "3.7.0",
       platform: "macos",
       architecture: "arm64",
+      capabilities: ["ocr.image"],
       license: { spdxId: "NOASSERTION", name: "See bundled legal inventory" }
     });
     expect(computeLocalToolPackageSha256(firstOutput, {
