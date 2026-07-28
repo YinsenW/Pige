@@ -1191,7 +1191,7 @@ Target responsibilities (current code: safe checksum summary, singleton-recovere
 body-free failures/events):
 
 - Manage built-in, vault-scoped, and machine-local Pige Skills.
-- Install Skills from explicit chat install requests, URL, Markdown file, or ZIP file.
+- Stage one Host-parsed HTTPS candidate from explicit authored chat; Settings alone reviews/installs it.
 - Stage, parse, validate, and preview Skills before enabling.
 - Maintain Skill metadata, enablement state, source URL, scope, checksum, capabilities, and warnings.
 - Select relevant active Skills for Agent workflows based on explicit user request, capture type, note/source type, trigger phrases, and vault conventions.

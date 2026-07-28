@@ -97,7 +97,8 @@ vault by default.
 Text-only whitespace creates no turn. Attachment-only preserves exact identities and uses
 the six-locale “Use only the attached file(s) as source material.” Its exact-source catalog
 excludes parent/sibling/cwd and ambient tools; confirmation cannot add them. Text-only
-tasks retain the closed high-risk boundary.
+tasks retain high-risk confirmation. Only nonempty durable authored text may expose exact
+HTTPS Skill staging; Host candidate and turn/Job/vault fences stage review, never install.
 
 ### 4.3 Submitted-Turn Authority
 

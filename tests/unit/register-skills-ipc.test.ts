@@ -26,6 +26,11 @@ function register(overrides: Record<string, unknown> = {}) {
     showOpenDialog: async () => ({ canceled: false, filePaths: ["/tmp/local-SKILL.md"] }),
     showSaveDialog: async () => ({ canceled: false, filePath: "/tmp/exported-SKILL.md" }),
     summary: () => ({ status: "ready", registry: registry(2) }),
+    pendingStagedReviews: (request) => ({
+      ...request,
+      status: "ready",
+      staged: []
+    }),
     stageFromUrl: (request) => ({
       status: "ready",
       requestId: request.requestId,
@@ -104,6 +109,27 @@ function register(overrides: Record<string, unknown> = {}) {
 }
 
 describe("registerSkillsIpc", () => {
+  it("returns only the exact active-vault pending chat reviews and rechecks after the query", async () => {
+    let currentVaultId = activeVaultId;
+    const pendingStagedReviews = vi.fn((request) => {
+      currentVaultId = "vault_20260729_changedafterquery";
+      return { ...request, status: "ready" as const, staged: [] };
+    });
+    const { handlers } = register({
+      getActiveVaultId: () => currentVaultId,
+      pendingStagedReviews
+    });
+    const request = { apiVersion: 1 as const, requestId: lifecycleRequestId, activeVaultId };
+
+    expect(await handlers.get("skills.pendingStagedReviews")?.({}, request)).toEqual({
+      ...request,
+      status: "failed"
+    });
+    expect(pendingStagedReviews).toHaveBeenCalledWith(request);
+    await expect(handlers.get("skills.pendingStagedReviews")?.({}, { ...request, sourceUrl: "https://forbidden.test" }))
+      .rejects.toThrow();
+  });
+
   it("owns the single ZIP picker and never accepts a renderer path", async () => {
     const showOpenDialog = vi.fn(async () => ({ canceled: false, filePaths: ["/tmp/review.zip"] }));
     const stageFromZip = vi.fn((request) => ({

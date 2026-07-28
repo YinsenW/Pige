@@ -3426,7 +3426,7 @@ Consequences:
 
 - Stage executes nothing. Local pick is one bounded no-follow read with private file identity;
   update binds its strict HTTPS source and installed base/revision. Both reuse reviewed install;
-  ZIP/chat/vault/External-Web sources and public restore stay open.
+  vault/External-Web sources and public restore stay open.
 
 References:
 
@@ -3609,11 +3609,32 @@ Prevent archive authority leaks.
 
 Consequences:
 
-- Cancel/invalid/drift is inert; stage CAS installs. ZIP update/chat/restore stay open.
+- Cancel/invalid/drift is inert; stage CAS installs. ZIP update/restore stay open.
 
 References:
 
 - `docs/SKILL_EXTENSION_DESIGN.md`
+
+### D-20260729-Authored-Chat-Skill-Staging
+
+Status: Accepted
+Date: 2026-07-29
+
+Decision:
+
+Stage one Host-selected authored HTTPS candidate for Settings review only.
+
+Rationale:
+
+Enable chat without model/source authority.
+
+Consequences:
+
+- Turn/Job/vault drift closes; Settings alone adopts.
+
+References:
+
+- `docs/SKILL_EXTENSION_DESIGN.md`; `docs/API_AND_IPC_DESIGN.md`
 
 ### D-20260728-Pi-Package-Trash-Uninstall
 

@@ -99,6 +99,8 @@ import {
   SkillInstallStagedRequestSchema,
   SkillInstallStagedResultSchema,
   SkillLifecycleMutationResultSchema,
+  SkillPendingStagedReviewsRequestSchema,
+  SkillPendingStagedReviewsResultSchema,
   SkillStageFromUrlRequestSchema,
   SkillStageFromUrlResultSchema,
   SkillStageFromMarkdownRequestSchema,
@@ -2522,6 +2524,70 @@ describe("schemas", () => {
     expect(SkillDiscardStagedRequestSchema.parse(discardRequest)).toEqual(discardRequest);
     expect(SkillDiscardStagedResultSchema.parse({ status: "discarded", requestId }))
       .toEqual({ status: "discarded", requestId });
+  });
+
+  it("projects bounded vault-bound chat Skill reviews without renderer URL authority", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "skill_lifecycle_request_chatreviewabcdefghijkl",
+      activeVaultId: "vault_20260729_chatskillreview"
+    } as const;
+    expect(SkillPendingStagedReviewsRequestSchema.parse(request)).toEqual(request);
+    for (const unsafe of [
+      { candidateIndex: 1 },
+      { sourceUrl: "https://example.com/SKILL.md" },
+      { path: "/private/staging" },
+      { body: "private" }
+    ]) {
+      expect(() => SkillPendingStagedReviewsRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+    }
+
+    const staged = (suffix: string, sourceUrl = "https://example.com/SKILL.md") => ({
+      stagingId: `skillstage_${suffix.repeat(32)}`,
+      manifestSha256: `sha256:${suffix.repeat(64)}`,
+      bundleSha256: `sha256:${suffix.repeat(64)}`,
+      registryRevision: 4,
+      expiresAt: "2026-07-30T12:00:00.000Z",
+      sourceUrl,
+      id: `chat-skill-${suffix}`,
+      name: `Chat Skill ${suffix}`,
+      version: "1.0.0",
+      description: "A staged chat Skill awaiting explicit review.",
+      scope: "machine_local",
+      kind: "pure",
+      capabilities: ["read_current_source"],
+      dataBoundaries: ["local"],
+      files: [{
+        relativePath: "SKILL.md",
+        utf8ByteSize: 1024,
+        sha256: `sha256:${suffix.repeat(64)}`
+      }],
+      warnings: ["untrusted_remote_source"]
+    } as const);
+    const ready = { ...request, status: "ready", staged: [staged("a"), staged("b")] } as const;
+    expect(SkillPendingStagedReviewsResultSchema.parse(ready)).toEqual(ready);
+    expect(SkillPendingStagedReviewsResultSchema.parse({ ...request, status: "failed" }))
+      .toEqual({ ...request, status: "failed" });
+    expect(() => SkillPendingStagedReviewsResultSchema.parse({
+      ...request,
+      status: "failed",
+      error: { code: "private" }
+    })).toThrow();
+    expect(() => SkillPendingStagedReviewsResultSchema.parse({
+      ...ready,
+      staged: [staged("b"), staged("a")]
+    })).toThrow();
+    const localStage = { ...staged("c") } as { sourceUrl?: string };
+    delete localStage.sourceUrl;
+    expect(() => SkillPendingStagedReviewsResultSchema.parse({ ...ready, staged: [localStage] })).toThrow();
+    expect(() => SkillPendingStagedReviewsResultSchema.parse({
+      ...ready,
+      staged: Array.from({ length: 33 }, (_, index) => ({
+        ...staged("d"),
+        stagingId: `skillstage_${(index + 1).toString(16).padStart(32, "0")}`,
+        id: `chat-skill-cap-${index + 1}`
+      }))
+    })).toThrow();
   });
 
   it("keeps local Markdown Skill picking Main-owned, bounded, and pathless", () => {

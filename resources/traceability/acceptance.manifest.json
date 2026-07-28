@@ -780,7 +780,7 @@
     "PIGE-UI-004":{"status":"planned","plannedTarget":"Remaining Knowledge Tree density/scale, compact-platform, assistive-technology, and signed packaged visual acceptance."},
     "PIGE-UI-005":{"status":"planned","plannedTarget":"Reader selection works; cited append is frozen. Evidence, other mutation and platform proof remain."},
     "PIGE-UI-006":{"status":"partial","evidence":["EV-READER-RELATED","EV-READER-UI","EV-FULL-UI-LIBRARY","EV-FULL-UI-RESPONSIVE","EV-READER-ACTIONS-UI","EV-READER-INLINE","EV-READER-SELECTION-LINK"],"open":{"id":"OPEN-REQ-PIGE-UI-006","description":"Source/graph gaps remain.","targetBuilds":["B6.08","B6.09"],"targetExits":["E6.05","E6.07"]}},
-    "PIGE-SKILL-001":{"status":"planned","plannedTarget":"Settings stages, reviews and installs bounded pure HTTPS, Main-picked Markdown or ZIP Skills; installed bytes support re-enable, source update, trash uninstall and pathless export. Chat/vault/External-Web lifecycle and public restore remain."},
+    "PIGE-SKILL-001":{"status":"planned","plannedTarget":"Settings and explicit authored chat stage/review bounded HTTPS; Settings installs reviewed HTTPS or Main-picked Markdown/ZIP. Re-enable, source update, trash uninstall and pathless export work; vault/External-Web and public restore remain."},
     "PIGE-SKILL-002":{"status":"planned","plannedTarget":"One reviewed entry supports install, trash uninstall, exact update/rollback and CAS pin/unpin; enable/runtime remain."}
   },
   "exits": {
@@ -1036,7 +1036,7 @@
     "E7.06":{"status":"planned","plannedTarget":"Cell/row/field changes and one single-filter/sort saved view work; broader view/schema lifecycle, relations/formulas, conflict and exception-boundary integration remain."},
     "E8.01": {
       "status": "planned",
-      "plannedTarget": "One reviewed machine-local pure HTTPS SKILL.md installs from Settings; file/ZIP/chat/vault/External-Web lifecycle, runtime permissions, update, uninstall and export remain."
+      "plannedTarget": "Reviewed HTTPS and Main-picked Markdown/ZIP stage/install in Settings; explicit authored chat stages one HTTPS review. Vault/External-Web, runtime permissions and public restore remain."
     },
     "E8.02": {
       "status": "planned",

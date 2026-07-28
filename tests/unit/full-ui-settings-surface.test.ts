@@ -1797,6 +1797,116 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("adopts ordered chat-staged Skills without installing automatically", async () => {
+    const dom = createDom();
+    const vaultId = "vault_20260729_skillchatstage";
+    const staged = (suffix: string, name: string) => ({
+      stagingId: `skillstage_${suffix.repeat(32).slice(0, 32)}` as `skillstage_${string}`,
+      manifestSha256: `sha256:${suffix.repeat(64).slice(0, 64)}` as `sha256:${string}`,
+      bundleSha256: `sha256:${suffix === "a" ? "b".repeat(64) : "c".repeat(64)}` as `sha256:${string}`,
+      registryRevision: 4, expiresAt: "2026-07-29T12:00:00.000Z",
+      sourceUrl: `https://example.com/${name}/SKILL.md` as `https://${string}`,
+      id: `${name}-skill`, name, version: "1.0.0", description: `Reviews ${name}.`,
+      scope: "machine_local" as const, kind: "pure" as const,
+      capabilities: ["read_current_source" as const], dataBoundaries: ["local" as const],
+      files: [{ relativePath: "SKILL.md" as const, utf8ByteSize: 1024, sha256: `sha256:${"d".repeat(64)}` as const }],
+      warnings: ["untrusted_remote_source" as const]
+    });
+    const first = staged("a", "first-chat-review");
+    const second = staged("e", "second-chat-review");
+    const pendingStagedReviews = vi.fn()
+      .mockImplementationOnce(async (request) => ({ ...request, status: "ready" as const, staged: [first, second] }))
+      .mockImplementationOnce(async (request) => ({ ...request, status: "ready" as const, staged: [second] }))
+      .mockImplementationOnce(async (request) => ({ ...request, status: "failed" as const }));
+    const installStaged = vi.fn(async (request: { requestId: string }) => ({
+      status: "committed" as const, requestId: request.requestId, registry: skillRegistry(5, true)
+    }));
+    const discardStaged = vi.fn(async (request: { requestId: string }) => ({
+      status: "discarded" as const, requestId: request.requestId
+    }));
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: {
+      skills: {
+        summary: async () => ({ status: "ready" as const, registry: skillRegistry(4, false, 0, []) }),
+        pendingStagedReviews, installStaged, discardStaged, disable: vi.fn(), onChanged: () => () => undefined
+      },
+      vault: { current: async () => ({ vaultId }) }
+    } });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => { root.render(createElement(SkillsSettingsPanel, { t })); await settle(dom); await settle(dom); });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-skills"));
+    expect(pendingStagedReviews).toHaveBeenCalledWith({
+      apiVersion: 1, requestId: expect.stringMatching(/^skill_lifecycle_request_[a-z0-9]{16,64}$/u), activeVaultId: vaultId
+    });
+    expect(page.textContent).toContain(first.name);
+    expect(page.textContent).not.toContain(second.name);
+    expect(installStaged).not.toHaveBeenCalled();
+    await act(async () => { buttonNamed(page, "Install Skill").click(); await settle(dom); await settle(dom); });
+    expect(installStaged).toHaveBeenCalledWith(expect.objectContaining({
+      stagingId: first.stagingId, manifestSha256: first.manifestSha256,
+      bundleSha256: first.bundleSha256, expectedRegistryRevision: 4, enabled: true
+    }));
+    expect(page.textContent).toContain(second.name);
+    expect(installStaged).toHaveBeenCalledOnce();
+    await act(async () => { buttonNamed(page, "Discard").click(); await settle(dom); await settle(dom); });
+    expect(discardStaged).toHaveBeenCalledWith(expect.objectContaining({ stagingId: second.stagingId }));
+    expect(pendingStagedReviews).toHaveBeenCalledTimes(3);
+    expect(page.querySelector("#skill-url-install")).toBeNull();
+    expect(dom.window.document.activeElement).toBe(buttonNamed(page, "Install from link"));
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("does not replace or refocus a locally staged Skill when the chat query settles later", async () => {
+    const dom = createDom();
+    const vaultId = "vault_20260729_skillchatfence";
+    const summary = {
+      stagingId: "skillstage_abcdef0123456789abcdef0123456789" as const,
+      manifestSha256: `sha256:${"a".repeat(64)}` as const,
+      bundleSha256: `sha256:${"b".repeat(64)}` as const,
+      registryRevision: 8, expiresAt: "2026-07-29T12:00:00.000Z",
+      sourceUrl: "https://example.com/local/SKILL.md" as const,
+      id: "local-review", name: "Local review", version: "1.0.0", description: "Local staged review.",
+      scope: "machine_local" as const, kind: "pure" as const,
+      capabilities: ["read_current_source" as const], dataBoundaries: ["local" as const],
+      files: [{ relativePath: "SKILL.md" as const, utf8ByteSize: 512, sha256: `sha256:${"c".repeat(64)}` as const }],
+      warnings: ["untrusted_remote_source" as const]
+    };
+    let resolvePending!: (value: unknown) => void;
+    const pendingStagedReviews = vi.fn((request) => new Promise((resolve) => {
+      resolvePending = (value) => resolve({ ...request, ...(value as object) });
+    }));
+    const stageFromUrl = vi.fn(async (request: { requestId: string }) => ({
+      requestId: request.requestId, status: "ready" as const, staged: summary
+    }));
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: {
+      skills: {
+        summary: async () => ({ status: "ready" as const, registry: skillRegistry(8, false, 0, []) }),
+        pendingStagedReviews, stageFromUrl, disable: vi.fn(), onChanged: () => () => undefined
+      },
+      vault: { current: async () => ({ vaultId }) }
+    } });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => { root.render(createElement(SkillsSettingsPanel, { t })); await settle(dom); });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-skills"));
+    await act(async () => { buttonNamed(page, "Install from link").click(); await settle(dom); });
+    await act(async () => {
+      inputValue(dom, requireElement(page.querySelector<HTMLInputElement>("#skill-install-url")), summary.sourceUrl);
+      await settle(dom);
+    });
+    await act(async () => { buttonNamed(page, "Review Skill").click(); await settle(dom); });
+    const localInstall = buttonNamed(page, "Install Skill");
+    localInstall.focus();
+    await act(async () => {
+      resolvePending({ status: "ready", staged: [{ ...summary, name: "Pending chat review" }] });
+      await settle(dom);
+    });
+    expect(page.textContent).toContain("Local review");
+    expect(page.textContent).not.toContain("Pending chat review");
+    expect(dom.window.document.activeElement).toBe(localInstall);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("fails closed on the body-free Skill Registry failed result and retries to a verified empty state", async () => {
     const dom = createDom();
     const failedQuery: SkillRegistryQueryResult = {
