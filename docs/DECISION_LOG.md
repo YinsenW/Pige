@@ -3811,6 +3811,28 @@ References:
 
 - `docs/API_AND_IPC_DESIGN.md`; `docs/JOB_OPERATION_AND_RECOVERY.md`
 
+### D-20260729-Dataset-Citation-Open
+
+Status: Accepted
+Date: 2026-07-29
+
+Decision:
+
+Use durable event/ref lookup keys for Dataset citation Open.
+
+Rationale:
+
+Renderer identity grants no Dataset authority.
+
+Consequences:
+
+- Verify historical preview/bundle without substitution; read-only ranges are metadata and
+  row marks use stable IDs.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

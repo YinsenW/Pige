@@ -51,14 +51,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of bounded Library Dataset discovery and row paging.",
+    "scope": "Independent Planning review of exact historical Dataset citation Open.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "00ae5f30b874e8fe1e75c37285b6e458952374cf7bb757f744d90a6116618ac3"
+    "reviewedSha256": "b422ceb24ec36081d985daa7e6f56208ce5f8d554bffbd313bc2331ae375451a"
   },
   "reviewers": [{
-    "reviewerId": "dataset-discovery-review",
-    "task": "Library Dataset discovery and paging",
+    "reviewerId": "dataset-citation-open-review",
+    "task": "Historical Dataset citation Open",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -66,33 +66,32 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed the Dataset cursor and authority boundary; Development and UI independently supplied implementation evidence."
+    "independence": "Planning reviewed citation authority and historical-read boundaries; Development and UI independently supplied implementation evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"dataset-discovery-review","blockerCount":0,"summary":"Library discovers Datasets and appends exact current table/view pages without a new destination."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"dataset-discovery-review","blockerCount":0,"summary":"API, data and UI owners share one vault-, revision-, view- and boundary-bound cursor contract."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"dataset-discovery-review","blockerCount":0,"summary":"B6.16 browsing is bound while E6.11 citation, analytical, scale and platform proof stays planned."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"dataset-discovery-review","blockerCount":0,"summary":"Ordering, cursor tamper, checksum drift, final-page truth and stale-before-append are tested."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"dataset-discovery-review","blockerCount":0,"summary":"Existing API, data, UI, Playbook, Decision and trace owners absorb the slice."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"dataset-citation-open-review","blockerCount":0,"summary":"Historical citations open read-only in the existing Collection surface without replacing active data."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"dataset-citation-open-review","blockerCount":0,"summary":"API, data and UI owners bind lookup-only requests to the durable event, evidence and immutable bundle."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"dataset-citation-open-review","blockerCount":0,"summary":"B6.16 citation Open is bound while E6.11 analytical, scale and platform proof stays planned."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"dataset-citation-open-review","blockerCount":0,"summary":"Integrity drift, immutable revision checks, stable-row highlights and source-range metadata are tested."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"dataset-citation-open-review","blockerCount":0,"summary":"Existing API, data, UI, Playbook, Decision and trace owners absorb the slice."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Dataset summaries and pages remain strict, bounded, pathless and read-only."},
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Citation lookup and results remain strict, bounded, pathless and read-only."},
     {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision and trace locks preserve planned E6.11 and its explicit open proof."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"The exact 281-LOC discovery owner is protected and reviewed bytes are hash-bound."}
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"The exact 159-LOC citation owner is protected and reviewed bytes are hash-bound."}
   ],
   "coordination": {
-    "taskId": "dataset-discovery-20260729",
-    "taskTitle": "Library Dataset discovery and paging",
+    "taskId": "dataset-citation-open-20260729",
+    "taskTitle": "Historical Dataset citation Open",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Collection open, views and mutation CAS remain compatible.",
-    "acknowledgement": "Planning binds read-only browsing; citation highlighting and complete E6.11 proof remain separate."
+    "compatibility": "Existing active Collection browsing, paging and mutation CAS remain compatible.",
+    "acknowledgement": "Planning binds exact read-only citation Open; complete E6.11 proof remains separate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Citation-open row/range/aggregate highlighting remains open.",
     "Analytical snapshots, joins, large-scale and signed-platform proof remain open.",
-    "Dataset summaries and cursors must never become mutation or query authority."
+    "Citation lookup keys and highlights must never become mutation or query authority."
   ]
 }

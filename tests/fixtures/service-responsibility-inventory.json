@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 177,
-  "baselineLines": 94637,
+  "baselineFileCount": 178,
+  "baselineLines": 94832,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -19,7 +19,7 @@
       ["pi-agent-runtime-adapter.ts", 1398, "aprf"]
     ],
     "authority_reliability": [
-      ["agent-conversation-history.ts", 332, "r"],
+      ["agent-conversation-history.ts", 353, "r"],
       ["agent-conversation-pagination.ts", 134, "r"],
       ["agent-memory-lifecycle.ts", 507, "rd"],
       ["agent-page-update-service.ts", 1556, "rdf"],
@@ -43,6 +43,7 @@
       ["local-tool-job-recorder.ts", 90, "jr"],
       ["local-semantic-retrieval-service.ts", 354, "jpr"],
       ["managed-collection-service.ts", 984, "rd"],
+      ["managed-collection-citation-service.ts", 159, "rf"],
       ["managed-collection-view-service.ts", 733, "rdf"],
       ["local-tool-manager-service.ts", 1254, "prd"],
       ["paddle-ocr-bundle-materializer.ts", 642, "prd"],
@@ -96,7 +97,7 @@
       ["local-tool-lifecycle-store.ts", 696, "rd"],
       ["managed-collection-discovery.ts", 281, "rf"],
       ["managed-collection-column-storage.ts", 644, "rdf"],
-      ["managed-collection-storage.ts", 760, "rdf"],
+      ["managed-collection-storage.ts", 775, "rdf"],
       ["managed-collection-row-storage.ts", 579, "rdf"],
       ["markdown-page-index.ts", 429, "f"],
       ["model-provider-registry.ts", 1083, "prd"],
@@ -210,7 +211,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 177,
+    "serviceOwnerCount": 178,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,
