@@ -3,12 +3,17 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   SkillIdSchema,
+  SkillInstallSourceKindSchema,
+  SkillInstallUrlSchema,
   SkillInstallRequestIdSchema,
   SkillLifecycleRequestIdSchema,
   SkillRegistryRecordSchema,
   SkillStagingIdSchema,
+  SkillStageWarningSchema,
   VaultIdSchema,
-  type SkillRegistryRecord
+  type SkillInstallSourceKind,
+  type SkillRegistryRecord,
+  type SkillStageWarning
 } from "@pige/schemas";
 import {
   normalizeBundleFiles,
@@ -32,6 +37,9 @@ export interface SkillInstallReceipt {
   readonly manifestSha256: string;
   readonly bundleSha256: string;
   readonly enabled: boolean;
+  readonly source?: SkillInstallSourceKind;
+  readonly sourceUrl?: string;
+  readonly warnings?: readonly SkillStageWarning[];
 }
 
 export interface InstalledSkillSnapshot {
@@ -496,14 +504,35 @@ function fsyncTree(root: string): void {
 function parseInstallReceipt(source: string): SkillInstallReceipt {
   const record = parseJsonObject(source, "skill.install_receipt_invalid");
   const keys = Object.keys(record).sort().join(",");
-  if (!["bundleSha256,enabled,manifestSha256,requestId,schemaVersion,stagingId",
-    "enabled,manifestSha256,requestId,schemaVersion,stagingId"].includes(keys) ||
+  const legacyKeys = ["bundleSha256,enabled,manifestSha256,requestId,schemaVersion,stagingId",
+    "enabled,manifestSha256,requestId,schemaVersion,stagingId"];
+  const externalKeys = [
+    "bundleSha256,enabled,manifestSha256,requestId,schemaVersion,source,stagingId,warnings",
+    "bundleSha256,enabled,manifestSha256,requestId,schemaVersion,source,sourceUrl,stagingId,warnings"
+  ];
+  if (![...legacyKeys, ...externalKeys].includes(keys) ||
     record.schemaVersion !== 1 || typeof record.requestId !== "string" || typeof record.stagingId !== "string" ||
     typeof record.manifestSha256 !== "string" || typeof record.enabled !== "boolean") {
     throw lifecycleError("skill.install_receipt_invalid");
   }
   const bundleSha256 = typeof record.bundleSha256 === "string" ? record.bundleSha256 : record.manifestSha256;
   if (!/^sha256:[a-f0-9]{64}$/u.test(bundleSha256)) throw lifecycleError("skill.install_receipt_invalid");
+  if (externalKeys.includes(keys)) {
+    const parsedSource = SkillInstallSourceKindSchema.safeParse(record.source);
+    const parsedWarnings = Array.isArray(record.warnings)
+      ? record.warnings.map((warning) => SkillStageWarningSchema.safeParse(warning))
+      : [];
+    const sourceUrl = record.sourceUrl === undefined ? undefined : SkillInstallUrlSchema.safeParse(record.sourceUrl);
+    const remote = parsedSource.success && parsedSource.data === "https";
+    if (!parsedSource.success || record.enabled || parsedWarnings.length !== (record.warnings as unknown[]).length ||
+      parsedWarnings.some((warning) => !warning.success) ||
+      new Set(record.warnings as unknown[]).size !== (record.warnings as unknown[]).length ||
+      remote !== Boolean(sourceUrl?.success) ||
+      (remote && !parsedWarnings.some((warning) => warning.success && warning.data === "untrusted_remote_source")) ||
+      (!remote && parsedWarnings.some((warning) => warning.success && warning.data === "untrusted_remote_source"))) {
+      throw lifecycleError("skill.install_receipt_invalid");
+    }
+  }
   return { ...(record as unknown as Omit<SkillInstallReceipt, "bundleSha256">), bundleSha256 };
 }
 

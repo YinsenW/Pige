@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
 import {
-  PermissionCapabilitySchema,
+  deriveSkillDataBoundaries,
   SkillManifestSchema,
   SkillDiscardStagedResultSchema,
   SkillEnableRequestSchema,
@@ -16,8 +16,6 @@ import {
   SkillRegistryQueryResultSchema,
   SkillRegistrySummarySchema,
   SkillUninstallRequestSchema,
-  type SkillCapability,
-  type SkillDataBoundary,
   type SkillDisableRequest,
   type SkillDiscardStagedRequest,
   type SkillDiscardStagedResult,
@@ -65,9 +63,18 @@ const MANIFEST_FIELDS = new Set([
   "id", "name", "version", "description", "scope", "kind", "capabilities", "triggers", "author", "sourceUrl",
   "license", "updatedAt", "dataBoundary", "permissionSummary"
 ]);
-const DATA_BOUNDARY_ORDER: readonly SkillDataBoundary[] = [
-  "local", "filesystem", "network", "cloud", "brokered_credential", "destructive"
-];
+
+interface LoadedSkillManifest {
+  readonly manifest: SkillManifest;
+  readonly sha256: string;
+  readonly bundleSha256: string;
+  readonly files: readonly {
+    readonly relativePath: string;
+    readonly bytes: Buffer;
+    readonly sha256: `sha256:${string}`;
+  }[];
+  readonly receipt: SkillInstallReceipt | undefined;
+}
 
 export class SkillRegistryService {
   readonly #appDataRoot: string;
@@ -179,9 +186,10 @@ export class SkillRegistryService {
       const parsed = parseSkillManifest(candidate.bytes.toString("utf8"));
       assertSkillManifestRendererSafe(parsed);
       if (
-        parsed.scope !== "machine_local" || parsed.kind !== "pure" ||
+        parsed.scope !== "machine_local" || !isInstallableSkillKind(parsed.kind) ||
         parsed.id !== candidate.manifest.id || parsed.version !== candidate.manifest.version ||
-        digestBytes(candidate.bytes) !== request.manifestSha256
+        digestBytes(candidate.bytes) !== request.manifestSha256 ||
+        (parsed.kind === "external_web" && request.enabled)
       ) return skillInstallFailed(request.requestId, "unavailable");
       const update = candidate.update;
       const existingIndex = current.skills.findIndex((skill) => skill.id === parsed.id);
@@ -190,8 +198,17 @@ export class SkillRegistryService {
         return this.#sourceUpdate.commit(request, candidate, parsed, current, staging, mutationLock.assertOwned);
       }
 
+      const warnings = [
+        ...(candidate.source === "https" ? ["untrusted_remote_source" as const] : []),
+        ...(this.hasTriggerOverlap(parsed) ? ["trigger_overlap" as const] : [])
+      ];
       const receipt: SkillInstallReceipt = { schemaVersion: 1, requestId: request.requestId, stagingId: request.stagingId,
-        manifestSha256: request.manifestSha256, bundleSha256: request.bundleSha256, enabled: request.enabled };
+        manifestSha256: request.manifestSha256, bundleSha256: request.bundleSha256, enabled: request.enabled,
+        ...(parsed.kind === "external_web" ? {
+          source: candidate.source,
+          ...(candidate.sourceUrl ? { sourceUrl: candidate.sourceUrl } : {}),
+          warnings
+        } : {}) };
       this.#lifecycleStore.publishInstalled(parsed.id, candidate.files, receipt);
       if (current.revision === Number.MAX_SAFE_INTEGER) throw skillError("skill.registry_revision_exhausted", "Skill Registry revision is exhausted.");
       const now = new Date().toISOString();
@@ -442,7 +459,7 @@ export class SkillRegistryService {
       loaded.manifest.id !== record.id ||
       loaded.manifest.version !== record.version ||
       loaded.manifest.scope !== "machine_local" ||
-      loaded.manifest.kind === "package_provided"
+      !isInstallableSkillKind(loaded.manifest.kind)
     ) {
       throw skillError("skill.manifest_changed", "Installed Skill identity no longer matches its registry record.");
     }
@@ -460,13 +477,16 @@ export class SkillRegistryService {
       enabled: record.enabled,
       trust: record.trust,
       capabilities: loaded.manifest.capabilities,
-      dataBoundaries: deriveDataBoundaries(loaded.manifest.capabilities),
+      dataBoundaries: loaded.manifest.kind === "pure"
+        ? ["local"]
+        : [...deriveSkillDataBoundaries(loaded.manifest.capabilities)],
       ...(loaded.manifest.author ? { author: loaded.manifest.author } : {}),
       ...(loaded.manifest.license ? { license: loaded.manifest.license } : {}),
       canEnable: !record.enabled && loaded.manifest.kind === "pure",
       canUninstall: loaded.manifest.kind === "pure",
       canExport: loaded.manifest.kind === "pure",
-      canUpdate: canUpdateSkill(loaded.manifest)
+      canUpdate: canUpdateSkill(loaded.manifest),
+      ...(loaded.manifest.kind === "external_web" ? installedExternalDisclosure(loaded) : {})
     };
   }
 
@@ -557,14 +577,14 @@ export class SkillRegistryService {
     }
   }
 
-  #readManifest(skillId: string): { readonly manifest: SkillManifest; readonly sha256: string } {
+  #readManifest(skillId: string): LoadedSkillManifest {
     try {
-      const { bytes, sha256, bundleSha256 } = this.#lifecycleStore.readInstalled(skillId);
+      const { bytes, sha256, bundleSha256, files } = this.#lifecycleStore.readInstalled(skillId);
       const receipt = this.#lifecycleStore.readInstallReceipt(skillId);
       if (receipt && receipt.bundleSha256 !== bundleSha256) throw skillError("skill.manifest_changed", "Installed Skill bundle changed after review.");
       const source = bytes.toString("utf8");
       if (source.includes("\uFFFD")) throw skillError("skill.manifest_invalid", "Installed Skill manifest is not valid UTF-8.");
-      return { manifest: parseSkillManifest(source), sha256 };
+      return { manifest: parseSkillManifest(source), sha256, bundleSha256, files, receipt };
     } catch (caught) {
       if (caught instanceof PigeDomainError) throw caught;
       throw skillError("skill.manifest_invalid", "Installed Skill manifest is unavailable or invalid.");
@@ -710,45 +730,26 @@ function parseScalar(value: string): string {
   return value;
 }
 
-function deriveDataBoundaries(capabilities: readonly SkillCapability[]): SkillDataBoundary[] {
-  const boundaries = new Set<SkillDataBoundary>();
-  for (const capability of capabilities) {
-    if (!PermissionCapabilitySchema.safeParse(capability).success) {
-      boundaries.add("local");
-      continue;
-    }
-    switch (capability) {
-      case "read_vault":
-      case "write_vault":
-      case "change_settings":
-      case "spawn_agent":
-        boundaries.add("local");
-        break;
-      case "delete_vault":
-      case "change_pige_schema":
-        boundaries.add("destructive");
-        break;
-      case "external_filesystem":
-      case "run_shell":
-      case "install_local_tool":
-        boundaries.add("filesystem");
-        break;
-      case "external_network":
-        boundaries.add("network");
-        break;
-      case "install_package":
-        boundaries.add("network");
-        boundaries.add("filesystem");
-        break;
-      case "call_cloud_model_with_private_or_large_source":
-        boundaries.add("cloud");
-        break;
-      case "use_brokered_credential":
-        boundaries.add("brokered_credential");
-        break;
-    }
+function isInstallableSkillKind(kind: SkillManifest["kind"]): kind is "pure" | "external_web" { return kind !== "package_provided"; }
+
+function installedExternalDisclosure(loaded: LoadedSkillManifest) {
+  const receipt = loaded.receipt;
+  if (!receipt?.source || !receipt.warnings || receipt.enabled ||
+    (receipt.source === "https") !== Boolean(receipt.sourceUrl)) {
+    throw skillError("skill.install_receipt_invalid", "External/Web Skill review provenance is unavailable.");
   }
-  return DATA_BOUNDARY_ORDER.filter((boundary) => boundaries.has(boundary));
+  return {
+    source: receipt.source,
+    ...(receipt.sourceUrl ? { sourceUrl: receipt.sourceUrl } : {}),
+    manifestSha256: loaded.sha256,
+    bundleSha256: loaded.bundleSha256,
+    files: loaded.files.map((file) => ({
+      relativePath: file.relativePath,
+      utf8ByteSize: file.bytes.length,
+      sha256: file.sha256
+    })),
+    warnings: [...receipt.warnings]
+  };
 }
 
 function readBoundedNoFollow(filePath: string, maximumBytes: number): string | undefined {

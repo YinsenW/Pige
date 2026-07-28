@@ -5,6 +5,7 @@ import {
   SkillStageUpdateResultSchema,
   type SkillInstallStagedRequest,
   type SkillInstallStagedResult,
+  type SkillInstallSourceKind,
   type SkillManifest,
   type SkillRegistryFile,
   type SkillRegistryRecord,
@@ -39,6 +40,7 @@ export interface SkillStagedInstallCandidate {
   readonly stagingId: string;
   readonly requestId: string;
   readonly sourceUrl?: string;
+  readonly source: SkillInstallSourceKind;
   readonly manifestSha256: string;
   readonly bundleSha256: string;
   readonly expiresAt: string;
