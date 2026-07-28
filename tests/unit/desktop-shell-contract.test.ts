@@ -76,6 +76,9 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly rollback: (");
     expect(contractsSource).toContain("request: PiPackageRollbackRequest");
     expect(contractsSource).toContain("Promise<PiPackageRollbackResult>");
+    expect(contractsSource).toContain("readonly setPinned: (");
+    expect(contractsSource).toContain("request: PiPackageSetPinnedRequest");
+    expect(contractsSource).toContain("Promise<PiPackageSetPinnedResult>");
     expect(packageApi).toContain('ipcRenderer.invoke("piPackages.summary")');
     expect(packageApi).toContain('"piPackages.install"');
     expect(packageApi).toContain("PiPackageInstallRequestSchema.parse(request)");
