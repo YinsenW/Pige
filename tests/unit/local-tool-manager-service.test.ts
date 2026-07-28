@@ -295,6 +295,97 @@ describe("local tool manager service", () => {
     expect(harness.selfTest.calls).toHaveLength(selfTestsBefore);
   });
 
+  it("leases only a verified enabled runtime with its private package identity", async () => {
+    const fixture = createFakeLocalToolFixture(path.join(makeTempRoot("runtime-lease"), "fixture"));
+    const harness = makeHarness({ tools: [toToolDefinition(fixture)] });
+    await harness.service.install(installRequest(fixture, "request-runtime-lease-install"));
+
+    const result = await harness.service.withVerifiedRuntime("fake_ocr", (runtime) => {
+      expect(runtime).toMatchObject({
+        toolId: "fake_ocr",
+        version: "1.0.0",
+        manifestSha256: fixture.packageSha256
+      });
+      expect(runtime.rootPath.startsWith(`${harness.localToolRoot}${path.sep}`)).toBe(true);
+      expect(fs.readFileSync(path.join(runtime.rootPath, "bin", "fake-ocr.txt"), "utf8")).toBe("fake-local-tool\n");
+      return "leased";
+    });
+
+    expect(result).toBe("leased");
+  });
+
+  it("rejects a tampered active package before exposing a runtime path", async () => {
+    const fixture = createFakeLocalToolFixture(path.join(makeTempRoot("runtime-tamper"), "fixture"));
+    const harness = makeHarness({ tools: [toToolDefinition(fixture)] });
+    await harness.service.install(installRequest(fixture, "request-runtime-tamper-install"));
+    const record = JSON.parse(fs.readFileSync(
+      path.join(harness.localToolRoot, "records", "fake_ocr.json"), "utf8"
+    )) as { activeRelativePath: string };
+    fs.writeFileSync(
+      path.join(harness.localToolRoot, record.activeRelativePath, "bin", "fake-ocr.txt"),
+      "tampered\n"
+    );
+    let called = false;
+
+    await expect(harness.service.withVerifiedRuntime("fake_ocr", () => { called = true; }))
+      .rejects.toMatchObject({ code: "settings.local_tool_repair_required" });
+    expect(called).toBe(false);
+  });
+
+  it("rejects removal and disable before effect while a verified runtime lease is active", async () => {
+    const fixture = createFakeLocalToolFixture(path.join(makeTempRoot("runtime-contention"), "fixture"));
+    const harness = makeHarness({ tools: [toToolDefinition(fixture)] });
+    await harness.service.install(installRequest(fixture, "request-runtime-contention-install"));
+    let release!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const blocker = new Promise<void>((resolve) => { release = resolve; });
+    const leased = harness.service.withVerifiedRuntime("fake_ocr", async () => {
+      entered();
+      await blocker;
+    });
+    await started;
+
+    const removed = harness.service.remove(targetRequest(fixture, "request-runtime-contention-remove"));
+    const disabled = harness.service.setEnabled({
+      ...targetRequest(fixture, "request-runtime-contention-disable"),
+      enabled: false
+    });
+    expect(removed.job).toMatchObject({
+      state: "failed_retryable",
+      error: { code: "settings.local_tool_runtime_in_use" }
+    });
+    expect(disabled.job).toMatchObject({
+      state: "failed_retryable",
+      error: { code: "settings.local_tool_runtime_in_use" }
+    });
+    expect(harness.service.inspect("fake_ocr")).toMatchObject({ enabled: true, routable: true });
+
+    release();
+    await leased;
+  });
+
+  it("releases the runtime lease after callback completion and callback failure", async () => {
+    const fixture = createFakeLocalToolFixture(path.join(makeTempRoot("runtime-release"), "fixture"));
+    const harness = makeHarness({ tools: [toToolDefinition(fixture)] });
+    await harness.service.install(installRequest(fixture, "request-runtime-release-install"));
+
+    await harness.service.withVerifiedRuntime("fake_ocr", async () => undefined);
+    expect(harness.service.setEnabled({
+      ...targetRequest(fixture, "request-runtime-release-disable"), enabled: false
+    }).job.state).toBe("completed");
+    expect(harness.service.setEnabled({
+      ...targetRequest(fixture, "request-runtime-release-enable"), enabled: true
+    }).job.state).toBe("completed");
+
+    const callbackFailure = new Error("synthetic runtime failure");
+    await expect(harness.service.withVerifiedRuntime("fake_ocr", async () => {
+      throw callbackFailure;
+    })).rejects.toBe(callbackFailure);
+    expect(harness.service.remove(targetRequest(fixture, "request-runtime-release-remove")).job.state)
+      .toBe("completed");
+  });
+
   it.each(["agent", "ingest", "system", "background", "model", "source", "skill", "package"])(
     "rejects %s origin before permission, Job, or filesystem mutation",
     async (origin) => {

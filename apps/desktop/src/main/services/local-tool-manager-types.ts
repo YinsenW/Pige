@@ -109,6 +109,13 @@ export interface LocalToolHealthResult {
   >[];
 }
 
+export interface LocalToolVerifiedRuntime {
+  readonly toolId: string;
+  readonly rootPath: string;
+  readonly version: string;
+  readonly manifestSha256: string;
+}
+
 export interface LocalToolAuthorityRequest {
   readonly requestId: string;
   readonly userOrigin: string;
