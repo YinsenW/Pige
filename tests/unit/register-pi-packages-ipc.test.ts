@@ -110,9 +110,10 @@ describe("registerPiPackagesIpc", () => {
     expect(untrusted.summary).not.toHaveBeenCalled();
 
     const noVault = makeHarness({ getActiveVaultId: () => undefined });
+    await expect(call(noVault, "piPackages.summary")).resolves.toEqual({ status: "ready", registry });
     await expect(call(noVault, "piPackages.install", request)).resolves.toMatchObject({ status: "failed" });
     expect(noVault.install).not.toHaveBeenCalled();
-    expect(noVault.summary).not.toHaveBeenCalled();
+    expect(noVault.summary).toHaveBeenCalledOnce();
   });
 
   it("fails closed when the active vault changes while install is running", async () => {

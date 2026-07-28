@@ -24,11 +24,9 @@ const REQUEST_PREFIX = "pi_package_request_";
 
 export function registerPiPackagesIpc(options: RegisterPiPackagesIpcOptions): void {
   options.ipcMain.handle("piPackages.summary", async (event) => {
-    const vaultId = trustedActiveVault(options, event.sender);
-    if (!vaultId) return failedSummary();
-
+    if (!options.isTrustedSender(event.sender)) return failedSummary();
     const result = await readSummary(options);
-    return trustedActiveVault(options, event.sender) === vaultId ? result : failedSummary();
+    return options.isTrustedSender(event.sender) ? result : failedSummary();
   });
 
   options.ipcMain.handle("piPackages.install", async (event, request: unknown) => {
