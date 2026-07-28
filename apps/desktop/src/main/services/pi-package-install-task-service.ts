@@ -147,6 +147,14 @@ export class PiPackageInstallTaskService {
         const latest = this.#currentContext();
         latest.assertCurrent();
         if (!sameContext(record.binding, latest)) throw taskBindingChanged();
+        const registry = this.#registry();
+        const installedByThisTask = registry.revision === request.expectedRegistryRevision + 1 &&
+          registry.packages.some((candidate) =>
+            candidate.packageName === request.packageName && candidate.version === request.version
+          );
+        if (registry.revision !== request.expectedRegistryRevision && !installedByThisTask) {
+          throw taskBindingChanged();
+        }
       };
       const turn: PermissionedExternalTurnContext = {
         ...currentContext,

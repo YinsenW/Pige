@@ -166,6 +166,24 @@ describe("PiPackageInstallTaskService", () => {
     expect(fixture.confirmations.pending()).toMatchObject({ status: "none" });
     currentPolicyHash = fixture.context.policyHash;
   });
+
+  it("rejects registry revision drift while confirmation is pending", async () => {
+    const fixture = createFixture();
+    const execution = fixture.service.install(request, new AbortController().signal);
+    await vi.waitFor(() => expect(fixture.confirmations.pending()).toMatchObject({ status: "pending" }));
+    fixture.replaceRegistry({ apiVersion: 1, revision: 1, packages: [] });
+    const pending = fixture.confirmations.pending();
+    if (pending.status !== "pending") throw new Error("Expected package confirmation.");
+    await fixture.confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: pending.confirmation.confirmationId,
+      expectedRevision: pending.revision,
+      decision: "allow"
+    });
+
+    await expect(execution).resolves.toMatchObject({ status: "failed", registry: { revision: 1 } });
+    expect(fixture.execute).not.toHaveBeenCalled();
+  });
 });
 
 function createFixture(input: { revision?: number } = {}) {
@@ -229,6 +247,9 @@ function createFixture(input: { revision?: number } = {}) {
     confirmations,
     context,
     execute,
+    replaceRegistry: (next: PiPackageRegistrySummary) => {
+      registry = next;
+    },
     service: makeService(),
     restart: () => {
       const restartedConfirmations = new HighRiskConfirmationService();

@@ -32,13 +32,11 @@ const MAX_REDIRECTS = 3;
 const OWNER_MARKER = ".pige-package-owner.json";
 const REGISTRY_ORIGIN = "https://registry.npmjs.org";
 const ACTIVE_PACKAGE_LOCKS = new Set<string>();
-
 export interface PiPackageInstallRequest {
   readonly requestId: string;
   readonly packageName: string;
   readonly version: string;
 }
-
 export interface PiPackageInstallSummary {
   readonly status: "installed_disabled";
   readonly packageId: string;
@@ -49,7 +47,6 @@ export interface PiPackageInstallSummary {
   readonly dependencyCount: number;
   readonly requiresEnable: true;
 }
-
 interface ResolvedPackagePlan {
   readonly packageName: string;
   readonly version: string;
@@ -59,7 +56,6 @@ interface ResolvedPackagePlan {
   readonly dependencyCount: number;
   readonly manifestHash: string;
 }
-
 interface PackageRecord extends Omit<PiPackageInstallSummary, "status" | "revision" | "requiresEnable"> {
   readonly treeHash: string;
   readonly archiveHash: string;
@@ -71,18 +67,15 @@ interface PackageRecord extends Omit<PiPackageInstallSummary, "status" | "revisi
   readonly trust: "community";
   readonly requests: readonly PackageRequestRecord[];
 }
-
 interface PackageRequestRecord {
   readonly requestId: string;
   readonly revision: number;
 }
-
 interface PackageRegistryFile {
   readonly schemaVersion: 1;
   readonly revision: number;
   readonly packages: readonly PackageRecord[];
 }
-
 interface PackageOwnerMarker {
   readonly schemaVersion: 1;
   readonly requestId: string;
@@ -90,20 +83,16 @@ interface PackageOwnerMarker {
   readonly packageName: string;
   readonly version: string;
 }
-
 interface FetchTarget {
   readonly url: string;
   readonly hostname: string;
   readonly addresses: readonly string[];
 }
-
 interface FetchResponseHandle {
   readonly response: Response;
   dispose(): Promise<void>;
 }
-
 type FetchImplementation = (url: string, init: RequestInit & { readonly dispatcher?: Dispatcher }) => Promise<Response>;
-
 export interface PiPackageManagerOptions {
   readonly appDataRoot: string;
   readonly fetchImpl?: typeof fetch;
@@ -112,7 +101,6 @@ export interface PiPackageManagerOptions {
   readonly processAlive?: (pid: number) => boolean;
   readonly testOnlyMaxExtractedEntries?: number;
 }
-
 export class PiPackageManagerService {
   readonly #root: string;
   readonly #installedRoot: string;
@@ -149,17 +137,11 @@ export class PiPackageManagerService {
   summary(): PiPackageRegistrySummary {
     const registry = this.#readRegistry();
     return PiPackageRegistrySummarySchema.parse({
-      apiVersion: 1,
-      revision: registry.revision,
+      apiVersion: 1, revision: registry.revision,
       packages: registry.packages.map((record) => ({
-        packageId: record.packageId,
-        packageName: record.packageName,
-        version: record.version,
-        state: "installed_disabled",
-        packageTypes: record.packageTypes,
-        dependencyCount: record.dependencyCount,
-        enabled: false,
-        trust: "community"
+        packageId: record.packageId, packageName: record.packageName, version: record.version,
+        state: "installed_disabled", packageTypes: record.packageTypes,
+        dependencyCount: record.dependencyCount, enabled: false, trust: "community"
       }))
     });
   }
