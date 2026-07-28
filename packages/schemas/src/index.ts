@@ -4032,6 +4032,7 @@ export const AgentConversationTurnSummarySchema = z.object({
   jobId: JobIdSchema,
   userEventId: ConversationEventIdSchema,
   state: JobStateSchema,
+  proposalId: ProposalIdSchema.optional(),
   error: PigeErrorSummarySchema.optional()
 }).strict();
 export const AgentConversationInitialRequestSchema = z.object({
@@ -4146,6 +4147,7 @@ export const AgentSubmitTurnResultSchema = z.discriminatedUnion("state", [
     conversationId: ConversationIdSchema,
     tailEventId: ConversationEventIdSchema,
     state: z.literal("waiting"),
+    proposalId: ProposalIdSchema.optional(),
     error: PigeErrorSummarySchema
   }).strict(),
   AgentSubmitTurnFailedResultSchema
@@ -4157,6 +4159,80 @@ export const AgentStagedSubmitTurnResultSchema = z.union([
 export const AgentSubmitTurnIpcResultSchema = z.union([
   AgentSubmitTurnAcceptedResultSchema,
   AgentSubmitTurnResultSchema
+]);
+
+export const CurrentNoteAppendProposalIdSchema = ProposalIdSchema;
+export const CurrentNoteAppendProposalStateSchema = z.enum([
+  "ready",
+  "resolving",
+  "applied",
+  "rejected",
+  "conflicted"
+]);
+export const CurrentNoteAppendProposalLineSchema = z.object({
+  kind: z.enum(["context", "added"]),
+  text: z.string().min(1).max(160)
+}).strict();
+export const CurrentNoteAppendProposalPreviewSchema = z.object({
+  proposalId: CurrentNoteAppendProposalIdSchema,
+  kind: z.literal("append_current_note"),
+  state: CurrentNoteAppendProposalStateSchema,
+  revision: z.number().int().min(1),
+  activeVaultId: VaultIdSchema,
+  pageId: PageIdSchema,
+  jobId: JobIdSchema,
+  lines: z.array(CurrentNoteAppendProposalLineSchema).max(8)
+}).strict();
+export const CurrentNoteAppendProposalGetRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  pageId: PageIdSchema,
+  jobId: JobIdSchema,
+  proposalId: CurrentNoteAppendProposalIdSchema
+}).strict();
+export const CurrentNoteAppendProposalGetResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("available"),
+    proposal: CurrentNoteAppendProposalPreviewSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("unavailable"),
+    reason: z.enum(["not_found", "vault_changed", "binding_changed", "record_invalid"])
+  }).strict()
+]);
+export const CurrentNoteAppendProposalDecisionRequestSchema = CurrentNoteAppendProposalGetRequestSchema.extend({
+  expectedRevision: z.number().int().min(1),
+  decision: z.enum(["approve", "reject"])
+}).strict();
+export const CurrentNoteAppendProposalDecisionResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("applied"),
+    proposal: CurrentNoteAppendProposalPreviewSchema,
+    operationId: OperationIdSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("rejected"),
+    proposal: CurrentNoteAppendProposalPreviewSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("conflicted"),
+    proposal: CurrentNoteAppendProposalPreviewSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("stale"),
+    proposal: CurrentNoteAppendProposalPreviewSchema.optional()
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("failed"),
+    error: PigeErrorSummarySchema
+  }).strict()
 ]);
 
 export const ReaderSelectionActionRequestIdSchema = z.string()
@@ -5360,6 +5436,14 @@ export type AgentSubmitTurnResult = z.output<typeof AgentSubmitTurnResultSchema>
 export type AgentSubmitTurnAcceptedResult = z.output<typeof AgentSubmitTurnAcceptedResultSchema>;
 export type AgentStagedSubmitTurnResult = z.output<typeof AgentStagedSubmitTurnResultSchema>;
 export type AgentSubmitTurnIpcResult = z.output<typeof AgentSubmitTurnIpcResultSchema>;
+export type CurrentNoteAppendProposalId = z.infer<typeof CurrentNoteAppendProposalIdSchema>;
+export type CurrentNoteAppendProposalState = z.infer<typeof CurrentNoteAppendProposalStateSchema>;
+export type CurrentNoteAppendProposalLine = z.infer<typeof CurrentNoteAppendProposalLineSchema>;
+export type CurrentNoteAppendProposalPreview = z.infer<typeof CurrentNoteAppendProposalPreviewSchema>;
+export type CurrentNoteAppendProposalGetRequest = z.infer<typeof CurrentNoteAppendProposalGetRequestSchema>;
+export type CurrentNoteAppendProposalGetResult = z.infer<typeof CurrentNoteAppendProposalGetResultSchema>;
+export type CurrentNoteAppendProposalDecisionRequest = z.infer<typeof CurrentNoteAppendProposalDecisionRequestSchema>;
+export type CurrentNoteAppendProposalDecisionResult = z.infer<typeof CurrentNoteAppendProposalDecisionResultSchema>;
 export type CaptureFileRejection = z.output<typeof CaptureFileRejectionSchema>;
 export type CaptureFileRejectionReason = z.output<typeof CaptureFileRejectionReasonSchema>;
 export type AgentAnswerCitation = z.infer<typeof AgentAnswerCitationSchema>;

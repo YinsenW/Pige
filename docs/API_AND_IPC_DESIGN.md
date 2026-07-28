@@ -472,41 +472,32 @@ Current bridge queries:
 
 Reader edit contract:
 
-- `notes.openEditor` binds version/request/vault/page/render; `ready` returns exact bounded Markdown
-  plus opaque revision. `notes.saveEditor` adds that revision and exact untrimmed draft.
-- Main revalidates no-follow page/frontmatter/link/citation identity, CAS-writes, records reversible
-  `update_page`, and returns revision/Operation/render. Stale returns current revision and preserves
-  draft/Reader; invalid has a closed reason; other failures are body-free.
-- Source pages, lifecycle, merge/rich text and path/hash/error projection are absent.
+- `openEditor` binds request/vault/page/render and returns bounded Markdown plus revision;
+  `saveEditor` adds revision/draft. Main revalidates page/frontmatter/links/citations and CAS-writes
+  `update_page`. Stale preserves draft/Reader; failures are closed/body-free. Source pages, merge,
+  rich text and path/hash/error projection are absent.
 
 Reader reference query contract:
 
-- `notes.openSourceReference` accepts version/request/vault/current page/render/source ID;
-  NotesService rereads page membership, Source Record and source page.
-- `resolved` adds `target.pageId`; body-free `unresolved | not_found | stale | mismatch | changed`
-  retains Reader. The registrar exposes no record/locator/hash/candidate/error or ambient authority.
+- `notes.openSourceReference` accepts request/vault/page/render/source ID; NotesService rereads
+  membership and records. Only `resolved` adds `target.pageId`; body-free `unresolved | not_found |
+  stale | mismatch | changed` retains Reader and grants no authority.
 
 Reader selection uses queries `readerSelection.resolve`, `readerSelection.currentProposal`
 and commands `readerSelection.submitAction`, `readerSelection.submitTransform`,
 `readerSelection.submitLink`, `readerSelection.decideProposal`:
 
-- `resolve` takes version/request/vault/page/render-context plus anchor/focus
-  `{segmentId,utf16Offset}`. `resolved` returns only page ID/hash, a non-empty <=64 KiB
-  `utf8_bytes` span and content hash. Other states are body-free `invalid`, scoped `stale`
-  or `failed`.
-- Action/transform bind request, resolved identity and locale/client-turn; results expose
-  correlation, Job/conversation/tail, body-free error, Operation or bounded preview;
-  Main owns instructions, replacement, CAS and apply.
-- `submitLink` adds `link` but no target. Pi selects an opaque search ref;
-  Main fences pages, appends one reversible `update_page`, and returns safe current/target
-  page/Operation identity. Unknown/ambiguous/self/existing/drift fails closed; recovery
-  adopts one link/Operation.
-- Preview is opaque ID/action/state/revision plus <=8 context/removed/added lines of <=160
-  characters. `currentProposal` returns it or a body-free failure; `decideProposal` binds
-  proposal/revision/approve-or-reject.
-- Renderer text, paths, bodies, hashes, replacements, targets and raw proposal data never
-  cross. It correlates requests; `Later` stays local, refresh uses `notes.render`, and
-  Activity/Undo remains Operation-owned.
+- `resolve` binds vault/page/render and anchor/focus offsets; success returns a <=64 KiB span plus
+  hashes. Actions bind it and locale/client turn; Main owns instructions, CAS and apply.
+- Link has no renderer target: Pi selects an opaque ref, Main fences both pages and publishes one
+  reversible `update_page`; invalid/self/existing/drift fails closed and recovery adopts one effect.
+- Preview exposes opaque identity/state/revision and <=8 lines of <=160 characters. Decisions bind
+  revision; paths, bodies, replacements, targets and raw proposals stay Main-only. `Later` is local,
+  refresh uses `notes.render`, and Activity owns Undo.
+
+Current-note append stays under `agent.submitTurn`: after exact read, Main accepts <=16 KiB with
+`evidenceRefs:["citation_1"]`, then CAS-writes Agent `update_page` or returns a bound proposal.
+Its API exposes identity plus <=8 lines; drift conflicts and private data stays Main-only.
 
 Current Home Dataset read boundary:
 

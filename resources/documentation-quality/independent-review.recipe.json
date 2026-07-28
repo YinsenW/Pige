@@ -23,12 +23,14 @@
       "docs/PARSER_INGEST_SPEC.md",
       "docs/UI_PROTOTYPE.md",
       "docs/API_AND_IPC_DESIGN.md",
+      "docs/AGENT_RUNTIME_POLICY_CONTEXT.md",
       "docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md",
       "docs/AGENT_MEMORY_DESIGN.md",
       "docs/DATA_ARCHITECTURE.md",
       "docs/SOURCE_STORAGE_STRATEGY.md",
       "docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md",
       "docs/JOB_OPERATION_AND_RECOVERY.md",
+      "docs/MARKDOWN_SCHEMA.md",
       "docs/SKILL_EXTENSION_DESIGN.md",
       "docs/QUALITY_AND_TEST_STRATEGY.md",
       "docs/V0_1_IMPLEMENTATION_PLAYBOOK.md",
@@ -48,14 +50,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of the signed PaddleOCR r3 catalog: exact release identity, platform locks, complete legal inventory, offline materialization and lifecycle boundaries.",
+    "scope": "Independent Planning review of the current-note cited append contract: typed evidence, exact-page CAS, bounded stale review, durable Operation identity and restart-safe publication.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "8264d7e603ce421e2cebe33ed5eab2c99ba83f5ee9b324b9266d3c7987096fd4"
+    "reviewedSha256": "81be3cf60b88edf66b3265c6decae3143bfdeab3a92ef47f86443e12d06849c4"
   },
   "reviewers": [{
-    "reviewerId": "paddleocr-r3-release-review",
-    "task": "Managed PaddleOCR r3 release catalog",
+    "reviewerId": "current-note-cited-append-review",
+    "task": "Current-note cited append contract",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -63,33 +65,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed dependency, catalog, signing, legal and responsibility owners; Development independently produced the release builder, runtime, artifacts and lifecycle evidence."
+    "independence": "Planning reviewed typed authority, citation, CAS, proposal, Operation and recovery boundaries; Development owns the disjoint Main, preload and renderer implementation evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"paddleocr-r3-release-review","blockerCount":0,"summary":"Explicit install, verify, test, disable, enable and remove stay Main-owned; ordinary OCR never downloads dependencies."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"paddleocr-r3-release-review","blockerCount":0,"summary":"Architecture, dependency registry, parser catalog, signing key, platform locks and legal roots bind the same r3 artifacts."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"paddleocr-r3-release-review","blockerCount":0,"summary":"The release catalog is available without promoting the broader PaddleOCR requirement or exit status."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"paddleocr-r3-release-review","blockerCount":0,"summary":"Exact artifact, signature, tree, wrapper, SBOM, wheel-lock and legal-integrity gates support reproducible release maintenance."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"paddleocr-r3-release-review","blockerCount":0,"summary":"Existing architecture, dependency, parser, decision and inventory owners absorb the release facts without a new design document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"current-note-cited-append-review","blockerCount":0,"summary":"The current-note turn remains the sole entry; applied and review-required outcomes refresh only the bound Reader, Activity and proposal state."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"current-note-cited-append-review","blockerCount":0,"summary":"Schema, API, runtime policy, context, Markdown, Job and architecture owners bind the same exact-page append and review contract."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"current-note-cited-append-review","blockerCount":0,"summary":"Acceptance records the frozen interface while leaving implementation, assembled evidence and broader note mutation explicitly open."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"current-note-cited-append-review","blockerCount":0,"summary":"A bounded private append owner, typed publication result and feature-specific review API give Development stable disjoint seams."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"current-note-cited-append-review","blockerCount":0,"summary":"Existing owner documents and one durable Decision hold the contract without a new design document or duplicated proposal framework."}
   ],
   "verification": [
-    {"command":"npm run verify:parser-manifests && npm run verify:dependencies","status":"passed","evidence":"Both available r3 bundles bind exact Ed25519 signatures, platform locks, legal roots and zero-NOASSERTION inventories."},
-    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Architecture, dependency, release-bundle and durable-decision owners agree on the signed offline catalog."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"All six new service owners and directly changed LOC are inventoried; the reviewed snapshot binds the exact release contract."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict proposal, conversation and submit-result schemas agree with the renderer-safe desktop contract."},
+    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"The durable Decision, acceptance row and independent semantic claim bind the same unpromoted feature slice."},
+    {"command":"npm run verify:documentation-leanness && npm run verify:independent-documentation-review","status":"passed","evidence":"The existing owner set absorbs the contract and the exact governed snapshot is independently hash-bound."}
   ],
   "coordination": {
-    "taskId": "paddleocr-r3-release-20260728",
-    "taskTitle": "Managed PaddleOCR r3 release catalog",
+    "taskId": "current-note-cited-append-20260728",
+    "taskTitle": "Current-note cited append contract",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Native-first OCR routing remains; explicit PaddleOCR installation supplies the reviewed offline fallback without hidden package resolution.",
-    "acknowledgement": "Planning binds exact r3 release and legal identities only; broader acceptance, background update, purge and platform evidence remain open."
+    "compatibility": "Existing current-note read, citation, update_page Activity and Reader refresh owners remain compatible; selection transforms and user editor authority are unchanged.",
+    "acknowledgement": "Planning freezes the interface and owner boundary only; Development implementation, assembled restart evidence and broader note mutation remain open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "The release remains explicit-download and prerelease-scoped; ordinary capture and OCR never install it implicitly.",
-    "Any artifact, signature, tree, wrapper, lock, legal-file or runtime identity drift fails closed before adoption.",
-    "Broader update, progress, cancellation, purge and packaged Windows acceptance remain outside this bind."
+    "citation_1 proves the inspected current-note revision, not independent source authority; existing citations are preserved and no new locator is invented.",
+    "Page, vault, Job, revision or proposal drift fails closed to bounded review or conflict without silent overwrite.",
+    "Broader note transforms, source-backed append inference and assembled restart evidence remain outside this interface freeze."
   ]
 }
