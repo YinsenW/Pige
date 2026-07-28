@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       commit:
-        description: Exact 40-character commit containing reviewed available bundle records
+        description: Exact reviewed catalog commit containing available bundle records
         required: true
         type: string
       tag:
-        description: Existing immutable paddleocr-local-v* tag at that commit
+        description: Existing immutable paddleocr-local-v* bundle tag
         required: true
         type: string
   push:
@@ -43,6 +43,7 @@ jobs:
           PIGE_REQUESTED_COMMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.commit || github.sha }}
           PIGE_REQUESTED_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           PIGE_REPOSITORY: ${{ github.repository }}
+          PIGE_PARSER_MANIFEST: resources/parser-manifests/paddleocr-local.parser.manifest.json
         run: |
           set -euo pipefail
           test "$PIGE_REPOSITORY" = "YinsenW/Pige"
@@ -50,7 +51,11 @@ jobs:
           [[ "$PIGE_REQUESTED_TAG" =~ ^paddleocr-local-v[0-9][0-9A-Za-z._-]*$ ]]
           [[ ! "$PIGE_REQUESTED_TAG" =~ ^v ]]
           test "$(git rev-parse HEAD)" = "$PIGE_REQUESTED_COMMIT"
-          test "$(git rev-parse "refs/tags/$PIGE_REQUESTED_TAG^{commit}")" = "$PIGE_REQUESTED_COMMIT"
+          release_commit="$(git rev-parse "refs/tags/$PIGE_REQUESTED_TAG^{commit}")"
+          manifest_tag="$(node -e 'const fs=require("node:fs");const value=JSON.parse(fs.readFileSync(process.env.PIGE_PARSER_MANIFEST,"utf8"));process.stdout.write(value.releaseTag ?? "")')"
+          manifest_target="$(node -e 'const fs=require("node:fs");const value=JSON.parse(fs.readFileSync(process.env.PIGE_PARSER_MANIFEST,"utf8"));process.stdout.write(value.releaseTagTarget ?? "")')"
+          test "$manifest_tag" = "$PIGE_REQUESTED_TAG"
+          test "$manifest_target" = "$release_commit"
           printf 'commit=%s\n' "$PIGE_REQUESTED_COMMIT" >> "$GITHUB_OUTPUT"
           printf 'tag=%s\n' "$PIGE_REQUESTED_TAG" >> "$GITHUB_OUTPUT"
 
@@ -107,9 +112,9 @@ jobs:
 
       - name: Materialize ephemeral Ed25519 private key
         env:
-          PADDLEOCR_RELEASE_PRIVATE_KEY_BASE64: ${{ secrets.PADDLEOCR_RELEASE_ED25519_PRIVATE_KEY_BASE64 }}
+          PIGE_PADDLEOCR_BUNDLE_SIGNING_KEY_PEM: ${{ secrets.PIGE_PADDLEOCR_BUNDLE_SIGNING_KEY_PEM }}
         run: |
-          node -e "const fs=require('node:fs');const value=process.env.PADDLEOCR_RELEASE_PRIVATE_KEY_BASE64;if(!value)throw new Error('Missing PaddleOCR release key.');fs.mkdirSync(process.env.RUNNER_TEMP+'/paddleocr-key',{recursive:true,mode:0o700});fs.writeFileSync(process.env.RUNNER_TEMP+'/paddleocr-key/private.pem',Buffer.from(value,'base64'),{mode:0o600,flag:'wx'});"
+          node -e "const fs=require('node:fs');const value=process.env.PIGE_PADDLEOCR_BUNDLE_SIGNING_KEY_PEM;if(!value)throw new Error('Missing PaddleOCR release key.');fs.mkdirSync(process.env.RUNNER_TEMP+'/paddleocr-key',{recursive:true,mode:0o700});fs.writeFileSync(process.env.RUNNER_TEMP+'/paddleocr-key/private.pem',value,{mode:0o600,flag:'wx'});"
 
       - name: Create deterministic signed archive
         env:
@@ -224,18 +229,33 @@ jobs:
               --verification-record="${{ runner.temp }}/paddleocr-$platform.publisher-verification.json"
           done
 
-      - name: Publish new immutable prerelease
+      - name: Verify or publish immutable prerelease
         run: |
           set -euo pipefail
           if gh release view "$PIGE_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release already exists; immutable replacement is forbidden." >&2
-            exit 1
+            for platform in macos-arm64 windows-x64; do
+              directory="artifacts/paddleocr-release/$platform"
+              archive="$(find "$directory" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+              release_record="$directory/paddleocr-$platform.release.json"
+              published_release_record="$(basename "${archive%.zip}.release.json")"
+              existing="$RUNNER_TEMP/paddleocr-existing/$platform"
+              mkdir -p "$existing"
+              gh release download "$PIGE_RELEASE_TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --pattern "$(basename "$archive")" \
+                --pattern "$published_release_record" \
+                --dir "$existing"
+              cmp --silent "$archive" "$existing/$(basename "$archive")"
+              cmp --silent "$release_record" "$existing/$published_release_record"
+            done
+            echo "Existing immutable PaddleOCR prerelease matches the reviewed rebuild."
+          else
+            gh release create "$PIGE_RELEASE_TAG" \
+              artifacts/paddleocr-release/macos-arm64/* \
+              artifacts/paddleocr-release/windows-x64/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --prerelease \
+              --title "Pige PaddleOCR managed bundle $PIGE_RELEASE_TAG" \
+              --notes "Reviewed offline PaddleOCR LocalTool bundles for catalog commit $PIGE_RELEASE_COMMIT."
           fi
-          gh release create "$PIGE_RELEASE_TAG" \
-            artifacts/paddleocr-release/macos-arm64/* \
-            artifacts/paddleocr-release/windows-x64/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --verify-tag \
-            --prerelease \
-            --title "Pige PaddleOCR managed bundle $PIGE_RELEASE_TAG" \
-            --notes "Reviewed offline PaddleOCR LocalTool bundles for commit $PIGE_RELEASE_COMMIT."

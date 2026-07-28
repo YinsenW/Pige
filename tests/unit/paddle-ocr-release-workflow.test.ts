@@ -179,8 +179,11 @@ describe("PaddleOCR release workflow sidecar", () => {
     expect(workflow).not.toMatch(/^\s*-\s*"?v\*"?\s*$/mu);
     expect(workflow).toContain('node-version: "24.14.0"');
     expect(workflow).toContain("environment: production-release");
-    expect(workflow).toContain("PADDLEOCR_RELEASE_ED25519_PRIVATE_KEY_BASE64");
-    expect(workflow).toContain("Release already exists; immutable replacement is forbidden.");
+    expect(workflow).toContain("PIGE_PADDLEOCR_BUNDLE_SIGNING_KEY_PEM");
+    expect(workflow).toContain('test "$manifest_target" = "$release_commit"');
+    expect(workflow).toContain("Existing immutable PaddleOCR prerelease matches the reviewed rebuild.");
+    expect(workflow).toContain('cmp --silent "$archive"');
+    expect(workflow).not.toContain('test "$(git rev-parse "refs/tags/$PIGE_REQUESTED_TAG^{commit}")" = "$PIGE_REQUESTED_COMMIT"');
     expect(workflow).not.toMatch(/pip\s+install|uv\s+pip|npm\s+install(?!ed)/u);
 
     const packageJson = readJson(path.join(root, "package.json")) as { scripts: Record<string, string> };
