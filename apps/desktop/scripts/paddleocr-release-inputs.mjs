@@ -101,11 +101,20 @@ export async function verifyPaddleOcrReleasePublication(input) {
   const reviewedManifest = parseReviewedPaddleOcrManifest(rawManifest);
   const publication = parsePublicationContext(rawManifest, platform, releaseTag);
   const releaseResult = parseReleaseResult(parseJsonFile(releaseRecordPath, "release record", 1024 * 1024));
-  if (stableJson(releaseResult.bundle) !== stableJson(publication.bundle)) {
+  const { signature: releaseSignature, ...releaseUnsigned } = releaseResult.bundle;
+  const { signature: reviewedSignature, ...reviewedUnsigned } = publication.bundle;
+  if (
+    stableJson(releaseUnsigned) !== stableJson(reviewedUnsigned) ||
+    releaseSignature?.algorithm !== reviewedSignature.algorithm ||
+    releaseSignature?.keyId !== reviewedSignature.keyId
+  ) {
     fail("Signed release record differs from the reviewed available bundle.");
   }
   if (releaseResult.publicKeySpkiBase64 !== publication.signingKey.publicKeySpkiBase64) {
     fail("Release signer differs from the reviewed public key.");
+  }
+  if (releaseSignature.valueBase64 !== reviewedSignature.valueBase64) {
+    fail("Release signature differs from the reviewed available bundle.");
   }
   const archiveStats = fs.statSync(archivePath);
   if (archiveStats.size !== publication.bundle.sizeBytes) fail("Release archive size differs from the reviewed bundle.");

@@ -125,6 +125,10 @@ jobs:
         run: |
           node -e "const fs=require('node:fs');const value=process.env.PIGE_PADDLEOCR_BUNDLE_SIGNING_KEY_PEM;if(!value)throw new Error('Missing PaddleOCR release key.');fs.mkdirSync(process.env.RUNNER_TEMP+'/paddleocr-key',{recursive:true,mode:0o700});fs.writeFileSync(process.env.RUNNER_TEMP+'/paddleocr-key/private.pem',value,{mode:0o600,flag:'wx'});"
 
+      - name: Verify reviewed signing-key identity
+        run: >-
+          node -e "const fs=require('node:fs');const {createPrivateKey,createPublicKey}=require('node:crypto');const manifest=JSON.parse(fs.readFileSync('resources/parser-manifests/paddleocr-local.parser.manifest.json','utf8'));const expected=manifest.releaseSigningKeys.find((entry)=>entry.keyId==='${{ steps.inputs.outputs.key_id }}');const privateKey=createPrivateKey(fs.readFileSync(process.env.RUNNER_TEMP+'/paddleocr-key/private.pem'));const actual=createPublicKey(privateKey).export({type:'spki',format:'der'}).toString('base64');if(!expected||expected.algorithm!=='Ed25519'||actual!==expected.publicKeySpkiBase64)throw new Error('PaddleOCR release signer differs from the reviewed key.');"
+
       - name: Create deterministic signed archive
         env:
           PIGE_ARTIFACT_URL: ${{ steps.inputs.outputs.artifact_url }}

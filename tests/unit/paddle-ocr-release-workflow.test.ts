@@ -158,6 +158,22 @@ describe("PaddleOCR release workflow sidecar", () => {
       fileCount: 2
     });
 
+    const { publicKey: wrongPublicKey } = generateKeyPairSync("ed25519");
+    manifest.releaseSigningKeys![0].publicKeySpkiBase64 = wrongPublicKey
+      .export({ type: "spki", format: "der" })
+      .toString("base64");
+    writeJson(fixture.manifestPath, manifest);
+    await expect(verifyPaddleOcrReleasePublication({
+      platform: "macos-arm64",
+      releaseTag: TAG,
+      parserManifestPath: fixture.manifestPath,
+      archivePath,
+      releaseRecordPath,
+      verificationRecordPath: path.join(fixture.root, "wrong-signer-verification.json")
+    })).rejects.toThrow(/signer differs/u);
+    manifest.releaseSigningKeys![0].publicKeySpkiBase64 = result.publicKeySpkiBase64;
+    writeJson(fixture.manifestPath, manifest);
+
     fs.appendFileSync(archivePath, "tamper");
     await expect(verifyPaddleOcrReleasePublication({
       platform: "macos-arm64",
@@ -180,6 +196,7 @@ describe("PaddleOCR release workflow sidecar", () => {
     expect(workflow).toContain('node-version: "24.14.0"');
     expect(workflow).toContain("environment: production-release");
     expect(workflow).toContain("PIGE_PADDLEOCR_BUNDLE_SIGNING_KEY_PEM");
+    expect(workflow).toContain("PaddleOCR release signer differs from the reviewed key.");
     expect(workflow).toContain('test "$manifest_target" = "$release_commit"');
     expect(workflow).toContain('printf \'release_commit=%s\\n\' "$release_commit"');
     expect(workflow).toContain('paddleocr-release-source.manifest.json');
