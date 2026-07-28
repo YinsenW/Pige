@@ -51,14 +51,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of durable metadata-only Pi package version pin and unpin.",
+    "scope": "Independent Planning review of explicit authored chat HTTPS Skill staging.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "e3cb349eb43e5506534bccca0cbb86a8ad7df1bb6d245a0d690b96f33590ceb2"
+    "reviewedSha256": "1e9f043672351aab6c2da15f4619c38bd54f43aaca50fca51927bf99afff806b"
   },
   "reviewers": [{
-    "reviewerId": "pi-package-version-pin-review",
-    "task": "Disabled Pi package version pin and unpin",
+    "reviewerId": "chat-skill-staging-review",
+    "task": "Explicit authored chat HTTPS Skill staging",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -66,33 +66,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed durable metadata CAS, maintenance denial, restart truth and open runtime scope; Development independently supplied implementation evidence."
+    "independence": "Planning reviewed authored authority, exact candidate binding and review-only scope; Development independently supplied implementation evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"pi-package-version-pin-review","blockerCount":0,"summary":"Settings serializes Pin/Unpin and adopts authoritative registry eligibility."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"pi-package-version-pin-review","blockerCount":0,"summary":"Package, API, architecture, UI and Decision owners share metadata-only CAS semantics."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"pi-package-version-pin-review","blockerCount":0,"summary":"Acceptance records pin/unpin while enable and runtime remain planned."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"pi-package-version-pin-review","blockerCount":0,"summary":"Restart state and pre-confirmation update/rollback denial are directly testable."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"pi-package-version-pin-review","blockerCount":0,"summary":"Existing package/API/UI/Decision/trace owners absorb the slice without a new design doc."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"chat-skill-staging-review","blockerCount":0,"summary":"Settings alone lists and adopts one bounded pending staged review."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"chat-skill-staging-review","blockerCount":0,"summary":"Skill, API, runtime-policy, architecture, UI and Decision owners share review-only semantics."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"chat-skill-staging-review","blockerCount":0,"summary":"Acceptance records authored chat staging while broader lifecycle remains planned."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"chat-skill-staging-review","blockerCount":0,"summary":"Candidate and turn, Job and vault drift closure are directly testable."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"chat-skill-staging-review","blockerCount":0,"summary":"Existing Skill/API/UI/Decision/trace owners absorb the slice without a new design doc."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict pin identity and authoritative readable results remain bound."},
-    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision, acceptance and semantic locks bind the same incomplete package lifecycle."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact 223-LOC update and 1116-LOC manager owners are protected and hash-bound."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict pending-review identity and body/path-free projection remain bound."},
+    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision, acceptance and semantic locks bind review-only chat staging."},
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact 158-LOC tool and 922-LOC URL stage owners are protected and hash-bound."}
   ],
   "coordination": {
-    "taskId": "pi-package-version-pin-20260729",
-    "taskTitle": "Disabled Pi package version pin and unpin",
+    "taskId": "chat-skill-staging-20260729",
+    "taskTitle": "Explicit authored chat HTTPS Skill staging",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Catalog, install, trash uninstall and unpinned maintenance remain compatible; pinning never enables or executes a package.",
-    "acknowledgement": "Planning binds metadata-only pin/unpin; enable and runtime execution remain open."
+    "compatibility": "Existing Settings URL/file/ZIP and installed lifecycle remain compatible; chat stages only.",
+    "acknowledgement": "Planning binds one authored candidate to review; install, enable and grants remain separate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Pinned state must survive restart and reject crafted update/rollback before external effects.",
-    "Unpin restores only eligibility derived from the current verified receipt chain.",
-    "Enable, broader history and runtime execution remain outside this bind."
+    "Only durable nonempty authored text may expose the staging tool.",
+    "Stale candidate, turn, Job or vault identity must fail before fetch or publication.",
+    "Model/source/tool output cannot authorize; install, enable and grants remain outside this bind."
   ]
 }

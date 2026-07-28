@@ -1009,9 +1009,9 @@ Install: Paste Skill Link | Choose Markdown | Choose ZIP
 Staged: review identity, files, capabilities, boundary and warnings
 ```
 
-`Choose Markdown`/`Choose ZIP` open Main pickers; cancel is quiet, invalid ZIP closes and `ready`
-reuses review plus `Install`. No path/body appears; chat stays later. Actions require eligibility
-booleans; Update binds vault/Skill/revision. Uninstall confirms; export is pathless.
+Main pickers cancel quietly; invalid ZIP closes and `ready` reuses review/`Install`. Explicit
+authored chat adds one HTTPS review adopted only here. No path/body appears. Actions require
+eligibility; Update binds vault/Skill/revision, uninstall confirms and export is pathless.
 
 Focused high-risk dialog target:
 

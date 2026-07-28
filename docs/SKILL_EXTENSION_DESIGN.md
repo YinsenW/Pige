@@ -10,13 +10,10 @@ Pige should support installable Skills, but Skills must stay within Pige's perso
 Recommended v0.1 stance:
 
 - Add a Skill Manager in Settings.
-- Allow Skill installation from chat when the user explicitly provides a Skill link, ZIP, or Markdown file.
-- Stage and preview a Skill before enabling it.
-- Keep Skill installation explicit, reversible, scoped, and inspectable.
-- Treat pure Skills as Markdown instruction packs, not executable plugins.
-- Support external/Web Skills when they declare capabilities and run through Pige's Permission Broker.
-- Route executable code, npm packages, MCP servers, scripts, binaries, shell access, network access, brokered credential use, destructive writes, and external filesystem access through explicit runtime permission prompts. Raw credential access is never an extension capability.
-- Do not execute anything during install preview or staging.
+- Let explicit authored chat text stage one HTTPS Skill for Settings review.
+- Stage before enabling; installation stays explicit, reversible, scoped and non-executing.
+- Pure Skills are Markdown, not plugins. External/Web effects declare capabilities and use
+  Permission Broker; raw credentials are never a capability.
 
 ## 2. What A Skill Is
 
@@ -53,16 +50,15 @@ External/Web sources; Git repositories and a signed registry remain later.
 
 ## 4. Install And Installed Lifecycle
 
-Settings reviews/installs one HTTPS or Main-picked `.md`/`.zip` pure Skill; drop captures. Markdown
-is 256 KiB UTF-8. Main snapshots ZIP no-follow with descriptor/parent fences, capped at 2 MiB
-compressed, 4 MiB/64 files expanded and one root `SKILL.md`. Only UTF-8 Markdown/JSON is admitted;
-traversal, links, binaries, hooks, secrets/private paths and execution close. IPC exposes safe
-preview; cancel/invalid content or drift is inert. Install CAS-adopts the stage.
+Settings reviews one HTTPS or Main-picked `.md`/`.zip` pure Skill. Markdown is 256 KiB; ZIP is
+no-follow/parent-fenced, at most 2 MiB compressed, 4 MiB/64 files and one root `SKILL.md`.
+Links, binaries, hooks, secrets, paths and execution close. Explicit authored chat selects one
+Host HTTPS candidate by index for the same review; neutral/source/model/tool text and drift close.
 
-Only verified `user_confirmed` machine-local pure Skills expose lifecycle booleans. Enable restores,
-uninstall trash-adopts and export is pathless. HTTPS update binds source/base/revision, preserves
-enablement, trashes prior bytes and CAS-adopts once; same bytes are `current`. Background,
-cross-source, file/ZIP/chat update and public restore stay out.
+Only verified `user_confirmed` machine-local pure Skills expose lifecycle actions. Enable restores;
+uninstall trashes; export is pathless. HTTPS update binds source/base/revision, preserves state,
+trashes prior bytes and CAS-adopts once. Background, cross-source/file/ZIP update and public
+restore stay out.
 
 ## 5. Skill Format
 
@@ -310,9 +306,8 @@ overwrite/link policy and environment before confirmation; opaque `npx` or later
 
 ## 11. v0.1 Scope
 
-Include Settings and explicit-chat URL/`.md`/`.zip` staging, review and confirmation;
-vault/machine scopes; enable/disable/uninstall/export; metadata/capability parsing and
-ZIP/file safety; mediated External/Web effects; and relevant active-Skill selection.
+Include Settings URL/`.md`/`.zip` and explicit-chat HTTPS review; scoped lifecycle, safe files,
+mediated External/Web effects and active-Skill selection.
 
 Defer:
 

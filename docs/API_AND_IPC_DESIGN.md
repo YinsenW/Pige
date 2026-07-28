@@ -648,6 +648,10 @@ Text-only whitespace creates no turn; attachments plus whitespace-only text use 
 “Use only the attached file(s) as source material.” intent in six locales. Context bounding
 precedes assembly and never rewrites selected text.
 
+`skills.pendingStagedReviews` returns bounded safe HTTPS previews for one vault. Only
+nonempty authored text registers `pige_stage_submitted_skill_url`; `{candidateIndex}`
+stages one Host candidate, never install/enable/authority. Turn/Job/vault drift closes.
+
 ### 6.7.1 Reviewed Task Plan And Browser Interaction
 
 `TaskExecutionPlanSchema`/`TaskExecutionPlanStepSchema` are Main-private.
