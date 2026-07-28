@@ -1107,19 +1107,11 @@ lexical remains. Hide provider/routing, path, URL and checksum.
 
 ### Pi Packages Settings
 
-```txt
-Packages
-Installed
-No packages installed
-Install exact package
-  Package name  [                    ]
-  Exact version [                    ]  Install
-```
-
-Above Installed, local reviewed search has distinct loading/empty/failed states. Results disclose
-exact package/integrity/license/type/boundaries; selecting only fills the form. Install confirms
-disabled; Remove confirms/serializes. Failure retains input. No authority/path; enable/update/pin/
-rollback stay absent.
+Reviewed search distinguishes loading/empty/failed and discloses identity, integrity, license, type
+and boundaries; selection only fills install. Install/Remove confirm. Eligible
+disabled rows accept update version/SRI and one immediate-prior Roll back. Mutations serialize,
+confirm, adopt registry truth and retain draft/inventory on failure. No authority/path/code;
+enable/pin/runtime stay absent.
 
 ### Backup And Restore
 

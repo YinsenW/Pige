@@ -722,9 +722,11 @@ Skill IPC is body/path-free. Main owns fenced `.md`/`.zip` pickers; results expo
 ZIP adds `invalid` and one non-executing Markdown/JSON bundle. Eligibility gates UI; HTTPS update
 binds source/base/revision; install preserves enablement, trashes prior bytes and CAS-adopts.
 
-Pi Package IPC is path/body-free. Local `catalogQuery` returns sorted reviewed npm/integrity/license/
-type/capability/boundary facts or identity-only failure; never URL/path/body/rank. `summary` is
-authoritative; install/uninstall confirm. Uninstall truth includes registry; Main trash-adopts once.
+Pi Package IPC is path/body-free. `catalogQuery` returns sorted reviewed identity/disclosure or
+identity-only failure; `summary` is authoritative. Install/uninstall/update/single rollback
+confirm. Update binds package/revision/version/SRI; offline rollback binds opaque prior target/version.
+Readable `committed | denied | stale | not_found` includes registry; `failed` is identity-only.
+Main adopts verified trees once; package code never runs.
 
 Memory list returns vault/revision and <=1,000 safe records; private provenance stays in Main. Edit
 binds record/revision/title/body, secret-scans, and changes L1 only. Lifecycle `committed | stale |

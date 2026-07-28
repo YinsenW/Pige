@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-28T00:00:00Z",
+  "reviewedAt": "2026-07-29T00:00:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -51,14 +51,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of one repository-curated Pi package: local query, safe disclosure, exact supply chain and disabled-only confirmed install.",
+    "scope": "Independent Planning review of exact-version disabled Pi package update and verified immediate-prior offline rollback.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "740e5b4816073bcf10d0d678e142cfa0ad120994482a9f599d1d7d3773c0b7d1"
+    "reviewedSha256": "eb3c899bc0340e6598f8cc20b460d98a100fd247deb295bc860ccaa772fd01a2"
   },
   "reviewers": [{
-    "reviewerId": "pi-package-catalog-review",
-    "task": "Repository-curated Pi package catalog",
+    "reviewerId": "pi-package-update-rollback-review",
+    "task": "Disabled Pi package update and rollback",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -66,33 +66,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed catalog identity, package audit, disclosure, authority, install reuse and open lifecycle; Development independently supplied implementation evidence."
+    "independence": "Planning reviewed exact target identity, confirmation, disabled-only authority, rollback and open lifecycle; Development independently supplied implementation evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"pi-package-catalog-review","blockerCount":0,"summary":"Settings searches one sparse local reviewed catalog, discloses safe facts and reuses explicit confirmed install."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"pi-package-catalog-review","blockerCount":0,"summary":"Package, API, architecture, dependency, resource and UI owners share one pathless no-authority catalog."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"pi-package-catalog-review","blockerCount":0,"summary":"Acceptance records reviewed search/disclosure while enable, update, pin, rollback and runtime stay open."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"pi-package-catalog-review","blockerCount":0,"summary":"Exact manifest, package version/integrity/layout and deterministic local query are testable boundaries."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"pi-package-catalog-review","blockerCount":0,"summary":"Existing package, API, UI, Decision, dependency and trace owners absorb the slice without a new design doc."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"pi-package-update-rollback-review","blockerCount":0,"summary":"Settings confirms exact update or one available rollback and adopts authoritative registry truth."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"pi-package-update-rollback-review","blockerCount":0,"summary":"Package, API, architecture, UI and Decision owners share disabled-only exact-target semantics."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"pi-package-update-rollback-review","blockerCount":0,"summary":"Acceptance records update/rollback while enable, pin and runtime remain planned."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"pi-package-update-rollback-review","blockerCount":0,"summary":"Exact SRI, opaque prior target, CAS receipts and restart adoption are directly testable."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"pi-package-update-rollback-review","blockerCount":0,"summary":"Existing package/API/UI/Decision/trace owners absorb the slice without a new design doc."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict pathless catalog query and complete deterministic ready or identity-only failed results stay bound."},
-    {"command":"npm run verify:decisions && npm run verify:traceability && npm run verify:dependencies","status":"passed","evidence":"Decision, dependency/license facts, acceptance and semantic locks bind the same incomplete package slice."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact 143-LOC catalog owner, manifest and governed owner bytes are protected and hash-bound."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict update/rollback identities and authoritative readable results remain bound."},
+    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision, acceptance and semantic locks bind the same incomplete package lifecycle."},
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact 184-LOC update owner and changed manager/store LOC are protected and hash-bound."}
   ],
   "coordination": {
-    "taskId": "pi-package-curated-catalog-20260728",
-    "taskTitle": "Repository-curated Pi package catalog",
+    "taskId": "pi-package-update-rollback-20260729",
+    "taskTitle": "Disabled Pi package update and rollback",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing pinned install, disabled registry and trash uninstall remain compatible; catalog selection grants no package authority.",
-    "acknowledgement": "Planning binds one reviewed local catalog entry only; enable, update, pin, rollback and runtime execution remain open."
+    "compatibility": "Existing catalog, install and trash uninstall remain compatible; maintenance never enables or executes a package.",
+    "acknowledgement": "Planning binds exact-version update and one-step offline rollback only; enable, pin and runtime execution remain open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Only the exact reviewed package/version/integrity is recommended; catalog drift fails body-free.",
-    "Catalog trust discloses filesystem/cloud boundaries but creates no runtime or install authority.",
-    "Enable, update, pin, rollback and runtime execution remain outside this bind."
+    "Update network or supply-chain drift preserves the current authoritative disabled package.",
+    "Rollback accepts only the immediately previous verified tree bound by one opaque target.",
+    "Enable, pin, broader history and runtime execution remain outside this bind."
   ]
 }

@@ -3651,11 +3651,35 @@ Inspect one recommendation without marketplace or hidden install.
 
 Consequences:
 
-- Package exact facts; install confirms disabled. Enable/update/pin/rollback/runtime stay open.
+- Package exact facts; install confirms disabled. Enable/pin/runtime stay open; exact update/rollback
+  follow `D-20260729-Pi-Package-Disabled-Update-And-Rollback`.
 
 References:
 
 - `docs/SKILL_EXTENSION_DESIGN.md`
+
+### D-20260729-Pi-Package-Disabled-Update-And-Rollback
+
+Status: Accepted
+Date: 2026-07-29
+
+Decision:
+
+Confirmed exact version/SRI update swaps verified disabled bytes and retains the prior tree; one
+opaque target restores only that tree offline. Recovery adopts once.
+
+Rationale:
+
+Reversible maintenance without runtime authority.
+
+Consequences:
+
+- Drift/tamper/download failure preserves current bytes; no code executes. Enable, pin, broader
+  history and runtime remain open.
+
+References:
+
+- `docs/SKILL_EXTENSION_DESIGN.md`, `docs/API_AND_IPC_DESIGN.md`
 
 ## 4. Deferred Decisions
 
