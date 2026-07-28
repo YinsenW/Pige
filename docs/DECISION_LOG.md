@@ -3525,6 +3525,29 @@ References:
 
 - `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
 
+### D-20260728-Managed-PaddleOCR-Release-Bundle
+
+Status: Accepted
+Date: 2026-07-28
+
+Decision:
+
+Ship `paddleocr_local` only as a signed release bundle verified by a dedicated Main
+materializer, never Task Execution or `pip`.
+
+Rationale:
+
+One artifact makes Python, models, notices and origins auditable.
+
+Consequences:
+
+- Platforms stay unsupported until identity, lock/SBOM and offline smoke exist.
+
+References:
+
+- `resources/parser-manifests/paddleocr-local.parser.manifest.json`
+- `docs/TECH_ARCHITECTURE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

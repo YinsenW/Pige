@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "id": "paddleocr_local",
+  "catalogVersion": "2026-07-28",
+  "engineVersion": "3.7.0",
+  "platforms": ["macos-arm64", "windows-x64"],
+  "sourceKinds": ["image_file", "rendered_pdf_page", "rendered_presentation_media"],
+  "capabilities": ["local_text_detection", "local_text_recognition", "multilingual_ocr", "ocr_artifact_handoff"],
+  "executionBoundary": "isolated_managed_python_process",
+  "networkAccessDuringOcr": false,
+  "hiddenDownloads": false,
+  "nativeFirst": true,
+  "materialization": {
+    "owner": "PaddleOCR Bundle Materializer",
+    "mode": "release_preassembled_verified_bundle",
+    "userMachinePackageResolution": false,
+    "userMachineSourceBuild": false,
+    "reviewedTaskExecution": false,
+    "candidateHandoff": "Only a fully verified private bundle directory may be passed as candidatePath to LocalToolManagerService.",
+    "archivePolicy": "Reject path traversal, absolute paths, links, duplicate paths, collisions, excess entries, excess expanded bytes, and any file absent from the signed bundle manifest.",
+    "runtimePolicy": "Run the fixed Pige wrapper with Python isolated mode, a sanitized environment, CPU execution, exact local model directories, and networking denied."
+  },
+  "trustedOrigins": {
+    "releaseInputs": [
+      "https://github.com",
+      "https://release-assets.githubusercontent.com",
+      "https://files.pythonhosted.org",
+      "https://paddle-model-ecology.bj.bcebos.com"
+    ],
+    "runtimeDenied": [
+      "https://pypi.org",
+      "https://huggingface.co",
+      "https://modelscope.cn",
+      "https://aistudio.baidu.com"
+    ],
+    "redirectPolicy": "Each release input uses its exact URL; redirects are permitted only to an origin listed above and are revalidated before every request."
+  },
+  "pythonRuntime": {
+    "implementation": "CPython",
+    "version": "3.13.14",
+    "distribution": "Astral python-build-standalone install_only",
+    "release": "20260610",
+    "projectLicense": "MPL-2.0",
+    "runtimeNotices": "Preserve the complete CPython and bundled third-party license inventory shipped by python-build-standalone.",
+    "assets": [
+      {
+        "platform": "macos-arm64",
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-aarch64-apple-darwin-install_only.tar.gz",
+        "sizeBytes": 25281944,
+        "sha256": "0e255968ed96255df59b6bc9504545260c11de3171e48f7640668d88154945ba"
+      },
+      {
+        "platform": "windows-x64",
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.13.14%2B20260610-x86_64-pc-windows-msvc-install_only.tar.gz",
+        "sizeBytes": 47123990,
+        "sha256": "9a77f87ec431f16e79fc7e90d9115edf187d18b64100b6f6c27189f419fd79be"
+      }
+    ]
+  },
+  "pythonPackages": [
+    {
+      "name": "paddleocr",
+      "version": "3.7.0",
+      "license": "Apache-2.0",
+      "filename": "paddleocr-3.7.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/d2/79/2ade66cf72074a3d2a013e2ba1f256d6116fec797b908fc1b4f9c320d8c4/paddleocr-3.7.0-py3-none-any.whl",
+      "sizeBytes": 146750,
+      "sha256": "c0f0a81ad4112727f30c6fcf986ac0ef6a120d31ee0991a01fae0357ee32d338"
+    },
+    {
+      "name": "paddlex",
+      "version": "3.7.2",
+      "license": "Apache-2.0",
+      "filename": "paddlex-3.7.2-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/40/52/9bbb9cd5f4fbbbefc7391c7d1ee61df8d511017a31e6933f6744b063fdab/paddlex-3.7.2-py3-none-any.whl",
+      "sizeBytes": 2239708,
+      "sha256": "f1678bf650bbaccfd8f0d4e49d0ae631b4685c829fdae6e802ccd90d4fcb9a7f"
+    }
+  ],
+  "paddlePaddle": {
+    "version": "3.3.1",
+    "license": "Apache-2.0",
+    "backend": "cpu",
+    "assets": [
+      {
+        "platform": "macos-arm64",
+        "filename": "paddlepaddle-3.3.1-cp313-cp313-macosx_11_0_arm64.whl",
+        "url": "https://files.pythonhosted.org/packages/65/f8/bebb829227ac5574454b4342bcf512dbb02268118b62222fc7c1b420a3ef/paddlepaddle-3.3.1-cp313-cp313-macosx_11_0_arm64.whl",
+        "sizeBytes": 104538799,
+        "sha256": "2ce30bfb0023d8c9314b1413ca7a775a4ddd076e4551e74fbed2366cf1395c98"
+      },
+      {
+        "platform": "windows-x64",
+        "filename": "paddlepaddle-3.3.1-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/f4/c8/408b9e94ac2e10a55c1122b787359f7a6f79ef894ee1d57d78c5cca838d0/paddlepaddle-3.3.1-cp313-cp313-win_amd64.whl",
+        "sizeBytes": 104794530,
+        "sha256": "1203e2e1114b49e73a8440b68837ce5c93fdab51fe4838c5e5874ab40f58f747"
+      }
+    ]
+  },
+  "models": [
+    {
+      "id": "PP-OCRv5_mobile_det",
+      "role": "text_detection",
+      "license": "Apache-2.0",
+      "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv5_mobile_det_infer.tar",
+      "sizeBytes": 4935680,
+      "sha256": "50446e5d01ac2a73d5319c89513281f6578414c888c602f9af13f93feefffc58"
+    },
+    {
+      "id": "PP-OCRv5_mobile_rec",
+      "role": "text_recognition",
+      "languages": ["zh-Hans", "zh-Hant", "en", "ja"],
+      "license": "Apache-2.0",
+      "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv5_mobile_rec_infer.tar",
+      "sizeBytes": 16834560,
+      "sha256": "566b9512b34e34a9f0db54d87b51fa5a0b9ed2cf1ab7e49728cc0b8b5a64f414"
+    },
+    {
+      "id": "korean_PP-OCRv5_mobile_rec",
+      "role": "text_recognition",
+      "languages": ["ko", "en"],
+      "license": "Apache-2.0",
+      "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/korean_PP-OCRv5_mobile_rec_infer.tar",
+      "sizeBytes": 13680640,
+      "sha256": "a6261f800ad335aa6ef77b6f7c4dcedfd5e11b95f4d70982d41ee31c2ace5e66"
+    },
+    {
+      "id": "latin_PP-OCRv5_mobile_rec",
+      "role": "text_recognition",
+      "languages": ["latin-script"],
+      "license": "Apache-2.0",
+      "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/latin_PP-OCRv5_mobile_rec_infer.tar",
+      "sizeBytes": 8202240,
+      "sha256": "b23105a6a1ea38e32a97c5a0ddc7e8a9bbf541d8e47421e2c99e9ccabe29509c"
+    }
+  ],
+  "pipelineConfiguration": {
+    "device": "cpu",
+    "use_doc_orientation_classify": false,
+    "use_doc_unwarping": false,
+    "use_textline_orientation": false,
+    "requiredLocalArguments": ["text_detection_model_dir", "text_recognition_model_dir"],
+    "recognitionSelection": "Use PP-OCRv5_mobile_rec for Chinese/English/Japanese, korean_PP-OCRv5_mobile_rec for Korean, and latin_PP-OCRv5_mobile_rec for Latin-script hints; never fetch a replacement model."
+  },
+  "releaseBundles": [
+    {
+      "platform": "macos-arm64",
+      "state": "awaiting_release_artifact",
+      "artifactUrl": null,
+      "sizeBytes": null,
+      "sha256": null,
+      "signature": null,
+      "sbomSha256": null
+    },
+    {
+      "platform": "windows-x64",
+      "state": "awaiting_release_artifact",
+      "artifactUrl": null,
+      "sizeBytes": null,
+      "sha256": null,
+      "signature": null,
+      "sbomSha256": null
+    }
+  ],
+  "availabilityGate": [
+    "The release build resolves and hash-locks the complete transitive wheel graph for the exact platform; sdists, source builds, and user-machine package resolution are forbidden.",
+    "The release bundle carries a complete SPDX or CycloneDX SBOM plus every required license and notice.",
+    "The release bundle records exact artifact URL, byte size, SHA-256, publisher signature, SBOM SHA-256, installed-tree digest, wrapper digest, and every component file digest.",
+    "The packaged-app install, health check, OCR smoke, disable, remove, crash recovery, and offline execution gates pass on the exact platform.",
+    "Until every field and gate above is satisfied, the platform is unsupported and canInstall is false."
+  ],
+  "limits": {
+    "maxInputBytes": 52428800,
+    "maxInputPixels": 40000000,
+    "maxInputDimension": 20000,
+    "maxOutputCharacters": 1000000,
+    "timeoutMs": 120000
+  }
+}
