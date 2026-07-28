@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DatasetManifestSchema,
   DatasetSchemaRecordSchema,
@@ -20,6 +20,7 @@ import {
   type DatasetQueryExecutor
 } from "../../apps/desktop/src/main/services/dataset-query-types";
 import { ManagedCollectionViewService } from "../../apps/desktop/src/main/services/managed-collection-view-service";
+import { ManagedCollectionDiscovery } from "../../apps/desktop/src/main/services/managed-collection-discovery";
 import {
   createVaultOnDisk,
   loadVaultSummary
@@ -39,6 +40,75 @@ afterEach(() => {
 });
 
 describe("ManagedCollectionViewService", () => {
+  it("pages one current saved view with exclusive stable boundaries and a valid final page", async () => {
+    const fixture = await makeFixture(60);
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const service = new ManagedCollectionViewService({
+      current: () => vault,
+      activeVaultPath: () => fixture.vaultPath
+    }, directExecutor);
+    const manifest = readManifest(fixture.bundlePath);
+    const schema = DatasetSchemaRecordSchema.parse(readJson(path.join(fixture.bundlePath, manifest.schema.path)));
+    const table = required(schema.tables[0]);
+    const nameColumn = required(table.columns[0]);
+    const created = await service.createView({
+      apiVersion: 1,
+      requestId: "collection_request_pagedviewabcdefgh",
+      activeVaultId: vault.vaultId,
+      datasetId: manifest.datasetId,
+      tableId: table.id,
+      expectedRevisionId: manifest.activeRevision,
+      name: "Alphabetical",
+      sort: { columnId: nameColumn.id, direction: "asc" }
+    });
+    if (created.status !== "committed") throw new Error("Paged view was not created");
+    const request = {
+      apiVersion: 1 as const,
+      activeVaultId: vault.vaultId,
+      datasetId: manifest.datasetId,
+      tableId: table.id,
+      viewId: created.viewId,
+      limit: 25
+    };
+    const first = await service.open({ ...request, requestId: "collection_request_pagefirst00000001" });
+    expect(first).toMatchObject({
+      status: "ready",
+      snapshot: { totalRowCount: 60, returnedRowCount: 25, truncated: true },
+      nextRowCursor: expect.stringMatching(/^collection_rows_[a-f0-9]{64}$/u)
+    });
+    if (first.status !== "ready" || !first.nextRowCursor) throw new Error("First page cursor missing");
+    const second = await service.open({
+      ...request,
+      requestId: "collection_request_pagesecond0000002",
+      rowCursor: first.nextRowCursor
+    });
+    expect(second).toMatchObject({
+      status: "ready",
+      snapshot: { totalRowCount: 60, returnedRowCount: 25, truncated: true },
+      nextRowCursor: expect.stringMatching(/^collection_rows_[a-f0-9]{64}$/u)
+    });
+    if (second.status !== "ready" || !second.nextRowCursor) throw new Error("Second page cursor missing");
+    const last = await service.open({
+      ...request,
+      requestId: "collection_request_pagelast000000003",
+      rowCursor: second.nextRowCursor
+    });
+    expect(last).toMatchObject({
+      status: "ready",
+      snapshot: { totalRowCount: 60, returnedRowCount: 10, truncated: false }
+    });
+    if (last.status !== "ready") throw new Error("Final page missing");
+    expect(last).not.toHaveProperty("nextRowCursor");
+    const rowIds = [...first.snapshot.rows, ...second.snapshot.rows, ...last.snapshot.rows].map(({ rowId }) => rowId);
+    expect(rowIds).toHaveLength(60);
+    expect(new Set(rowIds).size).toBe(60);
+    await expect(service.open({
+      ...request,
+      requestId: "collection_request_pagetamper0000004",
+      rowCursor: `collection_rows_${"f".repeat(64)}`
+    })).resolves.toMatchObject({ status: "stale" });
+  }, 30_000);
+
   it("creates, applies, replays, revalidates, and forward-trashes one bounded saved view", async () => {
     const fixture = await makeFixture();
     const vault = loadVaultSummary(fixture.vaultPath);
@@ -154,25 +224,25 @@ describe("ManagedCollectionViewService", () => {
     })).resolves.toMatchObject({ status: "ineligible" });
 
     const pointerBytes = fs.readFileSync(pointerPath);
-    const driftExecutor: DatasetQueryExecutor = {
-      execute: async (input) => {
-        const result = await directExecutor.execute(input);
+    const discovery = new ManagedCollectionDiscovery();
+    const orderedRowIds = discovery.orderedRowIds.bind(discovery);
+    vi.spyOn(discovery, "orderedRowIds").mockImplementation((...input) => {
+        const result = orderedRowIds(...input);
         const currentPointer = readJson(pointerPath) as Record<string, unknown>;
         fs.writeFileSync(pointerPath, `${JSON.stringify({
           ...currentPointer,
           updatedAt: "2026-07-28T00:01:00.000Z"
         }, null, 2)}\n`);
         return result;
-      }
-    };
-    await expect(new ManagedCollectionViewService(port, driftExecutor).open({
+    });
+    await expect(new ManagedCollectionViewService(port, directExecutor, discovery).open({
       apiVersion: 1,
       requestId: "collection_request_viewdriftabcdefgh",
       activeVaultId: vault.vaultId,
       datasetId: manifest.datasetId,
       tableId: table.id,
       viewId: committed.viewId
-    })).resolves.toMatchObject({ status: "failed" });
+    })).resolves.toMatchObject({ status: "stale" });
     fs.writeFileSync(pointerPath, pointerBytes);
 
     const beforeUndoManifest = fs.readFileSync(path.join(fixture.bundlePath, "dataset.json"));
@@ -235,7 +305,7 @@ describe("ManagedCollectionViewService", () => {
   }, 30_000);
 });
 
-async function makeFixture() {
+async function makeFixture(rowCount = 3) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-collection-view-"));
   roots.push(root);
   createVaultOnDisk({
@@ -247,7 +317,8 @@ async function makeFixture() {
   });
   const vaultPath = path.join(root, "Views");
   const vault = loadVaultSummary(vaultPath);
-  const sourceBytes = Buffer.from("name,count\nAda,3\nGrace,5\nLin,5\n", "utf8");
+  const data = collectionRows(rowCount);
+  const sourceBytes = Buffer.from(`name,count\n${data.map(([name, count]) => `${name},${count}`).join("\n")}\n`, "utf8");
   const sourcePath = path.join(root, "records.csv");
   fs.writeFileSync(sourcePath, sourceBytes);
   const capture = await new LegacyCaptureFixture({
@@ -273,7 +344,7 @@ async function makeFixture() {
     policyHash: `sha256:${"c".repeat(64)}`,
     message: "Dataset import running."
   });
-  await new DatasetService({ plan: async () => csvPlan(sourceBytes) }).materializeSource(
+  await new DatasetService({ plan: async () => csvPlan(sourceBytes, data) }).materializeSource(
     vaultPath,
     sourceRecord,
     sourceRecordPath,
@@ -287,7 +358,7 @@ async function makeFixture() {
   };
 }
 
-function csvPlan(sourceBytes: Buffer): DatasetIngestPlan {
+function csvPlan(sourceBytes: Buffer, data = collectionRows(3)): DatasetIngestPlan {
   const valueCell = (columnOrdinal: number, text: string, sourceType: string,
     projection: DatasetIngestPlan["tables"][number]["rows"][number]["cells"][number]["projection"]
   ) => ({
@@ -297,7 +368,6 @@ function csvPlan(sourceBytes: Buffer): DatasetIngestPlan {
     lexical: { raw: text, text, quoted: false },
     projection
   });
-  const data = [["Ada", 3], ["Grace", 5], ["Lin", 5]] as const;
   return {
     schemaVersion: 1,
     planner: { id: "dataset_ingest", version: "1" },
@@ -326,7 +396,13 @@ function csvPlan(sourceBytes: Buffer): DatasetIngestPlan {
       maxXmlEntryBytes: 1024 * 1024,
       maxSelectedXmlBytes: 1024 * 1024
     },
-    stats: { tableCount: 1, rowCount: 3, columnCount: 2, cellCount: 6, retainedValueBytes: 18 },
+    stats: {
+      tableCount: 1,
+      rowCount: data.length,
+      columnCount: 2,
+      cellCount: data.length * 2,
+      retainedValueBytes: data.reduce((total, [name, count]) => total + name.length + String(count).length, 0)
+    },
     tables: [{
       ordinal: 0,
       sourceName: "records",
@@ -345,8 +421,8 @@ function csvPlan(sourceBytes: Buffer): DatasetIngestPlan {
         }
       },
       columns: [
-        { ordinal: 0, sourceName: "name", suggestedName: "name", projectedType: "text", sourceTypes: ["text"], stats: { missing: 0, empty: 0, null: 0, value: 3 } },
-        { ordinal: 1, sourceName: "count", suggestedName: "count", projectedType: "integer", sourceTypes: ["integer"], stats: { missing: 0, empty: 0, null: 0, value: 3 } }
+        { ordinal: 0, sourceName: "name", suggestedName: "name", projectedType: "text", sourceTypes: ["text"], stats: { missing: 0, empty: 0, null: 0, value: data.length } },
+        { ordinal: 1, sourceName: "count", suggestedName: "count", projectedType: "integer", sourceTypes: ["integer"], stats: { missing: 0, empty: 0, null: 0, value: data.length } }
       ],
       rows: data.map(([name, count], index) => ({
         ordinal: index,
@@ -359,6 +435,11 @@ function csvPlan(sourceBytes: Buffer): DatasetIngestPlan {
     }],
     warnings: []
   };
+}
+
+function collectionRows(count: number): Array<readonly [string, number]> {
+  const first: Array<readonly [string, number]> = [["Ada", 3], ["Grace", 5], ["Lin", 5]];
+  return Array.from({ length: count }, (_, index) => first[index] ?? [`Record ${String(index + 1).padStart(3, "0")}`, index + 1]);
 }
 
 function readManifest(bundlePath: string) {

@@ -1397,14 +1397,18 @@ describe("desktop shell build contract", () => {
 
     expect(contractsSource).toContain("readonly list: (request: CollectionListRequest)");
     expect(contractsSource).toContain("Promise<CollectionListResult>");
+    expect(registrarSource).toContain('ipcMain.handle("collections.list"');
     expect(registrarSource).toContain('ipcMain.handle("collections.open"');
     expect(registrarSource).toContain('ipcMain.handle("collections.editCell"');
     expect(registrarSource).toContain("CollectionOpenRequestSchema.parse(request)");
+    expect(registrarSource).toContain("CollectionListRequestSchema.parse(request)");
+    expect(registrarSource).toContain("CollectionListResultSchema.parse(rawResult)");
     expect(registrarSource).toContain("CollectionOpenResultSchema.parse(rawResult)");
     expect(registrarSource).toContain("CollectionCellEditRequestSchema.parse(request)");
     expect(registrarSource).toContain("CollectionCellEditResultSchema.parse(rawResult)");
     expect(registrarSource).toContain("options.getActiveVaultId() !== parsed.activeVaultId");
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.open", parsedRequest)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("collections.list", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.editCell", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.appendDefaultRow", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.addNullableColumn", parsedRequest)');
@@ -1413,6 +1417,8 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.trashColumn", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.trashRow", parsedRequest)');
     expect(preloadSource).toContain("CollectionOpenRequestSchema.parse(request)");
+    expect(preloadSource).toContain("CollectionListRequestSchema.parse(request)");
+    expect(preloadSource).toContain("CollectionListResultSchema.parse(");
     expect(preloadSource).toContain("CollectionOpenResultSchema.parse(");
     expect(preloadSource).toContain("CollectionCellEditRequestSchema.parse(request)");
     expect(preloadSource).toContain("CollectionCellEditResultSchema.parse(");

@@ -7,6 +7,8 @@ import { PigeDomainError } from "@pige/domain";
 import {
   CollectionCreateViewRequestSchema,
   CollectionCreateViewResultSchema,
+  CollectionListRequestSchema,
+  CollectionListResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
   CollectionViewFilterSchema,
@@ -15,6 +17,8 @@ import {
   ViewIdSchema,
   type CollectionCreateViewRequest,
   type CollectionCreateViewResult,
+  type CollectionListRequest,
+  type CollectionListResult,
   type CollectionOpenRequest,
   type CollectionOpenResult,
   type CollectionSnapshot,
@@ -32,6 +36,10 @@ import {
   type DatasetQueryWorkerInput
 } from "./dataset-query-types";
 import { DatasetQueryWorkerService } from "./dataset-query-worker-service";
+import {
+  ManagedCollectionDiscovery,
+  type CollectionRowPageIdentity
+} from "./managed-collection-discovery";
 import {
   MAX_COLLECTION_JSON_BYTES,
   assertFileRef,
@@ -108,14 +116,30 @@ const REVISION_DATE = /^dataset_rev_(\d{8})_[a-z0-9]{12,}$/u;
 export class ManagedCollectionViewService {
   readonly #vaults: ManagedCollectionViewVaultPort;
   readonly #executor: DatasetQueryExecutor;
+  readonly #discovery: ManagedCollectionDiscovery;
   #tail: Promise<void> = Promise.resolve();
 
   constructor(
     vaults: ManagedCollectionViewVaultPort,
-    executor: DatasetQueryExecutor = new DatasetQueryWorkerService()
+    executor: DatasetQueryExecutor = new DatasetQueryWorkerService(),
+    discovery = new ManagedCollectionDiscovery()
   ) {
     this.#vaults = vaults;
     this.#executor = executor;
+    this.#discovery = discovery;
+  }
+
+  list(request: CollectionListRequest): CollectionListResult {
+    const parsed = CollectionListRequestSchema.parse(request);
+    const vaultPath = this.#activeVaultPath(parsed.activeVaultId);
+    if (!vaultPath) {
+      return CollectionListResultSchema.parse({
+        apiVersion: parsed.apiVersion,
+        activeVaultId: parsed.activeVaultId,
+        status: "failed"
+      });
+    }
+    return this.#discovery.list(parsed.activeVaultId, vaultPath, parsed);
   }
 
   async open(request: CollectionOpenRequest): Promise<CollectionOpenResult> {
@@ -126,12 +150,18 @@ export class ManagedCollectionViewService {
     try {
       const binding = readBundle(vaultPath, parsed.datasetId);
       if (!binding) return CollectionOpenResultSchema.parse({ ...identity, status: "not_found" });
-      const snapshot = await this.#readSnapshot(binding, parsed.tableId, parsed.viewId);
-      if (!snapshot) return CollectionOpenResultSchema.parse({ ...identity, status: "not_found" });
+      const page = await this.#readPagedSnapshot(binding, parsed);
+      if (page === "stale") return CollectionOpenResultSchema.parse({ ...identity, status: "stale" });
+      if (!page) return CollectionOpenResultSchema.parse({ ...identity, status: "not_found" });
       if (!this.#activeVaultPath(parsed.activeVaultId)) {
         return CollectionOpenResultSchema.parse({ ...identity, status: "stale" });
       }
-      return CollectionOpenResultSchema.parse({ ...identity, status: "ready", snapshot });
+      return CollectionOpenResultSchema.parse({
+        ...identity,
+        status: "ready",
+        snapshot: page.snapshot,
+        ...(page.nextRowCursor ? { nextRowCursor: page.nextRowCursor } : {})
+      });
     } catch {
       return CollectionOpenResultSchema.parse({ ...identity, status: "failed" });
     }
@@ -372,6 +402,69 @@ export class ManagedCollectionViewService {
     return this.#readSnapshot(current, request.tableId);
   }
 
+  async #readPagedSnapshot(
+    binding: BundleBinding,
+    request: CollectionOpenRequest
+  ): Promise<{ readonly snapshot: CollectionSnapshot; readonly nextRowCursor?: string } | "stale" | undefined> {
+    const entries = this.#readViews(binding);
+    const views = activeSummaries(entries);
+    const selected = request.viewId
+      ? entries.find(({ revision }) => revision.viewId === request.viewId && revision.state === "active")
+      : undefined;
+    if (request.viewId && (!selected || selected.revision.tableId !== request.tableId ||
+        !this.#eligible(binding, request.tableId, selected.revision.filter, selected.revision.sort))) return undefined;
+    const before = selected ? viewIdentity(selected) : hashCanonical({
+      datasetId: binding.manifest.datasetId,
+      revisionId: binding.revision.id,
+      tableId: request.tableId,
+      viewId: null,
+      filter: null,
+      sort: null
+    });
+    const pageIdentity: CollectionRowPageIdentity = {
+      vaultId: request.activeVaultId,
+      datasetId: binding.manifest.datasetId,
+      revisionId: binding.revision.id,
+      tableId: request.tableId,
+      ...(request.viewId ? { viewId: request.viewId } : {}),
+      viewFingerprint: before
+    };
+    const page = this.#discovery.resolveRowPage(pageIdentity, request.limit ?? MAX_OPEN_ROWS, request.rowCursor);
+    if (!page) return "stale";
+    const orderedRowIds = this.#discovery.orderedRowIds(
+      binding,
+      request.tableId,
+      selected?.revision.filter,
+      selected?.revision.sort
+    );
+    if (page.boundaryRowId !== undefined && orderedRowIds[page.offset - 1] !== page.boundaryRowId) {
+      return "stale";
+    }
+    const current = this.#requireUnchangedBinding(binding);
+    if (selected) {
+      const after = this.#readViews(current).find(({ revision }) => revision.viewId === request.viewId);
+      if (!after || viewIdentity(after) !== before || after.revision.state !== "active" ||
+          !this.#eligible(current, request.tableId, after.revision.filter, after.revision.sort)) {
+        return "stale";
+      }
+    }
+    const rowIds = orderedRowIds.slice(page.offset, page.offset + page.limit);
+    const hasMore = page.offset + rowIds.length < orderedRowIds.length;
+    const projected = readCollectionSnapshot(current, request.tableId, {
+      rowIds,
+      totalRowCount: orderedRowIds.length,
+      views: activeSummaries(this.#readViews(current)),
+      ...(request.viewId ? { activeViewId: request.viewId } : {})
+    });
+    if (!projected) return undefined;
+    const snapshot = { ...projected, truncated: hasMore };
+    const boundaryRowId = rowIds[rowIds.length - 1];
+    const nextRowCursor = hasMore && boundaryRowId
+      ? this.#discovery.mintRowCursor(pageIdentity, page.offset + rowIds.length, boundaryRowId)
+      : undefined;
+    return { snapshot, ...(nextRowCursor ? { nextRowCursor } : {}) };
+  }
+
   async #readSnapshot(
     binding: BundleBinding,
     tableId: string,
@@ -384,7 +477,7 @@ export class ManagedCollectionViewService {
     if (!selected || selected.revision.tableId !== tableId ||
         !this.#eligible(binding, tableId, selected.revision.filter, selected.revision.sort)) return undefined;
     const before = viewIdentity(selected);
-    const query = await this.#query(binding, tableId, selected.revision);
+    const query = await this.#query(binding, tableId, selected.revision, MAX_OPEN_ROWS);
     const current = this.#requireUnchangedBinding(binding);
     const after = this.#readViews(current).find(({ revision }) => revision.viewId === activeViewId);
     if (!after || viewIdentity(after) !== before || after.revision.state !== "active" ||
@@ -399,12 +492,12 @@ export class ManagedCollectionViewService {
     });
   }
 
-  async #query(binding: BundleBinding, tableId: string, view: ViewRevision) {
+  async #query(binding: BundleBinding, tableId: string, view: ViewRevision | undefined, limit: number) {
     const table = binding.schema.tables.find((candidate) => candidate.id === tableId);
     if (!table) throw new PigeDomainError("collection.table_not_found", "The Collection table is unavailable.");
     const referencedIds = new Set<string>([
-      view.filter?.columnId,
-      view.sort?.columnId,
+      view?.filter?.columnId,
+      view?.sort?.columnId,
       table.columns[0]?.id
     ].filter((value): value is string => !!value));
     const columns = table.columns.filter((column) => referencedIds.has(column.id)).map(toWorkerColumn);
@@ -425,15 +518,15 @@ export class ManagedCollectionViewService {
         columns,
         plan: {
           selectColumnIds: columns.map(({ id }) => id),
-          filters: view.filter ? [{
+          filters: view?.filter ? [{
             columnId: view.filter.columnId,
             op: view.filter.operator,
             ...(view.filter.operator === "eq" ? { value: view.filter.value } : {})
           }] : [],
           groupByColumnIds: [],
           aggregates: [],
-          orderBy: view.sort ? [{ by: view.sort.columnId, direction: view.sort.direction }] : [],
-          limit: MAX_OPEN_ROWS
+          orderBy: view?.sort ? [{ by: view.sort.columnId, direction: view.sort.direction }] : [],
+          limit
         },
         limits: { ...DATASET_QUERY_DEFAULT_LIMITS }
       };

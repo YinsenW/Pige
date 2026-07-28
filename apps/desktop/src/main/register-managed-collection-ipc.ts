@@ -8,6 +8,8 @@ import {
   CollectionCellEditResultSchema,
   CollectionCreateViewRequestSchema,
   CollectionCreateViewResultSchema,
+  CollectionListRequestSchema,
+  CollectionListResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
   CollectionRenameColumnRequestSchema,
@@ -22,6 +24,8 @@ import {
   type CollectionCellEditResult,
   type CollectionCreateViewRequest,
   type CollectionCreateViewResult,
+  type CollectionListRequest,
+  type CollectionListResult,
   type CollectionAppendDefaultRowRequest,
   type CollectionAppendDefaultRowResult,
   type CollectionOpenRequest,
@@ -38,6 +42,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
   readonly isTrustedSender: (sender: WebContents) => boolean;
   readonly getActiveVaultId: () => string | undefined;
+  readonly listCollections: (
+    request: CollectionListRequest
+  ) => CollectionListResult | Promise<CollectionListResult>;
   readonly openCollection: (
     request: CollectionOpenRequest
   ) => CollectionOpenResult | Promise<CollectionOpenResult>;
@@ -62,6 +69,14 @@ interface RegisterManagedCollectionIpcOptions {
   readonly trashCollectionRow: (
     request: CollectionTrashRowRequest
   ) => CollectionTrashRowResult | Promise<CollectionTrashRowResult>;
+}
+
+function failedList(request: CollectionListRequest): CollectionListResult {
+  return CollectionListResultSchema.parse({
+    apiVersion: request.apiVersion,
+    activeVaultId: request.activeVaultId,
+    status: "failed"
+  });
 }
 
 function failedOpen(request: CollectionOpenRequest): CollectionOpenResult {
@@ -195,6 +210,20 @@ function assertEditIdentity(
 }
 
 export function registerManagedCollectionIpc(options: RegisterManagedCollectionIpcOptions): void {
+  options.ipcMain.handle("collections.list", async (_event, request: unknown) => {
+    const parsed = CollectionListRequestSchema.parse(request);
+    if (options.getActiveVaultId() !== parsed.activeVaultId) return failedList(parsed);
+    let rawResult: CollectionListResult;
+    try {
+      rawResult = await options.listCollections(parsed);
+    } catch {
+      return failedList(parsed);
+    }
+    const result = CollectionListResultSchema.parse(rawResult);
+    if (result.activeVaultId !== parsed.activeVaultId) return failedList(parsed);
+    return options.getActiveVaultId() === parsed.activeVaultId ? result : failedList(parsed);
+  });
+
   options.ipcMain.handle("collections.open", async (_event, request: unknown) => {
     const parsed = CollectionOpenRequestSchema.parse(request);
     if (options.getActiveVaultId() !== parsed.activeVaultId) return failedOpen(parsed);
