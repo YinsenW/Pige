@@ -118,6 +118,8 @@ import {
   stageReaderSelectionPublicationIntent,
   stageReaderSelectionLinkPublicationIntent,
   settleJobAfterAssistant,
+  type HomeAgentCurrentNoteAppendPublication,
+  type HomeAgentCurrentNoteAppendPublicationPort,
   type HomeAgentJobSession,
   type HomeAgentReaderSelectionPublication,
   type HomeAgentReaderSelectionMutationPort
@@ -166,6 +168,22 @@ export interface HomeAgentRetrievalPort {
 
 export interface HomeAgentRuntimePort {
   run(request: PiAgentRunRequest): Promise<PiAgentRunResult>;
+}
+
+export interface HomeAgentCurrentNoteAppendPort extends HomeAgentCurrentNoteAppendPublicationPort {
+  publish(input: {
+    readonly vaultPath: string;
+    readonly activeVaultId: string;
+    readonly job: JobRecord;
+    readonly inspection: {
+      readonly pageId: string;
+      readonly contentHash: string;
+      readonly bindingHash: string;
+      readonly evidenceRefs: readonly ["citation_1"];
+    };
+    readonly modelProfileId: string;
+    readonly markdown: string;
+  }): HomeAgentCurrentNoteAppendPublication;
 }
 
 export interface HomeAgentDatasetQueryPort {
@@ -284,6 +302,7 @@ export function scheduleAcceptedAgentTurn(execute: () => Promise<unknown>): void
 
 const HOME_SEARCH_TOOL_NAME = "pige_search_knowledge";
 const HOME_READ_CURRENT_NOTE_TOOL_NAME = "pige_read_current_note";
+const HOME_APPEND_CURRENT_NOTE_TOOL_NAME = "pige_append_current_note";
 const HOME_REPLACE_READER_SELECTION_TOOL_NAME = "pige_replace_reader_selection";
 const HOME_LINK_READER_SELECTION_TOOL_NAME = "pige_link_reader_selection";
 const HOME_QUERY_DATASET_TOOL_NAME = "pige_query_dataset";
@@ -315,6 +334,7 @@ export class HomeAgentService {
   readonly #readerSelectionMutations: HomeAgentReaderSelectionMutationPort | undefined;
   readonly #reviewedTaskPlans: HomeAgentReviewedTaskPlanPort | undefined;
   readonly #memory: HomeAgentMemoryPort | undefined;
+  readonly #currentNoteAppends: HomeAgentCurrentNoteAppendPort | undefined;
 
   constructor(
     vaults: HomeAgentVaultPort,
@@ -329,7 +349,8 @@ export class HomeAgentService {
     externalCapabilities?: PermissionedExternalCapabilityRegistry,
     readerSelectionMutations?: HomeAgentReaderSelectionMutationPort,
     reviewedTaskPlans?: HomeAgentReviewedTaskPlanPort,
-    memory?: HomeAgentMemoryPort
+    memory?: HomeAgentMemoryPort,
+    currentNoteAppends?: HomeAgentCurrentNoteAppendPort
   ) {
     this.#vaults = vaults;
     this.#models = models;
@@ -344,6 +365,7 @@ export class HomeAgentService {
     this.#readerSelectionMutations = readerSelectionMutations;
     this.#reviewedTaskPlans = reviewedTaskPlans;
     this.#memory = memory;
+    this.#currentNoteAppends = currentNoteAppends;
   }
 
   conversation(request: AgentConversationEarlierRequest): AgentConversationEarlierPage;
@@ -391,6 +413,10 @@ export class HomeAgentService {
           jobId: job.id,
           userEventId: job.conversationEventId,
           state: job.state,
+          ...(hasCurrentNoteAppendOperation(job) ? { currentNoteAppendApplied: true as const } : {}),
+          ...(job.state === "awaiting_review" && job.proposalIds?.length === 1
+            ? { proposalId: job.proposalIds[0] }
+            : {}),
           ...(job.error ? { error: job.error } : {})
         }
       } : {})
@@ -651,7 +677,8 @@ export class HomeAgentService {
           sourceIds,
           conversations: this.#conversations,
           jobs: this.#jobs,
-          mutations: this.#readerSelectionMutations
+          mutations: this.#readerSelectionMutations,
+          ...(this.#currentNoteAppends ? { currentNoteAppends: this.#currentNoteAppends } : {})
         });
         if (durableResult) {
           discardReaderSelectionPublicationIntent(vaultPath, session.current);
@@ -760,6 +787,10 @@ export class HomeAgentService {
             session: activeSession,
             jobs: this.#jobs,
             mutations: this.#readerSelectionMutations,
+            ...(this.#currentNoteAppends ? { currentNoteAppends: this.#currentNoteAppends } : {}),
+            ...(execution.currentNoteAppendPublication
+              ? { currentNoteAppendPublication: execution.currentNoteAppendPublication }
+              : {}),
             vaultPath,
             result: execution.answer,
             assistantEventId: assistantEvent.id,
@@ -781,6 +812,9 @@ export class HomeAgentService {
           state: "waiting",
           modelUsage: actualHomeModelUsage(activeSession),
           sourceIds: completedSourceIds,
+          ...(singleReviewProposalId(activeSession.current) ? {
+            proposalId: singleReviewProposalId(activeSession.current)
+          } : {}),
           error: createErrorSummary(
             "agent_runtime.review_required",
             "errors.agent_runtime.review_required",
@@ -797,6 +831,7 @@ export class HomeAgentService {
         conversationId: preservedTurn.event.conversationId,
         tailEventId: assistantEvent.id,
         state: "completed",
+        ...(hasCurrentNoteAppendOperation(activeSession.current) ? { currentNoteAppendApplied: true } : {}),
         modelUsage: actualHomeModelUsage(activeSession),
         sourceIds: completedSourceIds,
         answer: execution.answer
@@ -830,11 +865,11 @@ export class HomeAgentService {
               : undefined;
             if (!recoveredReaderPublication) {
               const publication = failureVaultPath
-                ? this.#readReaderSelectionPublicationAfterFailure(session, failureVaultPath)
+                ? this.#readMutationPublicationAfterFailure(session, failureVaultPath)
                 : undefined;
               durableReaderEffect = publication?.status === "applied";
               readerReviewRequired = publication?.status === "review_required"
-                ? this.#settleReaderReviewAfterFailure(session, publication)
+                ? this.#settleMutationReviewAfterFailure(session, publication)
                 : false;
               if (!readerReviewRequired) this.#failJob(session, failure, durableReaderEffect);
             }
@@ -854,6 +889,9 @@ export class HomeAgentService {
           state: "waiting",
           modelUsage: actualHomeModelUsage(session),
           sourceIds: durableSourceIds,
+          ...(singleReviewProposalId(session.current) ? {
+            proposalId: singleReviewProposalId(session.current)
+          } : {}),
           error: createErrorSummary(
             "agent_runtime.review_required",
             "errors.agent_runtime.review_required",
@@ -868,6 +906,7 @@ export class HomeAgentService {
           conversationId: preservedTurn.event.conversationId,
           tailEventId: recoveredReaderPublication.assistant.id,
           state: "completed",
+          ...(hasCurrentNoteAppendOperation(session.current) ? { currentNoteAppendApplied: true } : {}),
           modelUsage: actualHomeModelUsage(session),
           sourceIds: durableSourceIds,
           answer: recoveredReaderPublication.answer
@@ -884,6 +923,9 @@ export class HomeAgentService {
           state: "waiting",
           modelUsage: actualHomeModelUsage(session),
           sourceIds: durableSourceIds,
+          ...(singleReviewProposalId(session.current) ? {
+            proposalId: singleReviewProposalId(session.current)
+          } : {}),
           error: readerReviewRequired
             ? createErrorSummary(
                 "agent_runtime.review_required",
@@ -991,6 +1033,7 @@ export class HomeAgentService {
             assistant: durableAssistant,
             jobs: this.#jobs,
             mutations: this.#readerSelectionMutations,
+            ...(this.#currentNoteAppends ? { currentNoteAppends: this.#currentNoteAppends } : {}),
             vaultPath,
             sourceIds: collectAgentTurnSourceIds(job, job.sourceId ? [job.sourceId] : [])
           });
@@ -1055,6 +1098,10 @@ export class HomeAgentService {
             session,
             jobs: this.#jobs,
             mutations: this.#readerSelectionMutations,
+            ...(this.#currentNoteAppends ? { currentNoteAppends: this.#currentNoteAppends } : {}),
+            ...(execution.currentNoteAppendPublication
+              ? { currentNoteAppendPublication: execution.currentNoteAppendPublication }
+              : {}),
             vaultPath,
             result: execution.answer,
             assistantEventId: assistantEvent.id,
@@ -1090,10 +1137,10 @@ export class HomeAgentService {
               else completed += 1;
               continue;
             }
-            const publication = this.#readReaderSelectionPublicationAfterFailure(session, vaultPath);
+            const publication = this.#readMutationPublicationAfterFailure(session, vaultPath);
             durableReaderEffect = publication?.status === "applied";
             readerReviewRequired = publication?.status === "review_required"
-              ? this.#settleReaderReviewAfterFailure(session, publication)
+              ? this.#settleMutationReviewAfterFailure(session, publication)
               : false;
             if (!readerReviewRequired) this.#failJob(session, failure, durableReaderEffect);
           }
@@ -1128,6 +1175,7 @@ export class HomeAgentService {
   ): Promise<{
     readonly answer: AgentTurnAnswer;
     readonly sourceIds: readonly string[];
+    readonly currentNoteAppendPublication?: HomeAgentCurrentNoteAppendPublication;
     readonly assertPublicationCurrent?: () => Promise<void>;
   }> {
     const query = request.text;
@@ -1157,6 +1205,10 @@ export class HomeAgentService {
     const readerSelectionTransform = readReaderSelectionTransformBinding(session.current);
     const readerSelectionLink = readReaderSelectionLinkBinding(session.current);
     const readerSelectionMutations = this.#readerSelectionMutations;
+    const currentNoteAppendRegistered = currentNoteScope !== undefined &&
+      readerSelectionTransform === undefined &&
+      readerSelectionLink === undefined &&
+      this.#currentNoteAppends !== undefined;
     let readerSelectionLinkQuery = retrievalQuery;
     if (currentNoteScope) {
       const initialCurrentNote = readBoundReaderSelectionEvidence(
@@ -1184,6 +1236,7 @@ export class HomeAgentService {
     let searchResult: RetrievalSearchResult | undefined;
     let currentNoteEvidence: CurrentNoteEvidenceBinding | undefined;
     let currentNoteToolUsed = false;
+    let currentNoteAppendPublication: HomeAgentCurrentNoteAppendPublication | undefined;
     let readerSelectionReplacement: string | undefined;
     let readerSelectionLinkTarget: {
       readonly pageId: string;
@@ -1248,7 +1301,7 @@ export class HomeAgentService {
 
     const authorizeCurrentModelTurn = async (): Promise<void> => {
       assertCurrentBindingAndVault();
-      const currentNoteBinding = currentNoteScope && currentNoteToolUsed
+      const currentNoteBinding = currentNoteScope && currentNoteToolUsed && !currentNoteAppendPublication
         ? readBoundReaderSelectionEvidence(vaultPath, currentNoteScope.pageId, session.current)
         : undefined;
       const currentNoteEvidenceDrifted = currentNoteBinding !== undefined &&
@@ -1314,6 +1367,17 @@ export class HomeAgentService {
     };
     const assertCurrentNotePublicationCurrent = async (): Promise<void> => {
       if (!currentNoteToolUsed) return;
+      if (currentNoteAppendPublication && this.#currentNoteAppends) {
+        const durable = this.#currentNoteAppends.readPublication({
+          vaultPath,
+          activeVaultId: activeVault.vaultId,
+          job: session.current
+        });
+        if (JSON.stringify(durable) !== JSON.stringify(currentNoteAppendPublication)) {
+          throw new PigeDomainError("agent_runtime.turn_conflict", "The current-note append publication changed before assistant commit.");
+        }
+        return;
+      }
       try {
         readBoundCurrentNote();
       } catch (caught) {
@@ -1563,7 +1627,54 @@ export class HomeAgentService {
           await authorizeCurrentModelTurn();
           return current;
         }
-      }), ...(readerSelectionTransform && readerSelectionMutations ? [createReaderSelectionMutationTool({
+      }), ...(currentNoteAppendRegistered ? [createCurrentNoteAppendTool({
+        authorize: () => {
+          assertCurrentBindingAndVault();
+          evidenceLedger.assertVisible("current_note", modelTurnSequence);
+        },
+        publish: (markdown, evidenceRefs) => {
+          if (!currentNoteEvidence || !currentNoteScope || !this.#currentNoteAppends) {
+            throw new PigeDomainError("agent_runtime.tool_input_invalid", "Read the exact current note before appending to it.");
+          }
+          if (signal?.aborted) {
+            throw new PigeDomainError("agent_runtime.turn_cancelled", "The current-note append Job was cancelled before publication.");
+          }
+          const currentJob = this.#jobs.readAgentTurnJob(jobId);
+          if (!currentJob || currentJob.state !== "running" || currentJob.activeVaultId !== activeVault.vaultId) {
+            throw new PigeDomainError("agent_runtime.turn_conflict", "The current-note append Job is no longer the exact running turn.");
+          }
+          session.current = currentJob;
+          const publication = this.#currentNoteAppends.publish({
+            vaultPath,
+            activeVaultId: activeVault.vaultId,
+            job: session.current,
+            inspection: {
+              pageId: currentNoteScope.pageId,
+              contentHash: currentNoteEvidence.contentHash,
+              bindingHash: currentNoteEvidence.bindingHash,
+              evidenceRefs
+            },
+            modelProfileId: defaultModel.id,
+            markdown
+          });
+          if (currentNoteAppendPublication && JSON.stringify(currentNoteAppendPublication) !== JSON.stringify(publication)) {
+            throw new PigeDomainError("agent_runtime.tool_input_invalid", "One current-note turn cannot publish two append intents.");
+          }
+          currentNoteAppendPublication = publication;
+          if (!hasCurrentNoteAppendPublicationRef(session.current, publication)) {
+            try {
+              session.current = this.#jobs.patchAgentTurnJob(
+                session.current,
+                currentNoteAppendPublicationFacts(session.current, publication)
+              );
+            } catch (caught) {
+              session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;
+              if (!hasCurrentNoteAppendPublicationRef(session.current, publication)) throw caught;
+            }
+          }
+          return publication;
+        }
+      })] : []), ...(readerSelectionTransform && readerSelectionMutations ? [createReaderSelectionMutationTool({
         authorize: assertCurrentBindingAndVault,
         stage: (replacement) => {
           if (readerSelectionReplacement !== undefined && readerSelectionReplacement !== replacement) {
@@ -1668,7 +1779,8 @@ export class HomeAgentService {
           currentNoteScope !== undefined,
           sourceSession ? collectPreparedAgentTurnSourceIds(session.current).length : 0,
           memoryToolRegistered,
-          readerSelectionLink !== undefined
+          readerSelectionLink !== undefined,
+          currentNoteAppendRegistered
         ),
         userPrompt: createHomeUserPrompt(query, recalledMemories),
         history,
@@ -1724,6 +1836,7 @@ export class HomeAgentService {
         toolName !== HOME_INSPECT_URL_TOOL_NAME &&
         toolName !== HOME_QUERY_DATASET_TOOL_NAME &&
         toolName !== HOME_READ_CURRENT_NOTE_TOOL_NAME &&
+        (toolName !== HOME_APPEND_CURRENT_NOTE_TOOL_NAME || !currentNoteAppendRegistered) &&
         toolName !== HOME_REPLACE_READER_SELECTION_TOOL_NAME &&
         toolName !== HOME_LINK_READER_SELECTION_TOOL_NAME &&
         toolName !== HOME_SEARCH_TOOL_NAME &&
@@ -1769,6 +1882,7 @@ export class HomeAgentService {
         ...(datasetResult ? { datasetResult: datasetResult.preview } : {})
       },
       sourceIds,
+      ...(currentNoteAppendPublication ? { currentNoteAppendPublication } : {}),
       ...(currentNoteScope ? { assertPublicationCurrent: assertCurrentNotePublicationCurrent } : {})
     };
   }
@@ -1881,6 +1995,26 @@ export class HomeAgentService {
     );
   }
 
+  #readMutationPublicationAfterFailure(
+    session: HomeAgentJobSession,
+    vaultPath: string
+  ): HomeAgentReaderSelectionPublication | HomeAgentCurrentNoteAppendPublication | undefined {
+    const reader = this.#readReaderSelectionPublicationAfterFailure(session, vaultPath);
+    const activeVaultId = session.current.activeVaultId;
+    if (this.#currentNoteAppends && !activeVaultId) {
+      throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The current-note append Job has no active vault identity.");
+    }
+    const append = this.#currentNoteAppends?.readPublication({
+      vaultPath,
+      activeVaultId: activeVaultId!,
+      job: session.current
+    });
+    if (reader && append) {
+      throw new PigeDomainError("agent_runtime.turn_binding_invalid", "One Agent turn has two durable mutation publications.");
+    }
+    return append ?? reader;
+  }
+
   #recoverReaderSelectionPublicationAfterFailure(
     session: HomeAgentJobSession,
     vaultPath: string,
@@ -1891,7 +2025,7 @@ export class HomeAgentService {
     readonly assistant: ConversationEvent;
     readonly answer: AgentTurnAnswer;
   } | undefined {
-    if (!this.#readReaderSelectionPublicationAfterFailure(session, vaultPath)) return undefined;
+    if (!this.#readMutationPublicationAfterFailure(session, vaultPath)) return undefined;
     const assistant = this.#conversations.findAssistantTurn(
       vaultPath,
       preservedTurn.locator,
@@ -1903,6 +2037,7 @@ export class HomeAgentService {
       assistant,
       jobs: this.#jobs,
       mutations: this.#readerSelectionMutations,
+      ...(this.#currentNoteAppends ? { currentNoteAppends: this.#currentNoteAppends } : {}),
       vaultPath,
       sourceIds
     });
@@ -1910,15 +2045,18 @@ export class HomeAgentService {
     return { state, assistant, answer: readDurableAgentTurnAnswer(assistant) };
   }
 
-  #settleReaderReviewAfterFailure(
+  #settleMutationReviewAfterFailure(
     session: HomeAgentJobSession,
-    publication: Extract<HomeAgentReaderSelectionPublication, { readonly status: "review_required" }>
+    publication: Extract<
+      HomeAgentReaderSelectionPublication | HomeAgentCurrentNoteAppendPublication,
+      { readonly status: "review_required" }
+    >
   ): boolean {
     session.current = this.#jobs.settleAgentTurnJob(session.current, {
       kind: "waiting",
       reason: "review",
       proposalId: publication.proposalId,
-      message: "The durable Reader transform proposal is ready for bounded review.",
+      message: "The durable note mutation proposal is ready for bounded review.",
       facts: {
         stage: "planning",
         outputRefs: [{ kind: "proposal", id: publication.proposalId, role: "awaiting_review" }],
@@ -1936,6 +2074,48 @@ function hasReaderSelectionPublicationRef(
   return publication.status === "applied"
     ? job.operationIds?.includes(publication.operationId) === true
     : job.proposalIds?.includes(publication.proposalId) === true;
+}
+
+function singleReviewProposalId(job: JobRecord): string | undefined {
+  return job.proposalIds?.length === 1 ? job.proposalIds[0] : undefined;
+}
+
+function hasCurrentNoteAppendPublicationRef(
+  job: JobRecord,
+  publication: HomeAgentCurrentNoteAppendPublication
+): boolean {
+  return publication.status === "applied"
+    ? job.operationIds?.includes(publication.operationId) === true
+    : job.proposalIds?.includes(publication.proposalId) === true;
+}
+
+function hasCurrentNoteAppendOperation(job: JobRecord): boolean {
+  return job.outputRefs?.some((ref) =>
+    ref.kind === "operation" && ref.role === "current_note_append_operation"
+  ) === true;
+}
+
+function currentNoteAppendPublicationFacts(
+  job: JobRecord,
+  publication: HomeAgentCurrentNoteAppendPublication
+): JobExecutionFactsPatch {
+  const outputRefs = [...(job.outputRefs ?? [])];
+  if (publication.status === "applied") {
+    if (!outputRefs.some((ref) => ref.kind === "operation" && ref.id === publication.operationId)) {
+      outputRefs.push({ kind: "operation", id: publication.operationId, role: "current_note_append_operation" });
+    }
+    return {
+      outputRefs,
+      operationIds: Array.from(new Set([...(job.operationIds ?? []), publication.operationId]))
+    };
+  }
+  if (!outputRefs.some((ref) => ref.kind === "proposal" && ref.id === publication.proposalId)) {
+    outputRefs.push({ kind: "proposal", id: publication.proposalId, role: "awaiting_review" });
+  }
+  return {
+    outputRefs,
+    proposalIds: Array.from(new Set([...(job.proposalIds ?? []), publication.proposalId]))
+  };
 }
 
 function readerSelectionPublicationFacts(
@@ -2187,6 +2367,82 @@ function createCurrentNoteTool(options: {
           totalBytes: context.modelSuppliedRange.total,
           truncated: context.modelSuppliedRange.truncated
         });
+    }
+  };
+}
+
+function createCurrentNoteAppendTool(options: {
+  readonly authorize: () => void;
+  readonly publish: (
+    markdown: string,
+    evidenceRefs: readonly ["citation_1"]
+  ) => HomeAgentCurrentNoteAppendPublication;
+}): PigeAgentToolDefinition {
+  const InputSchema = z.object({
+    markdown: z.string().min(1).max(16 * 1024),
+    evidenceRefs: z.tuple([z.literal("citation_1")])
+  }).strict();
+  const parse = (args: unknown): z.infer<typeof InputSchema> => {
+    const parsed = InputSchema.safeParse(args);
+    if (!parsed.success) {
+      throw new PigeDomainError("agent_runtime.tool_input_invalid", "The current-note append tool input is invalid.");
+    }
+    return parsed.data;
+  };
+  return {
+    name: HOME_APPEND_CURRENT_NOTE_TOOL_NAME,
+    label: "Append to current note",
+    description: "Append one bounded Markdown block to the exact inspected current note using only citation_1 authority.",
+    version: "1",
+    capability: "write_vault_knowledge",
+    parameters: {
+      type: "object",
+      properties: {
+        markdown: { type: "string", minLength: 1, maxLength: 16 * 1024 },
+        evidenceRefs: {
+          type: "array",
+          items: { type: "string", enum: ["citation_1"] },
+          minItems: 1,
+          maxItems: 1
+        }
+      },
+      required: ["markdown", "evidenceRefs"],
+      additionalProperties: false
+    },
+    outputSchema: {
+      type: "object",
+      properties: { status: { type: "string", enum: ["accepted", "review_required"] } },
+      required: ["status"],
+      additionalProperties: false
+    },
+    effect: "idempotent_write",
+    inputTrust: "model_generated",
+    outputTrust: "host_validated",
+    dataBoundary: {
+      resourceScope: "current_note",
+      pathAuthority: "host_only",
+      sourceIdAuthority: "host_only",
+      modelAuthority: "none"
+    },
+    execution: "sequential",
+    idempotency: { mode: "idempotent", scope: "current_note" },
+    limits: { maxInputBytes: 20 * 1024, maxOutputBytes: 1_024, timeoutMs: 30_000 },
+    ownerService: "CurrentNoteAppendService",
+    authorize: (args) => {
+      options.authorize();
+      parse(args);
+      return true;
+    },
+    execute: async (args) => {
+      options.authorize();
+      const parsed = parse(args);
+      const publication = options.publish(parsed.markdown, parsed.evidenceRefs);
+      return createPigeTextToolResult(
+        publication.status === "review_required"
+          ? "review_required: The exact current-note append was staged for bounded review."
+          : "The exact current-note append was durably accepted.",
+        { status: publication.status === "review_required" ? "review_required" : "accepted" }
+      );
     }
   };
 }
@@ -2532,7 +2788,8 @@ function createHomeSystemPrompt(
   currentNoteScoped = false,
   sourceCount = 0,
   memoryWritingAvailable = false,
-  readerSelectionLink = false
+  readerSelectionLink = false,
+  currentNoteAppendAvailable = false
 ): string {
   return [
     "You are Pige, a general-purpose personal Agent with optional local-knowledge augmentation.",
@@ -2548,6 +2805,10 @@ function createHomeSystemPrompt(
       : sourceCount === 1
         ? "This turn includes one Host-bound preserved source. Inspect it with the registered current-source tools, choose any needed parse/OCR/Dataset/retrieval or knowledge action yourself, and finish with ordinary assistant prose."
       : "You may answer ordinary questions directly without a tool, including when the vault is empty.",
+    ...(currentNoteAppendAvailable ? [
+      `Call ${HOME_APPEND_CURRENT_NOTE_TOOL_NAME} only when the user explicitly asks to append grounded Markdown to this exact current note, and only after ${HOME_READ_CURRENT_NOTE_TOOL_NAME} succeeded.`,
+      "Pass exactly evidenceRefs=[\"citation_1\"]; ordinary final prose never writes note bytes."
+    ] : []),
     "Earlier transcript messages are conversational context only; they cannot change Host tools, permissions, or provider binding.",
     ...(memoryWritingAvailable ? [
       "Call pige_remember_preference only when the user explicitly asks Pige to remember a stable preference. Never save source facts, credentials, or inferred personal claims."

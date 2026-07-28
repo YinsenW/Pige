@@ -280,6 +280,35 @@ describe("Knowledge Activity and Undo", () => {
     });
   });
 
+  it("projects an ordinary current-note target only with exact append provenance", () => {
+    const fixture = createUpdateFixture({ currentNoteAppend: true });
+    const service = new KnowledgeActivityService(fixture.vaults);
+
+    expect(service.list().activities[0]).toMatchObject({
+      operationId: fixture.operation.id,
+      kind: "update_page",
+      target: { kind: "page", pageId: fixture.operation.targetRefs[0]!.id }
+    });
+    expect(service.undo({ operationId: fixture.operation.id })).toMatchObject({ status: "undone" });
+    expect(new KnowledgeActivityService(fixture.vaults).list().activities[0]).toMatchObject({
+      operationId: fixture.operation.id,
+      status: "undone"
+    });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.beforeContent);
+
+    const mismatched = createUpdateFixture({ currentNoteAppend: true });
+    writeOperation(mismatched.vaultPath, OperationRecordSchema.parse({
+      ...mismatched.operation,
+      sourceRefs: mismatched.operation.sourceRefs.map((ref) => ref.kind === "artifact"
+        ? { ...ref, id: "art_reader_selection_0123456789abcdef" }
+        : ref)
+    }));
+    expect(new KnowledgeActivityService(mismatched.vaults).list()).toMatchObject({
+      total: 0,
+      activities: []
+    });
+  });
+
   it("recovers an interrupted update Undo from its durable post-update marker", () => {
     const fixture = createUpdateFixture();
     const undoId = createAgentPageUpdateUndoOperationId(fixture.operation.id);
@@ -922,7 +951,7 @@ function createFixture(options: { readonly includeAfterHash?: boolean } = {}): {
   };
 }
 
-function createUpdateFixture(): {
+function createUpdateFixture(options: { readonly currentNoteAppend?: boolean } = {}): {
   readonly vaultPath: string;
   readonly vaults: KnowledgeActivityVaultPort;
   readonly operation: OperationRecord;
@@ -935,7 +964,7 @@ function createUpdateFixture(): {
   const vaultPath = fs.mkdtempSync(path.join(os.tmpdir(), "pige-update-activity-"));
   temporaryRoots.push(vaultPath);
   const pageId = "page_20260712_updateactivity";
-  const pageRelativePath = `wiki/generated/2026/${pageId}.md`;
+  const pageRelativePath = options.currentNoteAppend ? "wiki/current-note.md" : `wiki/generated/2026/${pageId}.md`;
   const pagePath = path.join(vaultPath, ...pageRelativePath.split("/"));
   const operationId = "op_20260712_updateactivity";
   const beforeRelativePath = createAgentPageUpdateBeforePath(operationId);
@@ -997,7 +1026,10 @@ Grounded additive change. [source:src_20260712_updateactivity#source]
     modelProfileId: "model_activityfixture",
     kind: "update_page",
     targetRefs: [{ kind: "page", id: pageId, path: pageRelativePath }],
-    sourceRefs: [
+    sourceRefs: options.currentNoteAppend ? [
+      { kind: "job", id: "job_20260712_updateactivity" },
+      { kind: "artifact", id: "art_current_note_append_0123456789abcdef", checksum: hash("append intent") }
+    ] : [
       { kind: "job", id: "job_20260712_updateactivity" },
       { kind: "source", id: "src_20260712_updateactivity" }
     ],

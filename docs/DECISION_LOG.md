@@ -3550,6 +3550,29 @@ References:
 - `resources/parser-manifests/paddleocr-local.parser.manifest.json`
 - `docs/TECH_ARCHITECTURE.md`
 
+### D-20260728-Current-Note-Cited-Append
+
+Status: Accepted
+Date: 2026-07-28
+
+Decision:
+
+After exact current-note inspect, `CurrentNoteAppendService` may CAS-publish one bounded
+`citation_1`-bound Agent `update_page`, or a stale proposal.
+
+Rationale:
+
+Keep write authority single-owned.
+
+Consequences:
+
+- Citations remain; private effect identity is restart-adoptable; renderer review is bounded;
+  Activity consumes `update_page` without owning append logic.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`, `docs/TECH_ARCHITECTURE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

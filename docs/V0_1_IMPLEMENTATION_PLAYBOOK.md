@@ -552,9 +552,9 @@ and 10,000-page/100,000-chunk warm lexical evidence. B6.06 freezes one prebuilt 
 runtime, derived vector DB and fail-lexical `semantic_hybrid` path; implementation,
 reranking, packaged platforms and broader recovery remain open, so E6.02 stays partial.
 
-B6.10 current-note timeline/citations/wait/egress and one B6.11 Reader
-read/transform/review/recovery slice work. Broader mutation, Activity/Undo, platforms and
-exceptions remain; E6.06 and PIGE-UI-005 stay planned.
+B6.10 current-note timeline/citations/wait/egress and B6.11 Reader read/transform/review/recovery
+work; an inspect-gated cited append contract is frozen. Implementation, broader mutation, platforms
+and evidence remain, so E6.06 and PIGE-UI-005 stay planned.
 
 B6.16 foundation evidence covers one Pi-selected `pige_query_dataset@1` catalog/query,
 opaque refs and strict typed plans, exact managed-collection revision/privacy binding,

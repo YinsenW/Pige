@@ -38,6 +38,11 @@ import type {
   CollectionTrashRowRequest,
   CollectionTrashRowResult,
   ConfirmationProposal,
+  CurrentNoteAppendProposalDecisionRequest,
+  CurrentNoteAppendProposalDecisionResult,
+  CurrentNoteAppendProposalGetRequest,
+  CurrentNoteAppendProposalGetResult,
+  CurrentNoteAppendProposalPreview,
   DatasetLogicalType,
   EffectiveAppearanceTheme,
   HighRiskConfirmationChangedEvent,
@@ -226,6 +231,11 @@ export type {
   HighRiskConfirmationSubject,
   HighRiskConfirmationTarget,
   HighRiskEffect,
+  CurrentNoteAppendProposalDecisionRequest,
+  CurrentNoteAppendProposalDecisionResult,
+  CurrentNoteAppendProposalGetRequest,
+  CurrentNoteAppendProposalGetResult,
+  CurrentNoteAppendProposalPreview,
   PiPackageInstallRequest,
   PiPackageInstallRequestId,
   PiPackageInstallResult,
@@ -1216,6 +1226,7 @@ export type AgentSubmitTurnResult =
       readonly conversationId: string;
       readonly tailEventId: string;
       readonly state: "completed";
+      readonly currentNoteAppendApplied?: true;
       readonly modelUsage: HomeAgentModelUsage;
       readonly sourceIds: readonly string[];
       readonly rejectedFiles?: readonly CaptureFileRejection[];
@@ -1231,6 +1242,7 @@ export type AgentSubmitTurnResult =
       readonly modelUsage: HomeAgentModelUsage;
       readonly sourceIds: readonly string[];
       readonly rejectedFiles?: readonly CaptureFileRejection[];
+      readonly proposalId?: string | undefined;
       readonly error: PigeErrorSummary;
     }
   | {
@@ -1286,6 +1298,8 @@ export interface AgentConversationTurnSummary {
   readonly jobId: string;
   readonly userEventId: string;
   readonly state: JobState;
+  readonly proposalId?: string | undefined;
+  readonly currentNoteAppendApplied?: true;
   readonly error?: PigeErrorSummary;
 }
 
@@ -1518,6 +1532,12 @@ export interface PigeDesktopApi {
       (request: AgentConversationEarlierRequest): Promise<AgentConversationEarlierPage>;
       (request?: AgentConversationInitialRequest): Promise<AgentConversationInitialTimeline | undefined>;
     };
+    readonly currentNoteAppendProposal: (
+      request: CurrentNoteAppendProposalGetRequest
+    ) => Promise<CurrentNoteAppendProposalGetResult>;
+    readonly decideCurrentNoteAppendProposal: (
+      request: CurrentNoteAppendProposalDecisionRequest
+    ) => Promise<CurrentNoteAppendProposalDecisionResult>;
     readonly onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void) => () => void;
   };
   readonly jobs: {

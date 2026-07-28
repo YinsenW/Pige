@@ -57,6 +57,19 @@ export type HomeAgentReaderSelectionPublication =
   | { readonly status: "review_required"; readonly proposalId: string }
   | { readonly status: "resolved"; readonly proposalId: string };
 
+export type HomeAgentCurrentNoteAppendPublication =
+  | { readonly status: "applied"; readonly operationId: string }
+  | { readonly status: "review_required"; readonly proposalId: string }
+  | { readonly status: "resolved"; readonly proposalId: string };
+
+export interface HomeAgentCurrentNoteAppendPublicationPort {
+  readPublication(input: {
+    readonly vaultPath: string;
+    readonly activeVaultId: string;
+    readonly job: JobRecord;
+  }): HomeAgentCurrentNoteAppendPublication | undefined;
+}
+
 export interface HomeAgentReaderSelectionMutationPort {
   publish(input: {
     readonly vaultPath: string;
@@ -295,23 +308,36 @@ export function settleJobAfterAssistant(input: {
   readonly session: HomeAgentJobSession;
   readonly jobs: HomeAgentTurnJobPort;
   readonly mutations: HomeAgentReaderSelectionMutationPort | undefined;
+  readonly currentNoteAppends?: HomeAgentCurrentNoteAppendPublicationPort;
+  readonly currentNoteAppendPublication?: HomeAgentCurrentNoteAppendPublication;
   readonly vaultPath: string;
   readonly result: AgentTurnAnswer;
   readonly assistantEventId: string;
   readonly sourceIds: readonly string[];
   readonly assistantContentHash?: string;
 }): boolean {
-  const publication = readReaderSelectionTransformPublication(
+  const readerPublication = readReaderSelectionTransformPublication(
     input.mutations,
     input.vaultPath,
     input.session.current
   ) ?? readReaderSelectionLinkPublication(input.mutations, input.vaultPath, input.session.current);
+  const appendPublication = input.currentNoteAppendPublication ?? input.currentNoteAppends?.readPublication({
+    vaultPath: input.vaultPath,
+    activeVaultId: requireJobActiveVaultId(input.session.current),
+    job: input.session.current
+  });
+  if (readerPublication && appendPublication) {
+    throw publicationConflict("One Agent turn cannot publish both Reader-selection and current-note append mutations.");
+  }
+  const publication = appendPublication ?? readerPublication;
   if (publication?.status === "review_required") {
     input.session.current = input.jobs.settleAgentTurnJob(input.session.current, {
       kind: "waiting",
       reason: "review",
       proposalId: publication.proposalId,
-      message: "The Reader transform requires bounded review before any note bytes are changed.",
+      message: appendPublication
+        ? "The current-note append requires bounded review before any note bytes are changed."
+        : "The Reader transform requires bounded review before any note bytes are changed.",
       facts: {
         stage: "planning",
         outputRefs: [
@@ -329,11 +355,14 @@ export function settleJobAfterAssistant(input: {
     return true;
   }
   if (publication?.status === "resolved") {
-    throw publicationConflict("The Reader transform proposal resolved before its Job converged.");
+    throw publicationConflict("The durable mutation proposal resolved before its Job converged.");
   }
   completeJob({
     ...input,
-    operationIds: publication?.status === "applied" ? [publication.operationId] : []
+    operationRefs: publication?.status === "applied" ? [{
+      id: publication.operationId,
+      role: appendPublication ? "current_note_append_operation" : "reader_selection_transform_operation"
+    }] : []
   });
   return false;
 }
@@ -346,8 +375,13 @@ export function completeJob(input: {
   readonly sourceIds?: readonly string[];
   readonly assistantContentHash?: string;
   readonly operationIds?: readonly string[];
+  readonly operationRefs?: readonly { readonly id: string; readonly role: string }[];
 }): void {
-  const operationIds = input.operationIds ?? [];
+  const operationRefs = input.operationRefs ?? (input.operationIds ?? []).map((id) => ({
+    id,
+    role: "reader_selection_transform_operation"
+  }));
+  const operationIds = operationRefs.map(({ id }) => id);
   input.session.current = input.jobs.settleAgentTurnJob(input.session.current, {
     kind: "completed",
     message: completionMessage(input.result),
@@ -359,7 +393,7 @@ export function completeJob(input: {
         input.sourceIds ?? [],
         input.result,
         input.assistantContentHash,
-        operationIds
+        operationRefs
       ),
       ...(operationIds.length > 0 ? {
         operationIds: Array.from(new Set([...(input.session.current.operationIds ?? []), ...operationIds]))
@@ -378,6 +412,7 @@ export function readDurableTurnResult(input: {
   readonly conversations: AgentTurnConversationStore;
   readonly jobs: HomeAgentTurnJobPort;
   readonly mutations: HomeAgentReaderSelectionMutationPort | undefined;
+  readonly currentNoteAppends?: HomeAgentCurrentNoteAppendPublicationPort;
 }): AgentSubmitTurnResult | undefined {
   const assistant = input.conversations.findAssistantTurn(
     input.vaultPath,
@@ -396,6 +431,7 @@ export function readDurableTurnResult(input: {
         session: input.session,
         jobs: input.jobs,
         mutations: input.mutations,
+        ...(input.currentNoteAppends ? { currentNoteAppends: input.currentNoteAppends } : {}),
         vaultPath: input.vaultPath,
         result: answer,
         assistantEventId: assistant.id,
@@ -411,6 +447,7 @@ export function readDurableTurnResult(input: {
       conversationId: input.preservedTurn.event.conversationId,
       tailEventId: assistant.id,
       state: "completed",
+      ...(hasCurrentNoteAppendOperation(input.session.current) ? { currentNoteAppendApplied: true } : {}),
       modelUsage: actualHomeModelUsage(input.session),
       sourceIds: collectAgentTurnSourceIds(input.session.current, input.sourceIds),
       answer
@@ -432,6 +469,9 @@ export function readDurableTurnResult(input: {
       state: "waiting",
       modelUsage: actualHomeModelUsage(input.session),
       sourceIds: collectAgentTurnSourceIds(input.session.current, input.sourceIds),
+      ...(singleReviewProposalId(input.session.current) ? {
+        proposalId: singleReviewProposalId(input.session.current)
+      } : {}),
       error: input.session.current.error ?? PigeErrorSummarySchema.parse({
         code: "agent_runtime.turn_in_progress",
         domain: "agent_runtime",
@@ -468,22 +508,34 @@ export function recoverDurableAssistantPublication(input: {
   readonly assistant: ConversationEvent;
   readonly jobs: HomeAgentTurnJobPort;
   readonly mutations: HomeAgentReaderSelectionMutationPort | undefined;
+  readonly currentNoteAppends?: HomeAgentCurrentNoteAppendPublicationPort;
   readonly vaultPath: string;
   readonly sourceIds: readonly string[];
 }): "completed" | "waiting" {
   input.session.modelInvocationStarted = true;
   const answer = readDurableAgentTurnAnswer(input.assistant);
-  const publication = readReaderSelectionTransformPublication(
+  const readerPublication = readReaderSelectionTransformPublication(
     input.mutations,
     input.vaultPath,
     input.session.current
   );
+  const appendPublication = input.currentNoteAppends?.readPublication({
+    vaultPath: input.vaultPath,
+    activeVaultId: requireJobActiveVaultId(input.session.current),
+    job: input.session.current
+  });
+  if (readerPublication && appendPublication) {
+    throw publicationConflict("Recovery found two durable mutation publications for one Agent turn.");
+  }
+  const publication = appendPublication ?? readerPublication;
   if (publication?.status === "review_required") {
     input.session.current = input.jobs.settleAgentTurnJob(input.session.current, {
       kind: "waiting",
       reason: "review",
       proposalId: publication.proposalId,
-      message: "Recovered the durable assistant result and its bounded Reader review.",
+      message: appendPublication
+        ? "Recovered the durable assistant result and its bounded current-note append review."
+        : "Recovered the durable assistant result and its bounded Reader review.",
       facts: {
         stage: "planning",
         outputRefs: [
@@ -501,9 +553,13 @@ export function recoverDurableAssistantPublication(input: {
     return "waiting";
   }
   if (publication?.status === "resolved") {
-    throw publicationConflict("The Reader transform proposal resolved before recovery converged.");
+    throw publicationConflict("The durable mutation proposal resolved before recovery converged.");
   }
-  const operationIds = publication?.status === "applied" ? [publication.operationId] : [];
+  const operationRefs = publication?.status === "applied" ? [{
+    id: publication.operationId,
+    role: appendPublication ? "current_note_append_operation" : "reader_selection_transform_operation"
+  }] : [];
+  const operationIds = operationRefs.map(({ id }) => id);
   input.session.current = input.jobs.adoptAgentTurnCompletion(input.session.current, {
     checkpointId: "agent_turn_assistant_event_persisted",
     message: "Recovered the durable assistant result without another model call.",
@@ -514,7 +570,7 @@ export function recoverDurableAssistantPublication(input: {
         input.sourceIds,
         answer,
         input.assistant.contentHash,
-        operationIds
+        operationRefs
       ),
       ...(operationIds.length > 0 ? {
         operationIds: Array.from(new Set([...(input.session.current.operationIds ?? []), ...operationIds]))
@@ -523,6 +579,12 @@ export function recoverDurableAssistantPublication(input: {
     }
   });
   return "completed";
+}
+
+function hasCurrentNoteAppendOperation(job: JobRecord): boolean {
+  return job.outputRefs?.some((ref) =>
+    ref.kind === "operation" && ref.role === "current_note_append_operation"
+  ) === true;
 }
 
 export function actualHomeModelUsage(session: HomeAgentJobSession | undefined): HomeAgentModelUsage {
@@ -562,6 +624,9 @@ function reviewRequiredTurnResult(
     state: "waiting",
     modelUsage: actualHomeModelUsage(input.session),
     sourceIds: collectAgentTurnSourceIds(input.session.current, input.sourceIds),
+    ...(singleReviewProposalId(input.session.current) ? {
+      proposalId: singleReviewProposalId(input.session.current)
+    } : {}),
     error: PigeErrorSummarySchema.parse({
       code: "agent_runtime.review_required",
       domain: "agent_runtime",
@@ -571,6 +636,10 @@ function reviewRequiredTurnResult(
       userAction: "review_proposal"
     })
   };
+}
+
+function singleReviewProposalId(job: JobRecord): string | undefined {
+  return job.proposalIds?.length === 1 ? job.proposalIds[0] : undefined;
 }
 
 function completionMessage(result: AgentTurnAnswer): string {
@@ -590,7 +659,7 @@ function mergeAgentTurnOutputRefs(
   sourceIds: readonly string[],
   result: AgentTurnAnswer,
   assistantContentHash?: string,
-  operationIds: readonly string[] = []
+  operationRefs: readonly { readonly id: string; readonly role: string }[] = []
 ): NonNullable<JobRecord["outputRefs"]> {
   type OutputRef = NonNullable<JobRecord["outputRefs"]>[number];
   const refs = new Map<string, OutputRef>();
@@ -611,8 +680,8 @@ function mergeAgentTurnOutputRefs(
       role: result.datasetResult ? "agent_turn_dataset_source" : "agent_turn_url_source"
     });
   }
-  for (const operationId of operationIds) {
-    add({ kind: "operation", id: operationId, role: "reader_selection_transform_operation" });
+  for (const operation of operationRefs) {
+    add({ kind: "operation", id: operation.id, role: operation.role });
   }
   for (const citation of result.citations) {
     if (isDatasetAnswerCitation(citation)) {
@@ -717,6 +786,11 @@ export function readReaderSelectionPageUpdateOperation(input: {
 
 function publicationConflict(message: string): PigeDomainError {
   return new PigeDomainError("agent_runtime.turn_binding_invalid", message);
+}
+
+function requireJobActiveVaultId(job: JobRecord): string {
+  if (!job.activeVaultId) throw publicationConflict("The Agent turn Job has no active vault identity.");
+  return job.activeVaultId;
 }
 
 function resolvePublicationPath(vaultPath: string, relativePath: string): string {

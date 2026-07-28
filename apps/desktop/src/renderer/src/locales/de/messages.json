@@ -739,6 +739,7 @@
   "note.agentWorking": "Pi Agent liest diese Notiz...",
   "note.proposal.apply": "Änderung anwenden",
   "note.proposal.action.expand": "Ausgewählte Textstelle erweitern",
+  "note.proposal.action.append_current_note": "An aktuelle Notiz anhängen",
   "note.proposal.action.polish": "Ausgewählte Textstelle überarbeiten",
   "note.proposal.action.translate": "Ausgewählte Textstelle übersetzen",
   "note.proposal.description": "Diese außergewöhnliche Änderung muss geprüft werden, bevor sie die Notiz aktualisiert. Das Original bleibt über Aktivität und Rückgängig wiederherstellbar.",

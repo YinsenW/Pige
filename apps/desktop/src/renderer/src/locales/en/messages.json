@@ -739,6 +739,7 @@
   "note.agentWorking": "Pi Agent is reading this note...",
   "note.proposal.apply": "Apply change",
   "note.proposal.action.expand": "Expand selected passage",
+  "note.proposal.action.append_current_note": "Append to current note",
   "note.proposal.action.polish": "Polish selected passage",
   "note.proposal.action.translate": "Translate selected passage",
   "note.proposal.description": "This exceptional change needs review before it updates the note. The original remains recoverable through Activity and Undo.",

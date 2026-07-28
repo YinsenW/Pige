@@ -114,6 +114,204 @@ describe("Note Agent production UI", () => {
     await unmount(dom, mount.root);
   });
 
+  it("recovers an exact current-note append review and refreshes only after its durable Job completes", async () => {
+    const dom = createDom();
+    const vaultId = "vault_current_note_append";
+    const pageId = "page_current_note_append";
+    const jobId = "job_current_note_append";
+    const proposalId = "proposal_20260728_currentnoteappend";
+    const preview = {
+      proposalId,
+      kind: "append_current_note" as const,
+      state: "ready" as const,
+      revision: 3,
+      activeVaultId: vaultId,
+      pageId,
+      jobId,
+      lines: [
+        { kind: "context" as const, text: "Existing cited context" },
+        { kind: "added" as const, text: "Grounded appended line" }
+      ]
+    };
+    const conversation = vi.fn()
+      .mockResolvedValueOnce(noteAppendReviewTimeline(pageId, jobId, proposalId))
+      .mockResolvedValue(notePageTimeline(pageId, "The cited append was applied.", jobId, true));
+    const currentNoteAppendProposal = vi.fn().mockResolvedValue({ apiVersion: 1, status: "available", proposal: preview });
+    const decideCurrentNoteAppendProposal = vi.fn().mockResolvedValue({
+      apiVersion: 1,
+      status: "applied",
+      proposal: { ...preview, state: "applied" },
+      operationId: "op_20260728_currentnoteappend"
+    });
+    const completed: Array<{ vaultId: string; pageId: string; jobId: string }> = [];
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        ...noteAgentApi(conversation),
+        agent: {
+          conversation,
+          submitTurn: vi.fn(),
+          currentNoteAppendProposal,
+          decideCurrentNoteAppendProposal,
+          onTurnDraft: () => () => undefined
+        }
+      }
+    });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, {
+        ...currentNoteAgentProps(pageId, vaultId),
+        onDurableTurnCompleted: (identity) => completed.push(identity)
+      }));
+      await settle(dom);
+    });
+
+    await waitFor(dom, () => container.textContent?.includes(t("note.proposal.action.append_current_note")) === true);
+    expect(completed).toEqual([]);
+    expect(currentNoteAppendProposal).toHaveBeenCalledWith({ apiVersion: 1, activeVaultId: vaultId, pageId, jobId, proposalId });
+    expect(container.querySelector('[data-kind="context"]')?.textContent).toContain("Existing cited context");
+    expect(container.querySelector('[data-kind="added"]')?.textContent).toContain("Grounded appended line");
+    expect(container.textContent).not.toContain(proposalId);
+    expect(container.textContent).not.toContain(jobId);
+
+    await click(dom, required(buttonNamed(container, t("note.proposal.apply"))));
+    await waitFor(dom, () => completed.length === 1);
+    expect(decideCurrentNoteAppendProposal).toHaveBeenCalledWith({
+      apiVersion: 1,
+      activeVaultId: vaultId,
+      pageId,
+      jobId,
+      proposalId,
+      expectedRevision: 3,
+      decision: "approve"
+    });
+    expect(completed).toEqual([{ vaultId, pageId, jobId }]);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, {
+        ...currentNoteAgentProps(pageId, vaultId),
+        onDurableTurnCompleted: (identity) => completed.push(identity)
+      }));
+      await settle(dom);
+    });
+    expect(completed).toHaveLength(1);
+    await unmount(dom, root);
+  });
+
+  it("does not report an ordinary completed current-note turn as a durable append", async () => {
+    const dom = createDom();
+    const pageId = "page_current_note_read_only";
+    const completed = vi.fn();
+    const conversation = vi.fn().mockResolvedValue(notePageTimeline(
+      pageId,
+      "This answer only explains the note.",
+      "job_current_note_read_only"
+    ));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: noteAgentApi(conversation)
+    });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, {
+        ...currentNoteAgentProps(pageId),
+        onDurableTurnCompleted: completed
+      }));
+      await settle(dom);
+    });
+
+    await waitFor(dom, () => container.textContent?.includes("This answer only explains the note.") === true);
+    expect(completed).not.toHaveBeenCalled();
+    await unmount(dom, root);
+  });
+
+  it("does not replay a historical append completion callback on mount", async () => {
+    const dom = createDom();
+    const pageId = "page_current_note_historical_append";
+    const completed = vi.fn();
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: noteAgentApi(vi.fn().mockResolvedValue(notePageTimeline(
+        pageId,
+        "This append completed before the panel mounted.",
+        "job_current_note_historical_append",
+        true
+      )))
+    });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, {
+        ...currentNoteAgentProps(pageId),
+        onDurableTurnCompleted: completed
+      }));
+      await settle(dom);
+    });
+
+    await waitFor(dom, () => container.textContent?.includes("This append completed before the panel mounted.") === true);
+    expect(completed).not.toHaveBeenCalled();
+    await unmount(dom, root);
+  });
+
+  it("fails append review closed on an identity mismatch without exposing private failure detail", async () => {
+    const dom = createDom();
+    const pageId = "page_current_note_append_stale";
+    const jobId = "job_current_note_append_stale";
+    const proposalId = "proposal_20260728_currentnotestale";
+    const conversation = vi.fn().mockResolvedValue(noteAppendReviewTimeline(pageId, jobId, proposalId));
+    const completed = vi.fn();
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        ...noteAgentApi(conversation),
+        agent: {
+          conversation,
+          submitTurn: vi.fn(),
+          currentNoteAppendProposal: vi.fn().mockResolvedValue({
+            apiVersion: 1,
+            status: "available",
+            proposal: {
+              proposalId,
+              kind: "append_current_note",
+              state: "ready",
+              revision: 1,
+              activeVaultId: "vault_other",
+              pageId,
+              jobId,
+              lines: [{ kind: "added", text: "Must remain unavailable" }]
+            }
+          }),
+          decideCurrentNoteAppendProposal: vi.fn().mockRejectedValue(new Error("private decision body")),
+          onTurnDraft: () => () => undefined
+        }
+      }
+    });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, {
+        ...currentNoteAgentProps(pageId),
+        onDurableTurnCompleted: completed
+      }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.textContent?.includes(t("note.proposal.unavailable")) === true);
+    expect(container.textContent).not.toContain("Must remain unavailable");
+    expect(container.textContent).not.toContain("private decision body");
+    expect(buttonNamed(container, t("note.proposal.apply"))).toBeUndefined();
+    expect(completed).not.toHaveBeenCalled();
+    await unmount(dom, root);
+  });
+
   it("fences a replaced snapshot cursor while retaining same-scope messages and resets only on identity change", async () => {
     const dom = createDom();
     let resolveOldCursor!: (value: unknown) => void;
@@ -1288,7 +1486,7 @@ describe("Note Agent production UI", () => {
     expect(appSource).toContain("pageId={selectedNote.summary.pageId}");
     expect(appSource).toContain("onSelectModel={setHomeDefaultModel}");
     expect(adapterSource).toContain('scope: { kind: "current_note", pageId }');
-    expect(adapterSource).toContain("proposal={props.proposal ? {");
+    expect(adapterSource).toContain("proposal={visibleProposal ? {");
     expect(appSource).toContain("window.pige.readerSelection.decideProposal");
     expect(appSource).toContain("window.pige.readerSelection.currentProposal");
     expect(appSource).toContain('decision: action === "apply" ? "approve" : "reject"');
@@ -1298,6 +1496,10 @@ describe("Note Agent production UI", () => {
     expect(appSource).toContain("current.pageId === selectedNote?.summary.pageId");
     expect(adapterSource).not.toContain("window.pige.proposals");
     expect(adapterSource).not.toContain("window.pige.activity");
+    expect(adapterSource).toContain("window.pige.agent.currentNoteAppendProposal");
+    expect(adapterSource).toContain("window.pige.agent.decideCurrentNoteAppendProposal");
+    expect(appSource).toContain("onDurableTurnCompleted={(identity) => void refreshCurrentNoteAfterDurableTurn(identity)}");
+    expect(appSource).toContain('activity?.target?.kind === "page"');
     expect(cssSource).toContain(".agent-message-card {");
     expect(cssSource).toContain(".agent-message-card.provisional {");
     expect(cssSource).toMatch(/\.agent-message-card\.role-user\s*\{[\s\S]*?justify-self:\s*end;[\s\S]*?background:\s*var\(--surface-muted\);/);
@@ -1327,6 +1529,7 @@ describe("Note Agent production UI", () => {
       "note.agentModelMenu",
       "note.agentModelSwitchFailed",
       "note.proposal.apply",
+      "note.proposal.action.append_current_note",
       "note.proposal.action.expand",
       "note.proposal.action.polish",
       "note.proposal.action.translate",
@@ -1404,6 +1607,35 @@ function proposalFixture(): NoteAgentProposal {
   };
 }
 
+function noteAppendReviewTimeline(pageId: string, jobId: string, proposalId: string): Record<string, unknown> {
+  return {
+    conversationId: `conversation_${pageId}`,
+    tailEventId: `event_user_${pageId}`,
+    canFollowUp: false,
+    messages: [{
+      id: `event_user_${pageId}`,
+      role: "user",
+      createdAt: "2026-07-28T01:00:00.000Z",
+      text: "Append the cited fact to this note.",
+      jobId
+    }],
+    latestTurn: {
+      jobId,
+      userEventId: `event_user_${pageId}`,
+      state: "awaiting_review",
+      proposalId,
+      error: {
+        code: "agent_runtime.review_required",
+        domain: "agent_runtime",
+        messageKey: "errors.agent_runtime.review_required",
+        retryable: false,
+        severity: "warning",
+        userAction: "review_proposal"
+      }
+    }
+  };
+}
+
 function noteRecoveryTimeline(state: "waiting_dependency" | "queued" | "running" | "completed"): Record<string, unknown> {
   const pageId = "page_current_note_recovery";
   const jobId = "job_note_recovery_1";
@@ -1437,7 +1669,12 @@ function noteRecoveryTimeline(state: "waiting_dependency" | "queued" | "running"
   };
 }
 
-function notePageTimeline(pageId: string, answer: string, jobId = `job_${pageId}`): Record<string, unknown> {
+function notePageTimeline(
+  pageId: string,
+  answer: string,
+  jobId = `job_${pageId}`,
+  currentNoteAppendApplied = false
+): Record<string, unknown> {
   return {
     conversationId: `conversation_${pageId}`,
     tailEventId: `event_assistant_${pageId}`,
@@ -1461,7 +1698,8 @@ function notePageTimeline(pageId: string, answer: string, jobId = `job_${pageId}
     latestTurn: {
       jobId,
       userEventId: `event_user_${pageId}`,
-      state: "completed"
+      state: "completed",
+      ...(currentNoteAppendApplied ? { currentNoteAppendApplied: true } : {})
     }
   };
 }

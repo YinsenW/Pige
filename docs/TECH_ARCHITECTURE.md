@@ -1050,6 +1050,9 @@ Responsibilities:
 - Apply eligible note edits with Activity/Undo; preview exceptional conflicts.
 - Keep read-only answers separate from durable wiki changes.
 
+`CurrentNoteAppendService` owns CAS/recovery, Agent `update_page` and stale review; other owners
+gain no append logic.
+
 Note Agent context:
 
 - Current page frontmatter.
