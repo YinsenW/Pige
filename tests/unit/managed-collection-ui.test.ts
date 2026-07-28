@@ -93,24 +93,35 @@ describe("ManagedCollectionPanel", () => {
     expect(Array.from(panel.querySelectorAll("button")).map((button) => button.textContent?.trim())).toEqual(["Back"]);
     expect(panel.querySelector("input, select, textarea")).toBeNull();
 
+    const aggregatePreview: DatasetQueryPreview = {
+      ...preview,
+      resultHash: `sha256:${"c".repeat(64)}`,
+      rows: [...preview.rows, { rowId: "row_datasetcitation02", values: ["South", 2] }],
+      matchedRowCount: 2,
+      returnedRowCount: 2
+    };
     const aggregateHighlights: readonly CollectionCitationHighlight[] = [
-      { kind: "range", range: { startRow: 1, endRow: 1 } },
+      { kind: "range", range: { startRow: 2, endRow: 5 } },
       { kind: "columns", columnIds: ["column_datasetcount001"] },
       { kind: "aggregate", aggregateKeys: ["record_count"], groupKeys: ["region"] }
     ];
     await act(async () => {
       root.render(createElement(ManagedCollectionCitationPanel, {
         mode: "citation_readonly",
-        preview,
+        preview: aggregatePreview,
         highlights: aggregateHighlights,
         onClose: () => undefined,
         t
       }));
       await settle(dom);
     });
-    expect(panel.querySelectorAll("mark")).toHaveLength(4);
+    expect(panel.querySelector('[data-citation-range="2:5"]')?.textContent).toBe("Rows: 2–5");
+    expect(Array.from(panel.querySelectorAll("tbody tr")).every((row) =>
+      row.getAttribute("data-citation-highlight") === null
+    )).toBe(true);
+    expect(panel.querySelectorAll("mark")).toHaveLength(6);
     expect(dom.window.document.activeElement).toBe(
-      panel.querySelector('[data-citation-primary="true"]')
+      panel.querySelector('[data-citation-range="2:5"]')
     );
 
     await act(async () => root.unmount());
