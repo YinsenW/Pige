@@ -23,10 +23,7 @@ import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDia
 import { TaskExecutionInteractionStatus } from "./components/TaskExecutionInteraction";
 import { AgentMemorySettingsPanel } from "./components/AgentMemorySettingsPanel";
 import { ManagedCollectionPanel } from "./components/ManagedCollectionPanel";
-import {
-  LocalSemanticRetrievalSettingsPanel,
-  type LocalSemanticRetrievalApi
-} from "./components/LocalSemanticRetrievalSettingsPanel";
+import { LocalCapabilitiesSettingsPanel } from "./components/LocalCapabilitiesSettingsPanel";
 import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 import { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
 import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
@@ -149,6 +146,7 @@ import {
   type ProviderEndpointProtocol,
 } from "@pige/schemas";
 export { AgentMemorySettingsPanel } from "./components/AgentMemorySettingsPanel";
+export { LocalCapabilitiesSettingsPanel } from "./components/LocalCapabilitiesSettingsPanel";
 export { LocalSemanticRetrievalSettingsPanel } from "./components/LocalSemanticRetrievalSettingsPanel";
 export { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 export { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
@@ -2170,6 +2168,7 @@ export function App(): React.JSX.Element {
             />
           ) : settingsSection === "capabilities" ? (
             <LocalCapabilitiesSettingsPanel
+              paddleOcrApi={window.pige.localCapabilities}
               semanticRetrievalApi={window.pige.retrieval}
               toolchainHealth={toolchainHealth}
               speechAvailability={speechAvailability}
@@ -6742,215 +6741,6 @@ export function PermissionsPrivacySettingsPanel(props: {
           </div>
         </div>
       </section>
-    </section>
-  );
-}
-
-export function LocalCapabilitiesSettingsPanel(props: {
-  readonly semanticRetrievalApi: LocalSemanticRetrievalApi;
-  readonly toolchainHealth: ToolchainHealth | null;
-  readonly speechAvailability: SpeechAvailabilityResult | null;
-  readonly speechAvailabilityLoading: boolean;
-  readonly speechAvailabilityFailed: boolean;
-  readonly onRefresh: () => Promise<void>;
-  readonly onOpenSpeechSettings: () => Promise<void>;
-  readonly onDevelopment: () => void;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshFailed, setRefreshFailed] = useState(false);
-  const missingRequiredTools =
-    props.toolchainHealth?.tools.filter((tool) => tool.required && tool.status === "missing") ?? [];
-  const toolchainState = props.toolchainHealth?.status ?? "checking";
-  const speechCapabilityState = props.speechAvailabilityLoading
-    ? "checking"
-    : props.speechAvailabilityFailed || props.speechAvailability?.status === "failed"
-      ? "failed"
-      : props.speechAvailability?.status === "supported"
-        ? props.speechAvailability.permission === "denied" || props.speechAvailability.permission === "restricted"
-          ? "permission_needed"
-          : "available"
-        : props.speechAvailability?.status === "unsupported"
-          ? props.speechAvailability.reason === "assets_unavailable"
-            ? "asset_needed"
-            : "unavailable"
-          : "checking";
-  const speechSettingsAvailable = props.speechAvailability?.status === "supported" &&
-    props.speechAvailability.canOpenSystemSettings &&
-    (props.speechAvailability.permission === "denied" || props.speechAvailability.permission === "restricted");
-
-  const refresh = async (): Promise<void> => {
-    if (refreshing) return;
-    setRefreshing(true);
-    setRefreshFailed(false);
-    try {
-      await props.onRefresh();
-    } catch {
-      setRefreshFailed(true);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  return (
-    <section className="settings-page capabilities-settings-page" aria-labelledby="settings-capabilities-title">
-      <header className="settings-panel-header">
-        <h1 id="settings-capabilities-title">{props.t("capabilities.title")}</h1>
-        <p>{props.t("capabilities.subtitle")}</p>
-      </header>
-
-      <section className="settings-section" aria-labelledby="capabilities-toolchain-title">
-        <h2 className="settings-section-title" id="capabilities-toolchain-title">
-          {props.t("capabilities.coreTools")}
-        </h2>
-        <div className="settings-card">
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("capabilities.toolchainTitle")}</strong>
-              <span>{props.t("capabilities.toolchainDescription")}</span>
-            </div>
-            <span className={`settings-status ${toolchainState === "needs_repair" ? "warning" : ""}`}>
-              {props.t(`capabilities.toolchain.${toolchainState}`)}
-            </span>
-          </div>
-          <div className="settings-row tall">
-            <div className="settings-row-copy">
-              <strong>{props.t("capabilities.detectedTools")}</strong>
-              {props.toolchainHealth ? (
-                <ul className="capability-tool-list" aria-label={props.t("capabilities.detectedTools")}>
-                  {props.toolchainHealth.tools.map((tool) => {
-                    const statusKey =
-                      tool.status === "ready"
-                        ? "capabilities.tool.ready"
-                        : tool.required
-                          ? "capabilities.tool.missing"
-                          : "capabilities.tool.optional_missing";
-                    const statusLabel = props.t(statusKey);
-                    return (
-                      <li
-                        key={tool.id}
-                        aria-label={`${tool.name}: ${statusLabel}`}
-                        data-tool-required={tool.required ? "true" : "false"}
-                        data-tool-status={tool.status}
-                      >
-                        <span>{tool.name}</span>
-                        <small
-                          className={
-                            tool.status === "ready" ? "ready" : tool.required ? "missing" : "optional-missing"
-                          }
-                        >
-                          {statusLabel}
-                        </small>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : (
-                <span>{props.t("capabilities.checkingDescription")}</span>
-              )}
-            </div>
-            <button
-              className="settings-button"
-              type="button"
-              disabled={refreshing}
-              aria-describedby="capabilities-refresh-status"
-              onClick={() => void refresh()}
-            >
-              {props.t(refreshing ? "capabilities.checking" : "capabilities.checkAgain")}
-            </button>
-          </div>
-          {missingRequiredTools.length > 0 ? (
-            <div className="settings-row">
-              <div className="settings-row-copy">
-                <strong>{props.t("capabilities.repairTitle")}</strong>
-                <span>{props.t("capabilities.repairDescription")}</span>
-              </div>
-              <button className="settings-button" type="button" onClick={props.onDevelopment}>
-                {props.t("capabilities.repair")}
-              </button>
-            </div>
-          ) : null}
-        </div>
-        <p
-          className={refreshFailed ? "settings-inline-status error" : "settings-inline-status"}
-          id="capabilities-refresh-status"
-          role={refreshFailed ? "alert" : "status"}
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          {refreshFailed ? props.t("capabilities.refreshFailed") : ""}
-        </p>
-      </section>
-
-      <LocalSemanticRetrievalSettingsPanel api={props.semanticRetrievalApi} t={props.t} />
-
-      <section className="settings-section" aria-labelledby="capabilities-input-title">
-        <h2 className="settings-section-title" id="capabilities-input-title">
-          {props.t("capabilities.ocrAndVoice")}
-        </h2>
-        <div className="settings-card">
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("capabilities.ocrEngineTitle")}</strong>
-              <span id="capabilities-ocr-description">{props.t("capabilities.ocrEngineDescription")}</span>
-            </div>
-            <button
-              className="settings-button"
-              type="button"
-              data-capability-control="ocr-engine"
-              aria-label={`${props.t("capabilities.ocrEngineTitle")}: ${props.t("settings.status.development")}`}
-              aria-describedby="capabilities-ocr-description capabilities-partial-note"
-              onClick={props.onDevelopment}
-            >
-              {props.t("settings.status.development")}
-            </button>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("capabilities.imageOcrTitle")}</strong>
-              <span>{props.t("capabilities.imageOcrDescription")}</span>
-            </div>
-            <button
-              className="settings-button"
-              type="button"
-              data-capability-control="image-ocr"
-              aria-label={`${props.t("capabilities.imageOcrTitle")}: ${props.t("settings.status.development")}`}
-              aria-describedby="capabilities-partial-note"
-              onClick={props.onDevelopment}
-            >
-              {props.t("settings.status.development")}
-            </button>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("capabilities.voiceTitle")}</strong>
-              <span>{props.t("capabilities.voiceDescription")}</span>
-            </div>
-            <div className="settings-row-control">
-              <span
-                className={`settings-status${speechCapabilityState === "available" ? "" : " warning"}`}
-                data-capability-status="voice-input"
-                role={speechCapabilityState === "failed" ? "alert" : "status"}
-                aria-live="polite"
-              >
-                {props.t(`capabilities.voice.${speechCapabilityState}`)}
-              </span>
-              {speechSettingsAvailable ? (
-                <button
-                  className="settings-button"
-                  type="button"
-                  data-capability-control="voice-open-settings"
-                  onClick={() => void props.onOpenSpeechSettings()}
-                >
-                  {props.t("capabilities.voice.openSettings")}
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <p className="settings-note" id="capabilities-partial-note">{props.t("capabilities.partialNote")}</p>
     </section>
   );
 }

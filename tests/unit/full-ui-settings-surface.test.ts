@@ -9,7 +9,6 @@ import {
   AgentMemorySettingsPanel,
   AppearanceSettingsPanel,
   GeneralSettingsPanel,
-  LocalCapabilitiesSettingsPanel,
   MaintenanceSettingsPanel,
   PiPackagesSettingsPanel,
   PermissionsPrivacySettingsPanel,
@@ -19,6 +18,10 @@ import {
   type DevelopmentCapability,
   type SettingsSection
 } from "../../apps/desktop/src/renderer/src/App";
+import {
+  LocalCapabilitiesSettingsPanel,
+  type PaddleOcrApi
+} from "../../apps/desktop/src/renderer/src/components/LocalCapabilitiesSettingsPanel";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 import type {
   LocalSemanticRetrievalDisableRequest,
@@ -30,6 +33,18 @@ import type {
   LocalSemanticRetrievalRemoveRequest,
   LocalSemanticRetrievalRemoveResult,
   LocalSemanticRetrievalStatus,
+  PaddleOcrDisableRequest,
+  PaddleOcrDisableResult,
+  PaddleOcrEnableRequest,
+  PaddleOcrEnableResult,
+  PaddleOcrInstallRequest,
+  PaddleOcrInstallResult,
+  PaddleOcrLifecycleState,
+  PaddleOcrRemoveRequest,
+  PaddleOcrRemoveResult,
+  PaddleOcrSummary,
+  PaddleOcrTestRequest,
+  PaddleOcrTestResult,
   PiPackageInstallRequest,
   PiPackageInstallResult,
   PiPackageRegistrySummary,
@@ -2327,6 +2342,7 @@ describe("full UI Settings surface", () => {
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
       root.render(createElement(LocalCapabilitiesSettingsPanel, {
+        paddleOcrApi: paddleOcrApi("not_installed"),
         semanticRetrievalApi,
         toolchainHealth: {
           status: "needs_repair",
@@ -2384,10 +2400,12 @@ describe("full UI Settings surface", () => {
     expect(container.textContent).toContain("Enabled");
     expect(container.textContent).toContain("Lexical search always remains available.");
 
-    const ocrEngine = requireElement(container.querySelector<HTMLButtonElement>('[data-capability-control="ocr-engine"]'));
+    const paddleOcr = requireElement(container.querySelector<HTMLElement>('[data-paddle-ocr-state="not_installed"]'));
     const imageOcr = requireElement(container.querySelector<HTMLButtonElement>('[data-capability-control="image-ocr"]'));
     const voice = requireElement(container.querySelector<HTMLElement>('[data-capability-status="voice-input"]'));
-    expect(ocrEngine.textContent).toBe("In development");
+    expect(paddleOcr.textContent).toContain("PaddleOCR fallback");
+    expect(paddleOcr.textContent).toContain("Not installed");
+    expect(paddleOcr.textContent).toContain("Install");
     expect(imageOcr.textContent).toBe("In development");
     expect(voice.textContent).toBe("Language resource needed");
     expect(container.querySelector('[data-capability-control="voice-input"]')).toBeNull();
@@ -2399,19 +2417,18 @@ describe("full UI Settings surface", () => {
     await act(async () => {
       buttonNamed(container, "Check again").click();
       buttonNamed(container, "Repair...").click();
-      ocrEngine.click();
       imageOcr.click();
       await settle(dom);
     });
     expect(onRefresh).toHaveBeenCalledOnce();
-    expect(onDevelopment).toHaveBeenCalledTimes(3);
-    expect(ocrEngine.textContent).toBe("In development");
+    expect(onDevelopment).toHaveBeenCalledTimes(2);
     expect(imageOcr.textContent).toBe("In development");
     expect(voice.textContent).toBe("Language resource needed");
     expect(ipcRead).toBe(false);
 
     await act(async () => {
       root.render(createElement(LocalCapabilitiesSettingsPanel, {
+        paddleOcrApi: paddleOcrApi("not_installed"),
         semanticRetrievalApi,
         toolchainHealth: {
           status: "ready",
@@ -2443,7 +2460,7 @@ describe("full UI Settings surface", () => {
     expect(
       Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Repair...")
     ).toBe(false);
-    expect(onDevelopment).toHaveBeenCalledTimes(3);
+    expect(onDevelopment).toHaveBeenCalledTimes(2);
     expect(ipcRead).toBe(false);
 
     await act(async () => root.unmount());
@@ -2462,6 +2479,160 @@ describe("full UI Settings surface", () => {
     expect(appSource).not.toContain("navigator.mediaDevices");
   });
 
+  it("runs the managed PaddleOCR lifecycle from authoritative actions without exposing package internals", async () => {
+    const dom = createDom();
+    let current = paddleOcrSummary(1, "not_installed");
+    let resolveInstall!: (result: PaddleOcrInstallResult) => void;
+    const installResult = new Promise<PaddleOcrInstallResult>((resolve) => {
+      resolveInstall = resolve;
+    });
+    const summary = vi.fn(async () => current);
+    const install = vi.fn(async (_request: PaddleOcrInstallRequest) => installResult);
+    const enable = vi.fn(async (request: PaddleOcrEnableRequest): Promise<PaddleOcrEnableResult> => {
+      current = paddleOcrSummary(3, "ready");
+      return {
+        apiVersion: 1,
+        requestId: request.requestId,
+        engineId: "paddleocr_local",
+        status: "committed",
+        summary: current
+      };
+    });
+    const test = vi.fn(async (request: PaddleOcrTestRequest): Promise<PaddleOcrTestResult> => {
+      current = paddleOcrSummary(4, "ready");
+      return {
+        apiVersion: 1,
+        requestId: request.requestId,
+        engineId: "paddleocr_local",
+        status: "accepted",
+        jobId: "job_20260728_paddleocrtest",
+        summary: current
+      };
+    });
+    const disable = vi.fn()
+      .mockImplementationOnce(async (request: PaddleOcrDisableRequest): Promise<PaddleOcrDisableResult> => ({
+        apiVersion: 1,
+        requestId: request.requestId,
+        engineId: "paddleocr_local",
+        status: "failed"
+      }))
+      .mockImplementationOnce(async (request: PaddleOcrDisableRequest): Promise<PaddleOcrDisableResult> => {
+        current = paddleOcrSummary(5, "disabled");
+        return {
+          apiVersion: 1,
+          requestId: request.requestId,
+          engineId: "paddleocr_local",
+          status: "committed",
+          summary: current
+        };
+      });
+    const remove = vi.fn(async (request: PaddleOcrRemoveRequest): Promise<PaddleOcrRemoveResult> => {
+      current = paddleOcrSummary(6, "not_installed");
+      return {
+        apiVersion: 1,
+        requestId: request.requestId,
+        engineId: "paddleocr_local",
+        status: "committed",
+        summary: current
+      };
+    });
+    const api: PaddleOcrApi = {
+      paddleOcrSummary: summary,
+      installPaddleOcr: install,
+      enablePaddleOcr: enable,
+      testPaddleOcr: test,
+      disablePaddleOcr: disable,
+      removePaddleOcr: remove
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(LocalCapabilitiesSettingsPanel, {
+        paddleOcrApi: api,
+        semanticRetrievalApi: semanticAssetApi("ready"),
+        toolchainHealth: null,
+        speechAvailability: null,
+        speechAvailabilityLoading: false,
+        speechAvailabilityFailed: false,
+        onRefresh: vi.fn(async () => undefined),
+        onOpenSpeechSettings: vi.fn(async () => undefined),
+        onDevelopment: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    expect(container.textContent).toContain("PaddleOCR fallback");
+    expect(container.textContent).toContain("24 MB");
+    expect(container.textContent).toContain("Downloads occur only after you choose Install.");
+    expect(container.textContent).not.toContain("Private Python");
+    expect(container.textContent).not.toContain("/Users/private");
+    expect(container.textContent).not.toContain("sha256:");
+    expect(container.querySelector('[data-paddle-ocr-action="update"]')).toBeNull();
+    expect(container.querySelector('[data-paddle-ocr-action="repair"]')).toBeNull();
+    const paddleButton = (action: string): HTMLButtonElement => requireElement(
+      container.querySelector<HTMLButtonElement>(`[data-paddle-ocr-action="${action}"]`)
+    );
+
+    const installButton = paddleButton("install");
+    await act(async () => {
+      installButton.click();
+      installButton.click();
+    });
+    expect(install).toHaveBeenCalledOnce();
+    const installRequest = install.mock.calls[0]?.[0];
+    expect(installRequest).toEqual({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^paddleocr_[a-z0-9]{16,64}$/u),
+      expectedRevision: 1
+    });
+    current = paddleOcrSummary(2, "disabled");
+    await act(async () => {
+      resolveInstall({
+        apiVersion: 1,
+        requestId: installRequest!.requestId,
+        engineId: "paddleocr_local",
+        status: "accepted",
+        jobId: "job_20260728_paddleocrinstall",
+        summary: current
+      });
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Disabled");
+
+    await act(async () => {
+      paddleButton("enable").click();
+      await settle(dom);
+    });
+    await act(async () => {
+      paddleButton("test").click();
+      await settle(dom);
+    });
+    await act(async () => {
+      paddleButton("disable").click();
+      await settle(dom);
+    });
+    expect(enable).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 2 }));
+    expect(test).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 3 }));
+    expect(disable).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 4 }));
+    expect(container.textContent).toContain("PaddleOCR could not be changed");
+    expect(container.textContent).toContain("Ready");
+
+    await act(async () => {
+      paddleButton("disable").click();
+      await settle(dom);
+    });
+    await act(async () => {
+      paddleButton("remove").click();
+      await settle(dom);
+    });
+    expect(disable).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: 4 }));
+    expect(remove).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 5 }));
+    expect(container.textContent).toContain("Not installed");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("projects real speech availability without requesting permission and opens system settings only after denial", async () => {
     const dom = createDom();
     const onOpenSpeechSettings = vi.fn(async () => undefined);
@@ -2470,6 +2641,7 @@ describe("full UI Settings surface", () => {
     const renderPanel = async (speechAvailability: SpeechAvailabilityResult): Promise<void> => {
       await act(async () => {
         root.render(createElement(LocalCapabilitiesSettingsPanel, {
+          paddleOcrApi: paddleOcrApi("not_installed"),
           semanticRetrievalApi,
           toolchainHealth: null,
           speechAvailability,
@@ -2996,6 +3168,54 @@ function semanticAssetApi(assetState: LocalSemanticRetrievalAssetState): LocalSe
     enableLocalSemanticAsset: unavailable,
     disableLocalSemanticAsset: unavailable,
     removeLocalSemanticAsset: unavailable
+  };
+}
+
+function paddleOcrSummary(revision: number, state: PaddleOcrLifecycleState): PaddleOcrSummary {
+  const [canInstall, canEnable, canTest, canDisable, canRemove] = state === "not_installed"
+    ? [true, false, false, false, false]
+    : state === "ready"
+      ? [false, false, true, true, true]
+      : state === "disabled"
+        ? [false, true, true, false, true]
+        : state === "needs_repair"
+          ? [false, false, false, false, true]
+          : [false, false, false, false, false];
+  return {
+    apiVersion: 1,
+    revision,
+    engineId: "paddleocr_local",
+    state,
+    catalogVersion: "2026.07",
+    components: [{
+      componentId: "runtime",
+      kind: "python_runtime",
+      label: "Private Python /Users/private",
+      version: "sha256:private",
+      sizeBytes: 8 * 1024 * 1024
+    }],
+    downloadSizeBytes: 24 * 1024 * 1024,
+    nativeOcrPreferred: true,
+    hiddenDownloadsAllowed: false,
+    canInstall,
+    canEnable,
+    canTest,
+    canDisable,
+    canRemove
+  };
+}
+
+function paddleOcrApi(state: PaddleOcrLifecycleState): PaddleOcrApi {
+  const unavailable = async (): Promise<never> => {
+    throw new Error("Mutation is not used by this fixture.");
+  };
+  return {
+    paddleOcrSummary: async () => paddleOcrSummary(1, state),
+    installPaddleOcr: unavailable,
+    enablePaddleOcr: unavailable,
+    testPaddleOcr: unavailable,
+    disablePaddleOcr: unavailable,
+    removePaddleOcr: unavailable
   };
 }
 
