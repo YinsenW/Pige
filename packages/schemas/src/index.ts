@@ -641,6 +641,12 @@ export const PiPackageInstallRequestIdSchema = z.string()
   .regex(/^pi_package_request_[a-z0-9]{16,64}$/u);
 export const PiPackageUninstallRequestIdSchema = z.string()
   .regex(/^pi_package_uninstall_request_[a-z0-9]{16,64}$/u);
+export const PiPackageCatalogQueryRequestIdSchema = z.string()
+  .regex(/^pi_package_catalog_request_[a-z0-9]{16,64}$/u);
+export const PiPackageCatalogIdSchema = z.string()
+  .regex(/^pi_catalog_[a-z0-9][a-z0-9._-]{2,63}$/u);
+export const PiPackageIntegritySchema = z.string()
+  .regex(/^sha512-[A-Za-z0-9+/]{86}==$/u);
 export const PiPackageNameSchema = z.string().refine(isSafePackageName);
 export const PiPackageVersionSchema = z.string().refine((value) =>
   value === value.trim() && value.length <= 64 && EXACT_PACKAGE_VERSION_PATTERN.test(value)
@@ -1443,6 +1449,53 @@ const SkillCapabilityListSchema = z.array(SkillCapabilitySchema).min(1).max(32)
   .refine((values) => new Set(values).size === values.length, "Skill capabilities must be unique.");
 const SkillDataBoundaryListSchema = z.array(SkillDataBoundarySchema).min(1).max(6)
   .refine((values) => new Set(values).size === values.length, "Skill data boundaries must be unique.");
+
+export const PiPackageCatalogQueryRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PiPackageCatalogQueryRequestIdSchema,
+  query: z.string()
+    .refine((value) => Array.from(value).length <= 120, "Pi package catalog queries must contain at most 120 Unicode characters.")
+    .refine(
+      (value) => value === value.trim() && !/[\u0000-\u001f\u007f]/u.test(value),
+      "Pi package catalog queries must be trimmed and contain no control characters."
+    )
+}).strict();
+export const PiPackageCatalogEntrySchema = z.object({
+  catalogId: PiPackageCatalogIdSchema,
+  packageName: PiPackageNameSchema,
+  version: PiPackageVersionSchema,
+  integrity: PiPackageIntegritySchema,
+  displayName: z.string().trim().min(1).max(120),
+  purpose: z.string().trim().min(1).max(240),
+  license: z.string().trim().min(1).max(160),
+  packageTypes: z.array(PiPackageTypeSchema).min(1).max(4).readonly(),
+  capabilities: SkillCapabilityListSchema.readonly(),
+  dataBoundaries: SkillDataBoundaryListSchema.readonly(),
+  trust: z.literal("curated"),
+  source: z.literal("npm")
+}).strict();
+const PiPackageCatalogQueryResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PiPackageCatalogQueryRequestIdSchema
+}).strict();
+export const PiPackageCatalogQueryResultSchema = z.discriminatedUnion("status", [
+  PiPackageCatalogQueryResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    entries: z.array(PiPackageCatalogEntrySchema).max(100).readonly(),
+    total: z.number().int().nonnegative().max(100)
+  }).strict(),
+  PiPackageCatalogQueryResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "ready") return;
+  if (result.total !== result.entries.length) {
+    context.addIssue({ code: "custom", path: ["total"], message: "Catalog total must match the complete filtered entry set." });
+  }
+  for (let index = 1; index < result.entries.length; index += 1) {
+    if (result.entries[index - 1]!.catalogId >= result.entries[index]!.catalogId) {
+      context.addIssue({ code: "custom", path: ["entries", index, "catalogId"], message: "Catalog entries must use unique ascending IDs." });
+    }
+  }
+});
 
 export const SkillManifestSchema = z.object({
   id: SkillIdSchema,
@@ -5617,6 +5670,9 @@ export type RendererSafeSubjectLabel = z.infer<typeof RendererSafeSubjectLabelSc
 export type PiPackageInstallRequestId = z.infer<typeof PiPackageInstallRequestIdSchema>;
 export type PiPackageInstallTaskId = z.infer<typeof PiPackageInstallTaskIdSchema>;
 export type PiPackageUninstallRequestId = z.infer<typeof PiPackageUninstallRequestIdSchema>;
+export type PiPackageCatalogQueryRequestId = z.infer<typeof PiPackageCatalogQueryRequestIdSchema>;
+export type PiPackageCatalogId = z.infer<typeof PiPackageCatalogIdSchema>;
+export type PiPackageIntegrity = z.infer<typeof PiPackageIntegritySchema>;
 export type PiPackageName = z.infer<typeof PiPackageNameSchema>;
 export type PiPackageVersion = z.infer<typeof PiPackageVersionSchema>;
 export type PiPackageType = z.infer<typeof PiPackageTypeSchema>;
@@ -5627,6 +5683,9 @@ export type PiPackageInstallRequest = z.infer<typeof PiPackageInstallRequestSche
 export type PiPackageInstallResult = z.infer<typeof PiPackageInstallResultSchema>;
 export type PiPackageUninstallRequest = z.infer<typeof PiPackageUninstallRequestSchema>;
 export type PiPackageUninstallResult = z.infer<typeof PiPackageUninstallResultSchema>;
+export type PiPackageCatalogEntry = z.infer<typeof PiPackageCatalogEntrySchema>;
+export type PiPackageCatalogQueryRequest = z.infer<typeof PiPackageCatalogQueryRequestSchema>;
+export type PiPackageCatalogQueryResult = z.infer<typeof PiPackageCatalogQueryResultSchema>;
 export type KnowledgeActivityPageTarget = z.infer<typeof KnowledgeActivityPageTargetSchema>;
 export type KnowledgeActivityCollectionTarget = z.infer<typeof KnowledgeActivityCollectionTargetSchema>;
 export type KnowledgeActivityTarget = z.infer<typeof KnowledgeActivityTargetSchema>;

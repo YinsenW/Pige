@@ -77,6 +77,8 @@ import {
   PaddleOcrTestResultSchema,
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
+  PiPackageCatalogQueryRequestSchema,
+  PiPackageCatalogQueryResultSchema,
   PiPackageRegistryQueryResultSchema,
   PiPackageUninstallRequestSchema,
   PiPackageUninstallResultSchema,
@@ -1255,6 +1257,61 @@ describe("schemas", () => {
       ...request,
       requestId: "pi_package_request_abcdefghijklmnop"
     })).toThrow();
+  });
+
+  it("keeps the curated Pi package catalog deterministic, bounded, and renderer-safe", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "pi_package_catalog_request_abcdefghijklmnop",
+      query: "knowledge"
+    } as const;
+    const integrity = `sha512-${"A".repeat(86)}==`;
+    const entries = ["alpha", "beta"].map((suffix, index) => ({
+      catalogId: `pi_catalog_${suffix}`,
+      packageName: `pi-${suffix}`,
+      version: `1.0.${index}`,
+      integrity,
+      displayName: `Pi ${suffix}`,
+      purpose: `Reviewed ${suffix} knowledge capability`,
+      license: "MIT",
+      packageTypes: ["skill"],
+      capabilities: ["read_vault"],
+      dataBoundaries: ["local"],
+      trust: "curated",
+      source: "npm"
+    })) as const;
+    expect(PiPackageCatalogQueryRequestSchema.parse(request)).toEqual(request);
+    expect(PiPackageCatalogQueryRequestSchema.parse({ ...request, query: "" })).toMatchObject({ query: "" });
+    expect(PiPackageCatalogQueryResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "ready",
+      entries,
+      total: entries.length
+    })).toMatchObject({ status: "ready", entries, total: 2 });
+    const failed = { apiVersion: 1, requestId: request.requestId, status: "failed" } as const;
+    expect(PiPackageCatalogQueryResultSchema.parse(failed)).toEqual(failed);
+    expect(() => PiPackageCatalogQueryResultSchema.parse({ ...failed, entries, total: 2 })).toThrow();
+    expect(() => PiPackageCatalogQueryResultSchema.parse({
+      apiVersion: 1, requestId: request.requestId, status: "ready", entries, total: 1
+    })).toThrow();
+    expect(() => PiPackageCatalogQueryResultSchema.parse({
+      apiVersion: 1, requestId: request.requestId, status: "ready", entries: [...entries].reverse(), total: 2
+    })).toThrow();
+    for (const forbidden of [
+      { url: "https://registry.npmjs.org/pi-alpha" }, { icon: "private" }, { rating: 5 },
+      { rank: 1 }, { path: "/private/package" }, { body: "private" }
+    ]) {
+      expect(() => PiPackageCatalogQueryResultSchema.parse({
+        apiVersion: 1,
+        requestId: request.requestId,
+        status: "ready",
+        entries: [{ ...entries[0], ...forbidden }],
+        total: 1
+      })).toThrow();
+    }
+    expect(() => PiPackageCatalogQueryRequestSchema.parse({ ...request, query: " knowledge " })).toThrow();
+    expect(() => PiPackageCatalogQueryRequestSchema.parse({ ...request, query: "x".repeat(121) })).toThrow();
   });
 
   it("keeps reviewed task plans private and browser interactions renderer-safe", () => {
