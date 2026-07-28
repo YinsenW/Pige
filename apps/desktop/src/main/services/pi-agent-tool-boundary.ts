@@ -26,7 +26,7 @@ export type PigeAgentToolTrust = "model_generated" | "untrusted_source" | "host_
 export type PigeAgentToolExecution = "sequential" | "parallel_read_only";
 
 export interface PigeAgentToolDataBoundary {
-  readonly resourceScope: "none" | "current_source" | "current_note" | "current_vault";
+  readonly resourceScope: "none" | "current_source" | "current_note" | "current_url" | "current_vault";
   readonly pathAuthority: "host_only";
   readonly sourceIdAuthority: "host_only";
   readonly modelAuthority: "none";

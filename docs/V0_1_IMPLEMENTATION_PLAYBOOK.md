@@ -653,6 +653,8 @@ Build:
 - [B8.07 -> E8.01] External/Web staging/disclosure and disabled-only install; runtime/enable stay B8.08.
 - [B8.08 -> E8.02] Raw Shell confirms per effect; a registered immutable install/config/
   auth plan confirms exact supply chain/destinations once and runs current-Job ordinals.
+  One Pige-owned External/Web adapter confirms each public-origin read; identity or redirect
+  drift closes before network.
 - [B8.09 -> E8.04] Curated Pi package catalog and manager with reviewed recommendations and explicit search/inspection.
 - [B8.10 -> E8.04] Pi package install, enable/disable, update, uninstall, version pinning, rollback, rollback-safe records, and trust/capability/data-boundary disclosure.
 

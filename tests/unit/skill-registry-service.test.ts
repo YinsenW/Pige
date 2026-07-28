@@ -107,6 +107,49 @@ describe("SkillRegistryService", () => {
     });
   });
 
+  it("enables and reprojects only the exact supported Pige HTTPS runtime identity", () => {
+    const root = createRoot();
+    const source = manifest({
+      id: "reviewed-web",
+      name: "Reviewed Web",
+      version: "1.0.0",
+      description: "Read one reviewed public origin.",
+      kind: "external_web",
+      capabilities: ["read_current_source", "external_network"],
+      extra: [
+        "dataBoundary: [local, network]",
+        "runtime:",
+        "  adapter: pige_readonly_https_v1",
+        "  origin: https://api.example.com"
+      ],
+      body: "## Procedure\n\nRead only the reviewed HTTPS origin."
+    });
+    seedInstalledSkill(root, source, false);
+    const service = new SkillRegistryService(root);
+
+    expect(readySummary(service).skills[0]).toMatchObject({
+      id: "reviewed-web",
+      canEnable: true,
+      runtime: { adapter: "pige_readonly_https_v1", origin: "https://api.example.com" }
+    });
+    expect(service.enable(lifecycleRequest("reviewed-web", 3))).toMatchObject({ status: "committed" });
+    const runtimes = service.enabledExternalWebRuntimes();
+    expect(runtimes).toHaveLength(1);
+    expect(runtimes[0]).toMatchObject({
+      name: "Reviewed Web",
+      identity: {
+        skillId: "reviewed-web",
+        skillVersion: "1.0.0",
+        registryRevision: 4,
+        runtime: { adapter: "pige_readonly_https_v1", origin: "https://api.example.com" }
+      }
+    });
+    expect(runtimes[0]!.identity.runtimeIdentityHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
+
+    fs.appendFileSync(path.join(root, "skills", "installed", "reviewed-web", "SKILL.md"), "\nchanged\n");
+    expect(service.enabledExternalWebRuntimes()).toEqual([]);
+  });
+
   it("rejects path and credential-shaped display metadata while allowing benign public URLs", () => {
     const root = createRoot();
     const unsafeSources = [

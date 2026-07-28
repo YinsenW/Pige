@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  ExternalWebSkillRuntimeIdentitySchema,
   SkillIdSchema,
   SkillInstallSourceKindSchema,
   SkillInstallUrlSchema,
@@ -11,6 +12,9 @@ import {
   SkillStagingIdSchema,
   SkillStageWarningSchema,
   VaultIdSchema,
+  type ExternalWebSkillRuntimeIdentity,
+  type SkillManifest,
+  type SkillRegistryFile,
   type SkillInstallSourceKind,
   type SkillRegistryRecord,
   type SkillStageWarning
@@ -47,6 +51,107 @@ export interface InstalledSkillSnapshot {
   readonly sha256: string;
   readonly bundleSha256: string;
   readonly files: readonly SkillBundleFile[];
+}
+
+export interface EnabledExternalWebSkillRuntime {
+  readonly identity: ExternalWebSkillRuntimeIdentity;
+  readonly name: string;
+  readonly triggers: readonly string[];
+}
+
+export function projectEnabledExternalWebSkillRuntimes(
+  registry: SkillRegistryFile,
+  readManifest: (skillId: string) => {
+    readonly manifest: SkillManifest;
+    readonly sha256: string;
+    readonly bundleSha256: string;
+  }
+): readonly EnabledExternalWebSkillRuntime[] {
+  const runtimes: EnabledExternalWebSkillRuntime[] = [];
+  for (const record of registry.skills) {
+    if (!record.enabled || record.trust !== "user_confirmed") continue;
+    try {
+      const loaded = readManifest(record.id);
+      const manifest = loaded.manifest;
+      if (!isSupportedExternalWebRuntime(manifest) || loaded.sha256 !== record.manifestSha256 ||
+        manifest.id !== record.id || manifest.version !== record.version) continue;
+      const identityBase = {
+        skillId: manifest.id,
+        skillVersion: manifest.version,
+        manifestSha256: loaded.sha256,
+        bundleSha256: loaded.bundleSha256,
+        registryRevision: registry.revision,
+        runtime: manifest.runtime
+      };
+      runtimes.push({
+        identity: ExternalWebSkillRuntimeIdentitySchema.parse({
+          kind: "external_web",
+          scope: "machine_local",
+          trust: "user_confirmed",
+          enabled: true,
+          ...identityBase,
+          runtimeIdentityHash: digestRuntimeIdentity(identityBase)
+        }),
+        name: manifest.name,
+        triggers: Object.freeze([...(manifest.triggers ?? [])])
+      });
+    } catch {
+      // Invalid or drifting installed bytes contribute no runtime authority.
+    }
+  }
+  return Object.freeze(runtimes.sort((left, right) => left.identity.skillId.localeCompare(right.identity.skillId, "en")));
+}
+
+export function isSupportedExternalWebRuntime(manifest: SkillManifest): manifest is SkillManifest & {
+  readonly kind: "external_web";
+  readonly runtime: NonNullable<SkillManifest["runtime"]>;
+} {
+  const permissionCapabilities = manifest.capabilities.filter(isPermissionCapability);
+  return manifest.kind === "external_web" && manifest.scope === "machine_local" &&
+    manifest.runtime?.adapter === "pige_readonly_https_v1" &&
+    permissionCapabilities.length === 1 && permissionCapabilities[0] === "external_network";
+}
+
+export function readSkillEnableEligibility(
+  record: SkillRegistryRecord,
+  readManifest: (skillId: string) => { readonly manifest: SkillManifest; readonly sha256: string }
+): boolean {
+  try {
+    const loaded = readManifest(record.id);
+    return record.trust === "user_confirmed" && loaded.sha256 === record.manifestSha256 &&
+      loaded.manifest.id === record.id && loaded.manifest.version === record.version &&
+      loaded.manifest.scope === "machine_local" &&
+      (loaded.manifest.kind === "pure" || isSupportedExternalWebRuntime(loaded.manifest));
+  } catch { return false; }
+}
+
+export function projectInstalledExternalDisclosure(loaded: {
+  readonly sha256: string;
+  readonly bundleSha256: string;
+  readonly files: readonly SkillBundleFile[];
+  readonly receipt: SkillInstallReceipt | undefined;
+}) {
+  const receipt = loaded.receipt;
+  if (!receipt?.source || !receipt.warnings || receipt.enabled ||
+    (receipt.source === "https") !== Boolean(receipt.sourceUrl)) return undefined;
+  return {
+    source: receipt.source,
+    ...(receipt.sourceUrl ? { sourceUrl: receipt.sourceUrl } : {}),
+    manifestSha256: loaded.sha256,
+    bundleSha256: loaded.bundleSha256,
+    files: loaded.files.map((file) => ({
+      relativePath: file.relativePath,
+      utf8ByteSize: file.bytes.length,
+      sha256: file.sha256
+    })),
+    warnings: [...receipt.warnings]
+  };
+}
+
+export function requireInstalledExternalDisclosure(loaded: Parameters<typeof projectInstalledExternalDisclosure>[0]) {
+  const disclosure = projectInstalledExternalDisclosure(loaded);
+  if (!disclosure) throw lifecycleError("skill.install_receipt_invalid");
+  return disclosure;
 }
 
 export interface SkillUninstallReceipt {
@@ -733,6 +838,21 @@ function stableJson(value: unknown): string {
       .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`).join(",")}}`;
   }
   return JSON.stringify(value) ?? "null";
+}
+
+function isPermissionCapability(value: string): boolean {
+  return [
+    "read_vault", "write_vault", "delete_vault", "external_filesystem", "external_network", "run_shell",
+    "install_package", "install_local_tool", "call_cloud_model_with_private_or_large_source",
+    "use_brokered_credential", "change_settings", "change_pige_schema", "spawn_agent"
+  ].includes(value);
+}
+
+function digestRuntimeIdentity(value: Readonly<Record<string, unknown>>): `sha256:${string}` {
+  return `sha256:${createHash("sha256")
+    .update("pige.external_web_skill.runtime_identity.v1\0", "utf8")
+    .update(stableJson(value), "utf8")
+    .digest("hex")}`;
 }
 
 function lifecycleError(code: string): Error {

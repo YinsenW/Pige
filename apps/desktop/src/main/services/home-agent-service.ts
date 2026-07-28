@@ -237,6 +237,13 @@ export interface HomeAgentReviewedTaskPlanPort {
   }): readonly PigeAgentToolDefinition[];
 }
 
+export interface HomeAgentExternalWebSkillPort {
+  toolsForTurn(turn: PermissionedExternalTurnContext & {
+    readonly authoredTaskIntent: "explicit_user_task" | "neutral_attachment";
+    readonly authoredText: string | undefined;
+  }): readonly PigeAgentToolDefinition[];
+}
+
 export interface HomeAgentMemoryPort {
   recall(vaultPath: string, limit?: number): readonly {
     readonly title: string;
@@ -340,6 +347,7 @@ export class HomeAgentService {
   readonly #memory: HomeAgentMemoryPort | undefined;
   readonly #currentNoteAppends: HomeAgentCurrentNoteAppendPort | undefined;
   readonly #skillStaging: HomeSkillStagingToolService | undefined;
+  readonly #externalWebSkills: HomeAgentExternalWebSkillPort | undefined;
 
   constructor(
     vaults: HomeAgentVaultPort,
@@ -356,7 +364,8 @@ export class HomeAgentService {
     reviewedTaskPlans?: HomeAgentReviewedTaskPlanPort,
     memory?: HomeAgentMemoryPort,
     currentNoteAppends?: HomeAgentCurrentNoteAppendPort,
-    skillStaging?: HomeSkillStagingToolService
+    skillStaging?: HomeSkillStagingToolService,
+    externalWebSkills?: HomeAgentExternalWebSkillPort
   ) {
     this.#vaults = vaults;
     this.#models = models;
@@ -373,6 +382,7 @@ export class HomeAgentService {
     this.#memory = memory;
     this.#currentNoteAppends = currentNoteAppends;
     this.#skillStaging = skillStaging;
+    this.#externalWebSkills = externalWebSkills;
   }
 
   conversation(request: AgentConversationEarlierRequest): AgentConversationEarlierPage;
@@ -1442,7 +1452,18 @@ export class HomeAgentService {
           readToolCatalogHash: () => toolCatalogHash
         }) ?? []
       : [];
-    const externalTools = [...registeredAmbientTools, ...registeredReviewedTaskPlanTools]
+    const registeredExternalWebSkillTools = !currentNoteScope
+      ? this.#externalWebSkills?.toolsForTurn({
+          ...externalTurnContext,
+          authoredTaskIntent: request.authoredTaskIntent,
+          authoredText: request.text
+        }) ?? []
+      : [];
+    const externalTools = [
+      ...registeredAmbientTools,
+      ...registeredReviewedTaskPlanTools,
+      ...registeredExternalWebSkillTools
+    ]
       .map((tool): PigeAgentToolDefinition => ({
       ...tool,
       authorize: async (args, context) => {

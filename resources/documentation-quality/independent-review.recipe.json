@@ -51,14 +51,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of External/Web Skill disclosure and disabled-only install.",
+    "scope": "Independent Planning review of the first External/Web read-only HTTPS runtime.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "5078a3ef9c88b93965aa57336570110becac2b29da6b63fc6fe51e91c605c458"
+    "reviewedSha256": "d64dca5525e4bf5b3942d4dd9b43f577758910b43fa3204d9e5462992086a222"
   },
   "reviewers": [{
-    "reviewerId": "external-web-skill-disclosure-review",
-    "task": "External/Web Skill staging and disclosure",
+    "reviewerId": "external-web-skill-runtime-review",
+    "task": "External/Web Skill read-only HTTPS runtime",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -66,33 +66,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed disclosure and disabled-only scope; Development independently supplied implementation evidence."
+    "independence": "Planning reviewed the closed runtime authority; Development independently supplied implementation evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"external-web-skill-disclosure-review","blockerCount":0,"summary":"Settings reuses staged review and persists External/Web Skills disabled."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"external-web-skill-disclosure-review","blockerCount":0,"summary":"Schema, service, UI and Skill owners share exact safe disclosure."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"external-web-skill-disclosure-review","blockerCount":0,"summary":"B8.07 is recorded without promoting B8.08 runtime."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"external-web-skill-disclosure-review","blockerCount":0,"summary":"Invalid manifests, drift, tamper and durable reconstruction are directly tested."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"external-web-skill-disclosure-review","blockerCount":0,"summary":"Existing Skill, Playbook, Decision and trace owners absorb the slice."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"external-web-skill-runtime-review","blockerCount":0,"summary":"Settings enables only the exact supported installed External/Web runtime."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"external-web-skill-runtime-review","blockerCount":0,"summary":"Schema, Broker, fetch, Skill and UI owners share one exact runtime identity."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"external-web-skill-runtime-review","blockerCount":0,"summary":"B8.08 records the bounded slice without claiming other runtimes complete."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"external-web-skill-runtime-review","blockerCount":0,"summary":"Ambiguity, denial, identity drift and redirect-origin drift are tested."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"external-web-skill-runtime-review","blockerCount":0,"summary":"Existing Skill, Playbook, Decision and trace owners absorb the slice."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict External/Web disclosure and disabled-only installed projection are bound."},
-    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision and trace locks preserve the B8.07/B8.08 split."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact 742/999/244/942-LOC Skill owners are protected and hash-bound."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"The exact one-call External/Web authority and public HTTPS binding are strict."},
+    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision and trace locks preserve the bounded B8.08 runtime scope."},
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact 179/862/1000-LOC runtime and Skill owners are protected and hash-bound."}
   ],
   "coordination": {
-    "taskId": "external-web-skill-disclosure-20260729",
-    "taskTitle": "External/Web Skill staging and disclosure",
+    "taskId": "external-web-skill-runtime-20260729",
+    "taskTitle": "External/Web Skill read-only HTTPS runtime",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Pure Skill staging and lifecycle remain compatible; External/Web installs disabled.",
-    "acknowledgement": "Planning binds disclosure and durable disabled install; runtime and enable remain separate."
+    "compatibility": "Pure Skill lifecycle stays compatible; unsupported External/Web runtimes remain disabled.",
+    "acknowledgement": "Planning binds one supported read-only HTTPS adapter; other runtimes remain separate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "External/Web capabilities and boundaries must be exact and renderer-safe.",
-    "Executable, ambiguous, stale or tampered content must fail before durable effect.",
-    "Install executes nothing and cannot enable; runtime remains outside this bind."
+    "External/Web capability, Skill identity and reviewed origin must remain exact.",
+    "Ambiguous, stale or tampered runtime identity must fail before network.",
+    "The one-call authority must never widen public-only SSRF or redirect limits."
   ]
 }

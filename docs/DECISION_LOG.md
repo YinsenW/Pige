@@ -3658,6 +3658,29 @@ References:
 
 - `docs/SKILL_EXTENSION_DESIGN.md`; `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
+### D-20260729-External-Web-Read-Only-HTTPS-Runtime
+
+Status: Accepted
+Date: 2026-07-29
+
+Decision:
+
+Enable one exact supported External/Web Skill; authored text with exactly one eligible runtime
+exposes Pige's read-only HTTPS tool.
+
+Rationale:
+
+Permit web reading without third-party code or broad network authority.
+
+Consequences:
+
+- Each call confirms one Skill/origin, stays public-only across redirects and closes on drift;
+  other runtime classes remain open.
+
+References:
+
+- `docs/SKILL_EXTENSION_DESIGN.md`; `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
 ### D-20260728-Pi-Package-Trash-Uninstall
 
 Status: Accepted

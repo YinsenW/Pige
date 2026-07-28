@@ -23,6 +23,7 @@ import {
   HomeAgentService,
   mergeHomeCitationCandidates,
   type HomeAgentDatasetQueryPort,
+  type HomeAgentExternalWebSkillPort,
   type HomeAgentModelPort,
   type HomeAgentReviewedTaskPlanPort,
   type HomeAgentRetrievalPort
@@ -467,6 +468,72 @@ describe("Home Pi Agent service", () => {
       confirmationOwner: { kind: "agent_turn", clientTurnId: "turn_20260727_reviewedplan" }
     });
     expect(jobs.readAgentTurnJob(outcome.requestId)?.privacy?.usedShell).toBe(true);
+  });
+
+  it("binds explicit authored Home text to the External/Web Skill runtime port", async () => {
+    const fixture = makeFixture();
+    const jobs = new JobsService(fixture.vaults);
+    let registeredTurn: Parameters<HomeAgentExternalWebSkillPort["toolsForTurn"]>[0] | undefined;
+    const delegatedTool = makeReviewedTaskPlanPort();
+    const externalWebSkills: HomeAgentExternalWebSkillPort = {
+      toolsForTurn: (turn) => {
+        registeredTurn = turn;
+        return delegatedTool.toolsForTurn({
+          ...turn,
+          clientTurnId: "turn_20260729_externalweb01",
+          authoredTaskIntent: "explicit_user_task",
+          readToolCatalogHash: () => ""
+        });
+      }
+    };
+    const runtime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        await request.beforeModelTurn?.();
+        const tool = request.tools.find((candidate) => candidate.name === "pige_execute_reviewed_plan");
+        if (!tool) throw new Error("Missing External/Web Skill runtime tool.");
+        const signal = new AbortController().signal;
+        await tool.execute({}, signal, { toolCallId: "pi_tool_external_web", signal });
+        await request.beforeModelTurn?.();
+        return makeRuntimeResult(request, tool.name, {
+          answer: "No external read was selected.",
+          citationRefs: [],
+          grounding: "general"
+        });
+      }
+    };
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      externalWebSkills
+    );
+
+    const outcome = await service.submitTurn({
+      text: "When is the launch?",
+      inputKind: "typed_text",
+      locale: "en",
+      clientTurnId: "turn_20260729_externalweb01"
+    });
+
+    expect(outcome).toMatchObject({ state: "completed" });
+    expect(registeredTurn).toMatchObject({
+      vaultId: fixture.vault.vaultId,
+      authoredTaskIntent: "explicit_user_task",
+      authoredText: "When is the launch?",
+      confirmationOwner: { kind: "agent_turn", clientTurnId: "turn_20260729_externalweb01" }
+    });
   });
 
   it("registers explicit memory, persists exact private provenance, and recalls active preferences", async () => {

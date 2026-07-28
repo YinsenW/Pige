@@ -557,7 +557,7 @@
     "PIGE-DATA-002":{"status":"planned","plannedTarget":"Bounded typed local Dataset query/table-view integration with deterministic result hashes, exact citations, stale-revision rejection, and no whole-payload egress."},
     "PIGE-DATA-003":{"status":"planned","plannedTarget":"Cell/row/field changes and one named single-filter/sort saved view preserve stable IDs, revision CAS and Activity/Undo; broader view/schema lifecycle, relations/formulas, backup and exceptional boundaries remain."},
     "PIGE-SEC-001":{"status":"partial","evidence":["EV-PROVIDER"],"open":{"id":"OPEN-REQ-PIGE-SEC-001","description":"OS-keychain integration, portable-mode warning, and release backup secret scans remain open.","targetBuilds":["B3.02"],"targetExits":["E3.02"]}},
-    "PIGE-SEC-002":{"status":"planned","plannedTarget":"Raw Shell stays per-effect; prove one immutable registered plan confirmation, exact ordinal authority, read-only probes, OAuth continuation, denial/drift/no-effect, recovery and real macOS behavior."},
+    "PIGE-SEC-002":{"status":"planned","plannedTarget":"One exact External/Web public-HTTPS read confirms per call and fails closed on identity/origin drift. Raw Shell stays per-effect; immutable-plan ordinal/OAuth/recovery and macOS proof remain."},
     "PIGE-SEC-003":{"status":"planned","plannedTarget":"Prove private durable authoredTaskIntent and Job-bound ingress snapshots survive restart: neutral/legacy attachments grant exact-source snapshot tools only, explicit authored attachment turns may request precise ambient confirmation/plans, and live paths/fallback/model/source cannot widen authority."},
     "PIGE-SEC-004":{"status":"partial","evidence":["EV-SECURITY-POLICY"],"open":{"id":"OPEN-REQ-PIGE-SEC-004","description":"Live private-reporting availability and release-time public-surface review remain open.","targetBuilds":["B9.17"],"targetExits":["E9.11"]}},
     "PIGE-SEC-005":{"status":"planned","plannedTarget":"Exact connected Provider/model plus Send preserves the user-authored and selected bounded payload unchanged, isolates stored credentials, rejects identity drift, and has no content policy, egress audit, approval UI or waiting state."},
@@ -567,7 +567,7 @@
     "PIGE-PI-002":{"status":"partial","evidence":["EV-PROVIDER","EV-PI-PROVIDER-BINDING","EV-HOME-MODEL-SWITCHER"],"open":{"id":"OPEN-REQ-PIGE-PI-002","description":"Full catalog/help, Provider delete, DeepSeek Anthropic, and packaged model matrix remain; Advanced/Fast stays hidden.","targetBuilds":["B3.04"],"targetExits":["E3.01"]}},
     "PIGE-PI-003": {
       "status": "planned",
-      "plannedTarget": "Prove attachment/fallback catalogs grant exact-source authority only; ambient effects derive solely from explicit authored intent and precise reviewed/confirmed scope, with stale or invented calls rejected pre-effect."
+      "plannedTarget": "External/Web runtime registers only for explicit authored intent with one eligible Skill; attachment/fallback remains exact-source only. Broader ambient-effect and platform proof remain."
     },
     "PIGE-PI-004":{"status":"partial","evidence":["EV-PROVIDER","EV-PROVIDER-CONNECTION","EV-MODELS-ERROR-OWNER","EV-MODELS-PROGRESSIVE-UI"],"open":{"id":"OPEN-REQ-PIGE-PI-004","description":"Progressive Models owns repair; catalog/help, deletion, DeepSeek Anthropic and packaged BYOK remain.","targetBuilds":["B3.01","B3.03","B3.04"],"targetExits":["E3.01"]}},
     "PIGE-PI-005": {
@@ -780,7 +780,7 @@
     "PIGE-UI-004":{"status":"planned","plannedTarget":"Remaining Knowledge Tree density/scale, compact-platform, assistive-technology, and signed packaged visual acceptance."},
     "PIGE-UI-005":{"status":"planned","plannedTarget":"Reader selection works; cited append is frozen. Evidence, other mutation and platform proof remain."},
     "PIGE-UI-006":{"status":"partial","evidence":["EV-READER-RELATED","EV-READER-UI","EV-FULL-UI-LIBRARY","EV-FULL-UI-RESPONSIVE","EV-READER-ACTIONS-UI","EV-READER-INLINE","EV-READER-SELECTION-LINK"],"open":{"id":"OPEN-REQ-PIGE-UI-006","description":"Source/graph gaps remain.","targetBuilds":["B6.08","B6.09"],"targetExits":["E6.05","E6.07"]}},
-    "PIGE-SKILL-001":{"status":"planned","plannedTarget":"Pure and External/Web Skills stage from reviewed HTTPS, Main-picked Markdown/ZIP or authored chat; external install stays disabled with exact disclosure. Pure lifecycle works; vault/runtime/public restore remain."},
+    "PIGE-SKILL-001":{"status":"planned","plannedTarget":"Pure and External/Web Skills stage/review/install; one supported external runtime enables explicit per-call public HTTPS reads. Vault/other runtime classes/external update/public restore remain."},
     "PIGE-SKILL-002":{"status":"planned","plannedTarget":"One reviewed entry supports install, trash uninstall, exact update/rollback and CAS pin/unpin; enable/runtime remain."}
   },
   "exits": {
@@ -1036,11 +1036,11 @@
     "E7.06":{"status":"planned","plannedTarget":"Cell/row/field changes and one single-filter/sort saved view work; broader view/schema lifecycle, relations/formulas, conflict and exception-boundary integration remain."},
     "E8.01": {
       "status": "planned",
-      "plannedTarget": "Pure and External/Web stage/review/install works; external stays disabled. Vault lifecycle, External/Web runtime/enable and public restore remain."
+      "plannedTarget": "Pure and External/Web stage/review/install works; one supported external HTTPS runtime can enable. Vault lifecycle, other runtimes, external update and public restore remain."
     },
     "E8.02": {
       "status": "planned",
-      "plannedTarget": "Attachment-only exact-source authority, explicit authored ambient intent eligibility, raw per-effect Shell, one immutable plan confirmation, exact ordinal/read-only/OAuth behavior, recovery and macOS evidence."
+      "plannedTarget": "One authored, uniquely selected External/Web Skill confirms one public HTTPS read. Raw per-effect Shell, immutable-plan ordinal/OAuth/recovery and macOS evidence remain."
     },
     "E8.03": {
       "status": "planned",
