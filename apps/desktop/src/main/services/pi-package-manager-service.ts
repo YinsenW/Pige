@@ -4,6 +4,7 @@ import fs from "node:fs";
 import net, { type LookupFunction } from "node:net";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
+import { PiPackageRegistrySummarySchema, type PiPackageRegistrySummary, type PiPackageType } from "@pige/schemas";
 import * as tar from "tar";
 import { Agent, fetch as undiciFetch, type Dispatcher } from "undici";
 import {
@@ -48,8 +49,6 @@ export interface PiPackageInstallSummary {
   readonly dependencyCount: number;
   readonly requiresEnable: true;
 }
-
-type PiPackageType = "extension" | "skill" | "prompt" | "theme";
 
 interface ResolvedPackagePlan {
   readonly packageName: string;
@@ -145,6 +144,24 @@ export class PiPackageManagerService {
     this.#prepare();
     recoverOrphanedLock(this.#lockPath, options.processAlive ?? isProcessAlive);
     this.#recoverOwnedResidue(this.#readRegistry());
+  }
+
+  summary(): PiPackageRegistrySummary {
+    const registry = this.#readRegistry();
+    return PiPackageRegistrySummarySchema.parse({
+      apiVersion: 1,
+      revision: registry.revision,
+      packages: registry.packages.map((record) => ({
+        packageId: record.packageId,
+        packageName: record.packageName,
+        version: record.version,
+        state: "installed_disabled",
+        packageTypes: record.packageTypes,
+        dependencyCount: record.dependencyCount,
+        enabled: false,
+        trust: "community"
+      }))
+    });
   }
 
   async install(
