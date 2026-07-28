@@ -1,9 +1,12 @@
 # Curated Packages
 
-Status: Phase-gated resource placeholder
-Last reviewed: 2026-07-10
+Status: Active reviewed catalog resource
+Last reviewed: 2026-07-28
 Review trigger: P8 package curation starts, a catalog candidate is admitted or rejected, or package admission policy changes.
 
-No curated Pi package manifest is currently approved. Add manifests here only after package review and when the owning implementation phase requires them; otherwise keep this directory explicitly empty or remove the placeholder during that phase's resource review.
+`pi-package-catalog.manifest.json` admits only `@narumitw/pi-btw@0.34.0`: MIT, npm SHA-512, one file,
+and no runtime dependencies, hooks, bin, native or links. Boundary disclosure grants no authority;
+confirmed install publishes disabled.
 
-Package selection and approval rules are owned by `docs/SKILL_EXTENSION_DESIGN.md`, with research rationale in `docs/PI_PACKAGE_RESEARCH.md`.
+Changes require identity/layout/license review and packaged verification.
+`docs/SKILL_EXTENSION_DESIGN.md` owns authority; `docs/PI_PACKAGE_RESEARCH.md` is rationale.

@@ -310,12 +310,12 @@ flags `update_available | deprecated | repair_needed` are independent from trust
   before one plan confirmation Main resolves packages/assets/redirects/Skills and fixed
   destinations. Pi cannot choose dependencies or alter steps.
 
-Current Settings lists the machine registry and, after confirmation, installs one exact public npm
-package/version as immutable `installed_disabled` bytes. SHA-512, bounded link-free extraction and
-hook/dependency/executable/native rejection remain mandatory. Only that state can be removed: Main
-confirms again, then request/package/revision CAS moves verified bytes to private durable trash and
-adopts once across restart. No package code runs; paths/bodies stay private and no Restore UI ships.
-Enable/runtime, update, catalog, pin and rollback remain open.
+Settings searches a packaged reviewed catalog offline. Its first entry pins
+`@narumitw/pi-btw@0.34.0`, MIT, npm SHA-512 and filesystem/cloud disclosure; selection grants no
+authority and only fills exact install. Confirmation publishes `installed_disabled`. Extraction
+canonicalizes one `./` prefix, then rejects collisions, links, hooks, runtime dependencies, bin and
+native input. Confirmed request/package/revision CAS trash-uninstalls and restart-adopts once. No
+code/path/body crosses IPC. Enable/runtime, update, pin, rollback and public restore remain open.
 
 The official Feishu fixture is recipe data: before confirmation it binds CLI/package/native and
 27-Skill/444-file identities, hashes, destinations/link/overwrite policy and controlled environment.

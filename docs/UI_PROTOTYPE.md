@@ -1116,10 +1116,10 @@ Install exact package
   Exact version [                    ]  Install
 ```
 
-The screen lists authoritative installed-disabled identity/type/trust. Name/version install
-uses Main confirmation; success clears input and adopts registry. Remove confirms, serializes with
-install, adopts registry and restores focus. Failure preserves inventory/input; no path appears.
-Catalog, enable, update, pin and rollback stay absent.
+Above Installed, local reviewed search has distinct loading/empty/failed states. Results disclose
+exact package/integrity/license/type/boundaries; selecting only fills the form. Install confirms
+disabled; Remove confirms/serializes. Failure retains input. No authority/path; enable/update/pin/
+rollback stay absent.
 
 ### Backup And Restore
 

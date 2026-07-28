@@ -2994,17 +2994,16 @@ Date: 2026-07-19
 
 Decision:
 
-Current-turn permission may install one exact public npm Pi package/version as immutable
-machine-local `installed_disabled` bytes.
+Current-turn permission may install one exact public npm identity as machine-local
+`installed_disabled` bytes.
 
 Rationale:
 
-Acquisition cannot imply execution or dependency selection.
+Acquisition cannot imply execution or dependencies.
 
 Consequences:
 
-- Require SHA-512, bounded link-free extraction, hook/dependency/native rejection, locking
-  and stable adoption. Remaining lifecycle, Exit and Phase status stay open.
+- Require SHA-512, bounded link-free extraction/rejection and stable adoption; lifecycle stays open.
 
 References:
 
@@ -3623,16 +3622,36 @@ Date: 2026-07-28
 
 Decision:
 
-Main-confirmed request/package/revision CAS moves one verified disabled package to private trash;
-restart adopts once.
+Confirmed package/revision CAS trashes one verified disabled package; restart adopts once.
 
 Rationale:
 
-Remove without runtime authority.
+Remove without authority.
 
 Consequences:
 
-- No code/link/path/body crosses IPC; no Restore UI; other lifecycle stays open.
+- No code/path/body or Restore UI; other lifecycle stays open.
+
+References:
+
+- `docs/SKILL_EXTENSION_DESIGN.md`
+
+### D-20260728-Repository-Curated-Pi-Package-Catalog
+
+Status: Accepted
+Date: 2026-07-28
+
+Decision:
+
+Ship a pathless local catalog pinning `@narumitw/pi-btw@0.34.0`; trust grants no authority.
+
+Rationale:
+
+Inspect one recommendation without marketplace or hidden install.
+
+Consequences:
+
+- Package exact facts; install confirms disabled. Enable/update/pin/rollback/runtime stay open.
 
 References:
 

@@ -94,7 +94,7 @@
     ["docs/PI_PACKAGE_RESEARCH.md", "Historical/research", "Dated Pi package catalog research and curation rationale", "Read only when package curation is in scope", "Historical"],
     ["docs/prototypes/README.md", "Historical/research", "Rendered key-screen prototype index and screenshots", "Read only for UI review or interaction validation", "Prototype evidence"],
     ["resources/brand/pige-icon/README.md", "Resource", "Approved Pige app-icon source, platform export inventory, and visual acceptance checks", "Read when the app icon, packaging integration, or store artwork changes", "Maintain"],
-    ["resources/curated-packages/README.md", "Resource", "Placeholder and admission rule for curated Pi package manifests", "Read at the owning extension phase boundaries", "Phase-gated resource"],
+    ["resources/curated-packages/README.md", "Resource", "Reviewed Pi package catalog and admission rule", "Read at the owning extension phase boundaries", "Maintain"],
     ["resources/documentation-quality/README.md", "Resource", "Documentation quality manifests, snapshot binding, and acceptance-report generation", "Read when documentation quality gates or accepted scores change", "Maintain"],
     ["resources/parser-manifests/README.md", "Resource", "Active parser manifest index and alignment reminder", "Read when parser or release inputs change", "Maintain"],
     ["resources/traceability/README.md", "Resource", "Machine-readable P0 coverage, acceptance linkage, evidence selectors, and phase status controls", "Read when scope, requirements, phases, milestones, Builds, Exits, evidence, or phase status changes", "Maintain"],
