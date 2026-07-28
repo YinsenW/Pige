@@ -20,6 +20,21 @@ afterEach(() => {
 });
 
 describe("PaddleOcrAdapter", () => {
+  it("ships a fixed offline wrapper with exact reviewed model identities", () => {
+    const source = fs.readFileSync(
+      "apps/desktop/native/paddleocr/pige_paddle_ocr_wrapper.py",
+      "utf8"
+    );
+    expect(source).toContain('text_detection_model_name="PP-OCRv5_mobile_det"');
+    expect(source).toContain('return "PP-OCRv5_mobile_rec", "PP-OCRv5_mobile_rec_infer"');
+    expect(source).toContain('return "korean_PP-OCRv5_mobile_rec"');
+    expect(source).toContain('return "latin_PP-OCRv5_mobile_rec"');
+    expect(source).toContain('socket.socket.sendto = _deny_network');
+    expect(source).toContain('request.get("networkAllowed") is not False');
+    expect(source).not.toContain("requests.get(");
+    expect(source).not.toContain("urllib.request");
+  });
+
   it("runs the fixed isolated wrapper once and returns a strict Paddle result", async () => {
     const fixture = createFixture();
     const runner = new RecordingRunner(({ stdin }) => ({ stdout: successResponse(stdin) }));
