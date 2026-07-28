@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type {
   AgentConversationRequest,
   AgentConversationEarlierPage,
+  AgentConversationHistoryListRequest,
+  AgentConversationHistoryListResult,
   AgentConversationInitialTimeline,
   AgentConversationTimeline,
   AppearanceSettingsSummary,
@@ -2826,6 +2828,126 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("browses an exact durable conversation without latest polling and rereads Current authoritatively", async () => {
+    const dom = createDom();
+    const current = paginatedHomeTimeline();
+    const historical: AgentConversationInitialTimeline = {
+      kind: "initial",
+      conversationId: "conv_20260711_historyfixture",
+      snapshotTailEventId: "event_20260711_historyassistant",
+      tailEventId: "event_20260711_historyassistant",
+      canFollowUp: false,
+      messages: [
+        {
+          id: "event_20260711_historyuser",
+          role: "user",
+          createdAt: "2026-07-11T08:00:00.000Z",
+          text: "Show the older plan.",
+          jobId: "job_20260711_historyturn"
+        },
+        {
+          id: "event_20260711_historyassistant",
+          role: "assistant",
+          createdAt: "2026-07-11T08:00:01.000Z",
+          text: "This is the selected historical answer.",
+          jobId: "job_20260711_historyturn"
+        }
+      ],
+      hasEarlier: false,
+      latestTurn: {
+        jobId: "job_20260711_historyturn",
+        userEventId: "event_20260711_historyuser",
+        state: "running"
+      }
+    };
+    const harness = createHarness(current);
+    harness.loadConversation = async (request) => {
+      harness.conversationRequests.push(request);
+      return request.conversationId === historical.conversationId ? historical : current;
+    };
+    harness.loadConversationHistory = async (request) => {
+      harness.conversationHistoryRequests.push(request);
+      return {
+        apiVersion: 1,
+        activeVaultId: request.activeVaultId,
+        status: "ready",
+        currentConversationId: current.conversationId,
+        conversations: [
+          {
+            conversationId: current.conversationId,
+            updatedAt: "2026-07-12T08:00:01.000Z",
+            safePreview: "What should I remember?",
+            tailEventId: current.tailEventId,
+            latestTurnState: "completed"
+          },
+          {
+            conversationId: historical.conversationId,
+            updatedAt: "2026-07-11T08:00:01.000Z",
+            safePreview: "Show the older plan.",
+            tailEventId: historical.tailEventId,
+            latestTurnState: "running"
+          }
+        ],
+        hasMore: false
+      };
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await setTextareaValue(dom, container, "Keep this draft while browsing.");
+
+    await clickButton(dom, container, enMessages["conversation.history"]);
+    await waitFor(dom, () => container.textContent?.includes("Show the older plan.") === true);
+    const historicalTrigger = Array.from(container.querySelectorAll<HTMLButtonElement>("[data-conversation-history-panel] .settings-row"))
+      .find((button) => button.textContent?.includes("Show the older plan."));
+    if (!historicalTrigger) throw new Error("Historical conversation trigger not found.");
+    await act(async () => {
+      historicalTrigger.click();
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector(".conversation-timeline-content")?.textContent
+      ?.includes("This is the selected historical answer.") === true);
+
+    expect(harness.conversationRequests.at(-1)).toEqual({
+      conversationId: historical.conversationId,
+      limit: 100
+    });
+    expect(buttons(container, enMessages["home.send"])[0]?.disabled).toBe(true);
+    const requestCountAfterOpen = harness.conversationRequests.length;
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 1_250));
+    expect(harness.conversationRequests).toHaveLength(requestCountAfterOpen);
+    expect(dom.window.document.activeElement).toBe(historicalTrigger);
+
+    harness.loadConversationHistory = async (request) => {
+      harness.conversationHistoryRequests.push(request);
+      return { apiVersion: 1, activeVaultId: request.activeVaultId, status: "failed" };
+    };
+    await clickButton(dom, container, enMessages["conversation.current"]);
+    expect(container.querySelector(".conversation-timeline-content")?.textContent)
+      .toContain("This is the selected historical answer.");
+
+    harness.loadConversationHistory = async (request) => {
+      harness.conversationHistoryRequests.push(request);
+      return {
+        apiVersion: 1,
+        activeVaultId: request.activeVaultId,
+        status: "ready",
+        currentConversationId: current.conversationId,
+        conversations: [],
+        hasMore: false
+      };
+    };
+    await clickButton(dom, container, enMessages["conversation.current"]);
+    await waitFor(dom, () => container.querySelector(".conversation-timeline-content")?.textContent
+      ?.includes("Remember the durable boundary.") === true);
+    expect(harness.conversationRequests.at(-1)).toEqual({
+      conversationId: current.conversationId,
+      limit: 100
+    });
+    expect(buttons(container, enMessages["home.send"])[0]?.disabled).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps following the recovered conversation when its obsolete Job metadata is safely omitted", async () => {
     const dom = createDom();
     const { latestTurn: _obsoleteJob, ...recoveredTimeline } = completedTimeline();
@@ -4229,6 +4351,7 @@ interface ConversationHarness {
   activities: KnowledgeActivitySummary[];
   readonly submitRequests: AgentSubmitTurnRequest[];
   readonly conversationRequests: AgentConversationRequest[];
+  readonly conversationHistoryRequests: AgentConversationHistoryListRequest[];
   readonly submittedFileNames: string[][];
   readonly retryJobIds: string[];
   retryMode: "queued" | "immediate_refail";
@@ -4289,6 +4412,7 @@ interface ConversationHarness {
   startSpeech: (request: SpeechStartRequest) => Promise<SpeechStartResult>;
   installSpeechAsset: (request: SpeechAssetInstallRequest) => Promise<SpeechAssetInstallResult>;
   loadConversation: (request: AgentConversationRequest) => Promise<AgentConversationTimeline | AgentConversationEarlierPage | undefined>;
+  loadConversationHistory: (request: AgentConversationHistoryListRequest) => Promise<AgentConversationHistoryListResult>;
   submitTurn: (
     request: AgentSubmitTurnRequest,
     files?: readonly File[]
@@ -4308,6 +4432,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     activities: [],
     submitRequests: [],
     conversationRequests: [],
+    conversationHistoryRequests: [],
     submittedFileNames: [],
     retryJobIds: [],
     retryMode: "queued",
@@ -4434,6 +4559,17 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     loadConversation: async (request) => {
       harness.conversationRequests.push(request);
       return harness.timeline;
+    },
+    loadConversationHistory: async (request) => {
+      harness.conversationHistoryRequests.push(request);
+      return {
+        apiVersion: 1,
+        activeVaultId: request.activeVaultId,
+        status: "ready",
+        ...(harness.timeline ? { currentConversationId: harness.timeline.conversationId } : {}),
+        conversations: [],
+        hasMore: false
+      };
     },
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
@@ -4685,6 +4821,7 @@ function makePigeApi(harness: ConversationHarness): object {
     agent: {
       runtimeStatus: () => harness.loadAgentRuntimeStatus(),
       conversation: (request: AgentConversationRequest) => harness.loadConversation(request),
+      conversationHistory: (request: AgentConversationHistoryListRequest) => harness.loadConversationHistory(request),
       submitTurn: (request: AgentSubmitTurnRequest, files: readonly File[] = []) => {
         harness.submittedFileNames.push(files.map((file) => file.name));
         return harness.submitTurn(request, files);

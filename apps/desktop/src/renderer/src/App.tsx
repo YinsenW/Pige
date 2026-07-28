@@ -16,6 +16,7 @@ import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
 import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ConversationMarkdown } from "./components/ConversationMarkdown";
+import { ConversationHistoryPanel } from "./components/ConversationHistoryPanel";
 import { ConversationScrollRail } from "./components/ConversationScrollRail";
 import { ConversationEarlierControl, projectCompletedConversation, useConversationPagination } from "./components/ConversationPagination";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
@@ -3508,6 +3509,7 @@ function HomeComposer(props: {
   const [agentModelUsage, setAgentModelUsage] = useState<HomeAgentModelUsage>("none");
   const [activeSourceTurn, setActiveSourceTurn] = useState<ActiveSourceTurnBinding | null>(null);
   const [conversationTimeline, setConversationTimeline] = useState<AgentConversationInitialTimeline | undefined>();
+  const [selectedHistoryConversationId, setSelectedHistoryConversationId] = useState<string | null>(null);
   const [pickerConversationAuthority, setPickerConversationAuthority] = useState<{
     readonly items: readonly StagedComposerItem[];
     readonly timeline: AgentConversationInitialTimeline | undefined;
@@ -3543,7 +3545,9 @@ function HomeComposer(props: {
   const processingPanelRef = useRef<HTMLElement | null>(null);
   const followConversationRef = useRef(true);
   const conversationPagination = useConversationPagination({
-    ownerKey: props.activeVault ? `${props.activeVault.vaultId}:home` : "home:none",
+    ownerKey: props.activeVault
+      ? `${props.activeVault.vaultId}:home:${selectedHistoryConversationId ?? "current"}`
+      : "home:none",
     initial: conversationTimeline,
     scrollRef: conversationTimelineRef
   });
@@ -3588,8 +3592,10 @@ function HomeComposer(props: {
   } | null>(null);
   const handledFileDropClientTurnIdRef = useRef<string | null>(null);
   const activeVaultIdRef = useRef<string | undefined>(props.activeVault?.vaultId);
+  const selectedHistoryConversationIdRef = useRef<string | null>(selectedHistoryConversationId);
   const activeAgentDraftRef = useRef<ActiveAgentDraftBinding | null>(null);
   activeVaultIdRef.current = props.activeVault?.vaultId;
+  selectedHistoryConversationIdRef.current = selectedHistoryConversationId;
   selectedNoteRef.current = selectedNote;
   voiceLanguageTagRef.current = props.locale;
   draftTextRef.current = text;
@@ -3997,8 +4003,9 @@ function HomeComposer(props: {
     return () => document.removeEventListener("pointerdown", dismissOnPointerDown);
   }, [modelMenuOpen]);
 
-  const latestTurn = conversationTimeline?.latestTurn;
-  const followableTailJobId = canFollowUpToConversation(conversationTimeline)
+  const viewingHistory = selectedHistoryConversationId !== null;
+  const latestTurn = viewingHistory ? undefined : conversationTimeline?.latestTurn;
+  const followableTailJobId = !viewingHistory && canFollowUpToConversation(conversationTimeline)
     ? conversationTimeline.messages.find((message) =>
         message.id === conversationTimeline.tailEventId && message.role === "assistant"
       )?.jobId
@@ -4028,7 +4035,9 @@ function HomeComposer(props: {
     (noSourceCurrentTurn.state === "running" || noSourceCurrentTurn.state === "cancel_requested")
     ? noSourceCurrentTurn
     : undefined;
-  const effectiveAgentRunState = noSourceCurrentTurn
+  const effectiveAgentRunState = viewingHistory
+    ? "idle"
+    : noSourceCurrentTurn
     ? homeConversationStateForJob(noSourceCurrentTurn.state) ?? agentRunState
     : followableTailJobId &&
         !composerSubmitActive &&
@@ -4065,7 +4074,7 @@ function HomeComposer(props: {
   const showFirstHomeGuide = props.showFirstHomeGuide &&
     effectiveAgentRunState === "idle" &&
     sourceWaitingForModelJobs.length === 0;
-  const showConversationRunMessage = !sourceWaitOwnsAgentState &&
+  const showConversationRunMessage = !viewingHistory && !sourceWaitOwnsAgentState &&
     agentAnswer === null &&
     effectiveAgentRunState !== "idle" &&
     effectiveAgentRunState !== "completed";
@@ -4080,7 +4089,7 @@ function HomeComposer(props: {
     if (agentAnswer && message.role === "assistant" && message.id === liveAnswerEventId) return false;
     return message.answer?.datasetResult !== undefined || conversationMessageMarkdown(message).trim().length > 0;
   });
-  const visibleOptimisticConversationTurns = optimisticConversationTurns.filter((turn) =>
+  const visibleOptimisticConversationTurns = (viewingHistory ? [] : optimisticConversationTurns).filter((turn) =>
     !(conversationPagination.messages.some((message) =>
       message.role === "user" && (
         (turn.conversationEventId !== undefined && message.id === turn.conversationEventId) ||
@@ -4088,14 +4097,14 @@ function HomeComposer(props: {
       )
     ) ?? false)
   );
-  const liveConversationAnswer = agentAnswer && !agentAnswer.datasetResult && !agentAnswer.retrieval
+  const liveConversationAnswer = !viewingHistory && agentAnswer && !agentAnswer.datasetResult && !agentAnswer.retrieval
     ? agentAnswer
     : null;
   const conversationFollowKey = [
     visibleConversationMessages.at(-1)?.id ?? "none",
     visibleOptimisticConversationTurns.at(-1)?.clientTurnId ?? "none",
-    agentDraft?.sequence ?? 0,
-    agentDraft?.text.length ?? 0,
+    viewingHistory ? 0 : agentDraft?.sequence ?? 0,
+    viewingHistory ? 0 : agentDraft?.text.length ?? 0,
     liveConversationAnswer?.answer.length ?? 0,
     effectiveAgentRunState
   ].join(":");
@@ -4140,12 +4149,12 @@ function HomeComposer(props: {
   }, [visibleConversationMessages.length > 0 || visibleOptimisticConversationTurns.length > 0 || agentDraft !== null || showConversationRunMessage || liveConversationAnswer !== null]);
   const showHomeHero = visibleConversationMessages.length === 0 &&
     visibleOptimisticConversationTurns.length === 0 &&
-    agentDraft === null &&
-    agentAnswer === null &&
+    (viewingHistory || agentDraft === null) &&
+    (viewingHistory || agentAnswer === null) &&
     selectedNote === null;
   const showConversationTimeline = selectedNote === null && (visibleConversationMessages.length > 0 ||
     visibleOptimisticConversationTurns.length > 0 ||
-    agentDraft !== null ||
+    (!viewingHistory && agentDraft !== null) ||
     showConversationRunMessage ||
     liveConversationAnswer !== null);
   const conversationOwnsFlexibleSpace = showConversationTimeline &&
@@ -4177,7 +4186,10 @@ function HomeComposer(props: {
     setComposerSubmitActive(false);
   };
 
-  const refreshConversationResult = async (expectedConversationId?: string): Promise<
+  const refreshConversationResult = async (
+    expectedConversationId?: string,
+    options?: { readonly conversationId?: string; readonly ignoreLocalTail?: boolean }
+  ): Promise<
     | { readonly status: "adopted"; readonly timeline: AgentConversationInitialTimeline | undefined }
     | { readonly status: "ignored" | "failed" }
   > => {
@@ -4188,14 +4200,18 @@ function HomeComposer(props: {
     }
     const requestId = conversationLoadSequence.current + 1;
     conversationLoadSequence.current = requestId;
+    const requestedConversationId = options?.conversationId ?? selectedHistoryConversationIdRef.current;
     try {
-      const nextTimeline = await window.pige.agent.conversation({ limit: 100 });
+      const nextTimeline = await window.pige.agent.conversation({
+        limit: 100,
+        ...(requestedConversationId ? { conversationId: requestedConversationId } : {})
+      });
       if (requestId === conversationLoadSequence.current && activeVaultIdRef.current === vaultId) {
         if (expectedConversationId && nextTimeline?.conversationId !== expectedConversationId) {
           return { status: "ignored" };
         }
         const localTail = locallyCompletedConversationTailRef.current;
-        const acknowledgesLocalTail = !localTail || (
+        const acknowledgesLocalTail = options?.ignoreLocalTail || !localTail || (
           localTail.vaultId === vaultId &&
           nextTimeline?.conversationId === localTail.conversationId &&
           (
@@ -4220,6 +4236,25 @@ function HomeComposer(props: {
     return result.status === "adopted" ? result.timeline : undefined;
   };
 
+  const openConversationView = async (
+    conversationId: string,
+    view: "current" | "history"
+  ): Promise<boolean> => {
+    const result = await refreshConversationResult(conversationId, {
+      conversationId,
+      ignoreLocalTail: true
+    });
+    if (result.status !== "adopted" || result.timeline?.conversationId !== conversationId) return false;
+    selectedHistoryConversationIdRef.current = view === "history" ? conversationId : null;
+    setSelectedHistoryConversationId(view === "history" ? conversationId : null);
+    followConversationRef.current = true;
+    noteOpenSequence.current += 1;
+    inlineReferenceSequence.current += 1;
+    setSelectedNote(null);
+    setSelectedNoteRelated(null);
+    return true;
+  };
+
   const acceptedTurnProjection = useHomeAcceptedTurnProjection({
     activeVaultId: props.activeVault?.vaultId,
     timeline: conversationTimeline,
@@ -4234,7 +4269,7 @@ function HomeComposer(props: {
     const sequence = pickerConversationLoadSequence.current + 1;
     pickerConversationLoadSequence.current = sequence;
     setPickerConversationAuthority(null);
-    if (!vaultId || items.length === 0) return;
+    if (!vaultId || items.length === 0 || selectedHistoryConversationIdRef.current) return;
     let retryTimer: number | undefined;
     const adoptCurrentConversation = async (): Promise<void> => {
       const result = await refreshConversationResult(expectedConversationId);
@@ -4258,7 +4293,7 @@ function HomeComposer(props: {
     return () => {
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
-  }, [props.activeVault?.vaultId, stagedComposerItems]);
+  }, [props.activeVault?.vaultId, selectedHistoryConversationId, stagedComposerItems]);
 
   useEffect(() => window.pige.agent.onTurnDraft?.((event) => {
     if (!isAgentTurnDraftEvent(event)) return;
@@ -4305,6 +4340,8 @@ function HomeComposer(props: {
     setSelectedNote(null);
     setSelectedNoteRelated(null);
     setNoteLoadingPageId(null);
+    selectedHistoryConversationIdRef.current = null;
+    setSelectedHistoryConversationId(null);
     setConversationTimeline(undefined);
     locallyCompletedConversationTailRef.current = null;
     setOptimisticConversationTurns([]);
@@ -4385,6 +4422,7 @@ function HomeComposer(props: {
     const hasRejectedPaste = stagedComposerItems.some((item) => item.kind === "rejected_pasted_text");
     const hasAttachments = stagedComposerItems.length > 0;
     if (
+      viewingHistory ||
       (!hasText && !hasAttachments) ||
       (!homeModelSendAvailable && !hasAttachments) ||
       (hasAttachments && pickerConversationAuthority?.items !== stagedComposerItems) ||
@@ -4564,7 +4602,7 @@ function HomeComposer(props: {
     setAgentRunState("accepted");
     await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
     setAgentRunState("running");
-    const followUpConversation = canFollowUpToConversation(conversationTimeline)
+    const followUpConversation = !viewingHistory && canFollowUpToConversation(conversationTimeline)
       ? conversationTimeline
       : undefined;
     beginAgentDraft(clientTurnId);
@@ -4685,6 +4723,7 @@ function HomeComposer(props: {
     event.preventDefault();
     if (
       event.repeat ||
+      viewingHistory ||
       composerSubmissionRef.current ||
       (stagedComposerItems.length > 0 && pickerConversationAuthority?.items !== stagedComposerItems) ||
       (!homeModelSendAvailable && stagedComposerItems.length === 0) ||
@@ -4761,6 +4800,8 @@ function HomeComposer(props: {
     ) return;
     handledFileDropClientTurnIdRef.current = request.clientTurnId;
     if (!beginComposerSubmission(request.clientTurnId)) return;
+    selectedHistoryConversationIdRef.current = null;
+    setSelectedHistoryConversationId(null);
     props.onFileDropRequestConsumed(request.clientTurnId);
     void submitHomeFiles(request.files, "file_drop", request.text, request.clientTurnId)
       .finally(() => {
@@ -5040,6 +5081,16 @@ function HomeComposer(props: {
           ) : null}
         </section>
       ) : null}
+      {props.activeVault && selectedNote === null ? (
+        <ConversationHistoryPanel
+          activeVaultId={props.activeVault.vaultId}
+          locale={props.locale}
+          selectedConversationId={selectedHistoryConversationId}
+          disabled={composerSubmitActive || agentRunState === "accepted" || agentRunState === "running"}
+          onOpenConversation={openConversationView}
+          t={props.t}
+        />
+      ) : null}
       {proposalReviewPending ? (
         <section className="proposal-strip" aria-label={props.t("proposal.queueTitle")}>
           <header className="proposal-strip-header">
@@ -5069,7 +5120,7 @@ function HomeComposer(props: {
           className="conversation-timeline"
           tabIndex={-1}
           aria-label={props.t("home.conversation")}
-          aria-busy={agentDraft !== null || effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running"}
+          aria-busy={!viewingHistory && (agentDraft !== null || effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running")}
           onScroll={(event) => {
             const timeline = event.currentTarget;
             followConversationRef.current = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight <= 48;
@@ -5083,7 +5134,7 @@ function HomeComposer(props: {
               onLoadEarlier={conversationPagination.loadEarlier}
               t={props.t}
             />
-            <TaskExecutionInteractionStatus t={props.t} />
+            {!viewingHistory ? <TaskExecutionInteractionStatus t={props.t} /> : null}
             {visibleConversationMessages.map((message) => {
             const markdown = conversationMessageMarkdown(message);
             return (
@@ -5137,7 +5188,7 @@ function HomeComposer(props: {
               <ConversationMarkdown markdown={turn.text} t={props.t} />
             </article>
           ))}
-          {agentDraft ? (
+          {!viewingHistory && agentDraft ? (
             <article
               className="conversation-message role-assistant provisional"
               data-agent-draft="true"
@@ -5598,6 +5649,7 @@ function HomeComposer(props: {
             aria-label={props.t("home.send")}
             title={!homeModelSendAvailable && stagedComposerItems.length === 0 ? props.t("home.modelUnavailable") : undefined}
             disabled={
+              viewingHistory ||
               (!text.trim() && stagedComposerItems.length === 0) ||
               (!homeModelSendAvailable && stagedComposerItems.length === 0) ||
               (stagedComposerItems.length > 0 && pickerConversationAuthority?.items !== stagedComposerItems) ||
