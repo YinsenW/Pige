@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { PADDLE_OCR_ENGINE_ID } from "@pige/schemas";
 import { describe, expect, it, vi } from "vitest";
@@ -8,6 +10,7 @@ import type {
 import {
   createUnavailablePaddleOcrLifecycleService,
   PaddleOcrLifecycleService,
+  readPaddleOcrReviewedManifest,
   type PaddleOcrLocalToolManagerPort
 } from "../../apps/desktop/src/main/services/paddle-ocr-lifecycle-service";
 
@@ -133,6 +136,53 @@ describe("Paddle OCR lifecycle service", () => {
       canInstall: false
     });
     expect(JSON.stringify(unavailable.service.summary({ apiVersion: 1 }))).not.toMatch(/path|url|sha256|pythonArgs/u);
+  });
+
+  it("projects only a complete reviewed available bundle as installable", () => {
+    const originalPath = path.resolve("resources/parser-manifests/paddleocr-local.parser.manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(originalPath, "utf8")) as {
+      releaseBundles: Record<string, unknown>[];
+    };
+    manifest.releaseBundles[0] = {
+      platform: "macos-arm64",
+      state: "available",
+      artifactUrl: "https://github.com/YinsenW/Pige/releases/download/paddleocr-v1/paddleocr-macos-arm64.zip",
+      sizeBytes: 123_456_789,
+      sha256: "a".repeat(64),
+      signature: {
+        algorithm: "Ed25519",
+        keyId: "pige-paddleocr-release-v1",
+        valueBase64: Buffer.alloc(64).toString("base64")
+      },
+      sbomSha256: "b".repeat(64),
+      installedTreeSha256: "c".repeat(64),
+      installedSizeBytes: 345_678_901,
+      wrapperSha256: "d".repeat(64),
+      packageLimits: {
+        maxManifestBytes: 262_144,
+        maxFileBytes: 1_073_741_824,
+        maxTotalBytes: 4_294_967_296,
+        maxFiles: 50_000
+      }
+    };
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-paddle-catalog-"));
+    const manifestPath = path.join(root, "manifest.json");
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+    try {
+      const projected = readPaddleOcrReviewedManifest(manifestPath, "darwin", "arm64");
+      expect(projected).toMatchObject({
+        engineVersion: "3.7.0",
+        catalog: { installable: true, downloadSizeBytes: 123_456_789 },
+        releaseBundle: {
+          state: "available",
+          platform: "macos-arm64",
+          packageLimits: { maxFiles: 50_000, maxTotalBytes: 4_294_967_296 }
+        }
+      });
+      expect(JSON.stringify(projected.catalog)).not.toMatch(/url|sha256|signature|path/u);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("materializes only an explicit current install and returns its real Job", async () => {

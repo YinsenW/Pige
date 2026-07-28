@@ -20,6 +20,11 @@ import type {
   LocalToolInspection,
   LocalToolLifecycleResult
 } from "./local-tool-manager-types";
+import {
+  resolveLocalToolPackageLimits,
+  type LocalToolPackageLimits
+} from "./local-tool-package";
+import type { ReviewedPaddleOcrAvailableBundle } from "./paddle-ocr-bundle-materializer";
 
 const USER_ORIGIN = "settings.local_capabilities";
 
@@ -80,6 +85,17 @@ interface PaddleOcrLifecycleServiceOptions {
 
 type PaddleOcrPlatform = "macos-arm64" | "windows-x64";
 
+export interface ReviewedPaddleOcrAwaitingBundle {
+  readonly platform: PaddleOcrPlatform;
+  readonly state: "awaiting_release_artifact";
+}
+
+export interface PaddleOcrReviewedManifestProjection {
+  readonly engineVersion: string;
+  readonly catalog: PaddleOcrReviewedCatalog;
+  readonly releaseBundle: ReviewedPaddleOcrAwaitingBundle | ReviewedPaddleOcrAvailableBundle | undefined;
+}
+
 interface ReviewedPaddleOcrManifest {
   readonly id: typeof PADDLE_OCR_ENGINE_ID;
   readonly catalogVersion: string;
@@ -94,10 +110,7 @@ interface ReviewedPaddleOcrManifest {
     readonly assets: readonly ReviewedAsset[];
   };
   readonly models: readonly ReviewedModel[];
-  readonly releaseBundles: readonly {
-    readonly platform: PaddleOcrPlatform;
-    readonly state: "awaiting_release_artifact";
-  }[];
+  readonly releaseBundles: readonly (ReviewedPaddleOcrAwaitingBundle | ReviewedPaddleOcrAvailableBundle)[];
 }
 
 interface ReviewedAsset {
@@ -127,7 +140,7 @@ export function createUnavailablePaddleOcrLifecycleService(
     : platform === "win32" && architecture === "x64"
       ? "windows-x64"
       : undefined;
-  const catalog = projectUnavailableCatalog(manifest, target);
+  const catalog = projectReviewedCatalog(manifest, target, false);
   return new PaddleOcrLifecycleService({
     catalog,
     manager: unavailableManager(manifest.engineVersion),
@@ -138,6 +151,25 @@ export function createUnavailablePaddleOcrLifecycleService(
       discard: () => undefined
     }
   });
+}
+
+export function readPaddleOcrReviewedManifest(
+  manifestPath: string,
+  platform = process.platform,
+  architecture = process.arch
+): PaddleOcrReviewedManifestProjection {
+  const manifest = parseReviewedManifest(JSON.parse(readFileSync(manifestPath, "utf8")));
+  const target = platform === "darwin" && architecture === "arm64"
+    ? "macos-arm64"
+    : platform === "win32" && architecture === "x64"
+      ? "windows-x64"
+      : undefined;
+  const releaseBundle = manifest.releaseBundles.find((entry) => entry.platform === target);
+  return {
+    engineVersion: manifest.engineVersion,
+    catalog: projectReviewedCatalog(manifest, target, releaseBundle?.state === "available"),
+    releaseBundle
+  };
 }
 
 export class PaddleOcrLifecycleService {
@@ -369,14 +401,16 @@ function parseReviewedManifest(value: unknown): ReviewedPaddleOcrManifest {
   const paddlePaddle = requireRecord(manifest.paddlePaddle);
   const pythonPackages = requireArray(manifest.pythonPackages).map(parsePackage);
   const models = requireArray(manifest.models).map(parseModel);
-  const releaseBundles = requireArray(manifest.releaseBundles).map((entry) => {
-    const bundle = requireRecord(entry);
-    if (!isPaddleOcrPlatform(bundle.platform) || bundle.state !== "awaiting_release_artifact") {
-      throw new Error("The PaddleOCR release bundle is not a reviewed unavailable artifact.");
-    }
-    return { platform: bundle.platform, state: "awaiting_release_artifact" as const };
-  });
-  if (pythonPackages.length === 0 || models.length === 0 || releaseBundles.length !== 2) {
+  const releaseBundles = requireArray(manifest.releaseBundles).map(parseReleaseBundle);
+  const releasePlatforms = new Set(releaseBundles.map((entry) => entry.platform));
+  if (
+    pythonPackages.length === 0 ||
+    models.length === 0 ||
+    releaseBundles.length !== 2 ||
+    releasePlatforms.size !== 2 ||
+    !releasePlatforms.has("macos-arm64") ||
+    !releasePlatforms.has("windows-x64")
+  ) {
     throw new Error("The reviewed PaddleOCR catalog is incomplete.");
   }
   return {
@@ -397,9 +431,10 @@ function parseReviewedManifest(value: unknown): ReviewedPaddleOcrManifest {
   };
 }
 
-function projectUnavailableCatalog(
+function projectReviewedCatalog(
   manifest: ReviewedPaddleOcrManifest,
-  platform: PaddleOcrPlatform | undefined
+  platform: PaddleOcrPlatform | undefined,
+  installable: boolean
 ): PaddleOcrReviewedCatalog {
   const pythonAsset = manifest.pythonRuntime.assets.find((asset) => asset.platform === platform);
   const paddleAsset = manifest.paddlePaddle.assets.find((asset) => asset.platform === platform);
@@ -413,12 +448,63 @@ function projectUnavailableCatalog(
       component(`model.${entry.id.toLowerCase()}`, "model", entry.id, manifest.engineVersion, entry.sizeBytes)
     )
   ];
+  const releaseBundle = manifest.releaseBundles.find((entry) => entry.platform === platform);
   return {
     catalogVersion: manifest.catalogVersion,
     components,
-    downloadSizeBytes: components.reduce((total, entry) => total + entry.sizeBytes, 0),
-    installable: false
+    downloadSizeBytes: installable && releaseBundle?.state === "available"
+      ? releaseBundle.sizeBytes
+      : components.reduce((total, entry) => total + entry.sizeBytes, 0),
+    installable
   };
+}
+
+function parseReleaseBundle(value: unknown): ReviewedPaddleOcrAwaitingBundle | ReviewedPaddleOcrAvailableBundle {
+  const bundle = requireRecord(value);
+  if (!isPaddleOcrPlatform(bundle.platform)) throw new Error("Invalid PaddleOCR release bundle platform.");
+  if (bundle.state === "awaiting_release_artifact") {
+    return { platform: bundle.platform, state: "awaiting_release_artifact" };
+  }
+  if (bundle.state !== "available") throw new Error("Invalid PaddleOCR release bundle state.");
+  const signature = requireRecord(bundle.signature);
+  if (
+    signature.algorithm !== "Ed25519" ||
+    !isBoundedString(signature.keyId, 80) ||
+    !isBoundedString(signature.valueBase64, 256)
+  ) {
+    throw new Error("Invalid PaddleOCR release bundle signature.");
+  }
+  return {
+    platform: bundle.platform,
+    state: "available",
+    artifactUrl: requireHttpsUrl(bundle.artifactUrl),
+    sizeBytes: requireSize(bundle.sizeBytes),
+    sha256: requireDigest(bundle.sha256),
+    signature: {
+      algorithm: "Ed25519",
+      keyId: signature.keyId,
+      valueBase64: signature.valueBase64
+    },
+    sbomSha256: requireDigest(bundle.sbomSha256),
+    installedTreeSha256: requireDigest(bundle.installedTreeSha256),
+    installedSizeBytes: requireSize(bundle.installedSizeBytes),
+    wrapperSha256: requireDigest(bundle.wrapperSha256),
+    packageLimits: parsePackageLimits(bundle.packageLimits)
+  };
+}
+
+function parsePackageLimits(value: unknown): LocalToolPackageLimits {
+  const limits = requireRecord(value);
+  if (Object.keys(limits).sort().join("\0") !==
+    ["maxFileBytes", "maxFiles", "maxManifestBytes", "maxTotalBytes"].join("\0")) {
+    throw new Error("Invalid PaddleOCR package limits.");
+  }
+  return resolveLocalToolPackageLimits({
+    maxManifestBytes: requireSize(limits.maxManifestBytes),
+    maxFileBytes: requireSize(limits.maxFileBytes),
+    maxTotalBytes: requireSize(limits.maxTotalBytes),
+    maxFiles: requireSize(limits.maxFiles)
+  });
 }
 
 function unavailableManager(version: string): PaddleOcrLocalToolManagerPort {
@@ -503,6 +589,22 @@ function requireVersion(value: unknown): string {
 function requireSize(value: unknown): number {
   if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error("Invalid catalog size.");
   return value as number;
+}
+
+function requireDigest(value: unknown): string {
+  if (typeof value !== "string" || !/^(?:sha256:)?[a-f0-9]{64}$/u.test(value)) {
+    throw new Error("Invalid catalog digest.");
+  }
+  return value;
+}
+
+function requireHttpsUrl(value: unknown): string {
+  if (!isBoundedString(value, 2_048)) throw new Error("Invalid catalog artifact URL.");
+  const parsed = new URL(value);
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.href !== value) {
+    throw new Error("Invalid catalog artifact URL.");
+  }
+  return value;
 }
 
 function isBoundedString(value: unknown, max: number): value is string {
