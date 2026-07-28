@@ -51,14 +51,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of exact-version disabled Pi package update and verified immediate-prior offline rollback.",
+    "scope": "Independent Planning review of durable metadata-only Pi package version pin and unpin.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "eb3c899bc0340e6598f8cc20b460d98a100fd247deb295bc860ccaa772fd01a2"
+    "reviewedSha256": "e3cb349eb43e5506534bccca0cbb86a8ad7df1bb6d245a0d690b96f33590ceb2"
   },
   "reviewers": [{
-    "reviewerId": "pi-package-update-rollback-review",
-    "task": "Disabled Pi package update and rollback",
+    "reviewerId": "pi-package-version-pin-review",
+    "task": "Disabled Pi package version pin and unpin",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -66,33 +66,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed exact target identity, confirmation, disabled-only authority, rollback and open lifecycle; Development independently supplied implementation evidence."
+    "independence": "Planning reviewed durable metadata CAS, maintenance denial, restart truth and open runtime scope; Development independently supplied implementation evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"pi-package-update-rollback-review","blockerCount":0,"summary":"Settings confirms exact update or one available rollback and adopts authoritative registry truth."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"pi-package-update-rollback-review","blockerCount":0,"summary":"Package, API, architecture, UI and Decision owners share disabled-only exact-target semantics."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"pi-package-update-rollback-review","blockerCount":0,"summary":"Acceptance records update/rollback while enable, pin and runtime remain planned."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"pi-package-update-rollback-review","blockerCount":0,"summary":"Exact SRI, opaque prior target, CAS receipts and restart adoption are directly testable."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"pi-package-update-rollback-review","blockerCount":0,"summary":"Existing package/API/UI/Decision/trace owners absorb the slice without a new design doc."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"pi-package-version-pin-review","blockerCount":0,"summary":"Settings serializes Pin/Unpin and adopts authoritative registry eligibility."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"pi-package-version-pin-review","blockerCount":0,"summary":"Package, API, architecture, UI and Decision owners share metadata-only CAS semantics."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"pi-package-version-pin-review","blockerCount":0,"summary":"Acceptance records pin/unpin while enable and runtime remain planned."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"pi-package-version-pin-review","blockerCount":0,"summary":"Restart state and pre-confirmation update/rollback denial are directly testable."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"pi-package-version-pin-review","blockerCount":0,"summary":"Existing package/API/UI/Decision/trace owners absorb the slice without a new design doc."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict update/rollback identities and authoritative readable results remain bound."},
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict pin identity and authoritative readable results remain bound."},
     {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision, acceptance and semantic locks bind the same incomplete package lifecycle."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact 184-LOC update owner and changed manager/store LOC are protected and hash-bound."}
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact 223-LOC update and 1116-LOC manager owners are protected and hash-bound."}
   ],
   "coordination": {
-    "taskId": "pi-package-update-rollback-20260729",
-    "taskTitle": "Disabled Pi package update and rollback",
+    "taskId": "pi-package-version-pin-20260729",
+    "taskTitle": "Disabled Pi package version pin and unpin",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing catalog, install and trash uninstall remain compatible; maintenance never enables or executes a package.",
-    "acknowledgement": "Planning binds exact-version update and one-step offline rollback only; enable, pin and runtime execution remain open."
+    "compatibility": "Catalog, install, trash uninstall and unpinned maintenance remain compatible; pinning never enables or executes a package.",
+    "acknowledgement": "Planning binds metadata-only pin/unpin; enable and runtime execution remain open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Update network or supply-chain drift preserves the current authoritative disabled package.",
-    "Rollback accepts only the immediately previous verified tree bound by one opaque target.",
-    "Enable, pin, broader history and runtime execution remain outside this bind."
+    "Pinned state must survive restart and reject crafted update/rollback before external effects.",
+    "Unpin restores only eligibility derived from the current verified receipt chain.",
+    "Enable, broader history and runtime execution remain outside this bind."
   ]
 }

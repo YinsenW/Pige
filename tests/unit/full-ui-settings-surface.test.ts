@@ -53,6 +53,8 @@ import type {
   PiPackageRegistrySummary,
   PiPackageRollbackRequest,
   PiPackageRollbackResult,
+  PiPackageSetPinnedRequest,
+  PiPackageSetPinnedResult,
   PiPackageUninstallRequest,
   PiPackageUninstallResult,
   PiPackageUpdateRequest,
@@ -1914,7 +1916,8 @@ describe("full UI Settings surface", () => {
       install,
       uninstall: vi.fn(),
       update: vi.fn(),
-      rollback: vi.fn()
+      rollback: vi.fn(),
+      setPinned: vi.fn()
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
 
@@ -2011,7 +2014,8 @@ describe("full UI Settings surface", () => {
       install,
       uninstall: vi.fn(),
       update: vi.fn(),
-      rollback: vi.fn()
+      rollback: vi.fn(),
+      setPinned: vi.fn()
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -2078,7 +2082,8 @@ describe("full UI Settings surface", () => {
       install: vi.fn(),
       uninstall: vi.fn(),
       update: vi.fn(),
-      rollback: vi.fn()
+      rollback: vi.fn(),
+      setPinned: vi.fn()
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -2134,7 +2139,8 @@ describe("full UI Settings surface", () => {
       install,
       uninstall: vi.fn(),
       update: vi.fn(),
-      rollback: vi.fn()
+      rollback: vi.fn(),
+      setPinned: vi.fn()
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -2191,7 +2197,8 @@ describe("full UI Settings surface", () => {
       install: vi.fn(),
       uninstall,
       update: vi.fn(),
-      rollback: vi.fn()
+      rollback: vi.fn(),
+      setPinned: vi.fn()
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -2265,7 +2272,8 @@ describe("full UI Settings surface", () => {
         install: vi.fn(),
         uninstall,
         update: vi.fn(),
-        rollback: vi.fn()
+        rollback: vi.fn(),
+        setPinned: vi.fn()
       };
       const root = createRoot(dom.window.document.querySelector("#root")!);
       await act(async () => {
@@ -2310,7 +2318,8 @@ describe("full UI Settings surface", () => {
       install: vi.fn(),
       uninstall,
       update: vi.fn(),
-      rollback: vi.fn()
+      rollback: vi.fn(),
+      setPinned: vi.fn()
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -2350,7 +2359,8 @@ describe("full UI Settings surface", () => {
       install: vi.fn(),
       uninstall: vi.fn(),
       update,
-      rollback: vi.fn()
+      rollback: vi.fn(),
+      setPinned: vi.fn()
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -2451,7 +2461,8 @@ describe("full UI Settings surface", () => {
         install: vi.fn(),
         uninstall: vi.fn(),
         update,
-        rollback: vi.fn()
+        rollback: vi.fn(),
+        setPinned: vi.fn()
       };
       const root = createRoot(dom.window.document.querySelector("#root")!);
       await act(async () => {
@@ -2508,7 +2519,8 @@ describe("full UI Settings surface", () => {
       install: vi.fn(),
       uninstall: vi.fn(),
       update,
-      rollback: vi.fn()
+      rollback: vi.fn(),
+      setPinned: vi.fn()
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -2558,7 +2570,8 @@ describe("full UI Settings surface", () => {
       install: vi.fn(),
       uninstall: vi.fn(),
       update: vi.fn(),
-      rollback
+      rollback,
+      setPinned: vi.fn()
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -2610,6 +2623,198 @@ describe("full UI Settings surface", () => {
     expect(page.textContent).toContain("The package was rolled back and remains disabled.");
     expect(page.textContent).not.toContain(rollbackId);
     expect(dom.window.document.activeElement).toBe(rolledBackRow);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("pins and unpins one exact installed Pi package with a synchronous mutation fence", async () => {
+    const dom = createDom();
+    const rollbackId = "pi_package_rollback_abcdefghijklmnop" as const;
+    const installedPackage = piPackage("pkg_aaaaaaaaaaaaaaaaaaaaaaaa", "held-package", {
+      canUpdate: true,
+      canRollback: true,
+      rollbackTarget: { rollbackId, targetVersion: "0.9.0" }
+    });
+    let settlePin!: (result: PiPackageSetPinnedResult) => void;
+    const setPinned = vi.fn((request: PiPackageSetPinnedRequest) => {
+      if (request.pinned) {
+        return new Promise<PiPackageSetPinnedResult>((resolve) => {
+          settlePin = resolve;
+        });
+      }
+      return Promise.resolve({
+        apiVersion: 1,
+        requestId: request.requestId,
+        packageId: request.packageId,
+        pinned: false,
+        status: "committed" as const,
+        registry: piPackageRegistry(62, [piPackage(request.packageId, installedPackage.packageName, {
+          version: "1.0.0",
+          canUpdate: true
+        })])
+      });
+    });
+    const api: PiPackagesApi = {
+      summary: async () => ({ status: "ready", registry: piPackageRegistry(60, [installedPackage]) }),
+      catalogQuery: emptyPiPackageCatalogQuery,
+      install: vi.fn(),
+      uninstall: vi.fn(),
+      update: vi.fn(),
+      rollback: vi.fn(),
+      setPinned
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(PiPackagesSettingsPanel, { api, t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+    const row = requireElement(page.querySelector<HTMLElement>(`[data-package-id="${installedPackage.packageId}"]`));
+    const pin = buttonNamed(row, "Pin version");
+    await act(async () => {
+      pin.click();
+      pin.click();
+      await settle(dom);
+    });
+    expect(setPinned).toHaveBeenCalledTimes(1);
+    const pinRequest = setPinned.mock.calls[0]![0];
+    expect(pinRequest).toMatchObject({
+      apiVersion: 1,
+      packageId: installedPackage.packageId,
+      expectedRegistryRevision: 60,
+      pinned: true
+    });
+    expect(pinRequest.requestId).toMatch(/^pi_package_pin_request_[a-f0-9]{32}$/u);
+    expect(buttonNamed(row, "Pinning…").disabled).toBe(true);
+
+    await act(async () => {
+      settlePin({
+        apiVersion: 1,
+        requestId: pinRequest.requestId,
+        packageId: pinRequest.packageId,
+        pinned: true,
+        status: "committed",
+        registry: piPackageRegistry(61, [piPackage(installedPackage.packageId, installedPackage.packageName, {
+          pinned: true,
+          canUpdate: false,
+          canRollback: false,
+          rollbackTarget: null
+        })])
+      });
+      await settle(dom);
+    });
+    const pinnedRow = requireElement(page.querySelector<HTMLElement>(`[data-package-id="${installedPackage.packageId}"]`));
+    const unpin = buttonNamed(pinnedRow, "Unpin version");
+    expect(unpin.getAttribute("aria-pressed")).toBe("true");
+    expect(pinnedRow.textContent).toContain("Pinned exact version v1.0.0");
+    expect(pinnedRow.querySelector("[data-package-update-version-id]")).toBeNull();
+    expect(pinnedRow.querySelector("[data-package-rollback-id]")).toBeNull();
+    expect(dom.window.document.activeElement).toBe(unpin);
+
+    await act(async () => {
+      unpin.click();
+      await settle(dom);
+    });
+    expect(setPinned).toHaveBeenCalledTimes(2);
+    expect(setPinned.mock.calls[1]![0]).toMatchObject({
+      packageId: installedPackage.packageId,
+      expectedRegistryRevision: 61,
+      pinned: false
+    });
+    const unpinnedRow = requireElement(page.querySelector<HTMLElement>(`[data-package-id="${installedPackage.packageId}"]`));
+    expect(buttonNamed(unpinnedRow, "Pin version").getAttribute("aria-pressed")).toBe("false");
+    expect(unpinnedRow.textContent).not.toContain("Pinned exact version");
+    expect(unpinnedRow.querySelector("[data-package-update-version-id]")).not.toBeNull();
+    expect(dom.window.document.activeElement).toBe(buttonNamed(unpinnedRow, "Pin version"));
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("adopts authoritative pin registries and preserves inventory and focus on identity-only failure", async () => {
+    const authoritativeCases = [
+      ["stale", [piPackage("pkg_aaaaaaaaaaaaaaaaaaaaaaaa", "authoritative-package")], "The package registry changed"],
+      ["not_found", [], "This package is no longer installed"]
+    ] as const;
+    for (const [status, packages, message] of authoritativeCases) {
+      const dom = createDom();
+      const installedPackage = piPackage("pkg_aaaaaaaaaaaaaaaaaaaaaaaa", "pin-package");
+      const setPinned = vi.fn(async (request: PiPackageSetPinnedRequest): Promise<PiPackageSetPinnedResult> => ({
+        apiVersion: 1,
+        requestId: request.requestId,
+        packageId: request.packageId,
+        pinned: request.pinned,
+        status,
+        registry: piPackageRegistry(71, packages)
+      }));
+      const api: PiPackagesApi = {
+        summary: async () => ({ status: "ready", registry: piPackageRegistry(70, [installedPackage]) }),
+        catalogQuery: emptyPiPackageCatalogQuery,
+        install: vi.fn(),
+        uninstall: vi.fn(),
+        update: vi.fn(),
+        rollback: vi.fn(),
+        setPinned
+      };
+      const root = createRoot(dom.window.document.querySelector("#root")!);
+      await act(async () => {
+        root.render(createElement(PiPackagesSettingsPanel, { api, t }));
+        await settle(dom);
+      });
+      const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+      await act(async () => {
+        buttonNamed(page, "Pin version").click();
+        await settle(dom);
+      });
+      expect(page.textContent).toContain(message);
+      if (status === "not_found") {
+        expect(page.querySelector(`[data-package-id="${installedPackage.packageId}"]`)).toBeNull();
+        expect(page.textContent).toContain("No Pi packages installed");
+        expect(dom.window.document.activeElement).toBe(page.querySelector("#packages-registry-title"));
+      } else {
+        expect(page.querySelector('[data-package-registry-revision="71"]')).not.toBeNull();
+        expect(page.textContent).toContain("authoritative-package");
+        expect(page.textContent).not.toContain("pin-package");
+        expect(dom.window.document.activeElement).toBe(buttonNamed(page, "Pin version"));
+      }
+      await act(async () => root.unmount());
+      dom.window.close();
+    }
+
+    const dom = createDom();
+    const installedPackage = piPackage("pkg_aaaaaaaaaaaaaaaaaaaaaaaa", "kept-pin-package");
+    const setPinned = vi.fn(async (request: PiPackageSetPinnedRequest): Promise<PiPackageSetPinnedResult> => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      packageId: request.packageId,
+      pinned: request.pinned,
+      status: "failed"
+    }));
+    const api: PiPackagesApi = {
+      summary: async () => ({ status: "ready", registry: piPackageRegistry(80, [installedPackage]) }),
+      catalogQuery: emptyPiPackageCatalogQuery,
+      install: vi.fn(),
+      uninstall: vi.fn(),
+      update: vi.fn(),
+      rollback: vi.fn(),
+      setPinned
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(PiPackagesSettingsPanel, { api, t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+    const pin = buttonNamed(page, "Pin version");
+    await act(async () => {
+      pin.click();
+      await settle(dom);
+    });
+    expect(page.querySelector('[data-package-registry-revision="80"]')).not.toBeNull();
+    expect(page.textContent).toContain("kept-pin-package");
+    expect(page.textContent).toContain("Pige could not change the version hold");
+    expect(dom.window.document.activeElement).toBe(pin);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -4019,6 +4224,7 @@ function piPackage(
     dependencyCount: 0,
     enabled: false,
     trust: "community",
+    pinned: false,
     canUpdate: false,
     canRollback: false,
     rollbackTarget: null,

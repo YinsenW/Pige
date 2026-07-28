@@ -3665,17 +3665,37 @@ Date: 2026-07-29
 
 Decision:
 
-Confirmed exact version/SRI update swaps verified disabled bytes and retains the prior tree; one
-opaque target restores only that tree offline. Recovery adopts once.
+Confirmed version/SRI update swaps disabled bytes, retaining one offline rollback target; recovery
+adopts once.
 
 Rationale:
 
-Reversible maintenance without runtime authority.
+Permit reversible maintenance without runtime authority.
 
 Consequences:
 
-- Drift/tamper/download failure preserves current bytes; no code executes. Enable, pin, broader
-  history and runtime remain open.
+- Failure preserves current bytes; no code executes. Enable/runtime and broader history stay open.
+
+References:
+
+- `docs/SKILL_EXTENSION_DESIGN.md`, `docs/API_AND_IPC_DESIGN.md`
+
+### D-20260729-Pi-Package-Version-Pin
+
+Status: Accepted
+Date: 2026-07-29
+
+Decision:
+
+Durable disabled-package pin blocks update/rollback before effects; unpin restores eligibility.
+
+Rationale:
+
+Hold a working version without runtime authority or another copy.
+
+Consequences:
+
+- Legacy defaults unpinned; restart preserves state. Uninstall confirms; enable/runtime stay open.
 
 References:
 

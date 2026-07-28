@@ -291,6 +291,7 @@ describe("PiPackageManagerService", () => {
         dependencyCount: 0,
         enabled: false,
         trust: "community",
+        pinned: false,
         canUpdate: true,
         canRollback: false,
         rollbackTarget: null

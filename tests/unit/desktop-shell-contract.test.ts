@@ -76,6 +76,9 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly rollback: (");
     expect(contractsSource).toContain("request: PiPackageRollbackRequest");
     expect(contractsSource).toContain("Promise<PiPackageRollbackResult>");
+    expect(contractsSource).toContain("readonly setPinned: (");
+    expect(contractsSource).toContain("request: PiPackageSetPinnedRequest");
+    expect(contractsSource).toContain("Promise<PiPackageSetPinnedResult>");
     expect(packageApi).toContain('ipcRenderer.invoke("piPackages.summary")');
     expect(packageApi).toContain('"piPackages.install"');
     expect(packageApi).toContain("PiPackageInstallRequestSchema.parse(request)");
@@ -89,6 +92,8 @@ describe("desktop shell build contract", () => {
     expect(packageApi).toContain('"piPackages.rollback"');
     expect(packageApi).toContain("PiPackageRollbackRequestSchema.parse(request)");
     expect(packageApi).toContain("PiPackageRollbackResultSchema.parse(await ipcRenderer.invoke");
+    expect(packageApi).toContain("PiPackageSetPinnedRequestSchema.parse(request)");
+    expect(packageApi).toContain("PiPackageSetPinnedResultSchema.parse(await ipcRenderer.invoke");
     for (const privateField of ["path", "tarball", "integrity", "authority", "rawError"]) {
       expect(packageApi).not.toContain(privateField);
     }

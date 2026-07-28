@@ -645,6 +645,8 @@ export const PiPackageUpdateRequestIdSchema = z.string()
   .regex(/^pi_package_update_request_[a-z0-9]{16,64}$/u);
 export const PiPackageRollbackRequestIdSchema = z.string()
   .regex(/^pi_package_rollback_request_[a-z0-9]{16,64}$/u);
+export const PiPackageSetPinnedRequestIdSchema = z.string()
+  .regex(/^pi_package_pin_request_[a-z0-9]{16,64}$/u);
 export const PiPackageRollbackIdSchema = z.string()
   .regex(/^pi_package_rollback_[a-z0-9]{16,64}$/u);
 export const PiPackageCatalogQueryRequestIdSchema = z.string()
@@ -668,6 +670,7 @@ export const PiPackageInstalledSummarySchema = z.object({
   dependencyCount: z.number().int().min(0).max(256),
   enabled: z.literal(false),
   trust: z.literal("community"),
+  pinned: z.boolean().default(false),
   canUpdate: z.boolean(),
   canRollback: z.boolean(),
   rollbackTarget: z.object({
@@ -680,6 +683,13 @@ export const PiPackageInstalledSummarySchema = z.object({
       code: "custom",
       path: ["rollbackTarget"],
       message: "Rollback availability must match one exact renderer-safe target."
+    });
+  }
+  if (summary.pinned && (summary.canUpdate || summary.canRollback || summary.rollbackTarget !== null)) {
+    context.addIssue({
+      code: "custom",
+      path: ["pinned"],
+      message: "Pinned packages must fail closed for update and rollback."
     });
   }
 });
@@ -779,6 +789,27 @@ export const PiPackageRollbackResultSchema = z.discriminatedUnion("status", [
   PiPackageRollbackAuthoritativeResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
   PiPackageRollbackAuthoritativeResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
   PiPackageRollbackResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const PiPackageSetPinnedRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PiPackageSetPinnedRequestIdSchema,
+  packageId: PiPackageIdSchema,
+  expectedRegistryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  pinned: z.boolean()
+}).strict();
+const PiPackageSetPinnedResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PiPackageSetPinnedRequestIdSchema,
+  packageId: PiPackageIdSchema,
+  pinned: z.boolean()
+}).strict();
+const PiPackageSetPinnedAuthoritativeResultIdentitySchema =
+  PiPackageSetPinnedResultIdentitySchema.extend({ registry: PiPackageRegistrySummarySchema });
+export const PiPackageSetPinnedResultSchema = z.discriminatedUnion("status", [
+  PiPackageSetPinnedAuthoritativeResultIdentitySchema.extend({ status: z.literal("committed") }).strict(),
+  PiPackageSetPinnedAuthoritativeResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  PiPackageSetPinnedAuthoritativeResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  PiPackageSetPinnedResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 const isSafeExecutableName = (value: string): boolean => {
   if (value !== value.trim() || value.length < 1 || value.length > 64) return false;
@@ -5741,6 +5772,7 @@ export type PiPackageInstallTaskId = z.infer<typeof PiPackageInstallTaskIdSchema
 export type PiPackageUninstallRequestId = z.infer<typeof PiPackageUninstallRequestIdSchema>;
 export type PiPackageUpdateRequestId = z.infer<typeof PiPackageUpdateRequestIdSchema>;
 export type PiPackageRollbackRequestId = z.infer<typeof PiPackageRollbackRequestIdSchema>;
+export type PiPackageSetPinnedRequestId = z.infer<typeof PiPackageSetPinnedRequestIdSchema>;
 export type PiPackageRollbackId = z.infer<typeof PiPackageRollbackIdSchema>;
 export type PiPackageCatalogQueryRequestId = z.infer<typeof PiPackageCatalogQueryRequestIdSchema>;
 export type PiPackageCatalogId = z.infer<typeof PiPackageCatalogIdSchema>;
@@ -5760,6 +5792,8 @@ export type PiPackageUpdateRequest = z.infer<typeof PiPackageUpdateRequestSchema
 export type PiPackageUpdateResult = z.infer<typeof PiPackageUpdateResultSchema>;
 export type PiPackageRollbackRequest = z.infer<typeof PiPackageRollbackRequestSchema>;
 export type PiPackageRollbackResult = z.infer<typeof PiPackageRollbackResultSchema>;
+export type PiPackageSetPinnedRequest = z.infer<typeof PiPackageSetPinnedRequestSchema>;
+export type PiPackageSetPinnedResult = z.infer<typeof PiPackageSetPinnedResultSchema>;
 export type PiPackageCatalogEntry = z.infer<typeof PiPackageCatalogEntrySchema>;
 export type PiPackageCatalogQueryRequest = z.infer<typeof PiPackageCatalogQueryRequestSchema>;
 export type PiPackageCatalogQueryResult = z.infer<typeof PiPackageCatalogQueryResultSchema>;

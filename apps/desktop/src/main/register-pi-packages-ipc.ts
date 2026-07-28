@@ -7,6 +7,8 @@ import {
   PiPackageRegistryQueryResultSchema,
   PiPackageRollbackRequestSchema,
   PiPackageRollbackResultSchema,
+  PiPackageSetPinnedRequestSchema,
+  PiPackageSetPinnedResultSchema,
   PiPackageUninstallRequestSchema,
   PiPackageUninstallResultSchema,
   PiPackageUpdateRequestSchema,
@@ -19,6 +21,8 @@ import {
   type PiPackageRegistryQueryResult,
   type PiPackageRollbackRequest,
   type PiPackageRollbackResult,
+  type PiPackageSetPinnedRequest,
+  type PiPackageSetPinnedResult,
   type PiPackageUninstallRequest,
   type PiPackageUninstallResult,
   type PiPackageUpdateRequest,
@@ -40,6 +44,7 @@ export interface RegisterPiPackagesIpcOptions {
   readonly update: (request: PiPackageUpdateRequest) => Awaitable<PiPackageUpdateResult>;
   readonly confirmRollback: (sender: WebContents, binding: PiPackageRollbackConfirmationBinding) => Awaitable<boolean>;
   readonly rollback: (request: PiPackageRollbackRequest) => Awaitable<PiPackageRollbackResult>;
+  readonly setPinned: (request: PiPackageSetPinnedRequest) => Awaitable<PiPackageSetPinnedResult>;
 }
 
 export interface PiPackageUpdateConfirmationBinding {
@@ -122,6 +127,7 @@ export function registerPiPackagesIpc(options: RegisterPiPackagesIpcOptions): vo
     if (!current) return before.status === "ready"
       ? updateResult(parsed, before.registry.revision === parsed.expectedRegistryRevision ? "not_found" : "stale", before.registry)
       : failedUpdate(parsed);
+    if (current.pinned || !current.canUpdate) return failedUpdate(parsed);
     let confirmed = false;
     try {
       confirmed = await options.confirmUpdate(event.sender, {
@@ -149,11 +155,13 @@ export function registerPiPackagesIpc(options: RegisterPiPackagesIpcOptions): vo
     const current = before.status === "ready" && before.registry.revision === parsed.expectedRegistryRevision
       ? before.registry.packages.find((entry) => entry.packageId === parsed.packageId)
       : undefined;
+    if (current?.pinned) return failedRollback(parsed);
     if (!current || current.rollbackTarget?.rollbackId !== parsed.rollbackId ||
       current.rollbackTarget.targetVersion !== parsed.targetVersion) {
       return before.status === "ready" ? rollbackResult(parsed,
         before.registry.revision === parsed.expectedRegistryRevision && !current ? "not_found" : "stale", before.registry) : failedRollback(parsed);
     }
+    if (!current.canRollback) return failedRollback(parsed);
     let confirmed = false;
     try {
       confirmed = await options.confirmRollback(event.sender, {
@@ -171,6 +179,17 @@ export function registerPiPackagesIpc(options: RegisterPiPackagesIpcOptions): vo
       assertRollbackIdentity(parsed, result);
       return trustedActiveVault(options, event.sender) === vaultId ? result : failedRollback(parsed);
     } catch { return failedRollback(parsed); }
+  });
+
+  options.ipcMain.handle("piPackages.setPinned", async (event, request: unknown) => {
+    const parsed = PiPackageSetPinnedRequestSchema.parse(request);
+    const vaultId = trustedActiveVault(options, event.sender);
+    if (!vaultId) return failedPinned(parsed);
+    try {
+      const result = PiPackageSetPinnedResultSchema.parse(await options.setPinned(parsed));
+      assertPinnedIdentity(parsed, result);
+      return trustedActiveVault(options, event.sender) === vaultId ? result : failedPinned(parsed);
+    } catch { return failedPinned(parsed); }
   });
 }
 
@@ -285,4 +304,13 @@ function assertRollbackIdentity(request: PiPackageRollbackRequest, result: PiPac
   if (result.apiVersion !== request.apiVersion || result.requestId !== request.requestId ||
     result.packageId !== request.packageId || result.rollbackId !== request.rollbackId ||
     result.targetVersion !== request.targetVersion) throw new Error("Pi package rollback response identity did not match the request.");
+}
+function failedPinned(request: PiPackageSetPinnedRequest): PiPackageSetPinnedResult {
+  return PiPackageSetPinnedResultSchema.parse({ apiVersion: request.apiVersion, requestId: request.requestId,
+    packageId: request.packageId, pinned: request.pinned, status: "failed" });
+}
+function assertPinnedIdentity(request: PiPackageSetPinnedRequest, result: PiPackageSetPinnedResult): void {
+  if (result.requestId !== request.requestId || result.packageId !== request.packageId || result.pinned !== request.pinned) {
+    throw new Error("Pi package pin result identity changed.");
+  }
 }

@@ -121,6 +121,8 @@ import type {
   PiPackageRegistryQueryResult,
   PiPackageRollbackRequest,
   PiPackageRollbackResult,
+  PiPackageSetPinnedRequest,
+  PiPackageSetPinnedResult,
   PiPackageUninstallRequest,
   PiPackageUninstallResult,
   PiPackageUpdateRequest,
@@ -266,6 +268,9 @@ export type {
   PiPackageRollbackRequest,
   PiPackageRollbackRequestId,
   PiPackageRollbackResult,
+  PiPackageSetPinnedRequest,
+  PiPackageSetPinnedRequestId,
+  PiPackageSetPinnedResult,
   PiPackageType,
   PiPackageVersion,
   PiPackageUninstallRequest,
@@ -1602,6 +1607,9 @@ export interface PigeDesktopApi {
     readonly rollback: (
       request: PiPackageRollbackRequest
     ) => Promise<PiPackageRollbackResult>;
+    readonly setPinned: (
+      request: PiPackageSetPinnedRequest
+    ) => Promise<PiPackageSetPinnedResult>;
   };
   readonly taskExecution: {
     readonly interaction: () => Promise<TaskInteractionPendingResult>;

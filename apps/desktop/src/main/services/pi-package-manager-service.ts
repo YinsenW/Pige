@@ -55,6 +55,7 @@ export interface PiPackageRecord extends Omit<PiPackageInstallSummary, "status" 
   readonly treeHash: string; readonly archiveHash: string; readonly integrity: string;
   readonly manifestHash: string; readonly relativePath: string; readonly installedAt: string;
   readonly enabled: false; readonly trust: "community";
+  readonly pinned?: true;
   readonly requests: readonly PackageRequestRecord[];
 }
 interface PackageRequestRecord {
@@ -903,6 +904,7 @@ function validateRecord(value: unknown): PiPackageRecord {
       "installed", record.packageId ?? "", record.version ?? "", String(record.treeHash ?? "").replace(/^sha256:/u, "")
     ) ||
     typeof record.installedAt !== "string" || Number.isNaN(Date.parse(record.installedAt)) || record.enabled !== false || record.trust !== "community" ||
+    (record.pinned !== undefined && record.pinned !== true) ||
     !Array.isArray(record.packageTypes) || record.packageTypes.length === 0 || record.packageTypes.some((type) => !["extension", "skill", "prompt", "theme"].includes(type)) ||
     !Number.isSafeInteger(record.dependencyCount) || record.dependencyCount! < 0 || record.dependencyCount! > 256 ||
     !Array.isArray(record.requests) || record.requests.length === 0 || record.requests.length > 1024 ||
@@ -940,8 +942,9 @@ function projectRegistry(
     packages: registry.packages.map((record) => ({
       packageId: record.packageId, packageName: record.packageName, version: record.version,
       state: "installed_disabled", packageTypes: record.packageTypes,
-      dependencyCount: record.dependencyCount, enabled: false, trust: "community", canUpdate: true,
-      canRollback: rollbackTarget(record) !== undefined, rollbackTarget: rollbackTarget(record) ?? null
+      dependencyCount: record.dependencyCount, enabled: false, trust: "community", pinned: record.pinned === true,
+      canUpdate: record.pinned !== true, canRollback: record.pinned !== true && rollbackTarget(record) !== undefined,
+      rollbackTarget: record.pinned === true ? null : rollbackTarget(record) ?? null
     }))
   });
 }

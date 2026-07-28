@@ -82,6 +82,8 @@ import {
   PiPackageRegistryQueryResultSchema,
   PiPackageRollbackRequestSchema,
   PiPackageRollbackResultSchema,
+  PiPackageSetPinnedRequestSchema,
+  PiPackageSetPinnedResultSchema,
   PiPackageUninstallRequestSchema,
   PiPackageUninstallResultSchema,
   PiPackageUpdateRequestSchema,
@@ -1171,8 +1173,9 @@ describe("schemas", () => {
         rollbackTarget: null
       }]
     } as const;
-    expect(PiPackageRegistryQueryResultSchema.parse({ status: "ready", registry }))
-      .toEqual({ status: "ready", registry });
+    const parsedRegistry = PiPackageRegistryQueryResultSchema.parse({ status: "ready", registry });
+    expect(parsedRegistry).toMatchObject({ status: "ready", registry });
+    expect(parsedRegistry.status === "ready" && parsedRegistry.registry.packages[0]?.pinned).toBe(false);
 
     const request = {
       apiVersion: 1,
@@ -1282,6 +1285,7 @@ describe("schemas", () => {
         dependencyCount: 0,
         enabled: false,
         trust: "community",
+        pinned: false,
         canUpdate: true,
         canRollback: true,
         rollbackTarget: { rollbackId, targetVersion: "0.34.0" }
@@ -1387,6 +1391,98 @@ describe("schemas", () => {
       expect(() => PiPackageRollbackRequestSchema.parse({ ...rollbackRequest, ...unsafe })).toThrow();
       expect(() => PiPackageUpdateResultSchema.parse({ ...updateFailed, ...unsafe })).toThrow();
       expect(() => PiPackageRollbackResultSchema.parse({ ...rollbackFailed, ...unsafe })).toThrow();
+    }
+  });
+
+  it("freezes metadata-only Pi package pinning and fail-closed maintenance eligibility", () => {
+    const packageId = "pkg_0123456789abcdef01234567";
+    const pinnedRegistry = {
+      apiVersion: 1,
+      revision: 10,
+      packages: [{
+        packageId,
+        packageName: "@narumitw/pi-btw",
+        version: "0.35.0",
+        state: "installed_disabled",
+        packageTypes: ["extension"],
+        dependencyCount: 0,
+        enabled: false,
+        trust: "community",
+        pinned: true,
+        canUpdate: false,
+        canRollback: false,
+        rollbackTarget: null
+      }]
+    } as const;
+    expect(PiPackageRegistryQueryResultSchema.parse({ status: "ready", registry: pinnedRegistry }))
+      .toEqual({ status: "ready", registry: pinnedRegistry });
+
+    const request = {
+      apiVersion: 1,
+      requestId: "pi_package_pin_request_abcdefghijklmnop",
+      packageId,
+      expectedRegistryRevision: 9,
+      pinned: true
+    } as const;
+    expect(PiPackageSetPinnedRequestSchema.parse(request)).toEqual(request);
+    for (const status of ["committed", "stale", "not_found"] as const) {
+      expect(PiPackageSetPinnedResultSchema.parse({
+        apiVersion: 1,
+        requestId: request.requestId,
+        packageId,
+        pinned: request.pinned,
+        status,
+        registry: pinnedRegistry
+      })).toMatchObject({ status, registry: pinnedRegistry });
+    }
+    const failed = {
+      apiVersion: 1,
+      requestId: request.requestId,
+      packageId,
+      pinned: request.pinned,
+      status: "failed"
+    } as const;
+    expect(PiPackageSetPinnedResultSchema.parse(failed)).toEqual(failed);
+    expect(() => PiPackageSetPinnedResultSchema.parse({ ...failed, registry: pinnedRegistry })).toThrow();
+    expect(() => PiPackageSetPinnedResultSchema.parse({ ...failed, status: "denied" })).toThrow();
+
+    expect(() => PiPackageRegistryQueryResultSchema.parse({
+      status: "ready",
+      registry: {
+        ...pinnedRegistry,
+        packages: [{ ...pinnedRegistry.packages[0], canUpdate: true }]
+      }
+    })).toThrow();
+    expect(() => PiPackageRegistryQueryResultSchema.parse({
+      status: "ready",
+      registry: {
+        ...pinnedRegistry,
+        packages: [{
+          ...pinnedRegistry.packages[0],
+          canRollback: true,
+          rollbackTarget: {
+            rollbackId: "pi_package_rollback_abcdefghijklmnop",
+            targetVersion: "0.34.0"
+          }
+        }]
+      }
+    })).toThrow();
+    expect(() => PiPackageSetPinnedRequestSchema.parse({
+      ...request,
+      requestId: "pi_package_update_request_abcdefghijklmnop"
+    })).toThrow();
+
+    for (const unsafe of [
+      { path: "/private/pi-packages/package" },
+      { treeHash: "private-tree" },
+      { packageBody: "export default malicious" },
+      { rawError: "private failure" },
+      { enabled: true },
+      { runtime: "node" },
+      { restorePath: "/private/trash" }
+    ]) {
+      expect(() => PiPackageSetPinnedRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+      expect(() => PiPackageSetPinnedResultSchema.parse({ ...failed, ...unsafe })).toThrow();
     }
   });
 

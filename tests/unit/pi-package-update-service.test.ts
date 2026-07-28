@@ -13,6 +13,7 @@ import { PiPackageUpdateService } from "../../apps/desktop/src/main/services/pi-
 const PACKAGE_NAME = "pige-update-fixture";
 const PACKAGE_ID = `pkg_${createHash("sha256").update(PACKAGE_NAME).digest("hex").slice(0, 24)}`;
 const UPDATE_REQUEST_ID = "pi_package_update_request_abcdefghijklmnop";
+const PIN_REQUEST_ID = "pi_package_pin_request_abcdefghijklmnop";
 const ROLLBACK_ID = "pi_package_rollback_abcdefghijklmnop";
 const roots: string[] = [];
 
@@ -109,6 +110,49 @@ describe("PiPackageUpdateService", () => {
       fixture.machineRoot, "pi-packages", "updates", ROLLBACK_ID, ".pige-package-update.json"
     ), "utf8"));
     expect(receipt).toMatchObject({ state: "committed", committedRegistryRevision: 2 });
+  });
+
+  it("atomically pins and unpins the exact installed record while preserving rollback authority", async () => {
+    const fixture = await createFixture();
+    const service = createService(fixture);
+    await expect(service.update(updateRequest(fixture))).resolves.toMatchObject({
+      status: "committed", registry: { revision: 2, packages: [{ version: "2.0.0", canRollback: true }] }
+    });
+    const beforePin = fixture.manager.readLifecycleRegistry().packages[0]!;
+    const pinRequest = { apiVersion: 1 as const, requestId: PIN_REQUEST_ID, packageId: PACKAGE_ID,
+      expectedRegistryRevision: 2, pinned: true };
+    await expect(service.setPinned(pinRequest)).resolves.toMatchObject({
+      status: "committed", registry: { revision: 3, packages: [{ version: "2.0.0", pinned: true,
+        canUpdate: false, canRollback: false, rollbackTarget: null }] }
+    });
+    const pinnedRecord = fixture.manager.readLifecycleRegistry().packages[0]!;
+    expect(pinnedRecord).toMatchObject({ version: beforePin.version, treeHash: beforePin.treeHash, pinned: true });
+    await expect(service.setPinned({ ...pinRequest, expectedRegistryRevision: 3 })).resolves.toMatchObject({
+      status: "committed", registry: { revision: 3, packages: [{ pinned: true }] }
+    });
+
+    const fetches = fixture.fetchImpl.mock.calls.length;
+    await expect(service.update({ ...updateRequest(fixture), requestId: "pi_package_update_request_pinnedcrafted001",
+      expectedRegistryRevision: 3 })).resolves.toEqual(expect.objectContaining({ status: "failed" }));
+    await expect(service.rollback({ apiVersion: 1, requestId: "pi_package_rollback_request_pinnedcrafted001",
+      packageId: PACKAGE_ID, expectedRegistryRevision: 3, rollbackId: ROLLBACK_ID,
+      targetVersion: "1.0.0" })).resolves.toEqual(expect.objectContaining({ status: "failed" }));
+    expect(fixture.fetchImpl).toHaveBeenCalledTimes(fetches);
+
+    const restarted = new PiPackageUpdateService({ manager: createManager(fixture) });
+    await expect(restarted.summary()).resolves.toMatchObject({ revision: 3, packages: [{ pinned: true }] });
+    await expect(restarted.setPinned({ ...pinRequest, requestId: "pi_package_pin_request_unpinningrequest01",
+      expectedRegistryRevision: 3, pinned: false })).resolves.toMatchObject({
+      status: "committed", registry: { revision: 4, packages: [{ pinned: false, canUpdate: true,
+        canRollback: true, rollbackTarget: { rollbackId: ROLLBACK_ID, targetVersion: "1.0.0" } }] }
+    });
+    await expect(restarted.summary().then((summary) => summary.packages[0])).resolves.not.toHaveProperty("privatePath");
+    await expect(restarted.setPinned({ ...pinRequest, requestId: "pi_package_pin_request_stalepinrequest01",
+      expectedRegistryRevision: 3 })).resolves.toMatchObject({ status: "stale", registry: { revision: 4 } });
+    await expect(restarted.setPinned({ ...pinRequest, requestId: "pi_package_pin_request_missingpinrequest01",
+      packageId: "pkg_ffffffffffffffffffffffff", expectedRegistryRevision: 4 })).resolves.toMatchObject({
+      status: "not_found", registry: { revision: 4 }
+    });
   });
 });
 

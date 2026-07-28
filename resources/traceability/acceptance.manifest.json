@@ -781,7 +781,7 @@
     "PIGE-UI-005":{"status":"planned","plannedTarget":"Reader selection works; cited append is frozen. Evidence, other mutation and platform proof remain."},
     "PIGE-UI-006":{"status":"partial","evidence":["EV-READER-RELATED","EV-READER-UI","EV-FULL-UI-LIBRARY","EV-FULL-UI-RESPONSIVE","EV-READER-ACTIONS-UI","EV-READER-INLINE","EV-READER-SELECTION-LINK"],"open":{"id":"OPEN-REQ-PIGE-UI-006","description":"Source/graph gaps remain.","targetBuilds":["B6.08","B6.09"],"targetExits":["E6.05","E6.07"]}},
     "PIGE-SKILL-001":{"status":"planned","plannedTarget":"Settings stages, reviews and installs bounded pure HTTPS, Main-picked Markdown or ZIP Skills; installed bytes support re-enable, source update, trash uninstall and pathless export. Chat/vault/External-Web lifecycle and public restore remain."},
-    "PIGE-SKILL-002":{"status":"planned","plannedTarget":"Settings searches one reviewed local entry, confirms install/trash uninstall and exact-version update/offline one-step rollback; enable, pin and runtime remain."}
+    "PIGE-SKILL-002":{"status":"planned","plannedTarget":"One reviewed entry supports install, trash uninstall, exact update/rollback and CAS pin/unpin; enable/runtime remain."}
   },
   "exits": {
     "E0.01":{"status":"partial","evidence":["EV-REPO","EV-REPO-FOUNDATION","EV-DEV-LAUNCH"],"open":{"id":"OPEN-EXIT-E0.01","description":"Real local launch and process-tree cleanup are executable; current Windows CI launch evidence remains open.","targetBuilds":["B0.03"],"targetExits":["E0.01"]}},
@@ -1048,7 +1048,7 @@
     },
     "E8.04": {
       "status": "planned",
-      "plannedTarget": "One reviewed local entry plus install/trash uninstall/exact-version update/offline one-step rollback works; enable, pin and runtime remain."
+      "plannedTarget": "Reviewed install/trash uninstall/update/rollback and CAS pin/unpin work; enable/runtime remain."
     },
     "E9.01":{"status":"partial","evidence":["EV-BACKUP","EV-BACKUP-DURABLE-COVERAGE","EV-BACKUP-ATOMIC-FINALIZATION","EV-BACKUP-JOB-LIFECYCLE","EV-BACKUP-MANIFEST-TRUTH","EV-BACKUP-EXTERNAL-MANAGED-COPIES"],"open":{"id":"OPEN-EXIT-E9.01","description":"UI, fixtures, Operations, scans, atomicity, platforms remain.","targetBuilds":["B9.01","B9.02"],"targetExits":["E9.01"]}},
     "E9.02":{"status":"partial","evidence":["EV-BACKUP","EV-RESTORE-CONFLICT","EV-RESTORE-PREVIEW-FENCE","EV-RESTORE-PUBLICATION","EV-RESTORE-LEGACY-LINEAGE","EV-RESTORE-IDENTITY-RECOVERY","EV-RESTORE-REPLACE-ROLLBACK","EV-RESTORE-ROLLBACK-RECOVERY","EV-RESTORE-JOB-RECOVERY","EV-RESTORE-DURABLE-OPERATION","EV-RESTORE-STARTUP-ADOPTION","EV-RESTORE-SAFE-UI"],"open":{"id":"OPEN-EXIT-E9.02","description":"Identity, rollback recovery, machine Job, Operation, safe preview and binding CAS are covered; migrations, transactions, final-syscall TOCTOU, cleanup and signed restore matrices remain.","targetBuilds":["B9.03","B9.04","B9.05","B9.06"],"targetExits":["E9.02"]}},
