@@ -53,7 +53,7 @@
     "scope": "Independent Planning review of the current-note cited append contract: typed evidence, exact-page CAS, bounded stale review, durable Operation identity and restart-safe publication.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "81be3cf60b88edf66b3265c6decae3143bfdeab3a92ef47f86443e12d06849c4"
+    "reviewedSha256": "6e24e3b632e98135252eb6dbb22a4e277dbeb8c932306f69b6c5c76f40396ef6"
   },
   "reviewers": [{
     "reviewerId": "current-note-cited-append-review",
