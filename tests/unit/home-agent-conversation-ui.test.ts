@@ -1174,11 +1174,13 @@ describe("Home durable Agent conversation UI", () => {
     const { container, root } = await mountHome(dom, makePigeApi(harness));
     const expandedButton = buttonsByAriaLabel(container, "Switch to wide layout")[0]!;
     const pinButton = buttonsByAriaLabel(container, "Pin on top")[0]!;
+    expect(expandedButton.querySelector("svg.lucide-picture-in-picture-2")).not.toBeNull();
     expect(expandedButton.compareDocumentPosition(pinButton) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
 
     await clickElement(dom, expandedButton);
     await waitFor(dom, () => container.querySelector('.shell.mode-expanded') !== null);
     expect(harness.windowModeRequests).toEqual(["expanded"]);
+    expect(buttonsByAriaLabel(container, "Switch to compact layout")[0]?.querySelector("svg.lucide-picture-in-picture-2")).not.toBeNull();
     await clickButtonByAriaLabel(dom, container, "Switch to compact layout");
     await waitFor(dom, () => container.querySelector('.shell.mode-compact') !== null);
     expect(harness.windowModeRequests).toEqual(["expanded", "compact"]);
