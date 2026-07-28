@@ -5,6 +5,7 @@ import type { JobRecordSnapshot } from "./job-record-store";
 import type {
   LocalToolLicenseIdentity,
   LocalToolPackageIdentity,
+  LocalToolPackageLimits,
   LocalToolPackageManifest
 } from "./local-tool-package";
 
@@ -35,11 +36,13 @@ export type LocalToolFailurePoint =
 
 export interface LocalToolAssetDefinition extends LocalToolPackageIdentity {
   readonly assetId: string;
+  readonly packageLimits?: Readonly<LocalToolPackageLimits>;
 }
 
 export interface LocalToolDefinition extends LocalToolPackageIdentity {
   readonly label: string;
   readonly kind: "ocr" | "runtime" | "document_parser" | "speech" | "utility";
+  readonly packageLimits?: Readonly<LocalToolPackageLimits>;
   readonly assets?: readonly LocalToolAssetDefinition[];
 }
 
@@ -107,6 +110,13 @@ export interface LocalToolHealthResult {
     LocalToolTargetInspection,
     "assetId" | "installState" | "enabled" | "healthy" | "routable" | "activeVersion"
   >[];
+}
+
+export interface LocalToolVerifiedRuntime {
+  readonly toolId: string;
+  readonly rootPath: string;
+  readonly version: string;
+  readonly manifestSha256: string;
 }
 
 export interface LocalToolAuthorityRequest {

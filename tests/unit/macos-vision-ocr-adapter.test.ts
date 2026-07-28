@@ -26,6 +26,7 @@ describe("macOS Vision OCR adapter", () => {
     const result = await adapter.recognize("/vault/raw/files/image.png", ["zh_Hans", "en", "bad language", "en"]);
 
     expect(result).toMatchObject({
+      adapterId: "macos_vision_ocr",
       engine: "macos_vision_document",
       adapterVersion: "1.0.0",
       text: "Pige OCR"

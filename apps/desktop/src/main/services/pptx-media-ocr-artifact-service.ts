@@ -22,7 +22,7 @@ import {
   OFFICE_PARSER_VERSION,
   type OfficeMediaTarget
 } from "./office-parser-types";
-import { MACOS_VISION_OCR_ADAPTER_VERSION, type NativeOcrResult } from "./ocr-types";
+import { isSupportedNativeOcrIdentity, type NativeOcrResult } from "./ocr-types";
 import { SourcePageService } from "./source-page-service";
 import { tryVerifyReadableSourceFileAsync, verifyReadableSourceFileAsync } from "./source-file-access";
 import { createVaultRelativePathResolver } from "./vault-layout";
@@ -244,6 +244,10 @@ export class PptxMediaOcrArtifactService {
     const parsedSource = currentSource.sourceRecord;
     const target = await this.resolveTarget(vaultPath, parsedSource);
     const results = validateItemResults(target, itemResults);
+    const firstResult = results[0]?.result;
+    if (!firstResult) {
+      throw new PigeDomainError("ocr.pptx.result_invalid", "PPTX media OCR returned no attributable result.");
+    }
     const sourceFile = await verifyReadableSourceFileAsync(vaultPath, parsedSource);
     const assembled = assemblePptxMediaOcr(target, results);
     const dateBucket = sourceDateBucket(parsedSource.id);
@@ -282,7 +286,7 @@ export class PptxMediaOcrArtifactService {
       parserMetadataArtifactId: target.parserMetadataArtifactId,
       parserMetadataChecksum: target.parserMetadataChecksum,
       nativeTextReady: target.nativeTextReady,
-      adapter: { id: "macos_vision_ocr", version: MACOS_VISION_OCR_ADAPTER_VERSION },
+      adapter: { id: firstResult.adapterId, version: firstResult.adapterVersion },
       ...(textIntegrity ? { ocrTextChecksum: textIntegrity.checksum } : {}),
       textCharacterCount: assembled.text.length,
       blockCount: assembled.blockCount,
@@ -315,8 +319,8 @@ export class PptxMediaOcrArtifactService {
         ocrStatus: target.skippedMediaCount > 0
           ? "completed_with_unsupported_media"
           : textArtifactPath ? "completed" : "completed_empty",
-        ocrAdapterId: "macos_vision_ocr",
-        ocrAdapterVersion: MACOS_VISION_OCR_ADAPTER_VERSION,
+        ocrAdapterId: firstResult.adapterId,
+        ocrAdapterVersion: firstResult.adapterVersion,
         ocrEngine: engineIds.length === 1 ? engineIds[0] : "mixed_local_ocr",
         ocrEngineVersions: engineVersions,
         ocrJobId: job.id,
@@ -465,7 +469,9 @@ function validateItemResults(
       !sameTarget(item.target, expected) ||
       item.mediaSize !== expected.size ||
       !/^sha256:[a-f0-9]{64}$/u.test(item.mediaChecksum) ||
-      item.result.adapterVersion !== MACOS_VISION_OCR_ADAPTER_VERSION ||
+      !isSupportedNativeOcrIdentity(item.result) ||
+      item.result.adapterId !== itemResults[0]?.result.adapterId ||
+      item.result.adapterVersion !== itemResults[0]?.result.adapterVersion ||
       item.result.text !== item.result.blocks.map((block) => block.text).join("\n")
     ) {
       throw new PigeDomainError("ocr.pptx.result_invalid", "A PPTX media OCR result is inconsistent with the verified target.");
@@ -569,8 +575,8 @@ function isReusableOcrSidecar(
     sidecar.parserMetadataArtifactId !== target.parserMetadataArtifactId ||
     sidecar.parserMetadataChecksum !== target.parserMetadataChecksum ||
     sidecar.nativeTextReady !== target.nativeTextReady ||
-    adapter?.id !== "macos_vision_ocr" ||
-    adapter.version !== MACOS_VISION_OCR_ADAPTER_VERSION ||
+    sourceRecord.metadata.ocrAdapterId !== adapter?.id ||
+    sourceRecord.metadata.ocrAdapterVersion !== adapter?.version ||
     sidecar.targetCount !== target.targets.length ||
     sidecar.skippedMediaCount !== target.skippedMediaCount ||
     sidecar.complete !== true ||
@@ -588,6 +594,7 @@ function isReusableOcrSidecar(
     media.length !== target.targets.length ||
     media.some((value, index) => {
       const expected = target.targets[index];
+      const engine = isRecord(value) && isRecord(value.engine) ? value.engine : undefined;
       return !expected || !isRecord(value) ||
         value.slide !== expected.slide ||
         value.locator !== expected.locator ||
@@ -596,7 +603,13 @@ function isReusableOcrSidecar(
         value.extension !== expected.extension ||
         value.mediaSize !== expected.size ||
         typeof value.mediaChecksum !== "string" ||
-        !/^sha256:[a-f0-9]{64}$/u.test(value.mediaChecksum);
+        !/^sha256:[a-f0-9]{64}$/u.test(value.mediaChecksum) ||
+        !isSupportedNativeOcrIdentity({
+          adapterId: adapter?.id,
+          adapterVersion: adapter?.version,
+          engine: engine?.id,
+          engineVersion: engine?.version
+        });
     })
   ) return false;
   if (!textArtifact) {

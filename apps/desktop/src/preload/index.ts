@@ -53,6 +53,18 @@ import type {
   LocalSemanticRetrievalRemoveResult,
   LocalSemanticRetrievalStatus,
   LocalSemanticRetrievalStatusRequest,
+  PaddleOcrDisableRequest,
+  PaddleOcrDisableResult,
+  PaddleOcrEnableRequest,
+  PaddleOcrEnableResult,
+  PaddleOcrInstallRequest,
+  PaddleOcrInstallResult,
+  PaddleOcrRemoveRequest,
+  PaddleOcrRemoveResult,
+  PaddleOcrSummary,
+  PaddleOcrSummaryRequest,
+  PaddleOcrTestRequest,
+  PaddleOcrTestResult,
   LocalDatabaseRebuildResult,
   LocalDatabaseStatus,
   LocalDatabaseResetResult,
@@ -223,6 +235,18 @@ import {
   LocalSemanticRetrievalRemoveResultSchema,
   LocalSemanticRetrievalStatusRequestSchema,
   LocalSemanticRetrievalStatusSchema,
+  PaddleOcrDisableRequestSchema,
+  PaddleOcrDisableResultSchema,
+  PaddleOcrEnableRequestSchema,
+  PaddleOcrEnableResultSchema,
+  PaddleOcrInstallRequestSchema,
+  PaddleOcrInstallResultSchema,
+  PaddleOcrRemoveRequestSchema,
+  PaddleOcrRemoveResultSchema,
+  PaddleOcrSummaryRequestSchema,
+  PaddleOcrSummarySchema,
+  PaddleOcrTestRequestSchema,
+  PaddleOcrTestResultSchema,
   RetrievalSearchRequestSchema,
   RetrievalSearchResultSchema,
   NoteEditorOpenRequestSchema,
@@ -1025,6 +1049,62 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke(
           "readerSelection.decideProposal",
           ReaderSelectionProposalDecisionRequestSchema.parse(request)
+        )
+      )
+  },
+  localCapabilities: {
+    paddleOcrSummary: async (
+      request: PaddleOcrSummaryRequest
+    ): Promise<PaddleOcrSummary> =>
+      PaddleOcrSummarySchema.parse(
+        await ipcRenderer.invoke(
+          "localCapabilities.paddleOcrSummary",
+          PaddleOcrSummaryRequestSchema.parse(request)
+        )
+      ),
+    installPaddleOcr: async (
+      request: PaddleOcrInstallRequest
+    ): Promise<PaddleOcrInstallResult> =>
+      PaddleOcrInstallResultSchema.parse(
+        await ipcRenderer.invoke(
+          "localCapabilities.installPaddleOcr",
+          PaddleOcrInstallRequestSchema.parse(request)
+        )
+      ),
+    enablePaddleOcr: async (
+      request: PaddleOcrEnableRequest
+    ): Promise<PaddleOcrEnableResult> =>
+      PaddleOcrEnableResultSchema.parse(
+        await ipcRenderer.invoke(
+          "localCapabilities.enablePaddleOcr",
+          PaddleOcrEnableRequestSchema.parse(request)
+        )
+      ),
+    testPaddleOcr: async (
+      request: PaddleOcrTestRequest
+    ): Promise<PaddleOcrTestResult> =>
+      PaddleOcrTestResultSchema.parse(
+        await ipcRenderer.invoke(
+          "localCapabilities.testPaddleOcr",
+          PaddleOcrTestRequestSchema.parse(request)
+        )
+      ),
+    disablePaddleOcr: async (
+      request: PaddleOcrDisableRequest
+    ): Promise<PaddleOcrDisableResult> =>
+      PaddleOcrDisableResultSchema.parse(
+        await ipcRenderer.invoke(
+          "localCapabilities.disablePaddleOcr",
+          PaddleOcrDisableRequestSchema.parse(request)
+        )
+      ),
+    removePaddleOcr: async (
+      request: PaddleOcrRemoveRequest
+    ): Promise<PaddleOcrRemoveResult> =>
+      PaddleOcrRemoveResultSchema.parse(
+        await ipcRenderer.invoke(
+          "localCapabilities.removePaddleOcr",
+          PaddleOcrRemoveRequestSchema.parse(request)
         )
       )
   },

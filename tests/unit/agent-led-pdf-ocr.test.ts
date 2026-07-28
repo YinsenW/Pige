@@ -572,6 +572,7 @@ function groundedOutput(title: string, evidenceRefs: readonly string[]) {
 function nativeOcrResult(text: string): NativeOcrResult {
   const hasText = text.length > 0;
   return {
+    adapterId: "macos_vision_ocr",
     engine: "macos_vision_document",
     engineVersion: "synthetic-1",
     adapterVersion: "1.0.0",

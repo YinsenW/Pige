@@ -306,6 +306,7 @@ class StaticOcrAdapter implements NativeImageOcrAdapterPort {
   isAvailable(): boolean { return true; }
   async recognize(): Promise<NativeOcrResult> {
     return {
+      adapterId: "macos_vision_ocr",
       engine: "macos_vision_document",
       engineVersion: "revision1",
       adapterVersion: "1.0.0",

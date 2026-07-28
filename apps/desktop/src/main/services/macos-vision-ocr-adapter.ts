@@ -15,6 +15,7 @@ import {
   OCR_MAX_OUTPUT_CHARACTERS,
   OCR_MAX_SOURCE_DIMENSION,
   OCR_MAX_SOURCE_PIXELS,
+  isSupportedNativeOcrIdentity,
   type MacOSVisionOcrHelperDescriptor,
   type NativeOcrBlock,
   type NativeOcrResult
@@ -352,10 +353,15 @@ function parseRecognitionResponse(value: unknown, requestId: string): NativeOcrR
   if (confidence !== null && confidence !== undefined && !isNormalizedNumber(confidence)) {
     throw invalidRecognitionResponse();
   }
-  return {
-    engine,
-    engineVersion: result.engineVersion.slice(0, 80),
+  const identity = {
+    adapterId: "macos_vision_ocr",
     adapterVersion: MACOS_VISION_OCR_ADAPTER_VERSION,
+    engine,
+    engineVersion: result.engineVersion.slice(0, 80)
+  } as const;
+  if (!isSupportedNativeOcrIdentity(identity)) throw invalidRecognitionResponse();
+  return {
+    ...identity,
     text: result.text,
     blocks,
     languageHints,

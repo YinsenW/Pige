@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import {
   computeLocalToolPackageSha256,
+  type LocalToolPackageLimits,
   type LocalToolPackageManifest
 } from "../../../apps/desktop/src/main/services/local-tool-package";
 import type {
@@ -19,6 +20,7 @@ export interface FakeLocalToolFixtureOptions {
   readonly capabilities?: readonly string[];
   readonly license?: { readonly spdxId: string; readonly name?: string };
   readonly files?: Readonly<Record<string, string | Buffer>>;
+  readonly packageLimits?: LocalToolPackageLimits;
 }
 
 export interface FakeLocalToolFixture {
@@ -27,6 +29,7 @@ export interface FakeLocalToolFixture {
   readonly manifest: LocalToolPackageManifest;
   readonly packageSha256: string;
   readonly sizeBytes: number;
+  readonly packageLimits?: LocalToolPackageLimits;
 }
 
 export function createFakeLocalToolFixture(
@@ -66,8 +69,9 @@ export function createFakeLocalToolFixture(
     rootPath,
     manifestPath,
     manifest,
-    packageSha256: computeLocalToolPackageSha256(rootPath),
-    sizeBytes: declaredFiles.reduce((total, file) => total + file.sizeBytes, 0)
+    packageSha256: computeLocalToolPackageSha256(rootPath, options.packageLimits),
+    sizeBytes: declaredFiles.reduce((total, file) => total + file.sizeBytes, 0),
+    ...(options.packageLimits ? { packageLimits: options.packageLimits } : {})
   };
 }
 
@@ -91,6 +95,7 @@ export function toToolDefinition(
     license: fixture.manifest.license,
     expectedSha256: fixture.packageSha256,
     expectedSizeBytes: fixture.sizeBytes,
+    ...(fixture.packageLimits ? { packageLimits: fixture.packageLimits } : {}),
     ...(input.assets ? { assets: input.assets } : {})
   };
 }
@@ -106,7 +111,8 @@ export function toAssetDefinition(fixture: FakeLocalToolFixture): LocalToolAsset
     capabilities: fixture.manifest.capabilities,
     license: fixture.manifest.license,
     expectedSha256: fixture.packageSha256,
-    expectedSizeBytes: fixture.sizeBytes
+    expectedSizeBytes: fixture.sizeBytes,
+    ...(fixture.packageLimits ? { packageLimits: fixture.packageLimits } : {})
   };
 }
 

@@ -111,6 +111,60 @@ describe("PDF OCR artifact service", () => {
     )).toBeUndefined();
   });
 
+  it("persists Paddle identity and rejects mismatched or unknown OCR identities", async () => {
+    const setup = await makeParsedScan(1);
+    const service = new PdfOcrArtifactService();
+    const staging = await service.stageRenderedPages(
+      setup.vaultPath,
+      setup.sourceRecord,
+      setup.sourceRecordPath,
+      setup.ocrJob,
+      renderInput(1)
+    );
+    const paddle = pageOcr(1, "Paddle PDF evidence", "paddle");
+    const invalidResults = [
+      { ...paddle, result: { ...paddle.result, engine: "macos_vision_text" } },
+      { ...paddle, result: { ...paddle.result, adapterId: "unknown_ocr" } }
+    ] as unknown as readonly PdfPageOcrResult[];
+    for (const invalid of invalidResults) {
+      await expect(service.persistOcr(
+        setup.vaultPath,
+        staging,
+        setup.sourceRecordPath,
+        setup.ocrJob,
+        [invalid]
+      )).rejects.toMatchObject({ code: "ocr.pdf.result_invalid" });
+    }
+
+    await service.persistOcr(
+      setup.vaultPath,
+      staging,
+      setup.sourceRecordPath,
+      setup.ocrJob,
+      [paddle]
+    );
+    const finalRecord = readSourceRecord(setup.sourceRecordPath);
+    const metadataArtifact = requireValue(finalRecord.artifacts.find((artifact) => artifact.id.endsWith("_pdf_ocr_metadata")));
+    const sidecar = JSON.parse(fs.readFileSync(path.join(setup.vaultPath, metadataArtifact.path), "utf8")) as Record<string, unknown>;
+
+    expect(finalRecord.metadata).toMatchObject({
+      ocrAdapterId: "paddleocr_local",
+      ocrAdapterVersion: "1.0.0",
+      ocrEngine: "Paddle",
+      ocrEngineVersions: ["3.2.0"]
+    });
+    expect(sidecar).toMatchObject({
+      adapter: { id: "paddleocr_local", version: "1.0.0" },
+      pages: [{ engine: { id: "Paddle", version: "3.2.0" } }]
+    });
+    expect(await service.readExisting(
+      setup.vaultPath,
+      finalRecord,
+      setup.sourceRecordPath,
+      setup.ocrJob
+    )).toMatchObject({ created: false });
+  });
+
   it("rejects source changes between rendering and final OCR persistence", async () => {
     const setup = await makeParsedScan(1);
     const service = new PdfOcrArtifactService();
@@ -455,11 +509,11 @@ function renderTarget(pageCount: number, pages: readonly number[]): PdfRenderFor
   };
 }
 
-function pageOcr(page: number, text: string): PdfPageOcrResult {
+function pageOcr(page: number, text: string, adapter: "macos" | "paddle" = "macos"): PdfPageOcrResult {
   const result: NativeOcrResult = {
-    engine: "macos_vision_document",
-    engineVersion: "macos-26",
-    adapterVersion: "1.0.0",
+    ...(adapter === "paddle"
+      ? { adapterId: "paddleocr_local", adapterVersion: "1.0.0", engine: "Paddle", engineVersion: "3.2.0" }
+      : { adapterId: "macos_vision_ocr", adapterVersion: "1.0.0", engine: "macos_vision_document", engineVersion: "macos-26" }),
     text,
     blocks: text ? [{
       text,

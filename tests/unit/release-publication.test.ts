@@ -168,6 +168,8 @@ describe("release publication", () => {
     expect(releaseConfig).toContain("releaseType: prerelease");
     expect(releaseConfig).toContain("channel: alpha");
     expect(releaseConfig).toContain("verifyUpdateCodeSignature: true");
+    expect(releaseConfig).toContain("from: ../../resources/parser-manifests");
+    expect(releaseConfig).toContain("to: parser-manifests");
     expect(rootPackage.scripts["release:package:mac:arm64"]).toContain("run-release-builder.mjs");
     expect(rootPackage.scripts["release:package:mac:arm64"]).toContain("--preflight-only=true");
     expect(rootPackage.scripts["release:package:win:x64"]).toContain("run-release-builder.mjs");

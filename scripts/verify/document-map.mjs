@@ -4,6 +4,7 @@ import path from "node:path";
 const root = process.cwd();
 const manifestPath = path.join(root, "resources/documentation-quality/document-map.manifest.json");
 const ignoredDirectories = new Set([".git", "node_modules", "artifacts", "coverage", "dist"]);
+const ignoredRoots = new Set([path.join(root, "resources", "licenses")]);
 const expectedColumns = ["path", "tier", "ownerRole", "defaultReadBehavior", "lifecycleDisposition"];
 const allowedTiers = new Set(["Entry", "Owner contract", "Specialized contract", "Routing/control", "Historical/research", "Resource"]);
 const allowedLifecycles = new Set(["Maintain", "Public workflow", "Historical", "Prototype evidence", "Phase-gated resource"]);
@@ -12,8 +13,8 @@ const lifecyclePolicyFields = ["reviewTrigger", "minimumCheckFrequency", "reclam
 function walkMarkdown(dir) {
   const files = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isDirectory() && ignoredDirectories.has(entry.name)) continue;
     const full = path.join(dir, entry.name);
+    if (entry.isDirectory() && (ignoredDirectories.has(entry.name) || ignoredRoots.has(full))) continue;
     if (entry.isDirectory()) {
       files.push(...walkMarkdown(full));
     } else if (entry.isFile() && entry.name.endsWith(".md")) {

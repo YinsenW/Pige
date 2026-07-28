@@ -175,6 +175,8 @@ describe("release packageability platforms", () => {
     const desktopMain = fs.readFileSync(path.join(root, "apps/desktop/src/main/index.ts"), "utf8");
     const workflow = fs.readFileSync(path.join(root, ".github/workflows/packageability.yml"), "utf8");
 
+    expect(builderConfig).toContain("from: ../../resources/parser-manifests");
+    expect(builderConfig).toContain("to: parser-manifests");
     expect(rootPackage.scripts["package:dir:win:x64"]).toContain("prepare:package:win:x64");
     expect(rootPackage.scripts["smoke:distributed:mac:arm64"]).toContain("--distribution-only=true");
     expect(rootPackage.scripts["smoke:packaged:win:x64"]).toContain("--platform=win --arch=x64");

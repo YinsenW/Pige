@@ -10,7 +10,7 @@ import {
   type OperationRecord,
   type SourceRecord
 } from "@pige/schemas";
-import { MACOS_VISION_OCR_ADAPTER_VERSION, type NativeOcrResult } from "./ocr-types";
+import { isSupportedNativeOcrIdentity, type NativeOcrResult } from "./ocr-types";
 import {
   writeArtifactJsonAtomic,
   writeArtifactJsonAtomicAsync,
@@ -107,7 +107,7 @@ export class OcrArtifactService {
       throw new PigeDomainError("ocr.source_unsupported", "This OCR adapter accepts preserved image sources only.");
     }
     const sourceFile = await verifyReadableSourceFileAsync(vaultPath, parsedSource);
-    if (result.adapterVersion !== MACOS_VISION_OCR_ADAPTER_VERSION || result.text !== result.blocks.map((block) => block.text).join("\n")) {
+    if (!isSupportedNativeOcrIdentity(result) || result.text !== result.blocks.map((block) => block.text).join("\n")) {
       throw new PigeDomainError("ocr.invalid_result", "The OCR adapter returned inconsistent text or version metadata.");
     }
 
@@ -131,7 +131,7 @@ export class OcrArtifactService {
       sourceId: parsedSource.id,
       kind: "image_ocr_metadata",
       createdAt: now,
-      adapter: { id: "macos_vision_ocr", version: result.adapterVersion },
+      adapter: { id: result.adapterId, version: result.adapterVersion },
       engine: { id: result.engine, version: result.engineVersion },
       sourceChecksum: sourceFile.checksum,
       ...(textIntegrity ? { ocrTextChecksum: textIntegrity.checksum } : {}),
@@ -154,7 +154,7 @@ export class OcrArtifactService {
         parserRequired: true,
         parserStatus: textArtifactPath ? "ocr_completed" : "ocr_completed_empty",
         ocrStatus: textArtifactPath ? "completed" : "completed_empty",
-        ocrAdapterId: "macos_vision_ocr",
+        ocrAdapterId: result.adapterId,
         ocrAdapterVersion: result.adapterVersion,
         ocrEngine: result.engine,
         ocrEngineVersion: result.engineVersion,
@@ -304,16 +304,23 @@ function isReusableSidecar(
   if (!sidecar) return false;
   const adapter = isRecord(sidecar.adapter) ? sidecar.adapter : undefined;
   const engine = isRecord(sidecar.engine) ? sidecar.engine : undefined;
+  const identity = {
+    adapterId: adapter?.id,
+    adapterVersion: adapter?.version,
+    engine: engine?.id,
+    engineVersion: engine?.version
+  };
   if (
     sidecar.schemaVersion !== 1 ||
     sidecar.artifactId !== ocrMetadataArtifactId(sourceRecord.id) ||
     sidecar.sourceId !== sourceRecord.id ||
     sidecar.kind !== "image_ocr_metadata" ||
     sidecar.sourceChecksum !== sourceChecksum ||
-    adapter?.id !== "macos_vision_ocr" ||
-    adapter.version !== MACOS_VISION_OCR_ADAPTER_VERSION ||
-    (engine?.id !== "macos_vision_document" && engine?.id !== "macos_vision_text") ||
-    typeof engine.version !== "string" ||
+    !isSupportedNativeOcrIdentity(identity) ||
+    sourceRecord.metadata.ocrAdapterId !== identity.adapterId ||
+    sourceRecord.metadata.ocrAdapterVersion !== identity.adapterVersion ||
+    sourceRecord.metadata.ocrEngine !== identity.engine ||
+    sourceRecord.metadata.ocrEngineVersion !== identity.engineVersion ||
     !Number.isSafeInteger(sidecar.textCharacterCount) ||
     (sidecar.textCharacterCount as number) < 0 ||
     !Number.isSafeInteger(sidecar.blockCount) ||

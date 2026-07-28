@@ -97,6 +97,7 @@ import { registerKnowledgeHealthIpc } from "./register-knowledge-health-ipc";
 import { registerMemoryIpc } from "./register-memory-ipc";
 import { registerSkillsIpc } from "./register-skills-ipc";
 import { registerPiPackagesIpc } from "./register-pi-packages-ipc";
+import { registerLocalCapabilitiesIpc } from "./register-local-capabilities-ipc";
 import {
   AgentIngestService,
   type AgentIngestCapabilitySnapshot,
@@ -104,6 +105,14 @@ import {
   type AgentIngestRetrievalPort
 } from "./services/agent-ingest-service";
 import { AgentRuntimeService } from "./services/agent-runtime-service";
+import {
+  createUnavailablePaddleOcrLifecycleService,
+  PaddleOcrLifecycleService
+} from "./services/paddle-ocr-lifecycle-service";
+import {
+  createPaddleOcrRuntimeComposition,
+  type PaddleOcrRuntimeComposition
+} from "./services/paddle-ocr-runtime-composition";
 import { AgentTurnDraftPublisher } from "./services/agent-turn-draft-publisher";
 import { AppearanceService } from "./services/appearance-service";
 import { BackupCoordinatorService } from "./services/backup-coordinator-service";
@@ -291,6 +300,8 @@ let updateService: UpdateService | undefined;
 let skillRegistryService: SkillRegistryService | undefined;
 let skillUrlInstallService: SkillUrlInstallService | undefined;
 let agentMemoryService: AgentMemoryService | undefined;
+let paddleOcrLifecycleService: PaddleOcrLifecycleService | undefined;
+let paddleOcrRuntimeComposition: PaddleOcrRuntimeComposition | undefined;
 let taskProcessSessionService: TaskProcessSessionService | undefined;
 let taskExecutionPlanService: TaskExecutionPlanService | undefined;
 let taskExecutionPlanRunner: TaskExecutionPlanRunner | undefined;
@@ -560,6 +571,37 @@ const getSkillUrlInstallService = (): SkillUrlInstallService => {
 const getAgentMemoryService = (): AgentMemoryService => {
   agentMemoryService ??= new AgentMemoryService();
   return agentMemoryService;
+};
+
+const getPaddleOcrLifecycleService = (): PaddleOcrLifecycleService => {
+  if (!paddleOcrLifecycleService) {
+    try {
+      paddleOcrLifecycleService = getPaddleOcrRuntimeComposition().lifecycle;
+    } catch {
+      paddleOcrLifecycleService = createUnavailablePaddleOcrLifecycleService(
+        resolvePaddleOcrManifestPath()
+      );
+    }
+  }
+  return paddleOcrLifecycleService;
+};
+
+const getPaddleOcrRuntimeComposition = (): PaddleOcrRuntimeComposition => {
+  paddleOcrRuntimeComposition ??= createPaddleOcrRuntimeComposition({
+    appDataRoot: app.getPath("userData"),
+    manifestPath: resolvePaddleOcrManifestPath(),
+    assertAppInstanceWriterLease
+  });
+  return paddleOcrRuntimeComposition;
+};
+
+const assertAppInstanceWriterLease = (): void => {
+  if (!ownsAppInstanceLock) {
+    throw new PigeDomainError(
+      "job.writer_lease_invalid",
+      "The app-instance writer lease is no longer current."
+    );
+  }
 };
 
 const getVaultService = (): VaultService => {
@@ -1015,7 +1057,7 @@ const getDatasetQueryService = (): DatasetQueryService => {
 };
 
 const getOcrService = (): OcrService => {
-  if (!ocrService) ocrService = new OcrService();
+  if (!ocrService) ocrService = new OcrService(getPaddleOcrRuntimeComposition().adapter);
   return ocrService;
 };
 
@@ -2142,6 +2184,15 @@ registerMemoryIpc({
     }
   }
 });
+registerLocalCapabilitiesIpc({
+  ipcMain,
+  paddleOcrSummary: (request) => getPaddleOcrLifecycleService().summary(request),
+  installPaddleOcr: (request) => getPaddleOcrLifecycleService().install(request),
+  enablePaddleOcr: (request) => getPaddleOcrLifecycleService().enable(request),
+  testPaddleOcr: (request) => getPaddleOcrLifecycleService().test(request),
+  disablePaddleOcr: (request) => getPaddleOcrLifecycleService().disable(request),
+  removePaddleOcr: (request) => getPaddleOcrLifecycleService().remove(request)
+});
 ipcMain.handle("activity.list", (_event, request?: KnowledgeActivityListRequest) =>
   (() => {
     const parsed = KnowledgeActivityListRequestSchema.parse(request ?? {});
@@ -2522,7 +2573,9 @@ app.whenReady().then(async () => {
   }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort());
   documentParserService = new DocumentParserService();
   datasetService = new DatasetService(new DatasetIngestWorkerService());
-  ocrService = new OcrService();
+  const paddleRuntime = getPaddleOcrRuntimeComposition();
+  paddleRuntime.recoverStaging();
+  ocrService = new OcrService(paddleRuntime.adapter);
   toolchainService = new ToolchainService(resolveToolchainManifestPath());
   captureService = new CaptureService(getVaultService());
   homeAgentAttachmentService = new HomeAgentAttachmentService(captureService);
@@ -2601,6 +2654,19 @@ function resolveToolchainManifestPath(): string {
     fallback,
     join(app.getAppPath(), "resources/toolchain-manifest/toolchain.manifest.json"),
     join(app.getAppPath(), "../../resources/toolchain-manifest/toolchain.manifest.json")
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? fallback;
+}
+
+function resolvePaddleOcrManifestPath(): string {
+  const relativePath = "parser-manifests/paddleocr-local.parser.manifest.json";
+  const fallback = join(process.cwd(), "resources", relativePath);
+  const candidates = [
+    join(process.resourcesPath, relativePath),
+    join(process.cwd(), "../../resources", relativePath),
+    fallback,
+    join(app.getAppPath(), "resources", relativePath),
+    join(app.getAppPath(), "../../resources", relativePath)
   ];
   return candidates.find((candidate) => existsSync(candidate)) ?? fallback;
 }

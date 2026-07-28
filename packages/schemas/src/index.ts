@@ -3515,6 +3515,141 @@ export const LocalSemanticRetrievalDisableResultSchema =
 export const LocalSemanticRetrievalRemoveResultSchema =
   LocalSemanticRetrievalMutationResultSchema;
 
+export const PADDLE_OCR_ENGINE_ID = "paddleocr_local" as const;
+export const PaddleOcrRequestIdSchema = z.string()
+  .regex(/^paddleocr_[a-z0-9]{16,64}$/u);
+export const PaddleOcrLifecycleStateSchema = z.enum([
+  "not_installed",
+  "ready",
+  "disabled",
+  "needs_repair",
+  "unsupported"
+]);
+export const PaddleOcrLifecycleActionSchema = z.enum([
+  "install",
+  "enable",
+  "test",
+  "disable",
+  "remove"
+]);
+export const PaddleOcrCatalogComponentSchema = z.object({
+  componentId: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/u),
+  kind: z.enum(["python_runtime", "engine", "model", "language_pack"]),
+  label: z.string().trim().min(1).max(80),
+  version: z.string().trim().min(1).max(64),
+  sizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+export const PaddleOcrSummaryRequestSchema = z.object({
+  apiVersion: z.literal(1)
+}).strict();
+export const PaddleOcrSummarySchema = z.object({
+  apiVersion: z.literal(1),
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  engineId: z.literal(PADDLE_OCR_ENGINE_ID),
+  state: PaddleOcrLifecycleStateSchema,
+  catalogVersion: z.string().trim().min(1).max(64),
+  components: z.array(PaddleOcrCatalogComponentSchema).min(1).max(16).readonly(),
+  downloadSizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  nativeOcrPreferred: z.literal(true),
+  hiddenDownloadsAllowed: z.literal(false),
+  activeAction: PaddleOcrLifecycleActionSchema.optional(),
+  activeJobId: JobIdSchema.optional(),
+  canInstall: z.boolean(),
+  canEnable: z.boolean(),
+  canTest: z.boolean(),
+  canDisable: z.boolean(),
+  canRemove: z.boolean()
+}).strict().superRefine((summary, context) => {
+  if ((summary.activeAction === undefined) !== (summary.activeJobId === undefined)) {
+    context.addIssue({
+      code: "custom",
+      message: "PaddleOCR active action and Job identity must be projected together.",
+      path: ["activeJobId"]
+    });
+  }
+  const expectedActions = summary.activeAction
+    ? [false, false, false, false, false]
+    : summary.state === "not_installed"
+      ? [true, false, false, false, false]
+      : summary.state === "ready"
+        ? [false, false, true, true, true]
+        : summary.state === "disabled"
+          ? [false, true, true, false, true]
+          : summary.state === "needs_repair"
+            ? [false, false, false, false, true]
+            : [false, false, false, false, false];
+  const actualActions = [
+    summary.canInstall,
+    summary.canEnable,
+    summary.canTest,
+    summary.canDisable,
+    summary.canRemove
+  ];
+  if (!actualActions.every((value, index) => value === expectedActions[index])) {
+    context.addIssue({
+      code: "custom",
+      message: "PaddleOCR actions must fail closed for the authoritative lifecycle state.",
+      path: ["canInstall"]
+    });
+  }
+});
+
+const PaddleOcrMutationRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PaddleOcrRequestIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+export const PaddleOcrInstallRequestSchema = PaddleOcrMutationRequestSchema;
+export const PaddleOcrEnableRequestSchema = PaddleOcrMutationRequestSchema;
+export const PaddleOcrTestRequestSchema = PaddleOcrMutationRequestSchema;
+export const PaddleOcrDisableRequestSchema = PaddleOcrMutationRequestSchema;
+export const PaddleOcrRemoveRequestSchema = PaddleOcrMutationRequestSchema;
+
+const PaddleOcrResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PaddleOcrRequestIdSchema,
+  engineId: z.literal(PADDLE_OCR_ENGINE_ID)
+}).strict();
+const PaddleOcrAuthoritativeResultSchema = PaddleOcrResultIdentitySchema.extend({
+  summary: PaddleOcrSummarySchema
+}).strict();
+export const PaddleOcrInstallResultSchema = z.discriminatedUnion("status", [
+  PaddleOcrAuthoritativeResultSchema.extend({
+    status: z.literal("accepted"),
+    jobId: JobIdSchema
+  }).strict(),
+  PaddleOcrAuthoritativeResultSchema.extend({ status: z.literal("already_installed") }).strict(),
+  PaddleOcrAuthoritativeResultSchema.extend({ status: z.literal("denied") }).strict(),
+  PaddleOcrAuthoritativeResultSchema.extend({ status: z.literal("stale") }).strict(),
+  PaddleOcrResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const PaddleOcrEnableResultSchema = z.discriminatedUnion("status", [
+  PaddleOcrAuthoritativeResultSchema.extend({ status: z.literal("committed") }).strict(),
+  PaddleOcrAuthoritativeResultSchema.extend({ status: z.literal("already_enabled") }).strict(),
+  PaddleOcrAuthoritativeResultSchema.extend({ status: z.literal("stale") }).strict(),
+  PaddleOcrAuthoritativeResultSchema.extend({ status: z.literal("not_found") }).strict(),
+  PaddleOcrResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const PaddleOcrTestResultSchema = z.discriminatedUnion("status", [
+  PaddleOcrAuthoritativeResultSchema.extend({
+    status: z.literal("accepted"),
+    jobId: JobIdSchema
+  }).strict(),
+  PaddleOcrAuthoritativeResultSchema.extend({ status: z.literal("cancelled") }).strict(),
+  PaddleOcrAuthoritativeResultSchema.extend({ status: z.literal("stale") }).strict(),
+  PaddleOcrAuthoritativeResultSchema.extend({ status: z.literal("not_found") }).strict(),
+  PaddleOcrResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+const PaddleOcrLifecycleMutationResultSchema = z.discriminatedUnion("status", [
+  PaddleOcrAuthoritativeResultSchema.extend({ status: z.literal("committed") }).strict(),
+  PaddleOcrAuthoritativeResultSchema.extend({ status: z.literal("already_current") }).strict(),
+  PaddleOcrAuthoritativeResultSchema.extend({ status: z.literal("stale") }).strict(),
+  PaddleOcrAuthoritativeResultSchema.extend({ status: z.literal("not_found") }).strict(),
+  PaddleOcrResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const PaddleOcrDisableResultSchema = PaddleOcrLifecycleMutationResultSchema;
+export const PaddleOcrRemoveResultSchema = PaddleOcrLifecycleMutationResultSchema;
+
 export const RetrievalAnswerCitationSchema = z.object({
   refId: z.string().min(1).max(64),
   label: z.string().min(1).max(160),
@@ -5481,6 +5616,22 @@ export type LocalSemanticRetrievalEnableResult = z.infer<typeof LocalSemanticRet
 export type LocalSemanticRetrievalMutationResult = z.infer<typeof LocalSemanticRetrievalMutationResultSchema>;
 export type LocalSemanticRetrievalDisableResult = z.infer<typeof LocalSemanticRetrievalDisableResultSchema>;
 export type LocalSemanticRetrievalRemoveResult = z.infer<typeof LocalSemanticRetrievalRemoveResultSchema>;
+export type PaddleOcrRequestId = z.infer<typeof PaddleOcrRequestIdSchema>;
+export type PaddleOcrLifecycleState = z.infer<typeof PaddleOcrLifecycleStateSchema>;
+export type PaddleOcrLifecycleAction = z.infer<typeof PaddleOcrLifecycleActionSchema>;
+export type PaddleOcrCatalogComponent = z.infer<typeof PaddleOcrCatalogComponentSchema>;
+export type PaddleOcrSummaryRequest = z.infer<typeof PaddleOcrSummaryRequestSchema>;
+export type PaddleOcrSummary = z.infer<typeof PaddleOcrSummarySchema>;
+export type PaddleOcrInstallRequest = z.infer<typeof PaddleOcrInstallRequestSchema>;
+export type PaddleOcrInstallResult = z.infer<typeof PaddleOcrInstallResultSchema>;
+export type PaddleOcrEnableRequest = z.infer<typeof PaddleOcrEnableRequestSchema>;
+export type PaddleOcrEnableResult = z.infer<typeof PaddleOcrEnableResultSchema>;
+export type PaddleOcrTestRequest = z.infer<typeof PaddleOcrTestRequestSchema>;
+export type PaddleOcrTestResult = z.infer<typeof PaddleOcrTestResultSchema>;
+export type PaddleOcrDisableRequest = z.infer<typeof PaddleOcrDisableRequestSchema>;
+export type PaddleOcrDisableResult = z.infer<typeof PaddleOcrDisableResultSchema>;
+export type PaddleOcrRemoveRequest = z.infer<typeof PaddleOcrRemoveRequestSchema>;
+export type PaddleOcrRemoveResult = z.infer<typeof PaddleOcrRemoveResultSchema>;
 export type SpeechAvailabilityRequest = z.infer<typeof SpeechAvailabilityRequestSchema>;
 export type SpeechAvailabilityResult = z.infer<typeof SpeechAvailabilityResultSchema>;
 export type SpeechAssetInstallationId = z.infer<typeof SpeechAssetInstallationIdSchema>;

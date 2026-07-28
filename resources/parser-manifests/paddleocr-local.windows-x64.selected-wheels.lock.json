@@ -1,0 +1,2297 @@
+{
+  "schemaVersion": 1,
+  "toolId": "paddleocr_local",
+  "catalogVersion": "2026-07-28",
+  "engineVersion": "3.7.0",
+  "platform": "windows-x64",
+  "pythonAbi": "cp313",
+  "bundleLicense": {
+    "spdxId": "LicenseRef-Pige-PaddleOCR-3.7.0-Aggregate-Legal-Inventory",
+    "name": "See bundled legal inventory"
+  },
+  "wrapper": {
+    "sizeBytes": 9358,
+    "sha256": "f293ba6f2e6727bdfe20c9294acecd122ab388c31f9932665f6f8d7e6e36f6dd"
+  },
+  "limits": {
+    "maxFiles": 25000,
+    "maxFileBytes": 536870912,
+    "maxTotalBytes": 1610612736,
+    "maxArchiveEntries": 50000,
+    "maxArchiveExpandedBytes": 2147483648
+  },
+  "wheels": [
+    {
+      "name": "aiohappyeyeballs",
+      "version": "2.7.1",
+      "filename": "aiohappyeyeballs-2.7.1-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/71/43/1947f06babed6b3f1d7f38b0c767f52df66bfb2bc10b468c4a7de9eceff2/aiohappyeyeballs-2.7.1-py3-none-any.whl",
+      "sizeBytes": 15038,
+      "sha256": "9243213661e29250eb41368e5daa826fc017156c3b8a11440826b2e3ed376472",
+      "metadataSha256": "e68d1bf48aec9dcc2767343dedec25e12860085cba180e10bc3d3bdd031602ba",
+      "license": "PSF-2.0",
+      "purl": "pkg:pypi/aiohappyeyeballs@2.7.1",
+      "dependencies": []
+    },
+    {
+      "name": "aiohttp",
+      "version": "3.14.3",
+      "filename": "aiohttp-3.14.3-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/9d/69/3d876ac02659f271cf7f6769f14a8e3de5b6e888ed8b5a7e998086a4cec8/aiohttp-3.14.3-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 476518,
+      "sha256": "dff9461ec275f22135650d5ba4b4931a11f3958df7dfbb8db630000d4dee0883",
+      "metadataSha256": "e4d89e3c83a95cb74c235e2a80ea83ef75cdadf3d3a2fbf5ab8cf8eec3309ba9",
+      "license": "Apache-2.0 AND MIT",
+      "purl": "pkg:pypi/aiohttp@3.14.3",
+      "dependencies": [
+        "aiohappyeyeballs",
+        "aiosignal",
+        "attrs",
+        "frozenlist",
+        "multidict",
+        "propcache",
+        "yarl"
+      ]
+    },
+    {
+      "name": "aiosignal",
+      "version": "1.4.0",
+      "filename": "aiosignal-1.4.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/fb/76/641ae371508676492379f16e2fa48f4e2c11741bd63c48be4b12a6b09cba/aiosignal-1.4.0-py3-none-any.whl",
+      "sizeBytes": 7490,
+      "sha256": "053243f8b92b990551949e63930a839ff0cf0b0ebbe0597b0f3fb19e1a0fe82e",
+      "metadataSha256": "09247ef1da8bc696728d47130e702e4307f6f7d101d6c485bff9f3a71ce7008d",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/aiosignal@1.4.0",
+      "dependencies": [
+        "frozenlist"
+      ]
+    },
+    {
+      "name": "aistudio-sdk",
+      "version": "0.3.9",
+      "filename": "aistudio_sdk-0.3.9-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/c2/56/ce14f76c1892f335fbcd82568d347fd1652e1a4b0b76ac4a4cd90e1ae202/aistudio_sdk-0.3.9-py3-none-any.whl",
+      "sizeBytes": 67186,
+      "sha256": "41621d052ddb7a58643438a7ca541f58ef0ab94a2acdfff0a71db81bf68dc027",
+      "metadataSha256": "8aa0efed9d52cfda6dd56eda3129b783c8ccf1c433638404bbe6be0766ba4a29",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/aistudio-sdk@0.3.9",
+      "dependencies": [
+        "bce-python-sdk",
+        "click",
+        "prettytable",
+        "psutil",
+        "requests",
+        "tqdm"
+      ]
+    },
+    {
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "filename": "annotated_types-0.8.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/99/91/8acff4f5e50511b911bbccb72b8628a49c68ce14148cd9f6431094859a90/annotated_types-0.8.0-py3-none-any.whl",
+      "sizeBytes": 13427,
+      "sha256": "f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0",
+      "metadataSha256": "614985b278f601b8ef863f82783b991cc3ada4b89f592eb71c7c48c5f2ef2298",
+      "license": "MIT",
+      "purl": "pkg:pypi/annotated-types@0.8.0",
+      "dependencies": []
+    },
+    {
+      "name": "anyio",
+      "version": "4.14.2",
+      "filename": "anyio-4.14.2-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/da/35/f2287558c17e29fafc8ef3daf819bb9834061cfa43bff8014f7df7f63bdc/anyio-4.14.2-py3-none-any.whl",
+      "sizeBytes": 125813,
+      "sha256": "9f505dda5ac9f0c8309b5e8bd445a8c2bf7246f3ce950121e45ea15bc41d1494",
+      "metadataSha256": "c5e6fc4dfd833319913b287be7a30d9935e9208c7ef917630621855aaac4d419",
+      "license": "MIT",
+      "purl": "pkg:pypi/anyio@4.14.2",
+      "dependencies": [
+        "idna"
+      ]
+    },
+    {
+      "name": "attrs",
+      "version": "26.1.0",
+      "filename": "attrs-26.1.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl",
+      "sizeBytes": 67548,
+      "sha256": "c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309",
+      "metadataSha256": "4cd40e690f23bf37cbcad34efd6758e062df1df07c86833f7e3ce95bf1fa38cc",
+      "license": "MIT",
+      "purl": "pkg:pypi/attrs@26.1.0",
+      "dependencies": []
+    },
+    {
+      "name": "bce-python-sdk",
+      "version": "0.9.76",
+      "filename": "bce_python_sdk-0.9.76-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/b9/06/4d4a26c3dfcdb29599f563329b87eefe55b02b3c2b9d8f8c3aeaa38a33a6/bce_python_sdk-0.9.76-py3-none-any.whl",
+      "sizeBytes": 435179,
+      "sha256": "e629181d060f4ed8f29749f47139bf08f1f9b0d8b15daedc956900785587e8d8",
+      "metadataSha256": "da16f36a1d23949be4f6f8542c6a97f637d197f83d623af92c7de6ba1cf0f374",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/bce-python-sdk@0.9.76",
+      "dependencies": [
+        "crc32c",
+        "future",
+        "pycryptodome",
+        "six"
+      ]
+    },
+    {
+      "name": "certifi",
+      "version": "2026.7.22",
+      "filename": "certifi-2026.7.22-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl",
+      "sizeBytes": 136983,
+      "sha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775",
+      "metadataSha256": "ef5af1638fbb23676ac3c5777dfcfc2cd9c348fe4172ed5ba3d277655b248090",
+      "license": "MPL-2.0",
+      "purl": "pkg:pypi/certifi@2026.7.22",
+      "dependencies": []
+    },
+    {
+      "name": "chardet",
+      "version": "7.4.3",
+      "filename": "chardet-7.4.3-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/1b/b3/5d0e77ea774bd3224321c248880ea0c0379000ac5c2bb6d77609549de247/chardet-7.4.3-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 944155,
+      "sha256": "e1b98790c284ff813f18f7cf7de5f05ea2435a080030c7f1a8318f3a4f80b131",
+      "metadataSha256": "edf756a378fe2c87814aad02ba9ca0dc0151f02b06c37a4382cc2d6d9874fdaa",
+      "license": "0BSD",
+      "purl": "pkg:pypi/chardet@7.4.3",
+      "dependencies": []
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "3.4.9",
+      "filename": "charset_normalizer-3.4.9-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/e8/ef/6953a77c7cf2c2ff9998e6f575ab3e380119f100223381565a4f94c1f836/charset_normalizer-3.4.9-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 161947,
+      "sha256": "fe2c7201c642b7c308f1675355ad7ff7b66acfe3541625efe5a3ad38f29d6115",
+      "metadataSha256": "83a2993c753cc6098985f8a75286025a01e96453403284ce25e3fef7665472e1",
+      "license": "MIT",
+      "purl": "pkg:pypi/charset-normalizer@3.4.9",
+      "dependencies": []
+    },
+    {
+      "name": "click",
+      "version": "8.4.2",
+      "filename": "click-8.4.2-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/fb/e2/79c688af8b210d232694e31e59da9f6ec747bae31c3f5946e4e9b98860d5/click-8.4.2-py3-none-any.whl",
+      "sizeBytes": 119243,
+      "sha256": "e6f9f66136c816745b9d65817da91d61d957fb16e02e4dcd0552553c5a197b76",
+      "metadataSha256": "194c9dd81d567f9081f026c7e401060fbafa7bc147c8e0a58b3668b40a64c031",
+      "license": "BSD-3-Clause",
+      "purl": "pkg:pypi/click@8.4.2",
+      "dependencies": [
+        "colorama"
+      ]
+    },
+    {
+      "name": "colorama",
+      "version": "0.4.6",
+      "filename": "colorama-0.4.6-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl",
+      "sizeBytes": 25335,
+      "sha256": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6",
+      "metadataSha256": "7baed29eb50c3b29bdb33ff84e3177bf1bc05784f7685ecdcaa4471c7dd810cc",
+      "license": "BSD-3-Clause",
+      "purl": "pkg:pypi/colorama@0.4.6",
+      "dependencies": []
+    },
+    {
+      "name": "colorlog",
+      "version": "6.12.0",
+      "filename": "colorlog-6.12.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/d4/19/0b6647bf5e331521e55d2b63bfbdc210bd9cd605189273f03614a05f702d/colorlog-6.12.0-py3-none-any.whl",
+      "sizeBytes": 12239,
+      "sha256": "30d392604e9110045a2c2aeefc27d7a017abbab63f3a8aee594eac0801df784e",
+      "metadataSha256": "47710c536b6c8a8eb074a08923a881e2ba76437ff633151675466c315c5c07b6",
+      "license": "MIT",
+      "purl": "pkg:pypi/colorlog@6.12.0",
+      "dependencies": [
+        "colorama"
+      ]
+    },
+    {
+      "name": "crc32c",
+      "version": "2.8",
+      "filename": "crc32c-2.8-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/d0/db/fd0f698c15d1e21d47c64181a98290665a08fcbb3940cd559e9c15bda57e/crc32c-2.8-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 66646,
+      "sha256": "171ff0260d112c62abcce29332986950a57bddee514e0a2418bfde493ea06bb3",
+      "metadataSha256": "cc352cfab6b8e8b7f175b22ba1b2895a0258aedd032e9e978b41c14694fa3fbd",
+      "license": "LGPL-2.1-or-later",
+      "purl": "pkg:pypi/crc32c@2.8",
+      "dependencies": []
+    },
+    {
+      "name": "filelock",
+      "version": "3.32.0",
+      "filename": "filelock-3.32.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/06/79/b4c714bef36bc4ec2beeae1e0c124f0223888cd8c6feb1cdc56038116920/filelock-3.32.0-py3-none-any.whl",
+      "sizeBytes": 97732,
+      "sha256": "d396bea984af47333ef05e50eae7eff88c84256de6112aea0ec48a233c064fe3",
+      "metadataSha256": "d964d7bb976411acbc7b7641476c55193c33b919956fdc8a183c0733cd2db660",
+      "license": "MIT",
+      "purl": "pkg:pypi/filelock@3.32.0",
+      "dependencies": []
+    },
+    {
+      "name": "frozenlist",
+      "version": "1.8.0",
+      "filename": "frozenlist-1.8.0-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/d8/cf/174c91dbc9cc49bc7b7aab74d8b734e974d1faa8f191c74af9b7e80848e6/frozenlist-1.8.0-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 43882,
+      "sha256": "878be833caa6a3821caf85eb39c5ba92d28e85df26d57afb06b35b2efd937231",
+      "metadataSha256": "4278aeb3d18f1f8b7e6af5b6771ba9a8f327012a42d64509f9d4087b55f71a94",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/frozenlist@1.8.0",
+      "dependencies": []
+    },
+    {
+      "name": "fsspec",
+      "version": "2026.6.0",
+      "filename": "fsspec-2026.6.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/e5/22/4222d7ddf3da30f363edaa98e329c2bce6c65497c9cb2810931c8b2c0fbc/fsspec-2026.6.0-py3-none-any.whl",
+      "sizeBytes": 203949,
+      "sha256": "02e0b71817df9b2169dc30a16832045764def1191b43dcff5bb85bdee212d2a1",
+      "metadataSha256": "20c85c024a69a059237c3a7985d381a3745017ae1d634c554b0c5901dde81095",
+      "license": "BSD-3-Clause",
+      "purl": "pkg:pypi/fsspec@2026.6.0",
+      "dependencies": []
+    },
+    {
+      "name": "future",
+      "version": "1.0.0",
+      "filename": "future-1.0.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/da/71/ae30dadffc90b9006d77af76b393cb9dfbfc9629f339fc1574a1c52e6806/future-1.0.0-py3-none-any.whl",
+      "sizeBytes": 491326,
+      "sha256": "929292d34f5872e70396626ef385ec22355a1fae8ad29e1a734c3e43f9fbc216",
+      "metadataSha256": "30d35a50a3116d9026558ab9026ffed4db58675562102a526bc56c4235db913e",
+      "license": "MIT",
+      "purl": "pkg:pypi/future@1.0.0",
+      "dependencies": []
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0",
+      "filename": "h11-0.16.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl",
+      "sizeBytes": 37515,
+      "sha256": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86",
+      "metadataSha256": "28f326098ac09fcba79b8f180f96087c841fe2456215cb7b872a9c7d5cd19d64",
+      "license": "MIT",
+      "purl": "pkg:pypi/h11@0.16.0",
+      "dependencies": []
+    },
+    {
+      "name": "hf-xet",
+      "version": "1.5.2",
+      "filename": "hf_xet-1.5.2-cp38-abi3-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/e9/f8/68b01c5c2edb56ac9a67b3d076ffddcb90867abaee923923eb34e7a14e76/hf_xet-1.5.2-cp38-abi3-win_amd64.whl",
+      "sizeBytes": 3988373,
+      "sha256": "ecf63d1cb69a9a7319910f8f83fcf9b46e7a32dfcf4b8f8eeddb55f647306e65",
+      "metadataSha256": "66aff7f65c7eb5858e3361091e4d339a833161813330f1c7cfc30a75528eb926",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/hf-xet@1.5.2",
+      "dependencies": []
+    },
+    {
+      "name": "httpcore",
+      "version": "1.0.9",
+      "filename": "httpcore-1.0.9-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/7e/f5/f66802a942d491edb555dd61e3a9961140fd64c90bce1eafd741609d334d/httpcore-1.0.9-py3-none-any.whl",
+      "sizeBytes": 78784,
+      "sha256": "2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55",
+      "metadataSha256": "fe2d4fda6199128978779e0cf27f3c045c531863fcdd987eacc74f3a18d41c21",
+      "license": "BSD-3-Clause",
+      "purl": "pkg:pypi/httpcore@1.0.9",
+      "dependencies": [
+        "certifi",
+        "h11"
+      ]
+    },
+    {
+      "name": "httpx",
+      "version": "0.28.1",
+      "filename": "httpx-0.28.1-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl",
+      "sizeBytes": 73517,
+      "sha256": "d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad",
+      "metadataSha256": "febb9b0f8f3e80d57c8199c304f35c4336e8581d1d18d7983c92766b82793b25",
+      "license": "BSD-3-Clause",
+      "purl": "pkg:pypi/httpx@0.28.1",
+      "dependencies": [
+        "anyio",
+        "certifi",
+        "httpcore",
+        "idna"
+      ]
+    },
+    {
+      "name": "huggingface-hub",
+      "version": "1.25.1",
+      "filename": "huggingface_hub-1.25.1-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/f7/3f/21e816831c6d16f88a6c784974413fa0421ce8a5d04380c2666ed5b503e5/huggingface_hub-1.25.1-py3-none-any.whl",
+      "sizeBytes": 774909,
+      "sha256": "004d4e70350517e24c68a7dbb7dc5e40b2b6aefef8f94bf7a85f6f9835102ea5",
+      "metadataSha256": "68431dae677a036a777a5a2fe4ebc3083837b3edbf10a51240e5486d73e29fbb",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/huggingface-hub@1.25.1",
+      "dependencies": [
+        "click",
+        "filelock",
+        "fsspec",
+        "hf-xet",
+        "httpx",
+        "packaging",
+        "pyyaml",
+        "tqdm",
+        "typing-extensions"
+      ]
+    },
+    {
+      "name": "idna",
+      "version": "3.18",
+      "filename": "idna-3.18-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/1e/5e/d4e9f1a599fb8e573b7b87160658329fbf28d19eac2718f51fc3def3aa5a/idna-3.18-py3-none-any.whl",
+      "sizeBytes": 65455,
+      "sha256": "7f952cbe720b688055e3f87de14f5c3e5fdaa8bc3928985c4077ca689de849a2",
+      "metadataSha256": "46dfe6e5ac462d0f680ecd9abcf66e829b6a2334824b4d9e3979b31135caf281",
+      "license": "BSD-3-Clause",
+      "purl": "pkg:pypi/idna@3.18",
+      "dependencies": []
+    },
+    {
+      "name": "imagesize",
+      "version": "2.0.0",
+      "filename": "imagesize-2.0.0-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/5f/53/fb7122b71361a0d121b669dcf3d31244ef75badbbb724af388948de543e2/imagesize-2.0.0-py2.py3-none-any.whl",
+      "sizeBytes": 9441,
+      "sha256": "5667c5bbb57ab3f1fa4bc366f4fbc971db3d5ed011fd2715fd8001f782718d96",
+      "metadataSha256": "d56afebcac05eca8ab6f88232288bb20c7e2290fb4160a94626c57b3dbecf66f",
+      "license": "MIT",
+      "purl": "pkg:pypi/imagesize@2.0.0",
+      "dependencies": []
+    },
+    {
+      "name": "modelscope",
+      "version": "1.38.1",
+      "filename": "modelscope-1.38.1-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/5d/f3/caf5ef8c4adc99cd66607639642ae503ac190a3358f782776687200a7c36/modelscope-1.38.1-py3-none-any.whl",
+      "sizeBytes": 6034052,
+      "sha256": "7d65be96999144ca045386d27a8ea057b8777504c538d9755d60ec2c8906fe72",
+      "metadataSha256": "f9c415e5d940a9dc2f43fafca7b86c0db948bc55a2668e179699111c1627cca4",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/modelscope@1.38.1",
+      "dependencies": [
+        "filelock",
+        "modelscope-hub",
+        "packaging",
+        "requests",
+        "setuptools",
+        "tqdm",
+        "urllib3"
+      ]
+    },
+    {
+      "name": "modelscope-hub",
+      "version": "0.1.8",
+      "filename": "modelscope_hub-0.1.8-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/2f/3c/ddc57e2bcf176b81fb344b030153d61daa4a7d69f559189d1685da43e459/modelscope_hub-0.1.8-py3-none-any.whl",
+      "sizeBytes": 149415,
+      "sha256": "905ffd0a64c99bd34d40a72452dba97611f702b1887c11ba694584fb46d25420",
+      "metadataSha256": "16fd6a0f47fb0dfa080299b3757c97d2a59e2d64462629474dafa801d41f13f1",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/modelscope-hub@0.1.8",
+      "dependencies": [
+        "filelock",
+        "requests",
+        "tqdm",
+        "urllib3"
+      ]
+    },
+    {
+      "name": "multidict",
+      "version": "6.7.1",
+      "filename": "multidict-6.7.1-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/b2/35/e994121b0e90e46134673422dd564623f93304614f5d11886b1b3e06f503/multidict-6.7.1-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 45884,
+      "sha256": "960c83bf01a95b12b08fd54324a4eb1d5b52c88932b5cba5d6e712bb3ed12eb5",
+      "metadataSha256": "3f52a21e43b0e57d05741fe479250f17864aafcb723c940e5aba5ebbdb25295e",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/multidict@6.7.1",
+      "dependencies": []
+    },
+    {
+      "name": "networkx",
+      "version": "3.6.1",
+      "filename": "networkx-3.6.1-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/9e/c9/b2622292ea83fbb4ec318f5b9ab867d0a28ab43c5717bb85b0a5f6b3b0a4/networkx-3.6.1-py3-none-any.whl",
+      "sizeBytes": 2068504,
+      "sha256": "d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762",
+      "metadataSha256": "aca5d94a97d1f70f301d033addb635f6e66be8973a00aba4127637eed2ef316a",
+      "license": "BSD-3-Clause",
+      "purl": "pkg:pypi/networkx@3.6.1",
+      "dependencies": []
+    },
+    {
+      "name": "numpy",
+      "version": "2.3.5",
+      "filename": "numpy-2.3.5-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/0c/88/e2eaa6cffb115b85ed7c7c87775cb8bcf0816816bc98ca8dbfa2ee33fe6e/numpy-2.3.5-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 12779090,
+      "sha256": "00dc4e846108a382c5869e77c6ed514394bdeb3403461d25a829711041217d5b",
+      "metadataSha256": "7f8a1bfc2b82fee89e1ceef1038aa174ee814832b54c39b4b1b93028ce3f27b1",
+      "license": "LicenseRef-Pige-NumPy-2.3.5-Windows-x64-Binary-Inventory",
+      "purl": "pkg:pypi/numpy@2.3.5",
+      "dependencies": []
+    },
+    {
+      "name": "opencv-contrib-python",
+      "version": "4.10.0.84",
+      "filename": "opencv_contrib_python-4.10.0.84-cp37-abi3-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/a7/9e/7110d2c5d543ab03b9581dbb1f8e2429863e44e0c9b4960b766f230c1279/opencv_contrib_python-4.10.0.84-cp37-abi3-win_amd64.whl",
+      "sizeBytes": 45541421,
+      "sha256": "47ec3160dae75f70e099b286d1a2e086d20dac8b06e759f60eaf867e6bdecba7",
+      "metadataSha256": "5f4c7d397dbc82ca5084cea55543b916aeeb4284995f7d534576089083bf570e",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/opencv-contrib-python@4.10.0.84",
+      "dependencies": [
+        "numpy"
+      ]
+    },
+    {
+      "name": "opt-einsum",
+      "version": "3.3.0",
+      "filename": "opt_einsum-3.3.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/bc/19/404708a7e54ad2798907210462fd950c3442ea51acc8790f3da48d2bee8b/opt_einsum-3.3.0-py3-none-any.whl",
+      "sizeBytes": 65486,
+      "sha256": "2455e59e3947d3c275477df7f5205b30635e266fe6dc300e3d9f9646bfcea147",
+      "metadataSha256": "04b7df404a9019b5005bf28c83a9d9516a68faaf70accd022c805b79c1b7f2a3",
+      "license": "MIT",
+      "purl": "pkg:pypi/opt-einsum@3.3.0",
+      "dependencies": [
+        "numpy"
+      ]
+    },
+    {
+      "name": "packaging",
+      "version": "26.2",
+      "filename": "packaging-26.2-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl",
+      "sizeBytes": 100195,
+      "sha256": "5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e",
+      "metadataSha256": "4f9cbcd7933415a4793f7767c98a2b6a512c823fc81c87337815705f230ecabf",
+      "license": "Apache-2.0 OR BSD-2-Clause",
+      "purl": "pkg:pypi/packaging@26.2",
+      "dependencies": []
+    },
+    {
+      "name": "paddleocr",
+      "version": "3.7.0",
+      "filename": "paddleocr-3.7.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/d2/79/2ade66cf72074a3d2a013e2ba1f256d6116fec797b908fc1b4f9c320d8c4/paddleocr-3.7.0-py3-none-any.whl",
+      "sizeBytes": 146750,
+      "sha256": "c0f0a81ad4112727f30c6fcf986ac0ef6a120d31ee0991a01fae0357ee32d338",
+      "metadataSha256": "d01623d2a55baffb332a43d4ce83967c19090b0a3426753a59288e4def628371",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/paddleocr@3.7.0",
+      "dependencies": [
+        "aiohttp",
+        "paddlex",
+        "pyyaml",
+        "requests",
+        "typing-extensions"
+      ]
+    },
+    {
+      "name": "paddlepaddle",
+      "version": "3.3.1",
+      "filename": "paddlepaddle-3.3.1-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/f4/c8/408b9e94ac2e10a55c1122b787359f7a6f79ef894ee1d57d78c5cca838d0/paddlepaddle-3.3.1-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 104794530,
+      "sha256": "1203e2e1114b49e73a8440b68837ce5c93fdab51fe4838c5e5874ab40f58f747",
+      "metadataSha256": "323b4bafb314614741e3345254018925f2e5f77ed0e417c4c60e9d541d437afb",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/paddlepaddle@3.3.1",
+      "dependencies": [
+        "httpx",
+        "networkx",
+        "numpy",
+        "opt-einsum",
+        "pillow",
+        "protobuf",
+        "safetensors",
+        "setuptools",
+        "typing-extensions"
+      ]
+    },
+    {
+      "name": "paddlex",
+      "version": "3.7.2",
+      "filename": "paddlex-3.7.2-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/40/52/9bbb9cd5f4fbbbefc7391c7d1ee61df8d511017a31e6933f6744b063fdab/paddlex-3.7.2-py3-none-any.whl",
+      "sizeBytes": 2239708,
+      "sha256": "f1678bf650bbaccfd8f0d4e49d0ae631b4685c829fdae6e802ccd90d4fcb9a7f",
+      "metadataSha256": "e4672eb9cee0db01355054a4a0201b88f01699da27f64114071d75ac5682cf80",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/paddlex@3.7.2",
+      "dependencies": [
+        "aistudio-sdk",
+        "chardet",
+        "colorlog",
+        "filelock",
+        "huggingface-hub",
+        "imagesize",
+        "modelscope",
+        "numpy",
+        "opencv-contrib-python",
+        "packaging",
+        "pandas",
+        "pillow",
+        "prettytable",
+        "py-cpuinfo",
+        "pyclipper",
+        "pydantic",
+        "pypdfium2",
+        "python-bidi",
+        "pyyaml",
+        "requests",
+        "ruamel-yaml",
+        "shapely",
+        "typing-extensions",
+        "ujson"
+      ]
+    },
+    {
+      "name": "pandas",
+      "version": "3.0.5",
+      "filename": "pandas-3.0.5-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/9c/ba/18c4ec8a746e177da05a9e7a7963781d8ea195780724f854601b6ebd6b78/pandas-3.0.5-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 9826896,
+      "sha256": "0d298e951f23016ce4699951d044ae6418dbc91bf68cefca0f77666fcbb4e5c6",
+      "metadataSha256": "d0b10219e9d6ede31e61b4e08566428e760edf133c7e0ff73b85280be986ce8d",
+      "license": "BSD-3-Clause",
+      "purl": "pkg:pypi/pandas@3.0.5",
+      "dependencies": [
+        "numpy",
+        "python-dateutil",
+        "tzdata"
+      ]
+    },
+    {
+      "name": "pillow",
+      "version": "12.3.0",
+      "filename": "pillow-12.3.0-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/a6/9b/7a58e61d62be561da3a356fe2384d4059a6345fc130e23ef1c36a5b81d24/pillow-12.3.0-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 7239691,
+      "sha256": "1cca606cd25738df4ed873d5ad46bbdb3d83b5cbca291f6b4ff13a4df6b0bbe8",
+      "metadataSha256": "2c4378001803cfac65809a50722d46e0da4ce8061e717f103e5d52734bab30f5",
+      "license": "MIT-CMU",
+      "purl": "pkg:pypi/pillow@12.3.0",
+      "dependencies": []
+    },
+    {
+      "name": "prettytable",
+      "version": "3.18.0",
+      "filename": "prettytable-3.18.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/fe/be/2e6798ace5cc036f5d05d36b7b2fd85346f1a708c87060890b070d0ec607/prettytable-3.18.0-py3-none-any.whl",
+      "sizeBytes": 37357,
+      "sha256": "b3346e0e6f79180833aebaac088ae926340586cf6d7d991b9eb125b65f72313a",
+      "metadataSha256": "271a5357524f01c8ce05af4ecd0d9fb8ea969e774f80aa2dcaa1d39005255558",
+      "license": "BSD-3-Clause",
+      "purl": "pkg:pypi/prettytable@3.18.0",
+      "dependencies": [
+        "wcwidth"
+      ]
+    },
+    {
+      "name": "propcache",
+      "version": "0.5.2",
+      "filename": "propcache-0.5.2-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/1c/fd/3f0f10dba4dabad3bf53102be007abf55481067952bde0fdddff439e7c61/propcache-0.5.2-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 41649,
+      "sha256": "dfed59d0a5aeb01e242e66ff0300bc4a265a7c05f612d30016f0b60b1017d757",
+      "metadataSha256": "7c761f2a24b03f88e3d8c6823fcab75a35ed9887ce232a080694efa603f37f08",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/propcache@0.5.2",
+      "dependencies": []
+    },
+    {
+      "name": "protobuf",
+      "version": "7.35.1",
+      "filename": "protobuf-7.35.1-cp310-abi3-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/0a/19/8d0cb6f20a1ef7b18f1c8986ad5783f22f84cce39c6ce9a6e645ea55192e/protobuf-7.35.1-cp310-abi3-win_amd64.whl",
+      "sizeBytes": 439996,
+      "sha256": "230a75ddfc2de4806e56696ce9640c1cdfdb6543b7cfce98d42a4c0a0e7bdb87",
+      "metadataSha256": "1c58cfd7acd805c087ceb1f14c27cdba3c52d074e1d7b05dacf31fdf413c0a8c",
+      "license": "BSD-3-Clause",
+      "purl": "pkg:pypi/protobuf@7.35.1",
+      "dependencies": []
+    },
+    {
+      "name": "psutil",
+      "version": "7.2.2",
+      "filename": "psutil-7.2.2-cp37-abi3-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/b4/90/e2159492b5426be0c1fef7acba807a03511f97c5f86b3caeda6ad92351a7/psutil-7.2.2-cp37-abi3-win_amd64.whl",
+      "sizeBytes": 137737,
+      "sha256": "eb7e81434c8d223ec4a219b5fc1c47d0417b12be7ea866e24fb5ad6e84b3d988",
+      "metadataSha256": "a263a40220d921d9cb963fc636d34f817aa2eb72c2696e3e3465d088cdb1976b",
+      "license": "BSD-3-Clause",
+      "purl": "pkg:pypi/psutil@7.2.2",
+      "dependencies": []
+    },
+    {
+      "name": "py-cpuinfo",
+      "version": "9.0.0",
+      "filename": "py_cpuinfo-9.0.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/e0/a9/023730ba63db1e494a271cb018dcd361bd2c917ba7004c3e49d5daf795a2/py_cpuinfo-9.0.0-py3-none-any.whl",
+      "sizeBytes": 22335,
+      "sha256": "859625bc251f64e21f077d099d4162689c762b5d6a4c3c97553d56241c9674d5",
+      "metadataSha256": "ad115e96f84576861c5e75d760301b81d23143cfe25546b99541e01265379dc1",
+      "license": "MIT",
+      "purl": "pkg:pypi/py-cpuinfo@9.0.0",
+      "dependencies": []
+    },
+    {
+      "name": "pyclipper",
+      "version": "1.4.0",
+      "filename": "pyclipper-1.4.0-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/ba/42/0a1920d276a0e1ca21dc0d13ee9e3ba10a9a8aa3abac76cd5e5a9f503306/pyclipper-1.4.0-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 104007,
+      "sha256": "d4b2d7c41086f1927d14947c563dfc7beed2f6c0d9af13c42fe3dcdc20d35832",
+      "metadataSha256": "98fe70a18b29110448b184deeaa5bcd9d018ce9e9db6ef232dd03146b68f1f78",
+      "license": "MIT",
+      "purl": "pkg:pypi/pyclipper@1.4.0",
+      "dependencies": []
+    },
+    {
+      "name": "pycryptodome",
+      "version": "3.23.0",
+      "filename": "pycryptodome-3.23.0-cp37-abi3-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/54/2f/e97a1b8294db0daaa87012c24a7bb714147c7ade7656973fd6c736b484ff/pycryptodome-3.23.0-cp37-abi3-win_amd64.whl",
+      "sizeBytes": 1799636,
+      "sha256": "c75b52aacc6c0c260f204cbdd834f76edc9fb0d8e0da9fbf8352ef58202564e2",
+      "metadataSha256": "3054c7b6ca96dfa8c968571921d169f91ac8ffa63686629d512dd50aa380bff1",
+      "license": "BSD-2-Clause AND LicenseRef-Pige-Public-Domain-Dedication",
+      "purl": "pkg:pypi/pycryptodome@3.23.0",
+      "dependencies": []
+    },
+    {
+      "name": "pydantic",
+      "version": "2.13.4",
+      "filename": "pydantic-2.13.4-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/fd/7b/122376b1fd3c62c1ed9dc80c931ace4844b3c55407b6fb2d199377c9736f/pydantic-2.13.4-py3-none-any.whl",
+      "sizeBytes": 472262,
+      "sha256": "45a282cde31d808236fd7ea9d919b128653c8b38b393d1c4ab335c62924d9aba",
+      "metadataSha256": "d1e56c3412492512fb6b59a9dfc25ab7af2a8204585cd7bca000513023133394",
+      "license": "MIT",
+      "purl": "pkg:pypi/pydantic@2.13.4",
+      "dependencies": [
+        "annotated-types",
+        "pydantic-core",
+        "typing-extensions",
+        "typing-inspection"
+      ]
+    },
+    {
+      "name": "pydantic-core",
+      "version": "2.46.4",
+      "filename": "pydantic_core-2.46.4-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/7e/e8/cff247591966f2d22ec8c003cd7587e27b7ba7b81ab2fb888e3ab75dc285/pydantic_core-2.46.4-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 2071819,
+      "sha256": "6b3ace8194b0e5204818c92802dcdca7fc6d88aabbb799d7c795540d9cd6d292",
+      "metadataSha256": "e2d0298dfb8712190ad250722e11a46a4391e71d687d5c7667c09e935cadc63b",
+      "license": "MIT",
+      "purl": "pkg:pypi/pydantic-core@2.46.4",
+      "dependencies": [
+        "typing-extensions"
+      ]
+    },
+    {
+      "name": "pypdfium2",
+      "version": "5.12.1",
+      "filename": "pypdfium2-5.12.1-py3-none-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/a9/c3/08b62718faf2f6b6aa49207626e3113ff3ec1b3cd076c0ef8fd852f0e57c/pypdfium2-5.12.1-py3-none-win_amd64.whl",
+      "sizeBytes": 3859845,
+      "sha256": "9609be73a6701a68f29dffe0335f7a2e4b3ba581542ed65d35d49f761a4600ca",
+      "metadataSha256": "30533ca749d12267b4d1ab74af1f5b5e271c6a104eca648bd0ecd07cd0963c3b",
+      "license": "LicenseRef-Pige-pypdfium2-5.12.1-Windows-x64-Wheel-License-Inventory",
+      "purl": "pkg:pypi/pypdfium2@5.12.1",
+      "dependencies": []
+    },
+    {
+      "name": "python-bidi",
+      "version": "0.6.11",
+      "filename": "python_bidi-0.6.11-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/85/0a/7ac8da3629ca8d93a419f5250c240fc13f7d34b7c04f279c8f9a474a2be9/python_bidi-0.6.11-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 160888,
+      "sha256": "f563d20481f7d316adf605bb94d5b7182acecdbc4d431d60473e9b1d526d0210",
+      "metadataSha256": "38a3fe183a7161d5c7be30d866fc726ff456b5bc0d9fd4512d7af89be7aa4e73",
+      "license": "LGPL-3.0-or-later AND LicenseRef-Pige-python-bidi-0.6.11-Rust-Third-Party-Inventory",
+      "purl": "pkg:pypi/python-bidi@0.6.11",
+      "dependencies": []
+    },
+    {
+      "name": "python-dateutil",
+      "version": "2.9.0.post0",
+      "filename": "python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+      "sizeBytes": 229892,
+      "sha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427",
+      "metadataSha256": "a9d436da322be808332f98d88325998e87cb693a678a9969feb4cfad729a6e93",
+      "license": "Apache-2.0 AND BSD-3-Clause",
+      "purl": "pkg:pypi/python-dateutil@2.9.0.post0",
+      "dependencies": [
+        "six"
+      ]
+    },
+    {
+      "name": "pyyaml",
+      "version": "6.0.2",
+      "filename": "PyYAML-6.0.2-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/fa/de/02b54f42487e3d3c6efb3f89428677074ca7bf43aae402517bc7cca949f3/PyYAML-6.0.2-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 156446,
+      "sha256": "8388ee1976c416731879ac16da0aff3f63b286ffdd57cdeb95f3f2e085687563",
+      "metadataSha256": "f65c17a933ab5cfb6cfa32362e8e54c2e680628d21891034059aa3721d168c09",
+      "license": "MIT",
+      "purl": "pkg:pypi/pyyaml@6.0.2",
+      "dependencies": []
+    },
+    {
+      "name": "requests",
+      "version": "2.34.2",
+      "filename": "requests-2.34.2-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl",
+      "sizeBytes": 73075,
+      "sha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0",
+      "metadataSha256": "8c384ba3e979480faae2859d3c5e6c1276dd2c3616e322e124d52c8cfc556f27",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/requests@2.34.2",
+      "dependencies": [
+        "certifi",
+        "charset-normalizer",
+        "idna",
+        "urllib3"
+      ]
+    },
+    {
+      "name": "ruamel-yaml",
+      "version": "0.19.1",
+      "filename": "ruamel_yaml-0.19.1-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/b8/0c/51f6841f1d84f404f92463fc2b1ba0da357ca1e3db6b7fbda26956c3b82a/ruamel_yaml-0.19.1-py3-none-any.whl",
+      "sizeBytes": 118102,
+      "sha256": "27592957fedf6e0b62f281e96effd28043345e0e66001f97683aa9a40c667c93",
+      "metadataSha256": "1ecd311518266882ede8804686f758255d6dff89a71a646bb6970a69615e39f6",
+      "license": "MIT",
+      "purl": "pkg:pypi/ruamel-yaml@0.19.1",
+      "dependencies": []
+    },
+    {
+      "name": "safetensors",
+      "version": "0.8.0",
+      "filename": "safetensors-0.8.0-cp310-abi3-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/1b/6d/3fba214c1e5e0f69991677ec3bc17023f0421776975e1de0c682dca475e2/safetensors-0.8.0-cp310-abi3-win_amd64.whl",
+      "sizeBytes": 355540,
+      "sha256": "096ec1a98435df7beb08853bb5aa9081a84f23d0adc67ed1a0a10550f608373f",
+      "metadataSha256": "597731d1baf7a94219753fa0a74abd1a8a18562d50d98b2e25d91e11e3224d36",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/safetensors@0.8.0",
+      "dependencies": []
+    },
+    {
+      "name": "setuptools",
+      "version": "83.0.0",
+      "filename": "setuptools-83.0.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/5d/40/e1e72872c6354b306daef1703549e8e83b4d43cfea356311bf722a043752/setuptools-83.0.0-py3-none-any.whl",
+      "sizeBytes": 1008090,
+      "sha256": "29b23c360f22f414dc7336bb39178cc7bcbf6021ed2733cde173f09dba19abb3",
+      "metadataSha256": "26e45e90de763c6938d93d1df2ecd6782a0f1514d41cbd22ebef4e0ab6475771",
+      "license": "MIT",
+      "purl": "pkg:pypi/setuptools@83.0.0",
+      "dependencies": []
+    },
+    {
+      "name": "shapely",
+      "version": "2.1.2",
+      "filename": "shapely-2.1.2-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/41/47/3647fe7ad990af60ad98b889657a976042c9988c2807cf322a9d6685f462/shapely-2.1.2-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 1722151,
+      "sha256": "ca2591bff6645c216695bdf1614fca9c82ea1144d4a7591a466fef64f28f0715",
+      "metadataSha256": "01dd9a347d1efa56099c3aa54c09f61ddd19e8c91eb222b9f16b6d6095b0e4a3",
+      "license": "BSD-3-Clause",
+      "purl": "pkg:pypi/shapely@2.1.2",
+      "dependencies": [
+        "numpy"
+      ]
+    },
+    {
+      "name": "six",
+      "version": "1.17.0",
+      "filename": "six-1.17.0-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl",
+      "sizeBytes": 11050,
+      "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274",
+      "metadataSha256": "562042078c2752549f6d8a7c86dbc5dd708088a7be6d80672ec7b07100b72468",
+      "license": "MIT",
+      "purl": "pkg:pypi/six@1.17.0",
+      "dependencies": []
+    },
+    {
+      "name": "tqdm",
+      "version": "4.70.0",
+      "filename": "tqdm-4.70.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/f9/1c/01bfd571a64e7f270e6bab5e33777debe0edc56759233ce84f27dec92d14/tqdm-4.70.0-py3-none-any.whl",
+      "sizeBytes": 80184,
+      "sha256": "7f585706bfddbdebf89daac705b2dfcc16890130727d3197ca62c732b4310953",
+      "metadataSha256": "0d95b85b90428f8776afc4a92b17c5094f78ee98d150b3255acbcdf4e9d57941",
+      "license": "MPL-2.0 AND MIT",
+      "purl": "pkg:pypi/tqdm@4.70.0",
+      "dependencies": [
+        "colorama"
+      ]
+    },
+    {
+      "name": "typing-extensions",
+      "version": "4.16.0",
+      "filename": "typing_extensions-4.16.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+      "sizeBytes": 45571,
+      "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+      "metadataSha256": "b05084ca1d50879865178d9fff9fabeab61bdfb1f361bfbde95421ffc8f9be46",
+      "license": "PSF-2.0",
+      "purl": "pkg:pypi/typing-extensions@4.16.0",
+      "dependencies": []
+    },
+    {
+      "name": "typing-inspection",
+      "version": "0.4.2",
+      "filename": "typing_inspection-0.4.2-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/dc/9b/47798a6c91d8bdb567fe2698fe81e0c6b7cb7ef4d13da4114b41d239f65d/typing_inspection-0.4.2-py3-none-any.whl",
+      "sizeBytes": 14611,
+      "sha256": "4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7",
+      "metadataSha256": "61096cd0bfe3c7040b6f98c22b02d190fe01936d0ff7616c5134fed02891953a",
+      "license": "MIT",
+      "purl": "pkg:pypi/typing-inspection@0.4.2",
+      "dependencies": [
+        "typing-extensions"
+      ]
+    },
+    {
+      "name": "tzdata",
+      "version": "2026.3",
+      "filename": "tzdata-2026.3-py2.py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/e5/6d/b53b99a9f2766d095985947a5782f1702cabb129a34f7a802d7197af832f/tzdata-2026.3-py2.py3-none-any.whl",
+      "sizeBytes": 348168,
+      "sha256": "dc096730c87af6cab1b171c9d532be840741ff5d459015e7f6947bd7d7e54931",
+      "metadataSha256": "511c019df477939fe7f4c38e32ad74a570c4ebb05b13fd2fffd0f0f2dbe6f7b1",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/tzdata@2026.3",
+      "dependencies": []
+    },
+    {
+      "name": "ujson",
+      "version": "5.13.0",
+      "filename": "ujson-5.13.0-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/b4/b5/1fe203bc294e98fdd65606883692ad8dc0aaac73838b89c99c3513404424/ujson-5.13.0-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 41098,
+      "sha256": "17a59d5cf23ef98f7c9314524976b4b288374d83200add01d953024fb06404f9",
+      "metadataSha256": "661520c667ac4d9f3671c5789158429eb497965fdd1016054c62ea20b312d9aa",
+      "license": "BSD-3-Clause AND TCL",
+      "purl": "pkg:pypi/ujson@5.13.0",
+      "dependencies": []
+    },
+    {
+      "name": "urllib3",
+      "version": "2.7.0",
+      "filename": "urllib3-2.7.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl",
+      "sizeBytes": 131087,
+      "sha256": "9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897",
+      "metadataSha256": "66147856d30bbb6bed01c6ce3326d0f48d84ed5f286ac177633a1486b82eace5",
+      "license": "MIT",
+      "purl": "pkg:pypi/urllib3@2.7.0",
+      "dependencies": []
+    },
+    {
+      "name": "wcwidth",
+      "version": "0.8.2",
+      "filename": "wcwidth-0.8.2-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/96/42/3e5985a0a7e57de470b320c6d6a1a67c844f6737a587f3d44dd13d1819e7/wcwidth-0.8.2-py3-none-any.whl",
+      "sizeBytes": 323166,
+      "sha256": "d63947694a0539a1d51e01eda7caf800c291020e6cdd7e28ad7b14dd33ad4f85",
+      "metadataSha256": "9a1f2d41c9dd637fc963f641c73978c7cb9a6f1ef85515f65b93b07d820187b3",
+      "license": "MIT",
+      "purl": "pkg:pypi/wcwidth@0.8.2",
+      "dependencies": []
+    },
+    {
+      "name": "yarl",
+      "version": "1.24.5",
+      "filename": "yarl-1.24.5-cp313-cp313-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/86/e4/62a06b7e87c4246ac76b7c2da136f972eb4a3a1fc94abb07e7022d6fdb0a/yarl-1.24.5-cp313-cp313-win_amd64.whl",
+      "sizeBytes": 97454,
+      "sha256": "2dbe06fc16bc91502bca713704022182e5729861ae00277c3a23354b40929740",
+      "metadataSha256": "828dd0df346ad989da5f5622011b6a07a4c6b7961aea718a7fc5a89e88cb4bc1",
+      "license": "Apache-2.0",
+      "purl": "pkg:pypi/yarl@1.24.5",
+      "dependencies": [
+        "idna",
+        "multidict",
+        "propcache"
+      ]
+    }
+  ],
+  "legal": [
+    {
+      "componentId": "model:PP-OCRv5_mobile_det",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "models/PP-OCRv5_mobile_det/LICENSE-Apache-2.0.txt",
+          "kind": "license",
+          "sizeBytes": 11357,
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ]
+    },
+    {
+      "componentId": "model:PP-OCRv5_mobile_rec",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "models/PP-OCRv5_mobile_rec/LICENSE-Apache-2.0.txt",
+          "kind": "license",
+          "sizeBytes": 11357,
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ]
+    },
+    {
+      "componentId": "model:korean_PP-OCRv5_mobile_rec",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "models/korean_PP-OCRv5_mobile_rec/LICENSE-Apache-2.0.txt",
+          "kind": "license",
+          "sizeBytes": 11357,
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ]
+    },
+    {
+      "componentId": "model:latin_PP-OCRv5_mobile_rec",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "models/latin_PP-OCRv5_mobile_rec/LICENSE-Apache-2.0.txt",
+          "kind": "license",
+          "sizeBytes": 11357,
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ]
+    },
+    {
+      "componentId": "runtime:cpython",
+      "licenseExpression": "MPL-2.0",
+      "files": [
+        {
+          "path": "runtime/01-python_LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 22055,
+          "sha256": "76900732e5f075b725f754000ad5cab1b2cf89e355c1570138476956b6413cd3"
+        },
+        {
+          "path": "runtime/02-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_AUTHORS.txt",
+          "kind": "notice",
+          "sizeBytes": 11869,
+          "sha256": "5b73479bffada0916044cb29c47ab20360215e3c838ff2e7562ecdfcb11645bd"
+        },
+        {
+          "path": "runtime/03-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 1093,
+          "sha256": "634300a669d49aeae65b12c6c48c924c51a4cdf3d1ff086dc3456dc8bcaa2104"
+        },
+        {
+          "path": "runtime/04-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_cachecontrol_LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 558,
+          "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b"
+        },
+        {
+          "path": "runtime/05-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_certifi_LICENSE",
+          "kind": "license",
+          "sizeBytes": 989,
+          "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+        },
+        {
+          "path": "runtime/06-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_distlib_LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 14531,
+          "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d"
+        },
+        {
+          "path": "runtime/07-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_distro_LICENSE",
+          "kind": "license",
+          "sizeBytes": 11325,
+          "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14"
+        },
+        {
+          "path": "runtime/08-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_idna_LICENSE.md",
+          "kind": "license",
+          "sizeBytes": 1541,
+          "sha256": "b7a336abf3b04e180ec065cdd16e705d079e1cc7a14f910aa6e9187f36b9cd87"
+        },
+        {
+          "path": "runtime/09-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_msgpack_COPYING",
+          "kind": "license",
+          "sizeBytes": 614,
+          "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427"
+        },
+        {
+          "path": "runtime/10-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_packaging_LICENSE",
+          "kind": "license",
+          "sizeBytes": 197,
+          "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+        },
+        {
+          "path": "runtime/11-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_packaging_LICENSE.APACHE",
+          "kind": "license",
+          "sizeBytes": 10174,
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        },
+        {
+          "path": "runtime/12-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_packaging_LICENSE.BSD",
+          "kind": "license",
+          "sizeBytes": 1344,
+          "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+        },
+        {
+          "path": "runtime/13-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_pkg_resources_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1023,
+          "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+        },
+        {
+          "path": "runtime/14-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_platformdirs_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1089,
+          "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6"
+        },
+        {
+          "path": "runtime/15-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_pygments_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1331,
+          "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17"
+        },
+        {
+          "path": "runtime/16-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_pyproject_hooks_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1081,
+          "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154"
+        },
+        {
+          "path": "runtime/17-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_requests_LICENSE",
+          "kind": "license",
+          "sizeBytes": 10142,
+          "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
+        },
+        {
+          "path": "runtime/18-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_resolvelib_LICENSE",
+          "kind": "license",
+          "sizeBytes": 751,
+          "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d"
+        },
+        {
+          "path": "runtime/19-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_rich_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1056,
+          "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15"
+        },
+        {
+          "path": "runtime/20-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_tomli_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1072,
+          "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+        },
+        {
+          "path": "runtime/21-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_tomli_w_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1072,
+          "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+        },
+        {
+          "path": "runtime/22-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_truststore_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1086,
+          "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca"
+        },
+        {
+          "path": "runtime/23-python_Lib_site-packages_pip-26.1.2.dist-info_licenses_src_pip__vendor_urllib3_LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 1093,
+          "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686"
+        },
+        {
+          "path": "runtime/24-python_Lib_site-packages_pip__vendor_cachecontrol_LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 558,
+          "sha256": "86eeee87be2a43f3ff1f56496f451f69243926f025fedbb033666c304c4c161b"
+        },
+        {
+          "path": "runtime/25-python_Lib_site-packages_pip__vendor_certifi_LICENSE",
+          "kind": "license",
+          "sizeBytes": 989,
+          "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+        },
+        {
+          "path": "runtime/26-python_Lib_site-packages_pip__vendor_distlib_LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 14531,
+          "sha256": "808e10c8a6ab8deb149ff9b3fb19f447a808094606d712a9ca57fead3552599d"
+        },
+        {
+          "path": "runtime/27-python_Lib_site-packages_pip__vendor_distro_LICENSE",
+          "kind": "license",
+          "sizeBytes": 11325,
+          "sha256": "cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14"
+        },
+        {
+          "path": "runtime/28-python_Lib_site-packages_pip__vendor_idna_LICENSE.md",
+          "kind": "license",
+          "sizeBytes": 1541,
+          "sha256": "b7a336abf3b04e180ec065cdd16e705d079e1cc7a14f910aa6e9187f36b9cd87"
+        },
+        {
+          "path": "runtime/29-python_Lib_site-packages_pip__vendor_msgpack_COPYING",
+          "kind": "license",
+          "sizeBytes": 614,
+          "sha256": "492dedba85da5872f78e6091bcd1fea474d660d35acb4dee964b8aab3f007427"
+        },
+        {
+          "path": "runtime/30-python_Lib_site-packages_pip__vendor_packaging_LICENSE",
+          "kind": "license",
+          "sizeBytes": 197,
+          "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+        },
+        {
+          "path": "runtime/31-python_Lib_site-packages_pip__vendor_packaging_LICENSE.APACHE",
+          "kind": "license",
+          "sizeBytes": 10174,
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        },
+        {
+          "path": "runtime/32-python_Lib_site-packages_pip__vendor_packaging_LICENSE.BSD",
+          "kind": "license",
+          "sizeBytes": 1344,
+          "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+        },
+        {
+          "path": "runtime/33-python_Lib_site-packages_pip__vendor_pkg_resources_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1023,
+          "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+        },
+        {
+          "path": "runtime/34-python_Lib_site-packages_pip__vendor_platformdirs_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1089,
+          "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6"
+        },
+        {
+          "path": "runtime/35-python_Lib_site-packages_pip__vendor_pygments_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1331,
+          "sha256": "a9d66f1d526df02e29dce73436d34e56e8632f46c275bbdffc70569e882f9f17"
+        },
+        {
+          "path": "runtime/36-python_Lib_site-packages_pip__vendor_pyproject_hooks_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1081,
+          "sha256": "1b22b049b5267d6dfc23a67bf4a84d8ec04b9fdfb1a51d360e42b4342c8b4154"
+        },
+        {
+          "path": "runtime/37-python_Lib_site-packages_pip__vendor_requests_LICENSE",
+          "kind": "license",
+          "sizeBytes": 10142,
+          "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
+        },
+        {
+          "path": "runtime/38-python_Lib_site-packages_pip__vendor_resolvelib_LICENSE",
+          "kind": "license",
+          "sizeBytes": 751,
+          "sha256": "f388fd38cad13112c1dc0f669bbe80e7f84541edbafb72f3030d2ca7642c3c9d"
+        },
+        {
+          "path": "runtime/39-python_Lib_site-packages_pip__vendor_rich_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1056,
+          "sha256": "deed7c17a4318158190a3ea239cc879a5a50271cebb98ae7025f48fbe58dca15"
+        },
+        {
+          "path": "runtime/40-python_Lib_site-packages_pip__vendor_tomli_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1072,
+          "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+        },
+        {
+          "path": "runtime/41-python_Lib_site-packages_pip__vendor_tomli_w_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1072,
+          "sha256": "b80816b0d530b8accb4c2211783790984a6e3b61922c2b5ee92f3372ab2742fe"
+        },
+        {
+          "path": "runtime/42-python_Lib_site-packages_pip__vendor_truststore_LICENSE",
+          "kind": "license",
+          "sizeBytes": 1086,
+          "sha256": "33be7b7e8fa4fd19b1760e1a8ed8a668bdab852c91b692dd41424bcb725a9fca"
+        },
+        {
+          "path": "runtime/43-python_Lib_site-packages_pip__vendor_urllib3_LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 1093,
+          "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686"
+        },
+        {
+          "path": "runtime/44-python_tcl_tk8.6_demos_license.terms",
+          "kind": "license",
+          "sizeBytes": 2307,
+          "sha256": "0d1e4405f6273f091732764ed89b57066be63ce64869be6c71ea337dc4f2f9b5"
+        },
+        {
+          "path": "runtime/45-python_tcl_tk8.6_license.terms",
+          "kind": "license",
+          "sizeBytes": 2307,
+          "sha256": "0d1e4405f6273f091732764ed89b57066be63ce64869be6c71ea337dc4f2f9b5"
+        },
+        {
+          "path": "runtime/python-build-standalone-MPL-2.0.txt",
+          "kind": "license",
+          "sizeBytes": 16725,
+          "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:aiohappyeyeballs",
+      "licenseExpression": "PSF-2.0",
+      "files": [
+        {
+          "path": "wheels/aiohappyeyeballs/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 13936,
+          "sha256": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:aiohttp",
+      "licenseExpression": "Apache-2.0 AND MIT",
+      "files": [
+        {
+          "path": "wheels/aiohttp/01-LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 11514,
+          "sha256": "ea195371abbf66a39eef56600955d1137c2c196dc144ffec46b6ea530ce70044"
+        },
+        {
+          "path": "wheels/aiohttp/02-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1091,
+          "sha256": "279012e02a10acfd59a3f2d8f13a497332535d871c2b27c89988985b06a3a438"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:aiosignal",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/aiosignal/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 11332,
+          "sha256": "6fd5243e92dd7f98ec69c7ac377728e74905709ff527a5bf98d6d0263c04f5b6"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:aistudio-sdk",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/aistudio-sdk/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 11358,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:annotated-types",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/annotated-types/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1083,
+          "sha256": "fe1049884b1a0d9342901e88e07f32925d24b3121d9972b6a6805fb9824b095d"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:anyio",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/anyio/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1081,
+          "sha256": "5361ac9dc58f2ef5fd2e9b09c68297c17f04950909bbc8023bdb82eacf22c2b0"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:attrs",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/attrs/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1109,
+          "sha256": "882115c95dfc2af1eeb6714f8ec6d5cbcabf667caff8729f42420da63f714e9f"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:bce-python-sdk",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/bce-python-sdk/01-Apache-2.0.txt",
+          "kind": "license",
+          "sizeBytes": 11357,
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:certifi",
+      "licenseExpression": "MPL-2.0",
+      "files": [
+        {
+          "path": "wheels/certifi/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 989,
+          "sha256": "e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:chardet",
+      "licenseExpression": "0BSD",
+      "files": [
+        {
+          "path": "wheels/chardet/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 653,
+          "sha256": "0517f574b0183d991eb7a9ec5dbf0add8d8ade5ac00341bd28ca0c18914d52e5"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:charset-normalizer",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/charset-normalizer/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1092,
+          "sha256": "18577485d3704f1a479ded8e573c0976cfed315fd2fd17983fa988da4c2f70d1"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:click",
+      "licenseExpression": "BSD-3-Clause",
+      "files": [
+        {
+          "path": "wheels/click/01-LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 1475,
+          "sha256": "9a8ad106a394e853bfe21f42f4e72d592819a22805d991b5f3275029292b658d"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:colorama",
+      "licenseExpression": "BSD-3-Clause",
+      "files": [
+        {
+          "path": "wheels/colorama/01-LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 1491,
+          "sha256": "cac35c02686e5d04a5a7140bfb3b36e73aed496656e891102e428886d7930318"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:colorlog",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/colorlog/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1107,
+          "sha256": "b1d9082bc483623fd59fc7279b457f0e40d942a76426cde257239e04dfe4125a"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:crc32c",
+      "licenseExpression": "LGPL-2.1-or-later",
+      "files": [
+        {
+          "path": "wheels/crc32c/01-AUTHORS.google-crc32c",
+          "kind": "notice",
+          "sizeBytes": 424,
+          "sha256": "ef70733bd20d778043fbf723a22fcdc5e7c910a527557cdf5c9844ca89c01055"
+        },
+        {
+          "path": "wheels/crc32c/02-LICENSE",
+          "kind": "license",
+          "sizeBytes": 27032,
+          "sha256": "1e7e6bae5a5bde32f1ae5a7c37a082d1ab03cf89354f7f936ac40be9e39a6531"
+        },
+        {
+          "path": "wheels/crc32c/03-LICENSE.google-crc32c",
+          "kind": "license",
+          "sizeBytes": 1488,
+          "sha256": "7014dc6fc709b9c455fe035c28323ee8b300b71bf315ff883c4051f28ffc81fe"
+        },
+        {
+          "path": "wheels/crc32c/04-LICENSE.slice-by-8",
+          "kind": "license",
+          "sizeBytes": 1944,
+          "sha256": "c520296236014f5358e0bcdb031667783021af8a8ee000c65784a648c7b0e3a6"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:filelock",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/filelock/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1088,
+          "sha256": "608c89d5060ae9921adccf3236695bc654a9946e12323ef6c021dfa04e294d48"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:frozenlist",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/frozenlist/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 11332,
+          "sha256": "6fd5243e92dd7f98ec69c7ac377728e74905709ff527a5bf98d6d0263c04f5b6"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:fsspec",
+      "licenseExpression": "BSD-3-Clause",
+      "files": [
+        {
+          "path": "wheels/fsspec/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1513,
+          "sha256": "2dc35496ce53a7307915c008a844aad53e772b49b34cdd00445067691407ec94"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:future",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/future/01-LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 1075,
+          "sha256": "beba04103c3a9fff928b59c77d5fbeb03a3e4bd0d7ac3d1e1f8994a21e30ee3b"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:h11",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/h11/01-LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 1124,
+          "sha256": "37db5bb85926db28a427a25867f10b1232003aea1be69ccb851138adb8e6f361"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:hf-xet",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/hf-xet/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 11558,
+          "sha256": "1eb85fc97224598dad1852b5d6483bbcf0aa8608790dcc657a5a2a761ae9c8c6"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:httpcore",
+      "licenseExpression": "BSD-3-Clause",
+      "files": [
+        {
+          "path": "wheels/httpcore/01-LICENSE.md",
+          "kind": "license",
+          "sizeBytes": 1518,
+          "sha256": "fdcb59154c74cbaba16a11242f7740bea9f23d6feb5547917d8c5f94a80392a5"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:httpx",
+      "licenseExpression": "BSD-3-Clause",
+      "files": [
+        {
+          "path": "wheels/httpx/01-LICENSE.md",
+          "kind": "license",
+          "sizeBytes": 1508,
+          "sha256": "4ec59d544f12b5f539a3a716fd321ac58ccd8030b465221f2c880200cdf28d8d"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:huggingface-hub",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/huggingface-hub/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 11357,
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:idna",
+      "licenseExpression": "BSD-3-Clause",
+      "files": [
+        {
+          "path": "wheels/idna/01-LICENSE.md",
+          "kind": "license",
+          "sizeBytes": 1541,
+          "sha256": "1a9a4f0e3d479a27240ddd59a9137a66ab4a0f9dfdc8ca6188cc0bfd85187f04"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:imagesize",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/imagesize/01-LICENSE.rst",
+          "kind": "license",
+          "sizeBytes": 1120,
+          "sha256": "d0659c2767a164c2bf2736ee9f7bb619e0f165c89a962839de53fd5f77f62f4e"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:modelscope",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/modelscope/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 11358,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:modelscope-hub",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/modelscope-hub/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 11358,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:multidict",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/multidict/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 611,
+          "sha256": "93d11a968e2f0f36373c40811ff6d20e173f58c3cab5884cd6617bbfd795492a"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:networkx",
+      "licenseExpression": "BSD-3-Clause",
+      "files": [
+        {
+          "path": "wheels/networkx/01-LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 1763,
+          "sha256": "3cf7c3a179d817b23b8b8568211769fefdf93797d207d984b8b2fa24d0220b33"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:numpy",
+      "licenseExpression": "LicenseRef-Pige-NumPy-2.3.5-Windows-x64-Binary-Inventory",
+      "files": [
+        {
+          "path": "wheels/numpy/01-LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 46841,
+          "sha256": "596b953e1dcbe829b32ae444387efa15003fc6abdeca8a2179f364a6364c286e"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:opencv-contrib-python",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/opencv-contrib-python/01-LICENSE-3RD-PARTY.txt",
+          "kind": "license",
+          "sizeBytes": 155450,
+          "sha256": "0b33c5be17819d10ecad11360c6f2bd5a7df7c0f80a3314a81e28070d93818e2"
+        },
+        {
+          "path": "wheels/opencv-contrib-python/02-LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 1090,
+          "sha256": "edef0fac1eb08d29d34563f724742e078da2513e196133a12c6ad9ff01e26107"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:opt-einsum",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/opt-einsum/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1080,
+          "sha256": "7b26691a7c8ee48af425a53cbaeaabc9aa3a84ea2e93fe47a1ecc550c1de76db"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:packaging",
+      "licenseExpression": "Apache-2.0 OR BSD-2-Clause",
+      "files": [
+        {
+          "path": "wheels/packaging/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 197,
+          "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+        },
+        {
+          "path": "wheels/packaging/02-LICENSE.APACHE",
+          "kind": "license",
+          "sizeBytes": 10174,
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        },
+        {
+          "path": "wheels/packaging/03-LICENSE.BSD",
+          "kind": "license",
+          "sizeBytes": 1344,
+          "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:paddleocr",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/paddleocr/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 11376,
+          "sha256": "3840c5c0c61c294264d2dd77b8777be6ddd90121ef4e0e64abcd22edea581d6e"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:paddlepaddle",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/paddlepaddle/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 11641,
+          "sha256": "60bb8ca6ee9ccc739508c518a1f03d923fa06d15c73bfb13c56032dc177d8bf3"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:paddlex",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/paddlex/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 11325,
+          "sha256": "accc36c817ac5ede473d05732e14afc11cb6e55ef5919bc826b653f631165043"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:pandas",
+      "licenseExpression": "BSD-3-Clause",
+      "files": [
+        {
+          "path": "wheels/pandas/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1634,
+          "sha256": "9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:pillow",
+      "licenseExpression": "MIT-CMU",
+      "files": [
+        {
+          "path": "wheels/pillow/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 78016,
+          "sha256": "4f7866a74802c6326f81faff59a56546b6aec2b10b91973e0e9308de95e79857"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:prettytable",
+      "licenseExpression": "BSD-3-Clause",
+      "files": [
+        {
+          "path": "wheels/prettytable/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1612,
+          "sha256": "0c8adcc204c8af6cdfdf7887dfd1f99c29901f6c1d505a78bba96efa4fb2cb05"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:propcache",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/propcache/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 11358,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "wheels/propcache/02-NOTICE",
+          "kind": "notice",
+          "sizeBytes": 609,
+          "sha256": "56d6ac6c8105c0a51304c21db060e361af9a8ea0af9a75c239c28b5d13693838"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:protobuf",
+      "licenseExpression": "BSD-3-Clause",
+      "files": [
+        {
+          "path": "wheels/protobuf/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1732,
+          "sha256": "6e5e117324afd944dcf67f36cf329843bc1a92229a8cd9bb573d7a83130fea7d"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:psutil",
+      "licenseExpression": "BSD-3-Clause",
+      "files": [
+        {
+          "path": "wheels/psutil/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1577,
+          "sha256": "c7adc4d5d1337a548b967421f1fbe258b93033a0417708fd6f4e38f8ecbceb80"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:py-cpuinfo",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/py-cpuinfo/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1127,
+          "sha256": "ddbaf76396bf5c7aa45975a21eafe2e22eecb7da5aa0db7cb0e6152faafef34d"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:pyclipper",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/pyclipper/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1131,
+          "sha256": "73c25539e7fb486b834c33747d579e0bc56c0f984294c88f3cb2329420ba300f"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:pycryptodome",
+      "licenseExpression": "BSD-2-Clause AND LicenseRef-Pige-Public-Domain-Dedication",
+      "files": [
+        {
+          "path": "wheels/pycryptodome/01-AUTHORS.rst",
+          "kind": "notice",
+          "sizeBytes": 815,
+          "sha256": "ac94de284f1522aee4f3e7e301e68af190786b4c8388d1a60cba4a3a1bbe3465"
+        },
+        {
+          "path": "wheels/pycryptodome/02-LICENSE.rst",
+          "kind": "license",
+          "sizeBytes": 2987,
+          "sha256": "60b8958a9ef9b7ec512087b725555372175ed2b02b969f8725b8534fde48acdd"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:pydantic",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/pydantic/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1129,
+          "sha256": "a9e186f3ca16b5eef84318e7a701721351a00cb7b8ae3a4394b67b49e3529ef3"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:pydantic-core",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/pydantic-core/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1101,
+          "sha256": "fbe7f615f18d135c07000e5a86325db27f42c7729699ef166ac1f7a3f4586bf4"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:pypdfium2",
+      "licenseExpression": "LicenseRef-Pige-pypdfium2-5.12.1-Windows-x64-Wheel-License-Inventory",
+      "files": [
+        {
+          "path": "wheels/pypdfium2/01-Apache-2.0.txt",
+          "kind": "license",
+          "sizeBytes": 11560,
+          "sha256": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5"
+        },
+        {
+          "path": "wheels/pypdfium2/02-BSD-3-Clause.txt",
+          "kind": "license",
+          "sizeBytes": 1485,
+          "sha256": "ad9a9e823df025f42389c1812eae28019f657d1ed7b3a4ebfd5010b0736a0da4"
+        },
+        {
+          "path": "wheels/pypdfium2/03-CC-BY-4.0.txt",
+          "kind": "license",
+          "sizeBytes": 14844,
+          "sha256": "f1b1748301cd4274f46733c218d510929661b4990855de5fc645dacd69c4371c"
+        },
+        {
+          "path": "wheels/pypdfium2/04-abseil.txt",
+          "kind": "license",
+          "sizeBytes": 11564,
+          "sha256": "f54fff0b905df5b3464527c652a30e903b172d6dcab4d89b5e6f105d5e4a4603"
+        },
+        {
+          "path": "wheels/pypdfium2/05-agg23.txt",
+          "kind": "license",
+          "sizeBytes": 725,
+          "sha256": "c110d3ea2ad77467ce0dcff7d3337e6c8be8049a5103f4b9bd5fd911a77972e5"
+        },
+        {
+          "path": "wheels/pypdfium2/06-fast_float.txt",
+          "kind": "license",
+          "sizeBytes": 1106,
+          "sha256": "bf1b57355feca8fce77ee95f48002f8d4789fb71b30ec7599c06cda4901fbb2b"
+        },
+        {
+          "path": "wheels/pypdfium2/07-freetype.txt",
+          "kind": "license",
+          "sizeBytes": 6741,
+          "sha256": "f4b133e25df1f86ad3ffea453aa0e613f0474f34778dbbb3e437e7b2724937d8"
+        },
+        {
+          "path": "wheels/pypdfium2/08-icu.txt",
+          "kind": "license",
+          "sizeBytes": 28286,
+          "sha256": "93679f4389d53b6835d89843f251844fb9bc455b35bab036d3c8e7abe497a47a"
+        },
+        {
+          "path": "wheels/pypdfium2/09-lcms.txt",
+          "kind": "license",
+          "sizeBytes": 1353,
+          "sha256": "7312b68c5b25e9bf2b828706fb4e29588f22705112f411fd42e1f7d84c3d139a"
+        },
+        {
+          "path": "wheels/pypdfium2/10-libjpeg_turbo.ijg",
+          "kind": "license",
+          "sizeBytes": 13059,
+          "sha256": "db16a04128171879c60708d171b88d97345a2dd20f9bfc173680a4497c73f704"
+        },
+        {
+          "path": "wheels/pypdfium2/11-libjpeg_turbo.md",
+          "kind": "license",
+          "sizeBytes": 5755,
+          "sha256": "be2b2b5ab168bce87bc3e31f2a5c5adba4b7f6e9e51d618e958d1d46972ebd95"
+        },
+        {
+          "path": "wheels/pypdfium2/12-libopenjpeg.txt",
+          "kind": "license",
+          "sizeBytes": 1794,
+          "sha256": "c5ab0890a737c2dfa7ba675036554f6d17741d98629b0c2a145354d00617e6b2"
+        },
+        {
+          "path": "wheels/pypdfium2/13-libpng.txt",
+          "kind": "license",
+          "sizeBytes": 5479,
+          "sha256": "452390433ba0f88aa3e2b122c647741b72a0c117cd6ed7a329b49785aecb5511"
+        },
+        {
+          "path": "wheels/pypdfium2/14-libtiff.txt",
+          "kind": "license",
+          "sizeBytes": 1139,
+          "sha256": "92b72ba97e6c2749c2a94bc0ef646b47080217f1e772a482b33cf5a5f98a6506"
+        },
+        {
+          "path": "wheels/pypdfium2/15-llvm-libc.txt",
+          "kind": "license",
+          "sizeBytes": 15418,
+          "sha256": "3b6226c32e168c83b891d8d6f0d3c29c2116dc3ef93dc93c307b54f279ecf383"
+        },
+        {
+          "path": "wheels/pypdfium2/16-pdfium-binaries.txt",
+          "kind": "license",
+          "sizeBytes": 1184,
+          "sha256": "8854f4388f1ca13b3ad9baa42e95f5546b4c0b17109c159256d3eca7be39b09b"
+        },
+        {
+          "path": "wheels/pypdfium2/17-pdfium.txt",
+          "kind": "license",
+          "sizeBytes": 12818,
+          "sha256": "961eacd9633fff6d051db7208b755e9210e30efac7adec3e6a6d52798f0ccf0e"
+        },
+        {
+          "path": "wheels/pypdfium2/18-simdutf.txt",
+          "kind": "license",
+          "sizeBytes": 1077,
+          "sha256": "c172a0ba936ff31230febb5dad869e25cb7c1a07480c7a381be8cf011bb52719"
+        },
+        {
+          "path": "wheels/pypdfium2/19-zlib.txt",
+          "kind": "license",
+          "sizeBytes": 1332,
+          "sha256": "33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:python-bidi",
+      "licenseExpression": "LGPL-3.0-or-later AND LicenseRef-Pige-python-bidi-0.6.11-Rust-Third-Party-Inventory",
+      "files": [
+        {
+          "path": "wheels/python-bidi/01-AUTHORS.rst",
+          "kind": "notice",
+          "sizeBytes": 386,
+          "sha256": "122365f20f8eba731da2cfd675c97f18bb468f83a56b949d3adcccf632ee7d9b"
+        },
+        {
+          "path": "wheels/python-bidi/02-COPYING",
+          "kind": "license",
+          "sizeBytes": 35821,
+          "sha256": "0b383d5a63da644f628d99c33976ea6487ed89aaa59f0b3257992deac1171e6b"
+        },
+        {
+          "path": "wheels/python-bidi/03-COPYING.LESSER",
+          "kind": "license",
+          "sizeBytes": 7816,
+          "sha256": "ea7d049c7705dc13afc202dd18e1827f3484f8212fd3fa7b82fc4a0c363432c9"
+        },
+        {
+          "path": "wheels/python-bidi/04-LICENSE-THIRD-PARTY.yml",
+          "kind": "license",
+          "sizeBytes": 2924,
+          "sha256": "8244dd3fec5774632922cc1593a1f6e124ff0fc3ce010ee874bec2640ee839a5"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:python-dateutil",
+      "licenseExpression": "Apache-2.0 AND BSD-3-Clause",
+      "files": [
+        {
+          "path": "wheels/python-dateutil/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 2889,
+          "sha256": "ba00f51a0d92823b5a1cde27d8b5b9d2321e67ed8da9bc163eff96d5e17e577e"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:pyyaml",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/pyyaml/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1101,
+          "sha256": "8d3928f9dc4490fd635707cb88eb26bd764102a7282954307d3e5167a577e8a4"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:requests",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/requests/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 10142,
+          "sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b"
+        },
+        {
+          "path": "wheels/requests/02-NOTICE",
+          "kind": "notice",
+          "sizeBytes": 38,
+          "sha256": "f5110972dedad2b4e9d314518daf3b7d72d6e02e499acd802181de6f74571dcc"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:ruamel-yaml",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/ruamel-yaml/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1121,
+          "sha256": "3e7632bb0dc1150f15f8161f5eec48dec8a99aaa1dfc9e8f63c02931e0fba7f8"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:safetensors",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/safetensors/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 11558,
+          "sha256": "1eb85fc97224598dad1852b5d6483bbcf0aa8608790dcc657a5a2a761ae9c8c6"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:setuptools",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/setuptools/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1023,
+          "sha256": "86da0f01aeae46348a3c3d465195dc1ceccde79f79e87769a64b8da04b2a4741"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:shapely",
+      "licenseExpression": "BSD-3-Clause",
+      "files": [
+        {
+          "path": "wheels/shapely/01-LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 1612,
+          "sha256": "e8cd7d34604d2758ff589f0f34d6ed79c3f7fb14aaf5e12fb09221421391a3bf"
+        },
+        {
+          "path": "wheels/shapely/02-LICENSE_GEOS",
+          "kind": "license",
+          "sizeBytes": 27295,
+          "sha256": "91a5bb11df4d44bfddc0c68db43681705326107781599fb6c6ff821042072d64"
+        },
+        {
+          "path": "wheels/shapely/03-LICENSE_win32",
+          "kind": "license",
+          "sizeBytes": 1179,
+          "sha256": "9b30cd1a09789884dd54e5828e31d2bf8e6879034e7cf7b6e0321444cf6dd11d"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:six",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/six/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1066,
+          "sha256": "4375ba20e2b9c6c4e7cad2940a628fd90e95cc3d50ee92aae755715d8ba1fbd0"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:tqdm",
+      "licenseExpression": "MPL-2.0 AND MIT",
+      "files": [
+        {
+          "path": "wheels/tqdm/01-LICENCE",
+          "kind": "license",
+          "sizeBytes": 1985,
+          "sha256": "fcff87c3a47ce8028a8512aa182d4fcf0ad1c90544ee75cf9b343684cac194de"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:typing-extensions",
+      "licenseExpression": "PSF-2.0",
+      "files": [
+        {
+          "path": "wheels/typing-extensions/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 13936,
+          "sha256": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:typing-inspection",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/typing-inspection/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1090,
+          "sha256": "804b59b25f2c31bd278f9202a19ae49a3945aa2664387e2d0a128c7cacc61ec3"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:tzdata",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/tzdata/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 625,
+          "sha256": "df58f69ea88683035d720b5375bcef0cf5aeaa98a1d098d572e0992c378deb46"
+        },
+        {
+          "path": "wheels/tzdata/02-LICENSE_APACHE",
+          "kind": "license",
+          "sizeBytes": 11357,
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:ujson",
+      "licenseExpression": "BSD-3-Clause AND TCL",
+      "files": [
+        {
+          "path": "wheels/ujson/01-LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 6089,
+          "sha256": "7cde8b8e921a7670b0825feee800d07c33cb6515569b4e5bcf56bd77da80ae05"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:urllib3",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/urllib3/01-LICENSE.txt",
+          "kind": "license",
+          "sizeBytes": 1093,
+          "sha256": "130e3a64d5fdd5d096a752694634a7d9df284469de86e5732100268041e3d686"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:wcwidth",
+      "licenseExpression": "MIT",
+      "files": [
+        {
+          "path": "wheels/wcwidth/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 1322,
+          "sha256": "70b98a95a2144eb70af8017fa8c6d95ce247e40867436e8bc649e137fe13d21a"
+        }
+      ]
+    },
+    {
+      "componentId": "wheel:yarl",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wheels/yarl/01-LICENSE",
+          "kind": "license",
+          "sizeBytes": 11358,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "wheels/yarl/02-NOTICE",
+          "kind": "notice",
+          "sizeBytes": 609,
+          "sha256": "56d6ac6c8105c0a51304c21db060e361af9a8ea0af9a75c239c28b5d13693838"
+        }
+      ]
+    },
+    {
+      "componentId": "wrapper:pige",
+      "licenseExpression": "Apache-2.0",
+      "files": [
+        {
+          "path": "wrapper/LICENSE-Apache-2.0.txt",
+          "kind": "license",
+          "sizeBytes": 11357,
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ]
+    }
+  ]
+}

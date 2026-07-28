@@ -59,6 +59,22 @@ import type {
   LocalSemanticRetrievalRemoveResult,
   LocalSemanticRetrievalStatus,
   LocalSemanticRetrievalStatusRequest,
+  PaddleOcrCatalogComponent,
+  PaddleOcrDisableRequest,
+  PaddleOcrDisableResult,
+  PaddleOcrEnableRequest,
+  PaddleOcrEnableResult,
+  PaddleOcrInstallRequest,
+  PaddleOcrInstallResult,
+  PaddleOcrLifecycleAction,
+  PaddleOcrLifecycleState,
+  PaddleOcrRemoveRequest,
+  PaddleOcrRemoveResult,
+  PaddleOcrRequestId,
+  PaddleOcrSummary,
+  PaddleOcrSummaryRequest,
+  PaddleOcrTestRequest,
+  PaddleOcrTestResult,
   MemoryDeleteRequest,
   MemoryDisableRequest,
   MemoryEnableRequest,
@@ -289,6 +305,22 @@ export type {
   LocalSemanticRetrievalRequestId,
   LocalSemanticRetrievalStatus,
   LocalSemanticRetrievalStatusRequest,
+  PaddleOcrCatalogComponent,
+  PaddleOcrDisableRequest,
+  PaddleOcrDisableResult,
+  PaddleOcrEnableRequest,
+  PaddleOcrEnableResult,
+  PaddleOcrInstallRequest,
+  PaddleOcrInstallResult,
+  PaddleOcrLifecycleAction,
+  PaddleOcrLifecycleState,
+  PaddleOcrRemoveRequest,
+  PaddleOcrRemoveResult,
+  PaddleOcrRequestId,
+  PaddleOcrSummary,
+  PaddleOcrSummaryRequest,
+  PaddleOcrTestRequest,
+  PaddleOcrTestResult,
   RetrievalSearchRequest,
   RetrievalSearchResult,
   RetrievalSearchResultItem,
@@ -458,7 +490,7 @@ export interface AgentRuntimePolicyContext {
   readonly localCapabilities: {
     readonly localDatabase: "not_initialized" | "ready" | "needs_rebuild" | "error";
     readonly parserToolchainReady: boolean;
-    readonly ocrEngines: readonly ("apple_vision" | "windows_ai" | "paddleocr")[];
+    readonly ocrEngines: readonly ("apple_vision" | "windows_ai" | "paddleocr_local")[];
     readonly speechInputAvailable: boolean;
     readonly embeddingModelInstalled: boolean;
     readonly hiddenDownloadsAllowed: false;
@@ -1605,6 +1637,26 @@ export interface PigeDesktopApi {
     readonly openSourceReference: (
       request: NoteOpenSourceReferenceRequest
     ) => Promise<NoteOpenSourceReferenceResult>;
+  };
+  readonly localCapabilities: {
+    readonly paddleOcrSummary: (
+      request: PaddleOcrSummaryRequest
+    ) => Promise<PaddleOcrSummary>;
+    readonly installPaddleOcr: (
+      request: PaddleOcrInstallRequest
+    ) => Promise<PaddleOcrInstallResult>;
+    readonly enablePaddleOcr: (
+      request: PaddleOcrEnableRequest
+    ) => Promise<PaddleOcrEnableResult>;
+    readonly testPaddleOcr: (
+      request: PaddleOcrTestRequest
+    ) => Promise<PaddleOcrTestResult>;
+    readonly disablePaddleOcr: (
+      request: PaddleOcrDisableRequest
+    ) => Promise<PaddleOcrDisableResult>;
+    readonly removePaddleOcr: (
+      request: PaddleOcrRemoveRequest
+    ) => Promise<PaddleOcrRemoveResult>;
   };
   readonly retrieval: {
     readonly search: (request: RetrievalSearchRequest) => Promise<RetrievalSearchResult>;

@@ -13,5 +13,8 @@ Current manifests:
 - `office-openxml.parser.manifest.json`: bundled DOCX/PPTX semantic and OpenXML extraction adapter.
 - `web-readability.parser.manifest.json`: bundled inert HTML/Readability article extraction adapter.
 - `macos-vision-ocr.helper.manifest.json`: app-owned macOS 26 Apple Vision OCR helper and stdin/stdout protocol.
+- `paddleocr-local.parser.manifest.json`: PaddleOCR signing, inputs, and release gate.
+- `paddleocr-local.macos-arm64.selected-wheels.lock.json` and
+  `paddleocr-local.windows-x64.selected-wheels.lock.json`: exact wheels/legal; texts are in `resources/licenses/paddleocr/`.
 
 Review this index whenever a parser/OCR adapter, dependency manifest, or supported source kind changes.

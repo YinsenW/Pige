@@ -90,6 +90,54 @@ describe("PPTX media OCR artifact service", () => {
     )).toMatchObject({ created: false, agentTextReady: true });
   });
 
+  it("persists Paddle identity and rejects mismatched or unknown OCR identities", async () => {
+    const setup = await makeParsedPptx();
+    const service = new PptxMediaOcrArtifactService();
+    const target = await service.resolveTarget(setup.vaultPath, setup.sourceRecord);
+    const paddle = itemResult(target.targets[0]!, "Paddle slide evidence", "paddle");
+    const invalidResults = [
+      { ...paddle, result: { ...paddle.result, engine: "macos_vision_document" } },
+      { ...paddle, result: { ...paddle.result, adapterId: "unknown_ocr" } }
+    ] as unknown as readonly PptxMediaOcrItemResult[];
+    for (const invalid of invalidResults) {
+      await expect(service.persist(
+        setup.vaultPath,
+        setup.sourceRecord,
+        setup.sourceRecordPath,
+        setup.ocrJob,
+        [invalid]
+      )).rejects.toMatchObject({ code: "ocr.pptx.result_invalid" });
+    }
+
+    await service.persist(
+      setup.vaultPath,
+      setup.sourceRecord,
+      setup.sourceRecordPath,
+      setup.ocrJob,
+      [paddle]
+    );
+    const finalRecord = readSourceRecord(setup.sourceRecordPath);
+    const metadataArtifact = requireValue(finalRecord.artifacts.find((artifact) => artifact.id.endsWith("_pptx_media_ocr_metadata")));
+    const sidecar = JSON.parse(fs.readFileSync(path.join(setup.vaultPath, metadataArtifact.path), "utf8")) as Record<string, unknown>;
+
+    expect(finalRecord.metadata).toMatchObject({
+      ocrAdapterId: "paddleocr_local",
+      ocrAdapterVersion: "1.0.0",
+      ocrEngine: "Paddle",
+      ocrEngineVersions: ["3.2.0"]
+    });
+    expect(sidecar).toMatchObject({
+      adapter: { id: "paddleocr_local", version: "1.0.0" },
+      media: [{ engine: { id: "Paddle", version: "3.2.0" } }]
+    });
+    expect(await service.readExisting(
+      setup.vaultPath,
+      finalRecord,
+      setup.sourceRecordPath,
+      setup.ocrJob
+    )).toMatchObject({ created: false });
+  });
+
   it("keeps useful native slide text ready when selected media OCR is empty", async () => {
     const setup = await makeParsedPptx();
     const service = new PptxMediaOcrArtifactService();
@@ -356,20 +404,24 @@ async function makeParsedPptx(): Promise<{
   };
 }
 
-function itemResult(target: OfficeMediaTarget, text: string): PptxMediaOcrItemResult {
+function itemResult(
+  target: OfficeMediaTarget,
+  text: string,
+  adapter: "macos" | "paddle" = "macos"
+): PptxMediaOcrItemResult {
   return {
     target,
     mediaChecksum: checksum(TINY_PNG),
     mediaSize: TINY_PNG.length,
-    result: nativeResult(text)
+    result: nativeResult(text, adapter)
   };
 }
 
-function nativeResult(text: string): NativeOcrResult {
+function nativeResult(text: string, adapter: "macos" | "paddle" = "macos"): NativeOcrResult {
   return {
-    engine: "macos_vision_document",
-    engineVersion: "revision1",
-    adapterVersion: "1.0.0",
+    ...(adapter === "paddle"
+      ? { adapterId: "paddleocr_local", adapterVersion: "1.0.0", engine: "Paddle", engineVersion: "3.2.0" }
+      : { adapterId: "macos_vision_ocr", adapterVersion: "1.0.0", engine: "macos_vision_document", engineVersion: "revision1" }),
     text,
     blocks: text ? [{
       text,

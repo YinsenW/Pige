@@ -4,8 +4,9 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { VaultSummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import { JobRecordSchema, type JobRecord } from "@pige/schemas";
+import { JobRecordSchema, SourceRecordSchema, type JobRecord } from "@pige/schemas";
 import { JobsService, type JobsVaultPort } from "../../apps/desktop/src/main/services/jobs-service";
+import { OcrArtifactService } from "../../apps/desktop/src/main/services/ocr-artifact-service";
 import { OcrService, type NativeImageOcrAdapterPort, type OcrPort } from "../../apps/desktop/src/main/services/ocr-service";
 import type { NativeOcrResult } from "../../apps/desktop/src/main/services/ocr-types";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
@@ -18,6 +19,55 @@ afterEach(() => {
 });
 
 describe("OCR executor integration", () => {
+  it("persists Paddle identity and rejects mismatched or unknown OCR identities", async () => {
+    const fixture = makeVault("PaddleIdentity");
+    const captured = await preserveImage(fixture, "paddle.png");
+    const sourceRecordPath = requireValue(findFiles(
+      path.join(fixture.vaultPath, ".pige", "source-records"),
+      `${captured.sourceId}.json`
+    )[0]);
+    const sourceRecord = SourceRecordSchema.parse(JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")));
+    const job = readJob(jobPath(fixture.vaultPath, captured.ocrJobId));
+    const paddle = ocrResult("paddle");
+    const invalidResults = [
+      { ...paddle, engine: "macos_vision_document" },
+      { ...paddle, adapterId: "unknown_ocr" }
+    ] as unknown as readonly NativeOcrResult[];
+    for (const invalid of invalidResults) {
+      await expect(new OcrArtifactService().persist(
+        fixture.vaultPath,
+        sourceRecord,
+        sourceRecordPath,
+        job,
+        invalid
+      )).rejects.toMatchObject({ code: "ocr.invalid_result" });
+    }
+
+    const jobs = new JobsService(
+      fixture.vaultPort,
+      undefined,
+      undefined,
+      undefined,
+      new OcrService(new StaticOcrAdapter(paddle))
+    );
+    expect(await jobs.ocrExecutor().process({ jobIds: [captured.ocrJobId] }))
+      .toMatchObject({ processed: 1, completed: 1, failed: 0 });
+    const finalRecord = SourceRecordSchema.parse(JSON.parse(fs.readFileSync(sourceRecordPath, "utf8")));
+    const metadataArtifact = requireValue(finalRecord.artifacts.find((artifact) => artifact.id.endsWith("_ocr_metadata")));
+    const sidecar = JSON.parse(fs.readFileSync(path.join(fixture.vaultPath, metadataArtifact.path), "utf8")) as Record<string, unknown>;
+
+    expect(finalRecord.metadata).toMatchObject({
+      ocrAdapterId: "paddleocr_local",
+      ocrAdapterVersion: "1.0.0",
+      ocrEngine: "Paddle",
+      ocrEngineVersion: "3.2.0"
+    });
+    expect(sidecar).toMatchObject({
+      adapter: { id: "paddleocr_local", version: "1.0.0" },
+      engine: { id: "Paddle", version: "3.2.0" }
+    });
+  });
+
   it("adopts one durable OCR effect into the same Job after settlement CAS contention", async () => {
     const fixture = makeVault("OcrAdoption");
     const captured = await preserveImage(fixture, "adoption.png");
@@ -148,16 +198,23 @@ interface VaultFixture {
 class StaticOcrAdapter implements NativeImageOcrAdapterPort {
   calls = 0;
 
+  constructor(readonly result: NativeOcrResult = ocrResult("macos")) {}
+
   isAvailable(): boolean {
     return true;
   }
 
   async recognize(): Promise<NativeOcrResult> {
     this.calls += 1;
-    return {
-      engine: "macos_vision_document",
-      engineVersion: "synthetic-1",
-      adapterVersion: "1.0.0",
+    return this.result;
+  }
+}
+
+function ocrResult(adapter: "macos" | "paddle"): NativeOcrResult {
+  return {
+      ...(adapter === "paddle"
+        ? { adapterId: "paddleocr_local", adapterVersion: "1.0.0", engine: "Paddle", engineVersion: "3.2.0" }
+        : { adapterId: "macos_vision_ocr", adapterVersion: "1.0.0", engine: "macos_vision_document", engineVersion: "synthetic-1" }),
       text: "Durable OCR evidence.",
       blocks: [{
         text: "Durable OCR evidence.",
@@ -180,7 +237,6 @@ class StaticOcrAdapter implements NativeImageOcrAdapterPort {
         downsampled: false
       }
     };
-  }
 }
 
 function makeVault(name: string): VaultFixture {

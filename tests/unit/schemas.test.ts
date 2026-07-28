@@ -58,6 +58,19 @@ import {
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   OperationRecordSchema,
+  PADDLE_OCR_ENGINE_ID,
+  PaddleOcrDisableRequestSchema,
+  PaddleOcrDisableResultSchema,
+  PaddleOcrEnableRequestSchema,
+  PaddleOcrEnableResultSchema,
+  PaddleOcrInstallRequestSchema,
+  PaddleOcrInstallResultSchema,
+  PaddleOcrRemoveRequestSchema,
+  PaddleOcrRemoveResultSchema,
+  PaddleOcrSummaryRequestSchema,
+  PaddleOcrSummarySchema,
+  PaddleOcrTestRequestSchema,
+  PaddleOcrTestResultSchema,
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
   PiPackageRegistryQueryResultSchema,
@@ -922,6 +935,129 @@ describe("schemas", () => {
     expect(() => LocalSemanticRetrievalInstallRequestSchema.parse({
       ...request,
       assetId: "another-model"
+    })).toThrow();
+  });
+
+  it("keeps the managed PaddleOCR lifecycle catalog-bound, explicit, and renderer-safe", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "paddleocr_abcdefghijklmnop",
+      expectedRevision: 4
+    } as const;
+    const catalog = {
+      apiVersion: 1,
+      revision: 4,
+      engineId: PADDLE_OCR_ENGINE_ID,
+      state: "not_installed",
+      catalogVersion: "paddleocr-v1",
+      components: [{
+        componentId: "paddleocr-engine",
+        kind: "engine",
+        label: "PaddleOCR local engine",
+        version: "1.0.0",
+        sizeBytes: 1024
+      }],
+      downloadSizeBytes: 1024,
+      nativeOcrPreferred: true,
+      hiddenDownloadsAllowed: false,
+      canInstall: true,
+      canEnable: false,
+      canTest: false,
+      canDisable: false,
+      canRemove: false
+    } as const;
+
+    expect(PaddleOcrSummaryRequestSchema.parse({ apiVersion: 1 })).toEqual({ apiVersion: 1 });
+    for (const schema of [
+      PaddleOcrInstallRequestSchema,
+      PaddleOcrEnableRequestSchema,
+      PaddleOcrTestRequestSchema,
+      PaddleOcrDisableRequestSchema,
+      PaddleOcrRemoveRequestSchema
+    ]) {
+      expect(schema.parse(request)).toEqual(request);
+    }
+    expect(PaddleOcrSummarySchema.parse(catalog)).toEqual(catalog);
+
+    const installing = {
+      ...catalog,
+      activeAction: "install",
+      activeJobId: "job_20260728_abcdefgh",
+      canInstall: false
+    } as const;
+    expect(PaddleOcrInstallResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      engineId: PADDLE_OCR_ENGINE_ID,
+      status: "accepted",
+      jobId: installing.activeJobId,
+      summary: installing
+    })).toMatchObject({ status: "accepted", summary: { nativeOcrPreferred: true } });
+
+    const ready = {
+      ...catalog,
+      revision: 5,
+      state: "ready",
+      canInstall: false,
+      canTest: true,
+      canDisable: true,
+      canRemove: true
+    } as const;
+    expect(PaddleOcrEnableResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      engineId: PADDLE_OCR_ENGINE_ID,
+      status: "committed",
+      summary: ready
+    })).toMatchObject({ status: "committed", summary: { state: "ready" } });
+    expect(PaddleOcrTestResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      engineId: PADDLE_OCR_ENGINE_ID,
+      status: "accepted",
+      jobId: "job_20260728_ijklmnop",
+      summary: { ...ready, activeAction: "test", activeJobId: "job_20260728_ijklmnop",
+        canTest: false, canDisable: false, canRemove: false }
+    })).toMatchObject({ status: "accepted" });
+    expect(PaddleOcrDisableResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      engineId: PADDLE_OCR_ENGINE_ID,
+      status: "already_current",
+      summary: { ...ready, state: "disabled", canEnable: true, canTest: true,
+        canDisable: false, canRemove: true }
+    })).toMatchObject({ status: "already_current" });
+    expect(PaddleOcrRemoveResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      engineId: PADDLE_OCR_ENGINE_ID,
+      status: "committed",
+      summary: { ...catalog, revision: 6 }
+    })).toMatchObject({ status: "committed" });
+
+    expect(() => PaddleOcrSummarySchema.parse({ ...catalog, engineId: "paddleocr" })).toThrow();
+    expect(() => PaddleOcrSummarySchema.parse({ ...catalog, canInstall: false })).toThrow();
+    expect(() => PaddleOcrSummarySchema.parse({
+      ...catalog,
+      activeAction: "install",
+      canInstall: false
+    })).toThrow();
+    for (const unsafe of [
+      { path: "/private/paddleocr" },
+      { url: "https://example.invalid/paddleocr" },
+      { sha256: "private-checksum" },
+      { pythonArgs: ["-m", "paddleocr"] },
+      { rawError: "private failure" }
+    ]) {
+      expect(() => PaddleOcrSummarySchema.parse({ ...catalog, ...unsafe })).toThrow();
+      expect(() => PaddleOcrInstallRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+    }
+    expect(() => PaddleOcrInstallResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      engineId: PADDLE_OCR_ENGINE_ID,
+      status: "failed",
+      summary: catalog
     })).toThrow();
   });
 

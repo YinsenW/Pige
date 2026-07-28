@@ -8,3 +8,6 @@
 *.pdf binary
 *.docx binary
 *.pptx binary
+
+# Preserve third-party legal evidence byte-for-byte; upstream whitespace is not source style.
+resources/licenses/** -text -whitespace conflict-marker-size=999
