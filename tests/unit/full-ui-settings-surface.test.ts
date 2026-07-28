@@ -1856,6 +1856,78 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("discloses External/Web Skill boundaries and checksums and installs it disabled", async () => {
+    const dom = createDom();
+    const vaultId = "vault_20260729_externalwebskill";
+    const manifestSha256 = `sha256:${"a".repeat(64)}` as const;
+    const bundleSha256 = `sha256:${"b".repeat(64)}` as const;
+    const fileSha256 = `sha256:${"c".repeat(64)}` as const;
+    const sourceUrl = "https://example.com/external-research/SKILL.md" as const;
+    const disclosure = {
+      kind: "external_web" as const,
+      capabilities: ["read_current_source", "external_network", "use_brokered_credential"] as const,
+      dataBoundaries: ["local", "network", "brokered_credential"] as const,
+      source: "https" as const, sourceUrl, manifestSha256, bundleSha256,
+      files: [{ relativePath: "SKILL.md" as const, utf8ByteSize: 1536, sha256: fileSha256 }],
+      warnings: ["untrusted_remote_source" as const]
+    };
+    const installed: SkillRegistrySummary["skills"][number] = {
+      id: "installed-external", name: "Installed external", version: "1.0.0",
+      description: "Uses reviewed external capabilities.", scope: "machine_local", enabled: false,
+      trust: "user_confirmed", canEnable: false, canUninstall: false, canExport: false, canUpdate: false,
+      ...disclosure
+    };
+    const staged = {
+      stagingId: `skillstage_${"d".repeat(32)}` as const, registryRevision: 9,
+      expiresAt: "2026-07-30T12:00:00.000Z", id: "staged-external", name: "Staged external",
+      version: "1.1.0", description: "Reviews an external workflow before install.",
+      scope: "machine_local" as const, ...disclosure,
+      sourceUrl: "https://example.com/staged-external/SKILL.md" as const,
+      manifestSha256: `sha256:${"d".repeat(64)}` as const,
+      bundleSha256: `sha256:${"e".repeat(64)}` as const,
+      files: [{ relativePath: "SKILL.md" as const, utf8ByteSize: 2048, sha256: `sha256:${"f".repeat(64)}` as const }]
+    };
+    const installedRegistry = skillRegistry(9, false, 0, [installed]);
+    const committedRegistry = skillRegistry(10, false, 0, [installed, {
+      ...installed, id: staged.id, name: staged.name, version: staged.version, description: staged.description,
+      sourceUrl: staged.sourceUrl, manifestSha256: staged.manifestSha256,
+      bundleSha256: staged.bundleSha256, files: staged.files
+    }]);
+    const installStaged = vi.fn(async (request: { requestId: string }) => ({
+      status: "committed" as const, requestId: request.requestId, registry: committedRegistry
+    }));
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: {
+      skills: {
+        summary: async () => ({ status: "ready" as const, registry: installedRegistry }),
+        pendingStagedReviews: async (request: object) => ({ ...request, status: "ready" as const, staged: [staged] }),
+        installStaged, discardStaged: vi.fn(), disable: vi.fn(), onChanged: () => () => undefined
+      },
+      vault: { current: async () => ({ vaultId }) }
+    } });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => { root.render(createElement(SkillsSettingsPanel, { t })); await settle(dom); await settle(dom); });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-skills"));
+    const installedRow = requireElement(page.querySelector<HTMLElement>('[data-skill-id="installed-external"]'));
+    for (const value of ["External workflow", "Local only", "Network", "Protected credential",
+      "read_current_source", "external_network", "use_brokered_credential", sourceUrl,
+      manifestSha256, bundleSha256, fileSha256, "This Skill comes from a remote source you must review."]) {
+      expect(installedRow.textContent).toContain(value);
+    }
+    const review = requireElement(page.querySelector<HTMLElement>("#skill-url-install"));
+    for (const value of [staged.name, staged.sourceUrl, staged.manifestSha256, staged.bundleSha256,
+      staged.files[0].sha256, "External workflow", "Local only", "Network", "Protected credential",
+      "read_current_source", "external_network", "use_brokered_credential"]) expect(review.textContent).toContain(value);
+    expect(installedRow.textContent).toContain("Disabled");
+    await act(async () => { buttonNamed(page, "Install Skill").click(); await settle(dom); await settle(dom); });
+    expect(installStaged).toHaveBeenCalledWith(expect.objectContaining({
+      stagingId: staged.stagingId, manifestSha256: staged.manifestSha256,
+      bundleSha256: staged.bundleSha256, expectedRegistryRevision: 9, enabled: false
+    }));
+    expect(page.querySelector('[data-skill-id="staged-external"]')?.textContent).toContain("Disabled");
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("does not replace or refocus a locally staged Skill when the chat query settles later", async () => {
     const dom = createDom();
     const vaultId = "vault_20260729_skillchatfence";

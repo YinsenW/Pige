@@ -5,22 +5,30 @@ import { PigeIcon } from "./PigeIcon";
 
 type InstalledLifecycleKind = "disable" | "enable" | "export" | "uninstall" | "update";
 
-interface InstalledLifecycleAction {
-  readonly kind: InstalledLifecycleKind;
-  readonly skillId: string;
-}
-interface UninstallConfirmation {
-  readonly skill: SkillSummary;
-  readonly expectedRevision: number;
-}
+interface InstalledLifecycleAction { readonly kind: InstalledLifecycleKind; readonly skillId: string; }
+interface UninstallConfirmation { readonly skill: SkillSummary; readonly expectedRevision: number; }
 
 type StagedSkillReview =
   | { readonly kind: "install"; readonly source: "url" | "markdown" | "zip" | "chat"; readonly staged: SkillStagedSummary }
   | { readonly kind: "update"; readonly staged: SkillStagedSummary; readonly skillId: string; readonly enabled: boolean };
 
-export function SkillsSettingsPanel(props: {
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
+function SkillDisclosure(props: { readonly skill: SkillStagedSummary | SkillSummary; readonly t: (key: string) => string }): React.JSX.Element {
+  const { skill, t } = props;
+  return <>
+    <div className="skill-registry-meta" aria-label={t("skills.reviewDetails")}>
+      <span>{t(`skills.kind.${skill.kind}`)}</span>
+      {skill.dataBoundaries.map((boundary) => <span key={boundary}>{t(`skills.boundary.${boundary}`)}</span>)}
+      {skill.capabilities.map((capability) => <span key={capability}>{skill.kind === "pure" ? t(`skills.capability.${capability}`) : capability}</span>)}
+    </div>
+    {skill.source ? <span>{skill.sourceUrl ?? skill.source}</span> : skill.sourceUrl ? <span>{skill.sourceUrl}</span> : null}
+    {skill.kind === "external_web" && skill.manifestSha256 ? <span>{`Manifest SHA-256 · ${skill.manifestSha256}`}</span> : null}
+    {skill.kind === "external_web" && skill.bundleSha256 ? <span>{`Bundle SHA-256 · ${skill.bundleSha256}`}</span> : null}
+    {skill.files?.map((file) => <span key={file.relativePath}>{`${file.relativePath} · ${formatByteSize(file.utf8ByteSize)}${skill.kind === "external_web" ? ` · ${file.sha256}` : ""}`}</span>)}
+    {skill.warnings?.map((warning) => <span role="status" key={warning}>{t(`skills.warning.${warning}`)}</span>)}
+  </>;
+}
+
+export function SkillsSettingsPanel(props: { readonly t: (key: string) => string }): React.JSX.Element {
   const [registry, setRegistry] = useState<SkillRegistrySummary | null>(null);
   const [readState, setReadState] = useState<"loading" | "ready" | "failed">("loading");
   const [reloadSequence, setReloadSequence] = useState(0);
@@ -556,7 +564,7 @@ export function SkillsSettingsPanel(props: {
         manifestSha256: staged.manifestSha256,
         bundleSha256: staged.bundleSha256,
         expectedRegistryRevision: staged.registryRevision,
-        enabled: review.kind === "update" ? review.enabled : true
+        enabled: review.kind === "update" ? review.enabled : staged.kind === "pure"
       });
       if (!finishInstallOperation(operation)) return;
       if (result.requestId !== requestId) {
@@ -689,12 +697,9 @@ export function SkillsSettingsPanel(props: {
                   <span>{skill.description}</span>
                   <div className="skill-registry-meta" aria-label={props.t("skills.skillDetails")}>
                     <span>{`v${skill.version}`}</span>
-                    <span>{props.t(`skills.kind.${skill.kind}`)}</span>
                     <span>{props.t(`skills.scope.${skill.scope}`)}</span>
-                    {skill.dataBoundaries.map((boundary) => (
-                      <span key={boundary}>{props.t(`skills.boundary.${boundary}`)}</span>
-                    ))}
                   </div>
+                  <SkillDisclosure skill={skill} t={props.t} />
                 </div>
                 <div className="settings-row-control skill-registry-control">
                   <span className={`settings-status ${skill.enabled ? "is-enabled" : "neutral"}`}>
@@ -866,16 +871,8 @@ export function SkillsSettingsPanel(props: {
                     {stagedReview.staged.author ? <span>{stagedReview.staged.author}</span> : null}
                     {stagedReview.staged.license ? <span>{stagedReview.staged.license}</span> : null}
                     <span>{props.t("skills.scope.machine_local")}</span>
-                    <span>{props.t("skills.boundary.local")}</span>
                   </div>
-                  {stagedReview.staged.sourceUrl ? <span>{stagedReview.staged.sourceUrl}</span> : null}
-                  {stagedReview.staged.files.map((file) => <span key={file.relativePath}>{`${file.relativePath} · ${formatByteSize(file.utf8ByteSize)}`}</span>)}
-                  {stagedReview.staged.capabilities.map((capability) => (
-                    <span key={capability}>{props.t(`skills.capability.${capability}`)}</span>
-                  ))}
-                  {stagedReview.staged.warnings.map((warning) => (
-                    <span role="status" key={warning}>{props.t(`skills.warning.${warning}`)}</span>
-                  ))}
+                  <SkillDisclosure skill={stagedReview.staged} t={props.t} />
                 </div>
                 <div className="settings-row-control skill-registry-control">
                   <button
