@@ -50,6 +50,11 @@ describe("PiPackageCatalogService", () => {
       total: 1,
       entries: [{ catalogId: "pi_catalog_alpha" }]
     });
+    expect(service.query(request("@example/zeta-helper"))).toMatchObject({
+      status: "ready",
+      total: 1,
+      entries: [{ catalogId: "pi_catalog_zeta" }]
+    });
     expect(service.query(request("cloud model"))).toMatchObject({ status: "ready", total: 2 });
     expect(service.query(request("not present"))).toMatchObject({ status: "ready", total: 0, entries: [] });
   });
@@ -71,6 +76,10 @@ describe("PiPackageCatalogService", () => {
       fs.renameSync(symlinked.manifestPath, targetPath);
       fs.symlinkSync(targetPath, symlinked.manifestPath);
       expect(new PiPackageCatalogService(symlinked.manifestPath).query(request(""))).toEqual(failed());
+
+      const hardlinked = makeFixture([entry()]);
+      fs.linkSync(hardlinked.manifestPath, path.join(hardlinked.root, "catalog-copy.json"));
+      expect(new PiPackageCatalogService(hardlinked.manifestPath).query(request(""))).toEqual(failed());
     }
   });
 
@@ -97,8 +106,8 @@ function entry(overrides: Record<string, unknown> = {}) {
     purpose: "Ask a side question without disturbing the main conversation.",
     license: "MIT",
     packageTypes: ["extension"],
-    capabilities: ["call_cloud_model_with_private_or_large_source"],
-    dataBoundaries: ["cloud"],
+    capabilities: ["external_filesystem", "call_cloud_model_with_private_or_large_source"],
+    dataBoundaries: ["filesystem", "cloud"],
     trust: "curated",
     source: "npm",
     ...overrides

@@ -10,8 +10,8 @@
       "purpose": "Ask a side question without disturbing the main conversation.",
       "license": "MIT",
       "packageTypes": ["extension"],
-      "capabilities": ["call_cloud_model_with_private_or_large_source"],
-      "dataBoundaries": ["cloud"],
+      "capabilities": ["external_filesystem", "call_cloud_model_with_private_or_large_source"],
+      "dataBoundaries": ["filesystem", "cloud"],
       "trust": "curated",
       "source": "npm"
     }

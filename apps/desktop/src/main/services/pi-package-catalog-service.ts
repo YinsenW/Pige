@@ -107,6 +107,7 @@ function readRegularFileNoFollow(filePath: string): Buffer {
 
 function matchesQuery(entry: PiPackageCatalogEntry, terms: readonly string[]): boolean {
   const searchable = normalizeSearch([
+    entry.packageName,
     entry.displayName,
     entry.purpose,
     ...entry.capabilities
@@ -133,7 +134,8 @@ function hasExactKeys(value: Record<string, unknown>, expected: ReadonlySet<stri
 
 function sameFileIdentity(left: fs.Stats, right: fs.Stats): boolean {
   return right.isFile() && !right.isSymbolicLink() && left.dev === right.dev && left.ino === right.ino &&
-    left.size === right.size && left.mtimeMs === right.mtimeMs && left.ctimeMs === right.ctimeMs;
+    left.nlink === 1 && right.nlink === 1 && left.size === right.size &&
+    left.mtimeMs === right.mtimeMs && left.ctimeMs === right.ctimeMs;
 }
 
 function sameDirectoryIdentity(left: fs.Stats, right: fs.Stats): boolean {
