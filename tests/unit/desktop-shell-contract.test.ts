@@ -982,6 +982,9 @@ describe("desktop shell build contract", () => {
 
     expect(contractsSource).toContain("readonly skills: {");
     expect(contractsSource).toContain("readonly summary: () => Promise<SkillRegistryQueryResult>;");
+    expect(contractsSource).toContain("readonly pendingStagedReviews: (");
+    expect(contractsSource).toContain("request: SkillPendingStagedReviewsRequest");
+    expect(contractsSource).toContain("Promise<SkillPendingStagedReviewsResult>");
     expect(contractsSource).toContain("readonly stageFromUrl: (request: SkillStageFromUrlRequest)");
     expect(contractsSource).toContain("readonly stageFromMarkdown: (request: SkillStageFromMarkdownRequest)");
     expect(contractsSource).toContain("readonly stageFromZip: (request: SkillStageFromZipRequest)");

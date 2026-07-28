@@ -1712,6 +1712,7 @@ export const SKILL_ZIP_STAGE_MAX_FILES = 64;
 export const SKILL_ZIP_STAGE_MAX_PATH_DEPTH = 8;
 export const SKILL_ZIP_STAGE_MAX_PATH_LENGTH = 512;
 export const SKILL_ZIP_STAGE_MAX_COMPRESSION_RATIO = 100;
+export const SKILL_PENDING_STAGED_REVIEWS_MAX_ITEMS = 32;
 export const SkillInstallRequestIdSchema = z.string()
   .regex(/^skillreq_[a-z0-9]{16,64}$/u);
 export const SkillLifecycleRequestIdSchema = z.string()
@@ -1928,6 +1929,42 @@ export const SkillStageFromZipResultSchema = z.discriminatedUnion("status", [
       path: ["staged", "sourceUrl"],
       message: "Local ZIP stages cannot expose a source URL."
     });
+  }
+});
+
+export const SkillPendingStagedReviewsRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SkillLifecycleRequestIdSchema,
+  activeVaultId: VaultIdSchema
+}).strict();
+const SkillPendingStagedReviewsResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SkillLifecycleRequestIdSchema,
+  activeVaultId: VaultIdSchema
+}).strict();
+export const SkillPendingStagedReviewsResultSchema = z.discriminatedUnion("status", [
+  SkillPendingStagedReviewsResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    staged: z.array(SkillStagedSummarySchema).max(SKILL_PENDING_STAGED_REVIEWS_MAX_ITEMS).readonly()
+  }).strict(),
+  SkillPendingStagedReviewsResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "ready") return;
+  for (const [index, staged] of result.staged.entries()) {
+    if (staged.sourceUrl === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["staged", index, "sourceUrl"],
+        message: "Pending chat Skill reviews must originate from HTTPS staging."
+      });
+    }
+    if (index > 0 && result.staged[index - 1]!.stagingId >= staged.stagingId) {
+      context.addIssue({
+        code: "custom",
+        path: ["staged", index, "stagingId"],
+        message: "Pending chat Skill reviews must use unique ascending staging IDs."
+      });
+    }
   }
 });
 
@@ -5937,6 +5974,8 @@ export type SkillStageFromMarkdownRequest = z.infer<typeof SkillStageFromMarkdow
 export type SkillStageFromMarkdownResult = z.infer<typeof SkillStageFromMarkdownResultSchema>;
 export type SkillStageFromZipRequest = z.infer<typeof SkillStageFromZipRequestSchema>;
 export type SkillStageFromZipResult = z.infer<typeof SkillStageFromZipResultSchema>;
+export type SkillPendingStagedReviewsRequest = z.infer<typeof SkillPendingStagedReviewsRequestSchema>;
+export type SkillPendingStagedReviewsResult = z.infer<typeof SkillPendingStagedReviewsResultSchema>;
 export type SkillInstallStagedRequest = z.infer<typeof SkillInstallStagedRequestSchema>;
 export type SkillInstallStagedResult = z.infer<typeof SkillInstallStagedResultSchema>;
 export type SkillDiscardStagedRequest = z.infer<typeof SkillDiscardStagedRequestSchema>;
