@@ -38,11 +38,25 @@ function withoutFencedCode(text) {
     .join("\n");
 }
 
+function stripHtmlTags(value) {
+  let result = "";
+  let insideTag = false;
+  for (const character of value) {
+    if (insideTag) {
+      if (character === ">") insideTag = false;
+    } else if (character === "<") {
+      insideTag = true;
+    } else {
+      result += character;
+    }
+  }
+  return result;
+}
+
 function githubSlug(value) {
-  return value
+  return stripHtmlTags(value
     .replace(/!\[([^\]]*)\]\([^)]*\)/gu, "$1")
-    .replace(/\[([^\]]+)\]\([^)]*\)/gu, "$1")
-    .replace(/<[^>]+>/gu, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/gu, "$1"))
     .replace(/[`*_~]/gu, "")
     .trim()
     .toLocaleLowerCase("en-US")
@@ -72,15 +86,78 @@ function collectAnchors(text) {
   return anchors;
 }
 
-function extractDestinations(text) {
-  const destinations = [];
-  const source = withoutFencedCode(text).replace(/`[^`\n]*`/gu, "");
-  const inlinePattern = /!?\[[^\]\n]*\]\((<[^>\n]+>|(?:\\.|[^)\n])+?)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/gu;
-  const referencePattern = /^\s*\[[^\]\n]+\]:\s*(<[^>\n]+>|\S+)/gmu;
-
-  for (const match of source.matchAll(inlinePattern)) {
-    destinations.push({ value: match[1], index: match.index });
+function readInlineDestination(source, openParenthesis) {
+  let cursor = openParenthesis + 1;
+  const destinationStart = cursor;
+  if (source[cursor] === "<") {
+    cursor += 1;
+    while (cursor < source.length && source[cursor] !== ">" && source[cursor] !== "\n") cursor += 1;
+    if (source[cursor] !== ">") return null;
+    const value = source.slice(destinationStart, cursor + 1);
+    cursor += 1;
+    while (source[cursor] === " " || source[cursor] === "\t") cursor += 1;
+    return source[cursor] === ")" ? { value, close: cursor } : null;
   }
+
+  let depth = 0;
+  while (cursor < source.length && source[cursor] !== "\n") {
+    const character = source[cursor];
+    if (character === "\\") {
+      cursor += 2;
+      continue;
+    }
+    if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      if (depth === 0) return { value: source.slice(destinationStart, cursor), close: cursor };
+      depth -= 1;
+    } else if ((character === " " || character === "\t") && depth === 0) {
+      const value = source.slice(destinationStart, cursor);
+      while (source[cursor] === " " || source[cursor] === "\t") cursor += 1;
+      const delimiter = source[cursor];
+      if (delimiter !== "\"" && delimiter !== "'" && delimiter !== "(") return null;
+      const closingDelimiter = delimiter === "(" ? ")" : delimiter;
+      cursor += 1;
+      while (cursor < source.length && source[cursor] !== "\n") {
+        if (source[cursor] === "\\") {
+          cursor += 2;
+          continue;
+        }
+        if (source[cursor] === closingDelimiter) break;
+        cursor += 1;
+      }
+      if (source[cursor] !== closingDelimiter) return null;
+      cursor += 1;
+      while (source[cursor] === " " || source[cursor] === "\t") cursor += 1;
+      return source[cursor] === ")" ? { value, close: cursor } : null;
+    }
+    cursor += 1;
+  }
+  return null;
+}
+
+function extractInlineDestinations(source) {
+  const destinations = [];
+  for (let index = 0; index < source.length; index += 1) {
+    const labelStart = source[index] === "[" ? index : source[index] === "!" && source[index + 1] === "[" ? index + 1 : -1;
+    if (labelStart < 0) continue;
+    let cursor = labelStart + 1;
+    while (cursor < source.length && source[cursor] !== "]" && source[cursor] !== "\n") {
+      cursor += source[cursor] === "\\" ? 2 : 1;
+    }
+    if (source[cursor] !== "]" || source[cursor + 1] !== "(") continue;
+    const destination = readInlineDestination(source, cursor + 1);
+    if (!destination) continue;
+    destinations.push({ value: destination.value, index });
+    index = destination.close;
+  }
+  return destinations;
+}
+
+function extractDestinations(text) {
+  const source = withoutFencedCode(text).replace(/`[^`\n]*`/gu, "");
+  const referencePattern = /^\s*\[[^\]\n]+\]:\s*(<[^>\n]+>|\S+)/gmu;
+  const destinations = extractInlineDestinations(source);
   for (const match of source.matchAll(referencePattern)) {
     destinations.push({ value: match[1], index: match.index });
   }

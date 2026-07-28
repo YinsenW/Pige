@@ -25,7 +25,7 @@
     { "path": "scripts/verify/local-database-rebuild-worker-smoke.mjs", "sha256": "6b1351fa22d461eec35589a5d7fbecdadd0efcd04464bf7e41d4e84020f6b88a" },
     { "path": "scripts/verify/macos-speech-helper-smoke.mjs", "sha256": "35d8b1c43b7c1c105a3e529543b506aa8ed6091ed68d59fabdb419f58f021413" },
     { "path": "scripts/verify/macos-vision-ocr-helper-smoke.mjs", "sha256": "66accf0bb7409f5341697ec08b76c0b1150d295b6bf2ff66518440f14f61a2d2" },
-    { "path": "scripts/verify/markdown-links.mjs", "sha256": "a82cdad03c258fc9233ccc5876de62be0d5cfb0f1c1c87f2bb384b844c3e6d4d" },
+    { "path": "scripts/verify/markdown-links.mjs", "sha256": "c0ff15c1865da722626a065272199d64cde7a8cade0dbbcac25215cd91f8c02a" },
     { "path": "scripts/verify/no-telemetry-negative-cases.mjs", "sha256": "8303b63572e5cf368a9dbdb0dead81f189f7b1c1a6f546f0f2c21d1f28cd5f7d" },
     { "path": "scripts/verify/no-telemetry.mjs", "sha256": "5b8abb246e05308d6409e79bb64de2ad1a0d7bac172c97dfdd2b9c76736fb4a9" },
     { "path": "scripts/verify/package-impact.mjs", "sha256": "2a9220d8f9099d39f80a7a19b2521720afcc77bf48c263f5310b35b70af082bf" },
