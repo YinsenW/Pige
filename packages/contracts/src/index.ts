@@ -1,6 +1,10 @@
 import type { PigeClientCapabilityTier, PigeRuntimeKind } from "@pige/domain";
 import type {
   AgentAttachmentCandidate,
+  AgentConversationHistoryCursor,
+  AgentConversationHistoryListRequest,
+  AgentConversationHistoryListResult,
+  AgentConversationHistorySummary,
   AgentStagedItem,
   AgentStagedLargePasteItem,
   AgentStagedItemRejectionReason,
@@ -220,6 +224,10 @@ import type {
 
 export type {
   AgentAttachmentCandidate,
+  AgentConversationHistoryCursor,
+  AgentConversationHistoryListRequest,
+  AgentConversationHistoryListResult,
+  AgentConversationHistorySummary,
   AgentStagedItem,
   AgentStagedLargePasteItem,
   AgentStagedItemRejectionReason,
@@ -1590,6 +1598,9 @@ export interface PigeDesktopApi {
       (request: AgentConversationEarlierRequest): Promise<AgentConversationEarlierPage>;
       (request?: AgentConversationInitialRequest): Promise<AgentConversationInitialTimeline | undefined>;
     };
+    readonly conversationHistory: (
+      request: AgentConversationHistoryListRequest
+    ) => Promise<AgentConversationHistoryListResult>;
     readonly currentNoteAppendProposal: (
       request: CurrentNoteAppendProposalGetRequest
     ) => Promise<CurrentNoteAppendProposalGetResult>;

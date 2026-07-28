@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  AGENT_CONVERSATION_HISTORY_PAGE_SIZE_MAX,
+  AGENT_CONVERSATION_HISTORY_PREVIEW_MAX_CODE_POINTS,
+  AgentConversationHistoryListRequestSchema,
+  AgentConversationHistoryListResultSchema,
   AgentConversationTurnSummarySchema,
   AgentSubmitTurnResultSchema,
   AppearanceSettingsSummarySchema,
@@ -133,6 +137,95 @@ import {
 } from "@pige/schemas";
 
 describe("schemas", () => {
+  it("strictly bounds renderer-safe conversation history without follow-up authority", () => {
+    const activeVaultId = "vault_20260729_history01";
+    const cursor = `conversation_history_${"a".repeat(64)}`;
+    expect(AgentConversationHistoryListRequestSchema.parse({
+      apiVersion: 1,
+      activeVaultId,
+      limit: AGENT_CONVERSATION_HISTORY_PAGE_SIZE_MAX,
+      cursor
+    })).toEqual({ apiVersion: 1, activeVaultId, limit: 50, cursor });
+    expect(() => AgentConversationHistoryListRequestSchema.parse({
+      apiVersion: 1,
+      activeVaultId,
+      limit: AGENT_CONVERSATION_HISTORY_PAGE_SIZE_MAX + 1
+    })).toThrow();
+    expect(() => AgentConversationHistoryListRequestSchema.parse({
+      apiVersion: 1,
+      activeVaultId,
+      cursor: "conversation_history_unsigned"
+    })).toThrow();
+
+    const conversations = [
+      {
+        conversationId: "conv_20260729_history01",
+        updatedAt: "2026-07-29T12:00:00.000Z",
+        safePreview: "Summarize the selected note",
+        tailEventId: "evt_20260729_historytail01",
+        scope: { kind: "current_note", pageId: "page_20260729_history01" },
+        inputPresentation: { kind: "reader_selection_action", action: "summarize" },
+        latestTurnState: "completed"
+      },
+      {
+        conversationId: "conv_20260729_history02",
+        updatedAt: "2026-07-29T11:00:00.000Z",
+        safePreview: "Compare the two sources",
+        tailEventId: "evt_20260729_historytail02"
+      }
+    ] as const;
+    const ready = {
+      apiVersion: 1,
+      activeVaultId,
+      status: "ready",
+      currentConversationId: conversations[0].conversationId,
+      conversations,
+      hasMore: true,
+      nextCursor: cursor
+    } as const;
+    expect(AgentConversationHistoryListResultSchema.parse(ready)).toEqual(ready);
+    expect(() => AgentConversationHistoryListResultSchema.parse({
+      ...ready,
+      conversations: [...conversations].reverse()
+    })).toThrow();
+    expect(() => AgentConversationHistoryListResultSchema.parse({
+      ...ready,
+      conversations: [
+        { ...conversations[1], updatedAt: conversations[0].updatedAt },
+        conversations[0]
+      ]
+    })).toThrow();
+    expect(() => AgentConversationHistoryListResultSchema.parse({
+      ...ready,
+      hasMore: false
+    })).toThrow();
+    expect(() => AgentConversationHistoryListResultSchema.parse({
+      ...ready,
+      currentConversationId: undefined
+    })).toThrow();
+    for (const privateField of ["canFollowUp", "jobId", "text", "path", "providerId"] as const) {
+      expect(() => AgentConversationHistoryListResultSchema.parse({
+        ...ready,
+        conversations: [{ ...conversations[0], [privateField]: "private" }]
+      })).toThrow();
+    }
+    expect(() => AgentConversationHistoryListResultSchema.parse({
+      ...ready,
+      conversations: [{ ...conversations[0], safePreview: "x".repeat(AGENT_CONVERSATION_HISTORY_PREVIEW_MAX_CODE_POINTS + 1) }]
+    })).toThrow();
+    expect(AgentConversationHistoryListResultSchema.parse({
+      apiVersion: 1,
+      activeVaultId,
+      status: "failed"
+    })).toEqual({ apiVersion: 1, activeVaultId, status: "failed" });
+    expect(() => AgentConversationHistoryListResultSchema.parse({
+      apiVersion: 1,
+      activeVaultId,
+      status: "failed",
+      error: "private"
+    })).toThrow();
+  });
+
   it("fences current-note append review and completion projections to exact states", () => {
     const turn = {
       jobId: "job_20260728_schemaappend01",

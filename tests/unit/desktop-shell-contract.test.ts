@@ -131,6 +131,15 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("AgentConversationResultSchema.optional().parse(");
   });
 
+  it("freezes one read-only conversation-history list beside the existing open path", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    expect(contractsSource).toContain("readonly conversationHistory: (");
+    expect(contractsSource).toContain("request: AgentConversationHistoryListRequest");
+    expect(contractsSource).toContain(") => Promise<AgentConversationHistoryListResult>;");
+    expect(contractsSource).toContain("readonly conversation: {");
+    expect(contractsSource).not.toContain("readonly openConversation:");
+  });
+
   it("uses a CommonJS preload entry compatible with Electron sandboxed preload execution", () => {
     expect(PRELOAD_ENTRY_FILENAME).toBe("index.cjs");
 
