@@ -998,6 +998,9 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly onChanged: (listener: (summary: SkillRegistrySummary)");
     expect(mainSource).toContain("registerSkillsIpc({");
     expect(handlers).toContain('options.ipcMain.handle("skills.summary"');
+    expect(handlers).toContain('options.ipcMain.handle("skills.pendingStagedReviews"');
+    expect(handlers).toContain("SkillPendingStagedReviewsRequestSchema.parse(request)");
+    expect(handlers).toContain("SkillPendingStagedReviewsResultSchema.parse(await options.pendingStagedReviews(parsed))");
     expect(handlers).toContain('options.ipcMain.handle("skills.stageFromUrl"');
     expect(handlers).toContain('options.ipcMain.handle("skills.installStaged"');
     expect(handlers).toContain('options.ipcMain.handle("skills.discardStaged"');
@@ -1010,6 +1013,9 @@ describe("desktop shell build contract", () => {
     expect(handlers).toContain("options.getActiveVaultId() !== parsed.activeVaultId");
     expect(handlers).toContain("options.publishRegistryChanged(result)");
     expect(preloadApi).toContain('ipcRenderer.invoke("skills.summary")');
+    expect(preloadApi).toContain('"skills.pendingStagedReviews"');
+    expect(preloadApi).toContain("SkillPendingStagedReviewsRequestSchema.parse(request)");
+    expect(preloadApi).toContain("SkillPendingStagedReviewsResultSchema.parse(");
     expect(preloadApi).toContain('"skills.stageFromUrl"');
     expect(preloadApi).toContain("SkillStageFromUrlRequestSchema.parse(request)");
     expect(preloadApi).toContain("SkillStageFromUrlResultSchema.parse(");

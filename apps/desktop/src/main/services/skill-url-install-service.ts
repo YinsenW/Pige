@@ -4,11 +4,16 @@ import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
 import {
   SKILL_URL_STAGE_MAX_UTF8_BYTES,
+  AgentClientTurnIdSchema,
+  ConversationEventIdSchema,
+  JobIdSchema,
   SkillDiscardStagedRequestSchema,
   SkillDiscardStagedResultSchema,
   SkillInstallStagedRequestSchema,
   SkillInstallStagedResultSchema,
   SkillInstallUrlSchema,
+  SkillPendingStagedReviewsRequestSchema,
+  SkillPendingStagedReviewsResultSchema,
   SkillStageFromMarkdownRequestSchema,
   SkillStageFromMarkdownResultSchema,
   SkillStageFromZipRequestSchema,
@@ -19,10 +24,13 @@ import {
   SkillStageUpdateResultSchema,
   SkillStagedFileSummarySchema,
   SkillStagingIdSchema,
+  VaultIdSchema,
   type SkillDiscardStagedRequest,
   type SkillDiscardStagedResult,
   type SkillInstallStagedRequest,
   type SkillInstallStagedResult,
+  type SkillPendingStagedReviewsRequest,
+  type SkillPendingStagedReviewsResult,
   type SkillManifest,
   type SkillStageFromMarkdownRequest,
   type SkillStageFromMarkdownResult,
@@ -79,6 +87,7 @@ interface SkillStageRecordBase {
 interface SkillUrlStageRecord extends SkillStageRecordBase {
   readonly requestSourceUrl: string;
   readonly finalSourceUrl: string;
+  readonly chat?: SkillChatStageBinding;
   readonly update?: SkillUpdateTarget;
 }
 
@@ -87,6 +96,14 @@ interface SkillLocalMarkdownStageRecord extends SkillStageRecordBase {
 }
 
 type SkillStageRecord = SkillUrlStageRecord | SkillLocalMarkdownStageRecord;
+
+export interface SkillChatStageBinding {
+  readonly activeVaultId: string;
+  readonly jobId: string;
+  readonly clientTurnId: string;
+  readonly conversationEventId: string;
+  readonly candidateIndex: number;
+}
 
 export interface SkillUrlFetchPort {
   fetchSnapshot(url: string, signal?: AbortSignal): Promise<SourceFetchSnapshot>;
@@ -125,15 +142,60 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
     signal: AbortSignal = new AbortController().signal
   ): Promise<SkillStageFromUrlResult> {
     const request = SkillStageFromUrlRequestSchema.parse(requestInput);
+    return await this.#stageUrl(request, undefined, signal, () => undefined);
+  }
+
+  async stageFromChatUrl(
+    requestInput: SkillStageFromUrlRequest,
+    bindingInput: SkillChatStageBinding,
+    signal: AbortSignal,
+    assertCurrent: () => void
+  ): Promise<SkillStageFromUrlResult> {
+    const request = SkillStageFromUrlRequestSchema.parse(requestInput);
+    const binding = parseChatBinding(bindingInput);
+    return await this.#stageUrl(request, binding, signal, assertCurrent);
+  }
+
+  pendingStagedReviews(requestInput: SkillPendingStagedReviewsRequest): SkillPendingStagedReviewsResult {
+    const request = SkillPendingStagedReviewsRequestSchema.parse(requestInput);
+    try {
+      this.#reapExpiredStages();
+      const staged = fs.readdirSync(this.#stagingRoot)
+        .filter((entry) => SkillStagingIdSchema.safeParse(entry).success)
+        .sort()
+        .map((entry) => this.#readCandidate(entry))
+        .filter((candidate): candidate is ReadStageCandidate =>
+          candidate !== undefined &&
+          !isLocalMarkdownRecord(candidate.record) &&
+          candidate.record.chat?.activeVaultId === request.activeVaultId &&
+          candidate.record.update === undefined &&
+          !isExpired(candidate.record.expiresAt, this.#now())
+        )
+        .map((candidate) => this.#project(candidate));
+      return SkillPendingStagedReviewsResultSchema.parse({ ...request, status: "ready", staged });
+    } catch {
+      return SkillPendingStagedReviewsResultSchema.parse({ ...request, status: "failed" });
+    }
+  }
+
+  async #stageUrl(
+    request: SkillStageFromUrlRequest,
+    chat: SkillChatStageBinding | undefined,
+    signal: AbortSignal,
+    assertCurrent: () => void
+  ): Promise<SkillStageFromUrlResult> {
     const stagingId = createStagingId(request.requestId);
     try {
       signal.throwIfAborted();
+      assertCurrent();
       const existing = this.#readCandidate(stagingId);
       if (existing) {
         if (existing.record.requestId !== request.requestId || isLocalMarkdownRecord(existing.record) ||
-          existing.record.requestSourceUrl !== request.sourceUrl) {
+          existing.record.requestSourceUrl !== request.sourceUrl ||
+          !sameOptionalChatBinding(existing.record.chat, chat)) {
           return stageFailed(request.requestId);
         }
+        assertCurrent();
         if (!isExpired(existing.record.expiresAt, this.#now())) {
           return SkillStageFromUrlResultSchema.parse({
             status: "ready",
@@ -146,6 +208,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
 
       const snapshot = await this.#fetcher.fetchSnapshot(request.sourceUrl, signal);
       signal.throwIfAborted();
+      assertCurrent();
       const finalSourceUrl = SkillInstallUrlSchema.safeParse(snapshot.finalUrl);
       if (!finalSourceUrl.success) return stageFailed(request.requestId);
       if (!isMarkdownContentType(snapshot.contentType)) {
@@ -182,13 +245,14 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
         stagingId,
         requestSourceUrl: request.sourceUrl,
         finalSourceUrl: finalSourceUrl.data,
+        ...(chat ? { chat } : {}),
         manifestSha256: digest(bytes),
         bundleSha256: bundle.bundleSha256,
         files: projectFiles(bundle.files),
         createdAt: now.toISOString(),
         expiresAt: new Date(now.getTime() + STAGE_TTL_MS).toISOString()
       };
-      this.#publishStage(record, bundle.files);
+      this.#publishStage(record, bundle.files, assertCurrent);
       const staged = this.#readCandidate(stagingId);
       if (!staged || staged.record.manifestSha256 !== record.manifestSha256) return stageFailed(request.requestId);
       return SkillStageFromUrlResultSchema.parse({
@@ -437,7 +501,11 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
     };
   }
 
-  #publishStage(record: SkillStageRecord, files: readonly SkillBundleFile[]): void {
+  #publishStage(
+    record: SkillStageRecord,
+    files: readonly SkillBundleFile[],
+    beforeCommit: () => void = () => undefined
+  ): void {
     this.#prepare();
     if (fs.readdirSync(this.#stagingRoot).filter((name) => SkillStagingIdSchema.safeParse(name).success).length >= MAX_STAGED_DIRECTORIES) {
       throw stageError("skill.stage_limit_reached", "Too many Skill reviews are staged.");
@@ -451,6 +519,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       writePrivateFile(path.join(temporaryPath, STAGE_RECORD_NAME), Buffer.from(`${JSON.stringify(record, null, 2)}\n`, "utf8"));
       fsyncDirectory(temporaryPath);
       try {
+        beforeCommit();
         fs.renameSync(temporaryPath, destination);
         published = true;
         fsyncDirectory(this.#stagingRoot);
@@ -551,12 +620,23 @@ function parseStageRecord(bytes: Buffer): SkillStageRecord {
   const isLocal = keys === "bundleSha256,createdAt,expiresAt,files,manifestSha256,requestId,schemaVersion,sourceKind,stagingId" &&
     (record.sourceKind === "local_markdown" || record.sourceKind === "local_zip") && typeof record.requestId === "string" &&
     /^skillreq_[a-z0-9]{16,64}$/u.test(record.requestId);
+  let chatBindingValid = true;
+  if (record.chat !== undefined) {
+    try {
+      parseChatBinding(record.chat);
+    } catch {
+      chatBindingValid = false;
+    }
+  }
   const isUrl = [
     "bundleSha256,createdAt,expiresAt,files,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId",
+    "bundleSha256,chat,createdAt,expiresAt,files,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId",
     "bundleSha256,createdAt,expiresAt,files,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId,update"
   ].includes(keys) &&
     (SkillStageFromUrlRequestSchema.safeParse({ apiVersion: 1, requestId: record.requestId, sourceUrl: record.requestSourceUrl }).success ||
-      isUpdateRecord(record)) && SkillInstallUrlSchema.safeParse(record.finalSourceUrl).success;
+      isUpdateRecord(record)) && SkillInstallUrlSchema.safeParse(record.finalSourceUrl).success &&
+    chatBindingValid &&
+    !(record.chat !== undefined && record.update !== undefined);
   if (
     (!isLocal && !isUrl) ||
     record.schemaVersion !== STAGE_SCHEMA_VERSION ||
@@ -574,6 +654,31 @@ function parseStageRecord(bytes: Buffer): SkillStageRecord {
 
 function isLocalMarkdownRecord(record: SkillStageRecord): record is SkillLocalMarkdownStageRecord {
   return "sourceKind" in record;
+}
+
+function parseChatBinding(value: unknown): SkillChatStageBinding {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw stageInvalid();
+  const record = value as Record<string, unknown>;
+  if (
+    Object.keys(record).sort().join(",") !==
+      "activeVaultId,candidateIndex,clientTurnId,conversationEventId,jobId" ||
+    !VaultIdSchema.safeParse(record.activeVaultId).success ||
+    !JobIdSchema.safeParse(record.jobId).success ||
+    !AgentClientTurnIdSchema.safeParse(record.clientTurnId).success ||
+    !ConversationEventIdSchema.safeParse(record.conversationEventId).success ||
+    !Number.isInteger(record.candidateIndex) || Number(record.candidateIndex) < 1 || Number(record.candidateIndex) > 8
+  ) throw stageInvalid();
+  return record as unknown as SkillChatStageBinding;
+}
+
+function sameOptionalChatBinding(
+  left: SkillChatStageBinding | undefined,
+  right: SkillChatStageBinding | undefined
+): boolean {
+  if (!left || !right) return left === right;
+  return left.activeVaultId === right.activeVaultId && left.jobId === right.jobId &&
+    left.clientTurnId === right.clientTurnId && left.conversationEventId === right.conversationEventId &&
+    left.candidateIndex === right.candidateIndex;
 }
 
 function canonicalPrivateRoot(rootInput: string): string {

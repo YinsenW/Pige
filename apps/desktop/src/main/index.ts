@@ -247,6 +247,7 @@ import {
 import { NoNetworkUpdateCheckAdapter, UpdateService } from "./services/update-service";
 import { SkillRegistryService } from "./services/skill-registry-service";
 import { SkillUrlInstallService } from "./services/skill-url-install-service";
+import { HomeSkillStagingToolService } from "./services/home-skill-staging-tool";
 import { AgentMemoryService } from "./services/agent-memory-service";
 import { VaultService } from "./services/vault-service";
 import { WindowModeService } from "./services/window-mode-service";
@@ -1284,7 +1285,8 @@ const getHomeAgentService = (): HomeAgentService => {
         })]
       },
       getAgentMemoryService(),
-      getCurrentNoteAppendService()
+      getCurrentNoteAppendService(),
+      new HomeSkillStagingToolService(getSkillUrlInstallService())
     );
   }
   return homeAgentService;
@@ -2164,6 +2166,7 @@ registerSkillsIpc({
   showOpenDialog: (window, options) => dialog.showOpenDialog(window, options),
   showSaveDialog: (window, options) => dialog.showSaveDialog(window, options),
   summary: () => getSkillRegistryService().summary(),
+  pendingStagedReviews: (request) => getSkillUrlInstallService().pendingStagedReviews(request),
   stageFromUrl: (request) => getSkillUrlInstallService().stageFromUrl(request),
   stageFromMarkdown: (request, sourcePath) => getSkillUrlInstallService().stageFromMarkdown(request, sourcePath),
   stageFromZip: (request, sourcePath) => getSkillUrlInstallService().stageFromZip(request, sourcePath),

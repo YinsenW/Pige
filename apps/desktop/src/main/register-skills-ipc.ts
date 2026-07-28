@@ -9,6 +9,8 @@ import {
   SkillInstallStagedRequestSchema,
   SkillInstallStagedResultSchema,
   SkillLifecycleMutationResultSchema,
+  SkillPendingStagedReviewsRequestSchema,
+  SkillPendingStagedReviewsResultSchema,
   SkillRegistryMutationResultSchema,
   SkillRegistryQueryResultSchema,
   SkillStageFromMarkdownRequestSchema,
@@ -29,6 +31,8 @@ import {
   type SkillInstallStagedRequest,
   type SkillInstallStagedResult,
   type SkillLifecycleMutationResult,
+  type SkillPendingStagedReviewsRequest,
+  type SkillPendingStagedReviewsResult,
   type SkillRegistryMutationResult,
   type SkillRegistryQueryResult,
   type SkillStageFromMarkdownRequest,
@@ -55,6 +59,9 @@ interface RegisterSkillsIpcOptions {
     readonly filePaths: string[];
   }>;
   readonly summary: () => SkillRegistryQueryResult | Promise<SkillRegistryQueryResult>;
+  readonly pendingStagedReviews: (
+    request: SkillPendingStagedReviewsRequest
+  ) => SkillPendingStagedReviewsResult | Promise<SkillPendingStagedReviewsResult>;
   readonly stageFromUrl: (
     request: SkillStageFromUrlRequest
   ) => SkillStageFromUrlResult | Promise<SkillStageFromUrlResult>;
@@ -104,6 +111,16 @@ export function registerSkillsIpc(options: RegisterSkillsIpcOptions): void {
   options.ipcMain.handle("skills.summary", async () =>
     SkillRegistryQueryResultSchema.parse(await options.summary())
   );
+  options.ipcMain.handle("skills.pendingStagedReviews", async (_event, request: unknown) => {
+    const parsed = SkillPendingStagedReviewsRequestSchema.parse(request);
+    if (!hasActiveVault(options, parsed.activeVaultId)) return pendingReviewsFailed(parsed);
+    const result = SkillPendingStagedReviewsResultSchema.parse(await options.pendingStagedReviews(parsed));
+    assertRequestIdentity(parsed, result);
+    if (result.activeVaultId !== parsed.activeVaultId || !hasActiveVault(options, parsed.activeVaultId)) {
+      return pendingReviewsFailed(parsed);
+    }
+    return result;
+  });
   options.ipcMain.handle("skills.stageFromUrl", async (_event, request: unknown) => {
     const parsed = SkillStageFromUrlRequestSchema.parse(request);
     const result = SkillStageFromUrlResultSchema.parse(await options.stageFromUrl(parsed));
@@ -299,6 +316,15 @@ function markdownStatus(
     requestId: request.requestId,
     activeVaultId: request.activeVaultId,
     status
+  });
+}
+
+function pendingReviewsFailed(request: SkillPendingStagedReviewsRequest): SkillPendingStagedReviewsResult {
+  return SkillPendingStagedReviewsResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    status: "failed"
   });
 }
 

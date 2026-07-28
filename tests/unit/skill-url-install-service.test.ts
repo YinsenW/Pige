@@ -16,6 +16,76 @@ afterEach(() => {
 });
 
 describe("SkillUrlInstallService", () => {
+  it("retains exact chat-origin reviews across restart and filters them by active vault", async () => {
+    const root = createRoot();
+    const fetchSnapshot = vi.fn(async () => snapshot(skillMarkdown()));
+    const registry = new SkillRegistryService(root);
+    const binding = {
+      activeVaultId: "vault_20260729_chatskill",
+      jobId: "job_20260729_chatskill01",
+      clientTurnId: "turn_20260729_chatskillturn01",
+      conversationEventId: "evt_20260729_chatskill01",
+      candidateIndex: 1
+    } as const;
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "skillreq_chat0123456789abcd",
+      sourceUrl: "https://example.com/SKILL.md"
+    };
+    const service = new SkillUrlInstallService({ appDataRoot: root, registry, fetcher: { fetchSnapshot } });
+    const staged = await service.stageFromChatUrl(request, binding, new AbortController().signal, () => undefined);
+    expect(staged).toMatchObject({ status: "ready", staged: { sourceUrl: request.sourceUrl } });
+    expect(await service.stageFromChatUrl(request, binding, new AbortController().signal, () => undefined))
+      .toMatchObject({ status: "ready", staged: { stagingId: staged.status === "ready" ? staged.staged.stagingId : "" } });
+    expect(fetchSnapshot).toHaveBeenCalledTimes(1);
+
+    const restarted = new SkillUrlInstallService({ appDataRoot: root, registry, fetcher: { fetchSnapshot } });
+    expect(restarted.pendingStagedReviews({
+      apiVersion: 1,
+      requestId: "skill_lifecycle_request_pending0123456789",
+      activeVaultId: binding.activeVaultId
+    })).toMatchObject({ status: "ready", staged: [{ id: "paper-reading", sourceUrl: request.sourceUrl }] });
+    expect(restarted.pendingStagedReviews({
+      apiVersion: 1,
+      requestId: "skill_lifecycle_request_other01234567890",
+      activeVaultId: "vault_20260729_otherchat"
+    })).toMatchObject({ status: "ready", staged: [] });
+    expect(await restarted.stageFromChatUrl(request, { ...binding, jobId: "job_20260729_changedjob" },
+      new AbortController().signal, () => undefined)).toMatchObject({ status: "failed" });
+  });
+
+  it("fails chat staging before publication when the exact turn binding drifts after fetch", async () => {
+    const root = createRoot();
+    const fetchSnapshot = vi.fn(async () => snapshot(skillMarkdown()));
+    const service = new SkillUrlInstallService({
+      appDataRoot: root,
+      registry: new SkillRegistryService(root),
+      fetcher: { fetchSnapshot }
+    });
+    let checks = 0;
+    const result = await service.stageFromChatUrl({
+      apiVersion: 1,
+      requestId: "skillreq_drift0123456789abc",
+      sourceUrl: "https://example.com/SKILL.md"
+    }, {
+      activeVaultId: "vault_20260729_chatdrift",
+      jobId: "job_20260729_chatdrift",
+      clientTurnId: "turn_20260729_chatdrift001",
+      conversationEventId: "evt_20260729_chatdrift",
+      candidateIndex: 1
+    }, new AbortController().signal, () => {
+      checks += 1;
+      if (checks === 3) throw new Error("turn changed");
+    });
+    expect(result).toMatchObject({ status: "failed" });
+    expect(fetchSnapshot).toHaveBeenCalledTimes(1);
+    expect(service.pendingStagedReviews({
+      apiVersion: 1,
+      requestId: "skill_lifecycle_request_drift0123456789a",
+      activeVaultId: "vault_20260729_chatdrift"
+    })).toMatchObject({ status: "ready", staged: [] });
+  });
+
   it("stages and installs one complete reviewed ZIP bundle atomically", async () => {
     const root = createRoot();
     const selectedPath = path.join(root, "local-skill.zip");
