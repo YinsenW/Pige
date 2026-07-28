@@ -556,16 +556,10 @@ B6.10 current-note timeline/citations/wait/egress and B6.11 Reader read/transfor
 work; an inspect-gated cited append contract is frozen. Implementation, broader mutation, platforms
 and evidence remain, so E6.06 and PIGE-UI-005 stay planned.
 
-B6.16 foundation evidence covers one Pi-selected `pige_query_dataset@1` catalog/query,
-opaque refs and strict typed plans, exact managed-collection revision/privacy binding,
-bounded worker execution, deterministic result hashes/citations, neutral drift audit,
-checksum-bound conversation/Job recovery, one escaped accessible Home table, and durable
-table/citation restoration after reopen. A preserved-source continuation narrows its
-catalog to the exact source/Dataset/revision and excludes unrelated historical Datasets.
-E6.11
-remains planned pending independent Dataset browsing/paging and citation-open highlighting,
-analytical snapshots/Parquet, joins or composition, large-scale and signed-platform proof,
-and broader cross-process recovery/CAS.
+B6.16 covers bounded query/citations, continuation/recovery/Home results, Library discovery
+and current table/view paging. Cursors bind vault/snapshot/revision/view/boundary; drift
+fails before append. E6.11 stays planned pending citation highlighting, analytical
+snapshots/joins, scale, signed platforms and broader recovery/CAS.
 
 B6.12/B6.14 current evidence covers the main-owned `library.tree` bridge, rebuildable
 Markdown-derived semantic hierarchy, deterministic weight/fragment/source/leaf metrics,

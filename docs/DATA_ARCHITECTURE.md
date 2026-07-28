@@ -102,8 +102,10 @@ type DatasetEvidenceRef = {
 };
 ```
 
-Row numbers are display locators, not identity. Managed Collections use stable row IDs;
-snapshots use declared primary keys when trustworthy or revision-bound row positions.
+Row numbers are display locators, not identity; Collections use stable row IDs and snapshots
+use trusted keys or revision-bound positions. Library summaries are pathless. Page cursors
+bind vault/Dataset/revision/table/view/boundary and revalidate manifest/schema/payload;
+cursor presence alone means more while `totalRowCount` stays the full view count.
 
 Arrow may be used only as a bounded in-memory/IPC representation. DuckDB is a candidate
 query engine, never durable truth; adopting it requires dependency, extension, packaging,
