@@ -124,6 +124,7 @@ describe("PaddleOCR runtime composition", () => {
       HF_HUB_OFFLINE: "1",
       TRANSFORMERS_OFFLINE: "1"
     });
+    expect(runner.inputFileBytes[0]).toBeGreaterThan(5_000);
 
     const imagePath = path.join(root, "input.png");
     fs.writeFileSync(imagePath, PNG);
@@ -287,10 +288,12 @@ class RecordingNativeAdapter implements NativeImageOcrAdapterPort {
 
 class RecordingPaddleRunner implements PaddleOcrProcessRunner {
   readonly calls: PaddleOcrProcessRequest[] = [];
+  readonly inputFileBytes: number[] = [];
 
   async run(request: PaddleOcrProcessRequest): Promise<PaddleOcrProcessResult> {
     this.calls.push(request);
-    const input = JSON.parse(request.stdin) as { requestId: string };
+    const input = JSON.parse(request.stdin) as { requestId: string; inputPath: string };
+    this.inputFileBytes.push(fs.statSync(input.inputPath).size);
     return {
       stdout: JSON.stringify({
         schemaVersion: 1,
