@@ -87,6 +87,7 @@ export type NoteMarkdownEditorSaveResult =
       readonly requestId: string;
       readonly activeVaultId: string;
       readonly pageId: string;
+      readonly invalidReason?: "unsupported_page_type";
     };
 interface RenderBinding {
   readonly activeVaultId: string;
@@ -135,7 +136,7 @@ export class NoteMarkdownEditorService {
         located.signature,
         MAX_NOTE_MARKDOWN_EDITOR_BYTES + 1
       );
-      if (!validatePortableMarkdown(content.markdown, request.pageId)) return { status: "failed" };
+      if (!validateEditableNoteMarkdown(content.markdown, request.pageId)) return { status: "failed" };
       if (!this.#scopeMatches(scope.activeVaultId, scope.vaultPath)) return { status: "failed" };
       const revisionId = hashMarkdown(content.markdown);
       const renderIdentity = createRenderIdentity({
@@ -170,6 +171,9 @@ export class NoteMarkdownEditorService {
     if (!isValidSaveRequest(request)) return { status: "invalid", ...identity };
     if (!validatePortableMarkdown(request.markdown, request.pageId)) {
       return { status: "invalid", ...identity };
+    }
+    if (!isNotePageMarkdown(request.markdown)) {
+      return { status: "invalid", ...identity, invalidReason: "unsupported_page_type" };
     }
     const binding = this.#bindings.get(request.renderIdentity);
     if (
@@ -299,7 +303,7 @@ export class NoteMarkdownEditorService {
         signature,
         MAX_NOTE_MARKDOWN_EDITOR_BYTES + 1
       ).markdown;
-      if (committed !== afterMarkdown || !validatePortableMarkdown(committed, binding.pageId)) {
+      if (committed !== afterMarkdown || !validateEditableNoteMarkdown(committed, binding.pageId)) {
         throw new Error("The committed Markdown page could not be verified.");
       }
       return signature;
@@ -363,8 +367,8 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
       !binding ||
       hashMarkdown(input.beforeMarkdown) !== binding.beforeHash ||
       hashMarkdown(input.afterMarkdown) !== binding.afterHash ||
-      !validatePortableMarkdown(input.beforeMarkdown, binding.pageId) ||
-      !validatePortableMarkdown(input.afterMarkdown, binding.pageId)
+      !validateEditableNoteMarkdown(input.beforeMarkdown, binding.pageId) ||
+      !validateEditableNoteMarkdown(input.afterMarkdown, binding.pageId)
     ) {
       throw new Error("The Markdown Activity update binding is invalid.");
     }
@@ -456,7 +460,7 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
       binding.beforeHash,
       MAX_NOTE_MARKDOWN_EDITOR_BYTES
     );
-    if (!validatePortableMarkdown(before, binding.pageId)) {
+    if (!validateEditableNoteMarkdown(before, binding.pageId)) {
       throw new Error("The Markdown Activity before-image is invalid.");
     }
     const undo = createUserPageUpdateUndoOperation(operation, binding);
@@ -563,6 +567,12 @@ function validatePortableMarkdown(markdown: string, expectedPageId: string): boo
   return extractPigeMarkdownLinkRefs(markdown).every(
     (reference) => reference.target.length <= MAX_REFERENCE_LENGTH && !UNSAFE_TEXT_PATTERN.test(reference.target)
   );
+}
+function validateEditableNoteMarkdown(markdown: string, expectedPageId: string): boolean {
+  return validatePortableMarkdown(markdown, expectedPageId) && isNotePageMarkdown(markdown);
+}
+function isNotePageMarkdown(markdown: string): boolean {
+  return parsePigeFrontmatter(markdown)?.frontmatter.type === "note";
 }
 function hasExactlyOneRequiredFrontmatterField(raw: string): boolean {
   const required = ["id", "schema_version", "title", "type", "created_at", "updated_at", "status"];

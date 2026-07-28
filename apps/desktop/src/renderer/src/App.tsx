@@ -2451,7 +2451,14 @@ export function LibraryPanel(props: {
     const note = props.selectedNote;
     const activeVaultId = props.activeVaultId;
     const renderContextId = note?.renderContextId;
-    if (!note || !activeVaultId || !renderContextId || !props.onOpenNoteEditor || editorOpenState === "opening") return;
+    if (
+      !note ||
+      !isNoteEditorEligible(note) ||
+      !activeVaultId ||
+      !renderContextId ||
+      !props.onOpenNoteEditor ||
+      editorOpenState === "opening"
+    ) return;
     const sequence = editorOpenSequence.current + 1;
     editorOpenSequence.current = sequence;
     const request: NoteEditorOpenRequest = {
@@ -2558,7 +2565,13 @@ export function LibraryPanel(props: {
 
   if (props.selectedNote) {
     const summary = props.selectedNote.summary;
-    if (editorReady && props.onSaveNoteEditor && props.onReloadNoteEditor && props.onNoteEditorCommitted) {
+    if (
+      isNoteEditorEligible(props.selectedNote) &&
+      editorReady &&
+      props.onSaveNoteEditor &&
+      props.onReloadNoteEditor &&
+      props.onNoteEditorCommitted
+    ) {
       const onNoteEditorCommitted = props.onNoteEditorCommitted;
       return (
         <NoteMarkdownEditor
@@ -2599,19 +2612,21 @@ export function LibraryPanel(props: {
             >
               <PigeIcon name="panel" size={17} />
             </button>
-            <button
-              ref={editorOpenerRef}
-              type="button"
-              data-reader-action="edit"
-              className={`icon-button${props.onOpenNoteEditor ? "" : " prototype-action"}`}
-              aria-label={props.t("note.edit")}
-              title={props.t("note.edit")}
-              aria-busy={editorOpenState === "opening"}
-              disabled={editorOpenState === "opening" || !props.selectedNote.renderContextId}
-              onClick={props.onOpenNoteEditor ? () => void openEditor() : () => showReaderDevelopment("document_actions")}
-            >
-              <PigeIcon name="edit" size={16} />
-            </button>
+            {isNoteEditorEligible(props.selectedNote) ? (
+              <button
+                ref={editorOpenerRef}
+                type="button"
+                data-reader-action="edit"
+                className={`icon-button${props.onOpenNoteEditor ? "" : " prototype-action"}`}
+                aria-label={props.t("note.edit")}
+                title={props.t("note.edit")}
+                aria-busy={editorOpenState === "opening"}
+                disabled={editorOpenState === "opening" || !props.selectedNote.renderContextId}
+                onClick={props.onOpenNoteEditor ? () => void openEditor() : () => showReaderDevelopment("document_actions")}
+              >
+                <PigeIcon name="edit" size={16} />
+              </button>
+            ) : null}
             <button
               type="button"
               className="icon-button"
@@ -4746,7 +4761,7 @@ function HomeComposer(props: {
     const note = selectedNoteRef.current;
     const activeVaultId = activeVaultIdRef.current;
     const renderContextId = note?.renderContextId;
-    if (!note || !activeVaultId || !renderContextId || editorOpenState === "opening") return;
+    if (!note || !isNoteEditorEligible(note) || !activeVaultId || !renderContextId || editorOpenState === "opening") return;
     const sequence = editorOpenSequence.current + 1;
     editorOpenSequence.current = sequence;
     const request: NoteEditorOpenRequest = {
@@ -5152,7 +5167,7 @@ function HomeComposer(props: {
       ) : null}
       {selectedNote ? (
         <section className="home-reader">
-          {editorReady ? (
+          {editorReady && isNoteEditorEligible(selectedNote) ? (
             <NoteMarkdownEditor
               ready={editorReady}
               labels={noteMarkdownEditorLabels(props.t)}
@@ -5183,16 +5198,18 @@ function HomeComposer(props: {
                 >
                   {props.t("retrieval.backToResults")}
                 </button>
-                <button
-                  ref={editorOpenerRef}
-                  type="button"
-                  className="ghost"
-                  aria-busy={editorOpenState === "opening"}
-                  disabled={editorOpenState === "opening" || !selectedNote.renderContextId}
-                  onClick={() => void openEditor()}
-                >
-                  {props.t("note.edit")}
-                </button>
+                {isNoteEditorEligible(selectedNote) ? (
+                  <button
+                    ref={editorOpenerRef}
+                    type="button"
+                    className="ghost"
+                    aria-busy={editorOpenState === "opening"}
+                    disabled={editorOpenState === "opening" || !selectedNote.renderContextId}
+                    onClick={() => void openEditor()}
+                  >
+                    {props.t("note.edit")}
+                  </button>
+                ) : null}
               </div>
               {editorOpenState === "failed" ? (
                 <p className="reader-action-status copy_failed" role="status" aria-live="polite">
@@ -5697,6 +5714,10 @@ function createNoteReferenceRequestId(): string {
 
 function createNoteEditorRequestId(): `noteeditreq_${string}` {
   return `noteeditreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function isNoteEditorEligible(note: NoteRenderResult): boolean {
+  return note.summary.pageType === "note";
 }
 
 function noteEditorOpenMatches(request: NoteEditorOpenRequest, result: NoteEditorOpenResult): boolean {

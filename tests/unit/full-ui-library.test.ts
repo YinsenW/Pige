@@ -351,7 +351,13 @@ describe("full UI Library", () => {
     const committedNotes: NoteRenderResult[] = [];
     const unavailable: string[] = [];
     let cleared = 0;
-    const note = readerNote();
+    const note = {
+      ...readerNote(),
+      summary: {
+        ...readerNote().summary,
+        pagePath: "wiki/generated/reader-actions.md"
+      }
+    };
     await act(async () => {
       root.render(createElement(LibraryPanel, {
         libraryList: libraryList(),
@@ -493,6 +499,41 @@ describe("full UI Library", () => {
     });
     expect(opened).toEqual(["page_20260715_source111"]);
     expect(unavailable).toEqual([]);
+
+    for (const pageType of ["source", "topic"] as const) {
+      const readOnlyPage: NoteRenderResult = {
+        ...note,
+        summary: {
+          ...note.summary,
+          pageId: `page_20260715_${pageType}readonly`,
+          pageType,
+          pagePath: pageType === "source" ? "sources/read-only.md" : "wiki/topics/read-only.md"
+        }
+      };
+      await act(async () => {
+        root.render(createElement(LibraryPanel, {
+          libraryList: libraryList(), selectedNote: readOnlyPage, selectedNoteRelated: null,
+          noteLoadingPageId: null, error: null, onGoHome: () => undefined,
+          onRefresh: async () => undefined, onSearch: async () => searchResult("unused", []), searchFocusRequest: 0,
+          onOpenNote: async () => undefined, onCloseNote: () => undefined,
+          noteAgentOpen: false, onToggleNoteAgent: () => undefined, noteAgentToggleRef: { current: null },
+          developmentNotice: null, onClearDevelopment: () => undefined,
+          onCopyNote: async () => true,
+          onOpenNoteEditor: async (request) => {
+            editorOpenRequests.push(request);
+            return {
+              apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId,
+              pageId: request.pageId, status: "failed"
+            };
+          },
+          activeVaultId: "vault_20260715_fullui01",
+          onDevelopment: (capability) => unavailable.push(capability), t
+        }));
+        await settle(dom);
+      });
+      expect(container.querySelectorAll<HTMLButtonElement>('button[aria-label="Edit note"]')).toHaveLength(0);
+    }
+    expect(editorOpenRequests).toHaveLength(1);
 
     await act(async () => root.unmount());
     dom.window.close();

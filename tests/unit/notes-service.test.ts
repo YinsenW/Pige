@@ -38,7 +38,7 @@ function writePage(input: {
   readonly fileName: string;
   readonly pageId: string;
   readonly title: string;
-  readonly pageType?: "note" | "source";
+  readonly pageType?: "note" | "source" | "concept" | "entity" | "topic" | "claim" | "question";
   readonly aliases?: readonly string[];
   readonly sourceIds?: readonly string[];
   readonly body?: string;
@@ -169,6 +169,53 @@ describe("notes service", () => {
     expect(saved.render.summary.pageId).toBe(pageId);
     expect(saved.render.renderContextId).not.toBe(open.renderContextId);
     expect(operations).toEqual([saved.operationId]);
+  });
+
+  it("keeps non-note pages out of editor sessions and reports page-type mutation explicitly", async () => {
+    const { vaultPath, vault } = makeVault();
+    const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
+    const editor = new NoteMarkdownEditorService(vaults, { recordPageUpdate: () => undefined });
+    const notes = new NotesService(vaults, undefined, undefined, editor);
+
+    for (const [index, pageType] of ["source", "concept", "entity", "topic", "claim", "question"].entries()) {
+      const pageId = `page_20260709_noneditable${index}`;
+      writePage({
+        vaultPath,
+        fileName: `${pageType}.md`,
+        pageId,
+        title: `Non-editable ${pageType}`,
+        pageType: pageType as "source" | "concept" | "entity" | "topic" | "claim" | "question"
+      });
+      const rendered = await notes.render({ pageId }, OWNER_ID);
+      expect(notes.openEditor(OWNER_ID, {
+        apiVersion: 1,
+        requestId: `noteeditreq_noneditable${index}`,
+        activeVaultId: vault.vaultId,
+        pageId,
+        renderContextId: rendered.renderContextId!
+      })).toMatchObject({ status: "failed" });
+    }
+
+    const pageId = "page_20260709_typechange12";
+    writePage({ vaultPath, fileName: "type-change.md", pageId, title: "Type change", body: "Before" });
+    const rendered = await notes.render({ pageId }, OWNER_ID);
+    const opened = notes.openEditor(OWNER_ID, {
+      apiVersion: 1,
+      requestId: "noteeditreq_typeopen12",
+      activeVaultId: vault.vaultId,
+      pageId,
+      renderContextId: rendered.renderContextId!
+    });
+    if (opened.status !== "ready") throw new Error("Expected the note editor to open.");
+    expect(await notes.saveEditor(OWNER_ID, {
+      apiVersion: 1,
+      requestId: "noteeditreq_typesave12",
+      activeVaultId: vault.vaultId,
+      pageId,
+      renderContextId: opened.renderContextId,
+      expectedRevision: opened.revision,
+      markdown: opened.markdown.replace('type: "note"', 'type: "source"')
+    })).toMatchObject({ status: "invalid", reason: "unsupported_page_type" });
   });
 
   it("reads and renders a vault Markdown page by stable page ID", async () => {

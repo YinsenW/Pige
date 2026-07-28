@@ -134,6 +134,40 @@ describe("NoteMarkdownEditorService", () => {
     expect(fixture.records).toEqual([]);
   });
 
+  it("fails closed for every non-note page type and rejects a page-type change on save", () => {
+    for (const pageType of ["source", "concept", "entity", "topic", "claim", "question"] as const) {
+      const fixture = createFixture({ pageType });
+      expect(fixture.service.open({ activeVaultId: VAULT_ID, pageId: PAGE_ID })).toEqual({ status: "failed" });
+      expect(fixture.records).toEqual([]);
+    }
+
+    const fixture = createFixture();
+    const opened = requireOpened(fixture.service);
+    expect(fixture.service.save({
+      requestId: "request_page_type_change",
+      activeVaultId: VAULT_ID,
+      pageId: PAGE_ID,
+      expectedRevisionId: opened.revisionId,
+      renderIdentity: opened.renderIdentity,
+      markdown: opened.markdown.replace('type: "note"', 'type: "source"')
+    })).toMatchObject({ status: "invalid", invalidReason: "unsupported_page_type" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
+    expect(fixture.records).toEqual([]);
+  });
+
+  it("preserves exact CAS and forward Undo for a generated type-note page", () => {
+    const fixture = createAdapterFixture({ pageRelativePath: `wiki/generated/${PAGE_ID}.md` });
+    const committed = commitEdit(fixture);
+    const operation = readOperation(fixture.vaultPath, committed.operationId);
+
+    expect(operation.targetRefs).toEqual([
+      { kind: "page", id: PAGE_ID, path: `wiki/generated/${PAGE_ID}.md` }
+    ]);
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(committed.markdown);
+    expect(fixture.adapter.undo(operation, committed.revisionId)).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
+  });
+
   it("fails closed when a governed Markdown parent becomes a symlink", () => {
     const fixture = createFixture();
     const opened = requireOpened(fixture.service);
@@ -294,7 +328,10 @@ interface ActivityRecord {
   readonly afterMarkdown: string;
 }
 
-function createFixture(): {
+function createFixture(options: {
+  readonly pageType?: "note" | "source" | "concept" | "entity" | "topic" | "claim" | "question";
+  readonly pageRelativePath?: string;
+} = {}): {
   readonly root: string;
   readonly vaultPath: string;
   readonly pagePath: string;
@@ -306,9 +343,9 @@ function createFixture(): {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-note-markdown-editor-"));
   roots.push(root);
   const vaultPath = path.join(root, "vault");
-  const pagePath = path.join(vaultPath, "wiki", `${PAGE_ID}.md`);
+  const pagePath = path.join(vaultPath, options.pageRelativePath ?? `wiki/${PAGE_ID}.md`);
   fs.mkdirSync(path.dirname(pagePath), { recursive: true });
-  const markdown = createMarkdown();
+  const markdown = createMarkdown(options.pageType);
   fs.writeFileSync(pagePath, markdown, { encoding: "utf8", mode: 0o600 });
   const records: ActivityRecord[] = [];
   const activity: NoteMarkdownEditorActivityPort = {
@@ -326,8 +363,8 @@ function createFixture(): {
   return { root, vaultPath, pagePath, markdown, records, vaults, service };
 }
 
-function createAdapterFixture() {
-  const fixture = createFixture();
+function createAdapterFixture(options: Parameters<typeof createFixture>[0] = {}) {
+  const fixture = createFixture(options);
   const adapter = new NoteMarkdownEditorActivityAdapter(fixture.vaults);
   const service = new NoteMarkdownEditorService(
     fixture.vaults,
@@ -419,12 +456,12 @@ function requireOpened(service: NoteMarkdownEditorService) {
   return opened;
 }
 
-function createMarkdown(): string {
+function createMarkdown(pageType: "note" | "source" | "concept" | "entity" | "topic" | "claim" | "question" = "note"): string {
   return `---
 id: "${PAGE_ID}"
 schema_version: 1
 title: "Markdown editor fixture"
-type: "note"
+type: "${pageType}"
 created_at: "2026-07-27T10:00:00.000Z"
 updated_at: "2026-07-27T10:00:00.000Z"
 status: "active"
