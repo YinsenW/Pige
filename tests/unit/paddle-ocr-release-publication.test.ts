@@ -9,6 +9,8 @@ import {
 } from "../../apps/desktop/scripts/package-paddleocr-release-bundle.mjs";
 import { canonicalPaddleOcrArtifactIdentity as canonicalMainIdentity } from
   "../../apps/desktop/src/main/services/paddle-ocr-bundle-materializer";
+import { computeLocalToolPackageSha256 } from
+  "../../apps/desktop/src/main/services/local-tool-package";
 
 const roots: string[] = [];
 const LIMITS = {
@@ -50,6 +52,7 @@ describe("PaddleOCR release publication", () => {
       signature: { algorithm: "Ed25519", keyId: "pige-paddleocr-2026-01" }
     });
     expect(first.bundle.sha256).toBe(sha256(fs.readFileSync(firstPath)));
+    expect(first.bundle.installedTreeSha256).toBe(computeLocalToolPackageSha256(fixture.packageRoot, LIMITS));
     expect(first.publicKeySpkiBase64).toBe(publicKey.export({ type: "spki", format: "der" }).toString("base64"));
     expect(verify(
       null,
@@ -99,7 +102,9 @@ function createPackage() {
     "sbom/paddleocr.spdx.json": Buffer.from('{"spdxVersion":"SPDX-2.3"}\n')
   };
   const files = Object.entries(payloads).map(([relativePath, body]) => {
-    fs.writeFileSync(path.join(packageRoot, ...relativePath.split("/")), body);
+    const filePath = path.join(packageRoot, ...relativePath.split("/"));
+    fs.writeFileSync(filePath, body);
+    if (relativePath.endsWith(".py")) fs.chmodSync(filePath, 0o700);
     return { path: relativePath, sizeBytes: body.length, sha256: sha256(body), executable: relativePath.endsWith(".py") };
   });
   fs.writeFileSync(path.join(packageRoot, "manifest.json"), `${JSON.stringify({

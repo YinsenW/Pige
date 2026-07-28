@@ -123,7 +123,7 @@ function inspectPackage(packageRoot, platform, engineVersion, limits) {
   hash.update("pige-local-tool-package-v1\0", "utf8");
   const manifestBytes = fs.readFileSync(manifestPath);
   updateFramedHash(hash, "manifest.json", manifestBytes);
-  const sortedEntries = [...manifest.files].sort((left, right) => compareText(left.path, right.path));
+  const sortedEntries = [...manifest.files].sort((left, right) => left.path.localeCompare(right.path));
   for (const entry of sortedEntries) {
     const relativePath = requireSafeRelativePath(entry?.path);
     const folded = relativePath.toLocaleLowerCase("en-US");
