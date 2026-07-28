@@ -143,6 +143,90 @@
     "requiredLocalArguments": ["text_detection_model_name", "text_detection_model_dir", "text_recognition_model_name", "text_recognition_model_dir"],
     "recognitionSelection": "Always bind text_detection_model_name=PP-OCRv5_mobile_det with text_detection_model_dir ending in PP-OCRv5_mobile_det_infer. Bind text_recognition_model_name and text_recognition_model_dir as one exact pair: PP-OCRv5_mobile_rec/PP-OCRv5_mobile_rec_infer for Chinese, English, or Japanese; korean_PP-OCRv5_mobile_rec/korean_PP-OCRv5_mobile_rec_infer for Korean; latin_PP-OCRv5_mobile_rec/latin_PP-OCRv5_mobile_rec_infer for Latin-script hints. Never infer a default name or fetch a replacement model."
   },
+  "selectedWheelLocks": {
+    "owner": "Release Engineering",
+    "reviewReportSha256": "5617ba82b03ee20a725edd6c8899009f5b73350ffd5a42f0d8e3a19fad5b50df",
+    "bundlePath": "supply-chain/selected-wheels.lock.json",
+    "selectionPolicy": "Exact selected wheels only: every entry binds normalized name, version, selected filename, files.pythonhosted.org URL, compressed size, SHA-256, METADATA SHA-256, Requires-Python, dependencies, purl and reviewed legal identity. Sdists, source builds, broad all-artifact hashes and user-machine resolution are forbidden.",
+    "platforms": [
+      {
+        "platform": "macos-arm64",
+        "state": "reviewed_graph_requires_legal_relock",
+        "pythonAbi": "cp313",
+        "wheelCount": 64,
+        "wheelBytes": 228577987,
+        "selectedLockSha256": "b3964173235098a5053150a0b1ab4b554ec0bbe4d35ddcea0f3235f3aa14d230",
+        "legalComponentCount": 70,
+        "legalFileCount": 145,
+        "legalInventorySha256": "e1d681d7c558151c5e06968822fa0aa39a8a9ff8230e00df0f1026a0b5eaddd5"
+      },
+      {
+        "platform": "windows-x64",
+        "state": "reviewed_graph_requires_legal_relock",
+        "pythonAbi": "cp313",
+        "wheelCount": 66,
+        "wheelBytes": 213474468,
+        "selectedLockSha256": "8c79edf45a33a87a2de60d6c77363873b8c2c6d7f2c2b12de6dcf1446c0bf825",
+        "legalComponentCount": 72,
+        "legalFileCount": 151,
+        "legalInventorySha256": "ce362ad3d200706cd69c8687e46967c3fc2cfdfe32f2aab1349d1eee117aef77"
+      }
+    ]
+  },
+  "legalResources": {
+    "owner": "Release Engineering Dependency And License Review",
+    "bundleLicense": {
+      "spdxId": "NOASSERTION",
+      "name": "See bundled legal inventory",
+      "releaseEligible": false
+    },
+    "bundlePaths": {
+      "notice": "legal/NOTICE.txt",
+      "inventory": "legal/THIRD-PARTY-NOTICES.json",
+      "componentRoot": "legal/<componentId>/",
+      "spdxSbom": "sbom/paddleocr.spdx.json",
+      "cycloneDxSbom": "sbom/paddleocr.cdx.json",
+      "reviewedCatalog": "supply-chain/paddleocr-local.parser.manifest.json",
+      "selectedWheelLock": "supply-chain/selected-wheels.lock.json"
+    },
+    "expressionPolicy": {
+      "accepted": [
+        "A valid SPDX expression from the exact hash-locked wheel METADATA License-Expression field.",
+        "A reviewed override bound to exact component name, version, selected filename, METADATA SHA-256, complete retained legal files and an exact origin below.",
+        "A LicenseRef-Pige-* expression only when its exact text, attribution, applicability and SHA-256 are retained in the component inventory."
+      ],
+      "rejected": [
+        "Classifier-only inference, package-name inference, a moving upstream branch, generated attribution without reviewed upstream evidence, or a license text that is not hash-bound.",
+        "NOASSERTION in a release-eligible component, final SPDX/CycloneDX SBOM, or published bundle manifest."
+      ]
+    },
+    "canonicalReviewedCopies": [
+      {
+        "componentId": "runtime:cpython",
+        "purpose": "python-build-standalone project license supplement; CPython and bundled runtime notices remain separately required",
+        "licenseExpression": "MPL-2.0",
+        "origin": "https://raw.githubusercontent.com/astral-sh/python-build-standalone/20260610/LICENSE",
+        "sizeBytes": 16725,
+        "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5"
+      },
+      {
+        "componentId": "wheel:bce-python-sdk",
+        "purpose": "canonical Apache-2.0 text because bce-python-sdk 0.9.76 declares Apache-2.0 but its selected wheel contains no legal text",
+        "licenseExpression": "Apache-2.0",
+        "origin": "repository:LICENSE; canonical upstream text https://www.apache.org/licenses/LICENSE-2.0.txt",
+        "sizeBytes": 11357,
+        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+      }
+    ],
+    "unresolvedMappings": [
+      "wheel:numpy@2.3.5",
+      "wheel:pycryptodome@3.23.0",
+      "wheel:pypdfium2@5.12.1",
+      "wheel:python-bidi@0.6.11",
+      "wheel:python-dateutil@2.9.0.post0"
+    ],
+    "publicationGate": "Regenerate both selected locks after canonical supplements and every unresolved aggregate/component expression are mapped. Preserve every exact wheel/runtime/model/wrapper legal text and origin; publish only when both SBOMs, notices, lock and bundle manifest contain no unresolved expression and match the final signed artifact."
+  },
   "releaseBundles": [
     {
       "platform": "macos-arm64",
