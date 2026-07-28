@@ -1486,7 +1486,7 @@
       "packageId": "pige-paddleocr-local-bundle",
       "version": "catalog 2026-07-28; CPython 3.13.14; PaddlePaddle 3.3.1; PaddleOCR 3.7.0; PaddleX 3.7.2; PP-OCRv5 mobile",
       "upstreamUrl": "https://github.com/PaddlePaddle/PaddleOCR",
-      "license": "Apache-2.0 components; MPL-2.0 python-build-standalone project; bundled CPython and third-party notices",
+      "license": "LicenseRef-Pige-PaddleOCR-3.7.0-Aggregate-Legal-Inventory; exact component expressions and texts include MPL-2.0 python-build-standalone, CPython, LGPL and other transitive obligations",
       "noticeRequired": true,
       "distributionMode": "explicit-download",
       "checksumPolicy": "sha256-and-publisher-signature-required",
@@ -1499,7 +1499,7 @@
       "replacementPath": "Keep the OCR adapter and lifecycle stable so native OCR or a later reviewed local engine can replace the bundle.",
       "lastReviewedAt": "2026-07-28",
       "reviewedBy": "Codex Product Planning",
-      "notes": "Exact upstream archives, wheels, model assets, sizes and SHA-256 values are frozen in the parser manifest. Release Engineering must add a complete transitive wheel lock, licenses/notices, SBOM, per-platform Pige artifact URL/size/SHA-256/signature and packaged offline smoke before canInstall becomes true; both entries intentionally remain unsupported until then. User machines never run pip, resolve dependencies, build sources or download models at OCR time."
+      "notes": "The r3 prerelease is bound to exact macOS-arm64 and Windows-x64 wheel locks, 298 committed legal files, complete zero-NOASSERTION notices/SBOMs, Ed25519 key pige-paddleocr-bundle-2026-02, artifact/tree/wrapper digests and offline lifecycle evidence. User machines never run pip, resolve dependencies, build sources or download models at OCR time."
     },
     {
       "registryRef": "speech.apple-speech",

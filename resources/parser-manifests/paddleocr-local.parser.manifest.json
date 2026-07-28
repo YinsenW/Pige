@@ -146,23 +146,82 @@
   "releaseBundles": [
     {
       "platform": "macos-arm64",
-      "state": "awaiting_release_artifact",
-      "artifactUrl": null,
-      "sizeBytes": null,
-      "sha256": null,
-      "signature": null,
-      "sbomSha256": null
+      "state": "available",
+      "artifactUrl": "https://github.com/YinsenW/Pige/releases/download/paddleocr-local-v3.7.0-20260728-r3/pige-paddleocr-local-3.7.0-macos-arm64.zip",
+      "sizeBytes": 304254654,
+      "sha256": "sha256:ce5a2317412e067e4affc05d3b80dac558c060f8a5f36e088db811df2e83c575",
+      "signature": {
+        "algorithm": "Ed25519",
+        "keyId": "pige-paddleocr-bundle-2026-02",
+        "valueBase64": "2VGf7Y7REAB5iyhWsRP0+Pe0crkqPkmB1so5kJwnw3Zfxg719eVjDaazGRIa7z6I8SX5IaqukdXsQtD4YyULAQ=="
+      },
+      "sbomSha256": "sha256:69b6810cbe9f871f9e877d4daef2ebe9ddfebf55164bdf20d6356fe09e90eeb6",
+      "installedTreeSha256": "sha256:202116e9daadee5d4feca4beb443377ff924b6a5d9c47963df2df8ac3b8a1a07",
+      "installedSizeBytes": 923202529,
+      "wrapperSha256": "sha256:f293ba6f2e6727bdfe20c9294acecd122ab388c31f9932665f6f8d7e6e36f6dd",
+      "packageLimits": {
+        "maxManifestBytes": 8388608,
+        "maxFileBytes": 536870912,
+        "maxTotalBytes": 1610612736,
+        "maxFiles": 25000
+      }
     },
     {
       "platform": "windows-x64",
-      "state": "awaiting_release_artifact",
-      "artifactUrl": null,
-      "sizeBytes": null,
-      "sha256": null,
-      "signature": null,
-      "sbomSha256": null
+      "state": "available",
+      "artifactUrl": "https://github.com/YinsenW/Pige/releases/download/paddleocr-local-v3.7.0-20260728-r3/pige-paddleocr-local-3.7.0-windows-x64.zip",
+      "sizeBytes": 301192449,
+      "sha256": "sha256:59db6a7b2a9bd13681e03b83dd5c701509821a2ac377229d1b3f89f19f1a80f4",
+      "signature": {
+        "algorithm": "Ed25519",
+        "keyId": "pige-paddleocr-bundle-2026-02",
+        "valueBase64": "NznZNiA6o2lpMoLZMCrcefDjPj7Imuypa+ALPM2vwdRgrpHeJxFpZRa4lFO0jLq+JsRMzzyiSlvNaH7i2LFKCg=="
+      },
+      "sbomSha256": "sha256:258b991372a6c58f0bd79486508518600a3ed4f618ae581cb8e9dae239be463f",
+      "installedTreeSha256": "sha256:debcac6d991e47ac1911312cef5fe59b0df5814cc7cf3ad05b1c780ccba24608",
+      "installedSizeBytes": 894340558,
+      "wrapperSha256": "sha256:f293ba6f2e6727bdfe20c9294acecd122ab388c31f9932665f6f8d7e6e36f6dd",
+      "packageLimits": {
+        "maxManifestBytes": 8388608,
+        "maxFileBytes": 536870912,
+        "maxTotalBytes": 1610612736,
+        "maxFiles": 25000
+      }
     }
   ],
+  "releaseTag": "paddleocr-local-v3.7.0-20260728-r3",
+  "releaseTagTarget": "3d6d8f37a3ce52af35fab8f3ce822db8f0b0bb21",
+  "releaseSigningKeys": [
+    {
+      "algorithm": "Ed25519",
+      "keyId": "pige-paddleocr-bundle-2026-02",
+      "publicKeySpkiBase64": "MCowBQYDK2VwAyEA5gljO/5NlBTevVRr1X1OalQUcDMeKIYsNVSnVanAp1o="
+    }
+  ],
+  "selectedWheelLocks": [
+    {
+      "platform": "macos-arm64",
+      "path": "resources/parser-manifests/paddleocr-local.macos-arm64.selected-wheels.lock.json",
+      "sha256": "65c1f670a21cfa29bdd9865945cd872e4b24a5ffd1808660af065563031dc35f",
+      "wheelCount": 64,
+      "legalRoot": "resources/licenses/paddleocr/macos-arm64",
+      "legalFileCount": 146
+    },
+    {
+      "platform": "windows-x64",
+      "path": "resources/parser-manifests/paddleocr-local.windows-x64.selected-wheels.lock.json",
+      "sha256": "11da2e04f86827348aa0207d659c229c4261a673426e18406892dec414746fc5",
+      "wheelCount": 66,
+      "legalRoot": "resources/licenses/paddleocr/windows-x64",
+      "legalFileCount": 152
+    }
+  ],
+  "legalResources": {
+    "aggregateLicense": "LicenseRef-Pige-PaddleOCR-3.7.0-Aggregate-Legal-Inventory",
+    "noAssertionAllowed": false,
+    "pythonBuildStandaloneMplSha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
+    "policy": "Every selected wheel, runtime, model and wrapper component is version/hash-bound to the platform lock and its complete committed legal inventory; release SBOM and notices must contain zero NOASSERTION values."
+  },
   "availabilityGate": [
     "The release build resolves and hash-locks the complete transitive wheel graph for the exact platform; sdists, source builds, and user-machine package resolution are forbidden.",
     "The release bundle carries a complete SPDX or CycloneDX SBOM plus every required license and notice.",

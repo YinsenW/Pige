@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = process.cwd();
+const exactThirdPartyTextRoots = new Set([path.join(root, "resources", "licenses")]);
 const textExtensions = new Set([
   ".css",
   ".html",
@@ -21,7 +22,10 @@ function walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if ([".git", "node_modules", "artifacts", "dist", "build", "out", "coverage"].includes(entry.name)) continue;
+      if (
+        [".git", "node_modules", "artifacts", "dist", "build", "out", "coverage"].includes(entry.name) ||
+        exactThirdPartyTextRoots.has(full)
+      ) continue;
       files.push(...walk(full));
     } else if (entry.isFile() && textExtensions.has(path.extname(entry.name))) {
       files.push(full);

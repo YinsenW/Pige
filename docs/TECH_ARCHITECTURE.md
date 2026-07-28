@@ -1235,25 +1235,23 @@ This is a bundled toolchain registry plus constrained local tool manager, not a 
 
 Responsibilities:
 
-- Resolve paths for bundled Git/Git Bash, Bun, `uv`, Python runtime, PDF tools, and Office parsing tools.
-- Validate bundled tool versions and checksums at first launch and repair time.
-- Provide a repair-needed state when a bundled executable is missing, blocked, quarantined, or corrupted.
-- Discover built-in platform capabilities such as Apple Vision OCR, Windows AI OCR, and SpeechAnalyzer.
-- Install, update, test, and remove optional local tools such as PaddleOCR.
-- Download, verify, update, test, and remove local RAG model assets such as Qwen3 Embedding GGUF files.
-- Store bundled tool metadata, optional Python environments, and model weights in machine-local app data, not inside the vault.
-- Verify checksums or signatures for downloadable tools and model assets when upstream metadata exists. If no upstream verification metadata exists, mark the install as lower-trust and require explicit confirmation.
-- Record installed versions, model choices, and availability state in machine-local settings.
-- Expose a simple capability registry to parser, OCR, RAG, and Agent services.
-- Require explicit user consent before large downloads or first tool execution.
-- Block task-time downloads for core toolchain dependencies.
-- Keep network access off during OCR execution unless a future tool explicitly declares and requests it.
+- Resolve and validate bundled Git/Git Bash, Bun, `uv`, Python, PDF, and Office tools;
+  expose repair-needed when an executable is missing, blocked, quarantined, or corrupt.
+- Discover platform capabilities such as Apple Vision OCR, Windows AI OCR, and SpeechAnalyzer.
+- Install, update, test, and remove optional tools and local RAG assets in machine-local app
+  data, never the vault; record versions, model choices, and availability.
+- Verify downloadable assets by checksum or signature. Missing upstream verification makes
+  an install lower-trust and explicitly confirmed.
+- Expose one simple capability registry to parser, OCR, RAG, and Agent services.
+- Require consent for large downloads or first execution, block core task-time downloads,
+  and keep OCR offline unless a future tool explicitly declares and requests network access.
 
 `paddleocr_local` (`ocr.paddleocr-local-bundle`) uses a dedicated Main materializer, never
 Task Execution/shell/`pip`. Release preassembles the exact macOS-arm64/Windows-x64 manifest
-inputs with a wheel lock, notices, SBOM, signature and hashes. Main verifies the private
-candidate; missing identity or platform smoke means unsupported/`canInstall=false`.
-Health/OCR stay offline with fixed local model directories.
+inputs with platform lock, legal inventory, SBOM, Ed25519 signature, and hashes. The r3
+catalog binds exact tag/key/artifacts and a zero-`NOASSERTION` aggregate inventory in the
+resource manifests. Main verifies the private candidate; missing identity or platform smoke
+means unsupported/`canInstall=false`. Health/OCR stay offline with fixed model directories.
 
 Dependencies/release inputs live in resource manifests; renderer lifecycle lives in schemas.
 

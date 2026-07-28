@@ -5,6 +5,7 @@ import path from "node:path";
 const root = process.cwd();
 const manifestPath = "resources/documentation-quality/documentation-leanness.manifest.json";
 const documentMapPath = "resources/documentation-quality/document-map.manifest.json";
+const distributedLicenseRoot = path.join(root, "resources", "licenses");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, manifestPath), "utf8"));
 const documentMap = JSON.parse(fs.readFileSync(path.join(root, documentMapPath), "utf8"));
 
@@ -250,6 +251,7 @@ function collectMarkdown(directory, files = []) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     if ([".git", "artifacts", "coverage", "dist", "node_modules"].includes(entry.name)) continue;
     const absolute = path.join(directory, entry.name);
+    if (entry.isDirectory() && absolute === distributedLicenseRoot) continue;
     if (entry.isDirectory()) collectMarkdown(absolute, files);
     else if (entry.isFile() && entry.name.endsWith(".md")) files.push(path.relative(root, absolute).split(path.sep).join("/"));
   }

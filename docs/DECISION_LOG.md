@@ -3542,6 +3542,8 @@ One artifact makes Python, models, notices and origins auditable.
 Consequences:
 
 - Platforms stay unsupported until identity, lock/SBOM and offline smoke exist.
+- r3 binds one Ed25519 key, exact platform locks, complete legal roots, component
+  expressions, and a zero-`NOASSERTION` aggregate LicenseRef.
 
 References:
 

@@ -7,6 +7,7 @@
   "strictlyAboveMinimum": true,
   "snapshot": {
     "roots": [
+      ".gitattributes",
       ".github/workflows/ci.yml",
       ".github/workflows/packageability.yml",
       "AGENTS.md",
@@ -40,18 +41,21 @@
       "resources/traceability/semantic-claims.manifest.json",
       "tests/fixtures/service-responsibility-inventory.json",
       "resources/dependency-manifest/dependencies.manifest.json",
+      "resources/parser-manifests",
+      "resources/licenses/paddleocr/macos-arm64/runtime/python-build-standalone-MPL-2.0.txt",
+      "resources/licenses/paddleocr/windows-x64/runtime/python-build-standalone-MPL-2.0.txt",
       "scripts/verify/architecture-reset.mjs",
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of Reader selection Link: opaque target selection, currentness fences, reversible update_page and restart adoption.",
+    "scope": "Independent Planning review of the signed PaddleOCR r3 catalog: exact release identity, platform locks, complete legal inventory, offline materialization and lifecycle boundaries.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "95c820d0cc85cef09dfa64a9f01a9bc61b48bb8d20371b9fdcd6cd818e752aa5"
+    "reviewedSha256": "f78d7931842da17b72e9883b07de4537270a2f3d8c4bd800b2cda4de0e56664c"
   },
   "reviewers": [{
-    "reviewerId": "reader-selection-link-review",
-    "task": "Reader selection directed Link",
+    "reviewerId": "paddleocr-r3-release-review",
+    "task": "Managed PaddleOCR r3 release catalog",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -59,33 +63,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed Reader/API/link/recovery/Decision/trace owners; Development independently owns target selection, publication, Activity/Undo and evidence."
+    "independence": "Planning reviewed dependency, catalog, signing, legal and responsibility owners; Development independently produced the release builder, runtime, artifacts and lifecycle evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"reader-selection-link-review","blockerCount":0,"summary":"One current Reader note gains one reversible directed link; target and backlink stay stable."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"reader-selection-link-review","blockerCount":0,"summary":"API, linking, recovery and UI agree on opaque Pi selection and Main-owned currentness fences."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"reader-selection-link-review","blockerCount":0,"summary":"Reader Link evidence is bound while PIGE-UI-005 and broader mutation completion stay open."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"reader-selection-link-review","blockerCount":0,"summary":"Exact publication, target drift, self/existing rejection and idempotent adoption tests bind the slice."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"reader-selection-link-review","blockerCount":0,"summary":"Existing Reader/link owners and one decision absorb the slice without a new document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"paddleocr-r3-release-review","blockerCount":0,"summary":"Explicit install, verify, test, disable, enable and remove stay Main-owned; ordinary OCR never downloads dependencies."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"paddleocr-r3-release-review","blockerCount":0,"summary":"Architecture, dependency registry, parser catalog, signing key, platform locks and legal roots bind the same r3 artifacts."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"paddleocr-r3-release-review","blockerCount":0,"summary":"The release catalog is available without promoting the broader PaddleOCR requirement or exit status."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"paddleocr-r3-release-review","blockerCount":0,"summary":"Exact artifact, signature, tree, wrapper, SBOM, wheel-lock and legal-integrity gates support reproducible release maintenance."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"paddleocr-r3-release-review","blockerCount":0,"summary":"Existing architecture, dependency, parser, decision and inventory owners absorb the release facts without a new design document."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict submitLink exposes no renderer target, path, body, hash or raw error."},
-    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Reader/API/link/recovery/UI owners agree on one reversible directed update_page."},
-    {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Statuses stay unchanged and the 587-LOC private link service is inventoried."}
+    {"command":"npm run verify:parser-manifests && npm run verify:dependencies","status":"passed","evidence":"Both available r3 bundles bind exact Ed25519 signatures, platform locks, legal roots and zero-NOASSERTION inventories."},
+    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Architecture, dependency, release-bundle and durable-decision owners agree on the signed offline catalog."},
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"All six new service owners and directly changed LOC are inventoried; the reviewed snapshot binds the exact release contract."}
   ],
   "coordination": {
-    "taskId": "reader-selection-link-20260728",
-    "taskTitle": "Reader selection directed Link",
+    "taskId": "paddleocr-r3-release-20260728",
+    "taskTitle": "Managed PaddleOCR r3 release catalog",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Reader read/transform/review actions stay; Link adds one bounded reversible relationship mutation.",
-    "acknowledgement": "Planning binds Reader Link only; other Reader mutations, redo, exceptions, scale and platform completion stay open."
+    "compatibility": "Native-first OCR routing remains; explicit PaddleOCR installation supplies the reviewed offline fallback without hidden package resolution.",
+    "acknowledgement": "Planning binds exact r3 release and legal identities only; broader acceptance, background update, purge and platform evidence remain open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Renderer supplies no target; Pi selects one opaque current local-search ref.",
-    "Vault, render, selection, current page, target, replay or Operation drift fails closed.",
-    "Other Reader mutations, target guessing, redo and broad relationship editing stay out of scope."
+    "The release remains explicit-download and prerelease-scoped; ordinary capture and OCR never install it implicitly.",
+    "Any artifact, signature, tree, wrapper, lock, legal-file or runtime identity drift fails closed before adoption.",
+    "Broader update, progress, cancellation, purge and packaged Windows acceptance remain outside this bind."
   ]
 }

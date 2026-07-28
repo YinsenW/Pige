@@ -3,12 +3,13 @@ import path from "node:path";
 
 const root = process.cwd();
 const ignoredDirectories = new Set([".git", "node_modules", "artifacts", "coverage", "dist"]);
+const ignoredRoots = new Set([path.join(root, "resources", "licenses")]);
 
 function walkMarkdown(dir) {
   const files = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isDirectory() && ignoredDirectories.has(entry.name)) continue;
     const full = path.join(dir, entry.name);
+    if (entry.isDirectory() && (ignoredDirectories.has(entry.name) || ignoredRoots.has(full))) continue;
     if (entry.isDirectory()) {
       files.push(...walkMarkdown(full));
     } else if (entry.isFile() && entry.name.endsWith(".md")) {
