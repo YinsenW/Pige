@@ -4,6 +4,8 @@ import path from "node:path";
 import type {
   AgentConversationEarlierPage,
   AgentConversationEarlierRequest,
+  AgentConversationHistoryListRequest,
+  AgentConversationHistoryListResult,
   AgentConversationInitialRequest,
   AgentConversationInitialTimeline,
   AgentConversationRequest,
@@ -27,6 +29,8 @@ import type {
 import { PigeDomainError } from "@pige/domain";
 import {
   AgentConversationRequestSchema,
+  AgentConversationHistoryListRequestSchema,
+  AgentConversationHistoryListResultSchema,
   AgentSubmitTurnRequestSchema as CanonicalAgentSubmitTurnRequestSchema,
   JobRecordSchema,
   MarkdownPageTypeSchema,
@@ -47,6 +51,7 @@ import {
   type AgentTurnConversationContextMessage,
   type PreservedAgentTurn
 } from "./agent-turn-conversation-store";
+import { AgentConversationHistory } from "./agent-conversation-history";
 import type {
   AgentIngestCapabilityPort,
   AgentIngestResult,
@@ -339,6 +344,7 @@ export class HomeAgentService {
   readonly #runtime: HomeAgentRuntimePort;
   readonly #capabilities: AgentIngestCapabilityPort | undefined;
   readonly #conversations: AgentTurnConversationStore;
+  readonly #conversationHistory: AgentConversationHistory;
   readonly #urls: HomeAgentUrlPort | undefined;
   readonly #datasets: HomeAgentDatasetQueryPort | undefined;
   readonly #externalCapabilities: PermissionedExternalCapabilityRegistry | undefined;
@@ -365,7 +371,8 @@ export class HomeAgentService {
     memory?: HomeAgentMemoryPort,
     currentNoteAppends?: HomeAgentCurrentNoteAppendPort,
     skillStaging?: HomeSkillStagingToolService,
-    externalWebSkills?: HomeAgentExternalWebSkillPort
+    externalWebSkills?: HomeAgentExternalWebSkillPort,
+    conversationHistory: AgentConversationHistory = new AgentConversationHistory()
   ) {
     this.#vaults = vaults;
     this.#models = models;
@@ -374,6 +381,7 @@ export class HomeAgentService {
     this.#runtime = runtime;
     this.#capabilities = capabilities;
     this.#conversations = conversations;
+    this.#conversationHistory = conversationHistory;
     this.#urls = urls;
     this.#datasets = datasets;
     this.#externalCapabilities = externalCapabilities;
@@ -383,6 +391,49 @@ export class HomeAgentService {
     this.#currentNoteAppends = currentNoteAppends;
     this.#skillStaging = skillStaging;
     this.#externalWebSkills = externalWebSkills;
+  }
+
+  conversationHistory(request: AgentConversationHistoryListRequest): AgentConversationHistoryListResult {
+    const validated = AgentConversationHistoryListRequestSchema.parse(request);
+    const activeVault = this.#vaults.current();
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!activeVault || !vaultPath || activeVault.vaultId !== validated.activeVaultId) {
+      return { apiVersion: 1, activeVaultId: validated.activeVaultId, status: "failed" };
+    }
+    try {
+      const page = this.#conversationHistory.list({
+        activeVaultId: validated.activeVaultId,
+        vaultPath,
+        ...(validated.limit === undefined ? {} : { limit: validated.limit }),
+        ...(validated.cursor === undefined ? {} : { cursor: validated.cursor })
+      });
+      if (this.#vaults.activeVaultPath() !== vaultPath || this.#vaults.current()?.vaultId !== validated.activeVaultId) {
+        return { apiVersion: 1, activeVaultId: validated.activeVaultId, status: "failed" };
+      }
+      const conversations = page.conversations.map(({ latestUserEventId, ...summary }) => {
+        const job = latestUserEventId
+          ? this.#jobs.findAgentTurnJobByConversationEvent(latestUserEventId)
+          : undefined;
+        return {
+          ...summary,
+          ...(job ? { latestTurnState: job.state } : {})
+        };
+      });
+      if (this.#vaults.activeVaultPath() !== vaultPath || this.#vaults.current()?.vaultId !== validated.activeVaultId) {
+        return { apiVersion: 1, activeVaultId: validated.activeVaultId, status: "failed" };
+      }
+      return AgentConversationHistoryListResultSchema.parse({
+        apiVersion: 1,
+        activeVaultId: validated.activeVaultId,
+        status: "ready",
+        ...(page.currentConversationId ? { currentConversationId: page.currentConversationId } : {}),
+        conversations,
+        hasMore: page.hasMore,
+        ...(page.nextCursor ? { nextCursor: page.nextCursor } : {})
+      });
+    } catch {
+      return { apiVersion: 1, activeVaultId: validated.activeVaultId, status: "failed" };
+    }
   }
 
   conversation(request: AgentConversationEarlierRequest): AgentConversationEarlierPage;
