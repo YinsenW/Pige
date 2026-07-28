@@ -140,8 +140,8 @@
     "use_doc_orientation_classify": false,
     "use_doc_unwarping": false,
     "use_textline_orientation": false,
-    "requiredLocalArguments": ["text_detection_model_dir", "text_recognition_model_dir"],
-    "recognitionSelection": "Use PP-OCRv5_mobile_rec for Chinese/English/Japanese, korean_PP-OCRv5_mobile_rec for Korean, and latin_PP-OCRv5_mobile_rec for Latin-script hints; never fetch a replacement model."
+    "requiredLocalArguments": ["text_detection_model_name", "text_detection_model_dir", "text_recognition_model_name", "text_recognition_model_dir"],
+    "recognitionSelection": "Always bind text_detection_model_name=PP-OCRv5_mobile_det with text_detection_model_dir ending in PP-OCRv5_mobile_det_infer. Bind text_recognition_model_name and text_recognition_model_dir as one exact pair: PP-OCRv5_mobile_rec/PP-OCRv5_mobile_rec_infer for Chinese, English, or Japanese; korean_PP-OCRv5_mobile_rec/korean_PP-OCRv5_mobile_rec_infer for Korean; latin_PP-OCRv5_mobile_rec/latin_PP-OCRv5_mobile_rec_infer for Latin-script hints. Never infer a default name or fetch a replacement model."
   },
   "releaseBundles": [
     {
