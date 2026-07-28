@@ -192,6 +192,9 @@ function assertHighRiskIntentMatchesBinding(
         return binding.capability === "use_brokered_credential" && binding.dataBoundary === "brokered_credential";
       case "risky_agent_edit":
         return binding.capability === "write_vault";
+      case "external_web_skill_https_read":
+        return binding.capability === "external_network" && binding.dataBoundary === "network" &&
+          binding.resourceScope === "current_url" && binding.actorType === "skill";
       case "authority_boundary_change":
         return binding.capability === "change_settings" || binding.capability === "change_pige_schema";
     }

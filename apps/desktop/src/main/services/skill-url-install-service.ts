@@ -502,6 +502,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       capabilities: manifest.capabilities,
       dataBoundaries: manifest.kind === "pure" ? ["local"] : [...deriveSkillDataBoundaries(manifest.capabilities)],
       ...(manifest.kind === "external_web" ? { source: stageSource(candidate.record) } : {}),
+      ...(manifest.runtime ? { runtime: manifest.runtime } : {}),
       ...(manifest.author ? { author: manifest.author } : {}),
       ...(manifest.license ? { license: manifest.license } : {}),
       files: [...candidate.record.files],

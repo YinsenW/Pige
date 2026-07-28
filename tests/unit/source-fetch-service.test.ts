@@ -70,6 +70,36 @@ describe("source fetch service", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it("keeps reviewed Skill reads public-only and on the exact HTTPS origin across redirects", async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => new URL(String(url)).pathname === "/start"
+      ? new Response("", { status: 302, headers: { location: "https://api.example.com/final" } })
+      : new Response("reviewed content", { headers: { "content-type": "text/plain" } }));
+    const service = new SourceFetchService({ lookup: async () => ["93.184.216.34"], fetchImpl });
+
+    await expect(service.fetchSnapshot("https://api.example.com/start", undefined, {
+      requiredHttpsOrigin: "https://api.example.com"
+    })).resolves.toMatchObject({ extractedText: "reviewed content", finalUrl: "https://api.example.com/final" });
+
+    const crossOrigin = new SourceFetchService({
+      lookup: async () => ["93.184.216.34"],
+      fetchImpl: async () => new Response("", {
+        status: 302,
+        headers: { location: "https://other.example/final" }
+      })
+    });
+    await expect(crossOrigin.fetchSnapshot("https://api.example.com/start", undefined, {
+      requiredHttpsOrigin: "https://api.example.com"
+    })).rejects.toMatchObject({ code: "url_fetch.origin_changed" });
+
+    const privateTarget = new SourceFetchService({
+      lookup: async () => ["127.0.0.1"],
+      fetchImpl: async () => { throw new Error("fetch should not run"); }
+    });
+    await expect(privateTarget.fetchSnapshot("https://api.example.com/start", undefined, {
+      requiredHttpsOrigin: "https://api.example.com"
+    })).rejects.toMatchObject({ code: "url_fetch.private_network_blocked" });
+  });
+
   it("blocks embedded credentials before fetch", async () => {
     const service = new SourceFetchService({
       lookup: async () => ["93.184.216.34"],

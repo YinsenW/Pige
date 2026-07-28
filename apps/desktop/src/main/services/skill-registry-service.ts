@@ -40,8 +40,13 @@ import { containsRestrictedModelContent } from "./model-egress-content";
 import { hasObjectErrorCode as isErrno } from "./object-error-code";
 import {
   lifecycleRequestIdentity as skillLifecycleIdentity,
+  isSupportedExternalWebRuntime,
+  readSkillEnableEligibility,
   matchesUninstallRequest as sameLifecycleRequest,
+  projectEnabledExternalWebSkillRuntimes,
+  requireInstalledExternalDisclosure,
   SkillRegistryLifecycleStore,
+  type EnabledExternalWebSkillRuntime,
   type SkillInstallReceipt,
   type SkillUninstallReceipt
 } from "./skill-registry-lifecycle-store";
@@ -61,7 +66,7 @@ const ACTIVE_SKILL_REGISTRY_LOCK_PATHS = new Set<string>();
 const ARRAY_FIELDS = new Set(["capabilities", "triggers", "dataBoundary"]);
 const MANIFEST_FIELDS = new Set([
   "id", "name", "version", "description", "scope", "kind", "capabilities", "triggers", "author", "sourceUrl",
-  "license", "updatedAt", "dataBoundary", "permissionSummary"
+  "license", "updatedAt", "dataBoundary", "runtime", "permissionSummary"
 ]);
 
 interface LoadedSkillManifest {
@@ -75,7 +80,6 @@ interface LoadedSkillManifest {
   }[];
   readonly receipt: SkillInstallReceipt | undefined;
 }
-
 export class SkillRegistryService {
   readonly #appDataRoot: string;
   readonly #rootPath: string;
@@ -140,6 +144,9 @@ export class SkillRegistryService {
   currentRevision(): number {
     return this.#readRegistry().revision;
   }
+
+  enabledExternalWebRuntimes = (): readonly EnabledExternalWebSkillRuntime[] =>
+    projectEnabledExternalWebSkillRuntimes(this.#readRegistry(), (id) => this.#readManifest(id));
 
   hasTriggerOverlap(manifest: SkillManifest): boolean {
     const requested = new Set((manifest.triggers ?? []).map(normalizeTrigger));
@@ -302,7 +309,8 @@ export class SkillRegistryService {
         });
       }
       const index = current.skills.findIndex((record) => record.id === parsed.skillId);
-      if (index < 0 || current.skills[index]!.enabled || !this.#isLifecycleEligible(current.skills[index]!)) {
+      if (index < 0 || current.skills[index]!.enabled ||
+        !readSkillEnableEligibility(current.skills[index]!, (id) => this.#readManifest(id))) {
         return SkillLifecycleMutationResultSchema.parse({
           ...skillLifecycleIdentity(parsed), status: "not_found", registry: this.#project(current)
         });
@@ -482,11 +490,13 @@ export class SkillRegistryService {
         : [...deriveSkillDataBoundaries(loaded.manifest.capabilities)],
       ...(loaded.manifest.author ? { author: loaded.manifest.author } : {}),
       ...(loaded.manifest.license ? { license: loaded.manifest.license } : {}),
-      canEnable: !record.enabled && loaded.manifest.kind === "pure",
+      canEnable: !record.enabled && (loaded.manifest.kind === "pure" || isSupportedExternalWebRuntime(loaded.manifest)),
       canUninstall: loaded.manifest.kind === "pure",
       canExport: loaded.manifest.kind === "pure",
       canUpdate: canUpdateSkill(loaded.manifest),
-      ...(loaded.manifest.kind === "external_web" ? installedExternalDisclosure(loaded) : {})
+      ...(loaded.manifest.kind === "external_web"
+        ? { ...requireInstalledExternalDisclosure(loaded), ...(loaded.manifest.runtime ? { runtime: loaded.manifest.runtime } : {}) }
+        : {})
     };
   }
 
@@ -650,6 +660,17 @@ export function parseSkillManifest(source: string): SkillManifest {
       index += 1;
       continue;
     }
+    if (key === "runtime") {
+      const nested: Record<string, string> = {};
+      for (index += 1; index < closingIndex && /^\s/u.test(lines[index]!); index += 1) {
+        const match = /^ {2}([a-zA-Z][a-zA-Z0-9]*): (.+)$/u.exec(lines[index]!);
+        if (!match || Object.hasOwn(nested, match[1]!))
+          throw skillError("skill.manifest_invalid", "Skill metadata object is malformed.");
+        nested[match[1]!] = parseScalar(match[2]!.trim());
+      }
+      values[key] = nested;
+      continue;
+    }
     if (!ARRAY_FIELDS.has(key)) throw skillError("skill.manifest_invalid", "Skill metadata value is missing.");
     const entries: string[] = [];
     index += 1;
@@ -731,26 +752,6 @@ function parseScalar(value: string): string {
 }
 
 function isInstallableSkillKind(kind: SkillManifest["kind"]): kind is "pure" | "external_web" { return kind !== "package_provided"; }
-
-function installedExternalDisclosure(loaded: LoadedSkillManifest) {
-  const receipt = loaded.receipt;
-  if (!receipt?.source || !receipt.warnings || receipt.enabled ||
-    (receipt.source === "https") !== Boolean(receipt.sourceUrl)) {
-    throw skillError("skill.install_receipt_invalid", "External/Web Skill review provenance is unavailable.");
-  }
-  return {
-    source: receipt.source,
-    ...(receipt.sourceUrl ? { sourceUrl: receipt.sourceUrl } : {}),
-    manifestSha256: loaded.sha256,
-    bundleSha256: loaded.bundleSha256,
-    files: loaded.files.map((file) => ({
-      relativePath: file.relativePath,
-      utf8ByteSize: file.bytes.length,
-      sha256: file.sha256
-    })),
-    warnings: [...receipt.warnings]
-  };
-}
 
 function readBoundedNoFollow(filePath: string, maximumBytes: number): string | undefined {
   let descriptor: number | undefined;

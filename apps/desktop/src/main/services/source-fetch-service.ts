@@ -2,6 +2,7 @@ import { lookup as dnsLookup } from "node:dns/promises";
 import type { LookupFunction } from "node:net";
 import net from "node:net";
 import { PigeDomainError } from "@pige/domain";
+import { ExternalWebSkillHttpsOriginSchema, type ExternalWebSkillHttpsOrigin } from "@pige/schemas";
 import { Agent, fetch as undiciFetch, type Dispatcher } from "undici";
 import {
   assertPermissionedExternalExecutionAuthority,
@@ -51,6 +52,7 @@ export interface SourceFetchServiceOptions {
 
 export interface SourceFetchRequestOptions {
   readonly permissionedExternalAuthority?: PermissionedExternalExecutionAuthority;
+  readonly requiredHttpsOrigin?: ExternalWebSkillHttpsOrigin;
 }
 
 interface ValidatedFetchTarget {
@@ -113,6 +115,15 @@ export class SourceFetchService {
     if (externalSignal?.aborted) {
       throw new PigeDomainError("url_fetch.cancelled", "The URL fetch was cancelled.");
     }
+    const requiredHttpsOrigin = options.requiredHttpsOrigin === undefined
+      ? undefined
+      : ExternalWebSkillHttpsOriginSchema.parse(options.requiredHttpsOrigin);
+    if (requiredHttpsOrigin && options.permissionedExternalAuthority) {
+      throw new PigeDomainError(
+        "url_fetch.authority_invalid",
+        "A reviewed HTTPS read cannot widen the public network boundary."
+      );
+    }
     const networkAccess = options.permissionedExternalAuthority
       ? "permissioned_external_network"
       : "public_only";
@@ -122,7 +133,7 @@ export class SourceFetchService {
         "external_network"
       );
     }
-    const originalTarget = await this.#validateFetchableUrl(url, networkAccess);
+    const originalTarget = await this.#validateFetchableUrl(url, networkAccess, requiredHttpsOrigin);
     let currentTarget = originalTarget;
     const warnings: string[] = [];
 
@@ -143,7 +154,8 @@ export class SourceFetchService {
           }
           nextTarget = await this.#validateFetchableUrl(
             new URL(location, currentTarget.url).toString(),
-            networkAccess
+            networkAccess,
+            requiredHttpsOrigin
           );
           warnings.push("redirected");
         } else {
@@ -243,7 +255,8 @@ export class SourceFetchService {
 
   async #validateFetchableUrl(
     value: string,
-    networkAccess: "public_only" | "permissioned_external_network"
+    networkAccess: "public_only" | "permissioned_external_network",
+    requiredHttpsOrigin?: ExternalWebSkillHttpsOrigin
   ): Promise<ValidatedFetchTarget> {
     let parsed: URL;
     try {
@@ -254,6 +267,12 @@ export class SourceFetchService {
 
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       throw new PigeDomainError("url_fetch.unsupported_scheme", "URL capture supports only HTTP and HTTPS.");
+    }
+    if (requiredHttpsOrigin && (parsed.protocol !== "https:" || parsed.origin !== requiredHttpsOrigin)) {
+      throw new PigeDomainError(
+        "url_fetch.origin_changed",
+        "The reviewed HTTPS read left its exact authorized origin."
+      );
     }
     if (parsed.username || parsed.password) {
       throw new PigeDomainError("url_fetch.credentials_not_allowed", "URL capture does not allow embedded credentials.");

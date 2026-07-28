@@ -248,6 +248,7 @@ import { NoNetworkUpdateCheckAdapter, UpdateService } from "./services/update-se
 import { SkillRegistryService } from "./services/skill-registry-service";
 import { SkillUrlInstallService } from "./services/skill-url-install-service";
 import { HomeSkillStagingToolService } from "./services/home-skill-staging-tool";
+import { ExternalWebSkillRuntimeService } from "./services/external-web-skill-runtime-service";
 import { AgentMemoryService } from "./services/agent-memory-service";
 import { VaultService } from "./services/vault-service";
 import { WindowModeService } from "./services/window-mode-service";
@@ -307,6 +308,7 @@ let speechService: SpeechService | undefined;
 let updateService: UpdateService | undefined;
 let skillRegistryService: SkillRegistryService | undefined;
 let skillUrlInstallService: SkillUrlInstallService | undefined;
+let externalWebSkillRuntimeService: ExternalWebSkillRuntimeService | undefined;
 let agentMemoryService: AgentMemoryService | undefined;
 let paddleOcrLifecycleService: PaddleOcrLifecycleService | undefined;
 let paddleOcrRuntimeComposition: PaddleOcrRuntimeComposition | undefined;
@@ -579,6 +581,19 @@ const getSkillUrlInstallService = (): SkillUrlInstallService => {
     registry: getSkillRegistryService()
   });
   return skillUrlInstallService;
+};
+
+const getExternalWebSkillRuntimeService = (): ExternalWebSkillRuntimeService => {
+  externalWebSkillRuntimeService ??= new ExternalWebSkillRuntimeService({
+    registry: getSkillRegistryService(),
+    capabilities: {
+      toolsForTurn: (adapter, turn) => new PermissionedExternalCapabilityRegistry(
+        [adapter],
+        getPermissionBrokerService()
+      ).toolsForTurn(turn)
+    }
+  });
+  return externalWebSkillRuntimeService;
 };
 
 const getAgentMemoryService = (): AgentMemoryService => {
@@ -1286,7 +1301,8 @@ const getHomeAgentService = (): HomeAgentService => {
       },
       getAgentMemoryService(),
       getCurrentNoteAppendService(),
-      new HomeSkillStagingToolService(getSkillUrlInstallService())
+      new HomeSkillStagingToolService(getSkillUrlInstallService()),
+      getExternalWebSkillRuntimeService()
     );
   }
   return homeAgentService;
