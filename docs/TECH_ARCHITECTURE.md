@@ -1297,11 +1297,11 @@ Responsibilities:
 - Explicit-text recipes resolve exact package/native/Skill supply chain and destinations before one
   immutable-plan confirmation, which grants no runtime authority.
 
-`PiPackageCatalogService` reads one bounded no-follow manifest; trust grants no authority.
-`PiPackageManagerService` verifies SHA-512/link-free extraction, publishes disabled and trash-
-uninstalls. `PiPackageUpdateService` confirms exact version/SRI and one opaque immediate-prior
-rollback; `PiPackageLifecycleStore` retains/adopts verified trees once. None executes code;
-enable/runtime, pin and public restore remain absent.
+`PiPackageCatalogService` reads one bounded no-follow manifest. `PiPackageManagerService` verifies
+SHA-512/link-free extraction, publishes disabled, CAS-pins metadata and trash-uninstalls.
+`PiPackageUpdateService` confirms exact version/SRI or one opaque prior rollback; pin rejects both
+before effects. `PiPackageLifecycleStore` adopts verified trees once. None executes code;
+enable/runtime and public restore remain absent.
 
 [`SKILL_EXTENSION_DESIGN.md`](SKILL_EXTENSION_DESIGN.md#10-relationship-to-pi-packages) owns
 metadata/lifecycle; Architecture owns isolation. Only reviewed, permissioned adapters may run;

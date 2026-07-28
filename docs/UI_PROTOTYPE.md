@@ -1108,10 +1108,10 @@ lexical remains. Hide provider/routing, path, URL and checksum.
 ### Pi Packages Settings
 
 Reviewed search distinguishes loading/empty/failed and discloses identity, integrity, license, type
-and boundaries; selection only fills install. Install/Remove confirm. Eligible
-disabled rows accept update version/SRI and one immediate-prior Roll back. Mutations serialize,
-confirm, adopt registry truth and retain draft/inventory on failure. No authority/path/code;
-enable/pin/runtime stay absent.
+and boundaries; selection only fills install. Disabled rows offer Update, one prior Roll back and
+metadata-only Pin/Unpin; pinned rows disable maintenance. Mutations serialize and adopt registry
+truth while failure retains drafts/inventory. Effects confirm; pin/unpin does not. No path/code or
+runtime authority.
 
 ### Backup And Restore
 
