@@ -12,6 +12,7 @@ import {
   BackupReconnectDependencyResultSchema,
   COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES,
   COLLECTION_LIST_CHANNEL,
+  COLLECTION_OPEN_CITATION_CHANNEL,
   CollectionAddNullableColumnRequestSchema,
   CollectionAddNullableColumnResultSchema,
   ConfirmationProposalSchema,
@@ -23,6 +24,8 @@ import {
   CollectionListResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
+  CollectionOpenCitationRequestSchema,
+  CollectionOpenCitationResultSchema,
   CollectionRenameColumnRequestSchema,
   CollectionRenameColumnResultSchema,
   CollectionTrashColumnRequestSchema,
@@ -497,6 +500,105 @@ describe("schemas", () => {
       ...openIdentity,
       status: "stale",
       rows: snapshot.rows
+    })).toThrow();
+  });
+
+  it("opens one durable Dataset citation as an exact read-only preview with typed highlights", () => {
+    expect(COLLECTION_OPEN_CITATION_CHANNEL).toBe("collections.openCitation");
+    const request = {
+      apiVersion: 1,
+      requestId: "collection_request_citationopen0001",
+      activeVaultId: "vault_20260729_datasetcitation",
+      conversationId: "conv_20260729_datasetcitation",
+      assistantEventId: "evt_20260729_datasetcitation01",
+      citationRef: "dataset_citation_1"
+    } as const;
+    expect(CollectionOpenCitationRequestSchema.parse(request)).toEqual(request);
+
+    const preview = {
+      datasetId: "dataset_20260729_datasetcitation",
+      revisionId: "dataset_rev_20260729_datasetcitation",
+      tableId: "table_datasetcitation01",
+      tableName: "Regional totals",
+      planHash: `sha256:${"a".repeat(64)}`,
+      resultHash: `sha256:${"b".repeat(64)}`,
+      columns: [
+        {
+          key: "region",
+          label: "Region",
+          logicalType: "string",
+          sourceColumnId: "column_datasetregion01"
+        },
+        {
+          key: "record_count",
+          label: "Records",
+          logicalType: "integer",
+          sourceColumnId: "column_datasetcount001",
+          aggregate: "count"
+        }
+      ],
+      rows: [{ rowId: "row_datasetcitation01", values: ["North", 3] }],
+      matchedRowCount: 1,
+      returnedRowCount: 1,
+      truncated: false,
+      citationRefs: [request.citationRef]
+    } as const;
+    const ready = {
+      ...request,
+      status: "ready",
+      mode: "citation_readonly",
+      preview,
+      highlights: [
+        { kind: "rows", rowIds: ["row_datasetcitation01"] },
+        { kind: "range", range: { startRow: 1, endRow: 1 } },
+        {
+          kind: "columns",
+          columnIds: ["column_datasetregion01", "column_datasetcount001"]
+        },
+        { kind: "aggregate", aggregateKeys: ["record_count"], groupKeys: ["region"] }
+      ]
+    } as const;
+    expect(CollectionOpenCitationResultSchema.parse(ready)).toMatchObject({
+      status: "ready",
+      mode: "citation_readonly",
+      preview: { revisionId: preview.revisionId, resultHash: preview.resultHash }
+    });
+
+    for (const status of ["stale", "not_found", "failed"] as const) {
+      expect(CollectionOpenCitationResultSchema.parse({ ...request, status })).toEqual({
+        ...request,
+        status
+      });
+    }
+    for (const unsafe of [
+      { datasetId: preview.datasetId },
+      { revisionId: preview.revisionId },
+      { queryPlanHash: preview.planHash },
+      { path: "/private/datasets/citation/dataset.json" },
+      { body: "private Dataset body" }
+    ]) {
+      expect(() => CollectionOpenCitationRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+    }
+    expect(() => CollectionOpenCitationResultSchema.parse({
+      ...ready,
+      citationRef: "dataset_citation_missing"
+    })).toThrow("requested durable citation ref");
+    expect(() => CollectionOpenCitationResultSchema.parse({
+      ...ready,
+      highlights: [
+        ...ready.highlights,
+        { kind: "columns", columnIds: ["column_datasetregion01"] }
+      ]
+    })).toThrow();
+    expect(() => CollectionOpenCitationResultSchema.parse({
+      ...ready,
+      highlights: ready.highlights.filter(({ kind }) => kind !== "columns")
+    })).toThrow("durable column identities");
+    expect(() => CollectionOpenCitationResultSchema.parse({
+      ...ready,
+      sourceId: "src_private",
+      checksum: `sha256:${"c".repeat(64)}`,
+      sql: "SELECT * FROM private"
     })).toThrow();
   });
 

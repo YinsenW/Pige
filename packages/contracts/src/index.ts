@@ -33,6 +33,8 @@ import type {
   CollectionCreateViewResult,
   CollectionListRequest,
   CollectionListResult,
+  CollectionOpenCitationRequest,
+  CollectionOpenCitationResult,
   CollectionOpenRequest,
   CollectionOpenResult,
   CollectionAppendDefaultRowRequest,
@@ -1691,6 +1693,9 @@ export interface PigeDesktopApi {
   readonly collections: {
     readonly list: (request: CollectionListRequest) => Promise<CollectionListResult>;
     readonly open: (request: CollectionOpenRequest) => Promise<CollectionOpenResult>;
+    readonly openCitation: (
+      request: CollectionOpenCitationRequest
+    ) => Promise<CollectionOpenCitationResult>;
     readonly editCell: (request: CollectionCellEditRequest) => Promise<CollectionCellEditResult>;
     readonly appendDefaultRow: (
       request: CollectionAppendDefaultRowRequest

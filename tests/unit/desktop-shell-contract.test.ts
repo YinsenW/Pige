@@ -1397,6 +1397,9 @@ describe("desktop shell build contract", () => {
 
     expect(contractsSource).toContain("readonly list: (request: CollectionListRequest)");
     expect(contractsSource).toContain("Promise<CollectionListResult>");
+    expect(contractsSource).toContain("readonly openCitation:");
+    expect(contractsSource).toContain("request: CollectionOpenCitationRequest");
+    expect(contractsSource).toContain("Promise<CollectionOpenCitationResult>");
     expect(registrarSource).toContain('ipcMain.handle("collections.list"');
     expect(registrarSource).toContain('ipcMain.handle("collections.open"');
     expect(registrarSource).toContain('ipcMain.handle("collections.editCell"');
