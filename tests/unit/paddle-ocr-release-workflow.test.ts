@@ -186,6 +186,19 @@ describe("PaddleOCR release workflow sidecar", () => {
     expect(workflow).not.toContain('test "$(git rev-parse "refs/tags/$PIGE_REQUESTED_TAG^{commit}")" = "$PIGE_REQUESTED_COMMIT"');
     expect(workflow).not.toMatch(/pip\s+install|uv\s+pip|npm\s+install(?!ed)/u);
 
+    for (const platform of ["macos-arm64", "windows-x64"]) {
+      const lock = readJson(path.join(
+        root,
+        `resources/parser-manifests/paddleocr-local.${platform}.selected-wheels.lock.json`
+      )) as { wheels: Array<{ filename: string; url: string }> };
+      expect(lock.wheels.every((wheel) => {
+        const url = new URL(wheel.url);
+        return url.protocol === "https:" &&
+          url.origin === "https://files.pythonhosted.org" &&
+          decodeURIComponent(url.pathname.split("/").at(-1) ?? "") === wheel.filename;
+      })).toBe(true);
+    }
+
     const packageJson = readJson(path.join(root, "package.json")) as { scripts: Record<string, string> };
     expect(packageJson.scripts).toMatchObject({
       "release:paddleocr:inputs": "node apps/desktop/scripts/paddleocr-release-inputs.mjs",
