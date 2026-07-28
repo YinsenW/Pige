@@ -21,6 +21,8 @@ extraResources:
     to: toolchain-manifest
   - from: ../../resources/parser-manifests
     to: parser-manifests
+  - from: ../../resources/curated-packages/pi-package-catalog.manifest.json
+    to: curated-packages/pi-package-catalog.manifest.json
   - from: ../../artifacts/release-packageability/package-resources
     to: release
 generateUpdatesFilesForAllChannels: true

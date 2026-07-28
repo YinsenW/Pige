@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "catalogId": "pi_catalog_narumitw_pi_btw",
+      "packageName": "@narumitw/pi-btw",
+      "version": "0.34.0",
+      "integrity": "sha512-ycjtInVV9csP+mR3L6gXgPJOsMGQej80ltkqbJhK0Gy3Mc8BgYvPrdQ0HXTFSGeDzr+//V51CYVK9KcgWti+VA==",
+      "displayName": "Pi BTW",
+      "purpose": "Ask a side question without disturbing the main conversation.",
+      "license": "MIT",
+      "packageTypes": ["extension"],
+      "capabilities": ["call_cloud_model_with_private_or_large_source"],
+      "dataBoundaries": ["cloud"],
+      "trust": "curated",
+      "source": "npm"
+    }
+  ]
+}

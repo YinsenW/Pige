@@ -103,6 +103,8 @@ import type {
   PigeDesktopApi,
   PiPackageInstallRequest,
   PiPackageInstallResult,
+  PiPackageCatalogQueryRequest,
+  PiPackageCatalogQueryResult,
   PiPackageRegistryQueryResult,
   PiPackageUninstallRequest,
   PiPackageUninstallResult,
@@ -237,6 +239,8 @@ import {
   HighRiskConfirmationResolveResultSchema,
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
+  PiPackageCatalogQueryRequestSchema,
+  PiPackageCatalogQueryResultSchema,
   PiPackageRegistryQueryResultSchema,
   PiPackageUninstallRequestSchema,
   PiPackageUninstallResultSchema,
@@ -834,6 +838,11 @@ const api: PigeDesktopApi = {
   piPackages: {
     summary: async (): Promise<PiPackageRegistryQueryResult> =>
       PiPackageRegistryQueryResultSchema.parse(await ipcRenderer.invoke("piPackages.summary")),
+    catalogQuery: async (request: PiPackageCatalogQueryRequest): Promise<PiPackageCatalogQueryResult> =>
+      PiPackageCatalogQueryResultSchema.parse(await ipcRenderer.invoke(
+        "piPackages.catalogQuery",
+        PiPackageCatalogQueryRequestSchema.parse(request)
+      )),
     install: async (request: PiPackageInstallRequest): Promise<PiPackageInstallResult> =>
       PiPackageInstallResultSchema.parse(await ipcRenderer.invoke(
         "piPackages.install",

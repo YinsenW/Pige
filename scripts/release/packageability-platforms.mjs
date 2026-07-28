@@ -16,6 +16,7 @@ const definitions = {
     builderPlatformFlag: "--mac",
     packagedRuntimeSmokeTimeoutMs: 60_000,
     requiredResourceFiles: [
+      "curated-packages/pi-package-catalog.manifest.json",
       "native/macos/arm64/pige-vision-ocr",
       "native/macos/arm64/pige-vision-ocr.manifest.json",
       "native/macos/arm64/pige-speech",
@@ -41,7 +42,7 @@ const definitions = {
     packageKind: "unsigned_nsis_preflight",
     builderPlatformFlag: "--win",
     packagedRuntimeSmokeTimeoutMs: 120_000,
-    requiredResourceFiles: [],
+    requiredResourceFiles: ["curated-packages/pi-package-catalog.manifest.json"],
     requiredSbomComponents: [],
     nativeSmokeScripts: [],
     nativeSemantic: nativeSemanticRuntimeTarget("windows", "x64")

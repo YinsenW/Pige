@@ -1,5 +1,7 @@
 import type { IpcMain, WebContents } from "electron";
 import {
+  PiPackageCatalogQueryRequestSchema,
+  PiPackageCatalogQueryResultSchema,
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
   PiPackageRegistryQueryResultSchema,
@@ -7,6 +9,8 @@ import {
   PiPackageUninstallResultSchema,
   type PiPackageInstallRequest,
   type PiPackageInstallResult,
+  type PiPackageCatalogQueryRequest,
+  type PiPackageCatalogQueryResult,
   type PiPackageRegistrySummary,
   type PiPackageRegistryQueryResult,
   type PiPackageUninstallRequest,
@@ -20,6 +24,7 @@ export interface RegisterPiPackagesIpcOptions {
   readonly isTrustedSender: (sender: WebContents) => boolean;
   readonly getActiveVaultId: () => string | undefined;
   readonly summary: () => Awaitable<PiPackageRegistryQueryResult>;
+  readonly catalogQuery: (request: PiPackageCatalogQueryRequest) => Awaitable<PiPackageCatalogQueryResult>;
   readonly install: (request: PiPackageInstallRequest) => Awaitable<PiPackageInstallResult>;
   readonly confirmUninstall: (sender: WebContents, request: PiPackageUninstallRequest) => Awaitable<boolean>;
   readonly uninstall: (request: PiPackageUninstallRequest) => Awaitable<PiPackageUninstallResult>;
@@ -32,6 +37,18 @@ export function registerPiPackagesIpc(options: RegisterPiPackagesIpcOptions): vo
     if (!options.isTrustedSender(event.sender)) return failedSummary();
     const result = await readSummary(options);
     return options.isTrustedSender(event.sender) ? result : failedSummary();
+  });
+
+  options.ipcMain.handle("piPackages.catalogQuery", async (event, request: unknown) => {
+    const parsed = PiPackageCatalogQueryRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender)) return failedCatalogQuery(parsed);
+    try {
+      const result = PiPackageCatalogQueryResultSchema.parse(await options.catalogQuery(parsed));
+      assertCatalogQueryIdentity(parsed, result);
+      return options.isTrustedSender(event.sender) ? result : failedCatalogQuery(parsed);
+    } catch {
+      return failedCatalogQuery(parsed);
+    }
   });
 
   options.ipcMain.handle("piPackages.install", async (event, request: unknown) => {
@@ -97,6 +114,23 @@ async function readSummary(
 
 function failedSummary(): PiPackageRegistryQueryResult {
   return PiPackageRegistryQueryResultSchema.parse({ status: "failed" });
+}
+
+function failedCatalogQuery(request: PiPackageCatalogQueryRequest): PiPackageCatalogQueryResult {
+  return PiPackageCatalogQueryResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    status: "failed"
+  });
+}
+
+function assertCatalogQueryIdentity(
+  request: PiPackageCatalogQueryRequest,
+  result: PiPackageCatalogQueryResult
+): void {
+  if (result.apiVersion !== request.apiVersion || result.requestId !== request.requestId) {
+    throw new Error("Pi package catalog response identity did not match the request.");
+  }
 }
 
 function failedInstall(

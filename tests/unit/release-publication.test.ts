@@ -170,6 +170,8 @@ describe("release publication", () => {
     expect(releaseConfig).toContain("verifyUpdateCodeSignature: true");
     expect(releaseConfig).toContain("from: ../../resources/parser-manifests");
     expect(releaseConfig).toContain("to: parser-manifests");
+    expect(releaseConfig).toContain("from: ../../resources/curated-packages/pi-package-catalog.manifest.json");
+    expect(releaseConfig).toContain("to: curated-packages/pi-package-catalog.manifest.json");
     expect(rootPackage.scripts["release:package:mac:arm64"]).toContain("run-release-builder.mjs");
     expect(rootPackage.scripts["release:package:mac:arm64"]).toContain("--preflight-only=true");
     expect(rootPackage.scripts["release:package:win:x64"]).toContain("run-release-builder.mjs");

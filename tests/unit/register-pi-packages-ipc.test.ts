@@ -31,11 +31,31 @@ const uninstallRequest = {
   expectedRegistryRevision: registry.revision,
   packageId: registry.packages[0].packageId
 } as const;
+const catalogRequest = {
+  apiVersion: 1,
+  requestId: "pi_package_catalog_request_abcdefghijklmnop",
+  query: "side question"
+} as const;
+const catalogEntry = {
+  catalogId: "pi_catalog_narumitw_pi_btw",
+  packageName: "@narumitw/pi-btw",
+  version: "0.34.0",
+  integrity: "sha512-ycjtInVV9csP+mR3L6gXgPJOsMGQej80ltkqbJhK0Gy3Mc8BgYvPrdQ0HXTFSGeDzr+//V51CYVK9KcgWti+VA==",
+  displayName: "Pi BTW",
+  purpose: "Ask a side question without disturbing the main conversation.",
+  license: "MIT",
+  packageTypes: ["extension"],
+  capabilities: ["call_cloud_model_with_private_or_large_source"],
+  dataBoundaries: ["cloud"],
+  trust: "curated",
+  source: "npm"
+} as const;
 
 function makeHarness(overrides: {
   readonly isTrustedSender?: () => boolean;
   readonly getActiveVaultId?: () => string | undefined;
   readonly summary?: () => unknown;
+  readonly catalogQuery?: (value: typeof catalogRequest) => unknown;
   readonly install?: (value: typeof request) => unknown;
   readonly confirmUninstall?: (value: typeof uninstallRequest) => unknown;
   readonly uninstall?: (value: typeof uninstallRequest) => unknown;
@@ -48,6 +68,13 @@ function makeHarness(overrides: {
     taskId: "pi_package_task_abcdefghijklmnop",
     registry,
     status: "installed_disabled"
+  })));
+  const catalogQuery = vi.fn(overrides.catalogQuery ?? ((value) => ({
+    apiVersion: 1,
+    requestId: value.requestId,
+    status: "ready",
+    entries: [catalogEntry],
+    total: 1
   })));
   const confirmUninstall = vi.fn((_sender, value) => overrides.confirmUninstall?.(value) ?? true);
   const uninstall = vi.fn(overrides.uninstall ?? ((value) => ({
@@ -64,17 +91,20 @@ function makeHarness(overrides: {
     isTrustedSender: overrides.isTrustedSender ?? (() => true),
     getActiveVaultId: overrides.getActiveVaultId ?? (() => "vault_20260728_packages"),
     summary,
+    catalogQuery,
     install,
     confirmUninstall,
     uninstall
   });
-  return { handlers, summary, install, confirmUninstall, uninstall };
+  return { handlers, summary, catalogQuery, install, confirmUninstall, uninstall };
 }
 
 describe("registerPiPackagesIpc", () => {
   it("registers the exact package Settings channels and forwards a strict install", async () => {
     const harness = makeHarness();
-    expect([...harness.handlers.keys()]).toEqual(["piPackages.summary", "piPackages.install", "piPackages.uninstall"]);
+    expect([...harness.handlers.keys()]).toEqual([
+      "piPackages.summary", "piPackages.catalogQuery", "piPackages.install", "piPackages.uninstall"
+    ]);
 
     await expect(call(harness, "piPackages.summary")).resolves.toEqual({ status: "ready", registry });
     await expect(call(harness, "piPackages.install", request)).resolves.toMatchObject({
@@ -84,6 +114,34 @@ describe("registerPiPackagesIpc", () => {
     });
     expect(harness.install).toHaveBeenCalledOnce();
     expect(harness.install).toHaveBeenCalledWith(request);
+  });
+
+  it("returns only strict local catalog results and fails closed across sender or identity drift", async () => {
+    const harness = makeHarness();
+    await expect(call(harness, "piPackages.catalogQuery", catalogRequest)).resolves.toEqual({
+      apiVersion: 1,
+      requestId: catalogRequest.requestId,
+      status: "ready",
+      entries: [catalogEntry],
+      total: 1
+    });
+    expect(harness.catalogQuery).toHaveBeenCalledWith(catalogRequest);
+
+    const swapped = makeHarness({ catalogQuery: () => ({
+      apiVersion: 1,
+      requestId: "pi_package_catalog_request_wrongidentity123",
+      status: "failed",
+      error: "/private/catalog"
+    }) });
+    await expect(call(swapped, "piPackages.catalogQuery", catalogRequest)).resolves.toEqual({
+      apiVersion: 1, requestId: catalogRequest.requestId, status: "failed"
+    });
+
+    const untrusted = makeHarness({ isTrustedSender: () => false });
+    await expect(call(untrusted, "piPackages.catalogQuery", catalogRequest)).resolves.toEqual({
+      apiVersion: 1, requestId: catalogRequest.requestId, status: "failed"
+    });
+    expect(untrusted.catalogQuery).not.toHaveBeenCalled();
   });
 
   it("confirms a strict uninstall before effect and returns only authoritative owner state", async () => {
