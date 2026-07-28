@@ -114,7 +114,7 @@ function createPackage() {
     platform: "macos",
     architecture: "arm64",
     capabilities: ["local_text_recognition"],
-    license: { spdxId: "NOASSERTION", name: "See bundled legal inventory" },
+    license: { spdxId: "LicenseRef-Pige-PaddleOCR-3.7.0-Aggregate-Legal-Inventory", name: "See bundled legal inventory" },
     files
   }, null, 2)}\n`);
   return {

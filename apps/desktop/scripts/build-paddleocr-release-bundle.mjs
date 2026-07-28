@@ -356,8 +356,14 @@ function validateLegalCoverage(legal, wheels, parserManifest) {
     fail("Legal inventory must cover exactly the runtime, wrapper, selected wheels, and reviewed models.");
   }
   const legalById = new Map(legal.map((record) => [record.componentId, record]));
-  if (legalById.get("runtime:cpython").licenseExpression !== parserManifest.pythonRuntime.license) {
+  const runtimeLegal = legalById.get("runtime:cpython");
+  if (runtimeLegal.licenseExpression !== parserManifest.pythonRuntime.license) {
     fail("CPython legal identity differs from the reviewed parser manifest.");
+  }
+  if (!runtimeLegal.files.some((file) =>
+    file.kind === "license" && file.path === "runtime/python-build-standalone-MPL-2.0.txt"
+  )) {
+    fail("python-build-standalone MPL-2.0 license evidence is missing from the reviewed runtime inventory.");
   }
   for (const wheel of wheels) {
     if (legalById.get(`wheel:${wheel.name}`).licenseExpression !== wheel.license) {
@@ -677,11 +683,11 @@ function writeSupplyChainMetadata({ temporaryPath, parserManifest, parserManifes
     SPDXID: `SPDXRef-Package-${index + 1}`,
     name: component.name,
     versionInfo: component.version,
-    downloadLocation: component.url ?? "NOASSERTION",
+    downloadLocation: component.url ?? "NONE",
     filesAnalyzed: false,
     licenseConcluded: component.license,
     licenseDeclared: component.license,
-    copyrightText: "NOASSERTION",
+    copyrightText: "See bundled legal inventory",
     checksums: [{ algorithm: "SHA256", checksumValue: component.sha256 }],
     externalRefs: component.purl ? [{
       referenceCategory: "PACKAGE-MANAGER",

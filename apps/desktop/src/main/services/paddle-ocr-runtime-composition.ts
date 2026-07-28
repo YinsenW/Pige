@@ -95,7 +95,10 @@ export function createPaddleOcrRuntimeComposition(
     platform: release.platform === "macos-arm64" ? "macos" : "windows",
     architecture: release.platform === "macos-arm64" ? "arm64" : "x64",
     capabilities: ["ocr.image"],
-    license: { spdxId: "NOASSERTION", name: "See bundled legal inventory" },
+    license: {
+      spdxId: "LicenseRef-Pige-PaddleOCR-3.7.0-Aggregate-Legal-Inventory",
+      name: "See bundled legal inventory"
+    },
     expectedSha256: normalizeDigest(release.installedTreeSha256),
     expectedSizeBytes: release.installedSizeBytes,
     packageLimits

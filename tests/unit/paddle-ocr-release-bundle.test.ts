@@ -78,7 +78,7 @@ describe("PaddleOCR release bundle builder", () => {
       platform: "macos",
       architecture: "arm64",
       capabilities: ["ocr.image"],
-      license: { spdxId: "NOASSERTION", name: "See bundled legal inventory" }
+      license: { spdxId: "LicenseRef-Pige-PaddleOCR-3.7.0-Aggregate-Legal-Inventory", name: "See bundled legal inventory" }
     });
     expect(computeLocalToolPackageSha256(firstOutput, {
       maxManifestBytes: 1024 * 1024,
@@ -159,6 +159,15 @@ describe("PaddleOCR release bundle builder", () => {
     const missingLicense = structuredClone(baseLock);
     missingLicense.legal = missingLicense.legal.filter((entry) => entry.componentId !== "wrapper:pige");
     expect(() => parseSelectedWheelLock(missingLicense, parsedManifest)).toThrow(/cover exactly/u);
+
+    const wrongRuntimeLicense = structuredClone(baseLock) as typeof baseLock & {
+      legal: Array<{ componentId: string; files: Array<{ path: string }> }>;
+    };
+    const runtimeLegal = wrongRuntimeLicense.legal.find((entry) => entry.componentId === "runtime:cpython");
+    if (!runtimeLegal) throw new Error("Fixture runtime legal record is missing.");
+    runtimeLegal.files[0]!.path = "runtime/LICENSE.txt";
+    expect(() => parseSelectedWheelLock(wrongRuntimeLicense, parsedManifest))
+      .toThrow(/python-build-standalone MPL-2.0 license evidence is missing/u);
   });
 
   it("contains no network, package resolver, source-build, or shell execution path", () => {
@@ -215,7 +224,7 @@ async function createFixture() {
 
   const legalDefinitions = [
     ["model:Tiny_det", "Apache-2.0", "model/LICENSE.txt"],
-    ["runtime:cpython", "MPL-2.0", "runtime/LICENSE.txt"],
+    ["runtime:cpython", "MPL-2.0", "runtime/python-build-standalone-MPL-2.0.txt"],
     ["wheel:paddleocr", "Apache-2.0", "paddleocr/LICENSE.txt"],
     ["wheel:paddlepaddle", "Apache-2.0", "paddlepaddle/LICENSE.txt"],
     ["wrapper:pige", "Apache-2.0", "wrapper/LICENSE.txt"]
@@ -295,7 +304,10 @@ async function createFixture() {
     engineVersion: "3.7.0",
     platform: "macos-arm64",
     pythonAbi: "cp313",
-    bundleLicense: { spdxId: "NOASSERTION", name: "See bundled legal inventory" },
+    bundleLicense: {
+      spdxId: "LicenseRef-Pige-PaddleOCR-3.7.0-Aggregate-Legal-Inventory",
+      name: "See bundled legal inventory"
+    },
     wrapper: fileIdentity(wrapperPath),
     limits: {
       maxFiles: 1024,

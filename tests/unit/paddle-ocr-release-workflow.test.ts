@@ -214,7 +214,7 @@ function createInputFixture() {
   const identity = (body: Buffer) => ({ sizeBytes: body.length, sha256: sha256(body) });
   const legalDefinitions = [
     ["model:Tiny_det", "Apache-2.0", "model/LICENSE.txt"],
-    ["runtime:cpython", "MPL-2.0", "runtime/LICENSE.txt"],
+    ["runtime:cpython", "MPL-2.0", "runtime/python-build-standalone-MPL-2.0.txt"],
     ["wheel:paddleocr", "Apache-2.0", "paddleocr/LICENSE.txt"],
     ["wheel:paddlepaddle", "Apache-2.0", "paddlepaddle/LICENSE.txt"],
     ["wrapper:pige", "Apache-2.0", "wrapper/LICENSE.txt"]
@@ -294,7 +294,10 @@ function createInputFixture() {
     engineVersion: "3.7.0",
     platform: "macos-arm64",
     pythonAbi: "cp313",
-    bundleLicense: { spdxId: "NOASSERTION", name: "See bundled legal inventory" },
+    bundleLicense: {
+      spdxId: "LicenseRef-Pige-PaddleOCR-3.7.0-Aggregate-Legal-Inventory",
+      name: "See bundled legal inventory"
+    },
     wrapper: { sizeBytes: 1, sha256: "5".repeat(64) },
     limits: { maxFiles: 128, maxFileBytes: 1024 * 1024, maxTotalBytes: 8 * 1024 * 1024, maxArchiveEntries: 128, maxArchiveExpandedBytes: 8 * 1024 * 1024 },
     wheels: [
@@ -349,7 +352,7 @@ function createLocalToolPackage(root: string) {
     platform: "macos",
     architecture: "arm64",
     capabilities: ["local_text_recognition"],
-    license: { spdxId: "NOASSERTION", name: "See bundled legal inventory" },
+    license: { spdxId: "LicenseRef-Pige-PaddleOCR-3.7.0-Aggregate-Legal-Inventory", name: "See bundled legal inventory" },
     files: entries
   });
   return packageRoot;
