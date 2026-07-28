@@ -1249,46 +1249,13 @@ Responsibilities:
 - Block task-time downloads for core toolchain dependencies.
 - Keep network access off during OCR execution unless a future tool explicitly declares and requests it.
 
-Current desktop code keeps `system.toolchainHealth` read-only and adds a service-local,
-non-networked fake-package lifecycle under trusted app data. Catalog-bound checksummed
-staging atomically publishes relative-only records; tests cover user/permission/Job
-gates, side-by-side recovery, independent packs, and vault invariance. Production
-wiring, Paddle/OCR, UI/platform, cross-process, and full recovery proof remain open;
-no `LocalToolPlugin` contract is frozen.
+`paddleocr_local` (`ocr.paddleocr-local-bundle`) uses a dedicated Main materializer, never
+Task Execution/shell/`pip`. Release preassembles the exact macOS-arm64/Windows-x64 manifest
+inputs with a wheel lock, notices, SBOM, signature and hashes. Main verifies the private
+candidate; missing identity or platform smoke means unsupported/`canInstall=false`.
+Health/OCR stay offline with fixed local model directories.
 
-Toolchain manifest:
-
-```ts
-type LocalToolPlugin = {
-  id: string;
-  label: string;
-  kind:
-    | "bundled_runtime"
-    | "bundled_parser"
-    | "ocr"
-    | "rag_model"
-    | "inference_engine"
-    | "document_parser"
-    | "speech"
-    | "utility";
-  version: string;
-  license: string;
-  platforms: Array<"macos" | "windows" | "linux">;
-  dataBoundary: "local" | "cloud";
-  distribution: "bundled" | "downloaded" | "system";
-  installState: "bundled" | "available" | "installed" | "needs_update" | "repair_needed" | "unsupported" | "error";
-  executablePath?: string;
-  sha256?: string;
-  modelAssets?: Array<{
-    id: string;
-    label: string;
-    sizeBytes?: number;
-    checksum?: string;
-    installed: boolean;
-  }>;
-  capabilities: string[];
-};
-```
+Dependencies/release inputs live in resource manifests; renderer lifecycle lives in schemas.
 
 v0.1 local tool targets:
 
