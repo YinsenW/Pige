@@ -177,6 +177,8 @@ import type {
   SkillStageFromUrlResult,
   SkillStageFromMarkdownRequest,
   SkillStageFromMarkdownResult,
+  SkillStageFromZipRequest,
+  SkillStageFromZipResult,
   SkillStageUpdateRequest,
   SkillStageUpdateResult,
   SkillUninstallRequest,
@@ -392,6 +394,8 @@ export type {
   SkillStageFromUrlResult,
   SkillStageFromMarkdownRequest,
   SkillStageFromMarkdownResult,
+  SkillStageFromZipRequest,
+  SkillStageFromZipResult,
   SkillStageUpdateRequest,
   SkillStageUpdateResult,
   SkillStageInvalidReason,
@@ -1575,6 +1579,7 @@ export interface PigeDesktopApi {
     readonly summary: () => Promise<SkillRegistryQueryResult>;
     readonly stageFromUrl: (request: SkillStageFromUrlRequest) => Promise<SkillStageFromUrlResult>;
     readonly stageFromMarkdown: (request: SkillStageFromMarkdownRequest) => Promise<SkillStageFromMarkdownResult>;
+    readonly stageFromZip: (request: SkillStageFromZipRequest) => Promise<SkillStageFromZipResult>;
     readonly stageUpdate: (request: SkillStageUpdateRequest) => Promise<SkillStageUpdateResult>;
     readonly installStaged: (request: SkillInstallStagedRequest) => Promise<SkillInstallStagedResult>;
     readonly discardStaged: (request: SkillDiscardStagedRequest) => Promise<SkillDiscardStagedResult>;

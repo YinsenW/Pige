@@ -958,6 +958,7 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly summary: () => Promise<SkillRegistryQueryResult>;");
     expect(contractsSource).toContain("readonly stageFromUrl: (request: SkillStageFromUrlRequest)");
     expect(contractsSource).toContain("readonly stageFromMarkdown: (request: SkillStageFromMarkdownRequest)");
+    expect(contractsSource).toContain("readonly stageFromZip: (request: SkillStageFromZipRequest)");
     expect(contractsSource).toContain("readonly stageUpdate: (request: SkillStageUpdateRequest)");
     expect(contractsSource).toContain("readonly installStaged: (request: SkillInstallStagedRequest)");
     expect(contractsSource).toContain("readonly discardStaged: (request: SkillDiscardStagedRequest)");
@@ -986,6 +987,9 @@ describe("desktop shell build contract", () => {
     expect(preloadApi).toContain('"skills.stageFromMarkdown"');
     expect(preloadApi).toContain("SkillStageFromMarkdownRequestSchema.parse(request)");
     expect(preloadApi).toContain("SkillStageFromMarkdownResultSchema.parse(");
+    expect(preloadApi).toContain('"skills.stageFromZip"');
+    expect(preloadApi).toContain("SkillStageFromZipRequestSchema.parse(request)");
+    expect(preloadApi).toContain("SkillStageFromZipResultSchema.parse(");
     expect(preloadApi).toContain('"skills.stageUpdate"');
     expect(preloadApi).toContain("SkillStageUpdateRequestSchema.parse(request)");
     expect(preloadApi).toContain("SkillStageUpdateResultSchema.parse(");
