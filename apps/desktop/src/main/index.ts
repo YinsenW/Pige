@@ -2147,6 +2147,7 @@ registerSkillsIpc({
   summary: () => getSkillRegistryService().summary(),
   stageFromUrl: (request) => getSkillUrlInstallService().stageFromUrl(request),
   stageFromMarkdown: (request, sourcePath) => getSkillUrlInstallService().stageFromMarkdown(request, sourcePath),
+  stageFromZip: (request, sourcePath) => getSkillUrlInstallService().stageFromZip(request, sourcePath),
   stageUpdate: (request) => getSkillUrlInstallService().stageUpdate(request),
   installStaged: (request) => getSkillUrlInstallService().installStaged(request),
   discardStaged: (request) => getSkillUrlInstallService().discardStaged(request),

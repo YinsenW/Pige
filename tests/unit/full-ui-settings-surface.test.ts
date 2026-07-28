@@ -1226,6 +1226,7 @@ describe("full UI Settings surface", () => {
     const staged = {
       stagingId: "skillstage_abcdef0123456789abcdef0123456789" as const,
       manifestSha256: `sha256:${"c".repeat(64)}` as const,
+      bundleSha256: `sha256:${"d".repeat(64)}` as const,
       registryRevision: 20,
       expiresAt: "2026-07-28T12:00:00.000Z",
       sourceUrl: "https://example.com/SKILL.md" as const,
@@ -1315,6 +1316,7 @@ describe("full UI Settings surface", () => {
       requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
       stagingId: staged.stagingId,
       manifestSha256: staged.manifestSha256,
+      bundleSha256: staged.bundleSha256,
       expectedRegistryRevision: 20,
       enabled: false
     });
@@ -1411,6 +1413,7 @@ describe("full UI Settings surface", () => {
     const staged = {
       stagingId: "skillstage_89abcdef0123456789abcdef01234567" as const,
       manifestSha256: `sha256:${"e".repeat(64)}` as const,
+      bundleSha256: `sha256:${"a".repeat(64)}` as const,
       registryRevision: 40,
       expiresAt: "2026-07-28T14:00:00.000Z",
       id: "local-review",
@@ -1505,6 +1508,7 @@ describe("full UI Settings surface", () => {
       requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
       stagingId: staged.stagingId,
       manifestSha256: staged.manifestSha256,
+      bundleSha256: staged.bundleSha256,
       expectedRegistryRevision: 40,
       enabled: true
     });
@@ -1525,6 +1529,130 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("stages one Main-picked ZIP Skill, reviews every safe file, and installs the exact bundle", async () => {
+    const dom = createDom();
+    const vaultId = "vault_20260728_zipskill";
+    const initialRegistry = skillRegistry(50, false, 0, []);
+    const installedRegistry = skillRegistry(51, true);
+    const staged = {
+      stagingId: "skillstage_fedcba9876543210fedcba9876543210" as const,
+      manifestSha256: `sha256:${"1".repeat(64)}` as const,
+      bundleSha256: `sha256:${"2".repeat(64)}` as const,
+      registryRevision: 50,
+      expiresAt: "2026-07-28T15:00:00.000Z",
+      id: "zip-review",
+      name: "ZIP review",
+      version: "1.0.0",
+      description: "Reviews a complete local ZIP Skill bundle.",
+      scope: "machine_local" as const,
+      kind: "pure" as const,
+      capabilities: ["read_current_source" as const],
+      dataBoundaries: ["local" as const],
+      files: [
+        { relativePath: "SKILL.md" as const, utf8ByteSize: 1536, sha256: `sha256:${"3".repeat(64)}` as const },
+        { relativePath: "references/config.json" as const, utf8ByteSize: 512, sha256: `sha256:${"4".repeat(64)}` as const },
+        { relativePath: "references/guide.md" as const, utf8ByteSize: 3072, sha256: `sha256:${"5".repeat(64)}` as const }
+      ],
+      warnings: []
+    };
+    let stageAttempt = 0;
+    const stageFromZip = vi.fn(async (request: {
+      requestId: `skillreq_${string}`;
+      activeVaultId: string;
+    }) => {
+      const identity = {
+        apiVersion: 1 as const,
+        requestId: request.requestId,
+        activeVaultId: request.activeVaultId
+      };
+      stageAttempt += 1;
+      if (stageAttempt === 1) return { ...identity, status: "cancelled" as const };
+      if (stageAttempt === 2) return { ...identity, status: "invalid" as const, reason: "archive_unsafe" as const };
+      return { ...identity, status: "ready" as const, staged };
+    });
+    const installStaged = vi.fn(async (request: { requestId: string }) => ({
+      status: "committed" as const,
+      requestId: request.requestId,
+      registry: installedRegistry
+    }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        skills: {
+          summary: async () => ({ status: "ready" as const, registry: initialRegistry }),
+          stageFromZip,
+          installStaged,
+          discardStaged: vi.fn(),
+          disable: vi.fn(),
+          onChanged: () => () => undefined
+        },
+        vault: { current: async () => ({ vaultId }) }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(SkillsSettingsPanel, { t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-skills"));
+    const importZip = (): HTMLButtonElement => buttonNamed(page, "Import ZIP Skill");
+
+    await act(async () => {
+      importZip().click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(stageFromZip).toHaveBeenCalledWith({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
+      activeVaultId: vaultId
+    });
+    expect(page.textContent).not.toContain("Pige could not review this ZIP Skill safely.");
+    expect(dom.window.document.activeElement).toBe(importZip());
+
+    await act(async () => {
+      importZip().click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(page.textContent).toContain("Pige could not review this ZIP Skill safely.");
+    expect(page.textContent).not.toContain("archive_unsafe");
+
+    await act(async () => {
+      importZip().click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(page.textContent).toContain("ZIP review");
+    expect(page.textContent).toContain("SKILL.md · 2 KB");
+    expect(page.textContent).toContain("references/config.json · 512 B");
+    expect(page.textContent).toContain("references/guide.md · 3 KB");
+    expect(page.textContent).not.toContain(staged.stagingId);
+    expect(page.textContent).not.toContain(staged.manifestSha256);
+    expect(page.textContent).not.toContain(staged.bundleSha256);
+    expect(page.textContent).not.toContain("file://");
+
+    await act(async () => {
+      buttonNamed(page, "Install Skill").click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(installStaged).toHaveBeenCalledWith({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
+      stagingId: staged.stagingId,
+      manifestSha256: staged.manifestSha256,
+      bundleSha256: staged.bundleSha256,
+      expectedRegistryRevision: 50,
+      enabled: true
+    });
+    expect(page.textContent).toContain("The reviewed Skill is installed and enabled.");
+    expect(dom.window.document.activeElement).toBe(importZip());
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("stages one exact Skill URL for review, installs with the frozen identity, and discards without installing", async () => {
     const dom = createDom();
     const initialRegistry = skillRegistry(3, false, 0, []);
@@ -1532,6 +1660,7 @@ describe("full UI Settings surface", () => {
     const staged = {
       stagingId: "skillstage_0123456789abcdef0123456789abcdef" as const,
       manifestSha256: `sha256:${"a".repeat(64)}` as const,
+      bundleSha256: `sha256:${"c".repeat(64)}` as const,
       registryRevision: 3,
       expiresAt: "2026-07-27T12:00:00.000Z",
       sourceUrl: "https://example.com/SKILL.md" as const,
@@ -1615,6 +1744,7 @@ describe("full UI Settings surface", () => {
       requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
       stagingId: staged.stagingId,
       manifestSha256: staged.manifestSha256,
+      bundleSha256: staged.bundleSha256,
       expectedRegistryRevision: 3,
       enabled: true
     });
@@ -1644,7 +1774,8 @@ describe("full UI Settings surface", () => {
       apiVersion: 1,
       requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
       stagingId: staged.stagingId,
-      manifestSha256: staged.manifestSha256
+      manifestSha256: staged.manifestSha256,
+      bundleSha256: staged.bundleSha256
     });
     expect(Array.from(page.querySelectorAll("button")).some((button) => button.textContent?.trim() === "Discard")).toBe(false);
     const restoredInput = requireElement(page.querySelector<HTMLInputElement>("#skill-install-url"));

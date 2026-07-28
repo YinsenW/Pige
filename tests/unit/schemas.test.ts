@@ -93,6 +93,8 @@ import {
   SkillStageFromUrlResultSchema,
   SkillStageFromMarkdownRequestSchema,
   SkillStageFromMarkdownResultSchema,
+  SkillStageFromZipRequestSchema,
+  SkillStageFromZipResultSchema,
   SkillStageUpdateRequestSchema,
   SkillStageUpdateResultSchema,
   SkillUninstallRequestSchema,
@@ -2156,6 +2158,7 @@ describe("schemas", () => {
     const staged = {
       stagingId,
       manifestSha256,
+      bundleSha256: manifestSha256,
       registryRevision: 4,
       expiresAt: "2026-07-27T12:00:00.000Z",
       sourceUrl,
@@ -2181,6 +2184,7 @@ describe("schemas", () => {
       requestId,
       stagingId,
       manifestSha256,
+      bundleSha256: manifestSha256,
       expectedRegistryRevision: 4,
       enabled: true
     } as const;
@@ -2189,7 +2193,7 @@ describe("schemas", () => {
     expect(SkillInstallStagedResultSchema.parse({ status: "committed", requestId, registry }))
       .toEqual({ status: "committed", requestId, registry });
 
-    const discardRequest = { apiVersion: 1, requestId, stagingId, manifestSha256 } as const;
+    const discardRequest = { apiVersion: 1, requestId, stagingId, manifestSha256, bundleSha256: manifestSha256 } as const;
     expect(SkillDiscardStagedRequestSchema.parse(discardRequest)).toEqual(discardRequest);
     expect(SkillDiscardStagedResultSchema.parse({ status: "discarded", requestId }))
       .toEqual({ status: "discarded", requestId });
@@ -2209,6 +2213,7 @@ describe("schemas", () => {
     const staged = {
       stagingId: `skillstage_${"d".repeat(32)}`,
       manifestSha256: `sha256:${"e".repeat(64)}`,
+      bundleSha256: `sha256:${"e".repeat(64)}`,
       registryRevision: 4,
       expiresAt: "2026-07-28T12:00:00.000Z",
       id: "local-review",
@@ -2240,6 +2245,64 @@ describe("schemas", () => {
       ...identity,
       staged: { ...staged, sourceUrl: "https://example.com/SKILL.md", warnings: ["untrusted_remote_source"] }
     })).toThrow();
+  });
+
+  it("keeps local ZIP Skill staging bounded, pathless, and bundle-bound", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "skillreq_zipabcdefghijklmnop",
+      activeVaultId: "vault_20260728_zipskill"
+    } as const;
+    expect(SkillStageFromZipRequestSchema.parse(request)).toEqual(request);
+    for (const unsafe of [{ path: "/private/skill.zip" }, { body: "private" }, { archiveBytes: "private" }]) {
+      expect(() => SkillStageFromZipRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+    }
+
+    const staged = {
+      stagingId: `skillstage_${"f".repeat(32)}`,
+      manifestSha256: `sha256:${"a".repeat(64)}`,
+      bundleSha256: `sha256:${"b".repeat(64)}`,
+      registryRevision: 4,
+      expiresAt: "2026-07-28T12:00:00.000Z",
+      id: "zip-review",
+      name: "ZIP Review",
+      version: "1.0.0",
+      description: "Review one local ZIP Skill before install.",
+      scope: "machine_local",
+      kind: "pure",
+      capabilities: ["read_current_source"],
+      dataBoundaries: ["local"],
+      files: [
+        { relativePath: "SKILL.md", utf8ByteSize: 1024, sha256: `sha256:${"a".repeat(64)}` },
+        { relativePath: "references/style.md", utf8ByteSize: 512, sha256: `sha256:${"c".repeat(64)}` },
+        { relativePath: "references/rules.json", utf8ByteSize: 256, sha256: `sha256:${"d".repeat(64)}` }
+      ],
+      warnings: []
+    } as const;
+    expect(SkillStageFromZipResultSchema.parse({ ...request, status: "ready", staged }))
+      .toEqual({ ...request, status: "ready", staged });
+    for (const reason of [
+      "archive_too_large", "archive_invalid", "archive_unsafe", "skill_root_invalid",
+      "manifest_invalid", "unsupported_content"
+    ] as const) {
+      expect(SkillStageFromZipResultSchema.parse({ ...request, status: "invalid", reason }))
+        .toEqual({ ...request, status: "invalid", reason });
+    }
+    expect(SkillStageFromZipResultSchema.parse({ ...request, status: "cancelled" }))
+      .toEqual({ ...request, status: "cancelled" });
+    expect(SkillStageFromZipResultSchema.parse({ ...request, status: "failed" }))
+      .toEqual({ ...request, status: "failed" });
+    expect(() => SkillStageFromZipResultSchema.parse({
+      ...request,
+      status: "ready",
+      staged: { ...staged, files: [...staged.files, { ...staged.files[1], relativePath: "REFERENCES/STYLE.MD" }] }
+    })).toThrow();
+    expect(() => SkillStageFromZipResultSchema.parse({
+      ...request,
+      status: "ready",
+      staged: { ...staged, files: staged.files.filter((file) => file.relativePath !== "SKILL.md") }
+    })).toThrow();
+    expect(() => SkillStageFromZipResultSchema.parse({ ...request, status: "failed", path: "/private/skill.zip" })).toThrow();
   });
 
   it("keeps installed Skill lifecycle vault-bound, CAS-fenced, and pathless", () => {
@@ -2292,6 +2355,7 @@ describe("schemas", () => {
     const stagedUpdate = {
       stagingId: `skillstage_${"a".repeat(32)}`,
       manifestSha256: `sha256:${"b".repeat(64)}`,
+      bundleSha256: `sha256:${"b".repeat(64)}`,
       registryRevision: request.expectedRegistryRevision,
       expiresAt: "2026-07-28T12:00:00.000Z",
       sourceUrl: "https://example.com/skills/paper-reading/SKILL.md",

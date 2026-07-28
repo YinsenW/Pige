@@ -1530,6 +1530,13 @@ export const SkillDisableRequestSchema = z.object({
 
 export const SKILL_URL_STAGE_MAX_UTF8_BYTES = 256 * 1024;
 export const SKILL_MARKDOWN_STAGE_MAX_UTF8_BYTES = SKILL_URL_STAGE_MAX_UTF8_BYTES;
+export const SKILL_ZIP_STAGE_MAX_ARCHIVE_BYTES = 2 * 1024 * 1024;
+export const SKILL_ZIP_STAGE_MAX_EXPANDED_BYTES = 4 * 1024 * 1024;
+export const SKILL_ZIP_STAGE_MAX_FILE_BYTES = SKILL_MARKDOWN_STAGE_MAX_UTF8_BYTES;
+export const SKILL_ZIP_STAGE_MAX_FILES = 64;
+export const SKILL_ZIP_STAGE_MAX_PATH_DEPTH = 8;
+export const SKILL_ZIP_STAGE_MAX_PATH_LENGTH = 512;
+export const SKILL_ZIP_STAGE_MAX_COMPRESSION_RATIO = 100;
 export const SkillInstallRequestIdSchema = z.string()
   .regex(/^skillreq_[a-z0-9]{16,64}$/u);
 export const SkillLifecycleRequestIdSchema = z.string()
@@ -1562,14 +1569,33 @@ export const SkillStageWarningSchema = z.enum([
   "untrusted_remote_source",
   "trigger_overlap"
 ]);
+export const SkillZipStageInvalidReasonSchema = z.enum([
+  "archive_too_large",
+  "archive_invalid",
+  "archive_unsafe",
+  "skill_root_invalid",
+  "manifest_invalid",
+  "unsupported_content"
+]);
+export const SkillStagedRelativePathSchema = z.string()
+  .min(1)
+  .max(SKILL_ZIP_STAGE_MAX_PATH_LENGTH)
+  .refine((value) => {
+    const segments = value.split("/");
+    return !value.startsWith("/") && !value.includes("\\") && !value.includes("\0") &&
+      segments.length <= SKILL_ZIP_STAGE_MAX_PATH_DEPTH &&
+      segments.every((segment) => segment.length > 0 && segment !== "." && segment !== "..") &&
+      (value === "SKILL.md" || /\.(?:json|md)$/iu.test(value));
+  }, "Staged Skill file paths must be bounded relative Markdown or JSON paths.");
 export const SkillStagedFileSummarySchema = z.object({
-  relativePath: z.literal("SKILL.md"),
-  utf8ByteSize: z.number().int().positive().max(SKILL_URL_STAGE_MAX_UTF8_BYTES),
+  relativePath: SkillStagedRelativePathSchema,
+  utf8ByteSize: z.number().int().positive().max(SKILL_ZIP_STAGE_MAX_FILE_BYTES),
   sha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u)
 }).strict();
 export const SkillStagedSummarySchema = z.object({
   stagingId: SkillStagingIdSchema,
   manifestSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  bundleSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
   registryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   expiresAt: z.string().datetime({ offset: true }),
   sourceUrl: SkillInstallUrlSchema.optional(),
@@ -1583,7 +1609,7 @@ export const SkillStagedSummarySchema = z.object({
   dataBoundaries: z.tuple([z.literal("local")]),
   author: z.string().min(1).max(120).optional(),
   license: z.string().min(1).max(120).optional(),
-  files: z.tuple([SkillStagedFileSummarySchema]),
+  files: z.array(SkillStagedFileSummarySchema).min(1).max(SKILL_ZIP_STAGE_MAX_FILES),
   warnings: z.array(SkillStageWarningSchema).max(2)
     .refine((values) => new Set(values).size === values.length, "Skill stage warnings must be unique.")
 }).strict().superRefine((staged, context) => {
@@ -1594,6 +1620,24 @@ export const SkillStagedSummarySchema = z.object({
       path: ["warnings"],
       message: "Remote Skill stages require one matching remote-source warning."
     });
+  }
+  const canonicalPaths = new Set<string>();
+  let totalBytes = 0;
+  let manifestCount = 0;
+  for (const [index, file] of staged.files.entries()) {
+    const canonicalPath = file.relativePath.normalize("NFC").toLocaleLowerCase("en-US");
+    if (canonicalPaths.has(canonicalPath)) {
+      context.addIssue({ code: "custom", path: ["files", index, "relativePath"], message: "Staged Skill file paths must be unique." });
+    }
+    canonicalPaths.add(canonicalPath);
+    totalBytes += file.utf8ByteSize;
+    if (file.relativePath === "SKILL.md") manifestCount += 1;
+  }
+  if (manifestCount !== 1) {
+    context.addIssue({ code: "custom", path: ["files"], message: "A staged Skill requires exactly one root SKILL.md." });
+  }
+  if (totalBytes > SKILL_ZIP_STAGE_MAX_EXPANDED_BYTES) {
+    context.addIssue({ code: "custom", path: ["files"], message: "Staged Skill files exceed the expanded-byte limit." });
   }
 });
 export const SkillStageFromUrlRequestSchema = z.object({
@@ -1606,11 +1650,13 @@ export const SkillStageFromMarkdownRequestSchema = z.object({
   requestId: SkillInstallRequestIdSchema,
   activeVaultId: VaultIdSchema
 }).strict();
+export const SkillStageFromZipRequestSchema = SkillStageFromMarkdownRequestSchema;
 export const SkillInstallStagedRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: SkillInstallRequestIdSchema,
   stagingId: SkillStagingIdSchema,
   manifestSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  bundleSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
   expectedRegistryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   enabled: z.boolean()
 }).strict();
@@ -1618,7 +1664,8 @@ export const SkillDiscardStagedRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: SkillInstallRequestIdSchema,
   stagingId: SkillStagingIdSchema,
-  manifestSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u)
+  manifestSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  bundleSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u)
 }).strict();
 
 const SkillInstalledLifecycleRequestIdentitySchema = z.object({
@@ -1684,6 +1731,27 @@ export const SkillStageFromMarkdownResultSchema = z.discriminatedUnion("status",
       code: "custom",
       path: ["staged", "sourceUrl"],
       message: "Local Markdown stages cannot expose a source URL."
+    });
+  }
+});
+
+export const SkillStageFromZipResultSchema = z.discriminatedUnion("status", [
+  SkillStageFromMarkdownResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    staged: SkillStagedSummarySchema
+  }).strict(),
+  SkillStageFromMarkdownResultIdentitySchema.extend({ status: z.literal("cancelled") }).strict(),
+  SkillStageFromMarkdownResultIdentitySchema.extend({
+    status: z.literal("invalid"),
+    reason: SkillZipStageInvalidReasonSchema
+  }).strict(),
+  SkillStageFromMarkdownResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status === "ready" && result.staged.sourceUrl !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["staged", "sourceUrl"],
+      message: "Local ZIP stages cannot expose a source URL."
     });
   }
 });
@@ -5664,6 +5732,7 @@ export type SkillStageUpdateResult = z.infer<typeof SkillStageUpdateResultSchema
 export type SkillStagingId = z.infer<typeof SkillStagingIdSchema>;
 export type SkillInstallUrl = z.infer<typeof SkillInstallUrlSchema>;
 export type SkillStageInvalidReason = z.infer<typeof SkillStageInvalidReasonSchema>;
+export type SkillZipStageInvalidReason = z.infer<typeof SkillZipStageInvalidReasonSchema>;
 export type SkillStageWarning = z.infer<typeof SkillStageWarningSchema>;
 export type SkillStagedFileSummary = z.infer<typeof SkillStagedFileSummarySchema>;
 export type SkillStagedSummary = z.infer<typeof SkillStagedSummarySchema>;
@@ -5671,6 +5740,8 @@ export type SkillStageFromUrlRequest = z.infer<typeof SkillStageFromUrlRequestSc
 export type SkillStageFromUrlResult = z.infer<typeof SkillStageFromUrlResultSchema>;
 export type SkillStageFromMarkdownRequest = z.infer<typeof SkillStageFromMarkdownRequestSchema>;
 export type SkillStageFromMarkdownResult = z.infer<typeof SkillStageFromMarkdownResultSchema>;
+export type SkillStageFromZipRequest = z.infer<typeof SkillStageFromZipRequestSchema>;
+export type SkillStageFromZipResult = z.infer<typeof SkillStageFromZipResultSchema>;
 export type SkillInstallStagedRequest = z.infer<typeof SkillInstallStagedRequestSchema>;
 export type SkillInstallStagedResult = z.infer<typeof SkillInstallStagedResultSchema>;
 export type SkillDiscardStagedRequest = z.infer<typeof SkillDiscardStagedRequestSchema>;

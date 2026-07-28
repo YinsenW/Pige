@@ -780,7 +780,7 @@
     "PIGE-UI-004":{"status":"planned","plannedTarget":"Remaining Knowledge Tree density/scale, compact-platform, assistive-technology, and signed packaged visual acceptance."},
     "PIGE-UI-005":{"status":"planned","plannedTarget":"Reader selection works; cited append is frozen. Evidence, other mutation and platform proof remain."},
     "PIGE-UI-006":{"status":"partial","evidence":["EV-READER-RELATED","EV-READER-UI","EV-FULL-UI-LIBRARY","EV-FULL-UI-RESPONSIVE","EV-READER-ACTIONS-UI","EV-READER-INLINE","EV-READER-SELECTION-LINK"],"open":{"id":"OPEN-REQ-PIGE-UI-006","description":"Source/graph gaps remain.","targetBuilds":["B6.08","B6.09"],"targetExits":["E6.05","E6.07"]}},
-    "PIGE-SKILL-001":{"status":"planned","plannedTarget":"Settings stages, reviews and installs bounded pure HTTPS or Main-picked local Markdown Skills; installed bytes support re-enable, source update, trash uninstall and pathless export. ZIP/chat/vault/External-Web lifecycle and public restore remain."},
+    "PIGE-SKILL-001":{"status":"planned","plannedTarget":"Settings stages, reviews and installs bounded pure HTTPS, Main-picked Markdown or ZIP Skills; installed bytes support re-enable, source update, trash uninstall and pathless export. Chat/vault/External-Web lifecycle and public restore remain."},
     "PIGE-SKILL-002":{"status":"planned","plannedTarget":"Catalog/lifecycle plus no-hidden-install and official Feishu recipe fixture: resolve CLI npm SRI, native binary checksum/origins, skills package/Skill source, fixed steps/destinations and browser auth before confirmation."}
   },
   "exits": {

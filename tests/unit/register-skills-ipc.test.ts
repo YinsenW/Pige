@@ -4,6 +4,7 @@ import { registerSkillsIpc } from "../../apps/desktop/src/main/register-skills-i
 const requestId = "skillreq_0123456789abcdef";
 const stagingId = "skillstage_0123456789abcdef0123456789abcdef";
 const manifestSha256 = `sha256:${"a".repeat(64)}`;
+const bundleSha256 = manifestSha256;
 const lifecycleRequestId = "skill_lifecycle_request_0123456789abcdef";
 const activeVaultId = "vault_20260728_skillipc";
 
@@ -31,6 +32,7 @@ function register(overrides: Record<string, unknown> = {}) {
       staged: {
         stagingId,
         manifestSha256,
+        bundleSha256,
         registryRevision: 2,
         expiresAt: "2026-07-27T12:30:00.000Z",
         sourceUrl: "https://example.com/SKILL.md",
@@ -54,6 +56,7 @@ function register(overrides: Record<string, unknown> = {}) {
       staged: {
         stagingId,
         manifestSha256,
+        bundleSha256,
         registryRevision: 2,
         expiresAt: "2026-07-27T12:30:00.000Z",
         id: "paper-reading",
@@ -67,6 +70,12 @@ function register(overrides: Record<string, unknown> = {}) {
         files: [{ relativePath: "SKILL.md", utf8ByteSize: 512, sha256: manifestSha256 }],
         warnings: []
       }
+    }),
+    stageFromZip: (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      status: "cancelled"
     }),
     stageUpdate: (request) => ({
       apiVersion: 1,
@@ -95,6 +104,27 @@ function register(overrides: Record<string, unknown> = {}) {
 }
 
 describe("registerSkillsIpc", () => {
+  it("owns the single ZIP picker and never accepts a renderer path", async () => {
+    const showOpenDialog = vi.fn(async () => ({ canceled: false, filePaths: ["/tmp/review.zip"] }));
+    const stageFromZip = vi.fn((request) => ({
+      apiVersion: 1 as const,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      status: "cancelled" as const
+    }));
+    const { handlers } = register({ showOpenDialog, stageFromZip });
+    const request = { apiVersion: 1 as const, requestId, activeVaultId };
+
+    expect(await handlers.get("skills.stageFromZip")?.({ sender: {} }, request)).toEqual({ ...request, status: "cancelled" });
+    expect(showOpenDialog).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      properties: ["openFile"],
+      filters: [{ name: "ZIP archive", extensions: ["zip"] }]
+    }));
+    expect(stageFromZip).toHaveBeenCalledWith(request, "/tmp/review.zip");
+    await expect(handlers.get("skills.stageFromZip")?.({ sender: {} }, { ...request, path: "/tmp/forbidden.zip" }))
+      .rejects.toThrow();
+  });
+
   it("owns pathless local Markdown selection and fences vault identity across the dialog", async () => {
     const successful = register();
     const request = { apiVersion: 1 as const, requestId, activeVaultId };
@@ -142,6 +172,7 @@ describe("registerSkillsIpc", () => {
       requestId,
       stagingId,
       manifestSha256,
+      bundleSha256,
       expectedRegistryRevision: 2,
       enabled: true
     });
@@ -152,7 +183,8 @@ describe("registerSkillsIpc", () => {
       apiVersion: 1,
       requestId,
       stagingId,
-      manifestSha256
+      manifestSha256,
+      bundleSha256
     });
     expect(publishRegistryChanged).toHaveBeenCalledTimes(1);
   });
@@ -171,6 +203,7 @@ describe("registerSkillsIpc", () => {
       requestId,
       stagingId,
       manifestSha256,
+      bundleSha256,
       expectedRegistryRevision: 2,
       enabled: true,
       body: "forbidden"

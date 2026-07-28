@@ -1009,10 +1009,9 @@ Install: Paste Skill Link | Choose Markdown | Choose ZIP
 Staged: review identity, files, capabilities, boundary and warnings
 ```
 
-`Choose Markdown` opens Main's `.md` picker; cancel is quiet and `ready` reuses staged review plus
-explicit `Install`. No selected path/body appears. Explicit chat remains later. Installed actions
-require exact eligibility booleans; Update binds vault/Skill/revision and labels `Update`.
-Uninstall confirms, export is pathless and closed results replace state; no UI inference.
+`Choose Markdown`/`Choose ZIP` open Main pickers; cancel is quiet, invalid ZIP closes and `ready`
+reuses review plus `Install`. No path/body appears; chat stays later. Actions require eligibility
+booleans; Update binds vault/Skill/revision. Uninstall confirms; export is pathless.
 
 Focused high-risk dialog target:
 

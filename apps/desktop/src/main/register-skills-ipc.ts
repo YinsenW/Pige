@@ -13,6 +13,8 @@ import {
   SkillRegistryQueryResultSchema,
   SkillStageFromMarkdownRequestSchema,
   SkillStageFromMarkdownResultSchema,
+  SkillStageFromZipRequestSchema,
+  SkillStageFromZipResultSchema,
   SkillStageFromUrlRequestSchema,
   SkillStageFromUrlResultSchema,
   SkillStageUpdateRequestSchema,
@@ -31,6 +33,8 @@ import {
   type SkillRegistryQueryResult,
   type SkillStageFromMarkdownRequest,
   type SkillStageFromMarkdownResult,
+  type SkillStageFromZipRequest,
+  type SkillStageFromZipResult,
   type SkillStageFromUrlRequest,
   type SkillStageFromUrlResult,
   type SkillStageUpdateRequest,
@@ -58,6 +62,10 @@ interface RegisterSkillsIpcOptions {
     request: SkillStageFromMarkdownRequest,
     sourcePath: string
   ) => SkillStageFromMarkdownResult | Promise<SkillStageFromMarkdownResult>;
+  readonly stageFromZip: (
+    request: SkillStageFromZipRequest,
+    sourcePath: string
+  ) => SkillStageFromZipResult | Promise<SkillStageFromZipResult>;
   readonly stageUpdate: (
     request: SkillStageUpdateRequest
   ) => SkillStageUpdateResult | Promise<SkillStageUpdateResult>;
@@ -130,6 +138,32 @@ export function registerSkillsIpc(options: RegisterSkillsIpcOptions): void {
       return markdownStatus(parsed, "failed");
     }
   });
+  options.ipcMain.handle("skills.stageFromZip", async (event, request: unknown) => {
+    const parsed = SkillStageFromZipRequestSchema.parse(request);
+    if (!hasActiveVault(options, parsed.activeVaultId)) return zipStatus(parsed, "failed");
+    const window = options.getWindow(event.sender);
+    if (!window) return zipStatus(parsed, "failed");
+    let selection: { readonly canceled: boolean; readonly filePaths: string[] };
+    try {
+      selection = await options.showOpenDialog(window, {
+        title: "Import ZIP Skill",
+        properties: ["openFile"],
+        filters: [{ name: "ZIP archive", extensions: ["zip"] }]
+      });
+    } catch {
+      return zipStatus(parsed, "failed");
+    }
+    if (!hasActiveVault(options, parsed.activeVaultId)) return zipStatus(parsed, "failed");
+    if (selection.canceled) return zipStatus(parsed, "cancelled");
+    if (selection.filePaths.length !== 1) return zipStatus(parsed, "failed");
+    try {
+      const result = SkillStageFromZipResultSchema.parse(await options.stageFromZip(parsed, selection.filePaths[0]!));
+      assertMarkdownIdentity(parsed, result);
+      return result;
+    } catch {
+      return zipStatus(parsed, "failed");
+    }
+  });
   options.ipcMain.handle("skills.stageUpdate", async (_event, request: unknown) => {
     const parsed = SkillStageUpdateRequestSchema.parse(request);
     if (!hasActiveVault(options, parsed.activeVaultId)) return stageUpdateFailed(parsed);
@@ -185,7 +219,10 @@ export function registerSkillsIpc(options: RegisterSkillsIpcOptions): void {
   });
 }
 
-function assertMarkdownIdentity(request: SkillStageFromMarkdownRequest, result: SkillStageFromMarkdownResult): void {
+function assertMarkdownIdentity(
+  request: SkillStageFromMarkdownRequest,
+  result: { readonly apiVersion: 1; readonly requestId: string; readonly activeVaultId: string }
+): void {
   if (result.apiVersion !== request.apiVersion || result.requestId !== request.requestId ||
     result.activeVaultId !== request.activeVaultId) {
     throw new Error("Skill Markdown stage response identity did not match the request.");
@@ -258,6 +295,15 @@ function markdownStatus(
   status: "cancelled" | "failed"
 ): SkillStageFromMarkdownResult {
   return SkillStageFromMarkdownResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    status
+  });
+}
+
+function zipStatus(request: SkillStageFromZipRequest, status: "cancelled" | "failed"): SkillStageFromZipResult {
+  return SkillStageFromZipResultSchema.parse({
     apiVersion: request.apiVersion,
     requestId: request.requestId,
     activeVaultId: request.activeVaultId,

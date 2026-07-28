@@ -40,15 +40,21 @@ export interface SkillStagedInstallCandidate {
   readonly requestId: string;
   readonly sourceUrl?: string;
   readonly manifestSha256: string;
+  readonly bundleSha256: string;
   readonly expiresAt: string;
   readonly manifest: SkillManifest;
   readonly bytes: Buffer;
+  readonly files: readonly {
+    readonly relativePath: string;
+    readonly bytes: Buffer;
+    readonly sha256: `sha256:${string}`;
+  }[];
   readonly update?: SkillStagedUpdateBinding;
 }
 
 export interface SkillStagingStorePort {
-  readForInstall(stagingId: string, manifestSha256: string): SkillStagedInstallCandidate | "stale" | undefined;
-  discardExact(stagingId: string, manifestSha256: string): "discarded" | "stale" | "not_found";
+  readForInstall(stagingId: string, manifestSha256: string, bundleSha256: string): SkillStagedInstallCandidate | "stale" | undefined;
+  discardExact(stagingId: string, manifestSha256: string, bundleSha256: string): "discarded" | "stale" | "not_found";
 }
 
 interface RegistryPorts {
@@ -175,7 +181,7 @@ export class SkillSourceUpdateRegistry {
     assertLock();
     this.#ports.writeRegistry(next);
     this.#ports.lifecycleStore.markUpdateCommitted(receipt, next.revision);
-    try { staging.discardExact(request.stagingId, request.manifestSha256); } catch { /* committed update owns cleanup retry */ }
+    try { staging.discardExact(request.stagingId, request.manifestSha256, request.bundleSha256); } catch { /* committed update owns cleanup retry */ }
     return SkillInstallStagedResultSchema.parse({
       status: "committed",
       requestId: request.requestId,

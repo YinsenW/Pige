@@ -169,11 +169,11 @@ export class SkillRegistryService {
       if (request.expectedRegistryRevision !== current.revision) {
         return SkillInstallStagedResultSchema.parse({ status: "stale", requestId: request.requestId, registry: this.#project(current) });
       }
-      const candidate = staging.readForInstall(request.stagingId, request.manifestSha256);
+      const candidate = staging.readForInstall(request.stagingId, request.manifestSha256, request.bundleSha256);
       if (!candidate || candidate === "stale") {
         return SkillInstallStagedResultSchema.parse({ status: "not_found", requestId: request.requestId });
       }
-      if (candidate.stagingId !== request.stagingId || candidate.manifestSha256 !== request.manifestSha256) {
+      if (candidate.stagingId !== request.stagingId || candidate.manifestSha256 !== request.manifestSha256 || candidate.bundleSha256 !== request.bundleSha256) {
         return skillInstallFailed(request.requestId, "unavailable");
       }
       const parsed = parseSkillManifest(candidate.bytes.toString("utf8"));
@@ -190,14 +190,9 @@ export class SkillRegistryService {
         return this.#sourceUpdate.commit(request, candidate, parsed, current, staging, mutationLock.assertOwned);
       }
 
-      const receipt: SkillInstallReceipt = {
-        schemaVersion: 1,
-        requestId: request.requestId,
-        stagingId: request.stagingId,
-        manifestSha256: request.manifestSha256,
-        enabled: request.enabled
-      };
-      this.#lifecycleStore.publishInstalled(parsed.id, candidate.bytes, receipt);
+      const receipt: SkillInstallReceipt = { schemaVersion: 1, requestId: request.requestId, stagingId: request.stagingId,
+        manifestSha256: request.manifestSha256, bundleSha256: request.bundleSha256, enabled: request.enabled };
+      this.#lifecycleStore.publishInstalled(parsed.id, candidate.files, receipt);
       if (current.revision === Number.MAX_SAFE_INTEGER) throw skillError("skill.registry_revision_exhausted", "Skill Registry revision is exhausted.");
       const now = new Date().toISOString();
       const next = SkillRegistryFileSchema.parse({
@@ -215,7 +210,7 @@ export class SkillRegistryService {
       });
       mutationLock.assertOwned();
       this.#writeRegistry(next);
-      try { staging.discardExact(request.stagingId, request.manifestSha256); } catch { /* committed install owns cleanup retry */ }
+      try { staging.discardExact(request.stagingId, request.manifestSha256, request.bundleSha256); } catch { /* committed install owns cleanup retry */ }
       return SkillInstallStagedResultSchema.parse({ status: "committed", requestId: request.requestId, registry: this.#project(next) });
     } catch (caught) {
       return skillInstallFailed(request.requestId, isErrno(caught, "EEXIST") ? "busy" : "unavailable");
@@ -229,7 +224,7 @@ export class SkillRegistryService {
     try {
       this.#prepare();
       mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
-      const status = staging.discardExact(request.stagingId, request.manifestSha256);
+      const status = staging.discardExact(request.stagingId, request.manifestSha256, request.bundleSha256);
       return SkillDiscardStagedResultSchema.parse({ status, requestId: request.requestId });
     } catch (caught) {
       return skillDiscardFailed(request.requestId, isErrno(caught, "EEXIST") ? "busy" : "unavailable");
@@ -564,7 +559,9 @@ export class SkillRegistryService {
 
   #readManifest(skillId: string): { readonly manifest: SkillManifest; readonly sha256: string } {
     try {
-      const { bytes, sha256 } = this.#lifecycleStore.readInstalled(skillId);
+      const { bytes, sha256, bundleSha256 } = this.#lifecycleStore.readInstalled(skillId);
+      const receipt = this.#lifecycleStore.readInstallReceipt(skillId);
+      if (receipt && receipt.bundleSha256 !== bundleSha256) throw skillError("skill.manifest_changed", "Installed Skill bundle changed after review.");
       const source = bytes.toString("utf8");
       if (source.includes("\uFFFD")) throw skillError("skill.manifest_invalid", "Installed Skill manifest is not valid UTF-8.");
       return { manifest: parseSkillManifest(source), sha256 };
@@ -579,6 +576,7 @@ export class SkillRegistryService {
       const receipt = this.#lifecycleStore.readInstallReceipt(record.id);
       if (!receipt || receipt.requestId !== request.requestId) continue;
       return receipt.stagingId === request.stagingId && receipt.manifestSha256 === request.manifestSha256 &&
+        receipt.bundleSha256 === request.bundleSha256 &&
         receipt.enabled === request.enabled && record.manifestSha256 === request.manifestSha256 ? true : "conflict";
     }
     return false;

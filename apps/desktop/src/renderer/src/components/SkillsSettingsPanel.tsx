@@ -26,7 +26,7 @@ interface UninstallConfirmation {
 type StagedSkillReview =
   | {
     readonly kind: "install";
-    readonly source: "url" | "markdown";
+    readonly source: "url" | "markdown" | "zip";
     readonly staged: SkillStagedSummary;
   }
   | {
@@ -55,13 +55,14 @@ export function SkillsSettingsPanel(props: {
   const lifecycleActiveRef = useRef(false);
   const uninstallConfirmationActiveRef = useRef(false);
   const installOperationRef = useRef(0);
-  const pendingFocusRef = useRef<"trigger" | "url" | "markdown" | null>(null);
+  const pendingFocusRef = useRef<"trigger" | "url" | "markdown" | "zip" | null>(null);
   const pendingInstalledFocusRef = useRef<{
     readonly skillId: string | null;
     readonly action?: InstalledLifecycleKind;
   } | undefined>(undefined);
   const installTriggerRef = useRef<HTMLButtonElement | null>(null);
   const markdownTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const zipTriggerRef = useRef<HTMLButtonElement | null>(null);
   const installUrlRef = useRef<HTMLInputElement | null>(null);
   const markdownStageActiveRef = useRef(false);
   const stagedPrimaryActionRef = useRef<HTMLButtonElement | null>(null);
@@ -79,11 +80,13 @@ export function SkillsSettingsPanel(props: {
     } else if (pendingFocusRef.current === "markdown" && !installOpen && installBusy === null) {
       pendingFocusRef.current = null;
       markdownTriggerRef.current?.focus();
+    } else if (pendingFocusRef.current === "zip" && !installOpen && installBusy === null) {
+      pendingFocusRef.current = null; zipTriggerRef.current?.focus();
     }
   }, [installBusy, installOpen, stagedReview]);
 
   useEffect(() => {
-    if (stagedReview?.kind === "update" || stagedReview?.source === "markdown") {
+    if (stagedReview?.kind === "update" || stagedReview?.source === "markdown" || stagedReview?.source === "zip") {
       stagedPrimaryActionRef.current?.focus();
     }
   }, [stagedReview]);
@@ -486,6 +489,36 @@ export function SkillsSettingsPanel(props: {
     }
   };
 
+  const stageFromZip = async (): Promise<void> => {
+    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || stagedReview || installOpen) return;
+    const operation = installOperationRef.current + 1;
+    installOperationRef.current = operation;
+    setInstallBusy("stage"); setStatusKey(null);
+    try {
+      const requestedVault = await window.pige.vault.current();
+      if (!finishInstallOperation(operation)) return;
+      if (!requestedVault) {
+        setStatusKey("skills.stageZipFailed"); pendingFocusRef.current = "zip";
+        return;
+      }
+      const requestId = createSkillInstallRequestId();
+      const result = await window.pige.skills.stageFromZip({ apiVersion: 1, requestId, activeVaultId: requestedVault.vaultId });
+      if (!finishInstallOperation(operation)) return;
+      const currentVault = await window.pige.vault.current();
+      if (!finishInstallOperation(operation)) return;
+      if (result.requestId !== requestId || result.activeVaultId !== requestedVault.vaultId || currentVault?.vaultId !== requestedVault.vaultId) {
+        setStatusKey("skills.stageZipFailed"); pendingFocusRef.current = "zip";
+        return;
+      }
+      if (result.status === "ready") { setInstallOpen(true); setStagedReview({ kind: "install", source: "zip", staged: result.staged }); }
+      else { if (result.status !== "cancelled") setStatusKey("skills.stageZipFailed"); pendingFocusRef.current = "zip"; }
+    } catch {
+      if (finishInstallOperation(operation)) { setStatusKey("skills.stageZipFailed"); pendingFocusRef.current = "zip"; }
+    } finally {
+      if (finishInstallOperation(operation)) setInstallBusy(null);
+    }
+  };
+
   const installStaged = async (): Promise<void> => {
     if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || !stagedReview) return;
     const review = stagedReview;
@@ -501,6 +534,7 @@ export function SkillsSettingsPanel(props: {
         requestId,
         stagingId: staged.stagingId,
         manifestSha256: staged.manifestSha256,
+        bundleSha256: staged.bundleSha256,
         expectedRegistryRevision: staged.registryRevision,
         enabled: review.kind === "update" ? review.enabled : true
       });
@@ -520,30 +554,32 @@ export function SkillsSettingsPanel(props: {
         setInstallOpen(false);
         setStatusKey(review.kind === "update" ? "skills.updateCompleted" : "skills.installCompleted");
         if (review.kind === "update") queueInstalledFocus(review.skillId, "update");
-        else pendingFocusRef.current = review.source === "markdown" ? "markdown" : "trigger";
+        else pendingFocusRef.current = review.source === "markdown" ? "markdown" : review.source === "zip" ? "zip" : "trigger";
       } else if (result.status === "stale") {
         setStagedReview(null);
         setStatusKey(review.kind === "update"
           ? "skills.updateStale"
-          : review.source === "markdown" ? "skills.installMarkdownReviewExpired" : "skills.installReviewExpired");
+          : review.source === "markdown" ? "skills.installMarkdownReviewExpired"
+            : review.source === "zip" ? "skills.installZipReviewExpired" : "skills.installReviewExpired");
         if (review.kind === "update") {
           setInstallOpen(false);
           queueInstalledFocus(review.skillId, "update");
-        } else if (review.source === "markdown") {
+        } else if (review.source === "markdown" || review.source === "zip") {
           setInstallOpen(false);
-          pendingFocusRef.current = "markdown";
+          pendingFocusRef.current = review.source;
         } else pendingFocusRef.current = "url";
       } else if (result.status === "not_found") {
         setStagedReview(null);
         setStatusKey(review.kind === "update"
           ? "skills.updateUnavailable"
-          : review.source === "markdown" ? "skills.installMarkdownReviewUnavailable" : "skills.installReviewUnavailable");
+          : review.source === "markdown" ? "skills.installMarkdownReviewUnavailable"
+            : review.source === "zip" ? "skills.installZipReviewUnavailable" : "skills.installReviewUnavailable");
         if (review.kind === "update") {
           setInstallOpen(false);
           queueInstalledFocus(review.skillId, "update");
-        } else if (review.source === "markdown") {
+        } else if (review.source === "markdown" || review.source === "zip") {
           setInstallOpen(false);
-          pendingFocusRef.current = "markdown";
+          pendingFocusRef.current = review.source;
         } else pendingFocusRef.current = "url";
       } else {
         setStatusKey(review.kind === "update" ? "skills.updateFailed" : "skills.installFailed");
@@ -571,7 +607,8 @@ export function SkillsSettingsPanel(props: {
         apiVersion: 1,
         requestId,
         stagingId: staged.stagingId,
-        manifestSha256: staged.manifestSha256
+        manifestSha256: staged.manifestSha256,
+        bundleSha256: staged.bundleSha256
       });
       if (!finishInstallOperation(operation)) return;
       if (result.requestId !== requestId) {
@@ -587,13 +624,14 @@ export function SkillsSettingsPanel(props: {
         ? null
         : review.kind === "update"
           ? "skills.updateUnavailable"
-          : review.source === "markdown" ? "skills.installMarkdownReviewUnavailable" : "skills.installReviewUnavailable");
+          : review.source === "markdown" ? "skills.installMarkdownReviewUnavailable"
+            : review.source === "zip" ? "skills.installZipReviewUnavailable" : "skills.installReviewUnavailable");
       if (review.kind === "update") {
         setInstallOpen(false);
         queueInstalledFocus(review.skillId, "update");
-      } else if (review.source === "markdown") {
+      } else if (review.source === "markdown" || review.source === "zip") {
         setInstallOpen(false);
-        pendingFocusRef.current = "markdown";
+        pendingFocusRef.current = review.source;
       } else pendingFocusRef.current = "url";
     } catch {
       if (finishInstallOperation(operation)) setStatusKey("skills.discardFailed");
@@ -809,6 +847,11 @@ export function SkillsSettingsPanel(props: {
             {props.t(installBusy === "stage" && markdownStageActiveRef.current
               ? "skills.reviewing" : "skills.importMarkdown")}
           </button>
+          <button ref={zipTriggerRef} className="settings-button settings-action" type="button"
+            disabled={lifecycleAction !== null || installBusy !== null || uninstallConfirmation !== null || installOpen}
+            onClick={() => void stageFromZip()}>
+            <PigeIcon name="fileText" size={15} aria-hidden="true" />{props.t("skills.importZip")}
+          </button>
         </div>
         {installOpen ? (
           <div className="settings-card" id="skill-url-install">
@@ -826,7 +869,7 @@ export function SkillsSettingsPanel(props: {
                     <span>{props.t("skills.boundary.local")}</span>
                   </div>
                   {stagedReview.staged.sourceUrl ? <span>{stagedReview.staged.sourceUrl}</span> : null}
-                  <span>{`${stagedReview.staged.files[0].relativePath} · ${formatByteSize(stagedReview.staged.files[0].utf8ByteSize)}`}</span>
+                  {stagedReview.staged.files.map((file) => <span key={file.relativePath}>{`${file.relativePath} · ${formatByteSize(file.utf8ByteSize)}`}</span>)}
                   {stagedReview.staged.capabilities.map((capability) => (
                     <span key={capability}>{props.t(`skills.capability.${capability}`)}</span>
                   ))}
