@@ -30,6 +30,7 @@ jobs:
       commit: ${{ steps.identity.outputs.commit }}
       tag: ${{ steps.identity.outputs.tag }}
       release_commit: ${{ steps.identity.outputs.release_commit }}
+      release_exists: ${{ steps.identity.outputs.release_exists }}
     steps:
       - name: Checkout exact requested commit
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -60,10 +61,18 @@ jobs:
           printf 'commit=%s\n' "$PIGE_REQUESTED_COMMIT" >> "$GITHUB_OUTPUT"
           printf 'tag=%s\n' "$PIGE_REQUESTED_TAG" >> "$GITHUB_OUTPUT"
           printf 'release_commit=%s\n' "$release_commit" >> "$GITHUB_OUTPUT"
+          if gh release view "$PIGE_REQUESTED_TAG" --repo "$PIGE_REPOSITORY" >/dev/null 2>&1; then
+            printf 'release_exists=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'release_exists=false\n' >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   build:
     name: Build and verify ${{ matrix.platform }}
     needs: validate
+    if: needs.validate.outputs.release_exists != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     environment: production-release
@@ -180,9 +189,78 @@ jobs:
           if-no-files-found: error
           retention-days: 2
 
+  verify-existing:
+    name: Verify immutable release ${{ matrix.platform }}
+    needs: validate
+    if: needs.validate.outputs.release_exists == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-arm64, windows-x64]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout reviewed catalog commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24.14.0"
+          cache: npm
+
+      - name: Install pinned dependencies
+        run: npm ci
+
+      - name: Download immutable reviewed release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIGE_PLATFORM: ${{ matrix.platform }}
+          PIGE_RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          directory="artifacts/paddleocr-release/$PIGE_PLATFORM"
+          mkdir -p "$directory"
+          artifact_url="$(node -e 'const fs=require("node:fs");const value=JSON.parse(fs.readFileSync("resources/parser-manifests/paddleocr-local.parser.manifest.json","utf8"));const bundle=value.releaseBundles.find((entry)=>entry.platform===process.env.PIGE_PLATFORM);process.stdout.write(bundle?.artifactUrl ?? "")')"
+          archive="$(basename "${artifact_url:?}")"
+          release_record="${archive%.zip}.release.json"
+          gh release download "$PIGE_RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$archive" \
+            --pattern "$release_record" \
+            --dir "$directory"
+          printf 'archive=%s\n' "$directory/$archive" >> "$GITHUB_OUTPUT"
+          printf 'release_record=%s\n' "$directory/$release_record" >> "$GITHUB_OUTPUT"
+
+      - name: Verify immutable archive, signature, and tree
+        run: >-
+          npm run release:paddleocr:verify --
+          --action=verify
+          --platform=${{ matrix.platform }}
+          --release-tag=${{ needs.validate.outputs.tag }}
+          --parser-manifest=resources/parser-manifests/paddleocr-local.parser.manifest.json
+          --archive=${{ steps.release.outputs.archive }}
+          --release-record=${{ steps.release.outputs.release_record }}
+          --verification-record=artifacts/paddleocr-release/${{ matrix.platform }}/paddleocr-${{ matrix.platform }}.verification.json
+
+      - name: Upload immutable verification evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: paddleocr-immutable-verification-${{ matrix.platform }}-${{ needs.validate.outputs.commit }}
+          path: artifacts/paddleocr-release/${{ matrix.platform }}/paddleocr-${{ matrix.platform }}.verification.json
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
     name: Publish immutable PaddleOCR prerelease
     needs: [validate, build]
+    if: needs.validate.outputs.release_exists != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: production-release

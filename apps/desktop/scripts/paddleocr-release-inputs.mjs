@@ -110,7 +110,10 @@ export async function verifyPaddleOcrReleasePublication(input) {
   ) {
     fail("Signed release record differs from the reviewed available bundle.");
   }
-  if (releaseResult.publicKeySpkiBase64 !== publication.signingKey.publicKeySpkiBase64) {
+  if (
+    releaseResult.publicKeySpkiBase64 !== null &&
+    releaseResult.publicKeySpkiBase64 !== publication.signingKey.publicKeySpkiBase64
+  ) {
     fail("Release signer differs from the reviewed public key.");
   }
   if (releaseSignature.valueBase64 !== reviewedSignature.valueBase64) {
@@ -448,10 +451,13 @@ function inspectExtractedPackage(root, bundle, platform, engineVersion) {
 
 function parseReleaseResult(value) {
   const record = requireObject(value, "release record");
-  requireExactKeys(record, ["bundle", "publicKeySpkiBase64"], "release record");
-  requireObject(record.bundle, "release bundle");
-  requireBase64(record.publicKeySpkiBase64, "release public key");
-  return record;
+  if (Object.hasOwn(record, "bundle")) {
+    requireExactKeys(record, ["bundle", "publicKeySpkiBase64"], "release record");
+    requireObject(record.bundle, "release bundle");
+    requireBase64(record.publicKeySpkiBase64, "release public key");
+    return record;
+  }
+  return Object.freeze({ bundle: record, publicKeySpkiBase64: null });
 }
 
 function parsePackageLimits(value) {

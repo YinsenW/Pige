@@ -158,6 +158,17 @@ describe("PaddleOCR release workflow sidecar", () => {
       fileCount: 2
     });
 
+    const publishedRecordPath = path.join(fixture.root, "published.release.json");
+    writeJson(publishedRecordPath, result.bundle);
+    await expect(verifyPaddleOcrReleasePublication({
+      platform: "macos-arm64",
+      releaseTag: TAG,
+      parserManifestPath: fixture.manifestPath,
+      archivePath,
+      releaseRecordPath: publishedRecordPath,
+      verificationRecordPath: path.join(fixture.root, "published-verification.json")
+    })).resolves.toMatchObject({ signatureVerified: true });
+
     const { publicKey: wrongPublicKey } = generateKeyPairSync("ed25519");
     manifest.releaseSigningKeys![0].publicKeySpkiBase64 = wrongPublicKey
       .export({ type: "spki", format: "der" })
@@ -203,6 +214,8 @@ describe("PaddleOCR release workflow sidecar", () => {
     expect(workflow).toContain('"${{ needs.validate.outputs.release_commit }}:resources/parser-manifests/paddleocr-local.parser.manifest.json"');
     expect(workflow).toContain('--parser-manifest=${{ runner.temp }}/paddleocr-release-source.manifest.json');
     expect(workflow).toContain("Existing immutable PaddleOCR prerelease matches the reviewed rebuild.");
+    expect(workflow).toContain("Verify immutable release ${{ matrix.platform }}");
+    expect(workflow).toContain("paddleocr-immutable-verification-${{ matrix.platform }}");
     expect(workflow).toContain('cmp --silent "$archive"');
     expect(workflow).not.toContain('test "$(git rev-parse "refs/tags/$PIGE_REQUESTED_TAG^{commit}")" = "$PIGE_REQUESTED_COMMIT"');
     expect(workflow).not.toMatch(/pip\s+install|uv\s+pip|npm\s+install(?!ed)/u);
