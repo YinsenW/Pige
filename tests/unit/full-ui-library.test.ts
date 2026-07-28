@@ -14,6 +14,8 @@ import type {
   NoteEditorSaveRequest,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
+  ReaderSelectionLinkRequest,
+  ReaderSelectionLinkResult,
   ReaderSelectionResolveRequest,
   ReaderSelectionResolveResult,
   ReaderSelectionTransformRequest,
@@ -1222,6 +1224,135 @@ describe("full UI Library", () => {
     expect(actionRequests[0]!.requestId).toMatch(/^readerselaction_[a-z0-9]{8,64}$/u);
     expect(actionRequests[0]!.clientTurnId).toMatch(/^turn_\d{8}_[a-z0-9]{12,64}$/u);
     expect(JSON.stringify(actionRequests[0])).not.toContain("private selected body");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("links an exact resolved selection, preserves it on a closed result, and refreshes only after apply", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const linkRequests: ReaderSelectionLinkRequest[] = [];
+    const appliedResults: Array<Extract<ReaderSelectionLinkResult, { status: "applied" }>> = [];
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: readerNote(),
+        ...resolvedSelectionProps(),
+        onSubmitSelectionLink: async (request) => {
+          linkRequests.push(request);
+          if (linkRequests.length === 1) {
+            return {
+              apiVersion: 1,
+              requestId: request.requestId,
+              status: "invalid",
+              reason: "target_ambiguous"
+            };
+          }
+          return {
+            apiVersion: 1,
+            requestId: request.requestId,
+            status: "applied",
+            jobId: "job_20260728_link0001",
+            conversationEventId: "evt_20260728_link0001",
+            conversationId: "conv_20260728_link01",
+            tailEventId: "evt_20260728_link0002",
+            operationId: "op_20260728_link0001",
+            currentPageId: request.selection.pageId,
+            targetPageId: "page_20260728_linktarget"
+          };
+        },
+        onSelectionLinkApplied: async (result) => {
+          appliedResults.push(result);
+          return true;
+        },
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    const container = requireElement(dom.window.document.querySelector<HTMLElement>("#root"));
+    const reader = requireElement(container.querySelector<HTMLElement>(".note-reader"));
+    const paragraph = requireElement(container.querySelector(".markdown-body p"));
+    const selectionNode = requireElement(paragraph.querySelector("[data-pige-selection-segment]")).firstChild!;
+    reader.focus();
+    Object.defineProperty(dom.window, "getSelection", {
+      configurable: true,
+      value: () => ({
+        isCollapsed: false,
+        rangeCount: 1,
+        anchorNode: selectionNode,
+        anchorOffset: 0,
+        focusNode: selectionNode,
+        focusOffset: 8,
+        toString: () => "private selected body",
+        getRangeAt: () => ({
+          commonAncestorContainer: paragraph,
+          startContainer: selectionNode,
+          startOffset: 0,
+          endContainer: selectionNode,
+          endOffset: 8,
+          getBoundingClientRect: () => ({
+            left: 80,
+            top: 90,
+            width: 120,
+            height: 18,
+            right: 200,
+            bottom: 108
+          })
+        })
+      })
+    });
+
+    await act(async () => {
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[data-selection-action="link"]') !== null);
+    const linkButton = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="link"]'));
+    await act(async () => {
+      linkButton.click();
+      linkButton.click();
+      await settle(dom);
+    });
+    expect(linkRequests).toHaveLength(1);
+    expect(linkRequests[0]).toMatchObject({
+      apiVersion: 1,
+      action: "link",
+      activeVaultId: "vault_20260715_fullui01",
+      renderContextId: `notectx_${"c".repeat(32)}`,
+      locale: "en",
+      selection: {
+        pageId: "page_20260715_reader1111",
+        span: { unit: "utf8_bytes", start: 0, endExclusive: 8 }
+      }
+    });
+    expect(linkRequests[0]!.requestId).toMatch(/^readerselaction_[a-z0-9]{8,64}$/u);
+    expect(linkRequests[0]!.clientTurnId).toMatch(/^turn_\d{8}_[a-z0-9]{12,64}$/u);
+    expect(JSON.stringify(linkRequests[0])).not.toMatch(/private selected body|targetPageId|targetPath/u);
+    expect(appliedResults).toEqual([]);
+    expect(container.querySelector('[data-selection-action="link"]')).not.toBeNull();
+    expect(container.textContent).toContain("Reader actions");
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "This selection action could not be started. Select the passage again and retry."
+    );
+
+    await act(async () => {
+      linkButton.click();
+      await settle(dom);
+    });
+    expect(linkRequests).toHaveLength(2);
+    expect(appliedResults).toHaveLength(1);
+    expect(appliedResults[0]).toMatchObject({
+      currentPageId: "page_20260715_reader1111",
+      targetPageId: "page_20260728_linktarget"
+    });
+    expect(container.querySelector(".selection-toolbar")).toBeNull();
+    await act(async () => settle(dom));
+    expect(dom.window.document.activeElement).toBe(reader);
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("The selected passage was updated.");
 
     await act(async () => root.unmount());
     dom.window.close();
