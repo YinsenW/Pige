@@ -481,12 +481,12 @@ shrink or revise; it is not a saved message. Do not announce every replacement t
 live region—keep the turn `aria-busy`, expose a bounded status, and announce the final or
 failure once.
 
-The durable upstream Pi final replaces the draft without duplicating a bubble. On
-failure/cancellation, remove the provisional text or mark the pending bubble with the
-existing localized recovery state; never leave it looking like a completed answer.
-Reopen/restart shows only durable messages. Verified citations and evidence rows appear
-only with the final result. Raw provider/Pi deltas, thinking, tool JSON, IDs, and errors
-never enter this surface.
+The durable Pi final replaces the draft; failure/cancellation clears or marks it. Restart
+shows durable messages only; citations appear with final results, never raw Pi/provider
+internals. History lists safe previews newest-first. Selection opens the exact timeline,
+stops latest polling and disables compose unless that timeline proves follow-up authority.
+`Current` rereads latest durable truth; vault change resets browsing, while failure keeps
+the visible timeline and draft.
 
 Prototype:
 

@@ -3767,6 +3767,28 @@ References:
 
 - `docs/SKILL_EXTENSION_DESIGN.md`, `docs/API_AND_IPC_DESIGN.md`
 
+### D-20260729-Home-Conversation-History-Browsing
+
+Status: Accepted
+Date: 2026-07-29
+
+Decision:
+
+Cursors reopen exact vault timelines.
+
+Rationale:
+
+Browse without copied messages.
+
+Consequences:
+
+- Selection grants no follow-up; `Current` rereads durable truth.
+- Failure preserves the view; packaged/compaction proof stays open.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`; `docs/JOB_OPERATION_AND_RECOVERY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

@@ -612,7 +612,7 @@ Build:
 - [B7.05 -> E7.02] Explicit "remember this" flow with provenance.
 - [B7.06 -> E7.02] Memory inspection, edit, disable, delete, export, and reset.
 - [B7.07 -> E7.05] Secret scanning before memory persistence.
-- [B7.08 -> E7.03] Conversation-history browsing and job references.
+- [B7.08 -> E7.03] Bounded vault history reopens exact timelines; packaged proof remains.
 - [B7.09 -> E7.04] Conversation-retention compaction for successful job detail.
 - [B7.10 -> E7.06] Managed Collections with typed fields, views, relations/formulas, and
   reversible Agent row/schema/view Activity/Undo. Foundation: same Dataset, CAS cell edit,

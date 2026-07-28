@@ -122,14 +122,14 @@ Required v0.1 job classes:
 exact values. Aliases such as `capture_preserve`, `parse_source`, `backup_create`, or
 `restore_validate` are forbidden.
 
-`agent_turn` binds the exact user event, one parent Job and ordered source/note refs. Its
-ordered mixed staged items preserve each accepted file/paste exactly once; staging is not
-Job state and `resources/large-paste-boundary.manifest.json` owns limits. Main accepts before renderer clearing. Failure keeps
-exact text/items/order/client-turn ID; retry adopts event/source refs without duplication.
-Short chat creates no Source Record. After accepted preservation, JobsService ensures one
-current Source Page per accepted record before inspect citation; rejected items get none.
-Parent progress binds source/revision/page; retry/restart adopts without duplicate
-Source/Page/Job. Child checkpoints are reliability, not Host semantic routing.
+`agent_turn` binds one user event, Job and ordered mixed staged items;
+`resources/large-paste-boundary.manifest.json` owns limits. Main accepts before renderer
+clear; retry/restart adopts event/source/Page refs exactly once. Short chat creates no
+Source Record; rejected items get no Source Page. Staging/checkpoints never route meaning.
+
+`AgentConversationHistory` no-follow reads `.pige/conversations/`, orders by time then ID
+and binds cursors to vault plus snapshot. Summaries grant selection only; the reopened tail
+owns follow-up. Failure preserves the timeline and never resumes Provider/Job work.
 
 Reader selection binds checksummed page/span/content/action refs; Job/instruction omit body
 and UI localizes presentation. Pi's explicit typed replacement may persist the private

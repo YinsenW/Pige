@@ -544,19 +544,18 @@ Install is `accepted|already_installed|stale|failed`; Enable adds
 `already_enabled|not_found`; Disable/Remove use `committed|stale|not_found|failed`.
 `ready` remains asset-only; B6.06 consumes only a private reverified lease.
 
-Schema-v1 `agent.submitTurn` binds optional client/conversation/tail IDs and strict
-`current_note` scope; preload projects no path. `agent.conversation` returns at most 100
-bounded messages, tail, `canFollowUp` and safe latest Job; Home asks for 24. Results omit
-private bodies, paths, Provider data and raw errors. Source citations reuse
-`AgentTurnAnswer.citations`; no IPC/DTO changes.
+Schema-v1 `agent.submitTurn` pairs optional conversation/tail IDs and strict
+`current_note` scope; `follow_up` requires the pair, `file_picker` may carry it and other
+kinds reject it. Home snapshots `canFollowUp`; stale/mixed identity fails before work and
+never falls back. `agent.conversation` returns <=100 bounded messages, exact tail,
+`canFollowUp` and safe latest Job without paths, Provider data or raw errors.
 
-`AgentSubmitTurnRequestSchema.superRefine` requires `conversationId` and
-`expectedTailEventId` together: `follow_up` requires them, `file_picker` may carry them,
-and all other kinds (including `file_drop`) reject them. Direct Home composer Send/Enter
-snapshots `canFollowUp`; picker must use that exact pair or, when absent, start one new
-conversation. `HomeAgentService.prepareSourceTurn` preserves it in `prepared.request`.
-Mixed/stale identity fails before Job/source/Provider work, preserves the composer
-snapshot and never falls back to another conversation.
+`agent.conversationHistory` returns <=50 vault summaries ordered by `updatedAt` descending
+then ID. Summary is bounded preview/safe scope/tail/state and grants selection only;
+opening reuses `agent.conversation`, which alone supplies follow-up authority. The opaque
+cursor binds vault, immutable snapshot and boundary; tamper/drift fails identity-only.
+`Current` rereads the latest durable conversation; failure preserves the timeline and
+restart triggers no Provider/Job replay.
 
 Picker selection/removal remains renderer-local, pathless and side-effect-free. Send
 submits exact text, ordered staged identities, active vault and one client-turn identity;
