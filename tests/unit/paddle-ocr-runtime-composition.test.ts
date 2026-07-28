@@ -113,7 +113,8 @@ describe("PaddleOCR runtime composition", () => {
     expect(runner.calls).toHaveLength(1);
     expect(runner.calls[0]).toMatchObject({
       networkAllowed: false,
-      shell: false
+      shell: false,
+      timeoutMs: 60_000
     });
     expect(runner.calls[0]!.args.slice(0, 2)).toEqual(["-I", "-B"]);
     expect(runner.calls[0]!.args[2]).toMatch(/pige\/paddle_ocr_wrapper\.py$/u);

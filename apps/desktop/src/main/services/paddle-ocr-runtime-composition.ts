@@ -111,6 +111,7 @@ export function createPaddleOcrRuntimeComposition(
       assertWriterLease: options.assertAppInstanceWriterLease
     }),
     selfTestPort: new PaddleOcrSelfTestPort(processRunner, reviewed.engineVersion, appDataRoot),
+    selfTestTimeoutMs: 60_000,
     platform: release.platform === "macos-arm64" ? "macos" : "windows",
     architecture: release.platform === "macos-arm64" ? "arm64" : "x64",
     ...(options.now ? { now: options.now } : {})
