@@ -51,7 +51,7 @@
     "scope": "Independent Planning review of the signed PaddleOCR r3 catalog: exact release identity, platform locks, complete legal inventory, offline materialization and lifecycle boundaries.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "f78d7931842da17b72e9883b07de4537270a2f3d8c4bd800b2cda4de0e56664c"
+    "reviewedSha256": "8264d7e603ce421e2cebe33ed5eab2c99ba83f5ee9b324b9266d3c7987096fd4"
   },
   "reviewers": [{
     "reviewerId": "paddleocr-r3-release-review",
