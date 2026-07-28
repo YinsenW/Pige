@@ -3594,6 +3594,28 @@ References:
 
 - `docs/AGENT_MEMORY_DESIGN.md`, `docs/API_AND_IPC_DESIGN.md`
 
+### D-20260728-Local-Skill-ZIP-Staging
+
+Status: Accepted
+Date: 2026-07-28
+
+Decision:
+
+Main stages a picked ZIP after file/parent fences, private snapshot and bounded non-executing
+validation; IPC exposes safe preview only.
+
+Rationale:
+
+Prevent archive authority leaks.
+
+Consequences:
+
+- Cancel/invalid/drift is inert; stage CAS installs. ZIP update/chat/restore stay open.
+
+References:
+
+- `docs/SKILL_EXTENSION_DESIGN.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

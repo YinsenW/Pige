@@ -690,6 +690,7 @@ Commands:
 - `memory.reset`
 - `skills.stageFromUrl`
 - `skills.stageFromMarkdown`
+- `skills.stageFromZip`
 - `skills.stageUpdate`
 - `skills.installStaged`
 - `skills.discardStaged`
@@ -714,11 +715,10 @@ Events:
 - `settings.appearanceChanged`
 - `memory.changed`
 
-Skill IPC is body/path-free. `stageFromMarkdown` takes API/request/vault identity; Main owns a
-no-follow 256 KiB UTF-8 `.md` picker/read and returns `cancelled | ready { staged } | failed` with no
-path/body/URL. Required lifecycle booleans gate UI and Main rechecks registry/manifest.
-`stageUpdate` re-fetches only its strict HTTPS source and binds source/base/revision. Shared
-`installStaged` preserves enablement, trashes prior bytes and CAS-adopts once; drift closes.
+Skill IPC is body/path-free. Main owns no-follow `.md`/`.zip` pickers. `stageFromMarkdown` returns
+`cancelled | ready | failed`; `stageFromZip` adds `invalid`, file/parent fences and one non-executing
+Markdown/JSON bundle. Both expose safe metadata only. Lifecycle booleans gate UI; HTTPS update binds
+source/base/revision; `installStaged` preserves enablement, trash-retains prior bytes and CAS-adopts.
 
 Memory list returns vault/revision and <=1,000 safe records; private provenance stays in Main. Edit
 binds record/revision/title/body, secret-scans, and changes L1 only. Lifecycle `committed | stale |

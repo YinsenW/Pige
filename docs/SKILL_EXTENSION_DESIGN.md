@@ -53,17 +53,16 @@ External/Web sources; Git repositories and a signed registry remain later.
 
 ## 4. Install And Installed Lifecycle
 
-Settings stages one HTTPS or Main-picked local `.md` pure Skill for review → explicit install;
-ordinary drop remains capture. Both are 256 KiB UTF-8 maximum and expose only safe
-metadata/digest/expiry. Local selection uses one no-follow descriptor-bound read and a private
-vault/file/hash receipt: no path, body, `sourceUrl` or update authority crosses IPC; cancel has no
-effect. Install binds request/stage/digest/revision and adopts once; drift fails closed.
+Settings reviews/installs one HTTPS or Main-picked `.md`/`.zip` pure Skill; drop captures. Markdown
+is 256 KiB UTF-8. Main snapshots ZIP no-follow with descriptor/parent fences, capped at 2 MiB
+compressed, 4 MiB/64 files expanded and one root `SKILL.md`. Only UTF-8 Markdown/JSON is admitted;
+traversal, links, binaries, hooks, secrets/private paths and execution close. IPC exposes safe
+preview; cancel/invalid content or drift is inert. Install CAS-adopts the stage.
 
-Verified `user_confirmed` machine-local pure Skills alone expose required lifecycle booleans; Main
-reproves registry/manifest. Enable restores, uninstall trash-adopts and export is pathless. Update
-re-fetches only its strict HTTPS source and binds safe preview to installed identity/revision;
-`installStaged` preserves enablement, trashes prior bytes and CAS/restart-adopts once. Same bytes
-are `current`; drift closes. No background/cross-source/file/ZIP/chat update or public restore.
+Only verified `user_confirmed` machine-local pure Skills expose lifecycle booleans. Enable restores,
+uninstall trash-adopts and export is pathless. HTTPS update binds source/base/revision, preserves
+enablement, trashes prior bytes and CAS-adopts once; same bytes are `current`. Background,
+cross-source, file/ZIP/chat update and public restore stay out.
 
 ## 5. Skill Format
 
