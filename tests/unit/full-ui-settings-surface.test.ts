@@ -67,6 +67,7 @@ import {
   LOCAL_SEMANTIC_RETRIEVAL_ASSET_ID,
   type LocalSemanticRetrievalAssetState,
   MemoryDeleteRequest,
+  MemoryEditRequest,
   MemoryEnableRequest,
   MemoryExportRequest,
   MemoryExportResult,
@@ -77,7 +78,21 @@ import {
   MemorySummary
 } from "@pige/schemas";
 
-const globalKeys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLSelectElement", "Event", "KeyboardEvent", "MouseEvent"] as const;
+const globalKeys = [
+  "window",
+  "document",
+  "navigator",
+  "Node",
+  "HTMLElement",
+  "HTMLInputElement",
+  "HTMLTextAreaElement",
+  "HTMLSelectElement",
+  "Event",
+  "InputEvent",
+  "CompositionEvent",
+  "KeyboardEvent",
+  "MouseEvent",
+] as const;
 const originalDescriptors = new Map<PropertyKey, PropertyDescriptor | undefined>();
 
 afterEach(() => {
@@ -2809,7 +2824,7 @@ describe("full UI Settings surface", () => {
     }));
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
-      value: { memory: { list, disable, enable, delete: deleteMemory, export: exportMemory, reset } }
+      value: { memory: { list, disable, edit: vi.fn(), enable, delete: deleteMemory, export: exportMemory, reset } }
     });
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -2942,16 +2957,173 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("fences an in-flight memory mutation when the active vault changes", async () => {
+  it("edits one memory with exact CAS while preserving the draft across stale, missing, and failed results", async () => {
     const dom = createDom();
-    let resolveEnable!: (result: MemoryLifecycleMutationResult) => void;
+    const originalSummary = memorySummary(4, "active");
+    const staleSummary = memorySummaryWithText(
+      5,
+      "Server title",
+      "The server changed this memory.",
+    );
+    const notFoundSummary = memoryEmptySummary(6);
+    const committedSummary = memorySummaryWithText(
+      7,
+      "Local title",
+      "Local body with exact wording.",
+    );
+    let attempt = 0;
+    const edit = vi.fn(async (request: MemoryEditRequest): Promise<MemoryLifecycleMutationResult> => {
+      attempt += 1;
+      if (attempt === 1) {
+        return {
+          apiVersion: 1,
+          requestId: request.requestId,
+          activeVaultId: request.activeVaultId,
+          status: "stale",
+          summary: staleSummary,
+        };
+      }
+      if (attempt === 2) {
+        return {
+          apiVersion: 1,
+          requestId: request.requestId,
+          activeVaultId: request.activeVaultId,
+          status: "not_found",
+          summary: notFoundSummary,
+        };
+      }
+      if (attempt === 3) throw new Error("synthetic edit failure");
+      return {
+        apiVersion: 1,
+        requestId: request.requestId,
+        activeVaultId: request.activeVaultId,
+        status: "committed",
+        operationId: "op_20260728_memoryedit",
+        summary: committedSummary,
+      };
+    });
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        memory: {
+          list: vi.fn(async () => originalSummary),
+          disable: vi.fn(),
+          edit,
+          enable: vi.fn(),
+          delete: vi.fn(),
+          export: vi.fn(),
+          reset: vi.fn(),
+        },
+      },
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(
+        createElement(AgentMemorySettingsPanel, {
+          activeVaultId: "vault_20260727_memoryfixture",
+          t,
+        }),
+      );
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await act(async () => {
+      buttonNamed(container, "Edit: Concise source summaries").click();
+      await settle(dom);
+    });
+    const title = requireElement(
+      container.querySelector<HTMLInputElement>("#memory-edit-title-memory_20260727_concisestyle"),
+    );
+    const body = requireElement(
+      container.querySelector<HTMLTextAreaElement>("#memory-edit-body-memory_20260727_concisestyle"),
+    );
+    await act(async () => {
+      inputValue(dom, title, "Local title");
+      textareaValue(dom, body, "Local body with exact wording.");
+      await settle(dom);
+    });
+    const composingEnter = new dom.window.KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      isComposing: true,
+      key: "Enter",
+    });
+    await act(async () => {
+      title.dispatchEvent(composingEnter);
+      await settle(dom);
+    });
+    expect(composingEnter.defaultPrevented).toBe(true);
+    expect(edit).not.toHaveBeenCalled();
+
+    await act(async () => {
+      buttonNamed(container, "Save").click();
+      await settle(dom);
+    });
+    expect(edit).toHaveBeenLastCalledWith(expect.objectContaining({
+      apiVersion: 1,
+      activeVaultId: "vault_20260727_memoryfixture",
+      memoryId: "memory_20260727_concisestyle",
+      expectedRevision: 4,
+      title: "Local title",
+      body: "Local body with exact wording.",
+    }));
+    expect(title.value).toBe("Local title");
+    expect(body.value).toBe("Local body with exact wording.");
+    expect(container.querySelector("[data-memory-revision]")?.getAttribute("data-memory-revision")).toBe("5");
+    expect(container.textContent).toContain("Memory changed. The latest list is shown and your draft is unchanged.");
+
+    await act(async () => {
+      buttonNamed(container, "Save").click();
+      await settle(dom);
+    });
+    expect(edit.mock.calls[1]?.[0]).toEqual(expect.objectContaining({ expectedRevision: 5 }));
+    expect(title.value).toBe("Local title");
+    expect(body.value).toBe("Local body with exact wording.");
+    expect(container.querySelector("[data-memory-revision]")?.getAttribute("data-memory-revision")).toBe("6");
+    expect(container.textContent).toContain("That memory is no longer available. Your draft is unchanged.");
+
+    await act(async () => {
+      buttonNamed(container, "Save").click();
+      await settle(dom);
+    });
+    expect(edit.mock.calls[2]?.[0]).toEqual(expect.objectContaining({ expectedRevision: 6 }));
+    expect(title.value).toBe("Local title");
+    expect(body.value).toBe("Local body with exact wording.");
+    expect(container.textContent).toContain("The edit could not be saved. Your draft is unchanged.");
+
+    await act(async () => {
+      buttonNamed(container, "Save").click();
+      await settle(dom);
+    });
+    expect(edit.mock.calls[3]?.[0]).toEqual(expect.objectContaining({ expectedRevision: 6 }));
+    expect(container.querySelector("#memory-edit-title-memory_20260727_concisestyle")).toBeNull();
+    expect(container.textContent).toContain("Local title");
+    expect(container.textContent).toContain("Local body with exact wording.");
+    expect(container.textContent).toContain("The memory was updated.");
+
+    await act(async () => {
+      buttonNamed(container, "Edit: Local title").click();
+      await settle(dom);
+      buttonNamed(container, "Cancel").click();
+      await settle(dom);
+    });
+    expect(container.querySelector("#memory-edit-title-memory_20260727_concisestyle")).toBeNull();
+    expect(container.textContent).toContain("Local title");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("fences an in-flight memory edit when the active vault changes", async () => {
+    const dom = createDom();
+    let resolveEdit!: (result: MemoryLifecycleMutationResult) => void;
     const list = vi.fn(async (request: MemoryListRequest): Promise<MemorySummary> => memorySummary(
       request.activeVaultId === "vault_20260727_memoryfixture" ? 4 : 20,
-      "disabled",
+      "active",
       request.activeVaultId
     ));
-    const enable = vi.fn((_request: MemoryEnableRequest) => new Promise<MemoryLifecycleMutationResult>((resolve) => {
-      resolveEnable = resolve;
+    const edit = vi.fn((_request: MemoryEditRequest) => new Promise<MemoryLifecycleMutationResult>((resolve) => {
+      resolveEdit = resolve;
     }));
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
@@ -2959,7 +3131,8 @@ describe("full UI Settings surface", () => {
         memory: {
           list,
           disable: vi.fn(),
-          enable,
+          edit,
+          enable: vi.fn(),
           delete: vi.fn(),
           export: vi.fn(),
           reset: vi.fn()
@@ -2976,7 +3149,16 @@ describe("full UI Settings surface", () => {
     });
     const container = dom.window.document.querySelector("#root")!;
     await act(async () => {
-      buttonNamed(container, "Enable: Concise source summaries").click();
+      buttonNamed(container, "Edit: Concise source summaries").click();
+      await settle(dom);
+    });
+    await act(async () => {
+      const title = requireElement(container.querySelector<HTMLInputElement>("#memory-edit-title-memory_20260727_concisestyle"));
+      inputValue(dom, title, "A fenced local title");
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(container, "Save").click();
       await settle(dom);
     });
 
@@ -2990,18 +3172,19 @@ describe("full UI Settings surface", () => {
     expect(container.querySelector("[data-memory-revision]")?.getAttribute("data-memory-revision")).toBe("20");
 
     await act(async () => {
-      resolveEnable({
+      resolveEdit({
         apiVersion: 1,
-        requestId: enable.mock.calls[0]?.[0].requestId,
+        requestId: edit.mock.calls[0]?.[0].requestId,
         activeVaultId: "vault_20260727_memoryfixture",
         status: "committed",
         operationId: "op_20260727_memoryfenced",
-        summary: memorySummary(10, "active")
+        summary: memorySummaryWithText(10, "A fenced local title", "Old vault body")
       });
       await settle(dom);
     });
     expect(container.querySelector("[data-memory-revision]")?.getAttribute("data-memory-revision")).toBe("20");
-    expect(container.textContent).not.toContain("The memory is enabled for future Agent turns.");
+    expect(container.textContent).not.toContain("A fenced local title");
+    expect(container.textContent).not.toContain("The memory was updated.");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -3075,6 +3258,12 @@ function inputValue(dom: JSDOM, input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
 }
 
+function textareaValue(dom: JSDOM, input: HTMLTextAreaElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value")?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+}
+
 function piPackageRegistry(
   revision: number,
   packages: PiPackageRegistrySummary["packages"] = []
@@ -3138,6 +3327,18 @@ function memoryEmptySummary(revision: number): MemorySummary {
     activeVaultId: "vault_20260727_memoryfixture",
     revision,
     records: []
+  };
+}
+
+function memorySummaryWithText(
+  revision: number,
+  title: string,
+  body: string,
+): MemorySummary {
+  const current = memorySummary(revision, "active");
+  return {
+    ...current,
+    records: current.records.map((record) => ({ ...record, title, body })),
   };
 }
 
