@@ -3636,6 +3636,28 @@ References:
 
 - `docs/SKILL_EXTENSION_DESIGN.md`; `docs/API_AND_IPC_DESIGN.md`
 
+### D-20260729-External-Web-Skill-Disclosure
+
+Status: Accepted
+Date: 2026-07-29
+
+Decision:
+
+Stage strict External/Web manifests through existing sources, disclose exact safe risk metadata,
+and install verified bytes disabled only.
+
+Rationale:
+
+Permit inspection without granting runtime authority.
+
+Consequences:
+
+- Invalid, ambiguous, executable, stale or tampered input closes; enable, update and runtime remain open.
+
+References:
+
+- `docs/SKILL_EXTENSION_DESIGN.md`; `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
 ### D-20260728-Pi-Package-Trash-Uninstall
 
 Status: Accepted

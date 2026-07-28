@@ -51,14 +51,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of explicit authored chat HTTPS Skill staging.",
+    "scope": "Independent Planning review of External/Web Skill disclosure and disabled-only install.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "1e9f043672351aab6c2da15f4619c38bd54f43aaca50fca51927bf99afff806b"
+    "reviewedSha256": "5078a3ef9c88b93965aa57336570110becac2b29da6b63fc6fe51e91c605c458"
   },
   "reviewers": [{
-    "reviewerId": "chat-skill-staging-review",
-    "task": "Explicit authored chat HTTPS Skill staging",
+    "reviewerId": "external-web-skill-disclosure-review",
+    "task": "External/Web Skill staging and disclosure",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -66,33 +66,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed authored authority, exact candidate binding and review-only scope; Development independently supplied implementation evidence."
+    "independence": "Planning reviewed disclosure and disabled-only scope; Development independently supplied implementation evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"chat-skill-staging-review","blockerCount":0,"summary":"Settings alone lists and adopts one bounded pending staged review."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"chat-skill-staging-review","blockerCount":0,"summary":"Skill, API, runtime-policy, architecture, UI and Decision owners share review-only semantics."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"chat-skill-staging-review","blockerCount":0,"summary":"Acceptance records authored chat staging while broader lifecycle remains planned."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"chat-skill-staging-review","blockerCount":0,"summary":"Candidate and turn, Job and vault drift closure are directly testable."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"chat-skill-staging-review","blockerCount":0,"summary":"Existing Skill/API/UI/Decision/trace owners absorb the slice without a new design doc."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"external-web-skill-disclosure-review","blockerCount":0,"summary":"Settings reuses staged review and persists External/Web Skills disabled."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"external-web-skill-disclosure-review","blockerCount":0,"summary":"Schema, service, UI and Skill owners share exact safe disclosure."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"external-web-skill-disclosure-review","blockerCount":0,"summary":"B8.07 is recorded without promoting B8.08 runtime."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"external-web-skill-disclosure-review","blockerCount":0,"summary":"Invalid manifests, drift, tamper and durable reconstruction are directly tested."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"external-web-skill-disclosure-review","blockerCount":0,"summary":"Existing Skill, Playbook, Decision and trace owners absorb the slice."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict pending-review identity and body/path-free projection remain bound."},
-    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision, acceptance and semantic locks bind review-only chat staging."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact 158-LOC tool and 922-LOC URL stage owners are protected and hash-bound."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict External/Web disclosure and disabled-only installed projection are bound."},
+    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision and trace locks preserve the B8.07/B8.08 split."},
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact 742/999/244/942-LOC Skill owners are protected and hash-bound."}
   ],
   "coordination": {
-    "taskId": "chat-skill-staging-20260729",
-    "taskTitle": "Explicit authored chat HTTPS Skill staging",
+    "taskId": "external-web-skill-disclosure-20260729",
+    "taskTitle": "External/Web Skill staging and disclosure",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Settings URL/file/ZIP and installed lifecycle remain compatible; chat stages only.",
-    "acknowledgement": "Planning binds one authored candidate to review; install, enable and grants remain separate."
+    "compatibility": "Pure Skill staging and lifecycle remain compatible; External/Web installs disabled.",
+    "acknowledgement": "Planning binds disclosure and durable disabled install; runtime and enable remain separate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Only durable nonempty authored text may expose the staging tool.",
-    "Stale candidate, turn, Job or vault identity must fail before fetch or publication.",
-    "Model/source/tool output cannot authorize; install, enable and grants remain outside this bind."
+    "External/Web capabilities and boundaries must be exact and renderer-safe.",
+    "Executable, ambiguous, stale or tampered content must fail before durable effect.",
+    "Install executes nothing and cannot enable; runtime remains outside this bind."
   ]
 }

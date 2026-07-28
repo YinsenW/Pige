@@ -650,7 +650,7 @@ Build:
 - [B8.04 -> E8.03] Third-party authority isolation and concrete effect decisions.
 - [B8.05 -> E8.01] Skill Registry Service (inventory/disable foundation only).
 - [B8.06 -> E8.01] Pure Skill staging/install from URL, Markdown, and ZIP plus explicit chat-initiated staging, enable, disable, uninstall, export, and source-aware update.
-- [B8.07 -> E8.01] External/Web Skill staging with capability disclosure.
+- [B8.07 -> E8.01] External/Web staging/disclosure and disabled-only install; runtime/enable stay B8.08.
 - [B8.08 -> E8.02] Raw Shell confirms per effect; a registered immutable install/config/
   auth plan confirms exact supply chain/destinations once and runs current-Job ordinals.
 - [B8.09 -> E8.04] Curated Pi package catalog and manager with reviewed recommendations and explicit search/inspection.
