@@ -58,6 +58,9 @@ import {
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   OperationRecordSchema,
+  PiPackageInstallRequestSchema,
+  PiPackageInstallResultSchema,
+  PiPackageRegistryQueryResultSchema,
   RequirementIdSchema,
   RetrievalSearchResultSchema,
   SetThemeRequestSchema,
@@ -935,6 +938,77 @@ describe("schemas", () => {
     } as const;
     expect(RetrievalSearchResultSchema.parse(result)).toEqual(result);
     expect(() => RetrievalSearchResultSchema.parse({ ...result, mode: "semantic_only" })).toThrow();
+  });
+
+  it("keeps Pi package inventory and exact install results strict, pathless, and revision-fenced", () => {
+    const registry = {
+      apiVersion: 1,
+      revision: 4,
+      packages: [{
+        packageId: "pkg_0123456789abcdef01234567",
+        packageName: "@larksuite/cli",
+        version: "1.0.77",
+        state: "installed_disabled",
+        packageTypes: ["extension"],
+        dependencyCount: 0,
+        enabled: false,
+        trust: "community"
+      }]
+    } as const;
+    expect(PiPackageRegistryQueryResultSchema.parse({ status: "ready", registry }))
+      .toEqual({ status: "ready", registry });
+
+    const request = {
+      apiVersion: 1,
+      requestId: "pi_package_request_abcdefghijklmnop",
+      expectedRegistryRevision: 4,
+      packageName: "@larksuite/cli",
+      version: "1.0.77"
+    } as const;
+    expect(PiPackageInstallRequestSchema.parse(request)).toEqual(request);
+    for (const status of ["installed_disabled", "denied", "stale"] as const) {
+      expect(PiPackageInstallResultSchema.parse({
+        apiVersion: 1,
+        requestId: request.requestId,
+        taskId: "pi_package_task_abcdefghijklmnop",
+        status,
+        registry
+      })).toMatchObject({ status, registry });
+    }
+    expect(PiPackageInstallResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      taskId: "pi_package_task_abcdefghijklmnop",
+      status: "failed"
+    })).toEqual({
+      apiVersion: 1,
+      requestId: request.requestId,
+      taskId: "pi_package_task_abcdefghijklmnop",
+      status: "failed"
+    });
+    expect(() => PiPackageInstallResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      taskId: "pi_package_task_abcdefghijklmnop",
+      status: "failed",
+      registry
+    })).toThrow();
+    for (const unsafe of [
+      { path: "/private/pi-packages/package" },
+      { tarballUrl: "https://registry.npmjs.org/private.tgz" },
+      { integrity: "sha512-private" },
+      { rawError: "private failure" }
+    ]) {
+      expect(() => PiPackageInstallRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+      expect(() => PiPackageInstallResultSchema.parse({
+        apiVersion: 1,
+        requestId: request.requestId,
+        taskId: "pi_package_task_abcdefghijklmnop",
+        status: "failed",
+        ...unsafe
+      })).toThrow();
+    }
+    expect(() => PiPackageInstallRequestSchema.parse({ ...request, version: "latest" })).toThrow();
   });
 
   it("keeps reviewed task plans private and browser interactions renderer-safe", () => {

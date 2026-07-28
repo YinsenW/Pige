@@ -17,6 +17,27 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("bridges the strict Pi package inventory and exact install interface without private authority", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const packagesStart = preloadSource.indexOf("piPackages: {");
+    const packageApi = preloadSource.slice(
+      packagesStart,
+      preloadSource.indexOf("taskExecution: {", packagesStart)
+    );
+
+    expect(contractsSource).toContain("readonly piPackages: {");
+    expect(contractsSource).toContain("readonly summary: () => Promise<PiPackageRegistryQueryResult>");
+    expect(contractsSource).toContain("request: PiPackageInstallRequest");
+    expect(packageApi).toContain('ipcRenderer.invoke("piPackages.summary")');
+    expect(packageApi).toContain('"piPackages.install"');
+    expect(packageApi).toContain("PiPackageInstallRequestSchema.parse(request)");
+    expect(packageApi).toContain("PiPackageInstallResultSchema.parse(await ipcRenderer.invoke");
+    for (const privateField of ["path", "tarball", "integrity", "authority", "rawError"]) {
+      expect(packageApi).not.toContain(privateField);
+    }
+  });
+
   it("strictly bridges the complete pathless Memory lifecycle surface", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");

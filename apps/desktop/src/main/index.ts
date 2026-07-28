@@ -96,6 +96,7 @@ import { registerLocalSemanticRetrievalIpc } from "./register-local-semantic-ret
 import { registerKnowledgeHealthIpc } from "./register-knowledge-health-ipc";
 import { registerMemoryIpc } from "./register-memory-ipc";
 import { registerSkillsIpc } from "./register-skills-ipc";
+import { registerPiPackagesIpc } from "./register-pi-packages-ipc";
 import {
   AgentIngestService,
   type AgentIngestCapabilitySnapshot,
@@ -182,6 +183,7 @@ import { createFirstPartyReadonlyNodeOsCapabilityAdapters } from "./services/rea
 import { createFirstPartyCommandCapabilityAdapter } from "./services/command-capability-adapter";
 import { createPiPackageInstallCapabilityAdapter } from "./services/pi-package-capability-adapter";
 import { PiPackageManagerService } from "./services/pi-package-manager-service";
+import { PiPackageInstallTaskService } from "./services/pi-package-install-task-service";
 import { NotesService } from "./services/notes-service";
 import {
   NoteMarkdownEditorActivityAdapter,
@@ -242,6 +244,7 @@ let firstPartyReadonlyNodeOsCapabilitiesRegistered = false;
 let firstPartyCommandCapabilityRegistered = false;
 let firstPartyPiPackageCapabilityRegistered = false;
 let piPackageManagerService: PiPackageManagerService | undefined;
+let piPackageInstallTaskService: PiPackageInstallTaskService | undefined;
 let windowModeService: WindowModeService | undefined;
 let backupRestoreService: BackupRestoreService | undefined;
 let backupCoordinatorService: BackupCoordinatorService | undefined;
@@ -926,6 +929,48 @@ const getPiPackageManagerService = (): PiPackageManagerService => {
     piPackageManagerService = new PiPackageManagerService({ appDataRoot: app.getPath("userData") });
   }
   return piPackageManagerService;
+};
+
+const getPiPackageInstallTaskService = (): PiPackageInstallTaskService => {
+  piPackageInstallTaskService ??= new PiPackageInstallTaskService({
+    appDataRoot: app.getPath("userData"),
+    capabilities: getPermissionedExternalCapabilityRegistry(),
+    packageRegistry: getPiPackageManagerService(),
+    confirmations: getHighRiskConfirmationService(),
+    currentContext: () => {
+      const vault = getVaultService().current();
+      const vaultPath = getVaultService().activeVaultPath();
+      const runtime = getAgentRuntimeService().runtimeStatus();
+      const policy = runtime.policySnapshot;
+      if (!vault || !vaultPath || !policy || policy.vaultId !== vault.vaultId) {
+        throw new Error("The Pi package install task requires a current vault policy.");
+      }
+      const assertCurrent = (): void => {
+        const currentVault = getVaultService().current();
+        const currentPath = getVaultService().activeVaultPath();
+        const currentRuntime = getAgentRuntimeService().runtimeStatus();
+        const currentPolicy = currentRuntime.policySnapshot;
+        if (
+          currentVault?.vaultId !== vault.vaultId ||
+          currentPath !== vaultPath ||
+          currentPolicy?.policyContextId !== policy.policyContextId ||
+          currentPolicy.policyHash !== policy.policyHash
+        ) {
+          throw new Error("The Pi package install task binding changed.");
+        }
+      };
+      return {
+        vaultPath,
+        vaultId: vault.vaultId,
+        policyContextId: policy.policyContextId,
+        policyHash: policy.policyHash,
+        runtimeKind: runtime.runtimeKind,
+        clientCapabilityTier: runtime.clientCapabilityTier,
+        assertCurrent
+      };
+    }
+  });
+  return piPackageInstallTaskService;
 };
 
 function getReadonlyNodeOsProtectedRoots(): readonly string[] {
@@ -2007,6 +2052,16 @@ registerSkillsIpc({
       if (!window.isDestroyed()) window.webContents.send("skills.changed", result.registry);
     }
   }
+});
+registerPiPackagesIpc({
+  ipcMain,
+  isTrustedSender: (sender) => {
+    const window = BrowserWindow.fromWebContents(sender);
+    return !!window && mainWindows.has(window);
+  },
+  getActiveVaultId: () => getVaultService().current()?.vaultId,
+  summary: () => ({ status: "ready", registry: getPiPackageManagerService().summary() }),
+  install: (request) => getPiPackageInstallTaskService().install(request)
 });
 registerMemoryIpc({
   ipcMain,

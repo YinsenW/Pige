@@ -398,6 +398,8 @@ export const ProposalIdSchema = z.string().regex(/^proposal_\d{8}_[a-z0-9]{8,}$/
 export const OperationIdSchema = z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/);
 
 export const HighRiskConfirmationIdSchema = z.string().regex(/^confirm_\d{8}_[a-z0-9]{16,64}$/);
+export const PiPackageInstallTaskIdSchema = z.string()
+  .regex(/^pi_package_task_[a-z0-9]{16,64}$/u);
 export const TaskExecutionPlanIdSchema = z.string()
   .regex(/^plan_[a-f0-9]{32}$/u);
 export const TaskInteractionIdSchema = z.string()
@@ -635,6 +637,52 @@ const isSafePackageSpec = (value: string): boolean => {
   if (separator < 1) return false;
   return isSafePackageName(value.slice(0, separator)) && EXACT_PACKAGE_VERSION_PATTERN.test(value.slice(separator + 1));
 };
+export const PiPackageInstallRequestIdSchema = z.string()
+  .regex(/^pi_package_request_[a-z0-9]{16,64}$/u);
+export const PiPackageNameSchema = z.string().refine(isSafePackageName);
+export const PiPackageVersionSchema = z.string().refine((value) =>
+  value === value.trim() && value.length <= 64 && EXACT_PACKAGE_VERSION_PATTERN.test(value)
+);
+export const PiPackageTypeSchema = z.enum(["extension", "skill", "prompt", "theme"]);
+export const PiPackageInstalledSummarySchema = z.object({
+  packageId: z.string().regex(/^pkg_[a-f0-9]{24}$/u),
+  packageName: PiPackageNameSchema,
+  version: PiPackageVersionSchema,
+  state: z.literal("installed_disabled"),
+  packageTypes: z.array(PiPackageTypeSchema).min(1).max(4).readonly(),
+  dependencyCount: z.number().int().min(0).max(256),
+  enabled: z.literal(false),
+  trust: z.literal("community")
+}).strict();
+export const PiPackageRegistrySummarySchema = z.object({
+  apiVersion: z.literal(1),
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  packages: z.array(PiPackageInstalledSummarySchema).max(1_000).readonly()
+}).strict();
+export const PiPackageRegistryQueryResultSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("ready"), registry: PiPackageRegistrySummarySchema }).strict(),
+  z.object({ status: z.literal("failed") }).strict()
+]);
+export const PiPackageInstallRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PiPackageInstallRequestIdSchema,
+  expectedRegistryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  packageName: PiPackageNameSchema,
+  version: PiPackageVersionSchema
+}).strict();
+const PiPackageInstallResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PiPackageInstallRequestIdSchema,
+  taskId: PiPackageInstallTaskIdSchema
+});
+const PiPackageInstallAuthoritativeResultIdentitySchema =
+  PiPackageInstallResultIdentitySchema.extend({ registry: PiPackageRegistrySummarySchema });
+export const PiPackageInstallResultSchema = z.discriminatedUnion("status", [
+  PiPackageInstallAuthoritativeResultIdentitySchema.extend({ status: z.literal("installed_disabled") }).strict(),
+  PiPackageInstallAuthoritativeResultIdentitySchema.extend({ status: z.literal("denied") }).strict(),
+  PiPackageInstallAuthoritativeResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  PiPackageInstallResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
 const isSafeExecutableName = (value: string): boolean => {
   if (value !== value.trim() || value.length < 1 || value.length > 64) return false;
   for (const character of value) {
@@ -673,6 +721,10 @@ export const HighRiskConfirmationOwnerSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("operation"),
     operationId: OperationIdSchema
+  }).strict(),
+  z.object({
+    kind: z.literal("pi_package_install_task"),
+    taskId: PiPackageInstallTaskIdSchema
   }).strict()
 ]);
 const HighRiskConfirmationSummaryBaseSchema = z.object({
@@ -752,7 +804,15 @@ export const HighRiskConfirmationSummarySchema = z.discriminatedUnion("effect", 
     presentation: z.object({ action: z.literal("change_authority_boundary"), target: z.literal("authority_boundary"), subject: HighRiskDisplayNameSubjectSchema }).strict(),
     owner: HighRiskConfirmationOwnerSchema
   }).strict()
-]);
+]).superRefine((summary, context) => {
+  if (summary.owner.kind === "pi_package_install_task" && summary.effect !== "install_unreviewed_package") {
+    context.addIssue({
+      code: "custom",
+      message: "Pi package install tasks may own only exact package-install confirmation.",
+      path: ["owner"]
+    });
+  }
+});
 export const HighRiskConfirmationPendingResultSchema = z.discriminatedUnion("status", [
   z.object({
     apiVersion: z.literal(1),
@@ -5155,6 +5215,16 @@ export type HighRiskConfirmationSubject = z.infer<typeof HighRiskConfirmationSub
 export type HighRiskConfirmationTarget = z.infer<typeof HighRiskConfirmationTargetSchema>;
 export type HighRiskEffect = z.infer<typeof HighRiskEffectSchema>;
 export type RendererSafeSubjectLabel = z.infer<typeof RendererSafeSubjectLabelSchema>;
+export type PiPackageInstallRequestId = z.infer<typeof PiPackageInstallRequestIdSchema>;
+export type PiPackageInstallTaskId = z.infer<typeof PiPackageInstallTaskIdSchema>;
+export type PiPackageName = z.infer<typeof PiPackageNameSchema>;
+export type PiPackageVersion = z.infer<typeof PiPackageVersionSchema>;
+export type PiPackageType = z.infer<typeof PiPackageTypeSchema>;
+export type PiPackageInstalledSummary = z.infer<typeof PiPackageInstalledSummarySchema>;
+export type PiPackageRegistrySummary = z.infer<typeof PiPackageRegistrySummarySchema>;
+export type PiPackageRegistryQueryResult = z.infer<typeof PiPackageRegistryQueryResultSchema>;
+export type PiPackageInstallRequest = z.infer<typeof PiPackageInstallRequestSchema>;
+export type PiPackageInstallResult = z.infer<typeof PiPackageInstallResultSchema>;
 export type KnowledgeActivityPageTarget = z.infer<typeof KnowledgeActivityPageTargetSchema>;
 export type KnowledgeActivityCollectionTarget = z.infer<typeof KnowledgeActivityCollectionTargetSchema>;
 export type KnowledgeActivityTarget = z.infer<typeof KnowledgeActivityTargetSchema>;

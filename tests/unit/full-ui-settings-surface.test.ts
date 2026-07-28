@@ -30,6 +30,9 @@ import type {
   LocalSemanticRetrievalRemoveRequest,
   LocalSemanticRetrievalRemoveResult,
   LocalSemanticRetrievalStatus,
+  PiPackageInstallRequest,
+  PiPackageInstallResult,
+  PiPackageRegistrySummary,
   SkillEnableRequest,
   SkillExportRequest,
   SkillLifecycleMutationResult,
@@ -43,6 +46,7 @@ import {
   LocalSemanticRetrievalSettingsPanel,
   type LocalSemanticRetrievalApi
 } from "../../apps/desktop/src/renderer/src/components/LocalSemanticRetrievalSettingsPanel";
+import type { PiPackagesApi } from "../../apps/desktop/src/renderer/src/components/PiPackagesSettingsPanel";
 import {
   LOCAL_SEMANTIC_RETRIEVAL_ASSET_BYTES,
   LOCAL_SEMANTIC_RETRIEVAL_ASSET_ID,
@@ -438,6 +442,13 @@ describe("full UI Settings surface", () => {
 
     await act(async () => {
       buttonNamed(dialog, "SkillsPartially available").click();
+      await settle(dom);
+    });
+    expect(dialog.querySelector('[role="status"]')).toBeNull();
+    expect(ipcRead).toBe(false);
+
+    await act(async () => {
+      buttonNamed(dialog, "Pi PackagesPartially available").click();
       await settle(dom);
     });
     expect(dialog.querySelector('[role="status"]')).toBeNull();
@@ -1720,41 +1731,154 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("renders the complete Pi Packages shell without inventing registry data or service work", async () => {
+  it("installs one exact Pi package through the typed API and adopts the authoritative disabled inventory", async () => {
     const dom = createDom();
-    const onDevelopment = vi.fn();
-    let ipcRead = false;
-    Object.defineProperty(dom.window, "pige", {
-      configurable: true,
-      get() {
-        ipcRead = true;
-        throw new Error("Pi Packages development actions must not access IPC.");
-      }
-    });
+    let settleInstall!: (result: PiPackageInstallResult) => void;
+    const summary = vi.fn(async () => ({ status: "ready", registry: piPackageRegistry(2) } as const));
+    const install = vi.fn((request: PiPackageInstallRequest) => new Promise<PiPackageInstallResult>((resolve) => {
+      settleInstall = resolve;
+    }));
+    const api: PiPackagesApi = { summary, install };
     const root = createRoot(dom.window.document.querySelector("#root")!);
 
     await act(async () => {
-      root.render(createElement(PiPackagesSettingsPanel, { onDevelopment, t }));
+      root.render(createElement(PiPackagesSettingsPanel, { api, t }));
       await settle(dom);
     });
 
     const page = dom.window.document.querySelector<HTMLElement>(".settings-packages")!;
     expect(page.getAttribute("aria-labelledby")).toBe("settings-packages-title");
     expect(page.querySelectorAll('[role="group"]')).toHaveLength(2);
-    expect(page.textContent).toContain("Package registry unavailable");
-    expect(page.textContent).toContain("Identity and trust stay visible");
-    expect(page.textContent).toContain("Capabilities and data boundary are reviewed");
-    expect(page.textContent).toContain("Lifecycle remains reversible");
-    expect(page.textContent).not.toContain("pi-obsidian-vault");
+    expect(page.textContent).toContain("No Pi packages installed");
     expect(page.querySelector("[data-package-id]")).toBeNull();
+    const packageName = requireElement(page.querySelector<HTMLInputElement>("#pi-package-name"));
+    const version = requireElement(page.querySelector<HTMLInputElement>("#pi-package-version"));
 
     await act(async () => {
-      buttonNamed(page, "Install from source...").click();
-      buttonNamed(page, "Search Pi Catalog...").click();
+      inputValue(dom, packageName, "@larksuite/cli");
+      inputValue(dom, version, "1.0.77");
       await settle(dom);
     });
-    expect(onDevelopment).toHaveBeenCalledTimes(2);
-    expect(ipcRead).toBe(false);
+    await act(async () => {
+      buttonNamed(page, "Install").click();
+      await settle(dom);
+    });
+    expect(install).toHaveBeenCalledTimes(1);
+    const request = install.mock.calls[0]![0];
+    expect(request).toMatchObject({
+      apiVersion: 1,
+      expectedRegistryRevision: 2,
+      packageName: "@larksuite/cli",
+      version: "1.0.77"
+    });
+    expect(request.requestId).toMatch(/^pi_package_request_[a-f0-9]{32}$/u);
+    expect(buttonNamed(page, "Waiting for confirmation…").disabled).toBe(true);
+
+    await act(async () => {
+      buttonNamed(page, "Waiting for confirmation…").click();
+      await settle(dom);
+    });
+    expect(install).toHaveBeenCalledTimes(1);
+
+    const installed = piPackageRegistry(3, [{
+      packageId: "pkg_0123456789abcdef01234567",
+      packageName: "@larksuite/cli",
+      version: "1.0.77",
+      state: "installed_disabled",
+      packageTypes: ["extension"],
+      dependencyCount: 0,
+      enabled: false,
+      trust: "community"
+    }]);
+    await act(async () => {
+      settleInstall({
+        apiVersion: 1,
+        requestId: request.requestId,
+        taskId: "pi_package_task_abcdefghijklmnop",
+        status: "installed_disabled",
+        registry: installed
+      });
+      await settle(dom);
+    });
+
+    const packageRow = requireElement(page.querySelector<HTMLElement>('[data-package-id="pkg_0123456789abcdef01234567"]'));
+    expect(packageRow.textContent).toContain("@larksuite/cli");
+    expect(packageRow.textContent).toContain("v1.0.77");
+    expect(packageRow.textContent).toContain("Installed · Disabled");
+    expect(dom.window.document.activeElement).toBe(packageRow);
+    expect(packageName.value).toBe("");
+    expect(version.value).toBe("");
+    expect(page.textContent).not.toMatch(/Enable|Update|Uninstall|Catalog/u);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("retains the exact Pi package draft and existing inventory across stale, denied, and failed results", async () => {
+    const dom = createDom();
+    const originalPackage = {
+      packageId: "pkg_aaaaaaaaaaaaaaaaaaaaaaaa",
+      packageName: "existing-package",
+      version: "2.0.0",
+      state: "installed_disabled" as const,
+      packageTypes: ["skill" as const],
+      dependencyCount: 0,
+      enabled: false as const,
+      trust: "community" as const
+    };
+    const results: Array<"stale" | "denied" | "failed"> = ["stale", "denied", "failed"];
+    const install = vi.fn(async (request: PiPackageInstallRequest): Promise<PiPackageInstallResult> => {
+      const status = results.shift()!;
+      return {
+        apiVersion: 1,
+        requestId: request.requestId,
+        taskId: "pi_package_task_abcdefghijklmnop",
+        status,
+        registry: status === "failed"
+          ? piPackageRegistry(6, [{ ...originalPackage, packageName: "must-not-replace-existing" }])
+          : piPackageRegistry(5, [originalPackage])
+      };
+    });
+    const api: PiPackagesApi = {
+      summary: async () => ({ status: "ready", registry: piPackageRegistry(4, [originalPackage]) }),
+      install
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(PiPackagesSettingsPanel, { api, t }));
+      await settle(dom);
+    });
+
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+    const packageName = requireElement(page.querySelector<HTMLInputElement>("#pi-package-name"));
+    const version = requireElement(page.querySelector<HTMLInputElement>("#pi-package-version"));
+    await act(async () => {
+      inputValue(dom, packageName, "new-package");
+      inputValue(dom, version, "1.2.3");
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(page, "Install").click();
+      await settle(dom);
+    });
+    expect(page.querySelector('[data-package-registry-revision="5"]')).not.toBeNull();
+    expect(page.textContent).toContain("The package registry changed");
+
+    for (const message of [
+      "Installation was not approved",
+      "Pige could not install this package"
+    ]) {
+      await act(async () => {
+        buttonNamed(page, "Install").click();
+        await settle(dom);
+      });
+      expect(page.textContent).toContain(message);
+      expect(packageName.value).toBe("new-package");
+      expect(version.value).toBe("1.2.3");
+      expect(page.textContent).toContain("existing-package");
+      expect(page.textContent).not.toContain("must-not-replace-existing");
+    }
+    expect(install.mock.calls.map(([request]) => request.expectedRegistryRevision)).toEqual([4, 5, 5]);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -2777,6 +2901,13 @@ function inputValue(dom: JSDOM, input: HTMLInputElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")?.set;
   setter?.call(input, value);
   input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+}
+
+function piPackageRegistry(
+  revision: number,
+  packages: PiPackageRegistrySummary["packages"] = []
+): PiPackageRegistrySummary {
+  return { apiVersion: 1, revision, packages };
 }
 
 async function settle(dom: JSDOM): Promise<void> {

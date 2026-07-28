@@ -83,6 +83,9 @@ import type {
   OnboardingStatus,
   OpenRecentVaultRequest,
   PigeDesktopApi,
+  PiPackageInstallRequest,
+  PiPackageInstallResult,
+  PiPackageRegistryQueryResult,
   ProposalDecisionRequest,
   ProposalDecisionResult,
   ProposalGetRequest,
@@ -205,6 +208,9 @@ import {
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
   HighRiskConfirmationResolveResultSchema,
+  PiPackageInstallRequestSchema,
+  PiPackageInstallResultSchema,
+  PiPackageRegistryQueryResultSchema,
   LocalSemanticRetrievalDisableRequestSchema,
   LocalSemanticRetrievalDisableResultSchema,
   LocalSemanticRetrievalEnableRequestSchema,
@@ -764,6 +770,15 @@ const api: PigeDesktopApi = {
       ipcRenderer.on("confirmations.changed", handler);
       return () => ipcRenderer.removeListener("confirmations.changed", handler);
     }
+  },
+  piPackages: {
+    summary: async (): Promise<PiPackageRegistryQueryResult> =>
+      PiPackageRegistryQueryResultSchema.parse(await ipcRenderer.invoke("piPackages.summary")),
+    install: async (request: PiPackageInstallRequest): Promise<PiPackageInstallResult> =>
+      PiPackageInstallResultSchema.parse(await ipcRenderer.invoke(
+        "piPackages.install",
+        PiPackageInstallRequestSchema.parse(request)
+      ))
   },
   taskExecution: {
     interaction: async (): Promise<TaskInteractionPendingResult> =>

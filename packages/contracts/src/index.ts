@@ -92,6 +92,9 @@ import type {
   NoteOpenSourceReferenceResult,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
+  PiPackageInstallRequest,
+  PiPackageInstallResult,
+  PiPackageRegistryQueryResult,
   PigeErrorSummary,
   ProposalState,
   ProposalTrustLevel,
@@ -205,6 +208,16 @@ export type {
   HighRiskConfirmationSubject,
   HighRiskConfirmationTarget,
   HighRiskEffect,
+  PiPackageInstallRequest,
+  PiPackageInstallRequestId,
+  PiPackageInstallResult,
+  PiPackageInstallTaskId,
+  PiPackageInstalledSummary,
+  PiPackageName,
+  PiPackageRegistryQueryResult,
+  PiPackageRegistrySummary,
+  PiPackageType,
+  PiPackageVersion,
   KnowledgeHealthCounts,
   KnowledgeHealthIndexGeneration,
   KnowledgeHealthIssueKind,
@@ -1484,6 +1497,12 @@ export interface PigeDesktopApi {
     readonly onChanged: (
       listener: (event: HighRiskConfirmationChangedEvent) => void
     ) => () => void;
+  };
+  readonly piPackages: {
+    readonly summary: () => Promise<PiPackageRegistryQueryResult>;
+    readonly install: (
+      request: PiPackageInstallRequest
+    ) => Promise<PiPackageInstallResult>;
   };
   readonly taskExecution: {
     readonly interaction: () => Promise<TaskInteractionPendingResult>;

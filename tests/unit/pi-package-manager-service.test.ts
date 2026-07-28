@@ -222,6 +222,33 @@ describe("PiPackageManagerService", () => {
     })).toThrow(expect.objectContaining({ code: "package.request_conflict" }));
   });
 
+  it("projects installed package inventory without private install authority or filesystem facts", async () => {
+    const fixture = await createFixture();
+    const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
+
+    expect(fixture.packages.summary()).toEqual({ apiVersion: 1, revision: 0, packages: [] });
+    await callTool(tool);
+
+    const summary = fixture.packages.summary();
+    expect(summary).toEqual({
+      apiVersion: 1,
+      revision: 1,
+      packages: [{
+        packageId: expect.stringMatching(/^pkg_[a-f0-9]{24}$/u),
+        packageName: PACKAGE_NAME,
+        version: PACKAGE_VERSION,
+        state: "installed_disabled",
+        packageTypes: ["extension"],
+        dependencyCount: 0,
+        enabled: false,
+        trust: "community"
+      }]
+    });
+    expect(JSON.stringify(summary)).not.toMatch(
+      /requestId|relativePath|treeHash|archiveHash|integrity|manifestHash|installedAt|registry\.npmjs|SYNTHETIC_PACKAGE_CODE/u
+    );
+  });
+
   it("encodes the complete scoped package name in the fixed registry request", async () => {
     const packageName = "@pige/synthetic-package";
     const fixture = await createFixture({ packageName });

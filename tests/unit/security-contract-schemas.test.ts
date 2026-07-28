@@ -181,6 +181,25 @@ describe("security-sensitive shared contracts", () => {
         subject: { kind: "package_name", value: "@larksuite/cli@1.0.72" }
       }
     }).presentation.subject).toEqual({ kind: "package_name", value: "@larksuite/cli@1.0.72" });
+
+    const packageTaskOwner = {
+      kind: "pi_package_install_task" as const,
+      taskId: "pi_package_task_abcdefghijklmnop"
+    };
+    expect(HighRiskConfirmationSummarySchema.parse({
+      ...confirmation,
+      effect: "install_unreviewed_package",
+      presentation: {
+        action: "install_package",
+        target: "local_toolchain",
+        subject: { kind: "package_name", value: "@larksuite/cli@1.0.72" }
+      },
+      owner: packageTaskOwner
+    }).owner).toEqual(packageTaskOwner);
+    expect(() => HighRiskConfirmationSummarySchema.parse({
+      ...confirmation,
+      owner: packageTaskOwner
+    })).toThrow();
   });
 
   it("keeps Skill inventory and lifecycle requests strict, pathless, and body-free", () => {
