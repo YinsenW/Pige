@@ -646,6 +646,7 @@ function inspectExtractedPackage(root: string, request: PiPackageInstallRequest,
 
 function assertDeclaredPiEntries(root: string, pi: unknown): void {
   if (!pi || typeof pi !== "object" || Array.isArray(pi)) throw packageError("package.manifest_invalid", "Pi package declaration is invalid.");
+  const declared = new Set<string>();
   for (const key of ["extensions", "skills", "prompts", "themes"]) {
     const entries = (pi as Record<string, unknown>)[key];
     if (entries === undefined) continue;
@@ -653,6 +654,8 @@ function assertDeclaredPiEntries(root: string, pi: unknown): void {
     for (const entry of entries) {
       if (typeof entry !== "string") throw packageError("package.manifest_invalid", "Pi package entry is invalid.");
       const normalized = validateRelativePackagePath(entry);
+      if (declared.has(normalized)) throw packageError("package.manifest_invalid", "Pi package entries collide after normalization.");
+      declared.add(normalized);
       const target = path.join(root, ...normalized.split("/"));
       ensureConfined(root, target);
       const stats = fs.lstatSync(target);
@@ -748,8 +751,8 @@ function validateArchiveEntryPath(value: string): string {
 }
 
 function validateRelativePackagePath(value: string): string {
-  const normalized = value.replaceAll("\\", "/");
-  if (normalized !== value || normalized.startsWith("/") || normalized.includes("\0") || normalized.split("/").some(isUnsafePathSegment)) {
+  const normalized = value.startsWith("./") ? value.slice(2) : value;
+  if (normalized.includes("\\") || normalized.startsWith("/") || normalized.includes("\0") || normalized.split("/").some(isUnsafePathSegment)) {
     throw packageError("package.manifest_invalid", "Pi package entry path is invalid.");
   }
   return normalized;

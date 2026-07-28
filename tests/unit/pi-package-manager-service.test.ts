@@ -223,6 +223,54 @@ describe("PiPackageManagerService", () => {
     })).toThrow(expect.objectContaining({ code: "package.request_conflict" }));
   });
 
+  it("accepts one conventional dot-slash prefix but rejects normalized entry collisions", async () => {
+    const accepted = await createFixture({ manifestOverrides: { pi: { extensions: ["./dist/index.js"] } } });
+    await expect(callTool(requireTool(accepted.registry.toolsForTurn(accepted.turn)))).resolves.toMatchObject({
+      details: { status: "installed_disabled", packageTypes: ["extension"] }
+    });
+
+    const collision = await createFixture({
+      manifestOverrides: { pi: { extensions: ["dist/index.js", "./dist/index.js"] } }
+    });
+    await expect(callTool(requireTool(collision.registry.toolsForTurn(collision.turn)))).rejects.toMatchObject({
+      code: "package.manifest_invalid"
+    });
+    expect(fs.existsSync(path.join(collision.machineRoot, "pi-packages", "registry.json"))).toBe(false);
+  });
+
+  it("installs the audited curated pi-btw manifest as disabled without executing it", async () => {
+    const packageName = "@narumitw/pi-btw";
+    const version = "0.34.0";
+    const fixture = await createFixture({
+      packageName,
+      packageVersion: version,
+      entryPath: "src/index.ts",
+      manifestOverrides: {
+        description: "Pi extension that adds a /btw side-question command.",
+        type: "module",
+        license: "MIT",
+        private: false,
+        pi: { extensions: ["./src/index.ts"] },
+        scripts: { check: "biome check . && npm run typecheck", format: "biome check --write .", typecheck: "tsc --noEmit" },
+        devDependencies: {
+          "@biomejs/biome": "2.5.5",
+          "@earendil-works/pi-ai": "0.82.1",
+          "@earendil-works/pi-coding-agent": "0.82.1",
+          "@earendil-works/pi-tui": "0.82.1",
+          typescript: "7.0.2"
+        }
+      }
+    });
+
+    await expect(callTool(requireTool(fixture.registry.toolsForTurn(fixture.turn)), new AbortController(), {
+      request_id: REQUEST_ID,
+      package_name: packageName,
+      version
+    })).resolves.toMatchObject({
+      details: { status: "installed_disabled", packageName, version, dependencyCount: 0 }
+    });
+  });
+
   it("projects installed package inventory without private install authority or filesystem facts", async () => {
     const fixture = await createFixture();
     const tool = requireTool(fixture.registry.toolsForTurn(fixture.turn));
@@ -551,6 +599,8 @@ interface Fixture {
 
 async function createFixture(options: {
   readonly packageName?: string;
+  readonly packageVersion?: string;
+  readonly entryPath?: string;
   readonly manifestOverrides?: Record<string, unknown>;
   readonly integrityOverride?: string;
   readonly includeSymlink?: boolean;
@@ -565,21 +615,23 @@ async function createFixture(options: {
   readonly testOnlyMaxExtractedEntries?: number;
 } = {}): Promise<Fixture> {
   const packageName = options.packageName ?? PACKAGE_NAME;
+  const packageVersion = options.packageVersion ?? PACKAGE_VERSION;
+  const entryPath = options.entryPath ?? "dist/index.js";
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-package-manager-"));
   roots.push(root);
   const machineRoot = path.join(root, "machine");
   fs.mkdirSync(machineRoot, { mode: 0o700 });
   const packageFixtureRoot = path.join(root, "package-fixture");
   const packageRoot = path.join(packageFixtureRoot, "package");
-  fs.mkdirSync(path.join(packageRoot, "dist"), { recursive: true });
+  fs.mkdirSync(path.dirname(path.join(packageRoot, entryPath)), { recursive: true });
   const manifest = {
     name: packageName,
-    version: PACKAGE_VERSION,
-    pi: { extensions: ["dist/index.js"] },
+    version: packageVersion,
+    pi: { extensions: [entryPath] },
     ...options.manifestOverrides
   };
   fs.writeFileSync(path.join(packageRoot, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-  fs.writeFileSync(path.join(packageRoot, "dist", "index.js"), "export const marker = 'SYNTHETIC_PACKAGE_CODE';\n", "utf8");
+  fs.writeFileSync(path.join(packageRoot, entryPath), "export const marker = 'SYNTHETIC_PACKAGE_CODE';\n", "utf8");
   fs.writeFileSync(path.join(packageRoot, "README.md"), "Synthetic package documentation.\n", "utf8");
   if (options.includeSymlink) fs.symlinkSync("../../outside", path.join(packageRoot, "unsafe-link"));
   if (options.includeReservedPath) {
@@ -607,13 +659,13 @@ async function createFixture(options: {
   const archive = fs.readFileSync(archivePath);
   const integrity = options.integrityOverride ?? `sha512-${createHash("sha512").update(archive).digest("base64")}`;
   const archiveName = packageName.split("/").at(-1)!;
-  const tarballUrl = `https://registry.npmjs.org/${encodeURIComponent(packageName)}/-/${archiveName}-${PACKAGE_VERSION}.tgz`;
+  const tarballUrl = `https://registry.npmjs.org/${encodeURIComponent(packageName)}/-/${archiveName}-${packageVersion}.tgz`;
   const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = input.toString();
     const encodedName = packageName.startsWith("@")
       ? encodeURIComponent(packageName).replace(/^%40/u, "@")
       : packageName;
-    if (url === `https://registry.npmjs.org/${encodedName}/${PACKAGE_VERSION}`) {
+    if (url === `https://registry.npmjs.org/${encodedName}/${packageVersion}`) {
       return new Response(JSON.stringify({ ...manifest, dist: { tarball: tarballUrl, integrity } }), {
         headers: { "content-type": "application/json" }
       });
