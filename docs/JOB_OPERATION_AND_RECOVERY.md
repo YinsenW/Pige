@@ -599,9 +599,10 @@ Lifecycle coverage:
 
 Reader save records one `update_page` with private before/after bytes; Undo requires the after
 revision and writes prior bytes forward. Drift or missing recovery evidence preserves the live page.
-Memory enable/delete/reset commit exact revision-bound private receipts before `update_memory` or
-`trash_memory`; deterministic Undo writes `restore_memory`. Restart adopts matching receipt/
-Operation pairs, while drift preserves current memory and later atoms rather than replaying removal.
+Memory edit/enable/delete/reset commit exact revision-bound private receipts before `update_memory`
+or `trash_memory`; edit retains immutable event/provenance and secret-scans before its receipt.
+Undo writes `restore_memory`; restart adopts exact pairs, while drift/tampering preserves current
+memory and later atoms.
 
 Rules:
 

@@ -610,7 +610,7 @@ Build:
 - [B7.03 -> E7.01] Exact create-note review/apply/conflict recovery foundation; autonomous eligibility and generic operations remain open.
 - [B7.04 -> E7.01] Hash-bound create/update/tag/link recovery plus `trash_page` or inverse `update_page`; other mutations open.
 - [B7.05 -> E7.02] Explicit "remember this" flow with provenance.
-- [B7.06 -> E7.02] Memory inspection, disable, delete, export, and reset.
+- [B7.06 -> E7.02] Memory inspection, edit, disable, delete, export, and reset.
 - [B7.07 -> E7.05] Secret scanning before memory persistence.
 - [B7.08 -> E7.03] Conversation-history browsing and job references.
 - [B7.09 -> E7.04] Conversation-retention compaction for successful job detail.

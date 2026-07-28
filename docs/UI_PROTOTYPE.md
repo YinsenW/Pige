@@ -840,6 +840,7 @@ Settings rules:
 - Vault & Note Storage contains vault identity, active vault path, note/knowledge root path, source asset root path, source storage policy, recent vaults, backup, restore, export, and trash.
 - Index & Maintenance contains rebuild index, reset local database, knowledge health, chunk status, and repair actions.
 - Agent & Memory contains `PIGE.md`, Agent behavior preferences, memory inspection, and autonomous activity/history controls.
+- One memory editor preserves its draft unless an authoritative same-vault summary commits.
 - Skills and Pi Packages are both under Extensions, but remain separate pages.
 - Cross-links are allowed, but cards from another domain should not be embedded in the current page.
 

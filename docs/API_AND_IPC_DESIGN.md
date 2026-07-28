@@ -683,6 +683,7 @@ Commands:
 - `models.updateModel`
 - `models.setDefaultModel`
 - `memory.disable`
+- `memory.edit`
 - `memory.enable`
 - `memory.delete`
 - `memory.export`
@@ -719,13 +720,11 @@ path/body/URL. Required lifecycle booleans gate UI and Main rechecks registry/ma
 `stageUpdate` re-fetches only its strict HTTPS source and binds source/base/revision. Shared
 `installStaged` preserves enablement, trashes prior bytes and CAS-adopts once; drift closes.
 
-Memory list returns vault/revision and at most 1,000 safe records; private conversation/event/Job
-IDs stay in Main. Disable remains compatible. Enable/delete bind exact record/revision; reset binds
-vault/revision. Lifecycle `committed | stale | not_found` echoes request/vault, returns current
-summary, and committed adds safe Operation ID. Delete/reset are private-trash Operations; Activity
-owns deterministic Undo/restart. Export binds revision, Main alone chooses the destination, and
-returns pathless `exported | cancelled | stale | failed`. `memory.changed` emits safe summary;
-renderer cannot create memory, submit provenance/path, or permanently erase it.
+Memory list returns vault/revision and <=1,000 safe records; private provenance stays in Main. Edit
+binds record/revision/title/body, secret-scans, and changes L1 only. Lifecycle `committed | stale |
+not_found` returns authoritative summary; committed adds Operation ID. Delete/reset retain private
+trash; Activity owns Undo/restart. Export is revision-bound, Main-picked and pathless. Renderer
+cannot create memory, submit provenance/path, or permanently erase it.
 
 Provider/model DTOs:
 

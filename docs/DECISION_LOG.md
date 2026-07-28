@@ -3573,6 +3573,27 @@ References:
 
 - `docs/API_AND_IPC_DESIGN.md`, `docs/TECH_ARCHITECTURE.md`
 
+### D-20260728-Vault-Memory-Derived-Edit
+
+Status: Accepted
+Date: 2026-07-28
+
+Decision:
+
+Edit secret-scans, then CAS-changes only L1 title/body; L0/private provenance stay immutable.
+
+Rationale:
+
+Correct memory without rewriting its origin.
+
+Consequences:
+
+- Replay/Undo/restart adopts one effect; drift/tampering closes and UI retains uncommitted drafts.
+
+References:
+
+- `docs/AGENT_MEMORY_DESIGN.md`, `docs/API_AND_IPC_DESIGN.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
