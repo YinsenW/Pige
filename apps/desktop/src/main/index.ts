@@ -2182,6 +2182,7 @@ registerMemoryIpc({
   },
   listMemory: (binding) => getAgentMemoryService().list(binding.vaultPath, binding.vaultId),
   disableMemory: (binding, request) => getAgentMemoryService().disable(binding.vaultPath, request),
+  editMemory: (binding, request) => getAgentMemoryService().edit(binding.vaultPath, request),
   enableMemory: (binding, request) => getAgentMemoryService().enable(binding.vaultPath, request),
   deleteMemory: (binding, request) => getAgentMemoryService().delete(binding.vaultPath, request),
   exportMemory: (binding, request, destinationPath) =>

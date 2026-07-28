@@ -39,6 +39,7 @@ function makeHarness(overrides: {
   readonly getActiveVaultBinding?: () => typeof binding | undefined;
   readonly showSaveDialog?: () => Promise<{ readonly canceled: boolean; readonly filePath?: string }>;
   readonly exportMemory?: (...args: any[]) => unknown;
+  readonly editMemory?: (...args: any[]) => unknown;
   readonly enableMemory?: (...args: any[]) => unknown;
 } = {}) {
   const handlers = new Map<string, IpcHandler>();
@@ -54,6 +55,7 @@ function makeHarness(overrides: {
     summary
   });
   const enableMemory = vi.fn(overrides.enableMemory ?? ((_binding, request) => lifecycle(request)));
+  const editMemory = vi.fn(overrides.editMemory ?? ((_binding, request) => lifecycle(request)));
   const deleteMemory = vi.fn((_binding, request) => lifecycle(request));
   const resetMemory = vi.fn((_binding, request) => lifecycle(request));
   const exportMemory = vi.fn(overrides.exportMemory ?? ((_binding, request) => ({
@@ -74,6 +76,7 @@ function makeHarness(overrides: {
     getActiveVaultBinding: overrides.getActiveVaultBinding ?? (() => binding),
     listMemory,
     disableMemory,
+    editMemory,
     enableMemory,
     deleteMemory,
     exportMemory,
@@ -85,6 +88,7 @@ function makeHarness(overrides: {
     publishMemoryChanged,
     listMemory,
     disableMemory,
+    editMemory,
     enableMemory,
     deleteMemory,
     exportMemory,
@@ -98,6 +102,7 @@ describe("registerMemoryIpc", () => {
     expect([...harness.handlers.keys()]).toEqual([
       "memory.list",
       "memory.disable",
+      "memory.edit",
       "memory.enable",
       "memory.delete",
       "memory.reset",
@@ -106,15 +111,24 @@ describe("registerMemoryIpc", () => {
 
     await expect(call(harness, "memory.list", { apiVersion: 1, activeVaultId })).resolves.toEqual(summary);
     await expect(call(harness, "memory.disable", recordRequest)).resolves.toMatchObject({ status: "committed" });
+    await expect(call(harness, "memory.edit", {
+      ...recordRequest,
+      title: "Updated memory",
+      body: "Updated safe memory body."
+    })).resolves.toMatchObject({ status: "committed" });
     await expect(call(harness, "memory.enable", recordRequest)).resolves.toMatchObject({ status: "committed" });
     await expect(call(harness, "memory.delete", recordRequest)).resolves.toMatchObject({ status: "committed" });
     await expect(call(harness, "memory.reset", vaultRequest)).resolves.toMatchObject({ status: "committed" });
-    expect(harness.publishMemoryChanged).toHaveBeenCalledTimes(4);
+    expect(harness.publishMemoryChanged).toHaveBeenCalledTimes(5);
     expect(harness.publishMemoryChanged).toHaveBeenCalledWith(summary);
   });
 
   it("strictly rejects malformed requests and identity-swapped results", async () => {
     const harness = makeHarness({
+      editMemory: (_binding, request) => ({
+        ...lifecycleResult(request),
+        receiptPath: "/private/memory/edit-receipt.json"
+      }),
       enableMemory: (_binding, request) => ({
         apiVersion: 1,
         requestId: "memory_request_wrongidentity1",
@@ -125,6 +139,13 @@ describe("registerMemoryIpc", () => {
     });
     await expect(call(harness, "memory.delete", { ...recordRequest, path: "/private/memory.json" }))
       .rejects.toThrow();
+    await expect(call(harness, "memory.edit", { ...recordRequest, title: "Missing body" }))
+      .rejects.toThrow();
+    await expect(call(harness, "memory.edit", {
+      ...recordRequest,
+      title: "Safe title",
+      body: "Safe body"
+    })).rejects.toThrow();
     await expect(call(harness, "memory.enable", recordRequest)).rejects.toThrow();
     expect(harness.deleteMemory).not.toHaveBeenCalled();
     expect(harness.publishMemoryChanged).not.toHaveBeenCalled();
@@ -189,4 +210,15 @@ function call(
   request: unknown
 ): Promise<unknown> {
   return Promise.resolve(harness.handlers.get(channel)!({ sender: {} } as IpcMainInvokeEvent, request));
+}
+
+function lifecycleResult(request: typeof recordRequest | typeof vaultRequest) {
+  return {
+    apiVersion: 1 as const,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    status: "committed" as const,
+    operationId: "op_20260727_memoryipc",
+    summary
+  };
 }

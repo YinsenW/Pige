@@ -9,6 +9,7 @@ import type {
 import {
   MemoryDeleteRequestSchema,
   MemoryDisableRequestSchema,
+  MemoryEditRequestSchema,
   MemoryEnableRequestSchema,
   MemoryExportRequestSchema,
   MemoryExportResultSchema,
@@ -20,6 +21,7 @@ import {
   OperationRecordSchema,
   type MemoryDeleteRequest,
   type MemoryDisableRequest,
+  type MemoryEditRequest,
   type MemoryEnableRequest,
   type MemoryExportRequest,
   type MemoryExportResult,
@@ -44,6 +46,7 @@ import {
   createMemoryUndoRegistry as createUndoRegistry,
   hashMemoryRegistry as hashRegistry,
   isMatchingMemoryRestoreOperation as isMatchingRestoreOperation,
+  isValidMemoryEditTransition,
   memoryLifecycleConflict as lifecycleConflict,
   memoryOperationRelativePath as operationRelativePath,
   memoryReceiptRelativePath as receiptRelativePath,
@@ -205,6 +208,21 @@ export class AgentMemoryService {
     });
   }
 
+  edit(vaultPath: string, request: MemoryEditRequest): MemoryLifecycleMutationResult {
+    const parsed = MemoryEditRequestSchema.parse(request);
+    if (containsRestrictedModelContent(`${parsed.title}\n${parsed.body}`)) {
+      throw new PigeDomainError("memory.secret_blocked", "Secret-like content cannot be saved as Agent memory.");
+    }
+    return this.#mutate(vaultPath, parsed.activeVaultId, {
+      action: "edit",
+      requestId: parsed.requestId,
+      expectedRevision: parsed.expectedRevision,
+      memoryId: parsed.memoryId,
+      title: parsed.title,
+      body: parsed.body
+    });
+  }
+
   delete(vaultPath: string, request: MemoryDeleteRequest): MemoryLifecycleMutationResult {
     const parsed = MemoryDeleteRequestSchema.parse(request);
     return this.#mutate(vaultPath, parsed.activeVaultId, {
@@ -362,9 +380,8 @@ export class AgentMemoryService {
             const operation = this.#readOperation(vaultPath, receipt.operationId);
             if (!operation) throw lifecycleConflict();
             const undoOperation = this.#readOperation(vaultPath, intent.undoOperationId);
-            if (undoOperation) {
-              if (!isMatchingRestoreOperation(operation, undoOperation)) throw lifecycleConflict();
-            } else if (this.#recoverRestoreIntent(vaultPath, receipt, intent, operation)) recovered += 1;
+            if (undoOperation && !isMatchingRestoreOperation(operation, undoOperation)) throw lifecycleConflict();
+            if (this.#recoverRestoreIntent(vaultPath, receipt, intent, operation)) recovered += 1;
           } else if (this.#recoverReceipt(vaultPath, receipt)) {
             recovered += 1;
           }
@@ -384,6 +401,8 @@ export class AgentMemoryService {
       readonly requestId: string;
       readonly expectedRevision: number;
       readonly memoryId?: string;
+      readonly title?: string;
+      readonly body?: string;
     }
   ): MemoryLifecycleMutationResult {
     this.#rememberVault(vaultPath);
@@ -401,7 +420,7 @@ export class AgentMemoryService {
     if (registry.revision === Number.MAX_SAFE_INTEGER) throw lifecycleConflict();
     const createdAt = this.#now().toISOString();
     const operationId = createOperationId(input.requestId, createdAt);
-    const prepared = prepareMutation(registry, input, createdAt);
+    const prepared = prepareMutation(registry, { ...input, operationId }, createdAt);
     if (!prepared) return lifecycleResult("not_found", activeVaultId, input.requestId, registry);
     const receipt: MemoryLifecycleReceipt = {
       schemaVersion: 1,
@@ -436,11 +455,11 @@ export class AgentMemoryService {
         throw lifecycleConflict();
       }
       this.#writeRegistryExact(vaultPath, currentHash, next);
-      this.#syncInspectableRecords(vaultPath, receipt, next);
       changed = true;
     } else if (currentHash !== receipt.afterRegistryHash || current.revision !== receipt.afterRevision) {
       throw lifecycleConflict();
     }
+    this.#syncInspectableRecords(vaultPath, receipt, this.#readRegistry(vaultPath));
     const operation = createLifecycleOperation(receipt);
     const operationWasMissing = this.#readOperation(vaultPath, operation.id) === undefined;
     this.#persistOperation(vaultPath, operation);
@@ -465,11 +484,12 @@ export class AgentMemoryService {
         throw lifecycleConflict();
       }
       this.#writeRegistryExact(vaultPath, currentHash, next);
-      for (const record of restoredRecords(receipt, next)) this.#writeInspectableRecord(vaultPath, record);
       changed = true;
     } else if (currentHash !== intent.restoredRegistryHash || current.revision !== intent.restoredRevision) {
       throw lifecycleConflict();
     }
+    const restoredRegistry = this.#readRegistry(vaultPath);
+    for (const record of restoredRecords(receipt, restoredRegistry)) this.#writeInspectableRecord(vaultPath, record);
     const restoreOperation = createRestoreOperation(originalOperation, receipt, intent);
     const operationWasMissing = this.#readOperation(vaultPath, restoreOperation.id) === undefined;
     this.#persistOperation(vaultPath, restoreOperation);
@@ -485,7 +505,13 @@ export class AgentMemoryService {
       throw new PigeDomainError("memory.registry_invalid", "The vault memory registry is unsafe.");
     }
     const parsed = JSON.parse(fs.readFileSync(registryPath, "utf8")) as MemoryRegistry;
-    return parseRegistry(parsed);
+    const registry = parseRegistry(parsed);
+    assertRegistryBindings(
+      registry.events,
+      registry.records,
+      (event, record) => this.#validateEditedRecord(vaultPath, event, record, new Set())
+    );
+    return registry;
   }
 
   #writeRegistry(vaultPath: string, registry: MemoryRegistry): void {
@@ -542,10 +568,11 @@ export class AgentMemoryService {
   }
 
   #findReceiptByRequest(vaultPath: string, requestId: string): MemoryLifecycleReceipt | undefined {
+    const edit = this.#readReceipt(vaultPath, `.pige/memory/edits/${requestId}.json`);
     const mutation = this.#readReceipt(vaultPath, `.pige/memory/mutations/${requestId}.json`);
     const trash = this.#readReceipt(vaultPath, `.pige/trash/memory/${requestId}.json`);
-    if (mutation && trash) throw lifecycleConflict();
-    return mutation ?? trash;
+    if ([edit, mutation, trash].filter(Boolean).length > 1) throw lifecycleConflict();
+    return edit ?? mutation ?? trash;
   }
 
   #readReceiptForOperation(vaultPath: string, operation: OperationRecord): MemoryLifecycleReceipt | undefined {
@@ -564,7 +591,7 @@ export class AgentMemoryService {
   }
 
   #readAllReceipts(vaultPath: string): readonly MemoryLifecycleReceipt[] {
-    const relativeRoots = [".pige/memory/mutations", ".pige/trash/memory"];
+    const relativeRoots = [".pige/memory/edits", ".pige/memory/mutations", ".pige/trash/memory"];
     const receipts: MemoryLifecycleReceipt[] = [];
     for (const relativeRoot of relativeRoots) {
       const root = resolveVaultPrivatePath(vaultPath, relativeRoot);
@@ -578,6 +605,39 @@ export class AgentMemoryService {
       }
     }
     return receipts;
+  }
+
+  #validateEditedRecord(
+    vaultPath: string,
+    event: MemoryEventRecord,
+    record: StoredMemoryRecord,
+    seenRequests: Set<string>
+  ): boolean {
+    const provenance = record.editProvenance;
+    if (!provenance || seenRequests.has(provenance.requestId)) return false;
+    seenRequests.add(provenance.requestId);
+    try {
+      const value = readPrivateJson(
+        vaultPath,
+        `.pige/memory/edits/${provenance.requestId}.json`,
+        MAX_PRIVATE_RECORD_BYTES
+      );
+      if (value === undefined) return false;
+      const receipt = parseReceipt(value);
+      if (
+        receipt.action !== "edit" || receipt.requestId !== provenance.requestId ||
+        receipt.operationId !== provenance.operationId || receipt.memoryId !== record.id ||
+        !receipt.beforeRecord || !receipt.afterRecord ||
+        stableJson(receipt.afterRecord) !== stableJson(record) ||
+        !isValidMemoryEditTransition(receipt.beforeRecord, receipt.afterRecord, receipt)
+      ) return false;
+      const before = receipt.beforeRecord;
+      return before.editProvenance
+        ? this.#validateEditedRecord(vaultPath, event, before, seenRequests)
+        : event.title === before.title && event.body === before.body;
+    } catch {
+      return false;
+    }
   }
 
   #rememberVault(vaultPath: string): void {
@@ -644,7 +704,6 @@ function parseRegistry(value: MemoryRegistry): MemoryRegistry {
   ) throw registryInvalid("The vault memory registry is invalid.");
   const events = value.events.map(parseMemoryEvent);
   const records = value.records.map(parseStoredMemoryRecord);
-  assertRegistryBindings(events, records);
   return { schemaVersion: 1, revision: value.revision, events, records };
 }
 
@@ -667,16 +726,30 @@ function parseStoredMemoryRecord(value: unknown): StoredMemoryRecord {
   if (
     typeof record.eventId !== "string" || !/^memory_event_[a-f0-9]{20}$/u.test(record.eventId) ||
     typeof record.conversationId !== "string" || typeof record.userEventId !== "string" ||
-    typeof record.parentJobId !== "string"
+    typeof record.parentJobId !== "string" ||
+    (record.editProvenance !== undefined && (
+      record.editProvenance.kind !== "explicit_edit" ||
+      typeof record.editProvenance.requestId !== "string" ||
+      !/^memory_request_[a-z0-9]{16,64}$/u.test(record.editProvenance.requestId) ||
+      typeof record.editProvenance.operationId !== "string" ||
+      !OPERATION_ID_PATTERN.test(record.editProvenance.operationId)
+    ))
   ) throw registryInvalid("A memory atom provenance binding is invalid.");
-  return { ...summary, eventId: record.eventId, conversationId: record.conversationId, userEventId: record.userEventId, parentJobId: record.parentJobId };
+  return {
+    ...summary,
+    eventId: record.eventId,
+    conversationId: record.conversationId,
+    userEventId: record.userEventId,
+    parentJobId: record.parentJobId,
+    ...(record.editProvenance ? { editProvenance: record.editProvenance } : {})
+  };
 }
 
 function parseReceipt(value: unknown): MemoryLifecycleReceipt {
   if (!value || typeof value !== "object") throw lifecycleConflict();
   const receipt = value as Partial<MemoryLifecycleReceipt>;
   if (
-    receipt.schemaVersion !== 1 || !(["enable", "delete", "reset"] as const).includes(receipt.action as never) ||
+    receipt.schemaVersion !== 1 || !(["edit", "enable", "delete", "reset"] as const).includes(receipt.action as never) ||
     typeof receipt.requestId !== "string" || !/^memory_request_[a-z0-9]{16,64}$/u.test(receipt.requestId) ||
     typeof receipt.activeVaultId !== "string" || !OPERATION_ID_PATTERN.test(receipt.operationId ?? "") ||
     typeof receipt.createdAt !== "string" || !Number.isSafeInteger(receipt.expectedRevision) ||
@@ -686,12 +759,13 @@ function parseReceipt(value: unknown): MemoryLifecycleReceipt {
   ) throw lifecycleConflict();
   const removedEvents = receipt.removedEvents.map(parseMemoryEvent);
   const removedRecords = receipt.removedRecords.map(parseStoredMemoryRecord);
-  assertRegistryBindings(removedEvents, removedRecords);
+  assertRegistryBindings(removedEvents, removedRecords, (_event, record) => record.editProvenance !== undefined);
   const beforeRecord = receipt.beforeRecord ? parseStoredMemoryRecord(receipt.beforeRecord) : undefined;
   const afterRecord = receipt.afterRecord ? parseStoredMemoryRecord(receipt.afterRecord) : undefined;
   if (
-    receipt.action === "enable"
-      ? (!receipt.memoryId || !beforeRecord || !afterRecord || removedRecords.length !== 0 || removedEvents.length !== 0)
+    (receipt.action === "edit" || receipt.action === "enable")
+      ? (!receipt.memoryId || !beforeRecord || !afterRecord || removedRecords.length !== 0 || removedEvents.length !== 0 ||
+        (receipt.action === "edit" && !isValidMemoryEditTransition(beforeRecord, afterRecord, receipt)))
       : (receipt.action === "delete" ? !receipt.memoryId || removedRecords.length !== 1 : !!receipt.memoryId) ||
         beforeRecord !== undefined || afterRecord !== undefined
   ) throw lifecycleConflict();
@@ -713,11 +787,20 @@ function parseRestoreIntent(value: unknown): MemoryRestoreIntent {
 function assertReceiptRequest(
   receipt: MemoryLifecycleReceipt,
   activeVaultId: string,
-  input: { readonly action: MemoryLifecycleAction; readonly expectedRevision: number; readonly memoryId?: string }
+  input: {
+    readonly action: MemoryLifecycleAction;
+    readonly expectedRevision: number;
+    readonly memoryId?: string;
+    readonly title?: string;
+    readonly body?: string;
+  }
 ): void {
   if (
     receipt.activeVaultId !== activeVaultId || receipt.action !== input.action ||
-    receipt.expectedRevision !== input.expectedRevision || receipt.memoryId !== input.memoryId
+    receipt.expectedRevision !== input.expectedRevision || receipt.memoryId !== input.memoryId ||
+    (input.action === "edit" && (
+      receipt.afterRecord?.title !== input.title || receipt.afterRecord?.body !== input.body
+    ))
   ) throw lifecycleConflict();
 }
 

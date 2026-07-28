@@ -2,6 +2,7 @@ import type { BrowserWindow, IpcMain, SaveDialogOptions, WebContents } from "ele
 import type {
   MemoryDeleteRequest,
   MemoryDisableRequest,
+  MemoryEditRequest,
   MemoryEnableRequest,
   MemoryExportRequest,
   MemoryExportResult,
@@ -15,6 +16,7 @@ import { PigeDomainError } from "@pige/domain";
 import {
   MemoryDeleteRequestSchema,
   MemoryDisableRequestSchema,
+  MemoryEditRequestSchema,
   MemoryEnableRequestSchema,
   MemoryExportRequestSchema,
   MemoryExportResultSchema,
@@ -48,6 +50,10 @@ export interface RegisterMemoryIpcOptions {
   readonly enableMemory: (
     binding: MemoryVaultBinding,
     request: MemoryEnableRequest
+  ) => Awaitable<MemoryLifecycleMutationResult>;
+  readonly editMemory: (
+    binding: MemoryVaultBinding,
+    request: MemoryEditRequest
   ) => Awaitable<MemoryLifecycleMutationResult>;
   readonly deleteMemory: (
     binding: MemoryVaultBinding,
@@ -83,6 +89,7 @@ export function registerMemoryIpc(options: RegisterMemoryIpcOptions): void {
     return result;
   });
 
+  registerLifecycleMutation(options, "memory.edit", MemoryEditRequestSchema, options.editMemory);
   registerLifecycleMutation(options, "memory.enable", MemoryEnableRequestSchema, options.enableMemory);
   registerLifecycleMutation(options, "memory.delete", MemoryDeleteRequestSchema, options.deleteMemory);
   registerLifecycleMutation(options, "memory.reset", MemoryResetRequestSchema, options.resetMemory);
@@ -119,11 +126,11 @@ export function registerMemoryIpc(options: RegisterMemoryIpcOptions): void {
   });
 }
 
-type LifecycleRequest = MemoryEnableRequest | MemoryDeleteRequest | MemoryResetRequest;
+type LifecycleRequest = MemoryEditRequest | MemoryEnableRequest | MemoryDeleteRequest | MemoryResetRequest;
 
 function registerLifecycleMutation<TRequest extends LifecycleRequest>(
   options: RegisterMemoryIpcOptions,
-  channel: "memory.enable" | "memory.delete" | "memory.reset",
+  channel: "memory.edit" | "memory.enable" | "memory.delete" | "memory.reset",
   schema: { parse(value: unknown): TRequest },
   mutate: (binding: MemoryVaultBinding, request: TRequest) => Awaitable<MemoryLifecycleMutationResult>
 ): void {
