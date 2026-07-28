@@ -164,8 +164,15 @@ import {
   applyReaderSelectionPageUpdate,
   createAgentPageUpdateOperationId
 } from "./services/agent-page-update-service";
-import { readReaderSelectionPageUpdateOperation } from "./services/agent-turn-publication";
+import {
+  readReaderSelectionLinkPublicationIntent,
+  readReaderSelectionPageUpdateOperation
+} from "./services/agent-turn-publication";
 import { ReaderSelectionActionService } from "./services/reader-selection-action-service";
+import {
+  applyReaderSelectionLink,
+  readReaderSelectionLinkOperation
+} from "./services/reader-selection-link-service";
 import {
   createReaderSelectionProposalId,
   ReaderSelectionProposalService
@@ -1165,6 +1172,45 @@ const getHomeAgentService = (): HomeAgentService => {
             );
           }
           return undefined;
+        },
+        publishLink: ({ vaultPath, job, selection, target }) => {
+          const targetPage = readCurrentNotePageForMutation(vaultPath, target.pageId);
+          if (
+            targetPage.item.summary.pagePath !== target.pagePath ||
+            targetPage.item.summary.title !== target.title ||
+            targetPage.page.contentHash !== target.contentHash
+          ) {
+            throw new PigeDomainError("agent_ingest.relationship_target_ineligible", "The Reader link target changed.");
+          }
+          const result = applyReaderSelectionLink({
+            vaultPath,
+            job,
+            selection,
+            currentPage: readCurrentNotePageForMutation(vaultPath, selection.pageId),
+            targetPage
+          });
+          getLocalDatabaseService().rebuild(vaultPath);
+          return {
+            status: "applied" as const,
+            operationId: result.operation.id,
+            pageContentHash: result.operation.after!.id,
+            targetPageId: result.targetPageId
+          };
+        },
+        readLinkPublication: ({ vaultPath, job, selection, target }) => {
+          const targetPage = readCurrentNotePageForMutation(vaultPath, target.pageId);
+          if (
+            targetPage.item.summary.pagePath !== target.pagePath ||
+            targetPage.item.summary.title !== target.title ||
+            targetPage.page.contentHash !== target.contentHash
+          ) return undefined;
+          const result = readReaderSelectionLinkOperation({ vaultPath, job, selection, targetPage });
+          return result ? {
+            status: "applied" as const,
+            operationId: result.operation.id,
+            pageContentHash: result.operation.after!.id,
+            targetPageId: result.targetPageId
+          } : undefined;
         }
       },
       {
@@ -1254,6 +1300,17 @@ const getReaderSelectionActionService = (): ReaderSelectionActionService => {
         readAppliedOperationId: ({ job, selection }) => {
           const operationId = createAgentPageUpdateOperationId(job.id, selection.pageId);
           return job.operationIds?.includes(operationId) ? operationId : undefined;
+        },
+        readAppliedLink: ({ job, selection }) => {
+          const vaultPath = getVaultService().activeVaultPath();
+          if (!vaultPath) return undefined;
+          const intent = readReaderSelectionLinkPublicationIntent(vaultPath, job);
+          if (!intent || JSON.stringify(intent.selection) !== JSON.stringify(selection)) return undefined;
+          const targetPage = readCurrentNotePageForMutation(vaultPath, intent.target.pageId);
+          const result = readReaderSelectionLinkOperation({ vaultPath, job, selection, targetPage });
+          return result && job.operationIds?.includes(result.operation.id)
+            ? { operationId: result.operation.id, targetPageId: result.targetPageId }
+            : undefined;
         },
         readProposal: (proposalId) => {
           const result = getReaderSelectionProposalService().get({ apiVersion: 1, proposalId });

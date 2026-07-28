@@ -47,10 +47,35 @@ describe("registerReaderIpc", () => {
       "notes.openSourceReference",
       "readerSelection.resolve",
       "readerSelection.submitAction",
+      "readerSelection.submitLink",
       "readerSelection.submitTransform",
       "readerSelection.currentProposal",
       "readerSelection.decideProposal"
     ]);
+  });
+
+  it("fails a Reader link closed before Agent submission without a tracked render owner", async () => {
+    const handlers = makeHarness({});
+    await expect(handlers.get("readerSelection.submitLink")!({ sender: makeSender(9) } as IpcMainInvokeEvent, {
+      apiVersion: 1,
+      requestId: "readerselaction_abcdefgh123456",
+      action: "link",
+      activeVaultId: "vault_20260728_abcdefgh",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      selection: {
+        pageId: "page_20260728_readerlink12",
+        pageContentHash: `sha256:${"a".repeat(64)}`,
+        span: { unit: "utf8_bytes", start: 1, endExclusive: 2 },
+        selectedContentHash: `sha256:${"b".repeat(64)}`
+      },
+      locale: "en",
+      clientTurnId: "turn_20260728_readerlink12"
+    })).resolves.toEqual({
+      apiVersion: 1,
+      requestId: "readerselaction_abcdefgh123456",
+      status: "invalid",
+      reason: "render_context_changed"
+    });
   });
 
   it("fails closed when Markdown editor requests have no active Reader owner", async () => {

@@ -87,6 +87,7 @@ import {
 import {
   createRetrievalEvidencePrivacyHash,
   readCurrentNoteEvidenceBinding,
+  readCurrentRetrievalPageForMutation,
   readRetrievalEvidencePrivacySnapshot,
   resolveCurrentNoteEvidenceQuoteLocator,
   type CurrentNoteEvidenceBinding,
@@ -109,10 +110,13 @@ import {
   isNonRetryableReaderPublicationErrorCode,
   readDurableTurnResult,
   readReaderSelectionPublicationIntent,
+  readReaderSelectionLinkPublication,
+  readReaderSelectionLinkPublicationIntent,
   requireReaderSelectionMutationPort,
   readReaderSelectionTransformPublication,
   recoverDurableAssistantPublication,
   stageReaderSelectionPublicationIntent,
+  stageReaderSelectionLinkPublicationIntent,
   settleJobAfterAssistant,
   type HomeAgentJobSession,
   type HomeAgentReaderSelectionPublication,
@@ -123,6 +127,7 @@ import {
   readBoundReaderSelectionEvidence,
   readInitialReaderSelectionEvidence,
   readerSelectionInputPresentation,
+  readReaderSelectionLinkBinding,
   readReaderSelectionTransformBinding,
   validateReaderSelectionTurnContext,
   type ReaderSelectionJobScope,
@@ -280,6 +285,7 @@ export function scheduleAcceptedAgentTurn(execute: () => Promise<unknown>): void
 const HOME_SEARCH_TOOL_NAME = "pige_search_knowledge";
 const HOME_READ_CURRENT_NOTE_TOOL_NAME = "pige_read_current_note";
 const HOME_REPLACE_READER_SELECTION_TOOL_NAME = "pige_replace_reader_selection";
+const HOME_LINK_READER_SELECTION_TOOL_NAME = "pige_link_reader_selection";
 const HOME_QUERY_DATASET_TOOL_NAME = "pige_query_dataset";
 const HOME_FETCH_URL_TOOL_NAME = "pige_fetch_url";
 const HOME_INSPECT_URL_TOOL_NAME = "pige_inspect_url_source";
@@ -518,6 +524,7 @@ export class HomeAgentService {
       readonly sourceIds?: readonly string[];
       readonly prepared?: PreparedSourceAgentTurn;
       readonly onDraft?: (snapshot: HomeAgentDraftSnapshot) => void;
+      readonly assertCurrent?: () => void;
     } & ReaderSelectionTurnContext = {}
   ): Promise<AgentSubmitTurnResult> {
     let requestId = `turn_${randomUUID().replaceAll("-", "")}`;
@@ -697,12 +704,10 @@ export class HomeAgentService {
       const conversationContext = this.#conversations.readContextBeforeUserTurn(vaultPath, activeTurn);
       const history = toPiAgentHistory(conversationContext);
       const conversationContextHash = createConversationContextHash(activeTurn, conversationContext);
-      const assertConversationCurrent = (): void => assertConversationContextCurrent(
-        this.#conversations,
-        vaultPath,
-        activeTurn,
-        conversationContextHash
-      );
+      const assertConversationCurrent = (): void => {
+        assertConversationContextCurrent(this.#conversations, vaultPath, activeTurn, conversationContextHash);
+        context.assertCurrent?.();
+      };
       const draftClientTurnId = validatedRequest.clientTurnId;
       const publishDraft = draftClientTurnId && context.onDraft
         ? (text: string): void => context.onDraft?.({
@@ -1150,7 +1155,9 @@ export class HomeAgentService {
       )
       : undefined;
     const readerSelectionTransform = readReaderSelectionTransformBinding(session.current);
+    const readerSelectionLink = readReaderSelectionLinkBinding(session.current);
     const readerSelectionMutations = this.#readerSelectionMutations;
+    let readerSelectionLinkQuery = retrievalQuery;
     if (currentNoteScope) {
       const initialCurrentNote = readBoundReaderSelectionEvidence(
         vaultPath,
@@ -1167,11 +1174,23 @@ export class HomeAgentService {
           "The durable current-note binding changed before Agent recovery."
         );
       }
+      if (readerSelectionLink) {
+        readerSelectionLinkQuery = Array.from(initialCurrentNote.modelText.trim()).slice(0, 320).join("");
+        if (!readerSelectionLinkQuery) {
+          throw new PigeDomainError("rag.search_not_found", "The selected passage has no searchable text.");
+        }
+      }
     }
     let searchResult: RetrievalSearchResult | undefined;
     let currentNoteEvidence: CurrentNoteEvidenceBinding | undefined;
     let currentNoteToolUsed = false;
     let readerSelectionReplacement: string | undefined;
+    let readerSelectionLinkTarget: {
+      readonly pageId: string;
+      readonly pagePath: string;
+      readonly contentHash: string;
+      readonly title: string;
+    } | undefined;
     let approvedEvidencePrivacyHash: string | undefined;
     let urlEvidence: HomeAgentUrlEvidence | undefined;
     let urlEvidenceInspected = false;
@@ -1285,6 +1304,12 @@ export class HomeAgentService {
           "agent_runtime.turn_conflict",
           "The selected evidence binding changed during the Agent turn."
         );
+      }
+      if (readerSelectionLinkTarget) {
+        const currentTarget = readCurrentNoteEvidenceBinding(vaultPath, readerSelectionLinkTarget.pageId);
+        if (currentTarget.contentHash !== readerSelectionLinkTarget.contentHash) {
+          throw new PigeDomainError("agent_ingest.relationship_target_ineligible", "The selected link target changed.");
+        }
       }
     };
     const assertCurrentNotePublicationCurrent = async (): Promise<void> => {
@@ -1549,6 +1574,50 @@ export class HomeAgentService {
           }
           readerSelectionReplacement = replacement;
         }
+      })] : []), ...(readerSelectionLink && readerSelectionMutations ? [createSearchTool({
+        authorize: assertCurrentBindingAndVault,
+        search: async () => {
+          searchToolUsed = true;
+          const result = await this.#retrieval.search({
+            scope: { kind: "active_vault", vaultId: activeVault.vaultId },
+            query: readerSelectionLinkQuery,
+            limit: 8
+          });
+          if (result.activeVaultId !== activeVault.vaultId || result.query !== readerSelectionLinkQuery) {
+            throw new PigeDomainError("rag.search_binding_invalid", "The Reader link search binding changed.");
+          }
+          searchResult = result;
+          const exactEvidence = this.#retrieval.readExactSelectedEvidence(result);
+          evidenceLedger.record("local_search", modelTurnSequence);
+          await authorizeCurrentModelTurn();
+          return { ...result, results: exactEvidence.items };
+        }
+      }), createReaderSelectionLinkTool({
+        authorize: assertCurrentBindingAndVault,
+        select: (targetRef) => {
+          if (!searchResult) {
+            throw new PigeDomainError("rag.search_not_found", "Search current notes before selecting a link target.");
+          }
+          const selected = buildHomeSearchSelectedEvidence(searchResult)
+            .find(({ citation }) => citation.refId === targetRef);
+          if (!selected) {
+            throw new PigeDomainError("rag.search_not_found", "The selected link target is unavailable.");
+          }
+          const target = readCurrentRetrievalPageForMutation(vaultPath, selected.item);
+          if (target.item.summary.pageId === readerSelectionLink.selection.pageId) {
+            throw new PigeDomainError("agent_ingest.relationship_target_invalid", "A note cannot link to itself.");
+          }
+          const nextTarget = {
+            pageId: target.item.summary.pageId,
+            pagePath: target.item.summary.pagePath,
+            contentHash: target.page.contentHash,
+            title: target.item.summary.title
+          };
+          if (readerSelectionLinkTarget && JSON.stringify(readerSelectionLinkTarget) !== JSON.stringify(nextTarget)) {
+            throw new PigeDomainError("rag.search_ambiguous", "One Reader link turn cannot select two targets.");
+          }
+          readerSelectionLinkTarget = nextTarget;
+        }
       })] : [])] : sourceSession ? [] : [createSearchTool({
         authorize: assertCurrentBindingAndVault,
         search: async () => {
@@ -1598,7 +1667,8 @@ export class HomeAgentService {
           !currentNoteScope && this.#datasets !== undefined,
           currentNoteScope !== undefined,
           sourceSession ? collectPreparedAgentTurnSourceIds(session.current).length : 0,
-          memoryToolRegistered
+          memoryToolRegistered,
+          readerSelectionLink !== undefined
         ),
         userPrompt: createHomeUserPrompt(query, recalledMemories),
         history,
@@ -1637,6 +1707,14 @@ export class HomeAgentService {
       assertCurrentBindingAndVault();
       stageReaderSelectionPublicationIntent(vaultPath, session.current, readerSelectionReplacement);
     }
+    if (readerSelectionLink && readerSelectionMutations) {
+      if (!readerSelectionLinkTarget) {
+        throw new PigeDomainError("rag.search_not_found", "The Reader link turn did not select a current target.");
+      }
+      signal?.throwIfAborted();
+      assertCurrentBindingAndVault();
+      stageReaderSelectionLinkPublicationIntent(vaultPath, session.current, readerSelectionLinkTarget);
+    }
     session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;
     assertCurrentBindingAndVault();
 
@@ -1647,6 +1725,7 @@ export class HomeAgentService {
         toolName !== HOME_QUERY_DATASET_TOOL_NAME &&
         toolName !== HOME_READ_CURRENT_NOTE_TOOL_NAME &&
         toolName !== HOME_REPLACE_READER_SELECTION_TOOL_NAME &&
+        toolName !== HOME_LINK_READER_SELECTION_TOOL_NAME &&
         toolName !== HOME_SEARCH_TOOL_NAME &&
         (toolName !== HOME_REMEMBER_PREFERENCE_TOOL_NAME || !memoryToolRegistered) &&
         !sourceToolNames.has(toolName) &&
@@ -1749,22 +1828,19 @@ export class HomeAgentService {
     vaultPath: string
   ): void {
     const intent = readReaderSelectionPublicationIntent(vaultPath, session.current);
-    if (!intent) return;
+    const linkIntent = readReaderSelectionLinkPublicationIntent(vaultPath, session.current);
+    if (!intent && !linkIntent) return;
     const mutations = requireReaderSelectionMutationPort(this.#readerSelectionMutations);
-    const existing = mutations.readPublication({
-      vaultPath,
-      job: session.current,
-      selection: intent.selection,
-      replacement: intent.replacement,
-      action: intent.action
-    });
-    const publication = existing ?? mutations.publish({
-      vaultPath,
-      job: session.current,
-      selection: intent.selection,
-      replacement: intent.replacement,
-      action: intent.action
-    });
+    const publication = linkIntent
+      ? mutations.readLinkPublication({ vaultPath, job: session.current, selection: linkIntent.selection, target: linkIntent.target }) ??
+        mutations.publishLink({ vaultPath, job: session.current, selection: linkIntent.selection, target: linkIntent.target })
+      : mutations.readPublication({
+          vaultPath, job: session.current, selection: intent!.selection,
+          replacement: intent!.replacement, action: intent!.action
+        }) ?? mutations.publish({
+          vaultPath, job: session.current, selection: intent!.selection,
+          replacement: intent!.replacement, action: intent!.action
+        });
     const refreshed = this.#jobs.readAgentTurnJob(session.current.id);
     if (refreshed) session.current = refreshed;
     if (hasReaderSelectionPublicationRef(session.current, publication)) return;
@@ -1794,6 +1870,9 @@ export class HomeAgentService {
     session: HomeAgentJobSession,
     vaultPath: string
   ): HomeAgentReaderSelectionPublication | undefined {
+    if (readReaderSelectionLinkPublicationIntent(vaultPath, session.current)) {
+      return readReaderSelectionLinkPublication(this.#readerSelectionMutations, vaultPath, session.current);
+    }
     if (!readReaderSelectionPublicationIntent(vaultPath, session.current)) return undefined;
     return readReaderSelectionTransformPublication(
       this.#readerSelectionMutations,
@@ -2174,6 +2253,61 @@ function createReaderSelectionMutationTool(options: {
   };
 }
 
+function createReaderSelectionLinkTool(options: {
+  readonly authorize: () => void;
+  readonly select: (targetRef: string) => void;
+}): PigeAgentToolDefinition {
+  const InputSchema = z.object({ targetRef: z.string().regex(/^citation_[2-9]$/u) }).strict();
+  return {
+    name: HOME_LINK_READER_SELECTION_TOOL_NAME,
+    label: "Link Reader selection",
+    description: "Link the current note to exactly one current note returned by the registered local search. Takes only an opaque citation ref.",
+    version: "1",
+    capability: "write_vault_knowledge",
+    parameters: {
+      type: "object",
+      properties: { targetRef: { type: "string", pattern: "^citation_[2-9]$" } },
+      required: ["targetRef"],
+      additionalProperties: false
+    },
+    outputSchema: {
+      type: "object",
+      properties: { status: { type: "string", enum: ["accepted"] } },
+      required: ["status"],
+      additionalProperties: false
+    },
+    effect: "idempotent_write",
+    inputTrust: "model_generated",
+    outputTrust: "host_validated",
+    dataBoundary: {
+      resourceScope: "current_note",
+      pathAuthority: "host_only",
+      sourceIdAuthority: "host_only",
+      modelAuthority: "none"
+    },
+    execution: "sequential",
+    idempotency: { mode: "idempotent", scope: "current_note" },
+    limits: { maxInputBytes: 1_024, maxOutputBytes: 1_024, timeoutMs: 30_000 },
+    ownerService: "ReaderSelectionActionService",
+    authorize: (args) => {
+      options.authorize();
+      if (!InputSchema.safeParse(args).success) {
+        throw new PigeDomainError("agent_runtime.tool_input_invalid", "The Reader link tool input is invalid.");
+      }
+      return true;
+    },
+    execute: async (args) => {
+      options.authorize();
+      const parsed = InputSchema.safeParse(args);
+      if (!parsed.success) {
+        throw new PigeDomainError("agent_runtime.tool_input_invalid", "The Reader link tool input is invalid.");
+      }
+      options.select(parsed.data.targetRef);
+      return createPigeTextToolResult("The current link target was accepted for durable publication.", { status: "accepted" });
+    }
+  };
+}
+
 function createDatasetQueryTool(options: {
   readonly authorize: (args: unknown) => void;
   readonly execute: (
@@ -2397,15 +2531,18 @@ function createHomeSystemPrompt(
   datasetQueryAvailable: boolean,
   currentNoteScoped = false,
   sourceCount = 0,
-  memoryWritingAvailable = false
+  memoryWritingAvailable = false,
+  readerSelectionLink = false
 ): string {
   return [
     "You are Pige, a general-purpose personal Agent with optional local-knowledge augmentation.",
     currentNoteScoped
       ? `This is a current-note request. Call ${HOME_READ_CURRENT_NOTE_TOOL_NAME} and answer from only its exact supplied UTF-8 byte range. If that evidence is empty or insufficient, explain the limitation in ordinary assistant prose.`
       : "Choose registered evidence tools only when they materially help the request. Use a registered external mutation tool only for the user's explicit current-turn action intent; the Host remains the sole permission and execution authority.",
-    currentNoteScoped
+    currentNoteScoped && !readerSelectionLink
       ? "Do not search other notes, query Datasets, fetch URLs, or invoke external capabilities in this scoped turn."
+      : readerSelectionLink
+        ? `This Reader link turn may call ${HOME_SEARCH_TOOL_NAME} and then ${HOME_LINK_READER_SELECTION_TOOL_NAME} with exactly one returned citation ref. The Host alone resolves and mutates the relationship.`
       : sourceCount > 1
         ? `This turn includes ${sourceCount} Host-bound preserved attachments. Use pige_list_attachments and pige_select_attachment to choose an opaque attachment before the registered inspect/parse/OCR/Dataset tools; choose any needed tool order yourself and finish with ordinary assistant prose.`
       : sourceCount === 1

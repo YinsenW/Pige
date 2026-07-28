@@ -264,6 +264,80 @@ describe("Reader selection action service", () => {
     expect(JSON.stringify(result)).not.toContain("SELECTED_PRIVATE_PASSAGE");
     expect(JSON.stringify(result)).not.toContain("pageContentHash");
   });
+
+  it("submits one exact Reader link turn and returns only durable safe identities", async () => {
+    const fixture = makeFixture("Before. SELECTED_PRIVATE_PASSAGE. After.");
+    const submitTurn = vi.fn(async () => ({
+      requestId: "job_20260718_link123456",
+      jobId: "job_20260718_link123456",
+      conversationEventId: "evt_20260718_link123456",
+      conversationId: "conv_20260718_link1234",
+      tailEventId: "evt_20260718_linkanswer",
+      state: "completed" as const,
+      modelUsage: "cloud" as const,
+      sourceIds: [],
+      answer: { answer: "Linked the related note.", grounding: "local_knowledge" as const, citations: [] }
+    }));
+    const service = new ReaderSelectionActionService(fixture.vaults, { submitTurn }, {
+      readJob: () => ({ id: "job_20260718_link123456" } as never),
+      readAppliedOperationId: () => undefined,
+      readProposal: () => undefined,
+      readAppliedLink: () => ({
+        operationId: "op_20260718_link123456",
+        targetPageId: "page_20260718_target123"
+      })
+    });
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "readerlink_20260718_abcdefgh",
+      action: "link" as const,
+      activeVaultId: fixture.vaults.current().vaultId,
+      renderContextId: "renderctx_20260718_abcdefgh",
+      selection: fixture.selection,
+      locale: "en" as const,
+      clientTurnId: "turn_20260718_linkabcdefgh"
+    };
+
+    await expect(service.submitLink(request, { renderContextCurrent: () => true })).resolves.toEqual({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "applied",
+      jobId: "job_20260718_link123456",
+      conversationEventId: "evt_20260718_link123456",
+      conversationId: "conv_20260718_link1234",
+      tailEventId: "evt_20260718_linkanswer",
+      operationId: "op_20260718_link123456",
+      currentPageId: fixture.selection.pageId,
+      targetPageId: "page_20260718_target123"
+    });
+    expect(submitTurn.mock.calls[0]?.[1]).toMatchObject({
+      currentNoteSelection: fixture.selection,
+      currentNoteLinkAction: "link"
+    });
+    expect(JSON.stringify(submitTurn.mock.calls[0]?.[0])).not.toContain("SELECTED_PRIVATE_PASSAGE");
+  });
+
+  it("fails a Reader link before Agent submission when its render owner changed", async () => {
+    const fixture = makeFixture("Before. SELECTED_PRIVATE_PASSAGE. After.");
+    const submitTurn = vi.fn();
+    const service = new ReaderSelectionActionService(fixture.vaults, { submitTurn });
+    await expect(service.submitLink({
+      apiVersion: 1,
+      requestId: "readerlink_20260718_staleabc",
+      action: "link",
+      activeVaultId: fixture.vaults.current().vaultId,
+      renderContextId: "renderctx_20260718_staleabc",
+      selection: fixture.selection,
+      locale: "en",
+      clientTurnId: "turn_20260718_staleabcdef"
+    }, { renderContextCurrent: () => false })).resolves.toEqual({
+      apiVersion: 1,
+      requestId: "readerlink_20260718_staleabc",
+      status: "invalid",
+      reason: "render_context_changed"
+    });
+    expect(submitTurn).not.toHaveBeenCalled();
+  });
 });
 
 function makeFixture(body: string): {

@@ -218,6 +218,13 @@ describe("desktop shell build contract", () => {
     expect(readerIpcSource).toContain('ipcMain.handle("readerSelection.submitAction"');
     expect(readerIpcSource).toContain("ReaderSelectionActionRequestSchema.parse(request)");
     expect(readerIpcSource).toContain("ReaderSelectionActionResultSchema.parse(");
+    expect(readerIpcSource).toContain('ipcMain.handle("readerSelection.submitLink"');
+    expect(readerIpcSource).toContain("ReaderSelectionLinkRequestSchema.parse(request)");
+    expect(readerIpcSource).toContain("ReaderSelectionLinkResultSchema.parse(");
+    expect(readerIpcSource).toContain("notesTrackedSenders.get(event.sender.id)");
+    expect(readerIpcSource).toContain("getNotesService().isRenderContextCurrent(ownerId, {");
+    expect(readerIpcSource).toContain("submitLink(parsed, {");
+    expect(readerIpcSource).toContain("renderContextCurrent,");
     expect(readerIpcSource).toContain('ipcMain.handle("readerSelection.submitTransform"');
     expect(readerIpcSource).toContain("ReaderSelectionTransformRequestSchema.parse(request)");
     expect(readerIpcSource).toContain("ReaderSelectionTransformResultSchema.parse(");
