@@ -560,7 +560,7 @@ export function readAgentPageUpdateOperationBinding(
   const sourceRefs = operation.sourceRefs.filter((ref) => ref.kind === "source");
   const jobRefs = operation.sourceRefs.filter((ref) => ref.kind === "job");
   const readerSelectionRefs = operation.sourceRefs.filter(
-    (ref) => ref.kind === "artifact" && /^art_reader_selection_[a-f0-9]{16}$/u.test(ref.id)
+    (ref) => ref.kind === "artifact" && /^art_(?:reader_selection|current_note_append)_[a-f0-9]{16}$/u.test(ref.id)
   );
   const hasReaderSelectionProvenance =
     readerSelectionRefs.length === 1 &&
@@ -576,8 +576,7 @@ export function readAgentPageUpdateOperationBinding(
     target?.kind !== "page" ||
     !/^page_\d{8}_[a-z0-9]{8,}$/u.test(target.id) ||
     !target.path ||
-    !/^wiki\/generated\/\d{4}\/page_\d{8}_[a-z0-9]{8,}\.md$/u.test(target.path) ||
-    path.posix.basename(target.path) !== `${target.id}.md` ||
+    !target.path.startsWith("wiki/") || path.posix.isAbsolute(target.path) || target.path.includes("\\") || target.path.split("/").some((segment) => !segment || segment === "." || segment === "..") ||
     before?.kind !== "page" ||
     !isContentHash(before.id) ||
     before.path !== createAgentPageUpdateBeforePath(operation.id) ||

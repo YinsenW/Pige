@@ -739,6 +739,7 @@
   "note.agentWorking": "Pi Agent lit cette note...",
   "note.proposal.apply": "Appliquer",
   "note.proposal.action.expand": "Développer le passage sélectionné",
+  "note.proposal.action.append_current_note": "Ajouter à la note actuelle",
   "note.proposal.action.polish": "Améliorer le passage sélectionné",
   "note.proposal.action.translate": "Traduire le passage sélectionné",
   "note.proposal.description": "Cette modification exceptionnelle doit être vérifiée avant de mettre à jour la note. L’original reste récupérable depuis Activité et Annuler.",

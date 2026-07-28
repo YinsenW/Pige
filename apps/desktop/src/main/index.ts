@@ -98,6 +98,7 @@ import { registerMemoryIpc } from "./register-memory-ipc";
 import { registerSkillsIpc } from "./register-skills-ipc";
 import { registerPiPackagesIpc } from "./register-pi-packages-ipc";
 import { registerLocalCapabilitiesIpc } from "./register-local-capabilities-ipc";
+import { registerCurrentNoteAppendIpc } from "./register-current-note-append-ipc";
 import {
   AgentIngestService,
   type AgentIngestCapabilitySnapshot,
@@ -162,6 +163,7 @@ import {
   type HomeAgentDraftSnapshot
 } from "./services/home-agent-service";
 import { HomeAgentUrlService } from "./services/home-agent-url-service";
+import { CurrentNoteAppendService } from "./services/current-note-append-service";
 import { HighRiskConfirmationService } from "./services/high-risk-confirmation-service";
 import { LocalDatabaseRebuildWorkerService } from "./services/local-database-rebuild-worker-service";
 import { LocalDatabaseService } from "./services/local-database-service";
@@ -269,6 +271,7 @@ let agentRuntimeService: AgentRuntimeService | undefined;
 let agentIngestService: AgentIngestService | undefined;
 let homeAgentService: HomeAgentService | undefined;
 let homeAgentUrlService: HomeAgentUrlService | undefined;
+let currentNoteAppendService: CurrentNoteAppendService | undefined;
 let appearanceService: AppearanceService | undefined;
 let appearanceServiceUnsubscribe: (() => void) | undefined;
 let toolchainService: ToolchainService | undefined;
@@ -1261,10 +1264,16 @@ const getHomeAgentService = (): HomeAgentService => {
           readToolCatalogHash: turn.readToolCatalogHash
         })]
       },
-      getAgentMemoryService()
+      getAgentMemoryService(),
+      getCurrentNoteAppendService()
     );
   }
   return homeAgentService;
+};
+
+const getCurrentNoteAppendService = (): CurrentNoteAppendService => {
+  currentNoteAppendService ??= new CurrentNoteAppendService();
+  return currentNoteAppendService;
 };
 
 const getHomeAgentUrlService = (): HomeAgentUrlService => {
@@ -2214,6 +2223,13 @@ registerReaderIpc({
   getNotesService,
   getReaderSelectionActionService,
   getReaderSelectionProposalService
+});
+registerCurrentNoteAppendIpc({
+  ipcMain,
+  currentVault: () => getVaultService().current(),
+  activeVaultPath: () => getVaultService().activeVaultPath(),
+  getService: getCurrentNoteAppendService,
+  getJobsService
 });
 registerBackupRestoreIpc({
   ipcMain,

@@ -9,6 +9,10 @@ import type {
   AgentSubmitTurnIpcResult,
   AgentTurnDraftEvent,
   AgentRuntimeStatus,
+  CurrentNoteAppendProposalDecisionRequest,
+  CurrentNoteAppendProposalDecisionResult,
+  CurrentNoteAppendProposalGetRequest,
+  CurrentNoteAppendProposalGetResult,
   AppHealth,
   BackupManifestSummary,
   BackupCreateResult,
@@ -192,6 +196,10 @@ import {
   AgentConversationResultSchema,
   AgentSubmitTurnIpcPayloadSchema,
   AgentSubmitTurnIpcResultSchema,
+  CurrentNoteAppendProposalDecisionRequestSchema,
+  CurrentNoteAppendProposalDecisionResultSchema,
+  CurrentNoteAppendProposalGetRequestSchema,
+  CurrentNoteAppendProposalGetResultSchema,
   AppearanceSettingsSummarySchema,
   AppearanceThemeMutationResultSchema,
   BackupReconnectDependencyRequestSchema,
@@ -766,6 +774,20 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke("agent.submitTurn", payload)
       ) as AgentSubmitTurnIpcResult;
     }) as PigeDesktopApi["agent"]["submitTurn"],
+    currentNoteAppendProposal: async (
+      request: CurrentNoteAppendProposalGetRequest
+    ): Promise<CurrentNoteAppendProposalGetResult> =>
+      CurrentNoteAppendProposalGetResultSchema.parse(await ipcRenderer.invoke(
+        "agent.currentNoteAppendProposal",
+        CurrentNoteAppendProposalGetRequestSchema.parse(request)
+      )),
+    decideCurrentNoteAppendProposal: async (
+      request: CurrentNoteAppendProposalDecisionRequest
+    ): Promise<CurrentNoteAppendProposalDecisionResult> =>
+      CurrentNoteAppendProposalDecisionResultSchema.parse(await ipcRenderer.invoke(
+        "agent.decideCurrentNoteAppendProposal",
+        CurrentNoteAppendProposalDecisionRequestSchema.parse(request)
+      )),
     onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void): (() => void) => {
       const handleDraft = (_event: IpcRendererEvent, draft: AgentTurnDraftEvent): void => listener(draft);
       ipcRenderer.on("agent.turnDraft", handleDraft);

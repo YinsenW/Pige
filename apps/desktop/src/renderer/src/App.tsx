@@ -920,6 +920,24 @@ export function App(): React.JSX.Element {
     await openNoteTarget(pageId);
   };
 
+  const refreshCurrentNoteAfterDurableTurn = async (identity: {
+    readonly vaultId: string;
+    readonly pageId: string;
+    readonly jobId: string;
+  }): Promise<void> => {
+    const selected = selectedNoteRef.current;
+    if (
+      activeVaultIdRef.current !== identity.vaultId ||
+      selectedNoteVaultIdRef.current !== identity.vaultId ||
+      selected?.summary.pageId !== identity.pageId ||
+      !identity.jobId
+    ) return;
+    await Promise.allSettled([
+      openNoteTarget(identity.pageId, false),
+      refreshVaultState()
+    ]);
+  };
+
   const readCollection = async (
     datasetId: string,
     tableId: string,
@@ -1338,6 +1356,11 @@ export function App(): React.JSX.Element {
         message: t(result.status === "already_undone" ? "activity.alreadyUndone" : "activity.undoCompleted")
       });
       await refreshVaultState();
+      if (
+        activity?.target?.kind === "page" &&
+        selectedNoteVaultIdRef.current === activeVaultIdRef.current &&
+        selectedNoteRef.current?.summary.pageId === activity.target.pageId
+      ) await openNoteTarget(activity.target.pageId, false);
       if (
         activity?.target?.kind === "collection" &&
         selectedCollectionRef.current?.snapshot.datasetId === activity.target.datasetId &&
@@ -2050,6 +2073,7 @@ export function App(): React.JSX.Element {
             onClose={() => void closeNoteAgent()}
             onOpenModels={(opener) => openSettings("models", opener)}
             onSelectModel={setHomeDefaultModel}
+            onDurableTurnCompleted={(identity) => void refreshCurrentNoteAfterDurableTurn(identity)}
             proposal={readerSelectionProposal?.vaultId === activeVault.vaultId &&
               readerSelectionProposal.pageId === selectedNote.summary.pageId
               ? readerSelectionProposal.preview

@@ -739,6 +739,7 @@
   "note.agentWorking": "Pi Agent가 이 노트를 읽는 중...",
   "note.proposal.apply": "변경 적용",
   "note.proposal.action.expand": "선택한 구절 확장",
+  "note.proposal.action.append_current_note": "현재 노트에 추가",
   "note.proposal.action.polish": "선택한 구절 다듬기",
   "note.proposal.action.translate": "선택한 구절 번역",
   "note.proposal.description": "이 예외적인 변경은 노트를 업데이트하기 전에 검토해야 합니다. 원본은 활동과 실행 취소에서 복구할 수 있습니다.",

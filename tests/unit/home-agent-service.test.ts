@@ -681,6 +681,106 @@ describe("Home Pi Agent service", () => {
     expect(observedToolNames).toEqual(["pige_read_current_note"]);
   });
 
+  it("publishes one explicitly selected current-note append and projects its bounded review identity", async () => {
+    const fixture = makeFixture();
+    const jobs = new JobsService(fixture.vaults);
+    const proposalId = "proposal_20260728_homeappend0001";
+    const publish = vi.fn(() => ({ status: "review_required" as const, proposalId }));
+    const readPublication = vi.fn(() => ({ status: "review_required" as const, proposalId }));
+    let toolResult = "";
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      {
+        run: async (request) => {
+          await request.beforeModelTurn?.();
+          const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
+          const appendTool = request.tools.find((tool) => tool.name === "pige_append_current_note");
+          if (!readTool || !appendTool) throw new Error("Missing exact current-note append tools.");
+          const signal = new AbortController().signal;
+          await readTool.execute({}, signal, { toolCallId: "pi_tool_home_append_read", signal });
+          await request.beforeModelTurn?.();
+          const result = await appendTool.execute({
+            markdown: "A durable cited append.",
+            evidenceRefs: ["citation_1"]
+          }, signal, { toolCallId: "pi_tool_home_append_write", signal });
+          toolResult = readPiToolText(result);
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, ["pige_read_current_note", "pige_append_current_note"], {
+            answer: "The cited append is ready for review. [citation_1]",
+            citationRefs: ["citation_1"],
+            grounding: "local_knowledge"
+          });
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { publish, readPublication }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Append the grounded conclusion to this note.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260728_homeappend01"
+    });
+
+    expect(outcome).toMatchObject({ state: "waiting", proposalId, error: { userAction: "review_proposal" } });
+    expect(toolResult).toContain("review_required");
+    expect(toolResult).not.toContain(proposalId);
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({
+      activeVaultId: fixture.vault.vaultId,
+      markdown: "A durable cited append.",
+      inspection: expect.objectContaining({
+        pageId: HOME_PAGE_ID,
+        evidenceRefs: ["citation_1"]
+      })
+    }));
+    expect(jobs.readAgentTurnJob(outcome.jobId!)).toMatchObject({
+      state: "awaiting_review",
+      proposalIds: [proposalId]
+    });
+    expect(service.conversation({ scope: { kind: "current_note", pageId: HOME_PAGE_ID } })).toMatchObject({
+      latestTurn: { proposalId, state: "awaiting_review" }
+    });
+  });
+
+  it("rejects an invented append tool when no exact current-note append owner is registered", async () => {
+    const fixture = makeFixture();
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => makeRuntimeResult(request, "pige_append_current_note", {
+          answer: "Invented mutation.",
+          citationRefs: [],
+          grounding: "general"
+        })
+      }
+    );
+    await expect(service.submitTurn({
+      text: "Summarize this note without editing it.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260728_homeappend02"
+    })).resolves.toMatchObject({
+      state: "failed",
+      error: { code: "agent_runtime.tool_not_registered" }
+    });
+  });
+
   it("rejects stale reviewed task-plan execution before the delegated effect", async () => {
     const fixture = makeFixture();
     let active = true;

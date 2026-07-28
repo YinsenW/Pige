@@ -739,6 +739,7 @@
   "note.agentWorking": "Pi Agent がこのノートを読んでいます...",
   "note.proposal.apply": "変更を適用",
   "note.proposal.action.expand": "選択した箇所を展開",
+  "note.proposal.action.append_current_note": "現在のノートに追記",
   "note.proposal.action.polish": "選択した箇所を推敲",
   "note.proposal.action.translate": "選択した箇所を翻訳",
   "note.proposal.description": "この例外的な変更は、ノートを更新する前に確認が必要です。元の内容は「アクティビティ」から元に戻せます。",
