@@ -774,6 +774,11 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke("agent.submitTurn", payload)
       ) as AgentSubmitTurnIpcResult;
     }) as PigeDesktopApi["agent"]["submitTurn"],
+    onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void): (() => void) => {
+      const handleDraft = (_event: IpcRendererEvent, draft: AgentTurnDraftEvent): void => listener(draft);
+      ipcRenderer.on("agent.turnDraft", handleDraft);
+      return () => ipcRenderer.removeListener("agent.turnDraft", handleDraft);
+    },
     currentNoteAppendProposal: async (
       request: CurrentNoteAppendProposalGetRequest
     ): Promise<CurrentNoteAppendProposalGetResult> =>
@@ -787,12 +792,7 @@ const api: PigeDesktopApi = {
       CurrentNoteAppendProposalDecisionResultSchema.parse(await ipcRenderer.invoke(
         "agent.decideCurrentNoteAppendProposal",
         CurrentNoteAppendProposalDecisionRequestSchema.parse(request)
-      )),
-    onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void): (() => void) => {
-      const handleDraft = (_event: IpcRendererEvent, draft: AgentTurnDraftEvent): void => listener(draft);
-      ipcRenderer.on("agent.turnDraft", handleDraft);
-      return () => ipcRenderer.removeListener("agent.turnDraft", handleDraft);
-    }
+      ))
   },
   jobs: {
     list: async (request?: JobsListRequest): Promise<JobsListResult> =>
