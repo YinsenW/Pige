@@ -17,6 +17,41 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("bridges one strict managed PaddleOCR lifecycle without private catalog authority", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const apiStart = preloadSource.indexOf("localCapabilities: {");
+    const paddleOcrApi = preloadSource.slice(
+      apiStart,
+      preloadSource.indexOf("retrieval: {", apiStart)
+    );
+
+    expect(contractsSource).toContain("readonly localCapabilities: {");
+    expect(contractsSource).toContain('readonly ocrEngines: readonly ("apple_vision" | "windows_ai" | "paddleocr_local")[]');
+    expect(contractsSource).toContain("readonly paddleOcrSummary:");
+    for (const action of ["install", "enable", "test", "disable", "remove"] as const) {
+      expect(contractsSource).toContain(`readonly ${action}PaddleOcr:`);
+      expect(paddleOcrApi).toContain(`"localCapabilities.${action}PaddleOcr"`);
+      const schemaName = `${action[0]?.toUpperCase()}${action.slice(1)}`;
+      expect(paddleOcrApi).toContain(`PaddleOcr${schemaName}RequestSchema.parse(request)`);
+      expect(paddleOcrApi).toContain(`PaddleOcr${schemaName}ResultSchema.parse(`);
+    }
+    expect(paddleOcrApi).toContain('"localCapabilities.paddleOcrSummary"');
+    expect(paddleOcrApi).toContain("PaddleOcrSummaryRequestSchema.parse(request)");
+    expect(paddleOcrApi).toContain("PaddleOcrSummarySchema.parse(");
+    for (const privateField of [
+      "candidatePath",
+      "downloadUrl",
+      "sha256",
+      "pythonArgs",
+      "languagePacks",
+      "authority",
+      "rawError"
+    ]) {
+      expect(paddleOcrApi).not.toContain(privateField);
+    }
+  });
+
   it("bridges the strict Pi package inventory and exact install interface without private authority", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
