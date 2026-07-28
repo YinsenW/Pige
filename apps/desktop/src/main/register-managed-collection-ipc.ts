@@ -8,6 +8,8 @@ import {
   CollectionCellEditResultSchema,
   CollectionCreateViewRequestSchema,
   CollectionCreateViewResultSchema,
+  CollectionOpenCitationRequestSchema,
+  CollectionOpenCitationResultSchema,
   CollectionListRequestSchema,
   CollectionListResultSchema,
   CollectionOpenRequestSchema,
@@ -24,6 +26,8 @@ import {
   type CollectionCellEditResult,
   type CollectionCreateViewRequest,
   type CollectionCreateViewResult,
+  type CollectionOpenCitationRequest,
+  type CollectionOpenCitationResult,
   type CollectionListRequest,
   type CollectionListResult,
   type CollectionAppendDefaultRowRequest,
@@ -48,6 +52,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly openCollection: (
     request: CollectionOpenRequest
   ) => CollectionOpenResult | Promise<CollectionOpenResult>;
+  readonly openCollectionCitation: (
+    request: CollectionOpenCitationRequest
+  ) => CollectionOpenCitationResult | Promise<CollectionOpenCitationResult>;
   readonly editCollectionCell: (
     request: CollectionCellEditRequest
   ) => CollectionCellEditResult | Promise<CollectionCellEditResult>;
@@ -86,6 +93,18 @@ function failedOpen(request: CollectionOpenRequest): CollectionOpenResult {
     activeVaultId: request.activeVaultId,
     datasetId: request.datasetId,
     tableId: request.tableId,
+    status: "failed"
+  });
+}
+
+function failedCitation(request: CollectionOpenCitationRequest): CollectionOpenCitationResult {
+  return CollectionOpenCitationResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    conversationId: request.conversationId,
+    assistantEventId: request.assistantEventId,
+    citationRef: request.citationRef,
     status: "failed"
   });
 }
@@ -192,6 +211,22 @@ function assertOpenIdentity(
   return result;
 }
 
+function assertCitationIdentity(
+  request: CollectionOpenCitationRequest,
+  result: CollectionOpenCitationResult
+): CollectionOpenCitationResult {
+  if (
+    result.requestId !== request.requestId ||
+    result.activeVaultId !== request.activeVaultId ||
+    result.conversationId !== request.conversationId ||
+    result.assistantEventId !== request.assistantEventId ||
+    result.citationRef !== request.citationRef
+  ) {
+    throw new Error("Managed Collection citation response identity did not match the request.");
+  }
+  return result;
+}
+
 function assertEditIdentity(
   request: CollectionCellEditRequest,
   result: CollectionCellEditResult
@@ -236,6 +271,26 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
     }
     const result = assertOpenIdentity(parsed, CollectionOpenResultSchema.parse(rawResult));
     return options.getActiveVaultId() === parsed.activeVaultId ? result : failedOpen(parsed);
+  });
+
+  options.ipcMain.handle("collections.openCitation", async (event, request: unknown) => {
+    const parsed = CollectionOpenCitationRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId) {
+      return failedCitation(parsed);
+    }
+    let rawResult: CollectionOpenCitationResult;
+    try {
+      rawResult = await options.openCollectionCitation(parsed);
+    } catch {
+      return failedCitation(parsed);
+    }
+    const result = assertCitationIdentity(
+      parsed,
+      CollectionOpenCitationResultSchema.parse(rawResult)
+    );
+    return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
+      ? result
+      : failedCitation(parsed);
   });
 
   options.ipcMain.handle("collections.editCell", async (_event, request: unknown) => {

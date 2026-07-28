@@ -103,6 +103,28 @@ export class AgentConversationHistory {
     };
   }
 
+  readAssistantEvent(input: {
+    readonly vaultPath: string;
+    readonly conversationId: string;
+    readonly assistantEventId: string;
+  }): ConversationEvent | undefined {
+    const match = CONVERSATION_FILE_PATTERN.exec(`${input.conversationId}.jsonl`);
+    if (!match || !/^evt_\d{8}_[a-z0-9]{8,}$/u.test(input.assistantEventId)) {
+      throw unavailableHistory();
+    }
+    const dateKey = match[2]!;
+    const root = assertSafeVaultRoot(input.vaultPath);
+    const directory = path.join(root, ".pige", "conversations", dateKey.slice(0, 4), dateKey.slice(4, 6));
+    if (!assertExistingDirectoryPath(root, directory)) return undefined;
+    const filePath = path.join(directory, `${input.conversationId}.jsonl`);
+    if (!lstatIfExists(filePath)) return undefined;
+    const events = readConversationFile(filePath);
+    if (events.some((event) => event.conversationId !== input.conversationId)) throw unavailableHistory();
+    const matches = events.filter((event) => event.id === input.assistantEventId);
+    if (matches.length > 1) throw unavailableHistory();
+    return matches[0]?.type === "assistant_message" ? matches[0] : undefined;
+  }
+
   #registerCursor(binding: HistoryCursorBinding): AgentConversationHistoryCursor {
     const cursor = `conversation_history_${randomBytes(32).toString("hex")}` as AgentConversationHistoryCursor;
     this.#cursors.set(cursor, binding);
