@@ -5,6 +5,8 @@ import type {
   AddManualModelRequest,
   AgentConversationRequest,
   AgentConversationResult,
+  AgentConversationHistoryListRequest,
+  AgentConversationHistoryListResult,
   AgentSubmitTurnRequest,
   AgentSubmitTurnIpcResult,
   AgentTurnDraftEvent,
@@ -209,6 +211,8 @@ import type {
 import {
   AgentConversationRequestSchema,
   AgentConversationResultSchema,
+  AgentConversationHistoryListRequestSchema,
+  AgentConversationHistoryListResultSchema,
   AgentSubmitTurnIpcPayloadSchema,
   AgentSubmitTurnIpcResultSchema,
   CurrentNoteAppendProposalDecisionRequestSchema,
@@ -772,6 +776,13 @@ const api: PigeDesktopApi = {
       const result = await ipcRenderer.invoke("agent.conversation", parsedRequest) as unknown;
       return AgentConversationResultSchema.optional().parse(result) as AgentConversationResult | undefined;
     }) as PigeDesktopApi["agent"]["conversation"],
+    conversationHistory: async (
+      request: AgentConversationHistoryListRequest
+    ): Promise<AgentConversationHistoryListResult> => {
+      const parsedRequest = AgentConversationHistoryListRequestSchema.parse(request);
+      const result = await ipcRenderer.invoke("agent.conversationHistory", parsedRequest) as unknown;
+      return AgentConversationHistoryListResultSchema.parse(result);
+    },
     submitTurn: (async (
       request: AgentSubmitTurnRequest,
       files: readonly File[] = []

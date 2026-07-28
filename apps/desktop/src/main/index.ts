@@ -9,6 +9,7 @@ import type {
   AddManualProviderRequest,
   AddManualModelRequest,
   AgentConversationRequest,
+  AgentConversationHistoryListRequest,
   AgentSubmitTurnRequest,
   AppHealth,
   AppearanceThemeMutationResult,
@@ -50,6 +51,8 @@ import type {
 import {
   AgentConversationRequestSchema,
   AgentConversationResultSchema,
+  AgentConversationHistoryListRequestSchema,
+  AgentConversationHistoryListResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   AppearanceSettingsSummarySchema,
@@ -1963,6 +1966,12 @@ ipcMain.handle("agent.conversation", (_event, request?: AgentConversationRequest
   const parsedRequest = AgentConversationRequestSchema.parse(request ?? {});
   return AgentConversationResultSchema.optional().parse(
     getHomeAgentService().conversation(parsedRequest as AgentConversationRequest)
+  );
+});
+ipcMain.handle("agent.conversationHistory", (_event, request: AgentConversationHistoryListRequest) => {
+  const parsedRequest = AgentConversationHistoryListRequestSchema.parse(request);
+  return AgentConversationHistoryListResultSchema.parse(
+    getHomeAgentService().conversationHistory(parsedRequest)
   );
 });
 ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {

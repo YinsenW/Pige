@@ -131,6 +131,22 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("AgentConversationResultSchema.optional().parse(");
   });
 
+  it("freezes one read-only conversation-history list beside the existing open path", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    expect(contractsSource).toContain("readonly conversationHistory: (");
+    expect(contractsSource).toContain("request: AgentConversationHistoryListRequest");
+    expect(contractsSource).toContain(") => Promise<AgentConversationHistoryListResult>;");
+    expect(contractsSource).toContain("readonly conversation: {");
+    expect(contractsSource).not.toContain("readonly openConversation:");
+    expect(preloadSource).toContain("AgentConversationHistoryListRequestSchema.parse(request)");
+    expect(preloadSource).toContain('ipcRenderer.invoke("agent.conversationHistory", parsedRequest)');
+    expect(preloadSource).toContain("AgentConversationHistoryListResultSchema.parse(result)");
+    expect(mainSource).toContain('ipcMain.handle("agent.conversationHistory"');
+    expect(mainSource).toContain("AgentConversationHistoryListResultSchema.parse(");
+  });
+
   it("uses a CommonJS preload entry compatible with Electron sandboxed preload execution", () => {
     expect(PRELOAD_ENTRY_FILENAME).toBe("index.cjs");
 
@@ -772,7 +788,7 @@ describe("desktop shell build contract", () => {
     expect(homeComposer).toContain("props.fileDropRequest");
     expect(homeComposer).toContain('void submitHomeFiles(request.files, "file_drop", request.text, request.clientTurnId)');
     expect(homeComposer).toContain('data-agent-draft="true"');
-    expect(homeComposer).toContain('aria-busy={agentDraft !== null || effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running"}');
+    expect(homeComposer).toContain('aria-busy={!viewingHistory && (agentDraft !== null || effectiveAgentRunState === "accepted" || effectiveAgentRunState === "running")}');
     expect(homeComposer).toContain("event.sequence <= active.sequence");
     expect(rendererSource).toContain('...(text?.trim() ? { text } : {})');
     expect(homeComposer).toContain("const text = props.draftText");

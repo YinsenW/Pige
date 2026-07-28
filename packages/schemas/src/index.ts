@@ -4589,6 +4589,92 @@ export const AgentTurnAnswerSchema = z.object({
 export const AgentConversationCursorSchema = z.string()
   .regex(/^timeline_[a-f0-9]{32}$/)
   .max(80);
+export const AGENT_CONVERSATION_HISTORY_PAGE_SIZE_MAX = 50;
+export const AGENT_CONVERSATION_HISTORY_PREVIEW_MAX_CODE_POINTS = 240;
+export const AgentConversationHistoryCursorSchema = z.string()
+  .regex(/^conversation_history_[a-f0-9]{64}$/)
+  .max(96);
+export const AgentConversationHistoryListRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  limit: z.number().int().min(1).max(AGENT_CONVERSATION_HISTORY_PAGE_SIZE_MAX).optional(),
+  cursor: AgentConversationHistoryCursorSchema.optional()
+}).strict();
+const AgentConversationHistoryPreviewSchema = z.string()
+  .min(1)
+  .refine(
+    (value) => [...value].length <= AGENT_CONVERSATION_HISTORY_PREVIEW_MAX_CODE_POINTS,
+    "Conversation history preview exceeds the code-point limit."
+  )
+  .refine(
+    (value) => !/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(value),
+    "Conversation history preview must be one safe display line."
+  );
+export const AgentConversationHistorySummarySchema = z.object({
+  conversationId: ConversationIdSchema,
+  updatedAt: z.string().datetime({ offset: true }),
+  safePreview: AgentConversationHistoryPreviewSchema,
+  tailEventId: ConversationEventIdSchema,
+  scope: AgentTurnCurrentNoteScopeSchema.optional(),
+  inputPresentation: AgentConversationInputPresentationSchema.optional(),
+  latestTurnState: JobStateSchema.optional()
+}).strict();
+const AgentConversationHistoryResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema
+});
+export const AgentConversationHistoryReadyResultSchema = AgentConversationHistoryResultIdentitySchema.extend({
+  status: z.literal("ready"),
+  currentConversationId: ConversationIdSchema.optional(),
+  conversations: z.array(AgentConversationHistorySummarySchema)
+    .max(AGENT_CONVERSATION_HISTORY_PAGE_SIZE_MAX)
+    .readonly(),
+  hasMore: z.boolean(),
+  nextCursor: AgentConversationHistoryCursorSchema.optional()
+}).strict().superRefine((result, context) => {
+  if (result.hasMore !== (result.nextCursor !== undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: ["nextCursor"],
+      message: "Conversation history pagination truth is inconsistent."
+    });
+  }
+  if ((result.conversations.length === 0) !== (result.currentConversationId === undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: ["currentConversationId"],
+      message: "Current conversation identity must exactly match non-empty history."
+    });
+  }
+  if (new Set(result.conversations.map((summary) => summary.conversationId)).size !== result.conversations.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["conversations"],
+      message: "Conversation history identities must be unique."
+    });
+  }
+  for (let index = 1; index < result.conversations.length; index += 1) {
+    const previous = result.conversations[index - 1]!;
+    const current = result.conversations[index]!;
+    const previousTime = Date.parse(previous.updatedAt);
+    const currentTime = Date.parse(current.updatedAt);
+    if (previousTime < currentTime ||
+      (previousTime === currentTime && previous.conversationId.localeCompare(current.conversationId, "en") > 0)) {
+      context.addIssue({
+        code: "custom",
+        path: ["conversations", index],
+        message: "Conversation history must be ordered by updatedAt descending then conversationId."
+      });
+    }
+  }
+});
+export const AgentConversationHistoryFailedResultSchema = AgentConversationHistoryResultIdentitySchema.extend({
+  status: z.literal("failed")
+}).strict();
+export const AgentConversationHistoryListResultSchema = z.discriminatedUnion("status", [
+  AgentConversationHistoryReadyResultSchema,
+  AgentConversationHistoryFailedResultSchema
+]);
 export const AgentConversationMessageSchema = z.object({
   id: ConversationEventIdSchema,
   role: z.enum(["user", "assistant"]),
@@ -6001,6 +6087,10 @@ export type CloudSendPolicy = z.infer<typeof CloudSendPolicySchema>;
 export type ConfirmationProposal = z.infer<typeof ConfirmationProposalSchema>;
 export type ConversationEvent = z.infer<typeof ConversationEventSchema>;
 export type AgentConversationInputPresentation = z.output<typeof AgentConversationInputPresentationSchema>;
+export type AgentConversationHistoryCursor = z.output<typeof AgentConversationHistoryCursorSchema>;
+export type AgentConversationHistoryListRequest = z.input<typeof AgentConversationHistoryListRequestSchema>;
+export type AgentConversationHistorySummary = z.output<typeof AgentConversationHistorySummarySchema>;
+export type AgentConversationHistoryListResult = z.output<typeof AgentConversationHistoryListResultSchema>;
 export type AgentConversationMessage = z.output<typeof AgentConversationMessageSchema>;
 export type AgentConversationTurnSummary = z.output<typeof AgentConversationTurnSummarySchema>;
 export type AgentConversationInitialRequest = z.input<typeof AgentConversationInitialRequestSchema>;

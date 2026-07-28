@@ -181,6 +181,61 @@ describe("Home Pi Agent service", () => {
     }])).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_conflict" }));
   });
 
+  it("projects conversation history without granting follow-up authority", () => {
+    const fixture = makeFixture();
+    const models = makeModels();
+    const conversations = new AgentTurnConversationStore();
+    const preserved = conversations.appendUserTurn(
+      fixture.vaultPath,
+      "Review the durable conversation",
+      { inputKind: "typed_text", locale: "en" },
+      { clientTurnId: "turn_20260729_historyservice01" }
+    );
+    const jobs = new JobsService(fixture.vaults);
+    jobs.createAgentTurnJob({
+      conversationEventId: preserved.event.id,
+      conversationLocator: preserved.locator,
+      inputHash: preserved.inputHash
+    });
+    const service = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      undefined,
+      undefined,
+      conversations
+    );
+
+    const result = service.conversationHistory({
+      apiVersion: 1,
+      activeVaultId: fixture.vault.vaultId,
+      limit: 10
+    });
+    expect(result).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: fixture.vault.vaultId,
+      status: "ready",
+      currentConversationId: preserved.event.conversationId,
+      conversations: [{
+        conversationId: preserved.event.conversationId,
+        safePreview: "Review the durable conversation",
+        tailEventId: preserved.event.id,
+        latestTurnState: "queued"
+      }],
+      hasMore: false
+    });
+    expect(JSON.stringify(result)).not.toMatch(/canFollowUp|jobId|providerId|path/u);
+    expect(service.conversationHistory({
+      apiVersion: 1,
+      activeVaultId: "vault_20260729_wrongvault01"
+    })).toEqual({
+      apiVersion: 1,
+      activeVaultId: "vault_20260729_wrongvault01",
+      status: "failed"
+    });
+  });
+
   it("runs a source-bearing turn through one Home-owned Pi loop", async () => {
     const fixture = makeFixture();
     const models = makeModels();

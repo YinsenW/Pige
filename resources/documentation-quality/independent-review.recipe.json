@@ -51,14 +51,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of the first External/Web read-only HTTPS runtime.",
+    "scope": "Independent Planning review of bounded Home conversation-history browsing.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "d64dca5525e4bf5b3942d4dd9b43f577758910b43fa3204d9e5462992086a222"
+    "reviewedSha256": "9b1bf90a397c6903b79536562fb48d4f9b2226ef8499506cd0808f159722a177"
   },
   "reviewers": [{
-    "reviewerId": "external-web-skill-runtime-review",
-    "task": "External/Web Skill read-only HTTPS runtime",
+    "reviewerId": "conversation-history-review",
+    "task": "Home conversation-history browsing",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -66,33 +66,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed the closed runtime authority; Development independently supplied implementation evidence."
+    "independence": "Planning reviewed the history and authority boundary; Development and UI independently supplied implementation evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"external-web-skill-runtime-review","blockerCount":0,"summary":"Settings enables only the exact supported installed External/Web runtime."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"external-web-skill-runtime-review","blockerCount":0,"summary":"Schema, Broker, fetch, Skill and UI owners share one exact runtime identity."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"external-web-skill-runtime-review","blockerCount":0,"summary":"B8.08 records the bounded slice without claiming other runtimes complete."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"external-web-skill-runtime-review","blockerCount":0,"summary":"Ambiguity, denial, identity drift and redirect-origin drift are tested."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"external-web-skill-runtime-review","blockerCount":0,"summary":"Existing Skill, Playbook, Decision and trace owners absorb the slice."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"conversation-history-review","blockerCount":0,"summary":"Home browses and returns to exact durable conversations without fabricating identity."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"conversation-history-review","blockerCount":0,"summary":"API, Job and UI owners share one vault-, snapshot- and tail-bound history contract."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"conversation-history-review","blockerCount":0,"summary":"B7.08 evidence is bound while cross-process, packaged and compaction exits stay open."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"conversation-history-review","blockerCount":0,"summary":"Ordering, cursor tamper, vault drift, symlink confinement and selected polling are tested."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"conversation-history-review","blockerCount":0,"summary":"Existing API, Job, UI, Playbook, Decision and trace owners absorb the slice."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"The exact one-call External/Web authority and public HTTPS binding are strict."},
-    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision and trace locks preserve the bounded B8.08 runtime scope."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact 179/862/1000-LOC runtime and Skill owners are protected and hash-bound."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"History DTOs remain strict, bounded, pathless and selection-only."},
+    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision and trace locks preserve the partial B7.08/E7.03 scope."},
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"The exact 332-LOC history owner is protected and reviewed bytes are hash-bound."}
   ],
   "coordination": {
-    "taskId": "external-web-skill-runtime-20260729",
-    "taskTitle": "External/Web Skill read-only HTTPS runtime",
+    "taskId": "conversation-history-20260729",
+    "taskTitle": "Home conversation-history browsing",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Pure Skill lifecycle stays compatible; unsupported External/Web runtimes remain disabled.",
-    "acknowledgement": "Planning binds one supported read-only HTTPS adapter; other runtimes remain separate."
+    "compatibility": "Existing conversation open, pagination, follow-up and current-turn paths remain compatible.",
+    "acknowledgement": "Planning binds selection-only browsing; compaction and packaged restart proof remain separate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "External/Web capability, Skill identity and reviewed origin must remain exact.",
-    "Ambiguous, stale or tampered runtime identity must fail before network.",
-    "The one-call authority must never widen public-only SSRF or redirect limits."
+    "Cross-process kill/reopen and packaged reference-history proof remain open.",
+    "Conversation compaction must preserve stable event, source, Job and Operation refs.",
+    "History summaries and cursors must never become follow-up authority."
   ]
 }
