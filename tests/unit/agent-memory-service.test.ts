@@ -358,6 +358,44 @@ describe("AgentMemoryService", () => {
     expect(service.activitySummary(operation, undoOperation)).toMatchObject({ status: "undone", canUndo: false });
   });
 
+  it("rejects a tampered edited atom in a delete receipt before restoring registry state", () => {
+    const vaultPath = createVault();
+    const service = new AgentMemoryService({ now: advancingClock(), activeVaultPath: () => vaultPath });
+    const record = remember(service, vaultPath, "editdeletetamper");
+    service.edit(vaultPath, {
+      apiVersion: 1,
+      requestId: "memory_request_editdeletetamper",
+      activeVaultId: VAULT_ID,
+      memoryId: record.id,
+      expectedRevision: 1,
+      title: "Edited before delete",
+      body: "This exact edited atom is protected by its receipt chain."
+    });
+    const deleted = service.delete(vaultPath, {
+      apiVersion: 1,
+      requestId: "memory_request_deletetampered01",
+      activeVaultId: VAULT_ID,
+      memoryId: record.id,
+      expectedRevision: 2
+    });
+    const receiptPath = path.join(
+      vaultPath,
+      ".pige/trash/memory/memory_request_deletetampered01.json"
+    );
+    const receipt = JSON.parse(fs.readFileSync(receiptPath, "utf8")) as {
+      removedRecords: Array<Record<string, unknown>>;
+    };
+    receipt.removedRecords[0] = { ...receipt.removedRecords[0], body: "Tampered body" };
+    fs.writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
+    const registryPath = path.join(vaultPath, ".pige/memory/registry.json");
+    const registryBeforeUndo = fs.readFileSync(registryPath, "utf8");
+
+    expect(() => service.undo(readOperation(vaultPath, deleted.operationId!), "3"))
+      .toThrowError(expect.objectContaining({ code: "memory.lifecycle_conflict" }));
+    expect(fs.readFileSync(registryPath, "utf8")).toBe(registryBeforeUndo);
+    expect(service.list(vaultPath, VAULT_ID)).toMatchObject({ revision: 3, records: [] });
+  });
+
   it("undoes one reset by merging exact removed records without deleting later memory", () => {
     const vaultPath = createVault();
     const service = new AgentMemoryService({ now: advancingClock(), activeVaultPath: () => vaultPath });

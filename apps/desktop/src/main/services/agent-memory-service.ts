@@ -564,7 +564,17 @@ export class AgentMemoryService {
 
   #readReceipt(vaultPath: string, relativePath: string): MemoryLifecycleReceipt | undefined {
     const value = readPrivateJson(vaultPath, relativePath, MAX_PRIVATE_RECORD_BYTES);
-    return value === undefined ? undefined : parseReceipt(value);
+    if (value === undefined) return undefined;
+    const receipt = parseReceipt(value);
+    const removedEventsById = new Map(receipt.removedEvents.map((event) => [event.id, event]));
+    for (const record of receipt.removedRecords) {
+      if (!record.editProvenance) continue;
+      const event = removedEventsById.get(record.eventId);
+      if (!event || !this.#validateEditedRecord(vaultPath, event, record, new Set())) {
+        throw lifecycleConflict();
+      }
+    }
+    return receipt;
   }
 
   #findReceiptByRequest(vaultPath: string, requestId: string): MemoryLifecycleReceipt | undefined {
