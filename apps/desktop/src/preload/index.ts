@@ -72,6 +72,8 @@ import type {
   NoteRenderResult,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
+  ReaderSelectionLinkRequest,
+  ReaderSelectionLinkResult,
   ReaderSelectionProposalDecisionRequest,
   ReaderSelectionProposalDecisionResult,
   ReaderSelectionProposalGetRequest,
@@ -233,6 +235,8 @@ import {
   NoteResolveInlineReferenceResultSchema,
   ReaderSelectionActionRequestSchema,
   ReaderSelectionActionResultSchema,
+  ReaderSelectionLinkRequestSchema,
+  ReaderSelectionLinkResultSchema,
   ReaderSelectionProposalDecisionRequestSchema,
   ReaderSelectionProposalDecisionResultSchema,
   ReaderSelectionProposalGetRequestSchema,
@@ -985,6 +989,15 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke(
           "readerSelection.submitAction",
           ReaderSelectionActionRequestSchema.parse(request)
+        )
+      ),
+    submitLink: async (
+      request: ReaderSelectionLinkRequest
+    ): Promise<ReaderSelectionLinkResult> =>
+      ReaderSelectionLinkResultSchema.parse(
+        await ipcRenderer.invoke(
+          "readerSelection.submitLink",
+          ReaderSelectionLinkRequestSchema.parse(request)
         )
       ),
     submitTransform: async (

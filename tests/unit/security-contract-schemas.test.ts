@@ -14,6 +14,8 @@ import {
   ProviderProfileSchema,
   ReaderSelectionActionRequestSchema,
   ReaderSelectionActionResultSchema,
+  ReaderSelectionLinkRequestSchema,
+  ReaderSelectionLinkResultSchema,
   ReaderSelectionProposalDecisionRequestSchema,
   ReaderSelectionProposalDecisionResultSchema,
   ReaderSelectionProposalGetResultSchema,
@@ -445,6 +447,57 @@ describe("security-sensitive shared contracts", () => {
       tailEventId: "evt_20260710_bcdef123",
       answer: "raw provider body"
     })).toThrow();
+
+    const link = {
+      ...request,
+      action: "link" as const,
+      activeVaultId: "vault_20260710_abcdef12",
+      renderContextId: `notectx_${"c".repeat(32)}`
+    };
+    expect(ReaderSelectionLinkRequestSchema.parse(link)).toEqual(link);
+    for (const unsafe of [
+      { targetPageId: "page_20260710_target12" },
+      { targetPath: "/private/vault/wiki/target.md" },
+      { selectedText: "untrusted selection body" },
+      { targetHash: `sha256:${"d".repeat(64)}` }
+    ]) {
+      expect(() => ReaderSelectionLinkRequestSchema.parse({ ...link, ...unsafe })).toThrow();
+    }
+    expect(ReaderSelectionLinkResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "applied",
+      jobId: "job_20260710_abcdef12",
+      conversationEventId: "evt_20260710_abcdef12",
+      conversationId: "conv_20260710_abcd",
+      tailEventId: "evt_20260710_bcdef123",
+      operationId: "op_20260710_abcdef12",
+      currentPageId: request.selection.pageId,
+      targetPageId: "page_20260710_target12"
+    })).toMatchObject({ status: "applied", targetPageId: "page_20260710_target12" });
+    expect(() => ReaderSelectionLinkResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "applied",
+      jobId: "job_20260710_abcdef12",
+      conversationEventId: "evt_20260710_abcdef12",
+      conversationId: "conv_20260710_abcd",
+      tailEventId: "evt_20260710_bcdef123",
+      operationId: "op_20260710_abcdef12",
+      currentPageId: request.selection.pageId,
+      targetPageId: request.selection.pageId
+    })).toThrow();
+    expect(ReaderSelectionLinkResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "invalid",
+      reason: "target_ambiguous"
+    })).toEqual({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "invalid",
+      reason: "target_ambiguous"
+    });
 
     const transform = { ...request, action: "polish" as const };
     expect(ReaderSelectionTransformRequestSchema.parse(transform)).toEqual(transform);
