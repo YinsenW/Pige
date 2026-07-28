@@ -673,13 +673,14 @@ export const PiPackageInstallRequestSchema = z.object({
 const PiPackageInstallResultIdentitySchema = z.object({
   apiVersion: z.literal(1),
   requestId: PiPackageInstallRequestIdSchema,
-  taskId: PiPackageInstallTaskIdSchema,
-  registry: PiPackageRegistrySummarySchema
+  taskId: PiPackageInstallTaskIdSchema
 });
+const PiPackageInstallAuthoritativeResultIdentitySchema =
+  PiPackageInstallResultIdentitySchema.extend({ registry: PiPackageRegistrySummarySchema });
 export const PiPackageInstallResultSchema = z.discriminatedUnion("status", [
-  PiPackageInstallResultIdentitySchema.extend({ status: z.literal("installed_disabled") }).strict(),
-  PiPackageInstallResultIdentitySchema.extend({ status: z.literal("denied") }).strict(),
-  PiPackageInstallResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  PiPackageInstallAuthoritativeResultIdentitySchema.extend({ status: z.literal("installed_disabled") }).strict(),
+  PiPackageInstallAuthoritativeResultIdentitySchema.extend({ status: z.literal("denied") }).strict(),
+  PiPackageInstallAuthoritativeResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
   PiPackageInstallResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 const isSafeExecutableName = (value: string): boolean => {

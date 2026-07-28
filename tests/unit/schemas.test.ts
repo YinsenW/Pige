@@ -966,7 +966,7 @@ describe("schemas", () => {
       version: "1.0.77"
     } as const;
     expect(PiPackageInstallRequestSchema.parse(request)).toEqual(request);
-    for (const status of ["installed_disabled", "denied", "stale", "failed"] as const) {
+    for (const status of ["installed_disabled", "denied", "stale"] as const) {
       expect(PiPackageInstallResultSchema.parse({
         apiVersion: 1,
         requestId: request.requestId,
@@ -975,6 +975,24 @@ describe("schemas", () => {
         registry
       })).toMatchObject({ status, registry });
     }
+    expect(PiPackageInstallResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      taskId: "pi_package_task_abcdefghijklmnop",
+      status: "failed"
+    })).toEqual({
+      apiVersion: 1,
+      requestId: request.requestId,
+      taskId: "pi_package_task_abcdefghijklmnop",
+      status: "failed"
+    });
+    expect(() => PiPackageInstallResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      taskId: "pi_package_task_abcdefghijklmnop",
+      status: "failed",
+      registry
+    })).toThrow();
     for (const unsafe of [
       { path: "/private/pi-packages/package" },
       { tarballUrl: "https://registry.npmjs.org/private.tgz" },
@@ -987,7 +1005,6 @@ describe("schemas", () => {
         requestId: request.requestId,
         taskId: "pi_package_task_abcdefghijklmnop",
         status: "failed",
-        registry,
         ...unsafe
       })).toThrow();
     }
