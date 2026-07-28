@@ -94,6 +94,14 @@ export interface PaddleOcrReviewedManifestProjection {
   readonly engineVersion: string;
   readonly catalog: PaddleOcrReviewedCatalog;
   readonly releaseBundle: ReviewedPaddleOcrAwaitingBundle | ReviewedPaddleOcrAvailableBundle | undefined;
+  readonly releaseSigningKeys: readonly PaddleOcrReleaseSigningKey[];
+  readonly trustedReleaseOrigins: readonly string[];
+}
+
+export interface PaddleOcrReleaseSigningKey {
+  readonly algorithm: "Ed25519";
+  readonly keyId: string;
+  readonly publicKeySpkiBase64: string;
 }
 
 interface ReviewedPaddleOcrManifest {
@@ -111,6 +119,8 @@ interface ReviewedPaddleOcrManifest {
   };
   readonly models: readonly ReviewedModel[];
   readonly releaseBundles: readonly (ReviewedPaddleOcrAwaitingBundle | ReviewedPaddleOcrAvailableBundle)[];
+  readonly releaseSigningKeys: readonly PaddleOcrReleaseSigningKey[];
+  readonly trustedReleaseOrigins: readonly string[];
 }
 
 interface ReviewedAsset {
@@ -168,7 +178,9 @@ export function readPaddleOcrReviewedManifest(
   return {
     engineVersion: manifest.engineVersion,
     catalog: projectReviewedCatalog(manifest, target, releaseBundle?.state === "available"),
-    releaseBundle
+    releaseBundle,
+    releaseSigningKeys: manifest.releaseSigningKeys,
+    trustedReleaseOrigins: manifest.trustedReleaseOrigins
   };
 }
 
@@ -402,12 +414,21 @@ function parseReviewedManifest(value: unknown): ReviewedPaddleOcrManifest {
   const pythonPackages = requireArray(manifest.pythonPackages).map(parsePackage);
   const models = requireArray(manifest.models).map(parseModel);
   const releaseBundles = requireArray(manifest.releaseBundles).map(parseReleaseBundle);
+  const releaseSigningKeys = manifest.releaseSigningKeys === undefined
+    ? []
+    : requireArray(manifest.releaseSigningKeys).map(parseReleaseSigningKey);
+  const trustedOrigins = requireRecord(manifest.trustedOrigins);
+  const trustedReleaseOrigins = requireArray(trustedOrigins.releaseInputs).map(requireHttpsOrigin);
   const releasePlatforms = new Set(releaseBundles.map((entry) => entry.platform));
+  const releaseKeyIds = new Set(releaseSigningKeys.map((entry) => entry.keyId));
   if (
     pythonPackages.length === 0 ||
     models.length === 0 ||
     releaseBundles.length !== 2 ||
     releasePlatforms.size !== 2 ||
+    releaseKeyIds.size !== releaseSigningKeys.length ||
+    new Set(trustedReleaseOrigins).size !== trustedReleaseOrigins.length ||
+    trustedReleaseOrigins.length === 0 ||
     !releasePlatforms.has("macos-arm64") ||
     !releasePlatforms.has("windows-x64")
   ) {
@@ -427,8 +448,36 @@ function parseReviewedManifest(value: unknown): ReviewedPaddleOcrManifest {
       assets: requireArray(paddlePaddle.assets).map(parseAsset)
     },
     models,
-    releaseBundles
+    releaseBundles,
+    releaseSigningKeys,
+    trustedReleaseOrigins
   };
+}
+
+function parseReleaseSigningKey(value: unknown): PaddleOcrReleaseSigningKey {
+  const key = requireRecord(value);
+  if (
+    Object.keys(key).sort().join("\0") !== ["algorithm", "keyId", "publicKeySpkiBase64"].join("\0") ||
+    key.algorithm !== "Ed25519" ||
+    !isBoundedString(key.keyId, 80) ||
+    !isBoundedString(key.publicKeySpkiBase64, 1_024)
+  ) {
+    throw new Error("Invalid PaddleOCR release signing key.");
+  }
+  return {
+    algorithm: "Ed25519",
+    keyId: key.keyId,
+    publicKeySpkiBase64: key.publicKeySpkiBase64
+  };
+}
+
+function requireHttpsOrigin(value: unknown): string {
+  if (!isBoundedString(value, 256)) throw new Error("Invalid PaddleOCR release origin.");
+  const parsed = new URL(value);
+  if (parsed.protocol !== "https:" || parsed.origin !== value) {
+    throw new Error("Invalid PaddleOCR release origin.");
+  }
+  return value;
 }
 
 function projectReviewedCatalog(

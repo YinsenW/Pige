@@ -142,7 +142,13 @@ describe("Paddle OCR lifecycle service", () => {
     const originalPath = path.resolve("resources/parser-manifests/paddleocr-local.parser.manifest.json");
     const manifest = JSON.parse(fs.readFileSync(originalPath, "utf8")) as {
       releaseBundles: Record<string, unknown>[];
+      releaseSigningKeys?: Record<string, unknown>[];
     };
+    manifest.releaseSigningKeys = [{
+      algorithm: "Ed25519",
+      keyId: "pige-paddleocr-release-v1",
+      publicKeySpkiBase64: Buffer.from("reviewed-spki").toString("base64")
+    }];
     manifest.releaseBundles[0] = {
       platform: "macos-arm64",
       state: "available",
@@ -177,7 +183,12 @@ describe("Paddle OCR lifecycle service", () => {
           state: "available",
           platform: "macos-arm64",
           packageLimits: { maxFiles: 50_000, maxTotalBytes: 4_294_967_296 }
-        }
+        },
+        releaseSigningKeys: [{
+          algorithm: "Ed25519",
+          keyId: "pige-paddleocr-release-v1"
+        }],
+        trustedReleaseOrigins: expect.arrayContaining(["https://github.com"])
       });
       expect(JSON.stringify(projected.catalog)).not.toMatch(/url|sha256|signature|path/u);
     } finally {
