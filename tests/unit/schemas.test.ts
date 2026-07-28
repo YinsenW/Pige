@@ -47,6 +47,7 @@ import {
   MarkdownPageStatusSchema,
   MarkdownPageTypeSchema,
   MemoryDeleteRequestSchema,
+  MemoryEditRequestSchema,
   MemoryEnableRequestSchema,
   MemoryExportRequestSchema,
   MemoryExportResultSchema,
@@ -1529,6 +1530,14 @@ describe("schemas", () => {
 
     expect(MemoryEnableRequestSchema.parse(recordRequest)).toEqual(recordRequest);
     expect(MemoryDeleteRequestSchema.parse(recordRequest)).toEqual(recordRequest);
+    const editRequest = {
+      ...recordRequest,
+      title: "Concise answers",
+      body: "Prefer concise, direct answers."
+    } as const;
+    expect(MemoryEditRequestSchema.parse(editRequest)).toEqual(editRequest);
+    expect(() => MemoryEditRequestSchema.parse({ ...editRequest, body: "" })).toThrow();
+    expect(() => MemoryEditRequestSchema.parse({ ...editRequest, path: "/private/memory.json" })).toThrow();
     const resetRequest = { ...identity, expectedRevision: 7 } as const;
     expect(MemoryResetRequestSchema.parse(resetRequest)).toEqual(resetRequest);
     expect(MemoryLifecycleMutationResultSchema.parse({

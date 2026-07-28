@@ -11,16 +11,12 @@ Portable truth stays under `.pige/memory/`; rebuildable indexes stay under
 
 ## 2. What Memory Means In Pige
 
-Memory differs from browsable wiki knowledge, preserved sources/artifacts and RAG retrieval.
-It holds preferences, corrections, recurring workflows, vault conventions and lessons.
-
-Memory captures stable preferences, corrections, vault conventions and workflow lessons. It is
-not hidden factual evidence; sources and wiki pages remain the grounding layer for factual answers.
+Memory differs from wiki knowledge, sources/artifacts and RAG. It holds preferences, corrections,
+workflows, conventions and lessons, never hidden factual evidence; sources/wiki ground facts.
 
 ## 3. Options Reviewed
 
-TencentDB Agent Memory, `pi-hermes-memory`, `pi-memctx`/`pi-memory` and Engram inform
-layering, traceability, inspectability and local retrieval, but do not own Pige vault/runtime lifecycle.
+External memory projects inform layering, traceability and retrieval but never own Pige lifecycle.
 
 ## 4. Chosen Architecture
 
@@ -58,14 +54,13 @@ projection only. Vault memory is portable and backed up unless excluded; indexes
   stay in Main. Renderer gets at most 1,000 bounded safe summaries.
 - Enabled Home recall adds at most eight recently updated active atoms as lower-authority
   user context, never system policy. Current instruction, `PIGE.md`, settings and safety win.
-- Settings lists at most 1,000 safe atoms and keeps disable compatible. Enable/delete/reset use
-  exact vault/request/revision CAS; committed mutations return safe Operation identity/current
-  summary. Delete/reset move exact L0/L1 facts into private receipts/trash and record
-  `trash_memory`; deterministic Activity Undo records `restore_memory`, merges only missing exact
-  facts, preserves later memory, and is restart-adoptable. Disabled/deleted atoms leave recall.
-- Export rechecks the exact revision after Main's save dialog and writes safe inspectable summaries
-  only. Renderer sees pathless `exported | cancelled | stale | failed`, never destination/private
-  provenance. Edit, autonomous/global memory, semantic recall and new permission modes remain open.
+- Settings lists <=1,000 safe atoms. Edit secret-scans then CAS-changes only L1 title/body; status,
+  L0 and private provenance remain. Receipt/`update_memory`/Undo is replay/restart-adoptable;
+  tampering closes and UI retains stale drafts.
+- Enable/delete/reset use revision CAS. Delete/reset retain exact L0/L1 privately, record
+  `trash_memory`, and Undo writes `restore_memory` without losing later facts; removed atoms leave recall.
+- Export rechecks revision after Main's dialog and writes safe summaries; results are pathless.
+  Autonomous/global and semantic memory remain open.
 
 ## 5. v0.1 Scope
 

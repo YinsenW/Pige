@@ -840,6 +840,7 @@ Settings rules:
 - Vault & Note Storage contains vault identity, active vault path, note/knowledge root path, source asset root path, source storage policy, recent vaults, backup, restore, export, and trash.
 - Index & Maintenance contains rebuild index, reset local database, knowledge health, chunk status, and repair actions.
 - Agent & Memory contains `PIGE.md`, Agent behavior preferences, memory inspection, and autonomous activity/history controls.
+- One memory editor preserves its draft unless an authoritative same-vault summary commits.
 - Skills and Pi Packages are both under Extensions, but remain separate pages.
 - Cross-links are allowed, but cards from another domain should not be embedded in the current page.
 
@@ -997,7 +998,7 @@ Load the strict active-vault summary and show bounded content/status/time/safe p
 Active atoms disable; disabled atoms re-enable; delete/reset are reversible and appear in Activity
 with Undo. Every mutation uses exact revision CAS, adopts returned state, and handles stale/not-found
 without losing the list. Export opens Main's save dialog; cancel is quiet and every result is
-pathless. No edit, permanent erase, autonomous/global memory or new permission control ships.
+pathless. No permanent erase, autonomous/global memory or new permission control ships.
 
 ### Skills Settings
 

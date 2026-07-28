@@ -162,6 +162,166 @@ describe("AgentMemoryService", () => {
     });
   });
 
+  it("edits only the derived atom with CAS, immutable L0 provenance, and exact replay", () => {
+    const vaultPath = createVault();
+    const service = new AgentMemoryService({ now: advancingClock(), activeVaultPath: () => vaultPath });
+    const record = remember(service, vaultPath, "edit");
+    const registryPath = path.join(vaultPath, ".pige/memory/registry.json");
+    const before = JSON.parse(fs.readFileSync(registryPath, "utf8")) as {
+      events: unknown[];
+      records: Array<Record<string, unknown>>;
+    };
+    const request = {
+      apiVersion: 1,
+      requestId: "memory_request_editexactreplay1",
+      activeVaultId: VAULT_ID,
+      memoryId: record.id,
+      expectedRevision: 1,
+      title: "Edited preference",
+      body: "Keep this revised preference and its original provenance."
+    } as const;
+
+    const committed = service.edit(vaultPath, request);
+    expect(committed).toMatchObject({
+      status: "committed",
+      operationId: expect.stringMatching(/^op_20260727_/),
+      summary: { revision: 2, records: [{
+        id: record.id,
+        title: request.title,
+        body: request.body,
+        status: "active"
+      }] }
+    });
+    expect(JSON.stringify(committed)).not.toMatch(/conversationId|userEventId|parentJobId|receiptPath/u);
+    expect(service.edit(vaultPath, request)).toEqual(committed);
+
+    const after = JSON.parse(fs.readFileSync(registryPath, "utf8")) as {
+      events: unknown[];
+      records: Array<Record<string, unknown>>;
+    };
+    expect(after.events).toEqual(before.events);
+    expect(after.records[0]).toMatchObject({
+      eventId: before.records[0]?.eventId,
+      conversationId: before.records[0]?.conversationId,
+      userEventId: before.records[0]?.userEventId,
+      parentJobId: before.records[0]?.parentJobId,
+      editProvenance: {
+        kind: "explicit_edit",
+        requestId: request.requestId,
+        operationId: committed.operationId
+      }
+    });
+    expect(() => service.edit(vaultPath, { ...request, title: "Conflicting replay" }))
+      .toThrowError(expect.objectContaining({ code: "memory.lifecycle_conflict" }));
+    expect(service.edit(vaultPath, {
+      ...request,
+      requestId: "memory_request_editstalerequest",
+      expectedRevision: 1
+    }).status).toBe("stale");
+    expect(service.edit(vaultPath, {
+      ...request,
+      requestId: "memory_request_editmissingrecord1",
+      memoryId: "memory_20260727_missingeditrecord",
+      expectedRevision: 2
+    }).status).toBe("not_found");
+  });
+
+  it("rejects secret edits before effects and preserves disabled state", () => {
+    const vaultPath = createVault();
+    const service = new AgentMemoryService({ now: advancingClock() });
+    const record = remember(service, vaultPath, "editdisabled");
+    const disabled = service.disable(vaultPath, {
+      apiVersion: 1,
+      requestId: "memory_request_editdisable000001",
+      activeVaultId: VAULT_ID,
+      memoryId: record.id,
+      expectedRevision: 1
+    });
+    expect(disabled).toMatchObject({ status: "committed", summary: { revision: 2 } });
+
+    expect(() => service.edit(vaultPath, {
+      apiVersion: 1,
+      requestId: "memory_request_editsecret000000",
+      activeVaultId: VAULT_ID,
+      memoryId: record.id,
+      expectedRevision: 2,
+      title: "Credential",
+      body: "api_key=sk-example-secret-value-123456789"
+    })).toThrowError(expect.objectContaining({ code: "memory.secret_blocked" }));
+    expect(fs.existsSync(path.join(
+      vaultPath,
+      ".pige/memory/edits/memory_request_editsecret000000.json"
+    ))).toBe(false);
+    expect(service.list(vaultPath, VAULT_ID).revision).toBe(2);
+
+    const edited = service.edit(vaultPath, {
+      apiVersion: 1,
+      requestId: "memory_request_editdisabled0000",
+      activeVaultId: VAULT_ID,
+      memoryId: record.id,
+      expectedRevision: 2,
+      title: "Disabled but editable",
+      body: "Retain the disabled state while updating this derived atom."
+    });
+    expect(edited).toMatchObject({
+      status: "committed",
+      summary: { records: [{ status: "disabled", title: "Disabled but editable" }] }
+    });
+    expect(service.recall(vaultPath)).toEqual([]);
+  });
+
+  it("recovers an interrupted edit and Undo restores the prior exact atom across restart", () => {
+    const vaultPath = createVault();
+    const service = new AgentMemoryService({ now: advancingClock(), activeVaultPath: () => vaultPath });
+    const original = remember(service, vaultPath, "editundo");
+    const committed = service.edit(vaultPath, {
+      apiVersion: 1,
+      requestId: "memory_request_editundorestart0",
+      activeVaultId: VAULT_ID,
+      memoryId: original.id,
+      expectedRevision: 1,
+      title: "Temporary edit",
+      body: "This edit will be restored through Activity Undo."
+    });
+    const operationPath = findOperationPath(vaultPath, committed.operationId!);
+    const atomPath = path.join(vaultPath, ".pige/memory/atoms", `${original.id}.md`);
+    fs.rmSync(operationPath);
+    fs.rmSync(atomPath);
+
+    const restarted = new AgentMemoryService({ now: advancingClock(), activeVaultPath: () => vaultPath });
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(fs.readFileSync(atomPath, "utf8")).toContain("This edit will be restored");
+    const operation = readOperation(vaultPath, committed.operationId!);
+    expect(restarted.activitySummary(operation)).toMatchObject({
+      kind: "update_memory",
+      target: { kind: "memory", memoryId: original.id },
+      canUndo: true
+    });
+
+    const undone = restarted.undo(operation, "2");
+    expect(undone).toMatchObject({ status: "undone", revisionId: "3" });
+    fs.rmSync(atomPath);
+    const afterUndoRestart = new AgentMemoryService({ activeVaultPath: () => vaultPath });
+    expect(afterUndoRestart.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
+    expect(fs.readFileSync(atomPath, "utf8")).toContain(original.body);
+    const restored = afterUndoRestart.list(vaultPath, VAULT_ID);
+    expect(restored.records).toEqual([expect.objectContaining({
+      id: original.id,
+      title: original.title,
+      body: original.body,
+      status: original.status,
+      createdAt: original.createdAt,
+      updatedAt: original.updatedAt
+    })]);
+    const registry = JSON.parse(fs.readFileSync(
+      path.join(vaultPath, ".pige/memory/registry.json"),
+      "utf8"
+    )) as { events: Array<{ title: string; body: string }>; records: Array<Record<string, unknown>> };
+    expect(registry.events[0]).toMatchObject({ title: original.title, body: original.body });
+    expect(registry.records[0]).toEqual(original);
+    expect(registry.records[0]).not.toHaveProperty("editProvenance");
+  });
+
   it("deletes trash-first, recovers a missing Operation, and restores private provenance through Undo", () => {
     const vaultPath = createVault();
     const service = new AgentMemoryService({ now: fixedClock(), activeVaultPath: () => vaultPath });
@@ -196,6 +356,44 @@ describe("AgentMemoryService", () => {
     const undoOperation = readOperation(vaultPath, undone.undoOperationId!);
     expect(service.findUndoOperation(operation, [operation, undoOperation])).toEqual(undoOperation);
     expect(service.activitySummary(operation, undoOperation)).toMatchObject({ status: "undone", canUndo: false });
+  });
+
+  it("rejects a tampered edited atom in a delete receipt before restoring registry state", () => {
+    const vaultPath = createVault();
+    const service = new AgentMemoryService({ now: advancingClock(), activeVaultPath: () => vaultPath });
+    const record = remember(service, vaultPath, "editdeletetamper");
+    service.edit(vaultPath, {
+      apiVersion: 1,
+      requestId: "memory_request_editdeletetamper",
+      activeVaultId: VAULT_ID,
+      memoryId: record.id,
+      expectedRevision: 1,
+      title: "Edited before delete",
+      body: "This exact edited atom is protected by its receipt chain."
+    });
+    const deleted = service.delete(vaultPath, {
+      apiVersion: 1,
+      requestId: "memory_request_deletetampered01",
+      activeVaultId: VAULT_ID,
+      memoryId: record.id,
+      expectedRevision: 2
+    });
+    const receiptPath = path.join(
+      vaultPath,
+      ".pige/trash/memory/memory_request_deletetampered01.json"
+    );
+    const receipt = JSON.parse(fs.readFileSync(receiptPath, "utf8")) as {
+      removedRecords: Array<Record<string, unknown>>;
+    };
+    receipt.removedRecords[0] = { ...receipt.removedRecords[0], body: "Tampered body" };
+    fs.writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
+    const registryPath = path.join(vaultPath, ".pige/memory/registry.json");
+    const registryBeforeUndo = fs.readFileSync(registryPath, "utf8");
+
+    expect(() => service.undo(readOperation(vaultPath, deleted.operationId!), "3"))
+      .toThrowError(expect.objectContaining({ code: "memory.lifecycle_conflict" }));
+    expect(fs.readFileSync(registryPath, "utf8")).toBe(registryBeforeUndo);
+    expect(service.list(vaultPath, VAULT_ID)).toMatchObject({ revision: 3, records: [] });
   });
 
   it("undoes one reset by merging exact removed records without deleting later memory", () => {

@@ -1818,6 +1818,10 @@ const MemoryRecordMutationRequestIdentitySchema = z.object({
 export const MemoryDisableRequestSchema = MemoryRecordMutationRequestIdentitySchema.strict();
 export const MemoryEnableRequestSchema = MemoryRecordMutationRequestIdentitySchema.strict();
 export const MemoryDeleteRequestSchema = MemoryRecordMutationRequestIdentitySchema.strict();
+export const MemoryEditRequestSchema = MemoryRecordMutationRequestIdentitySchema.extend({
+  title: z.string().trim().min(1).max(120),
+  body: z.string().trim().min(1).max(2_000)
+}).strict();
 
 export const MemoryResetRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -5681,6 +5685,7 @@ export type MemoryRequestId = z.infer<typeof MemoryRequestIdSchema>;
 export type MemoryDisableRequest = z.infer<typeof MemoryDisableRequestSchema>;
 export type MemoryEnableRequest = z.infer<typeof MemoryEnableRequestSchema>;
 export type MemoryDeleteRequest = z.infer<typeof MemoryDeleteRequestSchema>;
+export type MemoryEditRequest = z.infer<typeof MemoryEditRequestSchema>;
 export type MemoryResetRequest = z.infer<typeof MemoryResetRequestSchema>;
 export type MemoryExportRequest = z.infer<typeof MemoryExportRequestSchema>;
 export type MemoryMutationResult = z.infer<typeof MemoryMutationResultSchema>;

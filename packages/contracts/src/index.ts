@@ -82,6 +82,7 @@ import type {
   PaddleOcrTestResult,
   MemoryDeleteRequest,
   MemoryDisableRequest,
+  MemoryEditRequest,
   MemoryEnableRequest,
   MemoryExportRequest,
   MemoryExportResult,
@@ -357,6 +358,7 @@ export type {
   TaskInteractionPendingResult,
   MemoryDeleteRequest,
   MemoryDisableRequest,
+  MemoryEditRequest,
   MemoryEnableRequest,
   MemoryExportRequest,
   MemoryExportResult,
@@ -1585,6 +1587,7 @@ export interface PigeDesktopApi {
   readonly memory: {
     readonly list: (request: MemoryListRequest) => Promise<MemorySummary>;
     readonly disable: (request: MemoryDisableRequest) => Promise<MemoryMutationResult>;
+    readonly edit: (request: MemoryEditRequest) => Promise<MemoryLifecycleMutationResult>;
     readonly enable: (request: MemoryEnableRequest) => Promise<MemoryLifecycleMutationResult>;
     readonly delete: (request: MemoryDeleteRequest) => Promise<MemoryLifecycleMutationResult>;
     readonly export: (request: MemoryExportRequest) => Promise<MemoryExportResult>;

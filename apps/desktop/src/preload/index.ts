@@ -164,6 +164,7 @@ import type {
   SkillUninstallRequest,
   MemoryDeleteRequest,
   MemoryDisableRequest,
+  MemoryEditRequest,
   MemoryEnableRequest,
   MemoryExportRequest,
   MemoryExportResult,
@@ -311,6 +312,7 @@ import {
   SkillRegistryMutationResultSchema,
   MemoryDeleteRequestSchema,
   MemoryDisableRequestSchema,
+  MemoryEditRequestSchema,
   MemoryEnableRequestSchema,
   MemoryExportRequestSchema,
   MemoryExportResultSchema,
@@ -917,6 +919,11 @@ const api: PigeDesktopApi = {
       MemoryMutationResultSchema.parse(await ipcRenderer.invoke(
         "memory.disable",
         MemoryDisableRequestSchema.parse(request)
+      )),
+    edit: async (request: MemoryEditRequest): Promise<MemoryLifecycleMutationResult> =>
+      MemoryLifecycleMutationResultSchema.parse(await ipcRenderer.invoke(
+        "memory.edit",
+        MemoryEditRequestSchema.parse(request)
       )),
     enable: async (request: MemoryEnableRequest): Promise<MemoryLifecycleMutationResult> =>
       MemoryLifecycleMutationResultSchema.parse(await ipcRenderer.invoke(

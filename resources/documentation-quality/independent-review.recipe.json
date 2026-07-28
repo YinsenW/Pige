@@ -50,14 +50,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of the current-note cited append contract: typed evidence, exact-page CAS, bounded stale review, durable Operation identity and restart-safe publication.",
+    "scope": "Independent Planning review of vault-memory edit: L1-only CAS, immutable L0 provenance, secret-before-receipt, Activity Undo/recovery and fenced draft adoption.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "6e24e3b632e98135252eb6dbb22a4e277dbeb8c932306f69b6c5c76f40396ef6"
+    "reviewedSha256": "2f38f2485c17d65e8679882011b16db9f49f2f86b9b6cbe87f11fa7d48bae25a"
   },
   "reviewers": [{
-    "reviewerId": "current-note-cited-append-review",
-    "task": "Current-note cited append contract",
+    "reviewerId": "vault-memory-edit-review",
+    "task": "Vault-memory derived edit",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -65,33 +65,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed typed authority, citation, CAS, proposal, Operation and recovery boundaries; Development owns the disjoint Main, preload and renderer implementation evidence."
+    "independence": "Planning reviewed memory truth, provenance, CAS, secret, receipt, Operation, recovery and UI adoption boundaries; Development independently supplied implementation evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"current-note-cited-append-review","blockerCount":0,"summary":"The current-note turn remains the sole entry; applied and review-required outcomes refresh only the bound Reader, Activity and proposal state."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"current-note-cited-append-review","blockerCount":0,"summary":"Schema, API, runtime policy, context, Markdown, Job and architecture owners bind the same exact-page append and review contract."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"current-note-cited-append-review","blockerCount":0,"summary":"Acceptance records the frozen interface while leaving implementation, assembled evidence and broader note mutation explicitly open."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"current-note-cited-append-review","blockerCount":0,"summary":"A bounded private append owner, typed publication result and feature-specific review API give Development stable disjoint seams."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"current-note-cited-append-review","blockerCount":0,"summary":"Existing owner documents and one durable Decision hold the contract without a new design document or duplicated proposal framework."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-memory-edit-review","blockerCount":0,"summary":"Settings serializes one editor, retains uncommitted drafts and adopts only authoritative same-vault summaries."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-memory-edit-review","blockerCount":0,"summary":"Memory, API, Job, UI and phase owners bind the same L1-only CAS and immutable provenance rules."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-memory-edit-review","blockerCount":0,"summary":"Acceptance adds usable edit while leaving autonomous, global, semantic and full lifecycle evidence open."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-memory-edit-review","blockerCount":0,"summary":"Exact receipt, Operation, replay, tamper and Undo boundaries support deterministic maintenance and recovery."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-memory-edit-review","blockerCount":0,"summary":"Existing memory owners and one Decision absorb the behavior while reducing governed Markdown bytes."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict proposal, conversation and submit-result schemas agree with the renderer-safe desktop contract."},
-    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"The durable Decision, acceptance row and independent semantic claim bind the same unpromoted feature slice."},
-    {"command":"npm run verify:documentation-leanness && npm run verify:independent-documentation-review","status":"passed","evidence":"The existing owner set absorbs the contract and the exact governed snapshot is independently hash-bound."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict edit request and lifecycle result schemas preserve renderer-safe CAS vocabulary."},
+    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision, B7.06, acceptance and semantic locks bind the same unpromoted slice."},
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact service LOC and governed owner bytes are protected and independently hash-bound."}
   ],
   "coordination": {
-    "taskId": "current-note-cited-append-20260728",
-    "taskTitle": "Current-note cited append contract",
+    "taskId": "vault-memory-edit-20260728",
+    "taskTitle": "Vault-memory derived edit",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing current-note read, citation, update_page Activity and Reader refresh owners remain compatible; selection transforms and user editor authority are unchanged.",
-    "acknowledgement": "Planning freezes the interface and owner boundary only; Development implementation, assembled restart evidence and broader note mutation remain open."
+    "compatibility": "Existing remember, list, disable, enable, delete, reset, export, recall and Activity owners remain compatible; L0 attribution is unchanged.",
+    "acknowledgement": "Planning binds first usable edit only; autonomous/global/semantic memory, backup, scale and real-Electron evidence remain open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "citation_1 proves the inspected current-note revision, not independent source authority; existing citations are preserved and no new locator is invented.",
-    "Page, vault, Job, revision or proposal drift fails closed to bounded review or conflict without silent overwrite.",
-    "Broader note transforms, source-backed append inference and assembled restart evidence remain outside this interface freeze."
+    "Edit changes only derived L1 title/body; immutable L0 and private conversation/event/Job provenance remain authoritative.",
+    "Secret, vault, record, revision, replay or receipt drift fails closed without rewriting current memory.",
+    "Autonomous/global/semantic memory, backup, 1,000-record and real-Electron evidence remain outside this bind."
   ]
 }

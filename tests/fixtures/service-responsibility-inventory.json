@@ -3,7 +3,7 @@
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 169,
-  "baselineLines": 91462,
+  "baselineLines": 91633,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -20,7 +20,7 @@
     ],
     "authority_reliability": [
       ["agent-conversation-pagination.ts", 134, "r"],
-      ["agent-memory-lifecycle.ts", 429, "rd"],
+      ["agent-memory-lifecycle.ts", 507, "rd"],
       ["agent-page-update-service.ts", 1556, "rdf"],
       ["agent-policy-context.ts", 88, "ap"],
       ["agent-runtime-service.ts", 118, "ap"],
@@ -72,7 +72,7 @@
       ["verified-file-snapshot.ts", 152, "rd"]
     ],
     "storage": [
-      ["agent-memory-service.ts", 863, "rd"],
+      ["agent-memory-service.ts", 956, "rd"],
       ["agent-turn-conversation-store.ts", 1094, "rd"],
       ["appearance-service.ts", 40, ""],
       ["artifact-file-commit.ts", 29, "d"],

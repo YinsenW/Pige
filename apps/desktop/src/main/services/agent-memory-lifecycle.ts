@@ -31,9 +31,16 @@ export interface StoredMemoryRecord extends MemoryRecordSummary {
   readonly conversationId: string;
   readonly userEventId: string;
   readonly parentJobId: string;
+  readonly editProvenance?: MemoryEditProvenance;
 }
 
-export type MemoryLifecycleAction = "enable" | "delete" | "reset";
+export interface MemoryEditProvenance {
+  readonly kind: "explicit_edit";
+  readonly requestId: string;
+  readonly operationId: string;
+}
+
+export type MemoryLifecycleAction = "edit" | "enable" | "delete" | "reset";
 
 export interface MemoryLifecycleReceipt {
   readonly schemaVersion: 1;
@@ -75,7 +82,14 @@ export interface MemoryOperationBinding {
 
 export function prepareMemoryMutation(
   registry: MemoryRegistry,
-  input: { readonly action: MemoryLifecycleAction; readonly memoryId?: string },
+  input: {
+    readonly action: MemoryLifecycleAction;
+    readonly memoryId?: string;
+    readonly title?: string;
+    readonly body?: string;
+    readonly requestId?: string;
+    readonly operationId?: string;
+  },
   now: string
 ): {
   readonly next: MemoryRegistry;
@@ -84,6 +98,34 @@ export function prepareMemoryMutation(
   readonly beforeRecord?: StoredMemoryRecord;
   readonly afterRecord?: StoredMemoryRecord;
 } | undefined {
+  if (input.action === "edit") {
+    const index = registry.records.findIndex((record) => record.id === input.memoryId);
+    if (
+      index < 0 || input.title === undefined || input.body === undefined ||
+      input.requestId === undefined || input.operationId === undefined
+    ) return undefined;
+    const beforeRecord = registry.records[index]!;
+    const afterRecord: StoredMemoryRecord = {
+      ...beforeRecord,
+      title: input.title,
+      body: input.body,
+      updatedAt: now,
+      editProvenance: {
+        kind: "explicit_edit",
+        requestId: input.requestId,
+        operationId: input.operationId
+      }
+    };
+    const records = [...registry.records];
+    records[index] = afterRecord;
+    return {
+      next: { schemaVersion: 1, revision: registry.revision + 1, events: registry.events, records },
+      removedEvents: [],
+      removedRecords: [],
+      beforeRecord,
+      afterRecord
+    };
+  }
   if (input.action === "enable") {
     const index = registry.records.findIndex((record) => record.id === input.memoryId);
     if (index < 0 || registry.records[index]!.status !== "disabled") return undefined;
@@ -117,7 +159,7 @@ export function prepareMemoryMutation(
 }
 
 export function applyMemoryReceipt(registry: MemoryRegistry, receipt: MemoryLifecycleReceipt): MemoryRegistry {
-  if (receipt.action === "enable") {
+  if (receipt.action === "edit" || receipt.action === "enable") {
     const index = registry.records.findIndex((record) => record.id === receipt.memoryId);
     if (
       index < 0 || !receipt.beforeRecord || !receipt.afterRecord ||
@@ -141,20 +183,35 @@ export function applyMemoryReceipt(registry: MemoryRegistry, receipt: MemoryLife
   };
 }
 
+export function isValidMemoryEditTransition(
+  before: StoredMemoryRecord,
+  after: StoredMemoryRecord,
+  receipt: Partial<Pick<MemoryLifecycleReceipt, "action" | "requestId" | "operationId" | "memoryId" | "createdAt">>
+): boolean {
+  return receipt.action === "edit" && receipt.memoryId === before.id &&
+    before.id === after.id && before.kind === after.kind && before.status === after.status &&
+    stableJson(before.provenance) === stableJson(after.provenance) && before.createdAt === after.createdAt &&
+    before.eventId === after.eventId && before.conversationId === after.conversationId &&
+    before.userEventId === after.userEventId && before.parentJobId === after.parentJobId &&
+    after.updatedAt === receipt.createdAt && after.editProvenance?.kind === "explicit_edit" &&
+    after.editProvenance.requestId === receipt.requestId &&
+    after.editProvenance.operationId === receipt.operationId;
+}
+
 export function createMemoryUndoRegistry(
   registry: MemoryRegistry,
   receipt: MemoryLifecycleReceipt,
   now: string
 ): MemoryRegistry {
   if (registry.revision === Number.MAX_SAFE_INTEGER) throw memoryLifecycleConflict();
-  if (receipt.action === "enable") {
+  if (receipt.action === "edit" || receipt.action === "enable") {
     const current = registry.records.find((record) => record.id === receipt.memoryId);
     if (
       !current || !receipt.afterRecord || !receipt.beforeRecord ||
       stableJson(current) !== stableJson(receipt.afterRecord)
     ) throw memoryLifecycleConflict();
     const records = registry.records.map((record) => record.id === current.id
-      ? { ...receipt.beforeRecord!, updatedAt: now }
+      ? receipt.action === "edit" ? receipt.beforeRecord! : { ...receipt.beforeRecord!, updatedAt: now }
       : record);
     return { schemaVersion: 1, revision: registry.revision + 1, events: registry.events, records };
   }
@@ -170,7 +227,7 @@ export function createMemoryUndoRegistry(
     events: [...registry.events, ...receipt.removedEvents],
     records: [...registry.records, ...receipt.removedRecords]
   };
-  assertMemoryRegistryBindings(next.events, next.records);
+  assertMemoryRegistryBindings(next.events, next.records, (_event, record) => record.editProvenance !== undefined);
   return next;
 }
 
@@ -178,7 +235,9 @@ export function restoredMemoryRecords(
   receipt: MemoryLifecycleReceipt,
   registry: MemoryRegistry
 ): readonly StoredMemoryRecord[] {
-  if (receipt.action === "enable") return registry.records.filter((record) => record.id === receipt.memoryId);
+  if (receipt.action === "edit" || receipt.action === "enable") {
+    return registry.records.filter((record) => record.id === receipt.memoryId);
+  }
   const restored = new Set(receipt.removedRecords.map((record) => record.id));
   return registry.records.filter((record) => restored.has(record.id));
 }
@@ -190,7 +249,7 @@ export function createMemoryLifecycleOperation(receipt: MemoryLifecycleReceipt):
     schemaVersion: 1,
     createdAt: receipt.createdAt,
     actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
-    kind: receipt.action === "enable" ? "update_memory" : "trash_memory",
+    kind: receipt.action === "edit" || receipt.action === "enable" ? "update_memory" : "trash_memory",
     targetRefs,
     sourceRefs: [],
     before: {
@@ -205,11 +264,13 @@ export function createMemoryLifecycleOperation(receipt: MemoryLifecycleReceipt):
       path: ".pige/memory/registry.json",
       checksum: receipt.afterRegistryHash
     },
-    summary: receipt.action === "enable"
-      ? "Enabled an Agent memory record."
-      : receipt.action === "delete"
-        ? "Moved an Agent memory record to private trash."
-        : "Moved all Agent memory records to private trash.",
+    summary: receipt.action === "edit"
+      ? "Updated an Agent memory record."
+      : receipt.action === "enable"
+        ? "Enabled an Agent memory record."
+        : receipt.action === "delete"
+          ? "Moved an Agent memory record to private trash."
+          : "Moved all Agent memory records to private trash.",
     reversible: "yes",
     rollbackHint: "Restore the exact private memory receipt without replacing later memory records.",
     warnings: []
@@ -242,11 +303,13 @@ export function createMemoryRestoreOperation(
       path: ".pige/memory/registry.json",
       checksum: intent.restoredRegistryHash
     },
-    summary: receipt.action === "enable"
-      ? "Restored the prior disabled Agent memory state."
-      : receipt.action === "delete"
-        ? "Restored an Agent memory record from private trash."
-        : "Restored Agent memory records from private trash.",
+    summary: receipt.action === "edit"
+      ? "Restored the prior Agent memory text."
+      : receipt.action === "enable"
+        ? "Restored the prior disabled Agent memory state."
+        : receipt.action === "delete"
+          ? "Restored an Agent memory record from private trash."
+          : "Restored Agent memory records from private trash.",
     reversible: "best_effort",
     rollbackHint: "Create another explicit memory lifecycle action if the restored registry remains current.",
     warnings: []
@@ -258,7 +321,7 @@ export function memoryUndoUnavailableReason(
   receipt: MemoryLifecycleReceipt
 ): "content_changed" | "revision_changed" | "target_missing" | undefined {
   if (registry.revision < receipt.afterRevision) return "revision_changed";
-  if (receipt.action === "enable") {
+  if (receipt.action === "edit" || receipt.action === "enable") {
     const current = registry.records.find((record) => record.id === receipt.memoryId);
     if (!current) return "target_missing";
     return receipt.afterRecord && stableJson(current) === stableJson(receipt.afterRecord)
@@ -302,8 +365,17 @@ export function readMemoryOperationBinding(operation: OperationRecord): MemoryOp
     };
   }
   if (operation.sourceRefs.length !== 0) return undefined;
+  const action = operation.kind === "update_memory"
+    ? operation.before.path.startsWith(".pige/memory/edits/") ? "edit" : "enable"
+    : operation.targetRefs.length === 0 ? "reset" : "delete";
+  if (
+    (action === "edit" && !/^\.pige\/memory\/edits\/memory_request_[a-z0-9]{16,64}\.json$/u.test(operation.before.path)) ||
+    (action === "enable" && !/^\.pige\/memory\/mutations\/memory_request_[a-z0-9]{16,64}\.json$/u.test(operation.before.path)) ||
+    ((action === "delete" || action === "reset") &&
+      !/^\.pige\/trash\/memory\/memory_request_[a-z0-9]{16,64}\.json$/u.test(operation.before.path))
+  ) return undefined;
   return {
-    action: operation.kind === "update_memory" ? "enable" : operation.targetRefs.length === 0 ? "reset" : "delete",
+    action,
     ...(operation.targetRefs[0] ? { memoryId: operation.targetRefs[0].id } : {}),
     receiptPath: operation.before.path,
     beforeRevision,
@@ -349,7 +421,8 @@ export function createMemoryUndoOperationId(operationId: string): string {
 
 export function assertMemoryRegistryBindings(
   events: readonly MemoryEventRecord[],
-  records: readonly StoredMemoryRecord[]
+  records: readonly StoredMemoryRecord[],
+  validateEdit?: (event: MemoryEventRecord, record: StoredMemoryRecord) => boolean
 ): void {
   const eventsById = new Map<string, MemoryEventRecord>();
   for (const event of events) {
@@ -366,11 +439,14 @@ export function assertMemoryRegistryBindings(
     boundEventIds.add(record.eventId);
     const event = eventsById.get(record.eventId);
     if (
-      !event || event.title !== record.title || event.body !== record.body ||
+      !event ||
       event.conversationId !== record.conversationId || event.userEventId !== record.userEventId ||
       event.parentJobId !== record.parentJobId || event.occurredAt !== record.provenance.occurredAt ||
       event.occurredAt !== record.createdAt || record.id !== createMemoryId(event.userEventId) ||
-      event.id !== createMemoryEventId(event.userEventId)
+      event.id !== createMemoryEventId(event.userEventId) ||
+      (record.editProvenance
+        ? !validateEdit?.(event, record)
+        : event.title !== record.title || event.body !== record.body)
     ) throw memoryRegistryInvalid("A memory atom is not bound to its explicit event.");
   }
   if (eventsById.size !== boundEventIds.size) {
@@ -379,9 +455,11 @@ export function assertMemoryRegistryBindings(
 }
 
 export function memoryReceiptRelativePath(receipt: MemoryLifecycleReceipt): string {
-  return receipt.action === "enable"
-    ? `.pige/memory/mutations/${receipt.requestId}.json`
-    : `.pige/trash/memory/${receipt.requestId}.json`;
+  return receipt.action === "edit"
+    ? `.pige/memory/edits/${receipt.requestId}.json`
+    : receipt.action === "enable"
+      ? `.pige/memory/mutations/${receipt.requestId}.json`
+      : `.pige/trash/memory/${receipt.requestId}.json`;
 }
 
 export function memoryRestoreIntentRelativePath(operationId: string): string {

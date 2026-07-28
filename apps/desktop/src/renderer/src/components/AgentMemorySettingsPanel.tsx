@@ -9,10 +9,18 @@ import { PigeIcon } from "./PigeIcon";
 type Translate = (key: string) => string;
 type PendingAction =
   | {
-      readonly kind: "disable" | "enable" | "delete";
+      readonly kind: "disable" | "enable" | "delete" | "edit";
       readonly memoryId: string;
     }
   | { readonly kind: "export" | "reset" };
+
+interface MemoryEditDraft {
+  readonly activeVaultId: string;
+  readonly memoryId: string;
+  readonly record: MemoryRecordSummary;
+  readonly title: string;
+  readonly body: string;
+}
 
 function createMemoryRequestId(): string {
   return `memory_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
@@ -36,13 +44,20 @@ export function AgentMemorySettingsPanel(
   );
   const [resetConfirmationOpen, setResetConfirmationOpen] = useState(false);
   const [statusKey, setStatusKey] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<MemoryEditDraft | null>(null);
   const mountedRef = useRef(true);
   const activeVaultIdRef = useRef(props.activeVaultId);
   const operationSequenceRef = useRef(0);
   const operationActiveRef = useRef(false);
+  const editDraftRef = useRef<MemoryEditDraft | null>(null);
+  const editCompositionRef = useRef(false);
+  const editTitleRef = useRef<HTMLInputElement>(null);
+  const editTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const restoreEditFocusRef = useRef<string | null>(null);
   const resetTriggerRef = useRef<HTMLButtonElement>(null);
   const resetConfirmRef = useRef<HTMLButtonElement>(null);
   activeVaultIdRef.current = props.activeVaultId;
+  editDraftRef.current = editDraft;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -53,6 +68,9 @@ export function AgentMemorySettingsPanel(
     setSummary(null);
     setStatusKey(null);
     setPendingAction(null);
+    setEditDraft(null);
+    editCompositionRef.current = false;
+    restoreEditFocusRef.current = null;
     setResetConfirmationOpen(false);
     if (!requestedVaultId) {
       setReadState("idle");
@@ -96,6 +114,16 @@ export function AgentMemorySettingsPanel(
   useEffect(() => {
     if (resetConfirmationOpen) resetConfirmRef.current?.focus();
   }, [resetConfirmationOpen]);
+
+  useEffect(() => {
+    if (editDraft) {
+      editTitleRef.current?.focus();
+      return;
+    }
+    const memoryId = restoreEditFocusRef.current;
+    restoreEditFocusRef.current = null;
+    if (memoryId) editTriggerRefs.current.get(memoryId)?.focus();
+  }, [editDraft?.activeVaultId, editDraft?.memoryId]);
 
   const beginAction = (action: PendingAction): number | null => {
     if (operationActiveRef.current) return null;
@@ -209,10 +237,101 @@ export function AgentMemorySettingsPanel(
     }
   };
 
+  const beginEdit = (record: MemoryRecordSummary): void => {
+    const requestedSummary = summary;
+    if (!requestedSummary || operationActiveRef.current || resetConfirmationOpen) return;
+    setStatusKey(null);
+    setEditDraft({
+      activeVaultId: requestedSummary.activeVaultId,
+      memoryId: record.id,
+      record,
+      title: record.title,
+      body: record.body,
+    });
+  };
+
+  const cancelEdit = (): void => {
+    if (operationActiveRef.current) return;
+    editCompositionRef.current = false;
+    restoreEditFocusRef.current = editDraftRef.current?.memoryId ?? null;
+    setEditDraft(null);
+    setStatusKey(null);
+  };
+
+  const editRecord = async (): Promise<void> => {
+    const requestedSummary = summary;
+    const requestedDraft = editDraftRef.current;
+    const memoryApi = window.pige.memory;
+    if (
+      !memoryApi ||
+      !requestedSummary ||
+      !requestedDraft ||
+      editCompositionRef.current ||
+      requestedDraft.activeVaultId !== requestedSummary.activeVaultId
+    )
+      return;
+    const title = requestedDraft.title.trim();
+    const body = requestedDraft.body.trim();
+    if (!title || !body) return;
+    const sequence = beginAction({
+      kind: "edit",
+      memoryId: requestedDraft.memoryId,
+    });
+    if (sequence === null) return;
+    const requestedVaultId = requestedSummary.activeVaultId;
+    const requestId = createMemoryRequestId();
+    const isCurrentEdit = (): boolean => {
+      const currentDraft = editDraftRef.current;
+      return (
+        isCurrentAction(sequence, requestedVaultId) &&
+        currentDraft?.activeVaultId === requestedVaultId &&
+        currentDraft.memoryId === requestedDraft.memoryId
+      );
+    };
+    try {
+      const result = await memoryApi.edit({
+        apiVersion: 1,
+        requestId,
+        activeVaultId: requestedVaultId,
+        memoryId: requestedDraft.memoryId,
+        expectedRevision: requestedSummary.revision,
+        title,
+        body,
+      });
+      if (!isCurrentEdit()) return;
+      if (
+        result.requestId !== requestId ||
+        result.activeVaultId !== requestedVaultId ||
+        result.summary.activeVaultId !== requestedVaultId
+      ) {
+        setStatusKey("memory.editFailed");
+        return;
+      }
+      setSummary(result.summary);
+      setReadState("ready");
+      if (result.status === "committed") {
+        editCompositionRef.current = false;
+        restoreEditFocusRef.current = requestedDraft.memoryId;
+        setEditDraft(null);
+        setStatusKey("memory.editCompleted");
+      } else {
+        setStatusKey(
+          result.status === "stale"
+            ? "memory.editStale"
+            : "memory.editNotFound",
+        );
+      }
+    } catch {
+      if (isCurrentEdit()) setStatusKey("memory.editFailed");
+    } finally {
+      finishAction(sequence, requestedVaultId);
+    }
+  };
+
   const exportMemory = async (): Promise<void> => {
     const requestedSummary = summary;
     const memoryApi = window.pige.memory;
-    if (!memoryApi || !requestedSummary) return;
+    if (!memoryApi || !requestedSummary || editDraftRef.current) return;
     const sequence = beginAction({ kind: "export" });
     if (sequence === null) return;
     const requestedVaultId = requestedSummary.activeVaultId;
@@ -259,7 +378,7 @@ export function AgentMemorySettingsPanel(
   const resetMemory = async (): Promise<void> => {
     const requestedSummary = summary;
     const memoryApi = window.pige.memory;
-    if (!memoryApi || !requestedSummary) return;
+    if (!memoryApi || !requestedSummary || editDraftRef.current) return;
     const sequence = beginAction({ kind: "reset" });
     if (sequence === null) return;
     const requestedVaultId = requestedSummary.activeVaultId;
@@ -293,6 +412,13 @@ export function AgentMemorySettingsPanel(
   };
 
   const busy = pendingAction !== null;
+  const displayedRecords = summary
+    ? editDraft &&
+      editDraft.activeVaultId === summary.activeVaultId &&
+      !summary.records.some((record) => record.id === editDraft.memoryId)
+      ? [...summary.records, editDraft.record]
+      : summary.records
+    : [];
 
   return (
     <section
@@ -340,15 +466,20 @@ export function AgentMemorySettingsPanel(
               {props.t("memory.retryLoad")}
             </button>
           </div>
-        ) : summary && summary.records.length > 0 ? (
+        ) : summary && displayedRecords.length > 0 ? (
           <div
             className="settings-card"
             data-memory-revision={summary.revision}
           >
-            {summary.records.map((record) => (
+            {displayedRecords.map((record) => {
+              const editing =
+                editDraft?.activeVaultId === summary.activeVaultId &&
+                editDraft.memoryId === record.id;
+              return (
               <div
                 className="settings-row tall"
                 data-memory-id={record.id}
+                data-memory-editing={editing || undefined}
                 key={record.id}
               >
                 <span
@@ -358,8 +489,75 @@ export function AgentMemorySettingsPanel(
                   <PigeIcon name="memory" size={17} />
                 </span>
                 <div className="settings-row-copy">
-                  <strong>{record.title}</strong>
-                  <span>{record.body}</span>
+                  {editing ? (
+                    <form
+                      aria-label={`${props.t("memory.edit")}: ${record.title}`}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && event.nativeEvent.isComposing)
+                          event.preventDefault();
+                      }}
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        if (!editCompositionRef.current) void editRecord();
+                      }}
+                    >
+                      <label htmlFor={`memory-edit-title-${record.id}`}>
+                        {props.t("memory.editTitle")}
+                      </label>
+                      <input
+                        ref={editTitleRef}
+                        className="settings-input"
+                        id={`memory-edit-title-${record.id}`}
+                        maxLength={120}
+                        value={editDraft.title}
+                        disabled={busy}
+                        onInput={(event) => {
+                          const title = event.currentTarget.value;
+                          setEditDraft((current) =>
+                            current
+                              ? { ...current, title }
+                              : current,
+                          );
+                        }}
+                        onCompositionStart={() => {
+                          editCompositionRef.current = true;
+                        }}
+                        onCompositionEnd={() => {
+                          editCompositionRef.current = false;
+                        }}
+                      />
+                      <label htmlFor={`memory-edit-body-${record.id}`}>
+                        {props.t("memory.editBody")}
+                      </label>
+                      <textarea
+                        className="settings-input"
+                        id={`memory-edit-body-${record.id}`}
+                        maxLength={2000}
+                        rows={3}
+                        value={editDraft.body}
+                        disabled={busy}
+                        onInput={(event) => {
+                          const body = event.currentTarget.value;
+                          setEditDraft((current) =>
+                            current
+                              ? { ...current, body }
+                              : current,
+                          );
+                        }}
+                        onCompositionStart={() => {
+                          editCompositionRef.current = true;
+                        }}
+                        onCompositionEnd={() => {
+                          editCompositionRef.current = false;
+                        }}
+                      />
+                    </form>
+                  ) : (
+                    <>
+                      <strong>{record.title}</strong>
+                      <span>{record.body}</span>
+                    </>
+                  )}
                   <div
                     className="skill-registry-meta"
                     aria-label={props.t("memory.recordDetails")}
@@ -384,11 +582,52 @@ export function AgentMemorySettingsPanel(
                   >
                     {props.t(`memory.status.${record.status}`)}
                   </span>
+                  {editing ? (
+                    <>
+                      <button
+                        className="settings-button primary"
+                        type="button"
+                        disabled={
+                          busy ||
+                          editDraft.title.trim().length === 0 ||
+                          editDraft.body.trim().length === 0
+                        }
+                        onClick={() => void editRecord()}
+                      >
+                        {pendingAction?.kind === "edit" &&
+                        pendingAction.memoryId === record.id
+                          ? props.t("memory.saving")
+                          : props.t("memory.save")}
+                      </button>
+                      <button
+                        className="settings-button"
+                        type="button"
+                        disabled={busy}
+                        onClick={cancelEdit}
+                      >
+                        {props.t("memory.cancel")}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      ref={(node) => {
+                        if (node) editTriggerRefs.current.set(record.id, node);
+                        else editTriggerRefs.current.delete(record.id);
+                      }}
+                      className="settings-button"
+                      type="button"
+                      aria-label={`${props.t("memory.edit")}: ${record.title}`}
+                      disabled={busy || editDraft !== null || resetConfirmationOpen}
+                      onClick={() => beginEdit(record)}
+                    >
+                      {props.t("memory.edit")}
+                    </button>
+                  )}
                   <button
                     className="settings-button"
                     type="button"
                     aria-label={`${props.t(record.status === "active" ? "memory.disable" : "memory.enable")}: ${record.title}`}
-                    disabled={busy}
+                    disabled={busy || editDraft !== null}
                     title={props.t(
                       record.status === "active"
                         ? "memory.disableDescription"
@@ -401,10 +640,9 @@ export function AgentMemorySettingsPanel(
                       )
                     }
                   >
-                    {pendingAction &&
-                    "memoryId" in pendingAction &&
-                    pendingAction.memoryId === record.id &&
-                    pendingAction.kind !== "delete"
+                    {pendingAction?.kind ===
+                      (record.status === "active" ? "disable" : "enable") &&
+                    pendingAction.memoryId === record.id
                       ? props.t(
                           record.status === "active"
                             ? "memory.disabling"
@@ -420,7 +658,7 @@ export function AgentMemorySettingsPanel(
                     className="settings-button"
                     type="button"
                     aria-label={`${props.t("memory.delete")}: ${record.title}`}
-                    disabled={busy}
+                    disabled={busy || editDraft !== null}
                     title={props.t("memory.deleteDescription")}
                     onClick={() => void mutateRecord(record, "delete")}
                   >
@@ -431,7 +669,8 @@ export function AgentMemorySettingsPanel(
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : readState === "ready" ? (
           <MemoryStateCard
@@ -445,7 +684,7 @@ export function AgentMemorySettingsPanel(
             <button
               className="settings-button settings-action"
               type="button"
-              disabled={busy}
+              disabled={busy || editDraft !== null}
               onClick={() => void exportMemory()}
             >
               {pendingAction?.kind === "export"
@@ -456,10 +695,11 @@ export function AgentMemorySettingsPanel(
               ref={resetTriggerRef}
               className="settings-button settings-action"
               type="button"
-              disabled={busy}
+              disabled={busy || editDraft !== null}
               aria-expanded={resetConfirmationOpen}
               aria-controls="memory-reset-confirmation"
               onClick={() => {
+                if (editDraftRef.current) return;
                 setResetConfirmationOpen(true);
                 setStatusKey(null);
               }}
