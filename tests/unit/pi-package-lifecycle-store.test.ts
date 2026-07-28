@@ -80,7 +80,79 @@ describe("PiPackageLifecycleStore", () => {
       .toThrow(expect.objectContaining({ code: "package.install_changed" }));
     expect(fs.existsSync(hardlinkFixture.installedPath)).toBe(true);
   });
+
+  it("durably swaps one verified update tree and consumes its opaque rollback exactly once", () => {
+    const fixture = createFixture();
+    const candidatePath = path.join(fixture.packageRoot, "candidate");
+    fs.mkdirSync(candidatePath, { mode: 0o700 });
+    fs.writeFileSync(path.join(candidatePath, "index.js"), "export const value = 2;\n", { mode: 0o600 });
+    const treeHash = hashPiPackageTree(candidatePath);
+    const next: TestRecord = {
+      ...fixture.record, version: "2.0.0", treeHash,
+      relativePath: path.join("installed", fixture.record.packageId, "2.0.0", treeHash.slice(7))
+    };
+    const receipt = fixture.store.prepareUpdate({
+      requestId: "pi_package_update_request_abcdefghijklmnop",
+      rollbackId: "pi_package_rollback_abcdefghijklmnop", expectedRegistryRevision: 3,
+      previousRecord: fixture.record, nextRecord: next, candidatePath,
+      createdAt: "2026-07-29T00:00:00.000Z"
+    });
+    fixture.store.ensureUpdated(receipt);
+    const committed = fixture.store.markUpdateCommitted(receipt, 4);
+    expect(fixture.store.rollbackTarget(next)).toEqual({
+      rollbackId: receipt.rollbackId, targetVersion: fixture.record.version
+    });
+    const prepared = fixture.store.prepareRollback({
+      receipt: committed, requestId: "pi_package_rollback_request_abcdefghijklmnop",
+      expectedRegistryRevision: 6
+    });
+    fixture.store.ensureRolledBack(prepared);
+    fixture.store.markRollbackCommitted(prepared, 7);
+    expect(fixture.store.rollbackTarget(fixture.record)).toBeUndefined();
+    expect(() => fixture.store.prepareRollback({
+      receipt: committed, requestId: "pi_package_rollback_request_secondrequest0001",
+      expectedRegistryRevision: 5
+    })).toThrow(expect.objectContaining({ code: "package.rollback_receipt_conflict" }));
+    expect(fs.readFileSync(path.join(fixture.installedPath, "index.js"), "utf8")).toContain("value = 1");
+  });
+
+  it("supersedes an older rollback when a newer exact update commits", () => {
+    const fixture = createFixture();
+    const first = prepareLifecycleUpdate(fixture, fixture.record, "2.0.0", "first", 1);
+    fixture.store.ensureUpdated(first);
+    const firstCommitted = fixture.store.markUpdateCommitted(first, 2);
+    const second = prepareLifecycleUpdate(fixture, first.nextRecord, "3.0.0", "second", 2);
+    fixture.store.ensureUpdated(second);
+    const secondCommitted = fixture.store.markUpdateCommitted(second, 3);
+    expect(fixture.store.readUpdateReceipt(firstCommitted.rollbackId)?.state).toBe("superseded");
+
+    const rollback = fixture.store.prepareRollback({
+      receipt: secondCommitted, requestId: "pi_package_rollback_request_secondrequest0001",
+      expectedRegistryRevision: 3
+    });
+    fixture.store.ensureRolledBack(rollback);
+    fixture.store.markRollbackCommitted(rollback, 4);
+    expect(fixture.store.rollbackTarget(first.nextRecord)).toBeUndefined();
+  });
 });
+
+function prepareLifecycleUpdate(
+  fixture: ReturnType<typeof createFixture>, current: TestRecord, version: string, suffix: string,
+  expectedRegistryRevision: number
+) {
+  const candidatePath = path.join(fixture.packageRoot, `candidate-${suffix}`);
+  fs.mkdirSync(candidatePath, { mode: 0o700 });
+  fs.writeFileSync(path.join(candidatePath, "index.js"), `export const value = '${suffix}';\n`, { mode: 0o600 });
+  const treeHash = hashPiPackageTree(candidatePath);
+  const next: TestRecord = { ...current, version, treeHash,
+    relativePath: path.join("installed", current.packageId, version, treeHash.slice(7)) };
+  return fixture.store.prepareUpdate({
+    requestId: `pi_package_update_request_${suffix.padEnd(16, "a")}`,
+    rollbackId: `pi_package_rollback_${suffix.padEnd(16, "a")}`,
+    expectedRegistryRevision, previousRecord: current, nextRecord: next, candidatePath,
+    createdAt: `2026-07-29T00:00:0${expectedRegistryRevision}.000Z`
+  });
+}
 
 function createFixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-package-lifecycle-"));

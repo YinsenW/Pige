@@ -70,6 +70,12 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly uninstall: (");
     expect(contractsSource).toContain("request: PiPackageUninstallRequest");
     expect(contractsSource).toContain("Promise<PiPackageUninstallResult>");
+    expect(contractsSource).toContain("readonly update: (");
+    expect(contractsSource).toContain("request: PiPackageUpdateRequest");
+    expect(contractsSource).toContain("Promise<PiPackageUpdateResult>");
+    expect(contractsSource).toContain("readonly rollback: (");
+    expect(contractsSource).toContain("request: PiPackageRollbackRequest");
+    expect(contractsSource).toContain("Promise<PiPackageRollbackResult>");
     expect(packageApi).toContain('ipcRenderer.invoke("piPackages.summary")');
     expect(packageApi).toContain('"piPackages.install"');
     expect(packageApi).toContain("PiPackageInstallRequestSchema.parse(request)");
@@ -77,6 +83,12 @@ describe("desktop shell build contract", () => {
     expect(packageApi).toContain('"piPackages.uninstall"');
     expect(packageApi).toContain("PiPackageUninstallRequestSchema.parse(request)");
     expect(packageApi).toContain("PiPackageUninstallResultSchema.parse(await ipcRenderer.invoke");
+    expect(packageApi).toContain('"piPackages.update"');
+    expect(packageApi).toContain("PiPackageUpdateRequestSchema.parse(request)");
+    expect(packageApi).toContain("PiPackageUpdateResultSchema.parse(await ipcRenderer.invoke");
+    expect(packageApi).toContain('"piPackages.rollback"');
+    expect(packageApi).toContain("PiPackageRollbackRequestSchema.parse(request)");
+    expect(packageApi).toContain("PiPackageRollbackResultSchema.parse(await ipcRenderer.invoke");
     for (const privateField of ["path", "tarball", "integrity", "authority", "rawError"]) {
       expect(packageApi).not.toContain(privateField);
     }

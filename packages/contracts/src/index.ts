@@ -119,8 +119,12 @@ import type {
   PiPackageCatalogQueryRequest,
   PiPackageCatalogQueryResult,
   PiPackageRegistryQueryResult,
+  PiPackageRollbackRequest,
+  PiPackageRollbackResult,
   PiPackageUninstallRequest,
   PiPackageUninstallResult,
+  PiPackageUpdateRequest,
+  PiPackageUpdateResult,
   PigeErrorSummary,
   ProposalState,
   ProposalTrustLevel,
@@ -248,6 +252,7 @@ export type {
   PiPackageInstallResult,
   PiPackageInstallTaskId,
   PiPackageInstalledSummary,
+  PiPackageId,
   PiPackageCatalogEntry,
   PiPackageCatalogId,
   PiPackageCatalogQueryRequest,
@@ -257,11 +262,18 @@ export type {
   PiPackageName,
   PiPackageRegistryQueryResult,
   PiPackageRegistrySummary,
+  PiPackageRollbackId,
+  PiPackageRollbackRequest,
+  PiPackageRollbackRequestId,
+  PiPackageRollbackResult,
   PiPackageType,
   PiPackageVersion,
   PiPackageUninstallRequest,
   PiPackageUninstallRequestId,
   PiPackageUninstallResult,
+  PiPackageUpdateRequest,
+  PiPackageUpdateRequestId,
+  PiPackageUpdateResult,
   KnowledgeHealthCounts,
   KnowledgeHealthIndexGeneration,
   KnowledgeHealthIssueKind,
@@ -1584,6 +1596,12 @@ export interface PigeDesktopApi {
     readonly uninstall: (
       request: PiPackageUninstallRequest
     ) => Promise<PiPackageUninstallResult>;
+    readonly update: (
+      request: PiPackageUpdateRequest
+    ) => Promise<PiPackageUpdateResult>;
+    readonly rollback: (
+      request: PiPackageRollbackRequest
+    ) => Promise<PiPackageRollbackResult>;
   };
   readonly taskExecution: {
     readonly interaction: () => Promise<TaskInteractionPendingResult>;

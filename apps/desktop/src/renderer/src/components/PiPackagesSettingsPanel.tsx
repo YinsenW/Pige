@@ -7,8 +7,12 @@ import type {
   PiPackageInstallResult,
   PiPackageRegistryQueryResult,
   PiPackageRegistrySummary,
+  PiPackageRollbackRequest,
+  PiPackageRollbackResult,
   PiPackageUninstallRequest,
-  PiPackageUninstallResult
+  PiPackageUninstallResult,
+  PiPackageUpdateRequest,
+  PiPackageUpdateResult
 } from "@pige/contracts";
 import { PigeIcon } from "./PigeIcon";
 
@@ -17,9 +21,13 @@ export interface PiPackagesApi {
   catalogQuery: (request: PiPackageCatalogQueryRequest) => Promise<PiPackageCatalogQueryResult>;
   install: (request: PiPackageInstallRequest) => Promise<PiPackageInstallResult>;
   uninstall: (request: PiPackageUninstallRequest) => Promise<PiPackageUninstallResult>;
+  update: (request: PiPackageUpdateRequest) => Promise<PiPackageUpdateResult>;
+  rollback: (request: PiPackageRollbackRequest) => Promise<PiPackageRollbackResult>;
 }
 
 type ReadState = "loading" | "ready" | "failed";
+type UpdateDraft = { readonly targetVersion: string; readonly targetIntegrity: string };
+type PackageMutationFocus = { readonly packageId: string; readonly action: "update" | "rollback" };
 
 export function PiPackagesSettingsPanel(props: {
   readonly api: PiPackagesApi;
@@ -37,7 +45,11 @@ export function PiPackagesSettingsPanel(props: {
   const [catalogState, setCatalogState] = useState<ReadState>("loading");
   const [installing, setInstalling] = useState(false);
   const [uninstallingPackageId, setUninstallingPackageId] = useState<string | null>(null);
+  const [updatingPackageId, setUpdatingPackageId] = useState<string | null>(null);
+  const [rollingBackPackageId, setRollingBackPackageId] = useState<string | null>(null);
+  const [updateDrafts, setUpdateDrafts] = useState<Readonly<Record<string, UpdateDraft>>>({});
   const [statusKey, setStatusKey] = useState<string | null>(null);
+  const [maintenanceStatusKey, setMaintenanceStatusKey] = useState<string | null>(null);
   const pageRef = useRef<HTMLElement | null>(null);
   const mountedRef = useRef(true);
   const summarySequenceRef = useRef(0);
@@ -46,9 +58,14 @@ export function PiPackagesSettingsPanel(props: {
   const installActiveRef = useRef(false);
   const uninstallSequenceRef = useRef(0);
   const uninstallActiveRef = useRef(false);
+  const updateSequenceRef = useRef(0);
+  const updateActiveRef = useRef(false);
+  const rollbackSequenceRef = useRef(0);
+  const rollbackActiveRef = useRef(false);
   const pendingInstalledPackageFocusRef = useRef<string | null>(null);
   const pendingPackageFocusRef = useRef<string | null>(null);
   const pendingRegistryFocusRef = useRef(false);
+  const pendingMutationFocusRef = useRef<PackageMutationFocus | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -58,6 +75,8 @@ export function PiPackagesSettingsPanel(props: {
       catalogSequenceRef.current += 1;
       installSequenceRef.current += 1;
       uninstallSequenceRef.current += 1;
+      updateSequenceRef.current += 1;
+      rollbackSequenceRef.current += 1;
     };
   }, []);
 
@@ -112,7 +131,25 @@ export function PiPackagesSettingsPanel(props: {
   useEffect(() => {
     const installedPackageId = pendingInstalledPackageFocusRef.current;
     const packageId = pendingPackageFocusRef.current;
-    if (installing || uninstallingPackageId) return;
+    const mutationFocus = pendingMutationFocusRef.current;
+    if (installing || uninstallingPackageId || updatingPackageId || rollingBackPackageId) return;
+    if (mutationFocus) {
+      pendingMutationFocusRef.current = null;
+      const selector = mutationFocus.action === "update"
+        ? `[data-package-update-version-id="${mutationFocus.packageId}"]`
+        : `[data-package-rollback-id="${mutationFocus.packageId}"]`;
+      const packageAction = pageRef.current?.querySelector<HTMLElement>(selector);
+      if (packageAction) {
+        packageAction.focus();
+        return;
+      }
+      const packageRow = pageRef.current?.querySelector<HTMLElement>(`[data-package-id="${mutationFocus.packageId}"]`);
+      if (packageRow) {
+        packageRow.focus();
+        return;
+      }
+      pendingRegistryFocusRef.current = true;
+    }
     if (installedPackageId) {
       pendingInstalledPackageFocusRef.current = null;
       const packageRow = pageRef.current?.querySelector<HTMLElement>(`[data-package-id="${installedPackageId}"]`);
@@ -133,10 +170,10 @@ export function PiPackagesSettingsPanel(props: {
       pendingRegistryFocusRef.current = false;
       pageRef.current?.querySelector<HTMLElement>("#packages-registry-title")?.focus();
     }
-  }, [installing, registry, uninstallingPackageId]);
+  }, [installing, registry, rollingBackPackageId, uninstallingPackageId, updatingPackageId]);
 
   const installPackage = async (): Promise<void> => {
-    if (installActiveRef.current || uninstallActiveRef.current || !registry || packageName.length === 0 || version.length === 0) return;
+    if (installActiveRef.current || uninstallActiveRef.current || updateActiveRef.current || rollbackActiveRef.current || !registry || packageName.length === 0 || version.length === 0) return;
     const sequence = ++installSequenceRef.current;
     const request: PiPackageInstallRequest = {
       apiVersion: 1,
@@ -186,7 +223,7 @@ export function PiPackagesSettingsPanel(props: {
   };
 
   const uninstallPackage = async (packageId: string): Promise<void> => {
-    if (installActiveRef.current || uninstallActiveRef.current || !registry || readState !== "ready") return;
+    if (installActiveRef.current || uninstallActiveRef.current || updateActiveRef.current || rollbackActiveRef.current || !registry || readState !== "ready") return;
     const installedPackage = registry.packages.find((item) => item.packageId === packageId);
     if (!installedPackage) return;
     const sequence = ++uninstallSequenceRef.current;
@@ -199,28 +236,29 @@ export function PiPackagesSettingsPanel(props: {
     uninstallActiveRef.current = true;
     setUninstallingPackageId(packageId);
     setStatusKey(null);
+    setMaintenanceStatusKey(null);
     pendingPackageFocusRef.current = packageId;
     pendingRegistryFocusRef.current = false;
     try {
       const result = await props.api.uninstall(request);
       if (!mountedRef.current || sequence !== uninstallSequenceRef.current) return;
       if (result.requestId !== request.requestId || result.packageId !== request.packageId) {
-        setStatusKey("packages.removeStatus.failed");
+        setMaintenanceStatusKey("packages.removeStatus.failed");
         return;
       }
       if (result.status === "failed") {
-        setStatusKey("packages.removeStatus.failed");
+        setMaintenanceStatusKey("packages.removeStatus.failed");
         return;
       }
       setRegistry(result.registry);
-      setStatusKey(`packages.removeStatus.${result.status}`);
+      setMaintenanceStatusKey(`packages.removeStatus.${result.status}`);
       if (!result.registry.packages.some((item) => item.packageId === request.packageId)) {
         pendingPackageFocusRef.current = result.registry.packages[0]?.packageId ?? null;
         pendingRegistryFocusRef.current = result.registry.packages.length === 0;
       }
     } catch {
       if (mountedRef.current && sequence === uninstallSequenceRef.current) {
-        setStatusKey("packages.removeStatus.failed");
+        setMaintenanceStatusKey("packages.removeStatus.failed");
       }
     } finally {
       if (mountedRef.current && sequence === uninstallSequenceRef.current) {
@@ -229,6 +267,115 @@ export function PiPackagesSettingsPanel(props: {
       }
     }
   };
+
+  const updatePackage = async (packageId: string): Promise<void> => {
+    if (installActiveRef.current || uninstallActiveRef.current || updateActiveRef.current || rollbackActiveRef.current || !registry || readState !== "ready") return;
+    const installedPackage = registry.packages.find((item) => item.packageId === packageId);
+    const draft = updateDrafts[packageId];
+    if (!installedPackage?.canUpdate || !draft || draft.targetVersion.length === 0 || draft.targetIntegrity.length === 0) return;
+    const sequence = ++updateSequenceRef.current;
+    const request: PiPackageUpdateRequest = {
+      apiVersion: 1,
+      requestId: createPiPackageUpdateRequestId(),
+      packageId: installedPackage.packageId,
+      expectedRegistryRevision: registry.revision,
+      targetVersion: draft.targetVersion,
+      targetIntegrity: draft.targetIntegrity
+    };
+    updateActiveRef.current = true;
+    setUpdatingPackageId(packageId);
+    setStatusKey(null);
+    setMaintenanceStatusKey(null);
+    pendingMutationFocusRef.current = { packageId, action: "update" };
+    pendingRegistryFocusRef.current = false;
+    try {
+      const result = await props.api.update(request);
+      if (!mountedRef.current || sequence !== updateSequenceRef.current) return;
+      if (
+        result.requestId !== request.requestId ||
+        result.packageId !== request.packageId ||
+        result.targetVersion !== request.targetVersion ||
+        result.targetIntegrity !== request.targetIntegrity
+      ) {
+        setMaintenanceStatusKey("packages.updateStatus.failed");
+        return;
+      }
+      if (result.status === "failed") {
+        setMaintenanceStatusKey("packages.updateStatus.failed");
+        return;
+      }
+      setRegistry(result.registry);
+      setMaintenanceStatusKey(`packages.updateStatus.${result.status}`);
+      if (result.status === "committed") {
+        setUpdateDrafts((current) => {
+          const next = { ...current };
+          delete next[packageId];
+          return next;
+        });
+      }
+    } catch {
+      if (mountedRef.current && sequence === updateSequenceRef.current) {
+        setMaintenanceStatusKey("packages.updateStatus.failed");
+      }
+    } finally {
+      if (mountedRef.current && sequence === updateSequenceRef.current) {
+        updateActiveRef.current = false;
+        setUpdatingPackageId(null);
+      }
+    }
+  };
+
+  const rollbackPackage = async (packageId: string): Promise<void> => {
+    if (installActiveRef.current || uninstallActiveRef.current || updateActiveRef.current || rollbackActiveRef.current || !registry || readState !== "ready") return;
+    const installedPackage = registry.packages.find((item) => item.packageId === packageId);
+    const rollbackTarget = installedPackage?.canRollback ? installedPackage.rollbackTarget : null;
+    if (!installedPackage || !rollbackTarget) return;
+    const sequence = ++rollbackSequenceRef.current;
+    const request: PiPackageRollbackRequest = {
+      apiVersion: 1,
+      requestId: createPiPackageRollbackRequestId(),
+      packageId: installedPackage.packageId,
+      expectedRegistryRevision: registry.revision,
+      rollbackId: rollbackTarget.rollbackId,
+      targetVersion: rollbackTarget.targetVersion
+    };
+    rollbackActiveRef.current = true;
+    setRollingBackPackageId(packageId);
+    setStatusKey(null);
+    setMaintenanceStatusKey(null);
+    pendingMutationFocusRef.current = { packageId, action: "rollback" };
+    pendingRegistryFocusRef.current = false;
+    try {
+      const result = await props.api.rollback(request);
+      if (!mountedRef.current || sequence !== rollbackSequenceRef.current) return;
+      if (
+        result.requestId !== request.requestId ||
+        result.packageId !== request.packageId ||
+        result.rollbackId !== request.rollbackId ||
+        result.targetVersion !== request.targetVersion
+      ) {
+        setMaintenanceStatusKey("packages.rollbackStatus.failed");
+        return;
+      }
+      if (result.status === "failed") {
+        setMaintenanceStatusKey("packages.rollbackStatus.failed");
+        return;
+      }
+      setRegistry(result.registry);
+      setMaintenanceStatusKey(`packages.rollbackStatus.${result.status}`);
+    } catch {
+      if (mountedRef.current && sequence === rollbackSequenceRef.current) {
+        setMaintenanceStatusKey("packages.rollbackStatus.failed");
+      }
+    } finally {
+      if (mountedRef.current && sequence === rollbackSequenceRef.current) {
+        rollbackActiveRef.current = false;
+        setRollingBackPackageId(null);
+      }
+    }
+  };
+
+  const mutationBusy = installing || uninstallingPackageId !== null || updatingPackageId !== null || rollingBackPackageId !== null;
 
   return (
     <section ref={pageRef} className="settings-page settings-packages" aria-labelledby="settings-packages-title">
@@ -317,7 +464,7 @@ export function PiPackagesSettingsPanel(props: {
                   <button
                     className="settings-button"
                     type="button"
-                    disabled={installing || uninstallingPackageId !== null || readState !== "ready"}
+                    disabled={mutationBusy || readState !== "ready"}
                     onClick={() => {
                       setPackageName(entry.packageName);
                       setVersion(entry.version);
@@ -355,8 +502,19 @@ export function PiPackagesSettingsPanel(props: {
           </div>
         ) : registry && registry.packages.length > 0 ? (
           <div className="settings-card" data-package-registry-revision={registry.revision}>
-            {registry.packages.map((item) => (
-              <div className="settings-row tall" data-package-id={item.packageId} key={item.packageId} tabIndex={-1}>
+            {registry.packages.map((item) => {
+              const updateDraft = updateDrafts[item.packageId] ?? { targetVersion: "", targetIntegrity: "" };
+              return (
+              <form
+                className="settings-row tall"
+                data-package-id={item.packageId}
+                key={item.packageId}
+                tabIndex={-1}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void updatePackage(item.packageId);
+                }}
+              >
                 <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="package" size={17} /></span>
                 <div className="settings-row-copy">
                   <strong>{item.packageName}</strong>
@@ -366,20 +524,93 @@ export function PiPackagesSettingsPanel(props: {
                     <span>{props.t("packages.trust.community")}</span>
                     {item.packageTypes.map((type) => <span key={type}>{props.t(`packages.type.${type}`)}</span>)}
                   </div>
+                  {item.canUpdate ? (
+                    <>
+                      <label htmlFor={`pi-package-update-version-${item.packageId}`}><strong>{props.t("packages.updateVersion")}</strong></label>
+                      <span>{props.t("packages.updateVersionDescription")}</span>
+                      <input
+                        className="settings-input"
+                        id={`pi-package-update-version-${item.packageId}`}
+                        data-package-update-version-id={item.packageId}
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        value={updateDraft.targetVersion}
+                        placeholder={props.t("packages.versionPlaceholder")}
+                        disabled={mutationBusy || readState !== "ready"}
+                        onInput={(event) => {
+                          const targetVersion = event.currentTarget.value;
+                          setUpdateDrafts((current) => ({
+                            ...current,
+                            [item.packageId]: {
+                              ...(current[item.packageId] ?? { targetVersion: "", targetIntegrity: "" }),
+                              targetVersion
+                            }
+                          }));
+                          setMaintenanceStatusKey(null);
+                        }}
+                      />
+                      <label htmlFor={`pi-package-update-integrity-${item.packageId}`}><strong>{props.t("packages.updateIntegrity")}</strong></label>
+                      <span>{props.t("packages.updateIntegrityDescription")}</span>
+                      <input
+                        className="settings-input"
+                        id={`pi-package-update-integrity-${item.packageId}`}
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        value={updateDraft.targetIntegrity}
+                        placeholder="sha512-..."
+                        disabled={mutationBusy || readState !== "ready"}
+                        onInput={(event) => {
+                          const targetIntegrity = event.currentTarget.value;
+                          setUpdateDrafts((current) => ({
+                            ...current,
+                            [item.packageId]: {
+                              ...(current[item.packageId] ?? { targetVersion: "", targetIntegrity: "" }),
+                              targetIntegrity
+                            }
+                          }));
+                          setMaintenanceStatusKey(null);
+                        }}
+                      />
+                    </>
+                  ) : null}
                 </div>
                 <div className="settings-row-control">
+                  {item.canUpdate ? (
+                    <button
+                      className="settings-button"
+                      type="submit"
+                      disabled={mutationBusy || readState !== "ready" || updateDraft.targetVersion.length === 0 || updateDraft.targetIntegrity.length === 0}
+                    >
+                      {props.t(updatingPackageId === item.packageId ? "packages.updating" : "packages.update")}
+                    </button>
+                  ) : null}
+                  {item.canRollback && item.rollbackTarget ? (
+                    <button
+                      className="settings-button"
+                      type="button"
+                      data-package-rollback-id={item.packageId}
+                      disabled={mutationBusy || readState !== "ready"}
+                      onClick={() => void rollbackPackage(item.packageId)}
+                    >
+                      {props.t(rollingBackPackageId === item.packageId ? "packages.rollingBack" : "packages.rollback")}
+                      {rollingBackPackageId === item.packageId ? null : ` v${item.rollbackTarget.targetVersion}`}
+                    </button>
+                  ) : null}
                   <button
                     className="settings-button"
                     type="button"
                     data-package-remove-id={item.packageId}
-                    disabled={installing || uninstallingPackageId !== null || readState !== "ready"}
+                    disabled={mutationBusy || readState !== "ready"}
                     onClick={() => void uninstallPackage(item.packageId)}
                   >
                     {props.t(uninstallingPackageId === item.packageId ? "packages.removing" : "packages.remove")}
                   </button>
                 </div>
-              </div>
-            ))}
+              </form>
+              );
+            })}
           </div>
         ) : (
           <div className="settings-card skills-empty-card">
@@ -390,6 +621,7 @@ export function PiPackagesSettingsPanel(props: {
             </div>
           </div>
         )}
+        {maintenanceStatusKey ? <p className="settings-note" role="status" aria-live="polite">{props.t(maintenanceStatusKey)}</p> : null}
       </section>
 
       <section className="settings-section" role="group" aria-labelledby="packages-install-title">
@@ -414,7 +646,7 @@ export function PiPackagesSettingsPanel(props: {
               spellCheck={false}
               value={packageName}
               placeholder={props.t("packages.packageNamePlaceholder")}
-              disabled={installing || uninstallingPackageId !== null || readState !== "ready"}
+              disabled={mutationBusy || readState !== "ready"}
               onInput={(event) => {
                 setPackageName(event.currentTarget.value);
                 setIntegrity("");
@@ -435,7 +667,7 @@ export function PiPackagesSettingsPanel(props: {
               spellCheck={false}
               value={version}
               placeholder={props.t("packages.versionPlaceholder")}
-              disabled={installing || uninstallingPackageId !== null || readState !== "ready"}
+              disabled={mutationBusy || readState !== "ready"}
               onInput={(event) => {
                 setVersion(event.currentTarget.value);
                 setIntegrity("");
@@ -461,7 +693,7 @@ export function PiPackagesSettingsPanel(props: {
               <button
                 className="settings-button primary"
                 type="submit"
-                disabled={installing || uninstallingPackageId !== null || readState !== "ready" || packageName.length === 0 || version.length === 0}
+                disabled={mutationBusy || readState !== "ready" || packageName.length === 0 || version.length === 0}
               >
                 {props.t(installing ? "packages.installing" : "packages.install")}
               </button>
@@ -490,4 +722,16 @@ function createPiPackageCatalogQueryRequestId(): `pi_package_catalog_request_${s
   const bytes = new Uint8Array(16);
   globalThis.crypto.getRandomValues(bytes);
   return `pi_package_catalog_request_${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function createPiPackageUpdateRequestId(): `pi_package_update_request_${string}` {
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  return `pi_package_update_request_${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function createPiPackageRollbackRequestId(): `pi_package_rollback_request_${string}` {
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  return `pi_package_rollback_request_${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
 }

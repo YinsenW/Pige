@@ -5,8 +5,12 @@ import { PigeDomainError } from "@pige/domain";
 
 const OWNER_MARKER = ".pige-package-owner.json";
 const RECEIPT_NAME = ".pige-package-uninstall.json";
+const UPDATE_RECEIPT_NAME = ".pige-package-update.json";
 const MAX_RECEIPT_BYTES = 1024 * 1024;
 const REQUEST_PATTERN = /^pi_package_uninstall_request_[a-z0-9]{16,64}$/u;
+const UPDATE_REQUEST_PATTERN = /^pi_package_update_request_[a-z0-9]{16,64}$/u;
+const ROLLBACK_REQUEST_PATTERN = /^pi_package_rollback_request_[a-z0-9]{16,64}$/u;
+const ROLLBACK_ID_PATTERN = /^pi_package_rollback_[a-z0-9]{16,64}$/u;
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 
 export interface PiPackageLifecycleRecord {
@@ -28,6 +32,22 @@ export interface PiPackageUninstallReceipt<T extends PiPackageLifecycleRecord> {
   readonly committedRegistryRevision?: number;
 }
 
+export interface PiPackageUpdateReceipt<T extends PiPackageLifecycleRecord> {
+  readonly schemaVersion: 1;
+  readonly state: "prepared" | "committed" | "rollback_prepared" | "rolled_back" | "superseded";
+  readonly requestId: string;
+  readonly rollbackId: string;
+  readonly packageId: string;
+  readonly expectedRegistryRevision: number;
+  readonly previousRecord: T;
+  readonly nextRecord: T;
+  readonly createdAt: string;
+  readonly committedRegistryRevision?: number;
+  readonly rollbackRequestId?: string;
+  readonly rollbackExpectedRegistryRevision?: number;
+  readonly rolledBackRegistryRevision?: number;
+}
+
 export interface PiPackageLifecycleStoreOptions<T extends PiPackageLifecycleRecord> {
   readonly packageRoot: string;
   readonly installedRoot: string;
@@ -38,12 +58,14 @@ export class PiPackageLifecycleStore<T extends PiPackageLifecycleRecord> {
   readonly #packageRoot: string;
   readonly #installedRoot: string;
   readonly #trashRoot: string;
+  readonly #updatesRoot: string;
   readonly #parseRecord: (value: unknown) => T;
 
   constructor(options: PiPackageLifecycleStoreOptions<T>) {
     this.#packageRoot = options.packageRoot;
     this.#installedRoot = options.installedRoot;
     this.#trashRoot = path.join(options.packageRoot, "trash");
+    this.#updatesRoot = path.join(options.packageRoot, "updates");
     this.#parseRecord = options.parseRecord;
     this.prepare();
   }
@@ -51,7 +73,9 @@ export class PiPackageLifecycleStore<T extends PiPackageLifecycleRecord> {
   prepare(): void {
     assertDirectory(this.#packageRoot, this.#installedRoot);
     if (!fs.existsSync(this.#trashRoot)) fs.mkdirSync(this.#trashRoot, { mode: 0o700 });
+    if (!fs.existsSync(this.#updatesRoot)) fs.mkdirSync(this.#updatesRoot, { mode: 0o700 });
     assertDirectory(this.#packageRoot, this.#trashRoot);
+    assertDirectory(this.#packageRoot, this.#updatesRoot);
     let removedTemporary = false;
     for (const entry of fs.readdirSync(this.#trashRoot, { withFileTypes: true })) {
       if (!entry.isDirectory() || entry.isSymbolicLink() || !/^pi_package_uninstall_request_[a-z0-9]{16,64}\.[0-9a-f-]{36}\.tmp$/u.test(entry.name)) continue;
@@ -61,6 +85,14 @@ export class PiPackageLifecycleStore<T extends PiPackageLifecycleRecord> {
       removedTemporary = true;
     }
     if (removedTemporary) fsyncDirectory(this.#trashRoot);
+    for (const entry of fs.readdirSync(this.#updatesRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.isSymbolicLink() || !/^pi_package_rollback_[a-z0-9]{16,64}\.[0-9a-f-]{36}\.tmp$/u.test(entry.name)) continue;
+      const temporary = path.join(this.#updatesRoot, entry.name);
+      assertDirectory(this.#updatesRoot, temporary);
+      fs.rmSync(temporary, { recursive: true });
+      removedTemporary = true;
+    }
+    if (removedTemporary) fsyncDirectory(this.#updatesRoot);
   }
 
   assertInstalled(record: T): void {
@@ -169,6 +201,188 @@ export class PiPackageLifecycleStore<T extends PiPackageLifecycleRecord> {
     return committed;
   }
 
+  prepareUpdate(input: {
+    readonly requestId: string;
+    readonly rollbackId: string;
+    readonly expectedRegistryRevision: number;
+    readonly previousRecord: T;
+    readonly nextRecord: T;
+    readonly candidatePath: string;
+    readonly createdAt: string;
+  }): PiPackageUpdateReceipt<T> {
+    assertUpdateRequestId(input.requestId);
+    assertRollbackId(input.rollbackId);
+    const previousRecord = this.#parseRecord(input.previousRecord);
+    const nextRecord = this.#parseRecord(input.nextRecord);
+    if (
+      previousRecord.packageId !== nextRecord.packageId || previousRecord.version === nextRecord.version ||
+      !Number.isSafeInteger(input.expectedRegistryRevision) || input.expectedRegistryRevision < 0
+    ) throw lifecycleError("package.update_receipt_invalid");
+    this.assertInstalled(previousRecord);
+    assertTreeHash(input.candidatePath, nextRecord.treeHash);
+    const expected: PiPackageUpdateReceipt<T> = {
+      schemaVersion: 1, state: "prepared", requestId: input.requestId, rollbackId: input.rollbackId,
+      packageId: previousRecord.packageId, expectedRegistryRevision: input.expectedRegistryRevision,
+      previousRecord, nextRecord, createdAt: input.createdAt
+    };
+    const existing = this.readUpdateReceipt(input.rollbackId);
+    if (existing) {
+      if (!sameUpdateIntent(existing, expected)) throw lifecycleError("package.update_receipt_conflict");
+      return existing;
+    }
+    const target = this.#updateDirectory(input.rollbackId);
+    const temporary = `${target}.${randomUUID()}.tmp`;
+    fs.mkdirSync(temporary, { mode: 0o700 });
+    try {
+      writePrivateJson(path.join(temporary, UPDATE_RECEIPT_NAME), expected);
+      fs.renameSync(input.candidatePath, path.join(temporary, "candidate"));
+      fsyncDirectory(temporary);
+      fs.renameSync(temporary, target);
+      fsyncDirectory(this.#updatesRoot);
+    } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
+    return expected;
+  }
+
+  readUpdateReceipt(rollbackId: string): PiPackageUpdateReceipt<T> | undefined {
+    assertRollbackId(rollbackId);
+    const directory = this.#updateDirectory(rollbackId);
+    if (!fs.existsSync(directory)) return undefined;
+    assertDirectory(this.#updatesRoot, directory);
+    const source = readBoundedNoFollow(path.join(directory, UPDATE_RECEIPT_NAME), MAX_RECEIPT_BYTES);
+    if (source === undefined) throw lifecycleError("package.update_receipt_invalid");
+    let value: unknown;
+    try { value = JSON.parse(source); } catch { throw lifecycleError("package.update_receipt_invalid"); }
+    return this.#parseUpdateReceipt(value, rollbackId);
+  }
+
+  listPendingUpdates(): readonly PiPackageUpdateReceipt<T>[] {
+    this.prepare();
+    return this.#listUpdates().filter((receipt) => receipt.state === "prepared" || receipt.state === "rollback_prepared");
+  }
+
+  rollbackTarget(record: T): { readonly rollbackId: string; readonly targetVersion: string } | undefined {
+    const receipt = this.#listUpdates().find((candidate) =>
+      candidate.state === "committed" && candidate.packageId === record.packageId &&
+      sameLifecycleRecord(candidate.nextRecord, record)
+    );
+    return receipt ? { rollbackId: receipt.rollbackId, targetVersion: receipt.previousRecord.version } : undefined;
+  }
+
+  updateReceiptForRequest(requestId: string): PiPackageUpdateReceipt<T> | undefined {
+    assertUpdateRequestId(requestId);
+    return this.#listUpdates().find((receipt) => receipt.requestId === requestId);
+  }
+
+  ensureUpdated(receipt: PiPackageUpdateReceipt<T>): void {
+    const current = this.#readMatchingUpdateReceipt(receipt);
+    const directory = this.#updateDirectory(current.rollbackId);
+    const priorPath = path.join(directory, "previous");
+    const candidatePath = path.join(directory, "candidate");
+    const previousInstalledPath = this.#installedPath(current.previousRecord);
+    const nextInstalledPath = this.#installedPath(current.nextRecord);
+    if (!fs.existsSync(priorPath)) {
+      if (!fs.existsSync(previousInstalledPath)) throw lifecycleError("package.update_payload_missing");
+      this.assertInstalled(current.previousRecord);
+      fs.renameSync(previousInstalledPath, priorPath);
+      fsyncDirectory(path.dirname(previousInstalledPath));
+      fsyncDirectory(directory);
+    }
+    assertDirectory(directory, priorPath);
+    assertTreeHash(priorPath, current.previousRecord.treeHash);
+    if (!fs.existsSync(nextInstalledPath)) {
+      if (!fs.existsSync(candidatePath)) throw lifecycleError("package.update_payload_missing");
+      assertDirectory(directory, candidatePath);
+      assertTreeHash(candidatePath, current.nextRecord.treeHash);
+      fs.mkdirSync(path.dirname(nextInstalledPath), { recursive: true, mode: 0o700 });
+      fs.renameSync(candidatePath, nextInstalledPath);
+      fsyncDirectory(path.dirname(nextInstalledPath));
+      fsyncDirectory(directory);
+    }
+    this.assertInstalled(current.nextRecord);
+  }
+
+  markUpdateCommitted(receipt: PiPackageUpdateReceipt<T>, revision: number): PiPackageUpdateReceipt<T> {
+    const current = this.#readMatchingUpdateReceipt(receipt);
+    if (!Number.isSafeInteger(revision) || revision < 1) throw lifecycleError("package.update_receipt_invalid");
+    this.ensureUpdated(current);
+    if (current.state === "committed") {
+      if (current.committedRegistryRevision !== revision) throw lifecycleError("package.update_receipt_conflict");
+      return current;
+    }
+    if (current.state !== "prepared") throw lifecycleError("package.update_receipt_conflict");
+    const committed: PiPackageUpdateReceipt<T> = { ...current, state: "committed", committedRegistryRevision: revision };
+    this.#supersedePriorRollbacks(committed);
+    this.#writeUpdateReceipt(committed);
+    return committed;
+  }
+
+  prepareRollback(input: {
+    readonly receipt: PiPackageUpdateReceipt<T>;
+    readonly requestId: string;
+    readonly expectedRegistryRevision: number;
+  }): PiPackageUpdateReceipt<T> {
+    assertRollbackRequestId(input.requestId);
+    const current = this.#readMatchingUpdateReceipt(input.receipt);
+    if (current.state === "rollback_prepared") {
+      if (current.rollbackRequestId !== input.requestId || current.rollbackExpectedRegistryRevision !== input.expectedRegistryRevision) {
+        throw lifecycleError("package.rollback_receipt_conflict");
+      }
+      return current;
+    }
+    if (current.state !== "committed" || input.expectedRegistryRevision < current.committedRegistryRevision!) {
+      throw lifecycleError("package.rollback_receipt_conflict");
+    }
+    this.assertInstalled(current.nextRecord);
+    const prepared: PiPackageUpdateReceipt<T> = {
+      ...current, state: "rollback_prepared", rollbackRequestId: input.requestId,
+      rollbackExpectedRegistryRevision: input.expectedRegistryRevision
+    };
+    this.#writeUpdateReceipt(prepared);
+    return prepared;
+  }
+
+  ensureRolledBack(receipt: PiPackageUpdateReceipt<T>): void {
+    const current = this.#readMatchingUpdateReceipt(receipt);
+    if (current.state !== "rollback_prepared" && current.state !== "rolled_back") {
+      throw lifecycleError("package.rollback_receipt_conflict");
+    }
+    const directory = this.#updateDirectory(current.rollbackId);
+    const previousPath = path.join(directory, "previous");
+    const replacedPath = path.join(directory, "replaced");
+    const nextInstalledPath = this.#installedPath(current.nextRecord);
+    const previousInstalledPath = this.#installedPath(current.previousRecord);
+    if (!fs.existsSync(replacedPath)) {
+      if (!fs.existsSync(nextInstalledPath)) throw lifecycleError("package.rollback_payload_missing");
+      this.assertInstalled(current.nextRecord);
+      fs.renameSync(nextInstalledPath, replacedPath);
+      fsyncDirectory(path.dirname(nextInstalledPath));
+      fsyncDirectory(directory);
+    }
+    assertDirectory(directory, replacedPath);
+    assertTreeHash(replacedPath, current.nextRecord.treeHash);
+    if (!fs.existsSync(previousInstalledPath)) {
+      if (!fs.existsSync(previousPath)) throw lifecycleError("package.rollback_payload_missing");
+      fs.mkdirSync(path.dirname(previousInstalledPath), { recursive: true, mode: 0o700 });
+      fs.renameSync(previousPath, previousInstalledPath);
+      fsyncDirectory(path.dirname(previousInstalledPath));
+      fsyncDirectory(directory);
+    }
+    this.assertInstalled(current.previousRecord);
+  }
+
+  markRollbackCommitted(receipt: PiPackageUpdateReceipt<T>, revision: number): PiPackageUpdateReceipt<T> {
+    const current = this.#readMatchingUpdateReceipt(receipt);
+    if (!Number.isSafeInteger(revision) || revision < 1) throw lifecycleError("package.update_receipt_invalid");
+    this.ensureRolledBack(current);
+    if (current.state === "rolled_back") {
+      if (current.rolledBackRegistryRevision !== revision) throw lifecycleError("package.rollback_receipt_conflict");
+      return current;
+    }
+    const committed: PiPackageUpdateReceipt<T> = { ...current, state: "rolled_back", rolledBackRegistryRevision: revision };
+    this.#writeUpdateReceipt(committed);
+    return committed;
+  }
+
   #installedPath(record: T): string {
     const expected = path.join("installed", record.packageId, record.version, record.treeHash.replace(/^sha256:/u, ""));
     if (!SHA256_PATTERN.test(record.treeHash) || record.relativePath !== expected) {
@@ -183,6 +397,39 @@ export class PiPackageLifecycleStore<T extends PiPackageLifecycleRecord> {
     const directory = path.join(this.#trashRoot, requestId);
     ensureConfined(this.#trashRoot, directory);
     return directory;
+  }
+
+  #updateDirectory(rollbackId: string): string {
+    const directory = path.join(this.#updatesRoot, rollbackId);
+    ensureConfined(this.#updatesRoot, directory);
+    return directory;
+  }
+
+  #listUpdates(): readonly PiPackageUpdateReceipt<T>[] {
+    const receipts: PiPackageUpdateReceipt<T>[] = [];
+    for (const entry of fs.readdirSync(this.#updatesRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.isSymbolicLink() || !ROLLBACK_ID_PATTERN.test(entry.name)) continue;
+      const receipt = this.readUpdateReceipt(entry.name);
+      if (receipt) receipts.push(receipt);
+    }
+    return receipts.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  }
+
+  #readMatchingUpdateReceipt(receipt: PiPackageUpdateReceipt<T>): PiPackageUpdateReceipt<T> {
+    const current = this.readUpdateReceipt(receipt.rollbackId);
+    if (!current || !sameUpdateIntent(current, receipt)) throw lifecycleError("package.update_receipt_conflict");
+    return current;
+  }
+
+  #writeUpdateReceipt(receipt: PiPackageUpdateReceipt<T>): void {
+    writeJsonAtomic(path.join(this.#updateDirectory(receipt.rollbackId), UPDATE_RECEIPT_NAME), receipt);
+  }
+
+  #supersedePriorRollbacks(current: PiPackageUpdateReceipt<T>): void {
+    for (const receipt of this.#listUpdates()) {
+      if (receipt.rollbackId === current.rollbackId || receipt.packageId !== current.packageId || receipt.state !== "committed") continue;
+      this.#writeUpdateReceipt({ ...receipt, state: "superseded" });
+    }
   }
 
   #readMatchingReceipt(receipt: PiPackageUninstallReceipt<T>): PiPackageUninstallReceipt<T> {
@@ -204,6 +451,46 @@ export class PiPackageLifecycleStore<T extends PiPackageLifecycleRecord> {
       (receipt.state === "prepared" && receipt.committedRegistryRevision !== undefined)
     ) throw lifecycleError("package.uninstall_receipt_invalid");
     return { ...receipt, record } as PiPackageUninstallReceipt<T>;
+  }
+
+  #parseUpdateReceipt(value: unknown, rollbackId: string): PiPackageUpdateReceipt<T> {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw lifecycleError("package.update_receipt_invalid");
+    const receipt = value as Partial<PiPackageUpdateReceipt<T>>;
+    const previousRecord = this.#parseRecord(receipt.previousRecord);
+    const nextRecord = this.#parseRecord(receipt.nextRecord);
+    const states = ["prepared", "committed", "rollback_prepared", "rolled_back", "superseded"];
+    if (
+      receipt.schemaVersion !== 1 || !states.includes(String(receipt.state)) || receipt.rollbackId !== rollbackId ||
+      typeof receipt.requestId !== "string" || !UPDATE_REQUEST_PATTERN.test(receipt.requestId) ||
+      receipt.packageId !== previousRecord.packageId || nextRecord.packageId !== previousRecord.packageId ||
+      previousRecord.version === nextRecord.version || !Number.isSafeInteger(receipt.expectedRegistryRevision) ||
+      receipt.expectedRegistryRevision! < 0 || typeof receipt.createdAt !== "string" || Number.isNaN(Date.parse(receipt.createdAt))
+    ) throw lifecycleError("package.update_receipt_invalid");
+    if (receipt.state !== "prepared" && (!Number.isSafeInteger(receipt.committedRegistryRevision) || receipt.committedRegistryRevision! < 1)) {
+      throw lifecycleError("package.update_receipt_invalid");
+    }
+    if (receipt.state !== "prepared" && receipt.committedRegistryRevision !== receipt.expectedRegistryRevision! + 1) {
+      throw lifecycleError("package.update_receipt_invalid");
+    }
+    if (receipt.state === "prepared" && receipt.committedRegistryRevision !== undefined) throw lifecycleError("package.update_receipt_invalid");
+    if (["rollback_prepared", "rolled_back"].includes(String(receipt.state))) {
+      if (typeof receipt.rollbackRequestId !== "string" || !ROLLBACK_REQUEST_PATTERN.test(receipt.rollbackRequestId) ||
+        !Number.isSafeInteger(receipt.rollbackExpectedRegistryRevision) ||
+        receipt.rollbackExpectedRegistryRevision! < receipt.committedRegistryRevision!) {
+        throw lifecycleError("package.update_receipt_invalid");
+      }
+    } else if (receipt.rollbackRequestId !== undefined || receipt.rollbackExpectedRegistryRevision !== undefined) {
+      throw lifecycleError("package.update_receipt_invalid");
+    }
+    if (receipt.state === "rolled_back") {
+      if (!Number.isSafeInteger(receipt.rolledBackRegistryRevision) || receipt.rolledBackRegistryRevision! < 1) {
+        throw lifecycleError("package.update_receipt_invalid");
+      }
+      if (receipt.rolledBackRegistryRevision !== receipt.rollbackExpectedRegistryRevision! + 1) {
+        throw lifecycleError("package.update_receipt_invalid");
+      }
+    } else if (receipt.rolledBackRegistryRevision !== undefined) throw lifecycleError("package.update_receipt_invalid");
+    return { ...receipt, previousRecord, nextRecord } as PiPackageUpdateReceipt<T>;
   }
 }
 
@@ -309,8 +596,34 @@ function sameIntent<T extends PiPackageLifecycleRecord>(
     left.expectedRegistryRevision === right.expectedRegistryRevision && JSON.stringify(left.record) === JSON.stringify(right.record);
 }
 
+function sameUpdateIntent<T extends PiPackageLifecycleRecord>(
+  left: PiPackageUpdateReceipt<T>,
+  right: PiPackageUpdateReceipt<T>
+): boolean {
+  return left.requestId === right.requestId && left.rollbackId === right.rollbackId &&
+    left.packageId === right.packageId && left.expectedRegistryRevision === right.expectedRegistryRevision &&
+    sameLifecycleRecord(left.previousRecord, right.previousRecord) &&
+    sameLifecycleRecord(left.nextRecord, right.nextRecord);
+}
+
+function sameLifecycleRecord(left: PiPackageLifecycleRecord, right: PiPackageLifecycleRecord): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function assertRequestId(value: string): void {
   if (!REQUEST_PATTERN.test(value)) throw lifecycleError("package.uninstall_receipt_invalid");
+}
+
+function assertUpdateRequestId(value: string): void {
+  if (!UPDATE_REQUEST_PATTERN.test(value)) throw lifecycleError("package.update_receipt_invalid");
+}
+
+function assertRollbackRequestId(value: string): void {
+  if (!ROLLBACK_REQUEST_PATTERN.test(value)) throw lifecycleError("package.rollback_receipt_invalid");
+}
+
+function assertRollbackId(value: string): void {
+  if (!ROLLBACK_ID_PATTERN.test(value)) throw lifecycleError("package.update_receipt_invalid");
 }
 
 function isErrno(value: unknown, code: string): boolean {

@@ -22,7 +22,10 @@ const registry = {
     packageTypes: ["extension"],
     dependencyCount: 0,
     enabled: false,
-    trust: "community"
+    trust: "community",
+    canUpdate: true,
+    canRollback: false,
+    rollbackTarget: null
   }]
 } as const;
 const uninstallRequest = {
@@ -50,6 +53,17 @@ const catalogEntry = {
   trust: "curated",
   source: "npm"
 } as const;
+const updateRequest = {
+  apiVersion: 1, requestId: "pi_package_update_request_abcdefghijklmnop",
+  packageId: registry.packages[0].packageId, expectedRegistryRevision: registry.revision,
+  targetVersion: "1.3.0",
+  targetIntegrity: "sha512-ycjtInVV9csP+mR3L6gXgPJOsMGQej80ltkqbJhK0Gy3Mc8BgYvPrdQ0HXTFSGeDzr+//V51CYVK9KcgWti+VA=="
+} as const;
+const rollbackRequest = {
+  apiVersion: 1, requestId: "pi_package_rollback_request_abcdefghijklmnop",
+  packageId: registry.packages[0].packageId, expectedRegistryRevision: registry.revision + 1,
+  rollbackId: "pi_package_rollback_abcdefghijklmnop", targetVersion: request.version
+} as const;
 
 function makeHarness(overrides: {
   readonly isTrustedSender?: () => boolean;
@@ -59,6 +73,10 @@ function makeHarness(overrides: {
   readonly install?: (value: typeof request) => unknown;
   readonly confirmUninstall?: (value: typeof uninstallRequest) => unknown;
   readonly uninstall?: (value: typeof uninstallRequest) => unknown;
+  readonly confirmUpdate?: (value: typeof updateRequest) => unknown;
+  readonly update?: (value: typeof updateRequest) => unknown;
+  readonly confirmRollback?: (value: typeof rollbackRequest) => unknown;
+  readonly rollback?: (value: typeof rollbackRequest) => unknown;
 } = {}) {
   const handlers = new Map<string, IpcHandler>();
   const summary = vi.fn(overrides.summary ?? (() => ({ status: "ready", registry })));
@@ -84,6 +102,21 @@ function makeHarness(overrides: {
     registry: { ...registry, revision: registry.revision + 1, packages: [] },
     status: "removed"
   })));
+  const confirmUpdate = vi.fn((_sender, value) => overrides.confirmUpdate?.(value) ?? true);
+  const update = vi.fn(overrides.update ?? ((value) => ({
+    apiVersion: 1, requestId: value.requestId, packageId: value.packageId,
+    targetVersion: value.targetVersion, targetIntegrity: value.targetIntegrity,
+    registry: { ...registry, revision: registry.revision + 1, packages: [{
+      ...registry.packages[0], version: value.targetVersion, canRollback: true,
+      rollbackTarget: { rollbackId: rollbackRequest.rollbackId, targetVersion: request.version }
+    }] }, status: "committed"
+  })));
+  const confirmRollback = vi.fn((_sender, value) => overrides.confirmRollback?.(value) ?? true);
+  const rollback = vi.fn(overrides.rollback ?? ((value) => ({
+    apiVersion: 1, requestId: value.requestId, packageId: value.packageId,
+    rollbackId: value.rollbackId, targetVersion: value.targetVersion,
+    registry: { ...registry, revision: registry.revision + 2 }, status: "committed"
+  })));
   registerPiPackagesIpc({
     ipcMain: {
       handle: (channel, handler) => handlers.set(channel, handler as IpcHandler)
@@ -94,16 +127,22 @@ function makeHarness(overrides: {
     catalogQuery,
     install,
     confirmUninstall,
-    uninstall
+    uninstall,
+    confirmUpdate,
+    update,
+    confirmRollback,
+    rollback
   });
-  return { handlers, summary, catalogQuery, install, confirmUninstall, uninstall };
+  return { handlers, summary, catalogQuery, install, confirmUninstall, uninstall,
+    confirmUpdate, update, confirmRollback, rollback };
 }
 
 describe("registerPiPackagesIpc", () => {
   it("registers the exact package Settings channels and forwards a strict install", async () => {
     const harness = makeHarness();
     expect([...harness.handlers.keys()]).toEqual([
-      "piPackages.summary", "piPackages.catalogQuery", "piPackages.install", "piPackages.uninstall"
+      "piPackages.summary", "piPackages.catalogQuery", "piPackages.install", "piPackages.uninstall",
+      "piPackages.update", "piPackages.rollback"
     ]);
 
     await expect(call(harness, "piPackages.summary")).resolves.toEqual({ status: "ready", registry });
@@ -155,6 +194,40 @@ describe("registerPiPackagesIpc", () => {
     expect(harness.confirmUninstall).toHaveBeenCalledOnce();
     expect(harness.uninstall).toHaveBeenCalledWith(uninstallRequest);
     expect(harness.confirmUninstall.mock.invocationCallOrder[0]).toBeLessThan(harness.uninstall.mock.invocationCallOrder[0]!);
+  });
+
+  it("binds update confirmation to the exact current package, target, integrity, and revision", async () => {
+    const harness = makeHarness();
+    await expect(call(harness, "piPackages.update", updateRequest)).resolves.toMatchObject({
+      requestId: updateRequest.requestId, packageId: updateRequest.packageId,
+      targetVersion: updateRequest.targetVersion, targetIntegrity: updateRequest.targetIntegrity,
+      status: "committed", registry: { revision: registry.revision + 1 }
+    });
+    expect(harness.confirmUpdate).toHaveBeenCalledWith(expect.anything(), {
+      request: updateRequest, packageName: request.packageName, currentVersion: request.version
+    });
+    expect(harness.confirmUpdate.mock.invocationCallOrder[0]).toBeLessThan(harness.update.mock.invocationCallOrder[0]!);
+  });
+
+  it("confirms only the exact advertised one-step rollback and returns fresh denial state", async () => {
+    const updatedRegistry = {
+      ...registry, revision: registry.revision + 1,
+      packages: [{ ...registry.packages[0], version: updateRequest.targetVersion, canRollback: true,
+        rollbackTarget: { rollbackId: rollbackRequest.rollbackId, targetVersion: request.version } }]
+    } as const;
+    const harness = makeHarness({ summary: () => ({ status: "ready", registry: updatedRegistry }) });
+    await expect(call(harness, "piPackages.rollback", rollbackRequest)).resolves.toMatchObject({ status: "committed" });
+    expect(harness.confirmRollback).toHaveBeenCalledWith(expect.anything(), {
+      request: rollbackRequest, packageName: request.packageName, currentVersion: updateRequest.targetVersion
+    });
+
+    const denied = makeHarness({
+      summary: () => ({ status: "ready", registry: updatedRegistry }), confirmRollback: () => false
+    });
+    await expect(call(denied, "piPackages.rollback", rollbackRequest)).resolves.toMatchObject({
+      status: "denied", registry: updatedRegistry
+    });
+    expect(denied.rollback).not.toHaveBeenCalled();
   });
 
   it("returns denial with a freshly read registry and never invokes the manager", async () => {

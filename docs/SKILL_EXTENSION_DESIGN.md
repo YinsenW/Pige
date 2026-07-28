@@ -275,51 +275,43 @@ Skill use should be logged when it materially affects output:
 
 ## 10. Relationship To Pi Packages
 
-Pi packages may include skills, extensions, prompts, themes, and executable capabilities.
-Pure Markdown uses Skill Manager; declared External/Web capabilities remain mediated.
-Packages and executables use Package Manager, Local Tools, or a reviewed adapter, and any
-included Skill remains under package permission authority.
+Pi packages may contain Skills, prompts, themes or executable capabilities. Pure Markdown uses
+Skill Manager; Package Manager/Local Tools own packages, whose Skills retain package authority.
 
 ### 10.1 Package Manager Product Boundary
 
-Package Manager owns metadata, trust disclosure and lifecycle. Default UI shows reviewed
-and installed packages; Advanced owns community search. Catalog data cannot grant trust,
-enablement or permission.
+Package Manager owns metadata, trust disclosure and lifecycle. Default UI shows reviewed/installed
+packages; community search is Advanced. Catalog data grants no trust, enablement or permission.
 
 ### 10.2 Inspectable Package Metadata
 
-Before install/update, disclose available identity, author, license, type, source, exact
-version/integrity, capabilities, permissions, runtime/boundary, trust and lifecycle facts.
-Popularity is informational; unknown stays unknown.
+Before install/update disclose identity, author, license, type, source, exact version/integrity,
+capabilities, boundary, trust and lifecycle. Popularity is informational; unknown stays unknown.
 
 ### 10.3 Trust Categories And Runtime Authority
 
-Trust is `built_in | curated | community | blocked`, never authority. Curated binds only
-the reviewed version; install does not promote trust, and every enabled package remains
-adapter- and Permission-Broker-scoped.
+Trust is `built_in | curated | community | blocked`, never authority. Curated binds one reviewed
+version; install does not promote trust. Enabled packages still require reviewed adapters/Broker.
 
 ### 10.4 Lifecycle And Health
 
-Install state is `not_installed | staged | installed_disabled | installed_enabled`; health
-flags `update_available | deprecated | repair_needed` are independent from trust.
+State is `not_installed | staged | installed_disabled | installed_enabled`; health
+`update_available | deprecated | repair_needed` is independent from trust.
 
-- Search/stage executes nothing. Explicit install/update discloses identity and drift;
-  enable exposes reviewed adapters, disable preserves outputs, and uninstall never removes
-  user evidence. Pin/rollback and failed-change restoration remain required.
-- Ordinary work cannot infer install. Explicit text intent may select a registered recipe;
-  before one plan confirmation Main resolves packages/assets/redirects/Skills and fixed
-  destinations. Pi cannot choose dependencies or alter steps.
+- Search/stage executes nothing. Install/update disclose drift; enable exposes reviewed adapters;
+  disable preserves outputs; uninstall preserves evidence. Pin/rollback remain required.
+- Ordinary work cannot infer install. A registered explicit-text recipe resolves exact supply chain,
+  Skills and destinations before one plan confirmation; Pi cannot alter dependencies or steps.
 
-Settings searches a packaged reviewed catalog offline. Its first entry pins
-`@narumitw/pi-btw@0.34.0`, MIT, npm SHA-512 and filesystem/cloud disclosure; selection grants no
-authority and only fills exact install. Confirmation publishes `installed_disabled`. Extraction
-canonicalizes one `./` prefix, then rejects collisions, links, hooks, runtime dependencies, bin and
-native input. Confirmed request/package/revision CAS trash-uninstalls and restart-adopts once. No
-code/path/body crosses IPC. Enable/runtime, update, pin, rollback and public restore remain open.
+Settings searches one offline reviewed entry: `@narumitw/pi-btw@0.34.0`, MIT, npm SHA-512 and
+filesystem/cloud disclosure. Selection grants no authority. Confirmed install publishes disabled
+after bounded link/dependency/hook/bin/native rejection; confirmed CAS trash-uninstall adopts once.
+Confirmed exact-version/SRI update reuses those fences, retains the verified prior tree and publishes
+disabled; one opaque target restores only that tree offline, once, across restart. IPC exposes no
+code/path/body. Enable/runtime, pin and public restore remain open.
 
-The official Feishu fixture is recipe data: before confirmation it binds CLI/package/native and
-27-Skill/444-file identities, hashes, destinations/link/overwrite policy and controlled environment.
-Opaque `npx`, moving sources, arbitrary stdin and post-Allow discovery stay outside the plan.
+The Feishu recipe binds CLI/package/native, 27-Skill/444-file identities, hashes, destinations,
+overwrite/link policy and environment before confirmation; opaque `npx` or later discovery fail.
 
 ## 11. v0.1 Scope
 

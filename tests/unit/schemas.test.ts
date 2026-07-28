@@ -80,8 +80,12 @@ import {
   PiPackageCatalogQueryRequestSchema,
   PiPackageCatalogQueryResultSchema,
   PiPackageRegistryQueryResultSchema,
+  PiPackageRollbackRequestSchema,
+  PiPackageRollbackResultSchema,
   PiPackageUninstallRequestSchema,
   PiPackageUninstallResultSchema,
+  PiPackageUpdateRequestSchema,
+  PiPackageUpdateResultSchema,
   RequirementIdSchema,
   RetrievalSearchResultSchema,
   SetThemeRequestSchema,
@@ -1161,7 +1165,10 @@ describe("schemas", () => {
         packageTypes: ["extension"],
         dependencyCount: 0,
         enabled: false,
-        trust: "community"
+        trust: "community",
+        canUpdate: true,
+        canRollback: false,
+        rollbackTarget: null
       }]
     } as const;
     expect(PiPackageRegistryQueryResultSchema.parse({ status: "ready", registry }))
@@ -1257,6 +1264,130 @@ describe("schemas", () => {
       ...request,
       requestId: "pi_package_request_abcdefghijklmnop"
     })).toThrow();
+  });
+
+  it("freezes exact-version Pi package update and one-step rollback without runtime authority", () => {
+    const packageId = "pkg_0123456789abcdef01234567";
+    const targetIntegrity = `sha512-${"A".repeat(86)}==`;
+    const rollbackId = "pi_package_rollback_abcdefghijklmnop";
+    const registry = {
+      apiVersion: 1,
+      revision: 9,
+      packages: [{
+        packageId,
+        packageName: "@narumitw/pi-btw",
+        version: "0.35.0",
+        state: "installed_disabled",
+        packageTypes: ["extension"],
+        dependencyCount: 0,
+        enabled: false,
+        trust: "community",
+        canUpdate: true,
+        canRollback: true,
+        rollbackTarget: { rollbackId, targetVersion: "0.34.0" }
+      }]
+    } as const;
+    expect(PiPackageRegistryQueryResultSchema.parse({ status: "ready", registry }))
+      .toEqual({ status: "ready", registry });
+
+    const updateRequest = {
+      apiVersion: 1,
+      requestId: "pi_package_update_request_abcdefghijklmnop",
+      packageId,
+      expectedRegistryRevision: 8,
+      targetVersion: "0.35.0",
+      targetIntegrity
+    } as const;
+    expect(PiPackageUpdateRequestSchema.parse(updateRequest)).toEqual(updateRequest);
+    for (const status of ["committed", "denied", "stale", "not_found"] as const) {
+      expect(PiPackageUpdateResultSchema.parse({
+        apiVersion: 1,
+        requestId: updateRequest.requestId,
+        packageId,
+        targetVersion: updateRequest.targetVersion,
+        targetIntegrity,
+        status,
+        registry
+      })).toMatchObject({ status, registry });
+    }
+    const updateFailed = {
+      apiVersion: 1,
+      requestId: updateRequest.requestId,
+      packageId,
+      targetVersion: updateRequest.targetVersion,
+      targetIntegrity,
+      status: "failed"
+    } as const;
+    expect(PiPackageUpdateResultSchema.parse(updateFailed)).toEqual(updateFailed);
+    expect(() => PiPackageUpdateResultSchema.parse({ ...updateFailed, registry })).toThrow();
+
+    const rollbackRequest = {
+      apiVersion: 1,
+      requestId: "pi_package_rollback_request_abcdefghijklmnop",
+      packageId,
+      expectedRegistryRevision: 9,
+      rollbackId,
+      targetVersion: "0.34.0"
+    } as const;
+    expect(PiPackageRollbackRequestSchema.parse(rollbackRequest)).toEqual(rollbackRequest);
+    for (const status of ["committed", "denied", "stale", "not_found"] as const) {
+      expect(PiPackageRollbackResultSchema.parse({
+        apiVersion: 1,
+        requestId: rollbackRequest.requestId,
+        packageId,
+        rollbackId,
+        targetVersion: rollbackRequest.targetVersion,
+        status,
+        registry
+      })).toMatchObject({ status, registry });
+    }
+    const rollbackFailed = {
+      apiVersion: 1,
+      requestId: rollbackRequest.requestId,
+      packageId,
+      rollbackId,
+      targetVersion: rollbackRequest.targetVersion,
+      status: "failed"
+    } as const;
+    expect(PiPackageRollbackResultSchema.parse(rollbackFailed)).toEqual(rollbackFailed);
+    expect(() => PiPackageRollbackResultSchema.parse({ ...rollbackFailed, registry })).toThrow();
+
+    expect(() => PiPackageRegistryQueryResultSchema.parse({
+      status: "ready",
+      registry: {
+        ...registry,
+        packages: [{ ...registry.packages[0], canRollback: false }]
+      }
+    })).toThrow();
+    expect(() => PiPackageRegistryQueryResultSchema.parse({
+      status: "ready",
+      registry: {
+        ...registry,
+        packages: [{ ...registry.packages[0], canRollback: true, rollbackTarget: null }]
+      }
+    })).toThrow();
+    expect(() => PiPackageUpdateRequestSchema.parse({ ...updateRequest, targetVersion: "latest" })).toThrow();
+    expect(() => PiPackageUpdateRequestSchema.parse({ ...updateRequest, targetIntegrity: "sha512-private" })).toThrow();
+    expect(() => PiPackageRollbackRequestSchema.parse({
+      ...rollbackRequest,
+      requestId: "pi_package_update_request_abcdefghijklmnop"
+    })).toThrow();
+
+    for (const unsafe of [
+      { path: "/private/pi-packages/package" },
+      { treeHash: "private-tree" },
+      { receipt: { private: true } },
+      { packageBody: "export default malicious" },
+      { rawError: "private failure" },
+      { enabled: true },
+      { pin: true },
+      { providerCredential: "secret" }
+    ]) {
+      expect(() => PiPackageUpdateRequestSchema.parse({ ...updateRequest, ...unsafe })).toThrow();
+      expect(() => PiPackageRollbackRequestSchema.parse({ ...rollbackRequest, ...unsafe })).toThrow();
+      expect(() => PiPackageUpdateResultSchema.parse({ ...updateFailed, ...unsafe })).toThrow();
+      expect(() => PiPackageRollbackResultSchema.parse({ ...rollbackFailed, ...unsafe })).toThrow();
+    }
   });
 
   it("keeps the curated Pi package catalog deterministic, bounded, and renderer-safe", () => {
