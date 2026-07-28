@@ -383,6 +383,16 @@ describe("schemas", () => {
       rowCursor: `collection_rows_${"c".repeat(64)}`
     } as const;
     expect(CollectionOpenRequestSchema.parse(openRequest)).toEqual(openRequest);
+    const firstPageRequest = {
+      apiVersion: openRequest.apiVersion,
+      requestId: openRequest.requestId,
+      activeVaultId: openRequest.activeVaultId,
+      datasetId: openRequest.datasetId,
+      tableId: openRequest.tableId,
+      viewId: openRequest.viewId,
+      limit: openRequest.limit
+    } as const;
+    expect(CollectionOpenRequestSchema.parse(firstPageRequest)).toEqual(firstPageRequest);
     const snapshot = {
       datasetId: openRequest.datasetId,
       revisionId: datasets[0].activeRevisionId,
@@ -416,14 +426,71 @@ describe("schemas", () => {
       datasetId: openRequest.datasetId,
       tableId: openRequest.tableId
     } as const;
+    const continuationCursor = `collection_rows_${"d".repeat(64)}`;
     expect(CollectionOpenResultSchema.parse({
       ...openIdentity,
       status: "ready",
       snapshot,
-      nextRowCursor: `collection_rows_${"d".repeat(64)}`
+      nextRowCursor: continuationCursor
     })).toMatchObject({ status: "ready", snapshot: { returnedRowCount: 1 } });
+
+    const middlePage = {
+      ...snapshot,
+      rows: [{
+        rowId: "row_alphabrowse0026",
+        cells: [{ columnId: "column_alphabrowse01", value: "twenty-six", editable: true }],
+        canTrash: true
+      }]
+    } as const;
+    expect(CollectionOpenResultSchema.parse({
+      ...openIdentity,
+      status: "ready",
+      snapshot: middlePage,
+      nextRowCursor: continuationCursor
+    })).toMatchObject({ status: "ready", snapshot: { truncated: true } });
+
+    const finalRows = Array.from({ length: 10 }, (_, index) => ({
+      rowId: `row_alphabrowse${String(index + 51).padStart(4, "0")}`,
+      cells: [{ columnId: "column_alphabrowse01", value: `row-${index + 51}`, editable: true }],
+      canTrash: true
+    }));
+    const finalLaterPage = {
+      ...snapshot,
+      rows: finalRows,
+      totalRowCount: 60,
+      returnedRowCount: 10,
+      truncated: false
+    };
+    expect(CollectionOpenResultSchema.parse({
+      ...openIdentity,
+      status: "ready",
+      snapshot: finalLaterPage
+    })).toMatchObject({
+      status: "ready",
+      snapshot: { totalRowCount: 60, returnedRowCount: 10, truncated: false }
+    });
+
+    const emptyPage = {
+      ...snapshot,
+      rows: [],
+      totalRowCount: 0,
+      returnedRowCount: 0,
+      truncated: false
+    } as const;
+    expect(CollectionOpenResultSchema.parse({
+      ...openIdentity,
+      status: "ready",
+      snapshot: emptyPage
+    })).toMatchObject({ status: "ready", snapshot: { returnedRowCount: 0, truncated: false } });
+
     expect(() => CollectionOpenResultSchema.parse({ ...openIdentity, status: "ready", snapshot }))
       .toThrow("agree with snapshot truncation");
+    expect(() => CollectionOpenResultSchema.parse({
+      ...openIdentity,
+      status: "ready",
+      snapshot: finalLaterPage,
+      nextRowCursor: continuationCursor
+    })).toThrow("agree with snapshot truncation");
     expect(() => CollectionOpenRequestSchema.parse({ ...openRequest, rowCursor: "collection_rows_tampered" }))
       .toThrow();
     expect(() => CollectionOpenResultSchema.parse({
