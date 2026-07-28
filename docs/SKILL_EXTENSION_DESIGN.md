@@ -12,7 +12,7 @@ Recommended v0.1 stance:
 - Add a Skill Manager in Settings.
 - Let Settings or explicit authored chat stage a bounded Skill for review.
 - Installation is explicit, reversible and non-executing. External/Web Skills install disabled;
-  runtime and enablement require the separate reviewed adapter boundary.
+  only the exact supported read-only HTTPS adapter may be enabled and confirmed per call.
 
 ## 2. What A Skill Is
 
@@ -42,8 +42,9 @@ Explicit authored chat selects one Host HTTPS candidate by index; other content 
 
 External review and installed summaries expose only kind, exact declared capabilities and derived
 boundaries, safe source, checksums, files and warnings. Explicit install persists verified bytes
-disabled with `canEnable=false`; stage/install never runs Skill content. External update, enable and
-runtime remain separate work.
+disabled; stage/install never runs Skill content. A verified machine-local `external_web` manifest
+with `pige_readonly_https_v1`, `external_network`, `network` and one exact HTTPS origin may expose
+explicit enablement. External update and every other runtime class remain separate work.
 
 Only verified `user_confirmed` machine-local pure Skills expose lifecycle actions. Enable restores;
 uninstall trashes; export is pathless. HTTPS update binds source/base/revision, preserves state,
@@ -64,115 +65,16 @@ my-skill/
     example-output.md
 ```
 
-Minimal single-file Skill:
-
-```md
----
-id: paper-reading
-name: Paper Reading
-version: 1
-description: Extract source-backed research notes from papers.
-scope: vault
-triggers:
-  - academic paper
-  - research PDF
-capabilities:
-  - read_current_source
-  - suggest_note
-  - create_review_proposal
----
-
-## When To Use
-
-Use when the user captures an academic paper or asks to read a paper.
-
-## Procedure
-
-1. Preserve source metadata.
-2. Extract the thesis, methods, evidence, limitations, and useful claims.
-3. Create a source-backed note with citations.
-
-## Output Rules
-
-- Do not invent claims.
-- Keep citations attached to source pages.
-```
-
-Required metadata:
-
-- `id`.
-- `name`.
-- `version`.
-- `description`.
-- `scope`.
-- `capabilities`.
-
-Recommended metadata:
-
-- `kind`: `pure`, `external_web`, or `package_provided`.
-- `triggers`.
-- `author`.
-- `sourceUrl`.
-- `license`.
-- `updatedAt`.
-- `dataBoundary`.
-- `permissionSummary`.
+Required metadata is `id`, `name`, `version`, `description`, `scope` and `capabilities`.
+Optional metadata is `kind` (`pure | external_web | package_provided`), `triggers`, `author`,
+`sourceUrl`, `license`, `updatedAt`, `dataBoundary` and `permissionSummary`.
 
 ## 6. Storage
 
-Skill scopes:
-
-### 6.1 Built-In Skills
-
-Location:
-
-```txt
-App bundle/
-  skills/
-```
-
-Rules:
-
-- Shipped with Pige.
-- Cannot be edited in place.
-- Can be disabled if appropriate.
-
-### 6.2 Vault Skills
-
-Location:
-
-```txt
-Pige Vault/
-  .pige/
-    skills/
-      paper-reading/
-        SKILL.md
-        references/
-```
-
-Rules:
-
-- Travel with the vault.
-- Included in backups by default.
-- Pure vault Skills must be plain Markdown, JSON metadata, and small supporting files.
-- External/Web vault Skills may declare capabilities, but executable/package-backed behavior is not portable unless the target machine has the required package/tool and the user grants permission there.
-- Good for vault-specific workflows and note conventions.
-
-### 6.3 Machine-Local Skills
-
-Location:
-
-```txt
-OS app data/
-  Pige/
-    skills/
-```
-
-Rules:
-
-- Stay on the current machine.
-- Device-installed Skills under this directory do not enter vault backup sets.
-- Useful for personal workflows that should not travel with a vault.
+Built-ins live under app-bundle `skills/`, are immutable in place and may be disabled. Vault
+Skills live under `.pige/skills/`, travel in backups and contain only Markdown/JSON/small files.
+Machine-local Skills live in OS app-data `Pige/skills/` and never enter vault backups. Declared
+external/package behavior is portable only when the target has the reviewed adapter and grant.
 
 `skills/registry.json` is checksum-safe; token/revision fence disable; failures are body-free.
 
@@ -187,8 +89,12 @@ Runtime safety:
 - Pure Skills influence Agent reasoning but cannot directly access files, network, shell,
   providers, packages, settings or secrets.
 - Built-in registered first-party tools use the submitted turn's exact resource authority.
-- External/Web Skills and packages declare capabilities and run through reviewed adapters
-  and isolation; they never inherit first-party authority by name or prompt text.
+- Pige-owned `pige_readonly_https_v1` executes no Skill code. It registers
+  `pige_external_web_read` only for authored text with exactly one eligible enabled Skill.
+- Each read binds vault/Job/turn, Skill/version/digests, registry and policy; confirmation grants
+  one call. Ambiguity, denial or drift closes before network.
+- Fetch stays public-HTTPS-only and checks the reviewed origin initially and on every redirect.
+- Other runtimes need reviewed adapters and never inherit first-party authority from content.
 - Pige validates scope, path, resource, credential and effect boundaries. Raw credentials
   are never promptable or returned to Skill code.
 - Only closed-list high-risk effects ask once for the exact effect. Ordinary read, parse,
@@ -204,19 +110,8 @@ Settings should include a Skills section.
 Required actions: staged link/file install, inspect, enable/disable, uninstall, update, export,
 safe scope and conflict/trigger visibility.
 
-Skill details should show:
-
-- Name.
-- Description.
-- Source.
-- Scope.
-- Version.
-- Author/license when known.
-- Files.
-- Capabilities requested.
-- Declared capabilities and data boundary.
-- Last used.
-- Warnings.
+Skill details show name, description, source, scope, version, known author/license, files,
+requested capabilities, data boundary, last use and warnings.
 
 High-risk effect dialog:
 
@@ -241,21 +136,12 @@ Dialog behavior:
 
 ## 9. Agent Use
 
-At runtime, Pige selects Skills by:
-
-- Explicit user request.
-- Current capture type.
-- Note/source type.
-- Trigger phrases.
-- Vault conventions.
-- User selection in the UI.
+At runtime, explicit request, capture/note/source type, triggers, vault conventions and UI
+selection can select Skills, subject to the authority rules above.
 
 The Agent receives only relevant active Skill instructions, not the entire installed Skill library.
 
-Skill use should be logged when it materially affects output:
-
-- "Used Skill: Paper Reading"
-- "Used Skill: Meeting Note Cleanup"
+Material use is logged with the safe Skill name.
 
 ## 10. Relationship To Pi Packages
 
