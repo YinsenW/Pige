@@ -42,6 +42,7 @@ jobs:
       - name: Validate tag and checkout identity
         id: identity
         env:
+          GH_TOKEN: ${{ github.token }}
           PIGE_REQUESTED_COMMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.commit || github.sha }}
           PIGE_REQUESTED_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           PIGE_REPOSITORY: ${{ github.repository }}
@@ -66,9 +67,6 @@ jobs:
           else
             printf 'release_exists=false\n' >> "$GITHUB_OUTPUT"
           fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-
   build:
     name: Build and verify ${{ matrix.platform }}
     needs: validate

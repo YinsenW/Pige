@@ -216,6 +216,11 @@ describe("PaddleOCR release workflow sidecar", () => {
     expect(workflow).toContain("Existing immutable PaddleOCR prerelease matches the reviewed rebuild.");
     expect(workflow).toContain("Verify immutable release ${{ matrix.platform }}");
     expect(workflow).toContain("paddleocr-immutable-verification-${{ matrix.platform }}");
+    const identityStep = workflow.slice(
+      workflow.indexOf("      - name: Validate tag and checkout identity"),
+      workflow.indexOf("  build:")
+    );
+    expect(identityStep.match(/^\s{8}env:/gmu)).toHaveLength(1);
     expect(workflow).toContain('cmp --silent "$archive"');
     expect(workflow).not.toContain('test "$(git rev-parse "refs/tags/$PIGE_REQUESTED_TAG^{commit}")" = "$PIGE_REQUESTED_COMMIT"');
     expect(workflow).not.toMatch(/pip\s+install|uv\s+pip|npm\s+install(?!ed)/u);
