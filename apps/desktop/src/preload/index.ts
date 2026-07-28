@@ -106,8 +106,12 @@ import type {
   PiPackageCatalogQueryRequest,
   PiPackageCatalogQueryResult,
   PiPackageRegistryQueryResult,
+  PiPackageRollbackRequest,
+  PiPackageRollbackResult,
   PiPackageUninstallRequest,
   PiPackageUninstallResult,
+  PiPackageUpdateRequest,
+  PiPackageUpdateResult,
   ProposalDecisionRequest,
   ProposalDecisionResult,
   ProposalGetRequest,
@@ -242,8 +246,12 @@ import {
   PiPackageCatalogQueryRequestSchema,
   PiPackageCatalogQueryResultSchema,
   PiPackageRegistryQueryResultSchema,
+  PiPackageRollbackRequestSchema,
+  PiPackageRollbackResultSchema,
   PiPackageUninstallRequestSchema,
   PiPackageUninstallResultSchema,
+  PiPackageUpdateRequestSchema,
+  PiPackageUpdateResultSchema,
   LocalSemanticRetrievalDisableRequestSchema,
   LocalSemanticRetrievalDisableResultSchema,
   LocalSemanticRetrievalEnableRequestSchema,
@@ -852,6 +860,16 @@ const api: PigeDesktopApi = {
       PiPackageUninstallResultSchema.parse(await ipcRenderer.invoke(
         "piPackages.uninstall",
         PiPackageUninstallRequestSchema.parse(request)
+      )),
+    update: async (request: PiPackageUpdateRequest): Promise<PiPackageUpdateResult> =>
+      PiPackageUpdateResultSchema.parse(await ipcRenderer.invoke(
+        "piPackages.update",
+        PiPackageUpdateRequestSchema.parse(request)
+      )),
+    rollback: async (request: PiPackageRollbackRequest): Promise<PiPackageRollbackResult> =>
+      PiPackageRollbackResultSchema.parse(await ipcRenderer.invoke(
+        "piPackages.rollback",
+        PiPackageRollbackRequestSchema.parse(request)
       ))
   },
   taskExecution: {

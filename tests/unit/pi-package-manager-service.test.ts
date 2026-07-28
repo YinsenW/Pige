@@ -290,7 +290,10 @@ describe("PiPackageManagerService", () => {
         packageTypes: ["extension"],
         dependencyCount: 0,
         enabled: false,
-        trust: "community"
+        trust: "community",
+        canUpdate: true,
+        canRollback: false,
+        rollbackTarget: null
       }]
     });
     expect(JSON.stringify(summary)).not.toMatch(

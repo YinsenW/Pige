@@ -202,6 +202,7 @@ import { createFirstPartyCommandCapabilityAdapter } from "./services/command-cap
 import { createPiPackageInstallCapabilityAdapter } from "./services/pi-package-capability-adapter";
 import { PiPackageCatalogService } from "./services/pi-package-catalog-service";
 import { PiPackageManagerService } from "./services/pi-package-manager-service";
+import { PiPackageUpdateService } from "./services/pi-package-update-service";
 import { PiPackageInstallTaskService } from "./services/pi-package-install-task-service";
 import { NotesService } from "./services/notes-service";
 import {
@@ -264,6 +265,7 @@ let firstPartyCommandCapabilityRegistered = false;
 let firstPartyPiPackageCapabilityRegistered = false;
 let piPackageCatalogService: PiPackageCatalogService | undefined;
 let piPackageManagerService: PiPackageManagerService | undefined;
+let piPackageUpdateService: PiPackageUpdateService | undefined;
 let piPackageInstallTaskService: PiPackageInstallTaskService | undefined;
 let windowModeService: WindowModeService | undefined;
 let backupRestoreService: BackupRestoreService | undefined;
@@ -988,6 +990,11 @@ const getPiPackageManagerService = (): PiPackageManagerService => {
     piPackageManagerService = new PiPackageManagerService({ appDataRoot: app.getPath("userData") });
   }
   return piPackageManagerService;
+};
+
+const getPiPackageUpdateService = (): PiPackageUpdateService => {
+  piPackageUpdateService ??= new PiPackageUpdateService({ manager: getPiPackageManagerService() });
+  return piPackageUpdateService;
 };
 
 const getPiPackageCatalogService = (): PiPackageCatalogService => {
@@ -2174,6 +2181,7 @@ registerSkillsIpc({
     }
   }
 });
+const piPackageUpdates = getPiPackageUpdateService();
 registerPiPackagesIpc({
   ipcMain,
   isTrustedSender: (sender) => {
@@ -2181,7 +2189,7 @@ registerPiPackagesIpc({
     return !!window && mainWindows.has(window);
   },
   getActiveVaultId: () => getVaultService().current()?.vaultId,
-  summary: () => ({ status: "ready", registry: getPiPackageManagerService().summary() }),
+  summary: async () => ({ status: "ready", registry: await piPackageUpdates.summary() }),
   catalogQuery: (request) => getPiPackageCatalogService().query(request),
   install: (request) => getPiPackageInstallTaskService().install(request),
   confirmUninstall: async (sender, request) => {
@@ -2197,7 +2205,35 @@ registerPiPackagesIpc({
       throw caught;
     }
   },
-  uninstall: (request) => getPiPackageManagerService().uninstall(request)
+  uninstall: (request) => getPiPackageManagerService().uninstall(request),
+  confirmUpdate: async (sender, binding) => {
+    try {
+      await confirmSettingAction(sender, [], {
+        title: "Update this Pi package?",
+        message: `Pige will update ${binding.packageName} from ${binding.currentVersion} to ${binding.request.targetVersion} at Package Registry revision ${binding.request.expectedRegistryRevision}. The installed package remains disabled.`,
+        confirmLabel: "Update package"
+      });
+      return true;
+    } catch (caught) {
+      if (caught instanceof PigeDomainError && caught.code === "permission.user_denied") return false;
+      throw caught;
+    }
+  },
+  update: (request) => piPackageUpdates.update(request),
+  confirmRollback: async (sender, binding) => {
+    try {
+      await confirmSettingAction(sender, [], {
+        title: "Roll back this Pi package?",
+        message: `Pige will roll back ${binding.packageName} from ${binding.currentVersion} to ${binding.request.targetVersion} at Package Registry revision ${binding.request.expectedRegistryRevision}. The package remains disabled.`,
+        confirmLabel: "Roll back package"
+      });
+      return true;
+    } catch (caught) {
+      if (caught instanceof PigeDomainError && caught.code === "permission.user_denied") return false;
+      throw caught;
+    }
+  },
+  rollback: (request) => piPackageUpdates.rollback(request)
 });
 registerMemoryIpc({
   ipcMain,

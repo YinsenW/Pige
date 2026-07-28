@@ -19,7 +19,6 @@ import {
   PiPackageLifecycleStore, hashPiPackageTree,
   type PiPackageLifecycleRecord, type PiPackageUninstallReceipt
 } from "./pi-package-lifecycle-store";
-
 const PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]{0,63}\/[a-z0-9][a-z0-9._-]{0,63}|[a-z0-9][a-z0-9._-]{0,127})$/u;
 const EXACT_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{7,119}$/u;
@@ -52,7 +51,7 @@ interface ResolvedPackagePlan {
   readonly tarballUrl: string; readonly integrity: string;
   readonly packageTypes: readonly PiPackageType[]; readonly dependencyCount: number; readonly manifestHash: string;
 }
-interface PackageRecord extends Omit<PiPackageInstallSummary, "status" | "revision" | "requiresEnable">, PiPackageLifecycleRecord {
+export interface PiPackageRecord extends Omit<PiPackageInstallSummary, "status" | "revision" | "requiresEnable">, PiPackageLifecycleRecord {
   readonly treeHash: string; readonly archiveHash: string; readonly integrity: string;
   readonly manifestHash: string; readonly relativePath: string; readonly installedAt: string;
   readonly enabled: false; readonly trust: "community";
@@ -61,9 +60,12 @@ interface PackageRecord extends Omit<PiPackageInstallSummary, "status" | "revisi
 interface PackageRequestRecord {
   readonly requestId: string; readonly revision: number;
 }
-interface PackageRegistryFile {
+export interface PiPackageRegistryFile {
   readonly schemaVersion: 1; readonly revision: number;
-  readonly packages: readonly PackageRecord[];
+  readonly packages: readonly PiPackageRecord[];
+}
+export interface PreparedPiPackageUpdate {
+  readonly stagingPath: string; readonly candidatePath: string; readonly record: PiPackageRecord;
 }
 interface PackageOwnerMarker {
   readonly schemaVersion: 1; readonly requestId: string; readonly packageId: string;
@@ -90,8 +92,7 @@ export class PiPackageManagerService {
   readonly #pinAddresses: boolean;
   readonly #now: () => Date;
   readonly #maxExtractedEntries: number;
-  readonly #lifecycleStore: PiPackageLifecycleStore<PackageRecord>;
-
+  readonly #lifecycleStore: PiPackageLifecycleStore<PiPackageRecord>;
   constructor(options: PiPackageManagerOptions) {
     const appDataRoot = canonicalPrivateRoot(options.appDataRoot);
     this.#root = path.join(appDataRoot, "pi-packages");
@@ -119,11 +120,52 @@ export class PiPackageManagerService {
       this.#recoverUninstalls();
     } finally { lock.release(); }
   }
-
-  summary(): PiPackageRegistrySummary {
-    return projectRegistry(this.#readRegistry());
+  summary(): PiPackageRegistrySummary { return this.projectLifecycleRegistry(this.#readRegistry()); }
+  get lifecycleStore(): PiPackageLifecycleStore<PiPackageRecord> { return this.#lifecycleStore; }
+  async withLifecycleLock<T>(operation: () => Promise<T> | T): Promise<T> {
+    const lock = acquireLock(this.#lockPath);
+    try { this.#recoverOwnedResidue(this.#readRegistry()); this.#recoverUninstalls(); return await operation(); }
+    finally { lock.release(); }
   }
-
+  readLifecycleRegistry(): PiPackageRegistryFile { return this.#readRegistry(); }
+  replaceLifecycleRecord(expectedRevision: number, expected: PiPackageRecord, replacement: PiPackageRecord): PiPackageRegistryFile {
+    const current = this.#readRegistry();
+    const installed = current.packages.find((record) => record.packageId === expected.packageId);
+    if (current.revision !== expectedRevision || !installed || !sameRecord(installed, expected) || replacement.packageId !== expected.packageId)
+      throw packageError("package.registry_stale", "Package Registry changed before commit.");
+    const next = replacePackageRecord(current, replacement, incrementRevision(current.revision));
+    this.#writeRegistry(next); return next;
+  }
+  projectLifecycleRegistry(registry: PiPackageRegistryFile): PiPackageRegistrySummary {
+    return projectRegistry(registry, (record) => this.#lifecycleStore.rollbackTarget(record));
+  }
+  async prepareExactUpdateCandidate(input: {
+    readonly requestId: string; readonly current: PiPackageRecord; readonly targetVersion: string;
+    readonly targetIntegrity: string; readonly signal: AbortSignal;
+  }): Promise<PreparedPiPackageUpdate> {
+    const request = normalizePiPackageInstallRequest({ requestId: input.requestId, packageName: input.current.packageName, version: input.targetVersion });
+    const plan = await this.#resolvePlan(request, input.signal);
+    if (plan.integrity !== input.targetIntegrity) throw packageError("package.integrity_mismatch", "Package integrity did not match the exact update request.");
+    const stagingPath = this.#createStaging(request);
+    try {
+      const archivePath = path.join(stagingPath, "package.tgz");
+      const archiveHash = await this.#downloadArchive(plan, archivePath, input.signal);
+      const candidatePath = path.join(stagingPath, "package");
+      fs.mkdirSync(candidatePath, { mode: 0o700 });
+      await extractBoundedArchive(archivePath, candidatePath, input.signal, this.#maxExtractedEntries);
+      fs.rmSync(archivePath, { force: true });
+      const inspection = inspectExtractedPackage(candidatePath, request, plan);
+      const record: PiPackageRecord = { ...input.current, version: request.version, packageTypes: plan.packageTypes,
+        dependencyCount: plan.dependencyCount, treeHash: inspection.treeHash, archiveHash,
+        integrity: plan.integrity, manifestHash: plan.manifestHash,
+        relativePath: path.join("installed", input.current.packageId, request.version, inspection.treeHash.slice(7)),
+        installedAt: this.#now().toISOString() };
+      return { stagingPath, candidatePath, record };
+    } catch (caught) { removeOwnedDirectory(stagingPath, request.requestId); throw caught; }
+  }
+  discardPreparedUpdate(prepared: PreparedPiPackageUpdate): void {
+    if (fs.existsSync(prepared.stagingPath)) removeOwnedDirectory(prepared.stagingPath, readOwnerMarker(prepared.stagingPath)?.requestId ?? "");
+  }
   async install(
     request: PiPackageInstallRequest,
     signal: AbortSignal,
@@ -158,7 +200,6 @@ export class PiPackageManagerService {
         this.#writeRegistry(next);
         return projectRecord(adopted, nextRevision);
       }
-
       const plan = await this.#resolvePlan(normalized, signal);
       stagingPath = this.#createStaging(normalized);
       const archivePath = path.join(stagingPath, "package.tgz");
@@ -178,7 +219,6 @@ export class PiPackageManagerService {
       };
       writePrivateJson(path.join(extractedPath, OWNER_MARKER), owner);
       fsyncDirectory(extractedPath);
-
       const relativePath = path.join(
         "installed",
         packageId,
@@ -193,9 +233,8 @@ export class PiPackageManagerService {
       fs.rmSync(stagingPath, { recursive: true });
       stagingPath = undefined;
       fsyncDirectory(path.dirname(publishedPath));
-
       const nextRevision = incrementRevision(current.revision);
-      const record: PackageRecord = {
+      const record: PiPackageRecord = {
         packageId,
         packageName: normalized.packageName,
         version: normalized.version,
@@ -211,7 +250,7 @@ export class PiPackageManagerService {
         trust: "community",
         requests: [{ requestId: normalized.requestId, revision: nextRevision }]
       };
-      const next: PackageRegistryFile = {
+      const next: PiPackageRegistryFile = {
         schemaVersion: 1,
         revision: nextRevision,
         packages: [...current.packages, record].sort(compareRecords)
@@ -230,7 +269,6 @@ export class PiPackageManagerService {
       lock.release();
     }
   }
-
   adopt(request: PiPackageInstallRequest): PiPackageInstallSummary {
     const normalized = normalizePiPackageInstallRequest(request);
     const current = this.#readRegistry();
@@ -240,7 +278,6 @@ export class PiPackageManagerService {
     this.#assertInstalledRecord(record);
     return projectRecord(record, requestRecord(record, normalized.requestId)!.revision);
   }
-
   uninstall(request: PiPackageUninstallRequest): PiPackageUninstallResult {
     const parsed = PiPackageUninstallRequestSchema.parse(request);
     const identity = uninstallIdentity(parsed);
@@ -279,7 +316,6 @@ export class PiPackageManagerService {
       return PiPackageUninstallResultSchema.parse({ ...identity, status: "failed" });
     } finally { lock?.release(); }
   }
-
   async #resolvePlan(request: PiPackageInstallRequest, signal: AbortSignal): Promise<ResolvedPackagePlan> {
     const encodedName = request.packageName.startsWith("@")
       ? encodeURIComponent(request.packageName).replace(/^%40/u, "@")
@@ -310,7 +346,6 @@ export class PiPackageManagerService {
     const manifestHash = hashCanonical(manifestIdentity(manifest));
     return { packageName: request.packageName, version: request.version, tarballUrl, integrity, packageTypes, dependencyCount, manifestHash };
   }
-
   async #downloadArchive(plan: ResolvedPackagePlan, destination: string, signal: AbortSignal): Promise<string> {
     const handle = await this.#fetchFollowingRedirects(plan.tarballUrl, signal, MAX_ARCHIVE_BYTES);
     const response = handle.response;
@@ -348,7 +383,6 @@ export class PiPackageManagerService {
     }
     return `sha256:${sha256.digest("hex")}`;
   }
-
   async #fetchFollowingRedirects(url: string, signal: AbortSignal, maxBytes: number): Promise<FetchResponseHandle> {
     let current = await this.#validateRegistryTarget(url);
     for (let count = 0; count <= MAX_REDIRECTS; count += 1) {
@@ -373,7 +407,6 @@ export class PiPackageManagerService {
     }
     throw packageError("package.redirect_invalid", "Package registry redirected too many times.");
   }
-
   async #validateRegistryTarget(value: string): Promise<FetchTarget> {
     let parsed: URL;
     try { parsed = new URL(value); } catch { throw packageError("package.registry_url_invalid", "Package registry URL is invalid."); }
@@ -389,7 +422,6 @@ export class PiPackageManagerService {
     }
     return { url: parsed.toString(), hostname: stripBrackets(parsed.hostname), addresses: normalized };
   }
-
   async #fetchOne(target: FetchTarget, externalSignal: AbortSignal): Promise<FetchResponseHandle> {
     externalSignal.throwIfAborted();
     const controller = new AbortController();
@@ -426,7 +458,6 @@ export class PiPackageManagerService {
       throw packageError(controller.signal.aborted ? "package.download_timeout" : "package.download_failed", "Package download failed.");
     }
   }
-
   #prepare(): void {
     for (const candidate of [this.#root, this.#installedRoot, this.#stagingRoot]) {
       if (!fs.existsSync(candidate)) fs.mkdirSync(candidate, { mode: 0o700 });
@@ -434,7 +465,6 @@ export class PiPackageManagerService {
       if (!stats.isDirectory() || stats.isSymbolicLink()) throw packageError("package.root_invalid", "Package storage is unsafe.");
     }
   }
-
   #createStaging(request: PiPackageInstallRequest): string {
     const stagingPath = path.join(this.#stagingRoot, `${request.requestId}.${randomUUID()}`);
     ensureConfined(this.#stagingRoot, stagingPath);
@@ -448,14 +478,12 @@ export class PiPackageManagerService {
     } satisfies PackageOwnerMarker);
     return stagingPath;
   }
-
-  #readRegistry(): PackageRegistryFile {
+  #readRegistry(): PiPackageRegistryFile {
     const body = readBoundedNoFollow(this.#registryPath, MAX_REGISTRY_BYTES);
     if (body === undefined) return { schemaVersion: 1, revision: 0, packages: [] };
     try { return validateRegistry(JSON.parse(body)); } catch { throw packageError("package.registry_invalid", "Package Registry is unavailable."); }
   }
-
-  #writeRegistry(registry: PackageRegistryFile): void {
+  #writeRegistry(registry: PiPackageRegistryFile): void {
     const validated = validateRegistry(registry);
     const temporaryPath = path.join(this.#root, `.registry.${process.pid}.${randomUUID()}.tmp`);
     let descriptor: number | undefined;
@@ -474,8 +502,7 @@ export class PiPackageManagerService {
       if (!renamed) fs.rmSync(temporaryPath, { force: true });
     }
   }
-
-  #recoverOwnedResidue(registry: PackageRegistryFile): void {
+  #recoverOwnedResidue(registry: PiPackageRegistryFile): void {
     for (const entry of fs.readdirSync(this.#stagingRoot)) {
       const candidate = path.join(this.#stagingRoot, entry);
       const marker = readOwnerMarker(candidate);
@@ -501,7 +528,6 @@ export class PiPackageManagerService {
       if (marker) removeOwnedDirectory(candidate, marker.requestId);
     }
   }
-
   #publishedRequestMayBeCommitted(request: PiPackageInstallRequest, publishedPath: string): boolean {
     try {
       const relativePath = path.relative(this.#root, publishedPath);
@@ -513,16 +539,13 @@ export class PiPackageManagerService {
       return true;
     }
   }
-
-  #assertInstalledRecord(record: PackageRecord): void {
+  #assertInstalledRecord(record: PiPackageRecord): void {
     this.#lifecycleStore.assertInstalled(record);
   }
-
   #recoverUninstalls(): void {
     for (const receipt of this.#lifecycleStore.listPreparedUninstalls()) this.#recoverUninstall(receipt);
   }
-
-  #recoverUninstall(receipt: PiPackageUninstallReceipt<PackageRecord>): void {
+  #recoverUninstall(receipt: PiPackageUninstallReceipt<PiPackageRecord>): void {
     const current = this.#readRegistry();
     const record = current.packages.find((candidate) => candidate.packageId === receipt.packageId);
     if (current.revision === receipt.expectedRegistryRevision && record && sameRecord(record, receipt.record)) {
@@ -540,7 +563,6 @@ export class PiPackageManagerService {
     throw packageError("package.uninstall_recovery_conflict", "Package uninstall recovery conflicts with registry state.");
   }
 }
-
 async function extractBoundedArchive(
   archivePath: string,
   destination: string,
@@ -621,14 +643,12 @@ async function extractBoundedArchive(
   signal.throwIfAborted();
   assertSafeTree(destination);
 }
-
 function requireTestEntryLimit(value: number): number {
   if (!Number.isSafeInteger(value) || value < 1 || value > MAX_EXTRACTED_ENTRIES) {
     throw packageError("package.limit_invalid", "Package extraction test limit is invalid.");
   }
   return value;
 }
-
 function inspectExtractedPackage(root: string, request: PiPackageInstallRequest, plan: ResolvedPackagePlan): { readonly treeHash: string } {
   const manifest = parseBoundedJson(path.join(root, "package.json"), MAX_MANIFEST_BYTES);
   if (manifest.name !== request.packageName || manifest.version !== request.version || hashCanonical(manifestIdentity(manifest)) !== plan.manifestHash) {
@@ -643,7 +663,6 @@ function inspectExtractedPackage(root: string, request: PiPackageInstallRequest,
   assertDeclaredPiEntries(root, manifest.pi);
   return { treeHash: hashPiPackageTree(root) };
 }
-
 function assertDeclaredPiEntries(root: string, pi: unknown): void {
   if (!pi || typeof pi !== "object" || Array.isArray(pi)) throw packageError("package.manifest_invalid", "Pi package declaration is invalid.");
   const declared = new Set<string>();
@@ -663,7 +682,6 @@ function assertDeclaredPiEntries(root: string, pi: unknown): void {
     }
   }
 }
-
 function assertNoInstallHooks(value: unknown): void {
   if (value === undefined) return;
   if (!value || typeof value !== "object" || Array.isArray(value)) throw packageError("package.manifest_invalid", "Package scripts are invalid.");
@@ -676,7 +694,6 @@ function assertNoInstallHooks(value: unknown): void {
     throw packageError("package.install_hooks_blocked", "Packages with install lifecycle hooks are not supported.");
   }
 }
-
 function assertNoExecutablePackageMetadata(manifest: Record<string, unknown>): void {
   if (
     Object.prototype.hasOwnProperty.call(manifest, "bin") ||
@@ -689,7 +706,6 @@ function assertNoExecutablePackageMetadata(manifest: Record<string, unknown>): v
     );
   }
 }
-
 function assertSafeDependencySpecs(value: unknown): void {
   if (value === undefined) return;
   if (!value || typeof value !== "object" || Array.isArray(value)) throw packageError("package.dependencies_invalid", "Package dependencies are invalid.");
@@ -704,7 +720,6 @@ function assertSafeDependencySpecs(value: unknown): void {
     }
   }
 }
-
 function assertNoRuntimeDependencies(manifest: Record<string, unknown>): number {
   const objectFields = ["dependencies", "optionalDependencies", "peerDependencies"] as const;
   let dependencyCount = 0;
@@ -728,7 +743,6 @@ function assertNoRuntimeDependencies(manifest: Record<string, unknown>): number 
   }
   return dependencyCount;
 }
-
 function parsePackageTypes(value: unknown): readonly PiPackageType[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) return [];
   const record = value as Record<string, unknown>;
@@ -739,7 +753,6 @@ function parsePackageTypes(value: unknown): readonly PiPackageType[] {
   if (Array.isArray(record.themes) && record.themes.length > 0) types.push("theme");
   return types;
 }
-
 function validateArchiveEntryPath(value: string): string {
   const normalized = value.replaceAll("\\", "/").replace(/\/+$/u, "");
   if (
@@ -749,7 +762,6 @@ function validateArchiveEntryPath(value: string): string {
   ) throw packageError("package.archive_path_invalid", "Package archive path is invalid.");
   return normalized;
 }
-
 function validateRelativePackagePath(value: string): string {
   const normalized = value.startsWith("./") ? value.slice(2) : value;
   if (normalized.includes("\\") || normalized.startsWith("/") || normalized.includes("\0") || normalized.split("/").some(isUnsafePathSegment)) {
@@ -757,12 +769,10 @@ function validateRelativePackagePath(value: string): string {
   }
   return normalized;
 }
-
 function isUnsafePathSegment(part: string): boolean {
   if (part === "" || part === "." || part === ".." || part.endsWith(".") || part.endsWith(" ") || part.includes(":")) return true;
   return /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu.test(part);
 }
-
 function assertSafeTree(root: string): void {
   const visit = (directory: string): void => {
     for (const entry of fs.readdirSync(directory)) {
@@ -787,7 +797,6 @@ function assertSafeTree(root: string): void {
   };
   visit(root);
 }
-
 function hasExecutableBinaryMagic(filePath: string): boolean {
   const descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
   try {
@@ -804,14 +813,12 @@ function hasExecutableBinaryMagic(filePath: string): boolean {
     fs.closeSync(descriptor);
   }
 }
-
 export function normalizePiPackageInstallRequest(request: PiPackageInstallRequest): PiPackageInstallRequest {
   if (!REQUEST_ID_PATTERN.test(request.requestId)) throw packageError("package.request_invalid", "Package request identity is invalid.");
   if (!PACKAGE_NAME_PATTERN.test(request.packageName)) throw packageError("package.name_invalid", "Package name is invalid.");
   if (!EXACT_VERSION_PATTERN.test(request.version)) throw packageError("package.version_invalid", "An exact package version is required.");
   return Object.freeze({ requestId: request.requestId, packageName: request.packageName, version: request.version });
 }
-
 function requireRegistryUrl(value: unknown): string {
   if (typeof value !== "string" || value.length > 2048) throw packageError("package.metadata_invalid", "Package tarball URL is unavailable.");
   const parsed = new URL(value);
@@ -820,14 +827,12 @@ function requireRegistryUrl(value: unknown): string {
   }
   return parsed.toString();
 }
-
 function requireSha512Integrity(value: unknown): string {
   if (typeof value !== "string" || !/^sha512-[A-Za-z0-9+/]{86}==$/u.test(value)) {
     throw packageError("package.integrity_missing", "Package registry did not provide SHA-512 integrity.");
   }
   return value;
 }
-
 function createPinnedAgent(target: FetchTarget): Agent {
   return new Agent({
     allowH2: false,
@@ -836,17 +841,14 @@ function createPinnedAgent(target: FetchTarget): Agent {
     connect: { lookup: createPinnedLookup(target.hostname, target.addresses) as LookupFunction }
   });
 }
-
 async function lookupHostname(hostname: string): Promise<readonly string[]> {
   const literal = stripBrackets(hostname);
   if (net.isIP(literal)) return [literal];
   return (await dnsLookup(hostname, { all: true, verbatim: true })).map((entry) => entry.address);
 }
-
 function stripBrackets(value: string): string {
   return value.startsWith("[") && value.endsWith("]") ? value.slice(1, -1) : value;
 }
-
 async function readBoundedBody(response: Response, maxBytes: number, signal: AbortSignal): Promise<Buffer> {
   if (!response.body) throw packageError("package.download_failed", "Package response has no body.");
   const chunks: Buffer[] = [];
@@ -863,7 +865,6 @@ async function readBoundedBody(response: Response, maxBytes: number, signal: Abo
   }
   return Buffer.concat(chunks);
 }
-
 function canonicalPrivateRoot(value: string): string {
   if (!path.isAbsolute(value)) throw packageError("package.root_invalid", "Package root must be absolute.");
   fs.mkdirSync(value, { recursive: true, mode: 0o700 });
@@ -872,10 +873,9 @@ function canonicalPrivateRoot(value: string): string {
   if (!stats.isDirectory() || stats.isSymbolicLink()) throw packageError("package.root_invalid", "Package root is unsafe.");
   return canonical;
 }
-
-function validateRegistry(value: unknown): PackageRegistryFile {
+function validateRegistry(value: unknown): PiPackageRegistryFile {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid registry");
-  const candidate = value as Partial<PackageRegistryFile>;
+  const candidate = value as Partial<PiPackageRegistryFile>;
   if (candidate.schemaVersion !== 1 || !Number.isSafeInteger(candidate.revision) || candidate.revision! < 0 || !Array.isArray(candidate.packages)) throw new Error("invalid registry");
   const records = candidate.packages.map(validateRecord).sort(compareRecords);
   const coordinates = new Set<string>();
@@ -891,10 +891,9 @@ function validateRegistry(value: unknown): PackageRegistryFile {
   }
   return { schemaVersion: 1, revision: candidate.revision!, packages: records };
 }
-
-function validateRecord(value: unknown): PackageRecord {
+function validateRecord(value: unknown): PiPackageRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid record");
-  const record = value as Partial<PackageRecord>;
+  const record = value as Partial<PiPackageRecord>;
   if (
     typeof record.packageName !== "string" || !PACKAGE_NAME_PATTERN.test(record.packageName) ||
     record.packageId !== createPackageId(record.packageName) || typeof record.version !== "string" || !EXACT_VERSION_PATTERN.test(record.version) ||
@@ -912,48 +911,55 @@ function validateRecord(value: unknown): PackageRecord {
       !Number.isSafeInteger(request.revision) || request.revision < 1 || request.revision > Number.MAX_SAFE_INTEGER) ||
     new Set(record.requests.map((request) => request.requestId)).size !== record.requests.length
   ) throw new Error("invalid record");
-  return record as PackageRecord;
+  return record as PiPackageRecord;
 }
-
-function replaceRecord(registry: PackageRegistryFile, record: PackageRecord, revision: number): PackageRegistryFile {
+function replaceRecord(registry: PiPackageRegistryFile, record: PiPackageRecord, revision: number): PiPackageRegistryFile {
   if (revision !== incrementRevision(registry.revision)) throw packageError("package.registry_invalid", "Package Registry revision is invalid.");
   return { schemaVersion: 1, revision, packages: registry.packages.map((candidate) => candidate.packageId === record.packageId && candidate.version === record.version ? record : candidate).sort(compareRecords) };
 }
-function removeRecord(registry: PackageRegistryFile, record: PackageRecord, revision: number): PackageRegistryFile {
+function replacePackageRecord(registry: PiPackageRegistryFile, record: PiPackageRecord, revision: number): PiPackageRegistryFile {
+  if (revision !== incrementRevision(registry.revision)) throw packageError("package.registry_invalid", "Package Registry revision is invalid.");
+  return { schemaVersion: 1, revision, packages: registry.packages.map((candidate) => candidate.packageId === record.packageId ? record : candidate).sort(compareRecords) };
+}
+function removeRecord(registry: PiPackageRegistryFile, record: PiPackageRecord, revision: number): PiPackageRegistryFile {
   if (revision !== incrementRevision(registry.revision)) throw packageError("package.registry_invalid", "Package Registry revision is invalid.");
   return { schemaVersion: 1, revision, packages: registry.packages.filter((candidate) => candidate.packageId !== record.packageId) };
 }
-function compareRecords(left: PackageRecord, right: PackageRecord): number {
+function compareRecords(left: PiPackageRecord, right: PiPackageRecord): number {
   return left.packageId.localeCompare(right.packageId, "en") || left.version.localeCompare(right.version, "en");
 }
-function projectRecord(record: PackageRecord, revision: number): PiPackageInstallSummary {
+function projectRecord(record: PiPackageRecord, revision: number): PiPackageInstallSummary {
   return { status: "installed_disabled", packageId: record.packageId, packageName: record.packageName, version: record.version, revision, packageTypes: record.packageTypes, dependencyCount: record.dependencyCount, requiresEnable: true };
 }
-function projectRegistry(registry: PackageRegistryFile): PiPackageRegistrySummary {
+function projectRegistry(
+  registry: PiPackageRegistryFile,
+  rollbackTarget: (record: PiPackageRecord) => { readonly rollbackId: string; readonly targetVersion: string } | undefined = () => undefined
+): PiPackageRegistrySummary {
   return PiPackageRegistrySummarySchema.parse({
     apiVersion: 1, revision: registry.revision,
     packages: registry.packages.map((record) => ({
       packageId: record.packageId, packageName: record.packageName, version: record.version,
       state: "installed_disabled", packageTypes: record.packageTypes,
-      dependencyCount: record.dependencyCount, enabled: false, trust: "community"
+      dependencyCount: record.dependencyCount, enabled: false, trust: "community", canUpdate: true,
+      canRollback: rollbackTarget(record) !== undefined, rollbackTarget: rollbackTarget(record) ?? null
     }))
   });
 }
-function requestRecord(record: PackageRecord, requestId: string): PackageRequestRecord | undefined {
+function requestRecord(record: PiPackageRecord, requestId: string): PackageRequestRecord | undefined {
   return record.requests.find((request) => request.requestId === requestId);
 }
-function assertSameRequest(record: PackageRecord, request: PiPackageInstallRequest): void {
+function assertSameRequest(record: PiPackageRecord, request: PiPackageInstallRequest): void {
   if (record.packageName !== request.packageName || record.version !== request.version) throw packageError("package.request_conflict", "Package request identity was reused for another package.");
 }
 function uninstallIdentity(request: PiPackageUninstallRequest) {
   return { apiVersion: request.apiVersion, requestId: request.requestId, packageId: request.packageId } as const;
 }
-function assertSameUninstall(receipt: PiPackageUninstallReceipt<PackageRecord>, request: PiPackageUninstallRequest): void {
+function assertSameUninstall(receipt: PiPackageUninstallReceipt<PiPackageRecord>, request: PiPackageUninstallRequest): void {
   if (receipt.requestId !== request.requestId || receipt.packageId !== request.packageId || receipt.expectedRegistryRevision !== request.expectedRegistryRevision) {
     throw packageError("package.uninstall_receipt_conflict", "Package uninstall request identity was reused.");
   }
 }
-function sameRecord(left: PackageRecord, right: PackageRecord): boolean {
+function sameRecord(left: PiPackageRecord, right: PiPackageRecord): boolean {
   return canonicalJson(left) === canonicalJson(right);
 }
 function createPackageId(name: string): string {
@@ -975,7 +981,6 @@ function manifestIdentity(manifest: Record<string, any>): Record<string, unknown
     bundleDependencies: manifest.bundleDependencies ?? null
   };
 }
-
 function canonicalJson(value: unknown): string {
   if (value === null || typeof value === "boolean" || typeof value === "string") return JSON.stringify(value);
   if (typeof value === "number") {
@@ -986,7 +991,6 @@ function canonicalJson(value: unknown): string {
   if (typeof value === "object") return `{${Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(",")}}`;
   throw packageError("package.metadata_invalid", "Package metadata is invalid.");
 }
-
 function acquireLock(lockPath: string): { readonly release: () => void } {
   fs.mkdirSync(path.dirname(lockPath), { recursive: true, mode: 0o700 });
   let descriptor: number;
@@ -1011,7 +1015,6 @@ function acquireLock(lockPath: string): { readonly release: () => void } {
     finally { ACTIVE_PACKAGE_LOCKS.delete(lockPath); }
   } };
 }
-
 function recoverOrphanedLock(lockPath: string, processAlive: (pid: number) => boolean): void {
   if (ACTIVE_PACKAGE_LOCKS.has(lockPath) || !fs.existsSync(lockPath)) return;
   const stats = fs.lstatSync(lockPath);
@@ -1031,12 +1034,10 @@ function recoverOrphanedLock(lockPath: string, processAlive: (pid: number) => bo
   fs.rmSync(recovered, { force: true });
   fsyncDirectory(path.dirname(lockPath));
 }
-
 function isProcessAlive(pid: number): boolean {
   try { process.kill(pid, 0); return true; }
   catch (caught) { return (caught as NodeJS.ErrnoException)?.code !== "ESRCH"; }
 }
-
 function readOwnerMarker(root: string): PackageOwnerMarker | undefined {
   try {
     const value = parseBoundedJson(path.join(root, OWNER_MARKER), 4096) as Partial<PackageOwnerMarker>;
@@ -1044,19 +1045,16 @@ function readOwnerMarker(root: string): PackageOwnerMarker | undefined {
     return value as PackageOwnerMarker;
   } catch { return undefined; }
 }
-
 function removeOwnedDirectory(root: string, requestId: string): void {
   const marker = readOwnerMarker(root) ?? readOwnerMarker(path.join(root, "package"));
   if (marker?.requestId !== requestId) return;
   fs.rmSync(root, { recursive: true });
 }
-
 function walkVersionDirectories(root: string): readonly string[] {
   const output: string[] = [];
   for (const packageId of safeSubdirectories(root)) for (const version of safeSubdirectories(path.join(root, packageId))) for (const digest of safeSubdirectories(path.join(root, packageId, version))) output.push(path.join(root, packageId, version, digest));
   return output;
 }
-
 function safeSubdirectories(root: string): readonly string[] {
   if (!fs.existsSync(root)) return [];
   return fs.readdirSync(root).filter((entry) => {
@@ -1064,13 +1062,11 @@ function safeSubdirectories(root: string): readonly string[] {
     return stats.isDirectory() && !stats.isSymbolicLink();
   });
 }
-
 function parseBoundedJson(filePath: string, maxBytes: number): any {
   const body = readBoundedNoFollow(filePath, maxBytes);
   if (body === undefined) throw packageError("package.metadata_invalid", "Package metadata is missing.");
   try { return JSON.parse(body); } catch { throw packageError("package.metadata_invalid", "Package metadata is invalid."); }
 }
-
 function readBoundedNoFollow(filePath: string, maxBytes: number): string | undefined {
   let descriptor: number | undefined;
   try {
@@ -1083,42 +1079,35 @@ function readBoundedNoFollow(filePath: string, maxBytes: number): string | undef
     throw caught;
   } finally { if (descriptor !== undefined) fs.closeSync(descriptor); }
 }
-
 function writePrivateJson(filePath: string, value: unknown): void {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
   const descriptor = fs.openSync(filePath, "r");
   try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
 }
-
 function ensureConfined(root: string, candidate: string): void {
   const relative = path.relative(path.resolve(root), path.resolve(candidate));
   if (relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw packageError("package.path_invalid", "Package path escaped managed storage.");
 }
-
 function fsyncDirectory(directory: string): void {
   let descriptor: number | undefined;
   try { descriptor = fs.openSync(directory, fs.constants.O_RDONLY); fs.fsyncSync(descriptor); }
   catch (caught) { if (process.platform !== "win32") throw caught; }
   finally { if (descriptor !== undefined) fs.closeSync(descriptor); }
 }
-
 function incrementRevision(value: number): number {
   if (!Number.isSafeInteger(value) || value < 0 || value === Number.MAX_SAFE_INTEGER) throw packageError("package.registry_revision_exhausted", "Package Registry revision is exhausted.");
   return value + 1;
 }
-
 function normalizeFailure(caught: unknown): Error {
   if (caught instanceof DOMException && caught.name === "AbortError") return caught;
   if (caught instanceof PigeDomainError) return caught;
   return packageError("package.install_failed", "Package installation failed.");
 }
-
 function normalizeFilterError(caught: unknown): PigeDomainError {
   return caught instanceof PigeDomainError
     ? caught
     : packageError("package.archive_unsafe_entry", "Package archive contains an unsafe entry.");
 }
-
 function packageError(code: string, message: string): PigeDomainError {
   return new PigeDomainError(code, message);
 }
