@@ -30,7 +30,7 @@ import {
 import { SourcePageService } from "./source-page-service";
 import { tryVerifyReadableSourceFileAsync, verifyReadableSourceFileAsync } from "./source-file-access";
 import { createVaultRelativePathResolver } from "./vault-layout";
-import { MACOS_VISION_OCR_ADAPTER_VERSION, type NativeOcrResult } from "./ocr-types";
+import { isSupportedNativeOcrIdentity, type NativeOcrResult } from "./ocr-types";
 
 export interface PdfRenderedPageForOcr {
   readonly page: number;
@@ -473,6 +473,10 @@ export class PdfOcrArtifactService {
     const sourceFile = await verifyReadableSourceFileAsync(vaultPath, parsedSource);
     await verifyStagedPages(vaultPath, parsedSource, staging);
     const results = validatePageOcrResults(staging, pageResults);
+    const firstResult = results[0]?.result;
+    if (!firstResult) {
+      throw new PigeDomainError("ocr.pdf.result_invalid", "PDF OCR returned no attributable page result.");
+    }
     const complete = !staging.truncated &&
       staging.pages.length === staging.requestedPages.length &&
       results.length === staging.requestedPages.length;
@@ -518,7 +522,7 @@ export class PdfOcrArtifactService {
       renderMetadataArtifactId: staging.renderMetadataArtifactId,
       renderMetadataChecksum: staging.renderMetadataChecksum,
       requestedPages: staging.requestedPages,
-      adapter: { id: "macos_vision_ocr", version: MACOS_VISION_OCR_ADAPTER_VERSION },
+      adapter: { id: firstResult.adapterId, version: firstResult.adapterVersion },
       ...(textIntegrity ? { ocrTextChecksum: textIntegrity.checksum } : {}),
       textCharacterCount: assembled.text.length,
       blockCount: assembled.blockCount,
@@ -549,8 +553,8 @@ export class PdfOcrArtifactService {
         ocrStatus: complete
           ? textArtifactPath ? "completed" : "completed_empty"
           : "partial",
-        ocrAdapterId: "macos_vision_ocr",
-        ocrAdapterVersion: MACOS_VISION_OCR_ADAPTER_VERSION,
+        ocrAdapterId: firstResult.adapterId,
+        ocrAdapterVersion: firstResult.adapterVersion,
         ocrEngine: engineIds.length === 1 ? engineIds[0] : "mixed_local_ocr",
         ocrEngineVersions: engineVersions,
         ocrJobId: job.id,
@@ -635,6 +639,7 @@ function validatePageOcrResults(
 ): readonly PdfPageOcrResult[] {
   const sorted = [...pageResults].sort((left, right) => left.page - right.page);
   if (
+    sorted.length === 0 ||
     sorted.length !== pageResults.length ||
     !isSortedUniquePages(sorted.map((page) => page.page)) ||
     sorted.some((page) => page.locator !== `page:${page.page}` || !staging.pages.some((target) => target.page === page.page))
@@ -643,7 +648,9 @@ function validatePageOcrResults(
   }
   for (const page of sorted) {
     if (
-      page.result.adapterVersion !== MACOS_VISION_OCR_ADAPTER_VERSION ||
+      !isSupportedNativeOcrIdentity(page.result) ||
+      page.result.adapterId !== sorted[0]?.result.adapterId ||
+      page.result.adapterVersion !== sorted[0]?.result.adapterVersion ||
       page.result.text !== page.result.blocks.map((block) => block.text).join("\n")
     ) {
       throw new PigeDomainError("ocr.pdf.result_invalid", "A PDF page OCR result is inconsistent.");
@@ -848,8 +855,8 @@ function isReusablePdfOcrSidecar(
     sidecar.renderMetadataArtifactId !== renderMetadataArtifact.id ||
     sidecar.renderMetadataChecksum !== renderMetadataArtifact.checksum ||
     !sameNumberArray(positiveIntegerArray(sidecar.requestedPages), target.pages) ||
-    adapter?.id !== "macos_vision_ocr" ||
-    adapter.version !== MACOS_VISION_OCR_ADAPTER_VERSION ||
+    sourceRecord.metadata.ocrAdapterId !== adapter?.id ||
+    sourceRecord.metadata.ocrAdapterVersion !== adapter?.version ||
     !Number.isSafeInteger(sidecar.textCharacterCount) ||
     (sidecar.textCharacterCount as number) < 0 ||
     !Number.isSafeInteger(sidecar.blockCount) ||
@@ -858,12 +865,19 @@ function isReusablePdfOcrSidecar(
     typeof sidecar.ocrTextReady !== "boolean" ||
     typeof sidecar.agentTextReady !== "boolean" ||
     pages.length !== target.pages.length ||
-    pages.some((value, index) =>
-      !isRecord(value) ||
-      value.page !== target.pages[index] ||
-      value.locator !== `page:${target.pages[index]}` ||
-      value.renderedArtifactId !== pdfRenderedPageArtifactId(sourceRecord.id, target.pages[index] ?? 0)
-    ) ||
+    pages.some((value, index) => {
+      const engine = isRecord(value) && isRecord(value.engine) ? value.engine : undefined;
+      return !isRecord(value) ||
+        value.page !== target.pages[index] ||
+        value.locator !== `page:${target.pages[index]}` ||
+        value.renderedArtifactId !== pdfRenderedPageArtifactId(sourceRecord.id, target.pages[index] ?? 0) ||
+        !isSupportedNativeOcrIdentity({
+          adapterId: adapter?.id,
+          adapterVersion: adapter?.version,
+          engine: engine?.id,
+          engineVersion: engine?.version
+        });
+    }) ||
     !Array.isArray(sidecar.units) ||
     !Array.isArray(sidecar.warnings) ||
     sidecar.warnings.some((warning) => typeof warning !== "string") ||
