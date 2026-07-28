@@ -3554,13 +3554,6 @@ export const CollectionSnapshotSchema = z.object({
       message: "Collection totalRowCount must include every projected row."
     });
   }
-  if (snapshot.truncated !== (snapshot.totalRowCount > snapshot.returnedRowCount)) {
-    context.addIssue({
-      code: "custom",
-      path: ["truncated"],
-      message: "Collection truncation must agree with total and returned row counts."
-    });
-  }
   const columnIds = new Set(snapshot.columns.map(({ columnId }) => columnId));
   const viewIds = new Set<string>();
   for (const [index, view] of snapshot.views.entries()) {
