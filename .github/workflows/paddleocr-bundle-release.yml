@@ -1,0 +1,241 @@
+name: PaddleOCR managed bundle prerelease
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Exact 40-character commit containing reviewed available bundle records
+        required: true
+        type: string
+      tag:
+        description: Existing immutable paddleocr-local-v* tag at that commit
+        required: true
+        type: string
+  push:
+    tags:
+      - "paddleocr-local-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paddleocr-bundle-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate exact PaddleOCR release identity
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.identity.outputs.commit }}
+      tag: ${{ steps.identity.outputs.tag }}
+    steps:
+      - name: Checkout exact requested commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.commit || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate tag and checkout identity
+        id: identity
+        env:
+          PIGE_REQUESTED_COMMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.commit || github.sha }}
+          PIGE_REQUESTED_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          PIGE_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test "$PIGE_REPOSITORY" = "YinsenW/Pige"
+          [[ "$PIGE_REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PIGE_REQUESTED_TAG" =~ ^paddleocr-local-v[0-9][0-9A-Za-z._-]*$ ]]
+          [[ ! "$PIGE_REQUESTED_TAG" =~ ^v ]]
+          test "$(git rev-parse HEAD)" = "$PIGE_REQUESTED_COMMIT"
+          test "$(git rev-parse "refs/tags/$PIGE_REQUESTED_TAG^{commit}")" = "$PIGE_REQUESTED_COMMIT"
+          printf 'commit=%s\n' "$PIGE_REQUESTED_COMMIT" >> "$GITHUB_OUTPUT"
+          printf 'tag=%s\n' "$PIGE_REQUESTED_TAG" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build and verify ${{ matrix.platform }}
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment: production-release
+    strategy:
+      fail-fast: true
+      matrix:
+        platform: [macos-arm64, windows-x64]
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24.14.0"
+          cache: npm
+
+      - name: Install pinned dependencies
+        run: npm ci
+
+      - name: Download exact reviewed release inputs
+        id: inputs
+        run: >-
+          npm run release:paddleocr:inputs --
+          --action=prepare
+          --platform=${{ matrix.platform }}
+          --release-tag=${{ needs.validate.outputs.tag }}
+          --parser-manifest=resources/parser-manifests/paddleocr-local.parser.manifest.json
+          --wheel-lock=resources/parser-manifests/paddleocr-local.${{ matrix.platform }}.selected-wheels.lock.json
+          --legal=resources/licenses/paddleocr/${{ matrix.platform }}
+          --artifacts=${{ runner.temp }}/paddleocr-inputs/${{ matrix.platform }}
+          --builder-lock=${{ runner.temp }}/paddleocr-inputs/${{ matrix.platform }}.builder-lock.json
+          --record=${{ runner.temp }}/paddleocr-inputs/${{ matrix.platform }}.inputs.json
+          --github-output=$GITHUB_OUTPUT
+
+      - name: Build deterministic LocalTool bundle
+        run: >-
+          npm run release:paddleocr:build --
+          --parser-manifest=resources/parser-manifests/paddleocr-local.parser.manifest.json
+          --wheel-lock=${{ runner.temp }}/paddleocr-inputs/${{ matrix.platform }}.builder-lock.json
+          --artifacts=${{ runner.temp }}/paddleocr-inputs/${{ matrix.platform }}
+          --legal=resources/licenses/paddleocr/${{ matrix.platform }}
+          --wrapper=apps/desktop/native/paddleocr/pige_paddle_ocr_wrapper.py
+          --output=${{ runner.temp }}/paddleocr-package/${{ matrix.platform }}
+
+      - name: Materialize ephemeral Ed25519 private key
+        env:
+          PADDLEOCR_RELEASE_PRIVATE_KEY_BASE64: ${{ secrets.PADDLEOCR_RELEASE_ED25519_PRIVATE_KEY_BASE64 }}
+        run: |
+          node -e "const fs=require('node:fs');const value=process.env.PADDLEOCR_RELEASE_PRIVATE_KEY_BASE64;if(!value)throw new Error('Missing PaddleOCR release key.');fs.mkdirSync(process.env.RUNNER_TEMP+'/paddleocr-key',{recursive:true,mode:0o700});fs.writeFileSync(process.env.RUNNER_TEMP+'/paddleocr-key/private.pem',Buffer.from(value,'base64'),{mode:0o600,flag:'wx'});"
+
+      - name: Create deterministic signed archive
+        env:
+          PIGE_ARTIFACT_URL: ${{ steps.inputs.outputs.artifact_url }}
+          PIGE_ARTIFACT_FILENAME: ${{ steps.inputs.outputs.artifact_filename }}
+          PIGE_ENGINE_VERSION: ${{ steps.inputs.outputs.engine_version }}
+          PIGE_KEY_ID: ${{ steps.inputs.outputs.key_id }}
+          PIGE_PACKAGE_LIMITS: ${{ steps.inputs.outputs.package_limits }}
+        run: |
+          mkdir -p "artifacts/paddleocr-release/${{ matrix.platform }}"
+          npm --silent run release:paddleocr:archive -- \
+            --package="${{ runner.temp }}/paddleocr-package/${{ matrix.platform }}" \
+            --output="artifacts/paddleocr-release/${{ matrix.platform }}/$PIGE_ARTIFACT_FILENAME" \
+            --url="$PIGE_ARTIFACT_URL" \
+            --platform="${{ matrix.platform }}" \
+            --version="$PIGE_ENGINE_VERSION" \
+            --key-id="$PIGE_KEY_ID" \
+            --private-key="${{ runner.temp }}/paddleocr-key/private.pem" \
+            --limits="$PIGE_PACKAGE_LIMITS" \
+            > "artifacts/paddleocr-release/${{ matrix.platform }}/paddleocr-${{ matrix.platform }}.release.json"
+
+      - name: Remove private key
+        if: always()
+        run: node -e "require('node:fs').rmSync(process.env.RUNNER_TEMP+'/paddleocr-key',{recursive:true,force:true})"
+
+      - name: Independently verify archive, signature, and tree
+        env:
+          PIGE_ARTIFACT_FILENAME: ${{ steps.inputs.outputs.artifact_filename }}
+        run: >-
+          npm run release:paddleocr:verify --
+          --action=verify
+          --platform=${{ matrix.platform }}
+          --release-tag=${{ needs.validate.outputs.tag }}
+          --parser-manifest=resources/parser-manifests/paddleocr-local.parser.manifest.json
+          --archive=artifacts/paddleocr-release/${{ matrix.platform }}/$PIGE_ARTIFACT_FILENAME
+          --release-record=artifacts/paddleocr-release/${{ matrix.platform }}/paddleocr-${{ matrix.platform }}.release.json
+          --verification-record=artifacts/paddleocr-release/${{ matrix.platform }}/paddleocr-${{ matrix.platform }}.verification.json
+
+      - name: Copy machine-readable input record
+        run: >-
+          cp
+          "${{ runner.temp }}/paddleocr-inputs/${{ matrix.platform }}.inputs.json"
+          "artifacts/paddleocr-release/${{ matrix.platform }}/paddleocr-${{ matrix.platform }}.inputs.json"
+
+      - name: Upload verified release candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: paddleocr-verified-${{ matrix.platform }}-${{ needs.validate.outputs.commit }}
+          path: artifacts/paddleocr-release/${{ matrix.platform }}
+          if-no-files-found: error
+          retention-days: 2
+
+  publish:
+    name: Publish immutable PaddleOCR prerelease
+    needs: [validate, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: production-release
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PIGE_RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+      PIGE_RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
+    steps:
+      - name: Checkout publisher at validated commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24.14.0"
+          cache: npm
+
+      - name: Install pinned dependencies
+        run: npm ci
+
+      - name: Download verified macOS bundle
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: paddleocr-verified-macos-arm64-${{ needs.validate.outputs.commit }}
+          path: artifacts/paddleocr-release/macos-arm64
+
+      - name: Download verified Windows bundle
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: paddleocr-verified-windows-x64-${{ needs.validate.outputs.commit }}
+          path: artifacts/paddleocr-release/windows-x64
+
+      - name: Reverify downloaded publication assets
+        run: |
+          set -euo pipefail
+          for platform in macos-arm64 windows-x64; do
+            directory="artifacts/paddleocr-release/$platform"
+            mapfile -t archives < <(find "$directory" -maxdepth 1 -type f -name '*.zip' -print)
+            test "${#archives[@]}" -eq 1
+            test "$(find "$directory" -maxdepth 1 -type f | wc -l)" -eq 4
+            test -f "$directory/paddleocr-$platform.inputs.json"
+            test -f "$directory/paddleocr-$platform.release.json"
+            test -f "$directory/paddleocr-$platform.verification.json"
+            archive="${archives[0]}"
+            npm run release:paddleocr:verify -- \
+              --action=verify \
+              --platform="$platform" \
+              --release-tag="$PIGE_RELEASE_TAG" \
+              --parser-manifest=resources/parser-manifests/paddleocr-local.parser.manifest.json \
+              --archive="$archive" \
+              --release-record="artifacts/paddleocr-release/$platform/paddleocr-$platform.release.json" \
+              --verification-record="${{ runner.temp }}/paddleocr-$platform.publisher-verification.json"
+          done
+
+      - name: Publish new immutable prerelease
+        run: |
+          set -euo pipefail
+          if gh release view "$PIGE_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists; immutable replacement is forbidden." >&2
+            exit 1
+          fi
+          gh release create "$PIGE_RELEASE_TAG" \
+            artifacts/paddleocr-release/macos-arm64/* \
+            artifacts/paddleocr-release/windows-x64/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --prerelease \
+            --title "Pige PaddleOCR managed bundle $PIGE_RELEASE_TAG" \
+            --notes "Reviewed offline PaddleOCR LocalTool bundles for commit $PIGE_RELEASE_COMMIT."
