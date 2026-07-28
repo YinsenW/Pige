@@ -117,9 +117,7 @@ export class AgentConversationHistory {
 
 function readHistoryEntries(vaultPath: string): AgentConversationHistoryEntry[] {
   const conversationsRoot = path.join(vaultPath, ".pige", "conversations");
-  const rootStat = lstatIfExists(conversationsRoot);
-  if (!rootStat) return [];
-  assertDirectory(rootStat);
+  if (!assertExistingDirectoryPath(vaultPath, conversationsRoot)) return [];
 
   const entries: AgentConversationHistoryEntry[] = [];
   const budget = { entries: 0, files: 0, bytes: 0 };
@@ -272,6 +270,20 @@ function assertSafeVaultRoot(vaultPath: string): string {
   if (!stat) throw unavailableHistory();
   assertDirectory(stat);
   return root;
+}
+
+function assertExistingDirectoryPath(vaultPath: string, directoryPath: string): boolean {
+  const root = assertSafeVaultRoot(vaultPath);
+  const relative = path.relative(root, directoryPath);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) throw unavailableHistory();
+  let current = root;
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    const stat = lstatIfExists(current);
+    if (!stat) return false;
+    assertDirectory(stat);
+  }
+  return true;
 }
 
 function assertDirectory(stat: fs.Stats): void {

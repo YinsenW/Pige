@@ -94,6 +94,18 @@ describe("AgentConversationHistory", () => {
       vaultPath
     })).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_unavailable" }));
   });
+
+  it("does not follow a symlinked private metadata parent", () => {
+    const vaultPath = createVaultRoot();
+    const outside = createVaultRoot();
+    fs.mkdirSync(path.join(outside, "conversations"), { recursive: true });
+    fs.symlinkSync(outside, path.join(vaultPath, ".pige"));
+
+    expect(() => new AgentConversationHistory().list({
+      activeVaultId: "vault_20260729_history01",
+      vaultPath
+    })).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_unavailable" }));
+  });
 });
 
 function createVaultRoot(): string {
