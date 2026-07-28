@@ -3,9 +3,14 @@ import {
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
   PiPackageRegistryQueryResultSchema,
+  PiPackageUninstallRequestSchema,
+  PiPackageUninstallResultSchema,
   type PiPackageInstallRequest,
   type PiPackageInstallResult,
-  type PiPackageRegistryQueryResult
+  type PiPackageRegistrySummary,
+  type PiPackageRegistryQueryResult,
+  type PiPackageUninstallRequest,
+  type PiPackageUninstallResult
 } from "@pige/schemas";
 
 type Awaitable<T> = T | Promise<T>;
@@ -16,6 +21,8 @@ export interface RegisterPiPackagesIpcOptions {
   readonly getActiveVaultId: () => string | undefined;
   readonly summary: () => Awaitable<PiPackageRegistryQueryResult>;
   readonly install: (request: PiPackageInstallRequest) => Awaitable<PiPackageInstallResult>;
+  readonly confirmUninstall: (sender: WebContents, request: PiPackageUninstallRequest) => Awaitable<boolean>;
+  readonly uninstall: (request: PiPackageUninstallRequest) => Awaitable<PiPackageUninstallResult>;
 }
 
 const REQUEST_PREFIX = "pi_package_request_";
@@ -44,6 +51,28 @@ export function registerPiPackagesIpc(options: RegisterPiPackagesIpcOptions): vo
       return failedInstall(parsed, result.taskId);
     }
     return result;
+  });
+
+  options.ipcMain.handle("piPackages.uninstall", async (event, request: unknown) => {
+    const parsed = PiPackageUninstallRequestSchema.parse(request);
+    const vaultId = trustedActiveVault(options, event.sender);
+    if (!vaultId) return failedUninstall(parsed);
+    let confirmed = false;
+    try { confirmed = await options.confirmUninstall(event.sender, parsed); } catch { return failedUninstall(parsed); }
+    if (trustedActiveVault(options, event.sender) !== vaultId) return failedUninstall(parsed);
+    if (!confirmed) {
+      const summary = await readSummary(options);
+      return summary.status === "ready" && trustedActiveVault(options, event.sender) === vaultId
+        ? uninstallResult(parsed, "denied", summary.registry)
+        : failedUninstall(parsed);
+    }
+    try {
+      const result = PiPackageUninstallResultSchema.parse(await options.uninstall(parsed));
+      assertUninstallIdentity(parsed, result);
+      return trustedActiveVault(options, event.sender) === vaultId ? result : failedUninstall(parsed);
+    } catch {
+      return failedUninstall(parsed);
+    }
   });
 }
 
@@ -92,5 +121,26 @@ function assertInstallIdentity(
 ): void {
   if (result.apiVersion !== request.apiVersion || result.requestId !== request.requestId) {
     throw new Error("Pi package install response identity did not match the request.");
+  }
+}
+
+function failedUninstall(request: PiPackageUninstallRequest): PiPackageUninstallResult {
+  return uninstallResult(request, "failed");
+}
+
+function uninstallResult(
+  request: PiPackageUninstallRequest,
+  status: "denied" | "failed",
+  registry?: PiPackageRegistrySummary
+): PiPackageUninstallResult {
+  return PiPackageUninstallResultSchema.parse({
+    apiVersion: request.apiVersion, requestId: request.requestId, packageId: request.packageId, status,
+    ...(registry ? { registry } : {})
+  });
+}
+
+function assertUninstallIdentity(request: PiPackageUninstallRequest, result: PiPackageUninstallResult): void {
+  if (result.apiVersion !== request.apiVersion || result.requestId !== request.requestId || result.packageId !== request.packageId) {
+    throw new Error("Pi package uninstall response identity did not match the request.");
   }
 }

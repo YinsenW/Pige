@@ -326,7 +326,7 @@ async function confirmSettingAction(
 ): Promise<void> {
   const parentWindow = BrowserWindow.fromWebContents(sender);
   if (!parentWindow) throw new Error("No active window for setting confirmation.");
-  await guardSettingAction(settingKeys, confirmation, async (prompt) => {
+  const confirm = async (prompt: SettingActionConfirmation): Promise<boolean> => {
     const result = await dialog.showMessageBox(parentWindow, {
       type: "warning",
       buttons: ["Cancel", prompt.confirmLabel],
@@ -337,7 +337,12 @@ async function confirmSettingAction(
       message: prompt.message
     });
     return result.response === 1;
-  });
+  };
+  if (settingKeys.length === 0) {
+    if (!await confirm(confirmation)) throw new PigeDomainError("permission.user_denied", "The user canceled the setting action.");
+    return;
+  }
+  await guardSettingAction(settingKeys, confirmation, confirm);
 }
 
 
@@ -2170,7 +2175,21 @@ registerPiPackagesIpc({
   },
   getActiveVaultId: () => getVaultService().current()?.vaultId,
   summary: () => ({ status: "ready", registry: getPiPackageManagerService().summary() }),
-  install: (request) => getPiPackageInstallTaskService().install(request)
+  install: (request) => getPiPackageInstallTaskService().install(request),
+  confirmUninstall: async (sender, request) => {
+    try {
+      await confirmSettingAction(sender, [], {
+        title: "Remove this Pi package?",
+        message: `Pige will remove the disabled package ${request.packageId} from this device and retain its private recovery trash.`,
+        confirmLabel: "Remove package"
+      });
+      return true;
+    } catch (caught) {
+      if (caught instanceof PigeDomainError && caught.code === "permission.user_denied") return false;
+      throw caught;
+    }
+  },
+  uninstall: (request) => getPiPackageManagerService().uninstall(request)
 });
 registerMemoryIpc({
   ipcMain,

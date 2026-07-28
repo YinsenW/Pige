@@ -4,7 +4,10 @@ import fs from "node:fs";
 import net, { type LookupFunction } from "node:net";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
-import { PiPackageRegistrySummarySchema, type PiPackageRegistrySummary, type PiPackageType } from "@pige/schemas";
+import {
+  PiPackageRegistrySummarySchema, PiPackageUninstallRequestSchema, PiPackageUninstallResultSchema,
+  type PiPackageRegistrySummary, type PiPackageType, type PiPackageUninstallRequest, type PiPackageUninstallResult
+} from "@pige/schemas";
 import * as tar from "tar";
 import { Agent, fetch as undiciFetch, type Dispatcher } from "undici";
 import {
@@ -12,6 +15,10 @@ import {
   type PermissionedExternalExecutionAuthority
 } from "./permissioned-external-capability-service";
 import { createPinnedLookup, isNonPublicNetworkAddress } from "./source-fetch-service";
+import {
+  PiPackageLifecycleStore, hashPiPackageTree,
+  type PiPackageLifecycleRecord, type PiPackageUninstallReceipt
+} from "./pi-package-lifecycle-store";
 
 const PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]{0,63}\/[a-z0-9][a-z0-9._-]{0,63}|[a-z0-9][a-z0-9._-]{0,127})$/u;
 const EXACT_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
@@ -33,85 +40,57 @@ const OWNER_MARKER = ".pige-package-owner.json";
 const REGISTRY_ORIGIN = "https://registry.npmjs.org";
 const ACTIVE_PACKAGE_LOCKS = new Set<string>();
 export interface PiPackageInstallRequest {
-  readonly requestId: string;
-  readonly packageName: string;
-  readonly version: string;
+  readonly requestId: string; readonly packageName: string; readonly version: string;
 }
 export interface PiPackageInstallSummary {
-  readonly status: "installed_disabled";
-  readonly packageId: string;
-  readonly packageName: string;
-  readonly version: string;
-  readonly revision: number;
-  readonly packageTypes: readonly PiPackageType[];
-  readonly dependencyCount: number;
-  readonly requiresEnable: true;
+  readonly status: "installed_disabled"; readonly packageId: string;
+  readonly packageName: string; readonly version: string; readonly revision: number;
+  readonly packageTypes: readonly PiPackageType[]; readonly dependencyCount: number; readonly requiresEnable: true;
 }
 interface ResolvedPackagePlan {
-  readonly packageName: string;
-  readonly version: string;
-  readonly tarballUrl: string;
-  readonly integrity: string;
-  readonly packageTypes: readonly PiPackageType[];
-  readonly dependencyCount: number;
-  readonly manifestHash: string;
+  readonly packageName: string; readonly version: string;
+  readonly tarballUrl: string; readonly integrity: string;
+  readonly packageTypes: readonly PiPackageType[]; readonly dependencyCount: number; readonly manifestHash: string;
 }
-interface PackageRecord extends Omit<PiPackageInstallSummary, "status" | "revision" | "requiresEnable"> {
-  readonly treeHash: string;
-  readonly archiveHash: string;
-  readonly integrity: string;
-  readonly manifestHash: string;
-  readonly relativePath: string;
-  readonly installedAt: string;
-  readonly enabled: false;
-  readonly trust: "community";
+interface PackageRecord extends Omit<PiPackageInstallSummary, "status" | "revision" | "requiresEnable">, PiPackageLifecycleRecord {
+  readonly treeHash: string; readonly archiveHash: string; readonly integrity: string;
+  readonly manifestHash: string; readonly relativePath: string; readonly installedAt: string;
+  readonly enabled: false; readonly trust: "community";
   readonly requests: readonly PackageRequestRecord[];
 }
 interface PackageRequestRecord {
-  readonly requestId: string;
-  readonly revision: number;
+  readonly requestId: string; readonly revision: number;
 }
 interface PackageRegistryFile {
-  readonly schemaVersion: 1;
-  readonly revision: number;
+  readonly schemaVersion: 1; readonly revision: number;
   readonly packages: readonly PackageRecord[];
 }
 interface PackageOwnerMarker {
-  readonly schemaVersion: 1;
-  readonly requestId: string;
-  readonly packageId: string;
-  readonly packageName: string;
-  readonly version: string;
+  readonly schemaVersion: 1; readonly requestId: string; readonly packageId: string;
+  readonly packageName: string; readonly version: string;
 }
 interface FetchTarget {
-  readonly url: string;
-  readonly hostname: string;
-  readonly addresses: readonly string[];
+  readonly url: string; readonly hostname: string; readonly addresses: readonly string[];
 }
 interface FetchResponseHandle {
-  readonly response: Response;
-  dispose(): Promise<void>;
+  readonly response: Response; dispose(): Promise<void>;
 }
 type FetchImplementation = (url: string, init: RequestInit & { readonly dispatcher?: Dispatcher }) => Promise<Response>;
 export interface PiPackageManagerOptions {
-  readonly appDataRoot: string;
-  readonly fetchImpl?: typeof fetch;
+  readonly appDataRoot: string; readonly fetchImpl?: typeof fetch;
   readonly lookup?: (hostname: string) => Promise<readonly string[]>;
-  readonly now?: () => Date;
-  readonly processAlive?: (pid: number) => boolean;
+  readonly now?: () => Date; readonly processAlive?: (pid: number) => boolean;
   readonly testOnlyMaxExtractedEntries?: number;
 }
 export class PiPackageManagerService {
-  readonly #root: string;
-  readonly #installedRoot: string;
-  readonly #stagingRoot: string;
-  readonly #registryPath: string;
-  readonly #lockPath: string;
+  readonly #root: string; readonly #installedRoot: string; readonly #stagingRoot: string;
+  readonly #registryPath: string; readonly #lockPath: string;
   readonly #fetchImpl: FetchImplementation;
   readonly #lookup: (hostname: string) => Promise<readonly string[]>;
   readonly #pinAddresses: boolean;
   readonly #now: () => Date;
   readonly #maxExtractedEntries: number;
+  readonly #lifecycleStore: PiPackageLifecycleStore<PackageRecord>;
 
   constructor(options: PiPackageManagerOptions) {
     const appDataRoot = canonicalPrivateRoot(options.appDataRoot);
@@ -130,20 +109,19 @@ export class PiPackageManagerService {
       ? MAX_EXTRACTED_ENTRIES
       : requireTestEntryLimit(options.testOnlyMaxExtractedEntries);
     this.#prepare();
+    this.#lifecycleStore = new PiPackageLifecycleStore({
+      packageRoot: this.#root, installedRoot: this.#installedRoot, parseRecord: validateRecord
+    });
     recoverOrphanedLock(this.#lockPath, options.processAlive ?? isProcessAlive);
-    this.#recoverOwnedResidue(this.#readRegistry());
+    const lock = acquireLock(this.#lockPath);
+    try {
+      this.#recoverOwnedResidue(this.#readRegistry());
+      this.#recoverUninstalls();
+    } finally { lock.release(); }
   }
 
   summary(): PiPackageRegistrySummary {
-    const registry = this.#readRegistry();
-    return PiPackageRegistrySummarySchema.parse({
-      apiVersion: 1, revision: registry.revision,
-      packages: registry.packages.map((record) => ({
-        packageId: record.packageId, packageName: record.packageName, version: record.version,
-        state: "installed_disabled", packageTypes: record.packageTypes,
-        dependencyCount: record.dependencyCount, enabled: false, trust: "community"
-      }))
-    });
+    return projectRegistry(this.#readRegistry());
   }
 
   async install(
@@ -261,6 +239,45 @@ export class PiPackageManagerService {
     assertSameRequest(record, normalized);
     this.#assertInstalledRecord(record);
     return projectRecord(record, requestRecord(record, normalized.requestId)!.revision);
+  }
+
+  uninstall(request: PiPackageUninstallRequest): PiPackageUninstallResult {
+    const parsed = PiPackageUninstallRequestSchema.parse(request);
+    const identity = uninstallIdentity(parsed);
+    let lock: { readonly release: () => void } | undefined;
+    try {
+      lock = acquireLock(this.#lockPath);
+      this.#recoverOwnedResidue(this.#readRegistry());
+      this.#recoverUninstalls();
+      let current = this.#readRegistry();
+      const replay = this.#lifecycleStore.readUninstallReceipt(parsed.requestId);
+      if (replay) {
+        assertSameUninstall(replay, parsed);
+        if (replay.state === "prepared") this.#recoverUninstall(replay);
+        current = this.#readRegistry();
+        if (!current.packages.some((record) => record.packageId === parsed.packageId)) {
+          return PiPackageUninstallResultSchema.parse({ ...identity, status: "removed", registry: projectRegistry(current) });
+        }
+        throw packageError("package.uninstall_receipt_conflict", "Package uninstall receipt conflicts with installed state.");
+      }
+      if (parsed.expectedRegistryRevision !== current.revision) {
+        return PiPackageUninstallResultSchema.parse({ ...identity, status: "stale", registry: projectRegistry(current) });
+      }
+      const record = current.packages.find((candidate) => candidate.packageId === parsed.packageId);
+      if (!record) return PiPackageUninstallResultSchema.parse({ ...identity, status: "not_found", registry: projectRegistry(current) });
+      this.#lifecycleStore.assertInstalled(record);
+      const receipt = this.#lifecycleStore.prepareUninstall({
+        ...uninstallIdentity(parsed), expectedRegistryRevision: parsed.expectedRegistryRevision,
+        record, createdAt: this.#now().toISOString()
+      });
+      this.#lifecycleStore.ensureTrashed(receipt);
+      const next = removeRecord(current, record, incrementRevision(current.revision));
+      this.#writeRegistry(next);
+      this.#lifecycleStore.markUninstallCommitted(receipt, next.revision);
+      return PiPackageUninstallResultSchema.parse({ ...identity, status: "removed", registry: projectRegistry(next) });
+    } catch {
+      return PiPackageUninstallResultSchema.parse({ ...identity, status: "failed" });
+    } finally { lock?.release(); }
   }
 
   async #resolvePlan(request: PiPackageInstallRequest, signal: AbortSignal): Promise<ResolvedPackagePlan> {
@@ -411,9 +428,8 @@ export class PiPackageManagerService {
   }
 
   #prepare(): void {
-    fs.mkdirSync(this.#installedRoot, { recursive: true, mode: 0o700 });
-    fs.mkdirSync(this.#stagingRoot, { recursive: true, mode: 0o700 });
     for (const candidate of [this.#root, this.#installedRoot, this.#stagingRoot]) {
+      if (!fs.existsSync(candidate)) fs.mkdirSync(candidate, { mode: 0o700 });
       const stats = fs.lstatSync(candidate);
       if (!stats.isDirectory() || stats.isSymbolicLink()) throw packageError("package.root_invalid", "Package storage is unsafe.");
     }
@@ -499,21 +515,29 @@ export class PiPackageManagerService {
   }
 
   #assertInstalledRecord(record: PackageRecord): void {
-    const installedPath = path.join(this.#root, record.relativePath);
-    ensureConfined(this.#installedRoot, installedPath);
-    const plan: ResolvedPackagePlan = {
-      packageName: record.packageName,
-      version: record.version,
-      tarballUrl: "",
-      integrity: record.integrity,
-      packageTypes: record.packageTypes,
-      dependencyCount: record.dependencyCount,
-      manifestHash: record.manifestHash
-    };
-    const inspection = inspectExtractedPackage(installedPath, {
-      requestId: record.requests[0]!.requestId, packageName: record.packageName, version: record.version
-    }, plan);
-    if (inspection.treeHash !== record.treeHash) throw packageError("package.install_changed", "Installed package content changed.");
+    this.#lifecycleStore.assertInstalled(record);
+  }
+
+  #recoverUninstalls(): void {
+    for (const receipt of this.#lifecycleStore.listPreparedUninstalls()) this.#recoverUninstall(receipt);
+  }
+
+  #recoverUninstall(receipt: PiPackageUninstallReceipt<PackageRecord>): void {
+    const current = this.#readRegistry();
+    const record = current.packages.find((candidate) => candidate.packageId === receipt.packageId);
+    if (current.revision === receipt.expectedRegistryRevision && record && sameRecord(record, receipt.record)) {
+      this.#lifecycleStore.ensureTrashed(receipt);
+      const next = removeRecord(current, record, incrementRevision(current.revision));
+      this.#writeRegistry(next);
+      this.#lifecycleStore.markUninstallCommitted(receipt, next.revision);
+      return;
+    }
+    if (current.revision === receipt.expectedRegistryRevision + 1 && !record) {
+      this.#lifecycleStore.ensureTrashed(receipt);
+      this.#lifecycleStore.markUninstallCommitted(receipt, current.revision);
+      return;
+    }
+    throw packageError("package.uninstall_recovery_conflict", "Package uninstall recovery conflicts with registry state.");
   }
 }
 
@@ -617,9 +641,7 @@ function inspectExtractedPackage(root: string, request: PiPackageInstallRequest,
   assertNoExecutablePackageMetadata(manifest);
   assertNoRuntimeDependencies(manifest);
   assertDeclaredPiEntries(root, manifest.pi);
-  const digest = createHash("sha256");
-  hashTree(root, root, digest);
-  return { treeHash: `sha256:${digest.digest("hex")}` };
+  return { treeHash: hashPiPackageTree(root) };
 }
 
 function assertDeclaredPiEntries(root: string, pi: unknown): void {
@@ -780,46 +802,6 @@ function hasExecutableBinaryMagic(filePath: string): boolean {
   }
 }
 
-function hashTree(root: string, directory: string, digest: ReturnType<typeof createHash>): void {
-  for (const entry of fs.readdirSync(directory).sort((left, right) => left.localeCompare(right, "en"))) {
-    if (entry === OWNER_MARKER && directory === root) continue;
-    const candidate = path.join(directory, entry);
-    const stats = fs.lstatSync(candidate);
-    if (stats.isSymbolicLink() || (!stats.isFile() && !stats.isDirectory())) {
-      throw packageError("package.install_changed", "Installed package contains an unsafe filesystem entry.");
-    }
-    const relative = path.relative(root, candidate).split(path.sep).join("/");
-    digest.update(stats.isDirectory() ? "d\0" : "f\0").update(relative).update("\0");
-    if (stats.isDirectory()) hashTree(root, candidate, digest);
-    else digest.update(readRegularFileNoFollow(candidate, stats)).update("\0");
-  }
-}
-
-function readRegularFileNoFollow(filePath: string, expected: fs.Stats): Buffer {
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
-    const opened = fs.fstatSync(descriptor);
-    if (!opened.isFile() || opened.dev !== expected.dev || opened.ino !== expected.ino) {
-      throw packageError("package.install_changed", "Installed package file identity changed.");
-    }
-    const body = fs.readFileSync(descriptor);
-    const completed = fs.fstatSync(descriptor);
-    if (
-      completed.dev !== opened.dev || completed.ino !== opened.ino ||
-      completed.size !== opened.size || completed.size !== body.byteLength
-    ) {
-      throw packageError("package.install_changed", "Installed package file changed while it was inspected.");
-    }
-    return body;
-  } catch (caught) {
-    if (caught instanceof PigeDomainError) throw caught;
-    throw packageError("package.install_changed", "Installed package file could not be inspected safely.");
-  } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
-  }
-}
-
 export function normalizePiPackageInstallRequest(request: PiPackageInstallRequest): PiPackageInstallRequest {
   if (!REQUEST_ID_PATTERN.test(request.requestId)) throw packageError("package.request_invalid", "Package request identity is invalid.");
   if (!PACKAGE_NAME_PATTERN.test(request.packageName)) throw packageError("package.name_invalid", "Package name is invalid.");
@@ -915,7 +897,9 @@ function validateRecord(value: unknown): PackageRecord {
     record.packageId !== createPackageId(record.packageName) || typeof record.version !== "string" || !EXACT_VERSION_PATTERN.test(record.version) ||
     typeof record.treeHash !== "string" || !SHA256_PATTERN.test(record.treeHash) || typeof record.archiveHash !== "string" || !SHA256_PATTERN.test(record.archiveHash) ||
     typeof record.integrity !== "string" || !/^sha512-/u.test(record.integrity) || typeof record.manifestHash !== "string" || !SHA256_PATTERN.test(record.manifestHash) ||
-    typeof record.relativePath !== "string" || path.isAbsolute(record.relativePath) || record.relativePath.split(/[\\/]/u).includes("..") ||
+    typeof record.relativePath !== "string" || record.relativePath !== path.join(
+      "installed", record.packageId ?? "", record.version ?? "", String(record.treeHash ?? "").replace(/^sha256:/u, "")
+    ) ||
     typeof record.installedAt !== "string" || Number.isNaN(Date.parse(record.installedAt)) || record.enabled !== false || record.trust !== "community" ||
     !Array.isArray(record.packageTypes) || record.packageTypes.length === 0 || record.packageTypes.some((type) => !["extension", "skill", "prompt", "theme"].includes(type)) ||
     !Number.isSafeInteger(record.dependencyCount) || record.dependencyCount! < 0 || record.dependencyCount! > 256 ||
@@ -932,31 +916,49 @@ function replaceRecord(registry: PackageRegistryFile, record: PackageRecord, rev
   if (revision !== incrementRevision(registry.revision)) throw packageError("package.registry_invalid", "Package Registry revision is invalid.");
   return { schemaVersion: 1, revision, packages: registry.packages.map((candidate) => candidate.packageId === record.packageId && candidate.version === record.version ? record : candidate).sort(compareRecords) };
 }
-
+function removeRecord(registry: PackageRegistryFile, record: PackageRecord, revision: number): PackageRegistryFile {
+  if (revision !== incrementRevision(registry.revision)) throw packageError("package.registry_invalid", "Package Registry revision is invalid.");
+  return { schemaVersion: 1, revision, packages: registry.packages.filter((candidate) => candidate.packageId !== record.packageId) };
+}
 function compareRecords(left: PackageRecord, right: PackageRecord): number {
   return left.packageId.localeCompare(right.packageId, "en") || left.version.localeCompare(right.version, "en");
 }
-
 function projectRecord(record: PackageRecord, revision: number): PiPackageInstallSummary {
   return { status: "installed_disabled", packageId: record.packageId, packageName: record.packageName, version: record.version, revision, packageTypes: record.packageTypes, dependencyCount: record.dependencyCount, requiresEnable: true };
 }
-
+function projectRegistry(registry: PackageRegistryFile): PiPackageRegistrySummary {
+  return PiPackageRegistrySummarySchema.parse({
+    apiVersion: 1, revision: registry.revision,
+    packages: registry.packages.map((record) => ({
+      packageId: record.packageId, packageName: record.packageName, version: record.version,
+      state: "installed_disabled", packageTypes: record.packageTypes,
+      dependencyCount: record.dependencyCount, enabled: false, trust: "community"
+    }))
+  });
+}
 function requestRecord(record: PackageRecord, requestId: string): PackageRequestRecord | undefined {
   return record.requests.find((request) => request.requestId === requestId);
 }
-
 function assertSameRequest(record: PackageRecord, request: PiPackageInstallRequest): void {
   if (record.packageName !== request.packageName || record.version !== request.version) throw packageError("package.request_conflict", "Package request identity was reused for another package.");
 }
-
+function uninstallIdentity(request: PiPackageUninstallRequest) {
+  return { apiVersion: request.apiVersion, requestId: request.requestId, packageId: request.packageId } as const;
+}
+function assertSameUninstall(receipt: PiPackageUninstallReceipt<PackageRecord>, request: PiPackageUninstallRequest): void {
+  if (receipt.requestId !== request.requestId || receipt.packageId !== request.packageId || receipt.expectedRegistryRevision !== request.expectedRegistryRevision) {
+    throw packageError("package.uninstall_receipt_conflict", "Package uninstall request identity was reused.");
+  }
+}
+function sameRecord(left: PackageRecord, right: PackageRecord): boolean {
+  return canonicalJson(left) === canonicalJson(right);
+}
 function createPackageId(name: string): string {
   return `pkg_${createHash("sha256").update(name, "utf8").digest("hex").slice(0, 24)}`;
 }
-
 function hashCanonical(value: unknown): string {
   return `sha256:${createHash("sha256").update(canonicalJson(value), "utf8").digest("hex")}`;
 }
-
 function manifestIdentity(manifest: Record<string, any>): Record<string, unknown> {
   return {
     name: manifest.name,
@@ -1028,12 +1030,8 @@ function recoverOrphanedLock(lockPath: string, processAlive: (pid: number) => bo
 }
 
 function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (caught) {
-    return (caught as NodeJS.ErrnoException)?.code !== "ESRCH";
-  }
+  try { process.kill(pid, 0); return true; }
+  catch (caught) { return (caught as NodeJS.ErrnoException)?.code !== "ESRCH"; }
 }
 
 function readOwnerMarker(root: string): PackageOwnerMarker | undefined {

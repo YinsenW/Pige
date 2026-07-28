@@ -104,6 +104,8 @@ import type {
   PiPackageInstallRequest,
   PiPackageInstallResult,
   PiPackageRegistryQueryResult,
+  PiPackageUninstallRequest,
+  PiPackageUninstallResult,
   ProposalDecisionRequest,
   ProposalDecisionResult,
   ProposalGetRequest,
@@ -236,6 +238,8 @@ import {
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
   PiPackageRegistryQueryResultSchema,
+  PiPackageUninstallRequestSchema,
+  PiPackageUninstallResultSchema,
   LocalSemanticRetrievalDisableRequestSchema,
   LocalSemanticRetrievalDisableResultSchema,
   LocalSemanticRetrievalEnableRequestSchema,
@@ -834,6 +838,11 @@ const api: PigeDesktopApi = {
       PiPackageInstallResultSchema.parse(await ipcRenderer.invoke(
         "piPackages.install",
         PiPackageInstallRequestSchema.parse(request)
+      )),
+    uninstall: async (request: PiPackageUninstallRequest): Promise<PiPackageUninstallResult> =>
+      PiPackageUninstallResultSchema.parse(await ipcRenderer.invoke(
+        "piPackages.uninstall",
+        PiPackageUninstallRequestSchema.parse(request)
       ))
   },
   taskExecution: {

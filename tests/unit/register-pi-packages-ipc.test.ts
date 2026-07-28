@@ -25,12 +25,20 @@ const registry = {
     trust: "community"
   }]
 } as const;
+const uninstallRequest = {
+  apiVersion: 1,
+  requestId: "pi_package_uninstall_request_abcdefghijklmnop",
+  expectedRegistryRevision: registry.revision,
+  packageId: registry.packages[0].packageId
+} as const;
 
 function makeHarness(overrides: {
   readonly isTrustedSender?: () => boolean;
   readonly getActiveVaultId?: () => string | undefined;
   readonly summary?: () => unknown;
   readonly install?: (value: typeof request) => unknown;
+  readonly confirmUninstall?: (value: typeof uninstallRequest) => unknown;
+  readonly uninstall?: (value: typeof uninstallRequest) => unknown;
 } = {}) {
   const handlers = new Map<string, IpcHandler>();
   const summary = vi.fn(overrides.summary ?? (() => ({ status: "ready", registry })));
@@ -41,6 +49,14 @@ function makeHarness(overrides: {
     registry,
     status: "installed_disabled"
   })));
+  const confirmUninstall = vi.fn((_sender, value) => overrides.confirmUninstall?.(value) ?? true);
+  const uninstall = vi.fn(overrides.uninstall ?? ((value) => ({
+    apiVersion: 1,
+    requestId: value.requestId,
+    packageId: value.packageId,
+    registry: { ...registry, revision: registry.revision + 1, packages: [] },
+    status: "removed"
+  })));
   registerPiPackagesIpc({
     ipcMain: {
       handle: (channel, handler) => handlers.set(channel, handler as IpcHandler)
@@ -48,15 +64,17 @@ function makeHarness(overrides: {
     isTrustedSender: overrides.isTrustedSender ?? (() => true),
     getActiveVaultId: overrides.getActiveVaultId ?? (() => "vault_20260728_packages"),
     summary,
-    install
+    install,
+    confirmUninstall,
+    uninstall
   });
-  return { handlers, summary, install };
+  return { handlers, summary, install, confirmUninstall, uninstall };
 }
 
 describe("registerPiPackagesIpc", () => {
   it("registers the exact package Settings channels and forwards a strict install", async () => {
     const harness = makeHarness();
-    expect([...harness.handlers.keys()]).toEqual(["piPackages.summary", "piPackages.install"]);
+    expect([...harness.handlers.keys()]).toEqual(["piPackages.summary", "piPackages.install", "piPackages.uninstall"]);
 
     await expect(call(harness, "piPackages.summary")).resolves.toEqual({ status: "ready", registry });
     await expect(call(harness, "piPackages.install", request)).resolves.toMatchObject({
@@ -66,6 +84,71 @@ describe("registerPiPackagesIpc", () => {
     });
     expect(harness.install).toHaveBeenCalledOnce();
     expect(harness.install).toHaveBeenCalledWith(request);
+  });
+
+  it("confirms a strict uninstall before effect and returns only authoritative owner state", async () => {
+    const harness = makeHarness();
+    await expect(call(harness, "piPackages.uninstall", uninstallRequest)).resolves.toMatchObject({
+      requestId: uninstallRequest.requestId,
+      packageId: uninstallRequest.packageId,
+      status: "removed",
+      registry: { revision: 5, packages: [] }
+    });
+    expect(harness.confirmUninstall).toHaveBeenCalledOnce();
+    expect(harness.uninstall).toHaveBeenCalledWith(uninstallRequest);
+    expect(harness.confirmUninstall.mock.invocationCallOrder[0]).toBeLessThan(harness.uninstall.mock.invocationCallOrder[0]!);
+  });
+
+  it("returns denial with a freshly read registry and never invokes the manager", async () => {
+    const harness = makeHarness({ confirmUninstall: () => false });
+    await expect(call(harness, "piPackages.uninstall", uninstallRequest)).resolves.toEqual({
+      apiVersion: 1,
+      requestId: uninstallRequest.requestId,
+      packageId: uninstallRequest.packageId,
+      status: "denied",
+      registry
+    });
+    expect(harness.summary).toHaveBeenCalledOnce();
+    expect(harness.uninstall).not.toHaveBeenCalled();
+  });
+
+  it("fails uninstall before confirmation for malformed/untrusted input and after a vault fence change", async () => {
+    const malformed = makeHarness();
+    await expect(call(malformed, "piPackages.uninstall", { ...uninstallRequest, path: "/private/package" })).rejects.toThrow();
+    expect(malformed.confirmUninstall).not.toHaveBeenCalled();
+
+    const untrusted = makeHarness({ isTrustedSender: () => false });
+    await expect(call(untrusted, "piPackages.uninstall", uninstallRequest)).resolves.toMatchObject({ status: "failed" });
+    expect(untrusted.confirmUninstall).not.toHaveBeenCalled();
+
+    let reads = 0;
+    const changed = makeHarness({
+      getActiveVaultId: () => reads++ === 0 ? "vault_20260728_packages" : "vault_20260728_other"
+    });
+    await expect(call(changed, "piPackages.uninstall", uninstallRequest)).resolves.toEqual({
+      apiVersion: 1, requestId: uninstallRequest.requestId,
+      packageId: uninstallRequest.packageId, status: "failed"
+    });
+    expect(changed.uninstall).not.toHaveBeenCalled();
+  });
+
+  it("strips identity-swapped or private uninstall failures to identity-only failed", async () => {
+    const harness = makeHarness({
+      uninstall: () => ({
+        apiVersion: 1,
+        requestId: "pi_package_uninstall_request_wrongidentity123",
+        packageId: uninstallRequest.packageId,
+        status: "failed",
+        registry,
+        error: "ENOENT /private/package"
+      })
+    });
+    const result = await call(harness, "piPackages.uninstall", uninstallRequest);
+    expect(result).toEqual({
+      apiVersion: 1, requestId: uninstallRequest.requestId,
+      packageId: uninstallRequest.packageId, status: "failed"
+    });
+    expect(JSON.stringify(result)).not.toMatch(/registry|error|ENOENT|private/u);
   });
 
   it("strictly rejects malformed install requests before invoking the owner", async () => {

@@ -71,6 +71,9 @@ describe("desktop shell build contract", () => {
     expect(packageApi).toContain('"piPackages.install"');
     expect(packageApi).toContain("PiPackageInstallRequestSchema.parse(request)");
     expect(packageApi).toContain("PiPackageInstallResultSchema.parse(await ipcRenderer.invoke");
+    expect(packageApi).toContain('"piPackages.uninstall"');
+    expect(packageApi).toContain("PiPackageUninstallRequestSchema.parse(request)");
+    expect(packageApi).toContain("PiPackageUninstallResultSchema.parse(await ipcRenderer.invoke");
     for (const privateField of ["path", "tarball", "integrity", "authority", "rawError"]) {
       expect(packageApi).not.toContain(privateField);
     }
