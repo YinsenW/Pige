@@ -560,6 +560,7 @@ export const HighRiskEffectSchema = z.enum([
   "reviewed_execution_plan",
   "export_secret",
   "risky_agent_edit",
+  "external_web_skill_https_read",
   "authority_boundary_change"
 ]);
 export const HighRiskConfirmationActionSchema = z.enum([
@@ -571,6 +572,7 @@ export const HighRiskConfirmationActionSchema = z.enum([
   "execute_reviewed_plan",
   "export_credential",
   "apply_risky_edit",
+  "read_external_web",
   "change_authority_boundary"
 ]);
 export const HighRiskConfirmationTargetSchema = z.enum([
@@ -581,8 +583,18 @@ export const HighRiskConfirmationTargetSchema = z.enum([
   "local_toolchain",
   "credential_material",
   "current_note",
+  "reviewed_https_origin",
   "authority_boundary"
 ]);
+export const ExternalWebSkillHttpsOriginSchema = z.string().max(2048).refine((value) => {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && parsed.username === "" && parsed.password === "" &&
+      parsed.pathname === "/" && parsed.search === "" && parsed.hash === "" && parsed.origin === value;
+  } catch {
+    return false;
+  }
+}, "External/Web Skill origins must be exact canonical HTTPS origins.");
 const INTERNAL_DISPLAY_ID_MARKERS = [
   "vault_", "page_", "turn_", "op_", "job_", "confirm_", "secret_", "provider_", "model_"
 ] as const;
@@ -828,6 +840,14 @@ export const HighRiskConfirmationSubjectSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("package_name"), value: z.string().refine(isSafePackageSpec) }).strict(),
   z.object({ kind: z.literal("executable_name"), value: z.string().refine(isSafeExecutableName) }).strict(),
   z.object({
+    kind: z.literal("external_web_skill"),
+    value: RendererSafeSubjectLabelSchema,
+    version: z.string().min(1).max(80).regex(/^[0-9A-Za-z][0-9A-Za-z._+-]*$/u),
+    origin: ExternalWebSkillHttpsOriginSchema,
+    capability: z.literal("external_network"),
+    dataBoundary: z.literal("network")
+  }).strict(),
+  z.object({
     kind: z.literal("reviewed_execution_plan"),
     value: RendererSafeSubjectLabelSchema,
     plan: TaskExecutionPlanSummarySchema
@@ -840,6 +860,14 @@ const HighRiskDisplayNameSubjectSchema = z.object({
 const HighRiskItemCountSubjectSchema = z.object({
   kind: z.literal("item_count"),
   count: z.number().int().min(1).max(8)
+}).strict();
+const HighRiskExternalWebSkillSubjectSchema = z.object({
+  kind: z.literal("external_web_skill"),
+  value: RendererSafeSubjectLabelSchema,
+  version: z.string().min(1).max(80).regex(/^[0-9A-Za-z][0-9A-Za-z._+-]*$/u),
+  origin: ExternalWebSkillHttpsOriginSchema,
+  capability: z.literal("external_network"),
+  dataBoundary: z.literal("network")
 }).strict();
 export const HighRiskConfirmationOwnerSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -926,6 +954,18 @@ export const HighRiskConfirmationSummarySchema = z.discriminatedUnion("effect", 
       subject: z.union([HighRiskItemCountSubjectSchema, HighRiskDisplayNameSubjectSchema])
     }).strict(),
     owner: HighRiskOperationOwnerSchema
+  }).strict(),
+  HighRiskConfirmationSummaryBaseSchema.extend({
+    effect: z.literal("external_web_skill_https_read"),
+    presentation: z.object({
+      action: z.literal("read_external_web"),
+      target: z.literal("reviewed_https_origin"),
+      subject: HighRiskExternalWebSkillSubjectSchema
+    }).strict(),
+    owner: z.object({
+      kind: z.literal("agent_turn"),
+      clientTurnId: AgentClientTurnIdSchema
+    }).strict()
   }).strict(),
   HighRiskConfirmationSummaryBaseSchema.extend({
     effect: z.literal("authority_boundary_change"),
@@ -1604,6 +1644,23 @@ export function deriveSkillDataBoundaries(
 }
 
 export const SkillInstallSourceKindSchema = z.enum(["https", "local_markdown", "local_zip"]);
+export const ExternalWebSkillRuntimeAdapterSchema = z.literal("pige_readonly_https_v1");
+export const ExternalWebSkillRuntimeToolNameSchema = z.literal("pige_external_web_read");
+export const ExternalWebSkillRuntimeDeclarationSchema = z.object({
+  adapter: ExternalWebSkillRuntimeAdapterSchema,
+  origin: ExternalWebSkillHttpsOriginSchema
+}).strict();
+
+function hasSupportedExternalWebRuntime(
+  capabilities: readonly z.infer<typeof SkillCapabilitySchema>[],
+  runtime: z.infer<typeof ExternalWebSkillRuntimeDeclarationSchema> | undefined
+): boolean {
+  if (!runtime) return false;
+  const permissionCapabilities = capabilities.filter((capability) =>
+    PermissionCapabilitySchema.safeParse(capability).success
+  );
+  return permissionCapabilities.length === 1 && permissionCapabilities[0] === "external_network";
+}
 
 function hasExactOrderedValues(left: readonly string[] | undefined, right: readonly string[]): boolean {
   return left !== undefined && left.length === right.length && left.every((value, index) => value === right[index]);
@@ -1670,6 +1727,7 @@ export const SkillManifestSchema = z.object({
   license: z.string().trim().min(1).max(120).optional(),
   updatedAt: z.string().datetime({ offset: true }).optional(),
   dataBoundary: SkillDataBoundaryListSchema.optional(),
+  runtime: ExternalWebSkillRuntimeDeclarationSchema.optional(),
   permissionSummary: z.string().trim().min(1).max(500).optional()
 }).strict().superRefine((manifest, context) => {
   const permissionCapabilities = manifest.capabilities.filter((capability) =>
@@ -1680,6 +1738,13 @@ export const SkillManifestSchema = z.object({
       code: "custom",
       message: "Pure Skills cannot declare permission-mediated runtime capabilities.",
       path: ["capabilities"]
+    });
+  }
+  if (manifest.kind !== "external_web" && manifest.runtime !== undefined) {
+    context.addIssue({
+      code: "custom",
+      message: "Only External/Web Skills may declare a runtime adapter.",
+      path: ["runtime"]
     });
   }
   if (manifest.kind === "external_web" && permissionCapabilities.length === 0) {
@@ -1700,6 +1765,13 @@ export const SkillManifestSchema = z.object({
     }
     if (manifest.sourceUrl !== undefined && !SkillInstallUrlSchema.safeParse(manifest.sourceUrl).success) {
       context.addIssue({ code: "custom", message: "External/Web Skill source URL is unsafe.", path: ["sourceUrl"] });
+    }
+    if (manifest.runtime !== undefined && !hasSupportedExternalWebRuntime(manifest.capabilities, manifest.runtime)) {
+      context.addIssue({
+        code: "custom",
+        message: "The reviewed HTTPS runtime supports only external_network.",
+        path: ["runtime"]
+      });
     }
   }
 });
@@ -1747,34 +1819,37 @@ export const SkillSummarySchema = z.object({
   canUpdate: z.boolean(),
   source: SkillInstallSourceKindSchema.optional(),
   sourceUrl: z.lazy(() => SkillInstallUrlSchema).optional(),
+  runtime: ExternalWebSkillRuntimeDeclarationSchema.optional(),
   manifestSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u).optional(),
   bundleSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u).optional(),
   files: z.lazy(() => z.array(SkillStagedFileSummarySchema).min(1).max(SKILL_ZIP_STAGE_MAX_FILES)).optional(),
   warnings: z.lazy(() => z.array(SkillStageWarningSchema).max(2)
     .refine((values) => new Set(values).size === values.length, "Skill warnings must be unique.")).optional()
 }).strict().superRefine((skill, context) => {
-  const userManaged = skill.scope === "machine_local" && skill.kind === "pure" &&
-    skill.trust === "user_confirmed";
-  if (skill.canEnable && (!userManaged || skill.enabled)) {
+  const userManaged = skill.scope === "machine_local" && skill.trust === "user_confirmed";
+  const pureLifecycle = userManaged && skill.kind === "pure";
+  const externalRuntime = userManaged && skill.kind === "external_web" &&
+    hasSupportedExternalWebRuntime(skill.capabilities, skill.runtime);
+  if (skill.canEnable && ((!pureLifecycle && !externalRuntime) || skill.enabled)) {
     context.addIssue({ code: "custom", path: ["canEnable"], message: "Skill enable eligibility is invalid." });
   }
-  if (skill.canUninstall && !userManaged) {
+  if (skill.canUninstall && !pureLifecycle) {
     context.addIssue({ code: "custom", path: ["canUninstall"], message: "Skill uninstall eligibility is invalid." });
   }
-  if (skill.canExport && !userManaged) {
+  if (skill.canExport && !pureLifecycle) {
     context.addIssue({ code: "custom", path: ["canExport"], message: "Skill export eligibility is invalid." });
   }
-  if (skill.canUpdate && !userManaged) {
+  if (skill.canUpdate && !pureLifecycle) {
     context.addIssue({ code: "custom", path: ["canUpdate"], message: "Skill update eligibility is invalid." });
   }
   const requiredDisclosure = [skill.source, skill.manifestSha256, skill.bundleSha256, skill.files, skill.warnings];
-  const anyDisclosure = [...requiredDisclosure, skill.sourceUrl];
+  const anyDisclosure = [...requiredDisclosure, skill.sourceUrl, skill.runtime];
   if (skill.kind !== "external_web" && anyDisclosure.some((value) => value !== undefined)) {
     context.addIssue({ code: "custom", path: ["source"], message: "Only External/Web Skills expose installed review disclosure." });
   }
   if (skill.kind === "external_web") {
-    if (skill.enabled || skill.canEnable) {
-      context.addIssue({ code: "custom", path: ["enabled"], message: "External/Web Skills must remain disabled." });
+    if (skill.enabled && !externalRuntime) {
+      context.addIssue({ code: "custom", path: ["enabled"], message: "Unsupported External/Web Skills must remain disabled." });
     }
     if (requiredDisclosure.some((value) => value === undefined)) {
       context.addIssue({ code: "custom", path: ["source"], message: "External/Web Skill disclosure is incomplete." });
@@ -1835,6 +1910,22 @@ export const SkillInstallUrlSchema = z.string().url().max(2048).superRefine((val
     });
   }
 });
+export const ExternalWebSkillReadRequestSchema = z.object({
+  url: SkillInstallUrlSchema
+}).strict();
+export const ExternalWebSkillReadResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("ready"),
+    origin: ExternalWebSkillHttpsOriginSchema,
+    contentType: z.string().trim().min(1).max(160),
+    byteLength: z.number().int().nonnegative().max(16 * 1024 * 1024),
+    truncated: z.boolean(),
+    warningCount: z.number().int().nonnegative().max(32)
+  }).strict(),
+  z.object({ status: z.literal("denied") }).strict(),
+  z.object({ status: z.literal("stale") }).strict(),
+  z.object({ status: z.literal("failed") }).strict()
+]);
 export const SkillStageInvalidReasonSchema = z.enum([
   "source_too_large",
   "manifest_invalid",
@@ -1885,6 +1976,7 @@ export const SkillStagedSummarySchema = z.object({
   capabilities: SkillCapabilityListSchema,
   dataBoundaries: SkillDataBoundaryListSchema,
   source: SkillInstallSourceKindSchema.optional(),
+  runtime: ExternalWebSkillRuntimeDeclarationSchema.optional(),
   author: z.string().min(1).max(120).optional(),
   license: z.string().min(1).max(120).optional(),
   files: z.array(SkillStagedFileSummarySchema).min(1).max(SKILL_ZIP_STAGE_MAX_FILES),
@@ -1903,7 +1995,7 @@ export const SkillStagedSummarySchema = z.object({
     PermissionCapabilitySchema.safeParse(capability).success
   );
   if (staged.kind === "pure") {
-    if (permissionCapabilities.length > 0 || staged.source !== undefined ||
+    if (permissionCapabilities.length > 0 || staged.source !== undefined || staged.runtime !== undefined ||
       !hasExactOrderedValues(staged.dataBoundaries, ["local"])) {
       context.addIssue({ code: "custom", path: ["kind"], message: "Pure Skill review disclosure is invalid." });
     }
@@ -1911,6 +2003,9 @@ export const SkillStagedSummarySchema = z.object({
     if (permissionCapabilities.length === 0 || staged.source === undefined ||
       !hasExactOrderedValues(staged.dataBoundaries, deriveSkillDataBoundaries(staged.capabilities))) {
       context.addIssue({ code: "custom", path: ["dataBoundaries"], message: "External/Web Skill review disclosure is incomplete." });
+    }
+    if (staged.runtime !== undefined && !hasSupportedExternalWebRuntime(staged.capabilities, staged.runtime)) {
+      context.addIssue({ code: "custom", path: ["runtime"], message: "External/Web Skill runtime declaration is unsupported." });
     }
     const remoteSource = staged.source === "https";
     if (remoteSource !== Boolean(staged.sourceUrl)) {
@@ -2333,6 +2428,77 @@ export const PermissionActionBindingSchema = z.object({
   clientCapabilityTier: z.enum(["desktop_full", "web_client", "mobile_lite"]),
   bindingHash: PermissionSha256HashSchema
 }).strict();
+
+export const ExternalWebSkillRuntimeIdentitySchema = z.object({
+  kind: z.literal("external_web"),
+  scope: z.literal("machine_local"),
+  trust: z.literal("user_confirmed"),
+  enabled: z.literal(true),
+  skillId: SkillIdSchema,
+  skillVersion: z.string().min(1).max(80).regex(/^[0-9A-Za-z][0-9A-Za-z._+-]*$/u),
+  manifestSha256: PermissionSha256HashSchema,
+  bundleSha256: PermissionSha256HashSchema,
+  registryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  runtime: ExternalWebSkillRuntimeDeclarationSchema,
+  runtimeIdentityHash: PermissionSha256HashSchema
+}).strict();
+
+export const ExternalWebSkillRuntimeTurnBindingSchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  jobId: JobIdSchema,
+  clientTurnId: AgentClientTurnIdSchema,
+  authoredTaskIntent: z.literal("explicit_user_task"),
+  policyContextId: PermissionPolicyContextIdSchema,
+  policyHash: PermissionSha256HashSchema,
+  networkPolicy: z.literal("public_https_only"),
+  runtimeKind: z.literal("desktop_local"),
+  clientCapabilityTier: z.literal("desktop_full"),
+  identity: ExternalWebSkillRuntimeIdentitySchema,
+  permissionBinding: PermissionActionBindingSchema
+}).strict().superRefine((binding, context) => {
+  const permission = binding.permissionBinding;
+  const expected = {
+    vaultId: binding.activeVaultId,
+    jobId: binding.jobId,
+    actorType: "skill",
+    actorId: `skill:${binding.identity.skillId}`,
+    actorVersion: "1",
+    actorDigest: binding.identity.runtimeIdentityHash,
+    actionId: "external_web.read_https",
+    actionVersion: "1",
+    capability: "external_network",
+    dataBoundary: "network",
+    resourceScope: "current_url",
+    policyContextId: binding.policyContextId,
+    policyHash: binding.policyHash,
+    runtimeKind: binding.runtimeKind,
+    clientCapabilityTier: binding.clientCapabilityTier
+  } as const;
+  for (const [key, value] of Object.entries(expected)) {
+    if (permission[key as keyof typeof permission] !== value) {
+      context.addIssue({
+        code: "custom",
+        path: ["permissionBinding", key],
+        message: "External/Web Skill authority must match the exact runtime turn binding."
+      });
+    }
+  }
+});
+
+export const ExternalWebSkillRuntimeCallSchema = z.object({
+  toolName: ExternalWebSkillRuntimeToolNameSchema,
+  turn: ExternalWebSkillRuntimeTurnBindingSchema,
+  request: ExternalWebSkillReadRequestSchema
+}).strict().superRefine((call, context) => {
+  if (new URL(call.request.url).origin !== call.turn.identity.runtime.origin) {
+    context.addIssue({
+      code: "custom",
+      path: ["request", "url"],
+      message: "External/Web Skill reads must stay on the exact reviewed HTTPS origin."
+    });
+  }
+});
 
 export const ExternalMutationIntentIdSchema = z.string().regex(/^extmut_\d{8}_[a-z0-9]{12,}$/);
 export const ExternalMutationIntentSchema = z.object({
@@ -5924,6 +6090,7 @@ export type HighRiskConfirmationSubject = z.infer<typeof HighRiskConfirmationSub
 export type HighRiskConfirmationTarget = z.infer<typeof HighRiskConfirmationTargetSchema>;
 export type HighRiskEffect = z.infer<typeof HighRiskEffectSchema>;
 export type RendererSafeSubjectLabel = z.infer<typeof RendererSafeSubjectLabelSchema>;
+export type ExternalWebSkillHttpsOrigin = z.infer<typeof ExternalWebSkillHttpsOriginSchema>;
 export type PiPackageInstallRequestId = z.infer<typeof PiPackageInstallRequestIdSchema>;
 export type PiPackageInstallTaskId = z.infer<typeof PiPackageInstallTaskIdSchema>;
 export type PiPackageUninstallRequestId = z.infer<typeof PiPackageUninstallRequestIdSchema>;
@@ -6057,6 +6224,9 @@ export type PigeWarning = z.infer<typeof PigeWarningSchema>;
 export type PermissionActionBinding = z.infer<typeof PermissionActionBindingSchema>;
 export type PermissionActorType = z.infer<typeof PermissionActorTypeSchema>;
 export type PermissionCapability = z.infer<typeof PermissionCapabilitySchema>;
+export type ExternalWebSkillRuntimeIdentity = z.infer<typeof ExternalWebSkillRuntimeIdentitySchema>;
+export type ExternalWebSkillRuntimeTurnBinding = z.infer<typeof ExternalWebSkillRuntimeTurnBindingSchema>;
+export type ExternalWebSkillRuntimeCall = z.infer<typeof ExternalWebSkillRuntimeCallSchema>;
 export type SkillId = z.infer<typeof SkillIdSchema>;
 export type SkillVersion = z.infer<typeof SkillVersionSchema>;
 export type SkillKind = z.infer<typeof SkillKindSchema>;
@@ -6065,6 +6235,11 @@ export type SkillTrust = z.infer<typeof SkillTrustSchema>;
 export type SkillCapability = z.infer<typeof SkillCapabilitySchema>;
 export type SkillDataBoundary = z.infer<typeof SkillDataBoundarySchema>;
 export type SkillInstallSourceKind = z.infer<typeof SkillInstallSourceKindSchema>;
+export type ExternalWebSkillRuntimeAdapter = z.infer<typeof ExternalWebSkillRuntimeAdapterSchema>;
+export type ExternalWebSkillRuntimeToolName = z.infer<typeof ExternalWebSkillRuntimeToolNameSchema>;
+export type ExternalWebSkillRuntimeDeclaration = z.infer<typeof ExternalWebSkillRuntimeDeclarationSchema>;
+export type ExternalWebSkillReadRequest = z.infer<typeof ExternalWebSkillReadRequestSchema>;
+export type ExternalWebSkillReadResult = z.infer<typeof ExternalWebSkillReadResultSchema>;
 export type SkillManifest = z.infer<typeof SkillManifestSchema>;
 export type SkillRegistryRecord = z.infer<typeof SkillRegistryRecordSchema>;
 export type SkillRegistryFile = z.infer<typeof SkillRegistryFileSchema>;

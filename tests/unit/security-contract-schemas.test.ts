@@ -3,6 +3,7 @@ import {
   AddManualProviderRequestSchema,
   AddPresetProviderRequestSchema,
   DeleteProviderRequestSchema,
+  ExternalWebSkillRuntimeCallSchema,
   HighRiskConfirmationChangedEventSchema,
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
@@ -202,6 +203,48 @@ describe("security-sensitive shared contracts", () => {
       ...confirmation,
       owner: packageTaskOwner
     })).toThrow();
+
+    const externalWebConfirmation = {
+      apiVersion: 1 as const,
+      confirmationId: "confirm_20260729_externalwebread01",
+      effect: "external_web_skill_https_read" as const,
+      presentation: {
+        action: "read_external_web" as const,
+        target: "reviewed_https_origin" as const,
+        subject: {
+          kind: "external_web_skill" as const,
+          value: "External Research",
+          version: "1.0.0",
+          origin: "https://api.example.com",
+          capability: "external_network" as const,
+          dataBoundary: "network" as const
+        }
+      },
+      owner: { kind: "agent_turn" as const, clientTurnId: "turn_20260729_externalwebread" }
+    };
+    expect(HighRiskConfirmationSummarySchema.parse(externalWebConfirmation)).toEqual(externalWebConfirmation);
+    for (const unsafe of [
+      {
+        ...externalWebConfirmation,
+        presentation: {
+          ...externalWebConfirmation.presentation,
+          subject: { ...externalWebConfirmation.presentation.subject, origin: "http://api.example.com" }
+        }
+      },
+      {
+        ...externalWebConfirmation,
+        presentation: {
+          ...externalWebConfirmation.presentation,
+          subject: { ...externalWebConfirmation.presentation.subject, origin: "https://api.example.com/path" }
+        }
+      },
+      { ...externalWebConfirmation, owner: { kind: "operation", operationId: "op_20260729_abcdef12" } },
+      { ...externalWebConfirmation, body: "private" },
+      { ...externalWebConfirmation, url: "https://api.example.com/private" },
+      { ...externalWebConfirmation, credential: "secret" }
+    ]) {
+      expect(() => HighRiskConfirmationSummarySchema.parse(unsafe)).toThrow();
+    }
   });
 
   it("keeps Skill inventory and lifecycle requests strict, pathless, and body-free", () => {
@@ -612,6 +655,90 @@ describe("security-sensitive shared contracts", () => {
       ...binding,
       command: "curl https://private.example"
     })).toThrow();
+  });
+
+  it("binds one External/Web Skill HTTPS call without widening public-network policy", () => {
+    const runtimeIdentityHash = `sha256:${"c".repeat(64)}`;
+    const binding = {
+      vaultId: "vault_20260729_externalruntime",
+      jobId: "job_20260729_externalruntime",
+      actorType: "skill" as const,
+      actorId: "skill:external-research",
+      actorVersion: "1",
+      actorDigest: runtimeIdentityHash,
+      actionId: "external_web.read_https",
+      actionVersion: "1",
+      actionInputHash: `sha256:${"d".repeat(64)}`,
+      capability: "external_network" as const,
+      dataBoundary: "network" as const,
+      resourceScope: "current_url" as const,
+      resourceIdentityHash: `sha256:${"e".repeat(64)}`,
+      policyContextId: "policy_context_external_runtime",
+      policyHash: `sha256:${"f".repeat(64)}`,
+      runtimeKind: "desktop_local" as const,
+      clientCapabilityTier: "desktop_full" as const,
+      bindingHash: `sha256:${"0".repeat(64)}`
+    };
+    const call = {
+      toolName: "pige_external_web_read" as const,
+      turn: {
+        apiVersion: 1 as const,
+        activeVaultId: binding.vaultId,
+        jobId: binding.jobId,
+        clientTurnId: "turn_20260729_externalruntime",
+        authoredTaskIntent: "explicit_user_task" as const,
+        policyContextId: binding.policyContextId,
+        policyHash: binding.policyHash,
+        networkPolicy: "public_https_only" as const,
+        runtimeKind: "desktop_local" as const,
+        clientCapabilityTier: "desktop_full" as const,
+        identity: {
+          kind: "external_web" as const,
+          scope: "machine_local" as const,
+          trust: "user_confirmed" as const,
+          enabled: true as const,
+          skillId: "external-research",
+          skillVersion: "1.0.0",
+          manifestSha256: `sha256:${"a".repeat(64)}`,
+          bundleSha256: `sha256:${"b".repeat(64)}`,
+          registryRevision: 12,
+          runtime: {
+            adapter: "pige_readonly_https_v1" as const,
+            origin: "https://api.example.com"
+          },
+          runtimeIdentityHash
+        },
+        permissionBinding: binding
+      },
+      request: { url: "https://api.example.com/v1/search" }
+    };
+
+    expect(ExternalWebSkillRuntimeCallSchema.parse(call)).toEqual(call);
+    for (const invalid of [
+      { ...call, toolName: "third_party_fetch" },
+      { ...call, request: { url: "https://other.example.com/v1/search" } },
+      { ...call, turn: { ...call.turn, networkPolicy: "permissioned_external_network" } },
+      { ...call, turn: { ...call.turn, authoredTaskIntent: "neutral_attachment" } },
+      { ...call, turn: { ...call.turn, jobId: "job_20260729_otherjob12" } },
+      {
+        ...call,
+        turn: {
+          ...call.turn,
+          identity: { ...call.turn.identity, registryRevision: undefined }
+        }
+      },
+      {
+        ...call,
+        turn: {
+          ...call.turn,
+          permissionBinding: { ...binding, actorDigest: `sha256:${"9".repeat(64)}` }
+        }
+      },
+      { ...call, body: "private" },
+      { ...call, credential: "secret" }
+    ]) {
+      expect(() => ExternalWebSkillRuntimeCallSchema.parse(invalid)).toThrow();
+    }
   });
 
   it("strips arbitrary provider headers from persisted provider metadata", () => {
