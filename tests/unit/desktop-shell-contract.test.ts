@@ -1395,6 +1395,8 @@ describe("desktop shell build contract", () => {
     );
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
 
+    expect(contractsSource).toContain("readonly list: (request: CollectionListRequest)");
+    expect(contractsSource).toContain("Promise<CollectionListResult>");
     expect(registrarSource).toContain('ipcMain.handle("collections.open"');
     expect(registrarSource).toContain('ipcMain.handle("collections.editCell"');
     expect(registrarSource).toContain("CollectionOpenRequestSchema.parse(request)");
