@@ -3037,6 +3037,9 @@ describe("full UI Settings surface", () => {
     const body = requireElement(
       container.querySelector<HTMLTextAreaElement>("#memory-edit-body-memory_20260727_concisestyle"),
     );
+    expect(dom.window.document.activeElement).toBe(title);
+    expect(buttonNamed(container, "Export").disabled).toBe(true);
+    expect(buttonNamed(container, "Reset memory...").disabled).toBe(true);
     await act(async () => {
       inputValue(dom, title, "Local title");
       textareaValue(dom, body, "Local body with exact wording.");
@@ -3100,15 +3103,22 @@ describe("full UI Settings surface", () => {
     expect(container.textContent).toContain("Local title");
     expect(container.textContent).toContain("Local body with exact wording.");
     expect(container.textContent).toContain("The memory was updated.");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Edit: Local title"));
 
     await act(async () => {
       buttonNamed(container, "Edit: Local title").click();
       await settle(dom);
+    });
+    expect(dom.window.document.activeElement).toBe(
+      container.querySelector("#memory-edit-title-memory_20260727_concisestyle"),
+    );
+    await act(async () => {
       buttonNamed(container, "Cancel").click();
       await settle(dom);
     });
     expect(container.querySelector("#memory-edit-title-memory_20260727_concisestyle")).toBeNull();
     expect(container.textContent).toContain("Local title");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Edit: Local title"));
 
     await act(async () => root.unmount());
     dom.window.close();

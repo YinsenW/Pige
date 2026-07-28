@@ -51,6 +51,9 @@ export function AgentMemorySettingsPanel(
   const operationActiveRef = useRef(false);
   const editDraftRef = useRef<MemoryEditDraft | null>(null);
   const editCompositionRef = useRef(false);
+  const editTitleRef = useRef<HTMLInputElement>(null);
+  const editTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const restoreEditFocusRef = useRef<string | null>(null);
   const resetTriggerRef = useRef<HTMLButtonElement>(null);
   const resetConfirmRef = useRef<HTMLButtonElement>(null);
   activeVaultIdRef.current = props.activeVaultId;
@@ -67,6 +70,7 @@ export function AgentMemorySettingsPanel(
     setPendingAction(null);
     setEditDraft(null);
     editCompositionRef.current = false;
+    restoreEditFocusRef.current = null;
     setResetConfirmationOpen(false);
     if (!requestedVaultId) {
       setReadState("idle");
@@ -110,6 +114,16 @@ export function AgentMemorySettingsPanel(
   useEffect(() => {
     if (resetConfirmationOpen) resetConfirmRef.current?.focus();
   }, [resetConfirmationOpen]);
+
+  useEffect(() => {
+    if (editDraft) {
+      editTitleRef.current?.focus();
+      return;
+    }
+    const memoryId = restoreEditFocusRef.current;
+    restoreEditFocusRef.current = null;
+    if (memoryId) editTriggerRefs.current.get(memoryId)?.focus();
+  }, [editDraft?.activeVaultId, editDraft?.memoryId]);
 
   const beginAction = (action: PendingAction): number | null => {
     if (operationActiveRef.current) return null;
@@ -225,7 +239,7 @@ export function AgentMemorySettingsPanel(
 
   const beginEdit = (record: MemoryRecordSummary): void => {
     const requestedSummary = summary;
-    if (!requestedSummary || operationActiveRef.current) return;
+    if (!requestedSummary || operationActiveRef.current || resetConfirmationOpen) return;
     setStatusKey(null);
     setEditDraft({
       activeVaultId: requestedSummary.activeVaultId,
@@ -239,6 +253,7 @@ export function AgentMemorySettingsPanel(
   const cancelEdit = (): void => {
     if (operationActiveRef.current) return;
     editCompositionRef.current = false;
+    restoreEditFocusRef.current = editDraftRef.current?.memoryId ?? null;
     setEditDraft(null);
     setStatusKey(null);
   };
@@ -296,6 +311,7 @@ export function AgentMemorySettingsPanel(
       setReadState("ready");
       if (result.status === "committed") {
         editCompositionRef.current = false;
+        restoreEditFocusRef.current = requestedDraft.memoryId;
         setEditDraft(null);
         setStatusKey("memory.editCompleted");
       } else {
@@ -315,7 +331,7 @@ export function AgentMemorySettingsPanel(
   const exportMemory = async (): Promise<void> => {
     const requestedSummary = summary;
     const memoryApi = window.pige.memory;
-    if (!memoryApi || !requestedSummary) return;
+    if (!memoryApi || !requestedSummary || editDraftRef.current) return;
     const sequence = beginAction({ kind: "export" });
     if (sequence === null) return;
     const requestedVaultId = requestedSummary.activeVaultId;
@@ -362,7 +378,7 @@ export function AgentMemorySettingsPanel(
   const resetMemory = async (): Promise<void> => {
     const requestedSummary = summary;
     const memoryApi = window.pige.memory;
-    if (!memoryApi || !requestedSummary) return;
+    if (!memoryApi || !requestedSummary || editDraftRef.current) return;
     const sequence = beginAction({ kind: "reset" });
     if (sequence === null) return;
     const requestedVaultId = requestedSummary.activeVaultId;
@@ -489,6 +505,7 @@ export function AgentMemorySettingsPanel(
                         {props.t("memory.editTitle")}
                       </label>
                       <input
+                        ref={editTitleRef}
                         className="settings-input"
                         id={`memory-edit-title-${record.id}`}
                         maxLength={120}
@@ -593,10 +610,14 @@ export function AgentMemorySettingsPanel(
                     </>
                   ) : (
                     <button
+                      ref={(node) => {
+                        if (node) editTriggerRefs.current.set(record.id, node);
+                        else editTriggerRefs.current.delete(record.id);
+                      }}
                       className="settings-button"
                       type="button"
                       aria-label={`${props.t("memory.edit")}: ${record.title}`}
-                      disabled={busy || editDraft !== null}
+                      disabled={busy || editDraft !== null || resetConfirmationOpen}
                       onClick={() => beginEdit(record)}
                     >
                       {props.t("memory.edit")}
@@ -663,7 +684,7 @@ export function AgentMemorySettingsPanel(
             <button
               className="settings-button settings-action"
               type="button"
-              disabled={busy}
+              disabled={busy || editDraft !== null}
               onClick={() => void exportMemory()}
             >
               {pendingAction?.kind === "export"
@@ -674,10 +695,11 @@ export function AgentMemorySettingsPanel(
               ref={resetTriggerRef}
               className="settings-button settings-action"
               type="button"
-              disabled={busy}
+              disabled={busy || editDraft !== null}
               aria-expanded={resetConfirmationOpen}
               aria-controls="memory-reset-confirmation"
               onClick={() => {
+                if (editDraftRef.current) return;
                 setResetConfirmationOpen(true);
                 setStatusKey(null);
               }}
