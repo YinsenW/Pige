@@ -81,8 +81,7 @@ export function SkillsSettingsPanel(props: {
       pendingFocusRef.current = null;
       markdownTriggerRef.current?.focus();
     } else if (pendingFocusRef.current === "zip" && !installOpen && installBusy === null) {
-      pendingFocusRef.current = null;
-      zipTriggerRef.current?.focus();
+      pendingFocusRef.current = null; zipTriggerRef.current?.focus();
     }
   }, [installBusy, installOpen, stagedReview]);
 
@@ -491,47 +490,30 @@ export function SkillsSettingsPanel(props: {
   };
 
   const stageFromZip = async (): Promise<void> => {
-    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current ||
-        stagedReview || installOpen) return;
+    if (installBusy || lifecycleActiveRef.current || uninstallConfirmationActiveRef.current || stagedReview || installOpen) return;
     const operation = installOperationRef.current + 1;
     installOperationRef.current = operation;
-    setInstallBusy("stage");
-    setStatusKey(null);
+    setInstallBusy("stage"); setStatusKey(null);
     try {
       const requestedVault = await window.pige.vault.current();
       if (!finishInstallOperation(operation)) return;
       if (!requestedVault) {
-        setStatusKey("skills.stageZipFailed");
-        pendingFocusRef.current = "zip";
+        setStatusKey("skills.stageZipFailed"); pendingFocusRef.current = "zip";
         return;
       }
       const requestId = createSkillInstallRequestId();
-      const result = await window.pige.skills.stageFromZip({
-        apiVersion: 1,
-        requestId,
-        activeVaultId: requestedVault.vaultId
-      });
+      const result = await window.pige.skills.stageFromZip({ apiVersion: 1, requestId, activeVaultId: requestedVault.vaultId });
       if (!finishInstallOperation(operation)) return;
       const currentVault = await window.pige.vault.current();
       if (!finishInstallOperation(operation)) return;
-      if (result.requestId !== requestId || result.activeVaultId !== requestedVault.vaultId ||
-          currentVault?.vaultId !== requestedVault.vaultId) {
-        setStatusKey("skills.stageZipFailed");
-        pendingFocusRef.current = "zip";
+      if (result.requestId !== requestId || result.activeVaultId !== requestedVault.vaultId || currentVault?.vaultId !== requestedVault.vaultId) {
+        setStatusKey("skills.stageZipFailed"); pendingFocusRef.current = "zip";
         return;
       }
-      if (result.status === "ready") {
-        setInstallOpen(true);
-        setStagedReview({ kind: "install", source: "zip", staged: result.staged });
-      } else {
-        if (result.status !== "cancelled") setStatusKey("skills.stageZipFailed");
-        pendingFocusRef.current = "zip";
-      }
+      if (result.status === "ready") { setInstallOpen(true); setStagedReview({ kind: "install", source: "zip", staged: result.staged }); }
+      else { if (result.status !== "cancelled") setStatusKey("skills.stageZipFailed"); pendingFocusRef.current = "zip"; }
     } catch {
-      if (finishInstallOperation(operation)) {
-        setStatusKey("skills.stageZipFailed");
-        pendingFocusRef.current = "zip";
-      }
+      if (finishInstallOperation(operation)) { setStatusKey("skills.stageZipFailed"); pendingFocusRef.current = "zip"; }
     } finally {
       if (finishInstallOperation(operation)) setInstallBusy(null);
     }
@@ -865,15 +847,10 @@ export function SkillsSettingsPanel(props: {
             {props.t(installBusy === "stage" && markdownStageActiveRef.current
               ? "skills.reviewing" : "skills.importMarkdown")}
           </button>
-          <button
-            ref={zipTriggerRef}
-            className="settings-button settings-action"
-            type="button"
+          <button ref={zipTriggerRef} className="settings-button settings-action" type="button"
             disabled={lifecycleAction !== null || installBusy !== null || uninstallConfirmation !== null || installOpen}
-            onClick={() => void stageFromZip()}
-          >
-            <PigeIcon name="fileText" size={15} aria-hidden="true" />
-            {props.t("skills.importZip")}
+            onClick={() => void stageFromZip()}>
+            <PigeIcon name="fileText" size={15} aria-hidden="true" />{props.t("skills.importZip")}
           </button>
         </div>
         {installOpen ? (
@@ -892,9 +869,7 @@ export function SkillsSettingsPanel(props: {
                     <span>{props.t("skills.boundary.local")}</span>
                   </div>
                   {stagedReview.staged.sourceUrl ? <span>{stagedReview.staged.sourceUrl}</span> : null}
-                  {stagedReview.staged.files.map((file) => (
-                    <span key={file.relativePath}>{`${file.relativePath} · ${formatByteSize(file.utf8ByteSize)}`}</span>
-                  ))}
+                  {stagedReview.staged.files.map((file) => <span key={file.relativePath}>{`${file.relativePath} · ${formatByteSize(file.utf8ByteSize)}`}</span>)}
                   {stagedReview.staged.capabilities.map((capability) => (
                     <span key={capability}>{props.t(`skills.capability.${capability}`)}</span>
                   ))}
