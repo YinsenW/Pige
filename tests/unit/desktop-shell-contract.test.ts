@@ -92,6 +92,8 @@ describe("desktop shell build contract", () => {
     expect(packageApi).toContain('"piPackages.rollback"');
     expect(packageApi).toContain("PiPackageRollbackRequestSchema.parse(request)");
     expect(packageApi).toContain("PiPackageRollbackResultSchema.parse(await ipcRenderer.invoke");
+    expect(packageApi).toContain("PiPackageSetPinnedRequestSchema.parse(request)");
+    expect(packageApi).toContain("PiPackageSetPinnedResultSchema.parse(await ipcRenderer.invoke");
     for (const privateField of ["path", "tarball", "integrity", "authority", "rawError"]) {
       expect(packageApi).not.toContain(privateField);
     }

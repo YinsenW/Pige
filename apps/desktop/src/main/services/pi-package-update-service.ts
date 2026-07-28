@@ -1,8 +1,10 @@
 import { randomBytes } from "node:crypto";
 import {
   PiPackageRollbackRequestSchema, PiPackageRollbackResultSchema,
+  PiPackageSetPinnedRequestSchema, PiPackageSetPinnedResultSchema,
   PiPackageUpdateRequestSchema, PiPackageUpdateResultSchema,
   type PiPackageRegistrySummary, type PiPackageRollbackRequest, type PiPackageRollbackResult,
+  type PiPackageSetPinnedRequest, type PiPackageSetPinnedResult,
   type PiPackageUpdateRequest, type PiPackageUpdateResult
 } from "@pige/schemas";
 import {
@@ -41,11 +43,12 @@ export class PiPackageUpdateService {
     try {
       await this.#recovery;
       return await this.#manager.withLifecycleLock(async () => {
+        const current = this.#manager.readLifecycleRegistry();
+        const record = current.packages.find((candidate) => candidate.packageId === request.packageId);
+        if (record?.pinned) return updateResult(identity, "failed");
         const replay = this.#manager.lifecycleStore.updateReceiptForRequest(request.requestId);
         if (replay) return this.#adoptUpdateReplay(request, replay);
-        const current = this.#manager.readLifecycleRegistry();
         if (current.revision !== request.expectedRegistryRevision) return updateResult(identity, "stale", this.#project(current));
-        const record = current.packages.find((candidate) => candidate.packageId === request.packageId);
         if (!record) return updateResult(identity, "not_found", this.#project(current));
         if (record.version === request.targetVersion) return updateResult(identity, "failed");
         this.#manager.lifecycleStore.assertInstalled(record);
@@ -82,6 +85,7 @@ export class PiPackageUpdateService {
       return await this.#manager.withLifecycleLock(() => {
         const current = this.#manager.readLifecycleRegistry();
         const record = current.packages.find((candidate) => candidate.packageId === request.packageId);
+        if (record?.pinned) return rollbackResult(identity, "failed");
         const receipt = this.#manager.lifecycleStore.readUpdateReceipt(request.rollbackId);
         if (receipt?.state === "rolled_back" && receipt.rollbackRequestId === request.requestId &&
           receipt.rollbackExpectedRegistryRevision === request.expectedRegistryRevision &&
@@ -104,6 +108,24 @@ export class PiPackageUpdateService {
         return rollbackResult(identity, "committed", this.#project(next));
       });
     } catch { return rollbackResult(identity, "failed"); }
+  }
+
+  async setPinned(requestInput: PiPackageSetPinnedRequest): Promise<PiPackageSetPinnedResult> {
+    const request = PiPackageSetPinnedRequestSchema.parse(requestInput);
+    const identity = pinnedIdentity(request);
+    try {
+      await this.#recovery;
+      return await this.#manager.withLifecycleLock(() => {
+        const current = this.#manager.readLifecycleRegistry();
+        if (current.revision !== request.expectedRegistryRevision) return pinnedResult(identity, "stale", this.#project(current));
+        const record = current.packages.find((candidate) => candidate.packageId === request.packageId);
+        if (!record) return pinnedResult(identity, "not_found", this.#project(current));
+        if ((record.pinned === true) === request.pinned) return pinnedResult(identity, "committed", this.#project(current));
+        const replacement = request.pinned ? { ...record, pinned: true as const } : withoutPin(record);
+        const next = this.#manager.replaceLifecycleRecord(current.revision, record, replacement);
+        return pinnedResult(identity, "committed", this.#project(next));
+      });
+    } catch { return pinnedResult(identity, "failed"); }
   }
 
   #adoptUpdateReplay(request: PiPackageUpdateRequest, receipt: PiPackageUpdateReceipt<PiPackageRecord>): PiPackageUpdateResult {
@@ -161,6 +183,11 @@ function rollbackIdentity(request: PiPackageRollbackRequest) {
     rollbackId: request.rollbackId, targetVersion: request.targetVersion } as const;
 }
 
+function pinnedIdentity(request: PiPackageSetPinnedRequest) {
+  return { apiVersion: request.apiVersion, requestId: request.requestId, packageId: request.packageId,
+    pinned: request.pinned } as const;
+}
+
 function updateResult(
   identity: ReturnType<typeof updateIdentity>, status: "committed" | "stale" | "not_found" | "failed",
   registry?: PiPackageRegistrySummary
@@ -173,6 +200,18 @@ function rollbackResult(
   registry?: PiPackageRegistrySummary
 ): PiPackageRollbackResult {
   return PiPackageRollbackResultSchema.parse({ ...identity, status, ...(registry ? { registry } : {}) });
+}
+
+function pinnedResult(
+  identity: ReturnType<typeof pinnedIdentity>, status: "committed" | "stale" | "not_found" | "failed",
+  registry?: PiPackageRegistrySummary
+): PiPackageSetPinnedResult {
+  return PiPackageSetPinnedResultSchema.parse({ ...identity, status, ...(registry ? { registry } : {}) });
+}
+
+function withoutPin(record: PiPackageRecord): PiPackageRecord {
+  const { pinned: _pinned, ...unpinned } = record;
+  return unpinned;
 }
 
 function sameRecord(left: PiPackageRecord, right: PiPackageRecord): boolean {

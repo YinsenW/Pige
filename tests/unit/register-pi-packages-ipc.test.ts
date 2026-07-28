@@ -23,6 +23,7 @@ const registry = {
     dependencyCount: 0,
     enabled: false,
     trust: "community",
+    pinned: false,
     canUpdate: true,
     canRollback: false,
     rollbackTarget: null
@@ -64,6 +65,11 @@ const rollbackRequest = {
   packageId: registry.packages[0].packageId, expectedRegistryRevision: registry.revision + 1,
   rollbackId: "pi_package_rollback_abcdefghijklmnop", targetVersion: request.version
 } as const;
+const pinRequest = {
+  apiVersion: 1, requestId: "pi_package_pin_request_abcdefghijklmnop",
+  packageId: registry.packages[0].packageId, expectedRegistryRevision: registry.revision,
+  pinned: true
+} as const;
 
 function makeHarness(overrides: {
   readonly isTrustedSender?: () => boolean;
@@ -77,6 +83,7 @@ function makeHarness(overrides: {
   readonly update?: (value: typeof updateRequest) => unknown;
   readonly confirmRollback?: (value: typeof rollbackRequest) => unknown;
   readonly rollback?: (value: typeof rollbackRequest) => unknown;
+  readonly setPinned?: (value: typeof pinRequest) => unknown;
 } = {}) {
   const handlers = new Map<string, IpcHandler>();
   const summary = vi.fn(overrides.summary ?? (() => ({ status: "ready", registry })));
@@ -117,6 +124,12 @@ function makeHarness(overrides: {
     rollbackId: value.rollbackId, targetVersion: value.targetVersion,
     registry: { ...registry, revision: registry.revision + 2 }, status: "committed"
   })));
+  const setPinned = vi.fn(overrides.setPinned ?? ((value) => ({
+    apiVersion: 1, requestId: value.requestId, packageId: value.packageId, pinned: value.pinned,
+    registry: { ...registry, revision: registry.revision + 1, packages: [{ ...registry.packages[0],
+      pinned: value.pinned, canUpdate: !value.pinned, canRollback: false, rollbackTarget: null }] },
+    status: "committed"
+  })));
   registerPiPackagesIpc({
     ipcMain: {
       handle: (channel, handler) => handlers.set(channel, handler as IpcHandler)
@@ -131,10 +144,11 @@ function makeHarness(overrides: {
     confirmUpdate,
     update,
     confirmRollback,
-    rollback
+    rollback,
+    setPinned
   });
   return { handlers, summary, catalogQuery, install, confirmUninstall, uninstall,
-    confirmUpdate, update, confirmRollback, rollback };
+    confirmUpdate, update, confirmRollback, rollback, setPinned };
 }
 
 describe("registerPiPackagesIpc", () => {
@@ -142,7 +156,7 @@ describe("registerPiPackagesIpc", () => {
     const harness = makeHarness();
     expect([...harness.handlers.keys()]).toEqual([
       "piPackages.summary", "piPackages.catalogQuery", "piPackages.install", "piPackages.uninstall",
-      "piPackages.update", "piPackages.rollback"
+      "piPackages.update", "piPackages.rollback", "piPackages.setPinned"
     ]);
 
     await expect(call(harness, "piPackages.summary")).resolves.toEqual({ status: "ready", registry });
@@ -228,6 +242,40 @@ describe("registerPiPackagesIpc", () => {
       status: "denied", registry: updatedRegistry
     });
     expect(denied.rollback).not.toHaveBeenCalled();
+  });
+
+  it("sets pin state without confirmation and rejects pinned update or rollback before confirmation", async () => {
+    const harness = makeHarness();
+    await expect(call(harness, "piPackages.setPinned", pinRequest)).resolves.toMatchObject({
+      status: "committed", pinned: true, registry: { revision: registry.revision + 1,
+        packages: [{ pinned: true, canUpdate: false, canRollback: false }] }
+    });
+    expect(harness.setPinned).toHaveBeenCalledWith(pinRequest);
+
+    const pinnedRegistry = { ...registry, packages: [{ ...registry.packages[0], pinned: true,
+      canUpdate: false, canRollback: false, rollbackTarget: null }] } as const;
+    const pinned = makeHarness({ summary: () => ({ status: "ready", registry: pinnedRegistry }) });
+    await expect(call(pinned, "piPackages.update", updateRequest)).resolves.toMatchObject({ status: "failed" });
+    await expect(call(pinned, "piPackages.rollback", { ...rollbackRequest,
+      expectedRegistryRevision: pinnedRegistry.revision })).resolves.toMatchObject({ status: "failed" });
+    expect(pinned.confirmUpdate).not.toHaveBeenCalled();
+    expect(pinned.confirmRollback).not.toHaveBeenCalled();
+    expect(pinned.update).not.toHaveBeenCalled();
+    expect(pinned.rollback).not.toHaveBeenCalled();
+  });
+
+  it("fails pin closed across malformed identity and vault drift", async () => {
+    const malformed = makeHarness();
+    await expect(call(malformed, "piPackages.setPinned", { ...pinRequest, path: "/private/package" })).rejects.toThrow();
+    expect(malformed.setPinned).not.toHaveBeenCalled();
+
+    let reads = 0;
+    const changed = makeHarness({ getActiveVaultId: () => reads++ === 0
+      ? "vault_20260728_packages" : "vault_20260728_other" });
+    await expect(call(changed, "piPackages.setPinned", pinRequest)).resolves.toEqual({
+      apiVersion: 1, requestId: pinRequest.requestId, packageId: pinRequest.packageId,
+      pinned: true, status: "failed"
+    });
   });
 
   it("returns denial with a freshly read registry and never invokes the manager", async () => {

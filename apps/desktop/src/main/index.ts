@@ -2233,7 +2233,8 @@ registerPiPackagesIpc({
       throw caught;
     }
   },
-  rollback: (request) => piPackageUpdates.rollback(request)
+  rollback: (request) => piPackageUpdates.rollback(request),
+  setPinned: (request) => piPackageUpdates.setPinned(request)
 });
 registerMemoryIpc({
   ipcMain,
