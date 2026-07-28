@@ -23,7 +23,7 @@ import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoice
 import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
 import { TaskExecutionInteractionStatus } from "./components/TaskExecutionInteraction";
 import { AgentMemorySettingsPanel } from "./components/AgentMemorySettingsPanel";
-import { ManagedCollectionPanel } from "./components/ManagedCollectionPanel";
+import { ManagedCollectionCitationPanel, ManagedCollectionPanel } from "./components/ManagedCollectionPanel";
 import { LocalCapabilitiesSettingsPanel } from "./components/LocalCapabilitiesSettingsPanel";
 import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 import { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
@@ -139,6 +139,8 @@ import {
   type CollectionTrashColumnRequest,
   type CollectionTrashColumnResult,
   type CollectionOpenRequest,
+  type CollectionOpenCitationRequest,
+  type CollectionOpenCitationResult,
   type CollectionOpenResult,
   type CollectionSnapshot,
   type CollectionTrashRowRequest,
@@ -154,12 +156,20 @@ export { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 export { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
 export { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
 type View = "home" | "library" | "knowledgeTree";
-type ActiveCollection = {
+type EditableActiveCollection = {
+  readonly mode: "editable";
   readonly vaultId: string;
   readonly snapshot: CollectionSnapshot;
   readonly nextRowCursor?: string;
   readonly returnView: View;
 };
+type CitationActiveCollection = {
+  readonly mode: "citation_readonly";
+  readonly vaultId: string;
+  readonly result: Extract<CollectionOpenCitationResult, { readonly status: "ready" }>;
+  readonly returnView: View;
+};
+type ActiveCollection = EditableActiveCollection | CitationActiveCollection;
 export type SettingsSection =
   | "general"
   | "appearance"
@@ -1054,14 +1064,64 @@ export function App(): React.JSX.Element {
     setSelectedNote(null);
     setSelectedNoteRelated(null);
     setNoteAgentOpen(false);
-    setSelectedCollection({ vaultId, snapshot: opened.snapshot, returnView, ...(opened.nextRowCursor ? { nextRowCursor: opened.nextRowCursor } : {}) });
+    setSelectedCollection({ mode: "editable", vaultId, snapshot: opened.snapshot, returnView, ...(opened.nextRowCursor ? { nextRowCursor: opened.nextRowCursor } : {}) });
     window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".managed-collection-panel")?.focus());
+    return true;
+  };
+
+  const openCollectionCitation = async (
+    conversationId: string,
+    assistantEventId: string,
+    citationRef: string
+  ): Promise<boolean> => {
+    const vaultId = activeVaultIdRef.current;
+    if (!vaultId) return false;
+    const sequence = collectionOpenSequence.current + 1;
+    collectionOpenSequence.current = sequence;
+    const request: CollectionOpenCitationRequest = {
+      apiVersion: 1,
+      requestId: createCollectionRequestId(),
+      activeVaultId: vaultId,
+      conversationId,
+      assistantEventId,
+      citationRef
+    };
+    let result: CollectionOpenCitationResult;
+    try {
+      result = await window.pige.collections.openCitation(request);
+    } catch {
+      return false;
+    }
+    if (
+      sequence !== collectionOpenSequence.current ||
+      activeVaultIdRef.current !== vaultId ||
+      !collectionCitationIdentityMatches(request, result) ||
+      result.status !== "ready" ||
+      result.mode !== "citation_readonly"
+    ) return false;
+    const nextLayout = await requestWindowLayout({
+      apiVersion: 1,
+      surface: "reader",
+      sidebarOpen,
+      noteAgentOpen: false
+    });
+    if (
+      !nextLayout ||
+      sequence !== collectionOpenSequence.current ||
+      activeVaultIdRef.current !== vaultId
+    ) return false;
+    noteOpenSequence.current += 1;
+    inlineReferenceSequence.current += 1;
+    setSelectedNote(null);
+    setSelectedNoteRelated(null);
+    setNoteAgentOpen(false);
+    setSelectedCollection({ mode: "citation_readonly", vaultId, result, returnView: "home" });
     return true;
   };
 
   const reloadSelectedCollection = async (): Promise<CollectionSnapshot | null> => {
     const current = selectedCollectionRef.current;
-    if (!current || current.vaultId !== activeVaultIdRef.current) return null;
+    if (!current || current.mode !== "editable" || current.vaultId !== activeVaultIdRef.current) return null;
     const sequence = collectionOpenSequence.current + 1;
     collectionOpenSequence.current = sequence;
     const opened = await readCollection(
@@ -1073,7 +1133,7 @@ export function App(): React.JSX.Element {
     );
     if (!opened) return null;
     setSelectedCollection((active) => {
-      if (active?.vaultId !== current.vaultId || active.snapshot.datasetId !== current.snapshot.datasetId ||
+      if (active?.mode !== "editable" || active.vaultId !== current.vaultId || active.snapshot.datasetId !== current.snapshot.datasetId ||
           active.snapshot.tableId !== current.snapshot.tableId) return active;
       const { nextRowCursor: _discardedCursor, ...identity } = active;
       return { ...identity, snapshot: opened.snapshot, ...(opened.nextRowCursor ? { nextRowCursor: opened.nextRowCursor } : {}) };
@@ -1091,7 +1151,7 @@ export function App(): React.JSX.Element {
 
   const openCollectionView = async (viewId?: string): Promise<CollectionSnapshot | null> => {
     const current = selectedCollectionRef.current;
-    if (!current || current.vaultId !== activeVaultIdRef.current) return null;
+    if (!current || current.mode !== "editable" || current.vaultId !== activeVaultIdRef.current) return null;
     const sequence = collectionOpenSequence.current + 1;
     collectionOpenSequence.current = sequence;
     const opened = await readCollection(
@@ -1103,7 +1163,7 @@ export function App(): React.JSX.Element {
     );
     if (!opened) return null;
     setSelectedCollection((active) => {
-      if (active?.vaultId !== current.vaultId || active.snapshot.datasetId !== current.snapshot.datasetId ||
+      if (active?.mode !== "editable" || active.vaultId !== current.vaultId || active.snapshot.datasetId !== current.snapshot.datasetId ||
           active.snapshot.tableId !== current.snapshot.tableId) return active;
       const { nextRowCursor: _discardedCursor, ...identity } = active;
       return { ...identity, snapshot: opened.snapshot, ...(opened.nextRowCursor ? { nextRowCursor: opened.nextRowCursor } : {}) };
@@ -1113,7 +1173,7 @@ export function App(): React.JSX.Element {
 
   const loadMoreCollectionRows = async (rowCursor: string): Promise<CollectionOpenResult | null> => {
     const current = selectedCollectionRef.current;
-    if (!current || current.vaultId !== activeVaultIdRef.current || current.nextRowCursor !== rowCursor) return null;
+    if (!current || current.mode !== "editable" || current.vaultId !== activeVaultIdRef.current || current.nextRowCursor !== rowCursor) return null;
     const request: CollectionOpenRequest = {
       apiVersion: 1,
       requestId: createCollectionRequestId(),
@@ -1128,7 +1188,7 @@ export function App(): React.JSX.Element {
       const result = await window.pige.collections.open(request);
       const active = selectedCollectionRef.current;
       if (
-        !active || active.vaultId !== current.vaultId || active.snapshot.datasetId !== request.datasetId ||
+        !active || active.mode !== "editable" || active.vaultId !== current.vaultId || active.snapshot.datasetId !== request.datasetId ||
         active.snapshot.tableId !== request.tableId || active.snapshot.revisionId !== current.snapshot.revisionId ||
         active.snapshot.activeViewId !== request.viewId || active.nextRowCursor !== rowCursor ||
         !collectionOpenIdentityMatches(request, result)
@@ -1141,7 +1201,7 @@ export function App(): React.JSX.Element {
           result.snapshot.activeViewId !== current.snapshot.activeViewId
         ) return null;
         setSelectedCollection((selected) => {
-          if (selected !== active) return selected;
+          if (selected !== active || selected.mode !== "editable") return selected;
           const { nextRowCursor: _discardedCursor, ...identity } = selected;
           return { ...identity, ...(result.nextRowCursor ? { nextRowCursor: result.nextRowCursor } : {}) };
         });
@@ -1204,6 +1264,7 @@ export function App(): React.JSX.Element {
     const active = selectedCollectionRef.current;
     if (
       !active ||
+      active.mode !== "editable" ||
       active.vaultId !== activeVaultIdRef.current ||
       active.snapshot.datasetId !== snapshot.datasetId ||
       active.snapshot.tableId !== snapshot.tableId ||
@@ -1460,6 +1521,7 @@ export function App(): React.JSX.Element {
       ) await openNoteTarget(activity.target.pageId, false);
       if (
         activity?.target?.kind === "collection" &&
+        selectedCollectionRef.current?.mode === "editable" &&
         selectedCollectionRef.current?.snapshot.datasetId === activity.target.datasetId &&
         selectedCollectionRef.current.snapshot.tableId === activity.target.tableId
       ) void reloadSelectedCollection();
@@ -1988,7 +2050,18 @@ export function App(): React.JSX.Element {
             onError={setError}
             t={t}
           />
-        ) : selectedCollection && activeVault && selectedCollection.vaultId === activeVault.vaultId ? (
+        ) : selectedCollection && activeVault && selectedCollection.vaultId === activeVault.vaultId && selectedCollection.mode === "citation_readonly" ? (
+          <ManagedCollectionCitationPanel
+            mode={selectedCollection.result.mode}
+            preview={selectedCollection.result.preview}
+            highlights={selectedCollection.result.highlights}
+            onClose={() => {
+              collectionOpenSequence.current += 1;
+              navigateHome();
+            }}
+            t={t}
+          />
+        ) : selectedCollection && activeVault && selectedCollection.vaultId === activeVault.vaultId && selectedCollection.mode === "editable" ? (
           <ManagedCollectionPanel
             activeVaultId={activeVault.vaultId}
             snapshot={selectedCollection.snapshot}
@@ -2141,6 +2214,7 @@ export function App(): React.JSX.Element {
             onSaveNoteEditor={(request) => window.pige.notes.saveEditor(request)}
             onReloadNoteEditor={reloadNoteEditor}
             onOpenCollection={(datasetId, tableId) => openCollection(datasetId, tableId, "home")}
+            onOpenCollectionCitation={openCollectionCitation}
             draftText={homeDraftText}
             onDraftChange={setHomeDraftText}
             showFirstHomeGuide={onboarding?.showFirstHomeGuide === true}
@@ -3649,6 +3723,11 @@ function HomeComposer(props: {
   readonly onSaveNoteEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
   readonly onReloadNoteEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
   readonly onOpenCollection: (datasetId: string, tableId: string) => Promise<boolean>;
+  readonly onOpenCollectionCitation: (
+    conversationId: string,
+    assistantEventId: string,
+    citationRef: string
+  ) => Promise<boolean>;
   readonly draftText: string;
   readonly onDraftChange: (text: string) => void;
   readonly showFirstHomeGuide: boolean;
@@ -5324,6 +5403,13 @@ function HomeComposer(props: {
                     answer={message.answer}
                     modelUsage="none"
                     onOpenCollection={props.onOpenCollection}
+                    {...(message.role === "assistant" && conversationTimeline ? {
+                      onOpenCitation: (citationRef: string) => props.onOpenCollectionCitation(
+                        conversationTimeline.conversationId,
+                        message.id,
+                        citationRef
+                      )
+                    } : {})}
                     t={props.t}
                   />
                 ) : (
@@ -5521,6 +5607,13 @@ function HomeComposer(props: {
           answer={agentAnswer}
           modelUsage={agentModelUsage}
           onOpenCollection={props.onOpenCollection}
+          {...(conversationTimeline && liveAnswerEventId ? {
+            onOpenCitation: (citationRef: string) => props.onOpenCollectionCitation(
+              conversationTimeline.conversationId,
+              liveAnswerEventId,
+              citationRef
+            )
+          } : {})}
           t={props.t}
         />
       ) : agentAnswer?.retrieval ? (
@@ -6054,6 +6147,17 @@ function collectionOpenIdentityMatches(
     result.tableId === request.tableId;
 }
 
+function collectionCitationIdentityMatches(
+  request: CollectionOpenCitationRequest,
+  result: CollectionOpenCitationResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.conversationId === request.conversationId &&
+    result.assistantEventId === request.assistantEventId &&
+    result.citationRef === request.citationRef;
+}
+
 function collectionCreateViewIdentityMatches(
   request: CollectionCreateViewRequest,
   result: CollectionCreateViewResult
@@ -6181,13 +6285,38 @@ export function DatasetAnswerResult(props: {
   readonly answer: AgentTurnAnswer;
   readonly modelUsage: HomeAgentModelUsage;
   readonly onOpenCollection?: (datasetId: string, tableId: string) => Promise<boolean>;
+  readonly onOpenCitation?: (citationRef: string) => Promise<boolean>;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
+  const openingCitationRef = useRef<string | null>(null);
+  const [openingCitationRefId, setOpeningCitationRefId] = useState<string | null>(null);
+  const [citationOpenFailed, setCitationOpenFailed] = useState(false);
   const result = props.answer.datasetResult;
   if (!result) throw new Error("Dataset result metadata is unavailable.");
   const citations = props.answer.citations.filter((citation) =>
     "kind" in citation && citation.kind === "dataset"
   );
+  const openCitation = async (citationRef: string, trigger: HTMLButtonElement): Promise<void> => {
+    if (!props.onOpenCitation || openingCitationRef.current !== null) return;
+    openingCitationRef.current = citationRef;
+    setOpeningCitationRefId(citationRef);
+    setCitationOpenFailed(false);
+    let opened = false;
+    try {
+      opened = await props.onOpenCitation(citationRef);
+    } catch {
+      opened = false;
+    } finally {
+      if (openingCitationRef.current === citationRef) {
+        openingCitationRef.current = null;
+        setOpeningCitationRefId(null);
+      }
+    }
+    if (!opened) {
+      setCitationOpenFailed(true);
+      window.requestAnimationFrame(() => trigger.focus());
+    }
+  };
   return (
     <section className="dataset-answer" aria-label={props.t("dataset.result")}>
       <header className="dataset-answer-header">
@@ -6233,9 +6362,20 @@ export function DatasetAnswerResult(props: {
       {result.truncated ? <p className="muted retrieval-warning">{props.t("dataset.truncated")}</p> : null}
       {citations.length > 0 ? (
         <div className="dataset-citations" aria-label={props.t("dataset.citations")}>
-          {citations.map((citation) => <span key={citation.refId}>{citation.label} {citation.title}</span>)}
+          {citations.map((citation) => props.onOpenCitation ? (
+            <button
+              type="button"
+              className="ghost"
+              key={citation.refId}
+              disabled={openingCitationRefId !== null}
+              onClick={(event) => void openCitation(citation.refId, event.currentTarget)}
+            >
+              {citation.label} {citation.title}
+            </button>
+          ) : <span key={citation.refId}>{citation.label} {citation.title}</span>)}
         </div>
       ) : null}
+      {citationOpenFailed ? <p className="muted retrieval-warning" role="status">{props.t("collection.failed")}</p> : null}
     </section>
   );
 }

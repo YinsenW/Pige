@@ -12,6 +12,8 @@ import type {
   CollectionCellEditResult,
   CollectionCreateViewRequest,
   CollectionCreateViewResult,
+  CollectionCitationHighlight,
+  DatasetQueryPreview,
   CollectionRenameColumnRequest,
   CollectionRenameColumnResult,
   CollectionSnapshot,
@@ -22,7 +24,10 @@ import type {
   CollectionTrashRowResult
 } from "@pige/schemas";
 import type { AgentTurnAnswer } from "@pige/contracts";
-import { ManagedCollectionPanel } from "../../apps/desktop/src/renderer/src/components/ManagedCollectionPanel";
+import {
+  ManagedCollectionCitationPanel,
+  ManagedCollectionPanel
+} from "../../apps/desktop/src/renderer/src/components/ManagedCollectionPanel";
 import {
   ActivityHistorySettingsPanel,
   DatasetAnswerResult
@@ -56,6 +61,62 @@ afterEach(() => {
 });
 
 describe("ManagedCollectionPanel", () => {
+  it("renders exact cited rows and columns in a focused read-only surface", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const preview = citationPreview();
+    const highlights: readonly CollectionCitationHighlight[] = [
+      { kind: "rows", rowIds: ["row_datasetcitation01"] },
+      { kind: "columns", columnIds: ["column_datasetcount001"] }
+    ];
+    await act(async () => {
+      root.render(createElement(ManagedCollectionCitationPanel, {
+        mode: "citation_readonly",
+        preview,
+        highlights,
+        onClose: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+
+    const panel = requireElement(dom.window.document.querySelector<HTMLElement>(".managed-collection-citation-panel"));
+    expect(panel.dataset.collectionMode).toBe("citation_readonly");
+    expect(panel.textContent).toContain("North");
+    expect(panel.querySelectorAll("mark")).toHaveLength(3);
+    expect(panel.querySelector('[data-citation-row-id="row_datasetcitation01"]')?.getAttribute(
+      "data-citation-highlight"
+    )).toBe("true");
+    expect(dom.window.document.activeElement).toBe(
+      panel.querySelector('[data-citation-primary="true"]')
+    );
+    expect(Array.from(panel.querySelectorAll("button")).map((button) => button.textContent?.trim())).toEqual(["Back"]);
+    expect(panel.querySelector("input, select, textarea")).toBeNull();
+
+    const aggregateHighlights: readonly CollectionCitationHighlight[] = [
+      { kind: "range", range: { startRow: 1, endRow: 1 } },
+      { kind: "columns", columnIds: ["column_datasetcount001"] },
+      { kind: "aggregate", aggregateKeys: ["record_count"], groupKeys: ["region"] }
+    ];
+    await act(async () => {
+      root.render(createElement(ManagedCollectionCitationPanel, {
+        mode: "citation_readonly",
+        preview,
+        highlights: aggregateHighlights,
+        onClose: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    expect(panel.querySelectorAll("mark")).toHaveLength(4);
+    expect(dom.window.document.activeElement).toBe(
+      panel.querySelector('[data-citation-primary="true"]')
+    );
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("commits one editable scalar against the immutable displayed revision and restores cell focus", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
@@ -1594,6 +1655,26 @@ function committedResult(
     status: "committed",
     revisionId,
     operationId: "op_20260727_collection01"
+  };
+}
+
+function citationPreview(): DatasetQueryPreview {
+  return {
+    datasetId: "dataset_20260729_datasetcitation",
+    revisionId: "dataset_rev_20260729_datasetcitation",
+    tableId: "table_datasetcitation01",
+    tableName: "Regional totals",
+    planHash: `sha256:${"a".repeat(64)}`,
+    resultHash: `sha256:${"b".repeat(64)}`,
+    columns: [
+      { key: "region", label: "Region", logicalType: "string", sourceColumnId: "column_datasetregion01" },
+      { key: "record_count", label: "Records", logicalType: "integer", sourceColumnId: "column_datasetcount001", aggregate: "count" }
+    ],
+    rows: [{ rowId: "row_datasetcitation01", values: ["North", 3] }],
+    matchedRowCount: 1,
+    returnedRowCount: 1,
+    truncated: false,
+    citationRefs: ["citation_1"]
   };
 }
 

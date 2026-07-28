@@ -9,6 +9,7 @@ import type {
   CollectionCreateViewRequest,
   CollectionCreateViewResult,
   CollectionOpenResult,
+  CollectionOpenCitationResult,
   CollectionRenameColumnRequest,
   CollectionRenameColumnResult,
   CollectionScalarValue,
@@ -45,6 +46,32 @@ type ColumnDraft = {
 };
 
 const COLLECTION_EDITABLE_TYPES = ["string", "integer", "number", "boolean", "date", "datetime"] as const;
+
+type CitationReady = Extract<CollectionOpenCitationResult, { readonly status: "ready" }>;
+type CitationPanelProps = Pick<CitationReady, "mode" | "preview" | "highlights"> & { readonly onClose: () => void; readonly t: (key: string) => string };
+export function ManagedCollectionCitationPanel(props: CitationPanelProps): React.JSX.Element {
+  const panelRef = useRef<HTMLElement | null>(null);
+  const primary = props.highlights[0];
+  const rowIds = new Set(props.highlights.find((item) => item.kind === "rows")?.rowIds ?? []);
+  const range = props.highlights.find((item) => item.kind === "range")?.range;
+  const columnIds = new Set(props.highlights.find((item) => item.kind === "columns")?.columnIds ?? []);
+  const aggregate = props.highlights.find((item) => item.kind === "aggregate");
+  const aggregateKeys = new Set(aggregate?.kind === "aggregate" ? [...aggregate.aggregateKeys, ...aggregate.groupKeys] : []);
+  const rowMarked = (rowId: string | undefined, index: number) => !!(rowId && rowIds.has(rowId)) || !!(range && index + 1 >= range.startRow && index + 1 <= range.endRow);
+  const columnMarked = (column: CitationReady["preview"]["columns"][number]) => !!(column.sourceColumnId && columnIds.has(column.sourceColumnId)) || aggregateKeys.has(column.key);
+  const primaryRow = (rowId: string | undefined, index: number) => primary?.kind === "rows" ? rowId === primary.rowIds[0] : primary?.kind === "range" && index + 1 === primary.range.startRow;
+  const primaryColumn = (column: CitationReady["preview"]["columns"][number]) => primary?.kind === "columns" ? column.sourceColumnId === primary.columnIds[0] : primary?.kind === "aggregate" && column.key === (primary.aggregateKeys[0] ?? primary.groupKeys[0]);
+  useLayoutEffect(() => { const panel = panelRef.current; (panel?.querySelector<HTMLElement>('[data-citation-primary="true"]') ?? panel)?.focus({ preventScroll: true }); }, [props.preview.resultHash, props.highlights]);
+  return <section ref={panelRef} className="dataset-answer managed-collection-panel managed-collection-citation-panel" aria-labelledby="managed-collection-citation-title" tabIndex={-1} data-collection-mode={props.mode}>
+    <header className="dataset-answer-header"><div><button type="button" className="ghost back-button" onClick={props.onClose}>{props.t("collection.back")}</button><p className="retrieval-eyebrow">{props.t("dataset.result")}</p><h1 id="managed-collection-citation-title">{props.preview.tableName}</h1></div><p className="muted dataset-answer-count">{props.t("dataset.rows")}: {props.preview.returnedRowCount}/{props.preview.matchedRowCount}</p></header>
+    <div className="dataset-table-scroll" tabIndex={0} aria-label={props.t("dataset.table")}><table className="dataset-table"><caption>{props.preview.tableName}</caption><thead><tr>
+      {props.preview.columns.map((column) => <th scope="col" key={column.key} tabIndex={-1} data-citation-highlight={columnMarked(column) ? "true" : undefined} data-citation-primary={primaryColumn(column) ? "true" : undefined}>{columnMarked(column) ? <mark>{column.label}</mark> : column.label}</th>)}
+    </tr></thead><tbody>{props.preview.rows.map((row, rowIndex) => <tr key={row.rowId ?? `${props.preview.resultHash}:${rowIndex}`} tabIndex={-1} data-citation-row-id={row.rowId} data-citation-highlight={rowMarked(row.rowId, rowIndex) ? "true" : undefined} data-citation-primary={primaryRow(row.rowId, rowIndex) ? "true" : undefined}>
+      {row.values.map((value, columnIndex) => { const column = props.preview.columns[columnIndex]; const marked = rowMarked(row.rowId, rowIndex) || !!(column && columnMarked(column)); const content = formatCollectionScalar(value); return <td key={column?.key ?? columnIndex}>{marked ? <mark>{content}</mark> : content}</td>; })}
+    </tr>)}</tbody></table></div>
+    {props.preview.truncated ? <p className="muted retrieval-warning">{props.t("dataset.truncated")}</p> : null}
+  </section>;
+}
 
 type EditNotice =
   | { readonly kind: "saved" }
