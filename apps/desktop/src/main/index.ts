@@ -97,6 +97,7 @@ import { registerKnowledgeHealthIpc } from "./register-knowledge-health-ipc";
 import { registerMemoryIpc } from "./register-memory-ipc";
 import { registerSkillsIpc } from "./register-skills-ipc";
 import { registerPiPackagesIpc } from "./register-pi-packages-ipc";
+import { registerLocalCapabilitiesIpc } from "./register-local-capabilities-ipc";
 import {
   AgentIngestService,
   type AgentIngestCapabilitySnapshot,
@@ -104,6 +105,10 @@ import {
   type AgentIngestRetrievalPort
 } from "./services/agent-ingest-service";
 import { AgentRuntimeService } from "./services/agent-runtime-service";
+import {
+  createUnavailablePaddleOcrLifecycleService,
+  PaddleOcrLifecycleService
+} from "./services/paddle-ocr-lifecycle-service";
 import { AgentTurnDraftPublisher } from "./services/agent-turn-draft-publisher";
 import { AppearanceService } from "./services/appearance-service";
 import { BackupCoordinatorService } from "./services/backup-coordinator-service";
@@ -291,6 +296,7 @@ let updateService: UpdateService | undefined;
 let skillRegistryService: SkillRegistryService | undefined;
 let skillUrlInstallService: SkillUrlInstallService | undefined;
 let agentMemoryService: AgentMemoryService | undefined;
+let paddleOcrLifecycleService: PaddleOcrLifecycleService | undefined;
 let taskProcessSessionService: TaskProcessSessionService | undefined;
 let taskExecutionPlanService: TaskExecutionPlanService | undefined;
 let taskExecutionPlanRunner: TaskExecutionPlanRunner | undefined;
@@ -560,6 +566,13 @@ const getSkillUrlInstallService = (): SkillUrlInstallService => {
 const getAgentMemoryService = (): AgentMemoryService => {
   agentMemoryService ??= new AgentMemoryService();
   return agentMemoryService;
+};
+
+const getPaddleOcrLifecycleService = (): PaddleOcrLifecycleService => {
+  paddleOcrLifecycleService ??= createUnavailablePaddleOcrLifecycleService(
+    resolvePaddleOcrManifestPath()
+  );
+  return paddleOcrLifecycleService;
 };
 
 const getVaultService = (): VaultService => {
@@ -2142,6 +2155,15 @@ registerMemoryIpc({
     }
   }
 });
+registerLocalCapabilitiesIpc({
+  ipcMain,
+  paddleOcrSummary: (request) => getPaddleOcrLifecycleService().summary(request),
+  installPaddleOcr: (request) => getPaddleOcrLifecycleService().install(request),
+  enablePaddleOcr: (request) => getPaddleOcrLifecycleService().enable(request),
+  testPaddleOcr: (request) => getPaddleOcrLifecycleService().test(request),
+  disablePaddleOcr: (request) => getPaddleOcrLifecycleService().disable(request),
+  removePaddleOcr: (request) => getPaddleOcrLifecycleService().remove(request)
+});
 ipcMain.handle("activity.list", (_event, request?: KnowledgeActivityListRequest) =>
   (() => {
     const parsed = KnowledgeActivityListRequestSchema.parse(request ?? {});
@@ -2601,6 +2623,19 @@ function resolveToolchainManifestPath(): string {
     fallback,
     join(app.getAppPath(), "resources/toolchain-manifest/toolchain.manifest.json"),
     join(app.getAppPath(), "../../resources/toolchain-manifest/toolchain.manifest.json")
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? fallback;
+}
+
+function resolvePaddleOcrManifestPath(): string {
+  const relativePath = "parser-manifests/paddleocr-local.parser.manifest.json";
+  const fallback = join(process.cwd(), "resources", relativePath);
+  const candidates = [
+    join(process.resourcesPath, relativePath),
+    join(process.cwd(), "../../resources", relativePath),
+    fallback,
+    join(app.getAppPath(), "resources", relativePath),
+    join(app.getAppPath(), "../../resources", relativePath)
   ];
   return candidates.find((candidate) => existsSync(candidate)) ?? fallback;
 }

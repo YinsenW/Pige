@@ -1,4 +1,5 @@
 import type { IpcMain, IpcMainInvokeEvent } from "electron";
+import { readFileSync } from "node:fs";
 import {
   PADDLE_OCR_ENGINE_ID,
   PaddleOcrDisableResultSchema,
@@ -126,6 +127,23 @@ function makeHarness(overrides: Record<string, unknown> = {}) {
 }
 
 describe("registerLocalCapabilitiesIpc", () => {
+  it("is composed by Main against the reviewed manifest lifecycle owner", () => {
+    const source = readFileSync("apps/desktop/src/main/index.ts", "utf8");
+    expect(source).toContain("registerLocalCapabilitiesIpc({");
+    expect(source).toContain("createUnavailablePaddleOcrLifecycleService(");
+    for (const callback of [
+      "paddleOcrSummary",
+      "installPaddleOcr",
+      "enablePaddleOcr",
+      "testPaddleOcr",
+      "disablePaddleOcr",
+      "removePaddleOcr"
+    ]) {
+      expect(source).toContain(`${callback}:`);
+    }
+    expect(source).toContain("parser-manifests/paddleocr-local.parser.manifest.json");
+  });
+
   it("registers exactly the six managed PaddleOCR preload channels", () => {
     expect([...makeHarness().handlers.keys()]).toEqual([
       "localCapabilities.paddleOcrSummary",

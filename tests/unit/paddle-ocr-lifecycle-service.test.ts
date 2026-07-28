@@ -6,6 +6,7 @@ import type {
   LocalToolLifecycleResult
 } from "../../apps/desktop/src/main/services/local-tool-manager-types";
 import {
+  createUnavailablePaddleOcrLifecycleService,
   PaddleOcrLifecycleService,
   type PaddleOcrLocalToolManagerPort
 } from "../../apps/desktop/src/main/services/paddle-ocr-lifecycle-service";
@@ -82,6 +83,46 @@ function makeHarness(overrides: { installable?: boolean } = {}) {
 }
 
 describe("Paddle OCR lifecycle service", () => {
+  it("projects the reviewed production manifest without claiming an unpublished bundle", async () => {
+    const manifestPath = path.resolve(
+      "resources/parser-manifests/paddleocr-local.parser.manifest.json"
+    );
+    const service = createUnavailablePaddleOcrLifecycleService(manifestPath, "darwin", "arm64");
+    const summary = service.summary({ apiVersion: 1 });
+
+    expect(summary).toMatchObject({
+      engineId: PADDLE_OCR_ENGINE_ID,
+      state: "unsupported",
+      catalogVersion: "2026-07-28",
+      nativeOcrPreferred: true,
+      hiddenDownloadsAllowed: false,
+      canInstall: false
+    });
+    expect(summary.components.map((component) => component.componentId)).toEqual([
+      "python-runtime",
+      "paddlepaddle",
+      "paddleocr",
+      "paddlex",
+      "model.pp-ocrv5_mobile_det",
+      "model.pp-ocrv5_mobile_rec",
+      "model.korean_pp-ocrv5_mobile_rec",
+      "model.latin_pp-ocrv5_mobile_rec"
+    ]);
+    expect(summary.downloadSizeBytes).toBeGreaterThan(140_000_000);
+    expect(JSON.stringify(summary)).not.toMatch(/url|sha256|path|pythonArgs/u);
+
+    await expect(service.install({
+      apiVersion: 1,
+      requestId,
+      expectedRevision: summary.revision
+    })).resolves.toEqual({
+      apiVersion: 1,
+      requestId,
+      engineId: PADDLE_OCR_ENGINE_ID,
+      status: "failed"
+    });
+  });
+
   it("projects an authoritative renderer-safe catalog and disables absent bundles", () => {
     const unavailable = makeHarness({ installable: false });
     expect(unavailable.service.summary({ apiVersion: 1 })).toMatchObject({

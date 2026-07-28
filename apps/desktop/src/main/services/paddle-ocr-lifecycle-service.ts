@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
   PADDLE_OCR_ENGINE_ID,
   type PaddleOcrCatalogComponent,
@@ -75,6 +76,68 @@ interface PaddleOcrLifecycleServiceOptions {
   readonly catalog: PaddleOcrReviewedCatalog;
   readonly manager: PaddleOcrLocalToolManagerPort;
   readonly materializer: PaddleOcrBundleMaterializerPort;
+}
+
+type PaddleOcrPlatform = "macos-arm64" | "windows-x64";
+
+interface ReviewedPaddleOcrManifest {
+  readonly id: typeof PADDLE_OCR_ENGINE_ID;
+  readonly catalogVersion: string;
+  readonly engineVersion: string;
+  readonly pythonRuntime: {
+    readonly version: string;
+    readonly assets: readonly ReviewedAsset[];
+  };
+  readonly pythonPackages: readonly ReviewedPackage[];
+  readonly paddlePaddle: {
+    readonly version: string;
+    readonly assets: readonly ReviewedAsset[];
+  };
+  readonly models: readonly ReviewedModel[];
+  readonly releaseBundles: readonly {
+    readonly platform: PaddleOcrPlatform;
+    readonly state: "awaiting_release_artifact";
+  }[];
+}
+
+interface ReviewedAsset {
+  readonly platform: PaddleOcrPlatform;
+  readonly sizeBytes: number;
+}
+
+interface ReviewedPackage {
+  readonly name: string;
+  readonly version: string;
+  readonly sizeBytes: number;
+}
+
+interface ReviewedModel {
+  readonly id: string;
+  readonly sizeBytes: number;
+}
+
+export function createUnavailablePaddleOcrLifecycleService(
+  manifestPath: string,
+  platform = process.platform,
+  architecture = process.arch
+): PaddleOcrLifecycleService {
+  const manifest = parseReviewedManifest(JSON.parse(readFileSync(manifestPath, "utf8")));
+  const target = platform === "darwin" && architecture === "arm64"
+    ? "macos-arm64"
+    : platform === "win32" && architecture === "x64"
+      ? "windows-x64"
+      : undefined;
+  const catalog = projectUnavailableCatalog(manifest, target);
+  return new PaddleOcrLifecycleService({
+    catalog,
+    manager: unavailableManager(manifest.engineVersion),
+    materializer: {
+      materialize: async () => {
+        throw new Error("The reviewed PaddleOCR release bundle is unavailable.");
+      },
+      discard: () => undefined
+    }
+  });
 }
 
 export class PaddleOcrLifecycleService {
@@ -291,4 +354,169 @@ function activeVersion(manager: PaddleOcrLocalToolManagerPort): string | undefin
 
 function jobCompleted(result: LocalToolLifecycleResult): boolean {
   return result.job.state === "completed" || result.job.state === "completed_with_warnings";
+}
+
+function parseReviewedManifest(value: unknown): ReviewedPaddleOcrManifest {
+  const manifest = requireRecord(value);
+  if (
+    manifest.id !== PADDLE_OCR_ENGINE_ID ||
+    !isBoundedString(manifest.catalogVersion, 64) ||
+    !isBoundedString(manifest.engineVersion, 64)
+  ) {
+    throw new Error("Invalid reviewed PaddleOCR catalog identity.");
+  }
+  const pythonRuntime = requireRecord(manifest.pythonRuntime);
+  const paddlePaddle = requireRecord(manifest.paddlePaddle);
+  const pythonPackages = requireArray(manifest.pythonPackages).map(parsePackage);
+  const models = requireArray(manifest.models).map(parseModel);
+  const releaseBundles = requireArray(manifest.releaseBundles).map((entry) => {
+    const bundle = requireRecord(entry);
+    if (!isPaddleOcrPlatform(bundle.platform) || bundle.state !== "awaiting_release_artifact") {
+      throw new Error("The PaddleOCR release bundle is not a reviewed unavailable artifact.");
+    }
+    return { platform: bundle.platform, state: "awaiting_release_artifact" as const };
+  });
+  if (pythonPackages.length === 0 || models.length === 0 || releaseBundles.length !== 2) {
+    throw new Error("The reviewed PaddleOCR catalog is incomplete.");
+  }
+  return {
+    id: PADDLE_OCR_ENGINE_ID,
+    catalogVersion: manifest.catalogVersion,
+    engineVersion: manifest.engineVersion,
+    pythonRuntime: {
+      version: requireVersion(pythonRuntime.version),
+      assets: requireArray(pythonRuntime.assets).map(parseAsset)
+    },
+    pythonPackages,
+    paddlePaddle: {
+      version: requireVersion(paddlePaddle.version),
+      assets: requireArray(paddlePaddle.assets).map(parseAsset)
+    },
+    models,
+    releaseBundles
+  };
+}
+
+function projectUnavailableCatalog(
+  manifest: ReviewedPaddleOcrManifest,
+  platform: PaddleOcrPlatform | undefined
+): PaddleOcrReviewedCatalog {
+  const pythonAsset = manifest.pythonRuntime.assets.find((asset) => asset.platform === platform);
+  const paddleAsset = manifest.paddlePaddle.assets.find((asset) => asset.platform === platform);
+  const components: PaddleOcrCatalogComponent[] = [
+    component("python-runtime", "python_runtime", "Python runtime", manifest.pythonRuntime.version, pythonAsset?.sizeBytes ?? 0),
+    component("paddlepaddle", "engine", "PaddlePaddle CPU", manifest.paddlePaddle.version, paddleAsset?.sizeBytes ?? 0),
+    ...manifest.pythonPackages.map((entry) =>
+      component(entry.name, "engine", packageLabel(entry.name), entry.version, entry.sizeBytes)
+    ),
+    ...manifest.models.map((entry) =>
+      component(`model.${entry.id.toLowerCase()}`, "model", entry.id, manifest.engineVersion, entry.sizeBytes)
+    )
+  ];
+  return {
+    catalogVersion: manifest.catalogVersion,
+    components,
+    downloadSizeBytes: components.reduce((total, entry) => total + entry.sizeBytes, 0),
+    installable: false
+  };
+}
+
+function unavailableManager(version: string): PaddleOcrLocalToolManagerPort {
+  const unavailable = async (): Promise<LocalToolLifecycleResult> => {
+    throw new Error("The reviewed PaddleOCR release bundle is unavailable.");
+  };
+  return {
+    inspect: () => ({
+      toolId: PADDLE_OCR_ENGINE_ID,
+      label: "PaddleOCR local engine",
+      installState: "unsupported",
+      enabled: false,
+      healthy: false,
+      routable: false,
+      desiredVersion: version,
+      platform: normalizeManagerPlatform(process.platform),
+      architecture: process.arch === "arm64" ? "arm64" : "x64",
+      capabilities: ["ocr.image"],
+      license: { spdxId: "Apache-2.0", name: "Apache License 2.0" },
+      assets: [],
+      routedCapabilities: []
+    }),
+    install: unavailable,
+    setEnabled: unavailable,
+    test: unavailable,
+    remove: unavailable
+  };
+}
+
+function component(
+  componentId: string,
+  kind: PaddleOcrCatalogComponent["kind"],
+  label: string,
+  version: string,
+  sizeBytes: number
+): PaddleOcrCatalogComponent {
+  return { componentId, kind, label, version, sizeBytes };
+}
+
+function parseAsset(value: unknown): ReviewedAsset {
+  const asset = requireRecord(value);
+  if (!isPaddleOcrPlatform(asset.platform)) throw new Error("Invalid PaddleOCR asset platform.");
+  return { platform: asset.platform, sizeBytes: requireSize(asset.sizeBytes) };
+}
+
+function parsePackage(value: unknown): ReviewedPackage {
+  const entry = requireRecord(value);
+  return {
+    name: requireIdentifier(entry.name),
+    version: requireVersion(entry.version),
+    sizeBytes: requireSize(entry.sizeBytes)
+  };
+}
+
+function parseModel(value: unknown): ReviewedModel {
+  const entry = requireRecord(value);
+  return { id: requireIdentifier(entry.id), sizeBytes: requireSize(entry.sizeBytes) };
+}
+
+function requireRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Expected catalog object.");
+  return value as Record<string, unknown>;
+}
+
+function requireArray(value: unknown): readonly unknown[] {
+  if (!Array.isArray(value)) throw new Error("Expected catalog array.");
+  return value;
+}
+
+function requireIdentifier(value: unknown): string {
+  if (!isBoundedString(value, 64) || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(value)) {
+    throw new Error("Invalid catalog identifier.");
+  }
+  return value;
+}
+
+function requireVersion(value: unknown): string {
+  if (!isBoundedString(value, 64)) throw new Error("Invalid catalog version.");
+  return value;
+}
+
+function requireSize(value: unknown): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error("Invalid catalog size.");
+  return value as number;
+}
+
+function isBoundedString(value: unknown, max: number): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= max;
+}
+
+function isPaddleOcrPlatform(value: unknown): value is PaddleOcrPlatform {
+  return value === "macos-arm64" || value === "windows-x64";
+}
+
+function packageLabel(name: string): string {
+  return name === "paddleocr" ? "PaddleOCR" : name === "paddlex" ? "PaddleX" : name;
+}
+
+function normalizeManagerPlatform(value: NodeJS.Platform): "macos" | "windows" | "linux" {
+  return value === "darwin" ? "macos" : value === "win32" ? "windows" : "linux";
 }
