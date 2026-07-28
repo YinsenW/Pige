@@ -53,6 +53,15 @@ describe("SkillZipStageService", () => {
     await expect(service.readSelectedArchive(linked)).rejects.toMatchObject<Partial<SkillZipStageError>>({
       reason: "archive_unsafe"
     });
+    const realParent = path.join(root, "real-parent");
+    fs.mkdirSync(realParent);
+    const nested = path.join(realParent, "nested.zip");
+    fs.copyFileSync(collision, nested);
+    const linkedParent = path.join(root, "linked-parent");
+    fs.symlinkSync(realParent, linkedParent, "dir");
+    await expect(service.readSelectedArchive(path.join(linkedParent, "nested.zip"))).rejects.toMatchObject<Partial<SkillZipStageError>>({
+      reason: "archive_unsafe"
+    });
     expect(fs.readdirSync(path.join(root, "skills", "zip-import"))).toEqual([]);
   });
 });

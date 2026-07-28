@@ -212,7 +212,9 @@ function snapshotSelectedArchive(sourcePath: string, destinationPath: string): v
     if (before.size < 1 || before.size > SKILL_ZIP_STAGE_MAX_ARCHIVE_BYTES) throw zipError("archive_too_large");
     const bytes = fs.readFileSync(sourceDescriptor);
     const after = fs.fstatSync(sourceDescriptor);
-    if (!sameIdentity(before, after) || bytes.length !== before.size) throw zipError("archive_unsafe");
+    const parentAfter = fs.lstatSync(parent);
+    if (!sameIdentity(before, after) || bytes.length !== before.size || !sameDirectoryIdentity(parentStats, parentAfter) ||
+      fs.realpathSync.native(parent) !== parent) throw zipError("archive_unsafe");
     destinationDescriptor = fs.openSync(
       destinationPath,
       fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0),
@@ -243,6 +245,10 @@ function digest(bytes: Buffer): `sha256:${string}` {
 
 function sameIdentity(left: fs.Stats, right: fs.Stats): boolean {
   return left.dev === right.dev && left.ino === right.ino && left.size === right.size && left.mtimeMs === right.mtimeMs;
+}
+
+function sameDirectoryIdentity(left: fs.Stats, right: fs.Stats): boolean {
+  return left.dev === right.dev && left.ino === right.ino && left.isDirectory() && right.isDirectory();
 }
 
 function zipError(reason: SkillZipStageInvalidReason): SkillZipStageError {
