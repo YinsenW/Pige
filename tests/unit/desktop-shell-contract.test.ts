@@ -70,6 +70,12 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly uninstall: (");
     expect(contractsSource).toContain("request: PiPackageUninstallRequest");
     expect(contractsSource).toContain("Promise<PiPackageUninstallResult>");
+    expect(contractsSource).toContain("readonly update: (");
+    expect(contractsSource).toContain("request: PiPackageUpdateRequest");
+    expect(contractsSource).toContain("Promise<PiPackageUpdateResult>");
+    expect(contractsSource).toContain("readonly rollback: (");
+    expect(contractsSource).toContain("request: PiPackageRollbackRequest");
+    expect(contractsSource).toContain("Promise<PiPackageRollbackResult>");
     expect(packageApi).toContain('ipcRenderer.invoke("piPackages.summary")');
     expect(packageApi).toContain('"piPackages.install"');
     expect(packageApi).toContain("PiPackageInstallRequestSchema.parse(request)");

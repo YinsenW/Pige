@@ -641,6 +641,12 @@ export const PiPackageInstallRequestIdSchema = z.string()
   .regex(/^pi_package_request_[a-z0-9]{16,64}$/u);
 export const PiPackageUninstallRequestIdSchema = z.string()
   .regex(/^pi_package_uninstall_request_[a-z0-9]{16,64}$/u);
+export const PiPackageUpdateRequestIdSchema = z.string()
+  .regex(/^pi_package_update_request_[a-z0-9]{16,64}$/u);
+export const PiPackageRollbackRequestIdSchema = z.string()
+  .regex(/^pi_package_rollback_request_[a-z0-9]{16,64}$/u);
+export const PiPackageRollbackIdSchema = z.string()
+  .regex(/^pi_package_rollback_[a-z0-9]{16,64}$/u);
 export const PiPackageCatalogQueryRequestIdSchema = z.string()
   .regex(/^pi_package_catalog_request_[a-z0-9]{16,64}$/u);
 export const PiPackageCatalogIdSchema = z.string()
@@ -652,16 +658,31 @@ export const PiPackageVersionSchema = z.string().refine((value) =>
   value === value.trim() && value.length <= 64 && EXACT_PACKAGE_VERSION_PATTERN.test(value)
 );
 export const PiPackageTypeSchema = z.enum(["extension", "skill", "prompt", "theme"]);
+export const PiPackageIdSchema = z.string().regex(/^pkg_[a-f0-9]{24}$/u);
 export const PiPackageInstalledSummarySchema = z.object({
-  packageId: z.string().regex(/^pkg_[a-f0-9]{24}$/u),
+  packageId: PiPackageIdSchema,
   packageName: PiPackageNameSchema,
   version: PiPackageVersionSchema,
   state: z.literal("installed_disabled"),
   packageTypes: z.array(PiPackageTypeSchema).min(1).max(4).readonly(),
   dependencyCount: z.number().int().min(0).max(256),
   enabled: z.literal(false),
-  trust: z.literal("community")
-}).strict();
+  trust: z.literal("community"),
+  canUpdate: z.boolean(),
+  canRollback: z.boolean(),
+  rollbackTarget: z.object({
+    rollbackId: PiPackageRollbackIdSchema,
+    targetVersion: PiPackageVersionSchema
+  }).strict().nullable()
+}).strict().superRefine((summary, context) => {
+  if (summary.canRollback !== (summary.rollbackTarget !== null)) {
+    context.addIssue({
+      code: "custom",
+      path: ["rollbackTarget"],
+      message: "Rollback availability must match one exact renderer-safe target."
+    });
+  }
+});
 export const PiPackageRegistrySummarySchema = z.object({
   apiVersion: z.literal(1),
   revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
@@ -695,12 +716,12 @@ export const PiPackageUninstallRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: PiPackageUninstallRequestIdSchema,
   expectedRegistryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  packageId: PiPackageInstalledSummarySchema.shape.packageId
+  packageId: PiPackageIdSchema
 }).strict();
 const PiPackageUninstallResultIdentitySchema = z.object({
   apiVersion: z.literal(1),
   requestId: PiPackageUninstallRequestIdSchema,
-  packageId: PiPackageInstalledSummarySchema.shape.packageId
+  packageId: PiPackageIdSchema
 }).strict();
 const PiPackageUninstallAuthoritativeResultIdentitySchema =
   PiPackageUninstallResultIdentitySchema.extend({ registry: PiPackageRegistrySummarySchema });
@@ -710,6 +731,54 @@ export const PiPackageUninstallResultSchema = z.discriminatedUnion("status", [
   PiPackageUninstallAuthoritativeResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
   PiPackageUninstallAuthoritativeResultIdentitySchema.extend({ status: z.literal("denied") }).strict(),
   PiPackageUninstallResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const PiPackageUpdateRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PiPackageUpdateRequestIdSchema,
+  packageId: PiPackageIdSchema,
+  expectedRegistryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  targetVersion: PiPackageVersionSchema,
+  targetIntegrity: PiPackageIntegritySchema
+}).strict();
+const PiPackageUpdateResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PiPackageUpdateRequestIdSchema,
+  packageId: PiPackageIdSchema,
+  targetVersion: PiPackageVersionSchema,
+  targetIntegrity: PiPackageIntegritySchema
+}).strict();
+const PiPackageUpdateAuthoritativeResultIdentitySchema =
+  PiPackageUpdateResultIdentitySchema.extend({ registry: PiPackageRegistrySummarySchema });
+export const PiPackageUpdateResultSchema = z.discriminatedUnion("status", [
+  PiPackageUpdateAuthoritativeResultIdentitySchema.extend({ status: z.literal("committed") }).strict(),
+  PiPackageUpdateAuthoritativeResultIdentitySchema.extend({ status: z.literal("denied") }).strict(),
+  PiPackageUpdateAuthoritativeResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  PiPackageUpdateAuthoritativeResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  PiPackageUpdateResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const PiPackageRollbackRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PiPackageRollbackRequestIdSchema,
+  packageId: PiPackageIdSchema,
+  expectedRegistryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  rollbackId: PiPackageRollbackIdSchema,
+  targetVersion: PiPackageVersionSchema
+}).strict();
+const PiPackageRollbackResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PiPackageRollbackRequestIdSchema,
+  packageId: PiPackageIdSchema,
+  rollbackId: PiPackageRollbackIdSchema,
+  targetVersion: PiPackageVersionSchema
+}).strict();
+const PiPackageRollbackAuthoritativeResultIdentitySchema =
+  PiPackageRollbackResultIdentitySchema.extend({ registry: PiPackageRegistrySummarySchema });
+export const PiPackageRollbackResultSchema = z.discriminatedUnion("status", [
+  PiPackageRollbackAuthoritativeResultIdentitySchema.extend({ status: z.literal("committed") }).strict(),
+  PiPackageRollbackAuthoritativeResultIdentitySchema.extend({ status: z.literal("denied") }).strict(),
+  PiPackageRollbackAuthoritativeResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  PiPackageRollbackAuthoritativeResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  PiPackageRollbackResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 const isSafeExecutableName = (value: string): boolean => {
   if (value !== value.trim() || value.length < 1 || value.length > 64) return false;
@@ -5670,8 +5739,12 @@ export type RendererSafeSubjectLabel = z.infer<typeof RendererSafeSubjectLabelSc
 export type PiPackageInstallRequestId = z.infer<typeof PiPackageInstallRequestIdSchema>;
 export type PiPackageInstallTaskId = z.infer<typeof PiPackageInstallTaskIdSchema>;
 export type PiPackageUninstallRequestId = z.infer<typeof PiPackageUninstallRequestIdSchema>;
+export type PiPackageUpdateRequestId = z.infer<typeof PiPackageUpdateRequestIdSchema>;
+export type PiPackageRollbackRequestId = z.infer<typeof PiPackageRollbackRequestIdSchema>;
+export type PiPackageRollbackId = z.infer<typeof PiPackageRollbackIdSchema>;
 export type PiPackageCatalogQueryRequestId = z.infer<typeof PiPackageCatalogQueryRequestIdSchema>;
 export type PiPackageCatalogId = z.infer<typeof PiPackageCatalogIdSchema>;
+export type PiPackageId = z.infer<typeof PiPackageIdSchema>;
 export type PiPackageIntegrity = z.infer<typeof PiPackageIntegritySchema>;
 export type PiPackageName = z.infer<typeof PiPackageNameSchema>;
 export type PiPackageVersion = z.infer<typeof PiPackageVersionSchema>;
@@ -5683,6 +5756,10 @@ export type PiPackageInstallRequest = z.infer<typeof PiPackageInstallRequestSche
 export type PiPackageInstallResult = z.infer<typeof PiPackageInstallResultSchema>;
 export type PiPackageUninstallRequest = z.infer<typeof PiPackageUninstallRequestSchema>;
 export type PiPackageUninstallResult = z.infer<typeof PiPackageUninstallResultSchema>;
+export type PiPackageUpdateRequest = z.infer<typeof PiPackageUpdateRequestSchema>;
+export type PiPackageUpdateResult = z.infer<typeof PiPackageUpdateResultSchema>;
+export type PiPackageRollbackRequest = z.infer<typeof PiPackageRollbackRequestSchema>;
+export type PiPackageRollbackResult = z.infer<typeof PiPackageRollbackResultSchema>;
 export type PiPackageCatalogEntry = z.infer<typeof PiPackageCatalogEntrySchema>;
 export type PiPackageCatalogQueryRequest = z.infer<typeof PiPackageCatalogQueryRequestSchema>;
 export type PiPackageCatalogQueryResult = z.infer<typeof PiPackageCatalogQueryResultSchema>;
