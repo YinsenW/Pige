@@ -220,7 +220,10 @@ function createFixture(input: { revision?: number } = {}) {
         packageTypes: ["extension"],
         dependencyCount: 0,
         enabled: false,
-        trust: "community"
+        trust: "community",
+        canUpdate: true,
+        canRollback: false,
+        rollbackTarget: null
       }]
     };
     return createPigeTextToolResult("installed", { status: "installed_disabled" });
