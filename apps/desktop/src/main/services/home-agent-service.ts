@@ -1308,7 +1308,7 @@ export class HomeAgentService {
       if (readerSelectionLinkTarget) {
         const currentTarget = readCurrentNoteEvidenceBinding(vaultPath, readerSelectionLinkTarget.pageId);
         if (currentTarget.contentHash !== readerSelectionLinkTarget.contentHash) {
-          throw new PigeDomainError("agent_ingest.relationship_target_ineligible", "The selected link target changed.");
+          throw new PigeDomainError("agent_runtime.link_target_changed", "The selected link target changed.");
         }
       }
     };
@@ -1605,7 +1605,7 @@ export class HomeAgentService {
           }
           const target = readCurrentRetrievalPageForMutation(vaultPath, selected.item);
           if (target.item.summary.pageId === readerSelectionLink.selection.pageId) {
-            throw new PigeDomainError("agent_ingest.relationship_target_invalid", "A note cannot link to itself.");
+            throw new PigeDomainError("agent_runtime.link_target_self", "A note cannot link to itself.");
           }
           const nextTarget = {
             pageId: target.item.summary.pageId,

@@ -69,7 +69,7 @@ describe("Reader selection link service", () => {
     fs.appendFileSync(fixture.targetPath, "\nChanged after binding.\n", "utf8");
 
     expect(() => applyReaderSelectionLink(input)).toThrowError(
-      expect.objectContaining({ code: "agent_ingest.page_conflict" })
+      expect.objectContaining({ code: "agent_runtime.link_conflict" })
     );
     expect(fs.readFileSync(fixture.currentPath, "utf8")).toBe(fixture.currentMarkdown);
   });
@@ -78,11 +78,11 @@ describe("Reader selection link service", () => {
     const self = makeFixture();
     const selfInput = self.input();
     expect(() => applyReaderSelectionLink({ ...selfInput, targetPage: selfInput.currentPage }))
-      .toThrowError(expect.objectContaining({ code: "agent_ingest.relationship_target_invalid" }));
+      .toThrowError(expect.objectContaining({ code: "agent_runtime.link_target_self" }));
 
     const existing = makeFixture(true);
     expect(() => applyReaderSelectionLink(existing.input()))
-      .toThrowError(expect.objectContaining({ code: "agent_ingest.relationship_exists" }));
+      .toThrowError(expect.objectContaining({ code: "agent_runtime.link_target_exists" }));
     expect(fs.readFileSync(existing.currentPath, "utf8")).toBe(existing.currentMarkdown);
   });
 

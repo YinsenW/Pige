@@ -84,10 +84,10 @@ function linkInvalidReason(
   code: string
 ): Extract<ReaderSelectionLinkResult, { status: "invalid" }>["reason"] | undefined {
   const byCode: Readonly<Record<string, Extract<ReaderSelectionLinkResult, { status: "invalid" }>["reason"]>> = {
-    "agent_ingest.relationship_target_invalid": "target_self",
-    "agent_ingest.relationship_exists": "target_already_linked",
-    "agent_ingest.relationship_target_ineligible": "target_changed",
-    "agent_ingest.page_conflict": "target_changed",
+    "agent_runtime.link_target_self": "target_self",
+    "agent_runtime.link_target_exists": "target_already_linked",
+    "agent_runtime.link_target_changed": "target_changed",
+    "agent_runtime.link_conflict": "target_changed",
     "rag.search_not_found": "target_not_found",
     "rag.search_ambiguous": "target_ambiguous",
     "note_render_stale": "render_context_changed"

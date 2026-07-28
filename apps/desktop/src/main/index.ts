@@ -1180,7 +1180,7 @@ const getHomeAgentService = (): HomeAgentService => {
             targetPage.item.summary.title !== target.title ||
             targetPage.page.contentHash !== target.contentHash
           ) {
-            throw new PigeDomainError("agent_ingest.relationship_target_ineligible", "The Reader link target changed.");
+            throw new PigeDomainError("agent_runtime.link_target_changed", "The Reader link target changed.");
           }
           const result = applyReaderSelectionLink({
             vaultPath,

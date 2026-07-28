@@ -58,7 +58,7 @@ export function applyReaderSelectionLink(input: {
   }
   if (current.pageId === target.pageId) {
     throw new PigeDomainError(
-      "agent_ingest.relationship_target_invalid",
+      "agent_runtime.link_target_self",
       "A Reader link requires two different current notes."
     );
   }
@@ -74,7 +74,7 @@ export function applyReaderSelectionLink(input: {
   assertExactSelection(preservedBefore, input.selection);
   if (hasDirectedLink(preservedBefore, current.pagePath, target)) {
     throw new PigeDomainError(
-      "agent_ingest.relationship_exists",
+      "agent_runtime.link_target_exists",
       "The selected notes already have this stable directed link."
     );
   }
@@ -139,7 +139,7 @@ export function readReaderSelectionLinkOperation(input: {
   const target = requireCurrentEligiblePage(input.vaultPath, input.targetPage);
   if (target.pageId === input.selection.pageId) {
     throw new PigeDomainError(
-      "agent_ingest.relationship_target_invalid",
+      "agent_runtime.link_target_self",
       "A Reader link requires two different current notes."
     );
   }
@@ -246,7 +246,7 @@ function requireEligibleMarkdown(
       !markdown.includes(`<!-- pige:managed:start agent-link ${expectedOperationId} -->`))
   ) {
     throw new PigeDomainError(
-      "agent_ingest.relationship_target_ineligible",
+      "agent_runtime.link_target_changed",
       "Reader links require clean active Pige-generated notes."
     );
   }
@@ -583,5 +583,5 @@ function stableJson(value: unknown): string {
 }
 
 function pageConflict(message: string): PigeDomainError {
-  return new PigeDomainError("agent_ingest.page_conflict", message);
+  return new PigeDomainError("agent_runtime.link_conflict", message);
 }
