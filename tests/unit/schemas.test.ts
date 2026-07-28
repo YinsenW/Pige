@@ -24,6 +24,10 @@ import {
   CollectionTrashRowResultSchema,
   CurrentNoteAppendProposalDecisionResultSchema,
   ConversationEventSchema,
+  ExternalWebSkillHttpsOriginSchema,
+  ExternalWebSkillReadRequestSchema,
+  ExternalWebSkillReadResultSchema,
+  ExternalWebSkillRuntimeDeclarationSchema,
   FixtureManifestSchema,
   HighRiskConfirmationSummarySchema,
   JobRecordSchema,
@@ -2530,7 +2534,7 @@ describe("schemas", () => {
       .toEqual({ status: "discarded", requestId });
   });
 
-  it("freezes External/Web Skill review disclosure without runtime or secret authority", () => {
+  it("freezes External/Web Skill review disclosure without implicit runtime or secret authority", () => {
     const capabilities = ["read_current_source", "external_network", "use_brokered_credential"] as const;
     const dataBoundaries = ["local", "network", "brokered_credential"] as const;
     expect(deriveSkillDataBoundaries(capabilities)).toEqual(dataBoundaries);
@@ -2642,6 +2646,139 @@ describe("schemas", () => {
       { ...installed, rawCredential: "secret" }
     ]) {
       expect(() => SkillSummarySchema.parse(invalid)).toThrow();
+    }
+  });
+
+  it("enables only the exact Pige-owned reviewed HTTPS External/Web runtime", () => {
+    const runtime = {
+      adapter: "pige_readonly_https_v1",
+      origin: "https://api.example.com"
+    } as const;
+    expect(ExternalWebSkillRuntimeDeclarationSchema.parse(runtime)).toEqual(runtime);
+    expect(ExternalWebSkillHttpsOriginSchema.parse(runtime.origin)).toBe(runtime.origin);
+    for (const origin of [
+      "http://api.example.com",
+      "https://user:secret@api.example.com",
+      "https://api.example.com/path",
+      "https://api.example.com?token=secret",
+      "https://api.example.com/#fragment",
+      "https://API.example.com"
+    ]) {
+      expect(() => ExternalWebSkillHttpsOriginSchema.parse(origin)).toThrow();
+    }
+
+    const capabilities = ["read_current_source", "external_network"] as const;
+    const dataBoundaries = ["local", "network"] as const;
+    const manifest = {
+      id: "external-research",
+      name: "External Research",
+      version: "1.0.0",
+      description: "Read one reviewed HTTPS origin through Pige.",
+      scope: "machine_local",
+      kind: "external_web",
+      capabilities,
+      dataBoundary: dataBoundaries,
+      runtime
+    } as const;
+    expect(SkillManifestSchema.parse(manifest)).toEqual(manifest);
+    for (const invalid of [
+      { ...manifest, runtime: { ...runtime, adapter: "third_party_js" } },
+      { ...manifest, runtime: { ...runtime, origin: "https://api.example.com/path" } },
+      { ...manifest, capabilities: [...capabilities, "use_brokered_credential"], dataBoundary: [...dataBoundaries, "brokered_credential"] },
+      { ...manifest, kind: "pure", capabilities: ["read_current_source"], dataBoundary: undefined }
+    ]) {
+      expect(() => SkillManifestSchema.parse(invalid)).toThrow();
+    }
+
+    const manifestSha256 = `sha256:${"a".repeat(64)}`;
+    const bundleSha256 = `sha256:${"b".repeat(64)}`;
+    const files = [{ relativePath: "SKILL.md", utf8ByteSize: 1024, sha256: manifestSha256 }] as const;
+    const staged = {
+      stagingId: `skillstage_${"c".repeat(32)}`,
+      manifestSha256,
+      bundleSha256,
+      registryRevision: 9,
+      expiresAt: "2026-07-30T12:00:00.000Z",
+      sourceUrl: "https://example.com/external-research/SKILL.md",
+      id: manifest.id,
+      name: manifest.name,
+      version: manifest.version,
+      description: manifest.description,
+      scope: "machine_local",
+      kind: "external_web",
+      capabilities,
+      dataBoundaries,
+      source: "https",
+      runtime,
+      files,
+      warnings: ["untrusted_remote_source"]
+    } as const;
+    expect(SkillStagedSummarySchema.parse(staged)).toEqual(staged);
+
+    const installed = {
+      id: manifest.id,
+      name: manifest.name,
+      version: manifest.version,
+      description: manifest.description,
+      scope: "machine_local",
+      kind: "external_web",
+      enabled: false,
+      trust: "user_confirmed",
+      capabilities,
+      dataBoundaries,
+      canEnable: true,
+      canUninstall: false,
+      canExport: false,
+      canUpdate: false,
+      source: "https",
+      sourceUrl: staged.sourceUrl,
+      runtime,
+      manifestSha256,
+      bundleSha256,
+      files,
+      warnings: staged.warnings
+    } as const;
+    expect(SkillSummarySchema.parse(installed)).toEqual(installed);
+    expect(SkillSummarySchema.parse({ ...installed, enabled: true, canEnable: false }))
+      .toMatchObject({ enabled: true, canEnable: false, runtime });
+    for (const invalid of [
+      { ...installed, runtime: undefined },
+      { ...installed, enabled: true },
+      { ...installed, canUninstall: true },
+      { ...installed, canExport: true },
+      { ...installed, canUpdate: true }
+    ]) {
+      expect(() => SkillSummarySchema.parse(invalid)).toThrow();
+    }
+
+    const request = { url: "https://api.example.com/research" } as const;
+    expect(ExternalWebSkillReadRequestSchema.parse(request)).toEqual(request);
+    for (const unsafe of [
+      { url: "http://api.example.com/research" },
+      { url: "https://user:secret@api.example.com/research" },
+      { url: "https://api.example.com/research?token=secret" },
+      { ...request, headers: { authorization: "secret" } },
+      { ...request, body: "private" }
+    ]) {
+      expect(() => ExternalWebSkillReadRequestSchema.parse(unsafe)).toThrow();
+    }
+    const ready = {
+      status: "ready",
+      origin: runtime.origin,
+      contentType: "application/json",
+      byteLength: 4096,
+      truncated: false,
+      warningCount: 0
+    } as const;
+    expect(ExternalWebSkillReadResultSchema.parse(ready)).toEqual(ready);
+    for (const unsafe of [
+      { ...ready, body: "private" },
+      { ...ready, url: request.url },
+      { ...ready, path: "/private/cache" },
+      { ...ready, credential: "secret" },
+      { status: "failed", rawError: "private" }
+    ]) {
+      expect(() => ExternalWebSkillReadResultSchema.parse(unsafe)).toThrow();
     }
   });
 

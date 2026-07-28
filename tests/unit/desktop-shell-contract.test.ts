@@ -996,6 +996,12 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly uninstall: (request: SkillUninstallRequest)");
     expect(contractsSource).toContain("readonly export: (request: SkillExportRequest)");
     expect(contractsSource).toContain("readonly onChanged: (listener: (summary: SkillRegistrySummary)");
+    expect(contractsSource).toContain("ExternalWebSkillRuntimeTurnBinding");
+    expect(contractsSource).toContain("ExternalWebSkillRuntimeCall");
+    expect(contractsSource).toContain("ExternalWebSkillRuntimeToolName");
+    expect(contractsSource).toContain("ExternalWebSkillReadResult");
+    expect(contractsSource).not.toContain("readonly readExternalWeb");
+    expect(preloadApi).not.toContain("readExternalWeb");
     expect(mainSource).toContain("registerSkillsIpc({");
     expect(handlers).toContain('options.ipcMain.handle("skills.summary"');
     expect(handlers).toContain('options.ipcMain.handle("skills.pendingStagedReviews"');
