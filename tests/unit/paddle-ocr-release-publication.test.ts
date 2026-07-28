@@ -4,9 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  canonicalPaddleOcrArtifactIdentity,
+  canonicalPaddleOcrArtifactIdentity as canonicalReleaseIdentity,
   packagePaddleOcrReleaseBundle
 } from "../../apps/desktop/scripts/package-paddleocr-release-bundle.mjs";
+import { canonicalPaddleOcrArtifactIdentity as canonicalMainIdentity } from
+  "../../apps/desktop/src/main/services/paddle-ocr-bundle-materializer";
 
 const roots: string[] = [];
 const LIMITS = {
@@ -51,10 +53,12 @@ describe("PaddleOCR release publication", () => {
     expect(first.publicKeySpkiBase64).toBe(publicKey.export({ type: "spki", format: "der" }).toString("base64"));
     expect(verify(
       null,
-      Buffer.from(canonicalPaddleOcrArtifactIdentity(first.bundle, "3.7.0"), "utf8"),
+      Buffer.from(canonicalReleaseIdentity(first.bundle, "3.7.0"), "utf8"),
       publicKey,
       Buffer.from(first.bundle.signature.valueBase64, "base64")
     )).toBe(true);
+    expect(canonicalReleaseIdentity(first.bundle, "3.7.0"))
+      .toBe(canonicalMainIdentity(first.bundle, "3.7.0"));
   });
 
   it("fails closed on undeclared files, digest drift, and links", async () => {
