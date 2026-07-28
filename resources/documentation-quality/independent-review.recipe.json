@@ -50,14 +50,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of bounded Main-picked Skill ZIP staging: descriptor/parent fences, private snapshot, safe preview and explicit install.",
+    "scope": "Independent Planning review of confirmed Pi Package trash uninstall: registry CAS, verified tree, durable receipt, recovery and pathless Settings adoption.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "cf9f52c157da0e261f6e700aa4178548c46762955e8d293cf2861655a5989194"
+    "reviewedSha256": "6d66644162df1e49b5052cf19e2a073b8f3d9f2c3e3fededa3d70959c2be754a"
   },
   "reviewers": [{
-    "reviewerId": "skill-zip-stage-review",
-    "task": "Local pure Skill ZIP staging",
+    "reviewerId": "pi-package-uninstall-review",
+    "task": "Pi Package trash uninstall",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -65,33 +65,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed ZIP authority, limits, safe projection, explicit install and remaining lifecycle gaps; Development independently supplied implementation evidence."
+    "independence": "Planning reviewed package eligibility, confirmation, CAS, trash, recovery, safe projection and open lifecycle; Development independently supplied implementation evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"skill-zip-stage-review","blockerCount":0,"summary":"Settings uses a Main picker, safe staged review and explicit Install without path or body projection."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"skill-zip-stage-review","blockerCount":0,"summary":"Skill, API, security and UI owners share one bounded non-executing ZIP contract."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"skill-zip-stage-review","blockerCount":0,"summary":"Acceptance records ZIP staging while chat, vault, External-Web and public restore remain open."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"skill-zip-stage-review","blockerCount":0,"summary":"Descriptor and parent identity, archive limits, safe files and stage CAS are exact testable boundaries."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"skill-zip-stage-review","blockerCount":0,"summary":"Existing Skill, API, UI, Decision and trace owners absorb the slice within governed budgets."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"pi-package-uninstall-review","blockerCount":0,"summary":"Settings serializes install/remove, confirms removal, adopts authoritative registry and restores focus."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"pi-package-uninstall-review","blockerCount":0,"summary":"Package, API, architecture and UI owners share one installed-disabled trash-uninstall contract."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"pi-package-uninstall-review","blockerCount":0,"summary":"Acceptance records pinned install/removal while enable, update, catalog, pin and rollback remain open."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"pi-package-uninstall-review","blockerCount":0,"summary":"Request/package/revision CAS, tree verification, receipts and recovery are exact testable boundaries."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"pi-package-uninstall-review","blockerCount":0,"summary":"Existing package, API, UI, architecture, Decision and trace owners absorb the slice at budget."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict pathless ZIP stage result and safe staged-file projection stay contract-bound."},
-    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision, acceptance and semantic locks bind the same unpromoted ZIP slice."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact 256-LOC service owner and governed bytes are protected and hash-bound."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict uninstall identity, authoritative branches and identity-only failure stay contract-bound."},
+    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision, acceptance and semantic locks bind the same incomplete package slice."},
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact 322-LOC lifecycle owner and governed bytes are protected and hash-bound."}
   ],
   "coordination": {
-    "taskId": "skill-zip-stage-20260728",
-    "taskTitle": "Local pure Skill ZIP staging",
+    "taskId": "pi-package-uninstall-20260728",
+    "taskTitle": "Pi Package trash uninstall",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing URL, Markdown, update and installed lifecycle owners remain compatible; ZIP adds no update authority or execution.",
-    "acknowledgement": "Planning binds local ZIP staging only; chat, vault, External-Web and public restore lifecycle remain open."
+    "compatibility": "Existing pinned install and disabled package registry remain compatible; removal grants no package runtime authority.",
+    "acknowledgement": "Planning binds trash uninstall only; enable, update, catalog, pin, rollback and public restore remain open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Selected ZIP and parent identities are fenced before and after the private snapshot; drift fails closed.",
-    "Archive traversal, links, disallowed files, restricted content and limit violations never reach install.",
-    "Chat, vault, External-Web, file/ZIP update and public restore lifecycle remain outside this bind."
+    "Only an authoritative installed-disabled record with exact request/package/revision identity may be removed.",
+    "Tree, symlink, receipt, registry or recovery drift fails closed without executing package content.",
+    "Enable, update, catalog, pin, rollback and public restore remain outside this bind."
   ]
 }

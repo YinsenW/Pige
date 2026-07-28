@@ -6,6 +6,7 @@ import * as tar from "tar";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPiPackageInstallCapabilityAdapter } from "../../apps/desktop/src/main/services/pi-package-capability-adapter";
 import { PiPackageManagerService } from "../../apps/desktop/src/main/services/pi-package-manager-service";
+import { PiPackageLifecycleStore, type PiPackageLifecycleRecord } from "../../apps/desktop/src/main/services/pi-package-lifecycle-store";
 import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
 import {
@@ -247,6 +248,101 @@ describe("PiPackageManagerService", () => {
     expect(JSON.stringify(summary)).not.toMatch(
       /requestId|relativePath|treeHash|archiveHash|integrity|manifestHash|installedAt|registry\.npmjs|SYNTHETIC_PACKAGE_CODE/u
     );
+  });
+
+  it("trash-first uninstalls one disabled package and replays the exact request without duplicate effects", async () => {
+    const fixture = await createFixture();
+    await callTool(requireTool(fixture.registry.toolsForTurn(fixture.turn)));
+    const installed = fixture.packages.summary().packages[0]!;
+    const uninstall = {
+      apiVersion: 1 as const,
+      requestId: "pi_package_uninstall_request_abcdefghijklmnop",
+      expectedRegistryRevision: 1,
+      packageId: installed.packageId
+    };
+
+    const removed = fixture.packages.uninstall(uninstall);
+    expect(removed).toMatchObject({ status: "removed", registry: { revision: 2, packages: [] } });
+    expect(fixture.packages.uninstall(uninstall)).toEqual(removed);
+    expect(fixture.packages.uninstall({ ...uninstall, expectedRegistryRevision: 2 })).toEqual({
+      apiVersion: 1, requestId: uninstall.requestId, packageId: uninstall.packageId, status: "failed"
+    });
+    const receiptRoot = path.join(fixture.machineRoot, "pi-packages", "trash", uninstall.requestId);
+    expect(fs.existsSync(path.join(receiptRoot, "package"))).toBe(true);
+    expect(JSON.parse(fs.readFileSync(path.join(receiptRoot, ".pige-package-uninstall.json"), "utf8")))
+      .toMatchObject({ state: "committed", packageId: installed.packageId, committedRegistryRevision: 2 });
+  });
+
+  it("returns authoritative stale/not-found states and keeps failed output registry-free", async () => {
+    const fixture = await createFixture();
+    await callTool(requireTool(fixture.registry.toolsForTurn(fixture.turn)));
+    const installed = fixture.packages.summary().packages[0]!;
+    expect(fixture.packages.uninstall({
+      apiVersion: 1,
+      requestId: "pi_package_uninstall_request_stalerequest0001",
+      expectedRegistryRevision: 0,
+      packageId: installed.packageId
+    })).toMatchObject({ status: "stale", registry: { revision: 1 } });
+    expect(fixture.packages.uninstall({
+      apiVersion: 1,
+      requestId: "pi_package_uninstall_request_missingrequest01",
+      expectedRegistryRevision: 1,
+      packageId: "pkg_ffffffffffffffffffffffff"
+    })).toMatchObject({ status: "not_found", registry: { revision: 1 } });
+
+    const versionRoot = path.join(fixture.machineRoot, "pi-packages", "installed", installed.packageId, installed.version);
+    const packageRoot = path.join(versionRoot, fs.readdirSync(versionRoot)[0]!);
+    fs.writeFileSync(path.join(packageRoot, "README.md"), "changed after install\n");
+    const failed = fixture.packages.uninstall({
+      apiVersion: 1,
+      requestId: "pi_package_uninstall_request_changedrequest01",
+      expectedRegistryRevision: 1,
+      packageId: installed.packageId
+    });
+    expect(failed).toEqual({
+      apiVersion: 1,
+      requestId: "pi_package_uninstall_request_changedrequest01",
+      packageId: installed.packageId,
+      status: "failed"
+    });
+  });
+
+  it.each([false, true])("adopts exact trash-first crash state at startup (registry committed: %s)", async (registryCommitted) => {
+    const fixture = await createFixture();
+    await callTool(requireTool(fixture.registry.toolsForTurn(fixture.turn)));
+    const packageRoot = path.join(fs.realpathSync.native(fixture.machineRoot), "pi-packages");
+    const registry = JSON.parse(fs.readFileSync(path.join(packageRoot, "registry.json"), "utf8"));
+    const record = registry.packages[0] as PiPackageLifecycleRecord;
+    const store = new PiPackageLifecycleStore({
+      packageRoot,
+      installedRoot: path.join(packageRoot, "installed"),
+      parseRecord: (value) => value as PiPackageLifecycleRecord
+    });
+    const receipt = store.prepareUninstall({
+      requestId: "pi_package_uninstall_request_restartrequest01",
+      packageId: record.packageId,
+      expectedRegistryRevision: 1,
+      record,
+      createdAt: "2026-07-28T12:03:00.000Z"
+    });
+    store.ensureTrashed(receipt);
+    if (registryCommitted) {
+      fs.writeFileSync(path.join(packageRoot, "registry.json"), `${JSON.stringify({
+        schemaVersion: 1, revision: 2, packages: []
+      }, null, 2)}\n`, "utf8");
+    }
+    const fetchCount = fixture.fetchImpl.mock.calls.length;
+
+    const restarted = new PiPackageManagerService({
+      appDataRoot: fixture.machineRoot,
+      fetchImpl: fixture.fetchImpl,
+      lookup: async () => ["93.184.216.34"]
+    });
+    expect(restarted.summary()).toEqual({ apiVersion: 1, revision: 2, packages: [] });
+    expect(fixture.fetchImpl).toHaveBeenCalledTimes(fetchCount);
+    expect(store.readUninstallReceipt(receipt.requestId)).toMatchObject({
+      state: "committed", committedRegistryRevision: 2
+    });
   });
 
   it("encodes the complete scoped package name in the fixed registry request", async () => {

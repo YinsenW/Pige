@@ -639,6 +639,8 @@ const isSafePackageSpec = (value: string): boolean => {
 };
 export const PiPackageInstallRequestIdSchema = z.string()
   .regex(/^pi_package_request_[a-z0-9]{16,64}$/u);
+export const PiPackageUninstallRequestIdSchema = z.string()
+  .regex(/^pi_package_uninstall_request_[a-z0-9]{16,64}$/u);
 export const PiPackageNameSchema = z.string().refine(isSafePackageName);
 export const PiPackageVersionSchema = z.string().refine((value) =>
   value === value.trim() && value.length <= 64 && EXACT_PACKAGE_VERSION_PATTERN.test(value)
@@ -682,6 +684,26 @@ export const PiPackageInstallResultSchema = z.discriminatedUnion("status", [
   PiPackageInstallAuthoritativeResultIdentitySchema.extend({ status: z.literal("denied") }).strict(),
   PiPackageInstallAuthoritativeResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
   PiPackageInstallResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const PiPackageUninstallRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PiPackageUninstallRequestIdSchema,
+  expectedRegistryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  packageId: PiPackageInstalledSummarySchema.shape.packageId
+}).strict();
+const PiPackageUninstallResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PiPackageUninstallRequestIdSchema,
+  packageId: PiPackageInstalledSummarySchema.shape.packageId
+}).strict();
+const PiPackageUninstallAuthoritativeResultIdentitySchema =
+  PiPackageUninstallResultIdentitySchema.extend({ registry: PiPackageRegistrySummarySchema });
+export const PiPackageUninstallResultSchema = z.discriminatedUnion("status", [
+  PiPackageUninstallAuthoritativeResultIdentitySchema.extend({ status: z.literal("removed") }).strict(),
+  PiPackageUninstallAuthoritativeResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  PiPackageUninstallAuthoritativeResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  PiPackageUninstallAuthoritativeResultIdentitySchema.extend({ status: z.literal("denied") }).strict(),
+  PiPackageUninstallResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 const isSafeExecutableName = (value: string): boolean => {
   if (value !== value.trim() || value.length < 1 || value.length > 64) return false;
@@ -5594,6 +5616,7 @@ export type HighRiskEffect = z.infer<typeof HighRiskEffectSchema>;
 export type RendererSafeSubjectLabel = z.infer<typeof RendererSafeSubjectLabelSchema>;
 export type PiPackageInstallRequestId = z.infer<typeof PiPackageInstallRequestIdSchema>;
 export type PiPackageInstallTaskId = z.infer<typeof PiPackageInstallTaskIdSchema>;
+export type PiPackageUninstallRequestId = z.infer<typeof PiPackageUninstallRequestIdSchema>;
 export type PiPackageName = z.infer<typeof PiPackageNameSchema>;
 export type PiPackageVersion = z.infer<typeof PiPackageVersionSchema>;
 export type PiPackageType = z.infer<typeof PiPackageTypeSchema>;
@@ -5602,6 +5625,8 @@ export type PiPackageRegistrySummary = z.infer<typeof PiPackageRegistrySummarySc
 export type PiPackageRegistryQueryResult = z.infer<typeof PiPackageRegistryQueryResultSchema>;
 export type PiPackageInstallRequest = z.infer<typeof PiPackageInstallRequestSchema>;
 export type PiPackageInstallResult = z.infer<typeof PiPackageInstallResultSchema>;
+export type PiPackageUninstallRequest = z.infer<typeof PiPackageUninstallRequestSchema>;
+export type PiPackageUninstallResult = z.infer<typeof PiPackageUninstallResultSchema>;
 export type KnowledgeActivityPageTarget = z.infer<typeof KnowledgeActivityPageTargetSchema>;
 export type KnowledgeActivityCollectionTarget = z.infer<typeof KnowledgeActivityCollectionTargetSchema>;
 export type KnowledgeActivityTarget = z.infer<typeof KnowledgeActivityTargetSchema>;

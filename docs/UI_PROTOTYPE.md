@@ -1109,48 +1109,17 @@ lexical remains. Hide provider/routing, path, URL and checksum.
 
 ```txt
 Packages
-
-Recommended For Pige
-pi-obsidian-vault
-  Agent-safe Obsidian vault access
-  Not installed
-  Install
-
-pi-smart-fetch
-  Web capture helper
-  Not installed
-  Install
-
-Advanced / Experimental
-pi-local-rag
-  External RAG reference; Pige has built-in local RAG
-  Not installed
-  Inspect
-
-pi-hermes-memory
-  External Pi memory reference; Pige has built-in memory
-  Not installed
-  Inspect
-
 Installed
 No packages installed
-
-Advanced: Search Pi Catalog
-memory, rag, web fetch, document parsing...
+Install exact package
+  Package name  [                    ]
+  Exact version [                    ]  Install
 ```
 
-The default Packages screen should not look like a marketplace. It should show a short set of reviewed knowledge-management capabilities. Full catalog search belongs behind an Advanced affordance for power users.
-
-Package details should show:
-
-- Description.
-- npm and repository links.
-- Version and last update.
-- Downloads and package type.
-- Trust tier: built-in, curated, community, or blocked.
-- Permissions: read vault, write vault, network, shell, model access, secrets, spawn agents.
-- Data boundary.
-- Install, disable, uninstall, update, and rollback actions where available.
+The screen lists authoritative installed-disabled identity/type/trust. Name/version install
+uses Main confirmation; success clears input and adopts registry. Remove confirms, serializes with
+install, adopts registry and restores focus. Failure preserves inventory/input; no path appears.
+Catalog, enable, update, pin and rollback stay absent.
 
 ### Backup And Restore
 

@@ -48,6 +48,8 @@ import type {
   PiPackageInstallRequest,
   PiPackageInstallResult,
   PiPackageRegistrySummary,
+  PiPackageUninstallRequest,
+  PiPackageUninstallResult,
   SkillEnableRequest,
   SkillExportRequest,
   SkillLifecycleMutationResult,
@@ -1899,7 +1901,7 @@ describe("full UI Settings surface", () => {
     const install = vi.fn((request: PiPackageInstallRequest) => new Promise<PiPackageInstallResult>((resolve) => {
       settleInstall = resolve;
     }));
-    const api: PiPackagesApi = { summary, install };
+    const api: PiPackagesApi = { summary, install, uninstall: vi.fn() };
     const root = createRoot(dom.window.document.querySelector("#root")!);
 
     await act(async () => {
@@ -2002,7 +2004,8 @@ describe("full UI Settings surface", () => {
     });
     const api: PiPackagesApi = {
       summary: async () => ({ status: "ready", registry: piPackageRegistry(4, [originalPackage]) }),
-      install
+      install,
+      uninstall: vi.fn()
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -2040,6 +2043,155 @@ describe("full UI Settings surface", () => {
       expect(page.textContent).not.toContain("must-not-replace-existing");
     }
     expect(install.mock.calls.map(([request]) => request.expectedRegistryRevision)).toEqual([4, 5, 5]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("removes one exact Pi package, serializes the request, and focuses the authoritative inventory", async () => {
+    const dom = createDom();
+    const firstPackage = piPackage("pkg_aaaaaaaaaaaaaaaaaaaaaaaa", "first-package");
+    const secondPackage = piPackage("pkg_bbbbbbbbbbbbbbbbbbbbbbbb", "second-package");
+    let settleUninstall!: (result: PiPackageUninstallResult) => void;
+    const uninstall = vi.fn((_request: PiPackageUninstallRequest) => new Promise<PiPackageUninstallResult>((resolve) => {
+      settleUninstall = resolve;
+    }));
+    const api: PiPackagesApi = {
+      summary: async () => ({ status: "ready", registry: piPackageRegistry(7, [firstPackage, secondPackage]) }),
+      install: vi.fn(),
+      uninstall
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(PiPackagesSettingsPanel, { api, t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+    const firstRow = requireElement(page.querySelector<HTMLElement>(`[data-package-id="${firstPackage.packageId}"]`));
+
+    await act(async () => {
+      buttonNamed(firstRow, "Remove").click();
+      await settle(dom);
+    });
+    expect(uninstall).toHaveBeenCalledTimes(1);
+    const request = uninstall.mock.calls[0]![0];
+    expect(request).toMatchObject({
+      apiVersion: 1,
+      expectedRegistryRevision: 7,
+      packageId: firstPackage.packageId
+    });
+    expect(request.requestId).toMatch(/^pi_package_uninstall_request_[a-f0-9]{32}$/u);
+    expect(buttonNamed(firstRow, "Removing…").disabled).toBe(true);
+    expect(buttonNamed(page, "Remove").disabled).toBe(true);
+    expect(buttonNamed(page, "Install").disabled).toBe(true);
+
+    await act(async () => {
+      buttonNamed(firstRow, "Removing…").click();
+      await settle(dom);
+    });
+    expect(uninstall).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      settleUninstall({
+        apiVersion: 1,
+        requestId: request.requestId,
+        packageId: request.packageId,
+        status: "removed",
+        registry: piPackageRegistry(8, [secondPackage])
+      });
+      await settle(dom);
+    });
+    expect(page.querySelector(`[data-package-id="${firstPackage.packageId}"]`)).toBeNull();
+    const secondRemove = requireElement(page.querySelector<HTMLButtonElement>(`[data-package-remove-id="${secondPackage.packageId}"]`));
+    expect(dom.window.document.activeElement).toBe(secondRemove);
+    expect(page.textContent).toContain("The package was removed.");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("adopts stale, denied, and not-found package registries while preserving a calm focus target", async () => {
+    const cases = [
+      ["stale", "The package registry changed. The latest inventory is shown."],
+      ["denied", "Removal was not approved. The latest package inventory is shown."],
+      ["not_found", "This package is no longer installed. The latest package inventory is shown."]
+    ] as const;
+    for (const [status, message] of cases) {
+      const dom = createDom();
+      const installedPackage = piPackage("pkg_aaaaaaaaaaaaaaaaaaaaaaaa", "kept-package");
+      const authoritativePackages = status === "not_found" ? [] : [installedPackage];
+      const uninstall = vi.fn(async (request: PiPackageUninstallRequest): Promise<PiPackageUninstallResult> => ({
+        apiVersion: 1,
+        requestId: request.requestId,
+        packageId: request.packageId,
+        status,
+        registry: piPackageRegistry(10, authoritativePackages)
+      }));
+      const api: PiPackagesApi = {
+        summary: async () => ({ status: "ready", registry: piPackageRegistry(9, [installedPackage]) }),
+        install: vi.fn(),
+        uninstall
+      };
+      const root = createRoot(dom.window.document.querySelector("#root")!);
+      await act(async () => {
+        root.render(createElement(PiPackagesSettingsPanel, { api, t }));
+        await settle(dom);
+      });
+      const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+      await act(async () => {
+        buttonNamed(page, "Remove").click();
+        await settle(dom);
+      });
+      expect(page.textContent).toContain(message);
+      if (status === "not_found") {
+        expect(page.querySelector(`[data-package-id="${installedPackage.packageId}"]`)).toBeNull();
+        expect(dom.window.document.activeElement).toBe(page.querySelector("#packages-registry-title"));
+      } else {
+        expect(page.querySelector('[data-package-registry-revision="10"]')).not.toBeNull();
+        const remove = requireElement(page.querySelector<HTMLButtonElement>(`[data-package-remove-id="${installedPackage.packageId}"]`));
+        expect(dom.window.document.activeElement).toBe(remove);
+      }
+      await act(async () => root.unmount());
+      dom.window.close();
+    }
+  });
+
+  it("keeps the current Pi package inventory and focus on failed or mismatched uninstall identity", async () => {
+    const dom = createDom();
+    const installedPackage = piPackage("pkg_aaaaaaaaaaaaaaaaaaaaaaaa", "kept-package");
+    const responses: Array<"failed" | "mismatched"> = ["failed", "mismatched"];
+    const uninstall = vi.fn(async (request: PiPackageUninstallRequest): Promise<PiPackageUninstallResult> => {
+      const response = responses.shift();
+      return {
+        apiVersion: 1,
+        requestId: response === "mismatched" ? "pi_package_uninstall_request_0000000000000000" : request.requestId,
+        packageId: request.packageId,
+        status: "failed"
+      };
+    });
+    const api: PiPackagesApi = {
+      summary: async () => ({ status: "ready", registry: piPackageRegistry(12, [installedPackage]) }),
+      install: vi.fn(),
+      uninstall
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(PiPackagesSettingsPanel, { api, t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const remove = buttonNamed(page, "Remove");
+      await act(async () => {
+        remove.click();
+        await settle(dom);
+      });
+      expect(page.querySelector('[data-package-registry-revision="12"]')).not.toBeNull();
+      expect(page.textContent).toContain("Pige could not remove this package");
+      expect(page.textContent).toContain("kept-package");
+      expect(dom.window.document.activeElement).toBe(remove);
+    }
+    expect(uninstall).toHaveBeenCalledTimes(2);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -3410,6 +3562,19 @@ function piPackageRegistry(
   packages: PiPackageRegistrySummary["packages"] = []
 ): PiPackageRegistrySummary {
   return { apiVersion: 1, revision, packages };
+}
+
+function piPackage(packageId: `pkg_${string}`, packageName: string): PiPackageRegistrySummary["packages"][number] {
+  return {
+    packageId,
+    packageName,
+    version: "1.0.0",
+    state: "installed_disabled",
+    packageTypes: ["extension"],
+    dependencyCount: 0,
+    enabled: false,
+    trust: "community"
+  };
 }
 
 async function settle(dom: JSDOM): Promise<void> {

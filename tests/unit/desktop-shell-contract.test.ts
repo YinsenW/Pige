@@ -52,7 +52,7 @@ describe("desktop shell build contract", () => {
     }
   });
 
-  it("bridges the strict Pi package inventory and exact install interface without private authority", () => {
+  it("bridges Pi package inventory/install and freezes strict pathless uninstall ownership", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const packagesStart = preloadSource.indexOf("piPackages: {");
@@ -64,10 +64,16 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly piPackages: {");
     expect(contractsSource).toContain("readonly summary: () => Promise<PiPackageRegistryQueryResult>");
     expect(contractsSource).toContain("request: PiPackageInstallRequest");
+    expect(contractsSource).toContain("readonly uninstall: (");
+    expect(contractsSource).toContain("request: PiPackageUninstallRequest");
+    expect(contractsSource).toContain("Promise<PiPackageUninstallResult>");
     expect(packageApi).toContain('ipcRenderer.invoke("piPackages.summary")');
     expect(packageApi).toContain('"piPackages.install"');
     expect(packageApi).toContain("PiPackageInstallRequestSchema.parse(request)");
     expect(packageApi).toContain("PiPackageInstallResultSchema.parse(await ipcRenderer.invoke");
+    expect(packageApi).toContain('"piPackages.uninstall"');
+    expect(packageApi).toContain("PiPackageUninstallRequestSchema.parse(request)");
+    expect(packageApi).toContain("PiPackageUninstallResultSchema.parse(await ipcRenderer.invoke");
     for (const privateField of ["path", "tarball", "integrity", "authority", "rawError"]) {
       expect(packageApi).not.toContain(privateField);
     }

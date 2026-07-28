@@ -688,6 +688,8 @@ Commands:
 - `memory.delete`
 - `memory.export`
 - `memory.reset`
+- `piPackages.install`
+- `piPackages.uninstall`
 - `skills.stageFromUrl`
 - `skills.stageFromMarkdown`
 - `skills.stageFromZip`
@@ -707,6 +709,7 @@ Queries:
 - `settings.appearance`
 - `models.summary`
 - `memory.list`
+- `piPackages.summary`
 - `skills.summary`
 - `system.toolchainHealth`
 
@@ -719,6 +722,10 @@ Skill IPC is body/path-free. Main owns no-follow `.md`/`.zip` pickers. `stageFro
 `cancelled | ready | failed`; `stageFromZip` adds `invalid`, file/parent fences and one non-executing
 Markdown/JSON bundle. Both expose safe metadata only. Lifecycle booleans gate UI; HTTPS update binds
 source/base/revision; `installStaged` preserves enablement, trash-retains prior bytes and CAS-adopts.
+
+Pi Package IPC is path/body-free: `summary` is authoritative; install/uninstall confirm. Uninstall
+binds request/package/revision; `removed | stale | not_found | denied` include registry, `failed` is
+identity-only. Main trash-retains and restart-adopts once.
 
 Memory list returns vault/revision and <=1,000 safe records; private provenance stays in Main. Edit
 binds record/revision/title/body, secret-scans, and changes L1 only. Lifecycle `committed | stale |
