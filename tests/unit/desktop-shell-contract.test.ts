@@ -52,7 +52,7 @@ describe("desktop shell build contract", () => {
     }
   });
 
-  it("bridges Pi package inventory/install and freezes strict pathless uninstall ownership", () => {
+  it("bridges Pi package lifecycle and freezes the local curated catalog contract", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const packagesStart = preloadSource.indexOf("piPackages: {");
@@ -63,6 +63,9 @@ describe("desktop shell build contract", () => {
 
     expect(contractsSource).toContain("readonly piPackages: {");
     expect(contractsSource).toContain("readonly summary: () => Promise<PiPackageRegistryQueryResult>");
+    expect(contractsSource).toContain("readonly catalogQuery: (");
+    expect(contractsSource).toContain("request: PiPackageCatalogQueryRequest");
+    expect(contractsSource).toContain("Promise<PiPackageCatalogQueryResult>");
     expect(contractsSource).toContain("request: PiPackageInstallRequest");
     expect(contractsSource).toContain("readonly uninstall: (");
     expect(contractsSource).toContain("request: PiPackageUninstallRequest");

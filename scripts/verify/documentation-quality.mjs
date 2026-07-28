@@ -313,7 +313,7 @@ function resourceLifecycleComplete() {
 
   const resources = [
     ["docs/prototypes/README.md", "Prototype evidence"],
-    ["resources/curated-packages/README.md", "Phase-gated resource"],
+    ["resources/curated-packages/README.md", "Maintain"],
     ["resources/documentation-quality/README.md", "Maintain"],
     ["resources/parser-manifests/README.md", "Maintain"],
     ["resources/traceability/README.md", "Maintain"],
@@ -338,7 +338,6 @@ function resourceLifecycleComplete() {
   }
 
   for (const relativeDirectory of [
-    "resources/curated-packages",
     "resources/prompts/ingest",
     "resources/prompts/retrieval",
     "resources/skill-templates"

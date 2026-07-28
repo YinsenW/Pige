@@ -200,6 +200,7 @@ import {
 import { createFirstPartyReadonlyNodeOsCapabilityAdapters } from "./services/readonly-node-os/first-party-readonly-node-os-capability-adapters";
 import { createFirstPartyCommandCapabilityAdapter } from "./services/command-capability-adapter";
 import { createPiPackageInstallCapabilityAdapter } from "./services/pi-package-capability-adapter";
+import { PiPackageCatalogService } from "./services/pi-package-catalog-service";
 import { PiPackageManagerService } from "./services/pi-package-manager-service";
 import { PiPackageInstallTaskService } from "./services/pi-package-install-task-service";
 import { NotesService } from "./services/notes-service";
@@ -261,6 +262,7 @@ let permissionedExternalCapabilityRegistry: PermissionedExternalCapabilityRegist
 let firstPartyReadonlyNodeOsCapabilitiesRegistered = false;
 let firstPartyCommandCapabilityRegistered = false;
 let firstPartyPiPackageCapabilityRegistered = false;
+let piPackageCatalogService: PiPackageCatalogService | undefined;
 let piPackageManagerService: PiPackageManagerService | undefined;
 let piPackageInstallTaskService: PiPackageInstallTaskService | undefined;
 let windowModeService: WindowModeService | undefined;
@@ -986,6 +988,11 @@ const getPiPackageManagerService = (): PiPackageManagerService => {
     piPackageManagerService = new PiPackageManagerService({ appDataRoot: app.getPath("userData") });
   }
   return piPackageManagerService;
+};
+
+const getPiPackageCatalogService = (): PiPackageCatalogService => {
+  piPackageCatalogService ??= new PiPackageCatalogService(resolvePiPackageCatalogManifestPath());
+  return piPackageCatalogService;
 };
 
 const getPiPackageInstallTaskService = (): PiPackageInstallTaskService => {
@@ -2175,6 +2182,7 @@ registerPiPackagesIpc({
   },
   getActiveVaultId: () => getVaultService().current()?.vaultId,
   summary: () => ({ status: "ready", registry: getPiPackageManagerService().summary() }),
+  catalogQuery: (request) => getPiPackageCatalogService().query(request),
   install: (request) => getPiPackageInstallTaskService().install(request),
   confirmUninstall: async (sender, request) => {
     try {
@@ -2691,6 +2699,19 @@ function resolveToolchainManifestPath(): string {
     fallback,
     join(app.getAppPath(), "resources/toolchain-manifest/toolchain.manifest.json"),
     join(app.getAppPath(), "../../resources/toolchain-manifest/toolchain.manifest.json")
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? fallback;
+}
+
+function resolvePiPackageCatalogManifestPath(): string {
+  const relativePath = "curated-packages/pi-package-catalog.manifest.json";
+  if (app.isPackaged) return join(process.resourcesPath, relativePath);
+  const fallback = join(process.cwd(), "resources", relativePath);
+  const candidates = [
+    fallback,
+    join(process.cwd(), "../../resources", relativePath),
+    join(app.getAppPath(), "resources", relativePath),
+    join(app.getAppPath(), "../../resources", relativePath)
   ];
   return candidates.find((candidate) => existsSync(candidate)) ?? fallback;
 }

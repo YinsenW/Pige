@@ -43,6 +43,7 @@
       "resources/traceability/semantic-claims.manifest.json",
       "tests/fixtures/service-responsibility-inventory.json",
       "resources/dependency-manifest/dependencies.manifest.json",
+      "resources/curated-packages",
       "resources/parser-manifests",
       "resources/licenses/paddleocr/macos-arm64/runtime/python-build-standalone-MPL-2.0.txt",
       "resources/licenses/paddleocr/windows-x64/runtime/python-build-standalone-MPL-2.0.txt",
@@ -50,14 +51,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of confirmed Pi Package trash uninstall: registry CAS, verified tree, durable receipt, recovery and pathless Settings adoption.",
+    "scope": "Independent Planning review of one repository-curated Pi package: local query, safe disclosure, exact supply chain and disabled-only confirmed install.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "6d66644162df1e49b5052cf19e2a073b8f3d9f2c3e3fededa3d70959c2be754a"
+    "reviewedSha256": "740e5b4816073bcf10d0d678e142cfa0ad120994482a9f599d1d7d3773c0b7d1"
   },
   "reviewers": [{
-    "reviewerId": "pi-package-uninstall-review",
-    "task": "Pi Package trash uninstall",
+    "reviewerId": "pi-package-catalog-review",
+    "task": "Repository-curated Pi package catalog",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -65,33 +66,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed package eligibility, confirmation, CAS, trash, recovery, safe projection and open lifecycle; Development independently supplied implementation evidence."
+    "independence": "Planning reviewed catalog identity, package audit, disclosure, authority, install reuse and open lifecycle; Development independently supplied implementation evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"pi-package-uninstall-review","blockerCount":0,"summary":"Settings serializes install/remove, confirms removal, adopts authoritative registry and restores focus."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"pi-package-uninstall-review","blockerCount":0,"summary":"Package, API, architecture and UI owners share one installed-disabled trash-uninstall contract."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"pi-package-uninstall-review","blockerCount":0,"summary":"Acceptance records pinned install/removal while enable, update, catalog, pin and rollback remain open."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"pi-package-uninstall-review","blockerCount":0,"summary":"Request/package/revision CAS, tree verification, receipts and recovery are exact testable boundaries."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"pi-package-uninstall-review","blockerCount":0,"summary":"Existing package, API, UI, architecture, Decision and trace owners absorb the slice at budget."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"pi-package-catalog-review","blockerCount":0,"summary":"Settings searches one sparse local reviewed catalog, discloses safe facts and reuses explicit confirmed install."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"pi-package-catalog-review","blockerCount":0,"summary":"Package, API, architecture, dependency, resource and UI owners share one pathless no-authority catalog."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"pi-package-catalog-review","blockerCount":0,"summary":"Acceptance records reviewed search/disclosure while enable, update, pin, rollback and runtime stay open."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"pi-package-catalog-review","blockerCount":0,"summary":"Exact manifest, package version/integrity/layout and deterministic local query are testable boundaries."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"pi-package-catalog-review","blockerCount":0,"summary":"Existing package, API, UI, Decision, dependency and trace owners absorb the slice without a new design doc."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict uninstall identity, authoritative branches and identity-only failure stay contract-bound."},
-    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision, acceptance and semantic locks bind the same incomplete package slice."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact 322-LOC lifecycle owner and governed bytes are protected and hash-bound."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict pathless catalog query and complete deterministic ready or identity-only failed results stay bound."},
+    {"command":"npm run verify:decisions && npm run verify:traceability && npm run verify:dependencies","status":"passed","evidence":"Decision, dependency/license facts, acceptance and semantic locks bind the same incomplete package slice."},
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Exact 143-LOC catalog owner, manifest and governed owner bytes are protected and hash-bound."}
   ],
   "coordination": {
-    "taskId": "pi-package-uninstall-20260728",
-    "taskTitle": "Pi Package trash uninstall",
+    "taskId": "pi-package-curated-catalog-20260728",
+    "taskTitle": "Repository-curated Pi package catalog",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing pinned install and disabled package registry remain compatible; removal grants no package runtime authority.",
-    "acknowledgement": "Planning binds trash uninstall only; enable, update, catalog, pin, rollback and public restore remain open."
+    "compatibility": "Existing pinned install, disabled registry and trash uninstall remain compatible; catalog selection grants no package authority.",
+    "acknowledgement": "Planning binds one reviewed local catalog entry only; enable, update, pin, rollback and runtime execution remain open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Only an authoritative installed-disabled record with exact request/package/revision identity may be removed.",
-    "Tree, symlink, receipt, registry or recovery drift fails closed without executing package content.",
-    "Enable, update, catalog, pin, rollback and public restore remain outside this bind."
+    "Only the exact reviewed package/version/integrity is recommended; catalog drift fails body-free.",
+    "Catalog trust discloses filesystem/cloud boundaries but creates no runtime or install authority.",
+    "Enable, update, pin, rollback and runtime execution remain outside this bind."
   ]
 }

@@ -1291,30 +1291,22 @@ Development toolchain note:
 
 Responsibilities:
 
-- Sync and cache Pi package catalog metadata.
-- Search packages by name, description, author, type, capability, and trust tier.
-- Manage package install, disable, uninstall, update, rollback, and version pinning.
-- Maintain a Pige-curated recommendation layer limited to packages that improve personal knowledge capture, parsing, memory, retrieval, linking, review, safety, or reuse.
-- Keep installed package files outside the vault.
-- Maintain machine-local install records.
-- Expose package capabilities to the Agent only after the user enables the package.
-- Enforce package permissions before any package tool runs.
-- Route package writes through permission-scoped Pige APIs and Operations; exceptional boundaries still intervene.
+- Query packaged reviewed recommendations; community sync/cache stays separate.
+- Curate knowledge-focused packages; manage disclosed lifecycle and update diffs.
+- Keep files/records machine-local; expose capabilities only after enable and permission checks.
+- Route writes through scoped Pige APIs/Operations.
 - Block hidden/inferred task-time installation. An explicit text task may run only a
   registered immutable plan that resolves package, native asset and Skill identities and
   integrities before its one confirmation; it grants no later runtime authority.
-- Show update diffs for version, permissions, and data boundary when possible.
 
-`PiPackageManagerService` uses SHA-512/bounded link-free extraction to install one exact public npm
-identity as `installed_disabled`. Separately confirmed request/package/revision CAS moves its
-verified tree to private trash and restart-adopts once. Neither path executes code or exposes paths;
-catalog, enable/runtime, update, pin, rollback and public restore remain absent.
+`PiPackageCatalogService` no-follow reads one bounded manifest; trust grants no authority. First
+coordinate `package.curated.pi-btw` feeds confirmed install. `PiPackageManagerService` verifies
+SHA-512/bounded link-free extraction, publishes disabled, and CAS trash-uninstalls/restart-adopts.
+Neither executes code; enable/runtime, update, pin, rollback and public restore remain absent.
 
-Package metadata, categories, trust tiers, capability declarations, and lifecycle are
-owned by [`SKILL_EXTENSION_DESIGN.md`](SKILL_EXTENSION_DESIGN.md#10-relationship-to-pi-packages)
-and the package manifest/schema. Architecture owns the Registry Service process boundary:
-it exposes only enabled, permission-checked adapters. Only explicit exact-package intent may
-invoke this Broker-mediated prerequisite; inferred or hidden install is forbidden.
+[`SKILL_EXTENSION_DESIGN.md`](SKILL_EXTENSION_DESIGN.md#10-relationship-to-pi-packages) owns
+metadata/trust/lifecycle; Architecture owns the process boundary. Only enabled, permission-checked
+adapters run; only explicit exact-package intent may invoke install. Hidden install is forbidden.
 
 ### 5.10 Backup Service
 
@@ -1884,6 +1876,7 @@ Reference-only capture, conversion, and local-tool evaluation:
 | Dependency | Status | Pige usage | Upstream source | Pin/update policy | Data boundary and notes |
 | --- | --- | --- | --- | --- | --- |
 | Pi Package Catalog | reference | Source for curated package review and user-installable package metadata. | https://pi.dev/packages | Re-crawl/review before changing curated recommendations. | Do not auto-install packages during Agent jobs. |
+| `@narumitw/pi-btw` (`package.curated.pi-btw`) | optional | Reviewed recommendation; exact confirmed disabled install. | https://www.npmjs.com/package/@narumitw/pi-btw/v/0.34.0 | Pin `0.34.0`/catalog SHA-512; re-audit changes. | MIT; 21,127 bytes; zero runtime/peer/optional deps, hooks/bin/native/links; one file. Filesystem/cloud disclosure grants no authority. |
 | Pi package docs | reference | Package format, install, and resource conventions. | https://github.com/earendil-works/pi/tree/main/packages/coding-agent/docs/packages.md | Re-check before Package Manager implementation. | Package installs require review and permissions. |
 | npm registry | optional | Package resolution for reviewed Pi packages and explicit permissioned external Skill/package flows. | https://www.npmjs.com | Use only through Package Manager or a reviewed runtime adapter with version pins and permission prompts. | No hidden install during ordinary Agent jobs; capability disclosure required. |
 | `tar` (`runtime.tar`) | required | Extract an integrity-verified Pi package archive in bounded staging. | https://github.com/isaacs/node-tar | Pin `7.5.22`; archive/link/collision/cancel/integrity/executable/native/package regressions gate updates. | BlueOak-1.0.0 bundled runtime. GHSA-r292-9mhp-454m reviewed; member selection is unused. Pige disables lifecycle scripts, rejects unsafe paths/links/executable/native content, bounds extraction, and never executes package code. |

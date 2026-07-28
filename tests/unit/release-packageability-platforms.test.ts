@@ -40,6 +40,7 @@ describe("release packageability platforms", () => {
       packagedRuntimeSmokeTimeoutMs: 60_000
     });
     expect(target.requiredSbomComponents).toEqual(["pige-speech", "pige-vision-ocr"]);
+    expect(target.requiredResourceFiles).toContain("curated-packages/pi-package-catalog.manifest.json");
     expect(target.nativeSmokeScripts).toEqual([
       "scripts/verify/macos-vision-ocr-helper-smoke.mjs",
       "scripts/verify/macos-speech-helper-smoke.mjs"
@@ -68,7 +69,7 @@ describe("release packageability platforms", () => {
       packageKind: "unsigned_nsis_preflight",
       packagedRuntimeSmokeTimeoutMs: 120_000
     });
-    expect(target.requiredResourceFiles).toEqual([]);
+    expect(target.requiredResourceFiles).toEqual(["curated-packages/pi-package-catalog.manifest.json"]);
     expect(target.requiredSbomComponents).toEqual([]);
     expect(target.nativeSmokeScripts).toEqual([]);
     expect(target.nativeSemantic).toMatchObject({
@@ -177,6 +178,8 @@ describe("release packageability platforms", () => {
 
     expect(builderConfig).toContain("from: ../../resources/parser-manifests");
     expect(builderConfig).toContain("to: parser-manifests");
+    expect(builderConfig).toContain("from: ../../resources/curated-packages/pi-package-catalog.manifest.json");
+    expect(builderConfig).toContain("to: curated-packages/pi-package-catalog.manifest.json");
     expect(rootPackage.scripts["package:dir:win:x64"]).toContain("prepare:package:win:x64");
     expect(rootPackage.scripts["smoke:distributed:mac:arm64"]).toContain("--distribution-only=true");
     expect(rootPackage.scripts["smoke:packaged:win:x64"]).toContain("--platform=win --arch=x64");

@@ -718,14 +718,13 @@ Events:
 - `settings.appearanceChanged`
 - `memory.changed`
 
-Skill IPC is body/path-free. Main owns no-follow `.md`/`.zip` pickers. `stageFromMarkdown` returns
-`cancelled | ready | failed`; `stageFromZip` adds `invalid`, file/parent fences and one non-executing
-Markdown/JSON bundle. Both expose safe metadata only. Lifecycle booleans gate UI; HTTPS update binds
-source/base/revision; `installStaged` preserves enablement, trash-retains prior bytes and CAS-adopts.
+Skill IPC is body/path-free. Main owns fenced `.md`/`.zip` pickers; results expose safe metadata only.
+ZIP adds `invalid` and one non-executing Markdown/JSON bundle. Eligibility gates UI; HTTPS update
+binds source/base/revision; install preserves enablement, trashes prior bytes and CAS-adopts.
 
-Pi Package IPC is path/body-free: `summary` is authoritative; install/uninstall confirm. Uninstall
-binds request/package/revision; `removed | stale | not_found | denied` include registry, `failed` is
-identity-only. Main trash-retains and restart-adopts once.
+Pi Package IPC is path/body-free. Local `catalogQuery` returns sorted reviewed npm/integrity/license/
+type/capability/boundary facts or identity-only failure; never URL/path/body/rank. `summary` is
+authoritative; install/uninstall confirm. Uninstall truth includes registry; Main trash-adopts once.
 
 Memory list returns vault/revision and <=1,000 safe records; private provenance stays in Main. Edit
 binds record/revision/title/body, secret-scans, and changes L1 only. Lifecycle `committed | stale |

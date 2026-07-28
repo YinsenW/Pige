@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type {
+  PiPackageCatalogEntry,
+  PiPackageCatalogQueryRequest,
+  PiPackageCatalogQueryResult,
   PiPackageInstallRequest,
   PiPackageInstallResult,
   PiPackageRegistryQueryResult,
@@ -11,6 +14,7 @@ import { PigeIcon } from "./PigeIcon";
 
 export interface PiPackagesApi {
   summary: () => Promise<PiPackageRegistryQueryResult>;
+  catalogQuery: (request: PiPackageCatalogQueryRequest) => Promise<PiPackageCatalogQueryResult>;
   install: (request: PiPackageInstallRequest) => Promise<PiPackageInstallResult>;
   uninstall: (request: PiPackageUninstallRequest) => Promise<PiPackageUninstallResult>;
 }
@@ -26,12 +30,18 @@ export function PiPackagesSettingsPanel(props: {
   const [reloadSequence, setReloadSequence] = useState(0);
   const [packageName, setPackageName] = useState("");
   const [version, setVersion] = useState("");
+  const [integrity, setIntegrity] = useState("");
+  const [catalogQuery, setCatalogQuery] = useState("");
+  const [submittedCatalogQuery, setSubmittedCatalogQuery] = useState("");
+  const [catalogEntries, setCatalogEntries] = useState<readonly PiPackageCatalogEntry[]>([]);
+  const [catalogState, setCatalogState] = useState<ReadState>("loading");
   const [installing, setInstalling] = useState(false);
   const [uninstallingPackageId, setUninstallingPackageId] = useState<string | null>(null);
   const [statusKey, setStatusKey] = useState<string | null>(null);
   const pageRef = useRef<HTMLElement | null>(null);
   const mountedRef = useRef(true);
   const summarySequenceRef = useRef(0);
+  const catalogSequenceRef = useRef(0);
   const installSequenceRef = useRef(0);
   const installActiveRef = useRef(false);
   const uninstallSequenceRef = useRef(0);
@@ -45,6 +55,7 @@ export function PiPackagesSettingsPanel(props: {
     return () => {
       mountedRef.current = false;
       summarySequenceRef.current += 1;
+      catalogSequenceRef.current += 1;
       installSequenceRef.current += 1;
       uninstallSequenceRef.current += 1;
     };
@@ -68,6 +79,35 @@ export function PiPackagesSettingsPanel(props: {
         setReadState("failed");
       });
   }, [props.api, reloadSequence]);
+
+  const queryCatalog = async (query: string): Promise<void> => {
+    const sequence = ++catalogSequenceRef.current;
+    const request: PiPackageCatalogQueryRequest = {
+      apiVersion: 1,
+      requestId: createPiPackageCatalogQueryRequestId(),
+      query
+    };
+    setSubmittedCatalogQuery(query);
+    setCatalogState("loading");
+    try {
+      const result = await props.api.catalogQuery(request);
+      if (!mountedRef.current || sequence !== catalogSequenceRef.current) return;
+      if (result.requestId !== request.requestId || result.status !== "ready") {
+        setCatalogState("failed");
+        return;
+      }
+      setCatalogEntries(result.entries);
+      setCatalogState("ready");
+    } catch {
+      if (mountedRef.current && sequence === catalogSequenceRef.current) {
+        setCatalogState("failed");
+      }
+    }
+  };
+
+  useEffect(() => {
+    void queryCatalog("");
+  }, [props.api]);
 
   useEffect(() => {
     const installedPackageId = pendingInstalledPackageFocusRef.current;
@@ -119,6 +159,7 @@ export function PiPackagesSettingsPanel(props: {
         setRegistry(result.registry);
         setPackageName("");
         setVersion("");
+        setIntegrity("");
         setStatusKey("packages.status.installed");
         pendingInstalledPackageFocusRef.current = result.registry.packages.find(
           (item) => item.packageName === request.packageName && item.version === request.version
@@ -195,6 +236,104 @@ export function PiPackagesSettingsPanel(props: {
         <h1 id="settings-packages-title">{props.t("packages.title")}</h1>
         <p>{props.t("packages.subtitle")}</p>
       </header>
+
+      <section className="settings-section" role="group" aria-labelledby="packages-catalog-title">
+        <h2 className="settings-section-title" id="packages-catalog-title">{props.t("packages.catalogTitle")}</h2>
+        <form
+          className="settings-card"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void queryCatalog(catalogQuery.trim());
+          }}
+        >
+          <div className="settings-row tall">
+            <div className="settings-row-copy">
+              <label htmlFor="pi-package-catalog-query"><strong>{props.t("packages.catalogSearch")}</strong></label>
+              <span>{props.t("packages.catalogSearchDescription")}</span>
+            </div>
+            <div className="settings-row-control">
+              <input
+                className="settings-input"
+                id="pi-package-catalog-query"
+                value={catalogQuery}
+                maxLength={120}
+                placeholder={props.t("packages.catalogSearchPlaceholder")}
+                disabled={catalogState === "loading"}
+                onInput={(event) => setCatalogQuery(event.currentTarget.value)}
+              />
+              <button className="settings-button" type="submit" disabled={catalogState === "loading"}>
+                {props.t("packages.catalogSearchAction")}
+              </button>
+            </div>
+          </div>
+        </form>
+        {catalogState === "loading" ? (
+          <div className="settings-card skills-empty-card" role="status" aria-live="polite">
+            <span className="skills-empty-icon" aria-hidden="true"><PigeIcon name="loading" size={19} className="spinning" /></span>
+            <div className="settings-row-copy"><strong>{props.t("packages.catalogLoading")}</strong></div>
+          </div>
+        ) : catalogState === "failed" ? (
+          <div className="settings-card skills-empty-card" role="status" aria-live="polite">
+            <span className="skills-empty-icon" aria-hidden="true"><PigeIcon name="package" size={19} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("packages.catalogFailed")}</strong>
+              <span>{props.t("packages.catalogFailedDescription")}</span>
+            </div>
+            <button className="settings-button" type="button" onClick={() => void queryCatalog(submittedCatalogQuery)}>
+              {props.t("packages.retry")}
+            </button>
+          </div>
+        ) : catalogEntries.length === 0 ? (
+          <div className="settings-card skills-empty-card" role="status">
+            <span className="skills-empty-icon" aria-hidden="true"><PigeIcon name="package" size={19} /></span>
+            <div className="settings-row-copy">
+              <strong>{props.t("packages.catalogEmpty")}</strong>
+              <span>{props.t("packages.catalogEmptyDescription")}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="settings-card" data-package-catalog-count={catalogEntries.length}>
+            {catalogEntries.map((entry) => (
+              <div className="settings-row tall" data-package-catalog-id={entry.catalogId} key={entry.catalogId}>
+                <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="package" size={17} /></span>
+                <div className="settings-row-copy">
+                  <strong>{entry.displayName}</strong>
+                  <span>{entry.purpose}</span>
+                  <details>
+                    <summary>{props.t("packages.catalogDetails")}</summary>
+                    <div className="skill-registry-meta" aria-label={props.t("packages.catalogDetails") }>
+                      <span>{entry.packageName}</span>
+                      <span>{`v${entry.version}`}</span>
+                      <span>{entry.license}</span>
+                      {entry.packageTypes.map((type) => <span key={type}>{props.t(`packages.type.${type}`)}</span>)}
+                    </div>
+                    <span>{`${props.t("packages.catalogCapabilities")}: ${entry.capabilities.join(", ")}`}</span>
+                    <span>{`${props.t("packages.catalogDataBoundaries")}: ${entry.dataBoundaries.join(", ")}`}</span>
+                    <span>{`${props.t("packages.catalogIntegrity")}: ${entry.integrity}`}</span>
+                    <span>{props.t("packages.catalogTrustNotice")}</span>
+                  </details>
+                </div>
+                <div className="settings-row-control">
+                  <button
+                    className="settings-button"
+                    type="button"
+                    disabled={installing || uninstallingPackageId !== null || readState !== "ready"}
+                    onClick={() => {
+                      setPackageName(entry.packageName);
+                      setVersion(entry.version);
+                      setIntegrity(entry.integrity);
+                      setStatusKey(null);
+                      pageRef.current?.querySelector<HTMLInputElement>("#pi-package-name")?.focus();
+                    }}
+                  >
+                    {props.t("packages.catalogSelect")}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="settings-section" role="group" aria-labelledby="packages-registry-title">
         <h2 className="settings-section-title" id="packages-registry-title" tabIndex={-1}>{props.t("packages.registryTitle")}</h2>
@@ -278,6 +417,7 @@ export function PiPackagesSettingsPanel(props: {
               disabled={installing || uninstallingPackageId !== null || readState !== "ready"}
               onInput={(event) => {
                 setPackageName(event.currentTarget.value);
+                setIntegrity("");
                 setStatusKey(null);
               }}
             />
@@ -298,10 +438,20 @@ export function PiPackagesSettingsPanel(props: {
               disabled={installing || uninstallingPackageId !== null || readState !== "ready"}
               onInput={(event) => {
                 setVersion(event.currentTarget.value);
+                setIntegrity("");
                 setStatusKey(null);
               }}
             />
           </div>
+          {integrity ? (
+            <div className="settings-row tall">
+              <div className="settings-row-copy">
+                <label htmlFor="pi-package-integrity"><strong>{props.t("packages.catalogIntegrity")}</strong></label>
+                <span>{props.t("packages.catalogIntegrityDescription")}</span>
+              </div>
+              <input className="settings-input" id="pi-package-integrity" readOnly value={integrity} />
+            </div>
+          ) : null}
           <div className="settings-row tall">
             <div className="settings-row-copy">
               <strong>{props.t("packages.confirmationTitle")}</strong>
@@ -334,4 +484,10 @@ function createPiPackageUninstallRequestId(): `pi_package_uninstall_request_${st
   const bytes = new Uint8Array(16);
   globalThis.crypto.getRandomValues(bytes);
   return `pi_package_uninstall_request_${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function createPiPackageCatalogQueryRequestId(): `pi_package_catalog_request_${string}` {
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  return `pi_package_catalog_request_${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
 }

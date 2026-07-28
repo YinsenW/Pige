@@ -45,6 +45,9 @@ import type {
   PaddleOcrSummary,
   PaddleOcrTestRequest,
   PaddleOcrTestResult,
+  PiPackageCatalogEntry,
+  PiPackageCatalogQueryRequest,
+  PiPackageCatalogQueryResult,
   PiPackageInstallRequest,
   PiPackageInstallResult,
   PiPackageRegistrySummary,
@@ -1901,7 +1904,7 @@ describe("full UI Settings surface", () => {
     const install = vi.fn((request: PiPackageInstallRequest) => new Promise<PiPackageInstallResult>((resolve) => {
       settleInstall = resolve;
     }));
-    const api: PiPackagesApi = { summary, install, uninstall: vi.fn() };
+    const api: PiPackagesApi = { summary, catalogQuery: emptyPiPackageCatalogQuery, install, uninstall: vi.fn() };
     const root = createRoot(dom.window.document.querySelector("#root")!);
 
     await act(async () => {
@@ -1911,7 +1914,7 @@ describe("full UI Settings surface", () => {
 
     const page = dom.window.document.querySelector<HTMLElement>(".settings-packages")!;
     expect(page.getAttribute("aria-labelledby")).toBe("settings-packages-title");
-    expect(page.querySelectorAll('[role="group"]')).toHaveLength(2);
+    expect(page.querySelectorAll('[role="group"]')).toHaveLength(3);
     expect(page.textContent).toContain("No Pi packages installed");
     expect(page.querySelector("[data-package-id]")).toBeNull();
     const packageName = requireElement(page.querySelector<HTMLInputElement>("#pi-package-name"));
@@ -1971,7 +1974,109 @@ describe("full UI Settings surface", () => {
     expect(dom.window.document.activeElement).toBe(packageRow);
     expect(packageName.value).toBe("");
     expect(version.value).toBe("");
-    expect(page.textContent).not.toMatch(/Enable|Update|Uninstall|Catalog/u);
+    expect(page.textContent).not.toMatch(/Enable|Update|Uninstall/u);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("searches the local reviewed package catalog and fills an exact install draft without installing", async () => {
+    const dom = createDom();
+    const entry = piPackageCatalogEntry();
+    const catalogQuery = vi.fn(async (request: PiPackageCatalogQueryRequest): Promise<PiPackageCatalogQueryResult> => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "ready",
+      entries: request.query ? [] : [entry],
+      total: request.query ? 0 : 1
+    }));
+    const install = vi.fn();
+    const api: PiPackagesApi = {
+      summary: async () => ({ status: "ready", registry: piPackageRegistry(1) }),
+      catalogQuery,
+      install,
+      uninstall: vi.fn()
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(PiPackagesSettingsPanel, { api, t }));
+      await settle(dom);
+    });
+
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+    expect(catalogQuery).toHaveBeenCalledTimes(1);
+    expect(catalogQuery.mock.calls[0]![0]).toMatchObject({ apiVersion: 1, query: "" });
+    expect(catalogQuery.mock.calls[0]![0].requestId).toMatch(/^pi_package_catalog_request_[a-f0-9]{32}$/u);
+    const row = requireElement(page.querySelector<HTMLElement>(`[data-package-catalog-id="${entry.catalogId}"]`));
+    expect(row.textContent).toContain(entry.displayName);
+    expect(row.textContent).toContain(entry.purpose);
+    const details = requireElement(row.querySelector<HTMLDetailsElement>("details"));
+    expect(details.open).toBe(false);
+    expect(details.textContent).toContain(entry.packageName);
+    expect(details.textContent).toContain(entry.integrity);
+    expect(details.textContent).toContain("grants no authority");
+
+    await act(async () => {
+      buttonNamed(row, "Use exact version").click();
+      await settle(dom);
+    });
+    expect(install).not.toHaveBeenCalled();
+    expect(requireElement(page.querySelector<HTMLInputElement>("#pi-package-name")).value).toBe(entry.packageName);
+    expect(requireElement(page.querySelector<HTMLInputElement>("#pi-package-version")).value).toBe(entry.version);
+    expect(requireElement(page.querySelector<HTMLInputElement>("#pi-package-integrity")).value).toBe(entry.integrity);
+
+    await act(async () => {
+      inputValue(dom, requireElement(page.querySelector<HTMLInputElement>("#pi-package-catalog-query")), "source");
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(page, "Search").click();
+      await settle(dom);
+    });
+    expect(catalogQuery).toHaveBeenCalledTimes(2);
+    expect(catalogQuery.mock.calls[1]![0]).toMatchObject({ apiVersion: 1, query: "source" });
+    expect(page.textContent).toContain("No matching reviewed packages");
+
+    await act(async () => {
+      inputValue(dom, requireElement(page.querySelector<HTMLInputElement>("#pi-package-name")), "manual-package");
+      await settle(dom);
+    });
+    expect(page.querySelector("#pi-package-integrity")).toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps curated catalog failures and retries body-free", async () => {
+    const dom = createDom();
+    let attempts = 0;
+    const catalogQuery = vi.fn(async (request: PiPackageCatalogQueryRequest): Promise<PiPackageCatalogQueryResult> => {
+      attempts += 1;
+      return attempts === 1
+        ? { apiVersion: 1, requestId: request.requestId, status: "failed" }
+        : { apiVersion: 1, requestId: request.requestId, status: "ready", entries: [], total: 0 };
+    });
+    const api: PiPackagesApi = {
+      summary: async () => ({ status: "ready", registry: piPackageRegistry(1) }),
+      catalogQuery,
+      install: vi.fn(),
+      uninstall: vi.fn()
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(PiPackagesSettingsPanel, { api, t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+    expect(page.textContent).toContain("Reviewed catalog unavailable");
+    expect(page.textContent).not.toContain("/private/");
+
+    await act(async () => {
+      buttonNamed(page, "Try again").click();
+      await settle(dom);
+    });
+    expect(catalogQuery).toHaveBeenCalledTimes(2);
+    expect(page.textContent).toContain("No matching reviewed packages");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -2004,6 +2109,7 @@ describe("full UI Settings surface", () => {
     });
     const api: PiPackagesApi = {
       summary: async () => ({ status: "ready", registry: piPackageRegistry(4, [originalPackage]) }),
+      catalogQuery: emptyPiPackageCatalogQuery,
       install,
       uninstall: vi.fn()
     };
@@ -2058,6 +2164,7 @@ describe("full UI Settings surface", () => {
     }));
     const api: PiPackagesApi = {
       summary: async () => ({ status: "ready", registry: piPackageRegistry(7, [firstPackage, secondPackage]) }),
+      catalogQuery: emptyPiPackageCatalogQuery,
       install: vi.fn(),
       uninstall
     };
@@ -2129,6 +2236,7 @@ describe("full UI Settings surface", () => {
       }));
       const api: PiPackagesApi = {
         summary: async () => ({ status: "ready", registry: piPackageRegistry(9, [installedPackage]) }),
+        catalogQuery: emptyPiPackageCatalogQuery,
         install: vi.fn(),
         uninstall
       };
@@ -2171,6 +2279,7 @@ describe("full UI Settings surface", () => {
     });
     const api: PiPackagesApi = {
       summary: async () => ({ status: "ready", registry: piPackageRegistry(12, [installedPackage]) }),
+      catalogQuery: emptyPiPackageCatalogQuery,
       install: vi.fn(),
       uninstall
     };
@@ -3562,6 +3671,29 @@ function piPackageRegistry(
   packages: PiPackageRegistrySummary["packages"] = []
 ): PiPackageRegistrySummary {
   return { apiVersion: 1, revision, packages };
+}
+
+function piPackageCatalogEntry(): PiPackageCatalogEntry {
+  return {
+    catalogId: "pi_catalog_reviewed_source",
+    packageName: "reviewed-source-package",
+    version: "1.2.3",
+    integrity: `sha512-${"A".repeat(86)}==`,
+    displayName: "Reviewed source helper",
+    purpose: "Organizes selected source material with an inspectable workflow.",
+    license: "MIT",
+    packageTypes: ["skill"],
+    capabilities: ["read_current_source"],
+    dataBoundaries: ["local"],
+    trust: "curated",
+    source: "npm"
+  };
+}
+
+async function emptyPiPackageCatalogQuery(
+  request: PiPackageCatalogQueryRequest
+): Promise<PiPackageCatalogQueryResult> {
+  return { apiVersion: 1, requestId: request.requestId, status: "ready", entries: [], total: 0 };
 }
 
 function piPackage(packageId: `pkg_${string}`, packageName: string): PiPackageRegistrySummary["packages"][number] {
