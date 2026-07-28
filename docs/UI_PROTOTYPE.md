@@ -998,7 +998,7 @@ Load the strict active-vault summary and show bounded content/status/time/safe p
 Active atoms disable; disabled atoms re-enable; delete/reset are reversible and appear in Activity
 with Undo. Every mutation uses exact revision CAS, adopts returned state, and handles stale/not-found
 without losing the list. Export opens Main's save dialog; cancel is quiet and every result is
-pathless. No edit, permanent erase, autonomous/global memory or new permission control ships.
+pathless. No permanent erase, autonomous/global memory or new permission control ships.
 
 ### Skills Settings
 

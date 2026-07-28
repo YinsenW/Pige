@@ -53,7 +53,7 @@
     "scope": "Independent Planning review of vault-memory edit: L1-only CAS, immutable L0 provenance, secret-before-receipt, Activity Undo/recovery and fenced draft adoption.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "384f39be930c565a1190b80236051edb40bac2556b54c1110fbb1d5df4d293bb"
+    "reviewedSha256": "2f38f2485c17d65e8679882011b16db9f49f2f86b9b6cbe87f11fa7d48bae25a"
   },
   "reviewers": [{
     "reviewerId": "vault-memory-edit-review",
