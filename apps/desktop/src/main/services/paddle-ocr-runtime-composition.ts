@@ -95,7 +95,7 @@ export function createPaddleOcrRuntimeComposition(
     platform: release.platform === "macos-arm64" ? "macos" : "windows",
     architecture: release.platform === "macos-arm64" ? "arm64" : "x64",
     capabilities: ["ocr.image"],
-    license: { spdxId: "Apache-2.0", name: "Apache License 2.0" },
+    license: { spdxId: "NOASSERTION", name: "See bundled legal inventory" },
     expectedSha256: normalizeDigest(release.installedTreeSha256),
     expectedSizeBytes: release.installedSizeBytes,
     packageLimits

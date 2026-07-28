@@ -64,6 +64,7 @@ describe("PaddleOCR runtime composition", () => {
       platform: "macos",
       architecture: "arm64",
       capabilities: ["ocr.image"],
+      license: { spdxId: "NOASSERTION", name: "See bundled legal inventory" },
       files: {
         "python/bin/python3": "python-runtime",
         "pige/paddle_ocr_wrapper.py": "offline-wrapper",
@@ -142,7 +143,8 @@ describe("PaddleOCR runtime composition", () => {
       version: "3.7.0",
       platform: "macos",
       architecture: "arm64",
-      capabilities: ["ocr.image"]
+      capabilities: ["ocr.image"],
+      license: { spdxId: "NOASSERTION", name: "See bundled legal inventory" }
     });
     const manifestPath = path.join(root, "paddleocr-local.parser.manifest.json");
     writeAvailableManifest(manifestPath, candidate.packageSha256, candidate.sizeBytes);
@@ -228,6 +230,7 @@ describe("PaddleOCR runtime composition", () => {
       platform: "windows",
       architecture: "x64",
       capabilities: ["ocr.image"],
+      license: { spdxId: "NOASSERTION", name: "See bundled legal inventory" },
       files: {
         "python/python.exe": "python-runtime",
         "pige/paddle_ocr_wrapper.py": "offline-wrapper"
