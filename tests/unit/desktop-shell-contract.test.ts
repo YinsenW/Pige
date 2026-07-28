@@ -84,6 +84,9 @@ describe("desktop shell build contract", () => {
       expect(registrarSource).toContain(`"memory.${method}"`);
     }
     expect(preloadSource).toContain("MemoryEnableRequestSchema.parse(request)");
+    expect(contractsSource).toContain("readonly edit:");
+    expect(preloadSource).toContain('"memory.edit"');
+    expect(preloadSource).toContain("MemoryEditRequestSchema.parse(request)");
     expect(preloadSource).toContain("MemoryDeleteRequestSchema.parse(request)");
     expect(preloadSource).toContain("MemoryExportRequestSchema.parse(request)");
     expect(preloadSource).toContain("MemoryResetRequestSchema.parse(request)");
