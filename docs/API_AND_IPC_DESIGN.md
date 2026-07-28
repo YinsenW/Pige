@@ -488,28 +488,25 @@ Reader reference query contract:
 
 Reader selection uses queries `readerSelection.resolve`, `readerSelection.currentProposal`
 and commands `readerSelection.submitAction`, `readerSelection.submitTransform`,
-`readerSelection.decideProposal`:
+`readerSelection.submitLink`, `readerSelection.decideProposal`:
 
 - `resolve` takes version/request/vault/page/render-context plus anchor/focus
   `{segmentId,utf16Offset}`. `resolved` returns only page ID/hash, a non-empty <=64 KiB
-  `utf8_bytes` span and selected-content hash. Other states are body-free `invalid` reasons
-  (`selection_empty | selection_too_large | endpoint_not_found | endpoint_offset_invalid |
-  unsupported_content`), `stale` scope (`vault | page | render_context`) or `failed`.
-- Action/transform take version/request, the resolved identity, locale and client-turn ID.
-  Actions are `explain | summarize` with `completed | waiting | failed | invalid`; transforms
-  are `translate | polish | expand` with `applied | review_required | waiting | failed |
-  invalid`. Results expose only correlation, Job/conversation/tail, body-free error,
-  `operationId`, or preview as applicable. Invalid reasons are vault/page/selection/size plus
-  transform-only `mutation_ineligible | replacement_invalid`.
-- Preview is only opaque ID, action, `ready | resolving | applied | rejected | conflicted`,
-  revision and <=8 context/removed/added lines of <=160 characters. `currentProposal` returns
-  it or `not_found | vault_changed | record_invalid`; `decideProposal` accepts
-  `{proposalId,expectedRevision,decision: approve | reject}` and returns
-  `applied | rejected | conflicted | stale | failed` (applied may add Operation ID).
-- Main revalidates vault/page/hash/span before Agent/write and owns instructions, replacement,
-  CAS and apply. Renderer-selected text, paths, bodies, hashes, replacements and raw proposal
-  data never cross; renderer correlates requests, `Later` stays local, same-page refresh uses
-  `notes.render`, and Activity/Undo remains Operation-owned.
+  `utf8_bytes` span and content hash. Other states are body-free `invalid`, scoped `stale`
+  or `failed`.
+- Action/transform bind request, resolved identity and locale/client-turn; results expose
+  correlation, Job/conversation/tail, body-free error, Operation or bounded preview;
+  Main owns instructions, replacement, CAS and apply.
+- `submitLink` adds `link` but no target. Pi selects an opaque search ref;
+  Main fences pages, appends one reversible `update_page`, and returns safe current/target
+  page/Operation identity. Unknown/ambiguous/self/existing/drift fails closed; recovery
+  adopts one link/Operation.
+- Preview is opaque ID/action/state/revision plus <=8 context/removed/added lines of <=160
+  characters. `currentProposal` returns it or a body-free failure; `decideProposal` binds
+  proposal/revision/approve-or-reject.
+- Renderer text, paths, bodies, hashes, replacements, targets and raw proposal data never
+  cross. It correlates requests; `Later` stays local, refresh uses `notes.render`, and
+  Activity/Undo remains Operation-owned.
 
 Current Home Dataset read boundary:
 

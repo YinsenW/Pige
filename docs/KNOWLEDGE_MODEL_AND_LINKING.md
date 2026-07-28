@@ -267,11 +267,13 @@ Readable durable links may use titles:
 [[Local RAG|local retrieval]]
 ```
 
-Current slice: after inspect and one retrieval, Pi supplies two distinct `related_NN`
-refs, cited reason, and high confidence. Host fixes one directed `links_to` between clean
-active generated notes: source adds `related_page_ids` plus a canonical
-`#wiki:<encoded-id>` managed link; target stays unchanged. Undo restores source and
-rebuild derives/removes backlink. Other link shapes/pages/types remain open.
+Generated-note linking takes two distinct `related_NN` refs after inspect/retrieval.
+Reader Link instead binds a resolved current-note selection while Pi selects one opaque
+search target. Main fences both active notes and adds the same `related_page_ids`
+plus canonical `#wiki:<encoded-id>` directed link through reversible `update_page`; target
+stays unchanged and rebuild derives/removes backlink. Renderer supplies no target;
+self/ambiguous/existing/drift fails closed and retry adopts one link/Operation. Other link
+shapes/pages/types remain open.
 
 Reader activation preserves those identities: exact page ID wins; otherwise one normalized
 title/alias/governed path/slug may resolve, while ambiguity chooses nothing. Source links

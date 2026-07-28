@@ -2898,6 +2898,30 @@ References:
 
 - `docs/API_AND_IPC_DESIGN.md`
 
+### D-20260728-Reader-Selection-Directed-Link
+
+Status: Accepted
+Date: 2026-07-28
+
+Decision:
+
+Reader Link lets Pi select one opaque ref; Main fences notes and publishes one reversible
+`update_page`.
+
+Rationale:
+
+Opaque selection denies renderer target authority.
+
+Consequences:
+
+- Renderer sends no target. Ambiguity, self/existing links or drift fails closed; retry
+  adopts one link/Operation.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
+
 ### D-20260717-Recent-Vault-Open-By-Stable-ID
 
 Status: Accepted

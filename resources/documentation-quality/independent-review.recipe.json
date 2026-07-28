@@ -38,19 +38,20 @@
       "resources/task-execution-plan.manifest.json",
       "resources/traceability/acceptance.manifest.json",
       "resources/traceability/semantic-claims.manifest.json",
+      "tests/fixtures/service-responsibility-inventory.json",
       "resources/dependency-manifest/dependencies.manifest.json",
       "scripts/verify/architecture-reset.mjs",
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of the first Managed Collection saved view: stable identity, bounded filter/sort, immutable view revision and Activity/Undo.",
+    "scope": "Independent Planning review of Reader selection Link: opaque target selection, currentness fences, reversible update_page and restart adoption.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
-    "minimumFileCount": 34,
-    "reviewedSha256": "a059ed6ac90153d8221a4cb21f608816dcd082ba57e435226b19b7610e7a781f"
+    "minimumFileCount": 35,
+    "reviewedSha256": "95c820d0cc85cef09dfa64a9f01a9bc61b48bb8d20371b9fdcd6cd818e752aa5"
   },
   "reviewers": [{
-    "reviewerId": "managed-collection-saved-view-review",
-    "task": "Managed Collection first saved view",
+    "reviewerId": "reader-selection-link-review",
+    "task": "Reader selection directed Link",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -58,33 +59,33 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed Dataset/API/recovery/UI/Decision/trace owners; Development and UI independently own saved-view publication, Activity/Undo, presentation and evidence."
+    "independence": "Planning reviewed Reader/API/link/recovery/Decision/trace owners; Development independently owns target selection, publication, Activity/Undo and evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"managed-collection-saved-view-review","blockerCount":0,"summary":"One Dataset keeps rows/revision stable while its view advances through private revisions."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"managed-collection-saved-view-review","blockerCount":0,"summary":"Data/API/recovery/UI agree on one bounded filter/sort, authoritative snapshot and forward Undo."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"managed-collection-saved-view-review","blockerCount":0,"summary":"PIGE-DATA-003 and E7.06 stay planned while broader view/schema lifecycle remains open."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"managed-collection-saved-view-review","blockerCount":0,"summary":"Exact create/open/replay/stale/duplicate/ineligible, Activity and UI tests bind the slice."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"managed-collection-saved-view-review","blockerCount":0,"summary":"Existing Collection owners and one decision absorb the slice without a new document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"reader-selection-link-review","blockerCount":0,"summary":"One current Reader note gains one reversible directed link; target and backlink stay stable."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"reader-selection-link-review","blockerCount":0,"summary":"API, linking, recovery and UI agree on opaque Pi selection and Main-owned currentness fences."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"reader-selection-link-review","blockerCount":0,"summary":"Reader Link evidence is bound while PIGE-UI-005 and broader mutation completion stay open."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"reader-selection-link-review","blockerCount":0,"summary":"Exact publication, target drift, self/existing rejection and idempotent adoption tests bind the slice."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"reader-selection-link-review","blockerCount":0,"summary":"Existing Reader/link owners and one decision absorb the slice without a new document."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict view identity and authoritative snapshots expose no row values or storage internals."},
-    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Dataset/API/recovery/UI and the existing Collection decision agree on reversible saved views."},
-    {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Planned acceptance stays open and final service ownership/LOC are inventoried."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Strict submitLink exposes no renderer target, path, body, hash or raw error."},
+    {"command":"npm run verify:docs && npm run verify:decisions","status":"passed","evidence":"Reader/API/link/recovery/UI owners agree on one reversible directed update_page."},
+    {"command":"npm run verify:traceability && npm run verify:boundaries","status":"passed","evidence":"Statuses stay unchanged and the 587-LOC private link service is inventoried."}
   ],
   "coordination": {
-    "taskId": "managed-collection-saved-view-20260728",
-    "taskTitle": "Managed Collection first saved view",
+    "taskId": "reader-selection-link-20260728",
+    "taskTitle": "Reader selection directed Link",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing row/field mutations stay; saved view adds one optional filter/sort without changing Dataset rows/revision.",
-    "acknowledgement": "Planning binds first saved-view create/open/Undo only; rename/delete, multi-filter/group, formulas, relations and completion stay open."
+    "compatibility": "Existing Reader read/transform/review actions stay; Link adds one bounded reversible relationship mutation.",
+    "acknowledgement": "Planning binds Reader Link only; other Reader mutations, redo, exceptions, scale and platform completion stay open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Only current stable columns may enter the single filter/sort; Main owns view identity.",
-    "Vault, Dataset, table, revision, view, replay or Operation drift fails closed.",
-    "View rename/delete, grouping, formulas, relations and broad CRUD stay out of scope."
+    "Renderer supplies no target; Pi selects one opaque current local-search ref.",
+    "Vault, render, selection, current page, target, replay or Operation drift fails closed.",
+    "Other Reader mutations, target guessing, redo and broad relationship editing stay out of scope."
   ]
 }
