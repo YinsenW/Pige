@@ -357,6 +357,8 @@ function writeWheel(
     const distInfo = `${distributionName}-${version}.dist-info`;
     zip.addBuffer(Buffer.from(`__version__ = '${version}'\n`), `${importName}/__init__.py`);
     zip.addBuffer(Buffer.from(metadataContent), `${distInfo}/METADATA`);
+    zip.addBuffer(Buffer.from(metadata("vendored-helper", "1.0.0", [])),
+      `${importName}/_vendor/vendored_helper-1.0.0.dist-info/METADATA`);
     zip.addBuffer(Buffer.from("Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n"), `${distInfo}/WHEEL`);
     zip.addBuffer(Buffer.from(""), `${distInfo}/RECORD`);
     zip.outputStream.once("error", reject);

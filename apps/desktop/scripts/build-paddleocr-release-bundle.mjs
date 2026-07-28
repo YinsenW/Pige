@@ -466,6 +466,7 @@ async function materializeWheels({ temporaryPath, artifactRoot, wheelLock }) {
 
 async function extractWheel({ wheelPath, wheel, platform, packageRoot, sitePackages, reservedPaths, limits }) {
   const archive = await openZip(wheelPath);
+  const expectedMetadataPath = rootWheelMetadataPath(wheel.filename);
   let entryCount = 0;
   let expandedBytes = 0;
   let metadataBytes;
@@ -491,7 +492,7 @@ async function extractWheel({ wheelPath, wheel, platform, packageRoot, sitePacka
           const relativeDestination = toPosix(path.relative(packageRoot, destination));
           reserveOutputPath(relativeDestination, reservedPaths);
           const bytes = await readZipEntry(archive, entry, limits.maxFileBytes);
-          if (archivePath.endsWith(".dist-info/METADATA")) {
+          if (archivePath === expectedMetadataPath) {
             if (metadataBytes) fail(`Wheel ${wheel.filename} contains duplicate METADATA.`);
             metadataBytes = bytes;
           }
@@ -508,6 +509,12 @@ async function extractWheel({ wheelPath, wheel, platform, packageRoot, sitePacka
     fail(`Wheel ${wheel.filename} METADATA does not match the selected lock.`);
   }
   assertWheelMetadata(metadataBytes.toString("utf8"), wheel);
+}
+
+function rootWheelMetadataPath(filename) {
+  const [distribution, version] = filename.slice(0, -4).split("-");
+  if (!distribution || !version) fail(`Wheel ${filename} has no canonical root metadata path.`);
+  return `${distribution}-${version}.dist-info/METADATA`;
 }
 
 function resolveWheelDestination({ archivePath, wheel, platform, packageRoot, sitePackages }) {
