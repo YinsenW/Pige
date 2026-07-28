@@ -51,8 +51,12 @@ import type {
   PiPackageInstallRequest,
   PiPackageInstallResult,
   PiPackageRegistrySummary,
+  PiPackageRollbackRequest,
+  PiPackageRollbackResult,
   PiPackageUninstallRequest,
   PiPackageUninstallResult,
+  PiPackageUpdateRequest,
+  PiPackageUpdateResult,
   SkillEnableRequest,
   SkillExportRequest,
   SkillLifecycleMutationResult,
@@ -1904,7 +1908,14 @@ describe("full UI Settings surface", () => {
     const install = vi.fn((request: PiPackageInstallRequest) => new Promise<PiPackageInstallResult>((resolve) => {
       settleInstall = resolve;
     }));
-    const api: PiPackagesApi = { summary, catalogQuery: emptyPiPackageCatalogQuery, install, uninstall: vi.fn() };
+    const api: PiPackagesApi = {
+      summary,
+      catalogQuery: emptyPiPackageCatalogQuery,
+      install,
+      uninstall: vi.fn(),
+      update: vi.fn(),
+      rollback: vi.fn()
+    };
     const root = createRoot(dom.window.document.querySelector("#root")!);
 
     await act(async () => {
@@ -1954,7 +1965,10 @@ describe("full UI Settings surface", () => {
       packageTypes: ["extension"],
       dependencyCount: 0,
       enabled: false,
-      trust: "community"
+      trust: "community",
+      canUpdate: false,
+      canRollback: false,
+      rollbackTarget: null
     }]);
     await act(async () => {
       settleInstall({
@@ -1995,7 +2009,9 @@ describe("full UI Settings surface", () => {
       summary: async () => ({ status: "ready", registry: piPackageRegistry(1) }),
       catalogQuery,
       install,
-      uninstall: vi.fn()
+      uninstall: vi.fn(),
+      update: vi.fn(),
+      rollback: vi.fn()
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -2060,7 +2076,9 @@ describe("full UI Settings surface", () => {
       summary: async () => ({ status: "ready", registry: piPackageRegistry(1) }),
       catalogQuery,
       install: vi.fn(),
-      uninstall: vi.fn()
+      uninstall: vi.fn(),
+      update: vi.fn(),
+      rollback: vi.fn()
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -2092,7 +2110,10 @@ describe("full UI Settings surface", () => {
       packageTypes: ["skill" as const],
       dependencyCount: 0,
       enabled: false as const,
-      trust: "community" as const
+      trust: "community" as const,
+      canUpdate: false,
+      canRollback: false,
+      rollbackTarget: null
     };
     const results: Array<"stale" | "denied" | "failed"> = ["stale", "denied", "failed"];
     const install = vi.fn(async (request: PiPackageInstallRequest): Promise<PiPackageInstallResult> => {
@@ -2111,7 +2132,9 @@ describe("full UI Settings surface", () => {
       summary: async () => ({ status: "ready", registry: piPackageRegistry(4, [originalPackage]) }),
       catalogQuery: emptyPiPackageCatalogQuery,
       install,
-      uninstall: vi.fn()
+      uninstall: vi.fn(),
+      update: vi.fn(),
+      rollback: vi.fn()
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -2166,7 +2189,9 @@ describe("full UI Settings surface", () => {
       summary: async () => ({ status: "ready", registry: piPackageRegistry(7, [firstPackage, secondPackage]) }),
       catalogQuery: emptyPiPackageCatalogQuery,
       install: vi.fn(),
-      uninstall
+      uninstall,
+      update: vi.fn(),
+      rollback: vi.fn()
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -2238,7 +2263,9 @@ describe("full UI Settings surface", () => {
         summary: async () => ({ status: "ready", registry: piPackageRegistry(9, [installedPackage]) }),
         catalogQuery: emptyPiPackageCatalogQuery,
         install: vi.fn(),
-        uninstall
+        uninstall,
+        update: vi.fn(),
+        rollback: vi.fn()
       };
       const root = createRoot(dom.window.document.querySelector("#root")!);
       await act(async () => {
@@ -2281,7 +2308,9 @@ describe("full UI Settings surface", () => {
       summary: async () => ({ status: "ready", registry: piPackageRegistry(12, [installedPackage]) }),
       catalogQuery: emptyPiPackageCatalogQuery,
       install: vi.fn(),
-      uninstall
+      uninstall,
+      update: vi.fn(),
+      rollback: vi.fn()
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -2301,6 +2330,286 @@ describe("full UI Settings surface", () => {
       expect(dom.window.document.activeElement).toBe(remove);
     }
     expect(uninstall).toHaveBeenCalledTimes(2);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("updates one exact Pi package once and adopts the authoritative disabled inventory", async () => {
+    const dom = createDom();
+    const installedPackage = piPackage("pkg_aaaaaaaaaaaaaaaaaaaaaaaa", "update-package", { canUpdate: true });
+    const targetIntegrity = `sha512-${"B".repeat(86)}==`;
+    const rollbackId = "pi_package_rollback_abcdefghijklmnop" as const;
+    let settleUpdate!: (result: PiPackageUpdateResult) => void;
+    const update = vi.fn((_request: PiPackageUpdateRequest) => new Promise<PiPackageUpdateResult>((resolve) => {
+      settleUpdate = resolve;
+    }));
+    const api: PiPackagesApi = {
+      summary: async () => ({ status: "ready", registry: piPackageRegistry(20, [installedPackage]) }),
+      catalogQuery: emptyPiPackageCatalogQuery,
+      install: vi.fn(),
+      uninstall: vi.fn(),
+      update,
+      rollback: vi.fn()
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(PiPackagesSettingsPanel, { api, t }));
+      await settle(dom);
+    });
+
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+    const row = requireElement(page.querySelector<HTMLElement>(`[data-package-id="${installedPackage.packageId}"]`));
+    const targetVersionInput = requireElement(row.querySelector<HTMLInputElement>(`#pi-package-update-version-${installedPackage.packageId}`));
+    const targetIntegrityInput = requireElement(row.querySelector<HTMLInputElement>(`#pi-package-update-integrity-${installedPackage.packageId}`));
+    expect(buttonNamed(row, "Update").disabled).toBe(true);
+    expect(page.textContent).not.toContain("Roll back");
+
+    await act(async () => {
+      inputValue(dom, targetVersionInput, "2.0.0");
+      await settle(dom);
+    });
+    await act(async () => {
+      inputValue(dom, targetIntegrityInput, targetIntegrity);
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(row, "Update").click();
+      await settle(dom);
+    });
+    expect(update).toHaveBeenCalledTimes(1);
+    const request = update.mock.calls[0]![0];
+    expect(request).toMatchObject({
+      apiVersion: 1,
+      packageId: installedPackage.packageId,
+      expectedRegistryRevision: 20,
+      targetVersion: "2.0.0",
+      targetIntegrity
+    });
+    expect(request.requestId).toMatch(/^pi_package_update_request_[a-f0-9]{32}$/u);
+    expect(buttonNamed(row, "Updating…").disabled).toBe(true);
+    await act(async () => {
+      buttonNamed(row, "Updating…").click();
+      await settle(dom);
+    });
+    expect(update).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      settleUpdate({
+        apiVersion: 1,
+        requestId: request.requestId,
+        packageId: request.packageId,
+        targetVersion: request.targetVersion,
+        targetIntegrity: request.targetIntegrity,
+        status: "committed",
+        registry: piPackageRegistry(21, [piPackage(installedPackage.packageId, installedPackage.packageName, {
+          version: "2.0.0",
+          canUpdate: true,
+          canRollback: true,
+          rollbackTarget: { rollbackId, targetVersion: "1.0.0" }
+        })])
+      });
+      await settle(dom);
+    });
+    const updatedRow = requireElement(page.querySelector<HTMLElement>(`[data-package-id="${installedPackage.packageId}"]`));
+    const clearedVersion = requireElement(updatedRow.querySelector<HTMLInputElement>(`#pi-package-update-version-${installedPackage.packageId}`));
+    expect(updatedRow.textContent).toContain("v2.0.0");
+    expect(updatedRow.textContent).toContain("Roll back to v1.0.0");
+    expect(page.textContent).toContain("The package was updated and remains disabled.");
+    expect(page.textContent).not.toContain(rollbackId);
+    expect(clearedVersion.value).toBe("");
+    expect(requireElement(updatedRow.querySelector<HTMLInputElement>(`#pi-package-update-integrity-${installedPackage.packageId}`)).value).toBe("");
+    expect(dom.window.document.activeElement).toBe(clearedVersion);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("adopts authoritative update outcomes while preserving failure drafts and fencing mismatched results", async () => {
+    const authoritativeCases = [
+      ["denied", "Update was not approved"],
+      ["stale", "The package registry changed"],
+      ["not_found", "This package is no longer installed"]
+    ] as const;
+    const targetIntegrity = `sha512-${"C".repeat(86)}==`;
+    for (const [status, message] of authoritativeCases) {
+      const dom = createDom();
+      const installedPackage = piPackage("pkg_aaaaaaaaaaaaaaaaaaaaaaaa", "kept-update-package", { canUpdate: true });
+      const authoritativePackages = status === "not_found" ? [] : [installedPackage];
+      const update = vi.fn(async (request: PiPackageUpdateRequest): Promise<PiPackageUpdateResult> => ({
+        apiVersion: 1,
+        requestId: request.requestId,
+        packageId: request.packageId,
+        targetVersion: request.targetVersion,
+        targetIntegrity: request.targetIntegrity,
+        status,
+        registry: piPackageRegistry(31, authoritativePackages)
+      }));
+      const api: PiPackagesApi = {
+        summary: async () => ({ status: "ready", registry: piPackageRegistry(30, [installedPackage]) }),
+        catalogQuery: emptyPiPackageCatalogQuery,
+        install: vi.fn(),
+        uninstall: vi.fn(),
+        update,
+        rollback: vi.fn()
+      };
+      const root = createRoot(dom.window.document.querySelector("#root")!);
+      await act(async () => {
+        root.render(createElement(PiPackagesSettingsPanel, { api, t }));
+        await settle(dom);
+      });
+      const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+      const versionInput = requireElement(page.querySelector<HTMLInputElement>(`#pi-package-update-version-${installedPackage.packageId}`));
+      const integrityInput = requireElement(page.querySelector<HTMLInputElement>(`#pi-package-update-integrity-${installedPackage.packageId}`));
+      await act(async () => {
+        inputValue(dom, versionInput, "2.0.0");
+        await settle(dom);
+      });
+      await act(async () => {
+        inputValue(dom, integrityInput, targetIntegrity);
+        await settle(dom);
+      });
+      await act(async () => {
+        buttonNamed(page, "Update").click();
+        await settle(dom);
+      });
+      expect(page.textContent).toContain(message);
+      if (status === "not_found") {
+        expect(page.querySelector(`[data-package-id="${installedPackage.packageId}"]`)).toBeNull();
+        expect(dom.window.document.activeElement).toBe(page.querySelector("#packages-registry-title"));
+      } else {
+        expect(page.querySelector('[data-package-registry-revision="31"]')).not.toBeNull();
+        const preservedVersion = requireElement(page.querySelector<HTMLInputElement>(`#pi-package-update-version-${installedPackage.packageId}`));
+        expect(preservedVersion.value).toBe("2.0.0");
+        expect(requireElement(page.querySelector<HTMLInputElement>(`#pi-package-update-integrity-${installedPackage.packageId}`)).value).toBe(targetIntegrity);
+        expect(dom.window.document.activeElement).toBe(preservedVersion);
+      }
+      await act(async () => root.unmount());
+      dom.window.close();
+    }
+
+    const dom = createDom();
+    const installedPackage = piPackage("pkg_aaaaaaaaaaaaaaaaaaaaaaaa", "identity-fenced-package", { canUpdate: true });
+    const responses: Array<"failed" | "mismatched"> = ["failed", "mismatched"];
+    const update = vi.fn(async (request: PiPackageUpdateRequest): Promise<PiPackageUpdateResult> => {
+      const response = responses.shift();
+      return response === "failed"
+        ? { ...request, status: "failed" }
+        : {
+            ...request,
+            requestId: "pi_package_update_request_0000000000000000",
+            status: "committed",
+            registry: piPackageRegistry(41, [piPackage(installedPackage.packageId, "must-not-replace", { canUpdate: true })])
+          };
+    });
+    const api: PiPackagesApi = {
+      summary: async () => ({ status: "ready", registry: piPackageRegistry(40, [installedPackage]) }),
+      catalogQuery: emptyPiPackageCatalogQuery,
+      install: vi.fn(),
+      uninstall: vi.fn(),
+      update,
+      rollback: vi.fn()
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(PiPackagesSettingsPanel, { api, t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+    await act(async () => {
+      inputValue(dom, requireElement(page.querySelector<HTMLInputElement>(`#pi-package-update-version-${installedPackage.packageId}`)), "2.0.0");
+      await settle(dom);
+    });
+    await act(async () => {
+      inputValue(dom, requireElement(page.querySelector<HTMLInputElement>(`#pi-package-update-integrity-${installedPackage.packageId}`)), targetIntegrity);
+      await settle(dom);
+    });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await act(async () => {
+        buttonNamed(page, "Update").click();
+        await settle(dom);
+      });
+      expect(page.textContent).toContain("Pige could not update this package");
+      expect(page.textContent).toContain("identity-fenced-package");
+      expect(page.textContent).not.toContain("must-not-replace");
+      expect(page.querySelector('[data-package-registry-revision="40"]')).not.toBeNull();
+      expect(requireElement(page.querySelector<HTMLInputElement>(`#pi-package-update-version-${installedPackage.packageId}`)).value).toBe("2.0.0");
+      expect(requireElement(page.querySelector<HTMLInputElement>(`#pi-package-update-integrity-${installedPackage.packageId}`)).value).toBe(targetIntegrity);
+    }
+    expect(update).toHaveBeenCalledTimes(2);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("shows only an eligible rollback and sends its opaque identity once", async () => {
+    const dom = createDom();
+    const rollbackId = "pi_package_rollback_abcdefghijklmnop" as const;
+    const installedPackage = piPackage("pkg_aaaaaaaaaaaaaaaaaaaaaaaa", "rollback-package", {
+      canRollback: true,
+      rollbackTarget: { rollbackId, targetVersion: "0.9.0" }
+    });
+    let settleRollback!: (result: PiPackageRollbackResult) => void;
+    const rollback = vi.fn((_request: PiPackageRollbackRequest) => new Promise<PiPackageRollbackResult>((resolve) => {
+      settleRollback = resolve;
+    }));
+    const api: PiPackagesApi = {
+      summary: async () => ({ status: "ready", registry: piPackageRegistry(50, [installedPackage]) }),
+      catalogQuery: emptyPiPackageCatalogQuery,
+      install: vi.fn(),
+      uninstall: vi.fn(),
+      update: vi.fn(),
+      rollback
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(PiPackagesSettingsPanel, { api, t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+    const row = requireElement(page.querySelector<HTMLElement>(`[data-package-id="${installedPackage.packageId}"]`));
+    expect(row.querySelector("[data-package-update-version-id]")).toBeNull();
+    expect(row.textContent).toContain("Roll back to v0.9.0");
+    expect(page.textContent).not.toContain(rollbackId);
+
+    await act(async () => {
+      buttonNamed(row, "Roll back to v0.9.0").click();
+      await settle(dom);
+    });
+    expect(rollback).toHaveBeenCalledTimes(1);
+    const request = rollback.mock.calls[0]![0];
+    expect(request).toMatchObject({
+      apiVersion: 1,
+      packageId: installedPackage.packageId,
+      expectedRegistryRevision: 50,
+      rollbackId,
+      targetVersion: "0.9.0"
+    });
+    expect(request.requestId).toMatch(/^pi_package_rollback_request_[a-f0-9]{32}$/u);
+    expect(buttonNamed(row, "Rolling back…").disabled).toBe(true);
+    await act(async () => {
+      buttonNamed(row, "Rolling back…").click();
+      await settle(dom);
+    });
+    expect(rollback).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      settleRollback({
+        apiVersion: 1,
+        requestId: request.requestId,
+        packageId: request.packageId,
+        rollbackId: request.rollbackId,
+        targetVersion: request.targetVersion,
+        status: "committed",
+        registry: piPackageRegistry(51, [piPackage(installedPackage.packageId, installedPackage.packageName, { version: "0.9.0" })])
+      });
+      await settle(dom);
+    });
+    const rolledBackRow = requireElement(page.querySelector<HTMLElement>(`[data-package-id="${installedPackage.packageId}"]`));
+    expect(rolledBackRow.textContent).toContain("v0.9.0");
+    expect(rolledBackRow.textContent).not.toContain("Roll back");
+    expect(page.textContent).toContain("The package was rolled back and remains disabled.");
+    expect(page.textContent).not.toContain(rollbackId);
+    expect(dom.window.document.activeElement).toBe(rolledBackRow);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -3696,7 +4005,11 @@ async function emptyPiPackageCatalogQuery(
   return { apiVersion: 1, requestId: request.requestId, status: "ready", entries: [], total: 0 };
 }
 
-function piPackage(packageId: `pkg_${string}`, packageName: string): PiPackageRegistrySummary["packages"][number] {
+function piPackage(
+  packageId: `pkg_${string}`,
+  packageName: string,
+  overrides: Partial<PiPackageRegistrySummary["packages"][number]> = {}
+): PiPackageRegistrySummary["packages"][number] {
   return {
     packageId,
     packageName,
@@ -3705,7 +4018,11 @@ function piPackage(packageId: `pkg_${string}`, packageName: string): PiPackageRe
     packageTypes: ["extension"],
     dependencyCount: 0,
     enabled: false,
-    trust: "community"
+    trust: "community",
+    canUpdate: false,
+    canRollback: false,
+    rollbackTarget: null,
+    ...overrides
   };
 }
 
