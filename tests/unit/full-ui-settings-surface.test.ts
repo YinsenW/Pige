@@ -1928,6 +1928,56 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("enables only the authoritative supported External/Web Skill projection", async () => {
+    const dom = createDom();
+    const vaultId = "vault_20260729_externalwebenable";
+    const runtime = { adapter: "pige_readonly_https_v1" as const, origin: "https://api.example.com" as const };
+    const external = {
+      id: "supported-external", name: "Supported external", version: "1.0.0",
+      description: "Reads one reviewed HTTPS origin.", scope: "machine_local" as const,
+      kind: "external_web" as const, enabled: false, trust: "user_confirmed" as const,
+      capabilities: ["read_current_source", "external_network"] as const,
+      dataBoundaries: ["local", "network"] as const, canEnable: true,
+      canUninstall: false, canExport: false, canUpdate: false, source: "https" as const,
+      sourceUrl: "https://example.com/supported/SKILL.md" as const, runtime,
+      manifestSha256: `sha256:${"a".repeat(64)}` as const,
+      bundleSha256: `sha256:${"b".repeat(64)}` as const,
+      files: [{ relativePath: "SKILL.md" as const, utf8ByteSize: 1024, sha256: `sha256:${"a".repeat(64)}` as const }],
+      warnings: ["untrusted_remote_source" as const]
+    };
+    const unsupported = { ...external, id: "unsupported-external", name: "Unsupported external",
+      runtime: undefined, canEnable: false };
+    const initial = skillRegistry(14, false, 0, [external, unsupported]);
+    const committed = skillRegistry(15, false, 0, [{ ...external, enabled: true, canEnable: false }, unsupported]);
+    const enable = vi.fn(async (request: SkillEnableRequest): Promise<SkillLifecycleMutationResult> => ({
+      apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId,
+      skillId: request.skillId, status: "committed", registry: committed
+    }));
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: {
+      skills: {
+        summary: async () => ({ status: "ready" as const, registry: initial }),
+        enable, disable: vi.fn(), onChanged: () => () => undefined
+      },
+      vault: { current: async () => ({ vaultId }) }
+    } });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => { root.render(createElement(SkillsSettingsPanel, { t })); await settle(dom); });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-skills"));
+    const supportedRow = requireElement(page.querySelector<HTMLElement>('[data-skill-id="supported-external"]'));
+    const unsupportedRow = requireElement(page.querySelector<HTMLElement>('[data-skill-id="unsupported-external"]'));
+    expect(buttonNamed(supportedRow, "Enable: Supported external").disabled).toBe(false);
+    expect(unsupportedRow.querySelector('[aria-label="Enable: Unsupported external"]')).toBeNull();
+    await act(async () => { buttonNamed(supportedRow, "Enable: Supported external").click(); await settle(dom); await settle(dom); });
+    expect(enable).toHaveBeenCalledWith({
+      apiVersion: 1, requestId: expect.stringMatching(/^skill_lifecycle_request_[a-z0-9]{16,64}$/u),
+      activeVaultId: vaultId, skillId: external.id, expectedRegistryRevision: 14
+    });
+    expect(supportedRow.textContent).toContain("Enabled");
+    expect(unsupportedRow.textContent).toContain("Disabled");
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("does not replace or refocus a locally staged Skill when the chat query settles later", async () => {
     const dom = createDom();
     const vaultId = "vault_20260729_skillchatfence";

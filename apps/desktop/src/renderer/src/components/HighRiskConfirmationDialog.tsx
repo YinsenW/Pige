@@ -45,6 +45,7 @@ export function HighRiskConfirmationDialog(props: {
     ? `${subject.count} ${props.t(subject.count === 1 ? "confirmation.item" : "confirmation.items")}`
     : subject.value;
   const reviewedPlan = subject.kind === "reviewed_execution_plan" ? subject.plan : null;
+  const externalWebSkill = subject.kind === "external_web_skill" ? subject : null;
 
   return (
     <div className="confirmation-backdrop">
@@ -94,8 +95,13 @@ export function HighRiskConfirmationDialog(props: {
           </div>
           <div>
             <dt>{props.t("confirmation.subject")}</dt>
-            <dd>{subjectText}</dd>
+            <dd>{externalWebSkill ? `${externalWebSkill.value} · v${externalWebSkill.version}` : subjectText}</dd>
           </div>
+          {externalWebSkill ? <>
+            <div><dt>{props.t("confirmation.origin")}</dt><dd>{externalWebSkill.origin}</dd></div>
+            <div><dt>{props.t("confirmation.capability")}</dt><dd>{props.t(`confirmation.capability.${externalWebSkill.capability}`)}</dd></div>
+            <div><dt>{props.t("confirmation.dataBoundary")}</dt><dd>{props.t(`skills.boundary.${externalWebSkill.dataBoundary}`)}</dd></div>
+          </> : null}
         </dl>}
         {props.error ? (
           <p className="confirmation-error" role="alert">{props.t("confirmation.failed")}</p>

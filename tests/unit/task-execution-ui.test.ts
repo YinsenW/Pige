@@ -67,6 +67,45 @@ describe("reviewed task execution UI", () => {
     await unmount(dom, mounted.root);
   });
 
+  it("shows only the reviewed External/Web Skill identity and exact HTTPS origin", async () => {
+    const dom = installDom();
+    const onResolve = vi.fn();
+    const mounted = await mount(dom, createElement(HighRiskConfirmationDialog, {
+      confirmation: {
+        apiVersion: 1,
+        confirmationId: "confirm_20260729_aaaaaaaaaaaaaaaa",
+        effect: "external_web_skill_https_read",
+        presentation: {
+          action: "read_external_web",
+          target: "reviewed_https_origin",
+          subject: {
+            kind: "external_web_skill",
+            value: "External Research",
+            version: "1.2.0",
+            origin: "https://api.example.com",
+            capability: "external_network",
+            dataBoundary: "network"
+          }
+        },
+        owner: { kind: "agent_turn", clientTurnId: "turn_20260729_externalweb01" }
+      },
+      resolving: false,
+      error: false,
+      onResolve,
+      t
+    }));
+    for (const value of ["Read from an external website", "Reviewed HTTPS origin",
+      "External Research · v1.2.0", "https://api.example.com", "External network", "Network"]) {
+      expect(mounted.container.textContent).toContain(value);
+    }
+    expect(mounted.container.textContent).not.toContain("/research");
+    expect(mounted.container.textContent).not.toContain("token=");
+    expect(mounted.container.textContent).not.toContain("pige_readonly_https_v1");
+    await act(async () => buttonNamed(mounted.container, "Allow this effect")?.click());
+    expect(onResolve).toHaveBeenCalledWith("allow");
+    await unmount(dom, mounted.root);
+  });
+
   it("opens only the exact typed browser interaction and clears the Home status after Main accepts it", async () => {
     const dom = installDom();
     const requests: TaskInteractionOpenRequest[] = [];
