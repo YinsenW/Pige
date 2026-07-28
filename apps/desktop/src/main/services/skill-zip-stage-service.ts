@@ -113,12 +113,14 @@ async function readArchiveSnapshot(snapshotPath: string): Promise<SkillZipBundle
   try {
     if (archive.entryCount < 1 || archive.entryCount > SKILL_ZIP_STAGE_MAX_FILES * 2) throw zipError("archive_too_large");
     const entries: { readonly name: string; readonly entry: Entry }[] = [];
+    const archiveNames: string[] = [];
     const archivePaths = new Set<string>();
     for await (const entry of archive.eachEntry()) {
       const name = validateEntry(entry);
       const canonicalPath = name.normalize("NFC").toLocaleLowerCase("en-US");
       if (archivePaths.has(canonicalPath)) throw zipError("archive_unsafe");
       archivePaths.add(canonicalPath);
+      archiveNames.push(name);
       if (!name.endsWith("/")) entries.push({ name, entry });
     }
     if (entries.length < 1 || entries.length > SKILL_ZIP_STAGE_MAX_FILES) throw zipError("archive_too_large");
@@ -126,6 +128,9 @@ async function readArchiveSnapshot(snapshotPath: string): Promise<SkillZipBundle
     if (manifestEntries.length !== 1) throw zipError("skill_root_invalid");
     const root = path.posix.dirname(manifestEntries[0]!.name);
     const rootPrefix = root === "." ? "" : `${root}/`;
+    if (rootPrefix && archiveNames.some((name) => name !== rootPrefix && !name.startsWith(rootPrefix))) {
+      throw zipError("skill_root_invalid");
+    }
     const files: SkillBundleFile[] = [];
     let expandedBytes = 0;
     for (const { name, entry } of entries) {
@@ -193,13 +198,18 @@ function snapshotSelectedArchive(sourcePath: string, destinationPath: string): v
   if (!path.isAbsolute(sourcePath) || path.extname(sourcePath).toLocaleLowerCase("en-US") !== ".zip") {
     throw zipError("archive_unsafe");
   }
+  const resolvedSource = path.resolve(sourcePath);
+  const parent = path.dirname(resolvedSource);
+  const parentStats = fs.lstatSync(parent);
+  if (!parentStats.isDirectory() || parentStats.isSymbolicLink() || fs.realpathSync.native(parent) !== parent ||
+    fs.realpathSync.native(resolvedSource) !== resolvedSource) throw zipError("archive_unsafe");
   let sourceDescriptor: number | undefined;
   let destinationDescriptor: number | undefined;
   try {
     sourceDescriptor = fs.openSync(sourcePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
     const before = fs.fstatSync(sourceDescriptor);
-    if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1 || before.size < 1 ||
-      before.size > SKILL_ZIP_STAGE_MAX_ARCHIVE_BYTES) throw zipError("archive_too_large");
+    if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1) throw zipError("archive_unsafe");
+    if (before.size < 1 || before.size > SKILL_ZIP_STAGE_MAX_ARCHIVE_BYTES) throw zipError("archive_too_large");
     const bytes = fs.readFileSync(sourceDescriptor);
     const after = fs.fstatSync(sourceDescriptor);
     if (!sameIdentity(before, after) || bytes.length !== before.size) throw zipError("archive_unsafe");

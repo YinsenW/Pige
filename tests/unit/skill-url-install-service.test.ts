@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ZipFile } from "yazl";
 import { SkillRegistryService } from "../../apps/desktop/src/main/services/skill-registry-service";
 import {
   SkillUrlInstallService
@@ -15,6 +16,38 @@ afterEach(() => {
 });
 
 describe("SkillUrlInstallService", () => {
+  it("stages and installs one complete reviewed ZIP bundle atomically", async () => {
+    const root = createRoot();
+    const selectedPath = path.join(root, "local-skill.zip");
+    fs.writeFileSync(selectedPath, await createZip([
+      ["bundle/SKILL.md", skillMarkdown({ id: "zip-review" })],
+      ["bundle/references/guide.md", "# Guide\nUse local evidence.\n"],
+      ["bundle/references/config.json", "{\"safe\":true}\n"]
+    ]), { mode: 0o600 });
+    const registry = new SkillRegistryService(root);
+    const service = new SkillUrlInstallService({ appDataRoot: root, registry });
+    const request = { apiVersion: 1 as const, requestId: "skillreq_zip0123456789abcd", activeVaultId: "vault_20260728_zipskill" };
+    const staged = await service.stageFromZip(request, selectedPath);
+    expect(staged).toMatchObject({ ...request, status: "ready", staged: {
+      id: "zip-review",
+      files: [{ relativePath: "references/config.json" }, { relativePath: "references/guide.md" }, { relativePath: "SKILL.md" }]
+    } });
+    if (staged.status !== "ready") throw new Error("Expected ZIP stage.");
+    expect(JSON.stringify(staged)).not.toContain(selectedPath);
+    expect(service.installStaged({
+      apiVersion: 1,
+      requestId: request.requestId,
+      stagingId: staged.staged.stagingId,
+      manifestSha256: staged.staged.manifestSha256,
+      bundleSha256: staged.staged.bundleSha256,
+      expectedRegistryRevision: staged.staged.registryRevision,
+      enabled: true
+    })).toMatchObject({ status: "committed", registry: { skills: [{ id: "zip-review" }] } });
+    expect(fs.readFileSync(path.join(root, "skills", "installed", "zip-review", "references", "guide.md"), "utf8"))
+      .toBe("# Guide\nUse local evidence.\n");
+    expect(fs.existsSync(path.join(root, "skills", "staging", staged.staged.stagingId))).toBe(false);
+  });
+
   it("stages one exact local Markdown file without projecting its path or remote update authority", async () => {
     const root = createRoot();
     const selectedPath = path.join(root, "local-skill.md");
@@ -33,7 +66,8 @@ describe("SkillUrlInstallService", () => {
     if (staged.status !== "ready") throw new Error("Expected local Markdown stage.");
     expect(service.installStaged({
       apiVersion: 1, requestId: request.requestId, stagingId: staged.staged.stagingId,
-      manifestSha256: staged.staged.manifestSha256, expectedRegistryRevision: staged.staged.registryRevision, enabled: true
+      manifestSha256: staged.staged.manifestSha256, bundleSha256: staged.staged.bundleSha256,
+      expectedRegistryRevision: staged.staged.registryRevision, enabled: true
     })).toMatchObject({ status: "committed", registry: { skills: [{ id: "paper-reading", canUpdate: false }] } });
 
     const linkedPath = path.join(root, "linked.md");
@@ -75,6 +109,7 @@ describe("SkillUrlInstallService", () => {
       requestId,
       stagingId: staged.staged.stagingId,
       manifestSha256: staged.staged.manifestSha256,
+      bundleSha256: staged.staged.bundleSha256,
       expectedRegistryRevision: staged.staged.registryRevision,
       enabled: true
     };
@@ -113,6 +148,7 @@ describe("SkillUrlInstallService", () => {
       requestId,
       stagingId: initialStage.staged.stagingId,
       manifestSha256: initialStage.staged.manifestSha256,
+      bundleSha256: initialStage.staged.bundleSha256,
       expectedRegistryRevision: initialStage.staged.registryRevision,
       enabled: true
     })).toMatchObject({ status: "committed" });
@@ -132,6 +168,7 @@ describe("SkillUrlInstallService", () => {
       requestId: "skillreq_update0123456789",
       stagingId: staged.staged.stagingId,
       manifestSha256: staged.staged.manifestSha256,
+      bundleSha256: staged.staged.bundleSha256,
       expectedRegistryRevision: staged.staged.registryRevision,
       enabled: true
     });
@@ -158,7 +195,8 @@ describe("SkillUrlInstallService", () => {
     if (first.status !== "ready") throw new Error("Expected initial stage.");
     service.installStaged({
       apiVersion: 1, requestId, stagingId: first.staged.stagingId,
-      manifestSha256: first.staged.manifestSha256, expectedRegistryRevision: 0, enabled: true
+      manifestSha256: first.staged.manifestSha256, bundleSha256: first.staged.bundleSha256,
+      expectedRegistryRevision: 0, enabled: true
     });
     const update = await service.stageUpdate({
       apiVersion: 1,
@@ -174,6 +212,7 @@ describe("SkillUrlInstallService", () => {
       requestId: "skillreq_updatedrift012345",
       stagingId: update.staged.stagingId,
       manifestSha256: update.staged.manifestSha256,
+      bundleSha256: update.staged.bundleSha256,
       expectedRegistryRevision: update.staged.registryRevision,
       enabled: true
     })).toMatchObject({ status: "stale" });
@@ -190,7 +229,8 @@ describe("SkillUrlInstallService", () => {
     if (first.status !== "ready") throw new Error("Expected initial stage.");
     service.installStaged({
       apiVersion: 1, requestId, stagingId: first.staged.stagingId,
-      manifestSha256: first.staged.manifestSha256, expectedRegistryRevision: 0, enabled: true
+      manifestSha256: first.staged.manifestSha256, bundleSha256: first.staged.bundleSha256,
+      expectedRegistryRevision: 0, enabled: true
     });
     fetchSnapshot.mockImplementationOnce(async () => {
       expect(registry.disable({ apiVersion: 1, skillId: "paper-reading", expectedRevision: 1 }))
@@ -237,7 +277,7 @@ describe("SkillUrlInstallService", () => {
 });
 
 function createRoot(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-skill-url-install-"));
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-skill-url-install-")));
   roots.push(root);
   return root;
 }
@@ -277,4 +317,17 @@ function snapshot(rawContent: string, contentType = "text/markdown") {
     extractedText: rawContent,
     warnings: []
   };
+}
+
+async function createZip(entries: readonly (readonly [string, string])[]): Promise<Buffer> {
+  const archive = new ZipFile();
+  const chunks: Buffer[] = [];
+  archive.outputStream.on("data", (chunk: Buffer) => chunks.push(chunk));
+  const completed = new Promise<Buffer>((resolve, reject) => {
+    archive.outputStream.once("error", reject);
+    archive.outputStream.once("end", () => resolve(Buffer.concat(chunks)));
+  });
+  for (const [name, content] of entries) archive.addBuffer(Buffer.from(content, "utf8"), name);
+  archive.end();
+  return completed;
 }

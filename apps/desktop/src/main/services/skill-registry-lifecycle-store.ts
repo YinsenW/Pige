@@ -121,6 +121,7 @@ export class SkillRegistryLifecycleStore {
   publishInstalled(skillIdInput: string, files: readonly SkillBundleFile[], receipt: SkillInstallReceipt): void {
     this.prepare();
     const skillId = SkillIdSchema.parse(skillIdInput);
+    if (skillBundleSha256(files) !== receipt.bundleSha256) throw lifecycleError("skill.install_payload_changed");
     const destination = path.join(this.#installedRoot, skillId);
     if (fs.existsSync(destination)) {
       const existing = this.readInstallReceipt(skillId);
@@ -424,6 +425,72 @@ function readManifestDirectory(parentRoot: string, directory: string): Installed
   const manifest = files.find((file) => file.relativePath === "SKILL.md");
   if (!manifest) throw lifecycleError("skill.manifest_invalid");
   return { bytes: manifest.bytes, sha256: manifest.sha256, bundleSha256: skillBundleSha256(files), files };
+}
+
+function writeBundleFiles(root: string, files: readonly SkillBundleFile[]): void {
+  for (const file of normalizeBundleFiles(files)) {
+    const destination = path.join(root, ...file.relativePath.split("/"));
+    if (!destination.startsWith(`${root}${path.sep}`)) throw lifecycleError("skill.registry_path_escape");
+    const parent = path.dirname(destination);
+    fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
+    let cursor = parent;
+    while (cursor !== root) {
+      assertOwnedDirectory(cursor);
+      cursor = path.dirname(cursor);
+    }
+    writePrivateFile(destination, file.bytes);
+  }
+}
+
+function readBundleTree(root: string): readonly SkillBundleFile[] {
+  const files: SkillBundleFile[] = [];
+  const visit = (directory: string, prefix: string): void => {
+    assertOwnedDirectory(directory);
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (prefix === "" && [INSTALL_RECEIPT_NAME, UNINSTALL_RECEIPT_NAME, UPDATE_RECEIPT_NAME].includes(entry.name)) continue;
+      const absolute = path.join(directory, entry.name);
+      const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const stats = fs.lstatSync(absolute);
+      if (entry.isSymbolicLink() || stats.isSymbolicLink()) throw lifecycleError("skill.bundle_invalid");
+      if (entry.isDirectory() && stats.isDirectory()) {
+        const beforeCount = files.length;
+        visit(absolute, relativePath);
+        if (files.length === beforeCount) throw lifecycleError("skill.bundle_invalid");
+        continue;
+      }
+      if (!entry.isFile() || !stats.isFile() || stats.nlink !== 1 || stats.size <= 0 || stats.size > MAX_MANIFEST_BYTES) {
+        throw lifecycleError("skill.bundle_invalid");
+      }
+      const descriptor = fs.openSync(absolute, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+      try {
+        const before = fs.fstatSync(descriptor);
+        const bytes = fs.readFileSync(descriptor);
+        const after = fs.fstatSync(descriptor);
+        if (!sameFileIdentity(before, after) || bytes.length !== before.size) throw lifecycleError("skill.bundle_changed");
+        new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        files.push({ relativePath, bytes, sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}` });
+      } catch (caught) {
+        if (caught instanceof TypeError) throw lifecycleError("skill.bundle_invalid");
+        throw caught;
+      } finally {
+        fs.closeSync(descriptor);
+      }
+    }
+  };
+  visit(root, "");
+  try { return normalizeBundleFiles(files); } catch { throw lifecycleError("skill.bundle_invalid"); }
+}
+
+function fsyncTree(root: string): void {
+  const directories: string[] = [];
+  const visit = (directory: string): void => {
+    directories.push(directory);
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isDirectory() && !entry.isSymbolicLink()) visit(path.join(directory, entry.name));
+    }
+  };
+  visit(root);
+  for (const directory of directories.reverse()) fsyncDirectory(directory);
 }
 
 function parseInstallReceipt(source: string): SkillInstallReceipt {

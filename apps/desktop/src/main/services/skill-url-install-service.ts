@@ -17,6 +17,7 @@ import {
   SkillStageFromUrlResultSchema,
   SkillStageUpdateRequestSchema,
   SkillStageUpdateResultSchema,
+  SkillStagedFileSummarySchema,
   SkillStagingIdSchema,
   type SkillDiscardStagedRequest,
   type SkillDiscardStagedResult,
@@ -59,7 +60,7 @@ import {
 
 const STAGE_SCHEMA_VERSION = 1;
 const STAGE_TTL_MS = 24 * 60 * 60 * 1000;
-const MAX_STAGE_RECORD_BYTES = 32 * 1024;
+const MAX_STAGE_RECORD_BYTES = 64 * 1024;
 const MAX_STAGED_DIRECTORIES = 32;
 const STAGE_RECORD_NAME = ".pige-stage.json";
 const STAGED_MANIFEST_NAME = "SKILL.md";
@@ -431,7 +432,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       dataBoundaries: ["local"],
       ...(manifest.author ? { author: manifest.author } : {}),
       ...(manifest.license ? { license: manifest.license } : {}),
-      files: candidate.record.files,
+      files: [...candidate.record.files],
       warnings
     };
   }
@@ -566,7 +567,9 @@ function parseStageRecord(bytes: Buffer): SkillStageRecord {
     typeof record.createdAt !== "string" || !Number.isFinite(Date.parse(record.createdAt)) ||
     typeof record.expiresAt !== "string" || !Number.isFinite(Date.parse(record.expiresAt))
   ) throw stageInvalid();
-  return record as unknown as SkillStageRecord;
+  let files;
+  try { files = record.files.map((file) => SkillStagedFileSummarySchema.parse(file)); } catch { throw stageInvalid(); }
+  return { ...record, files } as unknown as SkillStageRecord;
 }
 
 function isLocalMarkdownRecord(record: SkillStageRecord): record is SkillLocalMarkdownStageRecord {
