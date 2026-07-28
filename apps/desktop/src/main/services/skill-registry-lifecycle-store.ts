@@ -10,6 +10,11 @@ import {
   VaultIdSchema,
   type SkillRegistryRecord
 } from "@pige/schemas";
+import {
+  normalizeBundleFiles,
+  skillBundleSha256,
+  type SkillBundleFile
+} from "./skill-zip-stage-service";
 
 const MAX_MANIFEST_BYTES = 256 * 1024;
 const MAX_INSTALL_RECEIPT_BYTES = 4 * 1024;
@@ -25,12 +30,15 @@ export interface SkillInstallReceipt {
   readonly requestId: string;
   readonly stagingId: string;
   readonly manifestSha256: string;
+  readonly bundleSha256: string;
   readonly enabled: boolean;
 }
 
 export interface InstalledSkillSnapshot {
   readonly bytes: Buffer;
   readonly sha256: string;
+  readonly bundleSha256: string;
+  readonly files: readonly SkillBundleFile[];
 }
 
 export interface SkillUninstallReceipt {
@@ -110,14 +118,15 @@ export class SkillRegistryLifecycleStore {
     return readManifestDirectory(this.#installedRoot, path.join(this.#installedRoot, skillId));
   }
 
-  publishInstalled(skillIdInput: string, bytes: Buffer, receipt: SkillInstallReceipt): void {
+  publishInstalled(skillIdInput: string, files: readonly SkillBundleFile[], receipt: SkillInstallReceipt): void {
     this.prepare();
     const skillId = SkillIdSchema.parse(skillIdInput);
     const destination = path.join(this.#installedRoot, skillId);
     if (fs.existsSync(destination)) {
       const existing = this.readInstallReceipt(skillId);
       const snapshot = this.readInstalled(skillId);
-      if (!existing || stableJson(existing) !== stableJson(receipt) || snapshot.sha256 !== receipt.manifestSha256) {
+      if (!existing || stableJson(existing) !== stableJson(receipt) || snapshot.sha256 !== receipt.manifestSha256 ||
+        snapshot.bundleSha256 !== receipt.bundleSha256) {
         throw lifecycleError("skill.install_collision");
       }
       return;
@@ -126,9 +135,9 @@ export class SkillRegistryLifecycleStore {
     let renamed = false;
     try {
       fs.mkdirSync(temporaryPath, { mode: 0o700 });
-      writePrivateFile(path.join(temporaryPath, "SKILL.md"), bytes);
+      writeBundleFiles(temporaryPath, files);
       writePrivateFile(path.join(temporaryPath, INSTALL_RECEIPT_NAME), Buffer.from(`${JSON.stringify(receipt)}\n`, "utf8"));
-      fsyncDirectory(temporaryPath);
+      fsyncTree(temporaryPath);
       fs.renameSync(temporaryPath, destination);
       renamed = true;
       fsyncDirectory(this.#installedRoot);
@@ -380,6 +389,7 @@ export class SkillRegistryLifecycleStore {
         requestId: receipt.requestId,
         stagingId: receipt.stagingId,
         manifestSha256: receipt.newManifestSha256,
+        bundleSha256: receipt.newManifestSha256,
         enabled: receipt.enabled
       };
       writePrivateFile(path.join(replacementPath, INSTALL_RECEIPT_NAME), Buffer.from(`${JSON.stringify(installReceipt)}\n`, "utf8"));
@@ -410,29 +420,24 @@ export class SkillRegistryLifecycleStore {
 
 function readManifestDirectory(parentRoot: string, directory: string): InstalledSkillSnapshot {
   assertChildDirectory(parentRoot, directory);
-  const manifestPath = path.join(directory, "SKILL.md");
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(manifestPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
-    const before = fs.fstatSync(descriptor);
-    if (!before.isFile() || before.size <= 0 || before.size > MAX_MANIFEST_BYTES) throw lifecycleError("skill.manifest_invalid");
-    const bytes = fs.readFileSync(descriptor);
-    const after = fs.fstatSync(descriptor);
-    if (!sameFileIdentity(before, after)) throw lifecycleError("skill.manifest_changed");
-    return { bytes, sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}` };
-  } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
-  }
+  const files = readBundleTree(directory);
+  const manifest = files.find((file) => file.relativePath === "SKILL.md");
+  if (!manifest) throw lifecycleError("skill.manifest_invalid");
+  return { bytes: manifest.bytes, sha256: manifest.sha256, bundleSha256: skillBundleSha256(files), files };
 }
 
 function parseInstallReceipt(source: string): SkillInstallReceipt {
   const record = parseJsonObject(source, "skill.install_receipt_invalid");
-  if (Object.keys(record).sort().join(",") !== "enabled,manifestSha256,requestId,schemaVersion,stagingId" ||
+  const keys = Object.keys(record).sort().join(",");
+  if (!["bundleSha256,enabled,manifestSha256,requestId,schemaVersion,stagingId",
+    "enabled,manifestSha256,requestId,schemaVersion,stagingId"].includes(keys) ||
     record.schemaVersion !== 1 || typeof record.requestId !== "string" || typeof record.stagingId !== "string" ||
     typeof record.manifestSha256 !== "string" || typeof record.enabled !== "boolean") {
     throw lifecycleError("skill.install_receipt_invalid");
   }
-  return record as unknown as SkillInstallReceipt;
+  const bundleSha256 = typeof record.bundleSha256 === "string" ? record.bundleSha256 : record.manifestSha256;
+  if (!/^sha256:[a-f0-9]{64}$/u.test(bundleSha256)) throw lifecycleError("skill.install_receipt_invalid");
+  return { ...(record as unknown as Omit<SkillInstallReceipt, "bundleSha256">), bundleSha256 };
 }
 
 function parseUninstallReceipt(source: string): SkillUninstallReceipt {
