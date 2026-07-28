@@ -78,6 +78,8 @@ import {
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
   PiPackageRegistryQueryResultSchema,
+  PiPackageUninstallRequestSchema,
+  PiPackageUninstallResultSchema,
   RequirementIdSchema,
   RetrievalSearchResultSchema,
   SetThemeRequestSchema,
@@ -1214,6 +1216,45 @@ describe("schemas", () => {
       })).toThrow();
     }
     expect(() => PiPackageInstallRequestSchema.parse({ ...request, version: "latest" })).toThrow();
+  });
+
+  it("keeps Pi package uninstall identity exact and failed results registry-free", () => {
+    const registry = {
+      apiVersion: 1,
+      revision: 5,
+      packages: []
+    } as const;
+    const request = {
+      apiVersion: 1,
+      requestId: "pi_package_uninstall_request_abcdefghijklmnop",
+      expectedRegistryRevision: 4,
+      packageId: "pkg_0123456789abcdef01234567"
+    } as const;
+    expect(PiPackageUninstallRequestSchema.parse(request)).toEqual(request);
+    for (const status of ["removed", "stale", "not_found", "denied"] as const) {
+      expect(PiPackageUninstallResultSchema.parse({
+        apiVersion: 1,
+        requestId: request.requestId,
+        packageId: request.packageId,
+        status,
+        registry
+      })).toMatchObject({ status, registry });
+    }
+    const failed = {
+      apiVersion: 1,
+      requestId: request.requestId,
+      packageId: request.packageId,
+      status: "failed"
+    } as const;
+    expect(PiPackageUninstallResultSchema.parse(failed)).toEqual(failed);
+    expect(() => PiPackageUninstallResultSchema.parse({ ...failed, registry })).toThrow();
+    expect(() => PiPackageUninstallResultSchema.parse({ ...failed, path: "/private/package" })).toThrow();
+    expect(() => PiPackageUninstallResultSchema.parse({ ...failed, packageId: "pkg_wrong" })).toThrow();
+    expect(() => PiPackageUninstallResultSchema.parse({ ...failed, status: "removed" })).toThrow();
+    expect(() => PiPackageUninstallRequestSchema.parse({
+      ...request,
+      requestId: "pi_package_request_abcdefghijklmnop"
+    })).toThrow();
   });
 
   it("keeps reviewed task plans private and browser interactions renderer-safe", () => {

@@ -117,6 +117,8 @@ import type {
   PiPackageInstallRequest,
   PiPackageInstallResult,
   PiPackageRegistryQueryResult,
+  PiPackageUninstallRequest,
+  PiPackageUninstallResult,
   PigeErrorSummary,
   ProposalState,
   ProposalTrustLevel,
@@ -249,6 +251,9 @@ export type {
   PiPackageRegistrySummary,
   PiPackageType,
   PiPackageVersion,
+  PiPackageUninstallRequest,
+  PiPackageUninstallRequestId,
+  PiPackageUninstallResult,
   KnowledgeHealthCounts,
   KnowledgeHealthIndexGeneration,
   KnowledgeHealthIssueKind,
@@ -1565,6 +1570,9 @@ export interface PigeDesktopApi {
     readonly install: (
       request: PiPackageInstallRequest
     ) => Promise<PiPackageInstallResult>;
+    readonly uninstall: (
+      request: PiPackageUninstallRequest
+    ) => Promise<PiPackageUninstallResult>;
   };
   readonly taskExecution: {
     readonly interaction: () => Promise<TaskInteractionPendingResult>;
