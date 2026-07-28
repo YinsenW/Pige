@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConversationEventSchema } from "@pige/schemas";
 
@@ -138,6 +139,12 @@ describe("ManagedCollectionCitationService", () => {
     expect(unknown).toMatchObject({ status: "not_found" });
     expect(storage.readBundle).not.toHaveBeenCalled();
 
+    const unbound = new ManagedCollectionCitationService(vaultPort(), {
+      readAssistantEvent: () => ({ ...makeEvent(), contentHash: undefined })
+    }).open(request);
+    expect(unbound).toMatchObject({ status: "stale" });
+    expect(storage.readBundle).not.toHaveBeenCalled();
+
     storage.readBundle.mockImplementation(() => {
       throw new Error("historical revision changed");
     });
@@ -169,7 +176,7 @@ describe("ManagedCollectionCitationService", () => {
 });
 
 function makeEvent() {
-  return ConversationEventSchema.parse({
+  const event = {
     schemaVersion: 1,
     id: request.assistantEventId,
     conversationId: request.conversationId,
@@ -181,6 +188,18 @@ function makeEvent() {
     answerGrounding: "source",
     answerCitations: [citation],
     answerDatasetResult: preview
+  } as const;
+  return ConversationEventSchema.parse({
+    ...event,
+    contentHash: `sha256:${createHash("sha256").update(
+      `pige.agent_assistant.v2\0${event.jobId}\0${event.parentEventId}\0${JSON.stringify({
+        text: event.text,
+        grounding: event.answerGrounding,
+        citations: event.answerCitations,
+        datasetResult: event.answerDatasetResult
+      })}`,
+      "utf8"
+    ).digest("hex")}`
   });
 }
 

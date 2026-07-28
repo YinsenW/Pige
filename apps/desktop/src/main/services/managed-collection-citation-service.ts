@@ -52,6 +52,9 @@ export class ManagedCollectionCitationService {
         assistantEventId: parsed.assistantEventId
       });
       if (!event) return CollectionOpenCitationResultSchema.parse({ ...identity, status: "not_found" });
+      if (!event.contentHash || !event.jobId || !event.parentEventId) {
+        return CollectionOpenCitationResultSchema.parse({ ...identity, status: "stale" });
+      }
       const answer = readDurableAgentTurnAnswer(event);
       const preview = answer.datasetResult;
       const citations = answer.citations.filter(isDatasetCitation);
