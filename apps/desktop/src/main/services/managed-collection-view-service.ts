@@ -163,7 +163,10 @@ export class ManagedCollectionViewService {
         ...(page.nextRowCursor ? { nextRowCursor: page.nextRowCursor } : {})
       });
     } catch {
-      return CollectionOpenResultSchema.parse({ ...identity, status: "failed" });
+      return CollectionOpenResultSchema.parse({
+        ...identity,
+        status: parsed.rowCursor ? "stale" : "failed"
+      });
     }
   }
 

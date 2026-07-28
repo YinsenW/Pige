@@ -102,6 +102,13 @@ describe("ManagedCollectionViewService", () => {
     const rowIds = [...first.snapshot.rows, ...second.snapshot.rows, ...last.snapshot.rows].map(({ rowId }) => rowId);
     expect(rowIds).toHaveLength(60);
     expect(new Set(rowIds).size).toBe(60);
+    const payloadPath = path.join(fixture.bundlePath, manifest.payload.path);
+    fs.appendFileSync(payloadPath, "drift");
+    await expect(service.open({
+      ...request,
+      requestId: "collection_request_pagedrift00000005",
+      rowCursor: first.nextRowCursor
+    })).resolves.toMatchObject({ status: "stale" });
     await expect(service.open({
       ...request,
       requestId: "collection_request_pagetamper0000004",
