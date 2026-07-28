@@ -188,7 +188,6 @@ export class PiPackageInstallTaskService {
       return this.#result(request.requestId, taskId, status);
     }
   }
-
   async #withdrawPending(taskId: string): Promise<void> {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const pending = this.#confirmations.pending();
@@ -206,7 +205,6 @@ export class PiPackageInstallTaskService {
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
   }
-
   #settle(record: PiPackageInstallTaskRecord, state: InstallStatus): void {
     const current = this.#readTask(record.taskId);
     if (!current || !sameRequest(current.request, record.request) || !sameBinding(current.binding, record.binding)) {
