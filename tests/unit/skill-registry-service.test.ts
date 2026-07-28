@@ -87,7 +87,7 @@ describe("SkillRegistryService", () => {
       description: "Fetch reviewed web sources.",
       kind: "external_web",
       capabilities: ["external_network", "external_filesystem", "use_brokered_credential"],
-      extra: ["dataBoundary: [local]"],
+      extra: ["dataBoundary: [filesystem, network, brokered_credential]"],
       body: "## Procedure\n\nRequest capabilities through Pige services."
     });
     seedInstalledSkill(root, source, false);
@@ -96,7 +96,14 @@ describe("SkillRegistryService", () => {
       id: "web-research",
       enabled: false,
       capabilities: ["external_network", "external_filesystem", "use_brokered_credential"],
-      dataBoundaries: ["filesystem", "network", "brokered_credential"]
+      dataBoundaries: ["filesystem", "network", "brokered_credential"],
+      source: "local_markdown",
+      manifestSha256: digest(source),
+      bundleSha256: digest(source),
+      files: [{ relativePath: "SKILL.md", utf8ByteSize: Buffer.byteLength(source), sha256: digest(source) }],
+      warnings: [],
+      canEnable: false,
+      canUpdate: false
     });
   });
 
@@ -745,6 +752,18 @@ function seedInstalledSkill(
   const directory = path.join(root, "skills", "installed", parsed.id);
   fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(path.join(directory, "SKILL.md"), source);
+  if (parsed.kind === "external_web") {
+    fs.writeFileSync(path.join(directory, ".pige-install.json"), `${JSON.stringify({
+      schemaVersion: 1,
+      requestId: "skillreq_seed0123456789abc",
+      stagingId: "skillstage_0123456789abcdef0123456789abcdef",
+      manifestSha256: digest(source),
+      bundleSha256: digest(source),
+      enabled: false,
+      source: "local_markdown",
+      warnings: []
+    })}\n`, "utf8");
+  }
   const registryPath = path.join(root, "skills", "registry.json");
   const existing = fs.existsSync(registryPath)
     ? SkillRegistryFileSchema.parse(JSON.parse(fs.readFileSync(registryPath, "utf8")))

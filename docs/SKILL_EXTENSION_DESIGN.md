@@ -10,38 +10,22 @@ Pige should support installable Skills, but Skills must stay within Pige's perso
 Recommended v0.1 stance:
 
 - Add a Skill Manager in Settings.
-- Let explicit authored chat text stage one HTTPS Skill for Settings review.
-- Stage before enabling; installation stays explicit, reversible, scoped and non-executing.
-- Pure Skills are Markdown, not plugins. External/Web effects declare capabilities and use
-  Permission Broker; raw credentials are never a capability.
+- Let Settings or explicit authored chat stage a bounded Skill for review.
+- Installation is explicit, reversible and non-executing. External/Web Skills install disabled;
+  runtime and enablement require the separate reviewed adapter boundary.
 
 ## 2. What A Skill Is
 
-A Pige Skill is a local, human-readable instruction pack that teaches the Agent a repeatable knowledge-management workflow.
-
-Examples:
-
-- How to process academic papers.
-- How to turn book highlights into evergreen notes.
-- How to write source-backed company research pages.
-- How to clean meeting notes.
-- How to create claims with citations.
-- How to review stale pages.
-- How to format a user's preferred article summary.
-
-A Skill is not:
-
-- A general plugin marketplace item.
-- A background service.
-- A way to bypass Pige permissions.
-- A hidden package installer.
-- A hidden bridge to shell, network, secrets, model providers, or arbitrary filesystem access.
+A Pige Skill is a local, human-readable instruction pack for repeatable knowledge work such as
+source-backed research, note cleanup, cited claims or preferred summaries. It is not a marketplace
+plugin, background service, permission bypass, hidden installer, or hidden bridge to privileged
+resources.
 
 Skill classes:
 
-- Pure Skill: Markdown instructions plus metadata and small supporting files. It can guide Agent reasoning and create proposals through Pige services.
-- External/Web Skill: a Skill that can request runtime capabilities such as web fetch, package-backed tools, shell commands, or network access. It is installable in v0.1 only when those capabilities are declared, displayed, and mediated by the Permission Broker.
-- Package-provided Skill: a Skill exposed by a reviewed Pi package. Its package install and runtime capabilities remain governed by the Package Manager and Permission Broker.
+- Pure: Markdown, metadata and small files that guide reasoning through Pige services.
+- External/Web: declarative content requesting displayed capabilities; installation grants none.
+- Package-provided: exposed by a reviewed Pi package and governed by Package Manager boundaries.
 
 ## 3. Install Sources
 
@@ -50,10 +34,16 @@ External/Web sources; Git repositories and a signed registry remain later.
 
 ## 4. Install And Installed Lifecycle
 
-Settings reviews one HTTPS or Main-picked `.md`/`.zip` pure Skill. Markdown is 256 KiB; ZIP is
-no-follow/parent-fenced, at most 2 MiB compressed, 4 MiB/64 files and one root `SKILL.md`.
-Links, binaries, hooks, secrets, paths and execution close. Explicit authored chat selects one
-Host HTTPS candidate by index for the same review; neutral/source/model/tool text and drift close.
+Settings reviews one HTTPS or Main-picked `.md`/`.zip` pure or strict `external_web` Skill.
+Markdown is 256 KiB; ZIP is no-follow/parent-fenced, at most 2 MiB compressed, 4 MiB/64 files
+and one root `SKILL.md`. Executables, hooks, packages, raw-secret/unknown capabilities, missing
+or ambiguous boundaries, links, paths, tampering and stale review close before durable effect.
+Explicit authored chat selects one Host HTTPS candidate by index; other content cannot authorize.
+
+External review and installed summaries expose only kind, exact declared capabilities and derived
+boundaries, safe source, checksums, files and warnings. Explicit install persists verified bytes
+disabled with `canEnable=false`; stage/install never runs Skill content. External update, enable and
+runtime remain separate work.
 
 Only verified `user_confirmed` machine-local pure Skills expose lifecycle actions. Enable restores;
 uninstall trashes; export is pathless. HTTPS update binds source/base/revision, preserves state,
@@ -188,10 +178,9 @@ Rules:
 
 ## 7. Safety Rules
 
-Install staging is bounded and non-executing: ZIP traversal/file-count/size and allowed-file
-rules apply; scripts, binaries, packages, hooks, native modules and MCP configs never run.
-Executable/package-backed content routes elsewhere. Remote content stays untrusted until
-exact review; safe source, checksums, files and warnings remain visible.
+Install staging is bounded and non-executing: ZIP traversal/file-count/size and allowed-file rules
+apply; scripts, binaries, packages, hooks, native modules and MCP configs never run. Remote content
+stays untrusted until exact review; safe source, checksums, files and warnings remain visible.
 
 Runtime safety:
 
@@ -212,8 +201,8 @@ Runtime safety:
 
 Settings should include a Skills section.
 
-Required actions are link/file install, staged inspection, enable/disable, uninstall,
-source-aware update, export, safe scope change, and conflict/trigger-overlap visibility.
+Required actions: staged link/file install, inspect, enable/disable, uninstall, update, export,
+safe scope and conflict/trigger visibility.
 
 Skill details should show:
 
@@ -225,8 +214,7 @@ Skill details should show:
 - Author/license when known.
 - Files.
 - Capabilities requested.
-- Data boundary.
-- Declared capabilities and isolation boundary.
+- Declared capabilities and data boundary.
 - Last used.
 - Warnings.
 

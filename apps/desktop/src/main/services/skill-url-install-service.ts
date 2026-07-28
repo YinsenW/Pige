@@ -6,6 +6,7 @@ import {
   SKILL_URL_STAGE_MAX_UTF8_BYTES,
   AgentClientTurnIdSchema,
   ConversationEventIdSchema,
+  deriveSkillDataBoundaries,
   JobIdSchema,
   SkillDiscardStagedRequestSchema,
   SkillDiscardStagedResultSchema,
@@ -29,6 +30,7 @@ import {
   type SkillDiscardStagedResult,
   type SkillInstallStagedRequest,
   type SkillInstallStagedResult,
+  type SkillInstallSourceKind,
   type SkillPendingStagedReviewsRequest,
   type SkillPendingStagedReviewsResult,
   type SkillManifest,
@@ -230,7 +232,10 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
         return invalidStageResult(request.requestId, "manifest_invalid");
       }
       if (manifest.scope !== "machine_local") return invalidStageResult(request.requestId, "unsupported_scope");
-      if (manifest.kind !== "pure") return invalidStageResult(request.requestId, "unsupported_kind");
+      if (!isStagedSkillKind(manifest.kind)) return invalidStageResult(request.requestId, "unsupported_kind");
+      if (manifest.kind === "external_web" && manifest.sourceUrl !== undefined && manifest.sourceUrl !== finalSourceUrl.data) {
+        return invalidStageResult(request.requestId, "manifest_invalid");
+      }
       try {
         assertSkillManifestRendererSafe(manifest);
       } catch {
@@ -289,7 +294,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       const source = decodeUtf8(bytes);
       if (containsRestrictedModelContent(source)) return markdownFailed(identity);
       const manifest = parseSkillManifest(source);
-      if (manifest.scope !== "machine_local" || manifest.kind !== "pure" || manifest.sourceUrl !== undefined) {
+      if (manifest.scope !== "machine_local" || !isStagedSkillKind(manifest.kind) || manifest.sourceUrl !== undefined) {
         return markdownFailed(identity);
       }
       assertSkillManifestRendererSafe(manifest);
@@ -337,7 +342,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       const bundle = await this.#zipStage.readSelectedArchive(sourcePath);
       const source = decodeUtf8(bundle.manifestBytes);
       const manifest = parseSkillManifest(source);
-      if (manifest.scope !== "machine_local" || manifest.kind !== "pure" || manifest.sourceUrl !== undefined) {
+      if (manifest.scope !== "machine_local" || !isStagedSkillKind(manifest.kind) || manifest.sourceUrl !== undefined) {
         return zipInvalid(identity, "manifest_invalid");
       }
       assertSkillManifestRendererSafe(manifest);
@@ -457,6 +462,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
     return {
       stagingId: parsedId,
       requestId: current.record.requestId,
+      source: stageSource(current.record),
       ...(!isLocalMarkdownRecord(current.record) ? { sourceUrl: current.record.finalSourceUrl } : {}),
       manifestSha256: current.record.manifestSha256,
       bundleSha256: current.record.bundleSha256,
@@ -474,6 +480,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
 
   #project(candidate: ReadStageCandidate): SkillStagedSummary {
     const manifest = candidate.manifest;
+    if (!isStagedSkillKind(manifest.kind)) throw stageInvalid();
     const warnings = [
       ...(!isLocalMarkdownRecord(candidate.record) ? ["untrusted_remote_source" as const] : []),
       ...(this.#registry.hasTriggerOverlap(manifest) ? ["trigger_overlap" as const] : [])
@@ -491,9 +498,10 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       version: manifest.version,
       description: manifest.description,
       scope: "machine_local",
-      kind: "pure",
+      kind: manifest.kind,
       capabilities: manifest.capabilities,
-      dataBoundaries: ["local"],
+      dataBoundaries: manifest.kind === "pure" ? ["local"] : [...deriveSkillDataBoundaries(manifest.capabilities)],
+      ...(manifest.kind === "external_web" ? { source: stageSource(candidate.record) } : {}),
       ...(manifest.author ? { author: manifest.author } : {}),
       ...(manifest.license ? { license: manifest.license } : {}),
       files: [...candidate.record.files],
@@ -552,7 +560,11 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
     if (bytes.length === 0 || digest(bytes) !== record.manifestSha256) throw stageInvalid();
     const source = decodeUtf8(bytes);
     const manifest = parseSkillManifest(source);
-    if (manifest.scope !== "machine_local" || manifest.kind !== "pure") throw stageInvalid();
+    if (manifest.scope !== "machine_local" || !isStagedSkillKind(manifest.kind)) throw stageInvalid();
+    const sourceKind = stageSource(record);
+    if (manifest.kind === "external_web" &&
+      ((!isLocalMarkdownRecord(record) && manifest.sourceUrl !== undefined && manifest.sourceUrl !== record.finalSourceUrl) ||
+        (sourceKind !== "https" && manifest.sourceUrl !== undefined))) throw stageInvalid();
     assertSkillManifestRendererSafe(manifest);
     return { record, bytes, files, manifest };
   }
@@ -654,6 +666,14 @@ function parseStageRecord(bytes: Buffer): SkillStageRecord {
 
 function isLocalMarkdownRecord(record: SkillStageRecord): record is SkillLocalMarkdownStageRecord {
   return "sourceKind" in record;
+}
+
+function isStagedSkillKind(kind: SkillManifest["kind"]): kind is "pure" | "external_web" {
+  return kind === "pure" || kind === "external_web";
+}
+
+function stageSource(record: SkillStageRecord): SkillInstallSourceKind {
+  return isLocalMarkdownRecord(record) ? record.sourceKind : "https";
 }
 
 function parseChatBinding(value: unknown): SkillChatStageBinding {

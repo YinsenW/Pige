@@ -18,7 +18,7 @@ afterEach(() => {
 describe("SkillUrlInstallService", () => {
   it("retains exact chat-origin reviews across restart and filters them by active vault", async () => {
     const root = createRoot();
-    const fetchSnapshot = vi.fn(async () => snapshot(skillMarkdown()));
+    const fetchSnapshot = vi.fn(async () => snapshot(externalSkillMarkdown({ sourceUrl: "https://example.com/SKILL.md" })));
     const registry = new SkillRegistryService(root);
     const binding = {
       activeVaultId: "vault_20260729_chatskill",
@@ -34,7 +34,9 @@ describe("SkillUrlInstallService", () => {
     };
     const service = new SkillUrlInstallService({ appDataRoot: root, registry, fetcher: { fetchSnapshot } });
     const staged = await service.stageFromChatUrl(request, binding, new AbortController().signal, () => undefined);
-    expect(staged).toMatchObject({ status: "ready", staged: { sourceUrl: request.sourceUrl } });
+    expect(staged).toMatchObject({ status: "ready", staged: {
+      id: "web-research", kind: "external_web", source: "https", sourceUrl: request.sourceUrl
+    } });
     expect(await service.stageFromChatUrl(request, binding, new AbortController().signal, () => undefined))
       .toMatchObject({ status: "ready", staged: { stagingId: staged.status === "ready" ? staged.staged.stagingId : "" } });
     expect(fetchSnapshot).toHaveBeenCalledTimes(1);
@@ -44,7 +46,7 @@ describe("SkillUrlInstallService", () => {
       apiVersion: 1,
       requestId: "skill_lifecycle_request_pending0123456789",
       activeVaultId: binding.activeVaultId
-    })).toMatchObject({ status: "ready", staged: [{ id: "paper-reading", sourceUrl: request.sourceUrl }] });
+    })).toMatchObject({ status: "ready", staged: [{ id: "web-research", sourceUrl: request.sourceUrl }] });
     expect(restarted.pendingStagedReviews({
       apiVersion: 1,
       requestId: "skill_lifecycle_request_other01234567890",
@@ -196,6 +198,113 @@ describe("SkillUrlInstallService", () => {
     });
     expect(fetchSnapshot).toHaveBeenCalledTimes(1);
     expect(fs.readFileSync(sentinel, "utf8")).toBe("untouched");
+  });
+
+  it("stages strict External/Web manifests from every existing source and installs them disabled without effects", async () => {
+    const root = createRoot();
+    const sentinel = path.join(root, "effect-sentinel.txt");
+    fs.writeFileSync(sentinel, "untouched", "utf8");
+    const remoteSource = externalSkillMarkdown({ sourceUrl: "https://example.com/SKILL.md" });
+    const fetchSnapshot = vi.fn(async () => snapshot(remoteSource));
+    const registry = new SkillRegistryService(root);
+    const service = new SkillUrlInstallService({ appDataRoot: root, registry, fetcher: { fetchSnapshot } });
+    const staged = await service.stageFromUrl({
+      apiVersion: 1,
+      requestId: "skillreq_external0123456789",
+      sourceUrl: "https://example.com/SKILL.md"
+    });
+    expect(staged).toMatchObject({ status: "ready", staged: {
+      id: "web-research",
+      kind: "external_web",
+      source: "https",
+      sourceUrl: "https://example.com/SKILL.md",
+      capabilities: ["external_network", "use_brokered_credential"],
+      dataBoundaries: ["network", "brokered_credential"],
+      files: [{ relativePath: "SKILL.md" }],
+      warnings: ["untrusted_remote_source"]
+    } });
+    if (staged.status !== "ready") throw new Error("Expected External/Web stage.");
+    const install = {
+      apiVersion: 1 as const,
+      requestId: "skillreq_externalinstall0123",
+      stagingId: staged.staged.stagingId,
+      manifestSha256: staged.staged.manifestSha256,
+      bundleSha256: staged.staged.bundleSha256,
+      expectedRegistryRevision: staged.staged.registryRevision
+    };
+    expect(service.installStaged({ ...install, enabled: true })).toMatchObject({ status: "failed" });
+    const committed = service.installStaged({ ...install, enabled: false });
+    expect(committed).toMatchObject({ status: "committed", registry: {
+      skills: [{
+        id: "web-research",
+        kind: "external_web",
+        enabled: false,
+        canEnable: false,
+        source: "https",
+        sourceUrl: "https://example.com/SKILL.md",
+        manifestSha256: staged.staged.manifestSha256,
+        bundleSha256: staged.staged.bundleSha256,
+        files: staged.staged.files,
+        warnings: ["untrusted_remote_source"]
+      }]
+    } });
+    expect(registry.enable({
+      apiVersion: 1,
+      requestId: "skill_lifecycle_request_external0123456789",
+      activeVaultId: "vault_20260729_externalstage",
+      skillId: "web-research",
+      expectedRegistryRevision: 1
+    })).toMatchObject({ status: "not_found", registry: { skills: [{ id: "web-research", canEnable: false }] } });
+    expect(new SkillRegistryService(root).summary()).toEqual(registry.summary());
+    expect(fs.readFileSync(sentinel, "utf8")).toBe("untouched");
+    expect(fetchSnapshot).toHaveBeenCalledTimes(1);
+
+    for (const source of ["local_markdown", "local_zip"] as const) {
+      const localRoot = createRoot();
+      const localService = new SkillUrlInstallService({ appDataRoot: localRoot, registry: new SkillRegistryService(localRoot) });
+      const request = {
+        apiVersion: 1 as const,
+        requestId: source === "local_markdown" ? "skillreq_externalmarkdown01" : "skillreq_externalzip000001",
+        activeVaultId: "vault_20260729_externalstage"
+      };
+      const localManifest = externalSkillMarkdown();
+      const result = source === "local_markdown"
+        ? await (async () => {
+          const selected = path.join(localRoot, "external.md");
+          fs.writeFileSync(selected, localManifest, "utf8");
+          return await localService.stageFromMarkdown(request, selected);
+        })()
+        : await (async () => {
+          const selected = path.join(localRoot, "external.zip");
+          fs.writeFileSync(selected, await createZip([
+            ["skill/SKILL.md", localManifest],
+            ["skill/references/policy.json", "{\"mode\":\"reviewed\"}\n"]
+          ]));
+          return await localService.stageFromZip(request, selected);
+        })();
+      expect(result).toMatchObject({ status: "ready", staged: {
+        kind: "external_web", source, dataBoundaries: ["network", "brokered_credential"]
+      } });
+    }
+  });
+
+  it("rejects ambiguous External/Web authority before staging", async () => {
+    const root = createRoot();
+    const fetchSnapshot = vi.fn(async () => snapshot(externalSkillMarkdown({
+      dataBoundary: ["local"],
+      sourceUrl: "https://example.com/SKILL.md"
+    })));
+    const service = new SkillUrlInstallService({
+      appDataRoot: root,
+      registry: new SkillRegistryService(root),
+      fetcher: { fetchSnapshot }
+    });
+    expect(await service.stageFromUrl({
+      apiVersion: 1,
+      requestId: "skillreq_externalinvalid0123",
+      sourceUrl: "https://example.com/SKILL.md"
+    })).toMatchObject({ status: "invalid", reason: "manifest_invalid" });
+    expect(fs.readdirSync(path.join(root, "skills", "staging"))).toEqual([]);
   });
 
   it("stages and atomically commits one exact source-aware update while preserving enablement", async () => {
@@ -375,6 +484,31 @@ function skillMarkdown(overrides: {
     "## Procedure",
     "",
     "Read the exact preserved source and create cited notes."
+  ].join("\n");
+}
+
+function externalSkillMarkdown(overrides: {
+  readonly sourceUrl?: string;
+  readonly dataBoundary?: readonly string[];
+} = {}): string {
+  return [
+    "---",
+    "id: web-research",
+    "name: Web Research",
+    "version: 1",
+    "description: Review public sources with declared capabilities.",
+    "scope: machine_local",
+    "kind: external_web",
+    ...(overrides.sourceUrl ? [`sourceUrl: ${overrides.sourceUrl}`] : []),
+    "capabilities:",
+    "  - external_network",
+    "  - use_brokered_credential",
+    `dataBoundary: [${(overrides.dataBoundary ?? ["network", "brokered_credential"]).join(", ")}]`,
+    "---",
+    "",
+    "## Procedure",
+    "",
+    "Use only reviewed runtime capabilities after installation."
   ].join("\n");
 }
 

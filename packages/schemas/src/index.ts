@@ -1549,6 +1549,65 @@ const SkillCapabilityListSchema = z.array(SkillCapabilitySchema).min(1).max(32)
   .refine((values) => new Set(values).size === values.length, "Skill capabilities must be unique.");
 const SkillDataBoundaryListSchema = z.array(SkillDataBoundarySchema).min(1).max(6)
   .refine((values) => new Set(values).size === values.length, "Skill data boundaries must be unique.");
+const SKILL_DATA_BOUNDARY_ORDER = [
+  "local", "filesystem", "network", "cloud", "brokered_credential", "destructive"
+] as const satisfies readonly z.infer<typeof SkillDataBoundarySchema>[];
+
+export function deriveSkillDataBoundaries(
+  capabilities: readonly z.infer<typeof SkillCapabilitySchema>[]
+): readonly z.infer<typeof SkillDataBoundarySchema>[] {
+  const boundaries = new Set<z.infer<typeof SkillDataBoundarySchema>>();
+  for (const capability of capabilities) {
+    if (!PermissionCapabilitySchema.safeParse(capability).success) {
+      boundaries.add("local");
+      continue;
+    }
+    switch (capability) {
+      case "read_vault":
+      case "write_vault":
+      case "change_settings":
+      case "spawn_agent":
+        boundaries.add("local");
+        break;
+      case "delete_vault":
+      case "change_pige_schema":
+        boundaries.add("destructive");
+        break;
+      case "external_filesystem":
+        boundaries.add("filesystem");
+        break;
+      case "run_shell":
+        boundaries.add("filesystem");
+        boundaries.add("network");
+        boundaries.add("destructive");
+        break;
+      case "install_local_tool":
+        boundaries.add("filesystem");
+        boundaries.add("network");
+        break;
+      case "external_network":
+        boundaries.add("network");
+        break;
+      case "install_package":
+        boundaries.add("filesystem");
+        boundaries.add("network");
+        break;
+      case "call_cloud_model_with_private_or_large_source":
+        boundaries.add("cloud");
+        break;
+      case "use_brokered_credential":
+        boundaries.add("brokered_credential");
+        break;
+    }
+  }
+  return SKILL_DATA_BOUNDARY_ORDER.filter((boundary) => boundaries.has(boundary));
+}
+
+export const SkillInstallSourceKindSchema = z.enum(["https", "local_markdown", "local_zip"]);
+
+function hasExactOrderedValues(left: readonly string[] | undefined, right: readonly string[]): boolean {
+  return left !== undefined && left.length === right.length && left.every((value, index) => value === right[index]);
+}
 
 export const PiPackageCatalogQueryRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -1630,6 +1689,19 @@ export const SkillManifestSchema = z.object({
       path: ["capabilities"]
     });
   }
+  if (manifest.kind === "external_web") {
+    const expectedBoundaries = deriveSkillDataBoundaries(manifest.capabilities);
+    if (!hasExactOrderedValues(manifest.dataBoundary, expectedBoundaries)) {
+      context.addIssue({
+        code: "custom",
+        message: "External/Web Skill data boundaries must exactly match declared capabilities.",
+        path: ["dataBoundary"]
+      });
+    }
+    if (manifest.sourceUrl !== undefined && !SkillInstallUrlSchema.safeParse(manifest.sourceUrl).success) {
+      context.addIssue({ code: "custom", message: "External/Web Skill source URL is unsafe.", path: ["sourceUrl"] });
+    }
+  }
 });
 
 export const SkillRegistryRecordSchema = z.object({
@@ -1672,7 +1744,14 @@ export const SkillSummarySchema = z.object({
   canEnable: z.boolean(),
   canUninstall: z.boolean(),
   canExport: z.boolean(),
-  canUpdate: z.boolean()
+  canUpdate: z.boolean(),
+  source: SkillInstallSourceKindSchema.optional(),
+  sourceUrl: z.lazy(() => SkillInstallUrlSchema).optional(),
+  manifestSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u).optional(),
+  bundleSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u).optional(),
+  files: z.lazy(() => z.array(SkillStagedFileSummarySchema).min(1).max(SKILL_ZIP_STAGE_MAX_FILES)).optional(),
+  warnings: z.lazy(() => z.array(SkillStageWarningSchema).max(2)
+    .refine((values) => new Set(values).size === values.length, "Skill warnings must be unique.")).optional()
 }).strict().superRefine((skill, context) => {
   const userManaged = skill.scope === "machine_local" && skill.kind === "pure" &&
     skill.trust === "user_confirmed";
@@ -1687,6 +1766,28 @@ export const SkillSummarySchema = z.object({
   }
   if (skill.canUpdate && !userManaged) {
     context.addIssue({ code: "custom", path: ["canUpdate"], message: "Skill update eligibility is invalid." });
+  }
+  const requiredDisclosure = [skill.source, skill.manifestSha256, skill.bundleSha256, skill.files, skill.warnings];
+  const anyDisclosure = [...requiredDisclosure, skill.sourceUrl];
+  if (skill.kind !== "external_web" && anyDisclosure.some((value) => value !== undefined)) {
+    context.addIssue({ code: "custom", path: ["source"], message: "Only External/Web Skills expose installed review disclosure." });
+  }
+  if (skill.kind === "external_web") {
+    if (skill.enabled || skill.canEnable) {
+      context.addIssue({ code: "custom", path: ["enabled"], message: "External/Web Skills must remain disabled." });
+    }
+    if (requiredDisclosure.some((value) => value === undefined)) {
+      context.addIssue({ code: "custom", path: ["source"], message: "External/Web Skill disclosure is incomplete." });
+    }
+    if (!hasExactOrderedValues(skill.dataBoundaries, deriveSkillDataBoundaries(skill.capabilities))) {
+      context.addIssue({ code: "custom", path: ["dataBoundaries"], message: "External/Web Skill boundaries are ambiguous." });
+    }
+    const remoteSource = skill.source === "https";
+    if (remoteSource !== Boolean(skill.sourceUrl) ||
+      (remoteSource && skill.sourceUrl !== undefined && !skill.warnings?.includes("untrusted_remote_source")) ||
+      (!remoteSource && skill.warnings?.includes("untrusted_remote_source"))) {
+      context.addIssue({ code: "custom", path: ["source"], message: "External/Web Skill source disclosure is inconsistent." });
+    }
   }
 });
 
@@ -1780,9 +1881,10 @@ export const SkillStagedSummarySchema = z.object({
   version: z.string().min(1).max(80),
   description: z.string().min(1).max(500),
   scope: z.literal("machine_local"),
-  kind: z.literal("pure"),
+  kind: z.enum(["pure", "external_web"]),
   capabilities: SkillCapabilityListSchema,
-  dataBoundaries: z.tuple([z.literal("local")]),
+  dataBoundaries: SkillDataBoundaryListSchema,
+  source: SkillInstallSourceKindSchema.optional(),
   author: z.string().min(1).max(120).optional(),
   license: z.string().min(1).max(120).optional(),
   files: z.array(SkillStagedFileSummarySchema).min(1).max(SKILL_ZIP_STAGE_MAX_FILES),
@@ -1796,6 +1898,24 @@ export const SkillStagedSummarySchema = z.object({
       path: ["warnings"],
       message: "Remote Skill stages require one matching remote-source warning."
     });
+  }
+  const permissionCapabilities = staged.capabilities.filter((capability) =>
+    PermissionCapabilitySchema.safeParse(capability).success
+  );
+  if (staged.kind === "pure") {
+    if (permissionCapabilities.length > 0 || staged.source !== undefined ||
+      !hasExactOrderedValues(staged.dataBoundaries, ["local"])) {
+      context.addIssue({ code: "custom", path: ["kind"], message: "Pure Skill review disclosure is invalid." });
+    }
+  } else {
+    if (permissionCapabilities.length === 0 || staged.source === undefined ||
+      !hasExactOrderedValues(staged.dataBoundaries, deriveSkillDataBoundaries(staged.capabilities))) {
+      context.addIssue({ code: "custom", path: ["dataBoundaries"], message: "External/Web Skill review disclosure is incomplete." });
+    }
+    const remoteSource = staged.source === "https";
+    if (remoteSource !== Boolean(staged.sourceUrl)) {
+      context.addIssue({ code: "custom", path: ["source"], message: "External/Web Skill review source is inconsistent." });
+    }
   }
   const canonicalPaths = new Set<string>();
   let totalBytes = 0;
@@ -5944,6 +6064,7 @@ export type SkillScope = z.infer<typeof SkillScopeSchema>;
 export type SkillTrust = z.infer<typeof SkillTrustSchema>;
 export type SkillCapability = z.infer<typeof SkillCapabilitySchema>;
 export type SkillDataBoundary = z.infer<typeof SkillDataBoundarySchema>;
+export type SkillInstallSourceKind = z.infer<typeof SkillInstallSourceKindSchema>;
 export type SkillManifest = z.infer<typeof SkillManifestSchema>;
 export type SkillRegistryRecord = z.infer<typeof SkillRegistryRecordSchema>;
 export type SkillRegistryFile = z.infer<typeof SkillRegistryFileSchema>;

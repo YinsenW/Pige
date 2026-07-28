@@ -99,6 +99,7 @@ import {
   SkillInstallStagedRequestSchema,
   SkillInstallStagedResultSchema,
   SkillLifecycleMutationResultSchema,
+  SkillManifestSchema,
   SkillPendingStagedReviewsRequestSchema,
   SkillPendingStagedReviewsResultSchema,
   SkillStageFromUrlRequestSchema,
@@ -109,6 +110,8 @@ import {
   SkillStageFromZipResultSchema,
   SkillStageUpdateRequestSchema,
   SkillStageUpdateResultSchema,
+  SkillStagedSummarySchema,
+  SkillSummarySchema,
   SkillUninstallRequestSchema,
   SourceRecordSchema,
   TaskExecutionPlanSchema,
@@ -121,7 +124,8 @@ import {
   VaultManifestSchema,
   VaultRevealResultSchema,
   WindowLayoutRequestSchema,
-  WindowLayoutStateSchema
+  WindowLayoutStateSchema,
+  deriveSkillDataBoundaries
 } from "@pige/schemas";
 
 describe("schemas", () => {
@@ -2524,6 +2528,121 @@ describe("schemas", () => {
     expect(SkillDiscardStagedRequestSchema.parse(discardRequest)).toEqual(discardRequest);
     expect(SkillDiscardStagedResultSchema.parse({ status: "discarded", requestId }))
       .toEqual({ status: "discarded", requestId });
+  });
+
+  it("freezes External/Web Skill review disclosure without runtime or secret authority", () => {
+    const capabilities = ["read_current_source", "external_network", "use_brokered_credential"] as const;
+    const dataBoundaries = ["local", "network", "brokered_credential"] as const;
+    expect(deriveSkillDataBoundaries(capabilities)).toEqual(dataBoundaries);
+    expect(deriveSkillDataBoundaries(["run_shell"]))
+      .toEqual(["filesystem", "network", "destructive"]);
+    expect(deriveSkillDataBoundaries(["install_local_tool"]))
+      .toEqual(["filesystem", "network"]);
+
+    const manifest = {
+      id: "external-research",
+      name: "External Research",
+      version: "1.0.0",
+      description: "Request reviewed network research through Pige.",
+      scope: "machine_local",
+      kind: "external_web",
+      capabilities,
+      dataBoundary: dataBoundaries
+    } as const;
+    expect(SkillManifestSchema.parse(manifest)).toEqual(manifest);
+    for (const invalid of [
+      { ...manifest, dataBoundary: undefined },
+      { ...manifest, dataBoundary: ["network", "local", "brokered_credential"] },
+      { ...manifest, dataBoundary: ["local", "network"] },
+      { ...manifest, sourceUrl: "https://user:secret@example.com/SKILL.md" },
+      { ...manifest, capabilities: [...capabilities, "read_raw_secret"] },
+      { ...manifest, capabilities: [...capabilities, "unknown_capability"] }
+    ]) {
+      expect(() => SkillManifestSchema.parse(invalid)).toThrow();
+    }
+
+    const manifestSha256 = `sha256:${"a".repeat(64)}`;
+    const bundleSha256 = `sha256:${"b".repeat(64)}`;
+    const sourceUrl = "https://example.com/external-research/SKILL.md";
+    const staged = {
+      stagingId: `skillstage_${"c".repeat(32)}`,
+      manifestSha256,
+      bundleSha256,
+      registryRevision: 8,
+      expiresAt: "2026-07-30T12:00:00.000Z",
+      sourceUrl,
+      id: manifest.id,
+      name: manifest.name,
+      version: manifest.version,
+      description: manifest.description,
+      scope: "machine_local",
+      kind: "external_web",
+      capabilities,
+      dataBoundaries,
+      source: "https",
+      files: [
+        { relativePath: "SKILL.md", utf8ByteSize: 1024, sha256: manifestSha256 },
+        { relativePath: "references/policy.json", utf8ByteSize: 256, sha256: bundleSha256 }
+      ],
+      warnings: ["untrusted_remote_source"]
+    } as const;
+    expect(SkillStagedSummarySchema.parse(staged)).toEqual(staged);
+    for (const source of ["local_markdown", "local_zip"] as const) {
+      const local = { ...staged, source, sourceUrl: undefined, warnings: [] } as const;
+      expect(SkillStagedSummarySchema.parse(local)).toEqual(local);
+    }
+    for (const invalid of [
+      { ...staged, source: undefined },
+      { ...staged, source: "local_markdown" },
+      { ...staged, dataBoundaries: ["local", "network"] },
+      { ...staged, files: [{ ...staged.files[0], relativePath: "run.js" }] },
+      { ...staged, path: "/private/stage" },
+      { ...staged, body: "private Skill body" },
+      { ...staged, credential: "secret" }
+    ]) {
+      expect(() => SkillStagedSummarySchema.parse(invalid)).toThrow();
+    }
+
+    const installed = {
+      id: manifest.id,
+      name: manifest.name,
+      version: manifest.version,
+      description: manifest.description,
+      scope: "machine_local",
+      kind: "external_web",
+      enabled: false,
+      trust: "user_confirmed",
+      capabilities,
+      dataBoundaries,
+      canEnable: false,
+      canUninstall: false,
+      canExport: false,
+      canUpdate: false,
+      source: "https",
+      sourceUrl,
+      manifestSha256,
+      bundleSha256,
+      files: staged.files,
+      warnings: staged.warnings
+    } as const;
+    expect(SkillSummarySchema.parse(installed)).toEqual(installed);
+    expect(SkillSummarySchema.parse({
+      ...installed,
+      source: "local_zip",
+      sourceUrl: undefined,
+      warnings: []
+    })).toMatchObject({ source: "local_zip", enabled: false, canEnable: false });
+    for (const invalid of [
+      { ...installed, enabled: true },
+      { ...installed, canEnable: true },
+      { ...installed, files: undefined },
+      { ...installed, dataBoundaries: ["local", "network"] },
+      { ...installed, path: "/private/installed" },
+      { ...installed, body: "private Skill body" },
+      { ...installed, rawCredential: "secret" }
+    ]) {
+      expect(() => SkillSummarySchema.parse(invalid)).toThrow();
+    }
   });
 
   it("projects bounded vault-bound chat Skill reviews without renderer URL authority", () => {
