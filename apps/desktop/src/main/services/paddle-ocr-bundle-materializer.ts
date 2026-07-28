@@ -313,7 +313,7 @@ async function extractSafeZip(
   try {
     for await (const entry of archive.eachEntry()) {
       entryCount += 1;
-      if (entryCount > limits.maxFiles + 1_024) throw bundleError("archive_entry_limit_exceeded");
+      if (entryCount > limits.maxFiles + 1) throw bundleError("archive_entry_limit_exceeded");
       const parsed = parseArchiveEntry(entry);
       assertNoArchiveCollision(parsed.path, parsed.kind, seen);
       if (parsed.kind === "directory") {

@@ -153,13 +153,14 @@ describe("Paddle OCR release bundle materializer", () => {
 
   it("rejects excess entries and expanded bytes before package validation", async () => {
     const fixture = await makeFixture();
-    const excessEntries = Array.from({ length: 1_026 }, (_, index) => ({
+    const excessEntries = Array.from({ length: LIMITS.maxFiles + 2 }, (_, index) => ({
       name: `entries/${String(index).padStart(4, "0")}`,
       body: Buffer.alloc(0)
     }));
     const entryArchive = await zipEntries(excessEntries);
     const entryFixture = resignFixture(fixture, { archive: entryArchive, installedSizeBytes: 1 });
-    await expect(createMaterializer(entryFixture, bodyFetch(entryArchive)).materialize(REQUEST_ID)).rejects.toThrow();
+    await expect(createMaterializer(entryFixture, bodyFetch(entryArchive)).materialize(REQUEST_ID))
+      .rejects.toMatchObject({ name: "PaddleOcrBundleError:archive_entry_limit_exceeded" });
 
     const expandedArchive = await zipEntries([{ name: "large", body: Buffer.alloc(128) }]);
     const expandedFixture = resignFixture(fixture, { archive: expandedArchive, installedSizeBytes: 1 });
