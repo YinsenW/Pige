@@ -32,7 +32,7 @@ requireAll("docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md", [
 ]);
 requireAll("docs/JOB_OPERATION_AND_RECOVERY.md", [
   "High-Risk Decisions Are Not Job States",
-  "New Jobs never enter `waiting_permission` or `waiting_model_egress`"
+  "`waiting_permission`; all modes resolve one-action receipts"
 ]);
 requireAll("PRIVACY.md", ["pressing Send", "exact user-authored and explicitly selected bounded context", "credential isolation"]);
 requireAll("SECURITY.md", ["High-risk confirmation bypass", "third-party Skill/package acquiring first-party submitted-turn authority"]);
@@ -60,11 +60,13 @@ forbidAll("docs/AGENT_RUNTIME_POLICY_CONTEXT.md", ["cloudSendPolicy:", "strips e
 forbidAll("docs/JOB_OPERATION_AND_RECOVERY.md", ["modelEgressAudit?:", "`model_egress_decision` operation"]);
 
 const acceptance = JSON.parse(read("resources/traceability/acceptance.manifest.json"));
-for (const id of ["PIGE-SEC-002", "PIGE-SEC-003", "PIGE-SEC-005", "PIGE-PI-003"]) {
-  if (acceptance.requirements[id]?.status !== "planned") failures.push(`${id} must remain planned during AR1 implementation.`);
+for (const [id, status] of Object.entries({
+  "PIGE-SEC-002": "partial", "PIGE-SEC-003": "verified", "PIGE-SEC-005": "partial", "PIGE-PI-003": "partial"
+})) {
+  if (acceptance.requirements[id]?.status !== status) failures.push(`${id} must remain ${status} in the current acceptance ledger.`);
 }
-for (const id of ["E3.03", "E8.02", "E8.03"]) {
-  if (acceptance.exits[id]?.status !== "planned") failures.push(`${id} must remain planned during AR1 implementation.`);
+for (const [id, status] of Object.entries({ "E3.03": "partial", "E8.02": "partial", "E8.03": "verified" })) {
+  if (acceptance.exits[id]?.status !== status) failures.push(`${id} must remain ${status} in the current acceptance ledger.`);
 }
 
 const main = read("apps/desktop/src/main/index.ts");

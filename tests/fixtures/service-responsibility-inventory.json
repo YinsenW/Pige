@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 195,
-  "baselineLines": 101352,
+  "baselineFileCount": 197,
+  "baselineLines": 101672,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -35,6 +35,7 @@
       ["agent-turn-publication.ts", 386, "jrd"],
       ["durable-agent-turn-answer.ts", 79, "rd"],
       ["home-agent-attachment-service.ts", 358, "jrd"],
+      ["home-authored-text-capture-service.ts", 281, "jard"],
       ["high-risk-confirmation-service.ts", 268, "pr"],
       ["job-class-executor-registry.ts", 98, "jr"],
       ["jobs-service.ts", 6953, "japrd"],
@@ -66,6 +67,7 @@
       ["reader-selection-create-note-service.ts", 973, "jrd"],
       ["reader-selection-link-service.ts", 587, "rd"],
       ["reader-selection-proposal-service.ts", 505, "jrd"],
+      ["reader-source-reveal-service.ts", 39, "p"],
       ["renderer-navigation-guard.ts", 10, "p"],
       ["restore-coordinator-service.ts", 1015, "jr"],
       ["retrieval-evidence-boundary.ts", 470, "prf"],
@@ -228,7 +230,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 195,
+    "serviceOwnerCount": 197,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

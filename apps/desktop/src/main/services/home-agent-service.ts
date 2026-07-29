@@ -1649,9 +1649,9 @@ export class HomeAgentService {
               sourceId: urlEvidence.sourceId,
               inputHash: urlEvidence.inputHash
             });
+            await authorizeCurrentModelTurn();
             urlEvidenceInspected = true;
             evidenceLedger.record("url_source", modelTurnSequence);
-            await authorizeCurrentModelTurn();
             return urlEvidence;
           } catch (caught) {
             session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;

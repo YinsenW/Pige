@@ -236,7 +236,7 @@ describe("Agent-turn source preservation", () => {
       sourceId: binding.firstSourceId,
       ordinal: 0
     })).toBeUndefined();
-    expect(readSourceRecord(vaultPath, binding.firstSourceId).metadata.agentTurnAttachmentOrdinal).toBe(1);
+    expect(readSourceRecord(vaultPath, binding.firstSourceId).metadata.agentTurnAttachmentOrdinal).toBe(0);
   });
 
   it("removes an exact unpublished snapshot when a handled managed-copy publication fails", async () => {

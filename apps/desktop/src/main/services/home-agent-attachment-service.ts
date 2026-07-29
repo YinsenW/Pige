@@ -290,7 +290,8 @@ export class HomeAgentAttachmentService {
           jobId: request.jobId,
           sourceId,
           inputChecksum: entry.inputChecksum,
-          ordinal: entry.ordinal,
+          ordinal: acceptedIndex,
+          snapshotOrdinal: entry.ordinal,
           attachmentSetHash: request.prepared.attachmentSetHash
         });
       } catch {

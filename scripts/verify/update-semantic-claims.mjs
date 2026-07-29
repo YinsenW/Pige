@@ -12,5 +12,5 @@ if (!process.argv.includes("--accept-semantic-change")) {
 }
 
 const ledger = createSemanticClaimLedger(root);
-fs.writeFileSync(outputPath, `${JSON.stringify(ledger, null, 2)}\n`, "utf8");
+fs.writeFileSync(outputPath, `${JSON.stringify(ledger)}\n`, "utf8");
 console.log(`Updated ${path.relative(root, outputPath)} with ${ledger.claimCount} independently keyed per-claim digests after explicit semantic-change acceptance.`);
