@@ -193,7 +193,11 @@ export function loadVaultSummary(vaultPathInput: string): VaultSummary {
   const config = readVaultConfig(vaultPath);
   const sourceAssetRoot = config.sourceStorage.sourceAssetRootKind === "inside_vault"
     ? path.join(vaultPath, config.sourceStorage.inVaultSourceAssetRoot)
-    : "";
+    : "External folder";
+  const sourceStorageRevision = `ssrev_${createHash("sha256").update(JSON.stringify({
+    vaultId: manifest.vault_id,
+    sourceStorage: config.sourceStorage
+  })).digest("hex")}`;
 
   return {
     vaultId: manifest.vault_id,
@@ -202,10 +206,30 @@ export function loadVaultSummary(vaultPathInput: string): VaultSummary {
     knowledgeRootDisplay: vaultPath,
     sourceAssetRootDisplay: sourceAssetRoot,
     sourceAssetRootKind: config.sourceStorage.sourceAssetRootKind,
+    managedCopyRoot: {
+      activeVaultId: manifest.vault_id,
+      sourceStorageRevision,
+      mode: config.sourceStorage.sourceAssetRootKind,
+      availability: config.sourceStorage.sourceAssetRootKind === "inside_vault" ? "available" : "missing",
+      canConfigure: true
+    },
     defaultSourceStorageStrategy: config.sourceStorage.defaultStrategy,
     schemaVersion: manifest.vault_schema_version,
     counts: countVaultItems(vaultPath)
   };
+}
+
+export function updateVaultSourceAssetRootKind(
+  vaultPath: string,
+  sourceAssetRootKind: "inside_vault" | "external_binding"
+): VaultSummary {
+  const config = readVaultConfig(vaultPath);
+  writeJson(path.join(vaultPath, ".pige/config.json"), {
+    ...config,
+    sourceStorage: { ...config.sourceStorage, sourceAssetRootKind }
+  });
+  touchVaultManifest(vaultPath);
+  return loadVaultSummary(vaultPath);
 }
 
 export function inspectVaultCompatibility(vaultPathInput: string): VaultCompatibilityInspection {

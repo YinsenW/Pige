@@ -27,18 +27,14 @@ import {
   BackupManifestSchema,
   JobIdSchema,
   SourceRecordSchema,
-  VaultBindingsFileSchema,
   VaultIdSchema,
   VaultManifestSchema,
   type BackupDomainSchemaVersions,
   type BackupManifest,
-  type ExternalManagedCopyRootBinding,
   type SourceRecord,
   type VaultManifest
 } from "@pige/schemas";
 import {
-  assertDistinctBindingPaths,
-  captureCanonicalBindingDirectory,
   parseIncompleteManagedCopyRootIds,
   proveManagedCopyDependency,
   recordIncompleteManagedCopyRoot,
@@ -46,6 +42,7 @@ import {
   type BackupManagedCopyDependencyIdentity,
   type BackupManagedCopyRepairProof
 } from "./backup-managed-copy-binding";
+import { ManagedCopyRootService } from "./managed-copy-root-service";
 import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
 import {
   PIGE_DURABLE_ROOTS,
@@ -69,8 +66,7 @@ interface VerifiedExternalManagedCopyRoot {
   readonly vaultId: string;
   readonly absolutePath: string;
   readonly identities: readonly ExternalManagedCopyRootIdentity[];
-  readonly registryPath: string;
-  readonly bindingFingerprint: `sha256:${string}`;
+  assertCurrent(): void;
 }
 
 export class BackupManagedCopyDependencyError extends PigeDomainError {
@@ -100,20 +96,28 @@ function readExternalManagedCopyRoots(
     throw missingExternalManagedCopyRoot([...requestedRootIds].sort()[0]!);
   }
 
-  const userDataPath = captureCanonicalBindingDirectory(userDataPathInput);
-  const bindingsPath = path.join(userDataPath, "vault-bindings.json");
-  const bindings = readBindingsFile(bindingsPath);
-  const vaultRoots = bindings.roots.filter((root) => root.vaultId === vaultId);
-  assertDistinctBindingPaths(vaultRoots);
-  const rootsById = new Map(vaultRoots.map((root) => [root.rootId, root]));
+  const owner = new ManagedCopyRootService(userDataPathInput);
+  try { owner.readBindings(); } catch (caught) {
+    if (caught instanceof PigeDomainError && caught.code === "managed_copy.root_binding_conflict") {
+      throw new PigeDomainError("backup.root_binding_conflict", "Multiple external roots use one machine path.");
+    }
+    throw new PigeDomainError(
+      "backup.root_binding_registry_invalid",
+      "The external managed-copy root registry is unavailable or invalid."
+    );
+  }
   const resolved = new Map<string, VerifiedExternalManagedCopyRoot>();
 
   for (const rootId of [...requestedRootIds].sort()) {
-    const binding = rootsById.get(rootId);
-    if (!binding || binding.availability !== "available") {
-      throw missingExternalManagedCopyRoot(rootId);
-    }
-    resolved.set(rootId, captureExternalManagedCopyRoot(binding, bindingsPath));
+    let lease;
+    try { lease = owner.acquire(vaultId, rootId); } catch { throw missingExternalManagedCopyRoot(rootId); }
+    resolved.set(rootId, {
+      rootId,
+      vaultId,
+      absolutePath: lease.rootPath,
+      identities: captureExternalDirectoryChain(lease.rootPath, rootId),
+      assertCurrent: lease.assertCurrent
+    });
   }
   return resolved;
 }
@@ -155,15 +159,9 @@ function assertExternalManagedCopyRootIdentity(root: VerifiedExternalManagedCopy
 }
 
 function assertExternalManagedCopyRootBinding(root: VerifiedExternalManagedCopyRoot): void {
-  const current = readBindingsFile(root.registryPath).roots.find((binding) =>
-    binding.rootId === root.rootId && binding.vaultId === root.vaultId
-  );
-  if (
-    !current ||
-    current.availability !== "available" ||
-    current.absolutePath !== root.absolutePath ||
-    fingerprintExternalManagedCopyRootBinding(current) !== root.bindingFingerprint
-  ) {
+  try {
+    root.assertCurrent();
+  } catch {
     throw new BackupManagedCopyDependencyError(
       "backup.external_managed_copy_binding_changed",
       "An external managed-copy root binding changed during backup.",
@@ -171,82 +169,6 @@ function assertExternalManagedCopyRootBinding(root: VerifiedExternalManagedCopyR
       root.rootId
     );
   }
-}
-
-function readBindingsFile(bindingsPath: string) {
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(bindingsPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
-    const before = fs.fstatSync(descriptor);
-    const pathBefore = fs.lstatSync(bindingsPath);
-    if (
-      !before.isFile() ||
-      pathBefore.isSymbolicLink() ||
-      before.nlink !== 1 ||
-      pathBefore.nlink !== 1 ||
-      !sameFileRevision(before, pathBefore) ||
-      before.size > 4 * 1024 * 1024
-    ) {
-      throw new Error("The root registry is unsafe.");
-    }
-    const bytes = fs.readFileSync(descriptor);
-    const after = fs.fstatSync(descriptor);
-    const pathAfter = fs.lstatSync(bindingsPath);
-    if (!sameFileRevision(before, after) || !sameFileRevision(after, pathAfter)) {
-      throw new Error("The root registry changed while it was read.");
-    }
-    return VaultBindingsFileSchema.parse(JSON.parse(bytes.toString("utf8")) as unknown);
-  } catch (caught) {
-    if (isErrno(caught, "ENOENT")) {
-      return VaultBindingsFileSchema.parse({ schemaVersion: 1, roots: [], defaults: [] });
-    }
-    if (caught instanceof PigeDomainError) throw caught;
-    throw new PigeDomainError(
-      "backup.root_binding_registry_invalid",
-      "The external managed-copy root registry is unavailable or invalid."
-    );
-  } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
-  }
-}
-
-function captureExternalManagedCopyRoot(
-  binding: ExternalManagedCopyRootBinding,
-  registryPath: string
-): VerifiedExternalManagedCopyRoot {
-  if (!path.isAbsolute(binding.absolutePath) || path.resolve(binding.absolutePath) !== binding.absolutePath) {
-    throw new PigeDomainError(
-      "backup.root_binding_invalid",
-      "An external managed-copy root binding is not canonical."
-    );
-  }
-  const identities = captureExternalDirectoryChain(binding.absolutePath, binding.rootId);
-  let canonicalRoot: string;
-  try {
-    canonicalRoot = fs.realpathSync.native(binding.absolutePath);
-  } catch {
-    throw missingExternalManagedCopyRoot(binding.rootId);
-  }
-  if (canonicalRoot !== binding.absolutePath) {
-    throw new PigeDomainError(
-      "backup.root_binding_invalid",
-      "An external managed-copy root binding contains a symbolic link."
-    );
-  }
-  return {
-    rootId: binding.rootId,
-    vaultId: binding.vaultId,
-    absolutePath: binding.absolutePath,
-    identities,
-    registryPath,
-    bindingFingerprint: fingerprintExternalManagedCopyRootBinding(binding)
-  };
-}
-
-function fingerprintExternalManagedCopyRootBinding(
-  binding: ExternalManagedCopyRootBinding
-): `sha256:${string}` {
-  return checksumBuffer(Buffer.from(JSON.stringify(binding), "utf8"));
 }
 
 function captureExternalDirectoryChain(

@@ -28,6 +28,9 @@ import {
 } from "./ingress-snapshot-service";
 import { redactSensitiveUrl, SourceFetchService, type SourceFetchSnapshot } from "./source-fetch-service";
 import { observedLanguageFact, unknownLanguageFact } from "./durable-language";
+import { readBoundedSourceFileNoFollow, verifyReadableSourceFile } from "./source-file-access";
+import { readVaultManifest } from "./vault-layout";
+import { ManagedCopyRootService, selectCaptureManagedCopyRoot } from "./managed-copy-root-service";
 
 export interface CaptureVaultPort {
   current(): VaultSummary | undefined;
@@ -98,25 +101,12 @@ export interface AgentTurnUrlPreservationHooks {
 }
 
 const FILE_KIND_BY_EXTENSION = new Map<string, SourceKind>([
-  [".md", "markdown_file"],
-  [".markdown", "markdown_file"],
-  [".txt", "plain_text_file"],
-  [".pdf", "pdf_file"],
-  [".docx", "docx_file"],
-  [".pptx", "pptx_file"],
-  [".csv", "csv_file"],
-  [".xlsx", "xlsx_file"],
-  [".sqlite", "sqlite_file"],
-  [".sqlite3", "sqlite_file"],
-  [".db", "sqlite_file"],
-  [".png", "image_file"],
-  [".jpg", "image_file"],
-  [".jpeg", "image_file"],
-  [".webp", "image_file"],
-  [".gif", "image_file"],
-  [".tif", "image_file"],
-  [".tiff", "image_file"],
-  [".bmp", "image_file"]
+  ...[".md", ".markdown"].map((extension) => [extension, "markdown_file"] as const),
+  [".txt", "plain_text_file"], [".pdf", "pdf_file"], [".docx", "docx_file"], [".pptx", "pptx_file"],
+  [".csv", "csv_file"], [".xlsx", "xlsx_file"],
+  ...[".sqlite", ".sqlite3", ".db"].map((extension) => [extension, "sqlite_file"] as const),
+  ...[".png", ".jpg", ".jpeg", ".webp", ".gif", ".tif", ".tiff", ".bmp"]
+    .map((extension) => [extension, "image_file"] as const)
 ]);
 
 export function supportedFileSourceKind(filePath: string): SourceKind | undefined {
@@ -135,10 +125,16 @@ export function safeAttachmentDisplayName(filePath: string): string {
 export class CaptureService {
   readonly #vaults: CaptureVaultPort;
   readonly #sourceFetch: SourceFetchPort;
+  readonly #managedRoots: ManagedCopyRootService | undefined;
 
-  constructor(vaults: CaptureVaultPort, sourceFetch: SourceFetchPort = new SourceFetchService()) {
+  constructor(
+    vaults: CaptureVaultPort,
+    sourceFetch: SourceFetchPort = new SourceFetchService(),
+    managedRoots?: ManagedCopyRootService
+  ) {
     this.#vaults = vaults;
     this.#sourceFetch = sourceFetch;
+    this.#managedRoots = managedRoots;
   }
 
   async preserveUrlForAgentTurn(
@@ -148,7 +144,8 @@ export class CaptureService {
     hooks: AgentTurnUrlPreservationHooks = {}
   ): Promise<AgentTurnUrlPreservationResult> {
     const vaultPath = this.#vaults.activeVaultPath();
-    if (!this.#vaults.current() || !vaultPath) {
+    const vault = this.#vaults.current();
+    if (!vault || !vaultPath) {
       throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
     }
     assertAgentTurnUrlBinding(binding);
@@ -171,6 +168,7 @@ export class CaptureService {
       timestamp,
       captureId,
       sourceId: binding.sourceId,
+      managedRoot: selectCaptureManagedCopyRoot(this.#managedRoots, vault, vaultPath),
       agentTurn: {
         jobId: binding.jobId,
         inputHash: binding.inputHash
@@ -182,7 +180,8 @@ export class CaptureService {
 
   readAgentTurnUrlSource(binding: AgentTurnUrlPreservationBinding): AgentTurnUrlPreservationResult {
     const vaultPath = this.#vaults.activeVaultPath();
-    if (!this.#vaults.current() || !vaultPath) {
+    const vault = this.#vaults.current();
+    if (!vault || !vaultPath) {
       throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
     }
     assertAgentTurnUrlBinding(binding);
@@ -225,7 +224,8 @@ export class CaptureService {
       );
     }
     const vaultPath = this.#vaults.activeVaultPath();
-    if (!this.#vaults.current() || !vaultPath) {
+    const vault = this.#vaults.current();
+    if (!vault || !vaultPath) {
       throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
     }
     this.#vaults.assertWriterLease?.(vaultPath);
@@ -237,11 +237,12 @@ export class CaptureService {
     const dateKey = binding.sourceId.slice(4, 12);
     const monthKey = `${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}`;
     const managedCopyPath = vaultRelativePath("raw", "text", monthKey, `${binding.sourceId}.txt`);
+    const managedRoot = selectCaptureManagedCopyRoot(this.#managedRoots, vault, vaultPath);
     const sourceRecordPath = vaultRelativePath(".pige", "source-records", monthKey, `${binding.sourceId}.json`);
     const recordTarget = resolveVaultPath(vaultPath, sourceRecordPath);
     if (fs.existsSync(recordTarget)) {
       const existing = SourceRecordSchema.parse(JSON.parse(fs.readFileSync(recordTarget, "utf8")));
-      const managedTarget = existing.managedCopy ? resolveVaultPath(vaultPath, existing.managedCopy.path) : undefined;
+      const managedTarget = existing.managedCopy ? verifyReadableSourceFile(vaultPath, existing) : undefined;
       if (
         existing.id !== binding.sourceId ||
         existing.kind !== "text" ||
@@ -252,8 +253,7 @@ export class CaptureService {
         existing.managedCopy?.checksum !== checksum ||
         existing.managedCopy.size !== body.byteLength ||
         !managedTarget ||
-        !fs.existsSync(managedTarget) ||
-        checksumBuffer(fs.readFileSync(managedTarget)) !== checksum
+        checksumBuffer(fs.readFileSync(managedTarget.absolutePath)) !== checksum
       ) {
         throw new PigeDomainError(
           "agent_runtime.turn_binding_invalid",
@@ -268,7 +268,7 @@ export class CaptureService {
     }
     const timestamp = new Date().toISOString();
     const captureId = createDatedId("cap", timestamp.slice(0, 10).replaceAll("-", ""));
-    writeFileAtomic(resolveVaultPath(vaultPath, managedCopyPath), body);
+    writeFileAtomic(path.resolve(managedRoot.rootPath, ...managedCopyPath.split("/")), body);
     const sourceRecord: SourceRecord = CurrentSourceRecordSchema.parse({
       id: binding.sourceId,
       language: unknownLanguageFact("source_record"),
@@ -281,7 +281,13 @@ export class CaptureService {
         lastKnownSize: body.byteLength,
         checksum
       },
-      managedCopy: { path: managedCopyPath, checksum, size: body.byteLength },
+      managedCopy: {
+        path: managedCopyPath,
+        rootId: managedRoot.rootId,
+        pathBasis: managedRoot.pathBasis,
+        checksum,
+        size: body.byteLength
+      },
       artifacts: [],
       metadata: {
         inputKind: "file_picker",
@@ -376,7 +382,8 @@ export class CaptureService {
           }
         });
         unpublishedSnapshot = snapshot;
-        const managedRoot = resolveVaultPath(vaultPath, vaultRelativePath("raw", "files"));
+        const selectedRoot = selectCaptureManagedCopyRoot(this.#managedRoots, vault, vaultPath);
+        const managedRoot = path.resolve(selectedRoot.rootPath, "raw", "files");
         if (storageStrategy === "copy_to_source_library") {
           fs.mkdirSync(managedRoot, { recursive: true, mode: 0o700 });
         }
@@ -385,7 +392,7 @@ export class CaptureService {
             vaultPath,
             binding: snapshot,
             managedRoot,
-            destinationPath: resolveVaultPath(vaultPath, managedCopyPath)
+            destinationPath: path.resolve(selectedRoot.rootPath, ...managedCopyPath.split("/"))
           })
           : snapshot;
         unpublishedSnapshot = adoptedSnapshot;
@@ -395,7 +402,8 @@ export class CaptureService {
           displayName,
           sourceKind,
           agentTurnBinding,
-          adoptedSnapshot
+          adoptedSnapshot,
+          this.#managedRoots
         )) {
           sourceIds.push(sourceId);
           continue;
@@ -417,6 +425,8 @@ export class CaptureService {
           ...(storageStrategy === "copy_to_source_library" ? {
             managedCopy: {
               path: managedCopyPath,
+              rootId: selectedRoot.rootId,
+              pathBasis: selectedRoot.pathBasis,
               checksum: adoptedSnapshot.checksum,
               size: adoptedSnapshot.size
             }
@@ -482,7 +492,8 @@ function adoptExistingAgentTurnFileSource(
   displayName: string,
   sourceKind: SourceKind,
   binding: AgentTurnFilePreservationBinding,
-  snapshot: IngressSnapshotDescriptor
+  snapshot: IngressSnapshotDescriptor,
+  managedRoots?: ManagedCopyRootService
 ): boolean {
   const dateKey = binding.sourceId.slice(4, 12);
   const sourceRecordPath = resolveVaultPath(
@@ -523,18 +534,24 @@ function adoptExistingAgentTurnFileSource(
     );
   }
   if (existing.managedCopy) {
-    const managedCopyPath = resolveVaultPath(vaultPath, existing.managedCopy.path);
+    const resolved = existing.managedCopy.rootId && existing.managedCopy.rootId !== "root_vault_managed"
+      ? managedRoots?.resolveManagedCopy(readVaultManifest(vaultPath).vault_id, vaultPath, existing.managedCopy)
+      : undefined;
+    const managedCopyPath = resolved?.absolutePath ?? resolveVaultPath(vaultPath, existing.managedCopy.path);
     if (
       !fs.existsSync(managedCopyPath) ||
       existing.managedCopy.checksum !== snapshot.checksum ||
       existing.managedCopy.size !== snapshot.size ||
       snapshot.managedCopy?.destinationPath !== fs.realpathSync(managedCopyPath)
     ) {
+      resolved?.release();
       throw new PigeDomainError(
         "agent_runtime.turn_binding_invalid",
         "The existing managed attachment copy is unavailable."
       );
     }
+    resolved?.assertCurrent();
+    resolved?.release();
   }
   return true;
 }
@@ -550,6 +567,11 @@ function persistUrlSnapshot(input: {
   readonly timestamp: string;
   readonly captureId: string;
   readonly sourceId: string;
+  readonly managedRoot: {
+    readonly rootId: string;
+    readonly rootPath: string;
+    readonly pathBasis: "vault_relative" | "root_relative";
+  };
   readonly agentTurn: { readonly jobId: string; readonly inputHash: string };
   readonly onPublicationStart?: () => void;
 }): void {
@@ -566,7 +588,7 @@ function persistUrlSnapshot(input: {
   const rawSnapshotPath = vaultRelativePath("raw", "web", monthKey, `${input.sourceId}.${rawSnapshotExtension}`);
   const extractedTextPath = vaultRelativePath("artifacts", "web", monthKey, `${input.sourceId}.txt`);
   const sourceRecordPath = vaultRelativePath(".pige", "source-records", monthKey, `${input.sourceId}.json`);
-  const rawSnapshotTarget = resolveConfinedVaultWritePath(input.vaultPath, rawSnapshotPath);
+  const rawSnapshotTarget = path.resolve(input.managedRoot.rootPath, ...rawSnapshotPath.split("/"));
   const extractedTextTarget = resolveConfinedVaultWritePath(input.vaultPath, extractedTextPath);
   const sourceRecordTarget = resolveConfinedVaultWritePath(input.vaultPath, sourceRecordPath);
   const displayName = createUrlDisplayName(input.snapshot);
@@ -592,7 +614,7 @@ function persistUrlSnapshot(input: {
     .slice(0, 32);
 
   input.onPublicationStart?.();
-  writeConfinedVaultFileAtomic(input.vaultPath, rawSnapshotTarget, input.snapshot.rawContent);
+  writeFileAtomic(rawSnapshotTarget, input.snapshot.rawContent);
   writeConfinedVaultFileAtomic(input.vaultPath, extractedTextTarget, input.snapshot.extractedText);
 
   const sourceRecord: SourceRecord = CurrentSourceRecordSchema.parse({
@@ -608,6 +630,8 @@ function persistUrlSnapshot(input: {
     },
     managedCopy: {
       path: rawSnapshotPath,
+      rootId: input.managedRoot.rootId,
+      pathBasis: input.managedRoot.pathBasis,
       checksum: rawChecksum,
       size: rawBuffer.byteLength
     },
@@ -739,11 +763,8 @@ function readAgentTurnUrlSource(
       "The Agent-selected URL source binding changed before reuse."
     );
   }
-  const rawBytes = readConfinedRegularFile(
-    vaultPath,
-    resolveVaultPath(vaultPath, sourceRecord.managedCopy.path),
-    2 * 1024 * 1024
-  );
+  const verifiedRaw = verifyReadableSourceFile(vaultPath, sourceRecord);
+  const rawBytes = readBoundedSourceFileNoFollow(verifiedRaw.absolutePath, 2 * 1024 * 1024);
   const extractedBytes = readConfinedRegularFile(
     vaultPath,
     resolveVaultPath(vaultPath, extractedArtifact.path),

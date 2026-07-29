@@ -19,6 +19,8 @@ import type { SourceRecord } from "@pige/schemas";
 import type { VaultSummary } from "@pige/contracts";
 import { HomeAgentAttachmentService } from "../../apps/desktop/src/main/services/home-agent-attachment-service";
 import { ingressSnapshotService } from "../../apps/desktop/src/main/services/ingress-snapshot-service";
+import { ManagedCopyRootService } from "../../apps/desktop/src/main/services/managed-copy-root-service";
+import { configureManagedCopyLocatorResolver } from "../../apps/desktop/src/main/services/source-file-access";
 
 const tempRoots: string[] = [];
 let bindingSequence = 0;
@@ -63,6 +65,7 @@ function urlBinding(url: string): AgentTurnUrlPreservationBinding {
 }
 
 afterEach(() => {
+  configureManagedCopyLocatorResolver(undefined);
   vi.restoreAllMocks();
   for (const root of tempRoots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
@@ -70,6 +73,45 @@ afterEach(() => {
 });
 
 describe("Agent-turn source preservation", () => {
+  it("uses the selected external root only for future managed copies and retains old root identity", () => {
+    const { vaultPath, vault } = makeVault();
+    const userData = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-managed-root-user-")));
+    const firstRoot = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-managed-root-first-")));
+    const secondRoot = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-managed-root-second-")));
+    tempRoots.push(userData, firstRoot, secondRoot);
+    const owner = new ManagedCopyRootService(userData);
+    owner.bindDefault({ vaultId: vault.vaultId, selectedDirectory: firstRoot });
+    configureManagedCopyLocatorResolver({
+      resolve: (vaultId, activeVaultPath, managedCopy) => owner.resolveManagedCopy(vaultId, activeVaultPath, managedCopy)
+    });
+    const externalVault: VaultSummary = {
+      ...vault,
+      sourceAssetRootKind: "external_binding",
+      sourceAssetRootDisplay: path.basename(firstRoot),
+      managedCopyRoot: owner.summary(vault.vaultId, "external_binding")
+    };
+    const service = new CaptureService({ current: () => externalVault, activeVaultPath: () => vaultPath }, undefined, owner);
+    const firstText = "first external root";
+    const firstBinding = {
+      jobId: "job_20260729_externalroot1",
+      sourceId: "src_20260729_externalroot1",
+      inputChecksum: `sha256:${createHash("sha256").update(firstText).digest("hex")}`,
+      ordinal: 0,
+      attachmentSetHash: `sha256:${"1".repeat(64)}`
+    };
+    service.preserveTextForAgentTurn({ text: firstText, locale: "en" }, firstBinding);
+    const firstRecord = readSourceRecord(vaultPath, firstBinding.sourceId);
+    const firstRootId = firstRecord.managedCopy?.rootId;
+    expect(firstRecord.managedCopy).toMatchObject({ pathBasis: "root_relative" });
+    expect(fs.existsSync(path.join(firstRoot, firstRecord.managedCopy!.path))).toBe(true);
+
+    owner.bindDefault({ vaultId: vault.vaultId, selectedDirectory: secondRoot });
+    expect(verifyReadableSourceFile(vaultPath, firstRecord).absolutePath).toBe(
+      path.join(firstRoot, firstRecord.managedCopy!.path)
+    );
+    expect(owner.selection(vault.vaultId)?.rootId).not.toBe(firstRootId);
+    expect(readSourceRecord(vaultPath, firstBinding.sourceId).managedCopy?.rootId).toBe(firstRootId);
+  });
   it("preserves exact pasted UTF-8 bytes once and adopts the same managed source on retry", () => {
     const { vaultPath, vault } = makeVault();
     const text = "  password=literal\napiKey: exact\n😀  ";

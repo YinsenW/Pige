@@ -26,6 +26,7 @@ import {
   type VaultWriterLeaseFactory,
   type VaultWriterLeasePort
 } from "../../apps/desktop/src/main/services/vault-service";
+import { ManagedCopyRootService } from "../../apps/desktop/src/main/services/managed-copy-root-service";
 
 const tempRoots: string[] = [];
 const services: VaultService[] = [];
@@ -68,6 +69,50 @@ afterEach(() => {
 });
 
 describe("VaultService writer lease lifecycle", () => {
+  it("configures one external root through a Main-owned picker with exact revision fencing", async () => {
+    const root = makeTempRoot();
+    const vault = makeVault(root, "ManagedRoot");
+    const userDataInput = path.join(root, "user-data");
+    const externalInput = path.join(root, "external-root");
+    fs.mkdirSync(userDataInput);
+    fs.mkdirSync(externalInput);
+    const userData = fs.realpathSync.native(userDataInput);
+    const external = fs.realpathSync.native(externalInput);
+    electronMocks.getPath.mockImplementation((name: string) => name === "documents" ? root : userData);
+    const harness = makeLeaseHarness();
+    const owner = new ManagedCopyRootService(userData);
+    const service = trackService(new VaultService(
+      makeSettingsStore(root),
+      () => false,
+      harness.factory,
+      async () => "",
+      undefined,
+      owner
+    ));
+    service.openPath(vault.path);
+    const current = service.current()!;
+    electronMocks.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [external] });
+
+    await expect(service.configureManagedCopyRoot({} as never, {
+      apiVersion: 1,
+      requestId: "rootconfigreq_writerlease01",
+      activeVaultId: current.vaultId,
+      expectedSourceStorageRevision: current.managedCopyRoot.sourceStorageRevision
+    })).resolves.toMatchObject({
+      status: "configured",
+      summary: { mode: "external_binding", availability: "available", canConfigure: true }
+    });
+    expect(readVaultConfig(vault.path).sourceStorage.sourceAssetRootKind).toBe("external_binding");
+    expect(service.current()?.sourceAssetRootDisplay).toBe("external-root");
+
+    await expect(service.configureManagedCopyRoot({} as never, {
+      apiVersion: 1,
+      requestId: "rootconfigreq_writerlease02",
+      activeVaultId: current.vaultId,
+      expectedSourceStorageRevision: current.managedCopyRoot.sourceStorageRevision
+    })).resolves.toMatchObject({ status: "stale" });
+    expect(electronMocks.showOpenDialog).toHaveBeenCalledTimes(1);
+  });
   it("acquires a writer lease when creating, opening, and restoring the startup vault", async () => {
     const root = makeTempRoot();
     electronMocks.getPath.mockImplementation((name: string) => path.join(root, `electron-${name}`));
@@ -327,7 +372,7 @@ describe("VaultService writer lease lifecycle", () => {
     ));
     service.openPath(vault.path);
 
-    expect(service.current()?.sourceAssetRootDisplay).toBe("");
+    expect(service.current()?.sourceAssetRootDisplay).toBe("External folder");
     await expect(service.revealSourceAssetRoot()).resolves.toEqual(revealFailure("source_asset_root"));
     expect(revealedPaths).toEqual([]);
 

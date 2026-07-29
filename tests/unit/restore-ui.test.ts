@@ -10,6 +10,8 @@ import type {
   JobsListRequest,
   LocalDatabaseStatus,
   Locale,
+  ManagedCopyRootConfigureRequest,
+  ManagedCopyRootConfigureResult,
   ModelProviderSettingsSummary,
   OnboardingStatus,
   OpenRecentVaultRequest,
@@ -25,7 +27,10 @@ import type {
   VaultRevealTarget,
   VaultSummary
 } from "@pige/contracts";
-import { BackupContinueIncompleteAction } from "../../apps/desktop/src/renderer/src/components/VaultBackupSettingsPanel";
+import {
+  BackupContinueIncompleteAction,
+  ManagedCopyRootSelectionAction
+} from "../../apps/desktop/src/renderer/src/components/VaultBackupSettingsPanel";
 
 const globalKeys = [
   "window",
@@ -51,6 +56,64 @@ afterEach(() => {
 });
 
 describe("First-run onboarding UI", () => {
+  it("keeps the managed-copy root picker fail-closed, single-flight, quiet on cancel, and focus-owned", async () => {
+    const dom = createDom();
+    const { createRoot } = await import("react-dom/client");
+    const container = requireElement(dom.window.document.querySelector<HTMLElement>("#root"));
+    const fallback = dom.window.document.createElement("button");
+    fallback.textContent = "Source storage";
+    dom.window.document.body.append(fallback);
+    const root = createRoot(container);
+    let eligible = false;
+    let calls = 0;
+    let outcome: "cancelled" | "failed" | "selected" = "cancelled";
+    let resolveAttempt: ((value: typeof outcome) => void) | undefined;
+    const render = (): void => root.render(createElement(ManagedCopyRootSelectionAction, {
+      identityKey: "vault_restore_ui:source_storage_revision_7",
+      eligible,
+      labels: {
+        action: "Choose source storage",
+        pending: "Choosing source storage…",
+        selected: "Source storage updated.",
+        stale: "Source storage changed.",
+        failed: "Pige could not update source storage."
+      },
+      onSelect: () => {
+        calls += 1;
+        return new Promise((resolve) => { resolveAttempt = resolve; });
+      },
+      onSelected: async () => { eligible = false; render(); },
+      returnFocusRef: { current: fallback }
+    }));
+    await act(async () => { render(); await settle(dom); });
+    expect(buttons(container, "Choose source storage")).toHaveLength(0);
+
+    eligible = true;
+    await act(async () => { render(); await settle(dom); });
+    const choose = button(container, "Choose source storage");
+    await act(async () => { choose.click(); choose.click(); await settle(dom); });
+    expect(calls).toBe(1);
+    expect(container.textContent).toContain("Choosing source storage…");
+    await act(async () => { resolveAttempt?.(outcome); await settle(dom); });
+    await waitFor(dom, () => dom.window.document.activeElement === choose);
+    expect(container.textContent).not.toContain("Source storage updated.");
+
+    outcome = "failed";
+    await click(dom, choose);
+    await act(async () => { resolveAttempt?.(outcome); await settle(dom); });
+    await waitFor(dom, () => container.textContent?.includes("Pige could not update source storage.") === true);
+    expect(buttons(container, "Choose source storage")).toHaveLength(1);
+
+    outcome = "selected";
+    await click(dom, choose);
+    await act(async () => { resolveAttempt?.(outcome); await settle(dom); });
+    await waitFor(dom, () => dom.window.document.activeElement === fallback);
+    expect(buttons(container, "Choose source storage")).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps explicit incomplete-Backup continuation single-flight, quiet on cancel, and focus-owned on failure", async () => {
     const dom = createDom();
     const { createRoot } = await import("react-dom/client");
@@ -609,6 +672,63 @@ describe("Restore identity UI", () => {
     dom.window.close();
   });
 
+  it("configures only the pathless future managed-copy root and adopts the authoritative summary", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    let outcome: "failed" | "configured" = "failed";
+    harness.configureManagedCopyRoot = async (request) => {
+      harness.configureManagedCopyRootRequests.push(request);
+      if (outcome === "failed") return { ...request, status: "failed" };
+      const summary = {
+        activeVaultId: request.activeVaultId,
+        sourceStorageRevision: `ssrev_${"b".repeat(64)}`,
+        mode: "external_binding" as const,
+        availability: "available" as const,
+        canConfigure: true
+      };
+      const current = harness.onboarding.activeVault;
+      if (!current) throw new Error("Expected an active Vault.");
+      harness.onboarding = {
+        ...harness.onboarding,
+        activeVault: {
+          ...current,
+          sourceAssetRootDisplay: "External managed-copy folder",
+          sourceAssetRootKind: "external_binding",
+          managedCopyRoot: summary
+        }
+      };
+      return { ...request, status: "configured", summary };
+    };
+    const { container, root } = await mountApp(dom, makePigeApi(harness, true));
+    await openVaultSettings(dom, container);
+
+    expect(container.textContent).toContain("Applies to future managed copies only. Existing sources are not moved.");
+    const choose = button(container, "Choose folder");
+    await click(dom, choose);
+    await waitFor(dom, () => container.textContent?.includes("Pige could not update source storage.") ?? false);
+    expect(harness.configureManagedCopyRootRequests).toHaveLength(1);
+    expect(harness.configureManagedCopyRootRequests[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_restore_ui",
+      expectedSourceStorageRevision: `ssrev_${"a".repeat(64)}`
+    });
+    expect(JSON.stringify(harness.configureManagedCopyRootRequests[0])).not.toMatch(/path|rootId|sourceId/u);
+    expect(container.textContent).toContain("Restore UI Vault sources");
+    await waitFor(dom, () => dom.window.document.activeElement === choose);
+
+    outcome = "configured";
+    await click(dom, choose);
+    await waitFor(dom, () => buttons(container, "Change folder").length === 1);
+    expect(container.textContent).toContain("External managed-copy folder");
+    expect(container.textContent).toContain("External folder · Available");
+    expect(container.textContent).not.toContain("/private/");
+    expect(harness.configureManagedCopyRootRequests).toHaveLength(2);
+    await waitFor(dom, () => dom.window.document.activeElement === button(container, "Change folder"));
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("reconnects only an eligible managed-source dependency and resumes through polling without retry", async () => {
     const dom = createDom();
     const harness = createHarness(readyOnboarding(), bothModesPreview());
@@ -967,6 +1087,8 @@ interface RestoreHarness {
   }>;
   readonly continueIncompleteRequests: BackupContinueIncompleteRequest[];
   continueIncomplete: (request: BackupContinueIncompleteRequest) => Promise<BackupContinueIncompleteResult>;
+  readonly configureManagedCopyRootRequests: ManagedCopyRootConfigureRequest[];
+  configureManagedCopyRoot: (request: ManagedCopyRootConfigureRequest) => Promise<ManagedCopyRootConfigureResult>;
   readonly revealRequests: VaultRevealTarget[];
   lastBackupAt?: string;
   localDatabaseStatus: LocalDatabaseStatus | null;
@@ -999,6 +1121,11 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
     continueIncompleteRequests: [],
     continueIncomplete: async (request) => {
       harness.continueIncompleteRequests.push(request);
+      return { ...request, status: "cancelled" };
+    },
+    configureManagedCopyRootRequests: [],
+    configureManagedCopyRoot: async (request) => {
+      harness.configureManagedCopyRootRequests.push(request);
       return { ...request, status: "cancelled" };
     },
     revealRequests: [],
@@ -1109,6 +1236,7 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
       dismissFirstHomeGuide: async () => harness.onboarding,
       revealKnowledgeRoot: async () => harness.revealStorageRoot("knowledge_root"),
       revealSourceAssetRoot: async () => harness.revealStorageRoot("source_asset_root"),
+      configureManagedCopyRoot: (request: ManagedCopyRootConfigureRequest) => harness.configureManagedCopyRoot(request),
       updateSourceStoragePolicy: async () => {
         if (!harness.onboarding.activeVault) throw new Error("No active vault.");
         return harness.onboarding.activeVault;
@@ -1266,6 +1394,13 @@ function vaultSummary(): VaultSummary {
     knowledgeRootDisplay: "Restore UI Vault",
     sourceAssetRootDisplay: "Restore UI Vault sources",
     sourceAssetRootKind: "inside_vault",
+    managedCopyRoot: {
+      activeVaultId: "vault_restore_ui",
+      sourceStorageRevision: `ssrev_${"a".repeat(64)}`,
+      mode: "inside_vault",
+      availability: "available",
+      canConfigure: true
+    },
     defaultSourceStorageStrategy: "copy_to_source_library",
     schemaVersion: 2,
     counts: { notes: 2, sources: 1, managedSourceCopies: 1, referencedOriginals: 0 }

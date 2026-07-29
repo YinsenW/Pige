@@ -6,6 +6,8 @@ import type {
   OpenRecentVaultRequest,
   RecentVaultSummary,
   UpdateSourceStoragePolicyRequest,
+  ManagedCopyRootConfigureRequest,
+  ManagedCopyRootConfigureResult,
   VaultActionResult,
   VaultMigrationApplyRequest,
   VaultMigrationApplyResult,
@@ -23,6 +25,7 @@ import {
   normalizeVaultName,
   prepareVaultStorageRevealBinding,
   resetRebuildableVaultStorage,
+  updateVaultSourceAssetRootKind,
   updateVaultSourceStorageStrategy
 } from "./vault-layout";
 import {
@@ -38,6 +41,15 @@ export interface VaultWriterLeasePort {
 
 export type VaultWriterLeaseFactory = (vaultPath: string) => VaultWriterLeasePort;
 export type VaultPathRevealer = (targetPath: string) => Promise<string>;
+
+export interface VaultManagedCopyRootPort {
+  summary(vaultId: string, mode: VaultSummary["sourceAssetRootKind"]): VaultSummary["managedCopyRoot"];
+  selection(vaultId: string): { readonly rootPath: string } | undefined;
+  bindDefault(input: {
+    readonly vaultId: string;
+    readonly selectedDirectory: string;
+  }): unknown;
+}
 
 export interface VaultRestoreTransition {
   readonly previousVaultPath?: string;
@@ -60,6 +72,7 @@ export class VaultService {
   readonly #acquireWriterLease: VaultWriterLeaseFactory;
   readonly #revealPath: VaultPathRevealer;
   readonly #migration: VaultMigrationService;
+  readonly #managedRoots: VaultManagedCopyRootPort | undefined;
   #activeVaultPath: string | undefined;
   #activeVault: VaultSummary | undefined;
   #activeWriterLease: VaultWriterLeasePort | undefined;
@@ -70,13 +83,15 @@ export class VaultService {
     hasDefaultModel: () => boolean = () => false,
     acquireWriterLease: VaultWriterLeaseFactory = acquireVaultWriterLease,
     revealPath: VaultPathRevealer = (targetPath) => shell.openPath(targetPath),
-    migration = new VaultMigrationService(app.getPath("userData") || process.cwd())
+    migration = new VaultMigrationService(app.getPath("userData") || process.cwd()),
+    managedRoots?: VaultManagedCopyRootPort
   ) {
     this.#settings = settings;
     this.#hasDefaultModel = hasDefaultModel;
     this.#acquireWriterLease = acquireWriterLease;
     this.#revealPath = revealPath;
     this.#migration = migration;
+    this.#managedRoots = managedRoots;
     this.#restoreActiveVaultFromSettings();
   }
 
@@ -241,9 +256,57 @@ export class VaultService {
     const activeVaultPath = this.#requireActiveVaultPath();
     const vault = updateVaultSourceStorageStrategy(activeVaultPath, request.defaultStrategy);
     this.#assertActiveWriterLease();
-    this.#activeVault = vault;
-    this.#settings.setActiveVault(activeVaultPath, vault);
-    return vault;
+    this.#activeVault = this.#decorateVault(activeVaultPath, vault);
+    this.#settings.setActiveVault(activeVaultPath, this.#activeVault);
+    return this.#activeVault;
+  }
+
+  async configureManagedCopyRoot(
+    parentWindow: BrowserWindow,
+    request: ManagedCopyRootConfigureRequest
+  ): Promise<ManagedCopyRootConfigureResult> {
+    const identity = {
+      apiVersion: 1 as const,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      expectedSourceStorageRevision: request.expectedSourceStorageRevision
+    };
+    const activeVaultPath = this.#requireActiveVaultPath();
+    const current = this.#requireActiveVault();
+    if (current.vaultId !== request.activeVaultId) return { ...identity, status: "not_found" };
+    if (!this.#managedRoots || !current.managedCopyRoot.canConfigure) {
+      return { ...identity, status: "ineligible", summary: current.managedCopyRoot };
+    }
+    if (current.managedCopyRoot.sourceStorageRevision !== request.expectedSourceStorageRevision) {
+      return { ...identity, status: "stale", summary: current.managedCopyRoot };
+    }
+    const selection = await dialog.showOpenDialog(parentWindow, {
+      title: "Choose a folder for future source copies",
+      defaultPath: app.getPath("documents"),
+      properties: ["openDirectory", "createDirectory"]
+    });
+    if (selection.canceled || selection.filePaths.length !== 1 || !selection.filePaths[0]) {
+      return { ...identity, status: "cancelled" };
+    }
+    try {
+      if (this.#requireActiveVaultPath() !== activeVaultPath) return { ...identity, status: "stale", summary: this.#requireActiveVault().managedCopyRoot };
+      const beforeCommit = this.#requireActiveVault();
+      if (
+        beforeCommit.vaultId !== request.activeVaultId ||
+        beforeCommit.managedCopyRoot.sourceStorageRevision !== request.expectedSourceStorageRevision
+      ) return { ...identity, status: "stale", summary: beforeCommit.managedCopyRoot };
+      this.#managedRoots.bindDefault({ vaultId: request.activeVaultId, selectedDirectory: selection.filePaths[0] });
+      const updated = this.#decorateVault(
+        activeVaultPath,
+        updateVaultSourceAssetRootKind(activeVaultPath, "external_binding")
+      );
+      this.assertWriterLease(activeVaultPath);
+      this.#activeVault = updated;
+      this.#settings.setActiveVault(activeVaultPath, updated);
+      return { ...identity, status: "configured", summary: updated.managedCopyRoot };
+    } catch {
+      return { ...identity, status: "failed" };
+    }
   }
 
   resetLocalDatabase() {
@@ -376,9 +439,9 @@ export class VaultService {
     if (this.#activeWriterLease?.vaultPath === requestedPath) {
       this.#activeWriterLease.assertHeld();
       this.#activeVaultPath = requestedPath;
-      this.#activeVault = vault;
-      if (recentBinding) this.#settings.activateRecentVault(recentBinding, requestedPath, vault);
-      else this.#settings.setActiveVault(requestedPath, vault);
+      this.#activeVault = this.#decorateVault(vaultPath, vault);
+      if (recentBinding) this.#settings.activateRecentVault(recentBinding, requestedPath, this.#activeVault);
+      else this.#settings.setActiveVault(requestedPath, this.#activeVault);
       return;
     }
 
@@ -387,7 +450,8 @@ export class VaultService {
     let settingsCommitted = false;
     try {
       nextLease.assertHeld();
-      const nextVault = nextPath === requestedPath ? vault : loadVaultSummary(nextPath);
+      const loadedVault = nextPath === requestedPath ? vault : loadVaultSummary(nextPath);
+      const nextVault = this.#decorateVault(nextPath, loadedVault);
       if (nextVault.vaultId !== vault.vaultId) {
         throw new PigeDomainError("vault.binding_changed", "The canonical vault identity changed.");
       }
@@ -412,6 +476,19 @@ export class VaultService {
         // The previous vault is no longer writable through this service.
       }
     }
+  }
+
+  #decorateVault(vaultPath: string, vault: VaultSummary): VaultSummary {
+    if (!this.#managedRoots) return vault;
+    const managedCopyRoot = this.#managedRoots.summary(vault.vaultId, vault.sourceAssetRootKind);
+    const selection = vault.sourceAssetRootKind === "external_binding"
+      ? this.#managedRoots.selection(vault.vaultId)
+      : undefined;
+    return {
+      ...vault,
+      sourceAssetRootDisplay: selection ? path.basename(selection.rootPath) || "External folder" : vault.sourceAssetRootDisplay,
+      managedCopyRoot
+    };
   }
 
   #adoptMigratedVaultLease(lease: VaultWriterLeasePort, vault: VaultSummary): void {
@@ -473,6 +550,20 @@ export class VaultService {
     let binding: ReturnType<typeof prepareVaultStorageRevealBinding> | undefined;
     try {
       const activeVaultPath = this.#requireActiveVaultPath();
+      const activeVault = this.#requireActiveVault();
+      if (target === "source_asset_root" && activeVault.sourceAssetRootKind === "external_binding") {
+        const selected = this.#managedRoots?.selection(activeVault.vaultId);
+        if (!selected) throw new PigeDomainError("vault.external_binding_unavailable", "The external root is unavailable.");
+        const expectedRevision = activeVault.managedCopyRoot.sourceStorageRevision;
+        const openError = await this.#revealPath(selected.rootPath);
+        const current = this.#requireActiveVault();
+        if (
+          openError !== "" ||
+          current.vaultId !== activeVault.vaultId ||
+          this.#managedRoots?.summary(current.vaultId, current.sourceAssetRootKind).sourceStorageRevision !== expectedRevision
+        ) throw new PigeDomainError("vault.reveal_failed", "The managed-copy root changed before reveal completed.");
+        return { status: "revealed", target };
+      }
       binding = prepareVaultStorageRevealBinding(activeVaultPath, target);
       this.assertWriterLease(activeVaultPath);
       binding.assertCurrent();
