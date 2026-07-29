@@ -2356,6 +2356,67 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("remembers only the exact Main-projected eligible scope and single-flights its decision", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.confirmationPending = {
+      ...pendingHighRiskConfirmation(),
+      rememberScopedGrant: {
+        grantContextId: "grantctx_abcdefghijklmnop",
+        scope: "resource_scope",
+        safeScopeLabel: "Calendar · read events",
+        expiresAt: "2026-08-29T10:00:00.000Z"
+      }
+    };
+    const resolveGate = deferred<HighRiskConfirmationResolveResult>();
+    const api = makePigeApi(harness);
+    const { container, root } = await mountHome(dom, {
+      ...api,
+      confirmations: {
+        ...api.confirmations,
+        resolve: (request: HighRiskConfirmationResolveRequest) => {
+          harness.confirmationResolveRequests.push(request);
+          return resolveGate.promise;
+        }
+      }
+    });
+
+    await waitFor(dom, () => buttons(container, "Remember this scope").length === 1);
+    const dialog = requireElement(container.querySelector<HTMLElement>('[role="dialog"]'));
+    expect(dialog.textContent).toContain("Calendar · read events");
+    expect(dialog.textContent).not.toContain("grantctx_abcdefghijklmnop");
+    expect(buttons(dialog, "Allow once")).toHaveLength(1);
+    const remember = buttons(dialog, "Remember this scope")[0]!;
+    await act(async () => {
+      remember.click();
+      remember.click();
+      await settle(dom);
+    });
+    expect(harness.confirmationResolveRequests).toEqual([{
+      apiVersion: 1,
+      confirmationId: "confirm_20260722_abcdefghijklmnop",
+      expectedRevision: 7,
+      decision: "allow",
+      rememberScopedGrant: {
+        decision: "allow_scoped",
+        grantContextId: "grantctx_abcdefghijklmnop"
+      }
+    }]);
+
+    resolveGate.resolve({
+      apiVersion: 1,
+      status: "committed",
+      confirmationId: "confirm_20260722_abcdefghijklmnop",
+      revision: 8,
+      decision: "allow"
+    });
+    await act(async () => settle(dom));
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("serializes the exact confirmation decision and keeps failures body-free and retryable", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
