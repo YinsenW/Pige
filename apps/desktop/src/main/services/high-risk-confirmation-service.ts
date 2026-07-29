@@ -10,7 +10,8 @@ import {
   HighRiskConfirmationChangedEventSchema,
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
-  HighRiskConfirmationResolveResultSchema
+  HighRiskConfirmationResolveResultSchema,
+  type PermissionActionBinding
 } from "@pige/schemas";
 import {
   PermissionPolicyRuntimeState,
@@ -19,6 +20,7 @@ import {
   type PermissionPolicyRuntimePending
 } from "./permission-policy-runtime";
 import type { PermissionPolicyStorePort } from "./permission-policy-store";
+import type { PermissionPolicyGrantCandidate } from "./permission-policy-grant-record";
 
 export type HighRiskConfirmationEffectResult = "committed" | "stale" | "failed";
 export interface HighRiskConfirmationCommittedEffect {
@@ -40,6 +42,7 @@ interface InFlightResolution {
   readonly confirmationId: string;
   readonly revision: number;
   readonly decision: "allow" | "deny";
+  readonly grantContextId?: string;
   readonly promise: Promise<HighRiskConfirmationResolveResult>;
 }
 
@@ -64,7 +67,20 @@ export class HighRiskConfirmationService {
   pending(): HighRiskConfirmationPendingResult {
     const pending = this.#state.pending();
     return HighRiskConfirmationPendingResultSchema.parse(pending
-      ? { apiVersion: 1, status: "pending", revision: pending.revision, confirmation: pending.confirmation }
+      ? {
+          apiVersion: 1,
+          status: "pending",
+          revision: pending.revision,
+          confirmation: pending.confirmation,
+          ...(pending.grantCandidate ? {
+            rememberScopedGrant: {
+              grantContextId: pending.grantCandidate.grantContextId,
+              scope: pending.grantCandidate.scope,
+              safeScopeLabel: pending.grantCandidate.safeScopeLabel,
+              expiresAt: pending.grantCandidate.grant.expiresAt
+            }
+          } : {})
+        }
       : { apiVersion: 1, status: "none", revision: this.#state.revision() });
   }
 
@@ -72,13 +88,15 @@ export class HighRiskConfirmationService {
     registration: HighRiskConfirmationRegistration,
     resolver: HighRiskConfirmationEffectResolver,
     bindingDigest?: string,
-    jobId?: string
+    jobId?: string,
+    grantCandidate?: PermissionPolicyGrantCandidate
   ): HighRiskConfirmationRegistrationResult {
     const result = this.#state.register({
       registration,
       resolver,
       ...(bindingDigest ? { bindingDigest } : {}),
-      ...(jobId ? { jobId } : {})
+      ...(jobId ? { jobId } : {}),
+      ...(grantCandidate ? { grantCandidate } : {})
     });
     if (result.status === "already_resolved") {
       return { status: result.status, revision: result.receipt.revision, decision: result.receipt.decision };
@@ -89,6 +107,10 @@ export class HighRiskConfirmationService {
       revision: result.pending.revision,
       confirmation: result.pending.confirmation
     };
+  }
+
+  authorizeSavedGrant(binding: PermissionActionBinding, confirmation: HighRiskConfirmationSummary): boolean {
+    return this.#state.authorizeSavedGrant({ binding, confirmation })?.decision === "allow";
   }
 
   async resolve(request: HighRiskConfirmationResolveRequest): Promise<HighRiskConfirmationResolveResult> {
@@ -115,6 +137,7 @@ export class HighRiskConfirmationService {
       confirmationId: parsed.confirmationId,
       revision: parsed.expectedRevision,
       decision: parsed.decision,
+      ...(parsed.rememberScopedGrant ? { grantContextId: parsed.rememberScopedGrant.grantContextId } : {}),
       promise
     };
     try {
@@ -163,7 +186,11 @@ export class HighRiskConfirmationService {
 
     let committed: PermissionPolicyRuntimeCommit;
     try {
-      committed = this.#state.commit(pending, parsed.decision);
+      committed = this.#state.commit(
+        pending,
+        parsed.decision,
+        parsed.rememberScopedGrant?.grantContextId
+      );
     } catch {
       return this.#failed(parsed.confirmationId);
     }
@@ -184,7 +211,8 @@ export class HighRiskConfirmationService {
   #sameInFlight(request: HighRiskConfirmationResolveRequest): boolean {
     return this.#inFlight?.confirmationId === request.confirmationId &&
       this.#inFlight.revision === request.expectedRevision &&
-      this.#inFlight.decision === request.decision;
+      this.#inFlight.decision === request.decision &&
+      this.#inFlight.grantContextId === request.rememberScopedGrant?.grantContextId;
   }
 
   #failed(confirmationId: string): HighRiskConfirmationResolveResult {

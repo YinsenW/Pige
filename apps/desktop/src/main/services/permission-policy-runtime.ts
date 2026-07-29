@@ -2,13 +2,14 @@ import type {
   HighRiskConfirmationOwner,
   HighRiskConfirmationSummary
 } from "@pige/contracts";
-import { HighRiskConfirmationSummarySchema } from "@pige/schemas";
+import { HighRiskConfirmationSummarySchema, type PermissionActionBinding } from "@pige/schemas";
 import {
   createPermissionPolicyRequestId,
   type PermissionPolicyDecisionReceipt,
   type PermissionPolicySnapshot,
   type PermissionPolicyStorePort
 } from "./permission-policy-store";
+import type { PermissionPolicyGrantCandidate } from "./permission-policy-grant-record";
 
 export interface PermissionPolicyRuntimePending<TResolver> {
   readonly confirmation: HighRiskConfirmationSummary;
@@ -18,6 +19,7 @@ export interface PermissionPolicyRuntimePending<TResolver> {
   requestId?: string;
   jobId?: string;
   operationId?: string;
+  grantCandidate?: PermissionPolicyGrantCandidate;
 }
 
 export interface PermissionPolicyRuntimeReceipt {
@@ -81,6 +83,7 @@ export class PermissionPolicyRuntimeState<TResolver> {
     readonly resolver: TResolver;
     readonly bindingDigest?: string;
     readonly jobId?: string;
+    readonly grantCandidate?: PermissionPolicyGrantCandidate;
   }): PermissionPolicyRuntimeRegistration<TResolver> {
     const confirmation = HighRiskConfirmationSummarySchema.parse({ apiVersion: 1, ...input.registration });
     if (this.#store) return this.#registerDurable(confirmation, input);
@@ -91,10 +94,16 @@ export class PermissionPolicyRuntimeState<TResolver> {
         return { status: "busy", pending: this.#pending };
       }
       this.#pending.resolver = input.resolver;
+      if (input.grantCandidate) this.#pending.grantCandidate = input.grantCandidate;
       return { status: "restored", pending: this.#pending };
     }
     this.#revision += 1;
-    this.#pending = { confirmation, revision: this.#revision, resolver: input.resolver };
+    this.#pending = {
+      confirmation,
+      revision: this.#revision,
+      resolver: input.resolver,
+      ...(input.grantCandidate ? { grantCandidate: input.grantCandidate } : {})
+    };
     return { status: "registered", pending: this.#pending };
   }
 
@@ -104,7 +113,8 @@ export class PermissionPolicyRuntimeState<TResolver> {
 
   commit(
     pending: PermissionPolicyRuntimePending<TResolver>,
-    decision: "allow" | "deny"
+    decision: "allow" | "deny",
+    grantContextId?: string
   ): PermissionPolicyRuntimeCommit {
     if (!this.isCurrent(pending)) return { status: "stale" };
     if (this.#store) {
@@ -115,7 +125,8 @@ export class PermissionPolicyRuntimeState<TResolver> {
         bindingDigest,
         confirmationId: pending.confirmation.confirmationId,
         expectedRevision: pending.revision,
-        decision
+        decision,
+        ...(grantContextId ? { grantContextId } : {})
       });
       if (result.status !== "committed" && result.status !== "already_resolved") {
         this.#adopt(result.snapshot);
@@ -131,6 +142,21 @@ export class PermissionPolicyRuntimeState<TResolver> {
     const receipt = { confirmationId: pending.confirmation.confirmationId, revision: this.#revision, decision };
     this.#remember(receipt);
     return { status: "committed", receipt };
+  }
+
+  authorizeSavedGrant(input: {
+    readonly binding: PermissionActionBinding;
+    readonly confirmation: HighRiskConfirmationSummary;
+  }): PermissionPolicyRuntimeReceipt | undefined {
+    if (!this.#store) return undefined;
+    const result = this.#store.authorizeSavedGrant(input);
+    if (result.status !== "committed" && result.status !== "already_resolved") return undefined;
+    const receipt = runtimeReceipt(result.receipt);
+    if (!receipt.requestId || !receipt.decisionId) throw new Error("The saved grant receipt is incomplete.");
+    this.#links?.recordPending({ requestId: receipt.requestId, ...(receipt.jobId ? { jobId: receipt.jobId } : {}) });
+    this.#recordDecision(receipt);
+    this.#adopt(result.snapshot);
+    return receipt;
   }
 
   clearStale(pending: PermissionPolicyRuntimePending<TResolver>): boolean {
@@ -176,6 +202,7 @@ export class PermissionPolicyRuntimeState<TResolver> {
       readonly resolver: TResolver;
       readonly bindingDigest?: string;
       readonly jobId?: string;
+      readonly grantCandidate?: PermissionPolicyGrantCandidate;
     }
   ): PermissionPolicyRuntimeRegistration<TResolver> {
     if (!input.bindingDigest) throw new Error("A durable confirmation requires its binding digest.");
@@ -185,6 +212,7 @@ export class PermissionPolicyRuntimeState<TResolver> {
       requestId: createPermissionPolicyRequestId(bindingDigest, confirmation.confirmationId),
       bindingDigest,
       ...(input.jobId ? { jobId: input.jobId } : {}),
+      ...(input.grantCandidate ? { grantCandidate: input.grantCandidate } : {}),
       confirmation
     });
     if (result.status === "already_resolved") {
@@ -233,7 +261,8 @@ export class PermissionPolicyRuntimeState<TResolver> {
           ...(snapshot.pending.jobId ? { jobId: snapshot.pending.jobId } : {}),
           ...(snapshot.pending.confirmation.owner.kind === "operation"
             ? { operationId: snapshot.pending.confirmation.owner.operationId }
-            : {})
+            : {}),
+          ...(snapshot.pending.grantCandidate ? { grantCandidate: snapshot.pending.grantCandidate } : {})
         }
       : undefined;
   }

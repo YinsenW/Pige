@@ -1,16 +1,26 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs, { constants as fsConstants, type Stats } from "node:fs";
 import path from "node:path";
-import type { HighRiskConfirmationSummary } from "@pige/contracts";
+import type { HighRiskConfirmationSummary, PermissionPolicySummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
   HighRiskConfirmationSummarySchema,
   JobIdSchema,
+  PermissionActionBindingSchema,
   PermissionDecisionRecordSchema,
+  PermissionGrantContextIdSchema,
   PermissionRequestIdSchema
 } from "@pige/schemas";
 import { z } from "zod";
 import { hasErrorInstanceCode as isErrno } from "./object-error-code";
+import {
+  PermissionPolicyDefaultModeRecordSchema,
+  PermissionPolicyGrantCandidateSchema,
+  PermissionPolicyGrantRecordSchema,
+  permissionGrantMatches,
+  projectPermissionGrant,
+  type PermissionPolicyGrantCandidate
+} from "./permission-policy-grant-record";
 
 const MAX_POLICY_BYTES = 256 * 1024;
 const MAX_RECEIPTS = 64;
@@ -21,7 +31,8 @@ const PendingRequestIdentitySchema = z.object({
   requestId: PermissionRequestIdSchema,
   bindingDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
   jobId: JobIdSchema.optional(),
-  confirmation: HighRiskConfirmationSummarySchema
+  confirmation: HighRiskConfirmationSummarySchema,
+  grantCandidate: PermissionPolicyGrantCandidateSchema.optional()
 }).strict();
 const PendingRequestSchema = PendingRequestIdentitySchema.extend({
   state: z.literal("pending"),
@@ -36,8 +47,8 @@ const DecisionReceiptSchema = PermissionDecisionRecordSchema.extend({
 const PermissionPolicyRecordSchema = z.object({
   schemaVersion: z.literal(1),
   revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  defaultMode: z.literal("ask_every_time"),
-  grants: z.array(z.never()).max(0),
+  defaultMode: PermissionPolicyDefaultModeRecordSchema,
+  grants: z.array(PermissionPolicyGrantRecordSchema).max(64),
   pending: PendingRequestSchema.optional(),
   receipts: z.array(DecisionReceiptSchema).max(MAX_RECEIPTS)
 }).strict();
@@ -62,6 +73,9 @@ export interface PermissionPolicyDecisionReceipt {
 
 export interface PermissionPolicySnapshot {
   readonly revision: number;
+  readonly defaultMode: "ask_every_time" | "remember_scoped_grants";
+  readonly grants: readonly ReturnType<typeof projectPermissionGrant>[];
+  readonly invalidGrantCount: number;
   readonly pending?: {
     readonly state: "pending";
     readonly requestId: string;
@@ -69,6 +83,7 @@ export interface PermissionPolicySnapshot {
     readonly jobId?: string;
     readonly revision: number;
     readonly confirmation: HighRiskConfirmationSummary;
+    readonly grantCandidate?: PermissionPolicyGrantCandidate;
   };
   readonly receipts: readonly PermissionPolicyDecisionReceipt[];
 }
@@ -93,6 +108,7 @@ export interface PermissionPolicyStorePort {
     readonly bindingDigest: `sha256:${string}`;
     readonly jobId?: string;
     readonly confirmation: HighRiskConfirmationSummary;
+    readonly grantCandidate?: PermissionPolicyGrantCandidate;
   }): PermissionPolicyRegistrationResult;
   commitDecision(input: {
     readonly requestId: string;
@@ -100,6 +116,11 @@ export interface PermissionPolicyStorePort {
     readonly confirmationId: string;
     readonly expectedRevision: number;
     readonly decision: "allow" | "deny";
+    readonly grantContextId?: string;
+  }): PermissionPolicyDecisionResult;
+  authorizeSavedGrant(input: {
+    readonly binding: z.infer<typeof PermissionActionBindingSchema>;
+    readonly confirmation: HighRiskConfirmationSummary;
   }): PermissionPolicyDecisionResult;
   withdraw(input: {
     readonly confirmationId: string;
@@ -115,6 +136,7 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
   readonly #recordPath: string;
   readonly #assertWriterLease: () => void;
   readonly #now: () => string;
+  readonly #listeners = new Set<() => void>();
 
   constructor(appDataRootInput: string, assertWriterLease: () => void, now: () => string = () => new Date().toISOString()) {
     if (!path.isAbsolute(appDataRootInput)) throw policyInvalid();
@@ -130,15 +152,74 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
     return projectSnapshot(this.#readRecord());
   }
 
+  onChanged(listener: () => void): () => void {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
+  }
+
+  summary(activeVaultId: string): PermissionPolicySummary {
+    const snapshot = this.read();
+    return {
+      apiVersion: 1,
+      activeVaultId,
+      revision: snapshot.revision,
+      defaultMode: snapshot.defaultMode,
+      grants: [...snapshot.grants],
+      invalidGrantCount: snapshot.invalidGrantCount
+    };
+  }
+
+  setDefaultMode(expectedRevision: number, mode: "ask_every_time" | "remember_scoped_grants"): "committed" | "stale" {
+    const current = this.#readRecord();
+    if (current.revision !== expectedRevision) return "stale";
+    if (current.defaultMode === mode) return "committed";
+    const revision = nextRevision(current.revision);
+    const next = PermissionPolicyRecordSchema.parse({
+      ...current,
+      revision,
+      defaultMode: mode,
+      ...(mode === "ask_every_time" ? {
+        grants: [],
+        ...(current.pending ? {
+          pending: {
+            ...current.pending,
+            revision,
+            grantCandidate: undefined
+          }
+        } : {})
+      } : {})
+    });
+    this.#write(next);
+    return "committed";
+  }
+
+  revokeGrant(expectedRevision: number, grantId: string): "committed" | "stale" | "not_found" {
+    const current = this.#readRecord();
+    if (current.revision !== expectedRevision) return "stale";
+    if (!current.grants.some((grant) => grant.grantId === grantId)) return "not_found";
+    this.#write(PermissionPolicyRecordSchema.parse({
+      ...current,
+      revision: nextRevision(current.revision),
+      grants: current.grants.filter((grant) => grant.grantId !== grantId)
+    }));
+    return "committed";
+  }
+
   register(input: {
     readonly requestId: string;
     readonly bindingDigest: `sha256:${string}`;
     readonly jobId?: string;
     readonly confirmation: HighRiskConfirmationSummary;
+    readonly grantCandidate?: PermissionPolicyGrantCandidate;
   }): PermissionPolicyRegistrationResult {
-    const pendingIdentity = PendingRequestIdentitySchema.parse(input);
-    const confirmation = pendingIdentity.confirmation;
     const current = this.#readRecord();
+    const pendingIdentity = PendingRequestIdentitySchema.parse({
+      ...input,
+      grantCandidate: current.defaultMode === "remember_scoped_grants"
+        ? input.grantCandidate
+        : undefined
+    });
+    const confirmation = pendingIdentity.confirmation;
     const receipt = current.receipts.find((item) => item.confirmationId === confirmation.confirmationId);
     if (receipt) return { status: "already_resolved", receipt, snapshot: projectSnapshot(current) };
     if (current.pending) {
@@ -161,11 +242,12 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
     readonly confirmationId: string;
     readonly expectedRevision: number;
     readonly decision: "allow" | "deny";
+    readonly grantContextId?: string;
   }): PermissionPolicyDecisionResult {
     const current = this.#readRecord();
     const existing = current.receipts.find((item) => item.confirmationId === input.confirmationId);
     if (existing) {
-      const sameDecision = (existing.decision === "allow_once" && input.decision === "allow") ||
+      const sameDecision = (["allow_once", "allow_scoped"].includes(existing.decision) && input.decision === "allow") ||
         (existing.decision === "deny" && input.decision === "deny");
       return sameDecision
         ? { status: "already_resolved", receipt: existing, snapshot: projectSnapshot(current) }
@@ -183,6 +265,15 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
       return { status: "stale", snapshot: projectSnapshot(current) };
     }
     const revision = nextRevision(current.revision);
+    const grantCandidate = input.grantContextId
+      ? current.pending.grantCandidate
+      : undefined;
+    if (input.grantContextId && (
+      current.defaultMode !== "remember_scoped_grants" ||
+      grantCandidate?.grantContextId !== PermissionGrantContextIdSchema.parse(input.grantContextId)
+    )) {
+      return { status: "stale", snapshot: projectSnapshot(current) };
+    }
     const receipt = DecisionReceiptSchema.parse({
       state: "decided",
       id: decisionId(current.pending.confirmation, input.bindingDigest, input.decision),
@@ -192,8 +283,8 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
       confirmationRevision: input.expectedRevision,
       bindingHash: input.bindingDigest,
       revision,
-      decision: input.decision === "allow" ? "allow_once" : "deny",
-      scope: input.decision === "allow" ? "once" : "never",
+      decision: input.decision === "allow" ? (grantCandidate ? "allow_scoped" : "allow_once") : "deny",
+      scope: input.decision === "allow" ? (grantCandidate?.scope ?? "once") : "never",
       decidedBy: "user",
       autoAllowedBy: "none",
       ...(current.pending.jobId ? { jobId: current.pending.jobId } : {}),
@@ -206,6 +297,54 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
       ...current,
       revision,
       pending: undefined,
+      grants: grantCandidate
+        ? [...current.grants.filter((grant) => grant.grantId !== grantCandidate.grant.grantId), grantCandidate.grant]
+        : current.grants,
+      receipts: [...current.receipts, receipt].slice(-MAX_RECEIPTS)
+    });
+    this.#write(next);
+    return { status: "committed", receipt, snapshot: projectSnapshot(next) };
+  }
+
+  authorizeSavedGrant(input: {
+    readonly binding: z.infer<typeof PermissionActionBindingSchema>;
+    readonly confirmation: HighRiskConfirmationSummary;
+  }): PermissionPolicyDecisionResult {
+    const binding = PermissionActionBindingSchema.parse(input.binding);
+    const confirmation = HighRiskConfirmationSummarySchema.parse(input.confirmation);
+    const current = this.#readRecord();
+    const requestId = createPermissionPolicyRequestId(binding.bindingHash, confirmation.confirmationId);
+    const existing = current.receipts.find((item) => item.confirmationId === confirmation.confirmationId);
+    if (existing) {
+      return existing.bindingHash === binding.bindingHash && existing.decision !== "deny"
+        ? { status: "already_resolved", receipt: existing, snapshot: projectSnapshot(current) }
+        : { status: "stale", snapshot: projectSnapshot(current) };
+    }
+    if (current.defaultMode !== "remember_scoped_grants" ||
+      !current.grants.some((grant) => permissionGrantMatches(grant, binding, this.#now()))) {
+      return { status: "not_found", snapshot: projectSnapshot(current) };
+    }
+    const revision = nextRevision(current.revision);
+    const receipt = DecisionReceiptSchema.parse({
+      state: "decided",
+      id: decisionId(confirmation, binding.bindingHash, "allow"),
+      schemaVersion: 1,
+      permissionRequestId: requestId,
+      confirmationId: confirmation.confirmationId,
+      confirmationRevision: revision,
+      bindingHash: binding.bindingHash,
+      revision,
+      decision: "allow_once",
+      scope: "once",
+      decidedBy: "system",
+      autoAllowedBy: "saved_grant",
+      jobId: binding.jobId,
+      ...(confirmation.owner.kind === "operation" ? { operationId: confirmation.owner.operationId } : {}),
+      decidedAt: this.#now()
+    });
+    const next = PermissionPolicyRecordSchema.parse({
+      ...current,
+      revision,
       receipts: [...current.receipts, receipt].slice(-MAX_RECEIPTS)
     });
     this.#write(next);
@@ -274,6 +413,7 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
       fs.rmSync(temporaryPath, { force: true });
     }
     this.#assertWriterLease();
+    for (const listener of this.#listeners) listener();
   }
 }
 
@@ -293,8 +433,13 @@ function initialRecord(): PermissionPolicyRecord {
 }
 
 function projectSnapshot(record: PermissionPolicyRecord): PermissionPolicySnapshot {
+  const now = Date.now();
+  const validGrants = record.grants.filter((grant) => Date.parse(grant.expiresAt) > now);
   return {
     revision: record.revision,
+    defaultMode: record.defaultMode,
+    grants: validGrants.map(projectPermissionGrant),
+    invalidGrantCount: record.grants.length - validGrants.length,
     ...(record.pending ? {
       pending: {
         state: record.pending.state,
@@ -302,7 +447,8 @@ function projectSnapshot(record: PermissionPolicyRecord): PermissionPolicySnapsh
         bindingDigest: record.pending.bindingDigest,
         ...(record.pending.jobId ? { jobId: record.pending.jobId } : {}),
         revision: record.pending.revision,
-        confirmation: record.pending.confirmation
+        confirmation: record.pending.confirmation,
+        ...(record.pending.grantCandidate ? { grantCandidate: record.pending.grantCandidate } : {})
       }
     } : {}),
     receipts: record.receipts
