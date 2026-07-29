@@ -2950,6 +2950,9 @@ app.whenReady().then(async () => {
       smokeWindow = createMainWindow(false);
       smokeStage = "renderer_load";
       const renderer = await runPackagedRendererSmoke(smokeWindow);
+      const screenshot = (await smokeWindow.webContents.capturePage()).toPNG();
+      const screenshotPath = `${packagedRuntimeSmokeReportPath}.png`;
+      writeFileSync(screenshotPath, screenshot, { mode: 0o600, flag: "wx" });
       const runtimeIdentity = {
         appName: app.getName(),
         appVersion: app.getVersion(),
@@ -2963,7 +2966,14 @@ app.whenReady().then(async () => {
         semanticRuntime,
         pi,
         home,
-        renderer
+        renderer: {
+          ...renderer,
+          uiEvidence: {
+            fileName: "packaged-ui.png",
+            bytes: screenshot.byteLength,
+            sha256: `sha256:${createHash("sha256").update(screenshot).digest("hex")}`
+          }
+        }
       })}\n`, {
         encoding: "utf8",
         mode: 0o600,

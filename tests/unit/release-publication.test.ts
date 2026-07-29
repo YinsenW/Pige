@@ -15,6 +15,11 @@ import {
   parseReleaseTag,
   resolveExactTagCommit
 } from "../../scripts/release/release-tag.mjs";
+import {
+  parseProcessTable,
+  summarizeProcessTree,
+  validateRuntimeQualification
+} from "../../scripts/release/macos-downloaded-qualification.mjs";
 
 const temporaryRoots: string[] = [];
 const commit = "a".repeat(40);
@@ -149,15 +154,18 @@ describe("release publication", () => {
     expect(workflow).toContain(
       'echo "APPLE_API_KEY=$RUNNER_TEMP/pige-notarization/AuthKey.p8" >> "$GITHUB_ENV"'
     );
-    expect(workflow).toContain("needs: [validate, verify-macos-arm64, verify-windows-x64]");
+    expect(workflow).toContain("needs: [validate, verify-macos-arm64]");
     expect(workflow).toContain("pige-verified-macos-arm64-");
-    expect(workflow).toContain("pige-verified-windows-x64-");
+    expect(workflow).toContain("macos-downloaded-qualification.mjs");
+    expect(workflow).toContain("pige-qualified-macos-arm64-");
+    expect(workflow).not.toContain("verify-windows-x64");
+    expect(workflow).not.toContain("pige-verified-windows-x64-");
     expect(workflow).toContain("notarize-macos-container.mjs");
     expect(workflow).toContain('gh release create "$PIGE_RELEASE_TAG"');
     expect(workflow).toContain("--verify-tag");
     expect(workflow).toContain("--prerelease");
     expect(workflow).toContain("artifacts/release-publication/macos-arm64/alpha-mac.yml");
-    expect(workflow).toContain("artifacts/release-publication/windows-x64/alpha.yml");
+    expect(packageability).toContain("windows-x64:");
     expect(workflow).not.toContain("artifacts/release-publication/macos-arm64/*.yml");
     expect(workflow).not.toContain("artifacts/release-publication/windows-x64/*.yml");
     expect(workflow).not.toContain("softprops/action-gh-release");
@@ -188,6 +196,24 @@ describe("release publication", () => {
       "await validateConfiguration(config,new DebugLogger(false))"
     ].join(";")], { cwd: root, encoding: "utf8" });
     expect(schemaValidation.status, schemaValidation.stderr).toBe(0);
+  });
+
+  it("aggregates a bounded downloaded-app process tree and renderer-safe UI evidence", () => {
+    const rows = parseProcessTable(" 100 1 120000\n 101 100 20000\n 102 101 30000\n 999 1 999999\n");
+    expect(summarizeProcessTree(rows, 100)).toEqual({ processCount: 3, residentBytes: 174_080_000 });
+    expect(validateRuntimeQualification({
+      schemaVersion: 1,
+      status: "passed",
+      runtimeIdentity: { appName: "Pige", appVersion: "0.1.0-alpha.2", isPackaged: true },
+      pi: { adapterMode: "embedded_pi_sdk" },
+      home: { state: "completed", citationCount: 1 },
+      renderer: {
+        title: "Pige", rootReady: true, preloadReady: true, healthReady: true,
+        toolchainManifest: { requiredRuntimeModulesReady: true },
+        uiEvidence: { fileName: "packaged-ui.png", bytes: 42, sha256: `sha256:${"a".repeat(64)}` }
+      }
+    }, "0.1.0-alpha.2").status).toBe("passed");
+    expect(() => validateRuntimeQualification({ status: "passed" }, "0.1.0-alpha.2")).toThrow();
   });
 });
 
