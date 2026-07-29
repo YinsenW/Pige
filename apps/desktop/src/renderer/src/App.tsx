@@ -2601,6 +2601,9 @@ export function App(): React.JSX.Element {
               speechAvailability={speechAvailability}
               speechAvailabilityLoading={speechAvailabilityLoading}
               speechAvailabilityFailed={speechAvailabilityFailed}
+              speechAssetApi={window.pige.speech}
+              speechLanguageTag={locale}
+              onRefreshSpeechAvailability={refreshSpeechAvailability}
               onRefresh={refreshLocalCapabilities}
               onOpenSpeechSettings={() => window.pige.speech.openSystemSettings()
                 .then(() => undefined)
