@@ -22,6 +22,7 @@ import {
 
 const root = process.cwd();
 const options = parseOptions(process.argv.slice(2));
+const expectedAppVersion = process.env.PIGE_EXPECTED_APP_VERSION ?? "0.0.0";
 const target = resolvePackageabilityPlatform(options.platform, options.arch);
 assertPackageabilityHost(target);
 const buildId = resolveBuildId(process.env.PIGE_REPORT_BUILD_ID ?? "local");
@@ -105,7 +106,8 @@ try {
   const packagedRuntimeResult = runPackagedPiSmoke({
     executablePath: distributedApplication.executablePath,
     tempRoot,
-    target
+    target,
+    expectedAppVersion
   });
   const afterRuntimeManifest = target.platform === "macos"
     ? collectBundleManifest(distributedApplication.appPath)
@@ -411,7 +413,7 @@ function macCommandOptions() {
   };
 }
 
-function runPackagedPiSmoke({ executablePath, tempRoot, target }) {
+function runPackagedPiSmoke({ executablePath, tempRoot, target, expectedAppVersion }) {
   const reportPath = path.join(tempRoot, "pi-smoke.json");
   const result = spawnSync(executablePath, [
     `--pige-packaged-runtime-smoke-report=${reportPath}`,
@@ -436,7 +438,7 @@ function runPackagedPiSmoke({ executablePath, tempRoot, target }) {
   if (
     report.schemaVersion !== 1 ||
     report.runtimeIdentity?.appName !== "Pige" ||
-    report.runtimeIdentity?.appVersion !== "0.0.0" ||
+    report.runtimeIdentity?.appVersion !== expectedAppVersion ||
     report.runtimeIdentity?.isPackaged !== true ||
     report.semanticRuntime?.embedding?.buildType !== "prebuilt" ||
     report.semanticRuntime?.embedding?.backend !== target.nativeSemantic.embeddingBackend ||
@@ -452,11 +454,19 @@ function runPackagedPiSmoke({ executablePath, tempRoot, target }) {
     report.renderer?.rootReady !== true ||
     report.renderer?.preloadReady !== true ||
     report.renderer?.healthReady !== true ||
+    report.renderer?.uiEvidence?.fileName !== "packaged-ui.png" ||
+    !/^sha256:[a-f0-9]{64}$/u.test(report.renderer?.uiEvidence?.sha256 ?? "") ||
+    !Number.isSafeInteger(report.renderer?.uiEvidence?.bytes) || report.renderer.uiEvidence.bytes <= 0 ||
     report.renderer?.toolchainManifest?.requiredRuntimeModulesReady !== true ||
     !Array.isArray(report.renderer?.toolchainManifest?.missingBundledToolIds) ||
     !report.renderer.toolchainManifest.missingBundledToolIds.every((id) => typeof id === "string")
   ) {
     throw new Error("Packaged Pi smoke returned an invalid bounded result.");
+  }
+  const screenshotPath = `${reportPath}.png`;
+  if (!fs.existsSync(screenshotPath) || checksumFile(screenshotPath) !== report.renderer.uiEvidence.sha256 ||
+    fs.statSync(screenshotPath).size !== report.renderer.uiEvidence.bytes) {
+    throw new Error("Packaged UI evidence does not match the bounded runtime report.");
   }
   return {
     runtimeIdentity: report.runtimeIdentity,
@@ -468,7 +478,8 @@ function runPackagedPiSmoke({ executablePath, tempRoot, target }) {
       homeAnswerMode: report.home.answerMode,
       homeCitationCount: report.home.citationCount
     },
-    renderer: report.renderer
+    renderer: report.renderer,
+    screenshotPath
   };
 }
 
@@ -538,14 +549,16 @@ function readApplicationIdentity({ target, appPath, runtimeIdentity }) {
     const infoPlistPath = path.join(appPath, "Contents/Info.plist");
     const appName = readPlistValue(infoPlistPath, "CFBundleName");
     const appId = readPlistValue(infoPlistPath, "CFBundleIdentifier");
-    if (appName !== "Pige" || appId !== "com.yinsenw.pige") {
+    const appVersion = readPlistValue(infoPlistPath, "CFBundleShortVersionString");
+    if (appName !== "Pige" || appId !== "com.yinsenw.pige" ||
+      appVersion !== expectedAppVersion || runtimeIdentity?.appVersion !== expectedAppVersion) {
       throw new Error("Packaged macOS application identity does not match the reviewed preflight identity.");
     }
-    return { appName, appId };
+    return { appName, appId, appVersion };
   }
   if (
     runtimeIdentity?.appName !== "Pige" ||
-    runtimeIdentity?.appVersion !== "0.0.0" ||
+    runtimeIdentity?.appVersion !== expectedAppVersion ||
     runtimeIdentity?.isPackaged !== true
   ) {
     throw new Error("Packaged Windows runtime identity does not match the reviewed preflight identity.");
