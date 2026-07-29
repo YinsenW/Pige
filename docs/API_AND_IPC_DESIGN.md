@@ -809,7 +809,8 @@ Agent policy DTOs must follow `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`.
 
 #### 6.8.1 Signed Update Lifecycle
 
-`updates.summary`, `check`, `download`, `apply`, and `onStatusChanged` are body-free.
+`updates.summary`, `updates.check`, `updates.download`, `updates.apply`, and
+`updates.onStatusChanged` are body-free.
 Download/apply bind request ID, exact version and expected summary revision; Main owns the
 immutable alpha feed, one in-flight lifecycle, signed macOS adapter and risky-Job gate.
 Summaries expose only version, phase, bounded progress and timestamps. Feed, artifact path,
