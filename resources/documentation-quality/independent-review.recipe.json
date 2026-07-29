@@ -51,14 +51,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of Pige-managed numeric formula columns.",
+    "scope": "Independent Planning review of Pige numeric formula create/update.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "f40bbcf8f0de22567b583e994e5a52d95ce7733fbdc4eaed8edea8dac31c6d60"
+    "reviewedSha256": "be210fc57b18646212d1f61fdd29bc095dbc5887814a9df2ede5ad2d574a2986"
   },
   "reviewers": [{
-    "reviewerId": "managed-collection-formula-review",
-    "task": "Managed Collection numeric formulas",
+    "reviewerId": "managed-collection-formula-update-review",
+    "task": "Managed Collection formula updates",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -66,32 +66,32 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed formula truth, atomicity and authority boundaries; Development and UI independently supplied implementation evidence."
+    "independence": "Planning reviewed formula update truth and Undo; Development and UI supplied implementation evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"managed-collection-formula-review","blockerCount":0,"summary":"A bounded dialog uses authoritative numeric operands and preserves drafts on failure."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"managed-collection-formula-review","blockerCount":0,"summary":"API, durable Dataset schema and UI share one typed AST, eligibility and CAS contract."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"managed-collection-formula-review","blockerCount":0,"summary":"The first B7.10 formula slice is bound while PIGE-DATA-003 and E7.06 stay planned."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"managed-collection-formula-review","blockerCount":0,"summary":"AST limits, evaluation, atomic recomputation, replay, trash guards and Undo are tested."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"managed-collection-formula-review","blockerCount":0,"summary":"Existing API, data, UI, Playbook, Decision and trace owners absorb the slice."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"managed-collection-formula-update-review","blockerCount":0,"summary":"Lossless edit eligibility is projected and stale preserves the draft."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"managed-collection-formula-update-review","blockerCount":0,"summary":"API, schema and UI share one typed AST and distinct update vocabulary."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"managed-collection-formula-update-review","blockerCount":0,"summary":"Formula update is bound while PIGE-DATA-003 and E7.06 stay planned."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"managed-collection-formula-update-review","blockerCount":0,"summary":"No-change, replay, recomputation, drift and exact forward Undo are tested."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"managed-collection-formula-update-review","blockerCount":0,"summary":"Existing API, data, UI, Playbook, Decision and trace owners absorb the delta."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Formula requests, ASTs, projections and results remain strict and renderer-safe."},
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Formula update request/result and Activity vocabularies are strict and safe."},
     {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision and trace locks keep PIGE-DATA-003 and E7.06 planned."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"The exact 735-LOC formula owner is protected and reviewed bytes are hash-bound."}
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"The exact 410-LOC update owner is protected and reviewed bytes are hash-bound."}
   ],
   "coordination": {
-    "taskId": "managed-collection-formula-20260729",
-    "taskTitle": "Managed Collection numeric formulas",
+    "taskId": "managed-collection-formula-update-20260729",
+    "taskTitle": "Managed Collection formula updates",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
     "compatibility": "Existing paging, citation, query/import and Collection CAS remain compatible.",
-    "acknowledgement": "Planning binds one numeric formula slice; complete E7.06 proof remains separate."
+    "acknowledgement": "Planning binds formula update; complete E7.06 proof remains separate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Formula editing, formula-on-formula, relations and broader schema lifecycle remain open.",
+    "Nested formula editing, formula-on-formula, relations and broader lifecycle remain open.",
     "Scale/platform, backup and exceptional conflict proof remain open."
   ]
 }

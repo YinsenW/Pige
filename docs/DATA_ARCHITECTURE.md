@@ -83,10 +83,10 @@ row/field changes publish immutable SQLite/schema/Operation revisions, manifest 
 advance separately. Evidence, originals, old revisions and previews remain immutable.
 
 `DatasetColumn.calculation` is sole Pige formula truth, including empty tables. V1 is a nullable
-number AST: finite literals or same-table editable non-formula integer/number IDs, four arithmetic
-operators, depth <=8/nodes <=31. Missing/empty/null, zero division or non-finite becomes null;
-`-0` becomes `0`. Edits/row adds recalculate in one transaction/revision. Imported formula caches
-stay read-only; referenced inputs cannot trash and Pige formulas retain rename/trash/Undo.
+number AST: finite literals or same-table editable non-formula numeric IDs, four operators,
+depth <=8/nodes <=31. Missing/empty/null, zero division or non-finite becomes null; `-0` is `0`.
+Cell/row/formula edits recalculate atomically; update replaces one descriptor/column and forward
+Undo restores prior schema/payload/stats. Imports stay cached/read-only.
 
 ```ts
 type DatasetEvidenceRef = {

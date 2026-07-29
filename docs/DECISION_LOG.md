@@ -3840,15 +3840,15 @@ Date: 2026-07-29
 
 Decision:
 
-Persist formula ASTs on Dataset columns.
+Persist and revision-update formula ASTs on Dataset columns.
 
 Rationale:
 
-Empty-table truth fixes evaluation.
+Schema truth plus prior revisions fixes evaluation and Undo.
 
 Consequences:
 
-- Numeric inputs only; edits/rows are atomic and column Activity owns Undo.
+- Numeric inputs only; cell/row/formula changes are atomic and Activity owns Undo.
 
 References:
 
