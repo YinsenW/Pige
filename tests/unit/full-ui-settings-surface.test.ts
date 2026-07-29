@@ -20,6 +20,7 @@ import {
 } from "../../apps/desktop/src/renderer/src/App";
 import {
   LocalCapabilitiesSettingsPanel,
+  type OcrLanguagePreferenceApi,
   type PaddleOcrApi
 } from "../../apps/desktop/src/renderer/src/components/LocalCapabilitiesSettingsPanel";
 import { SkillTrashRestorePanel } from "../../apps/desktop/src/renderer/src/components/SkillTrashRestorePanel";
@@ -3677,9 +3678,7 @@ describe("full UI Settings surface", () => {
 
     const appLanguage = requireElement(container.querySelector<HTMLSelectElement>('select[aria-label="App language"]'));
     const knowledgeLanguage = requireElement(container.querySelector<HTMLButtonElement>('[data-appearance-control="knowledge-language"]'));
-    const ocrLanguage = requireElement(container.querySelector<HTMLButtonElement>('[data-appearance-control="ocr-language"]'));
     expect(knowledgeLanguage.textContent).toBe("In development");
-    expect(ocrLanguage.textContent).toBe("In development");
     expect(container.querySelector('select[aria-label="Knowledge language"]')).toBeNull();
     expect(container.querySelector('select[aria-label="OCR language hint"]')).toBeNull();
     await act(async () => {
@@ -3699,13 +3698,11 @@ describe("full UI Settings surface", () => {
     expect(appLanguage.disabled).toBe(false);
     await act(async () => {
       knowledgeLanguage.click();
-      ocrLanguage.click();
       await settle(dom);
     });
     expect(onLocaleChange).toHaveBeenCalledWith("fr");
-    expect(onDevelopment).toHaveBeenCalledTimes(2);
+    expect(onDevelopment).toHaveBeenCalledTimes(1);
     expect(knowledgeLanguage.textContent).toBe("In development");
-    expect(ocrLanguage.textContent).toBe("In development");
     expect(ipcRead).toBe(false);
 
     await act(async () => {
@@ -3801,12 +3798,11 @@ describe("full UI Settings surface", () => {
     expect(container.textContent).toContain("Lexical search always remains available.");
 
     const paddleOcr = requireElement(container.querySelector<HTMLElement>('[data-paddle-ocr-state="not_installed"]'));
-    const imageOcr = requireElement(container.querySelector<HTMLButtonElement>('[data-capability-control="image-ocr"]'));
     const voice = requireElement(container.querySelector<HTMLElement>('[data-capability-status="voice-input"]'));
     expect(paddleOcr.textContent).toContain("PaddleOCR fallback");
     expect(paddleOcr.textContent).toContain("Not installed");
     expect(paddleOcr.textContent).toContain("Install");
-    expect(imageOcr.textContent).toBe("In development");
+    expect(container.querySelector('[data-capability-control="image-ocr"]')).toBeNull();
     expect(voice.textContent).toBe("Language resource needed");
     expect(container.querySelector('[data-capability-control="voice-input"]')).toBeNull();
     expect(container.querySelector('[data-capability-control="voice-open-settings"]')).toBeNull();
@@ -3817,12 +3813,10 @@ describe("full UI Settings surface", () => {
     await act(async () => {
       buttonNamed(container, "Check again").click();
       buttonNamed(container, "Repair...").click();
-      imageOcr.click();
       await settle(dom);
     });
     expect(onRefresh).toHaveBeenCalledOnce();
-    expect(onDevelopment).toHaveBeenCalledTimes(2);
-    expect(imageOcr.textContent).toBe("In development");
+    expect(onDevelopment).toHaveBeenCalledTimes(1);
     expect(voice.textContent).toBe("Language resource needed");
     expect(ipcRead).toBe(false);
 
@@ -3860,8 +3854,121 @@ describe("full UI Settings surface", () => {
     expect(
       Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Repair...")
     ).toBe(false);
-    expect(onDevelopment).toHaveBeenCalledTimes(2);
+    expect(onDevelopment).toHaveBeenCalledTimes(1);
     expect(ipcRead).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps an OCR language CAS draft through stale state, suppresses duplicate updates, and restores focus", async () => {
+    const dom = createDom();
+    let resolveFirstUpdate!: (result: Awaited<ReturnType<OcrLanguagePreferenceApi["setOcrLanguagePreference"]>>) => void;
+    const firstUpdate = new Promise<Awaited<ReturnType<OcrLanguagePreferenceApi["setOcrLanguagePreference"]>>>((resolve) => {
+      resolveFirstUpdate = resolve;
+    });
+    const update = vi.fn()
+      .mockImplementationOnce(async () => firstUpdate)
+      .mockImplementationOnce(async (request) => ({
+        apiVersion: 1,
+        requestId: request.requestId,
+        status: "committed",
+        summary: {
+          apiVersion: 1,
+          revision: 3,
+          preference: { mode: "preferred", language: "ja" },
+          appliesTo: "new_ocr_jobs"
+        }
+      }));
+    const ocrLanguagePreferenceApi: OcrLanguagePreferenceApi = {
+      ocrLanguagePreference: vi.fn(async (request) => ({
+        apiVersion: 1,
+        requestId: request.requestId,
+        status: "ready",
+        summary: {
+          apiVersion: 1,
+          revision: 1,
+          preference: { mode: "automatic" },
+          appliesTo: "new_ocr_jobs"
+        }
+      })),
+      setOcrLanguagePreference: update
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(LocalCapabilitiesSettingsPanel, {
+        ocrLanguagePreferenceApi,
+        paddleOcrApi: paddleOcrApi("not_installed"),
+        semanticRetrievalApi: semanticAssetApi("ready"),
+        toolchainHealth: null,
+        onRefresh: vi.fn(async () => undefined),
+        onDevelopment: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+
+    const container = dom.window.document.querySelector("#root")!;
+    const select = requireElement(container.querySelector<HTMLSelectElement>('select[aria-label="Preferred OCR language"]'));
+    expect(Array.from(select.options).map((option) => [option.value, option.textContent])).toEqual([
+      ["automatic", "Automatic"],
+      ["zh-Hans", "简体中文"],
+      ["en", "English"],
+      ["ja", "日本語"],
+      ["ko", "한국어"],
+      ["fr", "Français"],
+      ["de", "Deutsch"]
+    ]);
+    expect(container.textContent).toContain("Used only for new OCR jobs. Existing text is not changed.");
+
+    await act(async () => {
+      select.focus();
+      selectValue(dom, select, "fr");
+      selectValue(dom, select, "de");
+      await settle(dom);
+    });
+    expect(update).toHaveBeenCalledOnce();
+    expect(update).toHaveBeenCalledWith({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^ocrlangreq_[a-z0-9]{16,64}$/u),
+      preference: { mode: "preferred", language: "fr" },
+      expectedRevision: 1
+    });
+    expect(select.value).toBe("fr");
+    expect(select.disabled).toBe(true);
+
+    await act(async () => {
+      resolveFirstUpdate({
+        apiVersion: 1,
+        requestId: update.mock.calls[0]![0].requestId,
+        status: "stale",
+        summary: {
+          apiVersion: 1,
+          revision: 2,
+          preference: { mode: "preferred", language: "en" },
+          appliesTo: "new_ocr_jobs"
+        }
+      });
+      await settle(dom);
+    });
+    expect(select.value).toBe("fr");
+    expect(select.disabled).toBe(false);
+    expect(dom.window.document.activeElement).toBe(select);
+    expect(container.textContent).toContain("The OCR language changed elsewhere. Your selection was kept");
+
+    await act(async () => {
+      selectValue(dom, select, "ja");
+      await settle(dom);
+    });
+    expect(update).toHaveBeenLastCalledWith({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^ocrlangreq_[a-z0-9]{16,64}$/u),
+      preference: { mode: "preferred", language: "ja" },
+      expectedRevision: 2
+    });
+    expect(select.value).toBe("ja");
+    expect(container.querySelector("#capabilities-ocr-language-notice")).toBeNull();
+    expect(dom.window.document.activeElement).toBe(select);
 
     await act(async () => root.unmount());
     dom.window.close();
