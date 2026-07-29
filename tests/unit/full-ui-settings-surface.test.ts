@@ -21,7 +21,8 @@ import {
 import {
   LocalCapabilitiesSettingsPanel,
   type OcrLanguagePreferenceApi,
-  type PaddleOcrApi
+  type PaddleOcrApi,
+  type SpeechAssetApi
 } from "../../apps/desktop/src/renderer/src/components/LocalCapabilitiesSettingsPanel";
 import { SkillTrashRestorePanel } from "../../apps/desktop/src/renderer/src/components/SkillTrashRestorePanel";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
@@ -71,6 +72,7 @@ import type {
   SkillRestoreRequest,
   SkillRestoreResult,
   SkillUninstallRequest,
+  SpeechAssetInstallEvent,
   SpeechAvailabilityResult
 } from "@pige/contracts";
 import {
@@ -3966,6 +3968,193 @@ describe("full UI Settings surface", () => {
     ).toBe(false);
     expect(onDevelopment).toHaveBeenCalledTimes(1);
     expect(ipcRead).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("installs one missing speech language asset and rechecks authoritative availability", async () => {
+    const dom = createDom();
+    let assetListener: ((event: SpeechAssetInstallEvent) => void) | undefined;
+    const installLanguageAsset = vi.fn<SpeechAssetApi["installLanguageAsset"]>()
+      .mockImplementationOnce(async (request) => ({
+        status: "started",
+        requestId: request.requestId,
+        installationId: "speechinstall_20260729_settingsasset",
+        languageTag: request.languageTag,
+        metering: "available"
+      }))
+      .mockImplementationOnce(async (request) => ({
+        status: "blocked",
+        requestId: request.requestId,
+        error: {
+          code: "speech.asset_install_failed",
+          domain: "speech",
+          messageKey: "errors.speech.asset_install_failed",
+          retryable: true,
+          severity: "warning",
+          userAction: "retry"
+        }
+      }));
+    const speechAssetApi: SpeechAssetApi = {
+      installLanguageAsset,
+      onAssetInstallEvent: (listener) => {
+        assetListener = listener;
+        return () => { assetListener = undefined; };
+      }
+    };
+    const refreshSpeechAvailability = vi.fn(async () => undefined);
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(LocalCapabilitiesSettingsPanel, {
+        paddleOcrApi: paddleOcrApi("not_installed"),
+        semanticRetrievalApi: semanticAssetApi("ready"),
+        toolchainHealth: { status: "ready", checkedAt: "2026-07-29T00:00:00.000Z", tools: [] },
+        speechAvailability: { status: "unsupported", reason: "assets_unavailable", canOpenSystemSettings: false },
+        speechAvailabilityLoading: false,
+        speechAvailabilityFailed: false,
+        speechAssetApi,
+        speechLanguageTag: "en",
+        onRefreshSpeechAvailability: refreshSpeechAvailability,
+        onRefresh: async () => undefined,
+        onDevelopment: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const install = buttonNamed(container, "Install resource");
+
+    await act(async () => {
+      install.click();
+      install.click();
+      await settle(dom);
+    });
+    expect(installLanguageAsset).toHaveBeenCalledOnce();
+    expect(installLanguageAsset.mock.calls[0]?.[0]).toMatchObject({ languageTag: "en" });
+    expect(installLanguageAsset.mock.calls[0]?.[0].requestId).toMatch(/^speechasset_[a-z0-9]{32}$/u);
+    expect(buttonNamed(container, "Installing...").disabled).toBe(true);
+
+    await act(async () => {
+      assetListener?.({
+        apiVersion: 1,
+        installationId: "speechinstall_20260729_settingsasset",
+        sequence: 1,
+        kind: "progress",
+        completedFraction: 0.4
+      });
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Installing language resource 40%");
+
+    await act(async () => {
+      assetListener?.({
+        apiVersion: 1,
+        installationId: "speechinstall_20260729_settingsasset",
+        sequence: 2,
+        kind: "installed",
+        languageTag: "en"
+      });
+      await settle(dom);
+    });
+    expect(refreshSpeechAvailability).toHaveBeenCalledOnce();
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Install resource"));
+
+    await act(async () => {
+      buttonNamed(container, "Install resource").click();
+      await settle(dom);
+    });
+    expect(installLanguageAsset).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('[role="alert"]')?.textContent)
+      .toBe("Pige could not install the language resource. Try again.");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Install resource"));
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("rejects speech asset results after locale drift or wrong-language startup", async () => {
+    const dom = createDom();
+    let resolveFirst!: (result: Awaited<ReturnType<SpeechAssetApi["installLanguageAsset"]>>) => void;
+    const first = new Promise<Awaited<ReturnType<SpeechAssetApi["installLanguageAsset"]>>>((resolve) => {
+      resolveFirst = resolve;
+    });
+    let assetListener: ((event: SpeechAssetInstallEvent) => void) | undefined;
+    const installLanguageAsset = vi.fn<SpeechAssetApi["installLanguageAsset"]>()
+      .mockImplementationOnce(() => first)
+      .mockImplementationOnce(async (request) => ({
+        status: "started",
+        requestId: request.requestId,
+        installationId: "speechinstall_20260729_wronglang",
+        languageTag: "en",
+        metering: "available"
+      }));
+    const speechAssetApi: SpeechAssetApi = {
+      installLanguageAsset,
+      onAssetInstallEvent: (listener) => {
+        assetListener = listener;
+        return () => { assetListener = undefined; };
+      }
+    };
+    const refreshSpeechAvailability = vi.fn(async () => undefined);
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const render = async (languageTag: "en" | "fr"): Promise<void> => {
+      await act(async () => {
+        root.render(createElement(LocalCapabilitiesSettingsPanel, {
+          paddleOcrApi: paddleOcrApi("not_installed"),
+          semanticRetrievalApi: semanticAssetApi("ready"),
+          toolchainHealth: { status: "ready", checkedAt: "2026-07-29T00:00:00.000Z", tools: [] },
+          speechAvailability: { status: "unsupported", reason: "assets_unavailable", canOpenSystemSettings: false },
+          speechAvailabilityLoading: false,
+          speechAvailabilityFailed: false,
+          speechAssetApi,
+          speechLanguageTag: languageTag,
+          onRefreshSpeechAvailability: refreshSpeechAvailability,
+          onRefresh: async () => undefined,
+          onDevelopment: vi.fn(),
+          t
+        }));
+        await settle(dom);
+      });
+    };
+    await render("en");
+    const container = dom.window.document.querySelector("#root")!;
+    await act(async () => {
+      buttonNamed(container, "Install resource").click();
+      await settle(dom);
+    });
+    const firstRequest = installLanguageAsset.mock.calls[0]?.[0];
+    await render("fr");
+    await act(async () => {
+      resolveFirst({
+        status: "started",
+        requestId: firstRequest!.requestId,
+        installationId: "speechinstall_20260729_oldlocale",
+        languageTag: "en",
+        metering: "available"
+      });
+      assetListener?.({
+        apiVersion: 1,
+        installationId: "speechinstall_20260729_oldlocale",
+        sequence: 1,
+        kind: "installed",
+        languageTag: "en"
+      });
+      await settle(dom);
+    });
+    expect(refreshSpeechAvailability).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-capability-status="voice-input"]')?.textContent)
+      .toBe("Language resource needed");
+
+    await act(async () => {
+      buttonNamed(container, "Install resource").click();
+      await settle(dom);
+    });
+    expect(installLanguageAsset).toHaveBeenCalledTimes(2);
+    expect(installLanguageAsset.mock.calls[1]?.[0].languageTag).toBe("fr");
+    expect(refreshSpeechAvailability).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')?.textContent)
+      .toBe("Pige could not install the language resource. Try again.");
 
     await act(async () => root.unmount());
     dom.window.close();

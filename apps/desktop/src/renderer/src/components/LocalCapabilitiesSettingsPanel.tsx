@@ -18,6 +18,9 @@ import type {
   OcrLanguagePreferenceResult,
   SetOcrLanguagePreferenceRequest,
   SetOcrLanguagePreferenceResult,
+  SpeechAssetInstallEvent,
+  SpeechAssetInstallRequest,
+  SpeechAssetInstallResult,
   SpeechAvailabilityResult,
   ToolchainHealth
 } from "@pige/contracts";
@@ -51,6 +54,11 @@ export interface PaddleOcrApi {
   readonly removePaddleOcr: (request: PaddleOcrRemoveRequest) => Promise<PaddleOcrRemoveResult>;
 }
 
+export interface SpeechAssetApi {
+  readonly installLanguageAsset: (request: SpeechAssetInstallRequest) => Promise<SpeechAssetInstallResult>;
+  readonly onAssetInstallEvent: (listener: (event: SpeechAssetInstallEvent) => void) => () => void;
+}
+
 export interface LocalCapabilitiesSettingsPanelProps {
   readonly ocrLanguagePreferenceApi?: OcrLanguagePreferenceApi;
   readonly paddleOcrApi: PaddleOcrApi;
@@ -59,6 +67,9 @@ export interface LocalCapabilitiesSettingsPanelProps {
   readonly speechAvailability?: SpeechAvailabilityResult | null;
   readonly speechAvailabilityLoading?: boolean;
   readonly speechAvailabilityFailed?: boolean;
+  readonly speechAssetApi?: SpeechAssetApi;
+  readonly speechLanguageTag?: Locale;
+  readonly onRefreshSpeechAvailability?: () => Promise<void>;
   readonly onRefresh: () => Promise<void>;
   readonly onOpenSpeechSettings?: () => Promise<void>;
   readonly onDevelopment: () => void;
@@ -439,6 +450,16 @@ export function LocalCapabilitiesSettingsPanel(
 ): React.JSX.Element {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshFailed, setRefreshFailed] = useState(false);
+  const [speechAssetState, setSpeechAssetState] = useState<"idle" | "installing" | "failed">("idle");
+  const [speechAssetProgress, setSpeechAssetProgress] = useState<number | null>(null);
+  const speechAssetRequestRef = useRef<string | null>(null);
+  const speechAssetInstallationRef = useRef<string | null>(null);
+  const speechAssetSequenceRef = useRef(0);
+  const speechAssetBufferedEventsRef = useRef<SpeechAssetInstallEvent[]>([]);
+  const speechAssetTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const speechStatusRef = useRef<HTMLSpanElement | null>(null);
+  const currentSpeechLanguageRef = useRef(props.speechLanguageTag);
+  currentSpeechLanguageRef.current = props.speechLanguageTag;
   const missingRequiredTools =
     props.toolchainHealth?.tools.filter((tool) => tool.required && tool.status === "missing") ?? [];
   const toolchainState = props.toolchainHealth?.status ?? "checking";
@@ -458,6 +479,100 @@ export function LocalCapabilitiesSettingsPanel(
   const speechSettingsAvailable = props.speechAvailability?.status === "supported" &&
     props.speechAvailability.canOpenSystemSettings &&
     (props.speechAvailability.permission === "denied" || props.speechAvailability.permission === "restricted");
+  const speechAssetInstallAvailable = speechCapabilityState === "asset_needed" &&
+    Boolean(props.speechAssetApi && props.speechLanguageTag && props.onRefreshSpeechAvailability);
+
+  const restoreSpeechAssetFocus = (): void => {
+    window.setTimeout(() => (speechAssetTriggerRef.current ?? speechStatusRef.current)?.focus(), 0);
+  };
+  const applySpeechAssetEvent = (event: SpeechAssetInstallEvent): void => {
+    if (
+      event.installationId !== speechAssetInstallationRef.current ||
+      event.sequence <= speechAssetSequenceRef.current
+    ) return;
+    speechAssetSequenceRef.current = event.sequence;
+    if (event.kind === "progress") {
+      setSpeechAssetProgress(Math.round(event.completedFraction * 100));
+      return;
+    }
+    speechAssetInstallationRef.current = null;
+    if (event.kind === "failed" || event.languageTag !== currentSpeechLanguageRef.current) {
+      setSpeechAssetState("failed");
+      setSpeechAssetProgress(null);
+      restoreSpeechAssetFocus();
+      return;
+    }
+    setSpeechAssetProgress(100);
+    void props.onRefreshSpeechAvailability?.().then(() => {
+      setSpeechAssetState("idle");
+      restoreSpeechAssetFocus();
+    }).catch(() => {
+      setSpeechAssetState("failed");
+      setSpeechAssetProgress(null);
+      restoreSpeechAssetFocus();
+    });
+  };
+  const installSpeechAsset = async (): Promise<void> => {
+    if (!speechAssetInstallAvailable || speechAssetRequestRef.current || speechAssetInstallationRef.current) return;
+    const requestId = `speechasset_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+    const languageTag = props.speechLanguageTag!;
+    speechAssetRequestRef.current = requestId;
+    speechAssetSequenceRef.current = 0;
+    speechAssetBufferedEventsRef.current = [];
+    setSpeechAssetState("installing");
+    setSpeechAssetProgress(null);
+    try {
+      const result = await props.speechAssetApi!.installLanguageAsset({ requestId, languageTag });
+      if (speechAssetRequestRef.current !== requestId) return;
+      speechAssetRequestRef.current = null;
+      if (currentSpeechLanguageRef.current !== languageTag) {
+        setSpeechAssetState("idle");
+        setSpeechAssetProgress(null);
+        return;
+      }
+      if (
+        result.requestId !== requestId ||
+        result.status !== "started" ||
+        result.languageTag !== languageTag
+      ) {
+        setSpeechAssetState("failed");
+        restoreSpeechAssetFocus();
+        return;
+      }
+      speechAssetInstallationRef.current = result.installationId;
+      for (const event of speechAssetBufferedEventsRef.current) applySpeechAssetEvent(event);
+      speechAssetBufferedEventsRef.current = [];
+    } catch {
+      if (speechAssetRequestRef.current === requestId) {
+        speechAssetRequestRef.current = null;
+        setSpeechAssetState("failed");
+        restoreSpeechAssetFocus();
+      }
+    }
+  };
+
+  useEffect(() => props.speechAssetApi?.onAssetInstallEvent((event) => {
+    if (!speechAssetInstallationRef.current && speechAssetRequestRef.current) {
+      speechAssetBufferedEventsRef.current.push(event);
+      return;
+    }
+    applySpeechAssetEvent(event);
+  }), [props.speechAssetApi, props.speechLanguageTag]);
+
+  useEffect(() => {
+    speechAssetRequestRef.current = null;
+    speechAssetInstallationRef.current = null;
+    speechAssetSequenceRef.current = 0;
+    speechAssetBufferedEventsRef.current = [];
+    setSpeechAssetState("idle");
+    setSpeechAssetProgress(null);
+  }, [props.speechLanguageTag]);
+
+  useEffect(() => () => {
+    speechAssetRequestRef.current = null;
+    speechAssetInstallationRef.current = null;
+    speechAssetBufferedEventsRef.current = [];
+  }, []);
 
   const refresh = async (): Promise<void> => {
     if (refreshing) return;
@@ -575,8 +690,10 @@ export function LocalCapabilitiesSettingsPanel(
             </div>
             <div className="settings-row-control">
               <span
+                ref={speechStatusRef}
                 className={`settings-status${speechCapabilityState === "available" ? "" : " warning"}`}
                 data-capability-status="voice-input"
+                tabIndex={-1}
                 role={speechCapabilityState === "failed" ? "alert" : "status"}
                 aria-live="polite"
               >
@@ -592,8 +709,34 @@ export function LocalCapabilitiesSettingsPanel(
                   {props.t("capabilities.voice.openSettings")}
                 </button>
               ) : null}
+              {speechAssetInstallAvailable ? (
+                <button
+                  ref={speechAssetTriggerRef}
+                  className="settings-button"
+                  type="button"
+                  data-capability-control="voice-install-asset"
+                  disabled={speechAssetState === "installing"}
+                  onClick={() => void installSpeechAsset()}
+                >
+                  {props.t(speechAssetState === "installing"
+                    ? "capabilities.voice.installingAsset"
+                    : "capabilities.voice.installAsset")}
+                </button>
+              ) : null}
             </div>
           </div>
+          {speechAssetState === "installing" || speechAssetState === "failed" ? (
+            <p
+              className={speechAssetState === "failed" ? "settings-inline-status error" : "settings-inline-status"}
+              role={speechAssetState === "failed" ? "alert" : "status"}
+              aria-live="polite"
+            >
+              {props.t(speechAssetState === "failed"
+                ? "capabilities.voice.assetInstallFailed"
+                : "capabilities.voice.assetInstallProgress")}
+              {speechAssetState === "installing" && speechAssetProgress !== null ? ` ${speechAssetProgress}%` : ""}
+            </p>
+          ) : null}
         </div>
       </section>
 
