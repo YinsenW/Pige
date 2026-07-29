@@ -886,6 +886,10 @@ export const HighRiskConfirmationOwnerSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("pi_package_install_task"),
     taskId: PiPackageInstallTaskIdSchema
+  }).strict(),
+  z.object({
+    kind: z.literal("permission_policy"),
+    policyRequestId: PermissionPolicyRequestIdSchema
   }).strict()
 ]);
 const HighRiskConfirmationSummaryBaseSchema = z.object({
@@ -982,6 +986,13 @@ export const HighRiskConfirmationSummarySchema = z.discriminatedUnion("effect", 
     context.addIssue({
       code: "custom",
       message: "Pi package install tasks may own only exact package-install confirmation.",
+      path: ["owner"]
+    });
+  }
+  if (summary.owner.kind === "permission_policy" && summary.effect !== "authority_boundary_change") {
+    context.addIssue({
+      code: "custom",
+      message: "Permission policy requests may own only exact authority-boundary confirmation.",
       path: ["owner"]
     });
   }
