@@ -29,7 +29,13 @@ describe("PermissionPolicyStore", () => {
     const assertWriterLease = vi.fn();
     const first = new PermissionPolicyStore(root, assertWriterLease);
 
-    expect(first.read()).toEqual({ revision: 0, receipts: [] });
+    expect(first.read()).toEqual({
+      revision: 0,
+      defaultMode: "ask_every_time",
+      grants: [],
+      invalidGrantCount: 0,
+      receipts: []
+    });
     expect(first.register({
       requestId: REQUEST_ID,
       bindingDigest: BINDING_DIGEST,

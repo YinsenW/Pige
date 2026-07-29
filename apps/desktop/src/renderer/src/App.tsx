@@ -23,6 +23,7 @@ import { ConversationEarlierControl, projectCompletedConversation, useConversati
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { HomeJobAction } from "./components/HomeJobAction";
 import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
+import { PermissionsPrivacySettingsPanel } from "./components/PermissionsPrivacySettingsPanel";
 import { VaultMigrationDialog } from "./components/VaultMigrationDialog";
 import { TaskExecutionInteractionStatus } from "./components/TaskExecutionInteraction";
 import { AgentMemorySettingsPanel } from "./components/AgentMemorySettingsPanel";
@@ -374,6 +375,7 @@ export function App(): React.JSX.Element {
   const [captureToast, setCaptureToast] = useState<CaptureToast | null>(null);
   const [highRiskConfirmation, setHighRiskConfirmation] = useState<HighRiskConfirmationPendingResult | null>(null);
   const [highRiskConfirmationDecision, setHighRiskConfirmationDecision] = useState<"allow" | "deny" | null>(null);
+  const highRiskConfirmationDecisionRef = useRef<"allow" | "deny" | null>(null);
   const [highRiskConfirmationFailed, setHighRiskConfirmationFailed] = useState(false);
   const [highRiskConfirmationReading, setHighRiskConfirmationReading] = useState(false);
   const [recentJobs, setRecentJobs] = useState<readonly JobSummary[]>([]);
@@ -585,6 +587,7 @@ export function App(): React.JSX.Element {
     if (next.revision < highRiskConfirmationRevisionRef.current) return;
     highRiskConfirmationRevisionRef.current = next.revision;
     setHighRiskConfirmation(next);
+    highRiskConfirmationDecisionRef.current = null;
     setHighRiskConfirmationDecision(null);
     setHighRiskConfirmationFailed(false);
   };
@@ -2027,9 +2030,13 @@ export function App(): React.JSX.Element {
     }
   };
 
-  const resolveHighRiskConfirmation = async (decision: "allow" | "deny"): Promise<void> => {
-    if (highRiskConfirmation?.status !== "pending" || highRiskConfirmationDecision) return;
+  const resolveHighRiskConfirmation = async (
+    decision: "allow" | "deny",
+    grantContextId?: string
+  ): Promise<void> => {
+    if (highRiskConfirmation?.status !== "pending" || highRiskConfirmationDecisionRef.current) return;
     const current = highRiskConfirmation;
+    highRiskConfirmationDecisionRef.current = decision;
     setHighRiskConfirmationDecision(decision);
     setHighRiskConfirmationFailed(false);
     try {
@@ -2037,7 +2044,10 @@ export function App(): React.JSX.Element {
         apiVersion: 1,
         confirmationId: current.confirmation.confirmationId,
         expectedRevision: current.revision,
-        decision
+        decision,
+        ...(grantContextId ? {
+          rememberScopedGrant: { decision: "allow_scoped" as const, grantContextId }
+        } : {})
       });
       if (result.status === "stale") {
         applyHighRiskConfirmation(result.current);
@@ -2059,6 +2069,7 @@ export function App(): React.JSX.Element {
         setHighRiskConfirmationFailed(true);
       }
     } finally {
+      highRiskConfirmationDecisionRef.current = null;
       setHighRiskConfirmationDecision(null);
     }
   };
@@ -2618,6 +2629,8 @@ export function App(): React.JSX.Element {
             />
           ) : settingsSection === "privacy" ? (
             <PermissionsPrivacySettingsPanel
+              activeVaultId={activeVault?.vaultId ?? null}
+              api={window.pige.permissions}
               t={t}
             />
           ) : settingsSection === "skills" ? (
@@ -2675,9 +2688,10 @@ export function App(): React.JSX.Element {
         <HighRiskConfirmationDialog
           key={highRiskConfirmation.confirmation.confirmationId}
           confirmation={highRiskConfirmation.confirmation}
+          rememberScopedGrant={highRiskConfirmation.rememberScopedGrant}
           resolving={highRiskConfirmationDecision !== null}
           error={highRiskConfirmationFailed}
-          onResolve={(decision) => void resolveHighRiskConfirmation(decision)}
+          onResolve={(decision, grantContextId) => void resolveHighRiskConfirmation(decision, grantContextId)}
           t={t}
         />
       ) : null}
@@ -7401,77 +7415,6 @@ export function AppearanceSettingsPanel(props: {
       </section>
 
       <p className="settings-note" id="appearance-partial-note">{props.t("appearance.partialNote")}</p>
-    </section>
-  );
-}
-
-export function PermissionsPrivacySettingsPanel(props: {
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  return (
-    <section className="settings-page privacy-settings-page" aria-labelledby="settings-privacy-title">
-      <header className="settings-panel-header">
-        <h1 id="settings-privacy-title">{props.t("privacy.title")}</h1>
-        <p>{props.t("privacy.subtitle")}</p>
-      </header>
-
-      <section className="settings-section" aria-labelledby="privacy-model-boundary-title">
-        <h2 className="settings-section-title" id="privacy-model-boundary-title">
-          {props.t("privacy.modelBoundary")}
-        </h2>
-        <div className="settings-card">
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("privacy.ordinaryTitle")}</strong>
-              <span>{props.t("privacy.ordinaryDescription")}</span>
-            </div>
-            <span className="settings-status">{props.t("privacy.connectedDefault")}</span>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("privacy.cloudPolicyTitle")}</strong>
-              <span>{props.t("privacy.cloudPolicyDescription")}</span>
-            </div>
-            <span className="settings-status">{props.t("privacy.cloudPolicyStatus")}</span>
-          </div>
-        </div>
-      </section>
-
-      <section className="settings-section" aria-labelledby="privacy-high-risk-title">
-        <h2 className="settings-section-title" id="privacy-high-risk-title">
-          {props.t("privacy.highRiskTitle")}
-        </h2>
-        <div className="settings-card">
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("privacy.highRiskEffectsTitle")}</strong>
-              <span>{props.t("privacy.highRiskEffectsDescription")}</span>
-            </div>
-            <span className="settings-status">{props.t("privacy.confirmEachEffect")}</span>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("privacy.noSavedAuthorityTitle")}</strong>
-              <span>{props.t("privacy.noSavedAuthorityDescription")}</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="settings-section" aria-labelledby="privacy-api-keys-title">
-        <h2 className="settings-section-title" id="privacy-api-keys-title">
-          {props.t("privacy.apiKeys")}
-        </h2>
-        <div className="settings-card">
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("privacy.apiKeyStorageTitle")}</strong>
-              <span>{props.t("privacy.apiKeyStorageDescription")}</span>
-            </div>
-            <span className="settings-status">{props.t("privacy.protected")}</span>
-          </div>
-        </div>
-      </section>
     </section>
   );
 }

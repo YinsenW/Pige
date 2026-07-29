@@ -400,6 +400,9 @@ export const OperationIdSchema = z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/);
 export const HighRiskConfirmationIdSchema = z.string().regex(/^confirm_\d{8}_[a-z0-9]{16,64}$/);
 export const PermissionRequestIdSchema = z.string().regex(/^permreq_\d{8}_[a-z0-9]{16,64}$/);
 export const PermissionDecisionIdSchema = z.string().regex(/^permdec_\d{8}_[a-z0-9]{16,64}$/);
+export const PermissionGrantContextIdSchema = z.string().regex(/^grantctx_[a-z0-9]{16,64}$/);
+export const PermissionGrantIdSchema = z.string().regex(/^grant_\d{8}_[a-z0-9]{16,64}$/);
+export const PermissionPolicyRequestIdSchema = z.string().regex(/^permissionpolicyreq_[a-z0-9]{16,64}$/);
 export const PiPackageInstallTaskIdSchema = z.string()
   .regex(/^pi_package_task_[a-z0-9]{16,64}$/u);
 export const TaskExecutionPlanIdSchema = z.string()
@@ -988,7 +991,13 @@ export const HighRiskConfirmationPendingResultSchema = z.discriminatedUnion("sta
     apiVersion: z.literal(1),
     status: z.literal("pending"),
     revision: z.number().int().positive(),
-    confirmation: HighRiskConfirmationSummarySchema
+    confirmation: HighRiskConfirmationSummarySchema,
+    rememberScopedGrant: z.object({
+      grantContextId: PermissionGrantContextIdSchema,
+      scope: z.enum(["actor_version", "resource_scope"]),
+      safeScopeLabel: RendererSafeSubjectLabelSchema,
+      expiresAt: z.string().datetime({ offset: true })
+    }).strict().optional()
   }).strict(),
   z.object({
     apiVersion: z.literal(1),
@@ -1000,8 +1009,20 @@ export const HighRiskConfirmationResolveRequestSchema = z.object({
   apiVersion: z.literal(1),
   confirmationId: HighRiskConfirmationIdSchema,
   expectedRevision: z.number().int().positive(),
-  decision: z.enum(["allow", "deny"])
-}).strict();
+  decision: z.enum(["allow", "deny"]),
+  rememberScopedGrant: z.object({
+    decision: z.literal("allow_scoped"),
+    grantContextId: PermissionGrantContextIdSchema
+  }).strict().optional()
+}).strict().superRefine((request, context) => {
+  if (request.decision === "deny" && request.rememberScopedGrant !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["rememberScopedGrant"],
+      message: "A denial cannot create a remembered scoped grant."
+    });
+  }
+});
 export const HighRiskConfirmationResolveResultSchema = z.discriminatedUnion("status", [
   z.object({
     apiVersion: z.literal(1),
@@ -2574,6 +2595,84 @@ export const PermissionDecisionRecordSchema = z.object({
     });
   }
 });
+
+export const PERMISSIONS_SUMMARY_CHANNEL = "permissions.summary" as const;
+export const PERMISSIONS_SET_DEFAULT_MODE_CHANNEL = "permissions.setDefaultMode" as const;
+export const PERMISSIONS_REVOKE_GRANT_CHANNEL = "permissions.revokeGrant" as const;
+export const PERMISSIONS_CHANGED_CHANNEL = "permissions.changed" as const;
+
+export const PermissionDefaultModeSchema = z.enum([
+  "ask_every_time",
+  "remember_scoped_grants"
+]);
+
+export const PermissionGrantSummarySchema = z.object({
+  grantId: PermissionGrantIdSchema,
+  actorType: PermissionActorTypeSchema,
+  actorLabel: RendererSafeSubjectLabelSchema,
+  actorVersion: PermissionVersionSchema,
+  capability: PermissionCapabilitySchema,
+  dataBoundary: PermissionDataBoundarySchema,
+  scope: z.enum(["actor_version", "resource_scope"]),
+  resourceScope: PermissionResourceScopeSchema,
+  resourceLabel: RendererSafeSubjectLabelSchema,
+  createdAt: z.string().datetime({ offset: true }),
+  expiresAt: z.string().datetime({ offset: true }),
+  canRevoke: z.literal(true)
+}).strict();
+
+export const PermissionPolicySummarySchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  defaultMode: PermissionDefaultModeSchema,
+  grants: z.array(PermissionGrantSummarySchema).max(64).refine(
+    (grants) => new Set(grants.map((grant) => grant.grantId)).size === grants.length,
+    "Permission grant IDs must be unique."
+  ),
+  invalidGrantCount: z.number().int().nonnegative().max(10_000)
+}).strict();
+
+const PermissionPolicyRequestIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PermissionPolicyRequestIdSchema,
+  activeVaultId: VaultIdSchema
+}).strict();
+
+export const PermissionPolicySummaryRequestSchema = PermissionPolicyRequestIdentitySchema;
+export const PermissionPolicySummaryResultSchema = z.discriminatedUnion("status", [
+  PermissionPolicyRequestIdentitySchema.extend({
+    status: z.literal("ready"),
+    summary: PermissionPolicySummarySchema
+  }).strict(),
+  PermissionPolicyRequestIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+
+export const PermissionSetDefaultModeRequestSchema = PermissionPolicyRequestIdentitySchema.extend({
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  mode: PermissionDefaultModeSchema
+}).strict();
+export const PermissionSetDefaultModeResultSchema = z.discriminatedUnion("status", [
+  PermissionPolicyRequestIdentitySchema.extend({
+    status: z.enum(["committed", "stale"]),
+    summary: PermissionPolicySummarySchema
+  }).strict(),
+  PermissionPolicyRequestIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+
+export const PermissionRevokeGrantRequestSchema = PermissionPolicyRequestIdentitySchema.extend({
+  grantId: PermissionGrantIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+export const PermissionRevokeGrantResultSchema = z.discriminatedUnion("status", [
+  PermissionPolicyRequestIdentitySchema.extend({
+    status: z.enum(["committed", "stale", "not_found"]),
+    summary: PermissionPolicySummarySchema
+  }).strict(),
+  PermissionPolicyRequestIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+
+export const PermissionPolicyChangedEventSchema = PermissionPolicySummarySchema;
 
 export const ExternalWebSkillRuntimeIdentitySchema = z.object({
   kind: z.literal("external_web"),
@@ -8059,7 +8158,19 @@ export type PermissionCapability = z.infer<typeof PermissionCapabilitySchema>;
 export type PermissionDecisionId = z.infer<typeof PermissionDecisionIdSchema>;
 export type PermissionDecisionRecord = z.infer<typeof PermissionDecisionRecordSchema>;
 export type PermissionDecisionScope = z.infer<typeof PermissionDecisionScopeSchema>;
+export type PermissionDefaultMode = z.infer<typeof PermissionDefaultModeSchema>;
+export type PermissionGrantContextId = z.infer<typeof PermissionGrantContextIdSchema>;
+export type PermissionGrantId = z.infer<typeof PermissionGrantIdSchema>;
+export type PermissionGrantSummary = z.infer<typeof PermissionGrantSummarySchema>;
+export type PermissionPolicyChangedEvent = z.infer<typeof PermissionPolicyChangedEventSchema>;
+export type PermissionPolicySummary = z.infer<typeof PermissionPolicySummarySchema>;
+export type PermissionPolicySummaryRequest = z.infer<typeof PermissionPolicySummaryRequestSchema>;
+export type PermissionPolicySummaryResult = z.infer<typeof PermissionPolicySummaryResultSchema>;
+export type PermissionRevokeGrantRequest = z.infer<typeof PermissionRevokeGrantRequestSchema>;
+export type PermissionRevokeGrantResult = z.infer<typeof PermissionRevokeGrantResultSchema>;
 export type PermissionRequestId = z.infer<typeof PermissionRequestIdSchema>;
+export type PermissionSetDefaultModeRequest = z.infer<typeof PermissionSetDefaultModeRequestSchema>;
+export type PermissionSetDefaultModeResult = z.infer<typeof PermissionSetDefaultModeResultSchema>;
 export type ExternalWebSkillRuntimeIdentity = z.infer<typeof ExternalWebSkillRuntimeIdentitySchema>;
 export type ExternalWebSkillRuntimeTurnBinding = z.infer<typeof ExternalWebSkillRuntimeTurnBindingSchema>;
 export type ExternalWebSkillRuntimeCall = z.infer<typeof ExternalWebSkillRuntimeCallSchema>;

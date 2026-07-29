@@ -52,6 +52,9 @@ import type {
   UpdateSourceStoragePolicyRequest,
   VaultMigrationApplyRequest,
   ManagedCopyRootConfigureRequest,
+  PermissionPolicySummaryRequest,
+  PermissionRevokeGrantRequest,
+  PermissionSetDefaultModeRequest,
   WindowLayoutRequest
 } from "@pige/contracts";
 import {
@@ -108,6 +111,17 @@ import {
   DIAGNOSTICS_CLEAR_LOCAL_CHANNEL,
   DiagnosticsClearLocalRequestSchema,
   DiagnosticsClearLocalResultSchema
+  ,PERMISSIONS_CHANGED_CHANNEL,
+  PERMISSIONS_REVOKE_GRANT_CHANNEL,
+  PERMISSIONS_SET_DEFAULT_MODE_CHANNEL,
+  PERMISSIONS_SUMMARY_CHANNEL,
+  PermissionPolicyChangedEventSchema,
+  PermissionPolicySummaryRequestSchema,
+  PermissionPolicySummaryResultSchema,
+  PermissionRevokeGrantRequestSchema,
+  PermissionRevokeGrantResultSchema,
+  PermissionSetDefaultModeRequestSchema,
+  PermissionSetDefaultModeResultSchema
 } from "@pige/schemas";
 import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
 import { registerReaderIpc } from "./register-reader-ipc";
@@ -300,6 +314,7 @@ let diagnosticsService: DiagnosticsService | undefined;
 let localDatabaseService: LocalDatabaseService | undefined;
 let modelProviderRegistry: ModelProviderRegistry | undefined;
 let highRiskConfirmationService: HighRiskConfirmationService | undefined;
+let permissionPolicyStore: PermissionPolicyStore | undefined;
 let permissionBrokerService: PermissionBrokerService | undefined;
 let permissionedExternalCapabilityRegistry: PermissionedExternalCapabilityRegistry | undefined;
 let firstPartyReadonlyNodeOsCapabilitiesRegistered = false;
@@ -601,10 +616,25 @@ const getLocalSettingsStore = (): LocalSettingsStore => {
   return localSettingsStore;
 };
 
+const getPermissionPolicyStore = (): PermissionPolicyStore => {
+  if (!permissionPolicyStore) {
+    permissionPolicyStore = new PermissionPolicyStore(app.getPath("userData"), assertAppInstanceWriterLease);
+    permissionPolicyStore.onChanged(() => {
+      const activeVaultId = getVaultService().current()?.vaultId;
+      if (!activeVaultId) return;
+      const event = PermissionPolicyChangedEventSchema.parse(permissionPolicyStore!.summary(activeVaultId));
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send(PERMISSIONS_CHANGED_CHANNEL, event);
+      }
+    });
+  }
+  return permissionPolicyStore;
+};
+
 const getHighRiskConfirmationService = (): HighRiskConfirmationService => {
   if (!highRiskConfirmationService) {
     highRiskConfirmationService = new HighRiskConfirmationService(
-      new PermissionPolicyStore(app.getPath("userData"), assertAppInstanceWriterLease),
+      getPermissionPolicyStore(),
       new PermissionPolicyRecordLink({
         activeVault: () => {
           const vault = getVaultService().current();
@@ -2296,6 +2326,47 @@ ipcMain.handle("confirmations.resolve", async (_event, request: HighRiskConfirma
   return HighRiskConfirmationResolveResultSchema.parse(
     await getHighRiskConfirmationService().resolve(parsed)
   );
+});
+ipcMain.handle(PERMISSIONS_SUMMARY_CHANNEL, (_event, request: PermissionPolicySummaryRequest) => {
+  const parsed = PermissionPolicySummaryRequestSchema.parse(request);
+  try {
+    if (getVaultService().current()?.vaultId !== parsed.activeVaultId) throw new Error("stale vault");
+    return PermissionPolicySummaryResultSchema.parse({
+      ...parsed,
+      status: "ready",
+      summary: getPermissionPolicyStore().summary(parsed.activeVaultId)
+    });
+  } catch {
+    return PermissionPolicySummaryResultSchema.parse({ ...parsed, status: "failed" });
+  }
+});
+ipcMain.handle(PERMISSIONS_SET_DEFAULT_MODE_CHANNEL, (_event, request: PermissionSetDefaultModeRequest) => {
+  const parsed = PermissionSetDefaultModeRequestSchema.parse(request);
+  try {
+    if (getVaultService().current()?.vaultId !== parsed.activeVaultId) throw new Error("stale vault");
+    const status = getPermissionPolicyStore().setDefaultMode(parsed.expectedRevision, parsed.mode);
+    return PermissionSetDefaultModeResultSchema.parse({
+      ...parsed,
+      status,
+      summary: getPermissionPolicyStore().summary(parsed.activeVaultId)
+    });
+  } catch {
+    return PermissionSetDefaultModeResultSchema.parse({ ...parsed, status: "failed" });
+  }
+});
+ipcMain.handle(PERMISSIONS_REVOKE_GRANT_CHANNEL, (_event, request: PermissionRevokeGrantRequest) => {
+  const parsed = PermissionRevokeGrantRequestSchema.parse(request);
+  try {
+    if (getVaultService().current()?.vaultId !== parsed.activeVaultId) throw new Error("stale vault");
+    const status = getPermissionPolicyStore().revokeGrant(parsed.expectedRevision, parsed.grantId);
+    return PermissionRevokeGrantResultSchema.parse({
+      ...parsed,
+      status,
+      summary: getPermissionPolicyStore().summary(parsed.activeVaultId)
+    });
+  } catch {
+    return PermissionRevokeGrantResultSchema.parse({ ...parsed, status: "failed" });
+  }
 });
 taskExecutionIpcUnsubscribe = registerTaskExecutionIpc({
   ipcMain,

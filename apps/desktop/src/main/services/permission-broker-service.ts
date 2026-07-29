@@ -6,6 +6,7 @@ import type {
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
+  HighRiskConfirmationSummarySchema,
   PermissionActionBindingSchema,
   type PermissionActionBinding
 } from "@pige/schemas";
@@ -14,6 +15,7 @@ import {
   type HighRiskConfirmationEffectResolver,
   type HighRiskConfirmationRegistration
 } from "./high-risk-confirmation-service";
+import { createPermissionPolicyGrantCandidate } from "./permission-policy-grant-record";
 
 const FIRST_PARTY_TURN_ACTORS = new Set([
   "local_tool.pige.node_os_readonly",
@@ -92,11 +94,21 @@ export class PermissionBrokerService {
     if (!confirmations) throw confirmationOwnerUnavailable();
 
     const confirmationId = confirmationIdFor(binding.bindingHash);
+    const confirmation = HighRiskConfirmationSummarySchema.parse({
+      apiVersion: 1,
+      confirmationId,
+      ...input.highRisk,
+      owner: input.owner
+    });
+    if (confirmations.authorizeSavedGrant(binding, confirmation)) {
+      return { status: "authorized", binding };
+    }
+    const grantCandidate = createPermissionPolicyGrantCandidate(binding, confirmation, new Date().toISOString());
     const registration = confirmations.register({
       confirmationId,
       ...input.highRisk,
       owner: input.owner
-    } as HighRiskConfirmationRegistration, input.resolveHighRisk, binding.bindingHash, binding.jobId);
+    } as HighRiskConfirmationRegistration, input.resolveHighRisk, binding.bindingHash, binding.jobId, grantCandidate);
 
     if (registration.status === "busy") return { status: "busy" };
 

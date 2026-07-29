@@ -81,6 +81,13 @@ import type {
   HighRiskConfirmationPendingResult,
   HighRiskConfirmationResolveRequest,
   HighRiskConfirmationResolveResult,
+  PermissionPolicyChangedEvent,
+  PermissionPolicySummaryRequest,
+  PermissionPolicySummaryResult,
+  PermissionRevokeGrantRequest,
+  PermissionRevokeGrantResult,
+  PermissionSetDefaultModeRequest,
+  PermissionSetDefaultModeResult,
   KnowledgeHealthRunRequest,
   KnowledgeHealthRunResult,
   KnowledgeHealthRepairRequest,
@@ -329,6 +336,18 @@ export type {
   HighRiskConfirmationSubject,
   HighRiskConfirmationTarget,
   HighRiskEffect,
+  PermissionDefaultMode,
+  PermissionGrantContextId,
+  PermissionGrantId,
+  PermissionGrantSummary,
+  PermissionPolicyChangedEvent,
+  PermissionPolicySummary,
+  PermissionPolicySummaryRequest,
+  PermissionPolicySummaryResult,
+  PermissionRevokeGrantRequest,
+  PermissionRevokeGrantResult,
+  PermissionSetDefaultModeRequest,
+  PermissionSetDefaultModeResult,
   CurrentNoteAppendProposalDecisionRequest,
   CurrentNoteAppendProposalDecisionResult,
   CurrentNoteAppendProposalGetRequest,
@@ -1776,6 +1795,20 @@ export interface PigeDesktopApi {
     ) => Promise<HighRiskConfirmationResolveResult>;
     readonly onChanged: (
       listener: (event: HighRiskConfirmationChangedEvent) => void
+    ) => () => void;
+  };
+  readonly permissions: {
+    readonly summary: (
+      request: PermissionPolicySummaryRequest
+    ) => Promise<PermissionPolicySummaryResult>;
+    readonly setDefaultMode: (
+      request: PermissionSetDefaultModeRequest
+    ) => Promise<PermissionSetDefaultModeResult>;
+    readonly revokeGrant: (
+      request: PermissionRevokeGrantRequest
+    ) => Promise<PermissionRevokeGrantResult>;
+    readonly onChanged: (
+      listener: (event: PermissionPolicyChangedEvent) => void
     ) => () => void;
   };
   readonly piPackages: {

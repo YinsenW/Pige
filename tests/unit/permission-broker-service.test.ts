@@ -3,8 +3,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { PermissionActionBinding } from "@pige/schemas";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
+import { PermissionPolicyStore } from "../../apps/desktop/src/main/services/permission-policy-store";
 import {
   assertPermissionActionBinding,
   createPermissionActionBinding,
@@ -156,6 +157,89 @@ describe("PermissionBrokerService AR1 authority", () => {
         }
       }
     })).toThrowError(expect.objectContaining({ code: "permission.high_risk_classification_invalid" }));
+  });
+
+  it("remembers one exact safe scope and auto-authorizes only a matching later action", async () => {
+    const fixture = createFixture();
+    fs.chmodSync(fixture.machineRoot, 0o700);
+    const store = new PermissionPolicyStore(
+      fixture.machineRoot,
+      vi.fn(),
+      () => "2026-07-29T12:00:00.000Z"
+    );
+    expect(store.setDefaultMode(0, "remember_scoped_grants")).toBe("committed");
+    const confirmations = new HighRiskConfirmationService(store);
+    const broker = new PermissionBrokerService({
+      rootPath: fixture.machineRoot,
+      unsafeAllowUnfenced: true,
+      confirmations
+    });
+    const exact = binding({ actorType: "skill", actorId: "skill.external.shell", capability: "run_shell" });
+    const request = {
+      vaultPath: fixture.vaultPath,
+      binding: exact,
+      owner: OWNER,
+      resolveHighRisk: () => "committed" as const,
+      highRisk: {
+        effect: "arbitrary_shell" as const,
+        presentation: {
+          action: "run_shell_command" as const,
+          target: "local_system" as const,
+          subject: { kind: "executable_name" as const, value: "lark-cli" }
+        }
+      }
+    };
+
+    const blocked = broker.authorizeTurnAction(request);
+    if (blocked.status !== "confirmation_required") throw new Error("Expected confirmation.");
+    const pending = confirmations.pending();
+    if (pending.status !== "pending" || !pending.rememberScopedGrant) {
+      throw new Error("Expected a safe remembered-scope candidate.");
+    }
+    expect(pending.rememberScopedGrant).toMatchObject({
+      scope: "resource_scope",
+      safeScopeLabel: "Reviewed Skill - Current action"
+    });
+    await expect(confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: blocked.confirmationId,
+      expectedRevision: blocked.revision,
+      decision: "allow",
+      rememberScopedGrant: {
+        decision: "allow_scoped",
+        grantContextId: pending.rememberScopedGrant.grantContextId
+      }
+    })).resolves.toMatchObject({ status: "committed", decision: "allow" });
+    expect(store.summary(VAULT_ID)).toMatchObject({
+      defaultMode: "remember_scoped_grants",
+      grants: [{ actorType: "skill", capability: "run_shell", canRevoke: true }]
+    });
+
+    const nextBinding = binding({
+      actorType: "skill",
+      actorId: "skill.external.shell",
+      capability: "run_shell",
+      actionInputHash: digest("next input")
+    });
+    expect(broker.authorizeTurnAction({ ...request, binding: nextBinding }))
+      .toEqual({ status: "authorized", binding: nextBinding });
+    expect(store.read().receipts.at(-1)).toMatchObject({
+      decidedBy: "system",
+      autoAllowedBy: "saved_grant",
+      decision: "allow_once"
+    });
+
+    const summary = store.summary(VAULT_ID);
+    expect(store.revokeGrant(summary.revision, summary.grants[0]!.grantId)).toBe("committed");
+    expect(broker.authorizeTurnAction({
+      ...request,
+      binding: binding({
+        actorType: "skill",
+        actorId: "skill.external.shell",
+        capability: "run_shell",
+        actionInputHash: digest("third input")
+      })
+    })).toMatchObject({ status: "confirmation_required" });
   });
 
   it("preserves every exact path, scope, identity and policy fence in the binding hash", () => {
