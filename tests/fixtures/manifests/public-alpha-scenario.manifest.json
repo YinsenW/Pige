@@ -2,6 +2,24 @@
   "schemaVersion": 1,
   "fixtures": [
     {
+      "id": "public-alpha.mixed-25.v1",
+      "path": "tests/fixtures/public-alpha/public-alpha-scenario.v1.json",
+      "kind": "deterministic-public-alpha-mixed-source-scenario",
+      "license": "Apache-2.0 (Pige synthetic fixture)",
+      "expectedOutputRefs": [
+        "scripts/release/public-alpha-scenario.mjs",
+        "apps/desktop/scripts/electron-unified-agent-roundtrip-smoke.mjs",
+        "tests/unit/public-alpha-scenario.test.ts"
+      ],
+      "redactionStatus": "synthetic_no_sensitive_data",
+      "sizeClass": "small",
+      "requiredPlatformCapabilities": [
+        "macos-26-vision"
+      ],
+      "owner": "Release and Public Alpha",
+      "updatePolicy": "Version when Public Alpha source breadth, recovery, backup, restore, or grounded retrieval acceptance changes."
+    },
+    {
       "id": "electron-public-alpha-continuity",
       "path": "apps/desktop/scripts/electron-unified-agent-roundtrip-smoke.mjs",
       "kind": "scripted-electron-public-alpha-mainflow",

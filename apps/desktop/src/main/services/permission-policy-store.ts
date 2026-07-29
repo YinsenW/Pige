@@ -557,10 +557,15 @@ function captureOwnedDirectory(directoryPathInput: string, create: boolean): str
   try {
     const directoryPath = path.resolve(directoryPathInput);
     if (create) fs.mkdirSync(directoryPath, { recursive: true, mode: 0o700 });
-    const stats = fs.lstatSync(directoryPath);
-    if (!stats.isDirectory() || stats.isSymbolicLink() || !isOwned(stats) || (stats.mode & 0o077) !== 0) {
+    let stats = fs.lstatSync(directoryPath);
+    if (!stats.isDirectory() || stats.isSymbolicLink() || !isOwned(stats)) {
       throw policyInvalid();
     }
+    if (create && (stats.mode & 0o077) !== 0) {
+      fs.chmodSync(directoryPath, 0o700);
+      stats = fs.lstatSync(directoryPath);
+    }
+    if ((stats.mode & 0o077) !== 0) throw policyInvalid();
     const realPath = fs.realpathSync.native(directoryPath);
     if (realPath !== directoryPath) throw policyInvalid();
     return realPath;

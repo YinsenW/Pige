@@ -25,6 +25,16 @@ afterEach(() => {
 });
 
 describe("PermissionPolicyStore", () => {
+  it("privatizes a Pige-owned fresh app-data directory before creating policy state", () => {
+    const parent = temporaryRoot();
+    const root = path.join(parent, "electron-user-data");
+    fs.mkdirSync(root, { mode: 0o755 });
+    const store = new PermissionPolicyStore(root, vi.fn());
+
+    expect(fs.statSync(root).mode & 0o077).toBe(0);
+    expect(store.read()).toMatchObject({ revision: 0, defaultMode: "ask_every_time" });
+  });
+
   it("atomically restores one exact pending request without granting an effect", () => {
     const root = temporaryRoot();
     const assertWriterLease = vi.fn();

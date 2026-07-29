@@ -61,6 +61,7 @@ import type {
   AgentIngestResult,
   AgentSourceToolSession
 } from "./agent-ingest-service";
+import { HOME_CAPTURE_AUTHORED_TEXT_TOOL_NAME, type HomeAuthoredTextCaptureService } from "./home-authored-text-capture-service";
 import {
   DatasetQueryToolRequestSchema,
   type DatasetQueryCatalog,
@@ -364,7 +365,7 @@ export class HomeAgentService {
   readonly #memory: HomeAgentMemoryPort | undefined;
   readonly #currentNoteAppends: HomeAgentCurrentNoteAppendPort | undefined;
   readonly #skillStaging: HomeSkillStagingToolService | undefined;
-  readonly #externalWebSkills: HomeAgentExternalWebSkillPort | undefined;
+  readonly #externalWebSkills: HomeAgentExternalWebSkillPort | undefined; readonly #authoredTextCapture: HomeAuthoredTextCaptureService | undefined;
 
   constructor(
     vaults: HomeAgentVaultPort,
@@ -383,7 +384,7 @@ export class HomeAgentService {
     currentNoteAppends?: HomeAgentCurrentNoteAppendPort,
     skillStaging?: HomeSkillStagingToolService,
     externalWebSkills?: HomeAgentExternalWebSkillPort,
-    conversationHistory: AgentConversationHistory = new AgentConversationHistory()
+    conversationHistory: AgentConversationHistory = new AgentConversationHistory(), authoredTextCapture?: HomeAuthoredTextCaptureService
   ) {
     this.#vaults = vaults;
     this.#models = models;
@@ -401,7 +402,7 @@ export class HomeAgentService {
     this.#memory = memory;
     this.#currentNoteAppends = currentNoteAppends;
     this.#skillStaging = skillStaging;
-    this.#externalWebSkills = externalWebSkills;
+    this.#externalWebSkills = externalWebSkills; this.#authoredTextCapture = authoredTextCapture;
   }
 
   conversationHistory(request: AgentConversationHistoryListRequest): AgentConversationHistoryListResult {
@@ -1585,7 +1586,17 @@ export class HomeAgentService {
     const memoryToolRegistered = memoryEnabled && !currentNoteScope &&
       request.authoredTaskIntent === "explicit_user_task";
     const recalledMemories = memoryEnabled ? this.#memory!.recall(vaultPath, 4) : [];
+    const capturedAuthoredTextSourceIds = new Set<string>(); const authoredTextCaptureTool = this.#authoredTextCapture?.toolForTurn({
+      enabled: !currentNoteScope && request.inputKind === "typed_text" && request.authoredTaskIntent === "explicit_user_task",
+      request: { vaultPath, activeVaultId: activeVault.vaultId, conversationId: request.sourceConversationId,
+        userEventId: request.sourceEventId, turnJobId: jobId, policyHash: policy.policyHash,
+        authoredText: request.text, locale: request.locale, assertCurrent: assertCurrentBindingAndVault },
+      onCaptured: (result) => { capturedAuthoredTextSourceIds.add(result.sourceId);
+        session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current; }
+    });
+    const authoredTextCaptureRegistered = authoredTextCaptureTool !== undefined;
     const tools: readonly PigeAgentToolDefinition[] = [
+      ...(authoredTextCaptureTool ? [authoredTextCaptureTool] : []),
       ...(this.#urls && urlCandidates.length > 0 ? [createFetchUrlTool({
         candidateCount: urlCandidates.length,
         authorize: authorizeUrlTool,
@@ -1985,7 +1996,7 @@ export class HomeAgentService {
         toolName !== HOME_LINK_READER_SELECTION_TOOL_NAME &&
         toolName !== HOME_CREATE_READER_SELECTION_NOTE_TOOL_NAME &&
         toolName !== HOME_SEARCH_TOOL_NAME &&
-        (toolName !== HOME_REMEMBER_PREFERENCE_TOOL_NAME || !memoryToolRegistered) &&
+        (toolName !== HOME_REMEMBER_PREFERENCE_TOOL_NAME || !memoryToolRegistered) && (toolName !== HOME_CAPTURE_AUTHORED_TEXT_TOOL_NAME || !authoredTextCaptureRegistered) &&
         !sourceToolNames.has(toolName) &&
         !skillStagingToolNames.has(toolName) &&
         !externalToolNames.has(toolName)
@@ -2015,8 +2026,8 @@ export class HomeAgentService {
     const citations = selectExplicitAssistantCitations(runtimeResult.assistantText, availableCitations);
     const sourceIds = Array.from(new Set([
       ...(urlEvidenceInspected && urlEvidence ? [urlEvidence.sourceId] : []),
-      ...(datasetResult?.evidence.sourceIds ?? []),
-      ...(sourceResult && session.current.sourceId ? [session.current.sourceId] : [])
+      ...(datasetResult?.evidence.sourceIds ?? []), ...(sourceResult && session.current.sourceId ? [session.current.sourceId] : []),
+      ...capturedAuthoredTextSourceIds
     ]));
     const grounding: AgentTurnAnswer["grounding"] = citations.length > 0 ? "local_knowledge" : "general";
     return {

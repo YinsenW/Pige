@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "public-alpha.mixed-25.v1",
+  "minimumSourceCount": 25,
+  "sources": [
+    { "id": "source-01", "kind": "typed_text", "locale": "en", "fixtureRef": "electron-public-alpha-continuity" },
+    { "id": "source-02", "kind": "typed_text", "locale": "zh-Hans", "fixtureRef": "eval-agent-ingest-multilingual-v3" },
+    { "id": "source-03", "kind": "large_paste", "locale": "en", "fixtureRef": "electron-public-alpha-continuity" },
+    { "id": "source-04", "kind": "large_paste", "locale": "ja", "fixtureRef": "eval-agent-ingest-multilingual-v3" },
+    { "id": "source-05", "kind": "url", "locale": "en", "fixtureRef": "synthetic-web-article" },
+    { "id": "source-06", "kind": "url", "locale": "de", "fixtureRef": "synthetic-web-article" },
+    { "id": "source-07", "kind": "url", "locale": "en", "fixtureRef": "synthetic-hostile-web-page", "expectedCondition": "degraded" },
+    { "id": "source-08", "kind": "markdown", "locale": "en", "fixtureRef": "electron-public-alpha-continuity" },
+    { "id": "source-09", "kind": "markdown", "locale": "ko", "fixtureRef": "eval-agent-ingest-multilingual-v3" },
+    { "id": "source-10", "kind": "txt", "locale": "en", "fixtureRef": "electron-public-alpha-continuity" },
+    { "id": "source-11", "kind": "txt", "locale": "fr", "fixtureRef": "eval-agent-ingest-multilingual-v3" },
+    { "id": "source-12", "kind": "txt", "locale": "zh-Hans", "fixtureRef": "eval-agent-ingest-multilingual-v3" },
+    { "id": "source-13", "kind": "text_pdf", "locale": "en", "fixtureRef": "generated-pdf-embedded-text" },
+    { "id": "source-14", "kind": "text_pdf", "locale": "fr", "fixtureRef": "generated-pdf-embedded-text" },
+    { "id": "source-15", "kind": "image_pdf", "locale": "en", "fixtureRef": "generated-macos-vision-ocr-image" },
+    { "id": "source-16", "kind": "docx", "locale": "en", "fixtureRef": "generated-docx-semantic-structure" },
+    { "id": "source-17", "kind": "docx", "locale": "ja", "fixtureRef": "generated-docx-semantic-structure" },
+    { "id": "source-18", "kind": "pptx", "locale": "en", "fixtureRef": "generated-pptx-order-notes-media" },
+    { "id": "source-19", "kind": "pptx", "locale": "ko", "fixtureRef": "generated-pptx-order-notes-media" },
+    { "id": "source-20", "kind": "image_ocr", "locale": "en", "fixtureRef": "generated-macos-vision-ocr-image" },
+    { "id": "source-21", "kind": "image_ocr", "locale": "zh-Hans", "fixtureRef": "generated-macos-vision-ocr-image" },
+    { "id": "source-22", "kind": "csv", "locale": "en", "fixtureRef": "electron-public-alpha-continuity" },
+    { "id": "source-23", "kind": "xlsx", "locale": "de", "fixtureRef": "electron-public-alpha-continuity" },
+    { "id": "source-24", "kind": "sqlite", "locale": "en", "fixtureRef": "electron-public-alpha-continuity" },
+    { "id": "source-25", "kind": "markdown", "locale": "zh-Hans", "fixtureRef": "eval-retrieval-regression-v1" }
+  ]
+}

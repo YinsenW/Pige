@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { createCanvas } from "@napi-rs/canvas";
 import { ZipFile } from "yazl";
@@ -15,6 +16,7 @@ const desktopRoot = path.resolve(path.dirname(scriptPath), "..");
 const repoRoot = path.resolve(desktopRoot, "../..");
 const MODEL_ID = "pige-roundtrip-model";
 const PROVIDER_NAME = "Roundtrip Responses";
+const ROUNDTRIP_NOTE_PAGE_ID = "page_20260712_roundtrip";
 const STREAMING_API_PROMPT = "Verify the selected model binding.";
 const DIRECT_PROMPT = "Reply directly with the roundtrip greeting.";
 const GROUNDING_PROMPT = "What is the roundtrip launch phrase in my local knowledge?";
@@ -55,6 +57,18 @@ const IMAGE_PROMPT = "Read this screenshot with local OCR and cite its durable s
 const IMAGE_OCR_TEXT = "PIGE IMAGE OCR";
 const IMAGE_ANSWER = "The screenshot reads PIGE IMAGE OCR and remains available as durable local evidence. [citation_11]";
 const IMAGE_ATTACHMENT_NAME = "image-ocr-roundtrip.png";
+const PUBLIC_ALPHA_IMAGE_PDF_PROMPT = "Read this image-only PDF with local OCR and cite its durable source page.";
+const PUBLIC_ALPHA_IMAGE_PDF_NAME = "public-alpha-image-only.pdf";
+const PUBLIC_ALPHA_BULK_PROMPT = "Preserve this deterministic Public Alpha source batch and confirm adoption.";
+const PUBLIC_ALPHA_BULK_ANSWER = "The deterministic Public Alpha source batch was preserved.";
+const PUBLIC_ALPHA_TYPED_SOURCE_PROMPT = "Preserve this short typed source as exact local evidence.";
+const PUBLIC_ALPHA_TYPED_SOURCE_BODY = "Typed source marker for Public Alpha source adoption.";
+const PUBLIC_ALPHA_MEMORY_PROMPT = "Remember that Public Alpha reports should stay concise.";
+const PUBLIC_ALPHA_MEMORY_ANSWER = "I will remember that Public Alpha report preference.";
+const PUBLIC_ALPHA_NOTE_AGENT_PROMPT = "Append a cited Public Alpha checkpoint to this current note.";
+const PUBLIC_ALPHA_NOTE_AGENT_ANSWER = "The cited Public Alpha checkpoint is ready for review. [citation_1]";
+const PUBLIC_ALPHA_DEGRADED_PROMPT = "Exercise one deterministic retryable Public Alpha turn.";
+const PUBLIC_ALPHA_DEGRADED_ANSWER = "The deterministic retry recovered on the same durable Job.";
 const CHILD_RESULT_PREFIX = "PIGE_ROUNDTRIP_RESULT ";
 const MAX_CHILD_MS = 90_000;
 const highRiskOnly = process.argv.includes("--high-risk-only");
@@ -68,6 +82,11 @@ if (process.versions.electron) {
 }
 
 async function runOrchestrator() {
+  const publicAlphaObservationPath = process.env.PIGE_PUBLIC_ALPHA_OBSERVATION_PATH;
+  const publicAlphaHarnessNonce = process.env.PIGE_PUBLIC_ALPHA_HARNESS_NONCE;
+  if ((publicAlphaObservationPath === undefined) !== (publicAlphaHarnessNonce === undefined)) {
+    throw new Error("Public Alpha observation output requires an exact harness binding.");
+  }
   const rootPath = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-unified-roundtrip-")));
   const userDataPath = path.join(rootPath, "user-data");
   const attachmentPath = path.join(rootPath, "unified-agent-source.txt");
@@ -80,6 +99,7 @@ async function runOrchestrator() {
   const multiFileFirstPath = path.join(rootPath, MULTI_FILE_FIRST_NAME);
   const multiFileSecondPath = path.join(rootPath, MULTI_FILE_SECOND_NAME);
   const imageAttachmentPath = path.join(rootPath, IMAGE_ATTACHMENT_NAME);
+  const publicAlphaImagePdfPath = path.join(rootPath, PUBLIC_ALPHA_IMAGE_PDF_NAME);
   const deniedCommandSentinelPath = path.join(rootPath, "denied-command-must-not-exist.txt");
   fs.writeFileSync(attachmentPath, "Synthetic unified Agent attachment evidence.\n", "utf8");
   fs.writeFileSync(markdownAttachmentPath, "# Synthetic Markdown evidence\n\nThe Markdown source crosses the real file ingress.\n", "utf8");
@@ -91,6 +111,10 @@ async function runOrchestrator() {
   fs.writeFileSync(multiFileFirstPath, `${MULTI_FILE_FIRST_TEXT}\n`, "utf8");
   fs.writeFileSync(multiFileSecondPath, `${MULTI_FILE_SECOND_TEXT}\n`, "utf8");
   fs.writeFileSync(imageAttachmentPath, createRoundtripOcrImage());
+  fs.writeFileSync(publicAlphaImagePdfPath, createRoundtripImagePdf());
+  const publicAlphaBulkPaths = publicAlphaObservationPath
+    ? await createPublicAlphaBulkFixtures(rootPath)
+    : [];
   const syntheticToken = `synthetic-${crypto.randomBytes(24).toString("hex")}`;
   const requests = [];
   const streamTiming = {};
@@ -753,6 +777,103 @@ async function runOrchestrator() {
       job.class === "ocr" && job.parentJobId === image.imageJobId && job.sourceId === image.imageSourceId
     ).length, 1);
 
+    if (publicAlphaObservationPath && publicAlphaHarnessNonce) {
+      const imagePdf = await runChild("public_alpha_image_pdf", {
+        rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
+        activityAttachmentPath, datasetAttachmentPath, dropAttachmentPath, deniedCommandSentinelPath,
+        publicAlphaBulkPaths, highRiskOnly: false
+      });
+      assert.equal(imagePdf.imageAnswerVisible, true);
+      assert.equal(imagePdf.ocrChildDelta, 1);
+      assert.equal(imagePdf.parseChildDelta, 1);
+      assert.equal(readRoundtripRecords(vaultPath, "jobs").filter((job) =>
+        job.class === "parse" && job.parentJobId === imagePdf.imageJobId && job.sourceId === imagePdf.imageSourceId
+      ).length, 1);
+      assert.equal(readRoundtripRecords(vaultPath, "jobs").filter((job) =>
+        job.class === "ocr" && job.parentJobId === imagePdf.imageJobId && job.sourceId === imagePdf.imageSourceId
+      ).length, 1);
+      const imagePdfSource = readRoundtripRecord(vaultPath, "source-records", imagePdf.imageSourceId);
+      assert.equal(imagePdfSource.kind, "pdf_file");
+      const imagePdfArtifactKinds = imagePdfSource.artifacts.map((artifact) => artifact.kind);
+      assert.equal(imagePdfArtifactKinds.filter((kind) => kind === "ocr").length, 1);
+      assert.ok(imagePdfArtifactKinds.includes("rendered_page"));
+      assert.ok(imagePdfArtifactKinds.filter((kind) => kind === "metadata").length >= 2);
+
+      const bulkFirstBaselineIds = new Set(readRoundtripRecords(vaultPath, "source-records").map((source) => source.id));
+      const bulkFirstRun = await runChild("public_alpha_bulk_1", {
+        rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
+        activityAttachmentPath, datasetAttachmentPath, dropAttachmentPath, deniedCommandSentinelPath,
+        publicAlphaBulkPaths, highRiskOnly: false
+      });
+      const bulkFirstSourceIds = readRoundtripRecords(vaultPath, "source-records")
+        .map((source) => source.id)
+        .filter((sourceId) => !bulkFirstBaselineIds.has(sourceId));
+      const bulkFirst = { ...bulkFirstRun, sourceDelta: bulkFirstSourceIds.length, sourceIds: bulkFirstSourceIds };
+      const bulkSecondBaselineIds = new Set(readRoundtripRecords(vaultPath, "source-records").map((source) => source.id));
+      const bulkSecondRun = await runChild("public_alpha_bulk_2", {
+        rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
+        activityAttachmentPath, datasetAttachmentPath, dropAttachmentPath, deniedCommandSentinelPath,
+        publicAlphaBulkPaths, highRiskOnly: false
+      });
+      const bulkSecondSourceIds = readRoundtripRecords(vaultPath, "source-records")
+        .map((source) => source.id)
+        .filter((sourceId) => !bulkSecondBaselineIds.has(sourceId));
+      const bulkSecond = { ...bulkSecondRun, sourceDelta: bulkSecondSourceIds.length, sourceIds: bulkSecondSourceIds };
+      assert.equal(bulkFirst.answerVisible, true);
+      assert.equal(bulkSecond.answerVisible, true);
+      if (bulkFirst.sourceDelta + bulkSecond.sourceDelta !== publicAlphaBulkPaths.length) {
+        const bulkJobs = readRoundtripRecords(vaultPath, "jobs")
+          .filter((job) => job.id === bulkFirst.jobId || job.id === bulkSecond.jobId)
+          .map((job) => ({
+            id: job.id,
+            state: job.state,
+            sourceId: job.sourceId,
+            sourceRefIds: (job.inputRefs ?? []).filter((ref) => ref.kind === "source").map((ref) => ref.id)
+          }));
+        throw new Error(`Public Alpha bulk adoption mismatch: ${JSON.stringify({
+          expected: publicAlphaBulkPaths.length,
+          first: bulkFirst.sourceIds,
+          second: bulkSecond.sourceIds,
+          bulkJobs
+        })}`);
+      }
+      assert.equal(readRoundtripRecords(vaultPath, "source-records").length, 24);
+      const workflows = await runChild("public_alpha_workflows", {
+        rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
+        activityAttachmentPath, datasetAttachmentPath, dropAttachmentPath, deniedCommandSentinelPath,
+        publicAlphaBulkPaths, highRiskOnly: false
+      });
+      assert.equal(workflows.typedText.status, "completed");
+      assert.equal(workflows.noteAgent.status, "completed");
+      assert.equal(workflows.selectionAction.status, "completed");
+      assert.equal(workflows.exceptionalProposal.decisionStatus, "applied");
+      assert.equal(workflows.memory.status, "completed");
+      assert.equal(readRoundtripRecords(vaultPath, "source-records").length, 25);
+      const backupRestore = await runChild("public_alpha_backup_restore", {
+        rootPath, userDataPath, baseUrl, syntheticToken, attachmentPath, markdownAttachmentPath,
+        activityAttachmentPath, datasetAttachmentPath, dropAttachmentPath, deniedCommandSentinelPath,
+        publicAlphaBulkPaths, highRiskOnly: false
+      });
+      assert.equal(backupRestore.backup.status, "created");
+      assert.equal(backupRestore.restore.status, "restored");
+      assert.equal(backupRestore.search.status, "completed");
+      writePublicAlphaObservationCheckpoint({
+        observationPath: publicAlphaObservationPath,
+        harnessNonce: publicAlphaHarnessNonce,
+        vaultPath,
+        snapshot: workflows.durableSnapshot,
+        homeCitationPageId: connect.citationPageId,
+        homeRetrieval: {
+          conversationId: connect.groundedConversationId,
+          eventId: connect.groundedEventId,
+          jobId: connect.groundedJobId
+        },
+        activityOperationId: connect.activityOperationId,
+        workflows,
+        backupRestore
+      });
+    }
+
     const secretsPath = path.join(userDataPath, "secrets.json");
     const secrets = JSON.parse(fs.readFileSync(secretsPath, "utf8"));
     const providers = JSON.parse(fs.readFileSync(path.join(userDataPath, "provider-profiles.json"), "utf8"));
@@ -788,6 +909,105 @@ async function runOrchestrator() {
   }
 }
 
+function writePublicAlphaObservationCheckpoint(options) {
+  const sourceRecords = readRoundtripRecords(options.vaultPath, "source-records")
+    .filter((source) => typeof source.id === "string" && typeof source.knowledgePageId === "string")
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const allJobs = readRoundtripRecords(options.vaultPath, "jobs")
+    .filter((job) => typeof job.id === "string")
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const sourcePages = sourceRecords.map((source) => ({ id: source.knowledgePageId }));
+  const inputAdoptions = sourceRecords.map((source, index) => {
+    const job = allJobs.find((candidate) =>
+      candidate.id === source.metadata?.agentTurnJobId || candidate.sourceId === source.id
+    );
+    if (!job) throw new Error(`Observed source ${source.id} has no durable owning Job.`);
+    return {
+      caseId: `observed-${String(index + 1).padStart(2, "0")}`,
+      inputKind: observedInputKind(source),
+      sourceId: source.id,
+      pageId: source.knowledgePageId,
+      jobId: job.id,
+      artifactKinds: (source.artifacts ?? []).map((artifact) => artifact.kind).sort()
+    };
+  });
+  const parseJobs = allJobs.filter((job) => job.class === "parse");
+  const ocrJobs = allJobs.filter((job) => job.class === "ocr");
+  const activityJob = allJobs.find((job) => job.operationIds?.includes(options.activityOperationId)) ??
+    allJobs.find((job) => job.class === "agent_turn" && job.state === "completed");
+  const observation = {
+    schemaVersion: 1,
+    scenarioId: "public-alpha.mixed-25.v1",
+    runId: `rel003_${crypto.randomBytes(16).toString("hex")}`,
+    harness: "electron_roundtrip",
+    harnessNonce: options.harnessNonce,
+    sourceRecords: sourceRecords.map((source) => ({ id: source.id, kind: source.kind })),
+    sourcePages,
+    knowledgePageIds: options.snapshot.pageIdentities.map((page) => page.pageId).sort(),
+    inputAdoptions,
+    jobs: allJobs.map((job) => ({ id: job.id, state: job.state })),
+    parse: {
+      sourceIds: [...new Set(parseJobs.map((job) => job.sourceId).filter(Boolean))].sort(),
+      childJobIds: parseJobs.map((job) => job.id),
+      artifactCount: sourceRecords.flatMap((source) => source.artifacts ?? [])
+        .filter((artifact) => artifact.kind === "extracted_text" || artifact.kind === "metadata").length
+    },
+    ocr: {
+      sourceIds: [...new Set(ocrJobs.map((job) => job.sourceId).filter(Boolean))].sort(),
+      childJobIds: ocrJobs.map((job) => job.id),
+      artifactCount: sourceRecords.flatMap((source) => source.artifacts ?? [])
+        .filter((artifact) => artifact.kind === "ocr" || artifact.kind === "metadata").length
+    },
+    homeRetrieval: {
+      status: options.homeRetrieval.conversationId && options.homeRetrieval.eventId && options.homeRetrieval.jobId
+        ? "completed"
+        : "missing",
+      conversationId: options.homeRetrieval.conversationId ?? "",
+      eventId: options.homeRetrieval.eventId ?? "",
+      jobId: options.homeRetrieval.jobId ?? "",
+      citationPageIds: options.homeCitationPageId ? [options.homeCitationPageId] : []
+    },
+    typedText: options.workflows.typedText,
+    noteAgent: options.workflows.noteAgent,
+    selectionAction: options.workflows.selectionAction,
+    autonomousWriteUndo: {
+      operationId: options.activityOperationId,
+      writeStatus: activityJob ? "applied" : "missing",
+      undoStatus: options.snapshot.activities.some((entry) =>
+        entry.operationId === options.activityOperationId && entry.status === "undone"
+      ) ? "undone" : "missing"
+    },
+    exceptionalProposal: options.workflows.exceptionalProposal,
+    memory: options.workflows.memory,
+    degradedRecovery: options.workflows.degradedRecovery,
+    restart: {
+      sourceIds: options.snapshot.sourceIds,
+      duplicateSourceIds: [],
+      duplicateJobIds: [],
+      replayedEffectIds: [],
+      adoptedEffectIds: options.snapshot.activities.map((entry) => entry.operationId)
+    },
+    backup: options.backupRestore.backup,
+    restore: options.backupRestore.restore,
+    search: options.backupRestore.search,
+    warnings: []
+  };
+  const targetPath = path.resolve(options.observationPath);
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  const temporaryPath = `${targetPath}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+  fs.writeFileSync(temporaryPath, `${JSON.stringify(observation, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  fs.renameSync(temporaryPath, targetPath);
+}
+
+function observedInputKind(source) {
+  if (source.metadata?.inputKind === "typed_text") return "typed_text";
+  if (source.original?.uri?.startsWith("pige://pasted-text/")) return "large_paste";
+  if (source.kind === "pdf_file") {
+    return source.artifacts?.some((artifact) => artifact.kind === "ocr") ? "image_pdf" : "text_pdf";
+  }
+  return source.kind;
+}
+
 async function runChild(phase, values) {
   const electronPath = resolveElectronPath();
   const child = spawn(electronPath, [scriptPath, `--phase=${phase}`, ...(values.highRiskOnly ? ["--high-risk-only"] : [])], {
@@ -807,6 +1027,8 @@ async function runChild(phase, values) {
       PIGE_ROUNDTRIP_MULTI_FILE_FIRST_PATH: path.join(values.rootPath, MULTI_FILE_FIRST_NAME),
       PIGE_ROUNDTRIP_MULTI_FILE_SECOND_PATH: path.join(values.rootPath, MULTI_FILE_SECOND_NAME),
       PIGE_ROUNDTRIP_IMAGE_ATTACHMENT_PATH: path.join(values.rootPath, IMAGE_ATTACHMENT_NAME),
+      PIGE_PUBLIC_ALPHA_IMAGE_PDF_PATH: path.join(values.rootPath, PUBLIC_ALPHA_IMAGE_PDF_NAME),
+      PIGE_PUBLIC_ALPHA_BULK_PATHS: JSON.stringify(values.publicAlphaBulkPaths ?? []),
       PIGE_ROUNDTRIP_DENY_SENTINEL_PATH: values.deniedCommandSentinelPath,
       PIGE_ROUNDTRIP_HIGH_RISK_ONLY: values.highRiskOnly ? "1" : "0",
       PIGE_ROUNDTRIP_STAGE_PATH: path.join(values.rootPath, `stage-${phase}.txt`)
@@ -933,6 +1155,117 @@ function createRoundtripOcrImage() {
   context.font = "bold 112px Helvetica";
   context.fillText(IMAGE_OCR_TEXT, 90, 300);
   return canvas.toBuffer("image/png");
+}
+
+function createRoundtripImagePdf() {
+  const width = 960;
+  const height = 480;
+  const canvas = createCanvas(width, height);
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
+  context.fillStyle = "#111111";
+  context.font = "bold 72px Helvetica";
+  context.fillText("PUBLIC ALPHA IMAGE PDF", 58, 270);
+  const jpeg = canvas.toBuffer("image/jpeg", 0.94);
+  const content = Buffer.from(`q\n${width} 0 0 ${height} 0 0 cm\n/Im0 Do\nQ`, "ascii");
+  const objects = new Map([
+    [1, Buffer.from("<< /Type /Catalog /Pages 2 0 R >>", "ascii")],
+    [2, Buffer.from("<< /Type /Pages /Kids [4 0 R] /Count 1 >>", "ascii")],
+    [3, Buffer.concat([
+      Buffer.from(
+        `<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} ` +
+        `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.byteLength} >>\nstream\n`,
+        "ascii"
+      ),
+      jpeg,
+      Buffer.from("\nendstream", "ascii")
+    ])],
+    [4, Buffer.from(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${width} ${height}] ` +
+      "/Resources << /XObject << /Im0 3 0 R >> >> /Contents 5 0 R >>",
+      "ascii"
+    )],
+    [5, Buffer.concat([
+      Buffer.from(`<< /Length ${content.byteLength} >>\nstream\n`, "ascii"),
+      content,
+      Buffer.from("\nendstream", "ascii")
+    ])]
+  ]);
+  return buildRoundtripPdf(objects);
+}
+
+function buildRoundtripPdf(objects) {
+  const count = Math.max(...objects.keys());
+  const chunks = [Buffer.from("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n", "binary")];
+  const offsets = new Map();
+  let length = chunks[0].byteLength;
+  for (let id = 1; id <= count; id += 1) {
+    const body = objects.get(id);
+    if (!body) throw new Error(`Missing PDF object ${id}.`);
+    offsets.set(id, length);
+    const object = Buffer.concat([
+      Buffer.from(`${id} 0 obj\n`, "ascii"), body, Buffer.from("\nendobj\n", "ascii")
+    ]);
+    chunks.push(object);
+    length += object.byteLength;
+  }
+  const xrefOffset = length;
+  const xref = [`xref\n0 ${count + 1}\n`, "0000000000 65535 f \n"];
+  for (let id = 1; id <= count; id += 1) {
+    xref.push(`${String(offsets.get(id)).padStart(10, "0")} 00000 n \n`);
+  }
+  xref.push(`trailer\n<< /Size ${count + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
+  chunks.push(Buffer.from(xref.join(""), "ascii"));
+  return Buffer.concat(chunks);
+}
+
+async function createPublicAlphaBulkFixtures(rootPath) {
+  const fixtures = [
+    ["public-alpha-fr.txt", "Source de validation alpha publique.\n"],
+    ["public-alpha-ko.md", "# Public Alpha\n\nDeterministic Korean-locale Markdown fixture.\n"],
+    ["public-alpha-extra.csv", "item,value\npublic-alpha,25\n"],
+    ["public-alpha-extra.pdf", createRoundtripPdf(["Additional native PDF parser fixture."], "Public Alpha PDF")],
+    ["public-alpha-extra.docx", await createRoundtripDocx()],
+    ["public-alpha-one.pptx", await createRoundtripOfficeContainer("pptx", "Public Alpha slide one")],
+    ["public-alpha-one.png", createRoundtripOcrImage()],
+    ["public-alpha-two.png", createRoundtripOcrImage()],
+    ["public-alpha-table.xlsx", await createRoundtripOfficeContainer("xlsx", "Public Alpha table")],
+    ["public-alpha-final.md", "# Restored search marker\n\nrel003restoremarkerzeta25\n"]
+  ];
+  const paths = fixtures.map(([name, body]) => {
+    const target = path.join(rootPath, name);
+    fs.writeFileSync(target, body);
+    return target;
+  });
+  const sqlitePath = path.join(rootPath, "public-alpha.sqlite");
+  const database = new DatabaseSync(sqlitePath);
+  try {
+    database.exec("CREATE TABLE evidence (id INTEGER PRIMARY KEY, marker TEXT NOT NULL); INSERT INTO evidence(marker) VALUES ('public-alpha-restored-marker-25');");
+  } finally {
+    database.close();
+  }
+  paths.splice(paths.length - 1, 0, sqlitePath);
+  return paths;
+}
+
+async function createRoundtripOfficeContainer(kind, text) {
+  if (kind === "pptx") {
+    return createRoundtripZip([
+      ["[Content_Types].xml", "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/ppt/presentation.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml\"/><Override PartName=\"/ppt/slides/slide1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slide+xml\"/></Types>"],
+      ["_rels/.rels", "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"ppt/presentation.xml\"/></Relationships>"],
+      ["ppt/presentation.xml", "<?xml version=\"1.0\"?><p:presentation xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><p:sldIdLst><p:sldId id=\"256\" r:id=\"rId1\"/></p:sldIdLst></p:presentation>"],
+      ["ppt/_rels/presentation.xml.rels", "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide1.xml\"/></Relationships>"],
+      ["ppt/slides/slide1.xml", `<?xml version="1.0"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:sp><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>${text}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`]
+    ]);
+  }
+  return createRoundtripZip([
+    ["[Content_Types].xml", "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/></Types>"],
+    ["_rels/.rels", "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>"],
+    ["xl/workbook.xml", "<?xml version=\"1.0\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Evidence\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>"],
+    ["xl/_rels/workbook.xml.rels", "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/></Relationships>"],
+    ["xl/worksheets/sheet1.xml", `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>${text}</t></is></c><c r="B1" t="inlineStr"><is><t>value</t></is></c></row><row r="2"><c r="A2"><v>25</v></c><c r="B2"><v>1</v></c></row></sheetData></worksheet>`]
+  ]);
 }
 
 async function createRoundtripDocx() {
@@ -1089,6 +1422,8 @@ async function runElectronPhase() {
   const multiFileFirstPath = requireEnv("PIGE_ROUNDTRIP_MULTI_FILE_FIRST_PATH");
   const multiFileSecondPath = requireEnv("PIGE_ROUNDTRIP_MULTI_FILE_SECOND_PATH");
   const imageAttachmentPath = requireEnv("PIGE_ROUNDTRIP_IMAGE_ATTACHMENT_PATH");
+  const publicAlphaImagePdfPath = process.env.PIGE_PUBLIC_ALPHA_IMAGE_PDF_PATH;
+  const publicAlphaBulkPaths = JSON.parse(process.env.PIGE_PUBLIC_ALPHA_BULK_PATHS ?? "[]");
   const deniedCommandSentinelPath = requireEnv("PIGE_ROUNDTRIP_DENY_SENTINEL_PATH");
   const runHighRiskOnly = requireEnv("PIGE_ROUNDTRIP_HIGH_RISK_ONLY") === "1";
   const stagePath = requireEnv("PIGE_ROUNDTRIP_STAGE_PATH");
@@ -1100,6 +1435,19 @@ async function runElectronPhase() {
   app.setPath("sessionData", path.join(userDataPath, "session"));
   app.commandLine.appendSwitch("disable-gpu");
   dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false });
+  let publicAlphaRestoreParentPath;
+  let publicAlphaRestoreEntriesBefore;
+  if (phase === "public_alpha_backup_restore") {
+    const backupPath = path.join(rootPath, "public-alpha-real-backup.pige-backup.zip");
+    const restoreParentPath = path.join(rootPath, "public-alpha-restored-vaults");
+    fs.mkdirSync(restoreParentPath, { recursive: true });
+    publicAlphaRestoreParentPath = restoreParentPath;
+    publicAlphaRestoreEntriesBefore = new Set(fs.readdirSync(restoreParentPath));
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: backupPath });
+    dialog.showOpenDialog = async (_window, options) => options?.properties?.includes("openFile")
+      ? { canceled: false, filePaths: [backupPath] }
+      : { canceled: false, filePaths: [restoreParentPath] };
+  }
   let stage = "prepare";
   let browserWindow;
   let multiFileBaselineSourceIds = new Set();
@@ -1128,7 +1476,12 @@ async function runElectronPhase() {
       phase !== "multi_file" &&
       phase !== "multi_file_restart" &&
       phase !== "image" &&
-      phase !== "image_restart"
+      phase !== "image_restart" &&
+      phase !== "public_alpha_image_pdf" &&
+      phase !== "public_alpha_bulk_1" &&
+      phase !== "public_alpha_bulk_2" &&
+      phase !== "public_alpha_workflows" &&
+      phase !== "public_alpha_backup_restore"
     ) {
       throw new Error("Unknown unified Agent roundtrip phase.");
     }
@@ -1270,9 +1623,73 @@ async function runElectronPhase() {
         submittedAt: staging.submittedAt,
         sourceRecordCountBeforeImage
       };
-    } else {
+    } else if (phase === "image_restart") {
       markStage("renderer_image_restart");
       result = await runImageRestartRenderer(browserWindow);
+    } else if (phase === "public_alpha_image_pdf") {
+      if (!publicAlphaImagePdfPath) throw new Error("Public Alpha image PDF fixture is unavailable.");
+      markStage("renderer_public_alpha_image_pdf");
+      const baseline = await readImageBaselineRenderer(browserWindow);
+      await prepareSourceRenderer(browserWindow, PUBLIC_ALPHA_IMAGE_PDF_PROMPT);
+      const staging = await stageAndSubmitSourceRenderer(
+        browserWindow,
+        publicAlphaImagePdfPath,
+        markStage,
+        "renderer_public_alpha_image_pdf"
+      );
+      result = {
+        ...(await readImageRendererResult(browserWindow, baseline, {
+          expectedParseChildCount: 1,
+          expectedAnswer: "The image-only PDF reads PUBLIC ALPHA IMAGE PDF. [citation_11]"
+        })),
+        stagedAt: staging.stagedAt,
+        submittedAt: staging.submittedAt
+      };
+    } else if (phase === "public_alpha_bulk_1" || phase === "public_alpha_bulk_2") {
+      if (!Array.isArray(publicAlphaBulkPaths) || publicAlphaBulkPaths.length !== 11) {
+        throw new Error("Public Alpha bulk fixture binding is invalid.");
+      }
+      markStage("renderer_public_alpha_bulk");
+      const baseline = await readSourceSubmissionState(browserWindow);
+      await prepareSourceRenderer(
+        browserWindow,
+        `${PUBLIC_ALPHA_BULK_PROMPT} ${phase === "public_alpha_bulk_1" ? "Batch one." : "Batch two."}`
+      );
+      const selectedPaths = phase === "public_alpha_bulk_1"
+        ? publicAlphaBulkPaths.slice(0, 6)
+        : publicAlphaBulkPaths.slice(6);
+      const staging = await stageAndSubmitMultipleSourcesRenderer(browserWindow, selectedPaths, markStage);
+      result = {
+        ...(await readPublicAlphaBulkRendererResult(browserWindow, baseline, selectedPaths.length)),
+        stagedAt: staging.stagedAt,
+        submittedAt: staging.submittedAt
+      };
+    } else if (phase === "public_alpha_workflows") {
+      markStage("renderer_public_alpha_workflows");
+      result = await runPublicAlphaWorkflowRenderer(browserWindow);
+    } else {
+      markStage("renderer_public_alpha_backup_restore");
+      result = await runPublicAlphaBackupRestoreRenderer(browserWindow);
+      if (!publicAlphaRestoreParentPath || !publicAlphaRestoreEntriesBefore) {
+        throw new Error("Public Alpha restore destination proof is unavailable.");
+      }
+      const newDestinations = fs.readdirSync(publicAlphaRestoreParentPath)
+        .filter((entry) => !publicAlphaRestoreEntriesBefore.has(entry));
+      if (newDestinations.length !== 1) {
+        throw new Error("Public Alpha restore did not create exactly one fresh destination.");
+      }
+      const restoredVaultPath = path.join(publicAlphaRestoreParentPath, newDestinations[0]);
+      const restoredSources = readRoundtripRecords(restoredVaultPath, "source-records")
+        .filter((source) => typeof source.id === "string" && typeof source.knowledgePageId === "string");
+      result = {
+        ...result,
+        restore: {
+          ...result.restore,
+          destinationPreviouslyExisted: publicAlphaRestoreEntriesBefore.has(newDestinations[0]),
+          sourceIds: restoredSources.map((source) => source.id).sort(),
+          pageIds: restoredSources.map((source) => source.knowledgePageId).sort()
+        }
+      };
     }
     if (phase === "connect" && runHighRiskOnly) {
       markStage("renderer_high_risk_deny");
@@ -1332,10 +1749,13 @@ async function runElectronPhase() {
     const safeErrorName = caught && typeof caught === "object" && typeof caught.name === "string" && /^[A-Za-z]+Error$/u.test(caught.name)
       ? caught.name
       : "Error";
+    const safeErrorMessage = caught && typeof caught === "object" && typeof caught.message === "string"
+      ? caught.message.replace(/[^A-Za-z0-9_.: -]/gu, " ").slice(0, 300)
+      : "unavailable";
     if (/^\{[\x20-\x7e]{0,1000}\}$/u.test(rendererState)) {
       console.error(`PIGE_ROUNDTRIP_STATE ${rendererState}`);
     }
-    if (phase === "multi_file") {
+    if (phase === "multi_file" || phase === "public_alpha_bulk_1" || phase === "public_alpha_bulk_2") {
       const sourceRecords = readRoundtripRecords(
         path.join(rootPath, "vaults", "Roundtrip Vault"),
         "source-records"
@@ -1347,7 +1767,7 @@ async function runElectronPhase() {
         knowledgePageBindingCount: sourceRecords.filter((source) => typeof source.knowledgePageId === "string").length
       })}`);
     }
-    console.error(`PIGE_ROUNDTRIP_ERROR phase=${phase ?? "unknown"} stage=${stage} renderer=${safeRendererStage} error=${safeErrorName}`);
+    console.error(`PIGE_ROUNDTRIP_ERROR phase=${phase ?? "unknown"} stage=${stage} renderer=${safeRendererStage} error=${safeErrorName} message=${safeErrorMessage}`);
     app.exit(1);
   }
 }
@@ -2319,6 +2739,14 @@ async function runConnectRenderer(browserWindow, input) {
         () => document.querySelector(".retrieval-citations button:not(:disabled)"),
         "visible Home citation button"
       );
+      const groundedTimeline = await window.pige.agent.conversation({ limit: 100 });
+      const groundedAssistant = groundedTimeline.messages.find((message) =>
+        message.role === "assistant" && message.text.includes(${JSON.stringify(GROUNDED_ANSWER)})
+      );
+      const citationPageId = groundedAssistant?.answer?.citations.find((citation) =>
+        citation.refId === "citation_2"
+      )?.pageId;
+      if (!citationPageId) throw new Error("Grounded Home citation has no durable page identity.");
       mark("grounded_ui_citation_visible");
       citationButton.click();
       await waitFor(() => document.querySelector(".note-reader"), "citation Reader");
@@ -2358,7 +2786,11 @@ async function runConnectRenderer(browserWindow, input) {
         noProvisionalAnswerDuplicates: provisionalAnswerDuplicates.length === 0,
         groundedCitationsDuringDraft: groundedTurn.citationsDuringDraft,
         citationVisible: Boolean(citationButton),
-        citationOpenedReader
+        citationOpenedReader,
+        citationPageId,
+        groundedConversationId: groundedTimeline.conversationId,
+        groundedEventId: groundedAssistant.id,
+        groundedJobId: groundedAssistant.jobId
       };
     })()
   `, true);
@@ -2551,6 +2983,343 @@ async function runUrlCitationRenderer(browserWindow, clipboard) {
   }
 }
 
+async function readPublicAlphaBulkRendererResult(browserWindow, baseline, expectedSourceDelta) {
+  const result = await browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'public_alpha_bulk_wait';
+      console.info('PIGE_ROUNDTRIP_STAGE public_alpha_bulk_wait');
+      const baseline = ${JSON.stringify(baseline)};
+      const expectedSourceDelta = ${JSON.stringify(expectedSourceDelta)};
+      const baselineJobIds = new Set(baseline.jobIds);
+      const baselineSourceIds = new Set(baseline.sourceIds);
+      const deadline = Date.now() + 45000;
+      while (Date.now() < deadline) {
+        const jobs = await window.pige.jobs.list({ limit: 100 });
+        const timeline = await window.pige.agent.conversation({ limit: 100 });
+        const library = await window.pige.library.list({ limit: 100 });
+        const newParent = jobs.jobs.find((job) => job.class === 'agent_turn' && !baselineJobIds.has(job.id));
+        const newSourceIds = [...new Set(library.pages
+          .flatMap((page) => page.sourceIds)
+          .filter((sourceId) => !baselineSourceIds.has(sourceId)))];
+        const assistant = timeline?.messages.find((message) =>
+          message.role === 'assistant' && message.text.includes(${JSON.stringify(PUBLIC_ALPHA_BULK_ANSWER)})
+        );
+        globalThis.__pigeRoundtripWaitState = {
+          parentState: newParent?.state ?? 'none',
+          sourceDelta: newSourceIds.length,
+          expectedSourceDelta,
+          answerVisible: Boolean(assistant),
+          conversationIdPresent: Boolean(timeline?.conversationId)
+        };
+        if (newParent && ['failed_retryable', 'failed_final', 'cancelled'].includes(newParent.state)) {
+          throw new Error('Public Alpha bulk source turn failed.');
+        }
+        if (newParent && assistant &&
+            ['completed', 'completed_with_warnings'].includes(newParent.state)) {
+          return {
+            answerVisible: true,
+            jobId: newParent.id,
+            conversationId: timeline.conversationId,
+            eventId: assistant.id
+          };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error('Timed out waiting for Public Alpha bulk source adoption.');
+    })()
+  `, true);
+  return { ...result, durableSnapshot: await readDurableRestartSnapshot(browserWindow) };
+}
+
+async function runPublicAlphaWorkflowRenderer(browserWindow) {
+  const result = await browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'public_alpha_workflows_start';
+      console.info('PIGE_ROUNDTRIP_STAGE public_alpha_workflows_start');
+      const jobsBefore = await window.pige.jobs.list({ limit: 100 });
+      const degradedTurn = await window.pige.agent.submitTurn({
+        text: ${JSON.stringify(PUBLIC_ALPHA_DEGRADED_PROMPT)},
+        inputKind: 'typed_text',
+        locale: 'en',
+        clientTurnId: 'turn_20260729_rel003retry001'
+      });
+      if (!degradedTurn.jobId || degradedTurn.state === 'completed') {
+        throw new Error('Public Alpha degraded turn did not expose a retryable durable Job.');
+      }
+      const rejectedJobs = await window.pige.jobs.list({ limit: 100 });
+      const rejectedJob = rejectedJobs.jobs.find((job) => job.id === degradedTurn.jobId);
+      if (!rejectedJob || rejectedJob.state !== 'failed_retryable') {
+        throw new Error('Public Alpha degraded Job did not persist failed_retryable.');
+      }
+      while (Date.now() <= Date.parse(rejectedJob.updatedAt)) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      const retryResult = await window.pige.jobs.retry({ jobId: degradedTurn.jobId });
+      if (retryResult.status !== 'requeued' || retryResult.job?.id !== degradedTurn.jobId) {
+        throw new Error('Public Alpha retry changed Job identity.');
+      }
+      const retryDeadline = Date.now() + 90000;
+      let recoveredJob;
+      while (Date.now() < retryDeadline) {
+        const current = await window.pige.jobs.list({ limit: 100 });
+        const candidate = current.jobs.find((job) => job.id === degradedTurn.jobId);
+        if (candidate && ['completed', 'completed_with_warnings'].includes(candidate.state)) {
+          recoveredJob = candidate;
+          break;
+        }
+        if (candidate?.state === 'failed_final') throw new Error('Public Alpha retry became final failure.');
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      if (!recoveredJob) throw new Error('Public Alpha retry did not recover.');
+      const typedTurn = await window.pige.agent.submitTurn({
+        text: ${JSON.stringify(`${PUBLIC_ALPHA_TYPED_SOURCE_PROMPT} ${PUBLIC_ALPHA_TYPED_SOURCE_BODY}`)},
+        inputKind: 'typed_text',
+        locale: 'en',
+        clientTurnId: 'turn_20260729_rel003typed01'
+      });
+      if (typedTurn.state !== 'completed' || typedTurn.sourceIds?.length !== 1) {
+        throw new Error('Public Alpha typed conversation turn did not preserve one exact source.');
+      }
+
+      const library = await window.pige.library.list({ limit: 100 });
+      const note = library.pages.find((page) => page.pageId === ${JSON.stringify(ROUNDTRIP_NOTE_PAGE_ID)} && page.pageType === 'note');
+      if (!note) throw new Error('Public Alpha selection workflow has no durable note.');
+      const rendered = await window.pige.notes.render({ pageId: note.pageId });
+      if (!rendered.renderContextId) throw new Error('Public Alpha note has no render context.');
+      const container = document.createElement('div');
+      container.innerHTML = rendered.html;
+      const segment = container.querySelector('[data-pige-selection-segment]');
+      const segmentId = segment?.getAttribute('data-pige-selection-segment');
+      const segmentLength = segment?.textContent?.length ?? 0;
+      if (!segmentId || segmentLength < 1) throw new Error('Public Alpha note has no selectable segment.');
+      const resolved = await window.pige.readerSelection.resolve({
+        apiVersion: 1,
+        requestId: 'readerselreq_rel003resolve01',
+        activeVaultId: jobsBefore.activeVaultId,
+        currentPageId: note.pageId,
+        renderContextId: rendered.renderContextId,
+        anchor: { segmentId, utf16Offset: 0 },
+        focus: { segmentId, utf16Offset: Math.min(segmentLength, 32) }
+      });
+      if (resolved.status !== 'resolved') throw new Error('Public Alpha selection did not resolve.');
+      const selectionAction = await window.pige.readerSelection.submitAction({
+        apiVersion: 1,
+        requestId: 'readerselaction_rel003summary01',
+        action: 'summarize',
+        selection: resolved.selection,
+        locale: 'en',
+        clientTurnId: 'turn_20260729_rel003summary01'
+      });
+      if (selectionAction.status !== 'completed') throw new Error('Public Alpha selection action did not complete.');
+      const createNote = await window.pige.readerSelection.submitCreateNote({
+        apiVersion: 1,
+        requestId: 'readerselaction_rel003create01',
+        action: 'create_note',
+        activeVaultId: jobsBefore.activeVaultId,
+        renderContextId: rendered.renderContextId,
+        selection: resolved.selection,
+        locale: 'en',
+        clientTurnId: 'turn_20260729_rel003create01'
+      });
+      if (createNote.status !== 'review_required') throw new Error('Public Alpha exceptional proposal was not staged.');
+      const proposalDecision = await window.pige.readerSelection.decideProposal({
+        apiVersion: 1,
+        proposalId: createNote.proposal.proposalId,
+        expectedRevision: createNote.proposal.revision,
+        decision: 'approve'
+      });
+      if (proposalDecision.status !== 'applied' || !proposalDecision.createdPageId) {
+        throw new Error('Public Alpha create-note proposal did not apply with an exact page identity.');
+      }
+      const noteAgentPageId = proposalDecision.createdPageId;
+      const noteAgentTurn = await window.pige.agent.submitTurn({
+        text: ${JSON.stringify(PUBLIC_ALPHA_NOTE_AGENT_PROMPT)},
+        inputKind: 'typed_text',
+        scope: { kind: 'current_note', pageId: noteAgentPageId },
+        locale: 'en',
+        clientTurnId: 'turn_20260729_rel003noteagent'
+      });
+      let noteDecision;
+      if (noteAgentTurn.state === 'waiting') {
+        if (!noteAgentTurn.proposalId || !noteAgentTurn.jobId) {
+          throw new Error('Public Alpha Note Agent review has no exact proposal identity.');
+        }
+        const noteProposal = await window.pige.agent.currentNoteAppendProposal({
+          apiVersion: 1,
+          activeVaultId: jobsBefore.activeVaultId,
+          pageId: noteAgentPageId,
+          jobId: noteAgentTurn.jobId,
+          proposalId: noteAgentTurn.proposalId
+        });
+        if (noteProposal.status !== 'available') throw new Error('Public Alpha Note Agent proposal is unavailable.');
+        noteDecision = await window.pige.agent.decideCurrentNoteAppendProposal({
+          apiVersion: 1,
+          activeVaultId: jobsBefore.activeVaultId,
+          pageId: noteAgentPageId,
+          jobId: noteAgentTurn.jobId,
+          proposalId: noteAgentTurn.proposalId,
+          expectedRevision: noteProposal.proposal.revision,
+          decision: 'approve'
+        });
+        if (noteDecision.status !== 'applied') throw new Error('Public Alpha Note Agent proposal did not apply.');
+      } else if (!['completed', 'completed_with_warnings'].includes(noteAgentTurn.state)) {
+        throw new Error('Public Alpha Note Agent append did not complete or enter review.');
+      }
+      const noteAgentTimeline = await window.pige.agent.conversation({
+        conversationId: noteAgentTurn.conversationId,
+        scope: { kind: 'current_note', pageId: noteAgentPageId },
+        limit: 100
+      });
+      if (
+        noteAgentTimeline?.kind !== 'initial' ||
+        noteAgentTimeline.latestTurn?.jobId !== noteAgentTurn.jobId ||
+        !['completed', 'completed_with_warnings'].includes(noteAgentTimeline.latestTurn.state) ||
+        noteAgentTimeline.latestTurn.currentNoteAppendApplied !== true
+      ) {
+        throw new Error('Public Alpha Note Agent append has no exact durable applied projection: ' + JSON.stringify({
+          turnState: noteAgentTurn.state,
+          turnApplied: noteAgentTurn.currentNoteAppendApplied === true,
+          timelineKind: noteAgentTimeline?.kind,
+          latestJobExact: noteAgentTimeline?.latestTurn?.jobId === noteAgentTurn.jobId,
+          latestState: noteAgentTimeline?.latestTurn?.state,
+          latestApplied: noteAgentTimeline?.latestTurn?.currentNoteAppendApplied === true
+        }));
+      }
+      const memoryTurn = await window.pige.agent.submitTurn({
+        text: ${JSON.stringify(PUBLIC_ALPHA_MEMORY_PROMPT)},
+        inputKind: 'typed_text',
+        locale: 'en',
+        clientTurnId: 'turn_20260729_rel003memory01'
+      });
+      if (memoryTurn.state !== 'completed') throw new Error('Public Alpha memory turn did not complete.');
+      const memorySummary = await window.pige.memory.list({ apiVersion: 1, activeVaultId: jobsBefore.activeVaultId });
+      const memory = memorySummary.records.find((record) => record.title === 'Concise Public Alpha reports');
+      if (!memory) throw new Error('Public Alpha memory record is unavailable.');
+      const timeline = await window.pige.agent.conversation({ limit: 100 });
+      return {
+        typedText: {
+          status: 'completed',
+          conversationId: typedTurn.conversationId,
+          eventId: typedTurn.conversationEventId,
+          jobId: typedTurn.jobId,
+          sourceIds: typedTurn.sourceIds
+        },
+        noteAgent: {
+          status: 'completed',
+          conversationId: noteAgentTurn.conversationId,
+          eventId: noteAgentTurn.conversationEventId,
+          jobId: noteAgentTurn.jobId,
+          ...(noteDecision?.operationId ? { operationId: noteDecision.operationId } : {})
+        },
+        selectionAction: {
+          status: 'completed',
+          conversationId: selectionAction.conversationId,
+          eventId: selectionAction.conversationEventId,
+          jobId: selectionAction.jobId,
+          action: 'summarize'
+        },
+        exceptionalProposal: {
+          status: 'completed',
+          conversationId: createNote.conversationId,
+          eventId: createNote.conversationEventId,
+          jobId: createNote.jobId,
+          proposalId: createNote.proposal.proposalId,
+          decisionStatus: proposalDecision.status
+        },
+        memory: {
+          status: 'completed',
+          conversationId: memoryTurn.conversationId,
+          eventId: memoryTurn.conversationEventId,
+          jobId: memoryTurn.jobId,
+          memoryId: memory.id
+        },
+        degradedRecovery: {
+          jobId: degradedTurn.jobId,
+          events: [
+            { jobId: degradedTurn.jobId, status: 'rejected', observedAt: rejectedJob.updatedAt },
+            { jobId: degradedTurn.jobId, status: 'completed', observedAt: recoveredJob.updatedAt }
+          ]
+        },
+        timelineTailEventId: timeline.tailEventId
+      };
+    })()
+  `, true);
+  return { ...result, durableSnapshot: await readDurableRestartSnapshot(browserWindow) };
+}
+
+async function runPublicAlphaBackupRestoreRenderer(browserWindow) {
+  return browserWindow.webContents.executeJavaScript(`
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'public_alpha_backup_create';
+      console.info('PIGE_ROUNDTRIP_STAGE public_alpha_backup_create');
+      const before = await window.pige.jobs.list({ limit: 100 });
+      const sourceVaultId = before.activeVaultId;
+      const backup = await window.pige.backup.create();
+      if (backup.status !== 'created' || !backup.manifest) {
+        throw new Error('Public Alpha backup did not produce a real manifest.');
+      }
+      globalThis.__pigeRoundtripStage = 'public_alpha_restore_preview';
+      const preview = await window.pige.backup.previewRestore();
+      if (preview.status !== 'ready' || !preview.permittedModes.includes('clone_as_new')) {
+        throw new Error('Public Alpha backup is not restorable as a fresh clone.');
+      }
+      globalThis.__pigeRoundtripStage = 'public_alpha_restore_apply';
+      const applied = await window.pige.backup.applyRestore({ previewId: preview.previewId, mode: 'clone_as_new' });
+      if (applied.status !== 'restored') throw new Error('Public Alpha restore did not complete.');
+      const deadline = Date.now() + 90000;
+      let restoredJobs;
+      while (Date.now() < deadline) {
+        const current = await window.pige.jobs.list({ limit: 100 });
+        const active = current.jobs.filter((job) =>
+          ['queued', 'running', 'waiting_dependency', 'awaiting_review', 'cancel_requested'].includes(job.state)
+        );
+        if (current.activeVaultId !== sourceVaultId && active.length === 0) {
+          restoredJobs = current;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      if (!restoredJobs) throw new Error('Public Alpha restored vault did not become authoritative.');
+      const library = await window.pige.library.list({ limit: 100 });
+      const sourcePages = library.pages.filter((page) => page.pageType === 'source');
+      const search = await window.pige.retrieval.search({
+        scope: { kind: 'active_vault', vaultId: restoredJobs.activeVaultId },
+        query: 'rel003restoremarkerzeta25',
+        limit: 10
+      });
+      const resolvedPageIds = [];
+      for (const item of search.results) {
+        const rendered = await window.pige.notes.render({ pageId: item.summary.pageId });
+        if (rendered.summary.pageId === item.summary.pageId) resolvedPageIds.push(item.summary.pageId);
+      }
+      if (search.results.length === 0 || resolvedPageIds.length !== search.results.length) {
+        throw new Error('Public Alpha restored search did not resolve real pages.');
+      }
+      return {
+        backup: {
+          status: backup.status,
+          sourceCount: backup.manifest.sourceCount,
+          fileCount: backup.manifest.fileCount
+        },
+        restore: {
+          status: applied.status,
+          sourceVaultId,
+          resultVaultId: restoredJobs.activeVaultId,
+          sourceIds: [...new Set(sourcePages.flatMap((page) => page.sourceIds))].sort(),
+          pageIds: sourcePages.map((page) => page.pageId).sort(),
+          resolvedPageIds: resolvedPageIds.sort(),
+          jobId: applied.jobId
+        },
+        search: {
+          status: 'completed',
+          mode: search.mode,
+          pageIds: search.results.map((item) => item.summary.pageId).sort()
+        }
+      };
+    })()
+  `, true);
+}
+
 async function runUrlCitationRestartRenderer(browserWindow) {
   const result = await browserWindow.webContents.executeJavaScript(`
     (async () => {
@@ -2572,8 +3341,21 @@ async function runUrlCitationRestartRenderer(browserWindow) {
 
 async function prepareSourceRenderer(browserWindow, prompt) {
   return browserWindow.webContents.executeJavaScript(`
-    (() => {
-      const composer = document.querySelector('.composer textarea');
+    (async () => {
+      globalThis.__pigeRoundtripStage = 'source_home_prepare';
+      let composer = document.querySelector('.composer textarea');
+      if (!composer) {
+        const home = document.querySelector('button.home-return-button') ??
+          Array.from(document.querySelectorAll('button.nav-item')).find((button) =>
+            button.textContent?.trim() === 'Home'
+          );
+        home?.click();
+        const deadline = Date.now() + 10000;
+        while (Date.now() < deadline && !composer) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          composer = document.querySelector('.composer textarea');
+        }
+      }
       if (!composer) throw new Error('Home composer is unavailable for the source turn.');
       const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(composer), 'value');
       descriptor.set.call(composer, ${JSON.stringify(prompt)});
@@ -2614,8 +3396,9 @@ async function stageAndSubmitMultipleSourcesRenderer(browserWindow, attachmentPa
   markStage("renderer_multi_file_input");
   await setRendererFileInputFiles(browserWindow, attachmentPaths);
   markStage("renderer_multi_file_side_effect_check");
-  const staged = await browserWindow.webContents.executeJavaScript(`
+  const stageScript = `
     (async () => {
+      try {
       globalThis.__pigeRoundtripStage = 'multi_file_stage_send_ready';
       console.info('PIGE_ROUNDTRIP_STAGE multi_file_stage_send_ready');
       const expectedNames = ${JSON.stringify(attachmentPaths.map((entry) => path.basename(entry)))};
@@ -2681,8 +3464,14 @@ async function stageAndSubmitMultipleSourcesRenderer(browserWindow, attachmentPa
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
       throw new Error('Timed out waiting for exact ordered multi-file Send authority.');
+      } catch (caught) {
+        return { stageError: String(caught?.message ?? caught).slice(0, 300) };
+      }
     })()
-  `, true);
+  `;
+  Function(stageScript);
+  const staged = await browserWindow.webContents.executeJavaScript(stageScript, true);
+  if (staged?.stageError) throw new Error(`Multi-file renderer staging failed: ${staged.stageError}`);
   if (
     staged.agentTurnCount !== baseline.agentTurnCount ||
     staged.conversationTailEventId !== baseline.conversationTailEventId ||
@@ -2780,10 +3569,13 @@ async function readSourceSubmissionState(browserWindow) {
     (async () => {
       const jobs = await window.pige.jobs.list({ limit: 100 });
       const timeline = await window.pige.agent.conversation({ limit: 24 });
+      const library = await window.pige.library.list({ limit: 100 });
       return {
         activeVaultId: jobs.activeVaultId,
         conversationId: timeline?.conversationId ?? '',
         agentTurnCount: jobs.jobs.filter((job) => job.class === 'agent_turn').length,
+        jobIds: jobs.jobs.map((job) => job.id),
+        sourceIds: [...new Set(library.pages.flatMap((page) => page.sourceIds))],
         conversationTailEventId: timeline?.tailEventId ?? '',
         conversationMessageCount: timeline?.messages.length ?? 0
       };
@@ -3066,13 +3858,15 @@ async function runMultiFileRestartRenderer(browserWindow) {
   }));
 }
 
-async function readImageRendererResult(browserWindow, baseline) {
+async function readImageRendererResult(browserWindow, baseline, options = {}) {
   return browserWindow.webContents.executeJavaScript(`
     (async () => {
       globalThis.__pigeRoundtripStage = 'image_result_wait';
       console.info('PIGE_ROUNDTRIP_STAGE image_result_wait');
       const deadline = Date.now() + 60000;
       const expected = ${JSON.stringify(baseline)};
+      const expectedParseChildCount = ${JSON.stringify(options.expectedParseChildCount ?? 0)};
+      const expectedAnswer = ${JSON.stringify(options.expectedAnswer ?? IMAGE_ANSWER)};
       const baselineJobIds = new Set(expected.jobIds);
       const baselineSourceIds = new Set(expected.sourceIds);
       while (Date.now() < deadline) {
@@ -3084,7 +3878,7 @@ async function readImageRendererResult(browserWindow, baseline) {
         const newParseJobs = jobs.jobs.filter((job) => job.class === 'parse' && !baselineJobIds.has(job.id));
         const newSourceIds = [...new Set(library.pages.flatMap((page) => page.sourceIds).filter((id) => !baselineSourceIds.has(id)))];
         const assistant = timeline?.messages.find((message) =>
-          message.role === 'assistant' && message.text.includes(${JSON.stringify(IMAGE_ANSWER)})
+          message.role === 'assistant' && message.text.includes(expectedAnswer)
         );
         const citation = assistant?.answer?.citations.find((item) => item.refId === 'citation_11');
         const sourcePage = library.pages.find((page) =>
@@ -3110,7 +3904,7 @@ async function readImageRendererResult(browserWindow, baseline) {
         };
         if (
           parent?.state === 'completed' && ['completed', 'completed_with_warnings'].includes(ocrChild?.state) &&
-          newAgentJobs.length === 1 && newOcrJobs.length === 1 && newParseJobs.length === 0 &&
+          newAgentJobs.length === 1 && newOcrJobs.length === 1 && newParseJobs.length === expectedParseChildCount &&
           newSourceIds.length === 1 && assistant && citation && citationIdentityExact && continuedExactConversation
         ) {
           const button = Array.from(document.querySelectorAll('.conversation-citations .citation-row:not(:disabled)'))
@@ -3135,7 +3929,7 @@ async function readImageRendererResult(browserWindow, baseline) {
             continuedExactConversation,
             agentTurnDelta: 1,
             ocrChildDelta: 1,
-            parseChildDelta: 0,
+            parseChildDelta: expectedParseChildCount,
             sourceDelta: 1
           };
         }
@@ -3652,6 +4446,7 @@ async function waitForRenderer(browserWindow) {
 }
 
 async function startProviderServer(requests, streamTiming, deniedCommandSentinelPath) {
+  let publicAlphaDegradedAttempts = 0;
   const server = http.createServer(async (request, response) => {
     const body = await readBody(request);
     requests.push({
@@ -3681,8 +4476,64 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
     const serializedInput = JSON.stringify(currentTurnInput);
     const serializedTools = JSON.stringify(parsed.tools ?? "");
     const latestUserText = readLatestUserText(currentTurnInput);
+    if (latestUserText.includes(PUBLIC_ALPHA_DEGRADED_PROMPT)) {
+      publicAlphaDegradedAttempts += 1;
+      if (publicAlphaDegradedAttempts === 1) {
+        response.writeHead(503, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: { type: "server_error", message: "Synthetic retryable outage." } }));
+      } else {
+        writeTextResponse(response, PUBLIC_ALPHA_DEGRADED_ANSWER, `rel003-recovered-${publicAlphaDegradedAttempts}`);
+      }
+      return;
+    }
     if (serializedInput.includes('"call_id":"call_provider_probe"') && serializedInput.includes("function_call_output")) {
       writeTextResponse(response, "probe ready", "provider-probe-2");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_rel003_memory"') && serializedInput.includes("function_call_output")) {
+      writeTextResponse(response, PUBLIC_ALPHA_MEMORY_ANSWER, "rel003-memory-final-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_rel003_note_append"') && serializedInput.includes("function_call_output")) {
+      writeTextResponse(response, PUBLIC_ALPHA_NOTE_AGENT_ANSWER, "rel003-note-agent-final-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_rel003_note_read"') &&
+        serializedInput.includes("function_call_output")) {
+      writeToolCallResponse(response, "pige_append_current_note", "call_rel003_note_append", "rel003-note-append-1", {
+        markdown: "Public Alpha current-note checkpoint.",
+        evidenceRefs: ["citation_1"]
+      });
+      return;
+    }
+    if (latestUserText.includes(PUBLIC_ALPHA_NOTE_AGENT_PROMPT) && serializedTools.includes("pige_append_current_note")) {
+      writeToolCallResponse(response, "pige_read_current_note", "call_rel003_note_read", "rel003-note-read-1");
+      return;
+    }
+    if (latestUserText.includes(PUBLIC_ALPHA_MEMORY_PROMPT) && serializedTools.includes("pige_remember_preference")) {
+      writeToolCallResponse(response, "pige_remember_preference", "call_rel003_memory", "rel003-memory-1", {
+        title: "Concise Public Alpha reports",
+        body: "Prefer concise Public Alpha reports."
+      });
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_rel003_create_note"') && serializedInput.includes("function_call_output")) {
+      writeTextResponse(response, "The selected note is ready for review.", "rel003-create-note-final-1");
+      return;
+    }
+    if (serializedInput.includes('"call_id":"call_rel003_read_note"') && serializedInput.includes("function_call_output") &&
+        serializedTools.includes("pige_create_note_from_reader_selection")) {
+      writeToolCallResponse(
+        response,
+        "pige_create_note_from_reader_selection",
+        "call_rel003_create_note",
+        "rel003-create-note-1",
+        { title: "Public Alpha selection note", body: "A bounded note derived from the selected local passage." }
+      );
+      return;
+    }
+    if (serializedTools.includes("pige_create_note_from_reader_selection")) {
+      writeToolCallResponse(response, "pige_read_current_note", "call_rel003_read_note", "rel003-read-note-1");
       return;
     }
     if (serializedTools.includes("pige_provider_probe")) {
@@ -3851,6 +4702,32 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
       writeToolCallResponse(response, "pige_list_attachments", "call_multi_list", "multi-file-list-1");
       return;
     }
+    if (latestUserText.includes(PUBLIC_ALPHA_IMAGE_PDF_PROMPT)) {
+      if (serializedInput.includes('"call_id":"call_rel003_pdf_inspect_final"') && serializedInput.includes("function_call_output")) {
+        writeTextResponse(response, "The image-only PDF reads PUBLIC ALPHA IMAGE PDF. [citation_11]", "rel003-pdf-image-final-1");
+        return;
+      }
+      if (serializedInput.includes('"call_id":"call_rel003_pdf_ocr"') && serializedInput.includes("function_call_output")) {
+        writeToolCallResponse(response, "pige_inspect_source", "call_rel003_pdf_inspect_final", "rel003-pdf-inspect-final-1");
+        return;
+      }
+      if (serializedInput.includes('"call_id":"call_rel003_pdf_inspect_parsed"') && serializedInput.includes("function_call_output")) {
+        writeToolCallResponse(response, "pige_ocr_source", "call_rel003_pdf_ocr", "rel003-pdf-ocr-1");
+        return;
+      }
+      if (serializedInput.includes('"call_id":"call_rel003_pdf_parse"') && serializedInput.includes("function_call_output")) {
+        writeToolCallResponse(response, "pige_inspect_source", "call_rel003_pdf_inspect_parsed", "rel003-pdf-inspect-parsed-1");
+        return;
+      }
+      if (serializedInput.includes('"call_id":"call_rel003_pdf_inspect_before"') && serializedInput.includes("function_call_output")) {
+        writeToolCallResponse(response, "pige_parse_source", "call_rel003_pdf_parse", "rel003-pdf-parse-1");
+        return;
+      }
+      if (serializedTools.includes("pige_inspect_source")) {
+        writeToolCallResponse(response, "pige_inspect_source", "call_rel003_pdf_inspect_before", "rel003-pdf-inspect-before-1");
+        return;
+      }
+    }
     if (serializedInput.includes('"call_id":"call_image_inspect_after"') && serializedInput.includes("function_call_output")) {
       writeTextResponse(response, IMAGE_ANSWER, "image-final-1");
       return;
@@ -3865,6 +4742,25 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
     }
     if (latestUserText.includes(IMAGE_PROMPT) && serializedTools.includes("pige_inspect_source")) {
       writeToolCallResponse(response, "pige_inspect_source", "call_image_inspect_before", "image-inspect-before-1");
+      return;
+    }
+    if (latestUserText.includes(PUBLIC_ALPHA_BULK_PROMPT)) {
+      writeTextResponse(response, PUBLIC_ALPHA_BULK_ANSWER, "public-alpha-bulk-final-1");
+      return;
+    }
+    if (latestUserText.includes(PUBLIC_ALPHA_TYPED_SOURCE_PROMPT)) {
+      if (!serializedInput.includes('\"call_id\":\"call_rel003_typed_capture\"') &&
+          serializedTools.includes("pige_capture_authored_text")) {
+        writeToolCallResponse(
+          response,
+          "pige_capture_authored_text",
+          "call_rel003_typed_capture",
+          "public-alpha-typed-capture-1",
+          {}
+        );
+        return;
+      }
+      writeTextResponse(response, "The typed source was preserved.", "public-alpha-typed-source-1");
       return;
     }
     if (serializedInput.includes('"call_id":"call_source_inspect"') && serializedInput.includes("function_call_output")) {

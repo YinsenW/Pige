@@ -9,6 +9,7 @@ import {
   ReaderSelectionCreateNoteProposalService,
   ReaderSelectionCreateNoteService
 } from "../../apps/desktop/src/main/services/reader-selection-create-note-service";
+import { readCurrentNoteSelectionEvidenceBinding } from "../../apps/desktop/src/main/services/retrieval-evidence-boundary";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 
 const roots: string[] = [];
@@ -140,12 +141,31 @@ function makeFixture() {
   });
   const vaultPath = path.join(root, "Reader Create Note");
   const vault = loadVaultSummary(vaultPath);
+  const markdown = `---
+id: "page_20260729_readercreate12"
+schema_version: 1
+title: "Reader create-note source"
+type: "note"
+created_at: "2026-07-29T10:00:00.000Z"
+updated_at: "2026-07-29T10:00:00.000Z"
+status: "active"
+language: "en"
+source_ids: []
+---
+
+Selected evidence for a bounded Reader note.
+`;
+  const pageBytes = Buffer.from(markdown, "utf8");
+  const selectionStart = pageBytes.indexOf(Buffer.from("Selected evidence", "utf8"));
+  const selectionEnd = selectionStart + Buffer.byteLength("Selected evidence", "utf8");
+  fs.writeFileSync(path.join(vaultPath, "wiki", "reader-create-note-source.md"), markdown, "utf8");
   const selection: ReaderSelectionIdentity = {
     pageId: "page_20260729_readercreate12",
-    pageContentHash: `sha256:${"a".repeat(64)}`,
-    span: { unit: "utf8_bytes", start: 10, endExclusive: 18 },
-    selectedContentHash: `sha256:${"b".repeat(64)}`
+    pageContentHash: `sha256:${createHash("sha256").update(pageBytes).digest("hex")}`,
+    span: { unit: "utf8_bytes", start: selectionStart, endExclusive: selectionEnd },
+    selectedContentHash: `sha256:${createHash("sha256").update(pageBytes.subarray(selectionStart, selectionEnd)).digest("hex")}`
   };
+  const selectionBinding = readCurrentNoteSelectionEvidenceBinding(vaultPath, selection);
   const job = {
     id: "job_20260729_readercreate12",
     schemaVersion: 1,
@@ -159,12 +179,12 @@ function makeFixture() {
     policyHash: `sha256:${"e".repeat(64)}`,
     message: "Reader create-note proposal is awaiting review.",
     inputRefs: [
-      { kind: "page", id: selection.pageId, checksum: selection.pageContentHash, role: "agent_turn_current_note_scope" },
+      { kind: "page", id: selection.pageId, checksum: selectionBinding.bindingHash, role: "agent_turn_current_note_scope" },
       {
         kind: "page",
         id: selection.pageId,
         checksum: selection.selectedContentHash,
-        locator: "utf8_bytes:10:18",
+        locator: `utf8_bytes:${selectionStart}:${selectionEnd}`,
         role: "agent_turn_reader_selection"
       },
       {

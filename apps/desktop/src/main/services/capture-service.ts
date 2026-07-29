@@ -31,6 +31,7 @@ import { observedLanguageFact, unknownLanguageFact } from "./durable-language";
 import { readBoundedSourceFileNoFollow, verifyReadableSourceFile } from "./source-file-access";
 import { readVaultManifest } from "./vault-layout";
 import { ManagedCopyRootService, selectCaptureManagedCopyRoot } from "./managed-copy-root-service";
+import { authoredTextMetadataMatches, authoredTextSourceIdentity, type AuthoredTextProvenance } from "./home-authored-text-capture-service";
 
 export interface CaptureVaultPort {
   current(): VaultSummary | undefined;
@@ -55,7 +56,7 @@ export interface AgentTurnTextPreservationBinding {
   readonly sourceId: string;
   readonly inputChecksum: string;
   readonly ordinal: number;
-  readonly attachmentSetHash: string;
+  readonly attachmentSetHash: string; readonly authoredTextProvenance?: AuthoredTextProvenance;
 }
 
 export interface AgentTurnTextPreservationRequest {
@@ -240,6 +241,7 @@ export class CaptureService {
     const managedRoot = selectCaptureManagedCopyRoot(this.#managedRoots, vault, vaultPath);
     const sourceRecordPath = vaultRelativePath(".pige", "source-records", monthKey, `${binding.sourceId}.json`);
     const recordTarget = resolveVaultPath(vaultPath, sourceRecordPath);
+    const authored = binding.authoredTextProvenance; const textIdentity = authoredTextSourceIdentity(authored, binding.sourceId, checksum);
     if (fs.existsSync(recordTarget)) {
       const existing = SourceRecordSchema.parse(JSON.parse(fs.readFileSync(recordTarget, "utf8")));
       const managedTarget = existing.managedCopy ? verifyReadableSourceFile(vaultPath, existing) : undefined;
@@ -250,6 +252,8 @@ export class CaptureService {
         existing.metadata.agentTurnJobId !== binding.jobId ||
         existing.metadata.agentTurnAttachmentOrdinal !== binding.ordinal ||
         existing.metadata.agentTurnAttachmentSetHash !== binding.attachmentSetHash ||
+        existing.metadata.inputKind !== textIdentity.inputKind || existing.original?.uri !== textIdentity.uri ||
+        existing.original?.displayName !== textIdentity.displayName || !authoredTextMetadataMatches(existing.metadata, authored) ||
         existing.managedCopy?.checksum !== checksum ||
         existing.managedCopy.size !== body.byteLength ||
         !managedTarget ||
@@ -276,8 +280,8 @@ export class CaptureService {
       storageStrategy: "copy_to_source_library",
       semanticOrchestration: "agent_turn",
       original: {
-        uri: `pige://pasted-text/${binding.sourceId}`,
-        displayName: "Pasted text",
+        uri: textIdentity.uri,
+        displayName: textIdentity.displayName,
         lastKnownSize: body.byteLength,
         checksum
       },
@@ -290,12 +294,13 @@ export class CaptureService {
       },
       artifacts: [],
       metadata: {
-        inputKind: "file_picker",
+        inputKind: textIdentity.inputKind,
         locale: request.locale,
         captureId,
         agentTurnJobId: binding.jobId,
         agentTurnAttachmentOrdinal: binding.ordinal,
         agentTurnAttachmentSetHash: binding.attachmentSetHash,
+        ...textIdentity.metadata,
         unicodeCodePointCount: [...request.text].length,
         utf8ByteSize: body.byteLength,
         parserStatus: "text_ready",
