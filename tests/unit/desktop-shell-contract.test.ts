@@ -1474,6 +1474,19 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly updateFormulaColumn:");
     expect(contractsSource).toContain("CollectionUpdateFormulaColumnRequest");
     expect(contractsSource).toContain("Promise<CollectionUpdateFormulaColumnResult>");
+    expect(schemasSource).toContain(
+      'COLLECTION_ADD_RELATION_COLUMN_CHANNEL = "collections.addRelationColumn"'
+    );
+    expect(schemasSource).toContain(
+      'COLLECTION_EDIT_RELATION_CELL_CHANNEL = "collections.editRelationCell"'
+    );
+    expect(contractsSource).toContain("readonly addRelationColumn:");
+    expect(contractsSource).toContain("CollectionAddRelationColumnRequest");
+    expect(contractsSource).toContain("Promise<CollectionAddRelationColumnResult>");
+    expect(contractsSource).toContain("readonly editRelationCell:");
+    expect(contractsSource).toContain("CollectionEditRelationCellRequest");
+    expect(contractsSource).toContain("Promise<CollectionEditRelationCellResult>");
+    expect(contractsSource).not.toContain("listRelationTargets");
     expect(contractsSource).toContain("readonly renameColumn:");
     expect(contractsSource).toContain("CollectionRenameColumnRequest");
     expect(contractsSource).toContain("readonly createView:");

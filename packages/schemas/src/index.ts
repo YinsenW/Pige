@@ -1071,6 +1071,8 @@ export const KnowledgeActivitySummarySchema = z.object({
     "add_collection_row",
     "add_collection_column",
     "update_collection_formula",
+    "add_collection_relation",
+    "update_collection_relation_cell",
     "rename_collection_column",
     "create_collection_view",
     "trash_collection_column",
@@ -3190,6 +3192,25 @@ export const DatasetPigeCalculationSchema = z.object({
   expression: DatasetPigeFormulaExpressionSchema
 }).strict();
 
+/**
+ * Pige relation v1 stores exactly one stable target row ID per source cell. The
+ * target table and display column are schema truth; paths, queries, and display
+ * text are never durable relation authority.
+ */
+export const DatasetPigeRelationSchema = z.object({
+  kind: z.literal("pige_single_relation"),
+  schemaVersion: z.literal(1),
+  targetTableId: TableIdSchema,
+  targetDisplayColumnId: ColumnIdSchema
+}).strict();
+
+/** Canonical SQLite projection_json encoding; clear is represented by JSON null. */
+export const DatasetPigeRelationCellSchema = z.object({
+  kind: z.literal("pige_relation_target"),
+  schemaVersion: z.literal(1),
+  targetRowId: RowIdSchema
+}).strict().nullable();
+
 function datasetPigeFormulaColumnRefs(expression: DatasetPigeFormulaExpressionNode): string[] {
   const refs: string[] = [];
   const pending = [expression];
@@ -3223,6 +3244,7 @@ export const DatasetColumnSchema = z.object({
   logicalType: DatasetLogicalTypeSchema,
   nullable: z.boolean(),
   calculation: DatasetPigeCalculationSchema.optional(),
+  relation: DatasetPigeRelationSchema.optional(),
   stats: z.object({
     missing: z.number().int().nonnegative(),
     empty: z.number().int().nonnegative(),
@@ -3262,6 +3284,22 @@ export const DatasetTableSchema = z.object({
   }
   const columnsById = new Map(table.columns.map((column) => [column.id, column]));
   for (const [index, column] of table.columns.entries()) {
+    if (column.calculation !== undefined && column.relation !== undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["columns", index],
+        message: "Dataset columns cannot be both formulas and relations."
+      });
+    }
+    if (column.relation !== undefined &&
+        (column.logicalType !== "string" || !column.nullable ||
+         column.sourceType !== "pige.relation.single")) {
+      context.addIssue({
+        code: "custom",
+        path: ["columns", index, "relation"],
+        message: "Pige relation columns must be nullable string-backed Pige columns."
+      });
+    }
     if (!column.calculation) continue;
     if (column.logicalType !== "number" || !column.nullable) {
       context.addIssue({
@@ -3276,6 +3314,7 @@ export const DatasetTableSchema = z.object({
         !operand ||
         operand.id === column.id ||
         operand.calculation !== undefined ||
+        operand.relation !== undefined ||
         datasetColumnContainsImportedFormula(operand) ||
         (operand.logicalType !== "integer" && operand.logicalType !== "number")
       ) {
@@ -3296,7 +3335,33 @@ export const DatasetSchemaRecordSchema = z.object({
   revisionId: DatasetRevisionIdSchema,
   tables: z.array(DatasetTableSchema).min(1).max(1024),
   createdAt: z.string().datetime({ offset: true })
-}).passthrough();
+}).passthrough().superRefine((schema, context) => {
+  const tablesById = new Map(schema.tables.map((table) => [table.id, table]));
+  const scalarDisplayTypes = new Set(["string", "integer", "number", "boolean", "date", "datetime"]);
+  for (const [tableIndex, table] of schema.tables.entries()) {
+    for (const [columnIndex, column] of table.columns.entries()) {
+      if (column.relation === undefined) continue;
+      const targetTable = tablesById.get(column.relation.targetTableId);
+      const targetColumn = targetTable?.columns.find(
+        (candidate) => candidate.id === column.relation?.targetDisplayColumnId
+      );
+      if (
+        targetTable === undefined ||
+        targetColumn === undefined ||
+        targetColumn.calculation !== undefined ||
+        targetColumn.relation !== undefined ||
+        datasetColumnContainsImportedFormula(targetColumn) ||
+        !scalarDisplayTypes.has(targetColumn.logicalType)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["tables", tableIndex, "columns", columnIndex, "relation"],
+          message: "Pige relations require one current same-Dataset scalar display column."
+        });
+      }
+    }
+  }
+});
 
 const DatasetFileRefSchema = z.object({
   path: z.string().min(1).max(1024),
@@ -3375,6 +3440,38 @@ export const DatasetRevisionSchema = z.object({
       kind: z.literal("collection_formula_update_undo"),
       tableId: TableIdSchema,
       columnId: ColumnIdSchema,
+      undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_relation_add"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      targetTableId: TableIdSchema,
+      targetDisplayColumnId: ColumnIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_relation_add_undo"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      targetTableId: TableIdSchema,
+      targetDisplayColumnId: ColumnIdSchema,
+      undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_relation_cell_edit"),
+      tableId: TableIdSchema,
+      rowId: RowIdSchema,
+      columnId: ColumnIdSchema,
+      targetTableId: TableIdSchema,
+      targetRowId: RowIdSchema.nullable()
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_relation_cell_edit_undo"),
+      tableId: TableIdSchema,
+      rowId: RowIdSchema,
+      columnId: ColumnIdSchema,
+      targetTableId: TableIdSchema,
+      targetRowId: RowIdSchema.nullable(),
       undoOfOperationId: OperationIdSchema
     }).strict(),
     z.object({
@@ -3474,6 +3571,8 @@ export const COLLECTION_LIST_CHANNEL = "collections.list" as const;
 export const COLLECTION_OPEN_CITATION_CHANNEL = "collections.openCitation" as const;
 export const COLLECTION_ADD_FORMULA_COLUMN_CHANNEL = "collections.addFormulaColumn" as const;
 export const COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL = "collections.updateFormulaColumn" as const;
+export const COLLECTION_ADD_RELATION_COLUMN_CHANNEL = "collections.addRelationColumn" as const;
+export const COLLECTION_EDIT_RELATION_CELL_CHANNEL = "collections.editRelationCell" as const;
 export const COLLECTION_LIST_MAX_LIMIT = 50;
 export const COLLECTION_ROW_PAGE_MAX_LIMIT = 50;
 export const CollectionScalarValueSchema = DatasetQueryScalarSchema;
@@ -3534,6 +3633,13 @@ export const CollectionColumnCalculationSummarySchema = z.discriminatedUnion("ki
   z.object({ kind: z.literal("imported_cached_formula") }).strict()
 ]);
 
+export const CollectionColumnRelationSummarySchema = DatasetPigeRelationSchema;
+
+/**
+ * Relation source columns may project canTrash only when the existing forward
+ * Undo owner can restore the exact descriptor and every target-row cell. Main
+ * must reprove inbound display-column and row guards immediately before trash.
+ */
 export const CollectionColumnSummarySchema = z.object({
   columnId: DatasetQueryColumnIdSchema,
   label: z.string().min(1).max(512),
@@ -3542,11 +3648,22 @@ export const CollectionColumnSummarySchema = z.object({
   canTrash: z.boolean(),
   canUseAsFormulaOperand: z.boolean(),
   canEditFormula: z.boolean(),
-  calculation: CollectionColumnCalculationSummarySchema.optional()
+  canUseAsRelationDisplay: z.boolean().default(false),
+  canEditRelation: z.boolean().default(false),
+  hasInboundRelationDescriptors: z.boolean().default(false),
+  calculation: CollectionColumnCalculationSummarySchema.optional(),
+  relation: CollectionColumnRelationSummarySchema.optional()
 }).strict().superRefine((column, context) => {
+  if (column.calculation !== undefined && column.relation !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["relation"],
+      message: "Collection columns cannot be both formulas and relations."
+    });
+  }
   if (
     column.canUseAsFormulaOperand &&
-    (column.calculation !== undefined ||
+    (column.calculation !== undefined || column.relation !== undefined ||
       (column.logicalType !== "integer" && column.logicalType !== "number"))
   ) {
     context.addIssue({
@@ -3569,6 +3686,37 @@ export const CollectionColumnSummarySchema = z.object({
       message: "Only a current losslessly representable Pige formula may be editable."
     });
   }
+  if (column.canEditRelation !== (column.relation?.kind === "pige_single_relation")) {
+    context.addIssue({
+      code: "custom",
+      path: ["canEditRelation"],
+      message: "Only current Pige relation columns may expose relation-cell edit authority."
+    });
+  }
+  if (column.relation !== undefined &&
+      (column.logicalType !== "string" || column.canUseAsRelationDisplay)) {
+    context.addIssue({
+      code: "custom",
+      path: ["relation"],
+      message: "Relation columns are string-backed targets and cannot be display columns."
+    });
+  }
+  if (column.canUseAsRelationDisplay &&
+      (column.calculation !== undefined || column.relation !== undefined ||
+       !["string", "integer", "number", "boolean", "date", "datetime"].includes(column.logicalType))) {
+    context.addIssue({
+      code: "custom",
+      path: ["canUseAsRelationDisplay"],
+      message: "Only current scalar non-formula columns may label relation targets."
+    });
+  }
+  if (column.hasInboundRelationDescriptors && column.canTrash) {
+    context.addIssue({
+      code: "custom",
+      path: ["canTrash"],
+      message: "Relation display columns with inbound descriptors must fail closed for trash."
+    });
+  }
   if (
     column.calculation?.kind === "imported_cached_formula" &&
     (column.canRename || column.canTrash || column.canUseAsFormulaOperand || column.canEditFormula)
@@ -3581,9 +3729,39 @@ export const CollectionColumnSummarySchema = z.object({
   }
 });
 
+export const COLLECTION_RELATION_DISPLAY_LABEL_MAX_UTF8_BYTES = 512;
+export const CollectionRelationDisplayLabelSchema = z.string().max(160).refine(
+  (value) => new TextEncoder().encode(value).byteLength <= COLLECTION_RELATION_DISPLAY_LABEL_MAX_UTF8_BYTES,
+  `Collection relation labels must not exceed ${COLLECTION_RELATION_DISPLAY_LABEL_MAX_UTF8_BYTES} UTF-8 bytes.`
+);
+
+/**
+ * Main derives displayLabel from the descriptor-owned scalar: null/empty becomes
+ * null; booleans are lowercase; finite numbers use String(value) with -0 as 0;
+ * strings/date/datetime retain their value and are UTF-8 truncated with an ellipsis.
+ */
+export const CollectionRelationCellValueSchema = z.object({
+  kind: z.literal("relation"),
+  targetRowId: DatasetQueryRowIdSchema.nullable(),
+  displayLabel: CollectionRelationDisplayLabelSchema.nullable()
+}).strict().superRefine((value, context) => {
+  if (value.targetRowId === null && value.displayLabel !== null) {
+    context.addIssue({
+      code: "custom",
+      path: ["displayLabel"],
+      message: "Cleared relation cells cannot project a display label."
+    });
+  }
+});
+
+export const CollectionCellValueSchema = z.union([
+  CollectionScalarValueSchema,
+  CollectionRelationCellValueSchema
+]);
+
 export const CollectionCellSchema = z.object({
   columnId: DatasetQueryColumnIdSchema,
-  value: CollectionScalarValueSchema,
+  value: CollectionCellValueSchema,
   editable: z.boolean(),
   readOnlyReason: CollectionCellReadOnlyReasonSchema.optional()
 }).strict().superRefine((cell, context) => {
@@ -3599,8 +3777,17 @@ export const CollectionCellSchema = z.object({
 export const CollectionRowSchema = z.object({
   rowId: DatasetQueryRowIdSchema,
   cells: z.array(CollectionCellSchema).max(32),
-  canTrash: z.boolean()
-}).strict();
+  canTrash: z.boolean(),
+  hasInboundRelationReferences: z.boolean().default(false)
+}).strict().superRefine((row, context) => {
+  if (row.hasInboundRelationReferences && row.canTrash) {
+    context.addIssue({
+      code: "custom",
+      path: ["canTrash"],
+      message: "Rows with inbound relation references must fail closed for trash."
+    });
+  }
+});
 
 export const CollectionDatasetTableSummarySchema = z.object({
   tableId: DatasetQueryTableIdSchema,
@@ -3726,6 +3913,7 @@ export const CollectionSnapshotSchema = z.object({
   canAppendDefaultRow: z.boolean(),
   canAddColumn: z.boolean(),
   canAddFormulaColumn: z.boolean(),
+  canAddRelationColumn: z.boolean().default(false),
   views: z.array(CollectionViewSummarySchema).max(32),
   activeViewId: ViewIdSchema.optional()
 }).strict().superRefine((snapshot, context) => {
@@ -3768,6 +3956,41 @@ export const CollectionSnapshotSchema = z.object({
         path: ["columns", index, "canTrash"],
         message: "Columns referenced by a Pige formula must fail closed for trash."
       });
+    }
+  }
+  for (const [columnIndex, column] of snapshot.columns.entries()) {
+    if (column.relation?.targetTableId !== snapshot.tableId) continue;
+    const displayColumn = columnsById.get(column.relation.targetDisplayColumnId);
+    if (displayColumn?.hasInboundRelationDescriptors !== true || displayColumn.canTrash) {
+      context.addIssue({
+        code: "custom",
+        path: ["columns", columnIndex, "relation", "targetDisplayColumnId"],
+        message: "Same-table relation display columns must project the inbound trash guard."
+      });
+    }
+  }
+  for (const [rowIndex, row] of snapshot.rows.entries()) {
+    for (const [cellIndex, cell] of row.cells.entries()) {
+      const column = columnsById.get(cell.columnId);
+      const relationValue = typeof cell.value === "object" && cell.value !== null &&
+        "kind" in cell.value && cell.value.kind === "relation" ? cell.value : undefined;
+      if ((column?.relation !== undefined) !== (relationValue !== undefined)) {
+        context.addIssue({
+          code: "custom",
+          path: ["rows", rowIndex, "cells", cellIndex, "value"],
+          message: "Relation columns and cells must use the strict relation projection together."
+        });
+      }
+      if (relationValue === undefined || relationValue.targetRowId === null ||
+          column?.relation?.targetTableId !== snapshot.tableId) continue;
+      const target = snapshot.rows.find((candidate) => candidate.rowId === relationValue.targetRowId);
+      if (target !== undefined && !target.hasInboundRelationReferences) {
+        context.addIssue({
+          code: "custom",
+          path: ["rows", rowIndex, "cells", cellIndex, "value", "targetRowId"],
+          message: "Visible relation targets must project the inbound row-trash guard."
+        });
+      }
     }
   }
   const viewIds = new Set<string>();
@@ -3917,6 +4140,38 @@ export const CollectionUpdateFormulaColumnRequestSchema = z.object({
   columnId: DatasetQueryColumnIdSchema,
   expectedRevisionId: DatasetQueryRevisionIdSchema,
   expression: DatasetPigeFormulaExpressionSchema
+}).strict();
+
+/**
+ * Main derives column/revision/Operation IDs from requestId plus this canonical
+ * same-Dataset descriptor. The target table is browsed only through collections.open.
+ */
+export const CollectionAddRelationColumnRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  label: CollectionNewColumnLabelSchema,
+  targetTableId: DatasetQueryTableIdSchema,
+  targetDisplayColumnId: DatasetQueryColumnIdSchema
+}).strict();
+
+/**
+ * A null targetRowId is the only clear intent. Main binds requestId to the
+ * canonical descriptor/cell intent and derives every revision and Operation ID.
+ */
+export const CollectionEditRelationCellRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  rowId: DatasetQueryRowIdSchema,
+  columnId: DatasetQueryColumnIdSchema,
+  targetRowId: DatasetQueryRowIdSchema.nullable()
 }).strict();
 
 export const CollectionRenameColumnRequestSchema = z.object({
@@ -4118,6 +4373,98 @@ export const CollectionUpdateFormulaColumnResultSchema = z.discriminatedUnion("s
       path: ["columnId"],
       message: "Committed formula updates must project the current Pige formula column."
     });
+  }
+});
+
+const CollectionAddRelationColumnResultIdentitySchema = CollectionResultIdentitySchema.extend({
+  targetTableId: DatasetQueryTableIdSchema,
+  targetDisplayColumnId: DatasetQueryColumnIdSchema
+}).strict();
+
+export const CollectionAddRelationColumnResultSchema = z.discriminatedUnion("status", [
+  CollectionAddRelationColumnResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    columnId: DatasetQueryColumnIdSchema,
+    operationId: OperationIdSchema,
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionAddRelationColumnResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionAddRelationColumnResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionAddRelationColumnResultIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
+  CollectionAddRelationColumnResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "committed" && result.status !== "stale") return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({
+      code: "custom",
+      path: ["snapshot"],
+      message: "Collection relation-column snapshots must match the request identity."
+    });
+  }
+  if (result.status !== "committed") return;
+  const column = result.snapshot.columns.find((candidate) => candidate.columnId === result.columnId);
+  if (column?.relation?.targetTableId !== result.targetTableId ||
+      column.relation.targetDisplayColumnId !== result.targetDisplayColumnId) {
+    context.addIssue({
+      code: "custom",
+      path: ["columnId"],
+      message: "Committed relation columns must project the exact descriptor."
+    });
+  }
+});
+
+const CollectionEditRelationCellResultIdentitySchema = CollectionResultIdentitySchema.extend({
+  rowId: DatasetQueryRowIdSchema,
+  columnId: DatasetQueryColumnIdSchema,
+  targetRowId: DatasetQueryRowIdSchema.nullable()
+}).strict();
+
+export const CollectionEditRelationCellResultSchema = z.discriminatedUnion("status", [
+  CollectionEditRelationCellResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionEditRelationCellResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionEditRelationCellResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionEditRelationCellResultIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
+  CollectionEditRelationCellResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "committed" && result.status !== "stale") return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({
+      code: "custom",
+      path: ["snapshot"],
+      message: "Collection relation-cell snapshots must match the request identity."
+    });
+  }
+  const column = result.snapshot.columns.find((candidate) => candidate.columnId === result.columnId);
+  if (column?.relation?.kind !== "pige_single_relation") {
+    context.addIssue({
+      code: "custom",
+      path: ["columnId"],
+      message: "Relation-cell snapshots must retain the current relation descriptor."
+    });
+  }
+  if (result.status !== "committed") return;
+  const row = result.snapshot.rows.find((candidate) => candidate.rowId === result.rowId);
+  const cell = row?.cells.find((candidate) => candidate.columnId === result.columnId);
+  if (cell !== undefined) {
+    const value = typeof cell.value === "object" && cell.value !== null &&
+      "kind" in cell.value && cell.value.kind === "relation" ? cell.value : undefined;
+    if (value?.targetRowId !== result.targetRowId) {
+      context.addIssue({
+        code: "custom",
+        path: ["snapshot", "rows"],
+        message: "Visible committed relation cells must match the requested target identity."
+      });
+    }
   }
 });
 
@@ -6164,6 +6511,8 @@ export const OperationRecordSchema = z.object({
     "add_collection_row",
     "add_collection_column",
     "update_collection_formula",
+    "add_collection_relation",
+    "update_collection_relation_cell",
     "rename_collection_column",
     "create_collection_view",
     "trash_collection_column",
@@ -6652,7 +7001,10 @@ export type DatasetColumn = z.infer<typeof DatasetColumnSchema>;
 export type DatasetPigeCalculation = z.infer<typeof DatasetPigeCalculationSchema>;
 export type DatasetPigeFormulaExpression = z.infer<typeof DatasetPigeFormulaExpressionSchema>;
 export type DatasetPigeFormulaOperator = z.infer<typeof DatasetPigeFormulaOperatorSchema>;
+export type DatasetPigeRelation = z.infer<typeof DatasetPigeRelationSchema>;
+export type DatasetPigeRelationCell = z.infer<typeof DatasetPigeRelationCellSchema>;
 export type CollectionCell = z.infer<typeof CollectionCellSchema>;
+export type CollectionCellValue = z.infer<typeof CollectionCellValueSchema>;
 export type CollectionCatalogCursor = z.infer<typeof CollectionCatalogCursorSchema>;
 export type CollectionCellEditRequest = z.infer<typeof CollectionCellEditRequestSchema>;
 export type CollectionCellEditResult = z.infer<typeof CollectionCellEditResultSchema>;
@@ -6668,6 +7020,10 @@ export type CollectionAddFormulaColumnRequest = z.infer<typeof CollectionAddForm
 export type CollectionAddFormulaColumnResult = z.infer<typeof CollectionAddFormulaColumnResultSchema>;
 export type CollectionUpdateFormulaColumnRequest = z.infer<typeof CollectionUpdateFormulaColumnRequestSchema>;
 export type CollectionUpdateFormulaColumnResult = z.infer<typeof CollectionUpdateFormulaColumnResultSchema>;
+export type CollectionAddRelationColumnRequest = z.infer<typeof CollectionAddRelationColumnRequestSchema>;
+export type CollectionAddRelationColumnResult = z.infer<typeof CollectionAddRelationColumnResultSchema>;
+export type CollectionEditRelationCellRequest = z.infer<typeof CollectionEditRelationCellRequestSchema>;
+export type CollectionEditRelationCellResult = z.infer<typeof CollectionEditRelationCellResultSchema>;
 export type CollectionRenameColumnRequest = z.infer<typeof CollectionRenameColumnRequestSchema>;
 export type CollectionRenameColumnResult = z.infer<typeof CollectionRenameColumnResultSchema>;
 export type CollectionCreateViewRequest = z.infer<typeof CollectionCreateViewRequestSchema>;
@@ -6679,6 +7035,8 @@ export type CollectionTrashRowResult = z.infer<typeof CollectionTrashRowResultSc
 export type CollectionCellReadOnlyReason = z.infer<typeof CollectionCellReadOnlyReasonSchema>;
 export type CollectionColumnSummary = z.infer<typeof CollectionColumnSummarySchema>;
 export type CollectionColumnCalculationSummary = z.infer<typeof CollectionColumnCalculationSummarySchema>;
+export type CollectionColumnRelationSummary = z.infer<typeof CollectionColumnRelationSummarySchema>;
+export type CollectionRelationCellValue = z.infer<typeof CollectionRelationCellValueSchema>;
 export type CollectionCitationHighlight = z.infer<typeof CollectionCitationHighlightSchema>;
 export type CollectionOpenCitationRequest = z.infer<typeof CollectionOpenCitationRequestSchema>;
 export type CollectionOpenCitationResult = z.infer<typeof CollectionOpenCitationResultSchema>;
