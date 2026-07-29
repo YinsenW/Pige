@@ -273,14 +273,13 @@ Rules:
 
 A submitted Agent turn is the authority record for ordinary registered first-party
 capabilities. It is scoped to the turn, selected vault/resources and connected Provider;
-it is not expanded by model output, source text, Skills or package code. Pige has no
-saved-grant, Ask-Every-Time or YOLO domain object.
+it is not expanded by model/source/extension content. Machine-local PermissionPolicy stores
+mode, bounded grants and request/decision receipts; Job/Operation records keep only exact IDs.
 
-Only closed-list high-risk effects have a typed one-effect confirmation: irreversible
-delete, user-file overwrite, write outside an explicitly selected directory, arbitrary
-shell/unknown-package install, or credential display/export. A denial applies no effect.
-Third-party code has its own reviewed capability/isolation contract and does not inherit
-first-party submitted-turn authority.
+Ask, scoped grants, and YOLO produce one-action decisions after Main matching. Permanent
+loss, original overwrite, raw credentials, risky edits, protected authority, and OS/SSRF/
+signature/path safety stay non-reusable. Denial applies no effect; third-party content cannot
+create grants or enable Full Access.
 
 ## 11. Service Ownership
 

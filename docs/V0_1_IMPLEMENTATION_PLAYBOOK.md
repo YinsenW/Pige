@@ -24,14 +24,13 @@ and ends the pause. Dates/statuses do not backfill or rise. AR4 is historical, a
 AR phase follows AR3.
 
 The manifest owns AR1 proof: `node scripts/verify/architecture-reset.mjs --phase-proof=AR1`
-requires zero executable JS/TS authority matches under `apps/` and `packages/` after
-test/catalog/generated/build/vendor exclusions. Non-authoritative shorthand is
-`grep -r "YOLO\|saved.grant\|permission_lifecycle\|waiting_permission\|waiting_model_egress" packages/ apps/ | wc -l`;
-its one deny-copy locale hit is not AR1 debt. The Node command alone decides completion.
+rejects duplicate approval/egress pipelines and Host semantic routing. The canonical
+Permission Policy Store, `waiting_permission`, saved-grant, and YOLO schemas are intentional
+authority owners, not AR1 debt; verifier allowlists must stay exact to those reviewed owners.
 
 | Phase | Development outcome | Required proof |
 | --- | --- | --- |
-| AR1 authority | Remove routine permission/egress state; retain narrow high-risk/Provider boundaries | Zero markers; denied risk executes nothing |
+| AR1 authority | Remove routine prompts and duplicate permission/egress pipelines; retain one low-interruption policy and high-risk/Provider boundaries | Exact reviewed owners only; denied risk and hard exclusions execute nothing |
 | AR2 Pi ownership | Replace Host pipelines with Pi-selected tools | Pi traces; no Host synthesis; sources preserved |
 | AR3 reliability | Unify Job reliability and trust-boundary schemas | Crash/cancel/idempotency/data/IPC proof |
 
@@ -639,7 +638,8 @@ Build:
 
 - [B8.01 -> E8.02] Closed-list high-risk confirmation service.
 - [B8.02 -> E8.02] Permission-dialog UI with safe summaries.
-- [B8.03 -> E8.03] Closed-list high-risk confirmation with no saved-grant/YOLO mode.
+- [B8.03 -> E8.03] Durable Ask/scoped-grant/YOLO modes; ordinary work stays prompt-free
+  and hard boundaries remain confirmed or blocked.
 - [B8.04 -> E8.03] Third-party authority isolation and concrete effect decisions.
 - [B8.05 -> E8.01] Skill Registry Service (inventory/disable foundation only).
 - [B8.06 -> E8.01] Pure Skill staging/install from URL, Markdown, and ZIP plus explicit chat-initiated staging, enable, disable, uninstall, export, and source-aware update.

@@ -701,20 +701,19 @@ Navigation:
 - Selection actions in note content.
 - Skill Manager for pure Skills and capability-declared external/Web Skills.
 - Curated Pi Package Manager for reviewed package install, disable, uninstall, and update flows.
-- Focused confirmation only for irreversible delete, original overwrite, out-of-root
-  write, arbitrary shell/unknown install, credential disclosure, risky Agent edits, or
-  equivalent escalation. Raw Shell stays per-effect; a registered fixed install/config/
-  auth recipe may confirm one exact plan. Attachments grant no ambient authority, while
-  explicit authored intent may request that precise effect.
-- Ordinary submitted-turn tool work has no permission-mode, saved-grant, or approval UI.
+- Ordinary bounded work does not prompt. Ask Every Time, scoped grants, or explicit YOLO
+  mediate sensitive effects; YOLO suppresses eligible Shell/write/network/install prompts.
+  Validation/audit always run, and permanent loss, original overwrite, raw credentials,
+  risky edits, protected authority, OS/SSRF/signature/path safety remain hard boundaries.
 - Settings IA grouped as Basic, Knowledge Base, AI, Security, Extensions, and System.
 - Setting ownership, scope, storage, backup behavior, permission requirement, and apply behavior are governed by `docs/SETTINGS_AND_PREFERENCES.md`.
 - Knowledge Base settings must include a real Vault & Note Storage page for local note storage: current vault name, active vault path, knowledge root path, managed source-copy path (the v1 UI compatibility label is Source asset root), default source storage strategy, reveal in file manager, open existing vault folder, create new vault, recent vaults, backup, restore, trash policy, and safe index repair entry points.
 - Models settings contain BYOK provider details, model list status, and one default Pi Agent model. Advanced/Fast model assignment is not a v0.1 visible setting unless a real Pi-compatible routing layer exists.
 - Local Capabilities settings contain local RAG, embeddings/reranking downloads, OCR, speech input, document parsers, and bundled toolchain health.
 - Permissions & Privacy settings contain API key storage, exact connected-Provider send
-  disclosure, and a clear high-risk boundary. It has no content-redaction setting,
-  permission mode, saved grant, or YOLO control.
+  disclosure, one calm permission-mode control, visible/revocable scoped grants, explicit
+  YOLO status, and the immutable hard-boundary disclosure. It has no content-redaction
+  setting or per-tool capability console.
 - Skills and Pi Packages live under Extensions, not under Models.
 
 Internationalization:
@@ -1533,8 +1532,8 @@ Security product requirements:
 - One user submit authorizes registered first-party reads, parse/OCR/retrieval,
   user-specified fetch, and bounded local tools. Host validates scope/resources without
   asking after each call.
-- Only the closed high-risk effects show Deny / Allow for that exact action. Pige has no
-  Ask-Every-Time, saved-grant, or YOLO mode for ordinary Agent work.
+- Only sensitive effects enter permission mediation. Ask, Main-derived scoped grants, and
+  explicit YOLO each record one-action authority; hard boundaries stay non-grantable.
 - Optional tools and model assets require explicit download consent and verified
   admission before execution.
 - External/Web Skills and packages cannot receive unmediated vault, filesystem,

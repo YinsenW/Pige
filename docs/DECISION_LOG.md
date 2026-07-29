@@ -989,6 +989,30 @@ References:
 - `docs/TECH_ARCHITECTURE.md`
 - `docs/DATA_ARCHITECTURE.md`
 
+### D-20260729-Low-Interruption-Permission-Modes
+
+Status: Accepted
+Date: 2026-07-29
+
+Decision:
+
+Ask, grants, or revocable YOLO mediate sensitive effects prompt-free.
+YOLO suppresses eligible prompts. Main validates/audits;
+hard boundaries hold; content cannot select modes. This revises only the permission clause
+of D-20260722-Personal-Agent-Architecture-Reset.
+
+Rationale:
+
+Prompts interrupt; receipts recover.
+
+Consequences:
+
+- `confirmations.*` gates effects; `permissions.*` stores policy.
+
+References:
+
+- `docs/SECURITY_THREAT_MODEL.md`
+
 ### D-20260709-Settings-Registry-Is-Required
 
 Status: Accepted
@@ -3340,7 +3364,7 @@ This removes repeated reviewed-setup prompts without command heuristics or broad
 
 Consequences:
 
-- No saved grant/YOLO/mode; drift fails closed or exact probes adopt.
+- D-20260729-Low-Interruption-Permission-Modes supersedes the mode; plan bounds remain.
 - Feishu is a recipe fixture; statuses stay unchanged.
 - Private ingress snapshots retain this authored-intent rule: attachments grant no ambient
   authority, but their presence does not veto a separately explicit reviewed task.

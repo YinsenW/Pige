@@ -954,10 +954,10 @@ Remove the entire `privacy.redactionTitle`/`privacy.redactionDescription` row.
 
 ### Submitted-turn Authority And High-risk Effects
 
-Send authorizes that turn's registered bounded tools and selected Provider context. No
-permission mode, saved grant, per-tool card, or YOLO exists. Only closed-list high risk
-(irreversible delete, original overwrite, out-of-root write, arbitrary shell/unknown
-install, credential export) opens the global modal; Deny executes nothing.
+Send authorizes bounded tools without routine prompts. One compact Ask/scoped-grant/YOLO
+control and the existing modal own decisions; YOLO needs confirmation, stays visible and
+revocable, and suppresses eligible Shell/write/network/install prompts. Internals remain
+Main-only, hard exclusions hold, and Deny executes nothing.
 
 A reviewed plan reuses that modal. Exact English source copy:
 

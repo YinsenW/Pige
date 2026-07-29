@@ -274,10 +274,10 @@ Self-host requirements later:
 
 ## 11. Authority Model Across Runtimes
 
-This section's former saved-grant/YOLO proposal is superseded by
-`D-20260722-Personal-Agent-Architecture-Reset`. Future clients must define explicit
-submitted-turn resource authority, third-party isolation and closed-list high-risk
-effects for their own runtime; desktop authority never transfers implicitly.
+Desktop Ask/Remember/YOLO follows the current Permission Policy contract. Future clients
+must define a separate explicit choice plus server-owned classification, third-party
+isolation, hard exclusions, revocation, and audit; desktop authority never transfers
+implicitly.
 
 <!-- Historical remote permission details below are non-normative migration research. -->
 

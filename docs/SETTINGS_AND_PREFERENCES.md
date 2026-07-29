@@ -182,6 +182,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Memory backup inclusion | Agent & Memory/Backup flow | `vault_portable` | Backup Service | `.pige/config.json` | Yes | `none` | Next backup |
 | Exceptional intervention policy (`confirmation.*` compatibility) | Agent & Memory | `vault_portable` | Agent Orchestrator, Change Proposal Service | `.pige/config.json` | Yes | `explicit_confirmation` | New jobs; cannot turn uncertainty into routine prompts |
 | Secret storage mode | Permissions & Privacy | `machine_local` plus `secret` | Settings and Secrets Service | OS app data + secret store | No | `explicit_warning` | Requires explicit warning |
+| Permission mode/grants | Permissions & Privacy | `machine_vault_binding` | Permission Policy | OS app data | No | YOLO confirms | New effects |
 | Vault-scoped Skill enablement | Skills | `vault_portable` | Skill Registry Service | `.pige/skills/` metadata or `.pige/config.json` | Yes | `permission_broker` | New Agent runs |
 | Machine-local Skill enablement | Skills | `machine_local` | Skill Registry Service | OS app data | No | `permission_broker` | New Agent runs |
 | Pi package install records | Pi Packages | `machine_local` | Pi Package Registry Service | OS app data | No | `permission_and_confirmation` | After install/remove job |
@@ -284,8 +285,8 @@ Sensitive settings that always require explicit confirmation:
 - API key storage mode.
 - Provider credential storage mode or Provider/endpoint identity changes. The disclosed
   Send behavior is not a content-policy setting.
-- No saved-grant or YOLO mode is a setting; ordinary first-party authority comes from
-  the submitted turn and exceptional effects use the high-risk confirmation owner.
+- YOLO enablement reuses confirmation; other mode/revoke actions are revision-fenced.
+  Untrusted content cannot invoke them.
 - Provider profile changes.
 - Vault path, external managed-copy root, or source storage policy changes.
 - `PIGE.md` edits.
@@ -403,8 +404,8 @@ Required tests:
 - Default binding reports not-configured/ready/configured-unusable without secret reads;
   changing it affects new Pi calls.
 - Changing source storage strategy affects new file captures only; typed/pasted text and fetched URL snapshots remain managed copies.
-- Ordinary Agent work exposes no permission-mode controls; high-risk decisions are
-  concrete actions, not stored settings.
+- Permissions UI offers Ask/grants/YOLO; grants are revocable, internals private, ordinary
+  work prompt-free, and hard boundaries unchanged.
 - Restore works without machine-local settings.
 - Settings page strings exist in all v0.1 locales.
 

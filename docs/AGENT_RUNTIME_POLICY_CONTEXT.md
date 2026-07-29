@@ -106,16 +106,17 @@ HTTPS Skill staging; Host candidate and turn/Job/vault fences stage review, neve
 type AuthorityPolicyContext = {
   firstPartyTurnAuthority: true;
   highRiskConfirmation: "closed_list";
+  permissionMode: "ask_every_time" | "remember_scoped_grants" | "yolo_full_access";
+  permissionPolicyRevision: number;
   thirdPartyInheritance: false;
 };
 ```
 
-Registered first-party reads, preservation, parse/OCR/retrieval, user-specified fetch,
-and bounded local tools inherit the explicit submit. Scope/path/resource validation still
-runs. Irreversible delete, original overwrite, out-of-root write, arbitrary shell or
-unknown install, credential disclosure, risky Agent edit, and equivalent escalation use
-the narrow high-risk confirmation owner. There is no saved-grant/YOLO mode or per-tool
-permission state machine. Third-party code cannot self-authorize.
+Registered first-party work inherits Submit; validation still runs. Policy Context carries
+mode/revision, never grant matchers. Permission Policy enforces Ask, scoped grants, or YOLO
+before sensitive effects. YOLO removes eligible prompts, not validation; permanent loss,
+original overwrite, raw credentials, risky edits, protected authority, OS/SSRF/signature/path
+safety stay non-reusable. Third-party content cannot authorize or select a mode.
 
 ### 4.4 Language, Memory, Retrieval, And Capabilities
 
