@@ -22,6 +22,7 @@ import {
   LocalCapabilitiesSettingsPanel,
   type PaddleOcrApi
 } from "../../apps/desktop/src/renderer/src/components/LocalCapabilitiesSettingsPanel";
+import { SkillTrashRestorePanel } from "../../apps/desktop/src/renderer/src/components/SkillTrashRestorePanel";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 import type {
   LocalSemanticRetrievalDisableRequest,
@@ -65,6 +66,8 @@ import type {
   SkillRegistryMutationResult,
   SkillRegistryQueryResult,
   SkillRegistrySummary,
+  SkillRestoreRequest,
+  SkillRestoreResult,
   SkillUninstallRequest,
   SpeechAvailabilityResult
 } from "@pige/contracts";
@@ -976,6 +979,85 @@ describe("full UI Settings surface", () => {
     expect(page.textContent).toContain("No check has been run yet.");
     expect(page.textContent).not.toContain("Broken reference removed");
     expect(runKnowledgeHealth).toHaveBeenCalledOnce();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps Skill Trash restore fail-closed, single-flight, retained on conflict, and focus-owned", async () => {
+    const dom = createDom();
+    installMatchMedia(dom, false);
+    const container = requireElement(dom.window.document.querySelector<HTMLElement>("#root"));
+    const installedAction = dom.window.document.createElement("button");
+    installedAction.textContent = "Enable restored Skill";
+    dom.window.document.body.append(installedAction);
+    const root = createRoot(container);
+    const vaultId = "vault_20260729_skillrestore";
+    const restorable = {
+      restoreContextId: `skill_restore_${"a".repeat(32)}` as const,
+      skillId: "review-notes",
+      name: "Review notes",
+      version: "1.2.0",
+      kind: "pure" as const,
+      scope: "machine_local" as const,
+      uninstalledAt: "2026-07-29T08:00:00.000Z",
+      canRestore: true as const
+    };
+    let registry: SkillRegistrySummary = { ...skillRegistry(7, false, 0, []), restorableSkills: [restorable] };
+    let resolveRestore!: (result: SkillRestoreResult) => void;
+    const restoreSkill = vi.fn((_request: SkillRestoreRequest) =>
+      new Promise<SkillRestoreResult>((resolve) => { resolveRestore = resolve; }));
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: {
+      skills: { restore: restoreSkill },
+      vault: { current: async () => ({ vaultId }) }
+    } });
+    const render = (): void => root.render(createElement(SkillTrashRestorePanel, {
+      registry,
+      disabled: false,
+      t,
+      onCommitted: (next) => {
+        registry = next;
+        render();
+        dom.window.requestAnimationFrame(() => dom.window.requestAnimationFrame(() => installedAction.focus()));
+      }
+    }));
+
+    await act(async () => { render(); await settle(dom); });
+    const restore = buttonNamed(container, "Restore: Review notes");
+    await act(async () => { restore.click(); restore.click(); await settle(dom); });
+    expect(restoreSkill).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain("Restoring...");
+    const firstRequest = restoreSkill.mock.calls[0]![0];
+    expect(firstRequest).toMatchObject({
+      activeVaultId: vaultId,
+      restoreContextId: restorable.restoreContextId,
+      skillId: restorable.skillId,
+      expectedRegistryRevision: 7
+    });
+    await act(async () => {
+      resolveRestore({ ...firstRequest, status: "ineligible", registry: skillRegistry(8, false, 0, []) });
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("The Skill list changed. Review it and try again.");
+    expect(container.querySelector("[data-restorable-skill-id]")).not.toBeNull();
+    await act(async () => { await settle(dom); await settle(dom); });
+    expect(dom.window.document.activeElement).toBe(restore);
+
+    await act(async () => { restore.click(); await settle(dom); });
+    expect(restoreSkill).toHaveBeenCalledTimes(2);
+    const secondRequest = restoreSkill.mock.calls[1]![0];
+    const restoredSkill = { ...skillRegistry(8, false).skills[0]!, enabled: false, canEnable: true };
+    await act(async () => {
+      resolveRestore({
+        ...secondRequest,
+        status: "committed",
+        registry: { ...skillRegistry(8, false, 0, [restoredSkill]), restorableSkills: [] }
+      });
+      await settle(dom);
+    });
+    await act(async () => { await settle(dom); await settle(dom); });
+    expect(container.querySelector("[data-restorable-skill-id]")).toBeNull();
+    expect(dom.window.document.activeElement).toBe(installedAction);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -4654,7 +4736,7 @@ function skillRegistry(
     canUpdate: true
   }]
 ): SkillRegistrySummary {
-  return { apiVersion: 1, revision, invalidManifestCount, skills };
+  return { apiVersion: 1, revision, invalidManifestCount, skills, restorableSkills: [] };
 }
 
 function memorySummary(
