@@ -26,27 +26,23 @@ import {
   type CollectionColumnActionNotice
 } from "./ManagedCollectionColumnActions";
 import { ManagedCollectionViewControls } from "./ManagedCollectionViewControls";
-
+import { ManagedCollectionFormulaColumnDialog } from "./ManagedCollectionFormulaColumnDialog";
 type CellIdentity = {
   readonly rowId: string;
   readonly columnId: string;
 };
-
 type CellEdit = CellIdentity & {
   readonly expectedRevisionId: string;
   readonly logicalType: DatasetLogicalType;
   readonly originalValue: CollectionScalarValue;
   readonly draft: string;
 };
-
 type ColumnDraft = {
   readonly expectedRevisionId: string;
   readonly label: string;
   readonly logicalType: CollectionAddNullableColumnRequest["logicalType"];
 };
-
 const COLLECTION_EDITABLE_TYPES = ["string", "integer", "number", "boolean", "date", "datetime"] as const;
-
 type CitationReady = Extract<CollectionOpenCitationResult, { readonly status: "ready" }>;
 type CitationPanelProps = Pick<CitationReady, "mode" | "preview" | "highlights"> & { readonly onClose: () => void; readonly t: (key: string) => string };
 export function ManagedCollectionCitationPanel(props: CitationPanelProps): React.JSX.Element {
@@ -206,11 +202,9 @@ export function ManagedCollectionPanel(props: {
   useEffect(() => {
     if (edit) editorRef.current?.focus();
   }, [edit?.rowId, edit?.columnId]);
-
   useEffect(() => {
     if (columnDraft && !busy) columnLabelRef.current?.focus();
   }, [columnDraft?.expectedRevisionId]);
-
   useLayoutEffect(() => {
     if (edit || !pendingFocusRef.current) return;
     const button = editTriggerRefs.current.get(cellKey(pendingFocusRef.current));
@@ -218,7 +212,6 @@ export function ManagedCollectionPanel(props: {
     pendingFocusRef.current = null;
     button.focus();
   }, [edit]);
-
   useLayoutEffect(() => {
     if (busy) return;
     if (pendingTrashFocusRef.current) {
@@ -244,7 +237,6 @@ export function ManagedCollectionPanel(props: {
     pendingAppendFocusRef.current = false;
     (appendTriggerRef.current ?? panelRef.current)?.focus();
   }, [busy, notice, props.snapshot.revisionId, visibleRows]);
-
   useLayoutEffect(() => {
     const pending = pendingRowsFocusRef.current;
     if (!pending || pending.paginationKey !== paginationKey) return;
@@ -252,7 +244,6 @@ export function ManagedCollectionPanel(props: {
     if (tableScrollRef.current) tableScrollRef.current.scrollTop = pending.scrollTop;
     loadMoreTriggerRef.current?.focus({ preventScroll: true });
   }, [paginationKey, visibleRows]);
-
   useLayoutEffect(() => {
     if (rowsLoadFailed && !rowsLoading) loadMoreTriggerRef.current?.focus({ preventScroll: true });
   }, [rowsLoadFailed, rowsLoading]);
@@ -648,6 +639,15 @@ export function ManagedCollectionPanel(props: {
           viewControlsActiveRef.current = active;
           setViewControlsBusy(active);
         }}
+        t={props.t}
+      />
+      <ManagedCollectionFormulaColumnDialog
+        activeVaultId={props.activeVaultId}
+        snapshot={props.snapshot}
+        blocked={busy || viewControlsBusy || edit !== null || columnDraft !== null}
+        onAdoptSnapshot={props.onAdoptSnapshot}
+        onActiveChange={(active) => { columnActionsActiveRef.current = active; setColumnActionsBusy(active); }}
+        onCommitted={setColumnFocusRequest}
         t={props.t}
       />
       {columnDraft ? (
