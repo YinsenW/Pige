@@ -11,13 +11,16 @@ import {
   GeneralSettingsPanel,
   MaintenanceSettingsPanel,
   PiPackagesSettingsPanel,
-  PermissionsPrivacySettingsPanel,
   SettingsSurface,
   SkillsSettingsPanel,
   SystemSettingsPanel,
   type DevelopmentCapability,
   type SettingsSection
 } from "../../apps/desktop/src/renderer/src/App";
+import {
+  PermissionsPrivacySettingsPanel,
+  type PermissionPolicyApi
+} from "../../apps/desktop/src/renderer/src/components/PermissionsPrivacySettingsPanel";
 import {
   LocalCapabilitiesSettingsPanel,
   type OcrLanguagePreferenceApi,
@@ -3737,6 +3740,124 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("projects Remember Scoped Grants without inferring authority and single-flights revocation", async () => {
+    const dom = createDom();
+    const initial = {
+      apiVersion: 1 as const,
+      activeVaultId: "vault_20260729_permissions",
+      revision: 1,
+      defaultMode: "remember_scoped_grants" as const,
+      grants: [
+        permissionGrant("grant_20260729_abcdefghijklmnop", "Calendar", "Read events"),
+        permissionGrant("grant_20260729_qrstuvwxyzabcdef", "Mail", "Draft messages")
+      ],
+      invalidGrantCount: 0
+    };
+    let resolveRevoke!: (result: Awaited<ReturnType<PermissionPolicyApi["revokeGrant"]>>) => void;
+    const revokeGrant = vi.fn(() => new Promise<Awaited<ReturnType<PermissionPolicyApi["revokeGrant"]>>>((resolve) => {
+      resolveRevoke = resolve;
+    }));
+    const setDefaultMode: PermissionPolicyApi["setDefaultMode"] = vi.fn(async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      status: "committed",
+      summary: { ...initial, revision: 3, defaultMode: request.mode, grants: [] }
+    }));
+    let changedListener: Parameters<PermissionPolicyApi["onChanged"]>[0] | undefined;
+    const api: PermissionPolicyApi = {
+      summary: vi.fn(async (request) => ({
+        apiVersion: 1,
+        requestId: request.requestId,
+        activeVaultId: request.activeVaultId,
+        status: "ready",
+        summary: initial
+      })),
+      setDefaultMode,
+      revokeGrant,
+      onChanged: vi.fn((listener) => {
+        changedListener = listener;
+        return () => { changedListener = undefined; };
+      })
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(PermissionsPrivacySettingsPanel, {
+        t,
+        activeVaultId: initial.activeVaultId,
+        api
+      }));
+      await settle(dom);
+    });
+
+    const container = dom.window.document.querySelector("#root")!;
+    expect(container.textContent).toContain("Remember scoped grants");
+    expect(container.textContent).toContain("Calendar · v1.0.0 · Read events");
+    expect(container.textContent).toContain("Mail · v1.0.0 · Draft messages");
+    expect(container.textContent).not.toContain("YOLO");
+
+    const revokeButtons = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+      .filter((button) => button.textContent === "Revoke");
+    const firstRevoke = revokeButtons[0]!;
+    firstRevoke.focus();
+    await act(async () => {
+      firstRevoke.click();
+      firstRevoke.click();
+      await settle(dom);
+    });
+    expect(revokeGrant).toHaveBeenCalledTimes(1);
+    expect(revokeGrant).toHaveBeenCalledWith(expect.objectContaining({
+      activeVaultId: initial.activeVaultId,
+      expectedRevision: 1,
+      grantId: "grant_20260729_abcdefghijklmnop"
+    }));
+    expect(firstRevoke.disabled).toBe(true);
+
+    await act(async () => {
+      resolveRevoke({
+        apiVersion: 1,
+        requestId: "permissionpolicyreq_abcdefghijklmnop",
+        activeVaultId: initial.activeVaultId,
+        status: "stale",
+        summary: { ...initial, revision: 2, grants: [initial.grants[1]!] }
+      });
+      await settle(dom);
+    });
+    expect(container.textContent).not.toContain("Calendar · v1.0.0 · Read events");
+    expect(container.textContent).toContain("Permissions changed elsewhere. The current settings are shown.");
+    expect(dom.window.document.activeElement).not.toBe(firstRevoke);
+
+    const ask = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="radio"]'))
+      .find((input) => input.parentElement?.textContent?.includes("Ask every time"))!;
+    ask.focus();
+    await act(async () => {
+      ask.click();
+      await settle(dom);
+    });
+    expect(setDefaultMode).toHaveBeenCalledTimes(1);
+    expect(setDefaultMode).toHaveBeenCalledWith(expect.objectContaining({
+      activeVaultId: initial.activeVaultId,
+      expectedRevision: 2,
+      mode: "ask_every_time"
+    }));
+    expect(container.textContent).not.toContain("Mail · v1.0.0 · Draft messages");
+    expect(dom.window.document.activeElement).toBe(ask);
+
+    await act(async () => {
+      changedListener?.({
+        ...initial,
+        revision: 4,
+        grants: [initial.grants[1]!]
+      });
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Mail · v1.0.0 · Draft messages");
+    expect(container.textContent).not.toContain("Permissions changed elsewhere");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("binds the real theme and app language while keeping unfinished language choices honest", async () => {
     const dom = createDom();
     let ipcRead = false;
@@ -4991,6 +5112,23 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 });
+
+function permissionGrant(grantId: string, actorLabel: string, resourceLabel: string) {
+  return {
+    grantId,
+    actorType: "skill" as const,
+    actorLabel,
+    actorVersion: "1.0.0",
+    capability: "external_network" as const,
+    dataBoundary: "network" as const,
+    scope: "resource_scope" as const,
+    resourceScope: "current_domain" as const,
+    resourceLabel,
+    createdAt: "2026-07-29T10:00:00.000Z",
+    expiresAt: "2026-08-29T10:00:00.000Z",
+    canRevoke: true as const
+  };
+}
 
 function createDom(): JSDOM {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: "http://localhost" });

@@ -1,14 +1,18 @@
 import { useEffect, useRef } from "react";
-import type { HighRiskConfirmationSummary } from "@pige/contracts";
+import type { HighRiskConfirmationPendingResult, HighRiskConfirmationSummary } from "@pige/contracts";
 import { TaskExecutionPlanDetails } from "./TaskExecutionInteraction";
 
-type ConfirmationDecision = "allow" | "deny";
+type RememberScopedGrant = Extract<
+  HighRiskConfirmationPendingResult,
+  { readonly status: "pending" }
+>["rememberScopedGrant"];
 
 export function HighRiskConfirmationDialog(props: {
   readonly confirmation: HighRiskConfirmationSummary;
+  readonly rememberScopedGrant?: RememberScopedGrant;
   readonly resolving: boolean;
   readonly error: boolean;
-  readonly onResolve: (decision: ConfirmationDecision) => void;
+  readonly onResolve: (decision: "allow" | "deny", grantContextId?: string) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -103,6 +107,14 @@ export function HighRiskConfirmationDialog(props: {
             <div><dt>{props.t("confirmation.dataBoundary")}</dt><dd>{props.t(`skills.boundary.${externalWebSkill.dataBoundary}`)}</dd></div>
           </> : null}
         </dl>}
+        {props.rememberScopedGrant ? (
+          <dl className="confirmation-summary">
+            <div>
+              <dt>{props.t("privacy.rememberScope")}</dt>
+              <dd>{props.rememberScopedGrant.safeScopeLabel}</dd>
+            </div>
+          </dl>
+        ) : null}
         {props.error ? (
           <p className="confirmation-error" role="alert">{props.t("confirmation.failed")}</p>
         ) : null}
@@ -124,8 +136,22 @@ export function HighRiskConfirmationDialog(props: {
           >
             {props.resolving
               ? props.t("confirmation.resolving")
-              : props.t(reviewedPlan ? "taskExecution.plan.allow" : "confirmation.allow")}
+              : props.t(props.rememberScopedGrant
+                ? "privacy.allowOnce"
+                : reviewedPlan
+                  ? "taskExecution.plan.allow"
+                  : "confirmation.allow")}
           </button>
+          {props.rememberScopedGrant ? (
+            <button
+              type="button"
+              className="danger"
+              disabled={props.resolving}
+              onClick={() => props.onResolve("allow", props.rememberScopedGrant?.grantContextId)}
+            >
+              {props.t("privacy.rememberScope")}
+            </button>
+          ) : null}
         </div>
       </section>
     </div>
