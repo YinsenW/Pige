@@ -1388,6 +1388,7 @@ describe("desktop shell build contract", () => {
   });
 
   it("strictly validates the Managed Collection IPC and preload boundaries", () => {
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const registrarSource = fs.readFileSync(
       path.resolve("apps/desktop/src/main/register-managed-collection-ipc.ts"),
@@ -1445,6 +1446,12 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("CollectionAppendDefaultRowRequest");
     expect(contractsSource).toContain("readonly addNullableColumn:");
     expect(contractsSource).toContain("CollectionAddNullableColumnRequest");
+    expect(schemasSource).toContain(
+      'COLLECTION_ADD_FORMULA_COLUMN_CHANNEL = "collections.addFormulaColumn"'
+    );
+    expect(contractsSource).toContain("readonly addFormulaColumn:");
+    expect(contractsSource).toContain("CollectionAddFormulaColumnRequest");
+    expect(contractsSource).toContain("Promise<CollectionAddFormulaColumnResult>");
     expect(contractsSource).toContain("readonly renameColumn:");
     expect(contractsSource).toContain("CollectionRenameColumnRequest");
     expect(contractsSource).toContain("readonly createView:");
