@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { SkillExportResult, SkillLifecycleMutationResult, SkillStageInvalidReason, SkillStageUpdateResult,
   SkillStagedSummary, SkillRegistryQueryResult, SkillRegistrySummary, SkillSummary } from "@pige/contracts";
 import { PigeIcon } from "./PigeIcon";
+import { SkillTrashRestorePanel, formatSkillByteSize } from "./SkillTrashRestorePanel";
 
 type InstalledLifecycleKind = "disable" | "enable" | "export" | "uninstall" | "update";
 
@@ -23,7 +24,7 @@ function SkillDisclosure(props: { readonly skill: SkillStagedSummary | SkillSumm
     {skill.source ? <span>{skill.sourceUrl ?? skill.source}</span> : skill.sourceUrl ? <span>{skill.sourceUrl}</span> : null}
     {skill.kind === "external_web" && skill.manifestSha256 ? <span>{`Manifest SHA-256 · ${skill.manifestSha256}`}</span> : null}
     {skill.kind === "external_web" && skill.bundleSha256 ? <span>{`Bundle SHA-256 · ${skill.bundleSha256}`}</span> : null}
-    {skill.files?.map((file) => <span key={file.relativePath}>{`${file.relativePath} · ${formatByteSize(file.utf8ByteSize)}${skill.kind === "external_web" ? ` · ${file.sha256}` : ""}`}</span>)}
+    {skill.files?.map((file) => <span key={file.relativePath}>{`${file.relativePath} · ${formatSkillByteSize(file.utf8ByteSize)}${skill.kind === "external_web" ? ` · ${file.sha256}` : ""}`}</span>)}
     {skill.warnings?.map((warning) => <span role="status" key={warning}>{t(`skills.warning.${warning}`)}</span>)}
   </>;
 }
@@ -933,6 +934,8 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
         ) : null}
       </section>
 
+      <SkillTrashRestorePanel registry={registry} disabled={lifecycleAction !== null || installBusy !== null || uninstallConfirmation !== null} t={props.t} onCommitted={(next, skillId) => { latestRevisionRef.current = next.revision; setRegistry(next); pendingInstalledFocusRef.current = { skillId }; }} />
+
       <section className="settings-section" role="group" aria-labelledby="skills-review-title">
         <h2 className="settings-section-title" id="skills-review-title">{props.t("skills.reviewTitle")}</h2>
         <div className="settings-card">
@@ -990,8 +993,4 @@ function deferFocus(callback: () => void): void {
 
 function invalidStageStatusKey(reason: SkillStageInvalidReason): string {
   return `skills.invalid.${reason}`;
-}
-
-function formatByteSize(bytes: number): string {
-  return bytes < 1024 ? `${bytes} B` : `${Math.ceil(bytes / 1024)} KB`;
 }
