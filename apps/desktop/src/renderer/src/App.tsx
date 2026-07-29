@@ -4780,6 +4780,13 @@ function HomeComposer(props: {
     return () => window.clearInterval(timer);
   }, [props.activeVault?.vaultId, latestTurn?.jobId, latestTurn?.state]);
 
+  const restoreComposerFocus = (): void => {
+    const input = composerInputRef.current;
+    const activeElement = document.activeElement;
+    if (!input || (activeElement !== document.body && !input.closest(".composer")?.contains(activeElement))) return;
+    input.focus({ preventScroll: true });
+  };
+
   const submitHomeInput = async (): Promise<void> => {
     const hasText = text.trim().length > 0;
     const hasRejectedPaste = stagedComposerItems.some((item) => item.kind === "rejected_pasted_text");
@@ -4927,6 +4934,7 @@ function HomeComposer(props: {
         void refreshConversation();
       } finally {
         finishComposerSubmission(clientTurnId);
+        restoreComposerFocus();
       }
       return;
     }

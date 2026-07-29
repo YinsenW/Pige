@@ -2404,9 +2404,14 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
-  it("stages multiple picker attachments in order with zero side effects until one Send", async () => {
+  it("sends multiple picker attachments atomically with lock, retention, clearing, and focus recovery", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
+    const submissionResolvers: Array<(result: AgentStagedSubmitTurnResult) => void> = [];
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => { submissionResolvers.push(resolve); });
+    };
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
     await attachFiles(dom, container, [
@@ -2421,15 +2426,65 @@ describe("Home durable Agent conversation UI", () => {
     ]);
 
     await setTextareaValue(dom, container, "Compare these files with my notes.");
-    await clickButton(dom, container, "Send");
+    const firstSend = buttons(container, "Send")[0]!;
+    firstSend.focus();
+    await act(async () => {
+      firstSend.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      firstSend.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      await settle(dom);
+    });
     await waitFor(dom, () => harness.submitRequests.length === 1);
 
     expect(harness.submitRequests[0]).toMatchObject({
       inputKind: "file_picker",
-      text: "Compare these files with my notes."
+      text: "Compare these files with my notes.",
+      stagedItems: [
+        { kind: "file", ordinal: 0, displayName: "first.md" },
+        { kind: "file", ordinal: 1, displayName: "second.csv" }
+      ]
     });
     expect(harness.submittedFileNames).toEqual([["first.md", "second.csv"]]);
+    expect(buttons(container, "Working...")[0]?.disabled).toBe(true);
+    expect(textareaValue(container)).toBe("Compare these files with my notes.");
+    expect(container.querySelectorAll(".attachment-chip")).toHaveLength(2);
+
+    await act(async () => {
+      submissionResolvers.shift()?.({
+        requestId: "request_20260729_atomic_failed",
+        state: "failed",
+        modelUsage: "none",
+        sourceIds: [],
+        error: turnConflictError()
+      });
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(textareaValue(container)).toBe("Compare these files with my notes.");
+    expect(Array.from(container.querySelectorAll(".attachment-chip strong")).map((chip) => chip.textContent)).toEqual([
+      "first.md",
+      "second.csv"
+    ]);
+    expect(dom.window.document.activeElement).toBe(homeComposer(container));
+
+    const retrySend = buttons(container, "Send")[0]!;
+    retrySend.focus();
+    await clickElement(dom, retrySend);
+    await waitFor(dom, () => harness.submitRequests.length === 2);
+    expect(harness.submitRequests[1]?.clientTurnId).toBe(harness.submitRequests[0]?.clientTurnId);
+    expect(harness.submitRequests[1]?.stagedItems).toEqual(harness.submitRequests[0]?.stagedItems);
+    expect(harness.submittedFileNames).toEqual([
+      ["first.md", "second.csv"],
+      ["first.md", "second.csv"]
+    ]);
+
+    await act(async () => {
+      submissionResolvers.shift()?.(acceptedStagedResult(harness.submitRequests[1]!));
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(textareaValue(container)).toBe("");
     expect(container.querySelector(".attachment-chip")).toBeNull();
+    expect(dom.window.document.activeElement).toBe(homeComposer(container));
 
     await act(async () => root.unmount());
     dom.window.close();
