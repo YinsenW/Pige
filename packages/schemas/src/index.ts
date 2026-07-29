@@ -2688,9 +2688,96 @@ export const SettingPermissionRequirementSchema = z.enum([
   "explicit_warning"
 ]);
 
-export const VaultManifestSchema = z.object({
+function isCanonicalBcp47Tag(value: string): boolean {
+  if (value === "unknown") {
+    return false;
+  }
+  try {
+    return Intl.getCanonicalLocales(value)[0] === value;
+  } catch {
+    return false;
+  }
+}
+
+export const Bcp47LanguageTagSchema = z.string()
+  .min(2)
+  .max(64)
+  .regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/u)
+  .refine(isCanonicalBcp47Tag, {
+    message: "Language tags must be canonical BCP 47 values."
+  });
+export const DurableLanguageSchema = z.union([
+  z.literal("unknown"),
+  Bcp47LanguageTagSchema
+]);
+export const DurableLanguageDomainSchema = z.enum([
+  "source_record",
+  "markdown_page",
+  "ocr_artifact",
+  "chunk",
+  "memory",
+  "query",
+  "response"
+]);
+export const DurableLanguageBasisSchema = z.enum([
+  "explicit_source",
+  "ocr_observed",
+  "page_inherited",
+  "source_inherited",
+  "memory_derived",
+  "query_detected",
+  "response_policy",
+  "legacy_missing",
+  "unavailable"
+]);
+const DurableLanguageFactObjectSchema = z.object({
+  domain: DurableLanguageDomainSchema,
+  language: DurableLanguageSchema,
+  basis: DurableLanguageBasisSchema
+}).strict();
+function refineDurableLanguageFact(
+  fact: z.infer<typeof DurableLanguageFactObjectSchema>,
+  context: z.RefinementCtx
+): void {
+  const unknownBasis = fact.basis === "legacy_missing" || fact.basis === "unavailable";
+  if ((fact.language === "unknown") !== unknownBasis) {
+    context.addIssue({
+      code: "custom",
+      path: ["language"],
+      message: "Unknown language is valid only for missing or unavailable evidence."
+    });
+  }
+}
+export const DurableLanguageFactSchema = DurableLanguageFactObjectSchema
+  .superRefine(refineDurableLanguageFact);
+export const SourceRecordLanguageFactSchema = DurableLanguageFactObjectSchema.extend({
+  domain: z.literal("source_record")
+}).superRefine(refineDurableLanguageFact);
+export const MarkdownPageLanguageFactSchema = DurableLanguageFactObjectSchema.extend({
+  domain: z.literal("markdown_page")
+}).superRefine(refineDurableLanguageFact);
+export const OcrArtifactLanguageFactSchema = DurableLanguageFactObjectSchema.extend({
+  domain: z.literal("ocr_artifact")
+}).superRefine(refineDurableLanguageFact);
+export const ChunkLanguageFactSchema = DurableLanguageFactObjectSchema.extend({
+  domain: z.literal("chunk")
+}).superRefine(refineDurableLanguageFact);
+export const MemoryLanguageFactSchema = DurableLanguageFactObjectSchema.extend({
+  domain: z.literal("memory")
+}).superRefine(refineDurableLanguageFact);
+export const QueryLanguageFactSchema = DurableLanguageFactObjectSchema.extend({
+  domain: z.literal("query")
+}).superRefine(refineDurableLanguageFact);
+export const ResponseLanguageFactSchema = DurableLanguageFactObjectSchema.extend({
+  domain: z.literal("response")
+}).superRefine(refineDurableLanguageFact);
+export const ConversationLanguageContinuitySchema = z.object({
+  queryLanguage: QueryLanguageFactSchema,
+  responseLanguage: ResponseLanguageFactSchema
+}).strict();
+
+const VaultManifestBaseSchema = z.object({
   vault_id: VaultIdSchema,
-  vault_schema_version: z.literal(1),
   created_at: z.string().datetime({ offset: true }),
   updated_at: z.string().datetime({ offset: true }),
   app_min_version: z.string().min(1),
@@ -2699,7 +2786,38 @@ export const VaultManifestSchema = z.object({
   rebuildable_roots: z.array(z.string().min(1)),
   origin_vault_id: VaultIdSchema.optional(),
   restored_from_backup_id: BackupIdSchema.optional()
+});
+export const VaultDurableDomainVersionsV2Schema = z.object({
+  markdownPages: z.literal(2),
+  sourceRecords: z.literal(2),
+  ocrArtifacts: z.literal(2),
+  conversationEvents: z.literal(2),
+  memory: z.literal(2),
+  datasets: z.literal(1),
+  jobs: z.literal(1),
+  proposals: z.literal(1),
+  operations: z.literal(1),
+  skills: z.literal(1),
+  vaultConfig: z.literal(1)
+}).strict();
+export const VaultManifestV1Schema = VaultManifestBaseSchema.extend({
+  vault_schema_version: z.literal(1)
 }).passthrough();
+export const VaultManifestV2Schema = VaultManifestBaseSchema.extend({
+  vault_schema_version: z.literal(2),
+  durable_domain_versions: VaultDurableDomainVersionsV2Schema
+}).passthrough();
+export const VaultManifestSchema = z.discriminatedUnion("vault_schema_version", [
+  VaultManifestV1Schema,
+  VaultManifestV2Schema
+]);
+export const CurrentVaultManifestSchema = VaultManifestV2Schema;
+export const VaultManifestCompatibilityHeaderSchema = z.object({
+  vault_id: VaultIdSchema,
+  vault_schema_version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+}).passthrough();
+
+export const VAULT_APPLY_MIGRATION_CHANNEL = "vault.applyMigration" as const;
 
 export const InVaultSourceAssetRootSchema = z.string()
   .min(1)
@@ -2903,13 +3021,114 @@ export const OnboardingStatusProjectionSchema = z.object({
   waitingDependencyCounts: WaitingDependencyCountsProjectionSchema.optional()
 }).strict();
 
+export const VaultMigrationRequestIdSchema = z.string()
+  .regex(/^vaultmigrationreq_[a-z0-9]{16,64}$/u);
+export const VaultMigrationPreviewIdSchema = z.string()
+  .regex(/^vaultmigration_[a-z0-9]{32,96}$/u);
+export const VaultMigrationClassSchema = z.literal("transform");
+export const VaultMigrationAffectedDomainSchema = z.enum([
+  "vault_manifest",
+  "source_records",
+  "markdown_pages",
+  "ocr_artifacts",
+  "conversation_events",
+  "memory",
+  "rebuildable_chunks"
+]);
+export const VaultMigrationWarningSchema = z.enum([
+  "pre_migration_backup_required",
+  "unknown_language_preserved",
+  "rebuildable_indexes_after_commit"
+]);
+const VaultMigrationAffectedDomainCountSchema = z.object({
+  domain: VaultMigrationAffectedDomainSchema,
+  count: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+export const VaultMigrationPreviewSchema = z.object({
+  apiVersion: z.literal(1),
+  previewId: VaultMigrationPreviewIdSchema,
+  vaultId: VaultIdSchema,
+  fromVersion: z.literal(1),
+  toVersion: z.literal(2),
+  migrationClass: VaultMigrationClassSchema,
+  requiresBackup: z.literal(true),
+  languagePolicy: z.literal("preserve_or_unknown"),
+  affectedDomains: z.array(VaultMigrationAffectedDomainCountSchema).length(7),
+  warnings: z.array(VaultMigrationWarningSchema).min(1).max(3)
+}).strict().superRefine((preview, context) => {
+  const expected = VaultMigrationAffectedDomainSchema.options;
+  const actual = preview.affectedDomains.map(({ domain }) => domain);
+  if (actual.length !== new Set(actual).size || actual.some((domain, index) => domain !== expected[index])) {
+    context.addIssue({
+      code: "custom",
+      path: ["affectedDomains"],
+      message: "Migration domain counts must contain every domain once in canonical order."
+    });
+  }
+});
+export const VaultOpenInvalidReasonSchema = z.enum([
+  "manifest_unreadable",
+  "manifest_malformed",
+  "identity_invalid",
+  "domain_versions_invalid"
+]);
+export const VaultMigrationCheckpointSchema = z.enum([
+  "compatibility_revalidated",
+  "pre_backup_completed",
+  "durable_domains_staged",
+  "staged_validation_completed",
+  "durable_domains_committed",
+  "manifest_committed",
+  "operation_recorded",
+  "indexes_rebuilt"
+]);
 export const VaultActionResultSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("completed"),
+    compatibility: z.literal("current").default("current"),
     vault: VaultSummaryProjectionSchema,
     onboarding: OnboardingStatusProjectionSchema
   }).strict(),
-  z.object({ status: z.literal("canceled") }).strict()
+  z.object({ status: z.literal("canceled") }).strict(),
+  z.object({
+    status: z.literal("needs_migration"),
+    preview: VaultMigrationPreviewSchema
+  }).strict(),
+  z.object({
+    status: z.literal("unsupported_newer"),
+    vaultId: VaultIdSchema,
+    foundVersion: z.number().int().min(3).max(Number.MAX_SAFE_INTEGER),
+    supportedVersion: z.literal(2)
+  }).strict(),
+  z.object({
+    status: z.literal("invalid"),
+    reason: VaultOpenInvalidReasonSchema
+  }).strict()
+]);
+export const VaultMigrationApplyRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: VaultMigrationRequestIdSchema,
+  vaultId: VaultIdSchema,
+  previewId: VaultMigrationPreviewIdSchema
+}).strict();
+const VaultMigrationApplyIdentitySchema = VaultMigrationApplyRequestSchema;
+export const VaultMigrationApplyResultSchema = z.discriminatedUnion("status", [
+  VaultMigrationApplyIdentitySchema.extend({
+    status: z.literal("completed"),
+    jobId: JobIdSchema,
+    operationId: OperationIdSchema,
+    vault: VaultSummaryProjectionSchema,
+    onboarding: OnboardingStatusProjectionSchema
+  }).strict(),
+  VaultMigrationApplyIdentitySchema.extend({
+    status: z.literal("stale"),
+    current: z.enum(["needs_migration", "current", "unsupported_newer", "invalid"])
+  }).strict(),
+  VaultMigrationApplyIdentitySchema.extend({
+    status: z.literal("failed"),
+    jobId: JobIdSchema.optional(),
+    repair: z.enum(["retry", "restore_pre_migration_backup", "open_read_only"])
+  }).strict()
 ]);
 
 export const BackupReconnectDependencyRequestIdSchema = z.string()
@@ -7348,6 +7567,19 @@ export type RetrievalAnswerCitation = z.infer<typeof RetrievalAnswerCitationSche
 export type SettingApplyBehavior = z.infer<typeof SettingApplyBehaviorSchema>;
 export type SettingPermissionRequirement = z.infer<typeof SettingPermissionRequirementSchema>;
 export type SettingScope = z.infer<typeof SettingScopeSchema>;
+export type Bcp47LanguageTag = z.infer<typeof Bcp47LanguageTagSchema>;
+export type DurableLanguage = z.infer<typeof DurableLanguageSchema>;
+export type DurableLanguageDomain = z.infer<typeof DurableLanguageDomainSchema>;
+export type DurableLanguageBasis = z.infer<typeof DurableLanguageBasisSchema>;
+export type DurableLanguageFact = z.infer<typeof DurableLanguageFactSchema>;
+export type SourceRecordLanguageFact = z.infer<typeof SourceRecordLanguageFactSchema>;
+export type MarkdownPageLanguageFact = z.infer<typeof MarkdownPageLanguageFactSchema>;
+export type OcrArtifactLanguageFact = z.infer<typeof OcrArtifactLanguageFactSchema>;
+export type ChunkLanguageFact = z.infer<typeof ChunkLanguageFactSchema>;
+export type MemoryLanguageFact = z.infer<typeof MemoryLanguageFactSchema>;
+export type QueryLanguageFact = z.infer<typeof QueryLanguageFactSchema>;
+export type ResponseLanguageFact = z.infer<typeof ResponseLanguageFactSchema>;
+export type ConversationLanguageContinuity = z.infer<typeof ConversationLanguageContinuitySchema>;
 export type LocalDatabaseSchemaState = z.infer<typeof LocalDatabaseSchemaStateSchema>;
 export type Locale = z.infer<typeof LocaleSchema>;
 export type SourceAssetRootKind = z.infer<typeof SourceAssetRootKindSchema>;
@@ -7357,6 +7589,20 @@ export type SourceStorageStrategy = z.infer<typeof SourceStorageStrategySchema>;
 export type ToolchainManifest = z.infer<typeof ToolchainManifestSchema>;
 export type VaultConfig = z.infer<typeof VaultConfigSchema>;
 export type VaultManifest = z.infer<typeof VaultManifestSchema>;
+export type VaultManifestV1 = z.infer<typeof VaultManifestV1Schema>;
+export type VaultManifestV2 = z.infer<typeof VaultManifestV2Schema>;
+export type VaultDurableDomainVersionsV2 = z.infer<typeof VaultDurableDomainVersionsV2Schema>;
+export type VaultManifestCompatibilityHeader = z.infer<typeof VaultManifestCompatibilityHeaderSchema>;
+export type VaultMigrationRequestId = z.infer<typeof VaultMigrationRequestIdSchema>;
+export type VaultMigrationPreviewId = z.infer<typeof VaultMigrationPreviewIdSchema>;
+export type VaultMigrationClass = z.infer<typeof VaultMigrationClassSchema>;
+export type VaultMigrationAffectedDomain = z.infer<typeof VaultMigrationAffectedDomainSchema>;
+export type VaultMigrationWarning = z.infer<typeof VaultMigrationWarningSchema>;
+export type VaultMigrationPreview = z.infer<typeof VaultMigrationPreviewSchema>;
+export type VaultOpenInvalidReason = z.infer<typeof VaultOpenInvalidReasonSchema>;
+export type VaultMigrationCheckpoint = z.infer<typeof VaultMigrationCheckpointSchema>;
+export type VaultMigrationApplyRequest = z.infer<typeof VaultMigrationApplyRequestSchema>;
+export type VaultMigrationApplyResult = z.infer<typeof VaultMigrationApplyResultSchema>;
 export type WindowLayoutMode = z.infer<typeof WindowLayoutModeSchema>;
 export type WindowLayoutRequest = z.infer<typeof WindowLayoutRequestSchema>;
 export type WindowLayoutState = z.infer<typeof WindowLayoutStateSchema>;

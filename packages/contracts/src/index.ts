@@ -33,6 +33,9 @@ import type {
   CollectionEditRelationCellResult,
   CollectionUpdateFormulaColumnRequest,
   CollectionUpdateFormulaColumnResult,
+  ConversationLanguageContinuity,
+  DurableLanguage,
+  DurableLanguageFact,
   CollectionAddNullableColumnRequest,
   CollectionAddNullableColumnResult,
   CollectionCellEditRequest,
@@ -227,6 +230,10 @@ import type {
   SourceKind,
   SourceAssetRootKind,
   SourceStorageStrategy,
+  VaultMigrationApplyRequest,
+  VaultMigrationApplyResult,
+  VaultMigrationPreview,
+  VaultOpenInvalidReason,
   VaultRevealResult,
   VaultRevealTarget,
   WindowLayoutMode,
@@ -262,7 +269,10 @@ export type {
   CollectionListRequest,
   CollectionListResult,
   CollectionRowCursor,
+  ConversationLanguageContinuity,
   DiagnosticError,
+  DurableLanguage,
+  DurableLanguageFact,
   PigeError,
   PigeErrorAction,
   PigeErrorDomain,
@@ -484,6 +494,10 @@ export type {
   SkillSummary,
   SkillTrust,
   SkillUninstallRequest,
+  VaultMigrationApplyRequest,
+  VaultMigrationApplyResult,
+  VaultMigrationPreview,
+  VaultOpenInvalidReason,
   WindowLayoutRequest,
   WindowLayoutState
 } from "@pige/schemas";
@@ -1585,11 +1599,26 @@ export interface UpdateSourceStoragePolicyRequest {
 export type VaultActionResult =
   | {
       readonly status: "completed";
+      readonly compatibility: "current";
       readonly vault: VaultSummary;
       readonly onboarding: OnboardingStatus;
     }
   | {
       readonly status: "canceled";
+    }
+  | {
+      readonly status: "needs_migration";
+      readonly preview: VaultMigrationPreview;
+    }
+  | {
+      readonly status: "unsupported_newer";
+      readonly vaultId: string;
+      readonly foundVersion: number;
+      readonly supportedVersion: 2;
+    }
+  | {
+      readonly status: "invalid";
+      readonly reason: VaultOpenInvalidReason;
     };
 
 export interface PigeDesktopApi {
@@ -1830,6 +1859,9 @@ export interface PigeDesktopApi {
     readonly create: (request: CreateVaultRequest) => Promise<VaultActionResult>;
     readonly open: () => Promise<VaultActionResult>;
     readonly openRecent: (request: OpenRecentVaultRequest) => Promise<VaultActionResult>;
+    readonly applyMigration: (
+      request: VaultMigrationApplyRequest
+    ) => Promise<VaultMigrationApplyResult>;
     readonly revealKnowledgeRoot: () => Promise<VaultRevealResult>;
     readonly revealSourceAssetRoot: () => Promise<VaultRevealResult>;
     readonly updateSourceStoragePolicy: (request: UpdateSourceStoragePolicyRequest) => Promise<VaultSummary>;
