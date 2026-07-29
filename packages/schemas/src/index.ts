@@ -139,6 +139,26 @@ export const NoteOpenSourceReferenceResultSchema = z.discriminatedUnion("status"
     }).strict()
   )
 ]);
+export const NOTE_REVEAL_SOURCE_CHANNEL = "notes.revealSource" as const;
+export const NoteRevealSourceRequestIdSchema = z.string()
+  .regex(/^notesourcereveal_[a-z0-9]{16,64}$/);
+export const NoteRevealSourceRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteRevealSourceRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  sourceId: SourceIdSchema
+}).strict();
+const NoteRevealSourceResultIdentitySchema = NoteRevealSourceRequestSchema;
+export const NoteRevealSourceResultSchema = z.discriminatedUnion("status", [
+  NoteRevealSourceResultIdentitySchema.extend({ status: z.literal("revealed") }).strict(),
+  NoteRevealSourceResultIdentitySchema.extend({ status: z.literal("cancelled") }).strict(),
+  NoteRevealSourceResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  NoteRevealSourceResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  NoteRevealSourceResultIdentitySchema.extend({ status: z.literal("unavailable") }).strict(),
+  NoteRevealSourceResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
 export const ReaderSelectionRequestIdSchema = z.string().regex(/^readerselreq_[a-z0-9]{8,64}$/);
 export const ReaderSelectionSegmentIdSchema = z.string().regex(/^readerseg_[a-f0-9]{16}$/);
 export const ReaderSelectionEndpointSchema = z.object({
@@ -8190,6 +8210,9 @@ export type NoteResolveInlineReferenceResult = z.infer<typeof NoteResolveInlineR
 export type NoteSourceReferenceRequestId = z.infer<typeof NoteSourceReferenceRequestIdSchema>;
 export type NoteOpenSourceReferenceRequest = z.infer<typeof NoteOpenSourceReferenceRequestSchema>;
 export type NoteOpenSourceReferenceResult = z.infer<typeof NoteOpenSourceReferenceResultSchema>;
+export type NoteRevealSourceRequestId = z.infer<typeof NoteRevealSourceRequestIdSchema>;
+export type NoteRevealSourceRequest = z.infer<typeof NoteRevealSourceRequestSchema>;
+export type NoteRevealSourceResult = z.infer<typeof NoteRevealSourceResultSchema>;
 export type ReaderSelectionEndpoint = z.infer<typeof ReaderSelectionEndpointSchema>;
 export type ReaderSelectionActionRequestId = z.infer<typeof ReaderSelectionActionRequestIdSchema>;
 export type ReaderSelectionActionRequest = z.infer<typeof ReaderSelectionActionRequestSchema>;
