@@ -659,14 +659,10 @@ Action behavior:
 
 ### 8.4 Structured Knowledge Surface
 
-Datasets are Library content, not a destination. Pathless <=50-row pages Load More only from
-authority and preserve rows/focus on failure. Citation mode uses the durable preview, stable
-row/column/aggregate highlights and range metadata; mutation is disabled. Formula/cache and
-packaged proof stay open.
-
-The first P1 slice edits a scalar, adds/trashes a row/field, or saves one named view with one
-optional filter/sort. Open/commit adopts the stable-ID snapshot; stale/failure preserves the
-surface. Renderer invents no ID/default/formula/body. Undo is exact; broader editing stays planned.
+Datasets stay in Library. Authority-only paging preserves rows/focus; citations are read-only.
+Changes adopt stable-ID snapshots and exact Undo. A bounded formula dialog uses only projected
+numeric operands/operators; Main owns ID/evaluation/eligibility and stale preserves the draft.
+Formula editing, relations, scale/platform stay open; renderer invents no durable fact.
 
 ## 9. Sources View
 

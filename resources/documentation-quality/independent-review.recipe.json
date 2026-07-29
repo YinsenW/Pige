@@ -51,14 +51,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of exact historical Dataset citation Open.",
+    "scope": "Independent Planning review of Pige-managed numeric formula columns.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "b422ceb24ec36081d985daa7e6f56208ce5f8d554bffbd313bc2331ae375451a"
+    "reviewedSha256": "f40bbcf8f0de22567b583e994e5a52d95ce7733fbdc4eaed8edea8dac31c6d60"
   },
   "reviewers": [{
-    "reviewerId": "dataset-citation-open-review",
-    "task": "Historical Dataset citation Open",
+    "reviewerId": "managed-collection-formula-review",
+    "task": "Managed Collection numeric formulas",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -66,32 +66,32 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed citation authority and historical-read boundaries; Development and UI independently supplied implementation evidence."
+    "independence": "Planning reviewed formula truth, atomicity and authority boundaries; Development and UI independently supplied implementation evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"dataset-citation-open-review","blockerCount":0,"summary":"Historical citations open read-only in the existing Collection surface without replacing active data."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"dataset-citation-open-review","blockerCount":0,"summary":"API, data and UI owners bind lookup-only requests to the durable event, evidence and immutable bundle."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"dataset-citation-open-review","blockerCount":0,"summary":"B6.16 citation Open is bound while E6.11 analytical, scale and platform proof stays planned."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"dataset-citation-open-review","blockerCount":0,"summary":"Integrity drift, immutable revision checks, stable-row highlights and source-range metadata are tested."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"dataset-citation-open-review","blockerCount":0,"summary":"Existing API, data, UI, Playbook, Decision and trace owners absorb the slice."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"managed-collection-formula-review","blockerCount":0,"summary":"A bounded dialog uses authoritative numeric operands and preserves drafts on failure."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"managed-collection-formula-review","blockerCount":0,"summary":"API, durable Dataset schema and UI share one typed AST, eligibility and CAS contract."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"managed-collection-formula-review","blockerCount":0,"summary":"The first B7.10 formula slice is bound while PIGE-DATA-003 and E7.06 stay planned."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"managed-collection-formula-review","blockerCount":0,"summary":"AST limits, evaluation, atomic recomputation, replay, trash guards and Undo are tested."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"managed-collection-formula-review","blockerCount":0,"summary":"Existing API, data, UI, Playbook, Decision and trace owners absorb the slice."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Citation lookup and results remain strict, bounded, pathless and read-only."},
-    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision and trace locks preserve planned E6.11 and its explicit open proof."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"The exact 159-LOC citation owner is protected and reviewed bytes are hash-bound."}
+    {"command":"npm run verify:contracts","status":"passed","evidence":"Formula requests, ASTs, projections and results remain strict and renderer-safe."},
+    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision and trace locks keep PIGE-DATA-003 and E7.06 planned."},
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"The exact 735-LOC formula owner is protected and reviewed bytes are hash-bound."}
   ],
   "coordination": {
-    "taskId": "dataset-citation-open-20260729",
-    "taskTitle": "Historical Dataset citation Open",
+    "taskId": "managed-collection-formula-20260729",
+    "taskTitle": "Managed Collection numeric formulas",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing active Collection browsing, paging and mutation CAS remain compatible.",
-    "acknowledgement": "Planning binds exact read-only citation Open; complete E6.11 proof remains separate."
+    "compatibility": "Existing paging, citation, query/import and Collection CAS remain compatible.",
+    "acknowledgement": "Planning binds one numeric formula slice; complete E7.06 proof remains separate."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Analytical snapshots, joins, large-scale and signed-platform proof remain open.",
-    "Citation lookup keys and highlights must never become mutation or query authority."
+    "Formula editing, formula-on-formula, relations and broader schema lifecycle remain open.",
+    "Scale/platform, backup and exceptional conflict proof remain open."
   ]
 }
