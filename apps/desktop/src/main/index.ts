@@ -60,6 +60,8 @@ import {
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
   HighRiskConfirmationResolveResultSchema,
+  RememberedScopeSummarySchema,
+  RememberedScopeClearResultSchema,
   AddManualProviderRequestSchema,
   AddPresetProviderRequestSchema,
   AddManualModelRequestSchema,
@@ -176,6 +178,7 @@ import { listMarkdownTagCatalog } from "./services/markdown-page-index";
 import { LocalSettingsStore } from "./services/local-settings";
 import { ModelProviderRegistry } from "./services/model-provider-registry";
 import { PermissionBrokerService } from "./services/permission-broker-service";
+import { PermissionGrantStore } from "./services/permission-grant-store";
 import {
   applyReaderSelectionPageUpdate,
   createAgentPageUpdateOperationId
@@ -266,6 +269,7 @@ let localDatabaseService: LocalDatabaseService | undefined;
 let modelProviderRegistry: ModelProviderRegistry | undefined;
 let highRiskConfirmationService: HighRiskConfirmationService | undefined;
 let permissionBrokerService: PermissionBrokerService | undefined;
+let permissionGrantStore: PermissionGrantStore | undefined;
 let permissionedExternalCapabilityRegistry: PermissionedExternalCapabilityRegistry | undefined;
 let firstPartyReadonlyNodeOsCapabilitiesRegistered = false;
 let firstPartyCommandCapabilityRegistered = false;
@@ -573,6 +577,11 @@ const getHighRiskConfirmationService = (): HighRiskConfirmationService => {
   return highRiskConfirmationService;
 };
 
+const getPermissionGrantStore = (): PermissionGrantStore => {
+  permissionGrantStore ??= new PermissionGrantStore(app.getPath("userData"));
+  return permissionGrantStore;
+};
+
 const getSkillRegistryService = (): SkillRegistryService => {
   if (!skillRegistryService) {
     skillRegistryService = new SkillRegistryService(app.getPath("userData"), {
@@ -802,7 +811,8 @@ const getPermissionBrokerService = (): PermissionBrokerService => {
     permissionBrokerService = new PermissionBrokerService({
       rootPath: app.getPath("userData"),
       assertWriterLease: (vaultPath) => getVaultService().assertWriterLease(vaultPath),
-      confirmations: getHighRiskConfirmationService()
+      confirmations: getHighRiskConfirmationService(),
+      grants: getPermissionGrantStore()
     });
   }
   return permissionBrokerService;
@@ -2158,6 +2168,14 @@ ipcMain.handle("confirmations.resolve", async (_event, request: HighRiskConfirma
     await getHighRiskConfirmationService().resolve(parsed)
   );
 });
+ipcMain.handle("confirmations.grants", () => RememberedScopeSummarySchema.parse({
+  apiVersion: 1,
+  count: getPermissionGrantStore().count()
+}));
+ipcMain.handle("confirmations.clearGrants", () => RememberedScopeClearResultSchema.parse({
+  apiVersion: 1,
+  cleared: getPermissionGrantStore().clear()
+}));
 taskExecutionIpcUnsubscribe = registerTaskExecutionIpc({
   ipcMain,
   readInteraction: () => getTaskProcessSessionService().interaction(),

@@ -283,10 +283,12 @@ Rules:
   separate; handlers revalidate without a permission lifecycle.
 - Side-effecting tools run sequentially; parallel tools require an explicit
   read-only/idempotent contract plus ordering, cancellation, and audit tests.
-- Irreversible delete, original-file overwrite, out-of-root write, arbitrary shell,
-  unknown-package install, credential export/display, and equivalent escalation require
-  explicit confirmation. Raw key bytes are never a capability. Renderer and extensions
-  receive no ambient file handle.
+- Irreversible delete, original-file overwrite, out-of-root write, Host-classified risky
+  shell, unknown-package install, credential export/display, and equivalent escalation
+  require explicit confirmation. The model may propose command risk, but Main validates
+  normalized executable/argv/cwd and cannot be persuaded to lower it. A closed set of
+  current-vault read-only commands proceeds directly. Raw key bytes are never a capability.
+  Renderer and extensions receive no ambient file handle.
 - Pi extensions or tools cannot access raw API keys. A reviewed Pige adapter may request brokered credential use for a specific provider call; it receives the call result, never the credential bytes.
 - Pi tool output is treated as untrusted tool output and sanitized before display, logging, or model reuse.
 - A tool implements one bounded deterministic capability. It cannot call a model,
@@ -308,8 +310,9 @@ Rules:
   replace Pi with a hidden content/organization workflow. Deterministic source
   preservation and mechanical projections remain Host-owned parts of the same Job.
 - A tool returns a typed blocked/high-risk result when its effect crosses the closed
-  confirmation boundary. New Jobs do not enter `waiting_permission`; Pi may choose
-  another available capability after the user decision or denial.
+  confirmation boundary. The decision receipt closes before effect execution; the tool
+  call then owns progress/failure. New Jobs do not enter `waiting_permission`; Pi may
+  choose another available capability after the user decision or denial.
 
 The Pige Tool Registry is Pi's only capability surface. Entries bind identity/version,
 schemas/trust, effect, resource/authority/data scope, execution, idempotency, limits,

@@ -70,6 +70,8 @@ import type {
   HighRiskConfirmationPendingResult,
   HighRiskConfirmationResolveRequest,
   HighRiskConfirmationResolveResult,
+  RememberedScopeSummary,
+  RememberedScopeClearResult,
   KnowledgeHealthRunRequest,
   KnowledgeHealthRunResult,
   KnowledgeHealthRepairRequest,
@@ -286,6 +288,8 @@ export type {
   HighRiskConfirmationSubject,
   HighRiskConfirmationTarget,
   HighRiskEffect,
+  RememberedScopeSummary,
+  RememberedScopeClearResult,
   CurrentNoteAppendProposalDecisionRequest,
   CurrentNoteAppendProposalDecisionResult,
   CurrentNoteAppendProposalGetRequest,
@@ -1637,6 +1641,8 @@ export interface PigeDesktopApi {
     readonly onChanged: (
       listener: (event: HighRiskConfirmationChangedEvent) => void
     ) => () => void;
+    readonly grants: () => Promise<RememberedScopeSummary>;
+    readonly clearGrants: () => Promise<RememberedScopeClearResult>;
   };
   readonly piPackages: {
     readonly summary: () => Promise<PiPackageRegistryQueryResult>;

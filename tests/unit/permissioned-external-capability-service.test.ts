@@ -111,6 +111,32 @@ describe("PermissionedExternalCapabilityRegistry AR1 authority", () => {
       .toThrowError(expect.objectContaining({ code: "permission.execution_authority_invalid" }));
   });
 
+  it("closes confirmation pending before a long authorized effect finishes", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const fixture = createFixture(highRiskShellAdapter(async () => {
+      await gate;
+      return RESULT;
+    }));
+    const tool = requireTool(fixture.registry.toolsForTurn({ ...fixture.turn, confirmationOwner: OWNER }));
+    const execution = call(tool, "tool_call_long_effect");
+    await vi.waitFor(() => expect(fixture.confirmations.pending()).toMatchObject({ status: "pending" }));
+    const pending = fixture.confirmations.pending();
+    if (pending.status !== "pending") throw new Error("Expected pending confirmation.");
+
+    await expect(fixture.confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: pending.confirmation.confirmationId,
+      expectedRevision: pending.revision,
+      decision: "allow"
+    })).resolves.toMatchObject({ status: "committed" });
+    expect(fixture.confirmations.pending()).toMatchObject({ status: "none" });
+    expect(fixture.execute).toHaveBeenCalledOnce();
+
+    release();
+    await expect(execution).resolves.toEqual(RESULT);
+  });
+
   it("single-flights the same exact tool call but does not collapse distinct tool-call identities", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });

@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  HighRiskConfirmationService,
-  type HighRiskConfirmationEffectResult
-} from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
+import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
 
 const TURN_OWNER = { kind: "agent_turn" as const, clientTurnId: "turn_20260722_abcdefghijklmnop" };
 const OPERATION_OWNER = { kind: "operation" as const, operationId: "op_20260722_abcdefgh" };
@@ -26,12 +23,6 @@ const DELETE = {
   },
   owner: OPERATION_OWNER
 };
-
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((next) => { resolve = next; });
-  return { promise, resolve };
-}
 
 describe("HighRiskConfirmationService", () => {
   it("owns one pending effect and restores only the exact stable identity", () => {
@@ -76,10 +67,9 @@ describe("HighRiskConfirmationService", () => {
     expect(service.pending()).toEqual({ apiVersion: 1, status: "none", revision: 0 });
   });
 
-  it("single-flights the same decision and never invokes an opposite concurrent decision", async () => {
+  it("commits the decision receipt without waiting for downstream effect execution", async () => {
     const service = new HighRiskConfirmationService();
-    const gate = deferred<HighRiskConfirmationEffectResult>();
-    const resolver = vi.fn(() => gate.promise);
+    const resolver = vi.fn(() => "committed" as const);
     const registered = service.register(SHELL, resolver);
     const request = {
       apiVersion: 1 as const,
@@ -88,15 +78,8 @@ describe("HighRiskConfirmationService", () => {
       decision: "allow" as const
     };
 
-    const first = service.resolve(request);
-    const joined = service.resolve(request);
-    await expect(service.resolve({ ...request, decision: "deny" })).resolves.toMatchObject({ status: "stale" });
-    expect(service.register(SHELL, () => "committed").status).toBe("busy");
-    expect(resolver).toHaveBeenCalledTimes(1);
-
-    gate.resolve("committed");
-    await expect(first).resolves.toMatchObject({ status: "committed", decision: "allow", revision: 2 });
-    await expect(joined).resolves.toMatchObject({ status: "committed", decision: "allow", revision: 2 });
+    await expect(service.resolve(request)).resolves.toMatchObject({ status: "committed", decision: "allow", revision: 2 });
+    expect(resolver).toHaveBeenCalledOnce();
     await expect(service.resolve(request)).resolves.toMatchObject({ status: "already_resolved", decision: "allow" });
     await expect(service.resolve({ ...request, decision: "deny" })).resolves.toEqual({
       apiVersion: 1,
@@ -147,11 +130,10 @@ describe("HighRiskConfirmationService", () => {
     expect(service.pending()).toMatchObject({ status: "pending", revision: successor.revision });
   });
 
-  it("does not let withdrawal race an effect already claimed for resolution", async () => {
+  it("does not leave the confirmation pending after a committed resolution", async () => {
     const service = new HighRiskConfirmationService();
-    const gate = deferred<HighRiskConfirmationEffectResult>();
-    const registered = service.register(SHELL, () => gate.promise);
-    const resolving = service.resolve({
+    const registered = service.register(SHELL, () => "committed");
+    await service.resolve({
       apiVersion: 1,
       confirmationId: SHELL.confirmationId,
       expectedRevision: registered.revision,
@@ -161,8 +143,7 @@ describe("HighRiskConfirmationService", () => {
       confirmationId: SHELL.confirmationId,
       expectedRevision: registered.revision,
       owner: TURN_OWNER
-    })).toBe("resolving");
-    gate.resolve("committed");
-    await expect(resolving).resolves.toMatchObject({ status: "committed", decision: "deny" });
+    })).toBe("not_found");
+    expect(service.pending()).toEqual({ apiVersion: 1, status: "none", revision: 2 });
   });
 });

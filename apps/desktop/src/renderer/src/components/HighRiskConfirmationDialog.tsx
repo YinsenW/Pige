@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { HighRiskConfirmationSummary } from "@pige/contracts";
 import { TaskExecutionPlanDetails } from "./TaskExecutionInteraction";
 
@@ -8,12 +8,13 @@ export function HighRiskConfirmationDialog(props: {
   readonly confirmation: HighRiskConfirmationSummary;
   readonly resolving: boolean;
   readonly error: boolean;
-  readonly onResolve: (decision: ConfirmationDecision) => void;
+  readonly onResolve: (decision: ConfirmationDecision, rememberScope: boolean) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const dialogRef = useRef<HTMLElement | null>(null);
   const denyButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const [rememberScope, setRememberScope] = useState(false);
 
   useEffect(() => {
     previousFocusRef.current = document.activeElement instanceof HTMLElement
@@ -34,7 +35,7 @@ export function HighRiskConfirmationDialog(props: {
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
-      if (!event.isComposing && !props.resolving) props.onResolve("deny");
+      if (!event.isComposing && !props.resolving) props.onResolve("deny", false);
     };
     document.addEventListener("keydown", denyOnEscape, true);
     return () => document.removeEventListener("keydown", denyOnEscape, true);
@@ -106,13 +107,24 @@ export function HighRiskConfirmationDialog(props: {
         {props.error ? (
           <p className="confirmation-error" role="alert">{props.t("confirmation.failed")}</p>
         ) : null}
+        {props.confirmation.canRemember === true ? (
+          <label className="confirmation-remember">
+            <input
+              type="checkbox"
+              checked={rememberScope}
+              disabled={props.resolving}
+              onChange={(event) => setRememberScope(event.currentTarget.checked)}
+            />
+            <span>{props.t("confirmation.rememberScope")}</span>
+          </label>
+        ) : null}
         <div className="confirmation-actions">
           <button
             ref={denyButtonRef}
             type="button"
             className="ghost"
             disabled={props.resolving}
-            onClick={() => props.onResolve("deny")}
+            onClick={() => props.onResolve("deny", false)}
           >
             {props.t("confirmation.deny")}
           </button>
@@ -120,7 +132,7 @@ export function HighRiskConfirmationDialog(props: {
             type="button"
             className="danger"
             disabled={props.resolving}
-            onClick={() => props.onResolve("allow")}
+            onClick={() => props.onResolve("allow", rememberScope)}
           >
             {props.resolving
               ? props.t("confirmation.resolving")

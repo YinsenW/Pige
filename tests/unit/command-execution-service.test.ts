@@ -171,6 +171,33 @@ describe("CommandExecutionService", () => {
     });
     if (!tool) throw new Error("Expected command tool.");
 
+    if (process.platform !== "win32") {
+      await expect(tool.execute({
+        executable: "/bin/pwd",
+        working_directory: vaultPath,
+        risk_assessment: { level: "low", reason: "Reads only the current working directory." }
+      }, new AbortController().signal, {
+        toolCallId: "tool_call_command_safe_read",
+        signal: new AbortController().signal
+      })).resolves.toMatchObject({ details: { status: "completed" } });
+      expect(confirmations.pending()).toMatchObject({ status: "none" });
+      expect(execute).toHaveBeenCalledTimes(1);
+      execute.mockClear();
+
+      await expect(tool.execute({
+        executable: "/bin/sh",
+        args: ["-lc", "pwd"],
+        working_directory: vaultPath,
+        risk_assessment: { level: "low", reason: "Runs one Host-verifiable read-only command." }
+      }, new AbortController().signal, {
+        toolCallId: "tool_call_command_safe_shell_read",
+        signal: new AbortController().signal
+      })).resolves.toMatchObject({ details: { status: "completed" } });
+      expect(confirmations.pending()).toMatchObject({ status: "none" });
+      expect(execute).toHaveBeenCalledTimes(1);
+      execute.mockClear();
+    }
+
     const deniedController = new AbortController();
     const denied = tool.execute({ executable: process.execPath, args: ["--version"] }, deniedController.signal, {
       toolCallId: "tool_call_command_denied",

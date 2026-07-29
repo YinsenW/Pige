@@ -14,6 +14,7 @@ import {
   type HighRiskConfirmationEffectResolver,
   type HighRiskConfirmationRegistration
 } from "./high-risk-confirmation-service";
+import { PermissionGrantStore } from "./permission-grant-store";
 
 const FIRST_PARTY_TURN_ACTORS = new Set([
   "local_tool.pige.node_os_readonly",
@@ -37,6 +38,7 @@ export type PermissionAuthorityResult =
 interface PermissionBrokerServiceCommonOptions {
   readonly rootPath: string;
   readonly confirmations?: HighRiskConfirmationService;
+  readonly grants?: PermissionGrantStore;
   readonly testOnlyHooks?: unknown;
 }
 
@@ -54,6 +56,7 @@ export class PermissionBrokerService {
   readonly #rootPath: string;
   readonly #assertWriterLease: ((vaultPath: string) => void) | undefined;
   readonly #confirmations: HighRiskConfirmationService | undefined;
+  readonly #grants: PermissionGrantStore | undefined;
 
   constructor(options: PermissionBrokerServiceOptions) {
     if (
@@ -70,6 +73,7 @@ export class PermissionBrokerService {
     this.#rootPath = path.resolve(options.rootPath);
     this.#assertWriterLease = options.assertWriterLease;
     this.#confirmations = options.confirmations;
+    this.#grants = options.grants;
   }
 
   authorizeTurnAction(input: {
@@ -78,6 +82,7 @@ export class PermissionBrokerService {
     readonly owner?: HighRiskConfirmationOwner;
     readonly highRisk?: PermissionHighRiskIntent;
     readonly resolveHighRisk?: HighRiskConfirmationEffectResolver;
+    readonly grantScopeHash?: `sha256:${string}`;
   }): PermissionAuthorityResult {
     const binding = parseAndVerifyBinding(input.binding);
     this.#assertCurrentVault(input.vaultPath);
@@ -88,6 +93,9 @@ export class PermissionBrokerService {
 
     if (!input.highRisk || !input.owner || !input.resolveHighRisk) throw highRiskClassificationRequired();
     assertHighRiskIntentMatchesBinding(binding, input.highRisk);
+    if (input.grantScopeHash && this.#grants?.has(input.grantScopeHash)) {
+      return { status: "authorized", binding };
+    }
     const confirmations = this.#confirmations;
     if (!confirmations) throw confirmationOwnerUnavailable();
 
@@ -95,8 +103,17 @@ export class PermissionBrokerService {
     const registration = confirmations.register({
       confirmationId,
       ...input.highRisk,
+      ...(input.grantScopeHash ? { canRemember: true as const } : {}),
       owner: input.owner
-    } as HighRiskConfirmationRegistration, input.resolveHighRisk);
+    } as HighRiskConfirmationRegistration, (decision, rememberScope) => {
+      if (rememberScope) {
+        if (decision !== "allow" || !input.grantScopeHash || !this.#grants) {
+          return "failed";
+        }
+        this.#grants.remember(input.grantScopeHash);
+      }
+      return input.resolveHighRisk!(decision, rememberScope);
+    });
 
     if (registration.status === "busy") return { status: "busy" };
 

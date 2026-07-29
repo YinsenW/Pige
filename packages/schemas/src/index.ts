@@ -885,7 +885,8 @@ export const HighRiskConfirmationOwnerSchema = z.discriminatedUnion("kind", [
 ]);
 const HighRiskConfirmationSummaryBaseSchema = z.object({
   apiVersion: z.literal(1),
-  confirmationId: HighRiskConfirmationIdSchema
+  confirmationId: HighRiskConfirmationIdSchema,
+  canRemember: z.literal(true).optional()
 });
 const HighRiskOperationOwnerSchema = z.object({
   kind: z.literal("operation"),
@@ -998,7 +999,8 @@ export const HighRiskConfirmationResolveRequestSchema = z.object({
   apiVersion: z.literal(1),
   confirmationId: HighRiskConfirmationIdSchema,
   expectedRevision: z.number().int().positive(),
-  decision: z.enum(["allow", "deny"])
+  decision: z.enum(["allow", "deny"]),
+  rememberScope: z.boolean().optional()
 }).strict();
 export const HighRiskConfirmationResolveResultSchema = z.discriminatedUnion("status", [
   z.object({
@@ -1033,6 +1035,14 @@ export const HighRiskConfirmationResolveResultSchema = z.discriminatedUnion("sta
   }).strict()
 ]);
 export const HighRiskConfirmationChangedEventSchema = HighRiskConfirmationPendingResultSchema;
+export const RememberedScopeSummarySchema = z.object({
+  apiVersion: z.literal(1),
+  count: z.number().int().min(0).max(128)
+}).strict();
+export const RememberedScopeClearResultSchema = z.object({
+  apiVersion: z.literal(1),
+  cleared: z.number().int().min(0).max(128)
+}).strict();
 
 export const KnowledgeActivityPageTargetSchema = z.object({
   kind: z.literal("page"),
@@ -6720,6 +6730,8 @@ export type HighRiskConfirmationResolveResult = z.infer<typeof HighRiskConfirmat
 export type HighRiskConfirmationSummary = z.infer<typeof HighRiskConfirmationSummarySchema>;
 export type HighRiskConfirmationSubject = z.infer<typeof HighRiskConfirmationSubjectSchema>;
 export type HighRiskConfirmationTarget = z.infer<typeof HighRiskConfirmationTargetSchema>;
+export type RememberedScopeSummary = z.infer<typeof RememberedScopeSummarySchema>;
+export type RememberedScopeClearResult = z.infer<typeof RememberedScopeClearResultSchema>;
 export type HighRiskEffect = z.infer<typeof HighRiskEffectSchema>;
 export type RendererSafeSubjectLabel = z.infer<typeof RendererSafeSubjectLabelSchema>;
 export type ExternalWebSkillHttpsOrigin = z.infer<typeof ExternalWebSkillHttpsOriginSchema>;

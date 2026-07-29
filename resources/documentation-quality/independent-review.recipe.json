@@ -51,14 +51,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of Pige numeric formula create/update.",
+    "scope": "Independent Planning review of risk-adaptive permission receipts and exact remembered scopes.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "be210fc57b18646212d1f61fdd29bc095dbc5887814a9df2ede5ad2d574a2986"
+    "reviewedSha256": "42193c85630c02e6080a7e98394355425050fbdda06ea90b21c45f5ad3ddefbd"
   },
   "reviewers": [{
-    "reviewerId": "managed-collection-formula-update-review",
-    "task": "Managed Collection formula updates",
+    "reviewerId": "risk-adaptive-permission-review",
+    "task": "Risk-adaptive permission receipts",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -66,32 +66,32 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed formula update truth and Undo; Development and UI supplied implementation evidence."
+    "independence": "Planning reviewed authority and recovery contracts; implementation and UI supplied direct evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"managed-collection-formula-update-review","blockerCount":0,"summary":"Lossless edit eligibility is projected and stale preserves the draft."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"managed-collection-formula-update-review","blockerCount":0,"summary":"API, schema and UI share one typed AST and distinct update vocabulary."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"managed-collection-formula-update-review","blockerCount":0,"summary":"Formula update is bound while PIGE-DATA-003 and E7.06 stay planned."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"managed-collection-formula-update-review","blockerCount":0,"summary":"No-change, replay, recomputation, drift and exact forward Undo are tested."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"managed-collection-formula-update-review","blockerCount":0,"summary":"Existing API, data, UI, Playbook, Decision and trace owners absorb the delta."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"risk-adaptive-permission-review","blockerCount":0,"summary":"Decision pending closes before execution and remembered scopes are revocable."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"risk-adaptive-permission-review","blockerCount":0,"summary":"Schema, Broker, command adapter, UI and recovery share one Host-owned risk boundary."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"risk-adaptive-permission-review","blockerCount":0,"summary":"Permission behavior changes without unrelated requirement promotion."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"risk-adaptive-permission-review","blockerCount":0,"summary":"Low-risk bypass, exact grants, drift, denial and long-effect decoupling are directly tested."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"risk-adaptive-permission-review","blockerCount":0,"summary":"Existing security, runtime, Settings, API, Job and Decision owners absorb the delta."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Formula update request/result and Activity vocabularies are strict and safe."},
-    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision and trace locks keep PIGE-DATA-003 and E7.06 planned."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"The exact 410-LOC update owner is protected and reviewed bytes are hash-bound."}
+    {"command":"npm run typecheck","status":"passed","evidence":"Permission request, remembered-scope and renderer contracts typecheck."},
+    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Authority and Job contracts remain synchronized without status promotion."},
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"The 131-LOC grant owner is protected and reviewed bytes are hash-bound."}
   ],
   "coordination": {
-    "taskId": "managed-collection-formula-update-20260729",
-    "taskTitle": "Managed Collection formula updates",
+    "taskId": "risk-adaptive-permissions-20260729",
+    "taskTitle": "Risk-adaptive permissions",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing paging, citation, query/import and Collection CAS remain compatible.",
-    "acknowledgement": "Planning binds formula update; complete E7.06 proof remains separate."
+    "compatibility": "Existing effect owners, cancellation, exact authority and high-risk exclusions remain compatible.",
+    "acknowledgement": "Planning binds the permission reliability correction without unrelated status promotion."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Nested formula editing, formula-on-formula, relations and broader lifecycle remain open.",
-    "Scale/platform, backup and exceptional conflict proof remain open."
+    "The low-risk command allowlist remains deliberately small and Host-controlled.",
+    "Per-grant inspection can follow the current body-free count and forget-all control."
   ]
 }

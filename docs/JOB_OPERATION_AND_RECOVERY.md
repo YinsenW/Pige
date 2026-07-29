@@ -502,6 +502,13 @@ first-party tools inherit the submitted turn; connected Provider identity plus S
 ordinary cloud authorization. A high-risk effect returns a typed decision requirement to
 the current turn or Operation, and denial executes nothing.
 
+Approval is not execution. Main first revalidates the immutable effect binding, commits a
+decision receipt and clears confirmation pending; only then does the originating tool/Job
+start or resume the effect. Long commands, downloads and pipelines therefore report
+progress/failure through their owner and cannot hold the confirmation IPC or dialog open.
+Effect failure never resurrects an already-resolved prompt. An eligible remembered grant
+may suppress a later prompt only when its Host-derived exact scope still matches.
+
 Jobs may record Pi-selected work and recover the same turn, but must never become a Host
 semantic state machine or dispatch pipeline.
 
@@ -798,7 +805,8 @@ Required tests:
 - Retry without duplicate source/page creation.
 - Cancellation after partial artifacts.
 - Permission denial leaves job stable.
-- Pending permission survives restart.
+- A committed permission decision is not replayed as pending; a running effect resumes or
+  fails through its own exact Job/tool checkpoint, while unpublished prompts are withdrawn.
 - Proposal apply with matching hash.
 - Proposal conflict when target file changed.
 - Operation record excludes secrets and large source bodies.

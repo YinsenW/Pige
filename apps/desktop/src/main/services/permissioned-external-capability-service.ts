@@ -86,13 +86,18 @@ export interface PermissionedExternalCapabilityAdapter {
     readonly dataBoundary: PermissionDataBoundary;
     readonly resourceScope: PermissionResourceScope;
     readonly reasonCode: string;
-    readonly highRisk?: (normalizedInput: unknown) => PermissionHighRiskIntent;
+    readonly highRisk?: (
+      normalizedInput: unknown,
+      turn: PermissionedExternalTurnContext
+    ) => PermissionHighRiskIntent | undefined;
+    readonly rememberScope?: (normalizedInput: unknown) => unknown | undefined;
   };
   readonly reviewedPlan?: PermissionedExternalReviewedPlanBinding;
   normalizeInput(args: unknown): unknown;
   resourceIdentity(normalizedInput: unknown): unknown;
   resourceDisplayName?(normalizedInput: unknown): string;
   resourceCount(normalizedInput: unknown): number;
+  assertTurnScope?(normalizedInput: unknown, turn: PermissionedExternalTurnContext): void;
   execute(
     normalizedInput: unknown,
     signal: AbortSignal,
@@ -178,12 +183,14 @@ export class PermissionedExternalCapabilityRegistry {
         turn.assertCurrent();
         const normalizedInput = adapter.normalizeInput(args);
         requireResourceCount(adapter.resourceCount(normalizedInput));
-        const highRisk = adapter.permission.highRisk?.(normalizedInput);
+        adapter.assertTurnScope?.(normalizedInput, turn);
+        const highRisk = adapter.permission.highRisk?.(normalizedInput, turn);
         const binding = createExternalActionBinding(adapter, turn, normalizedInput, context.toolCallId);
+        const grantScopeHash = highRisk ? createGrantScopeHash(adapter, turn, normalizedInput) : undefined;
         if (adapter.reviewedPlan) {
           return this.#runReviewedPlanBound(adapter, normalizedInput, signal, context, turn, binding);
         }
-        return this.#runBound(adapter, normalizedInput, signal, context, turn, binding, broker, highRisk);
+        return this.#runBound(adapter, normalizedInput, signal, context, turn, binding, broker, highRisk, grantScopeHash);
       }
     }));
   }
@@ -229,14 +236,17 @@ export class PermissionedExternalCapabilityRegistry {
     turn: PermissionedExternalTurnContext,
     binding: PermissionActionBinding,
     broker: PermissionBrokerService,
-    highRisk: PermissionHighRiskIntent | undefined
+    highRisk: PermissionHighRiskIntent | undefined,
+    grantScopeHash: `sha256:${string}` | undefined
   ): Promise<PigeAgentToolResult> {
     const completed = this.#completed.get(binding.bindingHash);
     if (completed) return completed;
     const active = this.#inFlight.get(binding.bindingHash);
     if (active) return active;
 
-    const execution = this.#authorizeAndExecute(adapter, normalizedInput, signal, context, turn, binding, broker, highRisk);
+    const execution = this.#authorizeAndExecute(
+      adapter, normalizedInput, signal, context, turn, binding, broker, highRisk, grantScopeHash
+    );
     this.#inFlight.set(binding.bindingHash, execution);
     try {
       return await execution;
@@ -253,7 +263,8 @@ export class PermissionedExternalCapabilityRegistry {
     turn: PermissionedExternalTurnContext,
     binding: PermissionActionBinding,
     broker: PermissionBrokerService,
-    highRisk: PermissionHighRiskIntent | undefined
+    highRisk: PermissionHighRiskIntent | undefined,
+    grantScopeHash: `sha256:${string}` | undefined
   ): Promise<PigeAgentToolResult> {
     let settle: ((result: PigeAgentToolResult) => void) | undefined;
     let fail: ((reason: unknown) => void) | undefined;
@@ -266,21 +277,21 @@ export class PermissionedExternalCapabilityRegistry {
       binding,
       ...(turn.confirmationOwner ? { owner: turn.confirmationOwner } : {}),
       ...(highRisk ? { highRisk } : {}),
+      ...(grantScopeHash ? { grantScopeHash } : {}),
       ...(highRisk
         ? {
-            resolveHighRisk: async (decision: "allow" | "deny") => {
+            resolveHighRisk: (decision: "allow" | "deny") => {
               if (decision === "deny") {
                 fail?.(new PigeDomainError("permission.denied", "The exact high-risk effect was denied."));
                 return "committed" as const;
               }
-              try {
-                const result = await this.#executeBound(adapter, normalizedInput, signal, context, turn, binding);
-                settle?.(result);
-                return "committed" as const;
-              } catch (caught) {
-                fail?.(caught);
-                return "failed" as const;
-              }
+              // The confirmation receipt commits before the potentially long effect starts.
+              // The original tool call still owns progress, cancellation and terminal failure.
+              queueMicrotask(() => {
+                void this.#executeBound(adapter, normalizedInput, signal, context, turn, binding)
+                  .then((result) => settle?.(result), (caught: unknown) => fail?.(caught));
+              });
+              return "committed" as const;
             }
           }
         : {})
@@ -343,6 +354,29 @@ export class PermissionedExternalCapabilityRegistry {
     return this.#broker;
   }
 
+}
+
+function createGrantScopeHash(
+  adapter: PermissionedExternalCapabilityAdapter,
+  turn: PermissionedExternalTurnContext,
+  normalizedInput: unknown
+): `sha256:${string}` | undefined {
+  if (!adapter.permission.rememberScope) return undefined;
+  const scope = adapter.permission.rememberScope(normalizedInput);
+  if (scope === undefined) return undefined;
+  return hashCanonical("pige.permission.remembered_scope.v1", {
+    vaultId: turn.vaultId,
+    actor: adapter.actor,
+    action: adapter.action,
+    capability: adapter.permission.capability,
+    dataBoundary: adapter.permission.dataBoundary,
+    resourceScope: adapter.permission.resourceScope,
+    policyContextId: turn.policyContextId,
+    policyHash: turn.policyHash,
+    runtimeKind: turn.runtimeKind,
+    clientCapabilityTier: turn.clientCapabilityTier,
+    scope
+  });
 }
 
 function issueExecutionAuthority(binding: PermissionActionBinding): PermissionedExternalExecutionAuthority {

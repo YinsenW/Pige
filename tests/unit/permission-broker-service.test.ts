@@ -10,6 +10,7 @@ import {
   createPermissionActionBinding,
   PermissionBrokerService
 } from "../../apps/desktop/src/main/services/permission-broker-service";
+import { PermissionGrantStore } from "../../apps/desktop/src/main/services/permission-grant-store";
 
 const roots: string[] = [];
 const VAULT_ID = "vault_20260722_authority01";
@@ -156,6 +157,61 @@ describe("PermissionBrokerService AR1 authority", () => {
         }
       }
     })).toThrowError(expect.objectContaining({ code: "permission.high_risk_classification_invalid" }));
+  });
+
+  it("persists and reuses only an exact Host-derived scoped grant", async () => {
+    const fixture = createFixture();
+    const grantScopeHash = digest("exact command, argv and working directory");
+    const exact = binding({
+      actorType: "local_tool",
+      actorId: "pige.command-execution",
+      capability: "run_shell",
+      dataBoundary: "local"
+    });
+    const request = {
+      vaultPath: fixture.vaultPath,
+      binding: exact,
+      owner: OWNER,
+      grantScopeHash,
+      resolveHighRisk: () => "committed" as const,
+      highRisk: {
+        effect: "arbitrary_shell" as const,
+        presentation: {
+          action: "run_shell_command" as const,
+          target: "local_system" as const,
+          subject: { kind: "executable_name" as const, value: "formatter" }
+        }
+      }
+    };
+    const grants = new PermissionGrantStore(fixture.machineRoot);
+    const broker = new PermissionBrokerService({
+      rootPath: fixture.machineRoot,
+      unsafeAllowUnfenced: true,
+      confirmations: fixture.confirmations,
+      grants
+    });
+    const blocked = broker.authorizeTurnAction(request);
+    if (blocked.status !== "confirmation_required") throw new Error("Expected confirmation.");
+    expect(fixture.confirmations.pending()).toMatchObject({
+      confirmation: { canRemember: true }
+    });
+    await fixture.confirmations.resolve({
+      apiVersion: 1,
+      confirmationId: blocked.confirmationId,
+      expectedRevision: blocked.revision,
+      decision: "allow",
+      rememberScope: true
+    });
+
+    const restarted = new PermissionBrokerService({
+      rootPath: fixture.machineRoot,
+      unsafeAllowUnfenced: true,
+      confirmations: new HighRiskConfirmationService(),
+      grants: new PermissionGrantStore(fixture.machineRoot)
+    });
+    expect(restarted.authorizeTurnAction(request)).toEqual({ status: "authorized", binding: exact });
+    expect(() => restarted.authorizeTurnAction({ ...request, grantScopeHash: digest("different scope") }))
+      .not.toThrow();
   });
 
   it("preserves every exact path, scope, identity and policy fence in the binding hash", () => {

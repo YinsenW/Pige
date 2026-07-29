@@ -628,9 +628,12 @@ Rules:
 
 ### 6.7 High-Risk Confirmation
 
-`confirmations.pending`/`confirmations.resolve` expose safe owner/effect presentation and
-`allow | deny` only for closed high risk; raw path/command/body/credential/error stays in
-Main and the effect Job revalidates. No saved/YOLO/permission/waiting state exists.
+`confirmations.pending`/`confirmations.resolve` expose safe presentation, `allow | deny`
+and an optional Main-eligible exact-scope remember flag. Raw effect data stays in Main and
+the Job revalidates. Resolution records the decision and closes pending before execution;
+progress/failure stays Job-owned. `confirmations.grants` exposes only a count and
+`confirmations.clearGrants` revokes all exact machine-local grants. No blanket YOLO or
+renderer-minted authority exists.
 Attachments grant exact-source tools only; explicit authored intent may separately request
 a precise ambient effect even with attachments. Fallback/model/source cannot. Typed URL is
 separate. Provider/model plus Send authorizes exact authored/selected bounded context

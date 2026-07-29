@@ -73,8 +73,11 @@ a Pige cloud service; other network features still disclose their boundary.
 - Pige asks only for a closed high-risk effect: irreversible deletion, overwrite of a
   user-owned original, out-of-root write, arbitrary shell or unknown-package install,
   credential export/display, risky Agent edit, or equivalent authority escalation.
-- Raw secret access is not grantable. Pige has no saved-grant or YOLO mode for ordinary
-  Agent work, and OS privacy/security controls remain in force.
+- Raw secret access is not grantable. Host-verified low-risk local reads run without a
+  prompt. An explicit remembered choice is machine-local, revocable, and bound to the
+  exact actor, action, vault, executable/arguments, resource identity, and policy; it
+  never covers permanent loss, credential export, an opaque shell, or privilege change.
+  Pige has no blanket YOLO switch, and OS privacy/security controls remain in force.
 
 ## Backups And Restore
 

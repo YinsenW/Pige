@@ -903,7 +903,9 @@ describe("desktop shell build contract", () => {
     expect(dialogSource).toContain('event.key !== "Escape"');
     expect(dialogSource).toContain('document.addEventListener("keydown", denyOnEscape, true)');
     expect(dialogSource).toContain('document.removeEventListener("keydown", denyOnEscape, true)');
-    expect(dialogSource).toContain('props.onResolve("deny")');
+    expect(dialogSource).toContain('props.onResolve("deny", false)');
+    expect(dialogSource).toContain("props.confirmation.canRemember === true");
+    expect(dialogSource).toContain('props.t("confirmation.rememberScope")');
     const confirmationStyles = rendererStyles.slice(
       rendererStyles.indexOf(".confirmation-backdrop"),
       rendererStyles.indexOf("@media (max-width: 420px)", rendererStyles.indexOf(".confirmation-backdrop"))

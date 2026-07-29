@@ -16,8 +16,9 @@ import {
 
 export type HighRiskConfirmationEffectResult = "committed" | "stale" | "failed";
 export type HighRiskConfirmationEffectResolver = (
-  decision: "allow" | "deny"
-) => HighRiskConfirmationEffectResult | Promise<HighRiskConfirmationEffectResult>;
+  decision: "allow" | "deny",
+  rememberScope: boolean
+) => HighRiskConfirmationEffectResult;
 
 export type HighRiskConfirmationRegistration = Omit<
   HighRiskConfirmationSummary,
@@ -195,7 +196,7 @@ export class HighRiskConfirmationService {
 
     let outcome: HighRiskConfirmationEffectResult;
     try {
-      outcome = await pending.resolver(parsed.decision);
+      outcome = pending.resolver(parsed.decision, parsed.rememberScope === true);
     } catch {
       outcome = "failed";
     }
@@ -251,6 +252,7 @@ export class HighRiskConfirmationService {
   ): boolean {
     return current.confirmationId === next.confirmationId &&
       current.effect === next.effect &&
+      current.canRemember === next.canRemember &&
       JSON.stringify(current.presentation) === JSON.stringify(next.presentation) &&
       JSON.stringify(current.owner) === JSON.stringify(next.owner);
   }

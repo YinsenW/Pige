@@ -284,8 +284,10 @@ Sensitive settings that always require explicit confirmation:
 - API key storage mode.
 - Provider credential storage mode or Provider/endpoint identity changes. The disclosed
   Send behavior is not a content-policy setting.
-- No saved-grant or YOLO mode is a setting; ordinary first-party authority comes from
-  the submitted turn and exceptional effects use the high-risk confirmation owner.
+- Permissions & Privacy exposes only the count and one “forget all” control for
+  machine-local exact scoped grants. Grants are created only from an eligible confirmation,
+  are excluded from backup, and are never a default mode or blanket YOLO switch. Ordinary
+  first-party authority still comes from the submitted turn.
 - Provider profile changes.
 - Vault path, external managed-copy root, or source storage policy changes.
 - `PIGE.md` edits.
@@ -403,8 +405,8 @@ Required tests:
 - Default binding reports not-configured/ready/configured-unusable without secret reads;
   changing it affects new Pi calls.
 - Changing source storage strategy affects new file captures only; typed/pasted text and fetched URL snapshots remain managed copies.
-- Ordinary Agent work exposes no permission-mode controls; high-risk decisions are
-  concrete actions, not stored settings.
+- Ordinary Agent work exposes no permission-mode selector. Host-verified low-risk work
+  proceeds directly; eligible concrete confirmations may store a revocable exact scope.
 - Restore works without machine-local settings.
 - Settings page strings exist in all v0.1 locales.
 

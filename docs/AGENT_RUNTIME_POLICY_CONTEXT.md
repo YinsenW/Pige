@@ -112,10 +112,12 @@ type AuthorityPolicyContext = {
 
 Registered first-party reads, preservation, parse/OCR/retrieval, user-specified fetch,
 and bounded local tools inherit the explicit submit. Scope/path/resource validation still
-runs. Irreversible delete, original overwrite, out-of-root write, arbitrary shell or
-unknown install, credential disclosure, risky Agent edit, and equivalent escalation use
-the narrow high-risk confirmation owner. There is no saved-grant/YOLO mode or per-tool
-permission state machine. Third-party code cannot self-authorize.
+runs. The Agent may propose risk, but Host classification is final and cannot be lowered by
+model/source/tool content. Irreversible delete, original overwrite, out-of-root write,
+risky shell or unknown install, credential disclosure, risky Agent edit, and equivalent
+escalation use the narrow confirmation owner. Eligible exact scopes may be remembered
+machine-locally and revoked; permanent loss, credentials, opaque shell and privilege
+changes always confirm. There is no blanket YOLO mode. Third-party code cannot self-authorize.
 
 ### 4.4 Language, Memory, Retrieval, And Capabilities
 

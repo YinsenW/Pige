@@ -627,21 +627,18 @@ Superseded by: D-20260722-Personal-Agent-Architecture-Reset
 
 Decision:
 
-v0.1 supports external/Web Skills and package-provided Skills only when capabilities are declared and sensitive runtime actions go through Permission Broker mediation.
+External Skills declare capabilities and use brokered effects; staging executes nothing.
 
 Rationale:
 
-Pige needs extensibility, but it should not become a hidden general-purpose plugin runner.
+Superseded by AR1.
 
 Consequences:
 
-- Install preview cannot execute scripts, package hooks, binaries, or MCP configs.
-- Sensitive runtime actions pause in `waiting_permission` unless covered by an explicit default permission mode.
-- Denied permissions leave the app stable.
+- Archived; AR1 removed waiting-permission state.
 
 References:
 
-- `docs/SKILL_EXTENSION_DESIGN.md`
 - `docs/SECURITY_THREAT_MODEL.md`
 
 ### D-20260709-Permission-Modes-And-YOLO
@@ -653,26 +650,19 @@ Superseded by: D-20260722-Personal-Agent-Architecture-Reset
 
 Decision:
 
-External Skills/packages/extensions use Ask Every Time, Remember Scoped Grants, or YOLO
-Full Access. Pige-owned bounded knowledge tools do not need YOLO or routine prompts.
+Ask/Scoped/YOLO modes were proposed.
 
 Rationale:
 
-External-capability users need both strict and scoped low-friction modes without a session concept.
+Superseded by AR1.
 
 Consequences:
 
-- Dialogs offer Deny, Allow Once, and revocable scoped Always Allow; YOLO is explicit/off by default.
-- Grants bind actor, version, capability, resource, and destination; auto-allows are logged.
-- YOLO cannot bypass OS/security, exceptional intervention, or stricter egress.
-- Raw secret bytes are never grantable; reviewed adapters use secret refs without disclosure.
+- Blanket YOLO remains removed; D-20260729 restores only exact revocable scopes.
 
 References:
 
-- `docs/PRD.md`
 - `docs/SECURITY_THREAT_MODEL.md`
-- `docs/TECH_ARCHITECTURE.md`
-- `docs/UI_PROTOTYPE.md`
 
 ### D-20260714-Pi-Capability-And-Authority
 
@@ -683,28 +673,19 @@ Superseded by: D-20260722-Personal-Agent-Architecture-Reset
 
 Decision:
 
-Pi may request path, filesystem, command and commit actions, but capability is not
-authority. Active-vault recoverable Markdown and exact selected-source admission have
-standing authority; other effects use Permission Broker. Destructive, policy,
-source-original, model-egress and raw-secret boundaries remain stronger.
+Pi may request capabilities but never creates authority.
 
 Rationale:
 
-Pi plans useful actions without model output becoming authority over user-owned paths.
+Superseded by AR1.
 
 Consequences:
 
-- Tool ownership never bypasses the gate for its exact action.
-- Allow once binds exact action/Job/policy/resource identity and is consumed once.
-- UI receives bounded system-authored summaries only; main executes the exact action.
-- Permission defaults cover eligible scopes only; stronger gates and raw-secret blocks remain.
-- Machine-local revision fences explicit YOLO and grant revocation. Main ships bounded
-  read-only folder/text/network tools; their untrusted output faces egress again.
+- Main retains exact action/Job/policy/resource authority and safe projection.
 
 References:
 
-- `docs/PRD.md`
-- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
+- `docs/SECURITY_THREAT_MODEL.md`
 
 ### D-20260709-Home-Composer-Unified-Entry
 
@@ -3064,30 +3045,19 @@ Superseded by: D-20260722-Personal-Agent-Architecture-Reset
 
 Decision:
 
-Pige is an OS-level Agent product. First-party filesystem, network, command, and package
-capabilities are present in the Agent catalog rather than hidden behind capability-absence
-messages. A submitted user task is one-use authority for ordinary desktop-local effects;
-the Host performs one exact binding/audit and does not ask the user to confirm the same
-intent again. Explicit YOLO remains useful for broader third-party grants, not as a
-prerequisite for basic Pige capability. Destructive loss, credential disclosure, changed
-trust boundaries, and source/model attempts to self-authorize remain distinct controls.
+Registered first-party OS capabilities remain present and bounded.
 
 Rationale:
 
-Permission should govern effects, not make basic Agent tools disappear or repeatedly ask
-the user to restate an intent already expressed by submitting the task.
+Superseded by AR1.
 
 Consequences:
 
-- Pige exposes one general first-party OS command tool with bounded execution mechanics.
-- Ordinary first-party calls are audited without a duplicate prompt.
-- Third-party, destructive, credential, and changed-boundary effects keep separate gates.
+- AR1 and D-20260729 own confirmation behavior.
 
 References:
 
-- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
 - `docs/SECURITY_THREAT_MODEL.md`
-- `docs/API_AND_IPC_DESIGN.md`
 
 ### D-20260722-Personal-Agent-Architecture-Reset
 
@@ -3325,27 +3295,20 @@ Supersedes: D-20260727-Source-Bound-Exact-Authority
 
 Decision:
 
-Explicit user-authored tasks, with or without attachments, may confirm one registered
-immutable install/config/auth plan. Attachments/fallback/model/source text grant no ambient
-authority. Main persists request-presence `authoredTaskIntent` before fallback (legacy is
-neutral), then binds supply chain, environment, destinations, Job and ordinal; read-only probes
-use recipe metadata and OAuth stays Main-private. Raw Shell remains per-effect.
+An authored task may confirm one immutable install/config/auth plan.
 
 Rationale:
 
-This removes repeated reviewed-setup prompts without command heuristics or broad grants.
+Main must bind intent, supply chain, environment, destinations, Job and ordinal.
 
 Consequences:
 
-- No saved grant/YOLO/mode; drift fails closed or exact probes adopt.
-- Feishu is a recipe fixture; statuses stay unchanged.
-- Private ingress snapshots retain this authored-intent rule: attachments grant no ambient
-  authority, but their presence does not veto a separately explicit reviewed task.
+- Attachments, fallback, model and source text grant nothing; drift fails closed or exact
+probes adopt. OAuth stays private and the plan grants no raw Shell authority.
 
 References:
 
 - `docs/SECURITY_THREAT_MODEL.md`
-- `docs/JOB_OPERATION_AND_RECOVERY.md`
 - `resources/task-execution-plan.manifest.json`
 
 ### D-20260727-Private-Ingress-Snapshot-Lifecycle
@@ -3853,6 +3816,32 @@ Consequences:
 References:
 
 - `docs/DATA_ARCHITECTURE.md`
+
+### D-20260729-Risk-Adaptive-Permission-Receipts
+
+Status: Accepted
+Date: 2026-07-29
+
+Decision:
+
+Agent risk is advisory and Host classification final. Verified local reads run directly;
+eligible effects may remember one exact machine-local scope. Permanent loss, credentials,
+opaque shell and privilege changes always ask.
+
+Rationale:
+
+Risk adaptation avoids prompt fatigue without letting Agent output mint authority.
+
+Consequences:
+
+- Main clears pending before effect execution. Renderer sees eligibility/count/revoke only;
+drift asks again and effect failure cannot resurrect the dialog.
+
+References:
+
+- `docs/SECURITY_THREAT_MODEL.md`
+- `docs/SETTINGS_AND_PREFERENCES.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
 
 ## 4. Deferred Decisions
 

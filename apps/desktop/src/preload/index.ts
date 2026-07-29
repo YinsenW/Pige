@@ -32,6 +32,8 @@ import type {
   HighRiskConfirmationPendingResult,
   HighRiskConfirmationResolveRequest,
   HighRiskConfirmationResolveResult,
+  RememberedScopeSummary,
+  RememberedScopeClearResult,
   JobActionRequest,
   JobActionResult,
   JobsListRequest,
@@ -259,6 +261,8 @@ import {
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
   HighRiskConfirmationResolveResultSchema,
+  RememberedScopeSummarySchema,
+  RememberedScopeClearResultSchema,
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
   PiPackageCatalogQueryRequestSchema,
@@ -934,6 +938,10 @@ const api: PigeDesktopApi = {
         "confirmations.resolve",
         HighRiskConfirmationResolveRequestSchema.parse(request)
       )),
+    grants: async (): Promise<RememberedScopeSummary> =>
+      RememberedScopeSummarySchema.parse(await ipcRenderer.invoke("confirmations.grants")),
+    clearGrants: async (): Promise<RememberedScopeClearResult> =>
+      RememberedScopeClearResultSchema.parse(await ipcRenderer.invoke("confirmations.clearGrants")),
     onChanged: (listener: (event: HighRiskConfirmationChangedEvent) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, value: unknown): void => {
         const parsed = HighRiskConfirmationChangedEventSchema.safeParse(value);

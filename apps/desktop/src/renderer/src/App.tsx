@@ -1827,7 +1827,10 @@ export function App(): React.JSX.Element {
     if (result.status === "applied") await openNoteTarget(current.pageId);
   };
 
-  const resolveHighRiskConfirmation = async (decision: "allow" | "deny"): Promise<void> => {
+  const resolveHighRiskConfirmation = async (
+    decision: "allow" | "deny",
+    rememberScope: boolean
+  ): Promise<void> => {
     if (highRiskConfirmation?.status !== "pending" || highRiskConfirmationDecision) return;
     const current = highRiskConfirmation;
     setHighRiskConfirmationDecision(decision);
@@ -1837,7 +1840,8 @@ export function App(): React.JSX.Element {
         apiVersion: 1,
         confirmationId: current.confirmation.confirmationId,
         expectedRevision: current.revision,
-        decision
+        decision,
+        ...(rememberScope ? { rememberScope: true } : {})
       });
       if (result.status === "stale") {
         applyHighRiskConfirmation(result.current);
@@ -2458,7 +2462,7 @@ export function App(): React.JSX.Element {
           confirmation={highRiskConfirmation.confirmation}
           resolving={highRiskConfirmationDecision !== null}
           error={highRiskConfirmationFailed}
-          onResolve={(decision) => void resolveHighRiskConfirmation(decision)}
+          onResolve={(decision, rememberScope) => void resolveHighRiskConfirmation(decision, rememberScope)}
           t={t}
         />
       ) : null}
@@ -7064,6 +7068,26 @@ export function AppearanceSettingsPanel(props: {
 export function PermissionsPrivacySettingsPanel(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
+  const [grantCount, setGrantCount] = useState<number | null>(null);
+  const [clearingGrants, setClearingGrants] = useState(false);
+  useEffect(() => {
+    let current = true;
+    void window.pige.confirmations.grants().then(
+      (summary) => { if (current) setGrantCount(summary.count); },
+      () => { if (current) setGrantCount(null); }
+    );
+    return () => { current = false; };
+  }, []);
+  const clearGrants = async (): Promise<void> => {
+    if (clearingGrants || !grantCount) return;
+    setClearingGrants(true);
+    try {
+      await window.pige.confirmations.clearGrants();
+      setGrantCount(0);
+    } finally {
+      setClearingGrants(false);
+    }
+  };
   return (
     <section className="settings-page privacy-settings-page" aria-labelledby="settings-privacy-title">
       <header className="settings-panel-header">
@@ -7110,6 +7134,16 @@ export function PermissionsPrivacySettingsPanel(props: {
               <strong>{props.t("privacy.noSavedAuthorityTitle")}</strong>
               <span>{props.t("privacy.noSavedAuthorityDescription")}</span>
             </div>
+            <button
+              type="button"
+              className="ghost"
+              disabled={!grantCount || clearingGrants}
+              onClick={() => void clearGrants()}
+            >
+              {clearingGrants
+                ? props.t("privacy.clearingGrants")
+                : `${props.t("privacy.clearGrants")} (${grantCount ?? "–"})`}
+            </button>
           </div>
         </div>
       </section>

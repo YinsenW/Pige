@@ -102,7 +102,36 @@ describe("reviewed task execution UI", () => {
     expect(mounted.container.textContent).not.toContain("token=");
     expect(mounted.container.textContent).not.toContain("pige_readonly_https_v1");
     await act(async () => buttonNamed(mounted.container, "Allow this effect")?.click());
-    expect(onResolve).toHaveBeenCalledWith("allow");
+    expect(onResolve).toHaveBeenCalledWith("allow", false);
+    await unmount(dom, mounted.root);
+  });
+
+  it("offers a scoped remembered choice only when Main marks the effect eligible", async () => {
+    const dom = installDom();
+    const onResolve = vi.fn();
+    const mounted = await mount(dom, createElement(HighRiskConfirmationDialog, {
+      confirmation: {
+        apiVersion: 1,
+        confirmationId: "confirm_20260729_bbbbbbbbbbbbbbbb",
+        canRemember: true,
+        effect: "arbitrary_shell",
+        presentation: {
+          action: "run_shell_command",
+          target: "local_system",
+          subject: { kind: "executable_name", value: "formatter" }
+        },
+        owner: { kind: "agent_turn", clientTurnId: "turn_20260729_scopedgrant01" }
+      },
+      resolving: false,
+      error: false,
+      onResolve,
+      t
+    }));
+    const checkbox = mounted.container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(checkbox).not.toBeNull();
+    await act(async () => checkbox?.click());
+    await act(async () => buttonNamed(mounted.container, "Allow this effect")?.click());
+    expect(onResolve).toHaveBeenCalledWith("allow", true);
     await unmount(dom, mounted.root);
   });
 

@@ -639,7 +639,8 @@ Build:
 
 - [B8.01 -> E8.02] Closed-list high-risk confirmation service.
 - [B8.02 -> E8.02] Permission-dialog UI with safe summaries.
-- [B8.03 -> E8.03] Closed-list high-risk confirmation with no saved-grant/YOLO mode.
+- [B8.03 -> E8.03] Host risk-adaptive confirmation, decoupled decision receipts, and
+  revocable exact scoped grants; no blanket YOLO mode.
 - [B8.04 -> E8.03] Third-party authority isolation and concrete effect decisions.
 - [B8.05 -> E8.01] Skill Registry Service (inventory/disable foundation only).
 - [B8.06 -> E8.01] Pure Skill staging/install from URL, Markdown, and ZIP plus explicit chat-initiated staging, enable, disable, uninstall, export, and source-aware update.

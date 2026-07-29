@@ -268,9 +268,13 @@ executes only that same-Job bound effect; stale/invented calls fail pre-effect.
 
 Threat: tool or Skill runs dangerous commands.
 
-For an explicit user-authored ambient task, `pige_run_command` remains `arbitrary_shell`, binds
-executable/argv/cwd, uses `shell:false`, limits and process-tree cancellation, and is
-confirmed per effect. Attachment presence alone and neutral fallback cannot register it.
+For an explicit user-authored ambient task, `pige_run_command` binds executable/argv/cwd,
+uses `shell:false`, limits and process-tree cancellation. The Agent may propose a risk
+level, but Main derives the final class from the normalized command and may only upgrade
+that proposal. A closed Host allowlist of current-vault, read-only commands runs directly;
+opaque shell/interpreter, deletion, credential and privilege commands confirm per effect.
+Other direct commands may offer an exact executable/argv/cwd remembered scope. Attachment
+presence alone and neutral fallback cannot register the tool.
 
 ### 6.7.1 Reviewed Task Execution Plans
 
@@ -363,11 +367,14 @@ confinement, limits, cancellation, idempotency and projection are enforcement, n
 Third-party code never inherits this authority from text, source, model, naming, or mode.
 
 Confirmation is closed to irreversible delete, original overwrite, out-of-root write,
-arbitrary shell/unknown install, credential export, risky edit, or equivalent destination/
-authority escalation. Section 6.7.1's reviewed plan is one immutable same-Job compound
-effect, not raw-Shell authority. Allow/deny applies only to that effect; its Job/Operation
-owns CAS/recovery. No Ask-Every-Time, saved grant, YOLO, permission state machine, or
-`waiting_permission` exists.
+Host-classified risky shell/unknown install, credential export, risky edit, or equivalent
+destination/authority escalation. Section 6.7.1's reviewed plan is one immutable same-Job
+compound effect, not raw-Shell authority. Main commits a decision receipt and clears the
+dialog before the Job executes; the Job owns progress, cancellation, CAS and recovery.
+Eligible exact scopes may be remembered machine-locally and revoked; opaque shell,
+permanent loss, credentials and privilege changes never inherit them. No blanket YOLO or
+renderer-owned permission state exists, and Jobs do not wait on execution behind a
+confirmation IPC.
 
 Connecting the exact Provider and pressing Send authorizes exact authored and selected
 bounded context unchanged. Identity drift needs another action; credentials stay isolated

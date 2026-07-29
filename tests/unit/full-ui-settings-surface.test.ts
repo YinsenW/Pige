@@ -3325,14 +3325,16 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("presents connected services and exact high-risk confirmation without standing permission modes", async () => {
+  it("presents risk-adaptive confirmation and revocable exact remembered scopes", async () => {
     const dom = createDom();
-    let ipcRead = false;
+    const clearGrants = vi.fn(async () => ({ apiVersion: 1 as const, cleared: 2 }));
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
-      get() {
-        ipcRead = true;
-        throw new Error("The Privacy panel must remain a truthful static projection.");
+      value: {
+        confirmations: {
+          grants: async () => ({ apiVersion: 1 as const, count: 2 }),
+          clearGrants
+        }
       }
     });
     const root = createRoot(dom.window.document.querySelector("#root")!);
@@ -3355,8 +3357,9 @@ describe("full UI Settings surface", () => {
     expect(container.textContent).toContain("Uses your connected provider");
     expect(container.textContent).toContain("without a second confirmation dialog");
     expect(container.textContent).toContain("Exact high-risk effects");
-    expect(container.textContent).toContain("Confirm each effect");
-    expect(container.textContent).toContain("No standing authority");
+    expect(container.textContent).toContain("Risk-adaptive");
+    expect(container.textContent).toContain("Scoped remembered choices");
+    expect(container.textContent).toContain("Forget all (2)");
     expect(container.textContent).toContain("Protected");
     expect(container.textContent).not.toContain("Default mode");
     expect(container.textContent).not.toContain("Saved scoped grants");
@@ -3371,7 +3374,9 @@ describe("full UI Settings surface", () => {
     expect(container.querySelector(".model-egress-prompt")).toBeNull();
     expect(Object.hasOwn(enMessages, "errors.model_provider.output_invalid")).toBe(false);
     expect(Object.hasOwn(enMessages, "errors.agent_runtime.completion_invalid")).toBe(false);
-    expect(ipcRead).toBe(false);
+    await act(async () => buttonNamed(container, "Forget all (2)").click());
+    expect(clearGrants).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain("Forget all (0)");
 
     await act(async () => root.unmount());
     dom.window.close();
