@@ -78,12 +78,15 @@ Two storage profiles share this envelope:
   plus versioned schema and provenance. It is read-only until a derived Dataset is
   created.
 
-`dataset.json` binds profile, initial/active revision, stable IDs, integrity, versions and
-compatibility. A `managed_collection` keeps its Dataset ID. Row/field changes write immutable
-SQLite/schema/Operation revisions and switch manifest last. A saved view instead advances its
-own revision; rows/Dataset revision stay unchanged and Undo trashes it forward. Evidence,
-originals, old revisions and previews stay immutable; missing fields are legacy-read only and
-dual payload roles require a derived revision.
+`dataset.json` binds profile, revisions, stable IDs, integrity and compatibility. Collection
+row/field changes publish immutable SQLite/schema/Operation revisions, manifest last; views
+advance separately. Evidence, originals, old revisions and previews remain immutable.
+
+`DatasetColumn.calculation` is sole Pige formula truth, including empty tables. V1 is a nullable
+number AST: finite literals or same-table editable non-formula integer/number IDs, four arithmetic
+operators, depth <=8/nodes <=31. Missing/empty/null, zero division or non-finite becomes null;
+`-0` becomes `0`. Edits/row adds recalculate in one transaction/revision. Imported formula caches
+stay read-only; referenced inputs cannot trash and Pige formulas retain rename/trash/Undo.
 
 ```ts
 type DatasetEvidenceRef = {

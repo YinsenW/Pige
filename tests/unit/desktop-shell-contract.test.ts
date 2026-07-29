@@ -1388,6 +1388,7 @@ describe("desktop shell build contract", () => {
   });
 
   it("strictly validates the Managed Collection IPC and preload boundaries", () => {
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const registrarSource = fs.readFileSync(
       path.resolve("apps/desktop/src/main/register-managed-collection-ipc.ts"),
@@ -1412,6 +1413,15 @@ describe("desktop shell build contract", () => {
     expect(registrarSource).toContain("CollectionOpenCitationResultSchema.parse(rawResult)");
     expect(registrarSource).toContain("CollectionCellEditRequestSchema.parse(request)");
     expect(registrarSource).toContain("CollectionCellEditResultSchema.parse(rawResult)");
+    expect(registrarSource).toContain(
+      "CollectionAddFormulaColumnRequestSchema.parse(request)"
+    );
+    expect(registrarSource).toContain(
+      "CollectionAddFormulaColumnResultSchema.parse(rawResult)"
+    );
+    expect(registrarSource).toContain(
+      "ipcMain.handle(COLLECTION_ADD_FORMULA_COLUMN_CHANNEL"
+    );
     expect(registrarSource).toContain("options.getActiveVaultId() !== parsed.activeVaultId");
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.open", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.openCitation", parsedRequest)');
@@ -1433,6 +1443,11 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain("CollectionAppendDefaultRowResultSchema.parse(");
     expect(preloadSource).toContain("CollectionAddNullableColumnRequestSchema.parse(request)");
     expect(preloadSource).toContain("CollectionAddNullableColumnResultSchema.parse(");
+    expect(preloadSource).toContain("CollectionAddFormulaColumnRequestSchema.parse(request)");
+    expect(preloadSource).toContain("CollectionAddFormulaColumnResultSchema.parse(");
+    expect(preloadSource).toContain(
+      "ipcRenderer.invoke(COLLECTION_ADD_FORMULA_COLUMN_CHANNEL, parsedRequest)"
+    );
     expect(preloadSource).toContain("CollectionRenameColumnRequestSchema.parse(request)");
     expect(preloadSource).toContain("CollectionRenameColumnResultSchema.parse(");
     expect(preloadSource).toContain("CollectionCreateViewRequestSchema.parse(request)");
@@ -1445,6 +1460,13 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("CollectionAppendDefaultRowRequest");
     expect(contractsSource).toContain("readonly addNullableColumn:");
     expect(contractsSource).toContain("CollectionAddNullableColumnRequest");
+    expect(schemasSource).toContain(
+      'COLLECTION_ADD_FORMULA_COLUMN_CHANNEL = "collections.addFormulaColumn"'
+    );
+    expect(contractsSource).toContain("readonly addFormulaColumn:");
+    expect(contractsSource).toContain("CollectionAddFormulaColumnRequest");
+    expect(contractsSource).toContain("Promise<CollectionAddFormulaColumnResult>");
+    expect(preloadSource).toContain("addFormulaColumn: invokeCollectionAddFormulaColumn");
     expect(contractsSource).toContain("readonly renameColumn:");
     expect(contractsSource).toContain("CollectionRenameColumnRequest");
     expect(contractsSource).toContain("readonly createView:");

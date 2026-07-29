@@ -105,7 +105,7 @@ function makeHarness(options: {
       title: "Tasks",
       tableId: request.tableId,
       tableName: "Tasks",
-      columns: [{ columnId: "column_abcdefghijkl", label: "Task", logicalType: "string", canRename: true, canTrash: true }],
+      columns: [{ columnId: "column_abcdefghijkl", label: "Task", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false }],
       rows: [{
         rowId: "row_abcdefghijkl",
         cells: [{ columnId: "column_abcdefghijkl", value: "Draft", editable: true }],
@@ -116,6 +116,7 @@ function makeHarness(options: {
       truncated: false,
       canAppendDefaultRow: true,
       canAddColumn: true,
+      canAddFormulaColumn: true,
       views: []
     }
   })));
@@ -228,6 +229,7 @@ describe("registerManagedCollectionIpc", () => {
       "collections.editCell",
       "collections.appendDefaultRow",
       "collections.addNullableColumn",
+      "collections.addFormulaColumn",
       "collections.renameColumn",
       "collections.createView",
       "collections.trashColumn",
@@ -309,7 +311,7 @@ describe("registerManagedCollectionIpc", () => {
           title: "Tasks",
           tableId: request.tableId,
           tableName: "Tasks",
-          columns: [{ columnId: "column_ownerabcdefghijkl", label: "Owner", logicalType: "string", canRename: true, canTrash: true }],
+          columns: [{ columnId: "column_ownerabcdefghijkl", label: "Owner", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false }],
           rows: [{
             rowId: "row_abcdefghijkl",
             cells: [{ columnId: "column_ownerabcdefghijkl", value: null, editable: true }],
@@ -320,6 +322,7 @@ describe("registerManagedCollectionIpc", () => {
           truncated: false,
           canAppendDefaultRow: true,
           canAddColumn: true,
+          canAddFormulaColumn: true,
           views: []
         }
       }),
@@ -534,13 +537,14 @@ describe("registerManagedCollectionIpc", () => {
           title: "Tasks",
           tableId: parsed.tableId,
           tableName: "Tasks",
-          columns: [{ columnId: "column_abcdefghijkl", label: "Task", logicalType: "string", canRename: true, canTrash: true }],
+          columns: [{ columnId: "column_abcdefghijkl", label: "Task", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false }],
           rows: [],
           totalRowCount: 0,
           returnedRowCount: 0,
           truncated: false,
           canAppendDefaultRow: true,
           canAddColumn: true,
+          canAddFormulaColumn: true,
           views: [{ viewId, viewRevision: 1, name: "Open tasks" }],
           activeViewId: viewId
         }
@@ -565,13 +569,14 @@ describe("registerManagedCollectionIpc", () => {
           title: "Tasks",
           tableId: parsed.tableId,
           tableName: "Tasks",
-          columns: [{ columnId: "column_abcdefghijkl", label: "Task", logicalType: "string", canRename: true, canTrash: true }],
+          columns: [{ columnId: "column_abcdefghijkl", label: "Task", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false }],
           rows: [],
           totalRowCount: 0,
           returnedRowCount: 0,
           truncated: false,
           canAppendDefaultRow: true,
           canAddColumn: true,
+          canAddFormulaColumn: true,
           views: []
         }
       })

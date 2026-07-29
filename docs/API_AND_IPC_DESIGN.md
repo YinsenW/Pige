@@ -501,17 +501,13 @@ Its API exposes identity plus <=8 lines; drift conflicts and private data stays 
 
 Current Home Dataset read boundary:
 
-- `agent.submitTurn` may return one bounded Dataset preview/citation; `agent.conversation`
-  restores its checksum-bound display columns, rows/counts/truncation and citations.
-- `collections.list` returns <=50 pathless summaries ordered by normalized title/ID; its
-  cursor binds vault/catalog snapshot/boundary.
-- `collections.open` returns <=50 rows/64 KiB. Its cursor binds vault/Dataset/revision/
-  table/view plan/row boundary; presence alone means more, and drift is stale before append.
-- `collections.openCitation` takes only vault/conversation/event/ref lookup keys. Main verifies
-  the bound event/bundle and returns its preview/highlights read-only; ranges stay metadata and
-  drift never substitutes or requeries.
-- Mutations separately bind exact revision/IDs/capabilities; Main owns IDs/defaults/Activity/Undo.
-  All reads fence vault/manifest/schema/payload and expose no storage/query/error internals.
+- Agent/conversation returns a checksum-bound preview/citation. List/open pages are <=50 rows/
+  64 KiB; cursors bind vault/catalog/revision/view/boundary and drift is stale.
+- Citation Open lookup keys grant no authority; Main verifies event/bundle and returns read-only
+  highlights without substitution/requery.
+- Mutations bind revision/IDs/capabilities. `addFormulaColumn` binds label plus a <=8-depth/
+  31-node numeric AST; Main owns ID, operand/trash eligibility, atomic recomputation and one
+  `add_collection_column` CAS/Undo. No raw expression, SQL, function or external ref exists.
 
 ### 6.6 Retrieval
 

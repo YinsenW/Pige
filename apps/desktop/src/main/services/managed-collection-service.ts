@@ -1,11 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import type { KnowledgeActivitySummary, KnowledgeActivityUndoResult, VaultSummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
   CollectionAddNullableColumnRequestSchema, CollectionAddNullableColumnResultSchema,
+  CollectionAddFormulaColumnRequestSchema, CollectionAddFormulaColumnResultSchema,
   CollectionAppendDefaultRowRequestSchema, CollectionAppendDefaultRowResultSchema,
   CollectionCellEditRequestSchema, CollectionCellEditResultSchema,
   CollectionRenameColumnRequestSchema, CollectionTrashColumnRequestSchema,
@@ -13,6 +13,7 @@ import {
   DatasetManifestSchema,
   DatasetRevisionSchema, DatasetSchemaRecordSchema, OperationRecordSchema,
   type CollectionAddNullableColumnRequest, type CollectionAddNullableColumnResult,
+  type CollectionAddFormulaColumnRequest, type CollectionAddFormulaColumnResult,
   type CollectionAppendDefaultRowRequest, type CollectionAppendDefaultRowResult,
   type CollectionCellEditRequest, type CollectionCellEditResult,
   type CollectionRenameColumnRequest, type CollectionRenameColumnResult, type CollectionTrashColumnRequest, type CollectionTrashColumnResult,
@@ -23,14 +24,18 @@ import {
 import {
   MAX_COLLECTION_JSON_BYTES, adoptNullableColumnMutation, assertSafeVaultRoot, collectionCellReadOnlyReason,
   createNullableColumnId, fileRef, hashCanonical,
-  openReadOnlyPayload, operationConflict, operationPathFor, payloadInvalid, publishImmutableFile,
+  openReadOnlyPayload, operationConflict, operationPathFor, payloadInvalid,
   parseCollectionCellValue, readAllBundles, readBundle, readCollectionCell, readCollectionCellFromRevision,
   readCollectionSnapshot, readJsonBounded, readJsonRef, readOperationRecords, readRevisionById,
-  replaceManifestCas, requestConflict, resolveBundleRelativePath, syncFile, validatePayloadMeta,
-  writeJsonExclusive, writeJsonImmutable,
+  replaceManifestCas, requestConflict, resolveBundleRelativePath,
+  writeJsonExclusive,
   type BundleBinding, type CollectionCellBinding
 } from "./managed-collection-storage";
 import { commitColumnRenameUndo, commitColumnTrashUndo, commitNullableColumnAdd, commitNullableColumnUndo, executeColumnRename, executeColumnTrash, normalizeColumnLabel } from "./managed-collection-column-storage";
+import {
+  adoptFormulaColumnMutation, commitCollectionCellMutation, commitFormulaColumnAdd,
+  createFormulaColumnId, createFormulaMutationIdentity
+} from "./managed-collection-formula-storage";
 import {
   adoptDefaultRowAppend,
   commitDefaultRowAppend,
@@ -95,6 +100,10 @@ export class ManagedCollectionService {
   async addNullableColumn(request: CollectionAddNullableColumnRequest): Promise<CollectionAddNullableColumnResult> {
     const parsed = CollectionAddNullableColumnRequestSchema.parse(request);
     return this.#serialize(() => this.#addNullableColumn(parsed));
+  }
+  async addFormulaColumn(request: CollectionAddFormulaColumnRequest): Promise<CollectionAddFormulaColumnResult> {
+    const parsed = CollectionAddFormulaColumnRequestSchema.parse(request);
+    return this.#serialize(() => this.#addFormulaColumn(parsed));
   }
   async renameColumn(request: CollectionRenameColumnRequest): Promise<CollectionRenameColumnResult> {
     const parsed = CollectionRenameColumnRequestSchema.parse(request);
@@ -285,7 +294,7 @@ export class ManagedCollectionService {
       if (invalidReason) {
         return CollectionCellEditResultSchema.parse({ ...identity, status: "invalid", reason: invalidReason });
       }
-      const committed = commitMutation({
+      const committed = commitCollectionCellMutation({
         binding,
         identity: mutationIdentity,
         tableId: request.tableId,
@@ -293,7 +302,7 @@ export class ManagedCollectionService {
         columnId: request.columnId,
         value: request.value,
         expectedRevisionId: request.expectedRevisionId,
-        change: { kind: "collection_cell_edit" }
+        change: { kind: "collection_cell_edit" }, createOperation: createOperationForRevision
       });
       if (!this.#activeVault(request.activeVaultId)) {
         return CollectionCellEditResultSchema.parse({ ...identity, status: "failed" });
@@ -432,6 +441,55 @@ export class ManagedCollectionService {
         : CollectionAddNullableColumnResultSchema.parse({ ...identity, status: "not_found" });
     }
   }
+  async #addFormulaColumn(request: CollectionAddFormulaColumnRequest): Promise<CollectionAddFormulaColumnResult> {
+    const identity = openIdentity(request), active = this.#activeVault(request.activeVaultId);
+    if (!active) return CollectionAddFormulaColumnResultSchema.parse({ ...identity, status: "not_found" });
+    try {
+      const binding = readBundle(active.vaultPath, request.datasetId);
+      if (!binding) return CollectionAddFormulaColumnResultSchema.parse({ ...identity, status: "not_found" });
+      const mutationIdentity = createFormulaMutationIdentity(request), columnId = createFormulaColumnId(request.tableId, request.requestId);
+      const adopted = adoptFormulaColumnMutation({
+        binding, request, identity: mutationIdentity, readSnapshot: readCollectionSnapshot,
+        createOperation: createOperationForRevision
+      });
+      if (adopted) return CollectionAddFormulaColumnResultSchema.parse({ ...identity, ...adopted });
+      const snapshot = readCollectionSnapshot(binding, request.tableId);
+      if (!snapshot) return CollectionAddFormulaColumnResultSchema.parse({ ...identity, status: "not_found" });
+      if (binding.manifest.activeRevision !== request.expectedRevisionId) {
+        return CollectionAddFormulaColumnResultSchema.parse({ ...identity, status: "stale", snapshot });
+      }
+      if (!snapshot.canAddFormulaColumn) {
+        return CollectionAddFormulaColumnResultSchema.parse({ ...identity, status: "invalid", reason: "ineligible_operand" });
+      }
+      const committed = commitFormulaColumnAdd({ binding, request, identity: mutationIdentity });
+      const operation = createOperationForRevision(committed.binding, committed.revision);
+      writeJsonExclusive(operationPathFor(committed.binding.vaultPath, operation.id), operation);
+      if (!this.#activeVault(request.activeVaultId)) {
+        return CollectionAddFormulaColumnResultSchema.parse({ ...identity, status: "not_found" });
+      }
+      const nextSnapshot = readCollectionSnapshot(committed.binding, request.tableId);
+      if (!nextSnapshot || nextSnapshot.revisionId !== committed.revision.id ||
+          !nextSnapshot.columns.some((column) => column.columnId === columnId && column.calculation?.kind === "pige_numeric_formula")) {
+        throw operationConflict();
+      }
+      return CollectionAddFormulaColumnResultSchema.parse({
+        ...identity, status: "committed", columnId, operationId: operation.id, snapshot: nextSnapshot
+      });
+    } catch (caught) {
+      if (caught instanceof PigeDomainError && caught.code === "collection.request_conflict") throw caught;
+      const latest = readBundle(active.vaultPath, request.datasetId);
+      const snapshot = latest ? readCollectionSnapshot(latest, request.tableId) : undefined;
+      const reason = caught instanceof PigeDomainError && caught.code === "collection.duplicate_label"
+        ? "duplicate_label" : caught instanceof PigeDomainError && caught.code === "collection.column_limit"
+          ? "column_limit" : caught instanceof PigeDomainError && caught.code === "collection.formula_operand_ineligible"
+            ? "ineligible_operand" : undefined;
+      return reason
+        ? CollectionAddFormulaColumnResultSchema.parse({ ...identity, status: "invalid", reason })
+        : snapshot
+          ? CollectionAddFormulaColumnResultSchema.parse({ ...identity, status: "stale", snapshot })
+          : CollectionAddFormulaColumnResultSchema.parse({ ...identity, status: "not_found" });
+    }
+  }
   #recoverActiveOperation(binding: BundleBinding): boolean {
     if (!binding.revision.change || binding.revision.change.kind === "initial_import") return false;
     const operationPath = operationPathFor(binding.vaultPath, binding.revision.operationId);
@@ -469,65 +527,6 @@ export class ManagedCollectionService {
     } finally {
       release();
     }
-  }
-}
-interface CommitMutationInput {
-  readonly binding: BundleBinding; readonly identity: MutationIdentity; readonly tableId: string;
-  readonly rowId: string; readonly columnId: string; readonly value: CollectionScalarValue;
-  readonly expectedRevisionId: string;
-  readonly change:
-    | { readonly kind: "collection_cell_edit" }
-    | { readonly kind: "collection_cell_undo"; readonly undoOfOperationId: string };
-}
-function commitMutation(input: CommitMutationInput): { readonly revision: DatasetRevision; readonly operation: OperationRecord } {
-  const current = readBundle(input.binding.vaultPath, input.binding.manifest.datasetId);
-  if (!current || current.manifest.activeRevision !== input.expectedRevisionId) {
-    throw new PigeDomainError("collection.revision_changed", "The Collection revision changed before commit.");
-  }
-  const currentCell = readCollectionCell(current, input.tableId, input.rowId, input.columnId);
-  if (!currentCell) throw new PigeDomainError("collection.cell_not_found", "The Collection cell is unavailable.");
-  const stagedRoot = path.join(current.bundlePath, ".staging", `${input.identity.revisionId}.${randomUUID()}`);
-  const payloadRelativePath = `data/revisions/${input.identity.revisionId}.sqlite`;
-  const schemaRelativePath = `schemas/${input.identity.revisionId}.json`;
-  const revisionRelativePath = `revisions/${input.identity.revisionId}.json`;
-  const stagedPayload = path.join(stagedRoot, "payload.sqlite");
-  fs.mkdirSync(stagedRoot, { recursive: true, mode: 0o700 });
-  try {
-    fs.copyFileSync(current.payloadPath, stagedPayload);
-    mutatePayload(stagedPayload, input.identity.revisionId, input.rowId, currentCell, input.value);
-    const schema = createNextSchema(current.schema, input.identity.revisionId, currentCell, input.value);
-    publishImmutableFile(stagedPayload, resolveBundleRelativePath(current.bundlePath, payloadRelativePath));
-    writeJsonImmutable(resolveBundleRelativePath(current.bundlePath, schemaRelativePath), schema);
-    const now = new Date().toISOString();
-    const revision = DatasetRevisionSchema.parse({
-      ...current.revision,
-      id: input.identity.revisionId,
-      parentRevisionId: current.revision.id,
-      schema: fileRef(current.bundlePath, schemaRelativePath),
-      payload: { ...fileRef(current.bundlePath, payloadRelativePath), format: "sqlite" },
-      operationId: input.identity.operationId,
-      change: { ...input.change, tableId: input.tableId, rowId: input.rowId, columnId: input.columnId },
-      createdAt: now
-    });
-    writeJsonImmutable(resolveBundleRelativePath(current.bundlePath, revisionRelativePath), revision);
-    replaceManifestCas(current, DatasetManifestSchema.parse({
-      ...current.manifest,
-      initialRevision: current.manifest.initialRevision ?? current.manifest.activeRevision,
-      activeRevision: revision.id,
-      revision: fileRef(current.bundlePath, revisionRelativePath),
-      schema: revision.schema,
-      payload: revision.payload,
-      updatedAt: now
-    }));
-    const committed = readBundle(current.vaultPath, current.manifest.datasetId);
-    if (!committed || committed.manifest.activeRevision !== revision.id) {
-      throw new PigeDomainError("collection.commit_uncertain", "The Collection commit could not be adopted.");
-    }
-    const operation = createOperationForRevision(committed, revision);
-    writeJsonExclusive(operationPathFor(current.vaultPath, operation.id), operation);
-    return { revision, operation };
-  } finally {
-    fs.rmSync(stagedRoot, { recursive: true, force: true });
   }
 }
 interface CommitRowAddInput {
@@ -568,7 +567,7 @@ function commitCellUndo(
   const beforeRevision = readRevisionById(current, binding.beforeRevisionId);
   const beforeCell = readCollectionCellFromRevision(current, beforeRevision, rowId, binding.columnId);
   if (!beforeCell) throw operationConflict();
-  return commitMutation({
+  return commitCollectionCellMutation({
     binding: current,
     identity: createUndoIdentity(operationId, binding.afterRevisionId),
     tableId: binding.tableId,
@@ -576,7 +575,8 @@ function commitCellUndo(
     columnId: binding.columnId,
     value: parseCollectionCellValue(beforeCell, beforeCell.column.logicalType),
     expectedRevisionId: binding.afterRevisionId,
-    change: { kind: "collection_cell_undo", undoOfOperationId: operationId }
+    change: { kind: "collection_cell_undo", undoOfOperationId: operationId },
+    createOperation: createOperationForRevision
   });
 }
 function commitColumnUndo(
@@ -622,97 +622,6 @@ function validateScalar(value: CollectionScalarValue, logicalType: DatasetLogica
     return typeof value === "string" && !Number.isNaN(Date.parse(value)) ? undefined : "type_mismatch";
   }
   return "type_mismatch";
-}
-function mutatePayload(
-  payloadPath: string,
-  revisionId: string,
-  rowId: string,
-  cell: CollectionCellBinding,
-  value: CollectionScalarValue
-): void {
-  const database = new DatabaseSync(payloadPath);
-  try {
-    database.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;");
-    validatePayloadMeta(database);
-    const encoded = encodeCellValue(value, cell.column.logicalType);
-    database.exec("BEGIN IMMEDIATE");
-    try {
-      const result = database.prepare([
-        "UPDATE pige_dataset_cells SET state = ?, source_type = ?, lexical_raw = NULL, lexical_text = NULL,",
-        "quoted = NULL, projection_kind = ?, projection_json = ?, formula_json = NULL, source_style_json = NULL",
-        "WHERE row_id = ? AND column_id = ? AND formula_json IS NULL"
-      ].join(" ")).run(
-        encoded.state,
-        "pige_user_edit",
-        encoded.projectionKind,
-        encoded.projectionJson,
-        rowId,
-        cell.column.id
-      );
-      if (result.changes !== 1) throw new PigeDomainError("collection.cell_changed", "The Collection cell changed before commit.");
-      if (database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'").run(revisionId).changes !== 1) {
-        throw payloadInvalid();
-      }
-      database.exec("COMMIT");
-    } catch (caught) {
-      database.exec("ROLLBACK");
-      throw caught;
-    }
-    const integrity = database.prepare("PRAGMA integrity_check").get() as { integrity_check?: unknown } | undefined;
-    if (integrity?.integrity_check !== "ok") throw payloadInvalid();
-  } finally {
-    database.close();
-  }
-  syncFile(payloadPath);
-}
-function encodeCellValue(value: CollectionScalarValue, logicalType: DatasetLogicalType) {
-  if (value === null) return { state: "null" as const, projectionKind: "null", projectionJson: null };
-  if (logicalType === "string") {
-    return {
-      state: value === "" ? "empty" as const : "value" as const,
-      projectionKind: "text",
-      projectionJson: JSON.stringify({ kind: "text", value })
-    };
-  }
-  const projectionKind = logicalType === "number" ? "real" : logicalType;
-  if (!EDITABLE_TYPES.has(logicalType)) throw new PigeDomainError("collection.type_mismatch", "The Collection cell type is not editable.");
-  return {
-    state: "value" as const,
-    projectionKind,
-    projectionJson: JSON.stringify({ kind: projectionKind, value })
-  };
-}
-function createNextSchema(
-  current: DatasetSchemaRecord,
-  revisionId: string,
-  cell: CollectionCellBinding,
-  value: CollectionScalarValue
-): DatasetSchemaRecord {
-  const oldState = normalizedState(cell.state);
-  const newState = value === null ? "null" : value === "" && cell.column.logicalType === "string" ? "empty" : "value";
-  return DatasetSchemaRecordSchema.parse({
-    ...current,
-    revisionId,
-    createdAt: new Date().toISOString(),
-    tables: current.tables.map((table) => ({
-      ...table,
-      columns: table.columns.map((column) => {
-        if (column.id !== cell.column.id || !column.stats || oldState === newState) return column;
-        return {
-          ...column,
-          stats: {
-            ...column.stats,
-            [oldState]: Math.max(0, column.stats[oldState] - 1),
-            [newState]: column.stats[newState] + 1
-          }
-        };
-      })
-    }))
-  });
-}
-function normalizedState(value: string): "missing" | "empty" | "null" | "value" {
-  if (value === "missing" || value === "empty" || value === "null" || value === "value") return value;
-  throw payloadInvalid();
 }
 function adoptExistingMutation(
   binding: BundleBinding,

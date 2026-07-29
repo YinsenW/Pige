@@ -3108,6 +3108,106 @@ export const DatasetLogicalTypeSchema = z.enum([
   "unknown"
 ]);
 
+export const DATASET_PIGE_FORMULA_MAX_DEPTH = 8;
+export const DATASET_PIGE_FORMULA_MAX_NODES = 31;
+export const DatasetPigeFormulaOperatorSchema = z.enum([
+  "add",
+  "subtract",
+  "multiply",
+  "divide"
+]);
+
+type DatasetPigeFormulaExpressionNode =
+  | { kind: "column"; columnId: string }
+  | { kind: "literal"; value: number }
+  | {
+      kind: "binary";
+      operator: "add" | "subtract" | "multiply" | "divide";
+      left: DatasetPigeFormulaExpressionNode;
+      right: DatasetPigeFormulaExpressionNode;
+    };
+
+const DatasetPigeFormulaColumnExpressionSchema = z.object({
+  kind: z.literal("column"),
+  columnId: ColumnIdSchema
+}).strict();
+
+const DatasetPigeFormulaLiteralExpressionSchema = z.object({
+  kind: z.literal("literal"),
+  value: z.number().finite()
+}).strict();
+
+function datasetPigeFormulaExpressionSchema(
+  remainingDepth: number
+): z.ZodType<DatasetPigeFormulaExpressionNode> {
+  if (remainingDepth <= 1) {
+    return z.discriminatedUnion("kind", [
+      DatasetPigeFormulaColumnExpressionSchema,
+      DatasetPigeFormulaLiteralExpressionSchema
+    ]);
+  }
+  const child = datasetPigeFormulaExpressionSchema(remainingDepth - 1);
+  return z.discriminatedUnion("kind", [
+    DatasetPigeFormulaColumnExpressionSchema,
+    DatasetPigeFormulaLiteralExpressionSchema,
+    z.object({
+      kind: z.literal("binary"),
+      operator: DatasetPigeFormulaOperatorSchema,
+      left: child,
+      right: child
+    }).strict()
+  ]);
+}
+
+export const DatasetPigeFormulaExpressionSchema = datasetPigeFormulaExpressionSchema(
+  DATASET_PIGE_FORMULA_MAX_DEPTH
+).superRefine((expression, context) => {
+  let nodeCount = 0;
+  const pending = [expression];
+  while (pending.length > 0) {
+    const node = pending.pop()!;
+    nodeCount += 1;
+    if (nodeCount > DATASET_PIGE_FORMULA_MAX_NODES) {
+      context.addIssue({
+        code: "custom",
+        message: `Pige Dataset formulas must not exceed ${DATASET_PIGE_FORMULA_MAX_NODES} nodes.`
+      });
+      return;
+    }
+    if (node.kind === "binary") pending.push(node.left, node.right);
+  }
+});
+
+/**
+ * Pige numeric formula v1 evaluates finite IEEE-754 numbers deterministically.
+ * Missing/null/empty operands, division by zero, and non-finite intermediates or
+ * results produce null; negative zero is persisted as positive zero.
+ */
+export const DatasetPigeCalculationSchema = z.object({
+  kind: z.literal("pige_numeric_formula"),
+  schemaVersion: z.literal(1),
+  expression: DatasetPigeFormulaExpressionSchema
+}).strict();
+
+function datasetPigeFormulaColumnRefs(expression: DatasetPigeFormulaExpressionNode): string[] {
+  const refs: string[] = [];
+  const pending = [expression];
+  while (pending.length > 0) {
+    const node = pending.pop()!;
+    if (node.kind === "column") refs.push(node.columnId);
+    if (node.kind === "binary") pending.push(node.left, node.right);
+  }
+  return refs;
+}
+
+function datasetColumnContainsImportedFormula(column: {
+  sourceType: string;
+  sourceTypes?: string[] | undefined;
+}): boolean {
+  return [column.sourceType, ...(column.sourceTypes ?? [])]
+    .some((sourceType) => sourceType.toLocaleLowerCase("en-US").includes("formula"));
+}
+
 export const DatasetColumnSchema = z.object({
   id: ColumnIdSchema,
   name: z.string().min(1).max(512),
@@ -3121,6 +3221,7 @@ export const DatasetColumnSchema = z.object({
   ).optional(),
   logicalType: DatasetLogicalTypeSchema,
   nullable: z.boolean(),
+  calculation: DatasetPigeCalculationSchema.optional(),
   stats: z.object({
     missing: z.number().int().nonnegative(),
     empty: z.number().int().nonnegative(),
@@ -3157,6 +3258,34 @@ export const DatasetTableSchema = z.object({
   const ordinals = new Set(table.columns.map((column) => column.ordinal));
   if (ordinals.size !== table.columns.length) {
     context.addIssue({ code: "custom", path: ["columns"], message: "Dataset column ordinals must be unique." });
+  }
+  const columnsById = new Map(table.columns.map((column) => [column.id, column]));
+  for (const [index, column] of table.columns.entries()) {
+    if (!column.calculation) continue;
+    if (column.logicalType !== "number" || !column.nullable) {
+      context.addIssue({
+        code: "custom",
+        path: ["columns", index, "calculation"],
+        message: "Pige Dataset formula columns must be nullable numbers."
+      });
+    }
+    for (const columnId of datasetPigeFormulaColumnRefs(column.calculation.expression)) {
+      const operand = columnsById.get(columnId);
+      if (
+        !operand ||
+        operand.id === column.id ||
+        operand.calculation !== undefined ||
+        datasetColumnContainsImportedFormula(operand) ||
+        (operand.logicalType !== "integer" && operand.logicalType !== "number")
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["columns", index, "calculation", "expression"],
+          message: "Pige Dataset formulas may reference only same-table editable non-formula numeric columns."
+        });
+        break;
+      }
+    }
   }
 });
 
@@ -3331,6 +3460,7 @@ export const CollectionCatalogCursorSchema = z.string().regex(/^collection_catal
 export const CollectionRowCursorSchema = z.string().regex(/^collection_rows_[a-f0-9]{64}$/);
 export const COLLECTION_LIST_CHANNEL = "collections.list" as const;
 export const COLLECTION_OPEN_CITATION_CHANNEL = "collections.openCitation" as const;
+export const COLLECTION_ADD_FORMULA_COLUMN_CHANNEL = "collections.addFormulaColumn" as const;
 export const COLLECTION_LIST_MAX_LIMIT = 50;
 export const COLLECTION_ROW_PAGE_MAX_LIMIT = 50;
 export const CollectionScalarValueSchema = DatasetQueryScalarSchema;
@@ -3386,13 +3516,49 @@ export const CollectionViewSummarySchema = z.object({
   sort: CollectionViewSortSchema.optional()
 }).strict();
 
+export const CollectionColumnCalculationSummarySchema = z.discriminatedUnion("kind", [
+  DatasetPigeCalculationSchema,
+  z.object({ kind: z.literal("imported_cached_formula") }).strict()
+]);
+
 export const CollectionColumnSummarySchema = z.object({
   columnId: DatasetQueryColumnIdSchema,
   label: z.string().min(1).max(512),
   logicalType: DatasetLogicalTypeSchema,
   canRename: z.boolean(),
-  canTrash: z.boolean()
-}).strict();
+  canTrash: z.boolean(),
+  canUseAsFormulaOperand: z.boolean(),
+  calculation: CollectionColumnCalculationSummarySchema.optional()
+}).strict().superRefine((column, context) => {
+  if (
+    column.canUseAsFormulaOperand &&
+    (column.calculation !== undefined ||
+      (column.logicalType !== "integer" && column.logicalType !== "number"))
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["canUseAsFormulaOperand"],
+      message: "Only non-formula numeric columns may be projected as formula operands."
+    });
+  }
+  if (column.calculation?.kind === "pige_numeric_formula" && column.logicalType !== "number") {
+    context.addIssue({
+      code: "custom",
+      path: ["calculation"],
+      message: "Pige formula summaries must project a numeric result column."
+    });
+  }
+  if (
+    column.calculation?.kind === "imported_cached_formula" &&
+    (column.canRename || column.canTrash || column.canUseAsFormulaOperand)
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["calculation"],
+      message: "Imported cached formulas must remain read-only and ineligible."
+    });
+  }
+});
 
 export const CollectionCellSchema = z.object({
   columnId: DatasetQueryColumnIdSchema,
@@ -3538,6 +3704,7 @@ export const CollectionSnapshotSchema = z.object({
   truncated: z.boolean(),
   canAppendDefaultRow: z.boolean(),
   canAddColumn: z.boolean(),
+  canAddFormulaColumn: z.boolean(),
   views: z.array(CollectionViewSummarySchema).max(32),
   activeViewId: ViewIdSchema.optional()
 }).strict().superRefine((snapshot, context) => {
@@ -3556,6 +3723,32 @@ export const CollectionSnapshotSchema = z.object({
     });
   }
   const columnIds = new Set(snapshot.columns.map(({ columnId }) => columnId));
+  const columnsById = new Map(snapshot.columns.map((column) => [column.columnId, column]));
+  const referencedFormulaOperands = new Set<string>();
+  for (const [index, column] of snapshot.columns.entries()) {
+    if (column.calculation?.kind !== "pige_numeric_formula") continue;
+    for (const columnId of datasetPigeFormulaColumnRefs(column.calculation.expression)) {
+      const operand = columnsById.get(columnId);
+      if (!operand?.canUseAsFormulaOperand) {
+        context.addIssue({
+          code: "custom",
+          path: ["columns", index, "calculation", "expression"],
+          message: "Projected Pige formulas may reference only eligible current columns."
+        });
+      } else {
+        referencedFormulaOperands.add(columnId);
+      }
+    }
+  }
+  for (const [index, column] of snapshot.columns.entries()) {
+    if (referencedFormulaOperands.has(column.columnId) && column.canTrash) {
+      context.addIssue({
+        code: "custom",
+        path: ["columns", index, "canTrash"],
+        message: "Columns referenced by a Pige formula must fail closed for trash."
+      });
+    }
+  }
   const viewIds = new Set<string>();
   for (const [index, view] of snapshot.views.entries()) {
     if (viewIds.has(view.viewId)) {
@@ -3683,6 +3876,17 @@ export const CollectionAddNullableColumnRequestSchema = z.object({
   logicalType: CollectionEditableLogicalTypeSchema
 }).strict();
 
+export const CollectionAddFormulaColumnRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  label: CollectionNewColumnLabelSchema,
+  expression: DatasetPigeFormulaExpressionSchema
+}).strict();
+
 export const CollectionRenameColumnRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: CollectionRequestIdSchema,
@@ -3804,6 +4008,43 @@ export const CollectionAddNullableColumnResultSchema = z.discriminatedUnion("sta
       code: "custom",
       path: ["columnId"],
       message: "Committed Collection columns must appear in the authoritative snapshot."
+    });
+  }
+});
+
+export const CollectionAddFormulaColumnResultSchema = z.discriminatedUnion("status", [
+  CollectionResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    columnId: DatasetQueryColumnIdSchema,
+    operationId: OperationIdSchema,
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionResultIdentitySchema.extend({
+    status: z.literal("invalid"),
+    reason: z.enum(["duplicate_label", "column_limit", "ineligible_operand"])
+  }).strict(),
+  CollectionResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "committed" && result.status !== "stale") return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({
+      code: "custom",
+      path: ["snapshot"],
+      message: "Collection formula-column snapshots must match the request identity."
+    });
+  }
+  if (result.status !== "committed") return;
+  const column = result.snapshot.columns.find((candidate) => candidate.columnId === result.columnId);
+  if (column?.calculation?.kind !== "pige_numeric_formula") {
+    context.addIssue({
+      code: "custom",
+      path: ["columnId"],
+      message: "Committed Collection formula columns must appear in the authoritative snapshot."
     });
   }
 });
@@ -6335,6 +6576,9 @@ export type CaptureFileRejectionReason = z.output<typeof CaptureFileRejectionRea
 export type AgentAnswerCitation = z.infer<typeof AgentAnswerCitationSchema>;
 export type DatasetAnswerCitation = z.infer<typeof DatasetAnswerCitationSchema>;
 export type DatasetColumn = z.infer<typeof DatasetColumnSchema>;
+export type DatasetPigeCalculation = z.infer<typeof DatasetPigeCalculationSchema>;
+export type DatasetPigeFormulaExpression = z.infer<typeof DatasetPigeFormulaExpressionSchema>;
+export type DatasetPigeFormulaOperator = z.infer<typeof DatasetPigeFormulaOperatorSchema>;
 export type CollectionCell = z.infer<typeof CollectionCellSchema>;
 export type CollectionCatalogCursor = z.infer<typeof CollectionCatalogCursorSchema>;
 export type CollectionCellEditRequest = z.infer<typeof CollectionCellEditRequestSchema>;
@@ -6347,6 +6591,8 @@ export type CollectionAppendDefaultRowRequest = z.infer<typeof CollectionAppendD
 export type CollectionAppendDefaultRowResult = z.infer<typeof CollectionAppendDefaultRowResultSchema>;
 export type CollectionAddNullableColumnRequest = z.infer<typeof CollectionAddNullableColumnRequestSchema>;
 export type CollectionAddNullableColumnResult = z.infer<typeof CollectionAddNullableColumnResultSchema>;
+export type CollectionAddFormulaColumnRequest = z.infer<typeof CollectionAddFormulaColumnRequestSchema>;
+export type CollectionAddFormulaColumnResult = z.infer<typeof CollectionAddFormulaColumnResultSchema>;
 export type CollectionRenameColumnRequest = z.infer<typeof CollectionRenameColumnRequestSchema>;
 export type CollectionRenameColumnResult = z.infer<typeof CollectionRenameColumnResultSchema>;
 export type CollectionCreateViewRequest = z.infer<typeof CollectionCreateViewRequestSchema>;
@@ -6357,6 +6603,7 @@ export type CollectionTrashRowRequest = z.infer<typeof CollectionTrashRowRequest
 export type CollectionTrashRowResult = z.infer<typeof CollectionTrashRowResultSchema>;
 export type CollectionCellReadOnlyReason = z.infer<typeof CollectionCellReadOnlyReasonSchema>;
 export type CollectionColumnSummary = z.infer<typeof CollectionColumnSummarySchema>;
+export type CollectionColumnCalculationSummary = z.infer<typeof CollectionColumnCalculationSummarySchema>;
 export type CollectionCitationHighlight = z.infer<typeof CollectionCitationHighlightSchema>;
 export type CollectionOpenCitationRequest = z.infer<typeof CollectionOpenCitationRequestSchema>;
 export type CollectionOpenCitationResult = z.infer<typeof CollectionOpenCitationResultSchema>;

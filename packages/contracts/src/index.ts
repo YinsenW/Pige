@@ -25,6 +25,8 @@ import type {
   CloudBoundary,
   CloudSendPolicy,
   ChangeOperation,
+  CollectionAddFormulaColumnRequest,
+  CollectionAddFormulaColumnResult,
   CollectionAddNullableColumnRequest,
   CollectionAddNullableColumnResult,
   CollectionCellEditRequest,
@@ -1703,6 +1705,9 @@ export interface PigeDesktopApi {
     readonly addNullableColumn: (
       request: CollectionAddNullableColumnRequest
     ) => Promise<CollectionAddNullableColumnResult>;
+    readonly addFormulaColumn: (
+      request: CollectionAddFormulaColumnRequest
+    ) => Promise<CollectionAddFormulaColumnResult>;
     readonly renameColumn: (
       request: CollectionRenameColumnRequest
     ) => Promise<CollectionRenameColumnResult>;

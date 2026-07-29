@@ -3833,6 +3833,27 @@ References:
 
 - `docs/API_AND_IPC_DESIGN.md`
 
+### D-20260729-Pige-Numeric-Formula-Columns
+
+Status: Accepted
+Date: 2026-07-29
+
+Decision:
+
+Persist formula ASTs on Dataset columns.
+
+Rationale:
+
+Empty-table truth fixes evaluation.
+
+Consequences:
+
+- Numeric inputs only; edits/rows are atomic and column Activity owns Undo.
+
+References:
+
+- `docs/DATA_ARCHITECTURE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
