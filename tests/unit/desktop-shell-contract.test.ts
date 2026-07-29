@@ -1096,6 +1096,7 @@ describe("desktop shell build contract", () => {
   });
 
   it("exposes scoped permission policy settings without duplicating the confirmation effect gate", () => {
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const permissionsStart = preloadSource.indexOf("permissions: {");
@@ -1119,6 +1120,9 @@ describe("desktop shell build contract", () => {
     for (const unsafeField of ["path", "body", "command", "bindingHash", "actorDigest", "resourceIdentityHash"]) {
       expect(preloadApi).not.toContain(unsafeField);
     }
+    expect(schemasSource).toContain('"yolo_full_access"');
+    expect(schemasSource).toContain("fullAccessAcknowledgement");
+    expect(schemasSource).toContain('status: z.literal("confirmation_required")');
   });
 
   it("exposes strict renderer-safe reviewed-task interaction IPC without private OAuth state", () => {

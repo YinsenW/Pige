@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { HighRiskConfirmationOwner } from "@pige/contracts";
 import {
   AddManualProviderRequestSchema,
   AddPresetProviderRequestSchema,
@@ -204,6 +205,31 @@ describe("security-sensitive shared contracts", () => {
       owner: packageTaskOwner
     })).toThrow();
 
+    const permissionPolicyOwner: HighRiskConfirmationOwner = {
+      kind: "permission_policy",
+      policyRequestId: "permissionpolicyreq_abcdefghijklmnop"
+    };
+    const fullAccessConfirmation = {
+      apiVersion: 1 as const,
+      confirmationId: "confirm_20260729_yolofullaccess1234",
+      effect: "authority_boundary_change" as const,
+      presentation: {
+        action: "change_authority_boundary" as const,
+        target: "authority_boundary" as const,
+        subject: { kind: "display_name" as const, value: "YOLO Full Access" }
+      },
+      owner: permissionPolicyOwner
+    };
+    expect(HighRiskConfirmationSummarySchema.parse(fullAccessConfirmation)).toEqual(fullAccessConfirmation);
+    expect(() => HighRiskConfirmationSummarySchema.parse({
+      ...fullAccessConfirmation,
+      owner: { ...permissionPolicyOwner, privatePath: "/private/policy.json" }
+    })).toThrow();
+    expect(() => HighRiskConfirmationSummarySchema.parse({
+      ...confirmation,
+      owner: permissionPolicyOwner
+    })).toThrow("authority-boundary");
+
     const externalWebConfirmation = {
       apiVersion: 1 as const,
       confirmationId: "confirm_20260729_externalwebread01",
@@ -252,6 +278,7 @@ describe("security-sensitive shared contracts", () => {
       apiVersion: 1 as const,
       revision: 4,
       invalidManifestCount: 1,
+      restorableSkills: [],
       skills: [{
         id: "paper-reading",
         name: "Paper Reading",

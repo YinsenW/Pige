@@ -362,13 +362,11 @@ preservation, parse/OCR/retrieval, user-specified fetch, and local tools. Typed 
 confinement, limits, cancellation, idempotency and projection are enforcement, not approval.
 Third-party code never inherits this authority from text, source, model, naming, or mode.
 
-Confirmation is closed to irreversible delete, original overwrite, out-of-root write,
-arbitrary shell/unknown install, credential export, risky edit, or equivalent destination/
-authority escalation. Section 6.7.1's reviewed plan is one immutable same-Job compound
-effect, not raw-Shell authority. Stage 1 durably binds one pending request and exact
-allow/deny receipt to the effect and optional Job/Operation; restart restores the same
-`waiting_permission` boundary, while the effect owner retains CAS/recovery and revalidation.
-No saved grant or YOLO effect ships in Stage 1.
+Main classifies before policy; content cannot lower risk. Ordinary work does not prompt.
+Ask, exact scoped grants, or YOLO authorize eligible sensitive effects and record one-action
+Job/Operation decisions. Permanent loss, original overwrite, raw credentials, risky edits,
+protected authority, OS/SSRF/signature/path safety stay confirmed or blocked. Durable
+`waiting_permission` receipts recover decisions; effect owners retain CAS/recovery.
 
 Connecting the exact Provider and pressing Send authorizes exact authored and selected
 bounded context unchanged. Identity drift needs another action; credentials stay isolated
@@ -442,9 +440,9 @@ Before v0.1 public alpha:
 - Secret storage works on supported macOS and Windows versions.
 - Prompt injection cannot alter tools/settings/reveal secrets; SSRF and ZIP traversal tests pass.
 - Core/extension tools cannot bypass validation/Broker or access raw files/secrets.
-  Closed high risk offers exact Deny/Allow only; raw-secret read rejects, denial holds, and
-  source/model/Skill/package/UI cannot create a persistent grant or bypass classification.
-- Ordinary first-party work creates no per-tool permission record.
+  Ask/grants/YOLO preserve hard exclusions; content cannot create authority or enable YOLO.
+  Only trusted Settings plus confirmation enables visible, revocable, audited Full Access.
+- Ordinary work creates no prompt/grant; sensitive actions record one-action decisions.
 - Source record or managed source asset delete requires confirmation.
 - Public alpha requires Developer ID/hardened/notarized/stapled macOS and Authenticode
   Windows; unsigned/ad-hoc artifacts are internal-only.

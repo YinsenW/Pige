@@ -495,21 +495,17 @@ Rules:
 
 UI copy should say "Stop" or "Cancel processing" for ongoing work and avoid implying already-preserved files will be deleted.
 
-## 10. High-Risk Decisions Remain Effect-Bound
+## 10. Durable Permission Decisions
 
-Only a Job already bound to an exact high-risk effect may enter `waiting_permission`.
-Main durably links its pending request and one-shot decision receipt to that Job and optional
-Operation, then restart adopts the same unresolved or decided boundary without minting a
-second decision. Ordinary registered first-party tools inherit the submitted turn;
-connected Provider identity plus Send owns ordinary cloud authorization, and denial
-executes nothing.
+Ordinary tools inherit Submit without prompts. Sensitive effects may enter
+`waiting_permission`; all modes resolve one-action receipts. Restart adopts only exact
+request/binding/Job/Operation identity, and denial executes nothing.
 
 Jobs may record Pi-selected work and recover the same turn, but must never become a Host
 semantic state machine or dispatch pipeline.
 
-The permission-policy store owns only durable pending/decision evidence; the effect owner
-still owns deterministic effect identity, checkpoint, CAS/idempotency, cancellation,
-commit, and recovery. If the app cannot prove
+Permission Policy stores decisions, not effects; effect owners retain identity, checkpoint,
+CAS/idempotency, cancellation, commit, and recovery. If the app cannot prove
 whether an irreversible effect committed, it fails closed and exposes repair; it does
 not mint new authority or replay the effect. Unpublished legacy waiting records may be
 cleared or rejected in AR1 rather than receiving a long-lived migration protocol.

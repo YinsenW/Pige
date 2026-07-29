@@ -213,6 +213,7 @@ import { listMarkdownTagCatalog } from "./services/markdown-page-index";
 import { LocalSettingsStore } from "./services/local-settings";
 import { ModelProviderRegistry } from "./services/model-provider-registry";
 import { PermissionBrokerService } from "./services/permission-broker-service";
+import { PermissionFullAccessService } from "./services/permission-full-access-service";
 import { PermissionPolicyStore } from "./services/permission-policy-store";
 import { PermissionPolicyRecordLink } from "./services/permission-policy-record-link";
 import {
@@ -315,6 +316,7 @@ let localDatabaseService: LocalDatabaseService | undefined;
 let modelProviderRegistry: ModelProviderRegistry | undefined;
 let highRiskConfirmationService: HighRiskConfirmationService | undefined;
 let permissionPolicyStore: PermissionPolicyStore | undefined;
+let permissionFullAccessService: PermissionFullAccessService | undefined;
 let permissionBrokerService: PermissionBrokerService | undefined;
 let permissionedExternalCapabilityRegistry: PermissionedExternalCapabilityRegistry | undefined;
 let firstPartyReadonlyNodeOsCapabilitiesRegistered = false;
@@ -651,6 +653,18 @@ const getHighRiskConfirmationService = (): HighRiskConfirmationService => {
     });
   }
   return highRiskConfirmationService;
+};
+
+const getPermissionFullAccessService = (): PermissionFullAccessService => {
+  if (!permissionFullAccessService) {
+    permissionFullAccessService = new PermissionFullAccessService({
+      store: getPermissionPolicyStore(),
+      confirmations: getHighRiskConfirmationService(),
+      activeVaultId: () => getVaultService().current()?.vaultId
+    });
+    permissionFullAccessService.restore();
+  }
+  return permissionFullAccessService;
 };
 
 const getSkillRegistryService = (): SkillRegistryService => {
@@ -2318,11 +2332,13 @@ registerSourceReconnectIpc({
   getReconnectService: () => new SourceOriginalReconnectService(getVaultService()),
   resumeBackgroundJobs
 });
-ipcMain.handle("confirmations.pending", () =>
-  HighRiskConfirmationPendingResultSchema.parse(getHighRiskConfirmationService().pending())
-);
+ipcMain.handle("confirmations.pending", () => {
+  getPermissionFullAccessService();
+  return HighRiskConfirmationPendingResultSchema.parse(getHighRiskConfirmationService().pending());
+});
 ipcMain.handle("confirmations.resolve", async (_event, request: HighRiskConfirmationResolveRequest) => {
   const parsed = HighRiskConfirmationResolveRequestSchema.parse(request);
+  getPermissionFullAccessService();
   return HighRiskConfirmationResolveResultSchema.parse(
     await getHighRiskConfirmationService().resolve(parsed)
   );
@@ -2344,10 +2360,12 @@ ipcMain.handle(PERMISSIONS_SET_DEFAULT_MODE_CHANNEL, (_event, request: Permissio
   const parsed = PermissionSetDefaultModeRequestSchema.parse(request);
   try {
     if (getVaultService().current()?.vaultId !== parsed.activeVaultId) throw new Error("stale vault");
-    const status = getPermissionPolicyStore().setDefaultMode(parsed.expectedRevision, parsed.mode);
+    const outcome = parsed.mode === "yolo_full_access"
+      ? getPermissionFullAccessService().request(parsed)
+      : { status: getPermissionPolicyStore().setDefaultMode(parsed.expectedRevision, parsed.mode) } as const;
     return PermissionSetDefaultModeResultSchema.parse({
       ...parsed,
-      status,
+      ...outcome,
       summary: getPermissionPolicyStore().summary(parsed.activeVaultId)
     });
   } catch {

@@ -70,12 +70,12 @@ a Pige cloud service; other network features still disclose their boundary.
   credentials remain confined to the secret store and authentication header.
 - Skills and packages are untrusted until reviewed and cannot acquire first-party turn
   authority through prompt text, naming, source content, or model output.
-- Pige asks only for a closed high-risk effect: irreversible deletion, overwrite of a
-  user-owned original, out-of-root write, arbitrary shell or unknown-package install,
-  credential export/display, risky Agent edit, or equivalent authority escalation.
-- One-shot high-risk pending requests and allow/deny receipts are machine-local policy
-  evidence, excluded from Vault backup and sync. Stage 1 adds no saved-grant or YOLO effect;
-  raw secret access remains non-grantable and OS privacy/security controls remain in force.
+- Pige avoids prompts for ordinary bounded work. Ask Every Time, scoped grants, or YOLO
+  may authorize sensitive work; YOLO suppresses eligible Shell/write/network/install prompts.
+- Every effect remains validated and logged. Raw secrets, permanent loss, original overwrite,
+  risky edits, protected authority, OS/SSRF/signature/path safety remain confirmed or blocked.
+  One-shot pending requests, decisions, grants, and mode are machine-local policy evidence
+  excluded from Vault backup and sync.
 
 ## Backups And Restore
 

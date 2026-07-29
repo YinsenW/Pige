@@ -6,6 +6,7 @@ import { PermissionPolicyStore } from "../../apps/desktop/src/main/services/perm
 
 const roots: string[] = [];
 const REQUEST_ID = "permreq_20260729_0123456789abcdef0123456789abcdef";
+const POLICY_REQUEST_ID = "permissionpolicyreq_20260729fullaccess";
 const BINDING_DIGEST = `sha256:${"a".repeat(64)}` as const;
 const CONFIRMATION = {
   apiVersion: 1 as const,
@@ -169,6 +170,48 @@ describe("PermissionPolicyStore", () => {
     const linked = path.join(root, "linked");
     fs.symlinkSync(outside, linked, "dir");
     expect(() => new PermissionPolicyStore(linked, vi.fn())).toThrow(/permission policy state/u);
+  });
+
+  it("enables Full Access only from the latest exact user decision and disables it directly", () => {
+    const root = temporaryRoot();
+    const now = vi.fn(() => "2026-07-29T12:00:00.000Z");
+    const store = new PermissionPolicyStore(root, vi.fn(), now);
+    expect(store.prepareFullAccessActivation({
+      expectedRevision: 0,
+      requestId: POLICY_REQUEST_ID,
+      activeVaultId: "vault_20260729_permission01",
+      confirmationId: CONFIRMATION.confirmationId
+    })).toBe("registered");
+    const registered = store.register({
+      requestId: REQUEST_ID,
+      bindingDigest: BINDING_DIGEST,
+      confirmation: CONFIRMATION
+    });
+    if (registered.status !== "registered") throw new Error("Expected registration.");
+    expect(store.commitDecision({
+      requestId: REQUEST_ID,
+      bindingDigest: BINDING_DIGEST,
+      confirmationId: CONFIRMATION.confirmationId,
+      expectedRevision: registered.snapshot.pending!.revision,
+      decision: "allow"
+    }).status).toBe("committed");
+    expect(store.finishFullAccessDecision("confirm_20260729_wrongidentity123", "allow")).toBe("stale");
+    expect(store.finishFullAccessDecision(CONFIRMATION.confirmationId, "allow")).toBe("committed");
+    expect(store.summary("vault_20260729_permission01")).toMatchObject({
+      revision: 4,
+      defaultMode: "yolo_full_access",
+      fullAccess: { enabled: true, enabledAt: "2026-07-29T12:00:00.000Z", canDisable: true },
+      grants: []
+    });
+
+    const restarted = new PermissionPolicyStore(root, vi.fn(), now);
+    expect(restarted.finishFullAccessDecision(CONFIRMATION.confirmationId, "allow")).toBe("committed");
+    expect(restarted.setDefaultMode(4, "ask_every_time")).toBe("committed");
+    expect(restarted.summary("vault_20260729_permission01")).toMatchObject({
+      revision: 5,
+      defaultMode: "ask_every_time",
+      fullAccess: { enabled: false, canEnable: true }
+    });
   });
 });
 

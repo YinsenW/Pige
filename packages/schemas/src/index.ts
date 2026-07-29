@@ -886,6 +886,10 @@ export const HighRiskConfirmationOwnerSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("pi_package_install_task"),
     taskId: PiPackageInstallTaskIdSchema
+  }).strict(),
+  z.object({
+    kind: z.literal("permission_policy"),
+    policyRequestId: PermissionPolicyRequestIdSchema
   }).strict()
 ]);
 const HighRiskConfirmationSummaryBaseSchema = z.object({
@@ -982,6 +986,13 @@ export const HighRiskConfirmationSummarySchema = z.discriminatedUnion("effect", 
     context.addIssue({
       code: "custom",
       message: "Pi package install tasks may own only exact package-install confirmation.",
+      path: ["owner"]
+    });
+  }
+  if (summary.owner.kind === "permission_policy" && summary.effect !== "authority_boundary_change") {
+    context.addIssue({
+      code: "custom",
+      message: "Permission policy requests may own only exact authority-boundary confirmation.",
       path: ["owner"]
     });
   }
@@ -2603,7 +2614,47 @@ export const PERMISSIONS_CHANGED_CHANNEL = "permissions.changed" as const;
 
 export const PermissionDefaultModeSchema = z.enum([
   "ask_every_time",
-  "remember_scoped_grants"
+  "remember_scoped_grants",
+  "yolo_full_access"
+]);
+
+export const PERMISSION_YOLO_HARD_BOUNDARIES = [
+  "permanent_delete",
+  "overwrite_user_original",
+  "raw_credential_export",
+  "risky_agent_edit",
+  "protected_authority_change",
+  "os_permission",
+  "ssrf_private_network",
+  "signature_verification",
+  "filesystem_safety"
+] as const;
+
+export const PermissionYoloHardBoundarySchema = z.enum(PERMISSION_YOLO_HARD_BOUNDARIES);
+const PermissionYoloHardBoundariesSchema = z.tuple([
+  z.literal("permanent_delete"),
+  z.literal("overwrite_user_original"),
+  z.literal("raw_credential_export"),
+  z.literal("risky_agent_edit"),
+  z.literal("protected_authority_change"),
+  z.literal("os_permission"),
+  z.literal("ssrf_private_network"),
+  z.literal("signature_verification"),
+  z.literal("filesystem_safety")
+]);
+
+export const PermissionFullAccessSummarySchema = z.discriminatedUnion("enabled", [
+  z.object({
+    enabled: z.literal(false),
+    canEnable: z.boolean(),
+    hardBoundaries: PermissionYoloHardBoundariesSchema
+  }).strict(),
+  z.object({
+    enabled: z.literal(true),
+    enabledAt: z.string().datetime({ offset: true }),
+    canDisable: z.literal(true),
+    hardBoundaries: PermissionYoloHardBoundariesSchema
+  }).strict()
 ]);
 
 export const PermissionGrantSummarySchema = z.object({
@@ -2626,12 +2677,21 @@ export const PermissionPolicySummarySchema = z.object({
   activeVaultId: VaultIdSchema,
   revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   defaultMode: PermissionDefaultModeSchema,
+  fullAccess: PermissionFullAccessSummarySchema,
   grants: z.array(PermissionGrantSummarySchema).max(64).refine(
     (grants) => new Set(grants.map((grant) => grant.grantId)).size === grants.length,
     "Permission grant IDs must be unique."
   ),
   invalidGrantCount: z.number().int().nonnegative().max(10_000)
-}).strict();
+}).strict().superRefine((summary, context) => {
+  if ((summary.defaultMode === "yolo_full_access") !== summary.fullAccess.enabled) {
+    context.addIssue({
+      code: "custom",
+      path: ["fullAccess", "enabled"],
+      message: "Full Access enabled state must exactly match the default permission mode."
+    });
+  }
+});
 
 const PermissionPolicyRequestIdentitySchema = z.object({
   apiVersion: z.literal(1),
@@ -2650,11 +2710,30 @@ export const PermissionPolicySummaryResultSchema = z.discriminatedUnion("status"
 
 export const PermissionSetDefaultModeRequestSchema = PermissionPolicyRequestIdentitySchema.extend({
   expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  mode: PermissionDefaultModeSchema
-}).strict();
+  mode: PermissionDefaultModeSchema,
+  fullAccessAcknowledgement: z.object({
+    kind: z.literal("yolo_full_access"),
+    explicitUserAction: z.literal(true),
+    hardBoundariesAcknowledged: z.literal(true)
+  }).strict().optional()
+}).strict().superRefine((request, context) => {
+  if ((request.mode === "yolo_full_access") !== (request.fullAccessAcknowledgement !== undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: ["fullAccessAcknowledgement"],
+      message: "YOLO Full Access requires one exact explicit user acknowledgement."
+    });
+  }
+});
 export const PermissionSetDefaultModeResultSchema = z.discriminatedUnion("status", [
   PermissionPolicyRequestIdentitySchema.extend({
     status: z.enum(["committed", "stale"]),
+    summary: PermissionPolicySummarySchema
+  }).strict(),
+  PermissionPolicyRequestIdentitySchema.extend({
+    status: z.literal("confirmation_required"),
+    confirmationId: HighRiskConfirmationIdSchema,
+    confirmationRevision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
     summary: PermissionPolicySummarySchema
   }).strict(),
   PermissionPolicyRequestIdentitySchema.extend({ status: z.literal("failed") }).strict()
@@ -8159,6 +8238,7 @@ export type PermissionDecisionId = z.infer<typeof PermissionDecisionIdSchema>;
 export type PermissionDecisionRecord = z.infer<typeof PermissionDecisionRecordSchema>;
 export type PermissionDecisionScope = z.infer<typeof PermissionDecisionScopeSchema>;
 export type PermissionDefaultMode = z.infer<typeof PermissionDefaultModeSchema>;
+export type PermissionFullAccessSummary = z.infer<typeof PermissionFullAccessSummarySchema>;
 export type PermissionGrantContextId = z.infer<typeof PermissionGrantContextIdSchema>;
 export type PermissionGrantId = z.infer<typeof PermissionGrantIdSchema>;
 export type PermissionGrantSummary = z.infer<typeof PermissionGrantSummarySchema>;
@@ -8171,6 +8251,7 @@ export type PermissionRevokeGrantResult = z.infer<typeof PermissionRevokeGrantRe
 export type PermissionRequestId = z.infer<typeof PermissionRequestIdSchema>;
 export type PermissionSetDefaultModeRequest = z.infer<typeof PermissionSetDefaultModeRequestSchema>;
 export type PermissionSetDefaultModeResult = z.infer<typeof PermissionSetDefaultModeResultSchema>;
+export type PermissionYoloHardBoundary = z.infer<typeof PermissionYoloHardBoundarySchema>;
 export type ExternalWebSkillRuntimeIdentity = z.infer<typeof ExternalWebSkillRuntimeIdentitySchema>;
 export type ExternalWebSkillRuntimeTurnBinding = z.infer<typeof ExternalWebSkillRuntimeTurnBindingSchema>;
 export type ExternalWebSkillRuntimeCall = z.infer<typeof ExternalWebSkillRuntimeCallSchema>;

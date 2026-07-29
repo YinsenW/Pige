@@ -9,7 +9,10 @@ import {
   PermissionActionBindingSchema,
   PermissionDecisionRecordSchema,
   PermissionGrantContextIdSchema,
-  PermissionRequestIdSchema
+  PERMISSION_YOLO_HARD_BOUNDARIES,
+  PermissionPolicyRequestIdSchema,
+  PermissionRequestIdSchema,
+  VaultIdSchema
 } from "@pige/schemas";
 import { z } from "zod";
 import { hasErrorInstanceCode as isErrno } from "./object-error-code";
@@ -17,6 +20,7 @@ import {
   PermissionPolicyDefaultModeRecordSchema,
   PermissionPolicyGrantCandidateSchema,
   PermissionPolicyGrantRecordSchema,
+  isPermissionPolicyAutoAllowEligible,
   permissionGrantMatches,
   projectPermissionGrant,
   type PermissionPolicyGrantCandidate
@@ -44,14 +48,27 @@ const DecisionReceiptSchema = PermissionDecisionRecordSchema.extend({
   revision: z.number().int().positive(),
 }).strict();
 
+const FullAccessActivationSchema = z.object({
+  requestId: PermissionPolicyRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  confirmationId: z.string().regex(/^confirm_\d{8}_[a-z0-9]{16,64}$/u),
+  baseRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+
 const PermissionPolicyRecordSchema = z.object({
   schemaVersion: z.literal(1),
   revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   defaultMode: PermissionPolicyDefaultModeRecordSchema,
+  fullAccessEnabledAt: z.string().datetime({ offset: true }).optional(),
+  fullAccessActivation: FullAccessActivationSchema.optional(),
   grants: z.array(PermissionPolicyGrantRecordSchema).max(64),
   pending: PendingRequestSchema.optional(),
   receipts: z.array(DecisionReceiptSchema).max(MAX_RECEIPTS)
-}).strict();
+}).strict().superRefine((record, context) => {
+  if ((record.defaultMode === "yolo_full_access") !== (record.fullAccessEnabledAt !== undefined)) {
+    context.addIssue({ code: "custom", path: ["fullAccessEnabledAt"], message: "Full Access state is inconsistent." });
+  }
+});
 
 export interface PermissionPolicyDecisionReceipt {
   readonly state: "decided";
@@ -73,7 +90,9 @@ export interface PermissionPolicyDecisionReceipt {
 
 export interface PermissionPolicySnapshot {
   readonly revision: number;
-  readonly defaultMode: "ask_every_time" | "remember_scoped_grants";
+  readonly defaultMode: "ask_every_time" | "remember_scoped_grants" | "yolo_full_access";
+  readonly fullAccessEnabledAt?: string;
+  readonly fullAccessActivation?: z.infer<typeof FullAccessActivationSchema>;
   readonly grants: readonly ReturnType<typeof projectPermissionGrant>[];
   readonly invalidGrantCount: number;
   readonly pending?: {
@@ -164,6 +183,18 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
       activeVaultId,
       revision: snapshot.revision,
       defaultMode: snapshot.defaultMode,
+      fullAccess: snapshot.fullAccessEnabledAt
+        ? {
+            enabled: true,
+            enabledAt: snapshot.fullAccessEnabledAt,
+            canDisable: true,
+            hardBoundaries: [...PERMISSION_YOLO_HARD_BOUNDARIES]
+          }
+        : {
+            enabled: false,
+            canEnable: snapshot.fullAccessActivation === undefined,
+            hardBoundaries: [...PERMISSION_YOLO_HARD_BOUNDARIES]
+          },
       grants: [...snapshot.grants],
       invalidGrantCount: snapshot.invalidGrantCount
     };
@@ -171,13 +202,14 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
 
   setDefaultMode(expectedRevision: number, mode: "ask_every_time" | "remember_scoped_grants"): "committed" | "stale" {
     const current = this.#readRecord();
-    if (current.revision !== expectedRevision) return "stale";
+    if (current.revision !== expectedRevision || current.fullAccessActivation) return "stale";
     if (current.defaultMode === mode) return "committed";
     const revision = nextRevision(current.revision);
     const next = PermissionPolicyRecordSchema.parse({
       ...current,
       revision,
       defaultMode: mode,
+      fullAccessEnabledAt: undefined,
       ...(mode === "ask_every_time" ? {
         grants: [],
         ...(current.pending ? {
@@ -190,6 +222,64 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
       } : {})
     });
     this.#write(next);
+    return "committed";
+  }
+
+  prepareFullAccessActivation(input: {
+    readonly expectedRevision: number;
+    readonly requestId: string;
+    readonly activeVaultId: string;
+    readonly confirmationId: string;
+  }): "registered" | "restored" | "stale" | "busy" {
+    const activation = FullAccessActivationSchema.parse({
+      requestId: input.requestId,
+      activeVaultId: input.activeVaultId,
+      confirmationId: input.confirmationId,
+      baseRevision: input.expectedRevision
+    });
+    const current = this.#readRecord();
+    if (current.fullAccessActivation) {
+      return canonicalJson(current.fullAccessActivation) === canonicalJson(activation) ? "restored" : "busy";
+    }
+    if (current.revision !== input.expectedRevision || current.pending || current.defaultMode === "yolo_full_access") {
+      return "stale";
+    }
+    this.#write(PermissionPolicyRecordSchema.parse({
+      ...current,
+      revision: nextRevision(current.revision),
+      fullAccessActivation: activation
+    }));
+    return "registered";
+  }
+
+  finishFullAccessDecision(confirmationId: string, decision: "allow" | "deny"): "committed" | "stale" {
+    const current = this.#readRecord();
+    if (current.defaultMode === "yolo_full_access" && !current.fullAccessActivation) {
+      return decision === "allow" ? "committed" : "stale";
+    }
+    const activation = current.fullAccessActivation;
+    const receipt = current.receipts.at(-1);
+    if (
+      current.pending ||
+      !activation ||
+      activation.confirmationId !== confirmationId ||
+      !receipt ||
+      receipt.confirmationId !== confirmationId ||
+      receipt.revision !== current.revision ||
+      receipt.decision !== (decision === "allow" ? "allow_once" : "deny") ||
+      receipt.decidedBy !== "user" ||
+      receipt.autoAllowedBy !== "none"
+    ) return "stale";
+    this.#write(PermissionPolicyRecordSchema.parse({
+      ...current,
+      revision: nextRevision(current.revision),
+      fullAccessActivation: undefined,
+      ...(decision === "allow" ? {
+        defaultMode: "yolo_full_access",
+        fullAccessEnabledAt: this.#now(),
+        grants: []
+      } : {})
+    }));
     return "committed";
   }
 
@@ -320,8 +410,14 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
         ? { status: "already_resolved", receipt: existing, snapshot: projectSnapshot(current) }
         : { status: "stale", snapshot: projectSnapshot(current) };
     }
-    if (current.defaultMode !== "remember_scoped_grants" ||
-      !current.grants.some((grant) => permissionGrantMatches(grant, binding, this.#now()))) {
+    const autoAllowedBy = current.defaultMode === "yolo_full_access" &&
+      isPermissionPolicyAutoAllowEligible(binding, confirmation)
+      ? "yolo_full_access" as const
+      : current.defaultMode === "remember_scoped_grants" &&
+        current.grants.some((grant) => permissionGrantMatches(grant, binding, this.#now()))
+        ? "saved_grant" as const
+        : undefined;
+    if (!autoAllowedBy) {
       return { status: "not_found", snapshot: projectSnapshot(current) };
     }
     const revision = nextRevision(current.revision);
@@ -337,7 +433,7 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
       decision: "allow_once",
       scope: "once",
       decidedBy: "system",
-      autoAllowedBy: "saved_grant",
+      autoAllowedBy,
       jobId: binding.jobId,
       ...(confirmation.owner.kind === "operation" ? { operationId: confirmation.owner.operationId } : {}),
       decidedAt: this.#now()
@@ -438,6 +534,8 @@ function projectSnapshot(record: PermissionPolicyRecord): PermissionPolicySnapsh
   return {
     revision: record.revision,
     defaultMode: record.defaultMode,
+    ...(record.fullAccessEnabledAt ? { fullAccessEnabledAt: record.fullAccessEnabledAt } : {}),
+    ...(record.fullAccessActivation ? { fullAccessActivation: record.fullAccessActivation } : {}),
     grants: validGrants.map(projectPermissionGrant),
     invalidGrantCount: record.grants.length - validGrants.length,
     ...(record.pending ? {

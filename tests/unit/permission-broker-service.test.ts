@@ -260,6 +260,135 @@ describe("PermissionBrokerService AR1 authority", () => {
     }
   });
 
+  it("auto-authorizes eligible Full Access effects but retains every hard confirmation boundary", () => {
+    const fixture = createFixture(true);
+    const policyRoot = path.join(path.dirname(fixture.machineRoot), "policy");
+    fs.mkdirSync(policyRoot, { mode: 0o700 });
+    const store = new PermissionPolicyStore(policyRoot, vi.fn(), () => "2026-07-29T12:00:00.000Z");
+    const confirmations = new HighRiskConfirmationService(store);
+    const broker = new PermissionBrokerService({
+      rootPath: fixture.machineRoot,
+      unsafeAllowUnfenced: true,
+      confirmations
+    });
+    const seedBinding = binding();
+    const seedConfirmation = {
+      apiVersion: 1 as const,
+      confirmationId: "confirm_20260729_yolofullaccess1234",
+      effect: "arbitrary_shell" as const,
+      presentation: {
+        action: "run_shell_command" as const,
+        target: "local_system" as const,
+        subject: { kind: "executable_name" as const, value: "node" }
+      },
+      owner: OWNER
+    };
+    expect(store.prepareFullAccessActivation({
+      expectedRevision: 0,
+      requestId: "permissionpolicyreq_20260729fullaccess",
+      activeVaultId: VAULT_ID,
+      confirmationId: seedConfirmation.confirmationId
+    })).toBe("registered");
+    const registration = store.register({
+      requestId: "permreq_20260729_abcdefabcdefabcdefabcdefabcd",
+      bindingDigest: seedBinding.bindingHash,
+      jobId: seedBinding.jobId,
+      confirmation: seedConfirmation
+    });
+    if (registration.status !== "registered") throw new Error("Expected registration.");
+    store.commitDecision({
+      requestId: "permreq_20260729_abcdefabcdefabcdefabcdefabcd",
+      bindingDigest: seedBinding.bindingHash,
+      confirmationId: seedConfirmation.confirmationId,
+      expectedRevision: registration.snapshot.pending!.revision,
+      decision: "allow"
+    });
+    expect(store.finishFullAccessDecision(seedConfirmation.confirmationId, "allow")).toBe("committed");
+
+    const ordinary = binding({
+      capability: "run_shell",
+      dataBoundary: "local",
+      actionInputHash: digest("full access ordinary")
+    });
+    expect(broker.authorizeTurnAction({
+      vaultPath: fixture.vaultPath,
+      binding: ordinary,
+      owner: OWNER,
+      resolveHighRisk: () => "committed",
+      highRisk: {
+        effect: "arbitrary_shell",
+        presentation: seedConfirmation.presentation
+      }
+    })).toEqual({ status: "authorized", binding: ordinary });
+    expect(store.read().receipts.at(-1)).toMatchObject({
+      autoAllowedBy: "yolo_full_access",
+      decision: "allow_once"
+    });
+
+    const hardBoundaries = [
+      {
+        binding: binding({ capability: "change_pige_schema", actionInputHash: digest("protected authority") }),
+        highRisk: {
+          effect: "authority_boundary_change" as const,
+          presentation: {
+            action: "change_authority_boundary" as const,
+            target: "authority_boundary" as const,
+            subject: { kind: "display_name" as const, value: "Protected settings" }
+          }
+        }
+      },
+      {
+        binding: binding({ capability: "external_filesystem", dataBoundary: "filesystem", actionInputHash: digest("overwrite") }),
+        highRisk: {
+          effect: "overwrite_user_original" as const,
+          presentation: {
+            action: "overwrite_original" as const,
+            target: "user_owned_original" as const,
+            subject: { kind: "display_name" as const, value: "Original file" }
+          }
+        }
+      },
+      {
+        binding: binding({ capability: "external_filesystem", dataBoundary: "filesystem", actionInputHash: digest("external write") }),
+        highRisk: {
+          effect: "write_outside_authorized_root" as const,
+          presentation: {
+            action: "write_external_item" as const,
+            target: "external_location" as const,
+            subject: { kind: "display_name" as const, value: "External folder" }
+          }
+        }
+      },
+      {
+        binding: binding({ capability: "use_brokered_credential", dataBoundary: "brokered_credential", actionInputHash: digest("secret") }),
+        highRisk: {
+          effect: "export_secret" as const,
+          presentation: {
+            action: "export_credential" as const,
+            target: "credential_material" as const,
+            subject: { kind: "display_name" as const, value: "Credential" }
+          }
+        }
+      }
+    ];
+    for (const [index, candidate] of hardBoundaries.entries()) {
+      expect(broker.authorizeTurnAction({
+        vaultPath: fixture.vaultPath,
+        binding: candidate.binding,
+        owner: OWNER,
+        resolveHighRisk: () => "committed",
+        highRisk: candidate.highRisk
+      }), `hard boundary ${index}`).toMatchObject({ status: "confirmation_required" });
+      const pending = confirmations.pending();
+      if (pending.status !== "pending") throw new Error("Expected a hard-boundary confirmation.");
+      confirmations.withdraw({
+        confirmationId: pending.confirmation.confirmationId,
+        expectedRevision: pending.revision,
+        owner: pending.confirmation.owner
+      });
+    }
+  });
+
   it("fails closed when the canonical confirmation owner is not wired", () => {
     const fixture = createFixture(false);
     expect(() => fixture.broker.authorizeTurnAction({
