@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { IpcMain, IpcMainInvokeEvent, WebContents } from "electron";
 import { registerReaderIpc } from "../../apps/desktop/src/main/register-reader-ipc";
 import type { NotesService } from "../../apps/desktop/src/main/services/notes-service";
+import type { ReaderSourceRevealService } from "../../apps/desktop/src/main/services/reader-source-reveal-service";
 
 type IpcHandler = (event: IpcMainInvokeEvent, request?: unknown) => unknown;
 
@@ -16,7 +17,7 @@ function makeSender(id: number): WebContents {
   } as unknown as WebContents;
 }
 
-function makeHarness(notes: Partial<NotesService>) {
+function makeHarness(notes: Partial<NotesService>, revealService?: Partial<ReaderSourceRevealService>) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
     ipcMain: {
@@ -33,6 +34,10 @@ function makeHarness(notes: Partial<NotesService>) {
     },
     getReaderSelectionCreateNoteService: () => {
       throw new Error("Reader create-note service was not expected.");
+    },
+    getReaderSourceRevealService: () => {
+      if (revealService) return revealService as ReaderSourceRevealService;
+      throw new Error("Reader source reveal service was not expected.");
     }
   });
   return handlers;
@@ -48,6 +53,7 @@ describe("registerReaderIpc", () => {
       "notes.saveEditor",
       "notes.resolveInlineReference",
       "notes.openSourceReference",
+      "notes.revealSource",
       "readerSelection.resolve",
       "readerSelection.submitAction",
       "readerSelection.submitLink",
@@ -292,5 +298,38 @@ describe("registerReaderIpc", () => {
       renderContextId: "notectx_0123456789abcdef0123456789abcdef",
       sourceId: "src_20260709_source1234"
     })).toThrow();
+  });
+
+  it("binds source reveal to the tracked Reader owner and strict result identity", async () => {
+    const render = vi.fn().mockResolvedValue({
+      summary: {
+        pageId: "page_20260729_current1234", title: "Current", pageType: "note",
+        pagePath: "wiki/current.md", sourceIds: ["src_20260729_source1234"],
+        status: "active", updatedAt: "2026-07-29T12:00:00.000Z"
+      },
+      html: "<p>Current</p>", byteSize: 7,
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef"
+    });
+    const reveal = vi.fn(async (_ownerId: string, request: unknown) => ({
+      ...(request as object), status: "revealed"
+    }));
+    const handlers = makeHarness({ render } as Partial<NotesService>, { reveal });
+    const sender = makeSender(15);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, {
+      pageId: "page_20260729_current1234"
+    });
+    const request = {
+      apiVersion: 1, requestId: "notesourcereveal_abcdefghijklmnop",
+      activeVaultId: "vault_20260729_abcdefgh",
+      currentPageId: "page_20260729_current1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      sourceId: "src_20260729_source1234"
+    } as const;
+
+    await expect(handlers.get("notes.revealSource")!({ sender } as IpcMainInvokeEvent, request))
+      .resolves.toEqual({ ...request, status: "revealed" });
+    expect(reveal).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
+    await expect(handlers.get("notes.revealSource")!({ sender: makeSender(16) } as IpcMainInvokeEvent, request))
+      .resolves.toEqual({ ...request, status: "stale" });
   });
 });

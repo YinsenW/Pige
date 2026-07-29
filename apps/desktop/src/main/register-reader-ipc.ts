@@ -7,6 +7,7 @@ import type {
   NoteEditorSaveRequest,
   NoteEditorSaveResult,
   NoteOpenSourceReferenceRequest,
+  NoteRevealSourceRequest,
   NoteRenderRequest,
   NoteResolveInlineReferenceRequest,
   ReaderSelectionActionRequest,
@@ -24,6 +25,8 @@ import {
   NoteEditorSaveResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
+  NoteRevealSourceRequestSchema,
+  NoteRevealSourceResultSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
   ReaderSelectionActionRequestSchema,
@@ -46,6 +49,7 @@ import type { NotesService } from "./services/notes-service";
 import type { ReaderSelectionActionService } from "./services/reader-selection-action-service";
 import type { ReaderSelectionProposalService } from "./services/reader-selection-proposal-service";
 import type { ReaderSelectionCreateNoteActionService } from "./services/reader-selection-create-note-service";
+import type { ReaderSourceRevealService } from "./services/reader-source-reveal-service";
 
 interface RegisterReaderIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
@@ -53,6 +57,7 @@ interface RegisterReaderIpcOptions {
   readonly getReaderSelectionActionService: () => ReaderSelectionActionService;
   readonly getReaderSelectionProposalService: () => ReaderSelectionProposalService;
   readonly getReaderSelectionCreateNoteService: () => ReaderSelectionCreateNoteActionService;
+  readonly getReaderSourceRevealService: () => ReaderSourceRevealService;
 }
 
 function failedEditorOpen(request: NoteEditorOpenRequest): NoteEditorOpenResult {
@@ -180,6 +185,15 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       ownerId === undefined
         ? { apiVersion: 1, requestId: parsed.requestId, status: "stale" }
         : options.getNotesService().openSourceReference(ownerId, parsed)
+    );
+  });
+  options.ipcMain.handle("notes.revealSource", async (event, request: NoteRevealSourceRequest) => {
+    const parsed = NoteRevealSourceRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    return NoteRevealSourceResultSchema.parse(
+      ownerId === undefined || event.sender.isDestroyed()
+        ? { ...parsed, status: "stale" }
+        : await options.getReaderSourceRevealService().reveal(ownerId, parsed)
     );
   });
   options.ipcMain.handle("readerSelection.resolve", (event, request: ReaderSelectionResolveRequest) => {
