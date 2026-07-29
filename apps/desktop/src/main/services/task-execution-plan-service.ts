@@ -222,10 +222,14 @@ export function createTaskExecutionPlanConfirmation(
         },
         owner
       }, (decision) => {
-        signal?.removeEventListener("abort", onAbort);
-        resolve(decision);
-        return "committed";
-      });
+        return {
+          status: "committed" as const,
+          continueEffect: () => {
+            signal?.removeEventListener("abort", onAbort);
+            resolve(decision);
+          }
+        };
+      }, binding.planDigest, binding.jobId);
       revision = registration.revision;
       if (registration.status === "busy") {
         reject(new PigeDomainError("permission.confirmation_busy", "Another high-risk effect is awaiting confirmation."));

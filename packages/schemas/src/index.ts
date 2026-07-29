@@ -398,6 +398,8 @@ export const ProposalIdSchema = z.string().regex(/^proposal_\d{8}_[a-z0-9]{8,}$/
 export const OperationIdSchema = z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/);
 
 export const HighRiskConfirmationIdSchema = z.string().regex(/^confirm_\d{8}_[a-z0-9]{16,64}$/);
+export const PermissionRequestIdSchema = z.string().regex(/^permreq_\d{8}_[a-z0-9]{16,64}$/);
+export const PermissionDecisionIdSchema = z.string().regex(/^permdec_\d{8}_[a-z0-9]{16,64}$/);
 export const PiPackageInstallTaskIdSchema = z.string()
   .regex(/^pi_package_task_[a-z0-9]{16,64}$/u);
 export const TaskExecutionPlanIdSchema = z.string()
@@ -2503,6 +2505,75 @@ export const PermissionActionBindingSchema = z.object({
   clientCapabilityTier: z.enum(["desktop_full", "web_client", "mobile_lite"]),
   bindingHash: PermissionSha256HashSchema
 }).strict();
+
+export const PermissionDecisionScopeSchema = z.enum([
+  "once",
+  "actor_version",
+  "resource_scope",
+  "profile_default",
+  "never"
+]);
+
+export const PermissionDecisionRecordSchema = z.object({
+  id: PermissionDecisionIdSchema,
+  schemaVersion: z.literal(1),
+  permissionRequestId: PermissionRequestIdSchema,
+  confirmationId: HighRiskConfirmationIdSchema,
+  confirmationRevision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  bindingHash: PermissionSha256HashSchema,
+  decision: z.enum(["deny", "allow_once", "allow_scoped"]),
+  scope: PermissionDecisionScopeSchema,
+  decidedBy: z.enum(["user", "system"]),
+  autoAllowedBy: z.enum(["none", "saved_grant", "yolo_full_access"]),
+  jobId: JobIdSchema.optional(),
+  operationId: OperationIdSchema.optional(),
+  decidedAt: z.string().datetime({ offset: true })
+}).strict().superRefine((decision, context) => {
+  if (decision.decision === "deny" && decision.scope !== "never") {
+    context.addIssue({
+      code: "custom",
+      path: ["scope"],
+      message: "A denial must use the never decision scope."
+    });
+  }
+  if (decision.decision === "allow_once" && decision.scope !== "once") {
+    context.addIssue({
+      code: "custom",
+      path: ["scope"],
+      message: "An allow-once decision must use the once decision scope."
+    });
+  }
+  if (decision.decision === "allow_scoped" && ["once", "never"].includes(decision.scope)) {
+    context.addIssue({
+      code: "custom",
+      path: ["scope"],
+      message: "A scoped allow must use actor_version, resource_scope, or profile_default scope."
+    });
+  }
+  if (decision.decision === "deny" && decision.autoAllowedBy !== "none") {
+    context.addIssue({
+      code: "custom",
+      path: ["autoAllowedBy"],
+      message: "A denial cannot be auto-allowed."
+    });
+  }
+  if (decision.autoAllowedBy !== "none" && (
+    decision.decidedBy !== "system" || decision.decision !== "allow_once"
+  )) {
+    context.addIssue({
+      code: "custom",
+      path: ["autoAllowedBy"],
+      message: "Saved grants and YOLO may authorize only one system-recorded action."
+    });
+  }
+  if (decision.decidedBy === "system" && decision.decision !== "deny" && decision.autoAllowedBy === "none") {
+    context.addIssue({
+      code: "custom",
+      path: ["autoAllowedBy"],
+      message: "A system allow must identify the saved grant or YOLO mode that authorized it."
+    });
+  }
+});
 
 export const ExternalWebSkillRuntimeIdentitySchema = z.object({
   kind: z.literal("external_web"),
@@ -5890,6 +5961,7 @@ export const JobStateSchema = z.enum([
   "queued",
   "running",
   "waiting_dependency",
+  "waiting_permission",
   "awaiting_review",
   "cancel_requested",
   "completed",
@@ -7001,6 +7073,14 @@ export const JobRecordSchema = z.object({
   policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
   inputRefs: z.array(JobRefSchema).optional(),
   outputRefs: z.array(JobRefSchema).optional(),
+  permissionRequestIds: z.array(PermissionRequestIdSchema).max(32).refine(
+    (ids) => new Set(ids).size === ids.length,
+    "Permission request IDs must be unique."
+  ).optional(),
+  permissionDecisionIds: z.array(PermissionDecisionIdSchema).max(32).refine(
+    (ids) => new Set(ids).size === ids.length,
+    "Permission decision IDs must be unique."
+  ).optional(),
   proposalIds: z.array(ProposalIdSchema).optional(),
   operationIds: z.array(OperationIdSchema).optional(),
   checkpoints: z.array(JobCheckpointSchema).optional(),
@@ -7227,6 +7307,10 @@ export const OperationRecordSchema = z.object({
   modelProfileId: z.string().regex(/^model_[a-z0-9_]+$/).optional(),
   skillId: z.string().regex(/^skill_[a-z0-9_]+$/).optional(),
   packageId: z.string().regex(/^pkg_[a-z0-9_]+$/).optional(),
+  permissionDecisionIds: z.array(PermissionDecisionIdSchema).max(32).refine(
+    (ids) => new Set(ids).size === ids.length,
+    "Permission decision IDs must be unique."
+  ).optional(),
   policyAudit: z.object({
     policyContextId: z.string().min(1),
     policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
@@ -7972,6 +8056,10 @@ export type PigeWarning = z.infer<typeof PigeWarningSchema>;
 export type PermissionActionBinding = z.infer<typeof PermissionActionBindingSchema>;
 export type PermissionActorType = z.infer<typeof PermissionActorTypeSchema>;
 export type PermissionCapability = z.infer<typeof PermissionCapabilitySchema>;
+export type PermissionDecisionId = z.infer<typeof PermissionDecisionIdSchema>;
+export type PermissionDecisionRecord = z.infer<typeof PermissionDecisionRecordSchema>;
+export type PermissionDecisionScope = z.infer<typeof PermissionDecisionScopeSchema>;
+export type PermissionRequestId = z.infer<typeof PermissionRequestIdSchema>;
 export type ExternalWebSkillRuntimeIdentity = z.infer<typeof ExternalWebSkillRuntimeIdentitySchema>;
 export type ExternalWebSkillRuntimeTurnBinding = z.infer<typeof ExternalWebSkillRuntimeTurnBindingSchema>;
 export type ExternalWebSkillRuntimeCall = z.infer<typeof ExternalWebSkillRuntimeCallSchema>;

@@ -96,7 +96,7 @@ export class PermissionBrokerService {
       confirmationId,
       ...input.highRisk,
       owner: input.owner
-    } as HighRiskConfirmationRegistration, input.resolveHighRisk);
+    } as HighRiskConfirmationRegistration, input.resolveHighRisk, binding.bindingHash, binding.jobId);
 
     if (registration.status === "busy") return { status: "busy" };
 

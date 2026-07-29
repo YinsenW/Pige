@@ -73,8 +73,9 @@ a Pige cloud service; other network features still disclose their boundary.
 - Pige asks only for a closed high-risk effect: irreversible deletion, overwrite of a
   user-owned original, out-of-root write, arbitrary shell or unknown-package install,
   credential export/display, risky Agent edit, or equivalent authority escalation.
-- Raw secret access is not grantable. Pige has no saved-grant or YOLO mode for ordinary
-  Agent work, and OS privacy/security controls remain in force.
+- One-shot high-risk pending requests and allow/deny receipts are machine-local policy
+  evidence, excluded from Vault backup and sync. Stage 1 adds no saved-grant or YOLO effect;
+  raw secret access remains non-grantable and OS privacy/security controls remain in force.
 
 ## Backups And Restore
 

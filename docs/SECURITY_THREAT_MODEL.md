@@ -365,9 +365,10 @@ Third-party code never inherits this authority from text, source, model, naming,
 Confirmation is closed to irreversible delete, original overwrite, out-of-root write,
 arbitrary shell/unknown install, credential export, risky edit, or equivalent destination/
 authority escalation. Section 6.7.1's reviewed plan is one immutable same-Job compound
-effect, not raw-Shell authority. Allow/deny applies only to that effect; its Job/Operation
-owns CAS/recovery. No Ask-Every-Time, saved grant, YOLO, permission state machine, or
-`waiting_permission` exists.
+effect, not raw-Shell authority. Stage 1 durably binds one pending request and exact
+allow/deny receipt to the effect and optional Job/Operation; restart restores the same
+`waiting_permission` boundary, while the effect owner retains CAS/recovery and revalidation.
+No saved grant or YOLO effect ships in Stage 1.
 
 Connecting the exact Provider and pressing Send authorizes exact authored and selected
 bounded context unchanged. Identity drift needs another action; credentials stay isolated
