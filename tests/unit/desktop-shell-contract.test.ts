@@ -17,6 +17,44 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("freezes one Main-owned machine-local diagnostics clear channel", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const diagnosticsApi = contractsSource.slice(
+      contractsSource.indexOf("readonly diagnostics: {"),
+      contractsSource.indexOf("readonly models: {")
+    );
+
+    expect(schemasSource).toContain(
+      'DIAGNOSTICS_CLEAR_LOCAL_CHANNEL = "diagnostics.clearLocalDiagnostics"'
+    );
+    expect(schemasSource).toContain("DiagnosticsClearLocalRequestSchema");
+    expect(schemasSource).toContain('status: z.literal("cleared")');
+    expect(schemasSource).toContain('status: z.literal("busy")');
+    expect(diagnosticsApi).toContain("readonly clearLocalDiagnostics: (");
+    expect(diagnosticsApi).toContain("request: DiagnosticsClearLocalRequest");
+    expect(diagnosticsApi).toContain(") => Promise<DiagnosticsClearLocalResult>;");
+    expect(preloadSource).toContain("DiagnosticsClearLocalRequestSchema.parse(request)");
+    expect(preloadSource).toContain("DiagnosticsClearLocalResultSchema.parse(");
+    expect(preloadSource).toContain("DIAGNOSTICS_CLEAR_LOCAL_CHANNEL");
+    const handler = mainSource.slice(
+      mainSource.indexOf("ipcMain.handle(\n  DIAGNOSTICS_CLEAR_LOCAL_CHANNEL"),
+      mainSource.indexOf("function isDiagnosticsExportRequestId")
+    );
+    expect(handler).toContain("DiagnosticsClearLocalRequestSchema.parse(request)");
+    expect(handler).toContain("diagnosticsClearInFlight || activeSupportBundleExports.size > 0");
+    expect(handler).toContain("getDiagnosticsService().clearOwnedEvents({");
+    expect(handler).toContain("latestSupportBundlePreview = undefined");
+    expect(handler.indexOf("DiagnosticsClearLocalRequestSchema.parse(request)"))
+      .toBeLessThan(handler.indexOf("clearOwnedEvents"));
+    expect(handler).not.toMatch(/activeVaultId|sourceId|rootId|outputPath|filePath/);
+    for (const privateField of ["activeVaultId", "path", "body", "expectedRevision"]) {
+      expect(diagnosticsApi).not.toContain(privateField);
+    }
+  });
+
   it("freezes one Main-owned pathless managed-copy root configuration channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");

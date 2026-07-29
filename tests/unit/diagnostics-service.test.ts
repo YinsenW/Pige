@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DiagnosticsService,
   redactDiagnosticText,
@@ -316,6 +316,42 @@ describe("diagnostics service", () => {
     await expect(service.exportSupportBundle(path.join(userDataPath, "support.json"), preview)).rejects.toThrow();
     expect(readEvents(userDataPath).map(({ code }) => code)).not.toContain("diagnostics.exportSupportBundle");
     expect(fs.existsSync(path.join(userDataPath, "support.json"))).toBe(false);
+  });
+
+  it("clears only owned event segments after the exact writer guard passes", () => {
+    const userDataPath = makeTempRoot();
+    const service = new DiagnosticsService(userDataPath, {
+      maxAppEventBytes: 1_600,
+      maxSegmentBytes: 420,
+      maxEventBytes: 400
+    });
+    for (let index = 0; index < 12; index += 1) {
+      service.recordEvent({ level: "error", code: `clear.${index}`, message: "safe" });
+    }
+    const diagnosticsPath = path.join(userDataPath, "diagnostics");
+    const preservedExport = path.join(diagnosticsPath, "user-support-bundle.json");
+    fs.writeFileSync(preservedExport, "user-owned export", { mode: 0o600 });
+    const assertClearAllowed = vi.fn();
+
+    const health = service.clearOwnedEvents({ assertClearAllowed });
+
+    expect(assertClearAllowed).toHaveBeenCalledOnce();
+    expect(eventFiles(userDataPath)).toEqual([]);
+    expect(fs.readFileSync(preservedExport, "utf8")).toBe("user-owned export");
+    expect(health).toMatchObject({ status: "ok", localOnly: true, recentErrorCount: 0 });
+    service.recordEvent({ level: "info", code: "clear.after", message: "safe" });
+    expect(readEvents(userDataPath).map(({ code }) => code)).toEqual(["clear.after"]);
+  });
+
+  it("fails before deleting an event when the clear guard rejects active ownership", () => {
+    const userDataPath = makeTempRoot();
+    const service = new DiagnosticsService(userDataPath);
+    service.recordEvent({ level: "error", code: "clear.retained", message: "safe" });
+
+    expect(() => service.clearOwnedEvents({
+      assertClearAllowed: () => { throw new Error("active export"); }
+    })).toThrow("active export");
+    expect(readEvents(userDataPath).map(({ code }) => code)).toEqual(["clear.retained"]);
   });
 
   it("normalizes legacy top-level messages through the same fixed catalog", () => {

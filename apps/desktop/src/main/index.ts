@@ -16,6 +16,8 @@ import type {
   CreateVaultRequest,
   CancelSupportBundleExportRequest,
   CancelSupportBundleExportResult,
+  DiagnosticsClearLocalRequest,
+  DiagnosticsClearLocalResult,
   ExportSupportBundleRequest,
   HighRiskConfirmationResolveRequest,
   JobActionRequest,
@@ -102,7 +104,10 @@ import {
   VaultMigrationApplyResultSchema,
   MANAGED_COPY_ROOT_CONFIGURE_CHANNEL,
   ManagedCopyRootConfigureRequestSchema,
-  ManagedCopyRootConfigureResultSchema
+  ManagedCopyRootConfigureResultSchema,
+  DIAGNOSTICS_CLEAR_LOCAL_CHANNEL,
+  DiagnosticsClearLocalRequestSchema,
+  DiagnosticsClearLocalResultSchema
 } from "@pige/schemas";
 import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
 import { registerReaderIpc } from "./register-reader-ipc";
@@ -361,6 +366,7 @@ const activeSupportBundleExports = new Map<string, {
   readonly senderId: number;
   readonly controller: AbortController;
 }>();
+let diagnosticsClearInFlight = false;
 const speechTrackedSenders = new Set<number>();
 const PACKAGED_RUNTIME_SMOKE_ARGUMENT = "--pige-packaged-runtime-smoke-report=";
 
@@ -2656,6 +2662,53 @@ ipcMain.handle(
     if (!active || active.senderId !== event.sender.id) return { status: "not_found" };
     active.controller.abort();
     return { status: "cancel_requested" };
+  }
+);
+ipcMain.handle(
+  DIAGNOSTICS_CLEAR_LOCAL_CHANNEL,
+  (_event, request: DiagnosticsClearLocalRequest): DiagnosticsClearLocalResult => {
+    const parsed = DiagnosticsClearLocalRequestSchema.parse(request);
+    if (diagnosticsClearInFlight || activeSupportBundleExports.size > 0) {
+      return DiagnosticsClearLocalResultSchema.parse({
+        apiVersion: 1,
+        requestId: parsed.requestId,
+        status: "busy",
+        health: getDiagnosticsService().health()
+      });
+    }
+    diagnosticsClearInFlight = true;
+    try {
+      const health = getDiagnosticsService().clearOwnedEvents({
+        assertClearAllowed: () => {
+          if (!diagnosticsClearInFlight || activeSupportBundleExports.size > 0) {
+            throw new Error("Diagnostics clear ownership changed.");
+          }
+        }
+      });
+      latestSupportBundlePreview = undefined;
+      return DiagnosticsClearLocalResultSchema.parse({
+        apiVersion: 1,
+        requestId: parsed.requestId,
+        status: "cleared",
+        health
+      });
+    } catch {
+      if (activeSupportBundleExports.size > 0) {
+        return DiagnosticsClearLocalResultSchema.parse({
+          apiVersion: 1,
+          requestId: parsed.requestId,
+          status: "busy",
+          health: getDiagnosticsService().health()
+        });
+      }
+      return DiagnosticsClearLocalResultSchema.parse({
+        apiVersion: 1,
+        requestId: parsed.requestId,
+        status: "failed"
+      });
+    } finally {
+      diagnosticsClearInFlight = false;
+    }
   }
 );
 

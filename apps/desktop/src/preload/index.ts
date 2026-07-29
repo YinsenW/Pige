@@ -27,6 +27,8 @@ import type {
   BackupRestoreStatus,
   CreateVaultRequest,
   DiagnosticsHealth,
+  DiagnosticsClearLocalRequest,
+  DiagnosticsClearLocalResult,
   ExportSupportBundleRequest,
   CancelSupportBundleExportRequest,
   CancelSupportBundleExportResult,
@@ -246,6 +248,9 @@ import {
   CurrentNoteAppendProposalGetResultSchema,
   AppearanceSettingsSummarySchema,
   AppearanceThemeMutationResultSchema,
+  DIAGNOSTICS_CLEAR_LOCAL_CHANNEL,
+  DiagnosticsClearLocalRequestSchema,
+  DiagnosticsClearLocalResultSchema,
   BACKUP_CONTINUE_INCOMPLETE_CHANNEL,
   BackupContinueIncompleteRequestSchema,
   BackupContinueIncompleteResultSchema,
@@ -1609,6 +1614,14 @@ const api: PigeDesktopApi = {
   diagnostics: {
     health: async (): Promise<DiagnosticsHealth> =>
       ipcRenderer.invoke("diagnostics.health") as Promise<DiagnosticsHealth>,
+    clearLocalDiagnostics: async (
+      request: DiagnosticsClearLocalRequest
+    ): Promise<DiagnosticsClearLocalResult> => {
+      const parsedRequest = DiagnosticsClearLocalRequestSchema.parse(request);
+      return DiagnosticsClearLocalResultSchema.parse(
+        await ipcRenderer.invoke(DIAGNOSTICS_CLEAR_LOCAL_CHANNEL, parsedRequest)
+      );
+    },
     previewSupportBundle: async (): Promise<SupportBundlePreview> =>
       ipcRenderer.invoke("diagnostics.previewSupportBundle") as Promise<SupportBundlePreview>,
     exportSupportBundle: async (request: ExportSupportBundleRequest): Promise<SupportBundleExportResult> =>

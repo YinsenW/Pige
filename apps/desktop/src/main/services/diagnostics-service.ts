@@ -116,6 +116,10 @@ export interface DiagnosticEvent {
   readonly redactedDetails?: Record<string, string | number | boolean>;
 }
 
+export interface DiagnosticsClearGuard {
+  readonly assertClearAllowed: () => void;
+}
+
 interface DiagnosticsServiceOptions {
   readonly now?: () => Date;
   readonly maxAppEventBytes?: number;
@@ -266,6 +270,15 @@ export class DiagnosticsService {
       maxStringBytes: this.#maxStringBytes
     });
     this.#appendEvent(record);
+  }
+
+  clearOwnedEvents(guard: DiagnosticsClearGuard): DiagnosticsHealth {
+    guard.assertClearAllowed();
+    for (const filePath of this.#listEventFilesNewestFirst()) fs.rmSync(filePath, { force: true });
+    this.#currentSegmentBytes = 0;
+    this.#nextExpiryAtMs = undefined;
+    this.#storeBytes = 0;
+    return this.health();
   }
 
   #readRecentEvents(): unknown[] {

@@ -35,6 +35,7 @@ import type {
   LocalSemanticRetrievalRemoveRequest,
   LocalSemanticRetrievalRemoveResult,
   LocalSemanticRetrievalStatus,
+  DiagnosticsClearLocalResult,
   PaddleOcrDisableRequest,
   PaddleOcrDisableResult,
   PaddleOcrEnableRequest,
@@ -3210,6 +3211,115 @@ describe("full UI Settings surface", () => {
     expect(panel.textContent).not.toContain("/private/raw-label");
     expect(panel.textContent).not.toContain("private body");
     expect(panel.textContent).not.toContain("RAW CONTENT");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("confirms diagnostics clearing once, preserves state on cancel or failure, and refreshes authoritative health on success", async () => {
+    const dom = createDom();
+    const refreshDiagnostics = vi.fn(async () => undefined);
+    const clearDiagnostics = vi.fn<() => Promise<DiagnosticsClearLocalResult>>()
+      .mockResolvedValueOnce({
+        apiVersion: 1,
+        requestId: "diagclearreq_aaaaaaaaaaaaaaaa",
+        status: "failed"
+      })
+      .mockResolvedValueOnce({
+        apiVersion: 1,
+        requestId: "diagclearreq_bbbbbbbbbbbbbbbb",
+        status: "cleared",
+        health: {
+          status: "degraded",
+          checkedAt: "2026-07-29T00:01:00.000Z",
+          localOnly: true,
+          recentErrorCount: 0,
+          checks: []
+        }
+      });
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        diagnostics: {
+          previewSupportBundle: vi.fn(),
+          exportSupportBundle: vi.fn(),
+          cancelSupportBundleExport: vi.fn()
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+
+    function Harness(): React.JSX.Element {
+      const [health, setHealth] = useState<import("@pige/contracts").DiagnosticsHealth>({
+        status: "ok",
+        checkedAt: "2026-07-29T00:00:00.000Z",
+        localOnly: true,
+        recentErrorCount: 0,
+        checks: []
+      });
+      return createElement(SystemSettingsPanel, {
+        surface: "diagnostics",
+        locale: "en",
+        diagnosticsHealth: health,
+        supportBundlePreview: null,
+        onRefreshDiagnostics: refreshDiagnostics,
+        onClearDiagnostics: async () => {
+          const result = await clearDiagnostics();
+          if (result.status === "cleared" || result.status === "busy") setHealth(result.health);
+          return result;
+        },
+        onSupportBundlePreviewChange: vi.fn(),
+        t
+      });
+    }
+
+    await act(async () => {
+      root.render(createElement(Harness));
+      await settle(dom);
+    });
+    const panel = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-system-page"));
+    const clearTrigger = buttonNamed(panel, "Clear…");
+
+    await act(async () => {
+      clearTrigger.click();
+      await settle(dom);
+    });
+    expect(panel.textContent).toContain("Clear local diagnostics?");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(panel, "Cancel"));
+
+    await act(async () => {
+      buttonNamed(panel, "Cancel").click();
+      await settle(dom);
+    });
+    expect(clearDiagnostics).not.toHaveBeenCalled();
+    expect(panel.textContent).toContain("Healthy");
+    expect(dom.window.document.activeElement).toBe(clearTrigger);
+
+    await act(async () => {
+      clearTrigger.click();
+      await settle(dom);
+      const confirm = buttonNamed(panel, "Clear diagnostics");
+      confirm.click();
+      confirm.click();
+      await settle(dom);
+    });
+    expect(clearDiagnostics).toHaveBeenCalledOnce();
+    expect(refreshDiagnostics).not.toHaveBeenCalled();
+    expect(panel.textContent).toContain("Pige could not clear local diagnostics. Nothing else was changed.");
+    expect(panel.textContent).toContain("Healthy");
+    expect(dom.window.document.activeElement).toBe(clearTrigger);
+
+    await act(async () => {
+      clearTrigger.click();
+      await settle(dom);
+      buttonNamed(panel, "Clear diagnostics").click();
+      await settle(dom);
+    });
+    expect(clearDiagnostics).toHaveBeenCalledTimes(2);
+    expect(refreshDiagnostics).not.toHaveBeenCalled();
+    expect(panel.textContent).toContain("Local diagnostics were cleared.");
+    expect(panel.textContent).toContain("Needs attention");
+    expect(dom.window.document.activeElement).toBe(clearTrigger);
 
     await act(async () => root.unmount());
     dom.window.close();
