@@ -3117,6 +3117,67 @@ export const UpdateStatusEventSchema = z.object({
   summary: UpdateSummarySchema
 }).strict();
 
+export const OCR_LANGUAGE_PREFERENCE_CHANNEL =
+  "localCapabilities.ocrLanguagePreference" as const;
+export const SET_OCR_LANGUAGE_PREFERENCE_CHANNEL =
+  "localCapabilities.setOcrLanguagePreference" as const;
+export const OcrLanguagePreferenceRequestIdSchema = z.string()
+  .regex(/^ocrlangreq_[a-z0-9]{16,64}$/u);
+export const OcrLanguagePreferenceSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("automatic") }).strict(),
+  z.object({
+    mode: z.literal("preferred"),
+    language: LocaleSchema
+  }).strict()
+]);
+export const OcrLanguagePreferenceMachineSettingsSchema = z.object({
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  preference: OcrLanguagePreferenceSchema
+}).strict();
+export const OcrLanguagePreferenceSummarySchema =
+  OcrLanguagePreferenceMachineSettingsSchema.extend({
+    apiVersion: z.literal(1),
+    appliesTo: z.literal("new_ocr_jobs")
+  }).strict();
+export const OcrLanguagePreferenceRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: OcrLanguagePreferenceRequestIdSchema
+}).strict();
+const OcrLanguagePreferenceResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: OcrLanguagePreferenceRequestIdSchema
+}).strict();
+export const OcrLanguagePreferenceResultSchema = z.discriminatedUnion("status", [
+  OcrLanguagePreferenceResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    summary: OcrLanguagePreferenceSummarySchema
+  }).strict(),
+  OcrLanguagePreferenceResultIdentitySchema.extend({
+    status: z.literal("failed")
+  }).strict()
+]);
+export const SetOcrLanguagePreferenceRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: OcrLanguagePreferenceRequestIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  preference: OcrLanguagePreferenceSchema
+}).strict();
+const OcrLanguagePreferenceAuthoritativeResultSchema =
+  OcrLanguagePreferenceResultIdentitySchema.extend({
+    summary: OcrLanguagePreferenceSummarySchema
+  }).strict();
+export const SetOcrLanguagePreferenceResultSchema = z.discriminatedUnion("status", [
+  OcrLanguagePreferenceAuthoritativeResultSchema.extend({
+    status: z.literal("committed")
+  }).strict(),
+  OcrLanguagePreferenceAuthoritativeResultSchema.extend({
+    status: z.literal("stale")
+  }).strict(),
+  OcrLanguagePreferenceResultIdentitySchema.extend({
+    status: z.literal("failed")
+  }).strict()
+]);
+
 export const MachineLocalSettingsSchema = z.object({
   schemaVersion: z.literal(1),
   activeVaultPath: z.string().min(1).optional(),
@@ -3124,6 +3185,7 @@ export const MachineLocalSettingsSchema = z.object({
   appearance: AppearanceMachineSettingsSchema.optional(),
   window: WindowPreferencesSchema.optional(),
   updates: UpdateMachineSettingsSchema.optional(),
+  ocrLanguagePreference: OcrLanguagePreferenceMachineSettingsSchema.optional(),
   dismissedFirstHomeVaultIds: z.array(VaultIdSchema).max(32).optional(),
   recentVaults: z.array(
     z.object({
@@ -7978,6 +8040,14 @@ export type LocalSemanticRetrievalEnableResult = z.infer<typeof LocalSemanticRet
 export type LocalSemanticRetrievalMutationResult = z.infer<typeof LocalSemanticRetrievalMutationResultSchema>;
 export type LocalSemanticRetrievalDisableResult = z.infer<typeof LocalSemanticRetrievalDisableResultSchema>;
 export type LocalSemanticRetrievalRemoveResult = z.infer<typeof LocalSemanticRetrievalRemoveResultSchema>;
+export type OcrLanguagePreferenceRequestId = z.infer<typeof OcrLanguagePreferenceRequestIdSchema>;
+export type OcrLanguagePreference = z.infer<typeof OcrLanguagePreferenceSchema>;
+export type OcrLanguagePreferenceMachineSettings = z.infer<typeof OcrLanguagePreferenceMachineSettingsSchema>;
+export type OcrLanguagePreferenceSummary = z.infer<typeof OcrLanguagePreferenceSummarySchema>;
+export type OcrLanguagePreferenceRequest = z.infer<typeof OcrLanguagePreferenceRequestSchema>;
+export type OcrLanguagePreferenceResult = z.infer<typeof OcrLanguagePreferenceResultSchema>;
+export type SetOcrLanguagePreferenceRequest = z.infer<typeof SetOcrLanguagePreferenceRequestSchema>;
+export type SetOcrLanguagePreferenceResult = z.infer<typeof SetOcrLanguagePreferenceResultSchema>;
 export type PaddleOcrRequestId = z.infer<typeof PaddleOcrRequestIdSchema>;
 export type PaddleOcrLifecycleState = z.infer<typeof PaddleOcrLifecycleStateSchema>;
 export type PaddleOcrLifecycleAction = z.infer<typeof PaddleOcrLifecycleActionSchema>;
