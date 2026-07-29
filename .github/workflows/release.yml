@@ -69,7 +69,7 @@ jobs:
         run: npm run verify
 
       - name: Run test suite
-        run: npm test -- --maxWorkers=2
+        run: npm test -- --maxWorkers=1
 
   build-macos-arm64:
     name: Build signed and notarized macOS arm64
