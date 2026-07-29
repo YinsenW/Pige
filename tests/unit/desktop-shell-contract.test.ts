@@ -1272,9 +1272,17 @@ describe("desktop shell build contract", () => {
     expect(knowledgeMapSource).not.toContain("window.pige.filesystem");
   });
 
-  it("fails closed on awaiting-review Jobs until a bounded renderer-safe proposal preview exists", () => {
+  it("routes awaiting-review Jobs through the bounded renderer-safe proposal owner", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const proposalPanel = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/components/ProposalReviewPanel.tsx"),
+      "utf8"
+    );
+    const proposalRegistrar = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-proposal-ipc.ts"),
+      "utf8"
+    );
     const styles = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/styles/app.css"), "utf8");
     const homeComposer = rendererSource.slice(
       rendererSource.indexOf("function HomeComposer"),
@@ -1298,16 +1306,14 @@ describe("desktop shell build contract", () => {
     expect(mainSource).not.toContain('getProposalService().get(request)');
     expect(mainSource).not.toContain('getJobsService().approveProposal(getProposalService(), request)');
     expect(mainSource).not.toContain('getJobsService().rejectProposal(getProposalService(), request)');
-    expect(rendererSource).not.toContain("window.pige.proposals");
     expect(homeComposer).toContain('job.state === "awaiting_review"');
-    expect(homeComposer).toContain('props.t("proposal.safePreviewTitle")');
-    expect(homeComposer).toContain('props.t("proposal.safePreviewDescription")');
-    expect(homeComposer).toContain('aria-describedby="proposal-safe-preview-description"');
-    expect(homeComposer).toContain('props.t("proposal.reviewUnavailable")');
-    expect(homeComposer).toContain("disabled");
-    expect(fs.existsSync(
-      path.resolve("apps/desktop/src/renderer/src/components/ProposalReviewPanel.tsx")
-    )).toBe(false);
+    expect(homeComposer).toContain("<ProposalReviewPanel");
+    expect(proposalPanel).toContain("window.pige.proposals.review");
+    expect(proposalPanel).toContain("window.pige.proposals.decide");
+    expect(proposalRegistrar).toContain('handle("proposals.review"');
+    expect(proposalRegistrar).toContain('handle("proposals.decide"');
+    expect(proposalPanel).not.toContain("ConfirmationProposal");
+    expect(proposalPanel).not.toMatch(/sourceRefs|targetRefs|baseHashes|proposedOperations/);
     const proposalStyles = styles.slice(
       styles.indexOf(".proposal-strip"),
       styles.indexOf(".retrieval-results")

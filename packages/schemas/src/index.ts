@@ -6794,6 +6794,50 @@ export const ConfirmationProposalSchema = z.object({
   }).optional()
 }).passthrough();
 
+export const ProposalReviewRequestIdSchema = z.string().regex(/^proposalreq_[a-z0-9]{16,64}$/);
+export const ProposalReviewPreviewSchema = z.object({
+  proposalId: ProposalIdSchema,
+  jobId: JobIdSchema,
+  revision: z.string().datetime({ offset: true }),
+  state: z.enum(["ready", "approved", "applied", "rejected", "conflicted"]),
+  trustLevel: ProposalTrustLevelSchema,
+  summary: z.string().min(1).max(600),
+  reason: z.string().min(1).max(1200),
+  operationKinds: z.array(z.enum(["create", "update", "rename", "delete"])).max(32),
+  warnings: z.array(z.string().min(1).max(600)).max(16)
+}).strict();
+const ProposalReviewIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: ProposalReviewRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  jobId: JobIdSchema,
+  proposalId: ProposalIdSchema
+}).strict();
+export const ProposalReviewRequestSchema = ProposalReviewIdentitySchema;
+export const ProposalReviewResultSchema = z.discriminatedUnion("status", [
+  ProposalReviewIdentitySchema.extend({
+    status: z.literal("available"),
+    preview: ProposalReviewPreviewSchema
+  }).strict(),
+  ProposalReviewIdentitySchema.extend({
+    status: z.enum(["not_found", "stale", "failed"])
+  }).strict()
+]);
+export const ProposalReviewDecisionRequestSchema = ProposalReviewIdentitySchema.extend({
+  expectedRevision: z.string().datetime({ offset: true }),
+  decision: z.enum(["approve", "reject"])
+}).strict();
+export const ProposalReviewDecisionResultSchema = z.discriminatedUnion("status", [
+  ProposalReviewIdentitySchema.extend({
+    status: z.enum(["applied", "rejected"]),
+    preview: ProposalReviewPreviewSchema
+  }).strict(),
+  ProposalReviewIdentitySchema.extend({
+    status: z.enum(["not_found", "stale", "conflicted", "failed"]),
+    preview: ProposalReviewPreviewSchema.optional()
+  }).strict()
+]);
+
 export const OperationRecordSchema = z.object({
   id: OperationIdSchema,
   schemaVersion: z.literal(1),
@@ -7271,6 +7315,11 @@ export type BoundaryVerification = z.infer<typeof BoundaryVerificationSchema>;
 export type CloudBoundary = z.infer<typeof CloudBoundarySchema>;
 export type CloudSendPolicy = z.infer<typeof CloudSendPolicySchema>;
 export type ConfirmationProposal = z.infer<typeof ConfirmationProposalSchema>;
+export type ProposalReviewPreview = z.infer<typeof ProposalReviewPreviewSchema>;
+export type ProposalReviewRequest = z.infer<typeof ProposalReviewRequestSchema>;
+export type ProposalReviewResult = z.infer<typeof ProposalReviewResultSchema>;
+export type ProposalReviewDecisionRequest = z.infer<typeof ProposalReviewDecisionRequestSchema>;
+export type ProposalReviewDecisionResult = z.infer<typeof ProposalReviewDecisionResultSchema>;
 export type ConversationEvent = z.infer<typeof ConversationEventSchema>;
 export type AgentConversationInputPresentation = z.output<typeof AgentConversationInputPresentationSchema>;
 export type AgentConversationHistoryCursor = z.output<typeof AgentConversationHistoryCursorSchema>;

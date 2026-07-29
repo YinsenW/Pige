@@ -118,6 +118,10 @@ import type {
   PiPackageUpdateResult,
   ProposalDecisionRequest,
   ProposalDecisionResult,
+  ProposalReviewRequest,
+  ProposalReviewResult,
+  ProposalReviewDecisionRequest,
+  ProposalReviewDecisionResult,
   ProposalGetRequest,
   ProposalGetResult,
   ProposalsListRequest,
@@ -324,6 +328,10 @@ import {
   ReaderSelectionProposalDecisionResultSchema,
   ReaderSelectionProposalGetRequestSchema,
   ReaderSelectionProposalGetResultSchema,
+  ProposalReviewRequestSchema,
+  ProposalReviewResultSchema,
+  ProposalReviewDecisionRequestSchema,
+  ProposalReviewDecisionResultSchema,
   ReaderSelectionTransformRequestSchema,
   ReaderSelectionTransformResultSchema,
   ReaderSelectionResolveRequestSchema,
@@ -1233,7 +1241,17 @@ const api: PigeDesktopApi = {
     approve: async (request: ProposalDecisionRequest): Promise<ProposalDecisionResult> =>
       ipcRenderer.invoke("proposals.approve", request) as Promise<ProposalDecisionResult>,
     reject: async (request: ProposalDecisionRequest): Promise<ProposalDecisionResult> =>
-      ipcRenderer.invoke("proposals.reject", request) as Promise<ProposalDecisionResult>
+      ipcRenderer.invoke("proposals.reject", request) as Promise<ProposalDecisionResult>,
+    review: async (request: ProposalReviewRequest): Promise<ProposalReviewResult> =>
+      ProposalReviewResultSchema.parse(await ipcRenderer.invoke(
+        "proposals.review",
+        ProposalReviewRequestSchema.parse(request)
+      )),
+    decide: async (request: ProposalReviewDecisionRequest): Promise<ProposalReviewDecisionResult> =>
+      ProposalReviewDecisionResultSchema.parse(await ipcRenderer.invoke(
+        "proposals.decide",
+        ProposalReviewDecisionRequestSchema.parse(request)
+      ))
   },
   library: {
     list: async (request?: LibraryListRequest): Promise<LibraryListResult> =>

@@ -103,6 +103,7 @@ import {
 import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
 import { registerReaderIpc } from "./register-reader-ipc";
 import { registerBackupRestoreIpc } from "./register-backup-restore-ipc";
+import { registerProposalIpc } from "./register-proposal-ipc";
 import { registerTaskExecutionIpc } from "./register-task-execution-ipc";
 import { registerManagedCollectionIpc } from "./register-managed-collection-ipc";
 import { registerLocalSemanticRetrievalIpc } from "./register-local-semantic-retrieval-ipc";
@@ -2396,6 +2397,23 @@ registerBackupRestoreIpc({
   getBackupCoordinator: getBackupCoordinatorService,
   getRestoreCoordinator: getRestoreCoordinatorService,
   resumeBackgroundJobs
+});
+
+registerProposalIpc({
+  ipcMain,
+  review: {
+    activeVaultId: () => getVaultService().current()?.vaultId,
+    read: (proposalId) => {
+      try {
+        return getProposalService().get({ proposalId }).proposal;
+      } catch (caught) {
+        if (caught instanceof PigeDomainError && caught.code === "proposal.not_found") return undefined;
+        throw caught;
+      }
+    },
+    approve: (proposalId) => getJobsService().approveProposal(getProposalService(), { proposalId }),
+    reject: (proposalId) => getJobsService().rejectProposal(getProposalService(), { proposalId })
+  }
 });
 
 function proposalRendererBoundaryUnavailable(): never {

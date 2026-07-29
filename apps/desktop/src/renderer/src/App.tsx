@@ -17,6 +17,7 @@ import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ConversationMarkdown } from "./components/ConversationMarkdown";
 import { ConversationHistoryPanel } from "./components/ConversationHistoryPanel";
+import { ProposalReviewPanel } from "./components/ProposalReviewPanel";
 import { ConversationScrollRail } from "./components/ConversationScrollRail";
 import { ConversationEarlierControl, projectCompletedConversation, useConversationPagination } from "./components/ConversationPagination";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
@@ -3881,6 +3882,12 @@ function HomeComposer(props: {
   const [liveAnswerEventId, setLiveAnswerEventId] = useState<string | null>(null);
   const [conversationCopyState, setConversationCopyState] = useState<ConversationCopyState | null>(null);
   const [processingListExpanded, setProcessingListExpanded] = useState(false);
+  const [proposalReview, setProposalReview] = useState<{
+    readonly activeVaultId: string;
+    readonly jobId: string;
+    readonly proposalId: string;
+    readonly returnFocus: HTMLButtonElement;
+  } | null>(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelSwitching, setModelSwitching] = useState(false);
   const [modelSwitchFailed, setModelSwitchFailed] = useState(false);
@@ -4384,7 +4391,14 @@ function HomeComposer(props: {
       )
     )
     .slice(0, 5);
-  const proposalReviewPending = props.recentJobs.some((job) => job.state === "awaiting_review");
+  const proposalReviewJobs = props.recentJobs.flatMap((job) =>
+    job.state === "awaiting_review" &&
+    conversationTimeline?.latestTurn?.state === "awaiting_review" &&
+    conversationTimeline.latestTurn.jobId === job.id &&
+    conversationTimeline.latestTurn.proposalId
+      ? [{ jobId: job.id, proposalId: conversationTimeline.latestTurn.proposalId }]
+      : []
+  );
   const noSourceCurrentTurn = selectCurrentNoSourceTurn({
     latestTurn,
     recentJobs: followableTailJobId
@@ -4598,6 +4612,12 @@ function HomeComposer(props: {
     const result = await refreshConversationResult();
     return result.status === "adopted" ? result.timeline : undefined;
   };
+
+  useEffect(() => {
+    if (proposalReview && proposalReview.activeVaultId !== props.activeVault?.vaultId) {
+      setProposalReview(null);
+    }
+  }, [proposalReview, props.activeVault?.vaultId]);
 
   const openConversationView = async (
     conversationId: string,
@@ -5462,28 +5482,44 @@ function HomeComposer(props: {
           t={props.t}
         />
       ) : null}
-      {proposalReviewPending ? (
+      {proposalReviewJobs.length > 0 ? (
         <section className="proposal-strip" aria-label={props.t("proposal.queueTitle")}>
           <header className="proposal-strip-header">
             <h2>{props.t("proposal.queueTitle")}</h2>
           </header>
           <div className="proposal-summary-list">
-            <article className="proposal-summary-card">
-              <div>
-                <strong>{props.t("proposal.safePreviewTitle")}</strong>
-                <p id="proposal-safe-preview-description">{props.t("proposal.safePreviewDescription")}</p>
-              </div>
-              <button
-                type="button"
-                className="secondary"
-                aria-describedby="proposal-safe-preview-description"
-                disabled
-              >
-                {props.t("proposal.reviewUnavailable")}
-              </button>
-            </article>
+            {proposalReviewJobs.map((job) => (
+              <article className="proposal-summary-card" key={job.jobId}>
+                <strong>{props.t("proposal.reviewTitle")}</strong>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={(event) => setProposalReview({
+                    activeVaultId: props.activeVault!.vaultId,
+                    jobId: job.jobId,
+                    proposalId: job.proposalId,
+                    returnFocus: event.currentTarget
+                  })}
+                >
+                  {props.t("proposal.review")}
+                </button>
+              </article>
+            ))}
           </div>
         </section>
+      ) : null}
+      {proposalReview ? (
+        <ProposalReviewPanel
+          activeVaultId={proposalReview.activeVaultId}
+          jobId={proposalReview.jobId}
+          proposalId={proposalReview.proposalId}
+          returnFocus={proposalReview.returnFocus}
+          onClose={() => setProposalReview(null)}
+          onResolved={async () => {
+            await Promise.allSettled([props.onHomeStateChanged(), refreshConversation()]);
+          }}
+          t={props.t}
+        />
       ) : null}
       {showConversationTimeline ? (
         <section

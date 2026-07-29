@@ -37,6 +37,11 @@ import type {
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
   OnboardingStatus,
+  ProposalReviewDecisionRequest,
+  ProposalReviewDecisionResult,
+  ProposalReviewPreview,
+  ProposalReviewRequest,
+  ProposalReviewResult,
   SpeechAvailabilityRequest,
   SpeechAvailabilityResult,
   SpeechAssetInstallEvent,
@@ -105,6 +110,81 @@ afterEach(() => {
 });
 
 describe("Home durable Agent conversation UI", () => {
+  it("reviews and decides the exact durable Home proposal without exposing private proposal data", async () => {
+    const dom = createDom();
+    const proposalId = "proposal_20260729_aaaaaaaa";
+    const jobId = "job_20260729_proposalreview";
+    const timeline = {
+      ...completedTimeline(),
+      latestTurn: {
+        jobId,
+        userEventId: "event_20260729_proposaluser",
+        state: "awaiting_review" as const,
+        proposalId
+      }
+    };
+    const harness = createHarness(timeline);
+    harness.jobs = [{
+      id: jobId,
+      class: "agent_turn",
+      state: "awaiting_review",
+      canReconnectDependency: false,
+      message: "Review required",
+      createdAt: "2026-07-29T08:00:00.000Z",
+      updatedAt: "2026-07-29T08:00:01.000Z"
+    }];
+    harness.proposalPreview = {
+      proposalId,
+      jobId,
+      revision: "2026-07-29T08:00:01.000Z",
+      state: "ready",
+      trustLevel: "review_required",
+      summary: "Create a concise project note",
+      reason: "The requested knowledge change needs confirmation.",
+      operationKinds: ["create", "update"],
+      warnings: ["Existing content remains recoverable."]
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => buttons(container, enMessages["proposal.review"]).length === 1);
+    const trigger = buttons(container, enMessages["proposal.review"])[0]!;
+    await clickButton(dom, container, enMessages["proposal.review"]);
+    await waitFor(dom, () => container.textContent?.includes(harness.proposalPreview!.summary) === true);
+    expect(harness.proposalReviewRequests).toHaveLength(1);
+    expect(harness.proposalReviewRequests[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_home_conversation",
+      jobId,
+      proposalId
+    });
+    expect(container.textContent).not.toContain(proposalId);
+    expect(container.textContent).not.toContain(jobId);
+    expect(container.textContent).toContain(enMessages["proposal.operation.create"]);
+    expect(container.textContent).toContain(enMessages["proposal.operation.update"]);
+
+    harness.proposalDecisionMode = "stale";
+    await clickButton(dom, container, enMessages["proposal.approve"]);
+    await waitFor(dom, () => container.textContent?.includes(enMessages["note.proposal.stale"]) === true);
+    expect(container.textContent).toContain(harness.proposalPreview.summary);
+    expect(harness.proposalDecisionRequests).toHaveLength(1);
+    expect(harness.proposalDecisionRequests[0]).toMatchObject({
+      activeVaultId: "vault_home_conversation",
+      jobId,
+      proposalId,
+      expectedRevision: harness.proposalPreview.revision,
+      decision: "approve"
+    });
+
+    harness.proposalDecisionMode = "applied";
+    await clickButton(dom, container, enMessages["proposal.approve"]);
+    await waitFor(dom, () => container.querySelector(".proposal-review-panel") === null);
+    expect(harness.proposalDecisionRequests).toHaveLength(2);
+    await waitFor(dom, () => dom.window.document.activeElement === trigger);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("fences and bounds the exact accepted picker turn projection", () => {
     const timeline = completedTimeline();
     const binding = {
@@ -4491,6 +4571,10 @@ interface ConversationHarness {
   readonly confirmationResolveRequests: HighRiskConfirmationResolveRequest[];
   readonly confirmationListeners: Set<(event: HighRiskConfirmationChangedEvent) => void>;
   confirmationResolveMode: "success" | "failed" | "stale" | "reject_initial" | "reject_pending" | "reject_unknown";
+  proposalPreview: ProposalReviewPreview | null;
+  readonly proposalReviewRequests: ProposalReviewRequest[];
+  readonly proposalDecisionRequests: ProposalReviewDecisionRequest[];
+  proposalDecisionMode: "applied" | "rejected" | "stale" | "conflicted" | "failed";
   locale: "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de";
   windowMode: "compact" | "expanded";
   readonly windowModeRequests: ("compact" | "expanded")[];
@@ -4574,6 +4658,10 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     confirmationResolveRequests: [],
     confirmationListeners: new Set(),
     confirmationResolveMode: "success",
+    proposalPreview: null,
+    proposalReviewRequests: [],
+    proposalDecisionRequests: [],
+    proposalDecisionMode: "applied",
     locale: "en",
     windowMode: "compact",
     windowModeRequests: [],
@@ -5101,7 +5189,33 @@ function makePigeApi(harness: ConversationHarness): object {
         total: 0,
         invalidProposalCount: 0,
         proposals: []
-      })
+      }),
+      review: async (request: ProposalReviewRequest): Promise<ProposalReviewResult> => {
+        harness.proposalReviewRequests.push(request);
+        const preview = harness.proposalPreview;
+        return preview && preview.jobId === request.jobId && preview.proposalId === request.proposalId
+          ? { ...request, status: "available", preview }
+          : { ...request, status: "not_found" };
+      },
+      decide: async (request: ProposalReviewDecisionRequest): Promise<ProposalReviewDecisionResult> => {
+        harness.proposalDecisionRequests.push(request);
+        const preview = harness.proposalPreview;
+        if (harness.proposalDecisionMode === "applied" || harness.proposalDecisionMode === "rejected") {
+          return {
+            ...request,
+            status: harness.proposalDecisionMode,
+            preview: preview ? {
+              ...preview,
+              state: harness.proposalDecisionMode === "applied" ? "applied" : "rejected"
+            } : undefined
+          } as ProposalReviewDecisionResult;
+        }
+        return {
+          ...request,
+          status: harness.proposalDecisionMode,
+          ...(preview ? { preview } : {})
+        } as ProposalReviewDecisionResult;
+      }
     },
     library: {
       list: async () => testLibraryList(),
