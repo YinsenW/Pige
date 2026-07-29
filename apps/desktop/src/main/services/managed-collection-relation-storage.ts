@@ -35,6 +35,8 @@ import {
   publishImmutableFile,
   readBundle,
   readJsonBounded,
+  readJsonRef,
+  readRevisionById,
   replaceManifestCas,
   requestConflict,
   resolveBundleRelativePath,
@@ -279,18 +281,10 @@ export function commitRelationUndo(input: {
   readonly kind: "collection_relation_add" | "collection_relation_cell_edit";
 }): { readonly binding: BundleBinding; readonly revision: DatasetRevision } {
   const current = requireCurrent(input.binding, input.afterRevisionId);
-  const after = DatasetRevisionSchema.parse(readJsonBounded(
-    resolveBundleRelativePath(current.bundlePath, `revisions/${input.afterRevisionId}.json`),
-    MAX_COLLECTION_JSON_BYTES
-  ));
-  const before = DatasetRevisionSchema.parse(readJsonBounded(
-    resolveBundleRelativePath(current.bundlePath, `revisions/${input.beforeRevisionId}.json`),
-    MAX_COLLECTION_JSON_BYTES
-  ));
+  const after = readRevisionById(current, input.afterRevisionId);
+  const before = readRevisionById(current, input.beforeRevisionId);
   if (after.change?.kind !== input.kind || after.parentRevisionId !== before.id) throw requestConflict();
-  const beforeSchema = DatasetSchemaRecordSchema.parse(readJsonBounded(
-    resolveBundleRelativePath(current.bundlePath, before.schema.path), MAX_COLLECTION_JSON_BYTES
-  ));
+  const beforeSchema = DatasetSchemaRecordSchema.parse(readJsonRef(current.bundlePath, before.schema));
   const tableId = after.change.tableId;
   const columnId = after.change.columnId;
   const change = after.change.kind === "collection_relation_add"
@@ -343,7 +337,8 @@ function commitRelationAdd(
   const current = requireCurrent(binding, request.expectedRevisionId);
   const table = current.schema.tables.find((candidate) => candidate.id === request.tableId);
   const targetTable = current.schema.tables.find((candidate) => candidate.id === request.targetTableId);
-  const display = targetTable?.columns.find((candidate) => candidate.id === request.targetDisplayColumnId);
+  const display = targetTable?.columns.slice(0, MAX_COLLECTION_COLUMNS)
+    .find((candidate) => candidate.id === request.targetDisplayColumnId);
   if (!table || !targetTable || !display || !isRelationDisplayColumn(display) || table.columns.length >= MAX_COLLECTION_COLUMNS ||
       table.columns.some((column) => normalize(column.name) === normalize(request.label))) {
     throw new PigeDomainError("collection.relation_ineligible", "The relation descriptor is ineligible.");
