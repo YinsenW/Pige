@@ -1,10 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type { VaultMigrationPreview } from "@pige/contracts";
 
 export interface VaultMigrationDialogProps {
   readonly preview: VaultMigrationPreview;
   readonly applying: boolean;
   readonly failed: boolean;
+  readonly returnFocusTarget: HTMLElement | null;
   readonly onApply: () => void;
   readonly onCancel: () => void;
   readonly t: (key: string) => string;
@@ -17,6 +18,13 @@ export function VaultMigrationDialog(props: VaultMigrationDialogProps): React.JS
   useEffect(() => {
     cancelRef.current?.focus();
   }, []);
+
+  useLayoutEffect(() => {
+    const target = props.returnFocusTarget;
+    return () => {
+      if (target?.isConnected) target.focus();
+    };
+  }, [props.returnFocusTarget]);
 
   return (
     <div className="confirmation-backdrop">
@@ -63,6 +71,11 @@ export function VaultMigrationDialog(props: VaultMigrationDialogProps): React.JS
           ))}
         </dl>
         <p>{props.t("vaultMigration.backupNotice")}</p>
+        <ul aria-label={props.t("vaultMigration.warnings")}>
+          {props.preview.warnings.map((warning) => (
+            <li key={warning}>{props.t(`vaultMigration.warning.${warning}`)}</li>
+          ))}
+        </ul>
         {props.failed ? <p className="error" role="alert">{props.t("vaultMigration.failed")}</p> : null}
         <div className="confirmation-actions">
           <button ref={cancelRef} type="button" className="secondary" disabled={props.applying} onClick={props.onCancel}>

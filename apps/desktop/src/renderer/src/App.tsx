@@ -327,6 +327,7 @@ export function App(): React.JSX.Element {
   const [vaultMigration, setVaultMigration] = useState<VaultMigrationPreview | null>(null);
   const [vaultMigrationApplying, setVaultMigrationApplying] = useState(false);
   const [vaultMigrationFailed, setVaultMigrationFailed] = useState(false);
+  const vaultMigrationTriggerRef = useRef<HTMLElement | null>(null);
   const [diagnosticsHealth, setDiagnosticsHealth] = useState<DiagnosticsHealth | null>(null);
   const [localDatabaseStatus, setLocalDatabaseStatus] = useState<LocalDatabaseStatus | null>(null);
   const [supportBundlePreview, setSupportBundlePreview] = useState<SupportBundlePreview | null>(null);
@@ -760,6 +761,9 @@ export function App(): React.JSX.Element {
       });
       setView("home");
     } else if (result.status === "needs_migration") {
+      vaultMigrationTriggerRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
       setVaultMigrationFailed(false);
       setVaultMigration(result.preview);
     } else if (result.status !== "canceled") {
@@ -824,6 +828,9 @@ export function App(): React.JSX.Element {
     try {
       const result = await window.pige.vault.openRecent({ vaultId });
       if (result.status === "needs_migration") {
+        vaultMigrationTriggerRef.current = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
         setVaultMigrationFailed(false);
         setVaultMigration(result.preview);
         return;
@@ -2558,6 +2565,7 @@ export function App(): React.JSX.Element {
           preview={vaultMigration}
           applying={vaultMigrationApplying}
           failed={vaultMigrationFailed}
+          returnFocusTarget={vaultMigrationTriggerRef.current}
           onApply={() => void applyVaultMigration()}
           onCancel={() => {
             if (vaultMigrationApplying) return;

@@ -215,13 +215,42 @@ describe("First-run onboarding UI", () => {
     const { container, root } = await mountApp(dom, makePigeApi(harness));
 
     await advanceToVault(dom, container);
-    await click(dom, buttonByAriaLabel(container, `Open: ${recent.name}`));
+    const migrationTrigger = buttonByAriaLabel(container, `Open: ${recent.name}`);
+    let triggerFocusCount = 0;
+    const focusTrigger = migrationTrigger.focus.bind(migrationTrigger);
+    migrationTrigger.focus = () => {
+      triggerFocusCount += 1;
+      focusTrigger();
+    };
+    migrationTrigger.focus();
+    await click(dom, migrationTrigger);
     await waitFor(dom, () => container.textContent?.includes("Update this vault") ?? false);
     expect(harness.migrationRequests).toHaveLength(0);
     expect(container.textContent).not.toContain("/private/");
+    expect(container.textContent).toContain("The update starts only after its private backup completes.");
+    expect(container.textContent).toContain("Missing language metadata remains explicitly unknown.");
+    expect(container.textContent).toContain("Local search indexes are rebuilt after durable files commit.");
 
+    await click(dom, button(container, "Cancel"));
+    await waitFor(dom, () => dom.window.document.activeElement === migrationTrigger);
+    const afterCancelFocusCount = triggerFocusCount;
+
+    await click(dom, migrationTrigger);
+    await waitFor(dom, () => container.textContent?.includes("Update this vault") ?? false);
+    const dialog = requireElement(container.querySelector<HTMLElement>('[aria-labelledby="vault-migration-title"]'));
+    await act(async () => {
+      dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => dom.window.document.activeElement === migrationTrigger);
+    expect(triggerFocusCount).toBeGreaterThan(afterCancelFocusCount);
+
+    await click(dom, migrationTrigger);
+    await waitFor(dom, () => container.textContent?.includes("Update this vault") ?? false);
+    const beforeSuccessFocusCount = triggerFocusCount;
     await click(dom, button(container, "Back up and update"));
     await waitFor(dom, () => container.querySelector('textarea[aria-label="Capture or ask"]') !== null);
+    expect(triggerFocusCount).toBeGreaterThan(beforeSuccessFocusCount);
     expect(harness.migrationRequests).toHaveLength(1);
     expect(Object.keys(harness.migrationRequests[0]!).sort()).toEqual([
       "apiVersion", "previewId", "requestId", "vaultId"
