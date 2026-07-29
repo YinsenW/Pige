@@ -69,6 +69,7 @@ import type {
   CaptureFileRejectionReason,
   AppHealth,
   BackupRestoreStatus,
+  DiagnosticsClearLocalResult,
   DiagnosticsHealth,
   HomeAgentModelUsage,
   HighRiskConfirmationPendingResult,
@@ -899,6 +900,16 @@ export function App(): React.JSX.Element {
     setDiagnosticsHealth(nextDiagnostics);
     setLocalDatabaseStatus(nextDatabaseStatus);
     setToolchainHealth(nextToolchainHealth);
+  };
+
+  const clearLocalDiagnostics = async (): Promise<DiagnosticsClearLocalResult> => {
+    const requestId = `diagclearreq_${crypto.randomUUID().replaceAll("-", "")}`;
+    const result = await window.pige.diagnostics.clearLocalDiagnostics({ apiVersion: 1, requestId });
+    if (result.requestId !== requestId) throw new Error("diagnostics_clear_identity_mismatch");
+    if (result.status === "cleared" || result.status === "busy") {
+      setDiagnosticsHealth(result.health);
+    }
+    return result;
   };
 
   const refreshSpeechAvailability = async (): Promise<void> => {
@@ -2633,6 +2644,7 @@ export function App(): React.JSX.Element {
               diagnosticsHealth={diagnosticsHealth}
               supportBundlePreview={supportBundlePreview}
               onRefreshDiagnostics={refreshDiagnostics}
+              onClearDiagnostics={clearLocalDiagnostics}
               onSupportBundlePreviewChange={setSupportBundlePreview}
               t={t}
             />
@@ -7652,16 +7664,22 @@ export function SystemSettingsPanel(props: {
   readonly diagnosticsHealth: DiagnosticsHealth | null;
   readonly supportBundlePreview: SupportBundlePreview | null;
   readonly onRefreshDiagnostics: () => Promise<void>;
+  readonly onClearDiagnostics?: () => Promise<DiagnosticsClearLocalResult>;
   readonly onSupportBundlePreviewChange: (preview: SupportBundlePreview | null) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
-  const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | null>(null);
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | "clear" | null>(null);
+  const [clearConfirming, setClearConfirming] = useState(false);
   const [notice, setNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
   const [updateSummary, setUpdateSummary] = useState<UpdateSummary | null>(null);
   const [updateLoadState, setUpdateLoadState] = useState<"loading" | "ready" | "failed">("loading");
   const [updateBusy, setUpdateBusy] = useState<"check" | "download" | "apply" | null>(null);
   const supportBundleExportRequestRef = useRef<string | null>(null);
   const supportBundleCancelRequestRef = useRef<string | null>(null);
+  const clearInFlightRef = useRef(false);
+  const clearTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const clearCancelRef = useRef<HTMLButtonElement | null>(null);
+  const restoreClearFocusRef = useRef(false);
   const updateSummaryRevisionRef = useRef(-1);
   const updateEventSequenceRef = useRef(0);
   const updateOperationRef = useRef<{
@@ -7712,6 +7730,50 @@ export function SystemSettingsPanel(props: {
     supportBundleCancelRequestRef.current = exportRequestId;
     void window.pige.diagnostics.cancelSupportBundleExport({ exportRequestId }).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (clearConfirming) {
+      clearCancelRef.current?.focus();
+      return;
+    }
+    if (!restoreClearFocusRef.current) return;
+    restoreClearFocusRef.current = false;
+    clearTriggerRef.current?.focus();
+  }, [clearConfirming]);
+
+  const restoreClearFocus = (): void => {
+    restoreClearFocusRef.current = true;
+  };
+
+  const cancelClearDiagnostics = (): void => {
+    if (clearInFlightRef.current) return;
+    setClearConfirming(false);
+    restoreClearFocus();
+  };
+
+  const clearDiagnostics = async (): Promise<void> => {
+    if (!props.onClearDiagnostics || diagnosticsBusy || clearInFlightRef.current) return;
+    clearInFlightRef.current = true;
+    setDiagnosticsBusy("clear");
+    setNotice(null);
+    try {
+      const result = await props.onClearDiagnostics();
+      if (result.status === "cleared") {
+        setNotice({ kind: "success", key: "system.clearDiagnosticsCompleted" });
+      } else if (result.status === "busy") {
+        setNotice({ kind: "error", key: "system.clearDiagnosticsBusy" });
+      } else {
+        setNotice({ kind: "error", key: "system.clearDiagnosticsFailed" });
+      }
+    } catch {
+      setNotice({ kind: "error", key: "system.clearDiagnosticsFailed" });
+    } finally {
+      clearInFlightRef.current = false;
+      setDiagnosticsBusy(null);
+      setClearConfirming(false);
+      restoreClearFocus();
+    }
+  };
 
   const refreshDiagnostics = async (): Promise<void> => {
     if (diagnosticsBusy) return;
@@ -8070,10 +8132,48 @@ export function SystemSettingsPanel(props: {
               <strong>{props.t("system.clearDiagnostics")}</strong>
               <span>{props.t("system.clearDiagnosticsDescription")}</span>
             </div>
-            <button className="settings-button" type="button" disabled title={props.t("development.state.unavailable")}>
+            <button
+              ref={clearTriggerRef}
+              className="settings-button"
+              type="button"
+              disabled={!props.onClearDiagnostics || Boolean(diagnosticsBusy)}
+              title={props.onClearDiagnostics ? undefined : props.t("development.state.unavailable")}
+              aria-expanded={clearConfirming}
+              onClick={() => {
+                setNotice(null);
+                setClearConfirming(true);
+              }}
+            >
               {props.t("system.clear")}
             </button>
           </div>
+          {clearConfirming ? (
+            <div className="settings-row tall" role="group" aria-labelledby="system-clear-diagnostics-confirm-title">
+              <div className="settings-row-copy">
+                <strong id="system-clear-diagnostics-confirm-title">{props.t("system.clearDiagnosticsConfirm")}</strong>
+                <span>{props.t("system.clearDiagnosticsConfirmDescription")}</span>
+              </div>
+              <div className="settings-row-control">
+                <button
+                  ref={clearCancelRef}
+                  className="settings-button"
+                  type="button"
+                  disabled={diagnosticsBusy === "clear"}
+                  onClick={cancelClearDiagnostics}
+                >
+                  {props.t("system.clearDiagnosticsCancel")}
+                </button>
+                <button
+                  className="settings-button primary"
+                  type="button"
+                  disabled={diagnosticsBusy === "clear"}
+                  onClick={() => void clearDiagnostics()}
+                >
+                  {props.t(diagnosticsBusy === "clear" ? "system.clearDiagnosticsClearing" : "system.clearDiagnosticsAction")}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {props.supportBundlePreview && supportPreviewProjection ? (
