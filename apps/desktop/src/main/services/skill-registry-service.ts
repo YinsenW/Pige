@@ -15,6 +15,8 @@ import {
   SkillRegistryMutationResultSchema,
   SkillRegistryQueryResultSchema,
   SkillRegistrySummarySchema,
+  SkillRestoreRequestSchema,
+  SkillRestoreResultSchema,
   SkillUninstallRequestSchema,
   type SkillDisableRequest,
   type SkillDiscardStagedRequest,
@@ -31,6 +33,8 @@ import {
   type SkillRegistryQueryResult,
   type SkillRegistryRecord,
   type SkillRegistrySummary,
+  type SkillRestoreRequest,
+  type SkillRestoreResult,
   type SkillSummary,
   type SkillStageUpdateRequest,
   type SkillStageUpdateResult,
@@ -39,17 +43,19 @@ import {
 import { containsRestrictedModelContent } from "./model-egress-content";
 import { hasObjectErrorCode as isErrno } from "./object-error-code";
 import {
-  lifecycleRequestIdentity as skillLifecycleIdentity,
   isSupportedExternalWebRuntime,
   readSkillEnableEligibility,
-  matchesUninstallRequest as sameLifecycleRequest,
   projectEnabledExternalWebSkillRuntimes,
   requireInstalledExternalDisclosure,
   SkillRegistryLifecycleStore,
   type EnabledExternalWebSkillRuntime,
-  type SkillInstallReceipt,
-  type SkillUninstallReceipt
+  type SkillInstallReceipt
 } from "./skill-registry-lifecycle-store";
+import {
+  lifecycleRequestIdentity as skillLifecycleIdentity,
+  matchesUninstallRequest as sameLifecycleRequest,
+  SkillRegistryRestoreService,
+} from "./skill-registry-restore-service";
 import {
   canUpdateSkill,
   SkillSourceUpdateRegistry,
@@ -87,6 +93,7 @@ export class SkillRegistryService {
   readonly #registryLockPath: string;
   readonly #lifecycleStore: SkillRegistryLifecycleStore;
   readonly #sourceUpdate: SkillSourceUpdateRegistry;
+  readonly #restore: SkillRegistryRestoreService;
 
   constructor(appDataRoot: string, options: { readonly recoverOrphanedMutationLock?: boolean } = {}) {
     if (!path.isAbsolute(appDataRoot)) {
@@ -115,16 +122,22 @@ export class SkillRegistryService {
       nextRegistry: (current, skills) => this.#nextRegistry(current, skills), writeRegistry: (registry) => this.#writeRegistry(registry),
       lifecycleStore: this.#lifecycleStore
     });
+    this.#restore = new SkillRegistryRestoreService({
+      appDataRoot: canonicalRoot, readRegistry: () => this.#readRegistry(), parseManifest: parseSkillManifest,
+      project: (registry) => this.#project(registry), nextRegistry: (current, skills) => this.#nextRegistry(current, skills),
+      writeRegistry: (registry) => this.#writeRegistry(registry), lifecycleStore: this.#lifecycleStore
+    });
     if (options.recoverOrphanedMutationLock) {
       try {
         this.#recoverOrphanedMutationLock();
         const pending = this.#lifecycleStore.listPreparedUninstalls();
         const pendingUpdates = this.#lifecycleStore.listPreparedUpdates();
-        if (pending.length > 0 || pendingUpdates.length > 0) {
+        if (pending.length > 0 || pendingUpdates.length > 0 || this.#restore.hasPreparedRestore()) {
           const mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
           try {
             this.#sourceUpdate.recover(pendingUpdates, mutationLock.assertOwned);
-            this.#recoverPreparedUninstalls(pending, mutationLock);
+            this.#restore.recoverPreparedUninstalls(pending, mutationLock.assertOwned);
+            this.#restore.recoverPrepared(mutationLock.assertOwned);
           } finally { mutationLock.release(); }
         }
       } catch {
@@ -141,12 +154,24 @@ export class SkillRegistryService {
     }
   }
 
-  currentRevision(): number {
-    return this.#readRegistry().revision;
-  }
+  currentRevision(): number { return this.#readRegistry().revision; }
 
   enabledExternalWebRuntimes = (): readonly EnabledExternalWebSkillRuntime[] =>
     projectEnabledExternalWebSkillRuntimes(this.#readRegistry(), (id) => this.#readManifest(id));
+
+  restore(requestInput: SkillRestoreRequest): SkillRestoreResult {
+    const request = SkillRestoreRequestSchema.parse(requestInput);
+    const identity = {
+      apiVersion: 1 as const, requestId: request.requestId, activeVaultId: request.activeVaultId,
+      restoreContextId: request.restoreContextId, skillId: request.skillId
+    };
+    let lock: SkillRegistryMutationLock | undefined;
+    try { this.#prepare();
+      lock = acquireSkillRegistryMutationLock(this.#registryLockPath);
+      const result = this.#restore.restore(request, lock.assertOwned);
+      return SkillRestoreResultSchema.parse({ ...identity, ...result });
+    } catch { return SkillRestoreResultSchema.parse({ ...identity, status: "failed" }); } finally { lock?.release(); }
+  }
 
   hasTriggerOverlap(manifest: SkillManifest): boolean {
     const requested = new Set((manifest.triggers ?? []).map(normalizeTrigger));
@@ -173,7 +198,7 @@ export class SkillRegistryService {
       this.#prepare();
       mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
       this.#sourceUpdate.recover(this.#lifecycleStore.listPreparedUpdates(), mutationLock.assertOwned);
-      this.#recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock);
+      this.#restore.recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock.assertOwned);
       const current = this.#readRegistry();
       const replay = this.#findInstallReplay(request, current);
       if (replay === "conflict") return skillInstallFailed(request.requestId, "unavailable");
@@ -262,7 +287,7 @@ export class SkillRegistryService {
     try {
       this.#prepare();
       mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
-      this.#recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock);
+      this.#restore.recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock.assertOwned);
       const current = this.#readRegistry();
       if (request.expectedRevision !== current.revision) {
         return SkillRegistryMutationResultSchema.parse({ status: "stale", registry: this.#project(current) });
@@ -301,7 +326,7 @@ export class SkillRegistryService {
     try {
       this.#prepare();
       mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
-      this.#recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock);
+      this.#restore.recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock.assertOwned);
       const current = this.#readRegistry();
       if (parsed.expectedRegistryRevision !== current.revision) {
         return SkillLifecycleMutationResultSchema.parse({
@@ -336,13 +361,13 @@ export class SkillRegistryService {
     try {
       this.#prepare();
       mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
-      this.#recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock);
+      this.#restore.recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock.assertOwned);
       let current = this.#readRegistry();
       const replay = this.#lifecycleStore.readUninstallReceipt(parsed.requestId);
       if (replay) {
         if (!sameLifecycleRequest(replay, parsed)) throw skillError("skill.uninstall_receipt_conflict", "Skill uninstall receipt identity changed.");
         if (replay.state === "prepared") {
-          this.#recoverPreparedUninstalls([replay], mutationLock);
+          this.#restore.recoverPreparedUninstalls([replay], mutationLock.assertOwned);
           current = this.#readRegistry();
         }
         if (!current.skills.some((record) => record.id === parsed.skillId)) {
@@ -387,7 +412,7 @@ export class SkillRegistryService {
     try {
       this.#prepare();
       mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
-      this.#recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock);
+      this.#restore.recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock.assertOwned);
       const current = this.#readRegistry();
       const resultIdentity = { ...skillLifecycleIdentity(parsed), registryRevision: current.revision };
       if (parsed.expectedRegistryRevision !== current.revision) {
@@ -453,7 +478,8 @@ export class SkillRegistryService {
       apiVersion: 1,
       revision: registry.revision,
       invalidManifestCount,
-      skills
+      skills,
+      restorableSkills: this.#restore.projectCandidates(registry)
     });
   }
 
@@ -516,32 +542,6 @@ export class SkillRegistryService {
       throw skillError("skill.registry_revision_exhausted", "Skill Registry revision is exhausted.");
     }
     return SkillRegistryFileSchema.parse({ schemaVersion: 1, revision: current.revision + 1, skills });
-  }
-
-  #recoverPreparedUninstalls(
-    receipts: readonly SkillUninstallReceipt[],
-    mutationLock: SkillRegistryMutationLock
-  ): void {
-    for (const receipt of receipts) {
-      const current = this.#readRegistry();
-      const index = current.skills.findIndex((record) => record.id === receipt.skillId);
-      if (current.revision === receipt.expectedRegistryRevision) {
-        if (index < 0 || JSON.stringify(current.skills[index]) !== JSON.stringify(receipt.record)) {
-          throw skillError("skill.uninstall_recovery_conflict", "Skill uninstall recovery conflicts with current state.");
-        }
-        this.#lifecycleStore.ensureTrashed(receipt);
-        const next = this.#nextRegistry(current, current.skills.filter((record) => record.id !== receipt.skillId));
-        mutationLock.assertOwned();
-        this.#writeRegistry(next);
-        this.#lifecycleStore.markUninstallCommitted(receipt, next.revision);
-        continue;
-      }
-      if (current.revision === receipt.expectedRegistryRevision + 1 && index < 0) {
-        this.#lifecycleStore.markUninstallCommitted(receipt, current.revision);
-        continue;
-      }
-      throw skillError("skill.uninstall_recovery_conflict", "Skill uninstall recovery cannot adopt current state.");
-    }
   }
 
   #readRegistry(): SkillRegistryFile {

@@ -2288,6 +2288,7 @@ registerSkillsIpc({
   disable: (request) => getSkillRegistryService().disable(request),
   enable: (request) => getSkillRegistryService().enable(request),
   uninstall: (request) => getSkillRegistryService().uninstall(request),
+  restore: (request) => getSkillRegistryService().restore(request),
   exportSkill: (request, destinationPath) => getSkillRegistryService().export(request, destinationPath),
   publishRegistryChanged: (result) => {
     if (!("registry" in result)) return;

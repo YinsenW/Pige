@@ -1113,6 +1113,8 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly disable: (request: SkillDisableRequest)");
     expect(contractsSource).toContain("readonly enable: (request: SkillEnableRequest)");
     expect(contractsSource).toContain("readonly uninstall: (request: SkillUninstallRequest)");
+    expect(contractsSource).toContain("readonly restore: (request: SkillRestoreRequest)");
+    expect(contractsSource).toContain("Promise<SkillRestoreResult>");
     expect(contractsSource).toContain("readonly export: (request: SkillExportRequest)");
     expect(contractsSource).toContain("readonly onChanged: (listener: (summary: SkillRegistrySummary)");
     expect(contractsSource).toContain("ExternalWebSkillRuntimeTurnBinding");
@@ -1122,6 +1124,7 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).not.toContain("readonly readExternalWeb");
     expect(preloadApi).not.toContain("readExternalWeb");
     expect(mainSource).toContain("registerSkillsIpc({");
+    expect(mainSource).toContain("restore: (request) => getSkillRegistryService().restore(request)");
     expect(handlers).toContain('options.ipcMain.handle("skills.summary"');
     expect(handlers).toContain('options.ipcMain.handle("skills.pendingStagedReviews"');
     expect(handlers).toContain("SkillPendingStagedReviewsRequestSchema.parse(request)");
@@ -1162,9 +1165,12 @@ describe("desktop shell build contract", () => {
     expect(preloadApi).toContain("SkillRegistryMutationResultSchema.parse(");
     expect(preloadApi).toContain('"skills.enable"');
     expect(preloadApi).toContain('"skills.uninstall"');
+    expect(preloadApi).toContain('"skills.restore"');
     expect(preloadApi).toContain('"skills.export"');
     expect(preloadApi).toContain("SkillEnableRequestSchema.parse(request)");
     expect(preloadApi).toContain("SkillUninstallRequestSchema.parse(request)");
+    expect(preloadApi).toContain("SkillRestoreRequestSchema.parse(request)");
+    expect(preloadApi).toContain("SkillRestoreResultSchema.parse(");
     expect(preloadApi).toContain("SkillExportRequestSchema.parse(request)");
     expect(preloadApi).toContain("SkillExportResultSchema.parse(");
     expect(preloadApi).toContain('ipcRenderer.on("skills.changed", handler)');

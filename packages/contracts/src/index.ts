@@ -233,6 +233,8 @@ import type {
   SkillStageFromZipResult,
   SkillStageUpdateRequest,
   SkillStageUpdateResult,
+  SkillRestoreRequest,
+  SkillRestoreResult,
   SkillUninstallRequest,
   SettingApplyBehavior,
   SettingPermissionRequirement,
@@ -510,6 +512,10 @@ export type {
   SkillStageFromZipResult,
   SkillStageUpdateRequest,
   SkillStageUpdateResult,
+  SkillRestoreContextId,
+  SkillRestoreRequest,
+  SkillRestoreResult,
+  SkillRestorableSummary,
   SkillStageInvalidReason,
   SkillStagedFileSummary,
   SkillStagedSummary,
@@ -1794,6 +1800,7 @@ export interface PigeDesktopApi {
     readonly disable: (request: SkillDisableRequest) => Promise<SkillRegistryMutationResult>;
     readonly enable: (request: SkillEnableRequest) => Promise<SkillLifecycleMutationResult>;
     readonly uninstall: (request: SkillUninstallRequest) => Promise<SkillLifecycleMutationResult>;
+    readonly restore: (request: SkillRestoreRequest) => Promise<SkillRestoreResult>;
     readonly export: (request: SkillExportRequest) => Promise<SkillExportResult>;
     readonly onChanged: (listener: (summary: SkillRegistrySummary) => void) => () => void;
   };

@@ -101,6 +101,11 @@ function register(overrides: Record<string, unknown> = {}) {
       apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId,
       skillId: request.skillId, status: "committed", registry: registry(3)
     }),
+    restore: (request) => ({
+      apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId,
+      restoreContextId: request.restoreContextId, skillId: request.skillId,
+      status: "committed", registry: registry(3)
+    }),
     exportSkill,
     publishRegistryChanged,
     ...overrides
@@ -266,6 +271,34 @@ describe("registerSkillsIpc", () => {
     expect(changed.publishRegistryChanged).not.toHaveBeenCalled();
   });
 
+  it("vault-fences restore and publishes only its exact committed identity", async () => {
+    const restore = vi.fn((request) => ({
+      apiVersion: request.apiVersion,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      restoreContextId: request.restoreContextId,
+      skillId: request.skillId,
+      status: "committed" as const,
+      registry: registry(request.expectedRegistryRevision + 1)
+    }));
+    const request = {
+      apiVersion: 1 as const,
+      requestId: lifecycleRequestId,
+      activeVaultId,
+      restoreContextId: `skill_restore_context_v2_${"a".repeat(48)}`,
+      skillId: "paper-reading",
+      expectedRegistryRevision: 2
+    };
+    const ready = register({ restore });
+    expect(await ready.handlers.get("skills.restore")?.({}, request)).toMatchObject({ status: "committed" });
+    expect(restore).toHaveBeenCalledOnce();
+    expect(ready.publishRegistryChanged).toHaveBeenCalledOnce();
+
+    const blocked = register({ getActiveVaultId: () => "vault_20260728_other", restore });
+    expect(await blocked.handlers.get("skills.restore")?.({}, request)).toMatchObject({ status: "failed" });
+    expect(restore).toHaveBeenCalledOnce();
+  });
+
   it("owns the pathless export dialog and rechecks vault identity after await", async () => {
     const request = lifecycleRequest();
     const blockedDialog = vi.fn();
@@ -304,7 +337,7 @@ describe("registerSkillsIpc", () => {
 });
 
 function registry(revision: number) {
-  return { apiVersion: 1 as const, revision, invalidManifestCount: 0, skills: [] };
+  return { apiVersion: 1 as const, revision, invalidManifestCount: 0, skills: [], restorableSkills: [] };
 }
 
 function lifecycleRequest() {

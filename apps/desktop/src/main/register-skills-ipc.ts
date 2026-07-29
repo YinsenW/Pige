@@ -13,6 +13,8 @@ import {
   SkillPendingStagedReviewsResultSchema,
   SkillRegistryMutationResultSchema,
   SkillRegistryQueryResultSchema,
+  SkillRestoreRequestSchema,
+  SkillRestoreResultSchema,
   SkillStageFromMarkdownRequestSchema,
   SkillStageFromMarkdownResultSchema,
   SkillStageFromZipRequestSchema,
@@ -35,6 +37,8 @@ import {
   type SkillPendingStagedReviewsResult,
   type SkillRegistryMutationResult,
   type SkillRegistryQueryResult,
+  type SkillRestoreRequest,
+  type SkillRestoreResult,
   type SkillStageFromMarkdownRequest,
   type SkillStageFromMarkdownResult,
   type SkillStageFromZipRequest,
@@ -89,12 +93,13 @@ interface RegisterSkillsIpcOptions {
   readonly uninstall: (
     request: SkillUninstallRequest
   ) => SkillLifecycleMutationResult | Promise<SkillLifecycleMutationResult>;
+  readonly restore: (request: SkillRestoreRequest) => SkillRestoreResult | Promise<SkillRestoreResult>;
   readonly exportSkill: (
     request: SkillExportRequest,
     destinationPath: string
   ) => SkillExportResult | Promise<SkillExportResult>;
   readonly publishRegistryChanged: (
-    result: SkillInstallStagedResult | SkillRegistryMutationResult | SkillLifecycleMutationResult
+    result: SkillInstallStagedResult | SkillRegistryMutationResult | SkillLifecycleMutationResult | SkillRestoreResult
   ) => void;
 }
 
@@ -209,6 +214,16 @@ export function registerSkillsIpc(options: RegisterSkillsIpcOptions): void {
   });
   registerInstalledMutation(options, "skills.enable", SkillEnableRequestSchema, options.enable);
   registerInstalledMutation(options, "skills.uninstall", SkillUninstallRequestSchema, options.uninstall);
+  options.ipcMain.handle("skills.restore", async (_event, request: unknown) => {
+    const parsed = SkillRestoreRequestSchema.parse(request);
+    if (!hasActiveVault(options, parsed.activeVaultId)) return restoreFailed(parsed);
+    const result = SkillRestoreResultSchema.parse(await options.restore(parsed));
+    if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
+      result.restoreContextId !== parsed.restoreContextId || result.skillId !== parsed.skillId ||
+      !hasActiveVault(options, parsed.activeVaultId)) return restoreFailed(parsed);
+    if (result.status === "committed") options.publishRegistryChanged(result);
+    return result;
+  });
   options.ipcMain.handle("skills.export", async (event, request: unknown): Promise<SkillExportResult> => {
     const parsed = SkillExportRequestSchema.parse(request);
     if (!hasActiveVault(options, parsed.activeVaultId)) return exportStatus(parsed, "failed");
@@ -233,6 +248,17 @@ export function registerSkillsIpc(options: RegisterSkillsIpcOptions): void {
     } catch {
       return exportStatus(parsed, "failed");
     }
+  });
+}
+
+function restoreFailed(request: SkillRestoreRequest): SkillRestoreResult {
+  return SkillRestoreResultSchema.parse({
+    apiVersion: 1,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    restoreContextId: request.restoreContextId,
+    skillId: request.skillId,
+    status: "failed"
   });
 }
 
