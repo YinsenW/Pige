@@ -811,10 +811,10 @@ Agent policy DTOs must follow `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`.
 
 `updates.summary`, `updates.check`, `updates.download`, `updates.apply`, and
 `updates.onStatusChanged` are body-free.
-Download/apply bind request ID, exact version and expected summary revision; Main owns the
+Download/apply bind request ID, exact version and expected summary revision; Main owns
 immutable alpha feed, one in-flight lifecycle, signed macOS adapter and risky-Job gate.
 Summaries expose only version, phase, bounded progress and timestamps. Feed, artifact path,
-credential, signature material and raw error never cross. Apply returns `restarting` before
+credential, signature and raw error never cross. Apply returns `restarting` before
 Main schedules relaunch; stale, blocked, busy, unavailable and failed remain usable states.
 
 ### 6.9 Diagnostics
