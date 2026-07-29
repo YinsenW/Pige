@@ -46,6 +46,9 @@ import type {
   KnowledgeHealthRunResult,
   KnowledgeHealthRepairRequest,
   KnowledgeHealthRepairResult,
+  ManagedCopyRootConfigureRequest,
+  ManagedCopyRootConfigureResult,
+  ManagedCopyRootSummary,
   KnowledgeTreeResult,
   LibraryListRequest,
   LibraryListResult,
@@ -281,6 +284,10 @@ import {
   KnowledgeHealthRunResultSchema,
   KnowledgeHealthRepairRequestSchema,
   KnowledgeHealthRepairResultSchema,
+  MANAGED_COPY_ROOT_CONFIGURE_CHANNEL,
+  ManagedCopyRootConfigureRequestSchema,
+  ManagedCopyRootConfigureResultSchema,
+  ManagedCopyRootSummarySchema,
   HighRiskConfirmationChangedEventSchema,
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
@@ -791,6 +798,7 @@ function projectVaultSummary(vault: {
   readonly knowledgeRootDisplay: string;
   readonly sourceAssetRootDisplay: string;
   readonly sourceAssetRootKind: VaultSummary["sourceAssetRootKind"];
+  readonly managedCopyRoot: ManagedCopyRootSummary;
   readonly defaultSourceStorageStrategy: VaultSummary["defaultSourceStorageStrategy"];
   readonly schemaVersion: number;
   readonly counts?: VaultSummary["counts"] | undefined;
@@ -803,6 +811,7 @@ function projectVaultSummary(vault: {
     knowledgeRootDisplay: vault.knowledgeRootDisplay,
     sourceAssetRootDisplay: vault.sourceAssetRootDisplay,
     sourceAssetRootKind: vault.sourceAssetRootKind,
+    managedCopyRoot: ManagedCopyRootSummarySchema.parse(vault.managedCopyRoot),
     defaultSourceStorageStrategy: vault.defaultSourceStorageStrategy,
     schemaVersion: vault.schemaVersion,
     ...(vault.counts ? { counts: vault.counts } : {}),
@@ -1504,6 +1513,24 @@ const api: PigeDesktopApi = {
       projectVaultRevealResult(await ipcRenderer.invoke("vault.revealSourceAssetRoot"), "source_asset_root"),
     updateSourceStoragePolicy: async (request: UpdateSourceStoragePolicyRequest): Promise<VaultSummary> =>
       ipcRenderer.invoke("vault.updateSourceStoragePolicy", request) as Promise<VaultSummary>,
+    configureManagedCopyRoot: async (
+      request: ManagedCopyRootConfigureRequest
+    ): Promise<ManagedCopyRootConfigureResult> => {
+      const parsedRequest = ManagedCopyRootConfigureRequestSchema.parse(request);
+      const result = ManagedCopyRootConfigureResultSchema.parse(await ipcRenderer.invoke(
+        MANAGED_COPY_ROOT_CONFIGURE_CHANNEL,
+        parsedRequest
+      ));
+      if (
+        result.requestId !== parsedRequest.requestId ||
+        result.activeVaultId !== parsedRequest.activeVaultId ||
+        result.expectedSourceStorageRevision !== parsedRequest.expectedSourceStorageRevision ||
+        ("summary" in result && result.summary.activeVaultId !== parsedRequest.activeVaultId)
+      ) {
+        throw new Error("Invalid managed-copy root configuration response identity.");
+      }
+      return result;
+    },
     removeRecent: async (vaultId: string): Promise<readonly RecentVaultSummary[]> =>
       ipcRenderer.invoke("vault.removeRecent", vaultId) as Promise<readonly RecentVaultSummary[]>
   },

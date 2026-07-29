@@ -73,6 +73,9 @@ import {
   KnowledgeHealthRunResultSchema,
   KnowledgeHealthRepairRequestSchema,
   KnowledgeHealthRepairResultSchema,
+  ManagedCopyRootConfigureRequestSchema,
+  ManagedCopyRootConfigureResultSchema,
+  ManagedCopyRootSummarySchema,
   LOCAL_SEMANTIC_RETRIEVAL_ASSET_BYTES,
   LOCAL_SEMANTIC_RETRIEVAL_ASSET_ID,
   LocalSemanticRetrievalDisableRequestSchema,
@@ -167,6 +170,7 @@ import {
   DurableLanguageSchema,
   VAULT_APPLY_MIGRATION_CHANNEL,
   VaultActionResultSchema,
+  VaultSummaryProjectionSchema,
   VaultConfigSchema,
   VaultManifestCompatibilityHeaderSchema,
   VaultManifestSchema,
@@ -3034,6 +3038,70 @@ describe("schemas", () => {
     })).toThrow();
   });
 
+  it("keeps managed-copy root configuration pathless, currentness-bound, and fail-closed", () => {
+    const summary = {
+      activeVaultId: "vault_20260709_abcdefgh",
+      sourceStorageRevision: `ssrev_${"a".repeat(64)}`,
+      mode: "external_binding",
+      availability: "available",
+      canConfigure: true
+    } as const;
+    expect(ManagedCopyRootSummarySchema.parse(summary)).toEqual(summary);
+    const request = {
+      apiVersion: 1,
+      requestId: "rootconfigreq_abcdefgh",
+      activeVaultId: summary.activeVaultId,
+      expectedSourceStorageRevision: summary.sourceStorageRevision
+    } as const;
+    expect(ManagedCopyRootConfigureRequestSchema.parse(request)).toEqual(request);
+    for (const privateField of ["path", "absolutePath", "rootId", "sourceBody"] as const) {
+      expect(() => ManagedCopyRootConfigureRequestSchema.parse({ ...request, [privateField]: "private" }))
+        .toThrow();
+    }
+    for (const status of ["configured", "stale", "ineligible"] as const) {
+      expect(ManagedCopyRootConfigureResultSchema.parse({ ...request, status, summary }))
+        .toEqual({ ...request, status, summary });
+    }
+    for (const status of ["cancelled", "not_found", "failed"] as const) {
+      expect(ManagedCopyRootConfigureResultSchema.parse({ ...request, status }))
+        .toEqual({ ...request, status });
+    }
+    expect(() => ManagedCopyRootConfigureResultSchema.parse({
+      ...request,
+      status: "failed",
+      path: "/private/managed-root"
+    })).toThrow();
+  });
+
+  it("allows external managed-copy roots to project only safe non-path labels", () => {
+    const summary = {
+      vaultId: "vault_20260709_abcdefgh",
+      name: "Knowledge",
+      activeVaultPathDisplay: "/Users/example/Knowledge",
+      knowledgeRootDisplay: "/Users/example/Knowledge",
+      sourceAssetRootDisplay: "External managed-copy location",
+      sourceAssetRootKind: "external_binding",
+      managedCopyRoot: {
+        activeVaultId: "vault_20260709_abcdefgh",
+        sourceStorageRevision: `ssrev_${"b".repeat(64)}`,
+        mode: "external_binding",
+        availability: "available",
+        canConfigure: true
+      },
+      defaultSourceStorageStrategy: "copy_to_source_library",
+      schemaVersion: 2
+    } as const;
+    expect(VaultSummaryProjectionSchema.parse(summary)).toEqual(summary);
+    expect(() => VaultSummaryProjectionSchema.parse({
+      ...summary,
+      sourceAssetRootDisplay: "/Volumes/Private/Sources"
+    })).toThrow("safe label");
+    expect(() => VaultSummaryProjectionSchema.parse({
+      ...summary,
+      managedCopyRoot: { ...summary.managedCopyRoot, activeVaultId: "vault_20260709_otherabc" }
+    })).toThrow("identity");
+  });
+
   it("keeps referenced-original reconnect currentness-bound, pathless, and authoritative", () => {
     const request = {
       apiVersion: 1,
@@ -3543,6 +3611,13 @@ describe("schemas", () => {
       knowledgeRootDisplay: "Knowledge",
       sourceAssetRootDisplay: "Sources",
       sourceAssetRootKind: "inside_vault" as const,
+      managedCopyRoot: {
+        activeVaultId: preview.vaultId,
+        sourceStorageRevision: `ssrev_${"c".repeat(64)}`,
+        mode: "inside_vault" as const,
+        availability: "available" as const,
+        canConfigure: true
+      },
       defaultSourceStorageStrategy: "copy_to_source_library" as const,
       schemaVersion: 2
     };

@@ -17,6 +17,33 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("freezes one Main-owned pathless managed-copy root configuration channel", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const vaultApi = contractsSource.slice(
+      contractsSource.indexOf("readonly vault: {"),
+      contractsSource.indexOf("readonly maintenance: {")
+    );
+
+    expect(schemasSource).toContain(
+      'MANAGED_COPY_ROOT_CONFIGURE_CHANNEL = "vault.configureManagedCopyRoot"'
+    );
+    expect(schemasSource).toContain("ManagedCopyRootConfigureRequestSchema");
+    expect(schemasSource).toContain("expectedSourceStorageRevision: SourceStorageRevisionSchema");
+    expect(schemasSource).toContain("An external managed-copy root must project a safe label, never its path.");
+    expect(contractsSource).toContain("readonly managedCopyRoot: ManagedCopyRootSummary;");
+    expect(vaultApi).toContain("readonly configureManagedCopyRoot: (");
+    expect(vaultApi).toContain("request: ManagedCopyRootConfigureRequest");
+    expect(vaultApi).toContain(") => Promise<ManagedCopyRootConfigureResult>;");
+    expect(preloadSource).toContain("ManagedCopyRootConfigureRequestSchema.parse(request)");
+    expect(preloadSource).toContain("MANAGED_COPY_ROOT_CONFIGURE_CHANNEL");
+    expect(preloadSource).toContain("Invalid managed-copy root configuration response identity.");
+    for (const privateField of ["absolutePath", "rootId", "sourcePath", "sourceBody", "rawError"]) {
+      expect(vaultApi).not.toContain(privateField);
+    }
+  });
+
   it("freezes one explicit pathless incomplete Backup continuation channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
