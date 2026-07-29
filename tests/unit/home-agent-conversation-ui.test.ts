@@ -42,6 +42,8 @@ import type {
   ProposalReviewPreview,
   ProposalReviewRequest,
   ProposalReviewResult,
+  ReferencedOriginalReconnectRequest,
+  ReferencedOriginalReconnectResult,
   SpeechAvailabilityRequest,
   SpeechAvailabilityResult,
   SpeechAssetInstallEvent,
@@ -76,6 +78,7 @@ import {
   selectCurrentNoSourceTurn,
   terminalTurnOwnsComposerSubmission
 } from "../../apps/desktop/src/renderer/src/components/HomeConversationTurnState";
+import { HomeJobAction } from "../../apps/desktop/src/renderer/src/components/HomeJobAction";
 
 const globalKeys = [
   "window",
@@ -110,6 +113,143 @@ afterEach(() => {
 });
 
 describe("Home durable Agent conversation UI", () => {
+  it("keeps a waiting dependency repair single-flight and restores focus after failure or disappearance", async () => {
+    const dom = createDom();
+    const { createRoot } = await import("react-dom/client");
+    const container = requireElement(dom.window.document.getElementById("root"));
+    const fallback = dom.window.document.createElement("button");
+    fallback.textContent = "Processing";
+    dom.window.document.body.append(fallback);
+    const returnFocusRef = { current: fallback };
+    const root = createRoot(container);
+    let calls = 0;
+    let rejectAttempt: ((reason: Error) => void) | undefined;
+    let resolveAttempt: (() => void) | undefined;
+    const onActivate = (): Promise<void> => {
+      calls += 1;
+      return new Promise<void>((resolve, reject) => {
+        resolveAttempt = resolve;
+        rejectAttempt = reject;
+      });
+    };
+    const renderRepair = (): void => root.render(createElement(HomeJobAction, {
+      job: sourceWaitingForModelJob(),
+      sourceWaitingForModel: false,
+      ownsSourceModelAction: false,
+      repair: {
+        label: "Reconnect source",
+        pendingLabel: "Checking source…",
+        onActivate,
+        returnFocusRef
+      },
+      onOpenModels: () => undefined,
+      onCancelJob: () => undefined,
+      onRetryJob: () => undefined,
+      t: (key: string) => key
+    }));
+    await act(async () => {
+      renderRepair();
+      await settle(dom);
+    });
+    const repair = buttons(container, "Reconnect source")[0]!;
+    await act(async () => {
+      repair.click();
+      repair.click();
+      await settle(dom);
+    });
+    expect(calls).toBe(1);
+    expect(repair.disabled).toBe(true);
+    expect(container.textContent).toContain("Checking source…");
+    await act(async () => {
+      rejectAttempt?.(new Error("body-free failure"));
+      await settle(dom);
+    });
+    expect(repair.disabled).toBe(false);
+    await waitFor(dom, () => dom.window.document.activeElement === repair);
+
+    await act(async () => {
+      repair.click();
+      await settle(dom);
+      root.render(createElement("span", null, "Repaired"));
+      resolveAttempt?.();
+      await settle(dom);
+    });
+    expect(calls).toBe(2);
+    await waitFor(dom, () => dom.window.document.activeElement === fallback);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("reconnects the exact referenced original Job and resumes through Home refresh only", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const waitingJob = referencedOriginalWaitingJob();
+    harness.jobs = [waitingJob];
+    let mode: "failed" | "cancelled" | "reconnected" = "failed";
+    harness.reconnectOriginalSource = async (request) => {
+      harness.reconnectOriginalSourceRequests.push(request);
+      if (mode !== "reconnected") return { ...request, status: mode };
+      const reconnectedJob = { ...waitingJob, state: "queued" as const, canReconnectDependency: false as const,
+        updatedAt: "2026-07-29T09:00:02.000Z" };
+      harness.jobs = [reconnectedJob];
+      return { ...request, status: "reconnected", job: reconnectedJob };
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => buttons(container, "Reconnect original file").length === 1);
+    const repair = buttons(container, "Reconnect original file")[0]!;
+    await act(async () => {
+      repair.click();
+      repair.click();
+      await settle(dom);
+    });
+    expect(harness.reconnectOriginalSourceRequests).toHaveLength(1);
+    expect(harness.reconnectOriginalSourceRequests[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_home_conversation",
+      waitingJobId: waitingJob.id,
+      expectedJobUpdatedAt: waitingJob.updatedAt
+    });
+    expect(harness.retryJobIds).toHaveLength(0);
+    expect(buttons(container, "Reconnect original file")).toHaveLength(1);
+    expect(container.textContent).toContain("Pige could not reconnect this original file. Choose the file again.");
+
+    mode = "cancelled";
+    await clickButton(dom, container, "Reconnect original file");
+    await waitFor(dom, () => harness.reconnectOriginalSourceRequests.length === 2);
+    expect(container.textContent).not.toContain("Pige could not reconnect this original file. Choose the file again.");
+    expect(buttons(container, "Reconnect original file")).toHaveLength(1);
+
+    mode = "reconnected";
+    await clickButton(dom, container, "Reconnect original file");
+    await waitFor(dom, () => harness.reconnectOriginalSourceRequests.length === 3);
+    await waitFor(dom, () => buttons(container, "Reconnect original file").length === 0);
+    expect(container.textContent).toContain("Original file reconnected. Processing is continuing.");
+    expect(harness.retryJobIds).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("does not offer referenced-source repair for a non-Agent Job even if eligibility is misprojected", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.jobs = [{
+      ...referencedOriginalWaitingJob(),
+      class: "backup",
+      canReconnectDependency: true
+    }];
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => container.textContent?.includes(enMessages["home.processing"]) === true);
+    expect(buttons(container, "Reconnect original file")).toHaveLength(0);
+    expect(harness.reconnectOriginalSourceRequests).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("reviews and decides the exact durable Home proposal without exposing private proposal data", async () => {
     const dom = createDom();
     const proposalId = "proposal_20260729_aaaaaaaa";
@@ -4553,6 +4693,8 @@ interface ConversationHarness {
   readonly retryJobIds: string[];
   retryMode: "queued" | "immediate_refail";
   readonly cancelJobIds: string[];
+  readonly reconnectOriginalSourceRequests: ReferencedOriginalReconnectRequest[];
+  reconnectOriginalSource: (request: ReferencedOriginalReconnectRequest) => Promise<ReferencedOriginalReconnectResult>;
   readonly setDefaultModelIds: string[];
   readonly speechAvailabilityRequests: SpeechAvailabilityRequest[];
   readonly speechStartRequests: SpeechStartRequest[];
@@ -4640,6 +4782,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     retryJobIds: [],
     retryMode: "queued",
     cancelJobIds: [],
+    reconnectOriginalSourceRequests: [],
     setDefaultModelIds: [],
     speechAvailabilityRequests: [],
     speechStartRequests: [],
@@ -4707,6 +4850,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
       pageId: request.pageId,
       status: "failed"
     }),
+    reconnectOriginalSource: async (request) => ({ ...request, status: "cancelled" }),
     openSourceReference: async (request) => ({
       apiVersion: 1,
       requestId: request.requestId,
@@ -5091,7 +5235,9 @@ function makePigeApi(harness: ConversationHarness): object {
           ? { ...job, state: "cancel_requested", updatedAt: "2026-07-12T10:00:01.000Z" }
           : job);
         return { status: "cancel_requested", job: harness.jobs.find((job) => job.id === jobId) };
-      }
+      },
+      reconnectOriginalSource: (request: ReferencedOriginalReconnectRequest) =>
+        harness.reconnectOriginalSource(request)
     },
     confirmations: {
       pending: async () => {
@@ -5753,6 +5899,22 @@ function sourceWaitingForModelJob(): JobSummary {
     message: "Source preserved; waiting for model.",
     createdAt: "2026-07-13T08:00:00.000Z",
     updatedAt: "2026-07-13T08:00:01.000Z"
+  };
+}
+
+function referencedOriginalWaitingJob(): JobSummary {
+  return {
+    id: "job_20260729_sourcereconnect",
+    class: "agent_turn",
+    state: "waiting_dependency",
+    stage: "waiting_for_path",
+    sourceId: "src_20260729_sourcereconnect",
+    sourceKind: "plain_text_file",
+    sourceDisplayName: "field-notes.txt",
+    canReconnectDependency: true,
+    message: "Original source needs reconnection.",
+    createdAt: "2026-07-29T09:00:00.000Z",
+    updatedAt: "2026-07-29T09:00:01.000Z"
   };
 }
 

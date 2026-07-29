@@ -171,6 +171,8 @@ import type {
   ReaderSelectionTransformAction,
   ReaderSelectionTransformRequest,
   ReaderSelectionTransformResult,
+  ReferencedOriginalReconnectRequest,
+  ReferencedOriginalReconnectResult,
   ReaderSelectionProposalDecisionRequest,
   ReaderSelectionProposalDecisionResult,
   ReaderSelectionProposalGetRequest,
@@ -266,6 +268,8 @@ export type {
   AppearanceThemePreference,
   BackupReconnectDependencyRequest,
   BackupReconnectDependencyResult,
+  ReferencedOriginalReconnectRequest,
+  ReferencedOriginalReconnectResult,
   CaptureFileRejection,
   CaptureFileRejectionReason,
   CollectionCatalogCursor,
@@ -1721,6 +1725,9 @@ export interface PigeDesktopApi {
     readonly list: (request?: JobsListRequest) => Promise<JobsListResult>;
     readonly cancel: (request: JobActionRequest) => Promise<JobActionResult>;
     readonly retry: (request: JobActionRequest) => Promise<JobActionResult>;
+    readonly reconnectOriginalSource: (
+      request: ReferencedOriginalReconnectRequest
+    ) => Promise<ReferencedOriginalReconnectResult>;
   };
   readonly confirmations: {
     readonly pending: () => Promise<HighRiskConfirmationPendingResult>;

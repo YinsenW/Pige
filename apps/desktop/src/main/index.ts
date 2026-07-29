@@ -104,6 +104,7 @@ import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
 import { registerReaderIpc } from "./register-reader-ipc";
 import { registerBackupRestoreIpc } from "./register-backup-restore-ipc";
 import { registerProposalIpc } from "./register-proposal-ipc";
+import { registerSourceReconnectIpc } from "./register-source-reconnect-ipc";
 import { registerTaskExecutionIpc } from "./register-task-execution-ipc";
 import { registerManagedCollectionIpc } from "./register-managed-collection-ipc";
 import { registerLocalSemanticRetrievalIpc } from "./register-local-semantic-retrieval-ipc";
@@ -228,6 +229,7 @@ import {
 import { OcrService } from "./services/ocr-service";
 import { MacOSSpeechAdapter } from "./services/macos-speech-adapter";
 import { ProposalService } from "./services/proposal-service";
+import { SourceOriginalReconnectService } from "./services/source-original-reconnect-service";
 import { installRendererNavigationGuard } from "./services/renderer-navigation-guard";
 import { RestoreCoordinatorService } from "./services/restore-coordinator-service";
 import { writeBackupCreatedOperation } from "./services/restore-job-store";
@@ -2182,6 +2184,14 @@ ipcMain.handle("jobs.retry", async (_event, request: JobActionRequest) => {
     getJobClassExecutorRegistry().require(result.job.class).schedule?.(result.job.id);
   }
   return result;
+});
+registerSourceReconnectIpc({
+  ipcMain,
+  getWindow: (sender) => BrowserWindow.fromWebContents(sender) ?? undefined,
+  showOpenDialog: (window, options) => dialog.showOpenDialog(window, options),
+  getJobs: getJobsService,
+  getReconnectService: () => new SourceOriginalReconnectService(getVaultService()),
+  resumeBackgroundJobs
 });
 ipcMain.handle("confirmations.pending", () =>
   HighRiskConfirmationPendingResultSchema.parse(getHighRiskConfirmationService().pending())

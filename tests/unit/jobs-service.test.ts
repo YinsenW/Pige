@@ -323,6 +323,96 @@ describe("jobs service", () => {
     expect(JSON.stringify(summaries)).not.toContain("hidden-rollback.zip");
   });
 
+  it("keeps referenced-original waits fenced until the exact source is current", () => {
+    const { vaultPath, vault } = makeVault();
+    const { jobs } = makeServices(vaultPath, vault);
+    const sourceId = "src_20260729_reconnectsource1";
+    const jobId = "job_20260729_reconnectsource1";
+    const content = Buffer.from("exact referenced source\n", "utf8");
+    const checksum = `sha256:${createHash("sha256").update(content).digest("hex")}`;
+    const missingPath = path.join(path.dirname(vaultPath), "replacement.txt");
+    const sourceRecord = SourceRecordSchema.parse({
+      schemaVersion: 1,
+      id: sourceId,
+      kind: "plain_text_file",
+      storageStrategy: "reference_original",
+      semanticOrchestration: "agent_turn",
+      original: {
+        uri: "file:///private/missing.txt",
+        path: missingPath,
+        displayName: "replacement.txt",
+        lastKnownSize: content.byteLength,
+        checksum
+      },
+      artifacts: [],
+      metadata: {},
+      createdAt: "2026-07-29T08:00:00.000Z",
+      updatedAt: "2026-07-29T08:00:00.000Z"
+    });
+    const sourceRecordPath = path.join(vaultPath, ".pige/source-records/2026/07", `${sourceId}.json`);
+    fs.mkdirSync(path.dirname(sourceRecordPath), { recursive: true });
+    fs.writeFileSync(sourceRecordPath, `${JSON.stringify(sourceRecord, null, 2)}\n`, "utf8");
+    writeJob(vaultPath, JobRecordSchema.parse({
+      schemaVersion: 1,
+      id: jobId,
+      class: "agent_turn",
+      state: "waiting_dependency",
+      stage: "waiting_for_path",
+      createdAt: "2026-07-29T08:00:00.000Z",
+      updatedAt: "2026-07-29T08:00:01.000Z",
+      activeVaultId: vault.vaultId,
+      sourceId,
+      waitingDependency: {
+        dependencyKind: "external_source",
+        dependencyId: sourceId,
+        requiredAction: "reconnect_path",
+        messageKey: "errors.source.external_unavailable"
+      },
+      message: "Waiting for the referenced original."
+    }));
+
+    const candidate = jobs.readOriginalSourceReconnectCandidate(jobId);
+    expect(candidate).toMatchObject({ activeVaultId: vault.vaultId, waitingJobId: jobId, sourceId });
+    expect(jobs.retry({ jobId }).status).toBe("not_allowed");
+
+    fs.writeFileSync(missingPath, content);
+    expect(jobs.resumeOriginalSourceReconnect(candidate!)).toMatchObject({ status: "requeued" });
+    expect(JSON.parse(fs.readFileSync(findFile(path.join(vaultPath, ".pige/jobs"), `${jobId}.json`), "utf8")).state)
+      .toBe("queued");
+  });
+
+  it("rejects source reconnect resume after the waiting Job revision changes", () => {
+    const { vaultPath, vault } = makeVault();
+    const { jobs } = makeServices(vaultPath, vault);
+    const jobId = "job_20260729_reconnectstale1";
+    const sourceId = "src_20260729_reconnectstale1";
+    const waiting = JobRecordSchema.parse({
+      schemaVersion: 1,
+      id: jobId,
+      class: "agent_turn",
+      state: "waiting_dependency",
+      stage: "waiting_for_path",
+      createdAt: "2026-07-29T08:00:00.000Z",
+      updatedAt: "2026-07-29T08:00:01.000Z",
+      activeVaultId: vault.vaultId,
+      sourceId,
+      waitingDependency: {
+        dependencyKind: "external_source",
+        dependencyId: sourceId,
+        requiredAction: "reconnect_path",
+        messageKey: "errors.source.external_unavailable"
+      },
+      message: "Waiting for the referenced original."
+    });
+    writeJob(vaultPath, waiting);
+    const candidate = jobs.readOriginalSourceReconnectCandidate(jobId)!;
+    writeJob(vaultPath, JobRecordSchema.parse({ ...waiting, updatedAt: "2026-07-29T08:00:02.000Z" }));
+
+    expect(jobs.resumeOriginalSourceReconnect(candidate)).toMatchObject({ status: "not_allowed" });
+    expect(JSON.parse(fs.readFileSync(findFile(path.join(vaultPath, ".pige/jobs"), `${jobId}.json`), "utf8")).state)
+      .toBe("waiting_dependency");
+  });
+
   it("reconciles interrupted jobs conservatively on startup", () => {
     const { vaultPath, vault } = makeVault();
     const { jobs } = makeServices(vaultPath, vault);

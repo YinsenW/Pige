@@ -70,6 +70,7 @@ import {
 } from "./dataset-import-job-executor";
 import { SourcePageService } from "./source-page-service";
 import type { SourcePageResult } from "./source-page-service";
+import { tryVerifyReadableSourceFile } from "./source-file-access";
 import type { LocalDatabaseService } from "./local-database-service";
 import type { OcrPort, OcrSourceCapability } from "./ocr-service";
 import {
@@ -218,6 +219,14 @@ const CANCELABLE_STATES = new Set<JobState>([
   "failed_retryable"
 ]);
 const RETRYABLE_STATES = new Set<JobState>(["failed_retryable", "waiting_dependency", "cancelled"]);
+
+export interface OriginalSourceReconnectCandidate {
+  readonly activeVaultId: string;
+  readonly waitingJobId: string;
+  readonly jobRevision: string;
+  readonly sourceId: string;
+}
+
 export class JobsService {
   readonly #vaults: JobsVaultPort;
   readonly #sourcePages: SourcePageService;
@@ -567,6 +576,17 @@ export class JobsService {
     }
     const jobFile = { path: snapshot.path, job: snapshot.job };
 
+    if (isOriginalSourceReconnectWait(jobFile.job)) {
+      const source = jobFile.job.sourceId ? readSourceRecord(vaultPath, jobFile.job.sourceId) : undefined;
+      if (!source || !tryVerifyReadableSourceFile(vaultPath, source)) {
+        return {
+          status: "not_allowed",
+          reason: "Reconnect the exact referenced original before retrying this Job.",
+          job: toJobSummary(vaultPath, jobFile.job)
+        };
+      }
+    }
+
     if (!RETRYABLE_STATES.has(jobFile.job.state)) {
       return {
         status: "not_allowed",
@@ -593,6 +613,30 @@ export class JobsService {
       status: "requeued",
       job: toJobSummary(vaultPath, committed)
     };
+  }
+
+  readOriginalSourceReconnectCandidate(jobId: string): OriginalSourceReconnectCandidate | undefined {
+    const vault = this.#vaults.current();
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!vault || !vaultPath) return undefined;
+    const job = this.#readJobSnapshot(vaultPath, jobId)?.job;
+    if (!job || !isOriginalSourceReconnectWait(job) || !job.sourceId || job.activeVaultId !== vault.vaultId) {
+      return undefined;
+    }
+    return {
+      activeVaultId: vault.vaultId,
+      waitingJobId: job.id,
+      jobRevision: job.updatedAt,
+      sourceId: job.sourceId
+    };
+  }
+
+  resumeOriginalSourceReconnect(candidate: OriginalSourceReconnectCandidate): JobActionResult {
+    const current = this.readOriginalSourceReconnectCandidate(candidate.waitingJobId);
+    if (!current || !isDeepStrictEqual(current, candidate)) {
+      return { status: "not_allowed", reason: "The waiting source Job changed before resume." };
+    }
+    return this.retry({ jobId: candidate.waitingJobId });
   }
 
   createAgentTurnJob(request: CreateAgentTurnJobRequest): JobRecord {
@@ -1897,7 +1941,13 @@ export class JobsService {
             jobFile.path,
             runningJob,
             "Waiting for the referenced original source to be reconnected before Agent ingest can continue.",
-            durableState
+            durableState,
+            {
+              dependencyKind: "external_source",
+              dependencyId: sourceRecordFile.sourceRecord.id,
+              requiredAction: "reconnect_path",
+              messageKey: "errors.source.external_unavailable"
+            }
           );
         } else if (
           caught instanceof PigeDomainError &&
@@ -3420,7 +3470,8 @@ export class JobsService {
     filePath: string,
     fallback: JobRecord,
     message: string,
-    durableState?: JobDurableWriteState
+    durableState?: JobDurableWriteState,
+    dependency?: NonNullable<JobRecord["waitingDependency"]>
   ): JobRecord {
     const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
     const snapshot = this.#alignDurableExecutionState(
@@ -3431,7 +3482,7 @@ export class JobsService {
     return coordinator.settle(snapshot, {
       kind: "waiting",
       reason: "dependency",
-      dependency: snapshot.job.waitingDependency ?? {
+      dependency: dependency ?? snapshot.job.waitingDependency ?? {
         dependencyKind: "local_tool",
         requiredAction: "repair_tool",
         messageKey: "errors.agent_runtime.tool_dependency_waiting"
@@ -4079,9 +4130,17 @@ function toJobSummary(vaultPath: string, job: JobRecord): JobSummary {
 
 function canReconnectDependency(job: JobRecord): boolean {
   const waiting = job.waitingDependency;
-  return job.class === "backup" && job.state === "waiting_dependency" &&
-    waiting?.requiredAction === "reconnect_path" &&
-    (waiting.dependencyKind === "vault_binding" || waiting.dependencyKind === "external_source");
+  if (job.state !== "waiting_dependency" || waiting?.requiredAction !== "reconnect_path") return false;
+  return job.class === "backup"
+    ? waiting.dependencyKind === "vault_binding" || waiting.dependencyKind === "external_source"
+    : isOriginalSourceReconnectWait(job);
+}
+
+function isOriginalSourceReconnectWait(job: JobRecord): boolean {
+  const waiting = job.waitingDependency;
+  return job.class === "agent_turn" && job.state === "waiting_dependency" &&
+    Boolean(job.sourceId) && waiting?.dependencyKind === "external_source" &&
+    waiting.dependencyId === job.sourceId && waiting.requiredAction === "reconnect_path";
 }
 
 function readSourceRecord(vaultPath: string, sourceId: string): SourceRecord | undefined {

@@ -17,6 +17,32 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("freezes one pathless currentness-bound referenced-original reconnect channel", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const jobsApi = contractsSource.slice(
+      contractsSource.indexOf("readonly jobs: {"),
+      contractsSource.indexOf("readonly confirmations: {")
+    );
+
+    expect(schemasSource).toContain(
+      'JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL = "jobs.reconnectOriginalSource"'
+    );
+    expect(schemasSource).toContain("ReferencedOriginalReconnectRequestSchema");
+    expect(schemasSource).toContain("expectedJobUpdatedAt: z.string().datetime({ offset: true })");
+    expect(schemasSource).toContain('status: z.literal("reconnected")');
+    expect(jobsApi).toContain("readonly reconnectOriginalSource: (");
+    expect(jobsApi).toContain("request: ReferencedOriginalReconnectRequest");
+    expect(jobsApi).toContain(") => Promise<ReferencedOriginalReconnectResult>;");
+    expect(preloadSource).toContain("ReferencedOriginalReconnectRequestSchema.parse(request)");
+    expect(preloadSource).toContain("ReferencedOriginalReconnectResultSchema.parse(await ipcRenderer.invoke(");
+    expect(preloadSource).toContain("JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL");
+    for (const privateField of ["sourcePath", "absolutePath", "rootId", "sourceBody", "rawError"]) {
+      expect(jobsApi).not.toContain(privateField);
+    }
+  });
+
   it("freezes one explicit body-free Vault migration channel without a second open API", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
