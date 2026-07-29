@@ -15,9 +15,15 @@ import {
 } from "@pige/schemas";
 
 export type HighRiskConfirmationEffectResult = "committed" | "stale" | "failed";
+export interface HighRiskConfirmationCommittedEffect {
+  readonly status: "committed";
+  readonly continueEffect: () => void;
+}
 export type HighRiskConfirmationEffectResolver = (
   decision: "allow" | "deny"
-) => HighRiskConfirmationEffectResult | Promise<HighRiskConfirmationEffectResult>;
+) => HighRiskConfirmationEffectResult |
+  HighRiskConfirmationCommittedEffect |
+  Promise<HighRiskConfirmationEffectResult | HighRiskConfirmationCommittedEffect>;
 
 export type HighRiskConfirmationRegistration = Omit<
   HighRiskConfirmationSummary,
@@ -193,7 +199,7 @@ export class HighRiskConfirmationService {
     parsed: HighRiskConfirmationResolveRequest
   ): Promise<HighRiskConfirmationResolveResult> {
 
-    let outcome: HighRiskConfirmationEffectResult;
+    let outcome: HighRiskConfirmationEffectResult | HighRiskConfirmationCommittedEffect;
     try {
       outcome = await pending.resolver(parsed.decision);
     } catch {
@@ -233,6 +239,13 @@ export class HighRiskConfirmationService {
     } satisfies ResolutionReceipt;
     this.#remember(terminal);
     this.#emit();
+    if (typeof outcome === "object") {
+      try {
+        outcome.continueEffect();
+      } catch {
+        // The committed decision is authoritative; the owning Job projects effect failure.
+      }
+    }
     return HighRiskConfirmationResolveResultSchema.parse({
       apiVersion: 1,
       status: "committed",

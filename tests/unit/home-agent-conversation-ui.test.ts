@@ -2378,6 +2378,60 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("closes an authoritatively committed confirmation before its resolve call settles", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const resolveGate = deferred<HighRiskConfirmationResolveResult>();
+    const api = makePigeApi(harness);
+    const deferredApi = {
+      ...api,
+      confirmations: {
+        ...api.confirmations,
+        resolve: (request: HighRiskConfirmationResolveRequest) => {
+          harness.confirmationResolveRequests.push(request);
+          return resolveGate.promise;
+        }
+      }
+    };
+    const { container, root } = await mountHome(dom, deferredApi);
+    const composer = homeComposer(container);
+    composer.focus();
+    const pending = pendingHighRiskConfirmation();
+    harness.confirmationPending = pending;
+    await act(async () => {
+      for (const listener of harness.confirmationListeners) listener(pending);
+      await settle(dom);
+    });
+    await waitFor(dom, () => buttons(container, "Allow this effect").length === 1);
+
+    await clickButton(dom, container, "Allow this effect");
+    await waitFor(dom, () => harness.confirmationResolveRequests.length === 1);
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    await act(async () => {
+      for (const listener of harness.confirmationListeners) listener({
+        apiVersion: 1,
+        status: "none",
+        revision: pending.revision + 1
+      });
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[role="dialog"]') === null);
+    expect(dom.window.document.activeElement).toBe(composer);
+
+    resolveGate.resolve({
+      apiVersion: 1,
+      status: "committed",
+      confirmationId: pending.confirmation.confirmationId,
+      revision: pending.revision + 1,
+      decision: "allow"
+    });
+    await act(async () => settle(dom));
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("adopts only monotonic confirmation events and traps keyboard focus inside the dialog", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);

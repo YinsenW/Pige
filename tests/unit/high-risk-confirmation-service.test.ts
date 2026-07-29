@@ -165,4 +165,23 @@ describe("HighRiskConfirmationService", () => {
     gate.resolve("committed");
     await expect(resolving).resolves.toMatchObject({ status: "committed", decision: "deny" });
   });
+
+  it("publishes the committed decision before starting the owning effect continuation", async () => {
+    const service = new HighRiskConfirmationService();
+    const states: string[] = [];
+    const continueEffect = vi.fn(() => states.push("effect"));
+    const registered = service.register(SHELL, () => ({ status: "committed", continueEffect }));
+    service.onChanged((event) => states.push(event.status));
+
+    await expect(service.resolve({
+      apiVersion: 1,
+      confirmationId: SHELL.confirmationId,
+      expectedRevision: registered.revision,
+      decision: "allow"
+    })).resolves.toMatchObject({ status: "committed", decision: "allow" });
+
+    expect(states).toEqual(["none", "effect"]);
+    expect(service.pending()).toEqual({ apiVersion: 1, status: "none", revision: 2 });
+    expect(continueEffect).toHaveBeenCalledOnce();
+  });
 });
