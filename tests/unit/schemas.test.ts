@@ -108,6 +108,8 @@ import {
   NoteEditorSaveResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
+  NoteRevealSourceRequestSchema,
+  NoteRevealSourceResultSchema,
   OperationRecordSchema,
   OcrLanguagePreferenceRequestSchema,
   OcrLanguagePreferenceResultSchema,
@@ -3374,6 +3376,46 @@ describe("schemas", () => {
       requestId: request.requestId,
       status: "not_found",
       sourceRecord: { path: "/private/source.json" }
+    })).toThrow();
+  });
+
+  it("keeps single-source Reader reveal currentness-bound and pathless", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "notesourcereveal_abcdefghijklmnop",
+      activeVaultId: "vault_20260729_abcdefgh",
+      currentPageId: "page_20260729_current1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      sourceId: "src_20260729_source1234"
+    } as const;
+
+    expect(NoteRevealSourceRequestSchema.parse(request)).toEqual(request);
+    expect(() => NoteRevealSourceRequestSchema.parse({
+      ...request,
+      path: "/private/original.pdf"
+    })).toThrow();
+    for (const status of [
+      "revealed",
+      "cancelled",
+      "stale",
+      "not_found",
+      "unavailable",
+      "failed"
+    ] as const) {
+      expect(NoteRevealSourceResultSchema.parse({ ...request, status }))
+        .toEqual({ ...request, status });
+    }
+    expect(() => NoteRevealSourceResultSchema.parse({
+      ...request,
+      status: "failed",
+      sourcePath: "/private/original.pdf",
+      sourceBody: "private",
+      rawError: "private"
+    })).toThrow();
+    expect(() => NoteRevealSourceResultSchema.parse({
+      ...request,
+      requestId: "noteref_abcdefghijklmnop",
+      status: "revealed"
     })).toThrow();
   });
 

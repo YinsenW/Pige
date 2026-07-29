@@ -158,6 +158,8 @@ import type {
   NoteRenderResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteRevealSourceRequest,
+  NoteRevealSourceResult,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
   PiPackageInstallRequest,
@@ -419,6 +421,9 @@ export type {
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
   NoteSourceReferenceRequestId,
+  NoteRevealSourceRequestId,
+  NoteRevealSourceRequest,
+  NoteRevealSourceResult,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
   ReaderSelectionEndpoint,
@@ -1956,6 +1961,9 @@ export interface PigeDesktopApi {
     readonly openSourceReference: (
       request: NoteOpenSourceReferenceRequest
     ) => Promise<NoteOpenSourceReferenceResult>;
+    readonly revealSource: (
+      request: NoteRevealSourceRequest
+    ) => Promise<NoteRevealSourceResult>;
   };
   readonly localCapabilities: {
     readonly ocrLanguagePreference: (
