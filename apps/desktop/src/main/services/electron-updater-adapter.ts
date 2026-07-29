@@ -1,5 +1,5 @@
 import type { AppUpdater, UpdateCheckResult, UpdateDownloadedEvent } from "electron-updater";
-import { autoUpdater } from "electron-updater";
+import electronUpdater from "electron-updater";
 import type { UpdateCapability } from "@pige/contracts";
 import { UpdateVersionSchema } from "@pige/schemas";
 import type {
@@ -44,7 +44,7 @@ export class ElectronUpdaterAdapter implements UpdateCheckAdapter {
       : platform === "linux"
         ? "unsupported_platform"
         : "development";
-    this.#client = options.client ?? autoUpdater;
+    this.#client = options.client ?? electronUpdater.autoUpdater;
     this.#configureClient();
   }
 
