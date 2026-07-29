@@ -5,6 +5,7 @@ import type {
   AgentTurnAnswer,
   HomeAgentModelUsage,
   ReaderSelectionIdentity,
+  ReaderSelectionProposalPreview,
   ReaderSelectionTransformAction
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
@@ -40,6 +41,7 @@ import {
   readReaderSelectionLinkBinding,
   readReaderSelectionTransformBinding
 } from "./reader-selection-job-binding";
+import { readReaderSelectionCreateNoteBinding } from "./reader-selection-create-note-service";
 
 export interface HomeAgentJobSession {
   current: JobRecord;
@@ -97,6 +99,19 @@ export interface HomeAgentReaderSelectionMutationPort {
     readonly selection: ReaderSelectionIdentity;
     readonly target: ReaderSelectionLinkTarget;
   }): HomeAgentReaderSelectionPublication | undefined;
+  publishCreateNote?(input: {
+    readonly vaultPath: string;
+    readonly job: JobRecord;
+    readonly selection: ReaderSelectionIdentity;
+    readonly selectedText: string;
+    readonly title: string;
+    readonly body: string;
+    readonly modelProfileId: string;
+  }): ReaderSelectionProposalPreview;
+  readCreateNotePublication?(input: {
+    readonly jobId: string;
+    readonly selection: ReaderSelectionIdentity;
+  }): ReaderSelectionProposalPreview | undefined;
 }
 
 export interface ReaderSelectionLinkTarget {
@@ -304,6 +319,19 @@ export function readReaderSelectionLinkPublication(
   });
 }
 
+function readReaderSelectionCreateNotePublication(
+  mutations: HomeAgentReaderSelectionMutationPort | undefined,
+  job: JobRecord
+): HomeAgentReaderSelectionPublication | undefined {
+  const binding = readReaderSelectionCreateNoteBinding(job);
+  if (!binding) return undefined;
+  const proposal = mutations?.readCreateNotePublication?.({ jobId: job.id, selection: binding.selection });
+  if (!proposal) return undefined;
+  return new Set(["ready", "resolving"]).has(proposal.state)
+    ? { status: "review_required", proposalId: proposal.proposalId }
+    : { status: "resolved", proposalId: proposal.proposalId };
+}
+
 export function settleJobAfterAssistant(input: {
   readonly session: HomeAgentJobSession;
   readonly jobs: HomeAgentTurnJobPort;
@@ -320,7 +348,8 @@ export function settleJobAfterAssistant(input: {
     input.mutations,
     input.vaultPath,
     input.session.current
-  ) ?? readReaderSelectionLinkPublication(input.mutations, input.vaultPath, input.session.current);
+  ) ?? readReaderSelectionLinkPublication(input.mutations, input.vaultPath, input.session.current) ??
+    readReaderSelectionCreateNotePublication(input.mutations, input.session.current);
   const appendPublication = input.currentNoteAppendPublication ?? input.currentNoteAppends?.readPublication({
     vaultPath: input.vaultPath,
     activeVaultId: requireJobActiveVaultId(input.session.current),
@@ -337,7 +366,7 @@ export function settleJobAfterAssistant(input: {
       proposalId: publication.proposalId,
       message: appendPublication
         ? "The current-note append requires bounded review before any note bytes are changed."
-        : "The Reader transform requires bounded review before any note bytes are changed.",
+        : "The Reader selection mutation requires bounded review before any note bytes are changed.",
       facts: {
         stage: "planning",
         outputRefs: [

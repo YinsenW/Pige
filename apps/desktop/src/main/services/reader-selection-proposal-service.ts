@@ -81,19 +81,27 @@ export interface ReaderSelectionProposalWriterPort {
   }): OperationRecord;
 }
 
+export interface ReaderSelectionCreateNoteProposalPort {
+  get(request: ReaderSelectionProposalGetRequest): ReaderSelectionProposalGetResult | undefined;
+  decide(request: ReaderSelectionProposalDecisionRequest): ReaderSelectionProposalDecisionResult | undefined;
+}
+
 export class ReaderSelectionProposalService {
   readonly #vaults: ReaderSelectionProposalVaultPort;
   readonly #jobs: ReaderSelectionProposalJobPort;
   readonly #writer: ReaderSelectionProposalWriterPort;
+  readonly #createNotes: ReaderSelectionCreateNoteProposalPort | undefined;
 
   constructor(
     vaults: ReaderSelectionProposalVaultPort,
     jobs: ReaderSelectionProposalJobPort,
-    writer: ReaderSelectionProposalWriterPort
+    writer: ReaderSelectionProposalWriterPort,
+    createNotes?: ReaderSelectionCreateNoteProposalPort
   ) {
     this.#vaults = vaults;
     this.#jobs = jobs;
     this.#writer = writer;
+    this.#createNotes = createNotes;
   }
 
   shouldRequireReview(selection: ReaderSelectionIdentity, replacement: string): boolean {
@@ -158,6 +166,8 @@ export class ReaderSelectionProposalService {
   }
 
   get(request: ReaderSelectionProposalGetRequest): ReaderSelectionProposalGetResult {
+    const createNote = this.#createNotes?.get(request);
+    if (createNote) return createNote;
     const current = this.#vaults.current();
     const vaultPath = this.#vaults.activeVaultPath();
     if (!current || !vaultPath) return { apiVersion: 1, status: "unavailable", reason: "vault_changed" };
@@ -206,6 +216,8 @@ export class ReaderSelectionProposalService {
   }
 
   decide(request: ReaderSelectionProposalDecisionRequest): ReaderSelectionProposalDecisionResult {
+    const createNote = this.#createNotes?.decide(request);
+    if (createNote) return createNote;
     try {
       return this.#decide(request);
     } catch (caught) {

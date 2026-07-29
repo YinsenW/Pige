@@ -10,6 +10,7 @@ import type {
   NoteRenderRequest,
   NoteResolveInlineReferenceRequest,
   ReaderSelectionActionRequest,
+  ReaderSelectionCreateNoteRequest,
   ReaderSelectionProposalDecisionRequest,
   ReaderSelectionProposalGetRequest,
   ReaderSelectionResolveRequest,
@@ -27,6 +28,8 @@ import {
   NoteResolveInlineReferenceResultSchema,
   ReaderSelectionActionRequestSchema,
   ReaderSelectionActionResultSchema,
+  ReaderSelectionCreateNoteRequestSchema,
+  ReaderSelectionCreateNoteResultSchema,
   ReaderSelectionLinkRequestSchema,
   ReaderSelectionLinkResultSchema,
   ReaderSelectionProposalDecisionRequestSchema,
@@ -42,12 +45,14 @@ import { AgentTurnDraftPublisher } from "./services/agent-turn-draft-publisher";
 import type { NotesService } from "./services/notes-service";
 import type { ReaderSelectionActionService } from "./services/reader-selection-action-service";
 import type { ReaderSelectionProposalService } from "./services/reader-selection-proposal-service";
+import type { ReaderSelectionCreateNoteActionService } from "./services/reader-selection-create-note-service";
 
 interface RegisterReaderIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
   readonly getNotesService: () => NotesService;
   readonly getReaderSelectionActionService: () => ReaderSelectionActionService;
   readonly getReaderSelectionProposalService: () => ReaderSelectionProposalService;
+  readonly getReaderSelectionCreateNoteService: () => ReaderSelectionCreateNoteActionService;
 }
 
 function failedEditorOpen(request: NoteEditorOpenRequest): NoteEditorOpenResult {
@@ -260,6 +265,44 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     try {
       return ReaderSelectionTransformResultSchema.parse(
         await options.getReaderSelectionActionService().submitTransform(parsed, {
+          onDraft: (draft) => draftPublisher.publish(draft)
+        })
+      );
+    } finally {
+      draftPublisher.close();
+    }
+  });
+  options.ipcMain.handle("readerSelection.submitCreateNote", async (
+    event,
+    request: ReaderSelectionCreateNoteRequest
+  ) => {
+    const parsed = ReaderSelectionCreateNoteRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return ReaderSelectionCreateNoteResultSchema.parse({
+        apiVersion: 1,
+        requestId: parsed.requestId,
+        status: "invalid",
+        reason: "render_context_changed"
+      });
+    }
+    const renderContextCurrent = (): boolean =>
+      notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed() &&
+      options.getNotesService().isRenderContextCurrent(ownerId, {
+        activeVaultId: parsed.activeVaultId,
+        pageId: parsed.selection.pageId,
+        renderContextId: parsed.renderContextId
+      });
+    const draftPublisher = new AgentTurnDraftPublisher({
+      clientTurnId: parsed.clientTurnId,
+      send: (draft) => {
+        if (!event.sender.isDestroyed()) event.sender.send("agent.turnDraft", draft);
+      }
+    });
+    try {
+      return ReaderSelectionCreateNoteResultSchema.parse(
+        await options.getReaderSelectionCreateNoteService().submit(parsed, {
+          renderContextCurrent,
           onDraft: (draft) => draftPublisher.publish(draft)
         })
       );
