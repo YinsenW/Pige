@@ -261,7 +261,7 @@ export class HomeAgentAttachmentService {
             jobId: request.jobId,
             sourceId,
             inputChecksum: entry.inputChecksum,
-            ordinal: entry.ordinal,
+            ordinal: acceptedIndex,
             attachmentSetHash: request.prepared.attachmentSetHash
           });
           if (preserved.sourceId !== sourceId || preserved.inputChecksum !== entry.inputChecksum) {
@@ -290,7 +290,7 @@ export class HomeAgentAttachmentService {
           jobId: request.jobId,
           sourceId,
           inputChecksum: entry.inputChecksum,
-          ordinal: entry.ordinal,
+          ordinal: acceptedIndex,
           attachmentSetHash: request.prepared.attachmentSetHash
         });
       } catch {

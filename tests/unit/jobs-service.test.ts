@@ -10,6 +10,7 @@ import {
 import { CaptureService, type SourceFetchPort } from "../../apps/desktop/src/main/services/capture-service";
 import { DocumentParserService, type DocumentParserPort } from "../../apps/desktop/src/main/services/document-parser-service";
 import { JobCancellationError } from "../../apps/desktop/src/main/services/job-execution-control";
+import { HomeAgentAttachmentService } from "../../apps/desktop/src/main/services/home-agent-attachment-service";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { ingressSnapshotService } from "../../apps/desktop/src/main/services/ingress-snapshot-service";
 import { KnowledgeActivityService } from "../../apps/desktop/src/main/services/knowledge-activity-service";
@@ -555,6 +556,60 @@ describe("jobs service", () => {
     });
     expect(listFiles(path.join(vaultPath, ".pige", "source-records")))
       .toHaveLength(2);
+  });
+
+  it("adopts a sparse accepted attachment set with compact durable ordinals", async () => {
+    const { vaultPath, vault } = makeVault();
+    const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
+    const jobs = new JobsService(vaults);
+    const attachments = new HomeAgentAttachmentService(new CaptureService(vaults));
+    const inputRoot = path.dirname(vaultPath);
+    const firstPath = path.join(inputRoot, "first.md");
+    const blockedPath = path.join(inputRoot, "blocked.exe");
+    const thirdPath = path.join(inputRoot, "third.txt");
+    fs.writeFileSync(firstPath, "first", "utf8");
+    fs.writeFileSync(blockedPath, "blocked", "utf8");
+    fs.writeFileSync(thirdPath, "third", "utf8");
+    const stagedItems = [
+      { kind: "file" as const, ordinal: 0, displayName: "first.md" },
+      { kind: "file" as const, ordinal: 1, displayName: "blocked.exe" },
+      { kind: "file" as const, ordinal: 2, displayName: "third.txt" }
+    ];
+    const prepared = await attachments.prepare([
+      { ordinal: 0, displayName: "first.md", internalPath: firstPath },
+      { ordinal: 1, displayName: "blocked.exe", internalPath: blockedPath },
+      { ordinal: 2, displayName: "third.txt", internalPath: thirdPath }
+    ], stagedItems);
+    expect(prepared.entries.map((entry) => entry.ordinal)).toEqual([0, 2]);
+
+    const created = jobs.createAgentTurnJob({
+      conversationEventId: "evt_20260729_sparseatomic1",
+      conversationLocator: ".pige/conversations/2026/07/conv_20260729_sparseatomic.jsonl",
+      inputHash: `sha256:${"b".repeat(64)}`,
+      sourceExpected: true,
+      attachmentCount: prepared.entries.length,
+      attachmentSetHash: prepared.attachmentSetHash,
+      sourceChecksums: prepared.entries.map((entry) => entry.inputChecksum)
+    });
+    const sourceIds = (created.inputRefs ?? [])
+      .filter((ref) => ref.kind === "source" && ref.role === "agent_turn_source")
+      .map((ref) => requireValue(ref.id));
+    const preserved = await attachments.preserve({
+      prepared,
+      turn: { schemaVersion: 1, inputKind: "file_picker", locale: "en", stagedItems },
+      jobId: created.id,
+      firstSourceId: sourceIds[0]!
+    });
+
+    expect(preserved).toMatchObject({ status: "preserved", sourceIds });
+    expect(jobs.attachAgentTurnSources(created.id, sourceIds, prepared.attachmentSetHash)).toMatchObject({
+      id: created.id,
+      state: "queued"
+    });
+    expect(sourceIds.map((sourceId) => SourceRecordSchema.parse(JSON.parse(fs.readFileSync(
+      findFile(path.join(vaultPath, ".pige/source-records"), `${sourceId}.json`),
+      "utf8"
+    ))).metadata.agentTurnAttachmentOrdinal)).toEqual([0, 1]);
   });
 
   it("retains private ingress snapshots until the exact parent is durably terminal", async () => {

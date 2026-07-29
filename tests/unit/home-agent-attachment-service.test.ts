@@ -156,7 +156,7 @@ describe("HomeAgentAttachmentService", () => {
     expect(preserve).not.toHaveBeenCalled();
   });
 
-  it("preserves sparse accepted entries with their original staged ordinals and deterministic bindings", async () => {
+  it("preserves sparse accepted entries with compact source ordinals and original staged receipts", async () => {
     const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-attachment-sparse-")));
     roots.push(root);
     const firstPath = path.join(root, "first.md");
@@ -200,9 +200,10 @@ describe("HomeAgentAttachmentService", () => {
 
     expect(result.sourceIds).toEqual([firstSourceId, createAttachmentSourceId(jobId, 1)]);
     expect(preserve.mock.calls.map((call) => call[1])).toEqual([
-      expect.objectContaining({ sourceId: firstSourceId, ordinal: 1 }),
-      expect.objectContaining({ sourceId: createAttachmentSourceId(jobId, 1), ordinal: 3 })
+      expect.objectContaining({ sourceId: firstSourceId, ordinal: 0 }),
+      expect.objectContaining({ sourceId: createAttachmentSourceId(jobId, 1), ordinal: 1 })
     ]);
+    expect(prepared.entries.map((entry) => entry.ordinal)).toEqual([1, 3]);
     expect(prepared.rejectedItems).toEqual([
       { ordinal: 0, kind: "file", displayName: "blocked.exe", reason: "unsupported_type" }
     ]);
