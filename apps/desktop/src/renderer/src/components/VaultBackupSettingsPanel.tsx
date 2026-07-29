@@ -319,6 +319,113 @@ function backupJobMessageKey(job: JobSummary): string {
 
 type ReconnectNotice = { readonly kind: "status" | "error"; readonly key: string };
 
+export type BackupContinueIncompleteOutcome = "continued" | "cancelled" | "stale" | "not_found" | "ineligible" | "failed";
+
+export function BackupContinueIncompleteAction(props: {
+  readonly identityKey: string;
+  readonly eligible: boolean;
+  readonly disabled?: boolean;
+  readonly labels: {
+    readonly action: string;
+    readonly confirmation: string;
+    readonly confirm: string;
+    readonly cancel: string;
+    readonly pending: string;
+    readonly continued: string;
+    readonly stale: string;
+    readonly failed: string;
+  };
+  readonly onContinue: () => Promise<BackupContinueIncompleteOutcome>;
+  readonly onContinued: () => Promise<void>;
+  readonly onPendingChange?: (pending: boolean) => void;
+  readonly returnFocusRef: RefObject<HTMLElement | null>;
+}): React.JSX.Element | null {
+  const [confirming, setConfirming] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [notice, setNotice] = useState<{ readonly kind: "status" | "error"; readonly text: string } | null>(null);
+  const requestSequenceRef = useRef(0);
+  const requestActiveRef = useRef(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  const previousEligibleRef = useRef(props.eligible);
+
+  const restoreFocus = (): void => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() =>
+      (triggerRef.current ?? props.returnFocusRef.current)?.focus()));
+  };
+
+  useEffect(() => {
+    const lostEligibility = previousEligibleRef.current && !props.eligible;
+    previousEligibleRef.current = props.eligible;
+    requestSequenceRef.current += 1;
+    requestActiveRef.current = false;
+    setConfirming(false);
+    setPending(false);
+    props.onPendingChange?.(false);
+    setNotice(null);
+    if (lostEligibility) restoreFocus();
+  }, [props.eligible, props.identityKey]);
+
+  useEffect(() => {
+    if (!confirming) return;
+    window.requestAnimationFrame(() => confirmRef.current?.focus());
+  }, [confirming]);
+
+  const cancel = (): void => {
+    if (requestActiveRef.current) return;
+    setConfirming(false);
+    setNotice(null);
+    restoreFocus();
+  };
+
+  const continueBackup = async (): Promise<void> => {
+    if (!props.eligible || props.disabled || requestActiveRef.current) return;
+    requestActiveRef.current = true;
+    const sequence = ++requestSequenceRef.current;
+    const identityKey = props.identityKey;
+    setPending(true);
+    props.onPendingChange?.(true);
+    setNotice(null);
+    try {
+      const outcome = await props.onContinue();
+      if (sequence !== requestSequenceRef.current || identityKey !== props.identityKey) return;
+      setConfirming(false);
+      if (outcome === "continued") {
+        setNotice({ kind: "status", text: props.labels.continued });
+        await props.onContinued().catch(() => undefined);
+      } else if (outcome === "cancelled") setNotice(null);
+      else if (outcome === "stale" || outcome === "not_found" || outcome === "ineligible") {
+        setNotice({ kind: "error", text: props.labels.stale });
+      } else setNotice({ kind: "error", text: props.labels.failed });
+    } catch {
+      if (sequence === requestSequenceRef.current && identityKey === props.identityKey) {
+        setConfirming(false);
+        setNotice({ kind: "error", text: props.labels.failed });
+      }
+    } finally {
+      if (sequence === requestSequenceRef.current && identityKey === props.identityKey) {
+        requestActiveRef.current = false;
+        setPending(false);
+        props.onPendingChange?.(false);
+        restoreFocus();
+      }
+    }
+  };
+
+  if (!props.eligible) return null;
+  return <div className="settings-row-control">
+    {confirming ? <div role="group" aria-label={props.labels.confirmation} className="settings-row-control">
+      <span className="settings-status">{props.labels.confirmation}</span>
+      <button ref={confirmRef} className="settings-button primary" type="button" disabled={pending} aria-busy={pending || undefined}
+        onClick={() => void continueBackup()}>{pending ? props.labels.pending : props.labels.confirm}</button>
+      <button className="settings-button" type="button" disabled={pending} onClick={cancel}>{props.labels.cancel}</button>
+    </div> : <button ref={triggerRef} className="settings-button" type="button" disabled={props.disabled}
+      onClick={() => { setNotice(null); setConfirming(true); }}>{props.labels.action}</button>}
+    {notice ? <span className={notice.kind === "error" ? "error" : "settings-status"}
+      role={notice.kind === "error" ? "alert" : "status"} aria-live="polite">{notice.text}</span> : null}
+  </div>;
+}
+
 export interface VaultBackupSettingsPanelProps {
   readonly locale: Locale;
   readonly busy: boolean;
@@ -457,6 +564,18 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
     }
   };
 
+  const continueIncompleteBackup = async (): Promise<BackupContinueIncompleteOutcome> => {
+    if (!activeBackupJob || activeBackupJob.canContinueIncomplete !== true) return "ineligible";
+    const result = await window.pige.backup.continueIncomplete({
+      apiVersion: 1,
+      requestId: `backupcontinuereq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+      activeVaultId: props.vault.vaultId,
+      waitingJobId: activeBackupJob.id,
+      expectedJobUpdatedAt: activeBackupJob.updatedAt
+    });
+    return result.status;
+  };
+
   const updatePolicy = async (defaultStrategy: SourceStorageStrategy): Promise<void> => {
     props.onError(null);
     try {
@@ -522,7 +641,26 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
         {activeBackupJob ? <div className="settings-row tall backup-job-status" role="status" aria-live="polite"><div className="settings-row-copy"><strong>{props.t("backup.currentJob")}</strong><span>{props.t(backupJobMessageKey(activeBackupJob))}</span></div><div className="settings-row-control">
           {activeBackupJob.state === "queued" || activeBackupJob.state === "running" ? <button type="button" className="settings-button" disabled={backupBusy} onClick={() => void cancelBackup()}>{props.t("home.cancelJob")}</button>
             : activeBackupJob.state === "failed_retryable" && activeBackupJob.error?.userAction === "retry" ? <button type="button" className="settings-button" disabled={backupBusy} onClick={() => void retryBackup()}>{props.t("home.retryJob")}</button>
-              : activeBackupJob.canReconnectDependency === true ? <button ref={reconnectButtonRef} type="button" className="settings-button" disabled={backupBusy} aria-busy={reconnectRequestActiveRef.current || undefined} onClick={() => void reconnectDependency()}>{props.t("backup.reconnectManagedSource")}</button> : null}
+              : activeBackupJob.canReconnectDependency === true ? <button ref={reconnectButtonRef} type="button" className="settings-button" disabled={backupBusy} aria-busy={reconnectRequestActiveRef.current || undefined} onClick={() => void reconnectDependency()}>{props.t("backup.reconnectManagedSource")}</button>
+                : <BackupContinueIncompleteAction
+                  identityKey={`${props.vault.vaultId}:${activeBackupJob.id}:${activeBackupJob.updatedAt}`}
+                  eligible={activeBackupJob.canContinueIncomplete === true}
+                  disabled={props.busy || backupBusy}
+                  labels={{
+                    action: props.t("backup.continueIncomplete"),
+                    confirmation: props.t("backup.continueIncompleteConfirmation"),
+                    confirm: props.t("backup.continueIncompleteConfirm"),
+                    cancel: props.t("backup.restoreCancel"),
+                    pending: props.t("backup.continueIncompletePending"),
+                    continued: props.t("backup.continueIncompleteContinued"),
+                    stale: props.t("backup.continueIncompleteStale"),
+                    failed: props.t("backup.continueIncompleteFailed")
+                  }}
+                  onContinue={continueIncompleteBackup}
+                  onContinued={props.onRefresh}
+                  onPendingChange={setBackupBusy}
+                  returnFocusRef={backupSectionRef}
+                />}
         </div></div> : null}
       </div>
       {reconnectNotice ? <p className={reconnectNotice.kind === "error" ? "error" : "muted"} role={reconnectNotice.kind === "error" ? "alert" : "status"} aria-live="polite">{props.t(reconnectNotice.key)}</p> : null}

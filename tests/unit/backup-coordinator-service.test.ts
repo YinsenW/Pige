@@ -23,6 +23,7 @@ import {
   prepareBackupDestinationPath
 } from "../../apps/desktop/src/main/services/backup-service";
 import { JobRecordStore } from "../../apps/desktop/src/main/services/job-record-store";
+import { prepareIncompleteBackupJob } from "../../apps/desktop/src/main/services/backup-reconnect-coordinator";
 import { writeBackupCreatedOperation } from "../../apps/desktop/src/main/services/restore-job-store";
 import {
   createVaultOnDisk,
@@ -139,6 +140,7 @@ describe("BackupCoordinatorService", () => {
       vaultId: input.vaultId,
       backupId: input.backupId,
       archiveDigest: input.archiveDigest,
+      ...(input.warningCodes ? { warningCodes: input.warningCodes } : {}),
       assertVaultWriterLease: input.assertVaultWriterLease
     });
     const coordinatorOptions = {
@@ -621,7 +623,123 @@ describe("BackupCoordinatorService", () => {
     expect(await restarted.recoverInterrupted()).toEqual({ recovered: 0, failed: 0 });
     expect(listOperationFiles(fixture.vaultPath)).toHaveLength(1);
   });
+
+  it("continues one exact incomplete Backup Job with a durable omission and warning", async () => {
+    const setup = await makeMissingExternalRootBackup("continueomit01");
+    const candidate = setup.coordinator.inspectIncompleteCandidate(
+      setup.vaultId,
+      setup.waiting.id,
+      setup.waiting.updatedAt
+    );
+    expect(candidate.status).toBe("ready");
+    if (candidate.status !== "ready") throw new Error("Expected an incomplete Backup candidate.");
+
+    expect(await setup.coordinator.continueIncomplete(candidate.candidate)).toBe("continued");
+
+    const completed = readJob(setup.fixture.vaultPath, setup.waiting.id);
+    expect(completed).toMatchObject({ id: setup.waiting.id, state: "completed_with_warnings" });
+    expect(completed.inputRefs).toContainEqual(expect.objectContaining({
+      kind: "root_binding",
+      id: setup.rootId,
+      locator: "vault_binding",
+      role: "backup_incomplete_omission"
+    }));
+    expect(completed.warnings?.map((warning) => warning.code))
+      .toContain("backup.external_managed_copy_omitted");
+    const operationPath = listOperationFiles(setup.fixture.vaultPath)[0]!;
+    expect(OperationRecordSchema.parse(JSON.parse(fs.readFileSync(operationPath, "utf8"))).warnings)
+      .toContain("backup.external_managed_copy_omitted");
+    expect(JSON.stringify(completed)).not.toContain("private/source.pdf");
+  });
+
+  it("adopts an accepted incomplete continuation after restart without a second Job", async () => {
+    const setup = await makeMissingExternalRootBackup("continuerestart01");
+    const inspected = setup.coordinator.inspectIncompleteCandidate(
+      setup.vaultId,
+      setup.waiting.id,
+      setup.waiting.updatedAt
+    );
+    if (inspected.status !== "ready") throw new Error("Expected an incomplete Backup candidate.");
+    const store = new JobRecordStore({
+      rootPath: path.join(setup.fixture.vaultPath, ".pige", "jobs"),
+      unsafeAllowUnfenced: true
+    });
+    const match = /^job_(\d{4})(\d{2})\d{2}_/u.exec(setup.waiting.id)!;
+    const jobPath = path.join(
+      setup.fixture.vaultPath,
+      ".pige",
+      "jobs",
+      match[1]!,
+      match[2]!,
+      `${setup.waiting.id}.json`
+    );
+    expect(prepareIncompleteBackupJob(
+      store,
+      store.read(jobPath),
+      inspected.candidate,
+      new Date(FIXED_NOW)
+    )?.job.state).toBe("queued");
+
+    const restarted = new BackupCoordinatorService(setup.options);
+    expect(await restarted.recoverInterrupted()).toEqual({ recovered: 1, failed: 0 });
+    expect(readJob(setup.fixture.vaultPath, setup.waiting.id)).toMatchObject({
+      id: setup.waiting.id,
+      state: "completed_with_warnings"
+    });
+    expect(listJobs(setup.fixture.vaultPath).filter((job) => job.class === "backup")).toHaveLength(1);
+    expect(listOperationFiles(setup.fixture.vaultPath)).toHaveLength(1);
+  });
 });
+
+async function makeMissingExternalRootBackup(suffix: string) {
+  const fixture = makeRealCoordinatorFixture(suffix);
+  const rootId = `root_${suffix}`;
+  const sourceId = `src_20260729_${suffix}`;
+  const sourceBody = `missing external source ${suffix}`;
+  fs.writeFileSync(
+    path.join(fixture.vaultPath, ".pige", "source-records", `${sourceId}.json`),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      id: sourceId,
+      kind: "pdf_file",
+      storageStrategy: "copy_to_source_library",
+      semanticOrchestration: "agent_turn",
+      managedCopy: {
+        rootId,
+        pathBasis: "root_relative",
+        path: "private/source.pdf",
+        checksum: digestFor(sourceBody),
+        size: Buffer.byteLength(sourceBody)
+      },
+      artifacts: [],
+      metadata: {},
+      createdAt: FIXED_NOW,
+      updatedAt: FIXED_NOW
+    }, null, 2)}\n`,
+    "utf8"
+  );
+  const userDataPath = path.join(fixture.root, "missing-app-data");
+  fs.mkdirSync(userDataPath, { recursive: true });
+  const core = new BackupRestoreService({ userDataPath: fs.realpathSync.native(userDataPath) });
+  const options = {
+    ...fixture.options,
+    backupService: core as BackupServicePort,
+    writeBackupCreatedOperation: (input: BackupCreatedOperationInput) => writeBackupCreatedOperation({
+      ...input,
+      ...(input.warningCodes ? { warningCodes: input.warningCodes } : {})
+    })
+  };
+  const coordinator = new BackupCoordinatorService(options);
+  const waiting = await coordinator.create(fixture.destination);
+  return {
+    fixture,
+    options,
+    coordinator,
+    waiting,
+    rootId,
+    vaultId: loadVaultSummary(fixture.vaultPath).vaultId
+  };
+}
 
 function makeRealCoordinatorFixture(suffix: string) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-backup-review-"));

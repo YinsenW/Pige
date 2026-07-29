@@ -39,7 +39,9 @@ import {
 import {
   assertDistinctBindingPaths,
   captureCanonicalBindingDirectory,
+  parseIncompleteManagedCopyRootIds,
   proveManagedCopyDependency,
+  recordIncompleteManagedCopyRoot,
   repairManagedCopyDependency,
   type BackupManagedCopyDependencyIdentity,
   type BackupManagedCopyRepairProof
@@ -371,6 +373,7 @@ export interface BackupCreateOptions {
   readonly expectedDestinationFence?: BackupDestinationFence;
   readonly expectedManifestChecksum?: `sha256:${string}`;
   readonly expectedArchiveDigest?: `sha256:${string}`;
+  readonly omittedExternalManagedCopyRootIds?: readonly string[];
   readonly signal?: AbortSignal;
   readonly onPhase?: BackupCreatePhaseReporter;
 }
@@ -1218,13 +1221,11 @@ function inspectBackupPreflight(
   const externalDependencies: BackupManifest["externalDependencies"] = [];
   const externalManagedCopies: NonNullable<BackupManifest["externalManagedCopies"]> = [];
   const sourceRecordPrefix = ".pige/source-records/";
-  const sourceRecords: Array<{
-    readonly relativePath: string;
-    readonly record: SourceRecord;
-    readonly checksum: string;
-  }> = [];
+  const sourceRecords: Array<{ readonly relativePath: string; readonly record: SourceRecord; readonly checksum: string }> = [];
   const sourceIds = new Set<string>();
   const requestedRootIds = new Set<string>();
+  const omittedRootIds = parseIncompleteManagedCopyRootIds(options.omittedExternalManagedCopyRootIds);
+  const recordedOmissions = new Set<string>();
 
   for (const relativePath of relativePaths) {
     if (!relativePath.startsWith(sourceRecordPrefix) || !relativePath.endsWith(".json")) continue;
@@ -1243,7 +1244,8 @@ function inspectBackupPreflight(
     if (rootId && rootId !== "root_vault_managed") requestedRootIds.add(rootId);
   }
 
-  const roots = readExternalManagedCopyRoots(userDataPath, readVaultManifest(vaultPath).vault_id, requestedRootIds);
+  const roots = readExternalManagedCopyRoots(userDataPath, readVaultManifest(vaultPath).vault_id,
+    new Set([...requestedRootIds].filter((rootId) => !omittedRootIds.has(rootId))));
   const externalLocators = new Set<string>();
   const includedRootIds = new Set<string>();
 
@@ -1268,6 +1270,7 @@ function inspectBackupPreflight(
       assertSafeVaultRelativePath(managedCopy.path);
       const root = roots.get(managedCopy.rootId);
       if (!root) {
+        if (recordIncompleteManagedCopyRoot(managedCopy.rootId, omittedRootIds, recordedOmissions, externalDependencies)) continue;
         throw new BackupManagedCopyDependencyError(
           "backup.external_managed_copy_root_missing",
           "A required external managed-copy root must be reconnected before backup.",

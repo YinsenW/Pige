@@ -17,6 +17,8 @@ import type {
   AppearanceSettingsSummary,
   AppearanceThemeMutationResult,
   AppearanceThemePreference,
+  BackupContinueIncompleteRequest,
+  BackupContinueIncompleteResult,
   BackupReconnectDependencyRequest,
   BackupReconnectDependencyResult,
   BoundaryVerification,
@@ -266,6 +268,8 @@ export type {
   AppearanceSettingsSummary,
   AppearanceThemeMutationResult,
   AppearanceThemePreference,
+  BackupContinueIncompleteRequest,
+  BackupContinueIncompleteResult,
   BackupReconnectDependencyRequest,
   BackupReconnectDependencyResult,
   ReferencedOriginalReconnectRequest,
@@ -973,6 +977,7 @@ export interface JobSummary {
   readonly sourceKind?: SourceKind;
   readonly backupKind?: "user_backup" | "restore_rollback";
   readonly canReconnectDependency: boolean;
+  readonly canContinueIncomplete: boolean;
   readonly error?: PigeErrorSummary;
   readonly message: string;
   readonly createdAt: string;
@@ -1986,6 +1991,9 @@ export interface PigeDesktopApi {
     readonly reconnectDependency: (
       request: BackupReconnectDependencyRequest
     ) => Promise<BackupReconnectDependencyResult>;
+    readonly continueIncomplete: (
+      request: BackupContinueIncompleteRequest
+    ) => Promise<BackupContinueIncompleteResult>;
     readonly previewRestore: () => Promise<RestorePreviewResult>;
     readonly applyRestore: (request: RestoreApplyRequest) => Promise<RestoreApplyResult>;
   };

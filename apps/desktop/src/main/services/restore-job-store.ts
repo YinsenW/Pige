@@ -105,6 +105,7 @@ export interface BackupOperationInput {
   readonly vaultId: string;
   readonly backupId: string;
   readonly archiveDigest: `sha256:${string}`;
+  readonly warningCodes?: readonly string[];
   readonly assertVaultWriterLease: () => void;
 }
 
@@ -822,7 +823,7 @@ function createBackupCreatedOperation(input: BackupOperationInput): OperationRec
     summary: "A validated backup archive was created for the active vault.",
     reversible: "best_effort",
     rollbackHint: "Remove the backup archive through the operating system when it is no longer needed.",
-    warnings: []
+    warnings: [...(input.warningCodes ?? [])]
   });
 }
 

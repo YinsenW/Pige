@@ -9,6 +9,8 @@ import type {
 } from "electron";
 import type {
   BackupCreateResult,
+  BackupContinueIncompleteRequest,
+  BackupContinueIncompleteResult,
   BackupReconnectDependencyRequest,
   BackupReconnectDependencyResult,
   BackupRestoreStatus,
@@ -19,6 +21,9 @@ import type {
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
+  BACKUP_CONTINUE_INCOMPLETE_CHANNEL,
+  BackupContinueIncompleteRequestSchema,
+  BackupContinueIncompleteResultSchema,
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
   type Locale
@@ -124,6 +129,42 @@ export function registerBackupRestoreIpc(options: RegisterBackupRestoreIpcOption
       inspected.candidate,
       selection.filePaths[0]
     ));
+  });
+  options.ipcMain.handle(BACKUP_CONTINUE_INCOMPLETE_CHANNEL, async (
+    event,
+    request: BackupContinueIncompleteRequest
+  ): Promise<BackupContinueIncompleteResult> => {
+    const parsed = BackupContinueIncompleteRequestSchema.parse(request);
+    const result = (status: BackupContinueIncompleteResult["status"]): BackupContinueIncompleteResult =>
+      BackupContinueIncompleteResultSchema.parse({ ...parsed, status });
+    const inspect = () => options.getBackupCoordinator().inspectIncompleteCandidate(
+      parsed.activeVaultId,
+      parsed.waitingJobId,
+      parsed.expectedJobUpdatedAt
+    );
+    const inspected = inspect();
+    if (inspected.status !== "ready") return result(inspected.status);
+    const window = options.getWindow(event.sender);
+    if (!window) return result("failed");
+    let confirmation: { readonly response: number };
+    try {
+      confirmation = await options.showMessageBox(window, {
+        type: "warning",
+        title: "Continue incomplete backup?",
+        message: "The unavailable managed source location will be omitted from this backup.",
+        detail: "The same backup job will continue and finish with a warning.",
+        buttons: ["Continue", "Cancel"],
+        defaultId: 1,
+        cancelId: 1,
+        noLink: true
+      });
+    } catch {
+      return result("failed");
+    }
+    if (confirmation.response !== 0) return result("cancelled");
+    const confirmed = inspect();
+    if (confirmed.status !== "ready") return result(confirmed.status);
+    return result(await options.getBackupCoordinator().continueIncomplete(confirmed.candidate));
   });
   options.ipcMain.handle("restore.preview", async (event): Promise<RestorePreviewResult> => {
     const senderId = event.sender.id;

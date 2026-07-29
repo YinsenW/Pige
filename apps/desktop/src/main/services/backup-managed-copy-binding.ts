@@ -7,6 +7,7 @@ import {
   SourceIdSchema,
   SourceRecordSchema,
   VaultBindingsFileSchema,
+  type BackupManifest,
   type ExternalManagedCopyRootBinding,
   type SourceRecord
 } from "@pige/schemas";
@@ -21,6 +22,31 @@ export interface BackupManagedCopyRepairProof extends BackupManagedCopyDependenc
   readonly vaultId: string;
   readonly rootId: string;
   readonly proofDigest: `sha256:${string}`;
+}
+
+export function parseIncompleteManagedCopyRootIds(rootIds: readonly string[] | undefined): ReadonlySet<string> {
+  const parsed = new Set(rootIds ?? []);
+  if (parsed.size > 8 || [...parsed].some((rootId) =>
+    RootBindingIdSchema.safeParse(rootId).success === false || rootId === "root_vault_managed"
+  )) throw new PigeDomainError("backup.incomplete_omission_invalid", "Backup omission authority is invalid.");
+  return parsed;
+}
+
+export function recordIncompleteManagedCopyRoot(
+  rootId: string,
+  omittedRootIds: ReadonlySet<string>,
+  recordedRootIds: Set<string>,
+  dependencies: BackupManifest["externalDependencies"]
+): boolean {
+  if (!omittedRootIds.has(rootId)) return false;
+  if (!recordedRootIds.has(rootId)) dependencies.push({
+    kind: "external_managed_copy_root",
+    rootId,
+    included: false,
+    requiredForCompleteRestore: true
+  });
+  recordedRootIds.add(rootId);
+  return true;
 }
 
 export function assertDistinctBindingPaths(roots: readonly ExternalManagedCopyRootBinding[]): void {
