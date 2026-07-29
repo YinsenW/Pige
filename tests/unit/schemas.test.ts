@@ -5081,6 +5081,21 @@ describe("schemas", () => {
       activeVaultId,
       revision: 9,
       defaultMode: "remember_scoped_grants",
+      fullAccess: {
+        enabled: false,
+        canEnable: true,
+        hardBoundaries: [
+          "permanent_delete",
+          "overwrite_user_original",
+          "raw_credential_export",
+          "risky_agent_edit",
+          "protected_authority_change",
+          "os_permission",
+          "ssrf_private_network",
+          "signature_verification",
+          "filesystem_safety"
+        ]
+      },
       grants: [{
         grantId: "grant_20260729_abcdefghijklmnop",
         actorType: "local_tool",
@@ -5130,5 +5145,53 @@ describe("schemas", () => {
       status: "failed",
       summary
     })).toThrow();
+
+    const yoloRequest = {
+      ...request,
+      expectedRevision: 9,
+      mode: "yolo_full_access",
+      fullAccessAcknowledgement: {
+        kind: "yolo_full_access",
+        explicitUserAction: true,
+        hardBoundariesAcknowledged: true
+      }
+    } as const;
+    expect(PermissionSetDefaultModeRequestSchema.parse(yoloRequest)).toEqual(yoloRequest);
+    expect(() => PermissionSetDefaultModeRequestSchema.parse({
+      ...yoloRequest,
+      fullAccessAcknowledgement: undefined
+    })).toThrow("explicit user acknowledgement");
+    expect(() => PermissionSetDefaultModeRequestSchema.parse({
+      ...yoloRequest,
+      mode: "ask_every_time"
+    })).toThrow("explicit user acknowledgement");
+    expect(PermissionSetDefaultModeResultSchema.parse({
+      ...request,
+      status: "confirmation_required",
+      confirmationId: "confirm_20260729_yolofullaccess1234",
+      confirmationRevision: 10,
+      summary
+    }).status).toBe("confirmation_required");
+    const fullAccessSummary = {
+      ...summary,
+      revision: 10,
+      defaultMode: "yolo_full_access",
+      fullAccess: {
+        enabled: true,
+        enabledAt: "2026-07-29T00:01:00.000Z",
+        canDisable: true,
+        hardBoundaries: summary.fullAccess.hardBoundaries
+      }
+    } as const;
+    expect(PermissionPolicySummaryResultSchema.parse({
+      ...request,
+      status: "ready",
+      summary: fullAccessSummary
+    }).summary.defaultMode).toBe("yolo_full_access");
+    expect(() => PermissionPolicySummaryResultSchema.parse({
+      ...request,
+      status: "ready",
+      summary: { ...fullAccessSummary, defaultMode: "ask_every_time" }
+    })).toThrow("exactly match");
   });
 });
