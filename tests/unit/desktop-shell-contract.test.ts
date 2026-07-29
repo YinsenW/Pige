@@ -1056,7 +1056,7 @@ describe("desktop shell build contract", () => {
     const confirmationsStart = preloadSource.indexOf("confirmations: {");
     const preloadApi = preloadSource.slice(
       confirmationsStart,
-      preloadSource.indexOf("skills: {", confirmationsStart)
+      preloadSource.indexOf("permissions: {", confirmationsStart)
     );
 
     expect(contractsSource).toContain("readonly confirmations: {");
@@ -1093,6 +1093,32 @@ describe("desktop shell build contract", () => {
       expect(preloadApi).not.toContain(unsafeField);
     }
     expect(preloadApi).not.toContain("Permission");
+  });
+
+  it("exposes scoped permission policy settings without duplicating the confirmation effect gate", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const permissionsStart = preloadSource.indexOf("permissions: {");
+    const preloadApi = preloadSource.slice(
+      permissionsStart,
+      preloadSource.indexOf("piPackages: {", permissionsStart)
+    );
+
+    expect(contractsSource).toContain("readonly permissions: {");
+    expect(contractsSource).toContain("request: PermissionPolicySummaryRequest");
+    expect(contractsSource).toContain("request: PermissionSetDefaultModeRequest");
+    expect(contractsSource).toContain("request: PermissionRevokeGrantRequest");
+    expect(preloadApi).toContain("PERMISSIONS_SUMMARY_CHANNEL");
+    expect(preloadApi).toContain("PermissionPolicySummaryRequestSchema.parse(request)");
+    expect(preloadApi).toContain("PERMISSIONS_SET_DEFAULT_MODE_CHANNEL");
+    expect(preloadApi).toContain("PermissionSetDefaultModeRequestSchema.parse(request)");
+    expect(preloadApi).toContain("PERMISSIONS_REVOKE_GRANT_CHANNEL");
+    expect(preloadApi).toContain("PermissionRevokeGrantRequestSchema.parse(request)");
+    expect(preloadApi).toContain("PermissionPolicyChangedEventSchema.safeParse(value)");
+    expect(preloadApi).not.toContain("confirmations.resolve");
+    for (const unsafeField of ["path", "body", "command", "bindingHash", "actorDigest", "resourceIdentityHash"]) {
+      expect(preloadApi).not.toContain(unsafeField);
+    }
   });
 
   it("exposes strict renderer-safe reviewed-task interaction IPC without private OAuth state", () => {
