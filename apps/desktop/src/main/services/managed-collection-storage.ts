@@ -25,6 +25,11 @@ import {
 } from "@pige/schemas";
 import { createVaultRelativePathResolver } from "./vault-layout";
 import { projectCollectionFormulaColumns } from "./managed-collection-formula-storage";
+import {
+  projectRelationColumns,
+  readInboundRelationRowIds,
+  readRelationCellValue,
+} from "./managed-collection-relation-storage";
 
 export interface FileRef {
   readonly path: string;
@@ -103,6 +108,12 @@ export function readCollectionSnapshot(
     const statement = database.prepare(
       "SELECT state, projection_kind, projection_json, formula_json FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
     );
+    const projectedColumns = projectRelationColumns(
+      columns,
+      binding.schema.tables.flatMap((candidate) => candidate.columns),
+      projectCollectionFormulaColumns(columns)
+    );
+    const inboundRelationRowIds = readInboundRelationRowIds(database, binding.schema);
     const projectedRows = rows.map((row) => {
       if (typeof row.row_id !== "string") throw payloadInvalid();
       const rowId = row.row_id;
@@ -110,6 +121,13 @@ export function readCollectionSnapshot(
         const raw = statement.get(rowId, column.id) as Record<string, unknown> | undefined;
         if (!raw) throw payloadInvalid();
         const cell = parseCellRecord(column, raw);
+        if (column.relation) {
+          return {
+            columnId: column.id,
+            value: readRelationCellValue(database, binding.schema, cell),
+            editable: true
+          };
+        }
         const reason = collectionCellReadOnlyReason(cell);
         return {
           columnId: column.id,
@@ -118,11 +136,11 @@ export function readCollectionSnapshot(
           ...(reason ? { readOnlyReason: reason } : {})
         };
       });
-      return { rowId, canTrash: true, cells };
+      const hasInboundRelationReferences = inboundRelationRowIds.has(rowId);
+      return { rowId, canTrash: !hasInboundRelationReferences, hasInboundRelationReferences, cells };
     });
     const totalRowCount = projection.totalRowCount ?? table.rowCount;
     if (!Number.isSafeInteger(totalRowCount) || totalRowCount < projectedRows.length) throw payloadInvalid();
-    const projectedColumns = projectCollectionFormulaColumns(columns);
     return CollectionSnapshotSchema.parse({
       datasetId: binding.manifest.datasetId,
       revisionId: binding.revision.id,
@@ -140,6 +158,10 @@ export function readCollectionSnapshot(
       canAddColumn: table.columns.length < MAX_OPEN_COLUMNS,
       canAddFormulaColumn: table.columns.length < MAX_OPEN_COLUMNS &&
         projectedColumns.some((column) => column.canUseAsFormulaOperand),
+      canAddRelationColumn: table.columns.length < MAX_OPEN_COLUMNS &&
+        binding.schema.tables.some((candidate) => candidate.columns.some((column) =>
+          !column.calculation && !column.relation &&
+          ["string", "integer", "number", "boolean", "date", "datetime"].includes(column.logicalType))),
       views: projection.views ?? [],
       ...(projection.activeViewId ? { activeViewId: projection.activeViewId } : {})
     });

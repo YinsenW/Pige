@@ -11,6 +11,8 @@ import {
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
   COLLECTION_ADD_FORMULA_COLUMN_CHANNEL,
+  COLLECTION_ADD_RELATION_COLUMN_CHANNEL,
+  COLLECTION_EDIT_RELATION_CELL_CHANNEL,
   COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
   COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES,
   COLLECTION_LIST_CHANNEL,
@@ -19,6 +21,11 @@ import {
   CollectionAddNullableColumnResultSchema,
   CollectionAddFormulaColumnRequestSchema,
   CollectionAddFormulaColumnResultSchema,
+  CollectionAddRelationColumnRequestSchema,
+  CollectionAddRelationColumnResultSchema,
+  CollectionEditRelationCellRequestSchema,
+  CollectionEditRelationCellResultSchema,
+  CollectionRelationCellValueSchema,
   CollectionUpdateFormulaColumnRequestSchema,
   CollectionUpdateFormulaColumnResultSchema,
   ConfirmationProposalSchema,
@@ -44,7 +51,10 @@ import {
   DATASET_PIGE_FORMULA_MAX_NODES,
   DatasetPigeCalculationSchema,
   DatasetPigeFormulaExpressionSchema,
+  DatasetPigeRelationCellSchema,
+  DatasetPigeRelationSchema,
   DatasetRevisionSchema,
+  DatasetSchemaRecordSchema,
   DatasetTableSchema,
   ExternalWebSkillHttpsOriginSchema,
   ExternalWebSkillReadRequestSchema,
@@ -1351,6 +1361,432 @@ describe("schemas", () => {
         canUndo: true
       }]
     }).activities[0]?.kind).toBe("update_collection_formula");
+  });
+
+  it("freezes one same-Dataset row relation with bounded projection and exact Undo vocabulary", () => {
+    const datasetId = "dataset_20260729_relation000001";
+    const revisionId = "dataset_rev_20260729_relation000001";
+    const sourceTableId = "table_relationsrc001";
+    const targetTableId = "table_relationdst001";
+    const sourceColumnId = "column_relationsrc01";
+    const relationColumnId = "column_relationlink01";
+    const targetDisplayColumnId = "column_relationname01";
+    const targetRowId = "row_relationtarget01";
+    const relation = {
+      kind: "pige_single_relation",
+      schemaVersion: 1,
+      targetTableId,
+      targetDisplayColumnId
+    } as const;
+
+    expect(COLLECTION_ADD_RELATION_COLUMN_CHANNEL).toBe("collections.addRelationColumn");
+    expect(COLLECTION_EDIT_RELATION_CELL_CHANNEL).toBe("collections.editRelationCell");
+    expect(DatasetPigeRelationSchema.parse(relation)).toEqual(relation);
+    expect(DatasetPigeRelationCellSchema.parse({
+      kind: "pige_relation_target",
+      schemaVersion: 1,
+      targetRowId
+    })).toMatchObject({ targetRowId });
+    expect(DatasetPigeRelationCellSchema.parse(null)).toBeNull();
+    expect(() => DatasetPigeRelationCellSchema.parse({
+      kind: "pige_relation_target",
+      schemaVersion: 1,
+      targetRowId,
+      displayLabel: "must not be durable"
+    })).toThrow();
+
+    const sourceColumn = {
+      id: sourceColumnId,
+      name: "Name",
+      ordinal: 0,
+      sourceType: "sqlite.text",
+      logicalType: "string",
+      nullable: true
+    } as const;
+    const relationColumn = {
+      id: relationColumnId,
+      name: "Company",
+      ordinal: 1,
+      sourceType: "pige.relation.single",
+      logicalType: "string",
+      nullable: true,
+      relation
+    } as const;
+    const displayColumn = {
+      id: targetDisplayColumnId,
+      name: "Company name",
+      ordinal: 0,
+      sourceType: "sqlite.text",
+      logicalType: "string",
+      nullable: true
+    } as const;
+    const schemaRecord = {
+      schemaVersion: 1,
+      datasetId,
+      revisionId,
+      tables: [{
+        id: sourceTableId,
+        name: "People",
+        sourceLocator: "table:people",
+        ordinal: 0,
+        rowCount: 1,
+        columnCount: 2,
+        columns: [sourceColumn, relationColumn]
+      }, {
+        id: targetTableId,
+        name: "Companies",
+        sourceLocator: "table:companies",
+        ordinal: 1,
+        rowCount: 1,
+        columnCount: 1,
+        columns: [displayColumn]
+      }],
+      createdAt: "2026-07-29T00:00:00.000Z"
+    } as const;
+    expect(DatasetSchemaRecordSchema.parse(schemaRecord).tables[0]?.columns[1]?.relation)
+      .toEqual(relation);
+    expect(() => DatasetSchemaRecordSchema.parse({
+      ...schemaRecord,
+      tables: [{
+        ...schemaRecord.tables[0],
+        columns: [sourceColumn, {
+          ...relationColumn,
+          relation: { ...relation, targetTableId: "table_outside000001" }
+        }]
+      }, schemaRecord.tables[1]]
+    })).toThrow("same-Dataset scalar display column");
+    expect(() => DatasetSchemaRecordSchema.parse({
+      ...schemaRecord,
+      tables: [schemaRecord.tables[0], {
+        ...schemaRecord.tables[1],
+        columns: [{ ...displayColumn, sourceType: "xlsx.formula.string" }]
+      }]
+    })).toThrow("same-Dataset scalar display column");
+    expect(() => DatasetSchemaRecordSchema.parse({
+      ...schemaRecord,
+      tables: [{
+        ...schemaRecord.tables[0],
+        columns: [sourceColumn, { ...relationColumn, sourceType: "xlsx.relation" }]
+      }, schemaRecord.tables[1]]
+    })).toThrow("nullable string-backed Pige columns");
+    expect(() => DatasetTableSchema.parse({
+      ...schemaRecord.tables[0],
+      columnCount: 3,
+      columns: [sourceColumn, relationColumn, {
+        id: "column_relationformula1",
+        name: "Invalid formula",
+        ordinal: 2,
+        sourceType: "pige.formula.number",
+        logicalType: "number",
+        nullable: true,
+        calculation: {
+          kind: "pige_numeric_formula",
+          schemaVersion: 1,
+          expression: { kind: "column", columnId: relationColumnId }
+        }
+      }]
+    })).toThrow("editable non-formula numeric columns");
+
+    const addRequest = {
+      apiVersion: 1,
+      requestId: "collection_request_relationadd00001",
+      activeVaultId: "vault_20260729_relation01",
+      datasetId,
+      tableId: sourceTableId,
+      expectedRevisionId: revisionId,
+      label: " Company ",
+      targetTableId,
+      targetDisplayColumnId
+    } as const;
+    expect(CollectionAddRelationColumnRequestSchema.parse(addRequest).label).toBe("Company");
+    const descriptorColumnSummary = {
+      columnId: relationColumnId,
+      label: "Company",
+      logicalType: "string",
+      canRename: true,
+      canTrash: true,
+      canUseAsFormulaOperand: false,
+      canEditFormula: false,
+      canUseAsRelationDisplay: false,
+      canEditRelation: true,
+      hasInboundRelationDescriptors: false,
+      relation
+    } as const;
+    const sourceSnapshot = {
+      datasetId,
+      revisionId: "dataset_rev_20260729_relation000002",
+      title: "Contacts",
+      tableId: sourceTableId,
+      tableName: "People",
+      columns: [{
+        columnId: sourceColumnId,
+        label: "Name",
+        logicalType: "string",
+        canRename: true,
+        canTrash: true,
+        canUseAsFormulaOperand: false,
+        canEditFormula: false,
+        canUseAsRelationDisplay: true,
+        canEditRelation: false,
+        hasInboundRelationDescriptors: false
+      }, descriptorColumnSummary],
+      rows: [{
+        rowId: "row_relationsource01",
+        canTrash: true,
+        hasInboundRelationReferences: false,
+        cells: [{ columnId: sourceColumnId, value: "Ada", editable: true }, {
+          columnId: relationColumnId,
+          value: { kind: "relation", targetRowId: null, displayLabel: null },
+          editable: true
+        }]
+      }],
+      totalRowCount: 1,
+      returnedRowCount: 1,
+      truncated: false,
+      canAppendDefaultRow: true,
+      canAddColumn: true,
+      canAddFormulaColumn: true,
+      canAddRelationColumn: true,
+      views: []
+    } as const;
+    const addIdentity = {
+      apiVersion: addRequest.apiVersion,
+      requestId: addRequest.requestId,
+      activeVaultId: addRequest.activeVaultId,
+      datasetId,
+      tableId: sourceTableId,
+      targetTableId,
+      targetDisplayColumnId
+    } as const;
+    expect(CollectionAddRelationColumnResultSchema.parse({
+      ...addIdentity,
+      status: "committed",
+      columnId: relationColumnId,
+      operationId: "op_20260729_relationadd01",
+      snapshot: sourceSnapshot
+    })).toMatchObject({ status: "committed", columnId: relationColumnId });
+    expect(CollectionAddRelationColumnResultSchema.parse({
+      ...addIdentity,
+      status: "stale",
+      snapshot: { ...sourceSnapshot, canAddRelationColumn: false }
+    }).status).toBe("stale");
+    for (const status of ["not_found", "ineligible", "failed"] as const) {
+      expect(CollectionAddRelationColumnResultSchema.parse({ ...addIdentity, status }).status)
+        .toBe(status);
+    }
+    for (const unsafe of [
+      { targetDatasetId: "dataset_20260729_outside000001" },
+      { multiple: true },
+      { reciprocal: true },
+      { query: "SELECT *" },
+      { path: "/private/relation.sqlite" }
+    ]) {
+      expect(() => CollectionAddRelationColumnRequestSchema.parse({ ...addRequest, ...unsafe })).toThrow();
+    }
+
+    const editRequest = {
+      apiVersion: 1,
+      requestId: "collection_request_relationedit0001",
+      activeVaultId: addRequest.activeVaultId,
+      datasetId,
+      tableId: sourceTableId,
+      expectedRevisionId: sourceSnapshot.revisionId,
+      rowId: sourceSnapshot.rows[0].rowId,
+      columnId: relationColumnId,
+      targetRowId
+    } as const;
+    expect(CollectionEditRelationCellRequestSchema.parse(editRequest)).toEqual(editRequest);
+    expect(CollectionEditRelationCellRequestSchema.parse({ ...editRequest, targetRowId: null }).targetRowId)
+      .toBeNull();
+    const editIdentity = {
+      apiVersion: editRequest.apiVersion,
+      requestId: editRequest.requestId,
+      activeVaultId: editRequest.activeVaultId,
+      datasetId,
+      tableId: sourceTableId,
+      rowId: editRequest.rowId,
+      columnId: relationColumnId,
+      targetRowId
+    } as const;
+    expect(CollectionEditRelationCellResultSchema.parse({
+      ...editIdentity,
+      status: "committed",
+      operationId: "op_20260729_relationedit1",
+      snapshot: {
+        ...sourceSnapshot,
+        rows: [{
+          ...sourceSnapshot.rows[0],
+          cells: [sourceSnapshot.rows[0].cells[0], {
+            columnId: relationColumnId,
+            value: { kind: "relation", targetRowId, displayLabel: "Acme" },
+            editable: true
+          }]
+        }]
+      }
+    }).status).toBe("committed");
+    expect(CollectionEditRelationCellResultSchema.parse({
+      ...editIdentity,
+      status: "stale",
+      snapshot: sourceSnapshot
+    }).status).toBe("stale");
+    for (const status of ["not_found", "ineligible", "failed"] as const) {
+      expect(CollectionEditRelationCellResultSchema.parse({ ...editIdentity, status }).status)
+        .toBe(status);
+    }
+    expect(() => CollectionEditRelationCellRequestSchema.parse({
+      ...editRequest,
+      targetTableId,
+      displayLabel: "renderer authority"
+    })).toThrow();
+    expect(CollectionRelationCellValueSchema.parse({
+      kind: "relation",
+      targetRowId,
+      displayLabel: "42"
+    }).displayLabel).toBe("42");
+    expect(() => CollectionRelationCellValueSchema.parse({
+      kind: "relation",
+      targetRowId: null,
+      displayLabel: "stale label"
+    })).toThrow("cannot project a display label");
+
+    const targetSnapshot = {
+      ...sourceSnapshot,
+      tableId: targetTableId,
+      tableName: "Companies",
+      columns: [{
+        columnId: targetDisplayColumnId,
+        label: "Company name",
+        logicalType: "string",
+        canRename: true,
+        canTrash: false,
+        canUseAsFormulaOperand: false,
+        canEditFormula: false,
+        canUseAsRelationDisplay: true,
+        canEditRelation: false,
+        hasInboundRelationDescriptors: true
+      }],
+      rows: [{
+        rowId: targetRowId,
+        canTrash: false,
+        hasInboundRelationReferences: true,
+        cells: [{ columnId: targetDisplayColumnId, value: "Acme", editable: true }]
+      }]
+    } as const;
+    expect(CollectionOpenResultSchema.parse({
+      apiVersion: 1,
+      requestId: "collection_request_relationopen0001",
+      activeVaultId: addRequest.activeVaultId,
+      datasetId,
+      tableId: targetTableId,
+      status: "ready",
+      snapshot: targetSnapshot
+    }).status).toBe("ready");
+    expect(() => CollectionOpenResultSchema.parse({
+      apiVersion: 1,
+      requestId: "collection_request_relationopen0001",
+      activeVaultId: addRequest.activeVaultId,
+      datasetId,
+      tableId: targetTableId,
+      status: "ready",
+      snapshot: {
+        ...targetSnapshot,
+        rows: [{ ...targetSnapshot.rows[0], canTrash: true }]
+      }
+    })).toThrow("inbound relation references");
+    expect(() => CollectionOpenResultSchema.parse({
+      apiVersion: 1,
+      requestId: "collection_request_relationopen0001",
+      activeVaultId: addRequest.activeVaultId,
+      datasetId,
+      tableId: targetTableId,
+      status: "ready",
+      snapshot: {
+        ...targetSnapshot,
+        columns: [{ ...targetSnapshot.columns[0], canTrash: true }]
+      }
+    })).toThrow("inbound descriptors");
+
+    const revisionBase = {
+      schemaVersion: 1,
+      id: sourceSnapshot.revisionId,
+      datasetId,
+      parentRevisionId: revisionId,
+      source: {
+        sourceId: "src_20260729_relation000001",
+        sourceKind: "csv_file",
+        sourceRecordHash: `sha256:${"a".repeat(64)}`,
+        sourceAssetChecksum: `sha256:${"b".repeat(64)}`,
+        sourceAssetSize: 128
+      },
+      schema: { path: `schemas/${sourceSnapshot.revisionId}.json`, checksum: `sha256:${"c".repeat(64)}`, size: 256 },
+      payload: { path: `data/revisions/${sourceSnapshot.revisionId}.sqlite`, checksum: `sha256:${"d".repeat(64)}`, size: 512, format: "sqlite" },
+      adapter: { id: "managed_collection", version: "1" },
+      writer: { id: "managed_collection_relation", version: "1" },
+      stats: { tableCount: 2, rowCount: 2, columnCount: 3, cellCount: 3, retainedValueBytes: 64 },
+      warnings: [],
+      operationId: "op_20260729_relationadd01",
+      createdAt: "2026-07-29T00:00:00.000Z"
+    } as const;
+    expect(DatasetRevisionSchema.parse({
+      ...revisionBase,
+      change: { kind: "collection_relation_add", tableId: sourceTableId, columnId: relationColumnId, targetTableId, targetDisplayColumnId }
+    }).change?.kind).toBe("collection_relation_add");
+    expect(DatasetRevisionSchema.parse({
+      ...revisionBase,
+      id: "dataset_rev_20260729_relation000005",
+      parentRevisionId: sourceSnapshot.revisionId,
+      payload: { ...revisionBase.payload, path: "data/revisions/dataset_rev_20260729_relation000005.sqlite" },
+      operationId: "op_20260729_relationundo2",
+      change: { kind: "collection_relation_add_undo", tableId: sourceTableId, columnId: relationColumnId, targetTableId, targetDisplayColumnId, undoOfOperationId: "op_20260729_relationadd01" }
+    }).change?.kind).toBe("collection_relation_add_undo");
+    expect(DatasetRevisionSchema.parse({
+      ...revisionBase,
+      id: "dataset_rev_20260729_relation000003",
+      parentRevisionId: sourceSnapshot.revisionId,
+      payload: { ...revisionBase.payload, path: "data/revisions/dataset_rev_20260729_relation000003.sqlite" },
+      operationId: "op_20260729_relationedit1",
+      change: { kind: "collection_relation_cell_edit", tableId: sourceTableId, rowId: editRequest.rowId, columnId: relationColumnId, targetTableId, targetRowId }
+    }).change?.kind).toBe("collection_relation_cell_edit");
+    expect(DatasetRevisionSchema.parse({
+      ...revisionBase,
+      id: "dataset_rev_20260729_relation000004",
+      parentRevisionId: "dataset_rev_20260729_relation000003",
+      payload: { ...revisionBase.payload, path: "data/revisions/dataset_rev_20260729_relation000004.sqlite" },
+      operationId: "op_20260729_relationundo1",
+      change: { kind: "collection_relation_cell_edit_undo", tableId: sourceTableId, rowId: editRequest.rowId, columnId: relationColumnId, targetTableId, targetRowId: null, undoOfOperationId: "op_20260729_relationedit1" }
+    }).change?.kind).toBe("collection_relation_cell_edit_undo");
+    for (const kind of ["add_collection_relation", "update_collection_relation_cell"] as const) {
+      expect(OperationRecordSchema.parse({
+        id: kind === "add_collection_relation" ? "op_20260729_relationadd01" : "op_20260729_relationedit1",
+        schemaVersion: 1,
+        createdAt: "2026-07-29T00:00:00.000Z",
+        actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+        kind,
+        targetRefs: [
+          { kind: "dataset", id: datasetId },
+          { kind: "table", id: sourceTableId },
+          { kind: "column", id: relationColumnId }
+        ],
+        sourceRefs: [{ kind: "dataset", id: datasetId }],
+        summary: "Changed one Managed Collection relation.",
+        reversible: "yes",
+        warnings: []
+      }).kind).toBe(kind);
+    }
+    expect(KnowledgeActivityListResultSchema.parse({
+      scannedAt: "2026-07-29T00:00:00.000Z",
+      activeVaultId: addRequest.activeVaultId,
+      total: 2,
+      invalidOperationCount: 0,
+      activities: ["add_collection_relation", "update_collection_relation_cell"].map((kind, index) => ({
+        operationId: index === 0 ? "op_20260729_relationadd01" : "op_20260729_relationedit1",
+        kind,
+        createdAt: "2026-07-29T00:00:00.000Z",
+        target: { kind: "collection", datasetId, tableId: sourceTableId, revisionId: sourceSnapshot.revisionId },
+        status: "applied",
+        canUndo: true
+      }))
+    }).activities).toHaveLength(2);
   });
 
   it("keeps Collection column rename stable, reversible, CAS-bound, and body-free", () => {

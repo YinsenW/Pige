@@ -660,9 +660,9 @@ Action behavior:
 ### 8.4 Structured Knowledge Surface
 
 Datasets stay in Library. Authority-only paging preserves rows/focus; citations are read-only.
-Changes adopt stable-ID snapshots and exact Undo. A bounded formula dialog creates or losslessly
-edits representable ASTs from projected operands/operators; Main owns eligibility and stale keeps
-the draft. Unsupported nested shapes cannot edit; relations and scale/platform stay open.
+Stable-ID snapshots have exact Undo. Bounded dialogs edit representable formulas or select one
+descriptor-owned row/derived label; Main owns eligibility and stale keeps drafts. Nested formulas,
+multi/reciprocal relations and scale/platform stay open.
 
 ## 9. Sources View
 

@@ -104,6 +104,94 @@ describe("Knowledge Activity and Undo", () => {
     expect(undo).toHaveBeenCalledTimes(1);
   });
 
+  it("routes relation add and cell edit Activity through exact forward-revision Undo ownership", async () => {
+    const fixture = createFixture();
+    const operations = ([
+      ["add_collection_relation", "op_20260729_relationadd01", "2026-07-29T12:00:00.000Z"],
+      ["update_collection_relation_cell", "op_20260729_relationedit1", "2026-07-29T12:01:00.000Z"]
+    ] as const).map(([kind, id, createdAt]) => OperationRecordSchema.parse({
+      id,
+      schemaVersion: 1,
+      createdAt,
+      actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+      kind,
+      targetRefs: [
+        { kind: "dataset", id: "dataset_20260729_relationactivity" },
+        { kind: "table", id: "table_relationactivity" },
+        { kind: "column", id: "column_relationactivity" }
+      ],
+      sourceRefs: [{ kind: "dataset_revision", id: "dataset_rev_20260729_before123456" }],
+      summary: "Changed one Managed Collection relation.",
+      reversible: "yes",
+      rollbackHint: "Create one forward relation revision.",
+      warnings: []
+    }));
+    for (const operation of operations) writeOperation(fixture.vaultPath, operation);
+    const undo = vi.fn(async (operation: OperationRecord) => ({
+      status: "undone" as const,
+      operationId: operation.id,
+      undoOperationId: operation.kind === "add_collection_relation"
+        ? "op_20260729_relationaddundo"
+        : "op_20260729_relationcellundo",
+      revisionId: operation.kind === "add_collection_relation"
+        ? "dataset_rev_20260729_relationaddundo"
+        : "dataset_rev_20260729_relationcellundo"
+    }));
+    const collections: KnowledgeActivityCollectionPort = {
+      activitySummary: (operation) => operations.some((candidate) => candidate.id === operation.id) ? {
+        operationId: operation.id,
+        kind: operation.kind as "add_collection_relation" | "update_collection_relation_cell",
+        createdAt: operation.createdAt,
+        targetLabel: "Related item",
+        target: {
+          kind: "collection",
+          datasetId: "dataset_20260729_relationactivity",
+          tableId: "table_relationactivity",
+          revisionId: "dataset_rev_20260729_after123456"
+        },
+        status: "applied",
+        canUndo: true
+      } : undefined,
+      findUndoOperation: () => undefined,
+      undo,
+      recoverIncompleteOperations: () => ({ recovered: 0, failed: 0 })
+    };
+    const service = new KnowledgeActivityService(fixture.vaults, collections);
+
+    const listed = service.list({ limit: 20 });
+    expect(listed.activities).toEqual(expect.arrayContaining(operations.map((operation) => expect.objectContaining({
+      operationId: operation.id,
+      kind: operation.kind,
+      target: {
+        kind: "collection",
+        datasetId: "dataset_20260729_relationactivity",
+        tableId: "table_relationactivity",
+        revisionId: "dataset_rev_20260729_after123456"
+      },
+      canUndo: true
+    }))));
+    expect(JSON.stringify(listed)).not.toMatch(/before123456|rollbackHint|sourceRefs|targetRefs/u);
+
+    await expect(service.undo({
+      operationId: operations[0]!.id,
+      expectedRevisionId: "dataset_rev_20260729_after123456"
+    })).resolves.toMatchObject({
+      status: "undone",
+      operationId: operations[0]!.id,
+      revisionId: "dataset_rev_20260729_relationaddundo"
+    });
+    await expect(service.undo({
+      operationId: operations[1]!.id,
+      expectedRevisionId: "dataset_rev_20260729_after654321"
+    })).resolves.toMatchObject({
+      status: "undone",
+      operationId: operations[1]!.id,
+      revisionId: "dataset_rev_20260729_relationcellundo"
+    });
+    expect(undo).toHaveBeenNthCalledWith(1, operations[0], "dataset_rev_20260729_after123456");
+    expect(undo).toHaveBeenNthCalledWith(2, operations[1], "dataset_rev_20260729_after654321");
+  });
+
   it("rejects malformed renderer requests before reading or changing the vault", () => {
     const fixture = createFixture();
     const service = new KnowledgeActivityService(fixture.vaults);

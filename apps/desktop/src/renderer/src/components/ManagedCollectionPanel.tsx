@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type Ref } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   CollectionAddNullableColumnRequest,
   CollectionAddNullableColumnResult,
@@ -27,6 +27,13 @@ import {
 } from "./ManagedCollectionColumnActions";
 import { ManagedCollectionViewControls } from "./ManagedCollectionViewControls";
 import { ManagedCollectionFormulaColumnDialog } from "./ManagedCollectionFormulaColumnDialog";
+import { ManagedCollectionRelationDialog } from "./ManagedCollectionRelationDialog";
+import {
+  ManagedCollectionScalarCellEditor,
+  formatCollectionCellValue,
+  isCollectionScalarValue,
+  parseCollectionScalar
+} from "./ManagedCollectionScalarCellEditor";
 type CellIdentity = {
   readonly rowId: string;
   readonly columnId: string;
@@ -64,7 +71,7 @@ export function ManagedCollectionCitationPanel(props: CitationPanelProps): React
     <div className="dataset-table-scroll" tabIndex={0} aria-label={props.t("dataset.table")}><table className="dataset-table"><caption>{props.preview.tableName}</caption><thead><tr>
       {props.preview.columns.map((column) => <th scope="col" key={column.key} tabIndex={-1} data-citation-highlight={columnMarked(column) ? "true" : undefined} data-citation-primary={primaryColumn(column) ? "true" : undefined}>{columnMarked(column) ? <mark>{column.label}</mark> : column.label}</th>)}
     </tr></thead><tbody>{props.preview.rows.map((row, rowIndex) => <tr key={row.rowId ?? `${props.preview.resultHash}:${rowIndex}`} tabIndex={-1} data-citation-row-id={row.rowId} data-citation-highlight={rowMarked(row.rowId) ? "true" : undefined} data-citation-primary={primaryRow(row.rowId) ? "true" : undefined}>
-      {row.values.map((value, columnIndex) => { const column = props.preview.columns[columnIndex]; const marked = rowMarked(row.rowId) || !!(column && columnMarked(column)); const content = formatCollectionScalar(value); return <td key={column?.key ?? columnIndex}>{marked ? <mark>{content}</mark> : content}</td>; })}
+      {row.values.map((value, columnIndex) => { const column = props.preview.columns[columnIndex]; const marked = rowMarked(row.rowId) || !!(column && columnMarked(column)); const content = formatCollectionCellValue(value); return <td key={column?.key ?? columnIndex}>{marked ? <mark>{content}</mark> : content}</td>; })}
     </tr>)}</tbody></table></div>
     {props.preview.truncated ? <p className="muted retrieval-warning">{props.t("dataset.truncated")}</p> : null}
   </section>;
@@ -128,8 +135,12 @@ export function ManagedCollectionPanel(props: {
   const [busy, setBusy] = useState(false);
   const [columnActionsBusy, setColumnActionsBusy] = useState(false);
   const [viewControlsBusy, setViewControlsBusy] = useState(false);
+  const [formulaActive, setFormulaActive] = useState(false);
+  const [relationActive, setRelationActive] = useState(false);
   const [columnFocusRequest, setColumnFocusRequest] = useState<string | null>(null);
+  const [cellFocusRequest, setCellFocusRequest] = useState<CellIdentity | null>(null);
   const [formulaEditRequest, setFormulaEditRequest] = useState<{ readonly columnId: string; readonly ownerKey: string; readonly revisionId: string } | null>(null);
+  const [relationEditRequest, setRelationEditRequest] = useState<{ readonly rowId: string; readonly columnId: string; readonly ownerKey: string; readonly revisionId: string } | null>(null);
   const [visibleRows, setVisibleRows] = useState<CollectionSnapshot["rows"]>(props.snapshot.rows);
   const [nextRowCursor, setNextRowCursor] = useState(props.nextRowCursor);
   const [rowsLoading, setRowsLoading] = useState(false);
@@ -143,6 +154,8 @@ export function ManagedCollectionPanel(props: {
   const columnTriggerRef = useRef<HTMLButtonElement | null>(null);
   const columnLabelRef = useRef<HTMLInputElement | null>(null);
   const columnActionsActiveRef = useRef(false);
+  const formulaActiveRef = useRef(false);
+  const relationActiveRef = useRef(false);
   const viewControlsActiveRef = useRef(false);
   const editTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
@@ -175,6 +188,8 @@ export function ManagedCollectionPanel(props: {
     trashActiveRef.current = null;
     columnActiveRef.current = null;
     columnActionsActiveRef.current = false;
+    formulaActiveRef.current = false;
+    relationActiveRef.current = false;
     viewControlsActiveRef.current = false;
     pendingFocusRef.current = null;
     pendingAppendFocusRef.current = false;
@@ -188,8 +203,12 @@ export function ManagedCollectionPanel(props: {
     setBusy(false);
     setColumnActionsBusy(false);
     setViewControlsBusy(false);
+    setFormulaActive(false);
+    setRelationActive(false);
     setColumnFocusRequest(null);
+    setCellFocusRequest(null);
     setFormulaEditRequest(null);
+    setRelationEditRequest(null);
   }, [ownerKey]);
   useEffect(() => {
     rowsLoadActiveRef.current = false;
@@ -211,6 +230,12 @@ export function ManagedCollectionPanel(props: {
     pendingFocusRef.current = null;
     button.focus();
   }, [edit]);
+  useLayoutEffect(() => {
+    if (!cellFocusRequest) return;
+    const button = editTriggerRefs.current.get(cellKey(cellFocusRequest));
+    setCellFocusRequest(null);
+    (button ?? panelRef.current)?.focus();
+  }, [cellFocusRequest, props.snapshot.revisionId]);
   useLayoutEffect(() => {
     if (busy) return;
     if (pendingTrashFocusRef.current) {
@@ -640,11 +665,33 @@ export function ManagedCollectionPanel(props: {
       <ManagedCollectionFormulaColumnDialog
         activeVaultId={props.activeVaultId}
         snapshot={props.snapshot}
-        blocked={busy || viewControlsBusy || edit !== null || columnDraft !== null}
+        blocked={busy || viewControlsBusy || relationActive || edit !== null || columnDraft !== null}
         requestedEdit={formulaEditRequest}
         onEditRequestHandled={() => setFormulaEditRequest(null)}
         onAdoptSnapshot={props.onAdoptSnapshot}
-        onActiveChange={(active) => { columnActionsActiveRef.current = active; setColumnActionsBusy(active); }}
+        onActiveChange={(active) => {
+          formulaActiveRef.current = active;
+          setFormulaActive(active);
+          columnActionsActiveRef.current = active || relationActiveRef.current;
+          setColumnActionsBusy(active || relationActiveRef.current);
+        }}
+        onFocusColumn={setColumnFocusRequest}
+        t={props.t}
+      />
+      <ManagedCollectionRelationDialog
+        activeVaultId={props.activeVaultId}
+        snapshot={props.snapshot}
+        blocked={busy || viewControlsBusy || formulaActive || edit !== null || columnDraft !== null}
+        requestedEdit={relationEditRequest}
+        onEditRequestHandled={() => setRelationEditRequest(null)}
+        onAdoptSnapshot={props.onAdoptSnapshot}
+        onActiveChange={(active) => {
+          relationActiveRef.current = active;
+          setRelationActive(active);
+          columnActionsActiveRef.current = active || formulaActiveRef.current;
+          setColumnActionsBusy(active || formulaActiveRef.current);
+        }}
+        onFocusCell={(rowId, columnId) => setCellFocusRequest({ rowId, columnId })}
         onFocusColumn={setColumnFocusRequest}
         t={props.t}
       />
@@ -763,6 +810,7 @@ export function ManagedCollectionPanel(props: {
                 {props.snapshot.columns.map((column) => {
                   const cell = row.cells.find((candidate) => candidate.columnId === column.columnId);
                   if (!cell) return <td key={column.columnId}>-</td>;
+                  const cellValue = cell.value;
                   const identity = { rowId: row.rowId, columnId: column.columnId };
                   const editing = edit?.rowId === row.rowId && edit.columnId === column.columnId;
                   return (
@@ -774,7 +822,7 @@ export function ManagedCollectionPanel(props: {
                             void submitEdit();
                           }}
                         >
-                          <CollectionValueEditor
+                          <ManagedCollectionScalarCellEditor
                             inputRef={editorRef}
                             draft={edit.draft}
                             logicalType={edit.logicalType}
@@ -798,7 +846,25 @@ export function ManagedCollectionPanel(props: {
                             {props.t("collection.cancel")}
                           </button>
                         </form>
-                      ) : cell.editable ? (
+                      ) : column.relation && column.canEditRelation && typeof cellValue === "object" && cellValue?.kind === "relation" ? (
+                        <button
+                          type="button"
+                          className="ghost"
+                          disabled={busy || columnActionsBusy || viewControlsBusy || columnDraft !== null}
+                          ref={(element) => {
+                            if (element) editTriggerRefs.current.set(cellKey(identity), element);
+                            else editTriggerRefs.current.delete(cellKey(identity));
+                          }}
+                          aria-label={`${props.t("collection.editRelation")}: ${column.label}, ${props.t("collection.row")} ${rowIndex + 1}`}
+                          onClick={() => {
+                            if (busy || columnActionsActiveRef.current || viewControlsActiveRef.current || columnDraft || appendActiveRef.current !== null || columnActiveRef.current !== null || trashActiveRef.current) return;
+                            setNotice(null);
+                            setRelationEditRequest({ ...identity, ownerKey, revisionId: props.snapshot.revisionId });
+                          }}
+                        >
+                          {formatCollectionCellValue(cellValue) || props.t("collection.relationEmpty")}
+                        </button>
+                      ) : cell.editable && isCollectionScalarValue(cellValue) ? (
                         <button
                           type="button"
                           className="ghost"
@@ -815,15 +881,15 @@ export function ManagedCollectionPanel(props: {
                               ...identity,
                               expectedRevisionId: props.snapshot.revisionId,
                               logicalType: column.logicalType,
-                              originalValue: cell.value,
-                              draft: formatCollectionScalar(cell.value)
+                              originalValue: cellValue,
+                              draft: formatCollectionCellValue(cellValue)
                             });
                           }}
                         >
-                          {formatCollectionScalar(cell.value)}
+                          {formatCollectionCellValue(cellValue)}
                         </button>
                       ) : (
-                        <span title={props.t("collection.readOnly")}>{formatCollectionScalar(cell.value)}</span>
+                        <span title={props.t("collection.readOnly")}>{formatCollectionCellValue(cellValue)}</span>
                       )}
                     </td>
                   );
@@ -884,77 +950,6 @@ function collectionPaginationIdentity(activeVaultId: string, snapshot: Collectio
     activeView?.filter ?? null,
     activeView?.sort ?? null
   ]);
-}
-
-function CollectionValueEditor(props: {
-  readonly inputRef: Ref<HTMLInputElement | HTMLSelectElement>;
-  readonly draft: string;
-  readonly logicalType: DatasetLogicalType;
-  readonly disabled: boolean;
-  readonly label: string;
-  readonly onChange: (draft: string) => void;
-  readonly onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement | HTMLSelectElement>) => void;
-}): React.JSX.Element {
-  if (props.logicalType === "boolean") {
-    return (
-      <select
-        ref={props.inputRef as Ref<HTMLSelectElement>}
-        aria-label={props.label}
-        value={props.draft}
-        disabled={props.disabled}
-        onChange={(event) => props.onChange(event.target.value)}
-        onKeyDown={props.onKeyDown}
-      >
-        <option value="">-</option>
-        <option value="true">true</option>
-        <option value="false">false</option>
-      </select>
-    );
-  }
-  return (
-    <input
-      ref={props.inputRef as Ref<HTMLInputElement>}
-      type={props.logicalType === "date" ? "date" : props.logicalType === "datetime" ? "datetime-local" : "text"}
-      inputMode={props.logicalType === "integer" || props.logicalType === "number" ? "decimal" : undefined}
-      aria-label={props.label}
-      value={props.draft}
-      disabled={props.disabled}
-      onChange={(event) => props.onChange(event.target.value)}
-      onKeyDown={props.onKeyDown}
-    />
-  );
-}
-
-function parseCollectionScalar(
-  draft: string,
-  logicalType: DatasetLogicalType,
-  originalValue: CollectionScalarValue
-): CollectionScalarValue | undefined {
-  if (draft === "" && originalValue === null) return null;
-  if (logicalType === "boolean") {
-    if (draft === "") return null;
-    if (draft === "true") return true;
-    if (draft === "false") return false;
-    return undefined;
-  }
-  if (logicalType === "integer") {
-    if (!/^-?\d+$/u.test(draft)) return undefined;
-    const value = Number(draft);
-    return Number.isSafeInteger(value) ? value : undefined;
-  }
-  if (logicalType === "number") {
-    if (draft.trim() === "") return undefined;
-    const value = Number(draft);
-    return Number.isFinite(value) ? value : undefined;
-  }
-  if (logicalType === "binary" || logicalType === "unknown") return undefined;
-  return new TextEncoder().encode(draft).byteLength <= 4096 ? draft : undefined;
-}
-
-function formatCollectionScalar(value: CollectionScalarValue): string {
-  if (value === null) return "";
-  if (typeof value === "boolean") return value ? "true" : "false";
-  return String(value);
 }
 
 function createCollectionRequestId(): `collection_request_${string}` {

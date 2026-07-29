@@ -41,6 +41,7 @@ import {
   type BundleBinding
 } from "./managed-collection-storage";
 import { appendFormulaCellsForNewRow, type FormulaProjectionStats } from "./managed-collection-formula-storage";
+import { assertRelationTrashGuards } from "./managed-collection-relation-storage";
 interface RowMutationIdentity {
   readonly revisionId: string;
   readonly operationId: string;
@@ -221,6 +222,7 @@ export function executeRowTrash(input: {
     const row = snapshot.rows.find((candidate) => candidate.rowId === input.request.rowId);
     if (!row) return CollectionTrashRowResultSchema.parse({ ...identity, status: "not_found" });
     if (!row.canTrash) return CollectionTrashRowResultSchema.parse({ ...identity, status: "ineligible" });
+    assertRelationTrashGuards({ binding, tableId: input.request.tableId, rowId: input.request.rowId });
     const committed = commitRowTrash({
       binding,
       identity: mutationIdentity,
@@ -244,6 +246,11 @@ export function executeRowTrash(input: {
     if (caught instanceof PigeDomainError && caught.code === "collection.request_conflict") throw caught;
     const latest = readBundle(input.vaultPath, input.request.datasetId);
     const snapshot = latest ? input.readSnapshot(latest, input.request.tableId) : undefined;
+    if (caught instanceof PigeDomainError && caught.code === "collection.relation_inbound") {
+      return snapshot
+        ? CollectionTrashRowResultSchema.parse({ ...identity, status: "ineligible", snapshot })
+        : CollectionTrashRowResultSchema.parse({ ...identity, status: "not_found" });
+    }
     return snapshot
       ? CollectionTrashRowResultSchema.parse({ ...identity, status: "stale", snapshot })
       : CollectionTrashRowResultSchema.parse({ ...identity, status: "not_found" });
@@ -446,8 +453,11 @@ function appendNullRow(
       if (typeof next?.ordinal !== "number" || !Number.isSafeInteger(next.ordinal)) throw payloadInvalid();
       db.prepare("INSERT INTO pige_dataset_rows VALUES (?, ?, ?, ?)").run(input.rowId, table.id, next.ordinal, next.ordinal + 1);
       const insertCell = db.prepare("INSERT INTO pige_dataset_cells VALUES (?, ?, 'null', 'pige_user_default', NULL, NULL, NULL, 'null', NULL, NULL, NULL)");
+      const insertRelationCell = db.prepare("INSERT INTO pige_dataset_cells VALUES (?, ?, 'null', 'pige.relation.single', NULL, NULL, NULL, 'pige_relation_target_v1', 'null', NULL, NULL)");
       const updateColumn = db.prepare("UPDATE pige_dataset_columns SET stats_json = ? WHERE column_id = ? AND table_id = ?");
-      for (const column of table.columns.filter((candidate) => !candidate.calculation)) insertCell.run(input.rowId, column.id);
+      for (const column of table.columns.filter((candidate) => !candidate.calculation)) {
+        (column.relation ? insertRelationCell : insertCell).run(input.rowId, column.id);
+      }
       formulaStats = new Map(appendFormulaCellsForNewRow(db, table, input.rowId));
       for (const column of table.columns) {
         const stats = column.stats ?? { missing: 0, empty: 0, null: 0, value: 0 };

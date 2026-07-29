@@ -20,6 +20,7 @@ describe("desktop shell build contract", () => {
   it("bridges one strict managed PaddleOCR lifecycle without private catalog authority", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const apiStart = preloadSource.indexOf("localCapabilities: {");
     const paddleOcrApi = preloadSource.slice(
       apiStart,
@@ -1396,6 +1397,7 @@ describe("desktop shell build contract", () => {
       "utf8"
     );
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
 
     expect(contractsSource).toContain("readonly list: (request: CollectionListRequest)");
     expect(contractsSource).toContain("Promise<CollectionListResult>");
@@ -1422,6 +1424,12 @@ describe("desktop shell build contract", () => {
     );
     expect(registrarSource).toContain(
       "ipcMain.handle(COLLECTION_ADD_FORMULA_COLUMN_CHANNEL"
+    );
+    expect(registrarSource).toContain(
+      "ipcMain.handle(COLLECTION_ADD_RELATION_COLUMN_CHANNEL"
+    );
+    expect(registrarSource).toContain(
+      "ipcMain.handle(COLLECTION_EDIT_RELATION_CELL_CHANNEL"
     );
     expect(registrarSource).toContain("options.getActiveVaultId() !== parsed.activeVaultId");
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.open", parsedRequest)');
@@ -1471,9 +1479,40 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("CollectionAddFormulaColumnRequest");
     expect(contractsSource).toContain("Promise<CollectionAddFormulaColumnResult>");
     expect(preloadSource).toContain("addFormulaColumn: invokeCollectionAddFormulaColumn");
+    expect(preloadSource).toContain("CollectionAddRelationColumnRequestSchema.parse(request)");
+    expect(preloadSource).toContain("CollectionAddRelationColumnResultSchema.parse(");
+    expect(preloadSource).toContain(
+      "ipcRenderer.invoke(COLLECTION_ADD_RELATION_COLUMN_CHANNEL, parsedRequest)"
+    );
+    expect(preloadSource).toContain("CollectionEditRelationCellRequestSchema.parse(request)");
+    expect(preloadSource).toContain("CollectionEditRelationCellResultSchema.parse(");
+    expect(preloadSource).toContain(
+      "ipcRenderer.invoke(COLLECTION_EDIT_RELATION_CELL_CHANNEL, parsedRequest)"
+    );
+    expect(preloadSource).toContain("addRelationColumn: invokeCollectionAddRelationColumn");
+    expect(preloadSource).toContain("editRelationCell: invokeCollectionEditRelationCell");
+    expect(mainSource).toContain(
+      "addRelationCollectionColumn: (request) => getManagedCollectionService().addRelationColumn(request)"
+    );
+    expect(mainSource).toContain(
+      "editRelationCollectionCell: (request) => getManagedCollectionService().editRelationCell(request)"
+    );
     expect(contractsSource).toContain("readonly updateFormulaColumn:");
     expect(contractsSource).toContain("CollectionUpdateFormulaColumnRequest");
     expect(contractsSource).toContain("Promise<CollectionUpdateFormulaColumnResult>");
+    expect(schemasSource).toContain(
+      'COLLECTION_ADD_RELATION_COLUMN_CHANNEL = "collections.addRelationColumn"'
+    );
+    expect(schemasSource).toContain(
+      'COLLECTION_EDIT_RELATION_CELL_CHANNEL = "collections.editRelationCell"'
+    );
+    expect(contractsSource).toContain("readonly addRelationColumn:");
+    expect(contractsSource).toContain("CollectionAddRelationColumnRequest");
+    expect(contractsSource).toContain("Promise<CollectionAddRelationColumnResult>");
+    expect(contractsSource).toContain("readonly editRelationCell:");
+    expect(contractsSource).toContain("CollectionEditRelationCellRequest");
+    expect(contractsSource).toContain("Promise<CollectionEditRelationCellResult>");
+    expect(contractsSource).not.toContain("listRelationTargets");
     expect(contractsSource).toContain("readonly renameColumn:");
     expect(contractsSource).toContain("CollectionRenameColumnRequest");
     expect(contractsSource).toContain("readonly createView:");

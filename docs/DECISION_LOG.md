@@ -3833,22 +3833,23 @@ References:
 
 - `docs/API_AND_IPC_DESIGN.md`
 
-### D-20260729-Pige-Numeric-Formula-Columns
+### D-20260729-Pige-Column-Descriptors
 
 Status: Accepted
 Date: 2026-07-29
 
 Decision:
 
-Persist and revision-update formula ASTs on Dataset columns.
+Persist and revision-update Pige formula/relation descriptors on Dataset columns.
 
 Rationale:
 
-Schema truth plus prior revisions fixes evaluation and Undo.
+Schema truth preserves empty tables and exact Undo.
 
 Consequences:
 
-- Numeric inputs only; cell/row/formula changes are atomic and Activity owns Undo.
+- Formulas use numeric inputs; single relations store same-Dataset row IDs. Inbound targets block
+  trash; Activity owns atomic Undo.
 
 References:
 

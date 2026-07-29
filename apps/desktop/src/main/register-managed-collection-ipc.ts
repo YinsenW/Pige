@@ -1,9 +1,15 @@
 import type { IpcMain, WebContents } from "electron";
 import {
   COLLECTION_ADD_FORMULA_COLUMN_CHANNEL,
+  COLLECTION_ADD_RELATION_COLUMN_CHANNEL,
+  COLLECTION_EDIT_RELATION_CELL_CHANNEL,
   COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
   CollectionAddFormulaColumnResultSchema,
+  CollectionAddRelationColumnRequestSchema,
+  CollectionAddRelationColumnResultSchema,
+  CollectionEditRelationCellRequestSchema,
+  CollectionEditRelationCellResultSchema,
   CollectionUpdateFormulaColumnRequestSchema,
   CollectionUpdateFormulaColumnResultSchema,
   CollectionAddNullableColumnRequestSchema,
@@ -30,6 +36,10 @@ import {
   type CollectionAddNullableColumnResult,
   type CollectionAddFormulaColumnRequest,
   type CollectionAddFormulaColumnResult,
+  type CollectionAddRelationColumnRequest,
+  type CollectionAddRelationColumnResult,
+  type CollectionEditRelationCellRequest,
+  type CollectionEditRelationCellResult,
   type CollectionUpdateFormulaColumnRequest,
   type CollectionUpdateFormulaColumnResult,
   type CollectionCellEditRequest,
@@ -80,6 +90,12 @@ interface RegisterManagedCollectionIpcOptions {
   readonly updateFormulaCollectionColumn?: (
     request: CollectionUpdateFormulaColumnRequest
   ) => CollectionUpdateFormulaColumnResult | Promise<CollectionUpdateFormulaColumnResult>;
+  readonly addRelationCollectionColumn?: (
+    request: CollectionAddRelationColumnRequest
+  ) => CollectionAddRelationColumnResult | Promise<CollectionAddRelationColumnResult>;
+  readonly editRelationCollectionCell?: (
+    request: CollectionEditRelationCellRequest
+  ) => CollectionEditRelationCellResult | Promise<CollectionEditRelationCellResult>;
   readonly renameCollectionColumn: (
     request: CollectionRenameColumnRequest
   ) => CollectionRenameColumnResult | Promise<CollectionRenameColumnResult>;
@@ -179,6 +195,37 @@ function failedUpdateFormulaColumn(request: CollectionUpdateFormulaColumnRequest
   return CollectionUpdateFormulaColumnResultSchema.parse({
     apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
     datasetId: request.datasetId, tableId: request.tableId, columnId: request.columnId, status: "failed"
+  });
+}
+
+function failedAddRelationColumn(
+  request: CollectionAddRelationColumnRequest
+): CollectionAddRelationColumnResult {
+  return CollectionAddRelationColumnResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    targetTableId: request.targetTableId,
+    targetDisplayColumnId: request.targetDisplayColumnId,
+    status: "failed"
+  });
+}
+
+function failedEditRelationCell(
+  request: CollectionEditRelationCellRequest
+): CollectionEditRelationCellResult {
+  return CollectionEditRelationCellResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    rowId: request.rowId,
+    columnId: request.columnId,
+    targetRowId: request.targetRowId,
+    status: "failed"
   });
 }
 
@@ -424,6 +471,42 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
     }
     return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
       ? result : failedUpdateFormulaColumn(parsed);
+  });
+
+  options.ipcMain.handle(COLLECTION_ADD_RELATION_COLUMN_CHANNEL, async (event, request: unknown) => {
+    const parsed = CollectionAddRelationColumnRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId ||
+        !options.addRelationCollectionColumn) return failedAddRelationColumn(parsed);
+    let rawResult: CollectionAddRelationColumnResult;
+    try { rawResult = await options.addRelationCollectionColumn(parsed); }
+    catch { return failedAddRelationColumn(parsed); }
+    const result = CollectionAddRelationColumnResultSchema.parse(rawResult);
+    if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
+        result.datasetId !== parsed.datasetId || result.tableId !== parsed.tableId ||
+        result.targetTableId !== parsed.targetTableId ||
+        result.targetDisplayColumnId !== parsed.targetDisplayColumnId) {
+      throw new Error("Managed Collection relation-column response identity did not match the request.");
+    }
+    return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
+      ? result : failedAddRelationColumn(parsed);
+  });
+
+  options.ipcMain.handle(COLLECTION_EDIT_RELATION_CELL_CHANNEL, async (event, request: unknown) => {
+    const parsed = CollectionEditRelationCellRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId ||
+        !options.editRelationCollectionCell) return failedEditRelationCell(parsed);
+    let rawResult: CollectionEditRelationCellResult;
+    try { rawResult = await options.editRelationCollectionCell(parsed); }
+    catch { return failedEditRelationCell(parsed); }
+    const result = CollectionEditRelationCellResultSchema.parse(rawResult);
+    if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
+        result.datasetId !== parsed.datasetId || result.tableId !== parsed.tableId ||
+        result.rowId !== parsed.rowId || result.columnId !== parsed.columnId ||
+        result.targetRowId !== parsed.targetRowId) {
+      throw new Error("Managed Collection relation-cell response identity did not match the request.");
+    }
+    return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
+      ? result : failedEditRelationCell(parsed);
   });
 
   options.ipcMain.handle("collections.renameColumn", async (event, request: unknown) => {

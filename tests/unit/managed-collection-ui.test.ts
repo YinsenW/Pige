@@ -8,6 +8,13 @@ import type {
   CollectionAddNullableColumnResult,
   CollectionAddFormulaColumnRequest,
   CollectionAddFormulaColumnResult,
+  CollectionAddRelationColumnRequest,
+  CollectionAddRelationColumnResult,
+  CollectionEditRelationCellRequest,
+  CollectionEditRelationCellResult,
+  CollectionListResult,
+  CollectionOpenRequest,
+  CollectionOpenResult,
   CollectionUpdateFormulaColumnRequest,
   CollectionUpdateFormulaColumnResult,
   CollectionAppendDefaultRowRequest,
@@ -390,6 +397,293 @@ describe("ManagedCollectionPanel", () => {
     expect(Array.from(container.querySelectorAll("button")).some((button) =>
       button.getAttribute("aria-label") === "Edit formula: Adjusted total"
     )).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("adds one same-Dataset relation column from exact table and display-field projections", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: CollectionAddRelationColumnRequest[] = [];
+    const initial = relationSourceSnapshot("dataset_rev_20260729_relation0001", true);
+    const target = relationTargetSnapshot("dataset_rev_20260729_relation0001", [
+      relationTargetRow("row_relationtarget01", "Acme")
+    ]);
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { collections: {
+        list: async (): Promise<CollectionListResult> => relationCatalog(initial),
+        open: async (request: CollectionOpenRequest): Promise<CollectionOpenResult> => ({
+          ...openIdentity(request), status: "ready", snapshot: target
+        }),
+        addRelationColumn: async (request: CollectionAddRelationColumnRequest): Promise<CollectionAddRelationColumnResult> => {
+          requests.push(request);
+          return {
+            ...relationColumnIdentity(request),
+            status: "committed",
+            columnId: "column_relationlink01",
+            operationId: "op_20260729_relation01",
+            snapshot: withRelationColumn(initial, request, null, null, "dataset_rev_20260729_relation0002")
+          };
+        }
+      } }
+    });
+    await act(async () => {
+      root.render(createElement(RelationCollectionHarness, { initialSnapshot: initial }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+
+    await click(dom, buttonNamed(container, "Add relation field"));
+    const name = requireElement(container.querySelector<HTMLInputElement>("#collection-relation-name"));
+    const table = requireElement(container.querySelector<HTMLSelectElement>("#collection-relation-table"));
+    await inputText(dom, name, "Company");
+    await selectValue(dom, table, target.tableId);
+    expect(requireElement(container.querySelector<HTMLSelectElement>("#collection-relation-display")).value)
+      .toBe("column_relationname01");
+    await click(dom, buttonNamed(container, "Save"));
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      activeVaultId: "vault_20260727_collection01",
+      datasetId: initial.datasetId,
+      tableId: initial.tableId,
+      expectedRevisionId: initial.revisionId,
+      label: "Company",
+      targetTableId: target.tableId,
+      targetDisplayColumnId: "column_relationname01"
+    });
+    expect(Object.keys(requests[0] ?? {}).sort()).toEqual([
+      "activeVaultId", "apiVersion", "datasetId", "expectedRevisionId", "label", "requestId",
+      "tableId", "targetDisplayColumnId", "targetTableId"
+    ]);
+    expect(container.textContent).toContain("Relation field added as a new revision.");
+    expect(container.textContent).toContain("Not linked");
+    expect(dom.window.document.activeElement).toBe(
+      container.querySelector('[data-collection-column-id="column_relationlink01"]')
+    );
+    expect(Array.from(container.querySelectorAll("button")).some((button) =>
+      button.getAttribute("aria-label") === "Edit cell: Company, row 1"
+    )).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps an add-relation draft but removes submit authority when stale revokes the capability", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const initial = relationSourceSnapshot("dataset_rev_20260729_relation0001", true);
+    const target = relationTargetSnapshot(initial.revisionId, [relationTargetRow("row_relationtarget01", "Acme")]);
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { collections: {
+        list: async (): Promise<CollectionListResult> => relationCatalog(initial),
+        open: async (request: CollectionOpenRequest): Promise<CollectionOpenResult> => ({ ...openIdentity(request), status: "ready", snapshot: target }),
+        addRelationColumn: async (request: CollectionAddRelationColumnRequest): Promise<CollectionAddRelationColumnResult> => ({
+          ...relationColumnIdentity(request),
+          status: "stale",
+          snapshot: { ...initial, revisionId: "dataset_rev_20260729_relation0002", canAddRelationColumn: false }
+        })
+      } }
+    });
+    await act(async () => { root.render(createElement(RelationCollectionHarness, { initialSnapshot: initial })); await settle(dom); });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Add relation field"));
+    const name = requireElement(container.querySelector<HTMLInputElement>("#collection-relation-name"));
+    await inputText(dom, name, "Company");
+    await selectValue(dom, requireElement(container.querySelector<HTMLSelectElement>("#collection-relation-table")), target.tableId);
+    await click(dom, buttonNamed(container, "Save"));
+
+    expect(name.value).toBe("Company");
+    expect(requireElement(container.querySelector<HTMLSelectElement>("#collection-relation-table")).value).toBe(target.tableId);
+    expect(buttonNamed(container, "Save").disabled).toBe(true);
+    expect(container.textContent).toContain("relation selection is preserved against the latest revision");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("pages exact relation targets, preserves selection across stale and failure, then sets and clears with focus recovery", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const initialBase = relationSourceSnapshot("dataset_rev_20260729_relation0002", false);
+    const initial = withRelationColumn(initialBase, relationAddRequest(initialBase), "row_relationtarget01", "Acme", initialBase.revisionId);
+    const stale = { ...initial, revisionId: "dataset_rev_20260729_relation0003" };
+    const requests: CollectionEditRelationCellRequest[] = [];
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { collections: {
+        open: async (request: CollectionOpenRequest): Promise<CollectionOpenResult> => request.rowCursor
+          ? {
+              ...openIdentity(request),
+              status: "ready",
+              snapshot: relationTargetSnapshot(stale.revisionId, [
+                relationTargetRow("row_relationtarget01", "Acme"),
+                relationTargetRow("row_relationtarget02", "Beta")
+              ])
+            }
+          : {
+              ...openIdentity(request),
+              status: "ready",
+              snapshot: relationTargetSnapshot(stale.revisionId, [relationTargetRow("row_relationtarget01", "Acme")], true),
+              nextRowCursor: "collection_rows_relation_page02"
+            },
+        editRelationCell: async (request: CollectionEditRelationCellRequest): Promise<CollectionEditRelationCellResult> => {
+          requests.push(request);
+          if (requests.length === 1) return { ...relationCellIdentity(request), status: "stale", snapshot: stale };
+          if (requests.length === 2) return { ...relationCellIdentity(request), status: "failed" };
+          const label = request.targetRowId === "row_relationtarget02" ? "Beta" : null;
+          return {
+            ...relationCellIdentity(request),
+            status: "committed",
+            operationId: `op_20260729_relation0${requests.length}`,
+            snapshot: withRelationCell(stale, request.targetRowId, label, `dataset_rev_20260729_relation000${requests.length + 2}`)
+          };
+        }
+      } }
+    });
+    await act(async () => {
+      root.render(createElement(RelationCollectionHarness, { initialSnapshot: initial }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Edit relation: Company, row 1"));
+    await click(dom, buttonNamed(container, "Load more rows"));
+    const targets = requireElement(container.querySelector<HTMLElement>('[aria-label="Related row"]'));
+    expect(Array.from(targets.querySelectorAll("button")).filter((button) => button.textContent?.trim() === "Acme")).toHaveLength(1);
+    expect(buttonNamed(container, "Save").disabled).toBe(true);
+    await click(dom, buttonNamed(targets, "Beta"));
+    await click(dom, buttonNamed(container, "Save"));
+
+    expect(requests[0]).toMatchObject({
+      expectedRevisionId: initial.revisionId,
+      rowId: "row_relationsource01",
+      columnId: "column_relationlink01",
+      targetRowId: "row_relationtarget02"
+    });
+    expect(buttonNamed(targets, "Beta").getAttribute("aria-pressed")).toBe("true");
+    expect(container.textContent).toContain("selection is preserved against the latest revision");
+    expect(container.textContent).toContain("Acme");
+    await click(dom, buttonNamed(container, "Save"));
+    expect(requests.map((request) => request.expectedRevisionId)).toEqual([
+      initial.revisionId, stale.revisionId
+    ]);
+    expect(buttonNamed(targets, "Beta").getAttribute("aria-pressed")).toBe("true");
+    expect(container.textContent).toContain("could not save the relation");
+    await click(dom, buttonNamed(container, "Save"));
+
+    const relationTrigger = buttonNamed(container, "Edit relation: Company, row 1");
+    expect(relationTrigger.textContent?.trim()).toBe("Beta");
+    expect(dom.window.document.activeElement).toBe(relationTrigger);
+    await click(dom, relationTrigger);
+    await click(dom, buttonNamed(container, "No related row"));
+    await click(dom, buttonNamed(container, "Save"));
+    expect(requests.at(-1)?.targetRowId).toBeNull();
+    expect(buttonNamed(container, "Edit relation: Company, row 1").textContent?.trim()).toBe("Not linked");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("fences a pending relation commit when the active vault identity changes", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const initial = relationSourceSnapshot("dataset_rev_20260729_relation0001", true);
+    const target = relationTargetSnapshot(initial.revisionId, [relationTargetRow("row_relationtarget01", "Acme")]);
+    let captured: CollectionAddRelationColumnRequest | null = null;
+    let resolveCommit!: (result: CollectionAddRelationColumnResult) => void;
+    const pending = new Promise<CollectionAddRelationColumnResult>((resolve) => { resolveCommit = resolve; });
+    let adoptionCount = 0;
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { collections: {
+        list: async (): Promise<CollectionListResult> => relationCatalog(initial),
+        open: async (request: CollectionOpenRequest): Promise<CollectionOpenResult> => ({ ...openIdentity(request), status: "ready", snapshot: target }),
+        addRelationColumn: async (request: CollectionAddRelationColumnRequest): Promise<CollectionAddRelationColumnResult> => {
+          captured = request;
+          return pending;
+        }
+      } }
+    });
+    const render = (activeVaultId: string) => createElement(ManagedCollectionPanel, {
+      activeVaultId,
+      snapshot: initial,
+      onClose: () => undefined,
+      onAddNullableColumn: notFoundColumnResult,
+      onRenameColumn: notFoundRenameResult,
+      onTrashColumn: notFoundTrashColumnResult,
+      onOpenView: async () => null,
+      onCreateView: notFoundCreateViewResult,
+      onAppendDefaultRow: notFoundAppendResult,
+      onTrashRow: notFoundTrashResult,
+      onAdoptSnapshot: () => { adoptionCount += 1; return true; },
+      onEditCell: async (request) => ({ ...editIdentity(request), status: "failed" }),
+      onReload: async () => initial,
+      t
+    });
+    await act(async () => { root.render(render("vault_20260727_collection01")); await settle(dom); });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Add relation field"));
+    await inputText(dom, requireElement(container.querySelector<HTMLInputElement>("#collection-relation-name")), "Company");
+    await selectValue(dom, requireElement(container.querySelector<HTMLSelectElement>("#collection-relation-table")), target.tableId);
+    await click(dom, buttonNamed(container, "Save"));
+    expect(captured).not.toBeNull();
+
+    await act(async () => { root.render(render("vault_20260727_collection02")); await settle(dom); });
+    const request = captured as CollectionAddRelationColumnRequest | null;
+    if (!request) throw new Error("Expected relation request.");
+    await act(async () => {
+      resolveCommit({
+        ...relationColumnIdentity(request),
+        status: "committed",
+        columnId: "column_relationlink01",
+        operationId: "op_20260729_relation01",
+        snapshot: withRelationColumn(initial, request, null, null, "dataset_rev_20260729_relation0002")
+      });
+      await settle(dom);
+    });
+    expect(adoptionCount).toBe(0);
+    expect(container.textContent).not.toContain("Relation field added as a new revision.");
+    expect(container.textContent).not.toContain("Company");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("rejects a target page from another revision without replacing visible target rows", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const base = relationSourceSnapshot("dataset_rev_20260729_relation0002", false);
+    const initial = withRelationColumn(base, relationAddRequest(base), "row_relationtarget01", "Acme", base.revisionId);
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { collections: {
+        open: async (request: CollectionOpenRequest): Promise<CollectionOpenResult> => request.rowCursor
+          ? {
+              ...openIdentity(request),
+              status: "ready",
+              snapshot: relationTargetSnapshot("dataset_rev_20260729_relation9999", [relationTargetRow("row_relationtarget02", "Beta")])
+            }
+          : {
+              ...openIdentity(request),
+              status: "ready",
+              snapshot: relationTargetSnapshot(initial.revisionId, [relationTargetRow("row_relationtarget01", "Acme")], true),
+              nextRowCursor: "collection_rows_relation_page02"
+            }
+      } }
+    });
+    await act(async () => { root.render(createElement(RelationCollectionHarness, { initialSnapshot: initial })); await settle(dom); });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Edit relation: Company, row 1"));
+    await click(dom, buttonNamed(container, "Load more rows"));
+    const targets = requireElement(container.querySelector<HTMLElement>('[aria-label="Related row"]'));
+
+    expect(targets.textContent).toContain("Acme");
+    expect(targets.textContent).not.toContain("Beta");
+    expect(container.textContent).toContain("could not load related rows");
+    expect(container.textContent).toContain("Ada");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -1721,6 +2015,32 @@ function FormulaCollectionHarness(props: {
   });
 }
 
+function RelationCollectionHarness(props: {
+  readonly initialSnapshot: CollectionSnapshot;
+}): React.JSX.Element {
+  const [snapshot, setSnapshot] = useState(props.initialSnapshot);
+  return createElement(ManagedCollectionPanel, {
+    activeVaultId: "vault_20260727_collection01",
+    snapshot,
+    onClose: () => undefined,
+    onAddNullableColumn: notFoundColumnResult,
+    onRenameColumn: notFoundRenameResult,
+    onTrashColumn: notFoundTrashColumnResult,
+    onOpenView: async () => null,
+    onCreateView: notFoundCreateViewResult,
+    onAppendDefaultRow: notFoundAppendResult,
+    onTrashRow: notFoundTrashResult,
+    onAdoptSnapshot: (next, expectedRevisionId) => {
+      if (snapshot.revisionId !== expectedRevisionId) return false;
+      setSnapshot(next);
+      return true;
+    },
+    onEditCell: async (request) => ({ ...editIdentity(request), status: "failed" }),
+    onReload: async () => snapshot,
+    t
+  });
+}
+
 function collectionSnapshot(
   revisionId: string,
   name: string,
@@ -1756,6 +2076,160 @@ function collectionSnapshot(
     canAddColumn,
     canAddFormulaColumn,
     views: []
+  };
+}
+
+function relationSourceSnapshot(revisionId: string, canAddRelationColumn: boolean): CollectionSnapshot {
+  const source = collectionSnapshot(revisionId, "Ada");
+  return {
+    ...source,
+    columns: source.columns.map((column) => ({
+      ...column,
+      canUseAsRelationDisplay: column.columnId === "column_name000001",
+      canEditRelation: false,
+      hasInboundRelationDescriptors: false
+    })),
+    rows: source.rows.map((row) => ({ ...row, rowId: "row_relationsource01", hasInboundRelationReferences: false })),
+    canAddRelationColumn
+  };
+}
+
+function relationTargetSnapshot(
+  revisionId: string,
+  rows: CollectionSnapshot["rows"],
+  truncated = false
+): CollectionSnapshot {
+  return {
+    datasetId: "dataset_20260727_collection01",
+    revisionId,
+    title: "Customers",
+    tableId: "table_relationtarget01",
+    tableName: "Companies",
+    columns: [{
+      columnId: "column_relationname01",
+      label: "Company name",
+      logicalType: "string",
+      canRename: true,
+      canTrash: false,
+      canUseAsFormulaOperand: false,
+      canEditFormula: false,
+      canUseAsRelationDisplay: true,
+      canEditRelation: false,
+      hasInboundRelationDescriptors: true
+    }],
+    rows: [...rows],
+    totalRowCount: truncated ? 2 : rows.length,
+    returnedRowCount: rows.length,
+    truncated,
+    canAppendDefaultRow: false,
+    canAddColumn: false,
+    canAddFormulaColumn: false,
+    canAddRelationColumn: false,
+    views: []
+  };
+}
+
+function relationTargetRow(rowId: string, label: string): CollectionSnapshot["rows"][number] {
+  return {
+    rowId,
+    canTrash: false,
+    hasInboundRelationReferences: true,
+    cells: [{ columnId: "column_relationname01", value: label, editable: true }]
+  };
+}
+
+function relationAddRequest(snapshot: CollectionSnapshot): CollectionAddRelationColumnRequest {
+  return {
+    apiVersion: 1,
+    requestId: "collection_request_relation_fixture01",
+    activeVaultId: "vault_20260727_collection01",
+    datasetId: snapshot.datasetId,
+    tableId: snapshot.tableId,
+    expectedRevisionId: snapshot.revisionId,
+    label: "Company",
+    targetTableId: "table_relationtarget01",
+    targetDisplayColumnId: "column_relationname01"
+  };
+}
+
+function withRelationColumn(
+  snapshot: CollectionSnapshot,
+  request: CollectionAddRelationColumnRequest,
+  targetRowId: string | null,
+  displayLabel: string | null,
+  revisionId: string
+): CollectionSnapshot {
+  const columnId = "column_relationlink01";
+  return {
+    ...snapshot,
+    revisionId,
+    canAddRelationColumn: false,
+    columns: [...snapshot.columns, {
+      columnId,
+      label: request.label,
+      logicalType: "string",
+      canRename: true,
+      canTrash: true,
+      canUseAsFormulaOperand: false,
+      canEditFormula: false,
+      canUseAsRelationDisplay: false,
+      canEditRelation: true,
+      hasInboundRelationDescriptors: false,
+      relation: {
+        kind: "pige_single_relation",
+        schemaVersion: 1,
+        targetTableId: request.targetTableId,
+        targetDisplayColumnId: request.targetDisplayColumnId
+      }
+    }],
+    rows: snapshot.rows.map((row) => ({
+      ...row,
+      cells: [...row.cells, {
+        columnId,
+        value: { kind: "relation", targetRowId, displayLabel },
+        editable: true
+      }]
+    }))
+  };
+}
+
+function withRelationCell(
+  snapshot: CollectionSnapshot,
+  targetRowId: string | null,
+  displayLabel: string | null,
+  revisionId: string
+): CollectionSnapshot {
+  return {
+    ...snapshot,
+    revisionId,
+    rows: snapshot.rows.map((row) => row.rowId === "row_relationsource01" ? {
+      ...row,
+      cells: row.cells.map((cell) => cell.columnId === "column_relationlink01" ? {
+        ...cell,
+        value: { kind: "relation" as const, targetRowId, displayLabel }
+      } : cell)
+    } : row)
+  };
+}
+
+function relationCatalog(snapshot: CollectionSnapshot): CollectionListResult {
+  return {
+    apiVersion: 1,
+    activeVaultId: "vault_20260727_collection01",
+    status: "ready",
+    datasets: [{
+      datasetId: snapshot.datasetId,
+      title: snapshot.title,
+      activeRevisionId: snapshot.revisionId,
+      tableCount: 2,
+      tables: [
+        { tableId: snapshot.tableId, tableName: snapshot.tableName, columnCount: snapshot.columns.length, rowCount: snapshot.totalRowCount, canOpen: true },
+        { tableId: "table_relationtarget01", tableName: "Companies", columnCount: 1, rowCount: 2, canOpen: true }
+      ],
+      tablesTruncated: false
+    }],
+    totalDatasetCount: 1,
+    hasMore: false
   };
 }
 
@@ -1956,6 +2430,41 @@ function formulaUpdateIdentity(request: CollectionUpdateFormulaColumnRequest) {
     datasetId: request.datasetId,
     tableId: request.tableId,
     columnId: request.columnId
+  };
+}
+
+function relationColumnIdentity(request: CollectionAddRelationColumnRequest) {
+  return {
+    apiVersion: 1 as const,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    targetTableId: request.targetTableId,
+    targetDisplayColumnId: request.targetDisplayColumnId
+  };
+}
+
+function relationCellIdentity(request: CollectionEditRelationCellRequest) {
+  return {
+    apiVersion: 1 as const,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    rowId: request.rowId,
+    columnId: request.columnId,
+    targetRowId: request.targetRowId
+  };
+}
+
+function openIdentity(request: CollectionOpenRequest) {
+  return {
+    apiVersion: 1 as const,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId
   };
 }
 

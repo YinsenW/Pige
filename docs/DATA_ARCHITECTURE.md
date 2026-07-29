@@ -82,11 +82,10 @@ Two storage profiles share this envelope:
 row/field changes publish immutable SQLite/schema/Operation revisions, manifest last; views
 advance separately. Evidence, originals, old revisions and previews remain immutable.
 
-`DatasetColumn.calculation` is sole Pige formula truth, including empty tables. V1 is a nullable
-number AST: finite literals or same-table editable non-formula numeric IDs, four operators,
-depth <=8/nodes <=31. Missing/empty/null, zero division or non-finite becomes null; `-0` is `0`.
-Cell/row/formula edits recalculate atomically; update replaces one descriptor/column and forward
-Undo restores prior schema/payload/stats. Imports stay cached/read-only.
+Formula/relation descriptors are Dataset schema truth, including empty tables. Formula V1 is a
+<=8-depth/31-node nullable numeric AST; invalid math is null. A single relation binds one
+same-Dataset table/scalar label column; cells store row IDs only. Inbound targets block trash;
+source-relation trash and changes use immutable schema/payload/stats CAS/forward Undo. Imports stay read-only.
 
 ```ts
 type DatasetEvidenceRef = {

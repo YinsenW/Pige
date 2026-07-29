@@ -52,6 +52,22 @@ const updateFormulaRequest = {
   columnId: "column_formulaabcdef",
   expression: { kind: "binary", operator: "multiply", left: { kind: "column", columnId: "column_operandabcdef" }, right: { kind: "literal", value: 2 } }
 } as const;
+const addRelationRequest = {
+  ...openRequest,
+  requestId: "collection_request_relationaddipc01",
+  expectedRevisionId: "dataset_rev_20260727_abcdefghijkl",
+  label: "Owner",
+  targetTableId: "table_targetabcdefgh",
+  targetDisplayColumnId: "column_targetlabelabc"
+} as const;
+const editRelationRequest = {
+  ...openRequest,
+  requestId: "collection_request_relationeditipc1",
+  expectedRevisionId: "dataset_rev_20260727_abcdefghijkl",
+  rowId: "row_abcdefghijkl",
+  columnId: "column_relationabcdef",
+  targetRowId: "row_targetabcdefgh"
+} as const;
 const renameColumnRequest = {
   ...openRequest,
   requestId: "collection_request_renameabcdefghij",
@@ -90,6 +106,8 @@ function makeHarness(options: {
   readonly appendDefaultCollectionRow?: (request: typeof appendRequest) => unknown;
   readonly addNullableCollectionColumn?: (request: typeof addColumnRequest) => unknown;
   readonly updateFormulaCollectionColumn?: (request: typeof updateFormulaRequest) => unknown;
+  readonly addRelationCollectionColumn?: (request: typeof addRelationRequest) => unknown;
+  readonly editRelationCollectionCell?: (request: typeof editRelationRequest) => unknown;
   readonly renameCollectionColumn?: (request: typeof renameColumnRequest) => unknown;
   readonly createCollectionView?: (request: typeof createViewRequest) => unknown;
   readonly trashCollectionColumn?: (request: typeof trashColumnRequest) => unknown;
@@ -164,6 +182,16 @@ function makeHarness(options: {
     apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
     datasetId: request.datasetId, tableId: request.tableId, columnId: request.columnId, status: "failed"
   })));
+  const addRelationCollectionColumn = vi.fn(options.addRelationCollectionColumn ?? ((request) => ({
+    apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId, tableId: request.tableId, targetTableId: request.targetTableId,
+    targetDisplayColumnId: request.targetDisplayColumnId, status: "not_found"
+  })));
+  const editRelationCollectionCell = vi.fn(options.editRelationCollectionCell ?? ((request) => ({
+    apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId, tableId: request.tableId, rowId: request.rowId,
+    columnId: request.columnId, targetRowId: request.targetRowId, status: "not_found"
+  })));
   const trashCollectionRow = vi.fn(options.trashCollectionRow ?? ((request) => ({
     apiVersion: request.apiVersion,
     requestId: request.requestId,
@@ -213,6 +241,8 @@ function makeHarness(options: {
     appendDefaultCollectionRow,
     addNullableCollectionColumn,
     updateFormulaCollectionColumn,
+    addRelationCollectionColumn,
+    editRelationCollectionCell,
     renameCollectionColumn,
     createCollectionView,
     trashCollectionColumn,
@@ -227,6 +257,8 @@ function makeHarness(options: {
     appendDefaultCollectionRow,
     addNullableCollectionColumn,
     updateFormulaCollectionColumn,
+    addRelationCollectionColumn,
+    editRelationCollectionCell,
     renameCollectionColumn,
     createCollectionView,
     trashCollectionColumn,
@@ -245,11 +277,47 @@ describe("registerManagedCollectionIpc", () => {
       "collections.addNullableColumn",
       "collections.addFormulaColumn",
       "collections.updateFormulaColumn",
+      "collections.addRelationColumn",
+      "collections.editRelationCell",
       "collections.renameColumn",
       "collections.createView",
       "collections.trashColumn",
       "collections.trashRow"
     ]);
+  });
+
+  it("strictly binds relation mutations to trusted sender, vault, and exact identity", async () => {
+    const accepted = makeHarness();
+    await expect(accepted.handlers.get("collections.addRelationColumn")!(
+      { sender: {} } as IpcMainInvokeEvent, addRelationRequest
+    )).resolves.toMatchObject({ status: "not_found", targetTableId: addRelationRequest.targetTableId });
+    await expect(accepted.handlers.get("collections.editRelationCell")!(
+      { sender: {} } as IpcMainInvokeEvent, editRelationRequest
+    )).resolves.toMatchObject({ status: "not_found", targetRowId: editRelationRequest.targetRowId });
+    expect(accepted.addRelationCollectionColumn).toHaveBeenCalledWith(addRelationRequest);
+    expect(accepted.editRelationCollectionCell).toHaveBeenCalledWith(editRelationRequest);
+
+    const untrusted = makeHarness({ isTrustedSender: () => false });
+    await expect(untrusted.handlers.get("collections.addRelationColumn")!(
+      { sender: {} } as IpcMainInvokeEvent, addRelationRequest
+    )).resolves.toMatchObject({ status: "failed" });
+    await expect(untrusted.handlers.get("collections.editRelationCell")!(
+      { sender: {} } as IpcMainInvokeEvent, editRelationRequest
+    )).resolves.toMatchObject({ status: "failed" });
+    expect(untrusted.addRelationCollectionColumn).not.toHaveBeenCalled();
+    expect(untrusted.editRelationCollectionCell).not.toHaveBeenCalled();
+
+    const mismatched = makeHarness({
+      editRelationCollectionCell: (request) => ({
+        apiVersion: request.apiVersion, requestId: request.requestId,
+        activeVaultId: request.activeVaultId, datasetId: request.datasetId,
+        tableId: request.tableId, rowId: request.rowId, columnId: request.columnId,
+        targetRowId: "row_differentabcdefgh", status: "not_found"
+      })
+    });
+    await expect(mismatched.handlers.get("collections.editRelationCell")!(
+      { sender: {} } as IpcMainInvokeEvent, editRelationRequest
+    )).rejects.toThrow("response identity did not match");
   });
 
   it("strictly binds formula updates to trusted sender, vault, and exact response identity", async () => {

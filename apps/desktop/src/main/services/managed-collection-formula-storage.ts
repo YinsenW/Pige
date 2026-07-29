@@ -663,6 +663,9 @@ export function projectCollectionFormulaColumns(
       canTrash: columns.length > 1 && !importedFormula && !referenced.has(column.id),
       canUseAsFormulaOperand,
       canEditFormula: pigeFormula && isBuilderRepresentable(calculation.expression),
+      canUseAsRelationDisplay: false,
+      canEditRelation: false,
+      hasInboundRelationDescriptors: false,
       ...(pigeFormula
         ? { calculation: column.calculation }
         : importedFormula
