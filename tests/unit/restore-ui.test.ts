@@ -4,6 +4,8 @@ import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
   AppearanceSettingsSummary,
+  BackupContinueIncompleteRequest,
+  BackupContinueIncompleteResult,
   JobSummary,
   JobsListRequest,
   LocalDatabaseStatus,
@@ -23,6 +25,7 @@ import type {
   VaultRevealTarget,
   VaultSummary
 } from "@pige/contracts";
+import { BackupContinueIncompleteAction } from "../../apps/desktop/src/renderer/src/components/VaultBackupSettingsPanel";
 
 const globalKeys = [
   "window",
@@ -48,6 +51,69 @@ afterEach(() => {
 });
 
 describe("First-run onboarding UI", () => {
+  it("keeps explicit incomplete-Backup continuation single-flight, quiet on cancel, and focus-owned on failure", async () => {
+    const dom = createDom();
+    const { createRoot } = await import("react-dom/client");
+    const container = requireElement(dom.window.document.querySelector<HTMLElement>("#root"));
+    const fallback = dom.window.document.createElement("button");
+    fallback.textContent = "Backup status";
+    dom.window.document.body.append(fallback);
+    const root = createRoot(container);
+    let calls = 0;
+    let outcome: "cancelled" | "failed" | "continued" = "cancelled";
+    let resolveAttempt: ((value: typeof outcome) => void) | undefined;
+    const render = (): void => root.render(createElement(BackupContinueIncompleteAction, {
+      identityKey: "vault_restore_ui:job_backup_incomplete:2026-07-29T10:00:00.000Z",
+      eligible: true,
+      labels: {
+        action: "Continue incomplete backup",
+        confirmation: "Continue this incomplete backup?",
+        confirm: "Continue",
+        cancel: "Cancel",
+        pending: "Continuing…",
+        continued: "Backup is continuing.",
+        stale: "This backup changed.",
+        failed: "Pige could not continue this backup."
+      },
+      onContinue: () => {
+        calls += 1;
+        return new Promise((resolve) => { resolveAttempt = resolve; });
+      },
+      onContinued: async () => undefined,
+      returnFocusRef: { current: fallback }
+    }));
+    await act(async () => { render(); await settle(dom); });
+
+    await click(dom, button(container, "Continue incomplete backup"));
+    await waitFor(dom, () => dom.window.document.activeElement === button(container, "Continue"));
+    await click(dom, button(container, "Cancel"));
+    await waitFor(dom, () => dom.window.document.activeElement === button(container, "Continue incomplete backup"));
+    expect(calls).toBe(0);
+
+    await click(dom, button(container, "Continue incomplete backup"));
+    const confirm = button(container, "Continue");
+    await act(async () => {
+      confirm.click();
+      confirm.click();
+      await settle(dom);
+    });
+    expect(calls).toBe(1);
+    expect(container.textContent).toContain("Continuing…");
+    await act(async () => { resolveAttempt?.(outcome); await settle(dom); });
+    await waitFor(dom, () => dom.window.document.activeElement === button(container, "Continue incomplete backup"));
+    expect(container.textContent).not.toContain("Backup is continuing.");
+
+    outcome = "failed";
+    await click(dom, button(container, "Continue incomplete backup"));
+    await click(dom, button(container, "Continue"));
+    await act(async () => { resolveAttempt?.(outcome); await settle(dom); });
+    await waitFor(dom, () => container.textContent?.includes("Pige could not continue this backup.") === true);
+    expect(button(container, "Continue incomplete backup")).toBeDefined();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps first paint language-neutral until the system-derived appearance owner resolves", async () => {
     const dom = createDom();
     const harness = createHarness(blockedOnboarding(), cloneOnlyPreview());
@@ -580,6 +646,60 @@ describe("Restore identity UI", () => {
     dom.window.close();
   });
 
+  it("continues only an eligible incomplete Backup after explicit confirmation and refreshes the same Job", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    const waitingJob = backupJob("waiting_dependency", "choose_path", true);
+    harness.jobs = [waitingJob];
+    let status: "failed" | "continued" = "failed";
+    harness.continueIncomplete = async (request) => {
+      harness.continueIncompleteRequests.push(request);
+      if (status === "failed") return { ...request, status };
+      harness.jobs = [{
+        ...waitingJob,
+        state: "running",
+        canContinueIncomplete: false,
+        updatedAt: "2026-07-29T10:00:02.000Z"
+      }];
+      return { ...request, status };
+    };
+    const { container, root } = await mountApp(dom, makePigeApi(harness, true));
+    await openVaultSettings(dom, container);
+
+    await waitFor(dom, () => buttons(container, "Continue incomplete").length === 1);
+    await click(dom, button(container, "Continue incomplete"));
+    await waitFor(dom, () => dom.window.document.activeElement === button(container, "Continue incomplete backup"));
+    const confirm = button(container, "Continue incomplete backup");
+    await act(async () => {
+      confirm.click();
+      confirm.click();
+      await settle(dom);
+    });
+    await waitFor(dom, () => harness.continueIncompleteRequests.length === 1);
+    expect(harness.continueIncompleteRequests[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_restore_ui",
+      waitingJobId: waitingJob.id,
+      expectedJobUpdatedAt: waitingJob.updatedAt
+    });
+    expect(container.textContent).toContain("Pige could not continue this backup.");
+    expect(buttons(container, "Continue incomplete")).toHaveLength(1);
+    expect(harness.retryJobIds).toHaveLength(0);
+
+    status = "continued";
+    await click(dom, button(container, "Continue incomplete"));
+    await click(dom, button(container, "Continue incomplete backup"));
+    await waitFor(dom, () => harness.continueIncompleteRequests.length === 2);
+    await waitFor(dom, () => buttons(container, "Continue incomplete").length === 0);
+    expect(container.querySelectorAll(".backup-job-status")).toHaveLength(1);
+    expect(container.textContent).toContain("Creating and validating the backup");
+    await waitFor(dom, () => dom.window.document.activeElement === container.querySelector('[aria-labelledby="vault-backup-title"]'));
+    expect(harness.retryJobIds).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps a cancelled reconnect actionable, single-flight, and focus-owned without a notice", async () => {
     const dom = createDom();
     const harness = createHarness(readyOnboarding(), bothModesPreview());
@@ -845,6 +965,8 @@ interface RestoreHarness {
     readonly waitingJobId: string;
     readonly status: "resolved" | "cancelled" | "stale" | "not_found" | "failed";
   }>;
+  readonly continueIncompleteRequests: BackupContinueIncompleteRequest[];
+  continueIncomplete: (request: BackupContinueIncompleteRequest) => Promise<BackupContinueIncompleteResult>;
   readonly revealRequests: VaultRevealTarget[];
   lastBackupAt?: string;
   localDatabaseStatus: LocalDatabaseStatus | null;
@@ -873,6 +995,11 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
     reconnectDependency: async (request) => {
       harness.reconnectRequests.push({ activeVaultId: request.activeVaultId, waitingJobId: request.waitingJobId });
       return { apiVersion: 1, ...request, status: "resolved" };
+    },
+    continueIncompleteRequests: [],
+    continueIncomplete: async (request) => {
+      harness.continueIncompleteRequests.push(request);
+      return { ...request, status: "cancelled" };
     },
     revealRequests: [],
     localDatabaseStatus: null,
@@ -1009,7 +1136,8 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
       applyRestore: (request: RestoreApplyRequest) => harness.applyRestore(request),
       create: async () => ({ status: "canceled" }),
       reconnectDependency: (request: { readonly requestId: string; readonly activeVaultId: string; readonly waitingJobId: string }) =>
-        harness.reconnectDependency(request)
+        harness.reconnectDependency(request),
+      continueIncomplete: (request: BackupContinueIncompleteRequest) => harness.continueIncomplete(request)
     },
     confirmations: {
       pending: async () => ({ apiVersion: 1 as const, status: "none" as const, revision: 0 }),
@@ -1179,7 +1307,8 @@ function recentVaultSummary(): RecentVaultSummary {
 
 function backupJob(
   state: "failed_retryable" | "failed_final" | "running" | "waiting_dependency",
-  userAction: "retry" | "choose_path" = "choose_path"
+  userAction: "retry" | "choose_path" = "choose_path",
+  canContinueIncomplete = false
 ): JobSummary {
   return {
     id: "job_20260714_backupui1",
@@ -1187,7 +1316,8 @@ function backupJob(
     state,
     stage: "backing_up",
     backupKind: "user_backup",
-    canReconnectDependency: state === "waiting_dependency",
+    canReconnectDependency: state === "waiting_dependency" && !canContinueIncomplete,
+    canContinueIncomplete,
     ...(state === "waiting_dependency" ? {
       waitingDependency: {
         dependencyKind: "external_source" as const,
@@ -1329,6 +1459,11 @@ function button(container: HTMLElement, label: string): HTMLButtonElement {
     );
   if (!match) throw new Error(`Button not found: ${label}`);
   return match;
+}
+
+function buttons(container: HTMLElement, label: string): HTMLButtonElement[] {
+  return Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+    .filter((candidate) => candidate.textContent === label);
 }
 
 function buttonByAriaLabel(container: HTMLElement, label: string): HTMLButtonElement {
