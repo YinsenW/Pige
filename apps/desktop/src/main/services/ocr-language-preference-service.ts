@@ -1,8 +1,22 @@
 import { createHash } from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
+import type {
+  OcrLanguagePreferenceRequest,
+  OcrLanguagePreferenceResult,
+  SetOcrLanguagePreferenceRequest,
+  SetOcrLanguagePreferenceResult
+} from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import { JobRecordSchema, type JobRecord, type JobRef, type SourceRecord } from "@pige/schemas";
+import {
+  JobRecordSchema,
+  OcrLanguagePreferenceResultSchema,
+  OcrLanguagePreferenceSummarySchema,
+  SetOcrLanguagePreferenceResultSchema,
+  type JobRecord,
+  type JobRef,
+  type OcrLanguagePreference as PublicOcrLanguagePreference,
+  type SourceRecord
+} from "@pige/schemas";
+import type { LocalSettingsStore } from "./local-settings";
 
 export const OCR_LANGUAGE_PREFERENCES = ["automatic", "en", "de", "fr", "ja", "ko", "zh-Hans"] as const;
 export type OcrLanguagePreference = typeof OCR_LANGUAGE_PREFERENCES[number];
@@ -38,6 +52,33 @@ export class OcrLanguagePreferenceService {
 
   current(): OcrLanguagePreferenceState {
     return validateState(this.#store.read());
+  }
+
+  read(request: OcrLanguagePreferenceRequest): OcrLanguagePreferenceResult {
+    try {
+      return OcrLanguagePreferenceResultSchema.parse({
+        apiVersion: 1,
+        requestId: request.requestId,
+        status: "ready",
+        summary: projectSummary(this.current())
+      });
+    } catch {
+      return { apiVersion: 1, requestId: request.requestId, status: "failed" };
+    }
+  }
+
+  set(request: SetOcrLanguagePreferenceRequest): SetOcrLanguagePreferenceResult {
+    try {
+      const result = this.mutate(request.expectedRevision, fromPublicPreference(request.preference));
+      return SetOcrLanguagePreferenceResultSchema.parse({
+        apiVersion: 1,
+        requestId: request.requestId,
+        status: result.status,
+        summary: projectSummary(result.state)
+      });
+    } catch {
+      return { apiVersion: 1, requestId: request.requestId, status: "failed" };
+    }
   }
 
   mutate(expectedRevision: number, preference: OcrLanguagePreference): {
@@ -194,97 +235,48 @@ class AutomaticOcrLanguagePreferenceStore implements OcrLanguagePreferenceStoreP
   }
 }
 
-export class MachineOcrLanguagePreferenceStore implements OcrLanguagePreferenceStorePort {
-  readonly #root: string;
-  readonly #filePath: string;
+export class LocalSettingsOcrLanguagePreferenceStore implements OcrLanguagePreferenceStorePort {
+  readonly #settings: LocalSettingsStore;
 
-  constructor(userDataPath: string) {
-    fs.mkdirSync(userDataPath, { recursive: true, mode: 0o700 });
-    this.#root = fs.realpathSync.native(userDataPath);
-    this.#filePath = path.join(this.#root, "ocr-language-preference.json");
+  constructor(settings: LocalSettingsStore) {
+    this.#settings = settings;
   }
 
   read(): OcrLanguagePreferenceState {
-    try {
-      const entry = fs.lstatSync(this.#filePath);
-      if (!entry.isFile() || entry.isSymbolicLink() || entry.size <= 0 || entry.size > 4 * 1024) {
-        throw settingsInvalid();
-      }
-      const realPath = fs.realpathSync.native(this.#filePath);
-      if (path.dirname(realPath) !== this.#root) throw settingsInvalid();
-      const descriptor = fs.openSync(realPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
-      try {
-        const current = fs.fstatSync(descriptor);
-        if (!current.isFile() || current.dev !== entry.dev || current.ino !== entry.ino || current.size !== entry.size) {
-          throw settingsInvalid();
-        }
-        const body = Buffer.alloc(current.size);
-        if (fs.readSync(descriptor, body, 0, body.length, 0) !== body.length) throw settingsInvalid();
-        return validateState(JSON.parse(body.toString("utf8")) as OcrLanguagePreferenceState);
-      } finally {
-        fs.closeSync(descriptor);
-      }
-    } catch (caught) {
-      if (isErrno(caught, "ENOENT")) return { revision: 0, preference: "automatic" };
-      if (caught instanceof PigeDomainError) throw caught;
-      throw settingsInvalid();
-    }
+    const current = this.#settings.getOcrLanguagePreferenceSettings();
+    return { revision: current.revision, preference: fromPublicPreference(current.preference) };
   }
 
-  mutate(expectedRevision: number, preference: OcrLanguagePreference): {
-    readonly status: "committed" | "stale";
-    readonly state: OcrLanguagePreferenceState;
-  } {
-    const current = this.read();
-    if (current.revision !== expectedRevision) return { status: "stale", state: current };
-    if (current.revision === Number.MAX_SAFE_INTEGER) {
-      throw new PigeDomainError("ocr.language_preference_revision_exhausted", "The OCR language preference revision is exhausted.");
-    }
-    const next = validateState({ revision: current.revision + 1, preference });
-    const body = `${JSON.stringify(next)}\n`;
-    const temporaryPath = `${this.#filePath}.${process.pid}.${Date.now()}.tmp`;
-    try {
-      const descriptor = fs.openSync(
-        temporaryPath,
-        fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0),
-        0o600
-      );
-      try {
-        fs.writeFileSync(descriptor, body, "utf8");
-        fs.fsyncSync(descriptor);
-      } finally {
-        fs.closeSync(descriptor);
+  mutate(expectedRevision: number, preference: OcrLanguagePreference) {
+    const result = this.#settings.mutateOcrLanguagePreferenceSettings(expectedRevision, (current) => ({
+      ...current,
+      preference: toPublicPreference(preference)
+    }));
+    return {
+      status: result.status,
+      state: {
+        revision: result.settings.revision,
+        preference: fromPublicPreference(result.settings.preference)
       }
-      if (this.read().revision !== expectedRevision) return { status: "stale", state: this.read() };
-      fs.renameSync(temporaryPath, this.#filePath);
-      fsyncDirectory(this.#root);
-      return { status: "committed", state: next };
-    } finally {
-      try {
-        fs.rmSync(temporaryPath, { force: true });
-      } catch {
-        // A stale temporary file must not replace the mutation result.
-      }
-    }
+    };
   }
 }
 
-function isErrno(value: unknown, code: string): boolean {
-  return typeof value === "object" && value !== null && "code" in value && value.code === code;
+function projectSummary(state: OcrLanguagePreferenceState) {
+  return OcrLanguagePreferenceSummarySchema.parse({
+    apiVersion: 1,
+    revision: state.revision,
+    preference: toPublicPreference(state.preference),
+    appliesTo: "new_ocr_jobs"
+  });
 }
 
-function fsyncDirectory(directory: string): void {
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(directory, fs.constants.O_RDONLY);
-    fs.fsyncSync(descriptor);
-  } catch {
-    // Directory fsync is not available on every supported filesystem.
-  } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
-  }
+function fromPublicPreference(preference: PublicOcrLanguagePreference): OcrLanguagePreference {
+  return preference.mode === "automatic" ? "automatic" : preference.language;
 }
 
-function settingsInvalid(): PigeDomainError {
-  return new PigeDomainError("ocr.language_preference_invalid", "The OCR language preference settings are invalid.");
+function toPublicPreference(preference: OcrLanguagePreference): PublicOcrLanguagePreference {
+  return preference === "automatic"
+    ? { mode: "automatic" }
+    : { mode: "preferred", language: preference };
 }

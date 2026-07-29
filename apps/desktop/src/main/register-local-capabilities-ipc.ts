@@ -1,5 +1,11 @@
 import type { IpcMain } from "electron";
 import {
+  OCR_LANGUAGE_PREFERENCE_CHANNEL,
+  SET_OCR_LANGUAGE_PREFERENCE_CHANNEL,
+  OcrLanguagePreferenceRequestSchema,
+  OcrLanguagePreferenceResultSchema,
+  SetOcrLanguagePreferenceRequestSchema,
+  SetOcrLanguagePreferenceResultSchema,
   PADDLE_OCR_ENGINE_ID,
   PaddleOcrDisableRequestSchema,
   PaddleOcrDisableResultSchema,
@@ -24,13 +30,23 @@ import {
   type PaddleOcrSummary,
   type PaddleOcrSummaryRequest,
   type PaddleOcrTestRequest,
-  type PaddleOcrTestResult
+  type PaddleOcrTestResult,
+  type OcrLanguagePreferenceRequest,
+  type OcrLanguagePreferenceResult,
+  type SetOcrLanguagePreferenceRequest,
+  type SetOcrLanguagePreferenceResult
 } from "@pige/schemas";
 
 type Awaitable<T> = T | Promise<T>;
 
 export interface RegisterLocalCapabilitiesIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
+  readonly ocrLanguagePreference: (
+    request: OcrLanguagePreferenceRequest
+  ) => Awaitable<OcrLanguagePreferenceResult>;
+  readonly setOcrLanguagePreference: (
+    request: SetOcrLanguagePreferenceRequest
+  ) => Awaitable<SetOcrLanguagePreferenceResult>;
   readonly paddleOcrSummary: (
     request: PaddleOcrSummaryRequest
   ) => Awaitable<PaddleOcrSummary>;
@@ -65,6 +81,22 @@ interface ResultSchema<T> {
 export function registerLocalCapabilitiesIpc(
   options: RegisterLocalCapabilitiesIpcOptions
 ): void {
+  options.ipcMain.handle(
+    OCR_LANGUAGE_PREFERENCE_CHANNEL,
+    async (_event, request: unknown) => {
+      const parsed = OcrLanguagePreferenceRequestSchema.parse(request);
+      return OcrLanguagePreferenceResultSchema.parse(await options.ocrLanguagePreference(parsed));
+    }
+  );
+
+  options.ipcMain.handle(
+    SET_OCR_LANGUAGE_PREFERENCE_CHANNEL,
+    async (_event, request: unknown) => {
+      const parsed = SetOcrLanguagePreferenceRequestSchema.parse(request);
+      return SetOcrLanguagePreferenceResultSchema.parse(await options.setOcrLanguagePreference(parsed));
+    }
+  );
+
   options.ipcMain.handle(
     "localCapabilities.paddleOcrSummary",
     async (_event, request: unknown) => {

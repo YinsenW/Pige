@@ -5,10 +5,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { JobRecord, SourceRecord } from "@pige/schemas";
 import {
   OcrLanguagePreferenceService,
-  MachineOcrLanguagePreferenceStore,
+  LocalSettingsOcrLanguagePreferenceStore,
   type OcrLanguagePreferenceState,
   type OcrLanguagePreferenceStorePort
 } from "../../apps/desktop/src/main/services/ocr-language-preference-service";
+import { LocalSettingsStore } from "../../apps/desktop/src/main/services/local-settings";
 
 const roots: string[] = [];
 
@@ -55,24 +56,52 @@ describe("OcrLanguagePreferenceService", () => {
       .toThrowError(expect.objectContaining({ code: "ocr.language_binding_invalid" }));
   });
 
-  it("defaults, commits with CAS, survives restart, and fails closed on a symlinked settings file", () => {
+  it("defaults, commits with CAS, survives restart, and survives unrelated settings rebuilds", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-ocr-language-"));
     roots.push(root);
-    const store = new MachineOcrLanguagePreferenceStore(root);
+    const store = new LocalSettingsOcrLanguagePreferenceStore(new LocalSettingsStore(root));
     expect(store.read()).toEqual({ revision: 0, preference: "automatic" });
     expect(store.mutate(0, "ja")).toEqual({
       status: "committed",
       state: { revision: 1, preference: "ja" }
     });
-    expect(new MachineOcrLanguagePreferenceStore(root).read()).toEqual({ revision: 1, preference: "ja" });
+    expect(new LocalSettingsOcrLanguagePreferenceStore(new LocalSettingsStore(root)).read())
+      .toEqual({ revision: 1, preference: "ja" });
     expect(store.mutate(0, "en")).toEqual({
       status: "stale",
       state: { revision: 1, preference: "ja" }
     });
 
-    fs.rmSync(path.join(root, "ocr-language-preference.json"));
-    fs.symlinkSync(path.join(root, "outside.json"), path.join(root, "ocr-language-preference.json"));
-    expect(() => store.read()).toThrowError(expect.objectContaining({ code: "ocr.language_preference_invalid" }));
+    const local = new LocalSettingsStore(root);
+    local.setAppLocale("fr");
+    expect(new LocalSettingsOcrLanguagePreferenceStore(local).read())
+      .toEqual({ revision: 1, preference: "ja" });
+  });
+
+  it("projects body-free public read and CAS results", () => {
+    const service = new OcrLanguagePreferenceService(new MemoryStore());
+    const requestId = "ocrlangreq_abcdefghijklmnop";
+
+    expect(service.read({ apiVersion: 1, requestId })).toEqual({
+      apiVersion: 1,
+      requestId,
+      status: "ready",
+      summary: {
+        apiVersion: 1,
+        revision: 0,
+        preference: { mode: "automatic" },
+        appliesTo: "new_ocr_jobs"
+      }
+    });
+    expect(service.set({
+      apiVersion: 1,
+      requestId,
+      expectedRevision: 0,
+      preference: { mode: "preferred", language: "de" }
+    })).toMatchObject({
+      status: "committed",
+      summary: { revision: 1, preference: { mode: "preferred", language: "de" } }
+    });
   });
 });
 

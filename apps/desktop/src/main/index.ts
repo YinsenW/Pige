@@ -237,7 +237,10 @@ import {
   NoteMarkdownEditorService
 } from "./services/note-markdown-editor-service";
 import { OcrService } from "./services/ocr-service";
-import { OcrLanguagePreferenceService } from "./services/ocr-language-preference-service";
+import {
+  LocalSettingsOcrLanguagePreferenceStore,
+  OcrLanguagePreferenceService
+} from "./services/ocr-language-preference-service";
 import { MacOSSpeechAdapter } from "./services/macos-speech-adapter";
 import { ProposalService } from "./services/proposal-service";
 import { SourceOriginalReconnectService } from "./services/source-original-reconnect-service";
@@ -1430,7 +1433,9 @@ const getAgentCapabilitySnapshot = (): AgentIngestCapabilitySnapshot => {
 };
 
 const getOcrLanguagePreferenceService = (): OcrLanguagePreferenceService => {
-  ocrLanguagePreferenceService ??= new OcrLanguagePreferenceService();
+  ocrLanguagePreferenceService ??= new OcrLanguagePreferenceService(
+    new LocalSettingsOcrLanguagePreferenceStore(getLocalSettingsStore())
+  );
   return ocrLanguagePreferenceService;
 };
 
@@ -2426,6 +2431,8 @@ registerMemoryIpc({
 });
 registerLocalCapabilitiesIpc({
   ipcMain,
+  ocrLanguagePreference: (request) => getOcrLanguagePreferenceService().read(request),
+  setOcrLanguagePreference: (request) => getOcrLanguagePreferenceService().set(request),
   paddleOcrSummary: (request) => getPaddleOcrLifecycleService().summary(request),
   installPaddleOcr: (request) => getPaddleOcrLifecycleService().install(request),
   enablePaddleOcr: (request) => getPaddleOcrLifecycleService().enable(request),
@@ -2894,7 +2901,8 @@ app.whenReady().then(async () => {
     getJobClassExecutorRegistry(),
     undefined,
     undefined,
-    getLocalRagEngineService()
+    getLocalRagEngineService(),
+    getOcrLanguagePreferenceService()
   );
   diagnosticsService = new DiagnosticsService(app.getPath("userData"));
   const restoreRecovery = await getRestoreCoordinatorService().recoverInterrupted();
