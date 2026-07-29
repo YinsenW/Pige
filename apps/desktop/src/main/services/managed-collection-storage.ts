@@ -440,6 +440,21 @@ export function readRevisionById(binding: BundleBinding, revisionId: string): Da
   return revision;
 }
 
+export function readImmutableCollectionRevision(
+  binding: BundleBinding,
+  revisionId: string
+): BundleBinding {
+  const revision = readRevisionById(binding, revisionId);
+  const schema = DatasetSchemaRecordSchema.parse(readJsonRef(binding.bundlePath, revision.schema));
+  if (
+    schema.datasetId !== binding.manifest.datasetId ||
+    schema.revisionId !== revision.id ||
+    revision.datasetId !== binding.manifest.datasetId
+  ) throw operationConflict();
+  const payloadPath = resolveBundleRelativePath(binding.bundlePath, revision.payload.path);
+  return { ...binding, revision, schema, payloadPath };
+}
+
 export function replaceManifestCas(binding: BundleBinding, next: DatasetManifest): void {
   const current = readRegularFile(binding.manifestPath, MAX_COLLECTION_JSON_BYTES, binding.bundlePath);
   if (!current.bytes.equals(binding.manifestBytes) || !sameFileRevision(current.stat, binding.manifestStat)) {

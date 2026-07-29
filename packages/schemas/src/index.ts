@@ -3330,6 +3330,7 @@ export const CollectionRequestIdSchema = z.string().regex(/^collection_request_[
 export const CollectionCatalogCursorSchema = z.string().regex(/^collection_catalog_[a-f0-9]{64}$/);
 export const CollectionRowCursorSchema = z.string().regex(/^collection_rows_[a-f0-9]{64}$/);
 export const COLLECTION_LIST_CHANNEL = "collections.list" as const;
+export const COLLECTION_OPEN_CITATION_CHANNEL = "collections.openCitation" as const;
 export const COLLECTION_LIST_MAX_LIMIT = 50;
 export const COLLECTION_ROW_PAGE_MAX_LIMIT = 50;
 export const CollectionScalarValueSchema = DatasetQueryScalarSchema;
@@ -4451,6 +4452,96 @@ export const DatasetQueryPreviewSchema = z.object({
       });
     }
   });
+});
+
+const CollectionCitationAggregateKeySchema = z.string().min(1).max(120);
+
+export const CollectionCitationHighlightSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("rows"),
+    rowIds: z.array(DatasetQueryRowIdSchema).min(1).max(50)
+  }).strict(),
+  z.object({
+    kind: z.literal("range"),
+    range: DatasetEvidenceRangeSchema
+  }).strict(),
+  z.object({
+    kind: z.literal("columns"),
+    columnIds: z.array(DatasetQueryColumnIdSchema).min(1).max(24)
+  }).strict(),
+  z.object({
+    kind: z.literal("aggregate"),
+    aggregateKeys: z.array(CollectionCitationAggregateKeySchema).min(1).max(32),
+    groupKeys: z.array(CollectionCitationAggregateKeySchema).max(32)
+  }).strict()
+]).superRefine((highlight, context) => {
+  const values = highlight.kind === "rows"
+    ? highlight.rowIds
+    : highlight.kind === "columns"
+      ? highlight.columnIds
+      : highlight.kind === "aggregate"
+        ? [...highlight.aggregateKeys, ...highlight.groupKeys]
+        : [];
+  if (new Set(values).size !== values.length) {
+    context.addIssue({
+      code: "custom",
+      message: "Collection citation highlight identities must be unique."
+    });
+  }
+});
+
+export const CollectionOpenCitationRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  conversationId: ConversationIdSchema,
+  assistantEventId: ConversationEventIdSchema,
+  citationRef: DatasetCitationRefIdSchema
+}).strict();
+
+const CollectionOpenCitationIdentitySchema = CollectionOpenCitationRequestSchema.pick({
+  apiVersion: true,
+  requestId: true,
+  activeVaultId: true,
+  conversationId: true,
+  assistantEventId: true,
+  citationRef: true
+});
+
+export const CollectionOpenCitationResultSchema = z.discriminatedUnion("status", [
+  CollectionOpenCitationIdentitySchema.extend({
+    status: z.literal("ready"),
+    mode: z.literal("citation_readonly"),
+    preview: DatasetQueryPreviewSchema,
+    highlights: z.array(CollectionCitationHighlightSchema).min(1).max(4)
+  }).strict(),
+  CollectionOpenCitationIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  CollectionOpenCitationIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionOpenCitationIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "ready") return;
+  if (!result.preview.citationRefs.includes(result.citationRef)) {
+    context.addIssue({
+      code: "custom",
+      path: ["preview", "citationRefs"],
+      message: "Collection citation preview must contain the requested durable citation ref."
+    });
+  }
+  const kinds = result.highlights.map(({ kind }) => kind);
+  if (new Set(kinds).size !== kinds.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["highlights"],
+      message: "Collection citation highlights must contain at most one target of each kind."
+    });
+  }
+  if (!kinds.includes("columns")) {
+    context.addIssue({
+      code: "custom",
+      path: ["highlights"],
+      message: "Collection citation highlights must include the durable column identities."
+    });
+  }
 });
 
 export const ConversationEventSchema = z.object({
@@ -6266,6 +6357,9 @@ export type CollectionTrashRowRequest = z.infer<typeof CollectionTrashRowRequest
 export type CollectionTrashRowResult = z.infer<typeof CollectionTrashRowResultSchema>;
 export type CollectionCellReadOnlyReason = z.infer<typeof CollectionCellReadOnlyReasonSchema>;
 export type CollectionColumnSummary = z.infer<typeof CollectionColumnSummarySchema>;
+export type CollectionCitationHighlight = z.infer<typeof CollectionCitationHighlightSchema>;
+export type CollectionOpenCitationRequest = z.infer<typeof CollectionOpenCitationRequestSchema>;
+export type CollectionOpenCitationResult = z.infer<typeof CollectionOpenCitationResultSchema>;
 export type CollectionOpenRequest = z.infer<typeof CollectionOpenRequestSchema>;
 export type CollectionOpenResult = z.infer<typeof CollectionOpenResultSchema>;
 export type CollectionRequestId = z.infer<typeof CollectionRequestIdSchema>;

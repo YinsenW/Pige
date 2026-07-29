@@ -95,6 +95,47 @@ describe("AgentConversationHistory", () => {
     })).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_unavailable" }));
   });
 
+  it("reads only the exact durable assistant event from its bound conversation", () => {
+    const vaultPath = createVaultRoot();
+    const conversations = new AgentTurnConversationStore();
+    const turn = conversations.appendUserTurn(
+      vaultPath,
+      "Compare this Dataset",
+      { inputKind: "typed_text", locale: "en" },
+      { clientTurnId: "turn_20260729_citationlookup001" }
+    );
+    const assistant = conversations.appendAssistantTurn(
+      vaultPath,
+      turn,
+      "job_20260729_citationlookup001",
+      "The cited rows match."
+    );
+    const history = new AgentConversationHistory();
+    expect(turn.event.conversationId).toBe("conv_20260729_citationlookup001");
+    expect(assistant.id).toMatch(/^evt_20260729_[a-z0-9]{8,}$/u);
+    expect(fs.existsSync(path.join(
+      vaultPath,
+      ".pige/conversations/2026/07",
+      `${turn.event.conversationId}.jsonl`
+    ))).toBe(true);
+
+    expect(history.readAssistantEvent({
+      vaultPath,
+      conversationId: turn.event.conversationId,
+      assistantEventId: assistant.id
+    })).toMatchObject({ id: assistant.id, conversationId: turn.event.conversationId, type: "assistant_message" });
+    expect(history.readAssistantEvent({
+      vaultPath,
+      conversationId: turn.event.conversationId,
+      assistantEventId: turn.event.id
+    })).toBeUndefined();
+    expect(() => history.readAssistantEvent({
+      vaultPath,
+      conversationId: "conv_20260729_wrongconversation",
+      assistantEventId: assistant.id
+    })).not.toThrow();
+  });
+
   it("does not follow a symlinked private metadata parent", () => {
     const vaultPath = createVaultRoot();
     const outside = createVaultRoot();

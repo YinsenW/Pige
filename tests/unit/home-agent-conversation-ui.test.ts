@@ -53,6 +53,10 @@ import type {
   WindowLayoutState,
   WindowState
 } from "@pige/contracts";
+import type {
+  CollectionOpenCitationRequest,
+  CollectionOpenCitationResult
+} from "@pige/schemas";
 import deMessages from "../../apps/desktop/src/renderer/src/locales/de/messages.json";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 import frMessages from "../../apps/desktop/src/renderer/src/locales/fr/messages.json";
@@ -3075,6 +3079,63 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("opens an exact durable Dataset citation read-only and keeps Home visible on a closed result", async () => {
+    const dom = createDom();
+    const timeline = completedDatasetTimeline();
+    const harness = createHarness(timeline);
+    const completed = datasetCompletedResult();
+    if (completed.state !== "completed" || !completed.answer.datasetResult) {
+      throw new Error("Expected a completed Dataset fixture.");
+    }
+    harness.openCollectionCitation = async (request) => ({
+      ...request,
+      status: "ready",
+      mode: "citation_readonly",
+      preview: completed.answer.datasetResult!,
+      highlights: [
+        { kind: "range", range: { startRow: 1, endRow: 1 } },
+        { kind: "columns", columnIds: ["column_salesregioncol01"] }
+      ]
+    });
+    const mount = await mountHome(dom, makePigeApi(harness));
+    await waitFor(dom, () => mount.container.textContent?.includes("D1 Sales by region") === true);
+
+    await clickButton(dom, mount.container, "D1 Sales by region");
+    await waitFor(dom, () => mount.container.querySelector(".managed-collection-citation-panel") !== null);
+    const request = harness.collectionCitationRequests[0];
+    expect(request).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_home_conversation",
+      conversationId: timeline.conversationId,
+      assistantEventId: timeline.tailEventId,
+      citationRef: "citation_1"
+    });
+    expect(Object.keys(request ?? {}).sort()).toEqual([
+      "activeVaultId",
+      "apiVersion",
+      "assistantEventId",
+      "citationRef",
+      "conversationId",
+      "requestId"
+    ]);
+    const citationPanel = mount.container.querySelector<HTMLElement>(".managed-collection-citation-panel");
+    expect(citationPanel?.dataset.collectionMode).toBe("citation_readonly");
+    expect(citationPanel?.querySelectorAll("mark").length).toBeGreaterThan(0);
+    expect(citationPanel?.querySelector("input, select, textarea")).toBeNull();
+
+    await clickButton(dom, mount.container, "Back");
+    await waitFor(dom, () => mount.container.textContent?.includes("D1 Sales by region") === true);
+    harness.openCollectionCitation = async (closedRequest) => ({ ...closedRequest, status: "stale" });
+    await clickButton(dom, mount.container, "D1 Sales by region");
+    await waitFor(dom, () => mount.container.textContent?.includes("Pige could not load or save this collection change.") === true);
+    expect(mount.container.querySelector(".managed-collection-citation-panel")).toBeNull();
+    expect(mount.container.textContent).toContain("North120.5");
+    expect(dom.window.document.activeElement?.textContent?.trim()).toBe("D1 Sales by region");
+
+    await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
   it("does not let an earlier turn completion erase a newly typed follow-up draft", async () => {
     const dom = createDom();
     const harness = createHarness(completedTimeline());
@@ -4352,6 +4413,7 @@ interface ConversationHarness {
   readonly submitRequests: AgentSubmitTurnRequest[];
   readonly conversationRequests: AgentConversationRequest[];
   readonly conversationHistoryRequests: AgentConversationHistoryListRequest[];
+  readonly collectionCitationRequests: CollectionOpenCitationRequest[];
   readonly submittedFileNames: string[][];
   readonly retryJobIds: string[];
   retryMode: "queued" | "immediate_refail";
@@ -4413,6 +4475,7 @@ interface ConversationHarness {
   installSpeechAsset: (request: SpeechAssetInstallRequest) => Promise<SpeechAssetInstallResult>;
   loadConversation: (request: AgentConversationRequest) => Promise<AgentConversationTimeline | AgentConversationEarlierPage | undefined>;
   loadConversationHistory: (request: AgentConversationHistoryListRequest) => Promise<AgentConversationHistoryListResult>;
+  openCollectionCitation: (request: CollectionOpenCitationRequest) => Promise<CollectionOpenCitationResult>;
   submitTurn: (
     request: AgentSubmitTurnRequest,
     files?: readonly File[]
@@ -4433,6 +4496,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     submitRequests: [],
     conversationRequests: [],
     conversationHistoryRequests: [],
+    collectionCitationRequests: [],
     submittedFileNames: [],
     retryJobIds: [],
     retryMode: "queued",
@@ -4571,6 +4635,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
         hasMore: false
       };
     },
+    openCollectionCitation: async (request) => ({ ...request, status: "failed" }),
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
       return request.stagedItems ? acceptedStagedResult(request) : completedResult();
@@ -4829,6 +4894,12 @@ function makePigeApi(harness: ConversationHarness): object {
       onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void) => {
         harness.draftListeners.add(listener);
         return () => harness.draftListeners.delete(listener);
+      }
+    },
+    collections: {
+      openCitation: (request: CollectionOpenCitationRequest) => {
+        harness.collectionCitationRequests.push(request);
+        return harness.openCollectionCitation(request);
       }
     },
     jobs: {

@@ -19,6 +19,11 @@ import type { DatasetIngestPlan } from "../../apps/desktop/src/main/services/dat
 import { KnowledgeActivityService } from "../../apps/desktop/src/main/services/knowledge-activity-service";
 import { ManagedCollectionService } from "../../apps/desktop/src/main/services/managed-collection-service";
 import {
+  readBundle,
+  readCollectionSnapshot,
+  readImmutableCollectionRevision
+} from "../../apps/desktop/src/main/services/managed-collection-storage";
+import {
   createVaultOnDisk,
   loadVaultSummary
 } from "../../apps/desktop/src/main/services/vault-layout";
@@ -965,6 +970,45 @@ describe("ManagedCollectionService", () => {
     expect(readManifest(fixture.bundlePath).activeRevision).toBe(first.revisionId);
     expect(findFile(path.join(fixture.vaultPath, ".pige/operations"), `${first.operationId}.json`))
       .toContain(first.operationId);
+  });
+
+  it("reopens an immutable historical revision after the active Collection advances", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const service = new ManagedCollectionService({
+      current: () => vault,
+      activeVaultPath: () => fixture.vaultPath
+    });
+    const initial = required(readBundle(fixture.vaultPath, readManifest(fixture.bundlePath).datasetId));
+    const initialSnapshot = required(readCollectionSnapshot(initial, required(initial.schema.tables[0]).id));
+    const row = required(initialSnapshot.rows[0]);
+    const column = required(initialSnapshot.columns[0]);
+    const originalValue = required(row.cells.find((cell) => cell.columnId === column.columnId)).value;
+    const committed = await service.editCell({
+      apiVersion: 1,
+      requestId: "collection_request_historicalopenabc",
+      activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId,
+      tableId: initialSnapshot.tableId,
+      rowId: row.rowId,
+      columnId: column.columnId,
+      expectedRevisionId: initial.revision.id,
+      value: "Current value"
+    });
+    expect(committed.status).toBe("committed");
+    const active = required(readBundle(fixture.vaultPath, initial.manifest.datasetId));
+    expect(active.revision.id).not.toBe(initial.revision.id);
+
+    const historical = readImmutableCollectionRevision(active, initial.revision.id);
+    const historicalSnapshot = required(readCollectionSnapshot(historical, initialSnapshot.tableId, {
+      rowIds: [row.rowId]
+    }));
+    expect(historicalSnapshot.revisionId).toBe(initial.revision.id);
+    expect(required(historicalSnapshot.rows[0]).cells).toContainEqual(expect.objectContaining({
+      columnId: column.columnId,
+      value: originalValue
+    }));
+    expect(readManifest(fixture.bundlePath).activeRevision).toBe(active.revision.id);
   });
 });
 

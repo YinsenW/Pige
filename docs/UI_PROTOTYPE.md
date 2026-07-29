@@ -532,8 +532,9 @@ Behavior:
   highlighted evidence in Library. Drafts carry none. Never expose SQL, engine names,
   query hashes, schema IDs, or internal paths.
 
-Home renders cited Dataset results. Library lists pathless Datasets and pages exact
-tables/views; citation highlighting, formula detail, scale and packaged proof stay open.
+Home renders cited results. Library lists pathless Datasets; citation Open rereads the
+exact preview read-only, highlights stable IDs and keeps ranges as metadata.
+Formula, scale and packaged proof stay open.
 
 ## 8. Note Reader
 
@@ -658,10 +659,10 @@ Action behavior:
 
 ### 8.4 Structured Knowledge Surface
 
-Datasets are Library content, not a new destination. It lists bounded pathless summaries
-and opens <=50-row table/view pages. Load More appends only an authoritative cursor page;
-failure preserves rows/focus. Citation row/range/aggregate highlighting, formula/cache
-warnings and packaged proof stay open. Never flatten rows or expose storage/query terms.
+Datasets are Library content, not a destination. Pathless <=50-row pages Load More only from
+authority and preserve rows/focus on failure. Citation mode uses the durable preview, stable
+row/column/aggregate highlights and range metadata; mutation is disabled. Formula/cache and
+packaged proof stay open.
 
 The first P1 slice edits a scalar, adds/trashes a row/field, or saves one named view with one
 optional filter/sort. Open/commit adopts the stable-ID snapshot; stale/failure preserves the

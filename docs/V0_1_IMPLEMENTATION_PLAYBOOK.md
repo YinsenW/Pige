@@ -556,10 +556,9 @@ B6.10 current-note timeline/citations/wait/egress and B6.11 Reader read/transfor
 work; an inspect-gated cited append contract is frozen. Implementation, broader mutation, platforms
 and evidence remain, so E6.06 and PIGE-UI-005 stay planned.
 
-B6.16 covers bounded query/citations, continuation/recovery/Home results, Library discovery
-and current table/view paging. Cursors bind vault/snapshot/revision/view/boundary; drift
-fails before append. E6.11 stays planned pending citation highlighting, analytical
-snapshots/joins, scale, signed platforms and broader recovery/CAS.
+B6.16 covers bounded query/citations, recovery, Library paging and historical citation Open.
+Cursors/lookups fence vault, event, revision and payload; drift never appends, substitutes or
+requeries. E6.11 stays planned for analytics, scale, signed platforms and broader recovery.
 
 B6.12/B6.14 current evidence covers the main-owned `library.tree` bridge, rebuildable
 Markdown-derived semantic hierarchy, deterministic weight/fragment/source/leaf metrics,

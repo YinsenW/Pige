@@ -229,6 +229,8 @@ import {
   CollectionCellEditResultSchema,
   CollectionCreateViewRequestSchema,
   CollectionCreateViewResultSchema,
+  CollectionOpenCitationRequestSchema,
+  CollectionOpenCitationResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
   CollectionListRequestSchema,
@@ -377,6 +379,8 @@ import type {
   CollectionCellEditResult,
   CollectionCreateViewRequest,
   CollectionCreateViewResult,
+  CollectionOpenCitationRequest,
+  CollectionOpenCitationResult,
   CollectionOpenRequest,
   CollectionOpenResult,
   CollectionListRequest,
@@ -456,6 +460,25 @@ async function invokeCollectionOpen(request: CollectionOpenRequest): Promise<Col
     result.snapshot.activeViewId !== parsedRequest.viewId
   ) {
     throw new Error("Invalid Managed Collection open response view identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionOpenCitation(
+  request: CollectionOpenCitationRequest
+): Promise<CollectionOpenCitationResult> {
+  const parsedRequest = CollectionOpenCitationRequestSchema.parse(request);
+  const result = CollectionOpenCitationResultSchema.parse(
+    await ipcRenderer.invoke("collections.openCitation", parsedRequest)
+  );
+  if (
+    result.requestId !== parsedRequest.requestId ||
+    result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.conversationId !== parsedRequest.conversationId ||
+    result.assistantEventId !== parsedRequest.assistantEventId ||
+    result.citationRef !== parsedRequest.citationRef
+  ) {
+    throw new Error("Invalid Managed Collection citation response identity.");
   }
   return result;
 }
@@ -1053,6 +1076,7 @@ const api: PigeDesktopApi = {
   collections: {
     list: invokeCollectionList,
     open: invokeCollectionOpen,
+    openCitation: invokeCollectionOpenCitation,
     editCell: invokeCollectionCellEdit,
     appendDefaultRow: invokeCollectionAppendDefaultRow,
     addNullableColumn: invokeCollectionAddNullableColumn,

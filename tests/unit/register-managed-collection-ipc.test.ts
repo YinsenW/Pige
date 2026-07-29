@@ -17,6 +17,14 @@ const listRequest = {
   activeVaultId,
   limit: 20
 } as const;
+const citationRequest = {
+  apiVersion: 1,
+  requestId: "collection_request_citationabcdefgh",
+  activeVaultId,
+  conversationId: "conv_20260727_citationabcdefgh",
+  assistantEventId: "evt_20260727_citationabcdefgh",
+  citationRef: "citation_10"
+} as const;
 const editRequest = {
   ...openRequest,
   requestId: "collection_request_qrstuvwxyzabcdef",
@@ -70,6 +78,7 @@ function makeHarness(options: {
   readonly isTrustedSender?: () => boolean;
   readonly listCollections?: (request: typeof listRequest) => unknown;
   readonly openCollection?: (request: typeof openRequest) => unknown;
+  readonly openCollectionCitation?: (request: typeof citationRequest) => unknown;
   readonly editCollectionCell?: (request: typeof editRequest) => unknown;
   readonly appendDefaultCollectionRow?: (request: typeof appendRequest) => unknown;
   readonly addNullableCollectionColumn?: (request: typeof addColumnRequest) => unknown;
@@ -109,6 +118,10 @@ function makeHarness(options: {
       canAddColumn: true,
       views: []
     }
+  })));
+  const openCollectionCitation = vi.fn(options.openCollectionCitation ?? ((request) => ({
+    ...request,
+    status: "not_found"
   })));
   const appendDefaultCollectionRow = vi.fn(options.appendDefaultCollectionRow ?? ((request) => ({
     apiVersion: request.apiVersion,
@@ -182,6 +195,7 @@ function makeHarness(options: {
     getActiveVaultId: options.getActiveVaultId ?? (() => activeVaultId),
     listCollections,
     openCollection,
+    openCollectionCitation,
     editCollectionCell,
     appendDefaultCollectionRow,
     addNullableCollectionColumn,
@@ -194,6 +208,7 @@ function makeHarness(options: {
     handlers,
     listCollections,
     openCollection,
+    openCollectionCitation,
     editCollectionCell,
     appendDefaultCollectionRow,
     addNullableCollectionColumn,
@@ -209,6 +224,7 @@ describe("registerManagedCollectionIpc", () => {
     expect([...makeHarness().handlers.keys()]).toEqual([
       "collections.list",
       "collections.open",
+      "collections.openCitation",
       "collections.editCell",
       "collections.appendDefaultRow",
       "collections.addNullableColumn",
@@ -217,6 +233,53 @@ describe("registerManagedCollectionIpc", () => {
       "collections.trashColumn",
       "collections.trashRow"
     ]);
+  });
+
+  it("fences citation lookup by trusted sender, vault, and exact result identity", async () => {
+    const ready = (request: typeof citationRequest) => ({
+      ...request,
+      status: "ready" as const,
+      mode: "citation_readonly" as const,
+      preview: {
+        datasetId: "dataset_20260727_abcdefghijkl",
+        revisionId: "dataset_rev_20260727_abcdefghijkl",
+        tableId: "table_abcdefghijkl",
+        tableName: "Tasks",
+        planHash: `sha256:${"a".repeat(64)}`,
+        resultHash: `sha256:${"b".repeat(64)}`,
+        columns: [{ key: "column_abcdefghijkl", label: "Task", logicalType: "string" as const }],
+        rows: [{ rowId: "row_abcdefghijkl", values: ["Draft"] }],
+        matchedRowCount: 1,
+        returnedRowCount: 1,
+        truncated: false,
+        citationRefs: [request.citationRef]
+      },
+      highlights: [{ kind: "columns" as const, columnIds: ["column_abcdefghijkl"] }]
+    });
+    const accepted = makeHarness({ openCollectionCitation: ready });
+    await expect(accepted.handlers.get("collections.openCitation")!(
+      { sender: {} } as IpcMainInvokeEvent,
+      citationRequest
+    )).resolves.toMatchObject({ status: "ready", mode: "citation_readonly" });
+    expect(accepted.openCollectionCitation).toHaveBeenCalledOnce();
+
+    const untrusted = makeHarness({ isTrustedSender: () => false, openCollectionCitation: ready });
+    await expect(untrusted.handlers.get("collections.openCitation")!(
+      { sender: {} } as IpcMainInvokeEvent,
+      citationRequest
+    )).resolves.toMatchObject({ status: "failed" });
+    expect(untrusted.openCollectionCitation).not.toHaveBeenCalled();
+
+    const mismatched = makeHarness({
+      openCollectionCitation: (request) => ({
+        ...ready(request),
+        assistantEventId: "evt_20260727_wrongidentityabcd"
+      })
+    });
+    await expect(mismatched.handlers.get("collections.openCitation")!(
+      { sender: {} } as IpcMainInvokeEvent,
+      citationRequest
+    )).rejects.toThrow();
   });
 
   it("strictly parses and returns bounded open and edit results", async () => {

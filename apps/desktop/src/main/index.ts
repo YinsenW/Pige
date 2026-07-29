@@ -160,6 +160,8 @@ import { KnowledgeActivityService, type KnowledgeActivityCollectionPort } from "
 import { KnowledgeHealthService } from "./services/knowledge-health-service";
 import { ManagedCollectionService } from "./services/managed-collection-service";
 import { ManagedCollectionViewService } from "./services/managed-collection-view-service";
+import { ManagedCollectionCitationService } from "./services/managed-collection-citation-service";
+import { AgentConversationHistory } from "./services/agent-conversation-history";
 import {
   HomeAgentService,
   scheduleAcceptedAgentTurn,
@@ -292,6 +294,8 @@ let knowledgeActivityService: KnowledgeActivityService | undefined;
 let knowledgeHealthService: KnowledgeHealthService | undefined;
 let managedCollectionService: ManagedCollectionService | undefined;
 let managedCollectionViewService: ManagedCollectionViewService | undefined;
+let managedCollectionCitationService: ManagedCollectionCitationService | undefined;
+const collectionCitationConversationHistory = new AgentConversationHistory();
 let libraryService: LibraryService | undefined;
 let notesService: NotesService | undefined;
 let noteMarkdownEditorActivityAdapter: NoteMarkdownEditorActivityAdapter | undefined;
@@ -1469,6 +1473,16 @@ const getManagedCollectionViewService = (): ManagedCollectionViewService => {
   return managedCollectionViewService;
 };
 
+const getManagedCollectionCitationService = (): ManagedCollectionCitationService => {
+  if (!managedCollectionCitationService) {
+    managedCollectionCitationService = new ManagedCollectionCitationService(
+      getVaultService(),
+      collectionCitationConversationHistory
+    );
+  }
+  return managedCollectionCitationService;
+};
+
 const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort => {
   const collections = getManagedCollectionService();
   const views = getManagedCollectionViewService();
@@ -2159,6 +2173,7 @@ registerManagedCollectionIpc({
   getActiveVaultId: () => getVaultService().current()?.vaultId,
   listCollections: (request) => getManagedCollectionViewService().list(request),
   openCollection: (request) => getManagedCollectionViewService().open(request),
+  openCollectionCitation: (request) => getManagedCollectionCitationService().open(request),
   editCollectionCell: (request) => getManagedCollectionService().editCell(request),
   appendDefaultCollectionRow: (request) => getManagedCollectionService().appendDefaultRow(request),
   addNullableCollectionColumn: (request) => getManagedCollectionService().addNullableColumn(request),
@@ -2668,6 +2683,10 @@ app.whenReady().then(async () => {
   proposalService = new ProposalService(getVaultService());
   managedCollectionService = new ManagedCollectionService(getVaultService());
   managedCollectionViewService = new ManagedCollectionViewService(getVaultService());
+  managedCollectionCitationService = new ManagedCollectionCitationService(
+    getVaultService(),
+    collectionCitationConversationHistory
+  );
   noteMarkdownEditorActivityAdapter = new NoteMarkdownEditorActivityAdapter(getVaultService());
   noteMarkdownEditorService = new NoteMarkdownEditorService(
     getVaultService(),
