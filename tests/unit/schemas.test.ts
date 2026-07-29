@@ -123,6 +123,7 @@ import {
   PaddleOcrSummarySchema,
   PaddleOcrTestRequestSchema,
   PaddleOcrTestResultSchema,
+  PermissionDecisionRecordSchema,
   SetOcrLanguagePreferenceRequestSchema,
   SetOcrLanguagePreferenceResultSchema,
   PiPackageInstallRequestSchema,
@@ -3013,6 +3014,67 @@ describe("schemas", () => {
         subject: { ...confirmation.presentation.subject, argv: ["install", "secret"] }
       }
     })).toThrow();
+
+    const permissionRequestId = "permreq_20260729_abcdefghijklmnop";
+    const permissionDecisionId = "permdec_20260729_abcdefghijklmnop";
+    const decision = {
+      id: permissionDecisionId,
+      schemaVersion: 1,
+      permissionRequestId,
+      confirmationId: confirmation.confirmationId,
+      confirmationRevision: 7,
+      bindingHash: digest,
+      decision: "allow_once",
+      scope: "once",
+      decidedBy: "user",
+      autoAllowedBy: "none",
+      jobId,
+      decidedAt: "2026-07-29T00:00:00.000Z"
+    } as const;
+    expect(PermissionDecisionRecordSchema.parse(decision)).toEqual(decision);
+    expect(() => PermissionDecisionRecordSchema.parse({
+      ...decision,
+      decision: "allow_scoped",
+      scope: "once"
+    })).toThrow("scoped allow");
+    expect(() => PermissionDecisionRecordSchema.parse({
+      ...decision,
+      decidedBy: "system",
+      autoAllowedBy: "none"
+    })).toThrow("system allow");
+
+    const permissionJob = JobRecordSchema.parse({
+      id: jobId,
+      class: "agent_turn",
+      state: "waiting_permission",
+      createdAt: "2026-07-29T00:00:00.000Z",
+      updatedAt: "2026-07-29T00:00:00.000Z",
+      permissionRequestIds: [permissionRequestId],
+      permissionDecisionIds: [permissionDecisionId],
+      message: "Waiting for one exact permission decision."
+    });
+    expect(permissionJob.permissionRequestIds).toEqual([permissionRequestId]);
+    expect(permissionJob.permissionDecisionIds).toEqual([permissionDecisionId]);
+    expect(() => JobRecordSchema.parse({
+      ...permissionJob,
+      permissionRequestIds: [permissionRequestId, permissionRequestId]
+    })).toThrow("unique");
+
+    const permissionOperation = OperationRecordSchema.parse({
+      id: "op_20260729_permission1",
+      schemaVersion: 1,
+      jobId,
+      createdAt: "2026-07-29T00:00:00.000Z",
+      actor: { kind: "pige_agent", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+      permissionDecisionIds: [permissionDecisionId],
+      kind: "repair_record",
+      targetRefs: [],
+      sourceRefs: [],
+      summary: "Applied the exact authorized effect.",
+      reversible: "no",
+      warnings: []
+    });
+    expect(permissionOperation.permissionDecisionIds).toEqual([permissionDecisionId]);
 
     const plan = {
       planId,
