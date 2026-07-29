@@ -170,9 +170,12 @@ import type {
   ProposalReviewPreview,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
+  ReaderSelectionCreateNoteRequest,
+  ReaderSelectionCreateNoteResult,
   ReaderSelectionLinkRequest,
   ReaderSelectionLinkResult,
   ReaderSelectionReadAction,
+  ReaderSelectionProposalAction,
   ReaderSelectionTransformAction,
   ReaderSelectionTransformRequest,
   ReaderSelectionTransformResult,
@@ -395,10 +398,13 @@ export type {
   ReaderSelectionActionRequest,
   ReaderSelectionActionRequestId,
   ReaderSelectionActionResult,
+  ReaderSelectionCreateNoteRequest,
+  ReaderSelectionCreateNoteResult,
   ReaderSelectionLinkRequest,
   ReaderSelectionLinkResult,
   ReaderSelectionIdentity,
   ReaderSelectionReadAction,
+  ReaderSelectionProposalAction,
   ReaderSelectionTransformAction,
   ReaderSelectionTransformRequest,
   ReaderSelectionTransformResult,
@@ -1875,6 +1881,9 @@ export interface PigeDesktopApi {
     readonly submitTransform: (
       request: ReaderSelectionTransformRequest
     ) => Promise<ReaderSelectionTransformResult>;
+    readonly submitCreateNote: (
+      request: ReaderSelectionCreateNoteRequest
+    ) => Promise<ReaderSelectionCreateNoteResult>;
     readonly currentProposal: (
       request: ReaderSelectionProposalGetRequest
     ) => Promise<ReaderSelectionProposalGetResult>;

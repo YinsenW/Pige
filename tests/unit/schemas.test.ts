@@ -132,6 +132,9 @@ import {
   PiPackageUpdateRequestSchema,
   PiPackageUpdateResultSchema,
   RequirementIdSchema,
+  ReaderSelectionCreateNoteRequestSchema,
+  ReaderSelectionCreateNoteResultSchema,
+  ReaderSelectionProposalDecisionResultSchema,
   RetrievalSearchResultSchema,
   SetThemeRequestSchema,
   SkillDiscardStagedRequestSchema,
@@ -338,6 +341,76 @@ describe("schemas", () => {
       proposal: { ...proposal, state: "applied" },
       operationId: "op_20260728_schemaappend01"
     })).toMatchObject({ status: "applied", proposal: { state: "applied" } });
+  });
+
+  it("binds Reader selection create-note review to one created page identity", () => {
+    const selection = {
+      pageId: "page_20260729_createnote01",
+      pageContentHash: `sha256:${"a".repeat(64)}`,
+      span: { unit: "utf8_bytes", start: 0, endExclusive: 32 },
+      selectedContentHash: `sha256:${"b".repeat(64)}`
+    } as const;
+    const request = {
+      apiVersion: 1,
+      requestId: "readerselaction_createnote01",
+      action: "create_note",
+      activeVaultId: "vault_20260729_createnote",
+      renderContextId: `notectx_${"c".repeat(32)}`,
+      selection,
+      locale: "en",
+      clientTurnId: "turn_20260729_createnote01"
+    } as const;
+    expect(ReaderSelectionCreateNoteRequestSchema.parse(request)).toEqual(request);
+    expect(() => ReaderSelectionCreateNoteRequestSchema.parse({ ...request, path: "/private/note.md" })).toThrow();
+
+    const createNoteProposal = {
+      proposalId: "proposal_20260729_createnote01",
+      action: "create_note",
+      state: "ready",
+      revision: 1,
+      lines: [{ kind: "added", text: "Create a note from the resolved selection." }]
+    } as const;
+    const reviewRequired = {
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "review_required",
+      jobId: "job_20260729_createnote01",
+      conversationEventId: "evt_20260729_createnote01",
+      conversationId: "conv_20260729_createnote01",
+      tailEventId: "evt_20260729_createnote02",
+      proposal: createNoteProposal
+    } as const;
+    expect(ReaderSelectionCreateNoteResultSchema.parse(reviewRequired)).toEqual(reviewRequired);
+    expect(() => ReaderSelectionCreateNoteResultSchema.parse({
+      ...reviewRequired,
+      proposal: { ...createNoteProposal, action: "polish" }
+    })).toThrow();
+    expect(() => ReaderSelectionCreateNoteResultSchema.parse({ ...reviewRequired, body: "private" })).toThrow();
+
+    const appliedCreateNote = {
+      apiVersion: 1,
+      status: "applied",
+      proposal: { ...createNoteProposal, state: "applied" },
+      operationId: "op_20260729_createnote01",
+      createdPageId: "page_20260729_creatednote01"
+    } as const;
+    expect(ReaderSelectionProposalDecisionResultSchema.parse(appliedCreateNote)).toEqual(appliedCreateNote);
+    expect(() => ReaderSelectionProposalDecisionResultSchema.parse({
+      ...appliedCreateNote,
+      createdPageId: undefined
+    })).toThrow();
+
+    const appliedTransform = {
+      apiVersion: 1,
+      status: "applied",
+      proposal: { ...createNoteProposal, action: "polish", state: "applied" },
+      operationId: "op_20260729_transform01"
+    } as const;
+    expect(ReaderSelectionProposalDecisionResultSchema.parse(appliedTransform)).toEqual(appliedTransform);
+    expect(() => ReaderSelectionProposalDecisionResultSchema.parse({
+      ...appliedTransform,
+      createdPageId: "page_20260729_creatednote01"
+    })).toThrow();
   });
 
   it("keeps Dataset discovery and Collection row paging bounded, ordered, and body-free", () => {
