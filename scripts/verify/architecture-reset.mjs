@@ -95,14 +95,21 @@ if (countLines(fs.readFileSync(adapterPath, "utf8")) > manifest.hardLimits.piAda
 }
 
 const acceptance = JSON.parse(fs.readFileSync(path.join(root, "resources/traceability/acceptance.manifest.json"), "utf8"));
-for (const requirementId of ["PIGE-SEC-002", "PIGE-SEC-003", "PIGE-SEC-005", "PIGE-PI-003"]) {
-  if (acceptance.requirements?.[requirementId]?.status !== "planned") {
-    failures.push(`${requirementId} must remain planned until reset implementation evidence exists`);
+const evidencedRequirementStatuses = {
+  "PIGE-SEC-002": "partial",
+  "PIGE-SEC-003": "verified",
+  "PIGE-SEC-005": "partial",
+  "PIGE-PI-003": "partial"
+};
+for (const [requirementId, expectedStatus] of Object.entries(evidencedRequirementStatuses)) {
+  if (acceptance.requirements?.[requirementId]?.status !== expectedStatus) {
+    failures.push(`${requirementId} must remain ${expectedStatus} until its reset evidence changes`);
   }
 }
-for (const exitId of ["E3.03", "E8.02", "E8.03"]) {
-  if (acceptance.exits?.[exitId]?.status !== "planned") {
-    failures.push(`${exitId} must remain planned until reset implementation evidence exists`);
+const evidencedExitStatuses = { "E3.03": "partial", "E8.02": "partial", "E8.03": "verified" };
+for (const [exitId, expectedStatus] of Object.entries(evidencedExitStatuses)) {
+  if (acceptance.exits?.[exitId]?.status !== expectedStatus) {
+    failures.push(`${exitId} must remain ${expectedStatus} until its reset evidence changes`);
   }
 }
 
