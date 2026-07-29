@@ -64,6 +64,26 @@ describe("recent vault opening", () => {
     expect(electronMocks.showOpenDialog).not.toHaveBeenCalled();
   });
 
+  it("previews a legacy recent vault without acquiring writer authority or activating it", () => {
+    const root = makeTempRoot();
+    const vault = makeVault(root, "Legacy");
+    const manifestPath = path.join(vault.path, ".pige/manifest.json");
+    const current = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+    const { durable_domain_versions: _versions, ...legacy } = current;
+    fs.writeFileSync(manifestPath, `${JSON.stringify({ ...legacy, vault_schema_version: 1 }, null, 2)}\n`);
+    const settings = makeRecentSettings(root, [recentRecord(vault, vault.summary.vaultId)]);
+    const acquired: string[] = [];
+    const service = trackService(new VaultService(settings, () => false, makeLeaseFactory(acquired)));
+
+    const result = service.openRecent({ vaultId: vault.summary.vaultId });
+
+    expect(result).toMatchObject({ status: "needs_migration", preview: { vaultId: vault.summary.vaultId } });
+    expect(VaultActionResultSchema.parse(result)).toEqual(result);
+    expect(acquired).toEqual([]);
+    expect(service.current()).toBeUndefined();
+    expect(settings.getActiveVaultPath()).toBeUndefined();
+  });
+
   it("rejects missing and duplicate recent IDs without disclosing stored paths", () => {
     const root = makeTempRoot();
     const first = makeVault(root, "First");

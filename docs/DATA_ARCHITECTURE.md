@@ -539,11 +539,12 @@ table_20260713_ef34ab56
 ```json
 {
   "vault_id": "vault_20260709_ab12cd",
-  "vault_schema_version": 1,
+  "vault_schema_version": 2,
   "created_at": "2026-07-09T00:00:00.000Z",
   "updated_at": "2026-07-09T00:00:00.000Z",
   "app_min_version": "0.1.0",
   "default_locale": "zh-Hans",
+  "durable_domain_versions": { "markdownPages": 2, "sourceRecords": 2, "ocrArtifacts": 2, "conversationEvents": 2, "memory": 2, "datasets": 1, "jobs": 1, "proposals": 1, "operations": 1, "skills": 1, "vaultConfig": 1 },
   "durable_roots": [
     "raw",
     "artifacts",
@@ -850,25 +851,11 @@ Controls:
 
 Detailed schema versioning and migration classes are defined in `docs/SYNC_CONFLICT_AND_MIGRATION.md`.
 
-Migration domains:
-
-- Vault schema.
-- Page frontmatter schema.
-- Source record schema.
-- Conversation event schema.
-- Job, proposal, and operation record schemas.
-- Agent memory schema.
-- Skill metadata schema.
-- Backup manifest format/domain compatibility schema.
-- SQLite schema.
-
-Rules:
-
-- Destructive durable migrations back up and intervene; reversible migrations record Operations.
-- SQLite migrations are rebuildable and can be reset.
-- Unknown fields in durable JSON/YAML must be preserved.
-- Failed migrations must leave original files intact.
-- Migration logs should be written to `.pige/operations/`.
+Durable migration domains are vault/page/source/conversation/Job/proposal/Operation/memory/
+Skill/backup schemas; SQLite is rebuildable. Destructive transforms back up and intervene;
+unknown fields/originals survive failure and Operations record success. Current v1→v2 adds
+the domain map and BCP47-or-`unknown` facts, then resets indexes after manifest-last commit;
+v1 is preview-only and future/invalid vaults never activate a writer.
 
 ## 16. Implementation Checklist
 

@@ -19,6 +19,7 @@ import {
 import { SourcePageService } from "./source-page-service";
 import { tryVerifyReadableSourceFileAsync, verifyReadableSourceFileAsync } from "./source-file-access";
 import { createVaultRelativePathResolver } from "./vault-layout";
+import { observedOcrArtifactLanguage, sourceLanguageAfterOcr } from "./durable-language";
 
 export interface OcrSourceResult {
   readonly sourceId: string;
@@ -139,6 +140,7 @@ export class OcrArtifactService {
       blockCount: result.blocks.length,
       ...(result.confidence !== undefined ? { confidence: result.confidence } : {}),
       languageHints: result.languageHints,
+      language: observedOcrArtifactLanguage(result.languageHints),
       image: result.image,
       agentTextReady: Boolean(textArtifactPath),
       units,
@@ -148,6 +150,7 @@ export class OcrArtifactService {
     const artifacts = upsertOcrArtifacts(parsedSource, textArtifactPath, textIntegrity, metadataArtifactPath, metadataIntegrity);
     const updatedSource = SourceRecordSchema.parse({
       ...parsedSource,
+      language: sourceLanguageAfterOcr(parsedSource.language, result.languageHints),
       artifacts,
       metadata: {
         ...parsedSource.metadata,

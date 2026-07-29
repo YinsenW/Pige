@@ -46,6 +46,7 @@ import type {
   UpdateCheckRequest,
   UpdateStatusEvent,
   UpdateSourceStoragePolicyRequest,
+  VaultMigrationApplyRequest,
   WindowLayoutRequest
 } from "@pige/contracts";
 import {
@@ -71,6 +72,7 @@ import {
   UpdateProviderCredentialRequestSchema,
   DeleteProviderRequestSchema,
   OpenRecentVaultRequestSchema,
+  VAULT_APPLY_MIGRATION_CHANNEL,
   UpdateModelRequestSchema,
   SetDefaultModelRequestSchema,
   SpeechAvailabilityRequestSchema,
@@ -88,7 +90,9 @@ import {
   SetThemeRequestSchema,
   WindowLayoutRequestSchema,
   WindowLayoutStateSchema,
-  VaultActionResultSchema
+  VaultActionResultSchema,
+  VaultMigrationApplyRequestSchema,
+  VaultMigrationApplyResultSchema
 } from "@pige/schemas";
 import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
 import { registerReaderIpc } from "./register-reader-ipc";
@@ -2408,9 +2412,19 @@ ipcMain.handle("vault.open", async (event) => {
 ipcMain.handle("vault.openRecent", (_event, request: OpenRecentVaultRequest) => {
   const parsedRequest = OpenRecentVaultRequestSchema.parse(request);
   const result = getVaultService().openRecent(parsedRequest);
-  initializeActiveDatabase();
-  resumeBackgroundJobs();
+  if (result.status === "completed") {
+    initializeActiveDatabase();
+    resumeBackgroundJobs();
+  }
   return VaultActionResultSchema.parse(result);
+});
+ipcMain.handle(VAULT_APPLY_MIGRATION_CHANNEL, async (_event, request: VaultMigrationApplyRequest) => {
+  const result = await getVaultService().applyMigration(VaultMigrationApplyRequestSchema.parse(request));
+  if (result.status === "completed") {
+    initializeActiveDatabase();
+    resumeBackgroundJobs();
+  }
+  return VaultMigrationApplyResultSchema.parse(result);
 });
 ipcMain.handle("vault.revealKnowledgeRoot", (event) => {
   requireWindow(event.sender);

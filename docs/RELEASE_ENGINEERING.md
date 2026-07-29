@@ -21,14 +21,13 @@ This document defines:
 
 ## 2. v0.1 Platform Scope
 
-v0.1 supported platforms:
+Phase 1 `v0.1 Public Alpha` supported platform:
 
 - macOS 26 or later.
-- Windows 11.
-- Windows 10 if Electron, bundled tools, local database, and update pipeline remain reliable in testing.
 
 Deferred:
 
+- Windows 11/10 public signing, installed-runtime, visual-equivalence and downloaded-distribution qualification; existing code, CI and packageability hooks remain.
 - Linux packaging.
 - Mobile.
 - Browser extension.
@@ -36,7 +35,7 @@ Deferred:
 Rules:
 
 - macOS is the primary v0.1 quality target.
-- Windows 10/11 are v0.1 targets, but Windows native OCR availability is runtime-detected.
+- Windows remains a maintained next-platform target and must not be represented as verified.
 - Linux-specific packaging and support should not block v0.1.
 
 ## 3. Installer Size Budget
@@ -356,28 +355,20 @@ Release evidence layout:
 - Release evidence must reference fixture manifest versions, app build ID, platform, installer artifact IDs, backup manifest summary, restore result, and unresolved blockers.
 - Release evidence must not include private vault content, source bodies, raw prompts, raw model responses, secrets, tokens, or unredacted private paths.
 
-Current evidence, reconciled 2026-07-18: unsigned macOS 26 arm64 and Windows x64
-packageability jobs build from the lockfile and fail closed across packaged identity/runtime,
-workers, Pi/Home, attribution/SBOM/license, size, redaction and signing-state probes; macOS
-also checks Vision/speech, sealed staging/ZIP equality and fresh-runner quarantine/runtime.
-Ad-hoc bytes prove no public trust; Git/Bun/`uv` IDs, platform breadth, installed lifecycle,
-update, scale/recovery, release notes and optional tools remain open.
-
-The protected-publication code rejects manual/non-alpha/unprotected/wrong-repository/`0.0.0`/
-identity-drift invocation, pins checkout/setup actions before secrets, requires
-`production-release`, native platform trust checks, exact metadata/manifests, independent
-download verification and publisher revalidation. It has not run with production credentials:
-no signed artifact, release, notes or update is claimed, so B9.12/B9.15/E9.08 and
-PIGE-REL-001/PIGE-REL-005 remain open.
+Current evidence: unsigned macOS/Windows packageability and fail-closed protected-publication
+identity/trust/metadata checks exist. They have not run with production credentials, so no
+signed artifact, release, notes or update is claimed; macOS Phase 1 signing, installed update,
+scale/recovery and publication remain open, with Windows qualification following later.
 
 ## 17. v0.1 Release Gates
 
-Public alpha requires: exact protected-tag/`production-release` authority; independently
-reverified Developer ID/hardened/notarized/stapled macOS arm64 and Authenticode Windows x64;
+Phase 1 Public Alpha requires: exact protected-tag/`production-release` authority; independently
+reverified Developer ID/hardened/notarized/stapled macOS arm64;
 exact final metadata/manifests; GitHub update check plus alpha-to-alpha risky-job-safe update;
 distributables at or below 330,000,000 bytes (300,000,000 target); packaged memory/scale/
 recovery budgets with no hidden waiver; notices, current dependency registry, smokes,
-backup/restore across update, and the 25-source scenario on macOS plus supported Windows.
+backup/restore across update, and the 25-source scenario on macOS. Windows retains the same
+trust and installed-distribution gates in the next platform phase and is not claimed here.
 
 ### Early macOS-first qualification
 

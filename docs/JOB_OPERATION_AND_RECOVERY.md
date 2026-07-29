@@ -746,6 +746,8 @@ Durable execution gates:
   checkpoints `manifest_validated`, `destination_reserved`, `archive_extracted`,
   `durable_domains_migrated`, `external_dependencies_reconciled`,
   `vault_identity_finalized`, `destination_committed`, and `indexes_rebuilt`.
+- Vault v1→v2 uses one Job across compatibility, backup, stage/validate, durable commit,
+  manifest commit, Operation and index checkpoints; restart adopts one `migration_applied`.
 - Staging is temporary; restart adopts exact checkpoint-bound bytes and cancellation
   removes only owned incomplete data.
 - A successful backup Job links `backup_created`. A successful machine-local Restore Job
@@ -763,7 +765,9 @@ the Playbook and acceptance manifest.
 
 Migration rules:
 
-- Migration tooling preserves records from a newer or unknown schema version as opaque bytes until a compatible migrator is available; it must not parse them through schema v1 and silently discard fields. Within schema v1, Job and Operation records are strict, so adding a durable field requires a versioned migration rather than an undeclared passthrough field.
+- Migration inspection blocks newer/invalid vaults before writer activation. The supported
+  v1→v2 transform preserves stable IDs and unknown manifest fields, adds durable-domain/language
+  truth, commits the manifest last, and records exactly one Operation.
 - Destructive migration creates a pre-migration backup and intervention; safe reversible migration records an Operation.
 - Migration itself writes an operation record.
 

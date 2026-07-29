@@ -55,6 +55,7 @@ created_at: "2026-07-09T12:00:00+08:00"
 updated_at: "2026-07-09T12:00:00+08:00"
 status: "active"
 language: "zh-Hans"
+language_basis: "explicit_source"
 language_confidence: 0.92
 detected_languages: ["zh-Hans", "en"]
 aliases: []
@@ -81,6 +82,7 @@ Field rules:
 - `created_at`, `updated_at`: required ISO 8601 with timezone.
 - `status`: one of `active`, `archived`, `draft`, `needs_review`, `missing_source`, `conflict`.
 - `language`: BCP 47 tag when known.
+- `language_basis`: evidence basis; v2 legacy gaps are `unknown/legacy_missing`, never guessed.
 - `language_confidence`: `0` to `1`; omit only when unknown.
 - `tags`: optional inline array of at most 12 unique NFKC/space-normalized 1–48-character,
   control-free strings; case-insensitive dedupe. Missing is compatible; scalar/numeric/
@@ -347,6 +349,7 @@ Schema migrations must:
 - Record operation summaries.
 - Rebuild database/index caches after completion.
 - Leave readable Markdown if migration fails.
+
 
 Detailed schema-version, migration-plan, conflict, and future-sync rules live in `docs/SYNC_CONFLICT_AND_MIGRATION.md`.
 

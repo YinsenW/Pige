@@ -21,6 +21,7 @@ import { ConversationScrollRail } from "./components/ConversationScrollRail";
 import { ConversationEarlierControl, projectCompletedConversation, useConversationPagination } from "./components/ConversationPagination";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
+import { VaultMigrationDialog } from "./components/VaultMigrationDialog";
 import { TaskExecutionInteractionStatus } from "./components/TaskExecutionInteraction";
 import { AgentMemorySettingsPanel } from "./components/AgentMemorySettingsPanel";
 import { ManagedCollectionCitationPanel, ManagedCollectionPanel } from "./components/ManagedCollectionPanel";
@@ -113,6 +114,8 @@ import type {
   ToolchainHealth,
   UpdateSummary,
   VaultSummary,
+  VaultActionResult,
+  VaultMigrationPreview,
   WindowLayoutRequest,
   WindowLayoutState,
   WindowState
@@ -321,6 +324,10 @@ export function App(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [openingRecentVaultId, setOpeningRecentVaultId] = useState<string | null>(null);
   const [recentVaultErrorId, setRecentVaultErrorId] = useState<string | null>(null);
+  const [vaultMigration, setVaultMigration] = useState<VaultMigrationPreview | null>(null);
+  const [vaultMigrationApplying, setVaultMigrationApplying] = useState(false);
+  const [vaultMigrationFailed, setVaultMigrationFailed] = useState(false);
+  const vaultMigrationTriggerRef = useRef<HTMLElement | null>(null);
   const [diagnosticsHealth, setDiagnosticsHealth] = useState<DiagnosticsHealth | null>(null);
   const [localDatabaseStatus, setLocalDatabaseStatus] = useState<LocalDatabaseStatus | null>(null);
   const [supportBundlePreview, setSupportBundlePreview] = useState<SupportBundlePreview | null>(null);
@@ -725,8 +732,91 @@ export function App(): React.JSX.Element {
   const openVault = (): Promise<void> =>
     runVaultAction(async () => {
       const result = await window.pige.vault.open();
-      if (result.status === "completed") setView("home");
+      handleVaultOpenResult(result);
     });
+
+  const handleVaultOpenResult = (result: VaultActionResult): void => {
+    if (result.status === "completed") {
+      setVaultMigration(null);
+      const migratedActiveVault = result.onboarding.activeVault;
+      setOnboarding({
+        state: result.onboarding.state,
+        ...(migratedActiveVault ? { activeVault: {
+          vaultId: migratedActiveVault.vaultId,
+          name: migratedActiveVault.name,
+          activeVaultPathDisplay: migratedActiveVault.activeVaultPathDisplay,
+          knowledgeRootDisplay: migratedActiveVault.knowledgeRootDisplay,
+          sourceAssetRootDisplay: migratedActiveVault.sourceAssetRootDisplay,
+          sourceAssetRootKind: migratedActiveVault.sourceAssetRootKind,
+          defaultSourceStorageStrategy: migratedActiveVault.defaultSourceStorageStrategy,
+          schemaVersion: migratedActiveVault.schemaVersion,
+          ...(migratedActiveVault.counts ? { counts: migratedActiveVault.counts } : {}),
+          ...(migratedActiveVault.lastBackupAt ? { lastBackupAt: migratedActiveVault.lastBackupAt } : {})
+        } } : {}),
+        hasDefaultModel: result.onboarding.hasDefaultModel,
+        showFirstHomeGuide: result.onboarding.showFirstHomeGuide,
+        ...(result.onboarding.waitingDependencyCounts
+          ? { waitingDependencyCounts: result.onboarding.waitingDependencyCounts }
+          : {})
+      });
+      setView("home");
+    } else if (result.status === "needs_migration") {
+      vaultMigrationTriggerRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+      setVaultMigrationFailed(false);
+      setVaultMigration(result.preview);
+    } else if (result.status !== "canceled") {
+      setError(t("vaultMigration.openFailed"));
+    }
+  };
+
+  const applyVaultMigration = async (): Promise<void> => {
+    const preview = vaultMigration;
+    if (!preview || vaultMigrationApplying) return;
+    setVaultMigrationApplying(true);
+    setVaultMigrationFailed(false);
+    try {
+      const result = await window.pige.vault.applyMigration({
+        apiVersion: 1,
+        requestId: `vaultmigrationreq_${crypto.randomUUID().replaceAll("-", "")}`,
+        vaultId: preview.vaultId,
+        previewId: preview.previewId
+      });
+      if (result.status !== "completed") {
+        setVaultMigrationFailed(true);
+        return;
+      }
+      setVaultMigration(null);
+      const migratedActiveVault = result.onboarding.activeVault;
+      setOnboarding({
+        state: result.onboarding.state,
+        ...(migratedActiveVault ? { activeVault: {
+          vaultId: migratedActiveVault.vaultId,
+          name: migratedActiveVault.name,
+          activeVaultPathDisplay: migratedActiveVault.activeVaultPathDisplay,
+          knowledgeRootDisplay: migratedActiveVault.knowledgeRootDisplay,
+          sourceAssetRootDisplay: migratedActiveVault.sourceAssetRootDisplay,
+          sourceAssetRootKind: migratedActiveVault.sourceAssetRootKind,
+          defaultSourceStorageStrategy: migratedActiveVault.defaultSourceStorageStrategy,
+          schemaVersion: migratedActiveVault.schemaVersion,
+          ...(migratedActiveVault.counts ? { counts: migratedActiveVault.counts } : {}),
+          ...(migratedActiveVault.lastBackupAt ? { lastBackupAt: migratedActiveVault.lastBackupAt } : {})
+        } } : {}),
+        hasDefaultModel: result.onboarding.hasDefaultModel,
+        showFirstHomeGuide: result.onboarding.showFirstHomeGuide,
+        ...(result.onboarding.waitingDependencyCounts
+          ? { waitingDependencyCounts: result.onboarding.waitingDependencyCounts }
+          : {})
+      });
+      setView("home");
+      await refreshVaultState();
+    } catch {
+      setVaultMigrationFailed(true);
+    } finally {
+      setVaultMigrationApplying(false);
+    }
+  };
 
   const openRecentVault = async (vaultId: string): Promise<void> => {
     if (recentVaultOpenRequestRef.current) return;
@@ -737,6 +827,14 @@ export function App(): React.JSX.Element {
     setError(null);
     try {
       const result = await window.pige.vault.openRecent({ vaultId });
+      if (result.status === "needs_migration") {
+        vaultMigrationTriggerRef.current = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+        setVaultMigrationFailed(false);
+        setVaultMigration(result.preview);
+        return;
+      }
       if (result.status !== "completed") {
         setRecentVaultErrorId(vaultId);
         return;
@@ -2459,6 +2557,21 @@ export function App(): React.JSX.Element {
           resolving={highRiskConfirmationDecision !== null}
           error={highRiskConfirmationFailed}
           onResolve={(decision) => void resolveHighRiskConfirmation(decision)}
+          t={t}
+        />
+      ) : null}
+      {vaultMigration ? (
+        <VaultMigrationDialog
+          preview={vaultMigration}
+          applying={vaultMigrationApplying}
+          failed={vaultMigrationFailed}
+          returnFocusTarget={vaultMigrationTriggerRef.current}
+          onApply={() => void applyVaultMigration()}
+          onCancel={() => {
+            if (vaultMigrationApplying) return;
+            setVaultMigration(null);
+            setVaultMigrationFailed(false);
+          }}
           t={t}
         />
       ) : null}

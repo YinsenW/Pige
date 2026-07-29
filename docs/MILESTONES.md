@@ -40,7 +40,8 @@ optional local knowledge must work; sources survive failure; Markdown stays port
 structured Dataset knowledge also stays portable and locally queryable;
 eligible changes remain recoverable through Activity/Undo; exact exceptions stay decidable.
 
-Platform scope remains macOS 26+, Windows 11, and Windows 10 when release tests pass; Linux and the items in section 5 remain deferred.
+Phase 1 Public Alpha qualifies macOS 26+ only. Windows code/CI/packageability stay;
+signing and real-machine qualification move to the next phase. Linux remains deferred.
 
 ## 3. Canonical Phase-To-Milestone Crosswalk
 

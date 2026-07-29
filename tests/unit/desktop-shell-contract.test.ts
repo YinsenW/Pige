@@ -17,6 +17,27 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("freezes one explicit body-free Vault migration channel without a second open API", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+
+    expect(contractsSource).toContain("readonly applyMigration: (");
+    expect(contractsSource).toContain("request: VaultMigrationApplyRequest");
+    expect(contractsSource).toContain(") => Promise<VaultMigrationApplyResult>;");
+    expect(contractsSource).not.toContain("readonly openMigration:");
+    expect(contractsSource).not.toContain("readonly migrationPreview:");
+    expect(schemasSource).toContain('VAULT_APPLY_MIGRATION_CHANNEL = "vault.applyMigration"');
+    expect(schemasSource).toContain("VaultManifestCompatibilityHeaderSchema");
+    expect(schemasSource).toContain("VaultMigrationApplyRequestSchema");
+    expect(schemasSource).toContain("VaultMigrationApplyResultSchema");
+    for (const privateField of ["absolutePath", "manifestBody", "rawError", "backupPath"]) {
+      expect(contractsSource.slice(
+        contractsSource.indexOf("export type VaultActionResult"),
+        contractsSource.indexOf("export interface PigeDesktopApi")
+      )).not.toContain(privateField);
+    }
+  });
+
   it("bridges one strict managed PaddleOCR lifecycle without private catalog authority", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");

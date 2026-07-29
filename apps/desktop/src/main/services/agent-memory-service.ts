@@ -14,6 +14,7 @@ import {
   MemoryExportRequestSchema,
   MemoryExportResultSchema,
   MemoryLifecycleMutationResultSchema,
+  MemoryLanguageFactSchema,
   MemoryMutationResultSchema,
   MemoryRecordSummarySchema,
   MemoryResetRequestSchema,
@@ -26,6 +27,7 @@ import {
   type MemoryExportRequest,
   type MemoryExportResult,
   type MemoryLifecycleMutationResult,
+  type MemoryLanguageFact,
   type MemoryMutationResult,
   type MemoryRecordSummary,
   type MemoryResetRequest,
@@ -77,6 +79,7 @@ export interface RememberVaultPreferenceRequest {
   readonly sourceConversationId: string;
   readonly sourceEventId: string;
   readonly parentJobId: string;
+  readonly language?: MemoryLanguageFact;
 }
 
 export interface AgentMemoryServiceDependencies {
@@ -155,6 +158,7 @@ export class AgentMemoryService {
       conversationId: request.sourceConversationId,
       userEventId: request.sourceEventId,
       parentJobId: request.parentJobId,
+      language: memoryLanguageOrLegacy(request.language),
       occurredAt: now
     };
     const record: StoredMemoryRecord = {
@@ -162,7 +166,8 @@ export class AgentMemoryService {
       eventId,
       conversationId: request.sourceConversationId,
       userEventId: request.sourceEventId,
-      parentJobId: request.parentJobId
+      parentJobId: request.parentJobId,
+      language: memoryLanguageOrLegacy(request.language)
     };
     const next = {
       schemaVersion: 1 as const,
@@ -726,7 +731,18 @@ function parseMemoryEvent(value: unknown): MemoryEventRecord {
     typeof event.conversationId !== "string" || typeof event.userEventId !== "string" ||
     typeof event.parentJobId !== "string" || typeof event.occurredAt !== "string"
   ) throw registryInvalid("A memory event is invalid.");
-  return event as MemoryEventRecord;
+  return {
+    ...(event as Omit<MemoryEventRecord, "language">),
+    language: MemoryLanguageFactSchema.parse(event.language ?? {
+      domain: "memory", language: "unknown", basis: "legacy_missing"
+    })
+  };
+}
+
+function memoryLanguageOrLegacy(value: unknown): MemoryLanguageFact {
+  return MemoryLanguageFactSchema.parse(value ?? {
+    domain: "memory", language: "unknown", basis: "legacy_missing"
+  });
 }
 
 function parseStoredMemoryRecord(value: unknown): StoredMemoryRecord {
@@ -751,6 +767,9 @@ function parseStoredMemoryRecord(value: unknown): StoredMemoryRecord {
     conversationId: record.conversationId,
     userEventId: record.userEventId,
     parentJobId: record.parentJobId,
+    language: MemoryLanguageFactSchema.parse(record.language ?? {
+      domain: "memory", language: "unknown", basis: "legacy_missing"
+    }),
     ...(record.editProvenance ? { editProvenance: record.editProvenance } : {})
   };
 }

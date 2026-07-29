@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -9,8 +9,15 @@ import {
   createPigeVaultId
 } from "@pige/domain";
 import {
+  CurrentVaultManifestSchema,
   VaultConfigSchema,
+  VaultManifestCompatibilityHeaderSchema,
   VaultManifestSchema,
+  VaultManifestV1Schema,
+  VaultManifestV2Schema,
+  type VaultManifestV1,
+  type VaultManifestV2,
+  type VaultOpenInvalidReason,
   type SourceStorageStrategy,
   type VaultConfig,
   type VaultManifest
@@ -60,6 +67,31 @@ export interface VaultStorageRevealBinding {
   assertCurrent(): void;
   release(): void;
 }
+
+export type VaultCompatibilityInspection =
+  | { readonly status: "current"; readonly manifest: VaultManifestV2; readonly snapshotId: string }
+  | { readonly status: "needs_migration"; readonly manifest: VaultManifestV1; readonly snapshotId: string }
+  | {
+      readonly status: "unsupported_newer";
+      readonly vaultId: string;
+      readonly foundVersion: number;
+      readonly snapshotId: string;
+    }
+  | { readonly status: "invalid"; readonly reason: VaultOpenInvalidReason };
+
+const CURRENT_DURABLE_DOMAIN_VERSIONS = Object.freeze({
+  markdownPages: 2,
+  sourceRecords: 2,
+  ocrArtifacts: 2,
+  conversationEvents: 2,
+  memory: 2,
+  datasets: 1,
+  jobs: 1,
+  proposals: 1,
+  operations: 1,
+  skills: 1,
+  vaultConfig: 1
+} as const);
 
 export function createVaultRelativePathResolver(
   outsideVaultError: () => Error,
@@ -132,16 +164,17 @@ export function createVaultOnDisk(options: CreateVaultOnDiskOptions): VaultSumma
   }
 
   const timestamp = now.toISOString();
-  const manifest: VaultManifest = {
+  const manifest: VaultManifestV2 = CurrentVaultManifestSchema.parse({
     vault_id: createPigeVaultId(now, randomUUID()),
     vault_schema_version: PIGE_VAULT_SCHEMA_VERSION,
+    durable_domain_versions: CURRENT_DURABLE_DOMAIN_VERSIONS,
     created_at: timestamp,
     updated_at: timestamp,
     app_min_version: PIGE_APP_MIN_VERSION,
     default_locale: options.locale ?? "zh-Hans",
     durable_roots: [...PIGE_DURABLE_ROOTS],
     rebuildable_roots: [...PIGE_REBUILDABLE_ROOTS]
-  };
+  });
 
   const config = getDefaultVaultConfig();
 
@@ -175,19 +208,65 @@ export function loadVaultSummary(vaultPathInput: string): VaultSummary {
   };
 }
 
-export function isPigeVault(vaultPath: string): boolean {
+export function inspectVaultCompatibility(vaultPathInput: string): VaultCompatibilityInspection {
+  const manifestPath = path.join(path.resolve(vaultPathInput), ".pige/manifest.json");
+  let bytes: string;
   try {
-    readVaultManifest(vaultPath);
-    readVaultConfig(vaultPath);
-    return true;
+    bytes = readBoundedRegularFileNoFollow(manifestPath, 256 * 1024);
   } catch {
-    return false;
+    return { status: "invalid", reason: "manifest_unreadable" };
   }
+
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(bytes);
+  } catch {
+    return { status: "invalid", reason: "manifest_malformed" };
+  }
+  const header = VaultManifestCompatibilityHeaderSchema.safeParse(decoded);
+  if (!header.success) return { status: "invalid", reason: "identity_invalid" };
+  const snapshotId = createHash("sha256").update(bytes, "utf8").digest("hex");
+  if (header.data.vault_schema_version === 1) {
+    const manifest = VaultManifestV1Schema.safeParse(decoded);
+    return manifest.success
+      ? { status: "needs_migration", manifest: manifest.data, snapshotId }
+      : { status: "invalid", reason: "manifest_malformed" };
+  }
+  if (header.data.vault_schema_version === PIGE_VAULT_SCHEMA_VERSION) {
+    const manifest = VaultManifestV2Schema.safeParse(decoded);
+    return manifest.success
+      ? { status: "current", manifest: manifest.data, snapshotId }
+      : { status: "invalid", reason: "domain_versions_invalid" };
+  }
+  if (header.data.vault_schema_version > PIGE_VAULT_SCHEMA_VERSION) {
+    return {
+      status: "unsupported_newer",
+      vaultId: header.data.vault_id,
+      foundVersion: header.data.vault_schema_version,
+      snapshotId
+    };
+  }
+  return { status: "invalid", reason: "manifest_malformed" };
+}
+
+export function isPigeVault(vaultPath: string): boolean {
+  const inspection = inspectVaultCompatibility(vaultPath);
+  if (inspection.status !== "current" && inspection.status !== "needs_migration") return false;
+  try { readVaultConfig(vaultPath); return true; } catch { return false; }
 }
 
 export function readVaultManifest(vaultPath: string): VaultManifest {
   const manifestPath = path.join(vaultPath, ".pige/manifest.json");
   return VaultManifestSchema.parse(JSON.parse(fs.readFileSync(manifestPath, "utf8")));
+}
+
+export function readCurrentVaultManifest(vaultPath: string): VaultManifestV2 {
+  const manifestPath = path.join(vaultPath, ".pige/manifest.json");
+  return CurrentVaultManifestSchema.parse(JSON.parse(readBoundedRegularFileNoFollow(manifestPath, 256 * 1024)));
+}
+
+export function currentVaultDurableDomainVersions(): VaultManifestV2["durable_domain_versions"] {
+  return CURRENT_DURABLE_DOMAIN_VERSIONS;
 }
 
 export function readVaultConfig(vaultPath: string): VaultConfig {

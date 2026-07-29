@@ -156,8 +156,20 @@ import {
   TaskInteractionOpenResultSchema,
   TaskInteractionPendingResultSchema,
   ToolchainManifestSchema,
+  Bcp47LanguageTagSchema,
+  ConversationLanguageContinuitySchema,
+  CurrentVaultManifestSchema,
+  DurableLanguageFactSchema,
+  DurableLanguageSchema,
+  VAULT_APPLY_MIGRATION_CHANNEL,
+  VaultActionResultSchema,
   VaultConfigSchema,
+  VaultManifestCompatibilityHeaderSchema,
   VaultManifestSchema,
+  VaultMigrationApplyRequestSchema,
+  VaultMigrationApplyResultSchema,
+  VaultMigrationCheckpointSchema,
+  VaultMigrationPreviewSchema,
   VaultRevealResultSchema,
   WindowLayoutRequestSchema,
   WindowLayoutStateSchema,
@@ -3341,6 +3353,185 @@ describe("schemas", () => {
         }
       }).sourceStorage.defaultStrategy
     ).toBe("copy_to_source_library");
+  });
+
+  it("freezes canonical BCP-47-or-unknown durable language truth", () => {
+    expect(Bcp47LanguageTagSchema.parse("zh-Hans")).toBe("zh-Hans");
+    expect(DurableLanguageSchema.parse("unknown")).toBe("unknown");
+    expect(DurableLanguageFactSchema.parse({
+      domain: "source_record",
+      language: "en-US",
+      basis: "explicit_source"
+    })).toEqual({ domain: "source_record", language: "en-US", basis: "explicit_source" });
+    expect(DurableLanguageFactSchema.parse({
+      domain: "chunk",
+      language: "unknown",
+      basis: "legacy_missing"
+    }).language).toBe("unknown");
+    for (const invalid of ["EN", "en_us", "not a language"]) {
+      expect(() => Bcp47LanguageTagSchema.parse(invalid)).toThrow();
+    }
+    expect(() => DurableLanguageFactSchema.parse({
+      domain: "memory",
+      language: "unknown",
+      basis: "memory_derived"
+    })).toThrow();
+    expect(() => DurableLanguageFactSchema.parse({
+      domain: "response",
+      language: "de",
+      basis: "unavailable"
+    })).toThrow();
+    expect(ConversationLanguageContinuitySchema.parse({
+      queryLanguage: { domain: "query", language: "ja", basis: "query_detected" },
+      responseLanguage: { domain: "response", language: "ja", basis: "response_policy" }
+    }).responseLanguage.language).toBe("ja");
+  });
+
+  it("distinguishes legacy, current, newer, and invalid vault manifests", () => {
+    const base = {
+      vault_id: "vault_20260709_ab12cd",
+      created_at: "2026-07-09T00:00:00.000Z",
+      updated_at: "2026-07-09T00:00:00.000Z",
+      app_min_version: "0.1.0",
+      default_locale: "zh-Hans" as const,
+      durable_roots: ["raw", ".pige/conversations"],
+      rebuildable_roots: [".pige/db"],
+      future_owner_field: { retained: true }
+    };
+    const domainVersions = {
+      markdownPages: 2,
+      sourceRecords: 2,
+      ocrArtifacts: 2,
+      conversationEvents: 2,
+      memory: 2,
+      datasets: 1,
+      jobs: 1,
+      proposals: 1,
+      operations: 1,
+      skills: 1,
+      vaultConfig: 1
+    } as const;
+    expect(VaultManifestSchema.parse({ ...base, vault_schema_version: 1 }).future_owner_field)
+      .toEqual({ retained: true });
+    expect(() => CurrentVaultManifestSchema.parse({ ...base, vault_schema_version: 1 })).toThrow();
+    expect(CurrentVaultManifestSchema.parse({
+      ...base,
+      vault_schema_version: 2,
+      durable_domain_versions: domainVersions
+    }).future_owner_field).toEqual({ retained: true });
+    expect(VaultManifestCompatibilityHeaderSchema.parse({
+      vault_id: base.vault_id,
+      vault_schema_version: 3,
+      unknown_future_field: true
+    }).vault_schema_version).toBe(3);
+    expect(() => VaultManifestSchema.parse({ ...base, vault_schema_version: 3 })).toThrow();
+  });
+
+  it("freezes one body-free v1-to-v2 migration preview and apply lifecycle", () => {
+    const affectedDomains = [
+      "vault_manifest",
+      "source_records",
+      "markdown_pages",
+      "ocr_artifacts",
+      "conversation_events",
+      "memory",
+      "rebuildable_chunks"
+    ].map((domain, count) => ({ domain, count }));
+    const preview = {
+      apiVersion: 1 as const,
+      previewId: `vaultmigration_${"a".repeat(32)}`,
+      vaultId: "vault_20260709_ab12cd",
+      fromVersion: 1 as const,
+      toVersion: 2 as const,
+      migrationClass: "transform" as const,
+      requiresBackup: true as const,
+      languagePolicy: "preserve_or_unknown" as const,
+      affectedDomains,
+      warnings: [
+        "pre_migration_backup_required",
+        "unknown_language_preserved",
+        "rebuildable_indexes_after_commit"
+      ]
+    };
+    expect(VAULT_APPLY_MIGRATION_CHANNEL).toBe("vault.applyMigration");
+    expect(VaultMigrationPreviewSchema.parse(preview).affectedDomains).toHaveLength(7);
+    expect(() => VaultMigrationPreviewSchema.parse({ ...preview, affectedDomains: [...affectedDomains].reverse() }))
+      .toThrow();
+    expect(() => VaultMigrationPreviewSchema.parse({ ...preview, path: "/private/vault" })).toThrow();
+
+    const summary = {
+      vaultId: preview.vaultId,
+      name: "Alpha",
+      activeVaultPathDisplay: "Alpha",
+      knowledgeRootDisplay: "Knowledge",
+      sourceAssetRootDisplay: "Sources",
+      sourceAssetRootKind: "inside_vault" as const,
+      defaultSourceStorageStrategy: "copy_to_source_library" as const,
+      schemaVersion: 2
+    };
+    const onboarding = {
+      state: "ready" as const,
+      activeVault: summary,
+      hasDefaultModel: false,
+      showFirstHomeGuide: false
+    };
+    expect(VaultActionResultSchema.parse({ status: "needs_migration", preview }).status)
+      .toBe("needs_migration");
+    expect(VaultActionResultSchema.parse({
+      status: "completed",
+      vault: summary,
+      onboarding
+    })).toMatchObject({ status: "completed", compatibility: "current" });
+    expect(VaultActionResultSchema.parse({
+      status: "unsupported_newer",
+      vaultId: preview.vaultId,
+      foundVersion: 3,
+      supportedVersion: 2
+    }).status).toBe("unsupported_newer");
+    expect(VaultActionResultSchema.parse({ status: "invalid", reason: "manifest_malformed" }).status)
+      .toBe("invalid");
+
+    const request = {
+      apiVersion: 1 as const,
+      requestId: `vaultmigrationreq_${"b".repeat(16)}`,
+      vaultId: preview.vaultId,
+      previewId: preview.previewId
+    };
+    expect(VaultMigrationApplyRequestSchema.parse(request)).toEqual(request);
+    expect(VaultMigrationApplyResultSchema.parse({
+      ...request,
+      status: "completed",
+      jobId: "job_20260729_migration1",
+      operationId: "op_20260729_migration1",
+      vault: summary,
+      onboarding
+    }).status).toBe("completed");
+    expect(VaultMigrationApplyResultSchema.parse({
+      ...request,
+      status: "stale",
+      current: "current"
+    }).status).toBe("stale");
+    expect(VaultMigrationApplyResultSchema.parse({
+      ...request,
+      status: "failed",
+      repair: "restore_pre_migration_backup"
+    }).status).toBe("failed");
+    expect(() => VaultMigrationApplyResultSchema.parse({
+      ...request,
+      status: "failed",
+      repair: "retry",
+      rawError: "secret path"
+    })).toThrow();
+    expect(VaultMigrationCheckpointSchema.options).toEqual([
+      "compatibility_revalidated",
+      "pre_backup_completed",
+      "durable_domains_staged",
+      "staged_validation_completed",
+      "durable_domains_committed",
+      "manifest_committed",
+      "operation_recorded",
+      "indexes_rebuilt"
+    ]);
   });
 
   it("accepts only canonical portable in-vault source roots", () => {

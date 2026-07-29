@@ -300,6 +300,10 @@ Rules:
 - Rebuildable schemas can reset and rebuild.
 - Durable file schemas require migration records.
 
+v1→v2 classifies current/migration/future/invalid before write, adds domain versions and
+BCP47-or-`unknown` facts, then backup/stages/commits manifest last. One migration Job/
+Operation adopts restart; drift/failure preserves originals for retry or backup restore.
+
 ## 11. Migration Classes
 
 Migration classes:

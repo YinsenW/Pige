@@ -51,14 +51,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Independent Planning review of one Pige single-row relation.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope and acceptance reconciliation.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "841e9a421faa03a3c67feab16d1ff30d8a469b94b8eb8aee877d398aa51298ba"
+    "reviewedSha256": "fa425d1c2df49c1c3cba7823c98338e2c72254c53a254b3f155a7abebfd1758b"
   },
   "reviewers": [{
-    "reviewerId": "managed-collection-relation-review",
-    "task": "Managed Collection single-row relations",
+    "reviewerId": "vault-v2-alpha-convergence-review",
+    "task": "Vault v2 migration and Alpha convergence",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -66,32 +66,32 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed relation truth, trash fences and Undo; Development and UI supplied implementation evidence."
+    "independence": "Planning reviewed durable migration, language, platform and ledger claims; Development/UI supplied executable evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"managed-collection-relation-review","blockerCount":0,"summary":"The dialog selects one descriptor-owned target and stale preserves the draft."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"managed-collection-relation-review","blockerCount":0,"summary":"API, schema and UI share strict descriptor, row-ID and inbound-trash rules."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"managed-collection-relation-review","blockerCount":0,"summary":"One relation is bound while PIGE-DATA-003 and E7.06 stay planned."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"managed-collection-relation-review","blockerCount":0,"summary":"Replay, stats, CAS, inbound trash fences and exact forward Undo are tested."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"managed-collection-relation-review","blockerCount":0,"summary":"Existing API, data, UI, Playbook, Decision and trace owners absorb the delta."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Migration preview is pathless, warning-complete and focus-owned."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"API, migration, language and release owners share exact v2/macOS truth."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Backup, checkpoints, manifest-last commit and restart adoption are tested."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owner docs and compact trace projections absorb the delta."}
   ],
   "verification": [
-    {"command":"npm run verify:contracts","status":"passed","evidence":"Relation requests, results and Activity vocabularies are strict and safe."},
-    {"command":"npm run verify:decisions && npm run verify:traceability","status":"passed","evidence":"Decision and trace locks keep PIGE-DATA-003 and E7.06 planned."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"The exact 683-LOC relation owner is protected and reviewed bytes are hash-bound."}
+    {"command":"npm run verify:traceability","status":"passed","evidence":"The 102-item ledger and phase states are claim-bound."},
+    {"command":"npm run verify:decisions","status":"passed","evidence":"Vault v2 and macOS Phase 1 decisions are synchronized."},
+    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Three new service owners and reviewed bytes are hash-bound."}
   ],
   "coordination": {
-    "taskId": "managed-collection-relation-20260729",
-    "taskTitle": "Managed Collection single-row relations",
+    "taskId": "vault-v2-alpha-convergence-20260729",
+    "taskTitle": "Vault v2 migration and Alpha convergence",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing formula, paging, citation, query/import and Collection CAS remain compatible.",
-    "acknowledgement": "Planning binds one relation; complete E7.06 proof remains separate."
+    "compatibility": "Windows code/hooks remain; future/invalid vaults never activate a writer.",
+    "acknowledgement": "Planning binds PR A without claiming remaining packaged exits."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "Multi-value, reciprocal, lookup/rollup and cross-Dataset relations remain open.",
-    "Scale/platform, backup and exceptional conflict proof remain open."
+    "macOS signing/notarization, signed update and packaged qualification remain open.",
+    "Windows public qualification and broader multilingual acceptance remain later."
   ]
 }

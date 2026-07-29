@@ -669,7 +669,8 @@ Vault:
 - Local database files remain rebuildable working state rather than knowledge truth.
 - Pige-managed deletion and archive remain recoverable through trash-first lifecycle rules.
 - `index.md`, `log.md`, and `PIGE.md`.
-- Stable YAML frontmatter schema.
+- Stable YAML frontmatter plus vault-v2 durable-domain/language compatibility: v1 migrates
+  only after preview/backup; language is canonical BCP 47 or `unknown`, never guessed.
 - Atomic write and external-change conflict handling for Markdown pages.
 - Archive/trash-first deletion policy.
 - Stable IDs and conflict metadata prepared for future sync.
@@ -679,7 +680,8 @@ Scale and platform:
 
 - Design target: 10,000 notes/source pages, 100 GB vault, and 100,000 retrieval chunks.
 - Minimum v0.1 platform: macOS 26 or later.
-- Windows target: Windows 11 and Windows 10 when the packaged runtime, updater, and bundled tools pass release tests.
+- Phase 1 `v0.1 Public Alpha` qualifies macOS 26+ only; Windows 11/10 code, CI and
+  packageability remain while public qualification moves to the next platform phase.
 - Linux is deferred from v0.1.
 - Core installer meets the release size ceiling without bundling optional model/OCR
   downloads.

@@ -857,19 +857,21 @@ References:
 
 Status: Accepted
 Date: 2026-07-09
+Revised: 2026-07-29
 
 Decision:
 
-v0.1 targets macOS 26 or later, Windows 11, and Windows 10 when tests pass. Linux is deferred.
+Phase 1 Public Alpha qualifies macOS 26+ only. Windows code/CI/packageability remain for
+the next signed platform phase; Linux is deferred.
 
 Rationale:
 
-The first release should be highly usable rather than superficially broad.
+Finish one trusted platform lane before making another support claim.
 
 Consequences:
 
-- macOS is primary quality target.
-- Windows packaging and native capability detection must be tested.
+- macOS signing/notarization, update and packaged evidence block Phase 1.
+- Windows acceptance stays open and unverified.
 - Linux-specific packaging should not block v0.1.
 
 References:
@@ -3854,6 +3856,30 @@ Consequences:
 References:
 
 - `docs/DATA_ARCHITECTURE.md`
+
+### D-20260729-Vault-v2-Language-Migration
+
+Status: Accepted
+Date: 2026-07-29
+
+Decision:
+
+Vault v2 adds durable-domain versions and BCP47-or-`unknown` language facts. v1 stays
+preview-only until backup-backed, manifest-last migration with one adopted Job/Operation.
+
+Rationale:
+
+Compatibility cannot come from locale or rebuildable SQLite.
+
+Consequences:
+
+- Distinguish future/invalid before write, preserve IDs/unknown fields/originals, and repair
+  by retry or backup.
+
+References:
+
+- `docs/SYNC_CONFLICT_AND_MIGRATION.md`
+- `docs/I18N_DESIGN.md`
 
 ## 4. Deferred Decisions
 
