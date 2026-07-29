@@ -9,7 +9,8 @@ import type {
   PermissionRevokeGrantRequest,
   PermissionRevokeGrantResult,
   PermissionSetDefaultModeRequest,
-  PermissionSetDefaultModeResult
+  PermissionSetDefaultModeResult,
+  PermissionYoloHardBoundary
 } from "@pige/contracts";
 
 export interface PermissionPolicyApi {
@@ -36,12 +37,18 @@ export function PermissionsPrivacySettingsPanel(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const [current, setCurrent] = useState<PermissionPolicySummary | null>(null);
-  const [notice, setNotice] = useState<"load_failed" | "stale" | "failed" | null>(null);
+  const [notice, setNotice] = useState<
+    "load_failed" | "confirmation_required" | "stale" | "failed" | null
+  >(null);
   const [operation, setOperation] = useState<PermissionOperation | null>(null);
+  const [fullAccessConfirming, setFullAccessConfirming] = useState(false);
+  const [fullAccessAcknowledged, setFullAccessAcknowledged] = useState(false);
   const currentRef = useRef(current);
   const ownerRef = useRef(props.activeVaultId);
   const operationRef = useRef<PermissionOperation | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
+  const fullAccessTriggerRef = useRef<HTMLElement | null>(null);
+  const fullAccessAcknowledgeRef = useRef<HTMLInputElement | null>(null);
 
   const applyCurrent = (next: PermissionPolicySummary): void => {
     if (next.activeVaultId !== ownerRef.current) return;
@@ -57,6 +64,8 @@ export function PermissionsPrivacySettingsPanel(props: {
     setCurrent(null);
     setOperation(null);
     setNotice(null);
+    setFullAccessConfirming(false);
+    setFullAccessAcknowledged(false);
     if (!props.activeVaultId || !props.api) return;
 
     const activeVaultId = props.activeVaultId;
@@ -83,14 +92,23 @@ export function PermissionsPrivacySettingsPanel(props: {
     };
   }, [props.activeVaultId, props.api]);
 
+  useEffect(() => {
+    if (!fullAccessConfirming) return;
+    const focusAcknowledgement = (): void => fullAccessAcknowledgeRef.current?.focus();
+    if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(focusAcknowledgement);
+    else window.setTimeout(focusAcknowledgement, 0);
+  }, [fullAccessConfirming]);
+
   const finish = (
     owner: string,
     nextOperation: PermissionOperation,
-    trigger: HTMLElement
+    trigger: HTMLElement,
+    restore = true
   ): void => {
     if (ownerRef.current !== owner || operationRef.current !== nextOperation) return;
     operationRef.current = null;
     setOperation(null);
+    if (!restore) return;
     const restoreFocus = (): void => {
       if (trigger.isConnected) {
         trigger.focus();
@@ -105,28 +123,59 @@ export function PermissionsPrivacySettingsPanel(props: {
     else window.setTimeout(restoreFocus, 0);
   };
 
-  const setMode = async (mode: PermissionDefaultMode, trigger: HTMLElement): Promise<void> => {
+  const setMode = async (
+    mode: PermissionDefaultMode,
+    trigger: HTMLElement,
+    acknowledgeFullAccess = false
+  ): Promise<void> => {
     const snapshot = currentRef.current;
     if (!snapshot || !props.api || operationRef.current || snapshot.defaultMode === mode) return;
     const nextOperation = { kind: "mode", mode } as const;
     operationRef.current = nextOperation;
     setOperation(nextOperation);
     setNotice(null);
+    let confirmationRequired = false;
     try {
       const result = await props.api.setDefaultMode({
         apiVersion: 1,
         requestId: createPermissionPolicyRequestId(),
         activeVaultId: snapshot.activeVaultId,
         expectedRevision: snapshot.revision,
-        mode
+        mode,
+        ...(acknowledgeFullAccess ? {
+          fullAccessAcknowledgement: {
+            kind: "yolo_full_access" as const,
+            explicitUserAction: true as const,
+            hardBoundariesAcknowledged: true as const
+          }
+        } : {})
       });
       if (ownerRef.current !== snapshot.activeVaultId) return;
-      if (result.status === "committed" || result.status === "stale") applyCurrent(result.summary);
-      setNotice(result.status === "stale" ? "stale" : result.status === "failed" ? "failed" : null);
+      if (result.status !== "failed") applyCurrent(result.summary);
+      setNotice(result.status === "confirmation_required"
+        ? "confirmation_required"
+        : result.status === "stale"
+          ? "stale"
+          : result.status === "failed"
+            ? "failed"
+            : null);
+      if (result.status === "committed" || result.status === "confirmation_required") {
+        confirmationRequired = result.status === "confirmation_required";
+        setFullAccessConfirming(false);
+        setFullAccessAcknowledged(false);
+      } else if (
+        result.status === "stale" &&
+        mode === "yolo_full_access" &&
+        (result.summary.fullAccess.enabled === true ||
+          (result.summary.fullAccess.enabled === false && !result.summary.fullAccess.canEnable))
+      ) {
+        setFullAccessConfirming(false);
+        setFullAccessAcknowledged(false);
+      }
     } catch {
       if (ownerRef.current === snapshot.activeVaultId) setNotice("failed");
     } finally {
-      finish(snapshot.activeVaultId, nextOperation, trigger);
+      finish(snapshot.activeVaultId, nextOperation, trigger, !confirmationRequired);
     }
   };
 
@@ -204,6 +253,20 @@ export function PermissionsPrivacySettingsPanel(props: {
 
   const busy = operation !== null;
   const showRemembered = current?.defaultMode === "remember_scoped_grants" || (current?.grants.length ?? 0) > 0;
+  const fullAccessEnabled = current?.fullAccess.enabled === true;
+  const fullAccessCanEnable = current?.fullAccess.enabled === false && current.fullAccess.canEnable;
+  const fullAccessCanDisable = current?.fullAccess.enabled === true && current.fullAccess.canDisable;
+
+  const cancelFullAccess = (): void => {
+    if (busy) return;
+    setFullAccessConfirming(false);
+    setFullAccessAcknowledged(false);
+    setNotice(null);
+    const trigger = fullAccessTriggerRef.current;
+    window.setTimeout(() => {
+      if (trigger?.isConnected) trigger.focus();
+    }, 0);
+  };
 
   return (
     <section
@@ -249,9 +312,11 @@ export function PermissionsPrivacySettingsPanel(props: {
               <span>{props.t("privacy.highRiskEffectsDescription")}</span>
             </div>
             <span className="settings-status">
-              {props.t(current?.defaultMode === "remember_scoped_grants"
-                ? "privacy.rememberScopedStatus"
-                : "privacy.confirmEachEffect")}
+              {props.t(current?.defaultMode === "yolo_full_access"
+                ? "privacy.fullAccessTitle"
+                : current?.defaultMode === "remember_scoped_grants"
+                  ? "privacy.rememberScopedStatus"
+                  : "privacy.confirmEachEffect")}
             </span>
           </div>
           {current ? (
@@ -280,8 +345,94 @@ export function PermissionsPrivacySettingsPanel(props: {
                     />
                     {props.t("privacy.rememberScoped")}
                   </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="privacy-permission-mode"
+                      checked={current.defaultMode === "yolo_full_access"}
+                      disabled={!fullAccessEnabled && !fullAccessCanEnable}
+                      onChange={(event) => {
+                        if (fullAccessEnabled) return;
+                        fullAccessTriggerRef.current = event.currentTarget;
+                        setNotice(null);
+                        setFullAccessAcknowledged(false);
+                        setFullAccessConfirming(true);
+                      }}
+                    />
+                    {props.t("privacy.fullAccessTitle")}
+                  </label>
                 </div>
               </fieldset>
+              {fullAccessEnabled ? (
+                <div className="settings-row" data-permission-mode="yolo_full_access">
+                  <div className="settings-row-copy">
+                    <strong>{props.t("privacy.fullAccessEnabled")}</strong>
+                    <span>{props.t("privacy.fullAccessDescription")}</span>
+                    <PermissionHardBoundaries
+                      boundaries={current.fullAccess.hardBoundaries}
+                      t={props.t}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="ghost"
+                    disabled={busy || !fullAccessCanDisable}
+                    onClick={(event) => void setMode("ask_every_time", event.currentTarget)}
+                  >
+                    {props.t("privacy.returnToAsk")}
+                  </button>
+                </div>
+              ) : null}
+              {fullAccessConfirming ? (
+                <section
+                  className="settings-row tall"
+                  role="alertdialog"
+                  aria-modal="false"
+                  aria-labelledby="privacy-full-access-confirm-title"
+                  aria-describedby="privacy-full-access-confirm-description"
+                  onKeyDown={(event) => {
+                    if (event.key !== "Escape" || event.nativeEvent.isComposing || busy) return;
+                    event.preventDefault();
+                    cancelFullAccess();
+                  }}
+                >
+                  <div className="settings-row-copy">
+                    <strong id="privacy-full-access-confirm-title">
+                      {props.t("privacy.fullAccessConfirmTitle")}
+                    </strong>
+                    <span id="privacy-full-access-confirm-description">
+                      {props.t("privacy.fullAccessDescription")}
+                    </span>
+                    <PermissionHardBoundaries
+                      boundaries={current.fullAccess.hardBoundaries}
+                      t={props.t}
+                    />
+                    <label>
+                      <input
+                        ref={fullAccessAcknowledgeRef}
+                        type="checkbox"
+                        checked={fullAccessAcknowledged}
+                        disabled={busy}
+                        onChange={(event) => setFullAccessAcknowledged(event.currentTarget.checked)}
+                      />
+                      {props.t("privacy.fullAccessAcknowledge")}
+                    </label>
+                  </div>
+                  <div>
+                    <button type="button" className="ghost" disabled={busy} onClick={cancelFullAccess}>
+                      {props.t("privacy.fullAccessCancel")}
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      disabled={busy || !fullAccessAcknowledged || fullAccessEnabled || !fullAccessCanEnable}
+                      onClick={(event) => void setMode("yolo_full_access", event.currentTarget, true)}
+                    >
+                      {props.t("privacy.fullAccessEnable")}
+                    </button>
+                  </div>
+                </section>
+              ) : null}
               {showRemembered ? (
                 <div className="settings-row">
                   <div className="settings-row-copy">
@@ -338,6 +489,8 @@ export function PermissionsPrivacySettingsPanel(props: {
               ? "privacy.permissionStale"
               : notice === "load_failed"
                 ? "privacy.permissionLoadFailed"
+                : notice === "confirmation_required"
+                  ? "privacy.fullAccessAwaitingConfirmation"
                 : "privacy.permissionFailed")}
           </p>
         ) : null}
@@ -363,4 +516,20 @@ export function PermissionsPrivacySettingsPanel(props: {
 
 function createPermissionPolicyRequestId(): string {
   return `permissionpolicyreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function PermissionHardBoundaries(props: {
+  readonly boundaries: readonly PermissionYoloHardBoundary[];
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  return (
+    <div>
+      <span>{props.t("privacy.fullAccessHardBoundaries")}</span>
+      <ul>
+        {props.boundaries.map((boundary) => (
+          <li key={boundary}>{props.t(`privacy.fullAccessBoundary.${boundary}`)}</li>
+        ))}
+      </ul>
+    </div>
+  );
 }

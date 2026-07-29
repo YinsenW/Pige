@@ -86,6 +86,7 @@ import type { PiPackagesApi } from "../../apps/desktop/src/renderer/src/componen
 import {
   LOCAL_SEMANTIC_RETRIEVAL_ASSET_BYTES,
   LOCAL_SEMANTIC_RETRIEVAL_ASSET_ID,
+  PERMISSION_YOLO_HARD_BOUNDARIES,
   type LocalSemanticRetrievalAssetState,
   MemoryDeleteRequest,
   MemoryEditRequest,
@@ -3747,6 +3748,11 @@ describe("full UI Settings surface", () => {
       activeVaultId: "vault_20260729_permissions",
       revision: 1,
       defaultMode: "remember_scoped_grants" as const,
+      fullAccess: {
+        enabled: false as const,
+        canEnable: true,
+        hardBoundaries: PERMISSION_YOLO_HARD_BOUNDARIES
+      },
       grants: [
         permissionGrant("grant_20260729_abcdefghijklmnop", "Calendar", "Read events"),
         permissionGrant("grant_20260729_qrstuvwxyzabcdef", "Mail", "Draft messages")
@@ -3794,7 +3800,7 @@ describe("full UI Settings surface", () => {
     expect(container.textContent).toContain("Remember scoped grants");
     expect(container.textContent).toContain("Calendar · v1.0.0 · Read events");
     expect(container.textContent).toContain("Mail · v1.0.0 · Draft messages");
-    expect(container.textContent).not.toContain("YOLO");
+    expect(container.textContent).toContain("YOLO Full Access");
 
     const revokeButtons = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
       .filter((button) => button.textContent === "Revoke");
@@ -3853,6 +3859,152 @@ describe("full UI Settings surface", () => {
     });
     expect(container.textContent).toContain("Mail · v1.0.0 · Draft messages");
     expect(container.textContent).not.toContain("Permissions changed elsewhere");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("requires an explicit Full Access acknowledgement and keeps its hard boundaries visible", async () => {
+    const dom = createDom();
+    const activeVaultId = "vault_20260729_fullaccess";
+    const askSummary = {
+      apiVersion: 1 as const,
+      activeVaultId,
+      revision: 5,
+      defaultMode: "ask_every_time" as const,
+      fullAccess: {
+        enabled: false as const,
+        canEnable: true,
+        hardBoundaries: PERMISSION_YOLO_HARD_BOUNDARIES
+      },
+      grants: [],
+      invalidGrantCount: 0
+    };
+    let changedListener: Parameters<PermissionPolicyApi["onChanged"]>[0] | undefined;
+    const setDefaultMode: PermissionPolicyApi["setDefaultMode"] = vi.fn(async (request) => (
+      request.mode === "yolo_full_access"
+        ? {
+            apiVersion: 1,
+            requestId: request.requestId,
+            activeVaultId,
+            status: "confirmation_required" as const,
+            confirmationId: "confirm_20260729_yolofullaccess1234",
+            confirmationRevision: 1,
+            summary: askSummary
+          }
+        : {
+            apiVersion: 1,
+            requestId: request.requestId,
+            activeVaultId,
+            status: "committed" as const,
+            summary: { ...askSummary, revision: 7 }
+          }
+    ));
+    const api: PermissionPolicyApi = {
+      summary: vi.fn(async (request) => ({
+        apiVersion: 1,
+        requestId: request.requestId,
+        activeVaultId,
+        status: "ready",
+        summary: askSummary
+      })),
+      setDefaultMode,
+      revokeGrant: vi.fn(),
+      onChanged: vi.fn((listener) => {
+        changedListener = listener;
+        return () => { changedListener = undefined; };
+      })
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(PermissionsPrivacySettingsPanel, { activeVaultId, api, t }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const fullAccessRadio = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="radio"]'))
+      .find((input) => input.parentElement?.textContent?.includes("YOLO Full Access"))!;
+    fullAccessRadio.focus();
+    await act(async () => {
+      fullAccessRadio.click();
+      await settle(dom);
+    });
+    let dialog = requireElement(container.querySelector<HTMLElement>('[role="alertdialog"]'));
+    expect(dialog.textContent).toContain("Turn on YOLO Full Access?");
+    expect(dialog.textContent).toContain("Permanent deletion");
+    expect(dialog.textContent).toContain("Operating system permissions");
+    expect(dialog.textContent).toContain("Filesystem confinement and symlink safety");
+    expect(dialog.textContent).not.toContain("yolo_full_access");
+    const acknowledgement = requireElement(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]'));
+    await act(async () => settle(dom));
+    expect(dom.window.document.activeElement).toBe(acknowledgement);
+    expect(buttonNamed(dialog, "Continue to confirmation").disabled).toBe(true);
+
+    await act(async () => {
+      dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle(dom);
+    });
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(dom.window.document.activeElement).toBe(fullAccessRadio);
+
+    await act(async () => {
+      fullAccessRadio.click();
+      await settle(dom);
+    });
+    dialog = requireElement(container.querySelector<HTMLElement>('[role="alertdialog"]'));
+    const retryAcknowledgement = requireElement(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]'));
+    await act(async () => {
+      retryAcknowledgement.click();
+      await settle(dom);
+    });
+    const enable = buttonNamed(dialog, "Continue to confirmation");
+    await act(async () => {
+      enable.click();
+      enable.click();
+      await settle(dom);
+    });
+    expect(setDefaultMode).toHaveBeenCalledTimes(1);
+    expect(setDefaultMode).toHaveBeenCalledWith(expect.objectContaining({
+      activeVaultId,
+      expectedRevision: 5,
+      mode: "yolo_full_access",
+      fullAccessAcknowledgement: {
+        kind: "yolo_full_access",
+        explicitUserAction: true,
+        hardBoundariesAcknowledged: true
+      }
+    }));
+    expect(container.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(container.textContent).toContain("Review the final Full Access confirmation.");
+
+    await act(async () => {
+      changedListener?.({
+        ...askSummary,
+        revision: 6,
+        defaultMode: "yolo_full_access",
+        fullAccess: {
+          enabled: true,
+          enabledAt: "2026-07-29T12:00:00.000Z",
+          canDisable: true,
+          hardBoundaries: PERMISSION_YOLO_HARD_BOUNDARIES
+        }
+      });
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("YOLO Full Access is on");
+    expect(container.textContent).toContain("Still always protected");
+    const returnToAsk = buttonNamed(container, "Return to Ask Every Time");
+    await act(async () => {
+      returnToAsk.click();
+      await settle(dom);
+    });
+    expect(setDefaultMode).toHaveBeenCalledTimes(2);
+    expect(setDefaultMode).toHaveBeenLastCalledWith(expect.objectContaining({
+      activeVaultId,
+      expectedRevision: 6,
+      mode: "ask_every_time"
+    }));
+    expect(setDefaultMode.mock.calls[1]?.[0]).not.toHaveProperty("fullAccessAcknowledgement");
+    expect(dom.window.document.activeElement?.getAttribute("name")).toBe("privacy-permission-mode");
 
     await act(async () => root.unmount());
     dom.window.close();
