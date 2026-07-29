@@ -30,7 +30,7 @@ export type NoteAgentMessage = {
 
 export type NoteAgentProposal = {
   readonly id: string;
-  readonly action: "translate" | "polish" | "expand" | "append_current_note";
+  readonly action: "translate" | "polish" | "expand" | "append_current_note" | "create_note";
   readonly revision: number;
   readonly lines: readonly {
     readonly kind: "context" | "removed" | "added";

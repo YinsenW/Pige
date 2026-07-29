@@ -91,6 +91,8 @@ import type {
   NoteResolveInlineReferenceRequest,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
+  ReaderSelectionCreateNoteRequest,
+  ReaderSelectionCreateNoteResult,
   ReaderSelectionLinkRequest,
   ReaderSelectionLinkResult,
   ReaderSelectionProposalDecisionResult,
@@ -259,6 +261,21 @@ type ActiveReaderSelectionProposal = {
   readonly preview: ReaderSelectionProposalPreview;
   readonly errorMessageKey?: string;
 };
+type HomeReaderSelectionContext = {
+  readonly vaultId: string;
+  readonly pageId: string;
+  readonly title: string;
+};
+function readerSelectionProposalOwnerMatches(
+  vaultId: string,
+  pageId: string,
+  selectedNote: NoteRenderResult | null,
+  selectedNoteVaultId: string | null,
+  homeContext: HomeReaderSelectionContext | null
+): boolean {
+  return (selectedNoteVaultId === vaultId && selectedNote?.summary.pageId === pageId) ||
+    (homeContext?.vaultId === vaultId && homeContext.pageId === pageId);
+}
 type HomeFileDropRequest = {
   readonly clientTurnId: string;
   readonly files: readonly File[];
@@ -322,6 +339,8 @@ export function App(): React.JSX.Element {
   const [noteAgentOpen, setNoteAgentOpen] = useState(false);
   const [noteAgentExternalRevision, setNoteAgentExternalRevision] = useState(0);
   const [readerSelectionProposal, setReaderSelectionProposal] = useState<ActiveReaderSelectionProposal | null>(null);
+  const [homeReaderSelectionContext, setHomeReaderSelectionContext] = useState<HomeReaderSelectionContext | null>(null);
+  const [homeReaderSelectionAgentActive, setHomeReaderSelectionAgentActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [openingRecentVaultId, setOpeningRecentVaultId] = useState<string | null>(null);
@@ -383,6 +402,7 @@ export function App(): React.JSX.Element {
   const activityOpenInFlightRef = useRef<string | null>(null);
   const readerSelectionProposalSequence = useRef(0);
   const readerSelectionProposalDecisionInFlight = useRef(false);
+  const homeReaderSelectionContextRef = useRef<HomeReaderSelectionContext | null>(null);
   const selectedNoteRef = useRef<NoteRenderResult | null>(selectedNote);
   const selectedNoteVaultIdRef = useRef<string | null>(selectedNoteVaultId);
   const selectedCollectionRef = useRef<ActiveCollection | null>(selectedCollection);
@@ -412,16 +432,17 @@ export function App(): React.JSX.Element {
   selectedNoteRef.current = selectedNote;
   selectedNoteVaultIdRef.current = selectedNoteVaultId;
   selectedCollectionRef.current = selectedCollection;
+  homeReaderSelectionContextRef.current = homeReaderSelectionContext;
 
   useEffect(() => {
     setReaderSelectionProposal((current) => {
       if (!current) return null;
       return current.vaultId === onboarding?.activeVault?.vaultId &&
-        current.pageId === selectedNote?.summary.pageId
+        (current.pageId === selectedNote?.summary.pageId || current.pageId === homeReaderSelectionContext?.pageId)
         ? current
         : null;
     });
-  }, [onboarding?.activeVault?.vaultId, selectedNote?.summary.pageId]);
+  }, [homeReaderSelectionContext?.pageId, onboarding?.activeVault?.vaultId, selectedNote?.summary.pageId]);
 
   useEffect(() => {
     if (
@@ -439,7 +460,13 @@ export function App(): React.JSX.Element {
         if (
           sequence !== readerSelectionProposalSequence.current ||
           activeVaultIdRef.current !== vaultId ||
-          selectedNoteRef.current?.summary.pageId !== pageId
+          !readerSelectionProposalOwnerMatches(
+            vaultId,
+            pageId,
+            selectedNoteRef.current,
+            selectedNoteVaultIdRef.current,
+            homeReaderSelectionContextRef.current
+          )
         ) return;
         if (result.status === "available") {
           setReaderSelectionProposal({ vaultId, pageId, preview: result.proposal });
@@ -1028,9 +1055,14 @@ export function App(): React.JSX.Element {
     }
   };
 
-  const openNoteTarget = async (pageId: string, reportError = true): Promise<boolean> => {
+  const openNoteTarget = async (
+    pageId: string,
+    reportError = true,
+    requiredPageType?: NoteRenderResult["summary"]["pageType"]
+  ): Promise<boolean> => {
     const vaultId = activeVaultIdRef.current;
     if (!vaultId) return false;
+    const previousRelated = selectedNoteRelated;
     inlineReferenceSequence.current += 1;
     const requestId = noteOpenSequence.current + 1;
     noteOpenSequence.current = requestId;
@@ -1043,8 +1075,12 @@ export function App(): React.JSX.Element {
       if (
         requestId !== noteOpenSequence.current ||
         activeVaultIdRef.current !== vaultId ||
-        note.summary.pageId !== pageId
-      ) return false;
+        note.summary.pageId !== pageId ||
+        (requiredPageType !== undefined && note.summary.pageType !== requiredPageType)
+      ) {
+        if (requestId === noteOpenSequence.current) setSelectedNoteRelated(previousRelated);
+        return false;
+      }
       let requestedNoteAgentOpen = noteAgentOpen;
       if (!noteAgentDisclosureInitialized.current) {
         noteAgentDisclosureInitialized.current = true;
@@ -1797,7 +1833,7 @@ export function App(): React.JSX.Element {
   };
 
   const closeNoteAgent = async (): Promise<void> => {
-    if (!selectedNote || !noteAgentOpen) return;
+    if ((!selectedNote && !homeReaderSelectionContextRef.current) || !noteAgentOpen) return;
     const nextLayout = await requestWindowLayout({
       apiVersion: 1,
       surface: "reader",
@@ -1844,6 +1880,32 @@ export function App(): React.JSX.Element {
     });
   };
 
+  const revealReaderSelectionCreateNote = (result: ReaderSelectionCreateNoteResult): void => {
+    const vaultId = activeVaultIdRef.current;
+    if (!vaultId) return;
+    const selected = selectedNoteRef.current;
+    const homeContext = homeReaderSelectionContextRef.current;
+    const owner = selected && selectedNoteVaultIdRef.current === vaultId
+      ? { vaultId, pageId: selected.summary.pageId }
+      : homeContext?.vaultId === vaultId
+        ? homeContext
+        : null;
+    if (!owner) return;
+    if (result.status === "review_required" && result.proposal.action === "create_note") {
+      setReaderSelectionProposal({ vaultId, pageId: owner.pageId, preview: result.proposal });
+    } else if (result.status !== "waiting" && !(result.status === "failed" && result.conversationId)) {
+      return;
+    }
+    if (!selected) setHomeReaderSelectionAgentActive(true);
+    setNoteAgentExternalRevision((current) => current + 1);
+    void requestWindowLayout({
+      apiVersion: 1,
+      surface: "reader",
+      sidebarOpen,
+      noteAgentOpen: true
+    });
+  };
+
   const refreshReaderSelectionLink = async (
     result: Extract<ReaderSelectionLinkResult, { status: "applied" }>
   ): Promise<boolean> => {
@@ -1872,8 +1934,13 @@ export function App(): React.JSX.Element {
     if (readerSelectionProposalDecisionInFlight.current || current.preview.state !== "ready") return;
     if (
       activeVaultIdRef.current !== current.vaultId ||
-      selectedNoteRef.current?.summary.pageId !== current.pageId ||
-      selectedNoteVaultIdRef.current !== current.vaultId
+      !readerSelectionProposalOwnerMatches(
+        current.vaultId,
+        current.pageId,
+        selectedNoteRef.current,
+        selectedNoteVaultIdRef.current,
+        homeReaderSelectionContextRef.current
+      )
     ) {
       setReaderSelectionProposal(null);
       return;
@@ -1908,7 +1975,13 @@ export function App(): React.JSX.Element {
     if (
       sequence !== readerSelectionProposalSequence.current ||
       activeVaultIdRef.current !== current.vaultId ||
-      selectedNoteRef.current?.summary.pageId !== current.pageId
+      !readerSelectionProposalOwnerMatches(
+        current.vaultId,
+        current.pageId,
+        selectedNoteRef.current,
+        selectedNoteVaultIdRef.current,
+        homeReaderSelectionContextRef.current
+      )
     ) return;
     if (result.status === "failed") {
       setReaderSelectionProposal({
@@ -1926,7 +1999,21 @@ export function App(): React.JSX.Element {
       return;
     }
     setReaderSelectionProposal({ vaultId: current.vaultId, pageId: current.pageId, preview: result.proposal });
-    if (result.status === "applied") await openNoteTarget(current.pageId);
+    if (result.status === "applied") {
+      const opened = result.proposal.action === "create_note" && result.createdPageId
+        ? await openNoteTarget(result.createdPageId, false, "note")
+        : result.proposal.action !== "create_note"
+          ? await openNoteTarget(current.pageId)
+          : false;
+      if (!opened && result.proposal.action === "create_note") {
+        setReaderSelectionProposal({
+          vaultId: current.vaultId,
+          pageId: current.pageId,
+          preview: result.proposal,
+          errorMessageKey: "note.selection.actionFailed"
+        });
+      }
+    }
   };
 
   const resolveHighRiskConfirmation = async (decision: "allow" | "deny"): Promise<void> => {
@@ -1965,6 +2052,11 @@ export function App(): React.JSX.Element {
     }
   };
   const highRiskConfirmationOpen = highRiskConfirmation?.status === "pending";
+  const noteAgentContext = selectedNote && selectedNoteVaultId === activeVault?.vaultId
+    ? { vaultId: selectedNoteVaultId, pageId: selectedNote.summary.pageId, title: selectedNote.summary.title }
+    : homeReaderSelectionAgentActive && homeReaderSelectionContext?.vaultId === activeVault?.vaultId
+      ? homeReaderSelectionContext
+      : null;
 
   return (
     <div
@@ -2022,7 +2114,7 @@ export function App(): React.JSX.Element {
       </header>
 
       <div
-        className={`main-layout${sidebarOpen ? " sidebar-open" : ""}${selectedNote || selectedCollection ? " note-open" : ""}${selectedNote && noteAgentOpen ? " agent-open" : ""}`}
+        className={`main-layout${sidebarOpen ? " sidebar-open" : ""}${selectedNote || selectedCollection ? " note-open" : ""}${noteAgentContext && noteAgentOpen ? " agent-open" : ""}`}
         inert={highRiskConfirmationOpen}
       >
         {sidebarOpen ? (
@@ -2203,10 +2295,12 @@ export function App(): React.JSX.Element {
             onSubmitReaderSelectionAction={submitReaderSelectionAction}
             onSubmitReaderSelectionLink={submitReaderSelectionLink}
             onSubmitReaderSelectionTransform={submitReaderSelectionTransform}
+            onSubmitReaderSelectionCreateNote={submitReaderSelectionCreateNote}
             locale={locale}
             onReaderSelectionAction={revealReaderSelectionAction}
             onReaderSelectionLinkApplied={refreshReaderSelectionLink}
             onReaderSelectionTransform={revealReaderSelectionTransform}
+            onReaderSelectionCreateNote={revealReaderSelectionCreateNote}
             selectedNote={selectedNote}
             selectedNoteRelated={selectedNoteRelated}
             noteLoadingPageId={noteLoadingPageId}
@@ -2250,10 +2344,12 @@ export function App(): React.JSX.Element {
               onSubmitReaderSelectionAction={submitReaderSelectionAction}
               onSubmitReaderSelectionLink={submitReaderSelectionLink}
               onSubmitReaderSelectionTransform={submitReaderSelectionTransform}
+              onSubmitReaderSelectionCreateNote={submitReaderSelectionCreateNote}
               locale={locale}
               onReaderSelectionAction={revealReaderSelectionAction}
               onReaderSelectionLinkApplied={refreshReaderSelectionLink}
               onReaderSelectionTransform={revealReaderSelectionTransform}
+              onReaderSelectionCreateNote={revealReaderSelectionCreateNote}
               selectedNote={selectedNote}
               selectedNoteRelated={selectedNoteRelated}
               noteLoadingPageId={noteLoadingPageId}
@@ -2312,6 +2408,11 @@ export function App(): React.JSX.Element {
             recentJobs={recentJobs}
             locale={locale}
             onReaderSelectionAction={revealReaderSelectionAction}
+            onReaderSelectionCreateNote={revealReaderSelectionCreateNote}
+            onReaderSelectionContextChange={(context) => {
+              setHomeReaderSelectionContext(context);
+              if (!context) setHomeReaderSelectionAgentActive(false);
+            }}
             onOpenNoteEditor={(request) => window.pige.notes.openEditor(request)}
             onSaveNoteEditor={(request) => window.pige.notes.saveEditor(request)}
             onReloadNoteEditor={reloadNoteEditor}
@@ -2339,13 +2440,13 @@ export function App(): React.JSX.Element {
           />
         )}
         </main>
-        {selectedNote && noteAgentOpen && activeVault && selectedNoteVaultId === activeVault.vaultId ? (
+        {noteAgentContext && noteAgentOpen && activeVault ? (
           <CurrentNoteAgent
-            key={`${activeVault.vaultId}:${selectedNote.summary.pageId}:${noteAgentExternalRevision}`}
+            key={`${activeVault.vaultId}:${noteAgentContext.pageId}:${noteAgentExternalRevision}`}
             modal={agentModal}
             vaultId={activeVault.vaultId}
-            pageId={selectedNote.summary.pageId}
-            noteTitle={selectedNote.summary.title}
+            pageId={noteAgentContext.pageId}
+            noteTitle={noteAgentContext.title}
             locale={locale}
             models={(modelSummary?.models ?? []).filter((model) => model.enabled).map((model) => {
               const providerName = modelSummary?.providers.find((provider) => provider.id === model.providerProfileId)?.displayName;
@@ -2365,17 +2466,17 @@ export function App(): React.JSX.Element {
             onSelectModel={setHomeDefaultModel}
             onDurableTurnCompleted={(identity) => void refreshCurrentNoteAfterDurableTurn(identity)}
             proposal={readerSelectionProposal?.vaultId === activeVault.vaultId &&
-              readerSelectionProposal.pageId === selectedNote.summary.pageId
+              readerSelectionProposal.pageId === noteAgentContext.pageId
               ? readerSelectionProposal.preview
               : null}
             {...(readerSelectionProposal?.vaultId === activeVault.vaultId &&
-              readerSelectionProposal.pageId === selectedNote.summary.pageId &&
+              readerSelectionProposal.pageId === noteAgentContext.pageId &&
               readerSelectionProposal.errorMessageKey
               ? { proposalErrorMessageKey: readerSelectionProposal.errorMessageKey }
               : {})}
             onProposalAction={(proposalId, action) => void decideReaderSelectionProposal(proposalId, action)}
             onOpenCitation={(pageId) => {
-              if (pageId !== selectedNote.summary.pageId) return;
+              if (pageId !== noteAgentContext.pageId) return;
               void openNote(pageId);
             }}
             t={t}
@@ -2769,12 +2870,16 @@ export function LibraryPanel(props: {
   readonly onSubmitReaderSelectionAction?: (request: ReaderSelectionActionRequest) => Promise<ReaderSelectionActionResult>;
   readonly onSubmitReaderSelectionLink?: (request: ReaderSelectionLinkRequest) => Promise<ReaderSelectionLinkResult>;
   readonly onSubmitReaderSelectionTransform?: (request: ReaderSelectionTransformRequest) => Promise<ReaderSelectionTransformResult>;
+  readonly onSubmitReaderSelectionCreateNote?: (
+    request: ReaderSelectionCreateNoteRequest
+  ) => Promise<ReaderSelectionCreateNoteResult>;
   readonly locale?: Locale;
   readonly onReaderSelectionAction?: (result: ReaderSelectionActionResult) => void;
   readonly onReaderSelectionLinkApplied?: (
     result: Extract<ReaderSelectionLinkResult, { status: "applied" }>
   ) => Promise<boolean>;
   readonly onReaderSelectionTransform?: (result: ReaderSelectionTransformResult) => void;
+  readonly onReaderSelectionCreateNote?: (result: ReaderSelectionCreateNoteResult) => void;
   readonly onActivateInlineReference?: (href: string) => Promise<ReaderInlineReferenceActivation>;
   readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
@@ -3036,10 +3141,12 @@ export function LibraryPanel(props: {
           {...(props.onSubmitReaderSelectionAction ? { onSubmitSelectionAction: props.onSubmitReaderSelectionAction } : {})}
           {...(props.onSubmitReaderSelectionLink ? { onSubmitSelectionLink: props.onSubmitReaderSelectionLink } : {})}
           {...(props.onSubmitReaderSelectionTransform ? { onSubmitSelectionTransform: props.onSubmitReaderSelectionTransform } : {})}
+          {...(props.onSubmitReaderSelectionCreateNote ? { onSubmitSelectionCreateNote: props.onSubmitReaderSelectionCreateNote } : {})}
           {...(props.locale ? { locale: props.locale } : {})}
           {...(props.onReaderSelectionAction ? { onSelectionActionResult: props.onReaderSelectionAction } : {})}
           {...(props.onReaderSelectionLinkApplied ? { onSelectionLinkApplied: props.onReaderSelectionLinkApplied } : {})}
           {...(props.onReaderSelectionTransform ? { onSelectionTransformResult: props.onReaderSelectionTransform } : {})}
+          {...(props.onReaderSelectionCreateNote ? { onSelectionCreateNoteResult: props.onReaderSelectionCreateNote } : {})}
           related={props.selectedNoteRelated}
           relatedLoadingPageId={props.noteLoadingPageId}
           onOpenRelated={props.onOpenNote}
@@ -3519,6 +3626,12 @@ function submitReaderSelectionTransform(request: ReaderSelectionTransformRequest
   return window.pige.readerSelection.submitTransform(request);
 }
 
+function submitReaderSelectionCreateNote(
+  request: ReaderSelectionCreateNoteRequest
+): Promise<ReaderSelectionCreateNoteResult> {
+  return window.pige.readerSelection.submitCreateNote(request);
+}
+
 const overlayFocusableSelector = [
   "button:not([disabled])",
   "[href]",
@@ -3836,6 +3949,8 @@ function HomeComposer(props: {
   readonly recentJobs: readonly JobSummary[];
   readonly locale: Locale;
   readonly onReaderSelectionAction: (result: ReaderSelectionActionResult) => void;
+  readonly onReaderSelectionCreateNote: (result: ReaderSelectionCreateNoteResult) => void;
+  readonly onReaderSelectionContextChange: (context: HomeReaderSelectionContext | null) => void;
   readonly onOpenNoteEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
   readonly onSaveNoteEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
   readonly onReloadNoteEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
@@ -3916,6 +4031,17 @@ function HomeComposer(props: {
   const [editorOpenState, setEditorOpenState] = useState<"idle" | "opening" | "failed">("idle");
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
+  useEffect(() => {
+    const context = props.activeVault && selectedNote
+      ? {
+          vaultId: props.activeVault.vaultId,
+          pageId: selectedNote.summary.pageId,
+          title: selectedNote.summary.title
+        }
+      : null;
+    props.onReaderSelectionContextChange(context);
+    return () => props.onReaderSelectionContextChange(null);
+  }, [props.activeVault?.vaultId, selectedNote?.summary.pageId, selectedNote?.summary.title]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const conversationTimelineRef = useRef<HTMLElement | null>(null);
@@ -5801,6 +5927,7 @@ function HomeComposer(props: {
                   onResolveSelection: resolveReaderSelection,
                   onSubmitSelectionAction: submitReaderSelectionAction,
                   onSubmitSelectionLink: submitReaderSelectionLink,
+                  onSubmitSelectionCreateNote: submitReaderSelectionCreateNote,
                   onSelectionLinkApplied: async (result: Extract<ReaderSelectionLinkResult, { status: "applied" }>) =>
                     openResultTarget(result.currentPageId),
                   onOpenSourceReference: (request) => window.pige.notes.openSourceReference(request),
@@ -5808,6 +5935,7 @@ function HomeComposer(props: {
                 } : {})}
                 locale={props.locale}
                 onSelectionActionResult={props.onReaderSelectionAction}
+                onSelectionCreateNoteResult={props.onReaderSelectionCreateNote}
                 related={selectedNoteRelated}
                 relatedLoadingPageId={noteLoadingPageId}
                 onOpenRelated={openResult}
