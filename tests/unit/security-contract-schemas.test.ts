@@ -278,6 +278,7 @@ describe("security-sensitive shared contracts", () => {
       apiVersion: 1 as const,
       revision: 4,
       invalidManifestCount: 1,
+      restorableSkills: [],
       skills: [{
         id: "paper-reading",
         name: "Paper Reading",

@@ -100,6 +100,15 @@ export function permissionGrantMatches(
     grant.clientCapabilityTier === binding.clientCapabilityTier;
 }
 
+export function isPermissionPolicyAutoAllowEligible(
+  bindingInput: PermissionActionBinding,
+  confirmation: HighRiskConfirmationSummary
+): boolean {
+  const binding = PermissionActionBindingSchema.parse(bindingInput);
+  return isRememberable(binding, confirmation) &&
+    !["overwrite_user_original", "write_outside_authorized_root"].includes(confirmation.effect);
+}
+
 export function projectPermissionGrant(grant: PermissionPolicyGrantRecord): PermissionGrantSummary {
   return PermissionGrantSummarySchema.parse({
     grantId: grant.grantId,
