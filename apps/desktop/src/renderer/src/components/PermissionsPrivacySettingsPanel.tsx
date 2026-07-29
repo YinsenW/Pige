@@ -46,6 +46,7 @@ export function PermissionsPrivacySettingsPanel(props: {
   const currentRef = useRef(current);
   const ownerRef = useRef(props.activeVaultId);
   const operationRef = useRef<PermissionOperation | null>(null);
+  const focusRestoreRef = useRef<{ readonly trigger: HTMLElement; readonly mode?: PermissionDefaultMode } | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const fullAccessTriggerRef = useRef<HTMLElement | null>(null);
   const fullAccessAcknowledgeRef = useRef<HTMLInputElement | null>(null);
@@ -61,6 +62,7 @@ export function PermissionsPrivacySettingsPanel(props: {
     ownerRef.current = props.activeVaultId;
     currentRef.current = null;
     operationRef.current = null;
+    focusRestoreRef.current = null;
     setCurrent(null);
     setOperation(null);
     setNotice(null);
@@ -99,6 +101,19 @@ export function PermissionsPrivacySettingsPanel(props: {
     else window.setTimeout(focusAcknowledgement, 0);
   }, [fullAccessConfirming]);
 
+  useEffect(() => {
+    const pending = focusRestoreRef.current;
+    if (!pending || operation !== null || (pending.mode && current?.defaultMode !== pending.mode)) return;
+    focusRestoreRef.current = null;
+    if (pending.trigger.isConnected) {
+      pending.trigger.focus();
+      return;
+    }
+    panelRef.current?.querySelector<HTMLElement>(
+      'button:not(:disabled), input[name="privacy-permission-mode"]:checked'
+    )?.focus();
+  }, [current, operation]);
+
   const finish = (
     owner: string,
     nextOperation: PermissionOperation,
@@ -107,19 +122,11 @@ export function PermissionsPrivacySettingsPanel(props: {
   ): void => {
     if (ownerRef.current !== owner || operationRef.current !== nextOperation) return;
     operationRef.current = null;
-    setOperation(null);
-    if (!restore) return;
-    const restoreFocus = (): void => {
-      if (trigger.isConnected) {
-        trigger.focus();
-        return;
-      }
-      const fallback = panelRef.current?.querySelector<HTMLElement>(
-        'button:not(:disabled), input[name="privacy-permission-mode"]:checked'
-      );
-      fallback?.focus();
+    if (restore) focusRestoreRef.current = {
+      trigger,
+      ...(nextOperation.kind === "mode" ? { mode: nextOperation.mode } : {})
     };
-    window.setTimeout(restoreFocus, 0);
+    setOperation(null);
   };
 
   const setMode = async (
