@@ -78,7 +78,7 @@ describe("library service", () => {
       title: "Library Source",
       pageType: "source",
       status: "active",
-      language: "en",
+      language: "unknown",
       sourceIds: [captureResult.sourceId]
     });
     expect(result.pages[0]?.pagePath).toMatch(/^sources\/text\/\d{4}\/src_/u);

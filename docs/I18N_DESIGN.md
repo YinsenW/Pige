@@ -93,6 +93,8 @@ translation_of: null
 Rules:
 
 - `language` describes the original source language.
+- Durable `{domain,language,basis}` uses canonical BCP 47 or evidence-backed `unknown` and
+  flows source/OCR→page→chunk/memory; query language, not UI locale, owns response language.
 - `summary_language` describes generated summaries.
 - Mixed-language sources can store multiple detected languages.
 - The Agent should not silently translate the source page unless the workflow asks for translation.

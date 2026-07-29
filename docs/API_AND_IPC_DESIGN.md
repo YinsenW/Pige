@@ -191,9 +191,12 @@ Rules:
 
 ### 6.1 Vault
 
-Current renderer/preload commands: `onboarding.dismissFirstHome`, `vault.revealKnowledgeRoot`, and `vault.revealSourceAssetRoot`.
+Current renderer/preload commands include `onboarding.dismissFirstHome`,
+`vault.revealKnowledgeRoot`, and `vault.revealSourceAssetRoot`.
 
-Commands: `vault.create`, `vault.open`, `onboarding.complete`, `vault.updateSourceStoragePolicy`, `vault.removeRecent`, `maintenance.rebuildLocalDatabase`, `maintenance.resetLocalDatabase`, and `maintenance.runKnowledgeHealth`.
+Commands: `vault.create`, `vault.open`, `vault.applyMigration`, `onboarding.complete`,
+`vault.updateSourceStoragePolicy`, `vault.removeRecent`, `maintenance.rebuildLocalDatabase`,
+`maintenance.resetLocalDatabase`, and `maintenance.runKnowledgeHealth`.
 
 Queries: `vault.current`, `vault.recent`, `vault.health`, `onboarding.status`, and `maintenance.localDatabaseStatus`.
 
@@ -239,6 +242,9 @@ type OnboardingStatus = {
 
 `vault.openRecent` takes `{ vaultId }` and returns `VaultActionResult`; main revalidates the binding.
 `pathDisplay` is never authority and failures return no path.
+
+Open distinguishes current/migration/future/invalid; `vault.applyMigration` binds request,
+vault and preview, returning only authoritative vault/Job/Operation or safe stale/repair truth.
 
 Local database status DTO:
 

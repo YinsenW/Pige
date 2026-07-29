@@ -1398,9 +1398,8 @@ Visual acceptance follows the manifest, not memory: implement section 16.2; run
 viewport/scale/motion/font inputs; save screenshot plus build/platform/commit/state
 metadata; inspect pixel and semantic differences; change baselines only with reviewed
 rationale. Low pixel delta never excuses hierarchy, legibility, focus or clipping.
-The matrix covers compact/expanded/reader widths, light/dark, governed locales and all
-listed workflow states on macOS and Windows. Baselines never contain private vault/account
-data, secrets, or external-product screenshots.
+The Phase 1 matrix covers these states on macOS 26+; Windows baselines remain next-phase,
+not a support claim. Baselines never contain private data, secrets or external screenshots.
 
 ## 17. Interaction Rules
 
@@ -1410,6 +1409,7 @@ data, secrets, or external-product screenshots.
 - Agent progress should be cancelable when possible.
 - Completion cards distinguish created, updated, skipped, and unchanged vault outcomes.
 - Errors should preserve user input and offer retry.
+- v1 migration shows all warnings and restores trigger focus; future/invalid vaults cannot Apply.
 - Users should be able to reveal generated durable note or Dataset results.
 - When a generated page updates existing knowledge, the UI should show "updated" separately from "created".
 - Eligible Agent edits apply visibly with provenance and Undo; exceptional boundaries pause.

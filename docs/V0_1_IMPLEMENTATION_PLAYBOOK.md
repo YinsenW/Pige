@@ -69,9 +69,9 @@ Current implementation state, last reconciled 2026-07-13:
 | P4 | in progress | SQLite, lexical search, Library, and rebuild foundations have evidence; completion remains open. |
 | P5 | in progress | Web/document/OCR Artifact and recovery slices have evidence; completion remains open. |
 | P6 | in progress | Retrieval, cited Home, Reader, and relationship foundations have evidence; completion remains open. |
-| P7 | planned | Autonomous knowledge, memory, and conversation acceptance remains below. |
-| P8 | planned | Skill, package, third-party isolation, and high-risk confirmation acceptance remains below. |
-| P9 | planned | Backup, restore, health, localization, accessibility, and release acceptance remains below. |
+| P7 | in progress | Autonomous knowledge, memory, and conversation acceptance remains below. |
+| P8 | in progress | Skill, package, third-party isolation, and high-risk confirmation acceptance remains below. |
+| P9 | in progress | Backup, restore, health, localization, accessibility, and release acceptance remains below. |
 
 Acceptance owns per-Requirement/Exit evidence and open work; no row above claims phase
 completion.
@@ -695,8 +695,8 @@ Build:
 - [B9.09 -> E9.05] Deterministic Knowledge Health report for broken links, orphans, duplicate-topic candidates, and unsourced claims.
 - [B9.10 -> E9.06] Six-locale coverage for release-critical workflows, including unavailable, error, permission, restore, and long-label states.
 - [B9.11 -> E9.07] Keyboard, focus, accessible-name, contrast, reduced-motion, and narrow-window accessibility baseline.
-- [B9.12 -> E9.08] Protected-tag exact-identity publication of independently verified,
-  trusted macOS arm64 and Windows x64 artifacts; no unsigned public fallback.
+- [B9.12 -> E9.08] Protected-tag exact-identity publication of an independently verified,
+  trusted macOS arm64 artifact; no unsigned public fallback. Windows qualification follows.
 - [B9.13 -> E9.09] Auto-update alpha channel with risky-job safeguards.
 - [B9.14 -> E9.08] Installer-size, 10,000-page/100,000-chunk scale, and idle/active-memory threshold reporting.
 - [B9.15 -> E9.08] Notices, notes, attribution, immutable metadata and platform-trust evidence.
@@ -704,29 +704,10 @@ Build:
 - [B9.17 -> E9.11] Error-state, empty-state, privacy-copy, known-limitations, and basic-shortcut release polish.
 - [B9.18 -> E9.12] Language metadata for sources/pages/OCR/chunks/memory, source-language preservation, and query-language response behavior.
 
-Current packageability foundation: unsigned macOS 26 arm64 and Windows x64 GitHub jobs
-produce ASAR-backed Pige artifacts under the hard size ceiling and run packaged identity,
-actual BrowserWindow renderer/preload/health IPC, Pi/Home, parser/index, attribution,
-SBOM, redaction, and platform-resource checks; macOS additionally proves packaged Vision.
-macOS now applies the Release Engineering section 8 ad-hoc seal before its official ZIP
-and rechecks the download on a fresh runner; no Developer ID/trust is claimed.
-B9.12/B9.14/B9.15/E9.08 remain open for platform breadth, trusted signing,
-installed/update, Windows OCR, scale/recovery, release notes and missing tools.
-
-Protected-publication code now binds protected alpha tag/version/commit, required platform
-trust and independently verified metadata before prerelease creation. It is unexecuted:
-credentials, signed artifacts, notes, platform/update/scale/recovery and a real release remain
-open; the zero-network check service changes no controlled status.
-
-Current Backup foundation covers bounded B9.01/B9.02: one pre-scan durable Job resumes five
-identity/checksum checkpoints, no-replace publishes a validated archive, links one
-`backup_created`, includes reachable external copies, waits on missing roots, and restores
-them into `raw/`. E9.01 stays partial for UI, Operations, atomicity, and platforms.
-
-Current restore foundation covers bounded B9.03–B9.06: bound preview; owned fresh clone/
-replace publication; verified rollback; binding CAS; eight-checkpoint machine Job; linked
-`restore_applied`; post-commit rebuild; redacted six-locale safety copy. E9.02 stays partial
-for migrations, transactions/final-syscall TOCTOU, cleanup and signed platform matrices.
+Current foundations cover unsigned packageability/publication checks, Job-owned backup/
+restore, and backup-backed manifest-last v1→v2 language/domain migration with one adopted
+Operation. Phase 1 still needs trusted macOS update/scale/recovery/notes; E9.01–03/E9.12
+retain their residual gates.
 
 Deferred from this phase:
 
@@ -745,10 +726,11 @@ Exit criteria:
   rewrites never happen silently.
 - [E9.06] Core workflows pass smoke tests in `zh-Hans`, `en`, `ja`, `ko`, `fr`, and `de`, including CJK search and narrow long-label layouts.
 - [E9.07] Keyboard-only navigation, visible focus, accessible names/tooltips, readable contrast, reduced-motion behavior, and unavailable/error states pass the v0.1 accessibility baseline.
-- [E9.08] One protected alpha tag produces attributable trusted macOS/Windows artifacts whose
-  downloaded bytes and metadata are independently verified before publication; each core
+- [E9.08] One protected alpha tag produces an attributable trusted macOS arm64 artifact whose
+  downloaded bytes and metadata are independently verified before publication; the core
   distributable is at or below 330,000,000 bytes excluding optional weights, packaged memory/
   recovery and 10,000-page/100,000-chunk scale pass, and notices/trust/notes are evidenced.
+  Windows retains the equivalent exit in the next platform phase.
 - [E9.09] App updates from one alpha to another without breaking vault data and does not update during an active risky job.
 - [E9.10] The scripted Public Alpha scenario report proves at least 25 mixed sources, a degraded path, restart recovery, backup, fresh-folder restore, and continued grounded retrieval.
 - [E9.11] Public privacy/support/security copy matches actual data flows; error and empty states are localized, actionable, and do not expose secrets or private paths.
