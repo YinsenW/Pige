@@ -7319,6 +7319,9 @@ function updateSummaryDescription(
   if (summary.capability === "unsupported_platform") return t("system.updateCapabilityUnsupported");
   if (summary.phase === "idle") return t("system.updateNotChecked");
   if (summary.phase === "checking") return t("system.checkingUpdates");
+  if (summary.phase === "downloading") return `${t("system.updateDownloading")} · ${Math.round(summary.progressPercent)}%`;
+  if (summary.phase === "ready_to_restart") return t("system.updateReadyToRestart");
+  if (summary.phase === "applying") return t("system.updateApplying");
   const status = summary.phase === "up_to_date"
     ? t("system.updateUpToDate")
     : summary.phase === "available"
@@ -7440,22 +7443,25 @@ export function SystemSettingsPanel(props: {
   const [notice, setNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
   const [updateSummary, setUpdateSummary] = useState<UpdateSummary | null>(null);
   const [updateLoadState, setUpdateLoadState] = useState<"loading" | "ready" | "failed">("loading");
-  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateBusy, setUpdateBusy] = useState<"check" | "download" | "apply" | null>(null);
   const supportBundleExportRequestRef = useRef<string | null>(null);
   const supportBundleCancelRequestRef = useRef<string | null>(null);
   const updateSummaryRevisionRef = useRef(-1);
   const updateEventSequenceRef = useRef(0);
-  const updateCheckBusyRef = useRef(false);
+  const updateOperationRef = useRef<{
+    readonly kind: "check" | "download" | "apply";
+    readonly requestId: string;
+  } | null>(null);
 
   useEffect(() => {
     if (props.surface !== "updates") return;
     let active = true;
     updateSummaryRevisionRef.current = -1;
     updateEventSequenceRef.current = 0;
-    updateCheckBusyRef.current = false;
+    updateOperationRef.current = null;
     setUpdateSummary(null);
     setUpdateLoadState("loading");
-    setUpdateBusy(false);
+    setUpdateBusy(null);
     setNotice(null);
 
     const applySummary = (summary: UpdateSummary): void => {
@@ -7479,6 +7485,7 @@ export function SystemSettingsPanel(props: {
       });
     return () => {
       active = false;
+      updateOperationRef.current = null;
       unsubscribe();
     };
   }, []);
@@ -7575,16 +7582,17 @@ export function SystemSettingsPanel(props: {
       : "system.healthLoading";
   const checkForUpdates = async (): Promise<void> => {
     if (
-      updateCheckBusyRef.current ||
+      updateOperationRef.current ||
       updateSummary?.capability !== "packaged_ready" ||
       updateSummary.phase === "checking"
     ) return;
-    updateCheckBusyRef.current = true;
-    setUpdateBusy(true);
-    setNotice(null);
     const requestId = `updatereq_${crypto.randomUUID().replaceAll("-", "")}`;
+    updateOperationRef.current = { kind: "check", requestId };
+    setUpdateBusy("check");
+    setNotice(null);
     try {
       const result = await window.pige.updates.check({ apiVersion: 1, requestId });
+      if (updateOperationRef.current?.requestId !== requestId || result.requestId !== requestId) return;
       if (result.summary.revision >= updateSummaryRevisionRef.current) {
         updateSummaryRevisionRef.current = result.summary.revision;
         setUpdateSummary(result.summary);
@@ -7596,10 +7604,104 @@ export function SystemSettingsPanel(props: {
         setNotice({ kind: "success", key: "system.updateCheckAlreadyRunning" });
       }
     } catch {
-      setNotice({ kind: "error", key: "system.updateCheckFailed" });
+      if (updateOperationRef.current?.requestId === requestId) {
+        setNotice({ kind: "error", key: "system.updateCheckFailed" });
+      }
     } finally {
-      updateCheckBusyRef.current = false;
-      setUpdateBusy(false);
+      if (updateOperationRef.current?.requestId === requestId) {
+        updateOperationRef.current = null;
+        setUpdateBusy(null);
+      }
+    }
+  };
+  const downloadUpdate = async (): Promise<void> => {
+    const snapshot = updateSummary;
+    if (updateOperationRef.current || snapshot?.capability !== "packaged_ready" || snapshot.phase !== "available") return;
+    const requestId = `updatedownloadreq_${crypto.randomUUID().replaceAll("-", "")}`;
+    const version = snapshot.availableVersion;
+    updateOperationRef.current = { kind: "download", requestId };
+    setUpdateBusy("download");
+    setNotice(null);
+    try {
+      const result = await window.pige.updates.download({
+        apiVersion: 1,
+        requestId,
+        expectedRevision: snapshot.revision,
+        version
+      });
+      if (
+        updateOperationRef.current?.requestId !== requestId ||
+        result.requestId !== requestId ||
+        result.version !== version
+      ) return;
+      if (result.summary.revision >= updateSummaryRevisionRef.current) {
+        updateSummaryRevisionRef.current = result.summary.revision;
+        setUpdateSummary(result.summary);
+        setUpdateLoadState("ready");
+      }
+      if (result.status === "blocked") {
+        setNotice({ kind: "error", key: "system.updateDownloadBlocked" });
+      } else if (result.status === "busy") {
+        setNotice({ kind: "success", key: "system.updateActionBusy" });
+      } else if (result.status === "stale") {
+        setNotice({ kind: "error", key: "system.updateStale" });
+      } else if (result.status === "unavailable" || result.status === "failed") {
+        setNotice({ kind: "error", key: "system.updateDownloadFailed" });
+      }
+    } catch {
+      if (updateOperationRef.current?.requestId === requestId) {
+        setNotice({ kind: "error", key: "system.updateDownloadFailed" });
+      }
+    } finally {
+      if (updateOperationRef.current?.requestId === requestId) {
+        updateOperationRef.current = null;
+        setUpdateBusy(null);
+      }
+    }
+  };
+  const applyUpdate = async (): Promise<void> => {
+    const snapshot = updateSummary;
+    if (updateOperationRef.current || snapshot?.capability !== "packaged_ready" || snapshot.phase !== "ready_to_restart") return;
+    const requestId = `updateapplyreq_${crypto.randomUUID().replaceAll("-", "")}`;
+    const version = snapshot.availableVersion;
+    updateOperationRef.current = { kind: "apply", requestId };
+    setUpdateBusy("apply");
+    setNotice(null);
+    try {
+      const result = await window.pige.updates.apply({
+        apiVersion: 1,
+        requestId,
+        expectedRevision: snapshot.revision,
+        version
+      });
+      if (
+        updateOperationRef.current?.requestId !== requestId ||
+        result.requestId !== requestId ||
+        result.version !== version
+      ) return;
+      if (result.summary.revision >= updateSummaryRevisionRef.current) {
+        updateSummaryRevisionRef.current = result.summary.revision;
+        setUpdateSummary(result.summary);
+        setUpdateLoadState("ready");
+      }
+      if (result.status === "blocked") {
+        setNotice({ kind: "error", key: "system.updateApplyBlocked" });
+      } else if (result.status === "busy") {
+        setNotice({ kind: "success", key: "system.updateActionBusy" });
+      } else if (result.status === "stale") {
+        setNotice({ kind: "error", key: "system.updateStale" });
+      } else if (result.status === "unavailable" || result.status === "failed") {
+        setNotice({ kind: "error", key: "system.updateApplyFailed" });
+      }
+    } catch {
+      if (updateOperationRef.current?.requestId === requestId) {
+        setNotice({ kind: "error", key: "system.updateApplyFailed" });
+      }
+    } finally {
+      if (updateOperationRef.current?.requestId === requestId) {
+        updateOperationRef.current = null;
+        setUpdateBusy(null);
+      }
     }
   };
   const supportPreviewProjection = props.supportBundlePreview
@@ -7623,7 +7725,7 @@ export function SystemSettingsPanel(props: {
       {props.surface === "updates" ? (
       <section className="settings-section" aria-labelledby="system-update-title">
         <h2 className="settings-section-title" id="system-update-title">{props.t("system.updateSection")}</h2>
-        <div className="settings-card settings-update-summary" aria-live="polite" aria-busy={updateLoadState === "loading" || updateSummary?.phase === "checking"}>
+        <div className="settings-card settings-update-summary" aria-live="polite" aria-busy={updateLoadState === "loading" || updateSummary?.phase === "checking" || updateSummary?.phase === "downloading" || updateSummary?.phase === "applying"}>
           <div className="settings-row tall">
             <div className="settings-row-copy">
               <strong>{props.t("system.currentVersion")}</strong>
@@ -7657,10 +7759,10 @@ export function SystemSettingsPanel(props: {
             <button
               className="settings-button"
               type="button"
-              disabled={updateLoadState !== "ready" || updateSummary?.capability !== "packaged_ready" || updateBusy || updateSummary?.phase === "checking"}
+              disabled={updateLoadState !== "ready" || updateSummary?.capability !== "packaged_ready" || updateBusy !== null || updateSummary?.phase === "checking" || updateSummary?.phase === "downloading" || updateSummary?.phase === "ready_to_restart" || updateSummary?.phase === "applying"}
               onClick={() => void checkForUpdates()}
             >
-              {props.t(updateBusy || updateSummary?.phase === "checking" ? "system.checkingUpdates" : "system.checkUpdates")}
+              {props.t(updateBusy === "check" || updateSummary?.phase === "checking" ? "system.checkingUpdates" : "system.checkUpdates")}
             </button>
           </div>
           {updateSummary?.phase === "available" ? (
@@ -7669,8 +7771,35 @@ export function SystemSettingsPanel(props: {
                 <strong>{props.t("system.updateAvailable")}</strong>
                 <span>{updateSummary.availableVersion}</span>
               </div>
-              <button className="settings-button" type="button" disabled title={props.t("system.updateDownloadUnavailable")}>
-                {props.t("system.downloadUpdate")}
+              <button className="settings-button" type="button" disabled={updateBusy !== null} onClick={() => void downloadUpdate()}>
+                {props.t(updateBusy === "download" ? "system.downloadingUpdate" : "system.downloadUpdate")}
+              </button>
+            </div>
+          ) : null}
+          {updateSummary?.phase === "downloading" ? (
+            <div className="settings-row">
+              <div className="settings-row-copy">
+                <strong>{props.t("system.updateDownloading")}</strong>
+                <span>{updateSummary.availableVersion} · {Math.round(updateSummary.progressPercent)}%</span>
+              </div>
+              <button className="settings-button" type="button" disabled>
+                {props.t("system.downloadingUpdate")}
+              </button>
+            </div>
+          ) : null}
+          {updateSummary?.phase === "ready_to_restart" || updateSummary?.phase === "applying" ? (
+            <div className="settings-row">
+              <div className="settings-row-copy">
+                <strong>{props.t(updateSummary.phase === "applying" ? "system.updateApplying" : "system.updateReadyToRestart")}</strong>
+                <span>{updateSummary.availableVersion}</span>
+              </div>
+              <button
+                className="settings-button"
+                type="button"
+                disabled={updateBusy !== null || updateSummary.phase === "applying"}
+                onClick={() => void applyUpdate()}
+              >
+                {props.t(updateBusy === "apply" || updateSummary.phase === "applying" ? "system.restartingToUpdate" : "system.restartAndUpdate")}
               </button>
             </div>
           ) : null}
