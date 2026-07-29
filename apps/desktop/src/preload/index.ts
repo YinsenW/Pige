@@ -18,6 +18,8 @@ import type {
   AppHealth,
   BackupManifestSummary,
   BackupCreateResult,
+  BackupContinueIncompleteRequest,
+  BackupContinueIncompleteResult,
   BackupReconnectDependencyRequest,
   BackupReconnectDependencyResult,
   AppearanceSettingsSummary,
@@ -233,6 +235,9 @@ import {
   CurrentNoteAppendProposalGetResultSchema,
   AppearanceSettingsSummarySchema,
   AppearanceThemeMutationResultSchema,
+  BACKUP_CONTINUE_INCOMPLETE_CHANNEL,
+  BackupContinueIncompleteRequestSchema,
+  BackupContinueIncompleteResultSchema,
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
   JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
@@ -1658,6 +1663,23 @@ const api: PigeDesktopApi = {
       return BackupReconnectDependencyResultSchema.parse(
         await ipcRenderer.invoke("backup.reconnectDependency", parsedRequest)
       );
+    },
+    continueIncomplete: async (
+      request: BackupContinueIncompleteRequest
+    ): Promise<BackupContinueIncompleteResult> => {
+      const parsedRequest = BackupContinueIncompleteRequestSchema.parse(request);
+      const result = BackupContinueIncompleteResultSchema.parse(
+        await ipcRenderer.invoke(BACKUP_CONTINUE_INCOMPLETE_CHANNEL, parsedRequest)
+      );
+      if (
+        result.requestId !== parsedRequest.requestId ||
+        result.activeVaultId !== parsedRequest.activeVaultId ||
+        result.waitingJobId !== parsedRequest.waitingJobId ||
+        result.expectedJobUpdatedAt !== parsedRequest.expectedJobUpdatedAt
+      ) {
+        throw new Error("Invalid incomplete Backup response identity.");
+      }
+      return result;
     },
     previewRestore: async (): Promise<RestorePreviewResult> => {
       const result = await ipcRenderer.invoke("restore.preview") as RestorePreviewResult;
