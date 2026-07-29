@@ -565,6 +565,7 @@ describe("full UI Library", () => {
     const revealSource = requireElement(container.querySelector<HTMLButtonElement>(
       `[data-reader-source-reveal="${note.summary.sourceIds[0]}"]`
     ));
+    revealSource.focus();
     await act(async () => {
       revealSource.click();
       await settle(dom);
