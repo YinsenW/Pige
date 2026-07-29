@@ -6,7 +6,6 @@ import { hasObjectErrorCode as isErrno } from "./object-error-code";
 import {
   BackupIdSchema,
   JobIdSchema,
-  JobRecordSchema,
   OperationRecordSchema,
   type JobCheckpoint,
   type JobRecord,
@@ -15,11 +14,9 @@ import {
 } from "@pige/schemas";
 import {
   captureBackupDestinationFence,
-  canonicalizeBackupDestinationPath,
   BackupManagedCopyDependencyError,
   type BackupCreateCheckpointEvent,
   type BackupCreateOptions,
-  type BackupDestinationFence,
   type RestoreCorePreviewResult
 } from "./backup-service";
 import {
@@ -28,6 +25,8 @@ import {
   omittedExternalManagedCopyRootIds,
   prepareIncompleteBackupJob,
   prepareIncompleteBackupRecovery,
+  createQueuedBackupJob,
+  readBackupBinding,
   prepareBackupForDurableCompletion,
   prepareReconnectedJob,
   proveWaitingDependency,
@@ -37,6 +36,7 @@ import {
   type BackupReconnectCandidateResult,
   type BackupIncompleteCandidate,
   type BackupIncompleteCandidateResult,
+  type BackupBinding,
   type BackupJobRequest,
   type BackupRecoveryResult,
   type BackupRetryResult,
@@ -95,16 +95,6 @@ export type {
   BackupRecoveryResult,
   BackupRetryResult
 } from "./backup-reconnect-coordinator";
-
-interface BackupBinding {
-  readonly jobId: string;
-  readonly backupId: string;
-  readonly createdAt: string;
-  readonly vaultId: string;
-  readonly vaultPath: string;
-  readonly destinationPath: string;
-  readonly destinationFence: BackupDestinationFence;
-}
 
 const MAX_RECOVERABLE_JOBS = 10_000;
 const RECOVERABLE_STATES = new Set<JobRecord["state"]>([
@@ -240,7 +230,7 @@ export class BackupCoordinatorService {
     const store = this.#store(binding.vaultPath);
     const snapshot = store.createIfAbsent(
       jobFilePath(binding.vaultPath, binding.jobId),
-      createQueuedBackupJob(binding)
+      createQueuedBackupJob(binding, BACKUP_CHECKPOINT_IDS)
     );
     return (await this.#run(store, snapshot, binding)).job;
   }
@@ -570,81 +560,6 @@ export class BackupCoordinatorService {
       assertWriterLease: () => this.#vault.assertWriterLease(vaultPath)
     });
   }
-}
-
-function createQueuedBackupJob(binding: BackupBinding): JobRecord {
-  const destinationRef: JobRef = {
-    kind: "external_uri",
-    path: binding.destinationPath,
-    role: "backup_destination"
-  };
-  const backupIdentityRef: JobRef = {
-    kind: "backup",
-    id: binding.backupId,
-    role: "backup_identity"
-  };
-  const checkpoints: JobCheckpoint[] = BACKUP_CHECKPOINT_IDS.map((id) => ({
-    id,
-    step: id,
-    state: "not_started",
-    inputRefs: id === "preflight" ? [destinationRef, backupIdentityRef] : [],
-    outputRefs: []
-  }));
-  return JobRecordSchema.parse({
-    schemaVersion: 1,
-    id: binding.jobId,
-    class: "backup",
-    state: "queued",
-    stage: "backing_up",
-    priority: "interactive",
-    scope: "vault",
-    createdAt: binding.createdAt,
-    updatedAt: binding.createdAt,
-    activeVaultId: binding.vaultId,
-    actor: {
-      kind: "user",
-      runtimeKind: "desktop_local",
-      clientCapabilityTier: "desktop_full"
-    },
-    inputRefs: [destinationRef, backupIdentityRef],
-    outputRefs: [],
-    operationIds: [],
-    checkpoints,
-    progress: { completedUnits: 0, totalUnits: BACKUP_CHECKPOINT_IDS.length, unit: "checkpoint" },
-    retry: { retryCount: 0, maxAutomaticRetries: 0, requiresUserAction: false },
-    cancellation: { durableWritesApplied: false },
-    privacy: {
-      usedCloudModel: false,
-      usedNetwork: false,
-      usedShell: false,
-      accessedExternalFiles: true,
-    },
-    message: "Backup is queued."
-  });
-}
-
-function readBackupBinding(job: JobRecord, vaultPath: string): BackupBinding {
-  const destination = job.inputRefs?.find((ref) => ref.role === "backup_destination")?.path;
-  const backupId = job.inputRefs?.find((ref) => ref.role === "backup_identity")?.id;
-  if (
-    job.class !== "backup" ||
-    job.scope !== "vault" ||
-    !job.activeVaultId ||
-    !destination ||
-    !backupId ||
-    !isCanonicalBackupDestination(destination)
-  ) {
-    throw new PigeDomainError("backup.job_conflict", "The Backup Job binding is invalid.");
-  }
-  return {
-    jobId: JobIdSchema.parse(job.id),
-    backupId: BackupIdSchema.parse(backupId),
-    createdAt: job.createdAt,
-    vaultId: job.activeVaultId,
-    vaultPath: path.resolve(vaultPath),
-    destinationPath: path.resolve(destination),
-    destinationFence: captureBackupDestinationFence(destination)
-  };
 }
 
 function recordCheckpoint(
@@ -987,16 +902,6 @@ function jobFilePath(vaultPath: string, jobId: string): string {
   const match = /^job_(\d{4})(\d{2})\d{2}_/u.exec(parsed);
   if (!match) throw new PigeDomainError("backup.job_conflict", "The Backup Job identity is invalid.");
   return path.join(vaultPath, ".pige", "jobs", match[1]!, match[2]!, `${parsed}.json`);
-}
-
-function isCanonicalBackupDestination(destinationPath: string): boolean {
-  const resolved = path.resolve(destinationPath);
-  if (resolved !== destinationPath || !resolved.endsWith(".pige-backup.zip")) return false;
-  try {
-    return canonicalizeBackupDestinationPath(resolved) === resolved;
-  } catch {
-    return false;
-  }
 }
 
 function checkpointChecksum(event: BackupCreateCheckpointEvent): string | undefined {

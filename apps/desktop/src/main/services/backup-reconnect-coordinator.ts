@@ -1,14 +1,27 @@
 import { createHash } from "node:crypto";
+import path from "node:path";
 import type { BackupCreateResult } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import type { JobRecord } from "@pige/schemas";
+import {
+  BackupIdSchema,
+  JobIdSchema,
+  JobRecordSchema,
+  type JobCheckpoint,
+  type JobRecord,
+  type JobRef
+} from "@pige/schemas";
 import type {
   BackupManagedCopyDependencyIdentity,
   BackupManagedCopyRepairProof
 } from "./backup-managed-copy-binding";
 import type {
   BackupCreateOptions,
+  BackupDestinationFence,
   RestoreCorePreviewResult
+} from "./backup-service";
+import {
+  captureBackupDestinationFence,
+  canonicalizeBackupDestinationPath
 } from "./backup-service";
 import { JobExecutionCoordinator } from "./job-execution-coordinator";
 import { JobRecordStore, type JobRecordSnapshot } from "./job-record-store";
@@ -24,6 +37,16 @@ export interface BackupIncompleteCandidate {
   readonly vaultId: string;
   readonly jobUpdatedAt: string;
   readonly rootId: string;
+}
+
+export interface BackupBinding {
+  readonly jobId: string;
+  readonly backupId: string;
+  readonly createdAt: string;
+  readonly vaultId: string;
+  readonly vaultPath: string;
+  readonly destinationPath: string;
+  readonly destinationFence: BackupDestinationFence;
 }
 
 export type BackupIncompleteCandidateResult =
@@ -263,6 +286,69 @@ export function startBackupJob(
   throw new PigeDomainError("backup.job_conflict", "The Backup Job cannot start from its durable state.");
 }
 
+export function createQueuedBackupJob(
+  binding: BackupBinding,
+  checkpointIds: readonly string[]
+): JobRecord {
+  const destinationRef: JobRef = {
+    kind: "external_uri",
+    path: binding.destinationPath,
+    role: "backup_destination"
+  };
+  const backupIdentityRef: JobRef = {
+    kind: "backup",
+    id: binding.backupId,
+    role: "backup_identity"
+  };
+  const checkpoints: JobCheckpoint[] = checkpointIds.map((id) => ({
+    id,
+    step: id,
+    state: "not_started",
+    inputRefs: id === "preflight" ? [destinationRef, backupIdentityRef] : [],
+    outputRefs: []
+  }));
+  return JobRecordSchema.parse({
+    schemaVersion: 1,
+    id: binding.jobId,
+    class: "backup",
+    state: "queued",
+    stage: "backing_up",
+    priority: "interactive",
+    scope: "vault",
+    createdAt: binding.createdAt,
+    updatedAt: binding.createdAt,
+    activeVaultId: binding.vaultId,
+    actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+    inputRefs: [destinationRef, backupIdentityRef],
+    outputRefs: [],
+    operationIds: [],
+    checkpoints,
+    progress: { completedUnits: 0, totalUnits: checkpointIds.length, unit: "checkpoint" },
+    retry: { retryCount: 0, maxAutomaticRetries: 0, requiresUserAction: false },
+    cancellation: { durableWritesApplied: false },
+    privacy: { usedCloudModel: false, usedNetwork: false, usedShell: false, accessedExternalFiles: true },
+    message: "Backup is queued."
+  });
+}
+
+export function readBackupBinding(job: JobRecord, vaultPath: string): BackupBinding {
+  const destination = job.inputRefs?.find((ref) => ref.role === "backup_destination")?.path;
+  const backupId = job.inputRefs?.find((ref) => ref.role === "backup_identity")?.id;
+  if (
+    job.class !== "backup" || job.scope !== "vault" || !job.activeVaultId ||
+    !destination || !backupId || !isCanonicalBackupDestination(destination)
+  ) throw new PigeDomainError("backup.job_conflict", "The Backup Job binding is invalid.");
+  return {
+    jobId: JobIdSchema.parse(job.id),
+    backupId: BackupIdSchema.parse(backupId),
+    createdAt: job.createdAt,
+    vaultId: job.activeVaultId,
+    vaultPath: path.resolve(vaultPath),
+    destinationPath: path.resolve(destination),
+    destinationFence: captureBackupDestinationFence(destination)
+  };
+}
+
 export function prepareBackupForDurableCompletion(
   store: JobRecordStore,
   snapshot: JobRecordSnapshot,
@@ -318,6 +404,16 @@ function mergeOmissionWarning(job: JobRecord) {
     messageKey: "errors.backup.external_managed_copy_omitted"
   };
   return [...(job.warnings ?? []).filter((candidate) => candidate.code !== warning.code), warning];
+}
+
+function isCanonicalBackupDestination(destinationPath: string): boolean {
+  const resolved = path.resolve(destinationPath);
+  if (resolved !== destinationPath || !resolved.endsWith(".pige-backup.zip")) return false;
+  try {
+    return canonicalizeBackupDestinationPath(resolved) === resolved;
+  } catch {
+    return false;
+  }
 }
 
 function managedCopyDependency(
