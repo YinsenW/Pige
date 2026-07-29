@@ -158,6 +158,11 @@ import type {
   PigeErrorSummary,
   ProposalState,
   ProposalTrustLevel,
+  ProposalReviewRequest,
+  ProposalReviewResult,
+  ProposalReviewDecisionRequest,
+  ProposalReviewDecisionResult,
+  ProposalReviewPreview,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
   ReaderSelectionLinkRequest,
@@ -386,6 +391,11 @@ export type {
   ReaderSelectionProposalGetRequest,
   ReaderSelectionProposalGetResult,
   ReaderSelectionProposalPreview,
+  ProposalReviewRequest,
+  ProposalReviewResult,
+  ProposalReviewDecisionRequest,
+  ProposalReviewDecisionResult,
+  ProposalReviewPreview,
   ReaderSelectionRequestId,
   ReaderSelectionResolveRequest,
   ReaderSelectionResolveResult,
@@ -1823,6 +1833,8 @@ export interface PigeDesktopApi {
     readonly get: (request: ProposalGetRequest) => Promise<ProposalGetResult>;
     readonly approve: (request: ProposalDecisionRequest) => Promise<ProposalDecisionResult>;
     readonly reject: (request: ProposalDecisionRequest) => Promise<ProposalDecisionResult>;
+    readonly review: (request: ProposalReviewRequest) => Promise<ProposalReviewResult>;
+    readonly decide: (request: ProposalReviewDecisionRequest) => Promise<ProposalReviewDecisionResult>;
   };
   readonly readerSelection: {
     readonly resolve: (
