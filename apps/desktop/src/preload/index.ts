@@ -36,6 +36,13 @@ import type {
   HighRiskConfirmationPendingResult,
   HighRiskConfirmationResolveRequest,
   HighRiskConfirmationResolveResult,
+  PermissionPolicyChangedEvent,
+  PermissionPolicySummaryRequest,
+  PermissionPolicySummaryResult,
+  PermissionRevokeGrantRequest,
+  PermissionRevokeGrantResult,
+  PermissionSetDefaultModeRequest,
+  PermissionSetDefaultModeResult,
   JobActionRequest,
   JobActionResult,
   JobsListRequest,
@@ -305,6 +312,17 @@ import {
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
   HighRiskConfirmationResolveResultSchema,
+  PERMISSIONS_CHANGED_CHANNEL,
+  PERMISSIONS_REVOKE_GRANT_CHANNEL,
+  PERMISSIONS_SET_DEFAULT_MODE_CHANNEL,
+  PERMISSIONS_SUMMARY_CHANNEL,
+  PermissionPolicyChangedEventSchema,
+  PermissionPolicySummaryRequestSchema,
+  PermissionPolicySummaryResultSchema,
+  PermissionRevokeGrantRequestSchema,
+  PermissionRevokeGrantResultSchema,
+  PermissionSetDefaultModeRequestSchema,
+  PermissionSetDefaultModeResultSchema,
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
   PiPackageCatalogQueryRequestSchema,
@@ -1091,6 +1109,37 @@ const api: PigeDesktopApi = {
       };
       ipcRenderer.on("confirmations.changed", handler);
       return () => ipcRenderer.removeListener("confirmations.changed", handler);
+    }
+  },
+  permissions: {
+    summary: async (
+      request: PermissionPolicySummaryRequest
+    ): Promise<PermissionPolicySummaryResult> =>
+      PermissionPolicySummaryResultSchema.parse(await ipcRenderer.invoke(
+        PERMISSIONS_SUMMARY_CHANNEL,
+        PermissionPolicySummaryRequestSchema.parse(request)
+      )),
+    setDefaultMode: async (
+      request: PermissionSetDefaultModeRequest
+    ): Promise<PermissionSetDefaultModeResult> =>
+      PermissionSetDefaultModeResultSchema.parse(await ipcRenderer.invoke(
+        PERMISSIONS_SET_DEFAULT_MODE_CHANNEL,
+        PermissionSetDefaultModeRequestSchema.parse(request)
+      )),
+    revokeGrant: async (
+      request: PermissionRevokeGrantRequest
+    ): Promise<PermissionRevokeGrantResult> =>
+      PermissionRevokeGrantResultSchema.parse(await ipcRenderer.invoke(
+        PERMISSIONS_REVOKE_GRANT_CHANNEL,
+        PermissionRevokeGrantRequestSchema.parse(request)
+      )),
+    onChanged: (listener: (event: PermissionPolicyChangedEvent) => void): (() => void) => {
+      const handler = (_event: IpcRendererEvent, value: unknown): void => {
+        const parsed = PermissionPolicyChangedEventSchema.safeParse(value);
+        if (parsed.success) listener(parsed.data);
+      };
+      ipcRenderer.on(PERMISSIONS_CHANGED_CHANNEL, handler);
+      return () => ipcRenderer.removeListener(PERMISSIONS_CHANGED_CHANNEL, handler);
     }
   },
   piPackages: {

@@ -67,6 +67,8 @@ import {
   ExternalWebSkillReadResultSchema,
   ExternalWebSkillRuntimeDeclarationSchema,
   FixtureManifestSchema,
+  HighRiskConfirmationPendingResultSchema,
+  HighRiskConfirmationResolveRequestSchema,
   HighRiskConfirmationSummarySchema,
   JobRecordSchema,
   KnowledgeActivityListResultSchema,
@@ -124,6 +126,12 @@ import {
   PaddleOcrTestRequestSchema,
   PaddleOcrTestResultSchema,
   PermissionDecisionRecordSchema,
+  PermissionPolicySummaryRequestSchema,
+  PermissionPolicySummaryResultSchema,
+  PermissionRevokeGrantRequestSchema,
+  PermissionRevokeGrantResultSchema,
+  PermissionSetDefaultModeRequestSchema,
+  PermissionSetDefaultModeResultSchema,
   SetOcrLanguagePreferenceRequestSchema,
   SetOcrLanguagePreferenceResultSchema,
   PiPackageInstallRequestSchema,
@@ -5020,5 +5028,107 @@ describe("schemas", () => {
       .toEqual({ ...identity, status: "failed" });
     expect(() => SkillRestoreResultSchema.parse({ ...identity, status: "failed", registry })).toThrow();
     expect(() => SkillRestoreRequestSchema.parse({ ...request, path: "/private/trash" })).toThrow();
+  });
+
+  it("freezes renderer-safe remembered permission grants without widening effect authority", () => {
+    const activeVaultId = "vault_20260729_permissions";
+    const confirmation = {
+      apiVersion: 1,
+      confirmationId: "confirm_20260729_abcdefghijklmnop",
+      effect: "arbitrary_shell",
+      presentation: {
+        action: "run_shell_command",
+        target: "local_system",
+        subject: { kind: "executable_name", value: "git" }
+      },
+      owner: { kind: "agent_turn", clientTurnId: "turn_20260729_abcdefghijkl" }
+    } as const;
+    const grantContextId = "grantctx_abcdefghijklmnop";
+    expect(HighRiskConfirmationPendingResultSchema.parse({
+      apiVersion: 1,
+      status: "pending",
+      revision: 4,
+      confirmation,
+      rememberScopedGrant: {
+        grantContextId,
+        scope: "resource_scope",
+        safeScopeLabel: "Current workspace actions",
+        expiresAt: "2026-08-28T00:00:00.000Z"
+      }
+    }).status).toBe("pending");
+    expect(HighRiskConfirmationResolveRequestSchema.parse({
+      apiVersion: 1,
+      confirmationId: confirmation.confirmationId,
+      expectedRevision: 4,
+      decision: "allow",
+      rememberScopedGrant: { decision: "allow_scoped", grantContextId }
+    }).rememberScopedGrant?.grantContextId).toBe(grantContextId);
+    expect(() => HighRiskConfirmationResolveRequestSchema.parse({
+      apiVersion: 1,
+      confirmationId: confirmation.confirmationId,
+      expectedRevision: 4,
+      decision: "deny",
+      rememberScopedGrant: { decision: "allow_scoped", grantContextId }
+    })).toThrow("denial");
+
+    const request = {
+      apiVersion: 1,
+      requestId: "permissionpolicyreq_abcdefghijklmnop",
+      activeVaultId
+    } as const;
+    const summary = {
+      apiVersion: 1,
+      activeVaultId,
+      revision: 9,
+      defaultMode: "remember_scoped_grants",
+      grants: [{
+        grantId: "grant_20260729_abcdefghijklmnop",
+        actorType: "local_tool",
+        actorLabel: "Pige command runner",
+        actorVersion: "1",
+        capability: "run_shell",
+        dataBoundary: "local",
+        scope: "resource_scope",
+        resourceScope: "current_vault",
+        resourceLabel: "Current workspace actions",
+        createdAt: "2026-07-29T00:00:00.000Z",
+        expiresAt: "2026-08-28T00:00:00.000Z",
+        canRevoke: true
+      }],
+      invalidGrantCount: 0
+    } as const;
+    expect(PermissionPolicySummaryRequestSchema.parse(request)).toEqual(request);
+    expect(PermissionPolicySummaryResultSchema.parse({ ...request, status: "ready", summary }).summary)
+      .toEqual(summary);
+    expect(() => PermissionPolicySummaryResultSchema.parse({
+      ...request,
+      status: "ready",
+      summary: { ...summary, path: "/private/permission-policy.json" }
+    })).toThrow();
+    expect(PermissionSetDefaultModeResultSchema.parse({
+      ...request,
+      status: "committed",
+      summary
+    }).status).toBe("committed");
+    expect(PermissionSetDefaultModeRequestSchema.parse({
+      ...request,
+      expectedRevision: 9,
+      mode: "ask_every_time"
+    }).mode).toBe("ask_every_time");
+    expect(PermissionRevokeGrantRequestSchema.parse({
+      ...request,
+      grantId: summary.grants[0].grantId,
+      expectedRevision: 9
+    }).grantId).toBe(summary.grants[0].grantId);
+    expect(PermissionRevokeGrantResultSchema.parse({
+      ...request,
+      status: "stale",
+      summary
+    }).status).toBe("stale");
+    expect(() => PermissionPolicySummaryResultSchema.parse({
+      ...request,
+      status: "failed",
+      summary
+    })).toThrow();
   });
 });
