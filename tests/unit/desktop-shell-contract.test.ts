@@ -155,6 +155,36 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("bridges machine-local OCR language preference with strict CAS and body-free failures", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const apiStart = preloadSource.indexOf("localCapabilities: {");
+    const localCapabilitiesApi = preloadSource.slice(
+      apiStart,
+      preloadSource.indexOf("retrieval: {", apiStart)
+    );
+
+    expect(contractsSource).toContain("readonly ocrLanguagePreference: (");
+    expect(contractsSource).toContain("request: OcrLanguagePreferenceRequest");
+    expect(contractsSource).toContain(") => Promise<OcrLanguagePreferenceResult>;");
+    expect(contractsSource).toContain("readonly setOcrLanguagePreference: (");
+    expect(contractsSource).toContain("request: SetOcrLanguagePreferenceRequest");
+    expect(contractsSource).toContain(") => Promise<SetOcrLanguagePreferenceResult>;");
+    expect(localCapabilitiesApi).toContain("OCR_LANGUAGE_PREFERENCE_CHANNEL");
+    expect(localCapabilitiesApi).toContain("SET_OCR_LANGUAGE_PREFERENCE_CHANNEL");
+    expect(localCapabilitiesApi).toContain("OcrLanguagePreferenceRequestSchema.parse(request)");
+    expect(localCapabilitiesApi).toContain("OcrLanguagePreferenceResultSchema.parse(");
+    expect(localCapabilitiesApi).toContain("SetOcrLanguagePreferenceRequestSchema.parse(request)");
+    expect(localCapabilitiesApi).toContain("SetOcrLanguagePreferenceResultSchema.parse(");
+    expect(schemasSource).toContain('"localCapabilities.ocrLanguagePreference" as const');
+    expect(schemasSource).toContain('"localCapabilities.setOcrLanguagePreference" as const');
+    expect(schemasSource).toContain('appliesTo: z.literal("new_ocr_jobs")');
+    for (const privateField of ["path", "body", "rawError", "adapterId", "modelFamily"]) {
+      expect(localCapabilitiesApi).not.toContain(privateField);
+    }
+  });
+
   it("bridges Pi package lifecycle and freezes the local curated catalog contract", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
