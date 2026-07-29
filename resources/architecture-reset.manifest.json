@@ -308,9 +308,10 @@
   },
   "validationTiers": {
     "inner": ["affected tests", "typecheck", "build when runtime or renderer output changes"],
-    "ordinaryPullRequest": ["affected tests", "typecheck", "build", "changed-owner contract gate"],
-    "highRiskOrArchitecture": ["full tests", "full governance and trace", "security/data adversarial checks", "real macOS Electron when user-visible"],
-    "mergeCandidateAndMain": ["full verify", "macOS package", "downloaded-distribution smoke"],
+    "ordinaryPullRequest": ["affected tests", "typecheck", "applicable build", "verify:change", "changed-owner contract/docs checks"],
+    "riskSpecific": ["risk-owned full tests/governance/adversarial checks only when required"],
+    "main": ["normal CI", "full verify"],
+    "releaseCandidate": ["full verify", "macOS package/install/sign/notary/update/backup-recovery"],
     "deferredPlatforms": ["Windows/Linux qualification only in explicit platform batches"]
   }
 }

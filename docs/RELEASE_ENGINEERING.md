@@ -366,12 +366,11 @@ recovery budgets with no hidden waiver; notices, current dependency registry, sm
 backup/restore across update, and the 25-source scenario on macOS. Windows retains the same
 trust and installed-distribution gates in the next platform phase and is not claimed here.
 
-### Early macOS-first qualification
+### macOS release-freeze qualification
 
-Every `main` push runs the full macOS package plus downloaded-distribution
-check; PR packaging follows the
-fail-closed impact classifier in `QUALITY_AND_TEST_STRATEGY.md`, independently of
-`full-gates` tests/governance. Windows/Linux packaging and qualification are batched later.
+Active-development PRs and `main` do not repeat packaging. Explicit release-freeze
+dispatch owns macOS package, downloaded-distribution, install, signing/notarization,
+update and backup/restore evidence. Windows/Linux qualification is batched later.
 Portable contracts and platform adapters remain required, and no Windows/Linux support
 claim is made until that explicit qualification succeeds.
 No critical security issue may remain; current security/private-reporting, privacy,

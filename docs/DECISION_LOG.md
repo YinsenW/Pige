@@ -3109,10 +3109,10 @@ context without Host content classification or rewriting. Per-tool Permission li
 saved grants/YOLO, model-egress policy/approval/audit state, and waiting approval Job
 states are deleted rather than extended.
 
-Governance and validation are risk-tiered. Ordinary development uses affected tests,
-typecheck, and build; full trace/independent review/package belongs to architecture,
-security, durable-data, migration, release, merge-candidate, and main nodes. macOS is the
-foreground early platform; other platforms are explicitly qualified later.
+Governance and validation are risk-tiered. Active-development PRs use affected tests,
+typecheck, applicable build, `verify:change` and changed-owner checks, expanding only for
+the specific risk. Full macOS package/install/sign/update/backup-recovery belongs to the
+release freeze; other platforms are explicitly qualified later.
 
 Rationale:
 
