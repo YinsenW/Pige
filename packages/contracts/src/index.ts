@@ -84,6 +84,9 @@ import type {
   KnowledgeHealthRepairRequest,
   KnowledgeHealthRepairResult,
   Locale,
+  ManagedCopyRootConfigureRequest,
+  ManagedCopyRootConfigureResult,
+  ManagedCopyRootSummary,
   LocalSemanticRetrievalDisableRequest,
   LocalSemanticRetrievalDisableResult,
   LocalSemanticRetrievalEnableRequest,
@@ -361,6 +364,9 @@ export type {
   KnowledgeHealthRepairRequestId,
   KnowledgeHealthRepairRequest,
   KnowledgeHealthRepairResult,
+  ManagedCopyRootConfigureRequest,
+  ManagedCopyRootConfigureResult,
+  ManagedCopyRootSummary,
   RendererSafeSubjectLabel,
   SetLocaleRequest,
   SetThemeRequest,
@@ -540,6 +546,7 @@ export interface VaultSummary {
   readonly knowledgeRootDisplay: string;
   readonly sourceAssetRootDisplay: string;
   readonly sourceAssetRootKind: SourceAssetRootKind;
+  readonly managedCopyRoot: ManagedCopyRootSummary;
   readonly defaultSourceStorageStrategy: SourceStorageStrategy;
   readonly schemaVersion: number;
   readonly counts?: VaultCounts;
@@ -1937,6 +1944,9 @@ export interface PigeDesktopApi {
     readonly revealKnowledgeRoot: () => Promise<VaultRevealResult>;
     readonly revealSourceAssetRoot: () => Promise<VaultRevealResult>;
     readonly updateSourceStoragePolicy: (request: UpdateSourceStoragePolicyRequest) => Promise<VaultSummary>;
+    readonly configureManagedCopyRoot: (
+      request: ManagedCopyRootConfigureRequest
+    ) => Promise<ManagedCopyRootConfigureResult>;
     readonly removeRecent: (vaultId: string) => Promise<readonly RecentVaultSummary[]>;
   };
   readonly maintenance: {
