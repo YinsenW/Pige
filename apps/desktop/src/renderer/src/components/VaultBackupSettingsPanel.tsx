@@ -426,6 +426,92 @@ export function BackupContinueIncompleteAction(props: {
   </div>;
 }
 
+export type ManagedCopyRootSelectionOutcome = "selected" | "cancelled" | "stale" | "not_found" | "ineligible" | "failed";
+
+export function ManagedCopyRootSelectionAction(props: {
+  readonly identityKey: string;
+  readonly eligible: boolean;
+  readonly disabled?: boolean;
+  readonly labels: {
+    readonly action: string;
+    readonly pending: string;
+    readonly selected: string;
+    readonly stale: string;
+    readonly failed: string;
+  };
+  readonly onSelect: () => Promise<ManagedCopyRootSelectionOutcome>;
+  readonly onSelected: () => Promise<void>;
+  readonly onPendingChange?: (pending: boolean) => void;
+  readonly returnFocusRef: RefObject<HTMLElement | null>;
+}): React.JSX.Element | null {
+  const [pending, setPending] = useState(false);
+  const [notice, setNotice] = useState<{ readonly kind: "status" | "error"; readonly text: string } | null>(null);
+  const requestSequenceRef = useRef(0);
+  const requestActiveRef = useRef(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const previousEligibleRef = useRef(props.eligible);
+  const previousIdentityRef = useRef(props.identityKey);
+
+  const restoreFocus = (): void => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() =>
+      (triggerRef.current ?? props.returnFocusRef.current)?.focus()));
+  };
+
+  useEffect(() => {
+    const lostEligibility = previousEligibleRef.current && !props.eligible;
+    const identityChanged = previousIdentityRef.current !== props.identityKey;
+    const wasActive = requestActiveRef.current;
+    previousEligibleRef.current = props.eligible;
+    previousIdentityRef.current = props.identityKey;
+    requestSequenceRef.current += 1;
+    requestActiveRef.current = false;
+    setPending(false);
+    props.onPendingChange?.(false);
+    setNotice(null);
+    if (lostEligibility || (identityChanged && wasActive)) restoreFocus();
+  }, [props.eligible, props.identityKey]);
+
+  const selectRoot = async (): Promise<void> => {
+    if (!props.eligible || props.disabled || requestActiveRef.current) return;
+    requestActiveRef.current = true;
+    const sequence = ++requestSequenceRef.current;
+    const identityKey = props.identityKey;
+    setPending(true);
+    props.onPendingChange?.(true);
+    setNotice(null);
+    try {
+      const outcome = await props.onSelect();
+      if (sequence !== requestSequenceRef.current || identityKey !== props.identityKey) return;
+      if (outcome === "selected") {
+        setNotice({ kind: "status", text: props.labels.selected });
+        await props.onSelected().catch(() => undefined);
+      } else if (outcome === "cancelled") setNotice(null);
+      else if (outcome === "stale" || outcome === "not_found" || outcome === "ineligible") {
+        setNotice({ kind: "error", text: props.labels.stale });
+      } else setNotice({ kind: "error", text: props.labels.failed });
+    } catch {
+      if (sequence === requestSequenceRef.current && identityKey === props.identityKey) {
+        setNotice({ kind: "error", text: props.labels.failed });
+      }
+    } finally {
+      if (sequence === requestSequenceRef.current && identityKey === props.identityKey) {
+        requestActiveRef.current = false;
+        setPending(false);
+        props.onPendingChange?.(false);
+        restoreFocus();
+      }
+    }
+  };
+
+  if (!props.eligible) return null;
+  return <div className="settings-row-control">
+    <button ref={triggerRef} className="settings-button" type="button" disabled={props.disabled || pending}
+      aria-busy={pending || undefined} onClick={() => void selectRoot()}>{pending ? props.labels.pending : props.labels.action}</button>
+    {notice ? <span className={notice.kind === "error" ? "error" : "settings-status"}
+      role={notice.kind === "error" ? "alert" : "status"} aria-live="polite">{notice.text}</span> : null}
+  </div>;
+}
+
 export interface VaultBackupSettingsPanelProps {
   readonly locale: Locale;
   readonly busy: boolean;
@@ -576,6 +662,21 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
     return result.status;
   };
 
+  const configureManagedCopyRoot = async (): Promise<ManagedCopyRootSelectionOutcome> => {
+    const managedCopyRoot = props.vault.managedCopyRoot;
+    if (managedCopyRoot.canConfigure !== true) return "ineligible";
+    const request = {
+      apiVersion: 1 as const,
+      requestId: `rootconfigreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+      activeVaultId: props.vault.vaultId,
+      expectedSourceStorageRevision: managedCopyRoot.sourceStorageRevision
+    };
+    const result = await window.pige.vault.configureManagedCopyRoot(request);
+    if (result.requestId !== request.requestId || result.activeVaultId !== request.activeVaultId
+      || result.expectedSourceStorageRevision !== request.expectedSourceStorageRevision) return "stale";
+    return result.status === "configured" ? "selected" : result.status;
+  };
+
   const updatePolicy = async (defaultStrategy: SourceStorageStrategy): Promise<void> => {
     props.onError(null);
     try {
@@ -626,7 +727,21 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
       <div className="settings-card" aria-busy={revealTarget ? "true" : undefined}>
         <div className="settings-row tall"><div className="settings-row-copy"><strong>{props.vault.name}</strong><span>{props.vault.activeVaultPathDisplay}</span></div><span className="settings-status">{props.t("vaultSettings.connected")}</span></div>
         <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("field.noteStorage")}</strong><span>{props.vault.knowledgeRootDisplay}</span></div><button ref={knowledgeRootButtonRef} className="settings-button settings-action" type="button" disabled={props.busy || Boolean(revealTarget)} onClick={() => void revealStorageRoot("knowledge_root")}>{props.t("vaultSettings.openInFinder")}</button></div>
-        <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("field.sourceAssets")}</strong><span>{props.vault.sourceAssetRootKind === "external_binding" ? props.t("vaultSettings.externalRootUnavailable") : props.vault.sourceAssetRootDisplay}</span></div><button ref={sourceAssetRootButtonRef} className="settings-button settings-action" type="button" disabled={props.busy || Boolean(revealTarget)} onClick={() => void revealStorageRoot("source_asset_root")}>{props.t("vaultSettings.openSourceAssets")}</button></div>
+        <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("field.sourceAssets")}</strong><span>{props.vault.sourceAssetRootDisplay}</span><span>{props.t(props.vault.managedCopyRoot.mode === "external_binding" ? "vaultSettings.managedCopyRoot.external" : "vaultSettings.managedCopyRoot.insideVault")} · {props.t(`vaultSettings.managedCopyRoot.${props.vault.managedCopyRoot.availability}`)}</span><span>{props.t("vaultSettings.managedCopyRoot.futureOnly")}</span></div><div className="settings-row-control"><button ref={sourceAssetRootButtonRef} className="settings-button settings-action" type="button" disabled={props.busy || Boolean(revealTarget)} onClick={() => void revealStorageRoot("source_asset_root")}>{props.t("vaultSettings.openSourceAssets")}</button><ManagedCopyRootSelectionAction
+          identityKey={`${props.vault.vaultId}:${props.vault.managedCopyRoot.sourceStorageRevision}`}
+          eligible={props.vault.managedCopyRoot.canConfigure === true}
+          disabled={props.busy || Boolean(revealTarget)}
+          labels={{
+            action: props.t(props.vault.managedCopyRoot.mode === "external_binding" ? "vaultSettings.managedCopyRoot.change" : "vaultSettings.managedCopyRoot.choose"),
+            pending: props.t("vaultSettings.managedCopyRoot.choosing"),
+            selected: props.t("vaultSettings.managedCopyRoot.configured"),
+            stale: props.t("vaultSettings.managedCopyRoot.stale"),
+            failed: props.t("vaultSettings.managedCopyRoot.failed")
+          }}
+          onSelect={configureManagedCopyRoot}
+          onSelected={props.onRefresh}
+          returnFocusRef={sourceAssetRootButtonRef}
+        /></div></div>
         <label className="settings-row" htmlFor="vault-source-storage-strategy"><span className="settings-row-copy"><strong>{props.t("sourceStorage.title")}</strong><span>{props.t("sourceStorage.description")}</span></span><select className="settings-select" id="vault-source-storage-strategy" value={props.vault.defaultSourceStorageStrategy} disabled={props.busy || Boolean(revealTarget)} onChange={(event) => void updatePolicy(event.target.value as SourceStorageStrategy)}><option value="copy_to_source_library">{props.t("sourceStorage.copy")}</option><option value="reference_original">{props.t("sourceStorage.reference")}</option></select></label>
       </div>
       <div className="settings-inline-actions"><button type="button" className="settings-button" onClick={props.onOpen} disabled={props.busy || Boolean(revealTarget)}>{props.t("vaultSettings.openAnother")}</button><button type="button" className="settings-button" onClick={props.onCreate} disabled={props.busy || Boolean(revealTarget)}>{props.t("vaultSettings.createNew")}</button></div>
