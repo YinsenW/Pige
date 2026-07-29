@@ -2178,6 +2178,7 @@ registerManagedCollectionIpc({
   appendDefaultCollectionRow: (request) => getManagedCollectionService().appendDefaultRow(request),
   addNullableCollectionColumn: (request) => getManagedCollectionService().addNullableColumn(request),
   addFormulaCollectionColumn: (request) => getManagedCollectionService().addFormulaColumn(request),
+  updateFormulaCollectionColumn: (request) => getManagedCollectionService().updateFormulaColumn(request),
   renameCollectionColumn: (request) => getManagedCollectionService().renameColumn(request),
   createCollectionView: (request) => getManagedCollectionViewService().createView(request),
   trashCollectionColumn: (request) => getManagedCollectionService().trashColumn(request),

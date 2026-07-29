@@ -196,7 +196,7 @@ export class KnowledgeActivityService {
     return vaultPath;
   }
 }
-function isCollectionActivityOperation(operation: OperationRecord): boolean { return ["update_collection_cell", "add_collection_row", "add_collection_column", "rename_collection_column", "create_collection_view", "trash_collection_column", "trash_collection_row"].includes(operation.kind); }
+function isCollectionActivityOperation(operation: OperationRecord): boolean { return ["update_collection_cell", "add_collection_row", "add_collection_column", "update_collection_formula", "rename_collection_column", "create_collection_view", "trash_collection_column", "trash_collection_row"].includes(operation.kind); }
 function toActivitySummary(
   vaultPath: string,
   operation: OperationRecord,

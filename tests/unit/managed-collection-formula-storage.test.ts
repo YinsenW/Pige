@@ -79,6 +79,32 @@ describe("managed collection formula storage", () => {
       .toMatch(/^column_[a-f0-9]{20}$/u);
   });
 
+  it("projects edit authority only for builder-lossless formula expressions", () => {
+    const operand = {
+      id: "column_operand1234567", name: "Count", ordinal: 0, sourceType: "integer", sourceTypes: ["integer"],
+      logicalType: "integer" as const, nullable: true, stats: { missing: 0, empty: 0, null: 0, value: 1 }
+    };
+    const simple = {
+      id: "column_simple12345678", name: "Simple", ordinal: 1, sourceType: "pige_numeric_formula_v1",
+      sourceTypes: ["pige_numeric_formula_v1"], logicalType: "number" as const, nullable: true,
+      calculation: { kind: "pige_numeric_formula" as const, schemaVersion: 1 as const,
+        expression: { kind: "binary" as const, operator: "multiply" as const,
+          left: { kind: "column" as const, columnId: operand.id }, right: { kind: "literal" as const, value: 2 } } },
+      stats: { missing: 0, empty: 0, null: 0, value: 1 }
+    };
+    const nested = {
+      ...simple, id: "column_nested12345678", name: "Nested", ordinal: 2,
+      calculation: { ...simple.calculation, expression: { kind: "binary" as const, operator: "add" as const,
+        left: { kind: "binary" as const, operator: "multiply" as const,
+          left: { kind: "column" as const, columnId: operand.id }, right: { kind: "literal" as const, value: 2 } },
+        right: { kind: "literal" as const, value: 1 } } }
+    };
+    expect(projectCollectionFormulaColumns([operand, simple, nested])).toEqual(expect.arrayContaining([
+      expect.objectContaining({ columnId: simple.id, canEditFormula: true }),
+      expect.objectContaining({ columnId: nested.id, canEditFormula: false })
+    ]));
+  });
+
   it("adds and adopts one immutable formula revision with computed payload and schema truth", async () => {
     const fixture = await makeCollectionFixture();
     const binding = required(readBundle(fixture.vaultPath, fixture.datasetId));

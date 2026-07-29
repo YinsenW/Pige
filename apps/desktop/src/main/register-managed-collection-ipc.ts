@@ -1,8 +1,11 @@
 import type { IpcMain, WebContents } from "electron";
 import {
   COLLECTION_ADD_FORMULA_COLUMN_CHANNEL,
+  COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
   CollectionAddFormulaColumnResultSchema,
+  CollectionUpdateFormulaColumnRequestSchema,
+  CollectionUpdateFormulaColumnResultSchema,
   CollectionAddNullableColumnRequestSchema,
   CollectionAddNullableColumnResultSchema,
   CollectionAppendDefaultRowRequestSchema,
@@ -27,6 +30,8 @@ import {
   type CollectionAddNullableColumnResult,
   type CollectionAddFormulaColumnRequest,
   type CollectionAddFormulaColumnResult,
+  type CollectionUpdateFormulaColumnRequest,
+  type CollectionUpdateFormulaColumnResult,
   type CollectionCellEditRequest,
   type CollectionCellEditResult,
   type CollectionCreateViewRequest,
@@ -72,6 +77,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly addFormulaCollectionColumn?: (
     request: CollectionAddFormulaColumnRequest
   ) => CollectionAddFormulaColumnResult | Promise<CollectionAddFormulaColumnResult>;
+  readonly updateFormulaCollectionColumn?: (
+    request: CollectionUpdateFormulaColumnRequest
+  ) => CollectionUpdateFormulaColumnResult | Promise<CollectionUpdateFormulaColumnResult>;
   readonly renameCollectionColumn: (
     request: CollectionRenameColumnRequest
   ) => CollectionRenameColumnResult | Promise<CollectionRenameColumnResult>;
@@ -164,6 +172,13 @@ function failedAddFormulaColumn(
     datasetId: request.datasetId,
     tableId: request.tableId,
     status: "failed"
+  });
+}
+
+function failedUpdateFormulaColumn(request: CollectionUpdateFormulaColumnRequest): CollectionUpdateFormulaColumnResult {
+  return CollectionUpdateFormulaColumnResultSchema.parse({
+    apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId, tableId: request.tableId, columnId: request.columnId, status: "failed"
   });
 }
 
@@ -393,6 +408,22 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
     return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
       ? result
       : failedAddFormulaColumn(parsed);
+  });
+
+  options.ipcMain.handle(COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL, async (event, request: unknown) => {
+    const parsed = CollectionUpdateFormulaColumnRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId ||
+        !options.updateFormulaCollectionColumn) return failedUpdateFormulaColumn(parsed);
+    let rawResult: CollectionUpdateFormulaColumnResult;
+    try { rawResult = await options.updateFormulaCollectionColumn(parsed); }
+    catch { return failedUpdateFormulaColumn(parsed); }
+    const result = CollectionUpdateFormulaColumnResultSchema.parse(rawResult);
+    if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
+        result.datasetId !== parsed.datasetId || result.tableId !== parsed.tableId || result.columnId !== parsed.columnId) {
+      throw new Error("Managed Collection formula-update response identity did not match the request.");
+    }
+    return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
+      ? result : failedUpdateFormulaColumn(parsed);
   });
 
   options.ipcMain.handle("collections.renameColumn", async (event, request: unknown) => {

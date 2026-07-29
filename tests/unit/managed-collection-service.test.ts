@@ -353,6 +353,83 @@ describe("ManagedCollectionService", () => {
     }));
   });
 
+  it("updates one Pige formula idempotently and restores its exact prior revision through Activity Undo", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionService(port);
+    const initial = required(readBundle(fixture.vaultPath, readManifest(fixture.bundlePath).datasetId));
+    const table = required(initial.schema.tables[0]);
+    const countColumn = required(table.columns.find((column) => column.logicalType === "integer"));
+    const added = await service.addFormulaColumn({
+      apiVersion: 1, requestId: "collection_request_formulaupdateadd1", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: initial.revision.id,
+      label: "Scaled count",
+      expression: { kind: "binary", operator: "multiply", left: { kind: "column", columnId: countColumn.id }, right: { kind: "literal", value: 2 } }
+    });
+    if (added.status !== "committed") throw new Error("Formula setup did not commit");
+    const request = {
+      apiVersion: 1 as const, requestId: "collection_request_formulaupdateone", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, columnId: added.columnId,
+      expectedRevisionId: added.snapshot.revisionId,
+      expression: { kind: "binary" as const, operator: "multiply" as const,
+        left: { kind: "column" as const, columnId: countColumn.id }, right: { kind: "literal" as const, value: 3 } }
+    };
+    const updated = await service.updateFormulaColumn(request);
+    expect(updated).toMatchObject({
+      status: "committed",
+      columnId: added.columnId,
+      snapshot: { columns: expect.arrayContaining([expect.objectContaining({
+        columnId: added.columnId, canEditFormula: true,
+        calculation: { kind: "pige_numeric_formula", schemaVersion: 1, expression: request.expression }
+      })]) }
+    });
+    if (updated.status !== "committed") throw new Error("Formula update did not commit");
+    expect(updated.snapshot.rows[0]?.cells).toContainEqual({
+      columnId: added.columnId, value: 9, editable: false, readOnlyReason: "formula"
+    });
+    await expect(new ManagedCollectionService(port).updateFormulaColumn(request)).resolves.toEqual(updated);
+    await expect(service.updateFormulaColumn({ ...request, expression: { ...request.expression,
+      right: { kind: "literal", value: 4 } } })).rejects.toMatchObject({ code: "collection.request_conflict" });
+    await expect(service.updateFormulaColumn({
+      ...request, requestId: "collection_request_formulanochangeone", expectedRevisionId: updated.snapshot.revisionId
+    })).resolves.toMatchObject({ status: "invalid", reason: "no_change" });
+    await expect(service.updateFormulaColumn({
+      ...request, requestId: "collection_request_formulastaleone1"
+    })).resolves.toMatchObject({ status: "stale", snapshot: { revisionId: updated.snapshot.revisionId } });
+
+    const activity = new KnowledgeActivityService(port, service);
+    const entry = required(activity.list({ limit: 20 }).activities.find((candidate) =>
+      candidate.kind === "update_collection_formula" && candidate.operationId === updated.operationId));
+    expect(entry).toMatchObject({ canUndo: true, target: { revisionId: updated.snapshot.revisionId } });
+    const undone = await activity.undo({ operationId: entry.operationId, expectedRevisionId: updated.snapshot.revisionId });
+    expect(undone.status).toBe("undone");
+    if (undone.status !== "undone") throw new Error("Formula update Undo did not commit");
+    const restored = await service.open({
+      apiVersion: 1, requestId: "collection_request_formulaafterundo", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id
+    });
+    expect(restored).toMatchObject({ status: "ready", snapshot: { revisionId: undone.revisionId } });
+    if (restored.status !== "ready") throw new Error("Restored formula did not reopen");
+    expect(restored.snapshot.columns).toContainEqual(expect.objectContaining({
+      columnId: added.columnId,
+      calculation: { kind: "pige_numeric_formula", schemaVersion: 1, expression: {
+        kind: "binary", operator: "multiply", left: { kind: "column", columnId: countColumn.id },
+        right: { kind: "literal", value: 2 }
+      } }
+    }));
+    expect(restored.snapshot.rows[0]?.cells).toContainEqual({
+      columnId: added.columnId, value: 6, editable: false, readOnlyReason: "formula"
+    });
+    const undoRevision = DatasetRevisionSchema.parse(readJson(path.join(
+      fixture.bundlePath, readManifest(fixture.bundlePath).revision.path
+    )));
+    expect(undoRevision.change).toEqual({
+      kind: "collection_formula_update_undo", tableId: table.id, columnId: added.columnId,
+      undoOfOperationId: updated.operationId
+    });
+  });
+
   it("adds nullable columns across all editable types, adopts replay, and restores the prior schema through Activity", async () => {
     const fixture = await makeCollectionFixture();
     const vault = loadVaultSummary(fixture.vaultPath);
