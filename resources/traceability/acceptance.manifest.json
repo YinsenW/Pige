@@ -555,7 +555,7 @@
       "plannedTarget": "Lossless preserve-first CSV/XLSX/SQLite Dataset import, manifest/schema/revision, no-execution, recovery, and backup fixtures."
     },
     "PIGE-DATA-002":{"status":"planned","plannedTarget":"Library discovery, bounded paging and exact historical citation-open highlighting work; analytical query breadth, scale/platform proof and complete no-whole-payload acceptance remain."},
-    "PIGE-DATA-003":{"status":"planned","plannedTarget":"Cell/row/field/view and numeric formula create/update preserve stable IDs, atomic revision CAS and Activity/Undo; nested formula editing, relations, broader lifecycle, backup and exceptional boundaries remain."},
+    "PIGE-DATA-003":{"status":"planned","plannedTarget":"Cell/row/field/view, numeric formula create/update and one same-Dataset row relation preserve stable IDs, CAS and Activity/Undo; nested formula, relation breadth, backup and exceptional boundaries remain."},
     "PIGE-SEC-001":{"status":"partial","evidence":["EV-PROVIDER"],"open":{"id":"OPEN-REQ-PIGE-SEC-001","description":"OS-keychain integration, portable-mode warning, and release backup secret scans remain open.","targetBuilds":["B3.02"],"targetExits":["E3.02"]}},
     "PIGE-SEC-002":{"status":"planned","plannedTarget":"One exact External/Web public-HTTPS read confirms per call and fails closed on identity/origin drift. Raw Shell stays per-effect; immutable-plan ordinal/OAuth/recovery and macOS proof remain."},
     "PIGE-SEC-003":{"status":"planned","plannedTarget":"Prove private durable authoredTaskIntent and Job-bound ingress snapshots survive restart: neutral/legacy attachments grant exact-source snapshot tools only, explicit authored attachment turns may request precise ambient confirmation/plans, and live paths/fallback/model/source cannot widen authority."},
@@ -1020,7 +1020,7 @@
     "E7.03":{"status":"partial","evidence":["EV-CONVERSATION-HISTORY","EV-HOME-FOLLOWUP"],"open":{"id":"OPEN-EXIT-E7.03","description":"Packaged restart and compaction proof remain.","targetBuilds":["B7.08"],"targetExits":["E7.03"]}},
     "E7.04":{"status":"planned","plannedTarget":"Conversation compaction identity/reference preservation tests."},
     "E7.05":{"status":"planned","plannedTarget":"Memory lifecycle, provenance, backup, and secret-scan integration report."},
-    "E7.06":{"status":"planned","plannedTarget":"Cell/row/field/view and atomic numeric formula create/update work; nested editing, relations, broader lifecycle, conflict, platform and exception-boundary proof remain."},
+    "E7.06":{"status":"planned","plannedTarget":"Cell/row/field/view, atomic numeric formula create/update and one same-Dataset row relation work; nested formula, relation breadth, conflict, platform and exception proof remain."},
     "E8.01": {
       "status": "planned",
       "plannedTarget": "Pure and External/Web stage/review/install works; one supported external HTTPS runtime can enable. Vault lifecycle, other runtimes, external update and public restore remain."

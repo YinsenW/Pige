@@ -572,7 +572,7 @@ Executable operation-kind vocabulary (machine checked):
 - `create_source_record`, `update_source_record`, `relink_source`.
 - `copy_source_asset`, `move_source_asset`, `trash_source_asset`, `restore_source_asset`.
 - `create_artifact`, `trash_artifact`, `restore_artifact`.
-- `create_dataset_revision`, `update_collection_cell`, `add_collection_row`, `add_collection_column`, `update_collection_formula`, `rename_collection_column`, `trash_collection_row`, `trash_collection_column`, `create_collection_view`.
+- `create_dataset_revision`, `update_collection_cell`, `add_collection_row`, `add_collection_column`, `update_collection_formula`, `add_collection_relation`, `update_collection_relation_cell`, `rename_collection_column`, `trash_collection_row`, `trash_collection_column`, `create_collection_view`.
 - `create_page`, `update_page`, `rename_page`, `archive_page`, `trash_page`, `restore_page`.
 - `update_index`.
 - `create_memory`, `update_memory`, `trash_memory`, `restore_memory`.
