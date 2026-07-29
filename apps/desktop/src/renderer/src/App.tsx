@@ -5444,6 +5444,7 @@ function HomeComposer(props: {
                 job={currentJob}
                 sourceWaitingForModel={sourceWaitingForModel}
                 ownsSourceModelAction={ownsSourceModelAction}
+                retryEligible={currentJob.state === "failed_retryable" && currentJob.class !== "retrieval_query"}
                 {...(repair ? { repair } : {})}
                 onOpenModels={props.onOpenModels}
                 onCancelJob={props.onCancelJob}
@@ -5508,6 +5509,7 @@ function HomeComposer(props: {
                   job={job}
                   sourceWaitingForModel={sourceWaitingForModel}
                   ownsSourceModelAction={ownsSourceModelAction}
+                  retryEligible={job.state === "failed_retryable" && job.class !== "retrieval_query"}
                   {...(repair ? { repair } : {})}
                   onOpenModels={props.onOpenModels}
                   onCancelJob={props.onCancelJob}

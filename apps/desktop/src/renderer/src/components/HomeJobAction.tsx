@@ -15,6 +15,7 @@ export function HomeJobAction(props: {
   readonly compact?: boolean;
   readonly sourceWaitingForModel: boolean;
   readonly ownsSourceModelAction: boolean;
+  readonly retryEligible: boolean;
   readonly repair?: HomeJobRepairAction;
   readonly onOpenModels: (opener: HTMLButtonElement) => Promise<void> | void;
   readonly onCancelJob: (jobId: string) => Promise<void> | void;
@@ -74,7 +75,7 @@ export function HomeJobAction(props: {
       <PigeIcon name="trash" size={13} />
     </button>;
   }
-  if (props.job.state === "failed_retryable" && props.job.class !== "retrieval_query") {
+  if (props.retryEligible) {
     return <button
       className="job-action"
       type="button"
