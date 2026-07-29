@@ -23,6 +23,7 @@ import {
   ReaderInlineReferenceSurface,
   type ReaderInlineReferenceActivation
 } from "./ReaderInlineReferenceSurface";
+import { ReaderSourceRevealAction, readerSourceActionLabels } from "./ReaderSourceActions";
 
 export type NoteRelatedState = LibraryRelatedResult | "loading" | "unavailable" | null;
 
@@ -110,6 +111,7 @@ export function NoteReader(props: {
     request: NoteOpenSourceReferenceRequest
   ) => Promise<NoteOpenSourceReferenceResult>;
   readonly onOpenSourcePage?: (pageId: string) => Promise<void>;
+  readonly onRevealSource?: Parameters<typeof ReaderSourceRevealAction>[0]["onRevealSource"];
   readonly onActivateInlineReference?: (href: string) => Promise<ReaderInlineReferenceActivation>;
   readonly onDevelopment: (capability: "selection_actions" | "reader_link") => void;
   readonly t: (key: string) => string;
@@ -847,32 +849,45 @@ export function NoteReader(props: {
         <section className="reader-sources" aria-label={props.t("note.sources")}>
           <h2>{props.t("note.sources")}</h2>
           <div className="reader-source-list">
-            {summary.sourceIds.slice(0, 5).map((sourceId, index) => (
-              <button
-                className="reader-source"
-                type="button"
-                key={sourceId}
-                data-reader-source-action="open"
-                disabled={sourceReferenceState?.status === "resolving"}
-                aria-busy={sourceReferenceState?.sourceId === sourceId && sourceReferenceState.status === "resolving"}
-                onClick={() => void openSourceReference(sourceId)}
-              >
-                <span className="reader-source-icon" aria-hidden="true">SRC</span>
-                <span className="reader-source-copy">
-                  <strong>{props.t("note.savedSource").replace("{number}", String(index + 1))}</strong>
-                  <span
-                    role={sourceReferenceState?.sourceId === sourceId ? "status" : undefined}
-                    aria-live={sourceReferenceState?.sourceId === sourceId ? "polite" : undefined}
-                    aria-atomic={sourceReferenceState?.sourceId === sourceId ? "true" : undefined}
+            {summary.sourceIds.slice(0, 5).map((sourceId, index) => {
+              const sourceLabel = props.t("note.savedSource").replace("{number}", String(index + 1));
+              return (
+                <div key={sourceId}>
+                  <button
+                    className="reader-source"
+                    type="button"
+                    data-reader-source-action="open"
+                    disabled={sourceReferenceState?.status === "resolving"}
+                    aria-busy={sourceReferenceState?.sourceId === sourceId && sourceReferenceState.status === "resolving"}
+                    onClick={() => void openSourceReference(sourceId)}
                   >
-                    {props.t(sourceReferenceState?.sourceId === sourceId
-                      ? `note.readerLink.${sourceReferenceState.status}`
-                      : "note.readerLinkReady")}
-                  </span>
-                </span>
-                <small>{props.t("note.open")}</small>
-              </button>
-            ))}
+                    <span className="reader-source-icon" aria-hidden="true">SRC</span>
+                    <span className="reader-source-copy">
+                      <strong>{sourceLabel}</strong>
+                      <span
+                        role={sourceReferenceState?.sourceId === sourceId ? "status" : undefined}
+                        aria-live={sourceReferenceState?.sourceId === sourceId ? "polite" : undefined}
+                        aria-atomic={sourceReferenceState?.sourceId === sourceId ? "true" : undefined}
+                      >
+                        {props.t(sourceReferenceState?.sourceId === sourceId
+                          ? `note.readerLink.${sourceReferenceState.status}`
+                          : "note.readerLinkReady")}
+                      </span>
+                    </span>
+                    <small>{props.t("note.open")}</small>
+                  </button>
+                  <ReaderSourceRevealAction
+                    currentPageId={summary.pageId}
+                    sourceId={sourceId}
+                    sourceLabel={sourceLabel}
+                    labels={readerSourceActionLabels(props.t)}
+                    {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
+                    {...(props.note.renderContextId ? { renderContextId: props.note.renderContextId } : {})}
+                    {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
+                  />
+                </div>
+              );
+            })}
           </div>
           {summary.sourceIds.length > 5 ? (
             <p className="reader-source-overflow">

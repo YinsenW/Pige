@@ -29,6 +29,8 @@ import type {
   ModelProviderSettingsSummary,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteRevealSourceRequest,
+  NoteRevealSourceResult,
   NoteEditorOpenRequest,
   NoteEditorOpenResult,
   NoteEditorSaveRequest,
@@ -1289,6 +1291,27 @@ describe("Home durable Agent conversation UI", () => {
     await waitFor(dom, () => container.textContent?.includes("Local Reader result") === true);
     await clickElement(dom, buttons(container, "Open")[0]!);
     await waitFor(dom, () => container.querySelector(".note-reader h1")?.textContent === "Note A");
+
+    const reveal = requireElement(container.querySelector<HTMLButtonElement>(`[data-reader-source-reveal="${sourceId}"]`));
+    await clickElement(dom, reveal);
+    await waitFor(dom, () => container.textContent?.includes("Original opened.") === true);
+    expect(harness.sourceRevealRequests).toHaveLength(1);
+    expect(harness.sourceRevealRequests[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_home_conversation",
+      currentPageId: "page_20260715_note0001",
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      sourceId
+    });
+    expect(Object.keys(harness.sourceRevealRequests[0]!).sort()).toEqual([
+      "activeVaultId",
+      "apiVersion",
+      "currentPageId",
+      "renderContextId",
+      "requestId",
+      "sourceId"
+    ]);
+    expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
 
     const source = requireElement(container.querySelector<HTMLButtonElement>(".reader-source"));
     await clickElement(dom, source);
@@ -4937,6 +4960,7 @@ interface ConversationHarness {
   failNextWindowLayout: boolean;
   readonly noteRenderRequests: string[];
   readonly sourceReferenceRequests: NoteOpenSourceReferenceRequest[];
+  readonly sourceRevealRequests: NoteRevealSourceRequest[];
   readonly inlineReferenceRequests: NoteResolveInlineReferenceRequest[];
   readonly editorOpenRequests: NoteEditorOpenRequest[];
   readonly editorSaveRequests: NoteEditorSaveRequest[];
@@ -4944,6 +4968,7 @@ interface ConversationHarness {
   openEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
   saveEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
   openSourceReference: (request: NoteOpenSourceReferenceRequest) => Promise<NoteOpenSourceReferenceResult>;
+  revealSource: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
   resolveInlineReference: (request: NoteResolveInlineReferenceRequest) => Promise<NoteResolveInlineReferenceResult>;
   loadAppearance: () => Promise<AppearanceSettingsSummary>;
   loadOnboarding: () => Promise<OnboardingStatus>;
@@ -5033,6 +5058,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     failNextWindowLayout: false,
     noteRenderRequests: [],
     sourceReferenceRequests: [],
+    sourceRevealRequests: [],
     inlineReferenceRequests: [],
     editorOpenRequests: [],
     editorSaveRequests: [],
@@ -5060,6 +5086,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
       requestId: request.requestId,
       status: "not_found"
     }),
+    revealSource: async (request) => ({ ...request, status: "revealed" }),
     resolveInlineReference: async (request) => ({
       apiVersion: 1,
       requestId: request.requestId,
@@ -5643,6 +5670,10 @@ function makePigeApi(harness: ConversationHarness): object {
       openSourceReference: async (request: NoteOpenSourceReferenceRequest) => {
         harness.sourceReferenceRequests.push(request);
         return harness.openSourceReference(request);
+      },
+      revealSource: async (request: NoteRevealSourceRequest) => {
+        harness.sourceRevealRequests.push(request);
+        return harness.revealSource(request);
       },
       openEditor: async (request: NoteEditorOpenRequest) => {
         harness.editorOpenRequests.push(request);
