@@ -193,7 +193,8 @@ export class ReaderSelectionCreateNoteService {
     readonly job: JobRecord;
     readonly intent: ReaderSelectionCreateNoteIntent;
   }): ReaderSelectionCreateNoteAppliedResult {
-    const job = requireBoundJob(input.job, input.intent);
+    const selectionBindingHash = requireCurrentSelectionBindingHash(input.vaultPath, input.intent.selection);
+    const job = requireBoundJob(input.job, input.intent, selectionBindingHash);
     const title = normalizeTitle(input.intent.title);
     const body = normalizeBody(input.intent.body);
     const pageId = createPageId(job.id, input.intent.proposalId);
@@ -241,7 +242,8 @@ export class ReaderSelectionCreateNoteService {
     readonly job: JobRecord;
     readonly intent: ReaderSelectionCreateNoteIntent;
   }): ReaderSelectionCreateNoteAppliedResult | undefined {
-    const job = requireBoundJob(input.job, input.intent);
+    const selectionBindingHash = requireCurrentSelectionBindingHash(input.vaultPath, input.intent.selection);
+    const job = requireBoundJob(input.job, input.intent, selectionBindingHash);
     const title = normalizeTitle(input.intent.title);
     const body = normalizeBody(input.intent.body);
     const pageId = createPageId(job.id, input.intent.proposalId);
@@ -635,7 +637,11 @@ export class ReaderSelectionCreateNoteProposalService {
   }
 }
 
-function requireBoundJob(jobValue: JobRecord, intent: ReaderSelectionCreateNoteIntent): JobRecord {
+function requireBoundJob(
+  jobValue: JobRecord,
+  intent: ReaderSelectionCreateNoteIntent,
+  selectionBindingHash: string
+): JobRecord {
   const job = JobRecordSchema.parse(jobValue);
   if (
     job.class !== "agent_turn" ||
@@ -645,7 +651,7 @@ function requireBoundJob(jobValue: JobRecord, intent: ReaderSelectionCreateNoteI
     job.policyHash !== intent.policyHash ||
     !/^model_[a-z0-9_]+$/u.test(intent.modelProfileId) ||
     !/^proposal_\d{8}_[a-z0-9]{8,}$/u.test(intent.proposalId) ||
-    !hasExactSelectionBinding(job, intent.selection) ||
+    !hasExactSelectionBinding(job, intent.selection, selectionBindingHash) ||
     !isDeepStrictEqual(readReaderSelectionCreateNoteBinding(job)?.selection, intent.selection)
   ) {
     throw conflict("The Reader create-note intent is not bound to its exact Job authority.");
@@ -653,7 +659,19 @@ function requireBoundJob(jobValue: JobRecord, intent: ReaderSelectionCreateNoteI
   return job;
 }
 
-function hasExactSelectionBinding(job: JobRecord, selection: ReaderSelectionIdentity): boolean {
+function requireCurrentSelectionBindingHash(vaultPath: string, selection: ReaderSelectionIdentity): string {
+  try {
+    return readCurrentNoteSelectionEvidenceBinding(vaultPath, selection).bindingHash;
+  } catch {
+    throw conflict("The Reader create-note selection is no longer current.");
+  }
+}
+
+function hasExactSelectionBinding(
+  job: JobRecord,
+  selection: ReaderSelectionIdentity,
+  selectionBindingHash: string
+): boolean {
   const refs = job.inputRefs ?? [];
   const scope = refs.filter((ref) => ref.role === "agent_turn_current_note_scope");
   const selected = refs.filter((ref) => ref.role === "agent_turn_reader_selection");
@@ -662,8 +680,7 @@ function hasExactSelectionBinding(job: JobRecord, selection: ReaderSelectionIden
     scope[0]?.kind === "page" && scope[0].id === selection.pageId &&
     selected[0]?.kind === "page" && selected[0].id === selection.pageId &&
     selected[0].checksum === selection.selectedContentHash && selected[0].locator === locator &&
-    typeof scope[0].checksum === "string" &&
-    isDeepStrictEqual(scope[0].checksum, selection.pageContentHash);
+    isDeepStrictEqual(scope[0].checksum, selectionBindingHash);
 }
 
 function normalizeTitle(value: string): string {

@@ -163,6 +163,7 @@ import { configureManagedCopyLocatorResolver } from "./services/source-file-acce
 import { ReaderSourceRevealService } from "./services/reader-source-reveal-service";
 import { type CaptureJobExecutor } from "./services/capture-job-executor";
 import { HomeAgentAttachmentService } from "./services/home-agent-attachment-service";
+import { HomeAuthoredTextCaptureService } from "./services/home-authored-text-capture-service";
 import { DiagnosticsService } from "./services/diagnostics-service";
 import { DatasetIngestWorkerService } from "./services/dataset-ingest-worker-service";
 import { DatasetQueryService } from "./services/dataset-query-service";
@@ -1454,7 +1455,9 @@ const getHomeAgentService = (): HomeAgentService => {
       getAgentMemoryService(),
       getCurrentNoteAppendService(),
       new HomeSkillStagingToolService(getSkillUrlInstallService()),
-      getExternalWebSkillRuntimeService()
+      getExternalWebSkillRuntimeService(),
+      undefined,
+      new HomeAuthoredTextCaptureService(getCaptureService(), getJobsService())
     );
   }
   return homeAgentService;
