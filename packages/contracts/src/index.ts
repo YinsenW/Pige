@@ -38,6 +38,8 @@ import type {
   ConversationLanguageContinuity,
   DurableLanguage,
   DurableLanguageFact,
+  DiagnosticsClearLocalRequest,
+  DiagnosticsClearLocalResult,
   CollectionAddNullableColumnRequest,
   CollectionAddNullableColumnResult,
   CollectionCellEditRequest,
@@ -298,6 +300,8 @@ export type {
   DiagnosticError,
   DurableLanguage,
   DurableLanguageFact,
+  DiagnosticsClearLocalRequest,
+  DiagnosticsClearLocalResult,
   PigeError,
   PigeErrorAction,
   PigeErrorDomain,
@@ -1996,6 +2000,9 @@ export interface PigeDesktopApi {
   };
   readonly diagnostics: {
     readonly health: () => Promise<DiagnosticsHealth>;
+    readonly clearLocalDiagnostics: (
+      request: DiagnosticsClearLocalRequest
+    ) => Promise<DiagnosticsClearLocalResult>;
     readonly previewSupportBundle: () => Promise<SupportBundlePreview>;
     readonly exportSupportBundle: (request: ExportSupportBundleRequest) => Promise<SupportBundleExportResult>;
     readonly cancelSupportBundleExport: (

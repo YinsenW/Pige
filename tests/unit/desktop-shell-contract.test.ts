@@ -17,6 +17,32 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("freezes one Main-owned machine-local diagnostics clear channel", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const diagnosticsApi = contractsSource.slice(
+      contractsSource.indexOf("readonly diagnostics: {"),
+      contractsSource.indexOf("readonly models: {")
+    );
+
+    expect(schemasSource).toContain(
+      'DIAGNOSTICS_CLEAR_LOCAL_CHANNEL = "diagnostics.clearLocalDiagnostics"'
+    );
+    expect(schemasSource).toContain("DiagnosticsClearLocalRequestSchema");
+    expect(schemasSource).toContain('status: z.literal("cleared")');
+    expect(schemasSource).toContain('status: z.literal("busy")');
+    expect(diagnosticsApi).toContain("readonly clearLocalDiagnostics: (");
+    expect(diagnosticsApi).toContain("request: DiagnosticsClearLocalRequest");
+    expect(diagnosticsApi).toContain(") => Promise<DiagnosticsClearLocalResult>;");
+    expect(preloadSource).toContain("DiagnosticsClearLocalRequestSchema.parse(request)");
+    expect(preloadSource).toContain("DiagnosticsClearLocalResultSchema.parse(");
+    expect(preloadSource).toContain("DIAGNOSTICS_CLEAR_LOCAL_CHANNEL");
+    for (const privateField of ["activeVaultId", "path", "body", "expectedRevision"]) {
+      expect(diagnosticsApi).not.toContain(privateField);
+    }
+  });
+
   it("freezes one Main-owned pathless managed-copy root configuration channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
