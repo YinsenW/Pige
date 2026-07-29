@@ -1908,9 +1908,7 @@ Reference-only capture, conversion, and local-tool evaluation:
 | GitHub Releases | required | Public alpha artifact hosting and v0.1 update feed source. | https://docs.github.com/repositories/releasing-projects-on-github | Release artifacts are immutable after publication except explicit retraction/replacement policy. | Public release metadata; no user vault data. |
 | electron-builder (`release.electron-builder`) | required | macOS/Windows packaging, signing hooks, notarization hooks, and update metadata generation. | https://www.electron.build | Pin `26.15.3`; update only after packaged native-module, identity, resource, SBOM, signing-hook, and update-metadata smoke. | MIT build/release dependency; excluded from the packaged runtime SBOM. |
 | `@electron/asar` (`release.electron-asar`) | required | Inspect and extract the built ASAR during bounded packageability verification. | https://github.com/electron/asar | Pin `4.2.0`; update with ASAR layout, native-unpack, traversal, size, and packaged-runtime smoke. | MIT build-only verifier dependency; it never enters application runtime authority or the runtime SBOM. |
-| electron-updater | recommended | In-app automatic update client backed by GitHub Releases or generated update metadata. | https://www.electron.build/auto-update | Pin with packaging stack; test alpha channel before release. | Must not update during active capture, backup, restore, or permissioned destructive jobs. |
-| Electron `autoUpdater` | candidate | Lower-level updater API if implementation avoids `electron-updater`. | https://www.electronjs.org/docs/latest/api/auto-updater | Choose only after platform signing/update tests. | Requires careful platform-specific behavior handling. |
-| update.electronjs.org / update-electron-app | reference | Reference path for open-source GitHub-hosted Electron app updates. | https://github.com/electron/update-electron-app | Use as design reference unless selected explicitly. | GitHub-hosted update pattern. |
+| `electron-updater` (`release.electron-updater`) | required | Main-owned explicit check/download/apply against the packaged GitHub alpha feed. | https://www.electron.build/auto-update | Pin `6.8.9`/npm integrity; macOS alpha-to-alpha signed download/apply gates changes. | MIT runtime dependency; `autoDownload=false`, `autoInstallOnAppQuit=false`; paths/errors/feed stay private. Windows adapter remains disabled until its platform qualification. |
 | GitHub Dependabot (`ci.dependabot`) | required | Dependency security alerts and version-update PRs. | https://docs.github.com/code-security/getting-started/dependabot-quickstart-guide | Add `dependabot.yml` during scaffold; review updates before merge. | Supply-chain visibility only; no runtime data access. |
 | GitHub CodeQL / github/codeql-action (`ci.codeql-action`) | required | Static analysis for JavaScript/TypeScript and security scanning. | https://docs.github.com/code-security/code-scanning/introduction-to-code-scanning/about-code-scanning-with-codeql | Add CodeQL workflow during scaffold; use security-extended queries where feasible. | CI-only; no user data. |
 | npm audit | required | npm dependency vulnerability scan in CI/release gates. | https://docs.npmjs.com/cli/commands/npm-audit | Run in CI after package manager choice; document exceptions. | CI-only. |
@@ -1939,7 +1937,8 @@ These exit paths must be considered before major dependency upgrades:
 - Git/Git Bash, Bun, `uv`, and Python: keep them as bundled toolchain components owned by Pige, not user-installed hidden prerequisites.
 - Pi packages: keep Package Manager optional and permissioned; Pige-native RAG, memory, parser, and backup behavior must not require community packages.
 - GitHub Actions/GitHub Releases: keep release metadata and update feed generation conventional enough to migrate to another host later.
-- electron-builder/electron-updater: keep checks behind Pige Update Service; its current default is zero-network/check-only, with no connected updater.
+- electron-builder/electron-updater stay behind Pige Update Service; only signed packaged
+  macOS uses the immutable alpha adapter, and Development remains zero-network.
 
 ### 16.12 Pre-Implementation Pinning Gates
 
@@ -1953,7 +1952,7 @@ Pin before implementing:
 - Backup/restore archive engine: yazl/yauzl.
 - Secret storage: Electron `safeStorage` encrypted local store, including unavailable-encryption behavior.
 - Vector index backend: sqlite-vec behind `VectorIndexDriver`, or a documented fallback if packaging validation fails.
-- Packaging/update stack: electron-builder/electron-updater with GitHub Releases alpha feed.
+- Packaging/update stack: electron-builder `26.15.3` plus electron-updater `6.8.9` with the immutable GitHub Releases alpha feed.
 - Security scanning: Dependabot, CodeQL, and npm audit in CI.
 
 ## 17. Reference Routing

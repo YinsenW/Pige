@@ -1572,6 +1572,8 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly updates:");
     expect(contractsSource).toContain("readonly summary: () => Promise<UpdateSummary>");
     expect(contractsSource).toContain("readonly check: (request: UpdateCheckRequest) => Promise<UpdateCheckResult>");
+    expect(contractsSource).toContain("readonly download: (request: UpdateDownloadRequest) => Promise<UpdateDownloadResult>");
+    expect(contractsSource).toContain("readonly apply: (request: UpdateApplyRequest) => Promise<UpdateApplyResult>");
     expect(contractsSource).toContain("readonly onStatusChanged:");
     expect(schemasSource).toContain('export const UpdateCapabilitySchema = z.enum([');
     expect(mainSource).toContain('ipcMain.handle("updates.summary"');

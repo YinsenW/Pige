@@ -48,7 +48,7 @@ Pige has two job scopes:
 - Vault-scoped jobs: work owned by an existing vault, source record, source asset,
   Markdown page, proposal, operation, memory, Skill, backup, or index.
 - Machine-local jobs: work that belongs to the app installation or device, such as local
-  model download, bundled tool repair, app update checks, machine-local package
+  model download, bundled tool repair, app update lifecycle, machine-local package
   installation, and restore coordination before a destination vault exists.
 
 Vault-scoped jobs:

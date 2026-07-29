@@ -731,7 +731,8 @@ Exit criteria:
   distributable is at or below 330,000,000 bytes excluding optional weights, packaged memory/
   recovery and 10,000-page/100,000-chunk scale pass, and notices/trust/notes are evidenced.
   Windows retains the equivalent exit in the next platform phase.
-- [E9.09] App updates from one alpha to another without breaking vault data and does not update during an active risky job.
+- [E9.09] Signed macOS check/download/explicit-restart updates one alpha to the next without
+  breaking Vault data; exact revision/version adoption prevents duplicates and risky Jobs block apply.
 - [E9.10] The scripted Public Alpha scenario report proves at least 25 mixed sources, a degraded path, restart recovery, backup, fresh-folder restore, and continued grounded retrieval.
 - [E9.11] Public privacy/support/security copy matches actual data flows; error and empty states are localized, actionable, and do not expose secrets or private paths.
 - [E9.12] Captured sources, generated pages, OCR artifacts, chunks, and memory retain useful language metadata; source language is preserved by default, and Home retrieval can accept and answer in the query language with CJK lexical and multilingual semantic coverage.

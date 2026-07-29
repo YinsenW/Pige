@@ -841,7 +841,15 @@ export interface SettingsRegistrySummary {
 
 export type UpdateChannel = "alpha";
 export type UpdateCapability = "development" | "unsupported_platform" | "packaged_ready";
-export type UpdatePhase = "idle" | "checking" | "up_to_date" | "available" | "failed";
+export type UpdatePhase =
+  | "idle"
+  | "checking"
+  | "up_to_date"
+  | "available"
+  | "downloading"
+  | "ready_to_restart"
+  | "applying"
+  | "failed";
 
 export type UpdateSummary = {
   readonly apiVersion: 1;
@@ -853,6 +861,18 @@ export type UpdateSummary = {
   | { readonly phase: "idle" | "checking" }
   | { readonly phase: "up_to_date" | "failed"; readonly checkedAt: string }
   | { readonly phase: "available"; readonly availableVersion: string; readonly checkedAt: string }
+  | {
+      readonly phase: "downloading";
+      readonly availableVersion: string;
+      readonly checkedAt: string;
+      readonly progressPercent: number;
+    }
+  | {
+      readonly phase: "ready_to_restart" | "applying";
+      readonly availableVersion: string;
+      readonly checkedAt: string;
+      readonly readyAt: string;
+    }
 );
 
 export interface UpdateCheckRequest {
@@ -863,6 +883,34 @@ export interface UpdateCheckRequest {
 export interface UpdateCheckResult {
   readonly status: "checked" | "unavailable" | "busy" | "stale";
   readonly requestId: string;
+  readonly summary: UpdateSummary;
+}
+
+export interface UpdateDownloadRequest {
+  readonly apiVersion: 1;
+  readonly requestId: string;
+  readonly expectedRevision: number;
+  readonly version: string;
+}
+
+export interface UpdateDownloadResult {
+  readonly status: "started" | "already_ready" | "blocked" | "busy" | "stale" | "unavailable" | "failed";
+  readonly requestId: string;
+  readonly version: string;
+  readonly summary: UpdateSummary;
+}
+
+export interface UpdateApplyRequest {
+  readonly apiVersion: 1;
+  readonly requestId: string;
+  readonly expectedRevision: number;
+  readonly version: string;
+}
+
+export interface UpdateApplyResult {
+  readonly status: "restarting" | "blocked" | "busy" | "stale" | "unavailable" | "failed";
+  readonly requestId: string;
+  readonly version: string;
   readonly summary: UpdateSummary;
 }
 
@@ -1909,6 +1957,8 @@ export interface PigeDesktopApi {
   readonly updates: {
     readonly summary: () => Promise<UpdateSummary>;
     readonly check: (request: UpdateCheckRequest) => Promise<UpdateCheckResult>;
+    readonly download: (request: UpdateDownloadRequest) => Promise<UpdateDownloadResult>;
+    readonly apply: (request: UpdateApplyRequest) => Promise<UpdateApplyResult>;
     readonly onStatusChanged: (listener: (event: UpdateStatusEvent) => void) => () => void;
   };
   readonly backup: {

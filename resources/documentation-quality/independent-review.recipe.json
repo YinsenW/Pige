@@ -54,7 +54,7 @@
     "scope": "Vault v2 language migration, macOS Phase 1 scope and acceptance reconciliation.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "fa425d1c2df49c1c3cba7823c98338e2c72254c53a254b3f155a7abebfd1758b"
+    "reviewedSha256": "9999d02b23f5ad62878413d93acbcf0439e8a21fd7d41efe21ce524103514d19"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
