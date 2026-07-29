@@ -1803,6 +1803,20 @@ export const SkillRegistryFileSchema = z.object({
   }
 });
 
+export const SkillRestoreContextIdSchema = z.string()
+  .regex(/^skill_restore_context_v2_[a-f0-9]{32,64}$/u);
+
+export const SkillRestorableSummarySchema = z.object({
+  restoreContextId: SkillRestoreContextIdSchema,
+  skillId: SkillIdSchema,
+  name: z.string().min(1).max(120),
+  version: z.string().min(1).max(80),
+  kind: z.literal("pure"),
+  scope: z.literal("machine_local"),
+  uninstalledAt: z.string().datetime({ offset: true }),
+  canRestore: z.literal(true)
+}).strict();
+
 export const SkillSummarySchema = z.object({
   id: SkillIdSchema,
   name: z.string().min(1).max(120),
@@ -1873,8 +1887,31 @@ export const SkillRegistrySummarySchema = z.object({
   apiVersion: z.literal(1),
   revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   invalidManifestCount: z.number().int().nonnegative().max(512),
-  skills: z.array(SkillSummarySchema).max(512)
-}).strict();
+  skills: z.array(SkillSummarySchema).max(512),
+  restorableSkills: z.array(SkillRestorableSummarySchema).max(512)
+}).strict().superRefine((registry, context) => {
+  const installedIds = new Set(registry.skills.map((skill) => skill.id));
+  const restoreContexts = new Set<string>();
+  const restorableIds = new Set<string>();
+  for (const [index, restorable] of registry.restorableSkills.entries()) {
+    if (installedIds.has(restorable.skillId) || restorableIds.has(restorable.skillId)) {
+      context.addIssue({
+        code: "custom",
+        path: ["restorableSkills", index, "skillId"],
+        message: "Restorable Skill IDs must be absent from the installed registry and unique."
+      });
+    }
+    if (restoreContexts.has(restorable.restoreContextId)) {
+      context.addIssue({
+        code: "custom",
+        path: ["restorableSkills", index, "restoreContextId"],
+        message: "Skill restore contexts must be unique."
+      });
+    }
+    restorableIds.add(restorable.skillId);
+    restoreContexts.add(restorable.restoreContextId);
+  }
+});
 
 export const SkillDisableRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -2073,6 +2110,14 @@ export const SkillEnableRequestSchema = SkillInstalledLifecycleRequestIdentitySc
 export const SkillUninstallRequestSchema = SkillInstalledLifecycleRequestIdentitySchema;
 export const SkillExportRequestSchema = SkillInstalledLifecycleRequestIdentitySchema;
 export const SkillStageUpdateRequestSchema = SkillInstalledLifecycleRequestIdentitySchema;
+export const SkillRestoreRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SkillLifecycleRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  restoreContextId: SkillRestoreContextIdSchema,
+  skillId: SkillIdSchema,
+  expectedRegistryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
 
 const SkillInstalledLifecycleResultIdentitySchema = z.object({
   apiVersion: z.literal(1),
@@ -2262,6 +2307,33 @@ export const SkillLifecycleMutationResultSchema = z.discriminatedUnion("status",
     registry: SkillRegistrySummarySchema
   }).strict(),
   SkillInstalledLifecycleResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+
+const SkillRestoreResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SkillLifecycleRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  restoreContextId: SkillRestoreContextIdSchema,
+  skillId: SkillIdSchema
+}).strict();
+export const SkillRestoreResultSchema = z.discriminatedUnion("status", [
+  SkillRestoreResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    registry: SkillRegistrySummarySchema
+  }).strict(),
+  SkillRestoreResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    registry: SkillRegistrySummarySchema
+  }).strict(),
+  SkillRestoreResultIdentitySchema.extend({
+    status: z.literal("not_found"),
+    registry: SkillRegistrySummarySchema
+  }).strict(),
+  SkillRestoreResultIdentitySchema.extend({
+    status: z.literal("ineligible"),
+    registry: SkillRegistrySummarySchema
+  }).strict(),
+  SkillRestoreResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 
 const SkillExportResultIdentitySchema = SkillInstalledLifecycleResultIdentitySchema.extend({
@@ -7740,6 +7812,7 @@ export type SkillManifest = z.infer<typeof SkillManifestSchema>;
 export type SkillRegistryRecord = z.infer<typeof SkillRegistryRecordSchema>;
 export type SkillRegistryFile = z.infer<typeof SkillRegistryFileSchema>;
 export type SkillSummary = z.infer<typeof SkillSummarySchema>;
+export type SkillRestorableSummary = z.infer<typeof SkillRestorableSummarySchema>;
 export type SkillRegistrySummary = z.infer<typeof SkillRegistrySummarySchema>;
 export type SkillRegistryQueryResult = z.infer<typeof SkillRegistryQueryResultSchema>;
 export type SkillDisableRequest = z.infer<typeof SkillDisableRequestSchema>;
@@ -7748,6 +7821,9 @@ export type SkillInstallRequestId = z.infer<typeof SkillInstallRequestIdSchema>;
 export type SkillLifecycleRequestId = z.infer<typeof SkillLifecycleRequestIdSchema>;
 export type SkillEnableRequest = z.infer<typeof SkillEnableRequestSchema>;
 export type SkillUninstallRequest = z.infer<typeof SkillUninstallRequestSchema>;
+export type SkillRestoreContextId = z.infer<typeof SkillRestoreContextIdSchema>;
+export type SkillRestoreRequest = z.infer<typeof SkillRestoreRequestSchema>;
+export type SkillRestoreResult = z.infer<typeof SkillRestoreResultSchema>;
 export type SkillExportRequest = z.infer<typeof SkillExportRequestSchema>;
 export type SkillLifecycleMutationResult = z.infer<typeof SkillLifecycleMutationResultSchema>;
 export type SkillExportResult = z.infer<typeof SkillExportResultSchema>;

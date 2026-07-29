@@ -188,6 +188,8 @@ import type {
   SkillStageFromZipResult,
   SkillStageUpdateRequest,
   SkillStageUpdateResult,
+  SkillRestoreRequest,
+  SkillRestoreResult,
   SkillUninstallRequest,
   MemoryDeleteRequest,
   MemoryDisableRequest,
@@ -413,6 +415,8 @@ import {
   SkillStageFromZipResultSchema,
   SkillStageUpdateRequestSchema,
   SkillStageUpdateResultSchema,
+  SkillRestoreRequestSchema,
+  SkillRestoreResultSchema,
   SkillUninstallRequestSchema,
   SetLocaleRequestSchema,
   SetThemeRequestSchema,
@@ -1181,6 +1185,11 @@ const api: PigeDesktopApi = {
       SkillLifecycleMutationResultSchema.parse(await ipcRenderer.invoke(
         "skills.uninstall",
         SkillUninstallRequestSchema.parse(request)
+      )),
+    restore: async (request: SkillRestoreRequest): Promise<SkillRestoreResult> =>
+      SkillRestoreResultSchema.parse(await ipcRenderer.invoke(
+        "skills.restore",
+        SkillRestoreRequestSchema.parse(request)
       )),
     export: async (request: SkillExportRequest): Promise<SkillExportResult> =>
       SkillExportResultSchema.parse(await ipcRenderer.invoke(
