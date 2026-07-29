@@ -60,6 +60,8 @@ import {
   DatasetRevisionSchema,
   DatasetSchemaRecordSchema,
   DatasetTableSchema,
+  DiagnosticsClearLocalRequestSchema,
+  DiagnosticsClearLocalResultSchema,
   ExternalWebSkillHttpsOriginSchema,
   ExternalWebSkillReadRequestSchema,
   ExternalWebSkillReadResultSchema,
@@ -196,6 +198,44 @@ import {
 } from "@pige/schemas";
 
 describe("schemas", () => {
+  it("keeps machine-local diagnostics clear pathless, bounded, and all-or-current", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "diagclearreq_abcdefghijklmnop"
+    } as const;
+    const health = {
+      status: "ok",
+      checkedAt: "2026-07-29T12:00:00.000Z",
+      localOnly: true,
+      recentErrorCount: 0,
+      checks: [{
+        id: "diagnostics_store",
+        status: "ok",
+        message: "Local diagnostics store is writable."
+      }]
+    } as const;
+
+    expect(DiagnosticsClearLocalRequestSchema.parse(request)).toEqual(request);
+    for (const privateField of ["activeVaultId", "path", "body", "expectedRevision"] as const) {
+      expect(() => DiagnosticsClearLocalRequestSchema.parse({ ...request, [privateField]: "private" }))
+        .toThrow();
+    }
+    for (const status of ["cleared", "busy"] as const) {
+      expect(DiagnosticsClearLocalResultSchema.parse({ ...request, status, health }))
+        .toEqual({ ...request, status, health });
+    }
+    expect(DiagnosticsClearLocalResultSchema.parse({ ...request, status: "failed" }))
+      .toEqual({ ...request, status: "failed" });
+    expect(() => DiagnosticsClearLocalResultSchema.parse({ ...request, status: "busy" })).toThrow();
+    expect(() => DiagnosticsClearLocalResultSchema.parse({
+      ...request,
+      status: "failed",
+      health
+    })).toThrow();
+    expect(() => DiagnosticsClearLocalResultSchema.parse({ ...request, status: "stale", health }))
+      .toThrow();
+  });
+
   it("strictly bounds renderer-safe conversation history without follow-up authority", () => {
     const activeVaultId = "vault_20260729_history01";
     const cursor = `conversation_history_${"a".repeat(64)}`;
