@@ -3075,6 +3075,36 @@ const VaultCountsProjectionSchema = z.object({
   referencedOriginals: z.number().int().nonnegative()
 }).strict();
 
+export const SourceStorageRevisionSchema = z.string()
+  .regex(/^ssrev_[a-f0-9]{64}$/u);
+export const ManagedCopyRootSummarySchema = z.object({
+  activeVaultId: VaultIdSchema,
+  sourceStorageRevision: SourceStorageRevisionSchema,
+  mode: SourceAssetRootKindSchema,
+  availability: z.enum(["available", "missing", "permission_needed"]),
+  canConfigure: z.boolean()
+}).strict().superRefine((summary, context) => {
+  if (summary.mode === "inside_vault" && summary.availability !== "available") {
+    context.addIssue({
+      code: "custom",
+      path: ["availability"],
+      message: "The in-vault managed-copy root must be available."
+    });
+  }
+});
+
+const ExternalManagedCopyRootDisplayLabelSchema = z.string()
+  .min(1)
+  .max(160)
+  .refine(
+    (value) => !/[\\/\u0000-\u001f\u007f-\u009f]/u.test(value),
+    "An external managed-copy root display value must be a safe label, not a path."
+  )
+  .refine(
+    (value) => !/^[A-Za-z]:/u.test(value) && !/^file:/iu.test(value),
+    "An external managed-copy root display value must not expose a path or URI."
+  );
+
 export const VaultSummaryProjectionSchema = z.object({
   vaultId: VaultIdSchema,
   name: z.string().min(1),
@@ -3082,11 +3112,61 @@ export const VaultSummaryProjectionSchema = z.object({
   knowledgeRootDisplay: z.string().min(1),
   sourceAssetRootDisplay: z.string().min(1),
   sourceAssetRootKind: SourceAssetRootKindSchema,
+  managedCopyRoot: ManagedCopyRootSummarySchema,
   defaultSourceStorageStrategy: SourceStorageStrategySchema,
   schemaVersion: z.number().int().positive(),
   counts: VaultCountsProjectionSchema.optional(),
   lastBackupAt: z.string().datetime({ offset: true }).optional()
+}).strict().superRefine((summary, context) => {
+  if (
+    summary.managedCopyRoot.activeVaultId !== summary.vaultId ||
+    summary.managedCopyRoot.mode !== summary.sourceAssetRootKind
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["managedCopyRoot"],
+      message: "Managed-copy root summary identity must match its Vault summary."
+    });
+  }
+  if (
+    summary.sourceAssetRootKind === "external_binding" &&
+    !ExternalManagedCopyRootDisplayLabelSchema.safeParse(summary.sourceAssetRootDisplay).success
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["sourceAssetRootDisplay"],
+      message: "An external managed-copy root must project a safe label, never its path."
+    });
+  }
+});
+
+export const MANAGED_COPY_ROOT_CONFIGURE_CHANNEL = "vault.configureManagedCopyRoot" as const;
+export const ManagedCopyRootConfigureRequestIdSchema = z.string()
+  .regex(/^rootconfigreq_[a-z0-9]{8,64}$/u);
+export const ManagedCopyRootConfigureRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: ManagedCopyRootConfigureRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  expectedSourceStorageRevision: SourceStorageRevisionSchema
 }).strict();
+const ManagedCopyRootConfigureResultIdentitySchema = ManagedCopyRootConfigureRequestSchema;
+export const ManagedCopyRootConfigureResultSchema = z.discriminatedUnion("status", [
+  ManagedCopyRootConfigureResultIdentitySchema.extend({
+    status: z.literal("configured"),
+    summary: ManagedCopyRootSummarySchema
+  }).strict(),
+  ManagedCopyRootConfigureResultIdentitySchema.extend({ status: z.literal("cancelled") }).strict(),
+  ManagedCopyRootConfigureResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    summary: ManagedCopyRootSummarySchema
+  }).strict(),
+  ManagedCopyRootConfigureResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  ManagedCopyRootConfigureResultIdentitySchema.extend({
+    status: z.literal("ineligible"),
+    summary: ManagedCopyRootSummarySchema
+  }).strict(),
+  ManagedCopyRootConfigureResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
 
 const WaitingDependencyCountsProjectionSchema = z.object({
   modelProvider: z.number().int().nonnegative(),
@@ -7810,6 +7890,11 @@ export type VaultOpenInvalidReason = z.infer<typeof VaultOpenInvalidReasonSchema
 export type VaultMigrationCheckpoint = z.infer<typeof VaultMigrationCheckpointSchema>;
 export type VaultMigrationApplyRequest = z.infer<typeof VaultMigrationApplyRequestSchema>;
 export type VaultMigrationApplyResult = z.infer<typeof VaultMigrationApplyResultSchema>;
+export type SourceStorageRevision = z.infer<typeof SourceStorageRevisionSchema>;
+export type ManagedCopyRootSummary = z.infer<typeof ManagedCopyRootSummarySchema>;
+export type ManagedCopyRootConfigureRequestId = z.infer<typeof ManagedCopyRootConfigureRequestIdSchema>;
+export type ManagedCopyRootConfigureRequest = z.infer<typeof ManagedCopyRootConfigureRequestSchema>;
+export type ManagedCopyRootConfigureResult = z.infer<typeof ManagedCopyRootConfigureResultSchema>;
 export type WindowLayoutMode = z.infer<typeof WindowLayoutModeSchema>;
 export type WindowLayoutRequest = z.infer<typeof WindowLayoutRequestSchema>;
 export type WindowLayoutState = z.infer<typeof WindowLayoutStateSchema>;
