@@ -384,6 +384,7 @@ describe("desktop shell build contract", () => {
 
     expect(contractsSource).toContain("readonly resolveInlineReference:");
     expect(contractsSource).toContain("readonly openSourceReference:");
+    expect(contractsSource).toContain("readonly revealSource:");
     expect(contractsSource).toContain("readonly openEditor:");
     expect(contractsSource).toContain("readonly saveEditor:");
     expect(mainSource).toContain("registerReaderIpc({");
@@ -406,6 +407,9 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('ipcRenderer.invoke(\n          "notes.openSourceReference"');
     expect(preloadSource).toContain("NoteOpenSourceReferenceRequestSchema.parse(request)");
     expect(preloadSource).toContain("NoteOpenSourceReferenceResultSchema.parse(");
+    expect(preloadSource).toContain("NOTE_REVEAL_SOURCE_CHANNEL");
+    expect(preloadSource).toContain("NoteRevealSourceRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteRevealSourceResultSchema.parse(");
     expect(preloadSource).toContain('ipcRenderer.invoke(\n          "notes.openEditor"');
     expect(preloadSource).toContain("NoteEditorOpenRequestSchema.parse(request)");
     expect(preloadSource).toContain("NoteEditorOpenResultSchema.parse(");
@@ -414,6 +418,16 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain("NoteEditorSaveResultSchema.parse(");
     expect(contractsSource).not.toContain("InlineReferencePath");
     expect(contractsSource).not.toContain("candidatePageIds");
+    const notesApiStart = contractsSource.indexOf("readonly notes: {");
+    const notesApi = contractsSource.slice(
+      notesApiStart,
+      contractsSource.indexOf("readonly localCapabilities: {", notesApiStart)
+    );
+    expect(notesApi).toContain("request: NoteRevealSourceRequest");
+    expect(notesApi).toContain(") => Promise<NoteRevealSourceResult>;");
+    for (const privateField of ["sourcePath", "originalPath", "managedCopyPath", "sourceBody", "rawError"]) {
+      expect(notesApi).not.toContain(privateField);
+    }
   });
 
   it("keeps Knowledge Health behind a strict registrar and body-free preload boundary", () => {

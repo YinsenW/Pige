@@ -160,6 +160,7 @@ import { CoalescedBatchDrainer } from "./services/background-job-drainer";
 import { CaptureService } from "./services/capture-service";
 import { ManagedCopyRootService } from "./services/managed-copy-root-service";
 import { configureManagedCopyLocatorResolver } from "./services/source-file-access";
+import { ReaderSourceRevealService } from "./services/reader-source-reveal-service";
 import { type CaptureJobExecutor } from "./services/capture-job-executor";
 import { HomeAgentAttachmentService } from "./services/home-agent-attachment-service";
 import { DiagnosticsService } from "./services/diagnostics-service";
@@ -1520,6 +1521,14 @@ const getNotesService = (): NotesService => {
   return notesService;
 };
 
+const getReaderSourceRevealService = (): ReaderSourceRevealService =>
+  new ReaderSourceRevealService(getNotesService(), {
+    reveal: (absolutePath) => {
+      shell.showItemInFolder(absolutePath);
+      return "revealed";
+    }
+  });
+
 const getNoteMarkdownEditorActivityAdapter = (): NoteMarkdownEditorActivityAdapter => {
   if (!noteMarkdownEditorActivityAdapter) {
     noteMarkdownEditorActivityAdapter = new NoteMarkdownEditorActivityAdapter(getVaultService());
@@ -2568,7 +2577,8 @@ registerReaderIpc({
   getNotesService,
   getReaderSelectionActionService,
   getReaderSelectionProposalService,
-  getReaderSelectionCreateNoteService: getReaderSelectionCreateNoteActionService
+  getReaderSelectionCreateNoteService: getReaderSelectionCreateNoteActionService,
+  getReaderSourceRevealService
 });
 registerCurrentNoteAppendIpc({
   ipcMain,

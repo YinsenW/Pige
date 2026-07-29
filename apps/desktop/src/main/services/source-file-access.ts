@@ -45,6 +45,50 @@ export interface VerifiedSourceTextPrefix {
   readonly complete: boolean;
 }
 
+export interface CurrentSourceRecordSnapshot {
+  readonly record: SourceRecord;
+  readonly identity: {
+    readonly size: number;
+    readonly mtimeMs: number;
+    readonly ctimeMs: number;
+    readonly deviceId: string;
+    readonly fileId: string;
+  };
+}
+
+export function readCurrentSourceRecordSnapshot(
+  vaultPath: string,
+  sourceId: string
+): CurrentSourceRecordSnapshot | undefined {
+  const dateKey = /^src_(\d{8})_/u.exec(sourceId)?.[1];
+  if (!dateKey) return undefined;
+  const root = path.resolve(vaultPath, ".pige", "source-records");
+  const filePath = path.resolve(root, dateKey.slice(0, 4), dateKey.slice(4, 6), `${sourceId}.json`);
+  if (!filePath.startsWith(`${root}${path.sep}`)) return undefined;
+  let descriptor: number | undefined;
+  try {
+    const namedBefore = assertConfinedSourceRecordPath(vaultPath, root, filePath);
+    if (namedBefore.size > 2 * 1024 * 1024 || namedBefore.nlink !== 1) return undefined;
+    descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const before = fs.fstatSync(descriptor);
+    if (!before.isFile() || before.nlink !== 1 || !sameSourceRecordIdentity(namedBefore, before)) return undefined;
+    const bytes = Buffer.alloc(before.size);
+    if (fs.readSync(descriptor, bytes, 0, before.size, 0) !== before.size) return undefined;
+    const after = fs.fstatSync(descriptor);
+    const namedAfter = assertConfinedSourceRecordPath(vaultPath, root, filePath);
+    if (after.nlink !== 1 || namedAfter.nlink !== 1 ||
+        !sameSourceRecordIdentity(before, after) || !sameSourceRecordIdentity(after, namedAfter)) return undefined;
+    const parsed = SourceRecordSchema.safeParse(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)));
+    return parsed.success && parsed.data.id === sourceId
+      ? { record: parsed.data, identity: sourceRecordIdentity(after) }
+      : undefined;
+  } catch {
+    return undefined;
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+}
+
 export function readBoundedSourceFileNoFollow(filePath: string, maxBytes: number): Buffer {
   const descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
   try {
@@ -105,6 +149,44 @@ export function tryVerifyReadableSourceFile(vaultPath: string, sourceRecord: Sou
   } catch {
     return undefined;
   }
+}
+
+export function verifyRevealableSourceFile(vaultPath: string, sourceRecord: SourceRecord): VerifiedSourceFile {
+  const parsed = SourceRecordSchema.parse(sourceRecord);
+  if (parsed.storageStrategy === "copy_to_source_library" && parsed.managedCopy?.path) {
+    const locator = resolveManagedCopyLocator(vaultPath, parsed);
+    try {
+      const verified = verifyFile(
+        locator.absolutePath,
+        parsed.managedCopy.size,
+        parsed.managedCopy.checksum,
+        "managed_copy"
+      );
+      locator.assertCurrent();
+      return verified;
+    } finally {
+      locator.release();
+    }
+  }
+  if (
+    parsed.storageStrategy === "reference_original" &&
+    parsed.original?.path &&
+    parsed.original.checksum &&
+    parsed.original.lastKnownSize !== undefined
+  ) {
+    if (!path.isAbsolute(parsed.original.path)) {
+      throw new PigeDomainError("source.reference_invalid", "The referenced original path is not absolute.");
+    }
+    const ingress = acquireIngressSnapshot(vaultPath, parsed);
+    ingress?.lease.release();
+    return verifyFile(
+      path.resolve(parsed.original.path),
+      parsed.original.lastKnownSize,
+      parsed.original.checksum,
+      "referenced_original"
+    );
+  }
+  throw new PigeDomainError("source.unavailable", "The Source Record has no revealable source file locator.");
 }
 
 export async function verifyReadableSourceFileAsync(
@@ -502,6 +584,57 @@ function checksumFile(filePath: string): string {
     fs.closeSync(descriptor);
   }
   return `sha256:${hash.digest("hex")}`;
+}
+
+function assertConfinedSourceRecordPath(vaultPath: string, root: string, filePath: string): fs.Stats {
+  const resolvedVault = path.resolve(vaultPath);
+  const vaultStat = fs.lstatSync(resolvedVault);
+  if (vaultStat.isSymbolicLink() || !vaultStat.isDirectory()) throw new Error("The vault root is unsafe.");
+  const canonicalVault = fs.realpathSync.native(resolvedVault);
+  for (const directory of [path.join(resolvedVault, ".pige"), root]) {
+    const stat = fs.lstatSync(directory);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error("The Source Record root is unsafe.");
+  }
+  const canonicalRoot = fs.realpathSync.native(root);
+  const rootRelative = path.relative(canonicalVault, canonicalRoot);
+  if (!rootRelative || rootRelative.startsWith(`..${path.sep}`) || path.isAbsolute(rootRelative)) {
+    throw new Error("The Source Record root escaped the vault.");
+  }
+  let parent = path.dirname(filePath);
+  while (true) {
+    const stat = fs.lstatSync(parent);
+    const relative = path.relative(canonicalRoot, fs.realpathSync.native(parent));
+    if (stat.isSymbolicLink() || !stat.isDirectory() || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+      throw new Error("A Source Record parent is unsafe.");
+    }
+    if (path.resolve(parent) === path.resolve(root)) break;
+    const next = path.dirname(parent);
+    if (next === parent) throw new Error("The Source Record parent chain is invalid.");
+    parent = next;
+  }
+  const named = fs.lstatSync(filePath);
+  const canonicalFile = fs.realpathSync.native(filePath);
+  if (named.isSymbolicLink() || !named.isFile() || !canonicalFile.startsWith(`${canonicalRoot}${path.sep}`)) {
+    throw new Error("The Source Record escaped its durable root.");
+  }
+  return named;
+}
+
+function sourceRecordIdentity(stat: fs.Stats): CurrentSourceRecordSnapshot["identity"] {
+  return {
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+    ctimeMs: stat.ctimeMs,
+    deviceId: String(stat.dev),
+    fileId: String(stat.ino)
+  };
+}
+
+function sameSourceRecordIdentity(left: fs.Stats, right: fs.Stats): boolean {
+  const a = sourceRecordIdentity(left);
+  const b = sourceRecordIdentity(right);
+  return a.size === b.size && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs &&
+    a.deviceId === b.deviceId && a.fileId === b.fileId;
 }
 
 const resolveVaultRelativePath = createVaultRelativePathResolver(

@@ -10,6 +10,7 @@ import type {
   NoteRenderResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteRevealSourceRequest,
   NoteEditorOpenRequest,
   NoteEditorSaveRequest,
   ReaderSelectionActionRequest,
@@ -413,6 +414,7 @@ describe("full UI Library", () => {
     const copied: string[] = [];
     const opened: string[] = [];
     const sourceRequests: NoteOpenSourceReferenceRequest[] = [];
+    const sourceRevealRequests: NoteRevealSourceRequest[] = [];
     const editorOpenRequests: NoteEditorOpenRequest[] = [];
     const editorSaveRequests: NoteEditorSaveRequest[] = [];
     const committedNotes: NoteRenderResult[] = [];
@@ -488,6 +490,10 @@ describe("full UI Library", () => {
             target: { pageId: "page_20260715_source111" }
           };
         },
+        onRevealSource: async (request) => {
+          sourceRevealRequests.push(request);
+          return { ...request, status: "revealed" };
+        },
         onDevelopment: (capability) => unavailable.push(capability),
         t
       }));
@@ -542,6 +548,10 @@ describe("full UI Library", () => {
           sourceRequests.push(request);
           return { apiVersion: 1, requestId: request.requestId, status: "resolved", target: { pageId: "page_20260715_source111" } };
         },
+        onRevealSource: async (request) => {
+          sourceRevealRequests.push(request);
+          return { ...request, status: "revealed" };
+        },
         onDevelopment: (capability) => unavailable.push(capability), t
       }));
       await settle(dom);
@@ -552,6 +562,22 @@ describe("full UI Library", () => {
     expect(container.textContent).toContain("Saved source 1");
     expect(container.textContent).not.toContain("source_private_0001");
     expect(container.textContent).not.toContain("/Users/example/private.md");
+    const revealSource = requireElement(container.querySelector<HTMLButtonElement>(
+      `[data-reader-source-reveal="${note.summary.sourceIds[0]}"]`
+    ));
+    revealSource.focus();
+    await act(async () => {
+      revealSource.click();
+      await settle(dom);
+    });
+    expect(sourceRevealRequests[0]).toMatchObject({
+      activeVaultId: "vault_20260715_fullui01",
+      currentPageId: note.summary.pageId,
+      renderContextId: note.renderContextId,
+      sourceId: note.summary.sourceIds[0]
+    });
+    expect(container.textContent).toContain("Original opened.");
+    expect(dom.window.document.activeElement).toBe(revealSource);
     await act(async () => {
       sourceButtons[0]!.click();
       await settle(dom);

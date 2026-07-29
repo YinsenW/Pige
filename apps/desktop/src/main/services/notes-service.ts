@@ -11,6 +11,7 @@ import type {
   NoteGetRequest,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteRevealSourceRequest,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
   NoteRenderRequest,
@@ -29,7 +30,6 @@ import {
   NoteInlineReferenceHrefSchema,
   PageIdSchema,
   SourceIdSchema,
-  SourceRecordSchema,
   type SourceRecord
 } from "@pige/schemas";
 import {
@@ -40,11 +40,11 @@ import {
   readMarkdownPageByRelativePath
 } from "./markdown-page-index";
 import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
+import { readCurrentSourceRecordSnapshot } from "./source-file-access";
 
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16;
 const MAX_RENDER_CONTEXT_HREFS = 128;
 const RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
-const MAX_SOURCE_RECORD_BYTES = 2 * 1024 * 1024;
 const MAX_NOTE_RENDER_BYTES = 4 * 1024 * 1024;
 const UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
 
@@ -110,10 +110,14 @@ interface StableNoteDocument {
   readonly identity: FileIdentity;
 }
 
-interface SourceRecordSnapshot {
-  readonly record: SourceRecord;
-  readonly identity: FileIdentity;
-}
+export type NotesSourceRevealResolution =
+  | {
+      readonly status: "ready";
+      readonly vaultPath: string;
+      readonly sourceRecord: SourceRecord;
+      assertCurrent(): boolean;
+    }
+  | { readonly status: "stale" | "not_found" };
 
 interface NoteEditorBinding {
   readonly privateRenderIdentity: string;
@@ -411,6 +415,43 @@ export class NotesService {
     }
   }
 
+  resolveSourceReveal(
+    ownerId: string,
+    request: NoteRevealSourceRequest
+  ): NotesSourceRevealResolution {
+    const vault = this.#vaults.current();
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!vault || !vaultPath || vault.vaultId !== request.activeVaultId) return { status: "stale" };
+    const context = this.#readRenderContext(ownerId, request.renderContextId);
+    if (
+      !context ||
+      context.vaultId !== request.activeVaultId ||
+      context.vaultPath !== vaultPath ||
+      context.pageId !== request.currentPageId ||
+      this.#ownerEpochs.get(ownerId) !== context.ownerEpoch ||
+      !this.#matchesCurrentPage(context)
+    ) return { status: "stale" };
+    if (!context.sourceIds.has(request.sourceId)) return { status: "not_found" };
+    const source = readCurrentSourceRecordSnapshot(vaultPath, request.sourceId);
+    if (!source) return { status: "not_found" };
+    return {
+      status: "ready",
+      vaultPath,
+      sourceRecord: source.record,
+      assertCurrent: () => {
+        const current = this.#readRenderContext(ownerId, request.renderContextId);
+        const latest = readCurrentSourceRecordSnapshot(vaultPath, request.sourceId);
+        return Boolean(
+          current === context &&
+          latest &&
+          this.#ownerEpochs.get(ownerId) === context.ownerEpoch &&
+          this.#matchesCurrentPage(context) &&
+          sameFileIdentity(source.identity, latest.identity)
+        );
+      }
+    };
+  }
+
   resolveSelection(
     ownerId: string,
     request: ReaderSelectionResolveRequest
@@ -560,7 +601,7 @@ export class NotesService {
     context: NoteRenderContext,
     sourceId: string
   ): SourceReferenceResolution {
-    const source = readSourceRecordSnapshot(context.vaultPath, sourceId);
+    const source = readCurrentSourceRecordSnapshot(context.vaultPath, sourceId);
     const pageId = source?.record.knowledgePageId;
     if (!source || !pageId) return { status: "source_unresolved" };
     const candidates = this.#referenceIndex?.inlineReferenceCandidates(context.vaultPath, {
@@ -581,7 +622,7 @@ export class NotesService {
     ) {
       return { status: "mismatch" };
     }
-    const after = readSourceRecordSnapshot(context.vaultPath, sourceId);
+    const after = readCurrentSourceRecordSnapshot(context.vaultPath, sourceId);
     if (!after || !sameFileIdentity(source.identity, after.identity)) {
       return { status: "changed" };
     }
@@ -764,109 +805,6 @@ function parseInlineReferenceHref(href: string):
   const locator = raw.slice(separator + 1);
   if (!CitationLocatorSchema.max(256).safeParse(locator).success) return undefined;
   return { kind: "source", sourceId, locator };
-}
-
-function readSourceRecordSnapshot(vaultPath: string, sourceId: string): SourceRecordSnapshot | undefined {
-  const dateKey = /^src_(\d{8})_/u.exec(sourceId)?.[1];
-  if (!dateKey) return undefined;
-  const root = path.resolve(vaultPath, ".pige", "source-records");
-  const filePath = path.resolve(
-    root,
-    dateKey.slice(0, 4),
-    dateKey.slice(4, 6),
-    `${sourceId}.json`
-  );
-  if (!filePath.startsWith(`${root}${path.sep}`)) return undefined;
-  let descriptor: number | undefined;
-  try {
-    const namedBefore = assertConfinedSourceRecordPath(vaultPath, root, filePath);
-    if (namedBefore.size > MAX_SOURCE_RECORD_BYTES || namedBefore.nlink !== 1) return undefined;
-    descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
-    const before = fs.fstatSync(descriptor);
-    if (
-      before.isSymbolicLink() ||
-      !before.isFile() ||
-      before.nlink !== 1 ||
-      !sameFileIdentity(toFileIdentity(namedBefore), toFileIdentity(before))
-    ) return undefined;
-    const bytes = Buffer.alloc(before.size);
-    const read = fs.readSync(descriptor, bytes, 0, before.size, 0);
-    if (read !== before.size) return undefined;
-    const after = fs.fstatSync(descriptor);
-    const namedAfter = assertConfinedSourceRecordPath(vaultPath, root, filePath);
-    if (
-      after.nlink !== 1 ||
-      namedAfter.nlink !== 1 ||
-      !sameFileIdentity(toFileIdentity(before), toFileIdentity(after)) ||
-      !sameFileIdentity(toFileIdentity(after), toFileIdentity(namedAfter))
-    ) return undefined;
-    const json = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    const parsed = SourceRecordSchema.safeParse(JSON.parse(json) as unknown);
-    if (!parsed.success || parsed.data.id !== sourceId) return undefined;
-    return { record: parsed.data, identity: toFileIdentity(after) };
-  } catch {
-    return undefined;
-  } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
-  }
-}
-
-function assertConfinedSourceRecordPath(vaultPath: string, root: string, filePath: string): fs.Stats {
-  const resolvedVault = path.resolve(vaultPath);
-  const vaultStat = fs.lstatSync(resolvedVault);
-  if (vaultStat.isSymbolicLink() || !vaultStat.isDirectory()) {
-    throw new Error("Vault root must remain a real directory.");
-  }
-  const canonicalVault = fs.realpathSync.native(resolvedVault);
-  for (const governedDirectory of [
-    path.join(resolvedVault, ".pige"),
-    path.join(resolvedVault, ".pige", "source-records")
-  ]) {
-    const governedStat = fs.lstatSync(governedDirectory);
-    if (governedStat.isSymbolicLink() || !governedStat.isDirectory()) {
-      throw new Error("Source record governance directories must remain real directories.");
-    }
-  }
-  const resolvedRoot = path.resolve(root);
-  const rootStat = fs.lstatSync(resolvedRoot);
-  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
-    throw new Error("Source record root must remain a real directory.");
-  }
-  const canonicalRoot = fs.realpathSync.native(resolvedRoot);
-  const rootRelativeToVault = path.relative(canonicalVault, canonicalRoot);
-  if (
-    !rootRelativeToVault ||
-    rootRelativeToVault.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(rootRelativeToVault)
-  ) {
-    throw new Error("Source record root escaped its governed vault.");
-  }
-  let parent = path.dirname(filePath);
-  while (true) {
-    const parentStat = fs.lstatSync(parent);
-    if (parentStat.isSymbolicLink() || !parentStat.isDirectory()) {
-      throw new Error("Source record parents must remain real directories.");
-    }
-    const canonicalParent = fs.realpathSync.native(parent);
-    const relative = path.relative(canonicalRoot, canonicalParent);
-    if (relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-      throw new Error("Source record parent escaped its governed root.");
-    }
-    if (path.resolve(parent) === resolvedRoot) break;
-    const next = path.dirname(parent);
-    if (next === parent) throw new Error("Source record parent chain did not reach its root.");
-    parent = next;
-  }
-  const named = fs.lstatSync(filePath);
-  const canonicalFile = fs.realpathSync.native(filePath);
-  if (
-    named.isSymbolicLink() ||
-    !named.isFile() ||
-    !canonicalFile.startsWith(`${canonicalRoot}${path.sep}`)
-  ) {
-    throw new Error("Source record escaped its governed root.");
-  }
-  return named;
 }
 
 function toFileIdentity(stat: fs.Stats): FileIdentity {

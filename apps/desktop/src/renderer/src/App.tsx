@@ -85,6 +85,8 @@ import type {
   ModelProfileSummary,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteRevealSourceRequest,
+  NoteRevealSourceResult,
   NoteEditorOpenRequest,
   NoteEditorOpenResult,
   NoteEditorSaveRequest,
@@ -2333,6 +2335,7 @@ export function App(): React.JSX.Element {
             }}
             onSearch={(request) => window.pige.retrieval.search(request)}
             onOpenSourceReference={(request) => window.pige.notes.openSourceReference(request)}
+            onRevealSource={(request) => window.pige.notes.revealSource(request)}
             searchFocusRequest={librarySearchFocusRequest}
             onOpenNote={openNote}
             onCloseNote={() => {
@@ -2381,6 +2384,7 @@ export function App(): React.JSX.Element {
               onRefresh={refreshLibrary}
               onSearch={(request) => window.pige.retrieval.search(request)}
               onOpenSourceReference={(request) => window.pige.notes.openSourceReference(request)}
+              onRevealSource={(request) => window.pige.notes.revealSource(request)}
               searchFocusRequest={librarySearchFocusRequest}
               onOpenNote={openNote}
               onCloseNote={() => {
@@ -2882,6 +2886,7 @@ export function LibraryPanel(props: {
   readonly onOpenSourceReference?: (
     request: NoteOpenSourceReferenceRequest
   ) => Promise<NoteOpenSourceReferenceResult>;
+  readonly onRevealSource?: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
   readonly searchFocusRequest: number;
   readonly onOpenNote: (pageId: string) => Promise<void>;
   readonly onCloseNote: () => void;
@@ -3181,6 +3186,7 @@ export function LibraryPanel(props: {
           relatedLoadingPageId={props.noteLoadingPageId}
           onOpenRelated={props.onOpenNote}
           {...(props.onOpenSourceReference ? { onOpenSourceReference: props.onOpenSourceReference } : {})}
+          {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
           onOpenSourcePage={props.onOpenNote}
           {...(props.onActivateInlineReference ? { onActivateInlineReference: props.onActivateInlineReference } : {})}
           onDevelopment={showReaderDevelopment}
@@ -5961,6 +5967,7 @@ function HomeComposer(props: {
                   onSelectionLinkApplied: async (result: Extract<ReaderSelectionLinkResult, { status: "applied" }>) =>
                     openResultTarget(result.currentPageId),
                   onOpenSourceReference: (request) => window.pige.notes.openSourceReference(request),
+                  onRevealSource: (request) => window.pige.notes.revealSource(request),
                   onOpenSourcePage: openResult
                 } : {})}
                 locale={props.locale}

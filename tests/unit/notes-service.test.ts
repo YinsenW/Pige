@@ -787,6 +787,35 @@ status: "active"
     });
   });
 
+  it("leases an exact current Reader source and invalidates it on SourceRecord drift", async () => {
+    const { vaultPath, vault } = makeVault();
+    const sourceId = "src_20260709_reveal123";
+    writePage({
+      vaultPath, fileName: "current.md", pageId: "page_20260709_current1234",
+      title: "Current", sourceIds: [sourceId]
+    });
+    writeSourceRecord({ vaultPath, sourceId });
+    const notes = makeNotes(vaultPath, vault);
+    const rendered = await notes.render({ pageId: "page_20260709_current1234" }, OWNER_ID);
+    const resolved = notes.resolveSourceReveal(OWNER_ID, {
+      apiVersion: 1,
+      requestId: "notesourcereveal_abcdefghijklmnop",
+      activeVaultId: vault.vaultId,
+      currentPageId: "page_20260709_current1234",
+      renderContextId: rendered.renderContextId!,
+      sourceId
+    });
+    expect(resolved.status).toBe("ready");
+    if (resolved.status !== "ready") throw new Error("Expected a reveal lease.");
+    expect(resolved.sourceRecord.id).toBe(sourceId);
+    expect(resolved.assertCurrent()).toBe(true);
+
+    const recordPath = path.join(vaultPath, ".pige", "source-records", "2026", "07", `${sourceId}.json`);
+    const record = JSON.parse(fs.readFileSync(recordPath, "utf8")) as Record<string, unknown>;
+    fs.writeFileSync(recordPath, JSON.stringify({ ...record, updatedAt: "2026-07-09T13:00:00.000Z" }));
+    expect(resolved.assertCurrent()).toBe(false);
+  });
+
   it("does not resolve saved-source rows without the bounded reference index", async () => {
     const { vaultPath, vault } = makeVault();
     const sourceId = "src_20260709_noindex12";
