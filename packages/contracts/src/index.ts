@@ -97,6 +97,10 @@ import type {
   LocalSemanticRetrievalRemoveResult,
   LocalSemanticRetrievalStatus,
   LocalSemanticRetrievalStatusRequest,
+  OcrLanguagePreferenceRequest,
+  OcrLanguagePreferenceResult,
+  SetOcrLanguagePreferenceRequest,
+  SetOcrLanguagePreferenceResult,
   PaddleOcrCatalogComponent,
   PaddleOcrDisableRequest,
   PaddleOcrDisableResult,
@@ -436,6 +440,14 @@ export type {
   LocalSemanticRetrievalRequestId,
   LocalSemanticRetrievalStatus,
   LocalSemanticRetrievalStatusRequest,
+  OcrLanguagePreference,
+  OcrLanguagePreferenceMachineSettings,
+  OcrLanguagePreferenceRequest,
+  OcrLanguagePreferenceRequestId,
+  OcrLanguagePreferenceResult,
+  OcrLanguagePreferenceSummary,
+  SetOcrLanguagePreferenceRequest,
+  SetOcrLanguagePreferenceResult,
   PaddleOcrCatalogComponent,
   PaddleOcrDisableRequest,
   PaddleOcrDisableResult,
@@ -1909,6 +1921,12 @@ export interface PigeDesktopApi {
     ) => Promise<NoteOpenSourceReferenceResult>;
   };
   readonly localCapabilities: {
+    readonly ocrLanguagePreference: (
+      request: OcrLanguagePreferenceRequest
+    ) => Promise<OcrLanguagePreferenceResult>;
+    readonly setOcrLanguagePreference: (
+      request: SetOcrLanguagePreferenceRequest
+    ) => Promise<SetOcrLanguagePreferenceResult>;
     readonly paddleOcrSummary: (
       request: PaddleOcrSummaryRequest
     ) => Promise<PaddleOcrSummary>;

@@ -64,6 +64,10 @@ import type {
   LocalSemanticRetrievalRemoveResult,
   LocalSemanticRetrievalStatus,
   LocalSemanticRetrievalStatusRequest,
+  OcrLanguagePreferenceRequest,
+  OcrLanguagePreferenceResult,
+  SetOcrLanguagePreferenceRequest,
+  SetOcrLanguagePreferenceResult,
   PaddleOcrDisableRequest,
   PaddleOcrDisableResult,
   PaddleOcrEnableRequest,
@@ -319,6 +323,12 @@ import {
   LocalSemanticRetrievalRemoveResultSchema,
   LocalSemanticRetrievalStatusRequestSchema,
   LocalSemanticRetrievalStatusSchema,
+  OCR_LANGUAGE_PREFERENCE_CHANNEL,
+  OcrLanguagePreferenceRequestSchema,
+  OcrLanguagePreferenceResultSchema,
+  SET_OCR_LANGUAGE_PREFERENCE_CHANNEL,
+  SetOcrLanguagePreferenceRequestSchema,
+  SetOcrLanguagePreferenceResultSchema,
   PaddleOcrDisableRequestSchema,
   PaddleOcrDisableResultSchema,
   PaddleOcrEnableRequestSchema,
@@ -1404,6 +1414,24 @@ const api: PigeDesktopApi = {
       )
   },
   localCapabilities: {
+    ocrLanguagePreference: async (
+      request: OcrLanguagePreferenceRequest
+    ): Promise<OcrLanguagePreferenceResult> =>
+      OcrLanguagePreferenceResultSchema.parse(
+        await ipcRenderer.invoke(
+          OCR_LANGUAGE_PREFERENCE_CHANNEL,
+          OcrLanguagePreferenceRequestSchema.parse(request)
+        )
+      ),
+    setOcrLanguagePreference: async (
+      request: SetOcrLanguagePreferenceRequest
+    ): Promise<SetOcrLanguagePreferenceResult> =>
+      SetOcrLanguagePreferenceResultSchema.parse(
+        await ipcRenderer.invoke(
+          SET_OCR_LANGUAGE_PREFERENCE_CHANNEL,
+          SetOcrLanguagePreferenceRequestSchema.parse(request)
+        )
+      ),
     paddleOcrSummary: async (
       request: PaddleOcrSummaryRequest
     ): Promise<PaddleOcrSummary> =>
