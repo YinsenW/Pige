@@ -13,9 +13,15 @@ import type {
   PaddleOcrSummaryRequest,
   PaddleOcrTestRequest,
   PaddleOcrTestResult,
+  OcrLanguagePreference,
+  OcrLanguagePreferenceRequest,
+  OcrLanguagePreferenceResult,
+  SetOcrLanguagePreferenceRequest,
+  SetOcrLanguagePreferenceResult,
   SpeechAvailabilityResult,
   ToolchainHealth
 } from "@pige/contracts";
+import type { Locale } from "@pige/schemas";
 import {
   LocalSemanticRetrievalSettingsPanel,
   type LocalSemanticRetrievalApi
@@ -24,6 +30,17 @@ import {
 type Translate = (key: string) => string;
 type PaddleOcrReadState = "loading" | "ready" | "failed";
 type PaddleOcrNotice = "denied" | "stale" | "failed" | null;
+type OcrLanguagePreferenceValue = "automatic" | Locale;
+type OcrLanguagePreferenceNotice = "stale" | "failed" | null;
+
+export interface OcrLanguagePreferenceApi {
+  readonly ocrLanguagePreference: (
+    request: OcrLanguagePreferenceRequest
+  ) => Promise<OcrLanguagePreferenceResult>;
+  readonly setOcrLanguagePreference: (
+    request: SetOcrLanguagePreferenceRequest
+  ) => Promise<SetOcrLanguagePreferenceResult>;
+}
 
 export interface PaddleOcrApi {
   readonly paddleOcrSummary: (request: PaddleOcrSummaryRequest) => Promise<PaddleOcrSummary>;
@@ -35,6 +52,7 @@ export interface PaddleOcrApi {
 }
 
 export interface LocalCapabilitiesSettingsPanelProps {
+  readonly ocrLanguagePreferenceApi?: OcrLanguagePreferenceApi;
   readonly paddleOcrApi: PaddleOcrApi;
   readonly semanticRetrievalApi: LocalSemanticRetrievalApi;
   readonly toolchainHealth: ToolchainHealth | null;
@@ -49,9 +67,30 @@ export interface LocalCapabilitiesSettingsPanelProps {
 
 const paddleOcrActions = ["install", "enable", "test", "disable", "remove"] as const;
 const paddleOcrPollLimit = 60;
+const ocrLanguagePreferences = ["automatic", "zh-Hans", "en", "ja", "ko", "fr", "de"] as const;
+const ocrLanguageLabels: Record<Locale, string> = {
+  "zh-Hans": "简体中文",
+  en: "English",
+  ja: "日本語",
+  ko: "한국어",
+  fr: "Français",
+  de: "Deutsch"
+};
 
 function createPaddleOcrRequestId(): string {
   return `paddleocr_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function createOcrLanguagePreferenceRequestId(): string {
+  return `ocrlangreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function ocrLanguagePreferenceValue(preference: OcrLanguagePreference): OcrLanguagePreferenceValue {
+  return preference.mode === "automatic" ? "automatic" : preference.language;
+}
+
+function ocrLanguagePreference(value: OcrLanguagePreferenceValue): OcrLanguagePreference {
+  return value === "automatic" ? { mode: "automatic" } : { mode: "preferred", language: value };
 }
 
 function formatDownloadSize(bytes: number): string {
@@ -59,6 +98,126 @@ function formatDownloadSize(bytes: number): string {
   return `${new Intl.NumberFormat(undefined, {
     maximumFractionDigits: mebibytes >= 100 ? 0 : 1
   }).format(mebibytes)} MB`;
+}
+
+function OcrLanguagePreferenceControl(props: {
+  readonly api: OcrLanguagePreferenceApi;
+  readonly t: Translate;
+}): React.JSX.Element {
+  const [snapshot, setSnapshot] = useState<Extract<OcrLanguagePreferenceResult, { status: "ready" }>["summary"] | null>(null);
+  const [draft, setDraft] = useState<OcrLanguagePreferenceValue | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState(false);
+  const [notice, setNotice] = useState<OcrLanguagePreferenceNotice>(null);
+  const mountedRef = useRef(true);
+  const requestSequenceRef = useRef(0);
+  const updateActiveRef = useRef(false);
+  const selectRef = useRef<HTMLSelectElement | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const sequence = requestSequenceRef.current + 1;
+    requestSequenceRef.current = sequence;
+    setLoading(true);
+    const requestId = createOcrLanguagePreferenceRequestId();
+    void props.api.ocrLanguagePreference({ apiVersion: 1, requestId }).then((result) => {
+      if (!mountedRef.current || sequence !== requestSequenceRef.current) return;
+      if (result.requestId !== requestId || result.status !== "ready") {
+        setNotice("failed");
+        setLoading(false);
+        return;
+      }
+      setSnapshot(result.summary);
+      setDraft(ocrLanguagePreferenceValue(result.summary.preference));
+      setNotice(null);
+      setLoading(false);
+    }).catch(() => {
+      if (!mountedRef.current || sequence !== requestSequenceRef.current) return;
+      setNotice("failed");
+      setLoading(false);
+    });
+    return () => {
+      mountedRef.current = false;
+      requestSequenceRef.current += 1;
+      updateActiveRef.current = false;
+    };
+  }, [props.api]);
+
+  const updatePreference = async (preference: OcrLanguagePreferenceValue): Promise<void> => {
+    const current = snapshot;
+    if (!current || updateActiveRef.current || pending) return;
+    updateActiveRef.current = true;
+    const sequence = requestSequenceRef.current + 1;
+    requestSequenceRef.current = sequence;
+    setDraft(preference);
+    setPending(true);
+    setNotice(null);
+    try {
+      const requestId = createOcrLanguagePreferenceRequestId();
+      const result = await props.api.setOcrLanguagePreference({
+        apiVersion: 1,
+        requestId,
+        preference: ocrLanguagePreference(preference),
+        expectedRevision: current.revision
+      });
+      if (!mountedRef.current || sequence !== requestSequenceRef.current) return;
+      if (result.requestId !== requestId) {
+        setNotice("failed");
+        return;
+      }
+      if ("summary" in result && result.summary.revision >= current.revision) {
+        setSnapshot(result.summary);
+        if (result.status === "committed") setDraft(ocrLanguagePreferenceValue(result.summary.preference));
+      }
+      setNotice(result.status === "committed" ? null : result.status);
+    } catch {
+      if (mountedRef.current && sequence === requestSequenceRef.current) setNotice("failed");
+    } finally {
+      if (mountedRef.current && sequence === requestSequenceRef.current) {
+        updateActiveRef.current = false;
+        setPending(false);
+        window.setTimeout(() => selectRef.current?.focus(), 0);
+      }
+    }
+  };
+
+  return (
+    <div className="settings-row tall" data-ocr-language-preference={draft ?? "loading"}>
+      <div className="settings-row-copy">
+        <strong>{props.t("capabilities.ocrLanguage.title")}</strong>
+        <span id="capabilities-ocr-language-description">{props.t("capabilities.ocrLanguage.description")}</span>
+      </div>
+      <div className="settings-row-control">
+        <select
+          ref={selectRef}
+          className="settings-select"
+          aria-label={props.t("capabilities.ocrLanguage.title")}
+          aria-describedby={`capabilities-ocr-language-description${notice ? " capabilities-ocr-language-notice" : ""}`}
+          disabled={loading || pending || !snapshot}
+          value={draft ?? "automatic"}
+          onChange={(event) => void updatePreference(event.target.value as OcrLanguagePreferenceValue)}
+        >
+          {ocrLanguagePreferences.map((preference) => (
+            <option key={preference} value={preference}>
+              {preference === "automatic"
+                ? props.t("capabilities.ocrLanguage.automatic")
+                : ocrLanguageLabels[preference]}
+            </option>
+          ))}
+        </select>
+      </div>
+      {notice ? (
+        <p
+          className="settings-inline-status error"
+          id="capabilities-ocr-language-notice"
+          role={notice === "failed" ? "alert" : "status"}
+          aria-live="polite"
+        >
+          {props.t(`capabilities.ocrLanguage.notice.${notice}`)}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function actionsForSummary(summary: PaddleOcrSummary): readonly PaddleOcrLifecycleAction[] {
@@ -406,22 +565,9 @@ export function LocalCapabilitiesSettingsPanel(
         </h2>
         <div className="settings-card">
           <PaddleOcrLifecyclePanel api={props.paddleOcrApi} t={props.t} />
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("capabilities.imageOcrTitle")}</strong>
-              <span>{props.t("capabilities.imageOcrDescription")}</span>
-            </div>
-            <button
-              className="settings-button"
-              type="button"
-              data-capability-control="image-ocr"
-              aria-label={`${props.t("capabilities.imageOcrTitle")}: ${props.t("settings.status.development")}`}
-              aria-describedby="capabilities-partial-note"
-              onClick={props.onDevelopment}
-            >
-              {props.t("settings.status.development")}
-            </button>
-          </div>
+          {props.ocrLanguagePreferenceApi ? (
+            <OcrLanguagePreferenceControl api={props.ocrLanguagePreferenceApi} t={props.t} />
+          ) : null}
           <div className="settings-row">
             <div className="settings-row-copy">
               <strong>{props.t("capabilities.voiceTitle")}</strong>

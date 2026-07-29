@@ -2583,6 +2583,7 @@ export function App(): React.JSX.Element {
             />
           ) : settingsSection === "capabilities" ? (
             <LocalCapabilitiesSettingsPanel
+              ocrLanguagePreferenceApi={window.pige.localCapabilities}
               paddleOcrApi={window.pige.localCapabilities}
               semanticRetrievalApi={window.pige.retrieval}
               toolchainHealth={toolchainHealth}
@@ -7371,22 +7372,6 @@ export function AppearanceSettingsPanel(props: {
               data-appearance-control="knowledge-language"
               aria-label={`${props.t("appearance.knowledgeLanguage")}: ${props.t("settings.status.development")}`}
               aria-describedby="appearance-knowledge-language-description appearance-partial-note"
-              onClick={props.onDevelopment}
-            >
-              {props.t("settings.status.development")}
-            </button>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("appearance.ocrLanguage")}</strong>
-              <span id="appearance-ocr-language-description">{props.t("appearance.ocrLanguageDescription")}</span>
-            </div>
-            <button
-              className="settings-button"
-              type="button"
-              data-appearance-control="ocr-language"
-              aria-label={`${props.t("appearance.ocrLanguage")}: ${props.t("settings.status.development")}`}
-              aria-describedby="appearance-ocr-language-description appearance-partial-note"
               onClick={props.onDevelopment}
             >
               {props.t("settings.status.development")}
