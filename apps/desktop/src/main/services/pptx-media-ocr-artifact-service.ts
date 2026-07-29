@@ -26,6 +26,7 @@ import { isSupportedNativeOcrIdentity, type NativeOcrResult } from "./ocr-types"
 import { SourcePageService } from "./source-page-service";
 import { tryVerifyReadableSourceFileAsync, verifyReadableSourceFileAsync } from "./source-file-access";
 import { createVaultRelativePathResolver } from "./vault-layout";
+import { observedOcrArtifactLanguage, sourceLanguageAfterOcr } from "./durable-language";
 
 export interface PptxMediaOcrTargetReady {
   readonly ready: true;
@@ -292,6 +293,7 @@ export class PptxMediaOcrArtifactService {
       blockCount: assembled.blockCount,
       ...(assembled.confidence !== undefined ? { confidence: assembled.confidence } : {}),
       languageHints: assembled.languageHints,
+      language: observedOcrArtifactLanguage(assembled.languageHints),
       targetCount: target.targets.length,
       skippedMediaCount: target.skippedMediaCount,
       complete: true,
@@ -313,6 +315,7 @@ export class PptxMediaOcrArtifactService {
     const engineVersions = uniqueStrings(results.map((item) => item.result.engineVersion));
     const updatedSource = SourceRecordSchema.parse({
       ...parsedSource,
+      language: sourceLanguageAfterOcr(parsedSource.language, assembled.languageHints),
       artifacts,
       metadata: {
         ...parsedSource.metadata,

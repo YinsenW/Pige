@@ -363,7 +363,7 @@ function renderSourcePage(input: {
 }): string {
   const sourceText = readManagedSourceText(input.vaultPath, input.sourceRecord);
   const sourceBody = createSourceBody(sourceText);
-  const language = typeof input.sourceRecord.metadata.locale === "string" ? input.sourceRecord.metadata.locale : "unknown";
+  const language = input.sourceRecord.language.language;
   const artifactIds = input.sourceRecord.artifacts.map((artifact) => artifact.id);
   const hasExtractedText = input.sourceRecord.artifacts.some((artifact) =>
     artifact.kind === "extracted_text" || artifact.kind === "ocr"
@@ -378,6 +378,7 @@ created_at: ${yamlString(input.now)}
 updated_at: ${yamlString(input.now)}
 status: "active"
 language: ${yamlString(language)}
+language_basis: ${yamlString(input.sourceRecord.language.basis)}
 aliases: []
 tags: []
 topics: []

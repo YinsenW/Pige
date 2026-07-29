@@ -27,6 +27,7 @@ import {
   type IngressSnapshotDescriptor
 } from "./ingress-snapshot-service";
 import { redactSensitiveUrl, SourceFetchService, type SourceFetchSnapshot } from "./source-fetch-service";
+import { observedLanguageFact, unknownLanguageFact } from "./durable-language";
 
 export interface CaptureVaultPort {
   current(): VaultSummary | undefined;
@@ -270,6 +271,7 @@ export class CaptureService {
     writeFileAtomic(resolveVaultPath(vaultPath, managedCopyPath), body);
     const sourceRecord: SourceRecord = CurrentSourceRecordSchema.parse({
       id: binding.sourceId,
+      language: unknownLanguageFact("source_record"),
       kind: "text",
       storageStrategy: "copy_to_source_library",
       semanticOrchestration: "agent_turn",
@@ -400,6 +402,7 @@ export class CaptureService {
         }
         const sourceRecord: SourceRecord = CurrentSourceRecordSchema.parse({
           id: sourceId,
+          language: unknownLanguageFact("source_record"),
           kind: sourceKind,
           storageStrategy,
           semanticOrchestration: "agent_turn",
@@ -594,6 +597,7 @@ function persistUrlSnapshot(input: {
 
   const sourceRecord: SourceRecord = CurrentSourceRecordSchema.parse({
     id: input.sourceId,
+    language: observedLanguageFact("source_record", sourceLanguage, "explicit_source"),
     kind: "url",
     storageStrategy: "copy_to_source_library",
     semanticOrchestration: "agent_turn",

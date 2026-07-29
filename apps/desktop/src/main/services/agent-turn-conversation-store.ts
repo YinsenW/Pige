@@ -26,13 +26,11 @@ import {
   invalidConversationTimelineCursor,
   selectConversationTimelineMessages
 } from "./agent-conversation-pagination";
-
-const MAX_TURN_TEXT_BYTES = 64 * 1024;
-const MAX_CONVERSATION_FILE_BYTES = 8 * 1024 * 1024;
+import { conversationLanguageContinuity } from "./durable-language";
+const MAX_TURN_TEXT_BYTES = 64 * 1024, MAX_CONVERSATION_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_CONTEXT_MESSAGES = 16;
 const MAX_CONTEXT_TEXT_BYTES = 64 * 1024;
-const DEFAULT_TIMELINE_MESSAGES = 50;
-const MAX_TIMELINE_MESSAGES = 100;
+const DEFAULT_TIMELINE_MESSAGES = 50, MAX_TIMELINE_MESSAGES = 100;
 const MAX_TIMELINE_TEXT_BYTES = 256 * 1024;
 const MAX_DISCOVERY_CANDIDATE_FILES = 256;
 const MAX_DISCOVERY_DIRECTORY_ENTRIES = 4_096;
@@ -154,6 +152,7 @@ export class AgentTurnConversationStore {
     const eventWithoutHash = ConversationEventSchema.parse({
       id: `evt_${dateKey}_${hashHex(`pige.agent_assistant.v1\0${jobId}\0${durableUser.event.id}`).slice(0, 16)}`,
       conversationId: durableUser.event.conversationId,
+      languageContinuity: durableUser.event.languageContinuity,
       type: "assistant_message",
       createdAt: new Date().toISOString(),
       parentEventId: durableUser.event.id,
@@ -403,6 +402,7 @@ export class AgentTurnConversationStore {
     const parsedEvent = ConversationEventSchema.parse({
       id: clientTurnEventId(resolved.clientTurnId),
       conversationId: resolved.conversationId,
+      ...(metadata?.locale ? { languageContinuity: conversationLanguageContinuity(boundedText, metadata.locale) } : {}),
       type: kind === "user" ? "user_message" : "error",
       createdAt: new Date().toISOString(),
       clientTurnId: resolved.clientTurnId,

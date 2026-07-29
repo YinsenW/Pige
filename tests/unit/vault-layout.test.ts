@@ -66,7 +66,7 @@ describe("vault layout", () => {
     expect(fs.existsSync(path.join(vaultPath, "index.md"))).toBe(true);
     expect(fs.existsSync(path.join(vaultPath, "log.md"))).toBe(true);
     expect(fs.existsSync(path.join(vaultPath, ".pige/config.json"))).toBe(true);
-    expect(manifest.vault_schema_version).toBe(1);
+    expect(manifest.vault_schema_version).toBe(2);
     expect(manifest.durable_roots).toContain(".pige/conversations");
     expect(manifest.durable_roots).toContain("datasets");
     expect(fs.existsSync(path.join(vaultPath, "datasets"))).toBe(true);

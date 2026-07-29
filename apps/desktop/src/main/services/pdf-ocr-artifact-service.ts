@@ -31,6 +31,7 @@ import { SourcePageService } from "./source-page-service";
 import { tryVerifyReadableSourceFileAsync, verifyReadableSourceFileAsync } from "./source-file-access";
 import { createVaultRelativePathResolver } from "./vault-layout";
 import { isSupportedNativeOcrIdentity, type NativeOcrResult } from "./ocr-types";
+import { observedOcrArtifactLanguage, sourceLanguageAfterOcr } from "./durable-language";
 
 export interface PdfRenderedPageForOcr {
   readonly page: number;
@@ -528,6 +529,7 @@ export class PdfOcrArtifactService {
       blockCount: assembled.blockCount,
       ...(assembled.confidence !== undefined ? { confidence: assembled.confidence } : {}),
       languageHints: assembled.languageHints,
+      language: observedOcrArtifactLanguage(assembled.languageHints),
       complete,
       ocrTextReady,
       agentTextReady,
@@ -547,6 +549,7 @@ export class PdfOcrArtifactService {
     const engineVersions = uniqueStrings(results.map((page) => page.result.engineVersion));
     const updatedSource = SourceRecordSchema.parse({
       ...parsedSource,
+      language: sourceLanguageAfterOcr(parsedSource.language, assembled.languageHints),
       artifacts,
       metadata: {
         ...parsedSource.metadata,

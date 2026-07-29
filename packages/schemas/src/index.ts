@@ -3226,6 +3226,11 @@ const CurrentSourceSemanticOrchestrationSchema = z.literal("agent_turn");
 const SourceRecordObjectSchema = z.object({
   schemaVersion: z.literal(1).default(1),
   id: SourceIdSchema,
+  language: SourceRecordLanguageFactSchema.default({
+    domain: "source_record",
+    language: "unknown",
+    basis: "legacy_missing"
+  }),
   kind: SourceKindSchema,
   storageStrategy: SourceStorageStrategySchema,
   semanticOrchestration: SourceSemanticOrchestrationSchema,
@@ -5427,6 +5432,10 @@ export const ConversationEventSchema = z.object({
   schemaVersion: z.literal(1).default(1),
   id: ConversationEventIdSchema,
   conversationId: ConversationIdSchema,
+  languageContinuity: ConversationLanguageContinuitySchema.default({
+    queryLanguage: { domain: "query", language: "unknown", basis: "legacy_missing" },
+    responseLanguage: { domain: "response", language: "unknown", basis: "legacy_missing" }
+  }),
   type: z.enum([
     "user_message",
     "assistant_message",

@@ -5,7 +5,7 @@ export const PIGE_REQUIREMENT_ID_PATTERN = /^PIGE-([A-Z][A-Z0-9]*)-(\d{3})$/;
 
 export type PigeRequirementId = `PIGE-${Uppercase<string>}-${number}`;
 
-export const PIGE_VAULT_SCHEMA_VERSION = 1;
+export const PIGE_VAULT_SCHEMA_VERSION = 2;
 export const PIGE_APP_MIN_VERSION = "0.1.0";
 export const PIGE_DEFAULT_VAULT_NAME = "Pige Vault";
 export const PIGE_VAULT_ID_PATTERN = /^vault_\d{8}_[a-z0-9]{6,}$/;

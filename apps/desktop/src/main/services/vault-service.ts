@@ -7,6 +7,8 @@ import type {
   RecentVaultSummary,
   UpdateSourceStoragePolicyRequest,
   VaultActionResult,
+  VaultMigrationApplyRequest,
+  VaultMigrationApplyResult,
   VaultRevealResult,
   VaultRevealTarget,
   VaultSummary
@@ -15,6 +17,7 @@ import { PIGE_DEFAULT_VAULT_NAME, PigeDomainError } from "@pige/domain";
 import { LocalSettingsStore, type RecentVaultBinding } from "./local-settings";
 import {
   createVaultOnDisk,
+  inspectVaultCompatibility,
   isPigeVault,
   loadVaultSummary,
   normalizeVaultName,
@@ -25,6 +28,7 @@ import {
 import {
   acquireVaultWriterLease
 } from "./vault-writer-lease";
+import { VaultMigrationService } from "./vault-migration-service";
 
 export interface VaultWriterLeasePort {
   readonly vaultPath: string;
@@ -55,6 +59,7 @@ export class VaultService {
   readonly #hasDefaultModel: () => boolean;
   readonly #acquireWriterLease: VaultWriterLeaseFactory;
   readonly #revealPath: VaultPathRevealer;
+  readonly #migration: VaultMigrationService;
   #activeVaultPath: string | undefined;
   #activeVault: VaultSummary | undefined;
   #activeWriterLease: VaultWriterLeasePort | undefined;
@@ -64,12 +69,14 @@ export class VaultService {
     settings: LocalSettingsStore,
     hasDefaultModel: () => boolean = () => false,
     acquireWriterLease: VaultWriterLeaseFactory = acquireVaultWriterLease,
-    revealPath: VaultPathRevealer = (targetPath) => shell.openPath(targetPath)
+    revealPath: VaultPathRevealer = (targetPath) => shell.openPath(targetPath),
+    migration = new VaultMigrationService(app.getPath("userData") || process.cwd())
   ) {
     this.#settings = settings;
     this.#hasDefaultModel = hasDefaultModel;
     this.#acquireWriterLease = acquireWriterLease;
     this.#revealPath = revealPath;
+    this.#migration = migration;
     this.#restoreActiveVaultFromSettings();
   }
 
@@ -163,7 +170,7 @@ export class VaultService {
     });
     const vaultPath = path.join(parentDirectory, normalizeVaultName(request.vaultName));
     this.#setActiveVault(vaultPath, vault);
-    return { status: "completed", vault: this.#requireActiveVault(), onboarding: this.onboardingStatus() };
+    return { status: "completed", compatibility: "current", vault: this.#requireActiveVault(), onboarding: this.onboardingStatus() };
   }
 
   async open(parentWindow: BrowserWindow): Promise<VaultActionResult> {
@@ -180,38 +187,46 @@ export class VaultService {
 
     const vaultPath = selection.filePaths[0];
     if (!vaultPath) return { status: "canceled" };
-    if (!isPigeVault(vaultPath)) {
-      throw new PigeDomainError("vault_not_compatible", "Selected folder is not a compatible Pige vault.");
-    }
-
-    const vault = loadVaultSummary(vaultPath);
-    this.#setActiveVault(vaultPath, vault);
-    return { status: "completed", vault: this.#requireActiveVault(), onboarding: this.onboardingStatus() };
+    return this.#openCompatiblePath(vaultPath);
   }
 
   openPath(vaultPathInput: string): VaultActionResult {
     this.#assertNoRestoreTransition();
     const vaultPath = path.resolve(vaultPathInput);
-    if (!isPigeVault(vaultPath)) {
-      throw new PigeDomainError("vault_not_compatible", "Selected folder is not a compatible Pige vault.");
-    }
-    const vault = loadVaultSummary(vaultPath);
-    this.#setActiveVault(vaultPath, vault);
-    return { status: "completed", vault: this.#requireActiveVault(), onboarding: this.onboardingStatus() };
+    return this.#openCompatiblePath(vaultPath);
   }
 
   openRecent(request: OpenRecentVaultRequest): VaultActionResult {
     this.#assertNoRestoreTransition();
     const binding = this.#settings.resolveRecentVaultBinding(request.vaultId);
-    if (!isPigeVault(binding.vaultPath)) {
-      throw new PigeDomainError("vault.recent_not_found", "The recent vault is no longer available.");
+    return this.#openCompatiblePath(binding.vaultPath, binding);
+  }
+
+  async applyMigration(request: VaultMigrationApplyRequest): Promise<VaultMigrationApplyResult> {
+    this.#assertNoRestoreTransition();
+    const vaultPath = this.#migration.resolvePreviewPath(request);
+    if (!vaultPath) return { ...request, status: "stale", current: "invalid" };
+    const lease = this.#acquireWriterLease(vaultPath);
+    let adopted = false;
+    try {
+      const outcome = await this.#migration.apply(request, lease);
+      if ("status" in outcome) return outcome;
+      lease.assertHeld();
+      this.#adoptMigratedVaultLease(lease, outcome.vault);
+      adopted = true;
+      return {
+        ...request,
+        status: "completed",
+        jobId: outcome.jobId,
+        operationId: outcome.operationId,
+        vault: this.#requireActiveVault(),
+        onboarding: this.onboardingStatus()
+      };
+    } finally {
+      if (!adopted) {
+        try { lease.release(); } catch { /* failed migration has no retained authority */ }
+      }
     }
-    const vault = loadVaultSummary(binding.vaultPath);
-    if (vault.vaultId !== binding.vaultId) {
-      throw new PigeDomainError("vault.recent_stale", "The recent vault identity changed.");
-    }
-    this.#setActiveVault(binding.vaultPath, vault, binding);
-    return { status: "completed", vault: this.#requireActiveVault(), onboarding: this.onboardingStatus() };
   }
 
   async revealKnowledgeRoot(): Promise<VaultRevealResult> {
@@ -338,7 +353,7 @@ export class VaultService {
     if (!activeVaultPath) return;
 
     try {
-      if (!isPigeVault(activeVaultPath)) {
+      if (inspectVaultCompatibility(activeVaultPath).status !== "current" || !isPigeVault(activeVaultPath)) {
         this.#settings.clearActiveVault();
         return;
       }
@@ -397,6 +412,48 @@ export class VaultService {
         // The previous vault is no longer writable through this service.
       }
     }
+  }
+
+  #adoptMigratedVaultLease(lease: VaultWriterLeasePort, vault: VaultSummary): void {
+    lease.assertHeld();
+    const nextPath = path.resolve(lease.vaultPath);
+    const current = inspectVaultCompatibility(nextPath);
+    if (current.status !== "current" || current.manifest.vault_id !== vault.vaultId) {
+      throw new PigeDomainError("vault.binding_changed", "The migrated vault identity changed before activation.");
+    }
+    this.#settings.setActiveVault(nextPath, vault);
+    const previous = this.#activeWriterLease;
+    this.#activeWriterLease = lease;
+    this.#activeVaultPath = nextPath;
+    this.#activeVault = vault;
+    if (previous && previous !== lease) {
+      try { previous.release(); } catch { /* previous binding is already revoked */ }
+    }
+  }
+
+  #openCompatiblePath(vaultPathInput: string, recentBinding?: RecentVaultBinding): VaultActionResult {
+    const vaultPath = path.resolve(vaultPathInput);
+    const inspection = inspectVaultCompatibility(vaultPath);
+    if (inspection.status === "invalid") return { status: "invalid", reason: inspection.reason };
+    if (recentBinding) {
+      const observedVaultId = inspection.status === "unsupported_newer"
+        ? inspection.vaultId
+        : inspection.manifest.vault_id;
+      if (observedVaultId !== recentBinding.vaultId) {
+        throw new PigeDomainError("vault.recent_stale", "The recent vault identity changed.");
+      }
+    }
+    if (inspection.status === "unsupported_newer") {
+      return { status: "unsupported_newer", vaultId: inspection.vaultId, foundVersion: inspection.foundVersion, supportedVersion: 2 };
+    }
+    if (inspection.status === "needs_migration") {
+      const preview = this.#migration.inspect(vaultPath);
+      return preview ? { status: "needs_migration", preview } : { status: "invalid", reason: "manifest_malformed" };
+    }
+    const vault = loadVaultSummary(vaultPath);
+    this.#setActiveVault(vaultPath, vault, recentBinding);
+    this.#migration.recoverCommitted(vaultPath, this.#activeWriterLease!);
+    return { status: "completed", compatibility: "current", vault: this.#requireActiveVault(), onboarding: this.onboardingStatus() };
   }
 
   #assertActiveWriterLease(): void {

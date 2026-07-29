@@ -204,6 +204,8 @@ import type {
   WindowLayoutState,
   WindowState,
   VaultActionResult,
+  VaultMigrationApplyRequest,
+  VaultMigrationApplyResult,
   VaultRevealResult,
   VaultRevealTarget,
   VaultSummary
@@ -323,6 +325,7 @@ import {
   ReaderSelectionResolveRequestSchema,
   ReaderSelectionResolveResultSchema,
   OpenRecentVaultRequestSchema,
+  VAULT_APPLY_MIGRATION_CHANNEL,
   SpeechAvailabilityRequestSchema,
   SpeechAvailabilityResultSchema,
   SpeechAssetInstallEventSchema,
@@ -382,7 +385,9 @@ import {
   SetThemeRequestSchema,
   WindowLayoutRequestSchema,
   WindowLayoutStateSchema,
-  VaultActionResultSchema
+  VaultActionResultSchema,
+  VaultMigrationApplyRequestSchema,
+  VaultMigrationApplyResultSchema
 } from "@pige/schemas";
 import type {
   CollectionAddFormulaColumnRequest,
@@ -743,9 +748,29 @@ function projectBackupManifestSummary(manifest: BackupManifestSummary): BackupMa
 
 function projectVaultActionResult(value: unknown): VaultActionResult {
   const parsed = VaultActionResultSchema.parse(value);
-  if (parsed.status === "canceled") return { status: "canceled" };
+  if (parsed.status !== "completed") return parsed;
 
-  const projectSummary = (vault: typeof parsed.vault): VaultSummary => ({
+  return {
+    status: "completed",
+    compatibility: "current",
+    vault: projectVaultSummary(parsed.vault),
+    onboarding: projectOnboarding(parsed.onboarding)
+  };
+}
+
+function projectVaultSummary(vault: {
+  readonly vaultId: string;
+  readonly name: string;
+  readonly activeVaultPathDisplay: string;
+  readonly knowledgeRootDisplay: string;
+  readonly sourceAssetRootDisplay: string;
+  readonly sourceAssetRootKind: VaultSummary["sourceAssetRootKind"];
+  readonly defaultSourceStorageStrategy: VaultSummary["defaultSourceStorageStrategy"];
+  readonly schemaVersion: number;
+  readonly counts?: VaultSummary["counts"] | undefined;
+  readonly lastBackupAt?: string | undefined;
+}): VaultSummary {
+  return {
     vaultId: vault.vaultId,
     name: vault.name,
     activeVaultPathDisplay: vault.activeVaultPathDisplay,
@@ -756,22 +781,38 @@ function projectVaultActionResult(value: unknown): VaultActionResult {
     schemaVersion: vault.schemaVersion,
     ...(vault.counts ? { counts: vault.counts } : {}),
     ...(vault.lastBackupAt ? { lastBackupAt: vault.lastBackupAt } : {})
-  });
+  };
+}
 
+function projectOnboarding(onboarding: {
+  readonly state: OnboardingStatus["state"];
+  readonly activeVault?: Parameters<typeof projectVaultSummary>[0] | undefined;
+  readonly hasDefaultModel: boolean;
+  readonly showFirstHomeGuide: boolean;
+  readonly waitingDependencyCounts?: OnboardingStatus["waitingDependencyCounts"] | undefined;
+}): OnboardingStatus {
   return {
+    state: onboarding.state,
+    ...(onboarding.activeVault ? { activeVault: projectVaultSummary(onboarding.activeVault) } : {}),
+    hasDefaultModel: onboarding.hasDefaultModel,
+    showFirstHomeGuide: onboarding.showFirstHomeGuide,
+    ...(onboarding.waitingDependencyCounts ? { waitingDependencyCounts: onboarding.waitingDependencyCounts } : {})
+  };
+}
+
+function projectVaultMigrationApplyResult(value: unknown): VaultMigrationApplyResult {
+  const parsed = VaultMigrationApplyResultSchema.parse(value);
+  if (parsed.status !== "completed") return parsed;
+  return {
+    apiVersion: 1,
+    requestId: parsed.requestId,
+    vaultId: parsed.vaultId,
+    previewId: parsed.previewId,
     status: "completed",
-    vault: projectSummary(parsed.vault),
-    onboarding: {
-      state: parsed.onboarding.state,
-      ...(parsed.onboarding.activeVault
-        ? { activeVault: projectSummary(parsed.onboarding.activeVault) }
-        : {}),
-      hasDefaultModel: parsed.onboarding.hasDefaultModel,
-      showFirstHomeGuide: parsed.onboarding.showFirstHomeGuide,
-      ...(parsed.onboarding.waitingDependencyCounts
-        ? { waitingDependencyCounts: parsed.onboarding.waitingDependencyCounts }
-        : {})
-    }
+    jobId: parsed.jobId,
+    operationId: parsed.operationId,
+    vault: projectVaultSummary(parsed.vault),
+    onboarding: projectOnboarding(parsed.onboarding)
   };
 }
 
@@ -1402,13 +1443,18 @@ const api: PigeDesktopApi = {
     dismissFirstHomeGuide: async (): Promise<OnboardingStatus> =>
       ipcRenderer.invoke("onboarding.dismissFirstHome") as Promise<OnboardingStatus>,
     create: async (request: CreateVaultRequest): Promise<VaultActionResult> =>
-      ipcRenderer.invoke("vault.create", request) as Promise<VaultActionResult>,
-    open: async (): Promise<VaultActionResult> => ipcRenderer.invoke("vault.open") as Promise<VaultActionResult>,
+      projectVaultActionResult(await ipcRenderer.invoke("vault.create", request)),
+    open: async (): Promise<VaultActionResult> => projectVaultActionResult(await ipcRenderer.invoke("vault.open")),
     openRecent: async (request: OpenRecentVaultRequest): Promise<VaultActionResult> => {
       const parsedRequest = OpenRecentVaultRequestSchema.parse(request);
       const result: unknown = await ipcRenderer.invoke("vault.openRecent", parsedRequest);
       return projectVaultActionResult(result);
     },
+    applyMigration: async (request: VaultMigrationApplyRequest): Promise<VaultMigrationApplyResult> =>
+      projectVaultMigrationApplyResult(await ipcRenderer.invoke(
+        VAULT_APPLY_MIGRATION_CHANNEL,
+        VaultMigrationApplyRequestSchema.parse(request)
+      )),
     revealKnowledgeRoot: async (): Promise<VaultRevealResult> =>
       projectVaultRevealResult(await ipcRenderer.invoke("vault.revealKnowledgeRoot"), "knowledge_root"),
     revealSourceAssetRoot: async (): Promise<VaultRevealResult> =>

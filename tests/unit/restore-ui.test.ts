@@ -16,6 +16,9 @@ import type {
   RestoreApplyResult,
   RestorePreviewResult,
   VaultActionResult,
+  VaultMigrationApplyRequest,
+  VaultMigrationApplyResult,
+  VaultMigrationPreview,
   VaultRevealResult,
   VaultRevealTarget,
   VaultSummary
@@ -182,6 +185,48 @@ describe("First-run onboarding UI", () => {
 
     expect(container.textContent).not.toContain("RAW_CREATE_SENTINEL");
     expect(container.textContent).not.toContain("/private/first-run-vault");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("requires explicit migration approval and opens only after the body-free apply result completes", async () => {
+    const dom = createDom();
+    const harness = createHarness(blockedOnboarding(), cloneOnlyPreview());
+    const recent = recentVaultSummary();
+    harness.recentVaults = [recent];
+    const preview = vaultMigrationPreview(recent.vaultId);
+    harness.openRecent = async (request) => {
+      harness.openRecentRequests.push(request);
+      return { status: "needs_migration", preview };
+    };
+    harness.applyMigration = async (request) => {
+      harness.migrationRequests.push(request);
+      harness.onboarding = readyOnboarding();
+      return {
+        ...request,
+        status: "completed",
+        jobId: "job_20260729_migrationtest",
+        operationId: "op_20260729_migrationtest",
+        vault: harness.onboarding.activeVault!,
+        onboarding: harness.onboarding
+      };
+    };
+    const { container, root } = await mountApp(dom, makePigeApi(harness));
+
+    await advanceToVault(dom, container);
+    await click(dom, buttonByAriaLabel(container, `Open: ${recent.name}`));
+    await waitFor(dom, () => container.textContent?.includes("Update this vault") ?? false);
+    expect(harness.migrationRequests).toHaveLength(0);
+    expect(container.textContent).not.toContain("/private/");
+
+    await click(dom, button(container, "Back up and update"));
+    await waitFor(dom, () => container.querySelector('textarea[aria-label="Capture or ask"]') !== null);
+    expect(harness.migrationRequests).toHaveLength(1);
+    expect(Object.keys(harness.migrationRequests[0]!).sort()).toEqual([
+      "apiVersion", "previewId", "requestId", "vaultId"
+    ].sort());
+    expect(harness.migrationRequests[0]).toMatchObject({ vaultId: recent.vaultId, previewId: preview.previewId });
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -757,6 +802,7 @@ interface RestoreHarness {
   modelSummaryReads: number;
   recentVaults: RecentVaultSummary[];
   readonly openRecentRequests: OpenRecentVaultRequest[];
+  readonly migrationRequests: VaultMigrationApplyRequest[];
   readonly preview: RestorePreviewResult;
   readonly applyRequests: RestoreApplyRequest[];
   jobs: JobSummary[];
@@ -775,6 +821,7 @@ interface RestoreHarness {
   localDatabaseStatus: LocalDatabaseStatus | null;
   applyRestore: (request: RestoreApplyRequest) => Promise<RestoreApplyResult>;
   openRecent: (request: OpenRecentVaultRequest) => Promise<VaultActionResult>;
+  applyMigration: (request: VaultMigrationApplyRequest) => Promise<VaultMigrationApplyResult>;
   revealStorageRoot: (target: VaultRevealTarget) => Promise<VaultRevealResult>;
 }
 
@@ -787,6 +834,7 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
     modelSummaryReads: 0,
     recentVaults: [],
     openRecentRequests: [],
+    migrationRequests: [],
     preview,
     applyRequests: [],
     jobs: [],
@@ -807,6 +855,7 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
       harness.openRecentRequests.push(request);
       return { status: "canceled" };
     },
+    applyMigration: async (request) => ({ ...request, status: "stale", current: "needs_migration" }),
     revealStorageRoot: async (target) => {
       harness.revealRequests.push(target);
       return { status: "revealed", target };
@@ -897,6 +946,7 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
       onboardingStatus: async () => harness.onboarding,
       recent: async () => harness.recentVaults,
       openRecent: (request: OpenRecentVaultRequest) => harness.openRecent(request),
+      applyMigration: (request: VaultMigrationApplyRequest) => harness.applyMigration(request),
       create: async () => ({ status: "canceled" as const }),
       open: async () => ({ status: "canceled" as const }),
       removeRecent: async () => [],
@@ -1060,8 +1110,31 @@ function vaultSummary(): VaultSummary {
     sourceAssetRootDisplay: "Restore UI Vault sources",
     sourceAssetRootKind: "inside_vault",
     defaultSourceStorageStrategy: "copy_to_source_library",
-    schemaVersion: 1,
+    schemaVersion: 2,
     counts: { notes: 2, sources: 1, managedSourceCopies: 1, referencedOriginals: 0 }
+  };
+}
+
+function vaultMigrationPreview(vaultId: string): VaultMigrationPreview {
+  return {
+    apiVersion: 1,
+    previewId: `vaultmigration_${"a".repeat(32)}`,
+    vaultId,
+    fromVersion: 1,
+    toVersion: 2,
+    migrationClass: "transform",
+    requiresBackup: true,
+    languagePolicy: "preserve_or_unknown",
+    affectedDomains: [
+      { domain: "vault_manifest", count: 1 },
+      { domain: "source_records", count: 2 },
+      { domain: "markdown_pages", count: 3 },
+      { domain: "ocr_artifacts", count: 4 },
+      { domain: "conversation_events", count: 5 },
+      { domain: "memory", count: 6 },
+      { domain: "rebuildable_chunks", count: 7 }
+    ],
+    warnings: ["pre_migration_backup_required", "unknown_language_preserved", "rebuildable_indexes_after_commit"]
   };
 }
 

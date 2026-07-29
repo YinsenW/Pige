@@ -1488,5 +1488,21 @@
   "vaultSettings.externalRootUnavailable": "Externer Speicher ist nicht verbunden",
   "vaultSettings.revealSucceeded": "Im System-Dateimanager geöffnet.",
   "vaultSettings.subtitle": "Lokale Dateien bleiben die Quelle der Wahrheit.",
-  "vaultSettings.title": "Tresor und Notizspeicher"
+  "vaultSettings.title": "Tresor und Notizspeicher",
+  "vaultMigration.title": "Diesen Tresor aktualisieren",
+  "vaultMigration.description": "Dieser ältere Tresor muss aktualisiert werden, bevor Pige ihn öffnen kann.",
+  "vaultMigration.version": "Format",
+  "vaultMigration.backupNotice": "Pige erstellt vor der Änderung dauerhafter Dateien eine private Sicherung.",
+  "vaultMigration.apply": "Sichern und aktualisieren",
+  "vaultMigration.applying": "Wird aktualisiert...",
+  "vaultMigration.cancel": "Abbrechen",
+  "vaultMigration.failed": "Der Tresor wurde nicht geöffnet. Wiederholen Sie die Aktualisierung oder stellen Sie die Sicherung wieder her.",
+  "vaultMigration.openFailed": "Diese Pige-Version kann den Tresor nicht sicher öffnen.",
+  "vaultMigration.domain.vault_manifest": "Tresormanifest",
+  "vaultMigration.domain.source_records": "Quellen",
+  "vaultMigration.domain.markdown_pages": "Wissensseiten",
+  "vaultMigration.domain.ocr_artifacts": "OCR-Metadaten",
+  "vaultMigration.domain.conversation_events": "Unterhaltungen",
+  "vaultMigration.domain.memory": "Gedächtnis",
+  "vaultMigration.domain.rebuildable_chunks": "Lokale Indizes"
 }

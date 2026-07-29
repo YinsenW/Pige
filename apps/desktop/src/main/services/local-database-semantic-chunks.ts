@@ -2,12 +2,14 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import type { LibraryPageSummary } from "@pige/contracts";
+import type { ChunkLanguageFact } from "@pige/schemas";
 import {
   MARKDOWN_FRONTMATTER_READ_LIMIT_BYTES,
   readMarkdownPageBodyAtSignature
 } from "./markdown-page-index";
 import { RAG_CHUNKER_VERSION } from "./rag-chunker";
 import { sanitizeSearchBody } from "./search-text-utils";
+import { inheritedChunkLanguage } from "./durable-language";
 
 const CURRENT_INDEX_REVISION = 5;
 const MAX_INDEXED_BODY_CHARS = 500_000;
@@ -38,6 +40,7 @@ export interface LocalDatabaseSemanticChunk {
   readonly text: string;
   readonly textHash: string;
   readonly summary: LibraryPageSummary;
+  readonly language: ChunkLanguageFact;
 }
 
 export interface LocalDatabaseSemanticChunkBatch {
@@ -186,7 +189,8 @@ function readCurrentRows(
     const textHash = String(row.text_hash);
     if (String(row.chunker_version) !== RAG_CHUNKER_VERSION || start < 0 || end <= start || end > body.length ||
       `sha256:${createHash("sha256").update(text).digest("hex")}` !== textHash) return undefined;
-    chunks.push({ chunkId: String(row.chunk_id), text, textHash, summary: port.rowToSummary(row) });
+    const summary = port.rowToSummary(row);
+    chunks.push({ chunkId: String(row.chunk_id), text, textHash, summary, language: inheritedChunkLanguage(summary.language) });
   }
   return chunks;
 }

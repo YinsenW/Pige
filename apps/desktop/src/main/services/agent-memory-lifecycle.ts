@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { PigeDomainError } from "@pige/domain";
 import {
   OperationRecordSchema,
+  type MemoryLanguageFact,
   type MemoryRecordSummary,
   type OperationRecord
 } from "@pige/schemas";
@@ -23,6 +24,7 @@ export interface MemoryEventRecord {
   readonly conversationId: string;
   readonly userEventId: string;
   readonly parentJobId: string;
+  readonly language: MemoryLanguageFact;
   readonly occurredAt: string;
 }
 
@@ -31,6 +33,7 @@ export interface StoredMemoryRecord extends MemoryRecordSummary {
   readonly conversationId: string;
   readonly userEventId: string;
   readonly parentJobId: string;
+  readonly language: MemoryLanguageFact;
   readonly editProvenance?: MemoryEditProvenance;
 }
 

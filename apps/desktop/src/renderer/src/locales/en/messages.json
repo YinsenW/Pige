@@ -1486,5 +1486,21 @@
   "vaultSettings.externalRootUnavailable": "External storage is not connected",
   "vaultSettings.revealSucceeded": "Opened in the system file manager.",
   "vaultSettings.subtitle": "Local files remain the source of truth.",
-  "vaultSettings.title": "Vault & Note Storage"
+  "vaultSettings.title": "Vault & Note Storage",
+  "vaultMigration.title": "Update this vault",
+  "vaultMigration.description": "This older vault must be updated before Pige can open it.",
+  "vaultMigration.version": "Format",
+  "vaultMigration.backupNotice": "Pige creates a private backup before changing durable files.",
+  "vaultMigration.apply": "Back up and update",
+  "vaultMigration.applying": "Updating...",
+  "vaultMigration.cancel": "Cancel",
+  "vaultMigration.failed": "The vault was not opened. Retry the update or restore its pre-update backup.",
+  "vaultMigration.openFailed": "This vault cannot be opened safely by this version of Pige.",
+  "vaultMigration.domain.vault_manifest": "Vault manifest",
+  "vaultMigration.domain.source_records": "Sources",
+  "vaultMigration.domain.markdown_pages": "Knowledge pages",
+  "vaultMigration.domain.ocr_artifacts": "OCR metadata",
+  "vaultMigration.domain.conversation_events": "Conversations",
+  "vaultMigration.domain.memory": "Memory",
+  "vaultMigration.domain.rebuildable_chunks": "Local indexes"
 }
