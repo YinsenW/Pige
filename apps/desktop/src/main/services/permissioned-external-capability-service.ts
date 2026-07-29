@@ -269,13 +269,13 @@ export class PermissionedExternalCapabilityRegistry {
       ...(highRisk
         ? {
             resolveHighRisk: (decision: "allow" | "deny") => {
-              if (decision === "deny") {
-                fail?.(new PigeDomainError("permission.denied", "The exact high-risk effect was denied."));
-                return "committed" as const;
-              }
               return {
                 status: "committed" as const,
                 continueEffect: () => {
+                  if (decision === "deny") {
+                    fail?.(new PigeDomainError("permission.denied", "The exact high-risk effect was denied."));
+                    return;
+                  }
                   void this.#executeBound(adapter, normalizedInput, signal, context, turn, binding)
                     .then((result) => settle?.(result), (caught) => fail?.(caught));
                 }

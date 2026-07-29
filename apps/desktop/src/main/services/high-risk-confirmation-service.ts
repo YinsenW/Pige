@@ -10,9 +10,15 @@ import {
   HighRiskConfirmationChangedEventSchema,
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
-  HighRiskConfirmationResolveResultSchema,
-  HighRiskConfirmationSummarySchema
+  HighRiskConfirmationResolveResultSchema
 } from "@pige/schemas";
+import {
+  PermissionPolicyRuntimeState,
+  type PermissionPolicyRuntimeCommit,
+  type PermissionPolicyRecordLinkPort,
+  type PermissionPolicyRuntimePending
+} from "./permission-policy-runtime";
+import type { PermissionPolicyStorePort } from "./permission-policy-store";
 
 export type HighRiskConfirmationEffectResult = "committed" | "stale" | "failed";
 export interface HighRiskConfirmationCommittedEffect {
@@ -25,32 +31,10 @@ export type HighRiskConfirmationEffectResolver = (
   HighRiskConfirmationCommittedEffect |
   Promise<HighRiskConfirmationEffectResult | HighRiskConfirmationCommittedEffect>;
 
-export type HighRiskConfirmationRegistration = Omit<
-  HighRiskConfirmationSummary,
-  "apiVersion"
->;
-
+export type HighRiskConfirmationRegistration = Omit<HighRiskConfirmationSummary, "apiVersion">;
 export type HighRiskConfirmationRegistrationResult =
-  | { readonly status: "registered"; readonly revision: number; readonly confirmation: HighRiskConfirmationSummary }
-  | { readonly status: "restored"; readonly revision: number; readonly confirmation: HighRiskConfirmationSummary }
-  | { readonly status: "busy"; readonly revision: number; readonly confirmation: HighRiskConfirmationSummary }
-  | {
-      readonly status: "already_resolved";
-      readonly revision: number;
-      readonly decision: "allow" | "deny";
-    };
-
-interface PendingEffect {
-  readonly confirmation: HighRiskConfirmationSummary;
-  readonly revision: number;
-  resolver: HighRiskConfirmationEffectResolver;
-}
-
-interface ResolutionReceipt {
-  readonly confirmationId: string;
-  readonly revision: number;
-  readonly decision: "allow" | "deny";
-}
+  | { readonly status: "registered" | "restored" | "busy"; readonly revision: number; readonly confirmation: HighRiskConfirmationSummary }
+  | { readonly status: "already_resolved"; readonly revision: number; readonly decision: "allow" | "deny" };
 
 interface InFlightResolution {
   readonly confirmationId: string;
@@ -66,104 +50,64 @@ export interface HighRiskConfirmationWithdrawal {
 }
 
 export type HighRiskConfirmationWithdrawalResult = "withdrawn" | "stale" | "not_found" | "resolving";
-
-const MAX_RECEIPTS = 64;
+type Pending = PermissionPolicyRuntimePending<HighRiskConfirmationEffectResolver>;
 
 export class HighRiskConfirmationService {
-  #revision = 0;
-  #pending: PendingEffect | undefined;
+  readonly #state: PermissionPolicyRuntimeState<HighRiskConfirmationEffectResolver>;
   #inFlight: InFlightResolution | undefined;
-  readonly #receipts = new Map<string, ResolutionReceipt>();
   readonly #listeners = new Set<(event: HighRiskConfirmationChangedEvent) => void>();
 
+  constructor(store?: PermissionPolicyStorePort, links?: PermissionPolicyRecordLinkPort) {
+    this.#state = new PermissionPolicyRuntimeState(store, links);
+  }
+
   pending(): HighRiskConfirmationPendingResult {
-    return HighRiskConfirmationPendingResultSchema.parse(this.#pending
-      ? {
-          apiVersion: 1,
-          status: "pending",
-          revision: this.#pending.revision,
-          confirmation: this.#pending.confirmation
-        }
-      : { apiVersion: 1, status: "none", revision: this.#revision });
+    const pending = this.#state.pending();
+    return HighRiskConfirmationPendingResultSchema.parse(pending
+      ? { apiVersion: 1, status: "pending", revision: pending.revision, confirmation: pending.confirmation }
+      : { apiVersion: 1, status: "none", revision: this.#state.revision() });
   }
 
   register(
     registration: HighRiskConfirmationRegistration,
-    resolver: HighRiskConfirmationEffectResolver
+    resolver: HighRiskConfirmationEffectResolver,
+    bindingDigest?: string,
+    jobId?: string
   ): HighRiskConfirmationRegistrationResult {
-    const receipt = this.#receipts.get(registration.confirmationId);
-    if (receipt) {
-      return { status: "already_resolved", revision: receipt.revision, decision: receipt.decision };
-    }
-    if (this.#pending) {
-      if (this.#sameRegistration(this.#pending.confirmation, registration)) {
-        if (this.#inFlight) {
-          return { status: "busy", revision: this.#pending.revision, confirmation: this.#pending.confirmation };
-        }
-        this.#pending.resolver = resolver;
-        return { status: "restored", revision: this.#pending.revision, confirmation: this.#pending.confirmation };
-      }
-      return { status: "busy", revision: this.#pending.revision, confirmation: this.#pending.confirmation };
-    }
-
-    const confirmation = HighRiskConfirmationSummarySchema.parse({
-      apiVersion: 1,
-      ...registration
+    const result = this.#state.register({
+      registration,
+      resolver,
+      ...(bindingDigest ? { bindingDigest } : {}),
+      ...(jobId ? { jobId } : {})
     });
-    this.#revision += 1;
-    this.#pending = { confirmation, revision: this.#revision, resolver };
-    this.#emit();
-    return { status: "registered", revision: this.#revision, confirmation };
+    if (result.status === "already_resolved") {
+      return { status: result.status, revision: result.receipt.revision, decision: result.receipt.decision };
+    }
+    if (result.status === "registered") this.#emit();
+    return {
+      status: this.#inFlight && result.status === "restored" ? "busy" : result.status,
+      revision: result.pending.revision,
+      confirmation: result.pending.confirmation
+    };
   }
 
   async resolve(request: HighRiskConfirmationResolveRequest): Promise<HighRiskConfirmationResolveResult> {
     const parsed = HighRiskConfirmationResolveRequestSchema.parse(request);
-    const receipt = this.#receipts.get(parsed.confirmationId);
+    const receipt = this.#state.receipt(parsed.confirmationId);
     if (receipt) {
-      if (receipt.decision !== parsed.decision) {
-        return HighRiskConfirmationResolveResultSchema.parse({
-          apiVersion: 1,
-          status: "stale",
-          current: this.pending()
-        });
-      }
-      return HighRiskConfirmationResolveResultSchema.parse({
-        apiVersion: 1,
-        status: "already_resolved",
-        ...receipt
-      });
+      return receipt.decision === parsed.decision
+        ? HighRiskConfirmationResolveResultSchema.parse({ apiVersion: 1, status: "already_resolved", ...receipt })
+        : this.#stale();
     }
-
-    const pending = this.#pending;
+    const pending = this.#state.pending();
     if (!pending || pending.confirmation.confirmationId !== parsed.confirmationId) {
       return HighRiskConfirmationResolveResultSchema.parse({
-        apiVersion: 1,
-        status: "not_found",
-        revision: this.#revision
+        apiVersion: 1, status: "not_found", revision: this.#state.revision()
       });
     }
-    if (parsed.expectedRevision !== pending.revision) {
-      return HighRiskConfirmationResolveResultSchema.parse({
-        apiVersion: 1,
-        status: "stale",
-        current: this.pending()
-      });
-    }
-
-    const inFlight = this.#inFlight;
-    if (inFlight) {
-      if (
-        inFlight.confirmationId === parsed.confirmationId &&
-        inFlight.revision === parsed.expectedRevision &&
-        inFlight.decision === parsed.decision
-      ) {
-        return inFlight.promise;
-      }
-      return HighRiskConfirmationResolveResultSchema.parse({
-        apiVersion: 1,
-        status: "stale",
-        current: this.pending()
-      });
+    if (pending.revision !== parsed.expectedRevision) return this.#stale();
+    if (this.#inFlight) {
+      return this.#sameInFlight(parsed) ? this.#inFlight.promise : this.#stale();
     }
 
     const promise = Promise.resolve().then(() => this.#executeResolution(pending, parsed));
@@ -181,76 +125,15 @@ export class HighRiskConfirmationService {
   }
 
   withdraw(request: HighRiskConfirmationWithdrawal): HighRiskConfirmationWithdrawalResult {
-    const pending = this.#pending;
-    if (!pending || pending.confirmation.confirmationId !== request.confirmationId) return "not_found";
+    const pending = this.#state.pending();
     if (
-      pending.revision !== request.expectedRevision ||
-      JSON.stringify(pending.confirmation.owner) !== JSON.stringify(request.owner)
-    ) return "stale";
-    if (this.#inFlight) return "resolving";
-    this.#pending = undefined;
-    this.#revision += 1;
-    this.#emit();
-    return "withdrawn";
-  }
-
-  async #executeResolution(
-    pending: PendingEffect,
-    parsed: HighRiskConfirmationResolveRequest
-  ): Promise<HighRiskConfirmationResolveResult> {
-
-    let outcome: HighRiskConfirmationEffectResult | HighRiskConfirmationCommittedEffect;
-    try {
-      outcome = await pending.resolver(parsed.decision);
-    } catch {
-      outcome = "failed";
-    }
-    if (outcome === "failed") {
-      return HighRiskConfirmationResolveResultSchema.parse({
-        apiVersion: 1,
-        status: "failed",
-        confirmationId: parsed.confirmationId,
-        revision: this.#revision
-      });
-    }
-    if (this.#pending !== pending) {
-      return HighRiskConfirmationResolveResultSchema.parse({
-        apiVersion: 1,
-        status: "stale",
-        current: this.pending()
-      });
-    }
-
-    this.#pending = undefined;
-    this.#revision += 1;
-    if (outcome === "stale") {
-      this.#emit();
-      return HighRiskConfirmationResolveResultSchema.parse({
-        apiVersion: 1,
-        status: "stale",
-        current: this.pending()
-      });
-    }
-
-    const terminal = {
-      confirmationId: parsed.confirmationId,
-      revision: this.#revision,
-      decision: parsed.decision
-    } satisfies ResolutionReceipt;
-    this.#remember(terminal);
-    this.#emit();
-    if (typeof outcome === "object") {
-      try {
-        outcome.continueEffect();
-      } catch {
-        // The committed decision is authoritative; the owning Job projects effect failure.
-      }
-    }
-    return HighRiskConfirmationResolveResultSchema.parse({
-      apiVersion: 1,
-      status: "committed",
-      ...terminal
-    });
+      this.#inFlight &&
+      pending?.confirmation.confirmationId === request.confirmationId &&
+      pending.revision === request.expectedRevision
+    ) return "resolving";
+    const status = this.#state.withdraw(request);
+    if (status === "withdrawn") this.#emit();
+    return status;
   }
 
   onChanged(listener: (event: HighRiskConfirmationChangedEvent) => void): () => void {
@@ -258,20 +141,60 @@ export class HighRiskConfirmationService {
     return () => this.#listeners.delete(listener);
   }
 
-  #sameRegistration(
-    current: HighRiskConfirmationSummary,
-    next: HighRiskConfirmationRegistration
-  ): boolean {
-    return current.confirmationId === next.confirmationId &&
-      current.effect === next.effect &&
-      JSON.stringify(current.presentation) === JSON.stringify(next.presentation) &&
-      JSON.stringify(current.owner) === JSON.stringify(next.owner);
+  async #executeResolution(
+    pending: Pending,
+    parsed: HighRiskConfirmationResolveRequest
+  ): Promise<HighRiskConfirmationResolveResult> {
+    const resolver = pending.resolver;
+    if (!resolver) return this.#failed(parsed.confirmationId);
+    let outcome: HighRiskConfirmationEffectResult | HighRiskConfirmationCommittedEffect;
+    try {
+      outcome = await resolver(parsed.decision);
+    } catch {
+      outcome = "failed";
+    }
+    if (outcome === "failed") return this.#failed(parsed.confirmationId);
+    if (!this.#state.isCurrent(pending)) return this.#stale();
+    if (outcome === "stale") {
+      this.#state.clearStale(pending);
+      this.#emit();
+      return this.#stale();
+    }
+
+    let committed: PermissionPolicyRuntimeCommit;
+    try {
+      committed = this.#state.commit(pending, parsed.decision);
+    } catch {
+      return this.#failed(parsed.confirmationId);
+    }
+    if (!("receipt" in committed)) return this.#stale();
+    this.#emit();
+    if (typeof outcome === "object") {
+      try { outcome.continueEffect(); } catch { /* The owning Job projects effect failure. */ }
+    }
+    return HighRiskConfirmationResolveResultSchema.parse({
+      apiVersion: 1,
+      status: committed.status === "already_resolved" ? "already_resolved" : "committed",
+      confirmationId: committed.receipt.confirmationId,
+      revision: committed.receipt.revision,
+      decision: committed.receipt.decision
+    });
   }
 
-  #remember(receipt: ResolutionReceipt): void {
-    this.#receipts.set(receipt.confirmationId, receipt);
-    const oldest = this.#receipts.keys().next().value as string | undefined;
-    if (this.#receipts.size > MAX_RECEIPTS && oldest) this.#receipts.delete(oldest);
+  #sameInFlight(request: HighRiskConfirmationResolveRequest): boolean {
+    return this.#inFlight?.confirmationId === request.confirmationId &&
+      this.#inFlight.revision === request.expectedRevision &&
+      this.#inFlight.decision === request.decision;
+  }
+
+  #failed(confirmationId: string): HighRiskConfirmationResolveResult {
+    return HighRiskConfirmationResolveResultSchema.parse({
+      apiVersion: 1, status: "failed", confirmationId, revision: this.#state.revision()
+    });
+  }
+
+  #stale(): HighRiskConfirmationResolveResult {
+    return HighRiskConfirmationResolveResultSchema.parse({ apiVersion: 1, status: "stale", current: this.pending() });
   }
 
   #emit(): void {

@@ -11,6 +11,7 @@ import {
   type TaskExecutionPlanBinding
 } from "../../apps/desktop/src/main/services/task-execution-plan-service";
 import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
+import { PermissionPolicyStore } from "../../apps/desktop/src/main/services/permission-policy-store";
 
 const RECIPE_ID = "official.feishu-cli.install-config-auth-status";
 
@@ -155,6 +156,56 @@ describe("TaskExecutionPlanService", () => {
     })).resolves.toMatchObject({ status: "committed", decision: "allow" });
     await expect(pendingConfirmation).resolves.toBeUndefined();
     expect(service.issueNextAuthority(plan, 1, current(service, plan))).toBeDefined();
+  });
+
+  it("does not settle a reviewed plan before its durable decision links and adopts it after restart", async () => {
+    const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-task-plan-permission-")));
+    fs.chmodSync(root, 0o700);
+    let failLink = true;
+    const order: string[] = [];
+    const links = {
+      recordPending: vi.fn(() => order.push("pending_link")),
+      recordDecision: vi.fn(() => {
+        if (failLink) throw new Error("synthetic link failure");
+        order.push("decision_link");
+      })
+    };
+    try {
+      const confirmations = new HighRiskConfirmationService(new PermissionPolicyStore(root, vi.fn()), links);
+      const service = new TaskExecutionPlanService({
+        confirmPlan: createTaskExecutionPlanConfirmation(confirmations)
+      });
+      const plan = service.resolvePlan(feishuResolution());
+      let settled = false;
+      void service.confirmPlan(plan, current(service, plan)).then(() => { settled = true; });
+      await vi.waitFor(() => expect(confirmations.pending().status).toBe("pending"));
+      const pending = confirmations.pending();
+      if (pending.status !== "pending") throw new Error("expected a pending reviewed plan");
+      await expect(confirmations.resolve({
+        apiVersion: 1,
+        confirmationId: pending.confirmation.confirmationId,
+        expectedRevision: pending.revision,
+        decision: "allow"
+      })).resolves.toMatchObject({ status: "failed" });
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      expect(order).toEqual(["pending_link"]);
+
+      failLink = false;
+      const restartedConfirmations = new HighRiskConfirmationService(
+        new PermissionPolicyStore(root, vi.fn()),
+        links
+      );
+      const restarted = new TaskExecutionPlanService({
+        confirmPlan: createTaskExecutionPlanConfirmation(restartedConfirmations)
+      });
+      const restartedPlan = restarted.resolvePlan(feishuResolution());
+      await expect(restarted.confirmPlan(restartedPlan, current(restarted, restartedPlan))).resolves.toBeUndefined();
+      expect(order).toEqual(["pending_link", "decision_link"]);
+      expect(restarted.issueNextAuthority(restartedPlan, 1, current(restarted, restartedPlan))).toBeDefined();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("withdraws an aborted reviewed-plan confirmation without granting authority", async () => {

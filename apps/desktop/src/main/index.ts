@@ -199,6 +199,8 @@ import { listMarkdownTagCatalog } from "./services/markdown-page-index";
 import { LocalSettingsStore } from "./services/local-settings";
 import { ModelProviderRegistry } from "./services/model-provider-registry";
 import { PermissionBrokerService } from "./services/permission-broker-service";
+import { PermissionPolicyStore } from "./services/permission-policy-store";
+import { PermissionPolicyRecordLink } from "./services/permission-policy-record-link";
 import {
   applyReaderSelectionPageUpdate,
   createAgentPageUpdateOperationId
@@ -601,7 +603,17 @@ const getLocalSettingsStore = (): LocalSettingsStore => {
 
 const getHighRiskConfirmationService = (): HighRiskConfirmationService => {
   if (!highRiskConfirmationService) {
-    highRiskConfirmationService = new HighRiskConfirmationService();
+    highRiskConfirmationService = new HighRiskConfirmationService(
+      new PermissionPolicyStore(app.getPath("userData"), assertAppInstanceWriterLease),
+      new PermissionPolicyRecordLink({
+        activeVault: () => {
+          const vault = getVaultService().current();
+          const vaultPath = getVaultService().activeVaultPath();
+          return vault && vaultPath ? { vaultId: vault.vaultId, vaultPath } : undefined;
+        },
+        assertWriterLease: (vaultPath) => getVaultService().assertWriterLease(vaultPath)
+      })
+    );
     highRiskConfirmationService.onChanged((event) => {
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send("confirmations.changed", event);

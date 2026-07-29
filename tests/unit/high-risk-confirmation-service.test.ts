@@ -1,8 +1,12 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   HighRiskConfirmationService,
   type HighRiskConfirmationEffectResult
 } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
+import { PermissionPolicyStore } from "../../apps/desktop/src/main/services/permission-policy-store";
 
 const TURN_OWNER = { kind: "agent_turn" as const, clientTurnId: "turn_20260722_abcdefghijklmnop" };
 const OPERATION_OWNER = { kind: "operation" as const, operationId: "op_20260722_abcdefgh" };
@@ -183,5 +187,60 @@ describe("HighRiskConfirmationService", () => {
     expect(states).toEqual(["none", "effect"]);
     expect(service.pending()).toEqual({ apiVersion: 1, status: "none", revision: 2 });
     expect(continueEffect).toHaveBeenCalledOnce();
+  });
+
+  it("restores an exact pending prompt across restart and requires resolver rebinding before effect", async () => {
+    const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-confirmation-restart-")));
+    fs.chmodSync(root, 0o700);
+    const bindingDigest = `sha256:${"d".repeat(64)}`;
+    const jobId = "job_20260729_abcdefghijklmnop";
+    const firstResolver = vi.fn(() => "committed" as const);
+    const links = { recordPending: vi.fn(), recordDecision: vi.fn() };
+    try {
+      const first = new HighRiskConfirmationService(new PermissionPolicyStore(root, vi.fn()), links);
+      const registered = first.register(SHELL, firstResolver, bindingDigest, jobId);
+      expect(registered).toMatchObject({ status: "registered", revision: 1 });
+      expect(links.recordPending).toHaveBeenCalledWith(expect.objectContaining({ jobId }));
+
+      const restarted = new HighRiskConfirmationService(new PermissionPolicyStore(root, vi.fn()), links);
+      expect(restarted.pending()).toEqual(first.pending());
+      await expect(restarted.resolve({
+        apiVersion: 1,
+        confirmationId: SHELL.confirmationId,
+        expectedRevision: 1,
+        decision: "allow"
+      })).resolves.toMatchObject({ status: "failed", revision: 1 });
+      expect(firstResolver).not.toHaveBeenCalled();
+      expect(restarted.pending().status).toBe("pending");
+
+      expect(restarted.register(SHELL, vi.fn(), `sha256:${"e".repeat(64)}`, jobId))
+        .toMatchObject({ status: "busy", revision: 1 });
+      const continueEffect = vi.fn();
+      const reboundResolver = vi.fn(() => ({ status: "committed" as const, continueEffect }));
+      expect(restarted.register(SHELL, reboundResolver, bindingDigest, jobId))
+        .toMatchObject({ status: "restored", revision: 1 });
+      await expect(restarted.resolve({
+        apiVersion: 1,
+        confirmationId: SHELL.confirmationId,
+        expectedRevision: 1,
+        decision: "allow"
+      })).resolves.toMatchObject({ status: "committed", revision: 2, decision: "allow" });
+      expect(reboundResolver).toHaveBeenCalledOnce();
+      expect(continueEffect).toHaveBeenCalledOnce();
+      expect(links.recordDecision).toHaveBeenCalledWith(expect.objectContaining({ jobId }));
+
+      const adopted = new HighRiskConfirmationService(new PermissionPolicyStore(root, vi.fn()), links);
+      expect(adopted.pending()).toEqual({ apiVersion: 1, status: "none", revision: 2 });
+      expect(adopted.register(SHELL, vi.fn(), bindingDigest, jobId))
+        .toEqual({ status: "already_resolved", revision: 2, decision: "allow" });
+      await expect(adopted.resolve({
+        apiVersion: 1,
+        confirmationId: SHELL.confirmationId,
+        expectedRevision: 1,
+        decision: "deny"
+      })).resolves.toMatchObject({ status: "stale" });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

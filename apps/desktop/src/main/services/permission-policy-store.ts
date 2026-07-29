@@ -4,8 +4,10 @@ import path from "node:path";
 import type { HighRiskConfirmationSummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
-  HighRiskConfirmationOwnerSchema,
-  HighRiskConfirmationSummarySchema
+  HighRiskConfirmationSummarySchema,
+  JobIdSchema,
+  PermissionDecisionRecordSchema,
+  PermissionRequestIdSchema
 } from "@pige/schemas";
 import { z } from "zod";
 import { hasErrorInstanceCode as isErrno } from "./object-error-code";
@@ -16,8 +18,9 @@ const POLICY_DIRECTORY = "permission-policy";
 const POLICY_FILE = "policy.json";
 
 const PendingRequestIdentitySchema = z.object({
-  requestId: z.string().regex(/^permission_request_[a-f0-9]{32}$/u),
+  requestId: PermissionRequestIdSchema,
   bindingDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  jobId: JobIdSchema.optional(),
   confirmation: HighRiskConfirmationSummarySchema
 }).strict();
 const PendingRequestSchema = PendingRequestIdentitySchema.extend({
@@ -25,16 +28,9 @@ const PendingRequestSchema = PendingRequestIdentitySchema.extend({
   revision: z.number().int().positive()
 }).strict();
 
-const DecisionReceiptSchema = z.object({
+const DecisionReceiptSchema = PermissionDecisionRecordSchema.extend({
   state: z.literal("decided"),
-  decisionId: z.string().regex(/^permission_decision_[a-f0-9]{32}$/u),
-  requestId: z.string().regex(/^permission_request_[a-f0-9]{32}$/u),
-  bindingDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
-  confirmationId: z.string().regex(/^confirm_[0-9]{8}_[a-z0-9]{16,64}$/u),
-  requestRevision: z.number().int().positive(),
   revision: z.number().int().positive(),
-  decision: z.enum(["allow", "deny"]),
-  owner: HighRiskConfirmationOwnerSchema
 }).strict();
 
 const PermissionPolicyRecordSchema = z.object({
@@ -48,14 +44,20 @@ const PermissionPolicyRecordSchema = z.object({
 
 export interface PermissionPolicyDecisionReceipt {
   readonly state: "decided";
-  readonly decisionId: string;
-  readonly requestId: string;
-  readonly bindingDigest: string;
+  readonly id: string;
+  readonly schemaVersion: 1;
+  readonly permissionRequestId: string;
   readonly confirmationId: string;
-  readonly requestRevision: number;
+  readonly confirmationRevision: number;
+  readonly bindingHash: string;
   readonly revision: number;
-  readonly decision: "allow" | "deny";
-  readonly owner: HighRiskConfirmationSummary["owner"];
+  readonly decision: "deny" | "allow_once" | "allow_scoped";
+  readonly scope: "once" | "actor_version" | "resource_scope" | "profile_default" | "never";
+  readonly decidedBy: "user" | "system";
+  readonly autoAllowedBy: "none" | "saved_grant" | "yolo_full_access";
+  readonly jobId?: string | undefined;
+  readonly operationId?: string | undefined;
+  readonly decidedAt: string;
 }
 
 export interface PermissionPolicySnapshot {
@@ -64,6 +66,7 @@ export interface PermissionPolicySnapshot {
     readonly state: "pending";
     readonly requestId: string;
     readonly bindingDigest: string;
+    readonly jobId?: string;
     readonly revision: number;
     readonly confirmation: HighRiskConfirmationSummary;
   };
@@ -88,6 +91,7 @@ export interface PermissionPolicyStorePort {
   register(input: {
     readonly requestId: string;
     readonly bindingDigest: `sha256:${string}`;
+    readonly jobId?: string;
     readonly confirmation: HighRiskConfirmationSummary;
   }): PermissionPolicyRegistrationResult;
   commitDecision(input: {
@@ -110,10 +114,12 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
   readonly #root: string;
   readonly #recordPath: string;
   readonly #assertWriterLease: () => void;
+  readonly #now: () => string;
 
-  constructor(appDataRootInput: string, assertWriterLease: () => void) {
+  constructor(appDataRootInput: string, assertWriterLease: () => void, now: () => string = () => new Date().toISOString()) {
     if (!path.isAbsolute(appDataRootInput)) throw policyInvalid();
     this.#assertWriterLease = assertWriterLease;
+    this.#now = now;
     const appDataRoot = captureOwnedDirectory(appDataRootInput, true);
     this.#root = captureOwnedDirectory(path.join(appDataRoot, POLICY_DIRECTORY), true);
     this.#recordPath = path.join(this.#root, POLICY_FILE);
@@ -127,6 +133,7 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
   register(input: {
     readonly requestId: string;
     readonly bindingDigest: `sha256:${string}`;
+    readonly jobId?: string;
     readonly confirmation: HighRiskConfirmationSummary;
   }): PermissionPolicyRegistrationResult {
     const pendingIdentity = PendingRequestIdentitySchema.parse(input);
@@ -158,7 +165,9 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
     const current = this.#readRecord();
     const existing = current.receipts.find((item) => item.confirmationId === input.confirmationId);
     if (existing) {
-      return existing.decision === input.decision
+      const sameDecision = (existing.decision === "allow_once" && input.decision === "allow") ||
+        (existing.decision === "deny" && input.decision === "deny");
+      return sameDecision
         ? { status: "already_resolved", receipt: existing, snapshot: projectSnapshot(current) }
         : { status: "stale", snapshot: projectSnapshot(current) };
     }
@@ -176,14 +185,22 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
     const revision = nextRevision(current.revision);
     const receipt = DecisionReceiptSchema.parse({
       state: "decided",
-      decisionId: decisionId(current.pending.confirmation, input.expectedRevision, input.decision),
-      requestId: input.requestId,
-      bindingDigest: input.bindingDigest,
+      id: decisionId(current.pending.confirmation, input.bindingDigest, input.decision),
+      schemaVersion: 1,
+      permissionRequestId: input.requestId,
       confirmationId: input.confirmationId,
-      requestRevision: input.expectedRevision,
+      confirmationRevision: input.expectedRevision,
+      bindingHash: input.bindingDigest,
       revision,
-      decision: input.decision,
-      owner: current.pending.confirmation.owner
+      decision: input.decision === "allow" ? "allow_once" : "deny",
+      scope: input.decision === "allow" ? "once" : "never",
+      decidedBy: "user",
+      autoAllowedBy: "none",
+      ...(current.pending.jobId ? { jobId: current.pending.jobId } : {}),
+      ...(current.pending.confirmation.owner.kind === "operation"
+        ? { operationId: current.pending.confirmation.owner.operationId }
+        : {}),
+      decidedAt: this.#now()
     });
     const next = PermissionPolicyRecordSchema.parse({
       ...current,
@@ -260,6 +277,17 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
   }
 }
 
+export function createPermissionPolicyRequestId(bindingDigest: string, confirmationId: string): string {
+  if (!/^sha256:[a-f0-9]{64}$/u.test(bindingDigest)) throw policyInvalid();
+  const date = /^confirm_(\d{8})_/u.exec(confirmationId)?.[1];
+  if (!date) throw policyInvalid();
+  return `permreq_${date}_${createHash("sha256")
+    .update("pige.permission.request.v1\0", "utf8")
+    .update(bindingDigest, "utf8")
+    .digest("hex")
+    .slice(0, 32)}`;
+}
+
 function initialRecord(): PermissionPolicyRecord {
   return { schemaVersion: 1, revision: 0, defaultMode: "ask_every_time", grants: [], receipts: [] };
 }
@@ -267,7 +295,16 @@ function initialRecord(): PermissionPolicyRecord {
 function projectSnapshot(record: PermissionPolicyRecord): PermissionPolicySnapshot {
   return {
     revision: record.revision,
-    ...(record.pending ? { pending: record.pending } : {}),
+    ...(record.pending ? {
+      pending: {
+        state: record.pending.state,
+        requestId: record.pending.requestId,
+        bindingDigest: record.pending.bindingDigest,
+        ...(record.pending.jobId ? { jobId: record.pending.jobId } : {}),
+        revision: record.pending.revision,
+        confirmation: record.pending.confirmation
+      }
+    } : {}),
     receipts: record.receipts
   };
 }
@@ -318,12 +355,13 @@ function samePendingIdentity(
 
 function decisionId(
   confirmation: HighRiskConfirmationSummary,
-  revision: number,
+  bindingDigest: string,
   decision: "allow" | "deny"
 ): string {
-  return `permission_decision_${createHash("sha256")
+  const date = /^confirm_(\d{8})_/u.exec(confirmation.confirmationId)?.[1] ?? "19700101";
+  return `permdec_${date}_${createHash("sha256")
     .update("pige.permission.decision.v1\0", "utf8")
-    .update(canonicalJson({ confirmation, revision, decision }), "utf8")
+    .update(canonicalJson({ confirmation, bindingDigest, decision }), "utf8")
     .digest("hex")
     .slice(0, 32)}`;
 }

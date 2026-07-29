@@ -7,6 +7,7 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
+import { PermissionPolicyStore } from "../../apps/desktop/src/main/services/permission-policy-store";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
 import {
   assertPermissionedExternalExecutionAuthority,
@@ -109,6 +110,63 @@ describe("PermissionedExternalCapabilityRegistry AR1 authority", () => {
     expect(fixture.execute).toHaveBeenCalledTimes(1);
     expect(() => assertPermissionedExternalExecutionAuthority(captured, "run_shell"))
       .toThrowError(expect.objectContaining({ code: "permission.execution_authority_invalid" }));
+  });
+
+  it("does not settle allow or deny before durable decision links succeed", async () => {
+    for (const decision of ["allow", "deny"] as const) {
+      const appDataRoot = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), `pige-permission-order-${decision}-`)));
+      fs.chmodSync(appDataRoot, 0o700);
+      roots.push(appDataRoot);
+      let failLink = true;
+      const order: string[] = [];
+      const confirmations = new HighRiskConfirmationService(
+        new PermissionPolicyStore(appDataRoot, vi.fn()),
+        {
+          recordPending: vi.fn(),
+          recordDecision: vi.fn(() => {
+            if (failLink) throw new Error("synthetic link failure");
+            order.push("decision_link");
+          })
+        }
+      );
+      const adapter = highRiskShellAdapter(async () => {
+        order.push("effect");
+        return RESULT;
+      });
+      const fixture = createFixture(adapter, confirmations);
+      const tool = requireTool(fixture.registry.toolsForTurn({ ...fixture.turn, confirmationOwner: OWNER }));
+      let settled = false;
+      const execution = call(tool, `tool_call_${decision}`);
+      void execution.then(
+        () => { settled = true; },
+        () => { settled = true; }
+      );
+      await vi.waitFor(() => expect(confirmations.pending().status).toBe("pending"));
+      const pending = confirmations.pending();
+      if (pending.status !== "pending") throw new Error("Expected pending confirmation.");
+      const request = {
+        apiVersion: 1 as const,
+        confirmationId: pending.confirmation.confirmationId,
+        expectedRevision: pending.revision,
+        decision
+      };
+
+      await expect(confirmations.resolve(request)).resolves.toMatchObject({ status: "failed" });
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      expect(order).toEqual([]);
+
+      failLink = false;
+      await expect(confirmations.resolve(request)).resolves.toMatchObject({ status: "already_resolved", decision });
+      expect(order[0]).toBe("decision_link");
+      if (decision === "allow") {
+        await expect(execution).resolves.toEqual(RESULT);
+        expect(order).toEqual(["decision_link", "effect"]);
+      } else {
+        await expect(execution).rejects.toMatchObject({ code: "permission.denied" });
+        expect(order).toEqual(["decision_link"]);
+      }
+    }
   });
 
   it("commits and clears confirmation before a long owning effect completes", async () => {
@@ -317,7 +375,10 @@ describe("PermissionedExternalCapabilityRegistry AR1 authority", () => {
 
 type Execute = PermissionedExternalCapabilityAdapter["execute"];
 
-function createFixture(adapter: PermissionedExternalCapabilityAdapter): {
+function createFixture(
+  adapter: PermissionedExternalCapabilityAdapter,
+  confirmations = new HighRiskConfirmationService()
+): {
   machineRoot: string;
   vaultPath: string;
   confirmations: HighRiskConfirmationService;
@@ -332,7 +393,6 @@ function createFixture(adapter: PermissionedExternalCapabilityAdapter): {
   const vaultPath = path.join(root, "vault");
   fs.mkdirSync(machineRoot);
   fs.mkdirSync(vaultPath);
-  const confirmations = new HighRiskConfirmationService();
   const broker = new PermissionBrokerService({ rootPath: machineRoot, unsafeAllowUnfenced: true, confirmations });
   const execute = adapter.execute as ReturnType<typeof vi.fn<Execute>>;
   return {

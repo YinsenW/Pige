@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { PermissionPolicyStore } from "../../apps/desktop/src/main/services/permission-policy-store";
 
 const roots: string[] = [];
-const REQUEST_ID = "permission_request_0123456789abcdef0123456789abcdef";
+const REQUEST_ID = "permreq_20260729_0123456789abcdef0123456789abcdef";
 const BINDING_DIGEST = `sha256:${"a".repeat(64)}` as const;
 const CONFIRMATION = {
   apiVersion: 1 as const,
@@ -85,7 +85,7 @@ describe("PermissionPolicyStore", () => {
 
   it("persists one deterministic decision receipt and fails opposite replay stale", () => {
     const root = temporaryRoot();
-    const store = new PermissionPolicyStore(root, vi.fn());
+    const store = new PermissionPolicyStore(root, vi.fn(), () => "2026-07-29T12:00:00.000Z");
     const registered = store.register({
       requestId: REQUEST_ID,
       bindingDigest: BINDING_DIGEST,
@@ -104,18 +104,23 @@ describe("PermissionPolicyStore", () => {
       status: "committed",
       receipt: {
         state: "decided",
-        requestId: REQUEST_ID,
-        bindingDigest: BINDING_DIGEST,
+        id: expect.stringMatching(/^permdec_20260729_[a-f0-9]{32}$/u),
+        schemaVersion: 1,
+        permissionRequestId: REQUEST_ID,
         confirmationId: CONFIRMATION.confirmationId,
-        requestRevision: 1,
+        confirmationRevision: 1,
+        bindingHash: BINDING_DIGEST,
         revision: 2,
-        decision: "allow",
-        owner: CONFIRMATION.owner
+        decision: "allow_once",
+        scope: "once",
+        decidedBy: "user",
+        autoAllowedBy: "none",
+        decidedAt: "2026-07-29T12:00:00.000Z"
       },
-      snapshot: { revision: 2, receipts: [{ decision: "allow" }] }
+      snapshot: { revision: 2, receipts: [{ decision: "allow_once" }] }
     });
-    expect(committed.status === "committed" && committed.receipt.decisionId)
-      .toMatch(/^permission_decision_[a-f0-9]{32}$/u);
+    expect(committed.status === "committed" && committed.receipt.id)
+      .toMatch(/^permdec_20260729_[a-f0-9]{32}$/u);
 
     const restarted = new PermissionPolicyStore(root, vi.fn());
     expect(restarted.read()).toEqual(committed.snapshot);
