@@ -379,6 +379,7 @@ function commitRelationEdit(
   const column = table?.columns.find((candidate) => candidate.id === request.columnId);
   const relation = column?.relation;
   if (!table || !column || !relation) throw new PigeDomainError("collection.relation_ineligible", "The relation cell is unavailable.");
+  let beforeState: "null" | "value";
   const database = new DatabaseSync(current.payloadPath, { readOnly: true });
   try {
     validatePayloadMeta(database, current.manifest.datasetId, current.revision.id);
@@ -391,6 +392,8 @@ function commitRelationEdit(
     const currentCell = database.prepare(
       "SELECT state, projection_json FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
     ).get(request.rowId, column.id) as { state?: unknown; projection_json?: unknown } | undefined;
+    if (currentCell?.state !== "null" && currentCell?.state !== "value") throw payloadInvalid();
+    beforeState = currentCell.state;
     const currentTarget = currentCell?.state === "null" && currentCell.projection_json === "null"
       ? null
       : relationTargetId(currentCell?.projection_json);
@@ -403,11 +406,24 @@ function commitRelationEdit(
   const cell = request.targetRowId === null ? null : {
     kind: "pige_relation_target" as const, schemaVersion: 1 as const, targetRowId: request.targetRowId
   };
+  const afterState = cell ? "value" : "null";
+  const stats = column.stats ?? { missing: 0, empty: 0, null: 0, value: 0 };
+  if (beforeState !== afterState && stats[beforeState] < 1) throw payloadInvalid();
+  const nextStats = beforeState === afterState ? stats : {
+    ...stats, [beforeState]: stats[beforeState] - 1, [afterState]: stats[afterState] + 1
+  };
   return publishMutation({
     current, identity, tableId: table.id, rowId: request.rowId, columnId: column.id,
     change: { kind: "collection_relation_cell_edit", targetTableId: relation.targetTableId, targetRowId: request.targetRowId },
     mutate: (database) => editRelationCell(database, current, column, request.rowId, cell, identity.revisionId),
-    schema: DatasetSchemaRecordSchema.parse({ ...current.schema, revisionId: identity.revisionId, createdAt: new Date().toISOString() }),
+    schema: DatasetSchemaRecordSchema.parse({
+      ...current.schema, revisionId: identity.revisionId, createdAt: new Date().toISOString(),
+      tables: current.schema.tables.map((candidate) => candidate.id === table.id
+        ? { ...candidate, columns: candidate.columns.map((entry) => entry.id === column.id
+          ? { ...entry, stats: nextStats }
+          : entry) }
+        : candidate)
+    }),
     stats: current.revision.stats
   });
 }
@@ -609,6 +625,7 @@ function deriveDisplayLabel(raw: { state?: unknown; projection_json?: unknown } 
   const text = typeof value === "string" ? value : typeof value === "number" && Number.isFinite(value)
     ? String(Object.is(value, -0) ? 0 : value) : typeof value === "boolean" ? String(value) : null;
   if (text === null) throw payloadInvalid();
+  if (text.length === 0) return null;
   const encoder = new TextEncoder();
   if (encoder.encode(text).byteLength <= 512 && text.length <= 160) return CollectionRelationDisplayLabelSchema.parse(text);
   let clipped = "";

@@ -1254,6 +1254,10 @@ describe("ManagedCollectionService", () => {
       })]) })
     ]) } });
     if (edited.status !== "committed") throw new Error("Relation cell was not edited");
+    expect(required(readBundle(fixture.vaultPath, initial.manifest.datasetId)).schema.tables
+      .find((candidate) => candidate.id === table.id)?.columns
+      .find((candidate) => candidate.id === added.columnId)?.stats)
+      .toEqual({ missing: 0, empty: 0, null: 1, value: 1 });
     await expect(service.editRelationCell({
       apiVersion: 1, requestId: "collection_request_relationnochangea", activeVaultId: vault.vaultId,
       datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: edited.snapshot.revisionId,
