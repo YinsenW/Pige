@@ -47,7 +47,7 @@ export interface AgentTurnFilePreservationBinding {
   readonly jobId: string;
   readonly sourceId: string;
   readonly inputChecksum?: string;
-  readonly ordinal?: number;
+  readonly ordinal?: number; readonly snapshotOrdinal?: number;
   readonly attachmentSetHash?: string;
 }
 
@@ -197,7 +197,7 @@ export class CaptureService {
       (!/^job_\d{8}_[a-z0-9]{8,}$/u.test(binding.jobId) ||
         !/^src_\d{8}_[a-z0-9]{8,}$/u.test(binding.sourceId) ||
         (binding.inputChecksum !== undefined && !/^sha256:[a-f0-9]{64}$/u.test(binding.inputChecksum)) ||
-        (binding.ordinal !== undefined && (!Number.isInteger(binding.ordinal) || binding.ordinal < 0 || binding.ordinal > 7)) ||
+        [binding.ordinal, binding.snapshotOrdinal].some((ordinal) => ordinal !== undefined && (!Number.isInteger(ordinal) || ordinal < 0 || ordinal > 7)) ||
         (binding.attachmentSetHash !== undefined && !/^sha256:[a-f0-9]{64}$/u.test(binding.attachmentSetHash)) ||
         request.filePaths.length !== 1)
     ) {
@@ -374,7 +374,7 @@ export class CaptureService {
           vaultId: vault.vaultId,
           parentJobId: agentTurnBinding.jobId,
           sourceId,
-          ordinal: agentTurnBinding.ordinal ?? 0,
+          ordinal: agentTurnBinding.snapshotOrdinal ?? agentTurnBinding.ordinal ?? 0,
           sourcePath: filePath,
           checksum,
           size: sourceStat.size,
@@ -531,7 +531,7 @@ function adoptExistingAgentTurnFileSource(
     Boolean(existing.managedCopy) !== Boolean(snapshot.managedCopy) ||
     snapshot.parentJobId !== binding.jobId ||
     snapshot.sourceId !== binding.sourceId ||
-    snapshot.ordinal !== (binding.ordinal ?? 0)
+    snapshot.ordinal !== (binding.snapshotOrdinal ?? binding.ordinal ?? 0)
   ) {
     throw new PigeDomainError(
       "agent_runtime.turn_binding_invalid",
@@ -593,7 +593,7 @@ function persistUrlSnapshot(input: {
   const rawSnapshotPath = vaultRelativePath("raw", "web", monthKey, `${input.sourceId}.${rawSnapshotExtension}`);
   const extractedTextPath = vaultRelativePath("artifacts", "web", monthKey, `${input.sourceId}.txt`);
   const sourceRecordPath = vaultRelativePath(".pige", "source-records", monthKey, `${input.sourceId}.json`);
-  const rawSnapshotTarget = path.resolve(input.managedRoot.rootPath, ...rawSnapshotPath.split("/"));
+  const rawSnapshotTarget = resolveConfinedVaultWritePath(input.managedRoot.rootPath, rawSnapshotPath);
   const extractedTextTarget = resolveConfinedVaultWritePath(input.vaultPath, extractedTextPath);
   const sourceRecordTarget = resolveConfinedVaultWritePath(input.vaultPath, sourceRecordPath);
   const displayName = createUrlDisplayName(input.snapshot);

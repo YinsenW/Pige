@@ -66,6 +66,7 @@ describe("HomeAgentAttachmentService", () => {
       sourceId,
       inputChecksum: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u),
       ordinal,
+      snapshotOrdinal: ordinal,
       attachmentSetHash: prepared.attachmentSetHash
     })));
   });

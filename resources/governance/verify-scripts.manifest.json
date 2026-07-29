@@ -5,7 +5,7 @@
     { "path": "scripts/verify/architecture-reset.mjs", "sha256": "38fcced8f9b0460d7620cb8922ad250b2e593dfc682303d17da6298827270813" },
     { "path": "scripts/verify/contract-consistency.mjs", "sha256": "3a57e55b1e3de2a6127879da49f7cb395b61daab3b48ee56ed152ff1eaf2e879" },
     { "path": "scripts/verify/contract-job-recovery.mjs", "sha256": "1b1787cc50f3dbf085783c030e0a439e4d8ff25d7f5fdf217aa91239183218d0" },
-    { "path": "scripts/verify/contract-security-egress.mjs", "sha256": "f27b2c61c60cb8588739f7d81a2141ec019de8028d318747401ec8a02eaf7e37" },
+    { "path": "scripts/verify/contract-security-egress.mjs", "sha256": "512f0302311bdf47c5a308c291ecf52e8022c9910e00c3478c022208f7d7ecf4" },
     { "path": "scripts/verify/contract-source-lifecycle.mjs", "sha256": "a8ecc9d0d3e92be6cf8d265675dc26febd0331e6dc6448cca23a45d4bdc3678c" },
     { "path": "scripts/verify/contract-stable-vocabulary.mjs", "sha256": "7661520c8b4809e4c2db52aff9ed1d750b6c06c831bcb19667ac29f39afa31a8" },
     { "path": "scripts/verify/decision-log.mjs", "sha256": "f157a17e2ea3df4158a379dbc95cc1753da035424658cc2d1243db96316b8b77" },
@@ -21,7 +21,7 @@
     { "path": "scripts/verify/generated-report-contract.mjs", "sha256": "beaf9850ed11d76726d93a011e27cae27013e2ab1b2994e861ed081ef6f7c60c" },
     { "path": "scripts/verify/import-boundaries.mjs", "sha256": "58f21306a4c96f88b1c8f7317b3edb892d7e6bb83354a2e16c39d1802aa3c3b5" },
     { "path": "scripts/verify/independent-documentation-review.mjs", "sha256": "d56b79223f4655cb48986c77b47598b13671fc06cb2c23e4b46b89bfdf7f484e" },
-    { "path": "scripts/verify/large-paste-boundary.mjs", "sha256": "d318a16774ff19bef62e7327a66844364b1b8b02342e5e52670dcd679e977a88" },
+    { "path": "scripts/verify/large-paste-boundary.mjs", "sha256": "55ba792e3171b78aa7055730917cf507c73de1ec9312b68a0608c4697b611b0c" },
     { "path": "scripts/verify/local-database-rebuild-worker-smoke.mjs", "sha256": "6b1351fa22d461eec35589a5d7fbecdadd0efcd04464bf7e41d4e84020f6b88a" },
     { "path": "scripts/verify/macos-speech-helper-smoke.mjs", "sha256": "35d8b1c43b7c1c105a3e529543b506aa8ed6091ed68d59fabdb419f58f021413" },
     { "path": "scripts/verify/macos-vision-ocr-helper-smoke.mjs", "sha256": "66accf0bb7409f5341697ec08b76c0b1150d295b6bf2ff66518440f14f61a2d2" },
@@ -43,7 +43,7 @@
     { "path": "scripts/verify/traceability.mjs", "sha256": "29ca157e4d051f2f4d0f06c9544c0180bca357b25a329343e493cfd6000515f3" },
     { "path": "scripts/verify/trailing-whitespace.mjs", "sha256": "ec8c7c35d1281c6ca1d9f85bdb4f7c3683d2af2d402ea90b21f348198037f246" },
     { "path": "scripts/verify/ui-visual-contract.mjs", "sha256": "08208f4005ca85bb052670bd9bfa97a4961106e1b9392778d55f5e202730eb31" },
-    { "path": "scripts/verify/update-semantic-claims.mjs", "sha256": "9c37e963ef8884fe69dc6ebf175b74c9abf2481026ecf8f9ce1930a6476b7be6" },
+    { "path": "scripts/verify/update-semantic-claims.mjs", "sha256": "2f166fcc1247d10ede19f82623b415d5955561963733bafeaf1a86c2f3cfa7cf" },
     { "path": "scripts/verify/verify-scripts-integrity.mjs", "sha256": "e7b227d313dca9e700b3ae69d07ee844f026b49560efbaa631a55dadc9384e67" }
   ]
 }

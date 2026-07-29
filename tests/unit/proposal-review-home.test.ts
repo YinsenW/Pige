@@ -17,27 +17,16 @@ afterEach(() => {
 });
 
 describe("Home proposal review safety", () => {
-  it("shows only localized unavailable truth for an awaiting-review Job and never reads the unsafe proposal DTO", async () => {
+  it("does not fabricate review authority from a legacy awaiting-review Job", async () => {
     const dom = createDom();
     const calls = { list: 0, get: 0, approve: 0, reject: 0 };
     const { container, root } = await mountHome(dom, makePigeApi(true, calls));
 
-    expect(container.textContent).toContain("Needs confirmation");
-    expect(container.textContent).toContain("Safe preview unavailable");
-    expect(container.textContent).toContain(
-      "A change is waiting for confirmation. Pige will not show or apply its content until the safe review service is available."
-    );
+    expect(container.querySelector(".proposal-strip")).toBeNull();
+    expect(container.textContent).not.toContain("Safe preview unavailable");
     expect(container.textContent).not.toContain("wiki/private/proposal.md");
     expect(container.textContent).not.toContain("private proposal body");
     expect(calls).toEqual({ list: 0, get: 0, approve: 0, reject: 0 });
-
-    const reviewButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
-      .find((candidate) => candidate.textContent === "Review unavailable");
-    expect(reviewButton?.disabled).toBe(true);
-    expect(reviewButton?.getAttribute("aria-describedby")).toBe("proposal-safe-preview-description");
-    expect(container.querySelector("#proposal-safe-preview-description")?.textContent).toContain(
-      "Pige will not show or apply its content"
-    );
 
     await act(async () => root.unmount());
     dom.window.close();

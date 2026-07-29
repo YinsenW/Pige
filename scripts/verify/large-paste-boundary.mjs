@@ -147,8 +147,8 @@ const implementationSources = {
 validateImplementation(implementationSources, errors);
 
 const acceptance = JSON.parse(read("resources/traceability/acceptance.manifest.json") || "{}");
-if (acceptance.requirements?.["PIGE-CAP-002"]?.status !== "planned") errors.push("PIGE-CAP-002 must remain planned");
-if (acceptance.exits?.["E2.02"]?.status !== "planned") errors.push("E2.02 must remain planned");
+if (acceptance.requirements?.["PIGE-CAP-002"]?.status !== "verified") errors.push("PIGE-CAP-002 must remain verified");
+if (acceptance.exits?.["E2.02"]?.status !== "verified") errors.push("E2.02 must remain verified");
 
 const mutations = [
   ["ordinaryTextMaxCodePoints", (copy) => { copy.limits.ordinaryTextMaxCodePoints = 8001; }],
@@ -188,4 +188,4 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log("Large-paste boundary contract OK: canonical limits, owners, planned status and mutation controls pass.");
+console.log("Large-paste boundary contract OK: canonical limits, owners, verified status and mutation controls pass.");

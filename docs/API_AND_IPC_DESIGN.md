@@ -468,51 +468,49 @@ Queries:
 Commands:
 
 - `notes.saveEditor`
+- `notes.revealSource`
 
-Current bridge queries:
-
-- Library queries return bounded stable-ID summaries from index/Markdown fallback; invalid data
-  degrades without renderer file access. Notes resolve page ID to safe Markdown/HTML.
-- `renderContextId` authorizes only bounded sender/render resolution. Main retains filesystem,
-  paths, private locations, prompts/responses, secrets, raw frontmatter/script and unsafe links.
+Library queries return bounded stable-ID summaries without renderer file access. Notes resolve IDs
+to safe Markdown/HTML. `renderContextId` authorizes rendering only; Main retains paths,
+private data, prompts, secrets, raw frontmatter/script and unsafe links.
 
 Reader edit contract:
 
 - `openEditor` binds request/vault/page/render and returns bounded Markdown plus revision;
-  `saveEditor` adds revision/draft. Main revalidates page/frontmatter/links/citations and CAS-writes
-  `update_page`. Stale preserves draft/Reader; failures are closed/body-free. Source pages, merge,
-  rich text and path/hash/error projection are absent.
+  `saveEditor` adds revision/draft. Main revalidates and CAS-writes `update_page`. Stale preserves
+  draft/Reader; failures are body-free. Source pages, merge, rich text and private details are absent.
 
 Reader reference query contract:
 
-- `notes.openSourceReference` accepts request/vault/page/render/source ID; NotesService rereads
-  membership and records. Only `resolved` adds `target.pageId`; body-free `unresolved | not_found |
-  stale | mismatch | changed` retains Reader and grants no authority.
+- `notes.openSourceReference` accepts exact request/vault/page/render/source identity. Only
+  `resolved` adds `target.pageId`; body-free `unresolved | not_found | stale | mismatch | changed`
+  retains Reader and grants no authority.
+- `notes.revealSource` revalidates that identity and reveals only its asset through Main;
+  renderer responses contain no path or body.
 
 Reader selection uses queries `readerSelection.resolve`, `readerSelection.currentProposal`
 and commands `readerSelection.submitAction`, `readerSelection.submitTransform`,
-`readerSelection.submitLink`, `readerSelection.decideProposal`:
+`readerSelection.submitLink`, `readerSelection.submitCreateNote`, `readerSelection.decideProposal`:
 
-- `resolve` binds vault/page/render and anchor/focus offsets; success returns a <=64 KiB span plus
-  hashes. Actions bind it and locale/client turn; Main owns instructions, CAS and apply.
-- Link has no renderer target: Pi selects an opaque ref, Main fences both pages and publishes one
-  reversible `update_page`; invalid/self/existing/drift fails closed and recovery adopts one effect.
+- `resolve` binds vault/page/render/offsets; success returns a <=64 KiB span plus hashes. Actions bind
+  it and locale/client turn; Main owns instructions, CAS and apply.
+- Link has no renderer target: Pi selects an opaque ref; Main fences pages and publishes one
+  reversible `update_page`. Drift fails closed; recovery adopts one effect.
+- Create note reuses selection review; only an applied authoritative note page ID navigates.
 - Preview exposes opaque identity/state/revision and <=8 lines of <=160 characters. Decisions bind
-  revision; paths, bodies, replacements, targets and raw proposals stay Main-only. `Later` is local,
-  refresh uses `notes.render`, and Activity owns Undo.
+  revision; private proposal details stay Main-only. Activity owns Undo.
 
-Current-note append stays under `agent.submitTurn`: after exact read, Main accepts <=16 KiB with
-`evidenceRefs:["citation_1"]`, then CAS-writes Agent `update_page` or returns a bound proposal.
-Its API exposes identity plus <=8 lines; drift conflicts and private data stays Main-only.
+Current-note append stays under `agent.submitTurn`: Main accepts <=16 KiB with
+`evidenceRefs:["citation_1"]`, then CAS-writes `update_page` or returns a proposal. Its API exposes
+identity plus <=8 lines; drift conflicts and private data stay Main-only.
 
-Current Home Dataset read boundary:
+Dataset boundary:
 
-- Agent/conversation returns a checksum-bound preview/citation. List/open pages are <=50 rows/
-  64 KiB; cursors bind vault/catalog/revision/view/boundary and drift is stale.
-- Citation Open lookup keys grant no authority; Main verifies event/bundle and returns read-only
-  highlights without substitution/requery.
-- Formula/single-relation changes bind revision/stable IDs and Main eligibility. A relation owns one
-  same-Dataset table/display column; cells store row IDs/bounded labels. CAS/Undo is path/query-free.
+- Preview/citation is checksum-bound. Pages are <=50 rows/64 KiB; cursors bind
+  vault/catalog/revision/view/boundary and drift is stale.
+- Citation keys grant no authority; Main returns read-only highlights without requery.
+- Formula/relation changes bind revision, IDs and Main eligibility. Relations are same-Dataset;
+  cells store row IDs/labels. CAS/Undo is path/query-free.
 
 ### 6.6 Retrieval
 
@@ -708,6 +706,7 @@ Commands:
 - `skills.disable`
 - `skills.enable`
 - `skills.uninstall`
+- `skills.restore`
 - `skills.export`
 - `tools.install`
 - `tools.remove`
