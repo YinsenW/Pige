@@ -119,8 +119,7 @@ export function PermissionsPrivacySettingsPanel(props: {
       );
       fallback?.focus();
     };
-    if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(restoreFocus);
-    else window.setTimeout(restoreFocus, 0);
+    window.setTimeout(restoreFocus, 0);
   };
 
   const setMode = async (
