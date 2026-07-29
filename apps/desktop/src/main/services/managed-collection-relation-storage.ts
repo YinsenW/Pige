@@ -144,12 +144,19 @@ export function readInboundRelationRowIds(
   const result = new Set<string>();
   for (const table of schema.tables) {
     for (const column of table.columns.filter((candidate) => candidate.relation)) {
+      const relation = column.relation!;
+      const targetTable = schema.tables.find((candidate) => candidate.id === relation.targetTableId);
+      const displayColumn = targetTable?.columns.find((candidate) => candidate.id === relation.targetDisplayColumnId);
+      if (!targetTable || !displayColumn || !isRelationDisplayColumn(displayColumn)) throw payloadInvalid();
       const rows = database.prepare(
         "SELECT projection_json FROM pige_dataset_cells WHERE column_id = ? AND state = 'value'"
       ).all(column.id) as Array<{ projection_json?: unknown }>;
       for (const entry of rows) {
         const targetRowId = relationTargetId(entry.projection_json);
         if (!targetRowId) throw payloadInvalid();
+        const target = database.prepare("SELECT table_id FROM pige_dataset_rows WHERE row_id = ?")
+          .get(targetRowId) as { table_id?: unknown } | undefined;
+        if (target?.table_id !== targetTable.id) throw payloadInvalid();
         result.add(targetRowId);
       }
     }
@@ -605,11 +612,18 @@ function adoptRevision(binding: BundleBinding, expectedRevisionId: string, ident
 function validateRelationSourceColumn(database: DatabaseSync, schema: BundleBinding["schema"], tableId: string, columnId: string): void {
   const column = schema.tables.find((table) => table.id === tableId)?.columns.find((candidate) => candidate.id === columnId);
   if (!column?.relation) return;
+  const targetTable = schema.tables.find((table) => table.id === column.relation!.targetTableId);
+  const displayColumn = targetTable?.columns.find((candidate) => candidate.id === column.relation!.targetDisplayColumnId);
+  if (!targetTable || !displayColumn || !isRelationDisplayColumn(displayColumn)) throw payloadInvalid();
   const rows = database.prepare("SELECT state, projection_json FROM pige_dataset_cells WHERE column_id = ?")
     .all(columnId) as Array<{ state?: unknown; projection_json?: unknown }>;
   for (const row of rows) {
     if (row.state === "null" && row.projection_json === "null") continue;
-    if (row.state !== "value" || !relationTargetId(row.projection_json)) throw payloadInvalid();
+    const targetRowId = relationTargetId(row.projection_json);
+    if (row.state !== "value" || !targetRowId) throw payloadInvalid();
+    const target = database.prepare("SELECT table_id FROM pige_dataset_rows WHERE row_id = ?")
+      .get(targetRowId) as { table_id?: unknown } | undefined;
+    if (target?.table_id !== targetTable.id) throw payloadInvalid();
   }
 }
 
