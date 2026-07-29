@@ -634,12 +634,13 @@ Rules:
 
 ### 6.7 High-Risk Confirmation
 
-`confirmations.pending`/`confirmations.resolve` remain the sole public one-shot decision
-surface for closed high risk. Main durably records one pending request and its exact
-`allow | deny` receipt, links optional Job/Operation identities, and restores the same
-`waiting_permission` decision after restart; raw path/command/body/credential/error stays
-in Main and the effect owner revalidates before execution. Stage 1 adds no saved grant or
-YOLO effect.
+`confirmations.pending`/`confirmations.resolve` remain the effect gate; eligible Allow may
+carry opaque `allow_scoped`. `permissions.summary`, `permissions.setDefaultMode`,
+`permissions.revokeGrant`, and `permissions.changed` expose pathless local policy. YOLO
+enablement reuses confirmation. Main durably records the exact pending request and one-action
+decision, links optional Job/Operation identities, and restores the same `waiting_permission`
+boundary after restart; raw path/command/body/credential/error stays in Main and the effect
+owner revalidates before execution.
 Attachments grant exact-source tools only; explicit authored intent may separately request
 a precise ambient effect even with attachments. Fallback/model/source cannot. Typed URL is
 separate. Provider/model plus Send authorizes exact authored/selected bounded context

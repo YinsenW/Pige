@@ -20,9 +20,9 @@ Quality bar:
 - No demo-only storage layer.
 - No dev-server-only experience for normal users.
 - No hidden dependency download during ordinary capture, ingest, search, or review.
-- No permissionless Agent/Skill/package/local-tool action outside standing knowledge-
-  Markdown or exact user-selected-source authority that reads, writes, deletes, commits,
-  calls network, runs shell, changes settings, or touches secrets.
+- No unclassified effect outside standing knowledge/selected-source authority. Ask,
+  scoped grants, and YOLO reduce prompts only after Main validation; hard boundaries never
+  inherit reusable permission.
 
 Scope discipline:
 

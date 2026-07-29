@@ -449,8 +449,8 @@ Tests must verify:
   line breaks; safe projection may enforce structural limits but must not trim either.
 - New Jobs cannot reach `waiting_permission` or `waiting_model_egress`.
 
-Delete tests that only preserve request/decision/consume/completion internals, YOLO,
-saved grants, or 12-hash egress approvals. Keep effect safety, irreversible data, secret
+Test permission restart, grant drift/revocation, YOLO, hard exclusions, and audit. Delete
+only duplicate approval/egress choreography. Keep effect safety, irreversible data, secret
 absence, destination identity, and recovery tests.
 
 ## 8. Parser And OCR Gates
