@@ -224,9 +224,15 @@ import {
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
   COLLECTION_ADD_FORMULA_COLUMN_CHANNEL,
+  COLLECTION_ADD_RELATION_COLUMN_CHANNEL,
+  COLLECTION_EDIT_RELATION_CELL_CHANNEL,
   COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
   CollectionAddFormulaColumnResultSchema,
+  CollectionAddRelationColumnRequestSchema,
+  CollectionAddRelationColumnResultSchema,
+  CollectionEditRelationCellRequestSchema,
+  CollectionEditRelationCellResultSchema,
   CollectionUpdateFormulaColumnRequestSchema,
   CollectionUpdateFormulaColumnResultSchema,
   CollectionAddNullableColumnRequestSchema,
@@ -381,6 +387,10 @@ import {
 import type {
   CollectionAddFormulaColumnRequest,
   CollectionAddFormulaColumnResult,
+  CollectionAddRelationColumnRequest,
+  CollectionAddRelationColumnResult,
+  CollectionEditRelationCellRequest,
+  CollectionEditRelationCellResult,
   CollectionUpdateFormulaColumnRequest,
   CollectionUpdateFormulaColumnResult,
   CollectionAddNullableColumnRequest,
@@ -589,6 +599,40 @@ async function invokeCollectionUpdateFormulaColumn(
       result.datasetId !== parsedRequest.datasetId || result.tableId !== parsedRequest.tableId ||
       result.columnId !== parsedRequest.columnId) {
     throw new Error("Invalid Managed Collection formula-update response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionAddRelationColumn(
+  request: CollectionAddRelationColumnRequest
+): Promise<CollectionAddRelationColumnResult> {
+  const parsedRequest = CollectionAddRelationColumnRequestSchema.parse(request);
+  const result = CollectionAddRelationColumnResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_ADD_RELATION_COLUMN_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId ||
+      result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.datasetId !== parsedRequest.datasetId || result.tableId !== parsedRequest.tableId ||
+      result.targetTableId !== parsedRequest.targetTableId ||
+      result.targetDisplayColumnId !== parsedRequest.targetDisplayColumnId) {
+    throw new Error("Invalid Managed Collection relation-column response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionEditRelationCell(
+  request: CollectionEditRelationCellRequest
+): Promise<CollectionEditRelationCellResult> {
+  const parsedRequest = CollectionEditRelationCellRequestSchema.parse(request);
+  const result = CollectionEditRelationCellResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_EDIT_RELATION_CELL_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId ||
+      result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.datasetId !== parsedRequest.datasetId || result.tableId !== parsedRequest.tableId ||
+      result.rowId !== parsedRequest.rowId || result.columnId !== parsedRequest.columnId ||
+      result.targetRowId !== parsedRequest.targetRowId) {
+    throw new Error("Invalid Managed Collection relation-cell response identity.");
   }
   return result;
 }
@@ -1125,6 +1169,8 @@ const api: PigeDesktopApi = {
     addNullableColumn: invokeCollectionAddNullableColumn,
     addFormulaColumn: invokeCollectionAddFormulaColumn,
     updateFormulaColumn: invokeCollectionUpdateFormulaColumn,
+    addRelationColumn: invokeCollectionAddRelationColumn,
+    editRelationCell: invokeCollectionEditRelationCell,
     renameColumn: invokeCollectionRenameColumn,
     createView: invokeCollectionCreateView,
     trashColumn: invokeCollectionTrashColumn,

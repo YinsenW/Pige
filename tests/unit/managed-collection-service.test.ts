@@ -1216,6 +1216,113 @@ describe("ManagedCollectionService", () => {
     }));
     expect(readManifest(fixture.bundlePath).activeRevision).toBe(active.revision.id);
   });
+
+  it("commits one same-Dataset relation with safe labels, guards, restart adoption, and Undo", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionService(port);
+    const initial = required(readBundle(fixture.vaultPath, readManifest(fixture.bundlePath).datasetId));
+    const table = required(initial.schema.tables[0]);
+    const display = required(table.columns[0]);
+    const [targetRowId, sourceRowId] = readRowIds(initial.payloadPath);
+    if (!targetRowId || !sourceRowId) throw new Error("Missing relation rows");
+    const added = await service.addRelationColumn({
+      apiVersion: 1, requestId: "collection_request_relationaddabcde", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: initial.revision.id,
+      label: "Person", targetTableId: table.id, targetDisplayColumnId: display.id
+    });
+    expect(added.status).toBe("committed");
+    if (added.status !== "committed") throw new Error("Relation column was not added");
+    expect(added.snapshot.columns.find((column) => column.columnId === display.id)).toMatchObject({
+      canTrash: false, hasInboundRelationDescriptors: true
+    });
+    expect(added.snapshot.columns.find((column) => column.columnId === added.columnId)).toMatchObject({
+      canEditRelation: true, canTrash: true, relation: {
+        kind: "pige_single_relation", targetTableId: table.id, targetDisplayColumnId: display.id
+      }
+    });
+    const edited = await service.editRelationCell({
+      apiVersion: 1, requestId: "collection_request_relationeditabcd", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: added.snapshot.revisionId,
+      rowId: sourceRowId, columnId: added.columnId, targetRowId
+    });
+    expect(edited).toMatchObject({ status: "committed", snapshot: { rows: expect.arrayContaining([
+      expect.objectContaining({ rowId: targetRowId, canTrash: false }),
+      expect.objectContaining({ rowId: sourceRowId, cells: expect.arrayContaining([expect.objectContaining({
+        columnId: added.columnId, value: { kind: "relation", targetRowId, displayLabel: "Ada" }, editable: true
+      })]) })
+    ]) } });
+    if (edited.status !== "committed") throw new Error("Relation cell was not edited");
+    await expect(service.editRelationCell({
+      apiVersion: 1, requestId: "collection_request_relationnochangea", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: edited.snapshot.revisionId,
+      rowId: sourceRowId, columnId: added.columnId, targetRowId
+    })).resolves.toMatchObject({ status: "ineligible" });
+    expect(readManifest(fixture.bundlePath).activeRevision).toBe(edited.snapshot.revisionId);
+    await expect(service.trashRow({
+      apiVersion: 1, requestId: "collection_request_relationrowguard", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id,
+      expectedRevisionId: edited.snapshot.revisionId, rowId: targetRowId
+    })).resolves.toMatchObject({ status: "ineligible" });
+    await expect(service.trashColumn({
+      apiVersion: 1, requestId: "collection_request_relationcolguard", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id,
+      expectedRevisionId: edited.snapshot.revisionId, columnId: display.id
+    })).resolves.toMatchObject({ status: "ineligible" });
+    const restarted = new ManagedCollectionService(port);
+    await expect(restarted.open({
+      apiVersion: 1, requestId: "collection_request_relationrestartx", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id
+    })).resolves.toMatchObject({ status: "ready", snapshot: { revisionId: edited.snapshot.revisionId } });
+    const activity = new KnowledgeActivityService(port, restarted);
+    const entry = required(activity.list({ limit: 20 }).activities.find(
+      (candidate) => candidate.kind === "update_collection_relation_cell"
+    ));
+    const undone = await activity.undo({ operationId: entry.operationId, expectedRevisionId: edited.snapshot.revisionId });
+    expect(undone).toMatchObject({ status: "undone" });
+    if (undone.status !== "undone") throw new Error("Relation cell was not undone");
+    const afterUndo = await restarted.open({
+      apiVersion: 1, requestId: "collection_request_relationundoopenx", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id
+    });
+    expect(afterUndo).toMatchObject({ status: "ready", snapshot: { rows: expect.arrayContaining([
+      expect.objectContaining({ rowId: sourceRowId, cells: expect.arrayContaining([expect.objectContaining({
+        columnId: added.columnId, value: { kind: "relation", targetRowId: null, displayLabel: null }
+      })]) })
+    ]) } });
+    if (afterUndo.status !== "ready") throw new Error("Relation Undo did not reopen");
+    const restoredTarget = await restarted.editRelationCell({
+      apiVersion: 1, requestId: "collection_request_relationrestoreab", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: afterUndo.snapshot.revisionId,
+      rowId: sourceRowId, columnId: added.columnId, targetRowId
+    });
+    if (restoredTarget.status !== "committed") throw new Error("Relation target was not restored");
+    const trashedColumn = await restarted.trashColumn({
+      apiVersion: 1, requestId: "collection_request_relationtrashcol", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id,
+      expectedRevisionId: restoredTarget.snapshot.revisionId, columnId: added.columnId
+    });
+    expect(trashedColumn).toMatchObject({ status: "committed" });
+    if (trashedColumn.status !== "committed") throw new Error("Relation source column was not trashed");
+    const trashActivity = required(activity.list({ limit: 20 }).activities.find(
+      (candidate) => candidate.kind === "trash_collection_column" && candidate.operationId === trashedColumn.operationId
+    ));
+    const restoredColumn = await activity.undo({
+      operationId: trashActivity.operationId, expectedRevisionId: trashedColumn.snapshot.revisionId
+    });
+    expect(restoredColumn).toMatchObject({ status: "undone" });
+    if (restoredColumn.status !== "undone") throw new Error("Relation source column was not restored");
+    const appended = await restarted.appendDefaultRow({
+      apiVersion: 1, requestId: "collection_request_relationappendrow", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: restoredColumn.revisionId
+    });
+    expect(appended).toMatchObject({ status: "committed" });
+    if (appended.status !== "committed") throw new Error("Relation default row was not appended");
+    expect(appended.snapshot.rows.find((row) => row.rowId === appended.rowId)?.cells.find(
+      (cell) => cell.columnId === added.columnId
+    )?.value).toEqual({ kind: "relation", targetRowId: null, displayLabel: null });
+  });
 });
 
 async function makeCollectionFixture() {
