@@ -23,7 +23,7 @@ import {
 import {
   MAX_COLLECTION_JSON_BYTES,
   adoptColumnRenameMutation,
-  columnUsesFormula,
+  columnUsesImportedFormula,
   fileRef,
   hashCanonical,
   operationConflict,
@@ -42,9 +42,9 @@ import {
   validatePayloadMeta,
   writeJsonExclusive,
   writeJsonImmutable,
-  type BundleBinding,
-  type CollectionColumnMutationIdentity
+  type BundleBinding, type CollectionColumnMutationIdentity
 } from "./managed-collection-storage";
+import { formulaReferencedColumnIds } from "./managed-collection-formula-storage";
 
 const MAX_OPEN_COLUMNS = 32;
 
@@ -313,7 +313,7 @@ export function commitColumnRename(input: {
   const table = current.schema.tables.find((candidate) => candidate.id === input.tableId);
   const column = table?.columns.find((candidate) => candidate.id === input.columnId);
   if (!table || !column) throw new PigeDomainError("collection.column_not_found", "The Collection column is unavailable.");
-  if (columnUsesFormula(column)) throw new PigeDomainError("collection.column_ineligible", "The Collection column cannot be renamed.");
+  if (columnUsesImportedFormula(column)) throw new PigeDomainError("collection.column_ineligible", "The Collection column cannot be renamed.");
   const normalized = normalizeColumnLabel(input.label);
   if (table.columns.some((candidate) => normalizeColumnLabel(candidate.name) === normalized)) {
     throw new PigeDomainError("collection.duplicate_label", "The Collection already has this column label.");
@@ -371,7 +371,7 @@ export function commitColumnTrash(input: {
   const table = current.schema.tables.find((candidate) => candidate.id === input.tableId);
   const column = table?.columns.find((candidate) => candidate.id === input.columnId);
   if (!table || !column) throw new PigeDomainError("collection.column_not_found", "The Collection column is unavailable.");
-  if (table.columns.length <= 1 || columnUsesFormula(column)) {
+  if (table.columns.length <= 1 || columnUsesImportedFormula(column) || table.columns.some((candidate) => candidate.calculation?.kind === "pige_numeric_formula" && formulaReferencedColumnIds(candidate.calculation.expression).includes(column.id))) {
     throw new PigeDomainError("collection.column_ineligible", "The Collection column cannot be trashed.");
   }
   return publishColumnMutation({

@@ -40,12 +40,11 @@ import {
   writeJsonExclusive,
   type BundleBinding
 } from "./managed-collection-storage";
-
+import { appendFormulaCellsForNewRow, type FormulaProjectionStats } from "./managed-collection-formula-storage";
 interface RowMutationIdentity {
   readonly revisionId: string;
   readonly operationId: string;
 }
-
 export function createDefaultRowMutationIdentity(request: CollectionAppendDefaultRowRequest): RowMutationIdentity {
   const dateKey = /^dataset_rev_(\d{8})_[a-z0-9]{12,}$/u.exec(request.expectedRevisionId)?.[1];
   if (!dateKey) throw requestConflict();
@@ -54,11 +53,9 @@ export function createDefaultRowMutationIdentity(request: CollectionAppendDefaul
     operationId: `op_${dateKey}_${digest("pige:collection-row-add-operation:v1", request.requestId).slice(0, 20)}`
   };
 }
-
 export function createDefaultRowId(request: CollectionAppendDefaultRowRequest): string {
   return `row_${digest("pige:collection-row:v1", request.requestId).slice(0, 20)}`;
 }
-
 export function createRowTrashMutationIdentity(request: CollectionTrashRowRequest): RowMutationIdentity {
   const dateKey = /^dataset_rev_(\d{8})_[a-z0-9]{12,}$/u.exec(request.expectedRevisionId)?.[1];
   if (!dateKey) throw requestConflict();
@@ -67,7 +64,6 @@ export function createRowTrashMutationIdentity(request: CollectionTrashRowReques
     operationId: `op_${dateKey}_${digest("pige:collection-row-trash-operation:v1", request.requestId).slice(0, 20)}`
   };
 }
-
 export function adoptDefaultRowAppend(input: {
   readonly binding: BundleBinding;
   readonly request: CollectionAppendDefaultRowRequest;
@@ -261,21 +257,21 @@ interface RowMutationInput {
   readonly rowId: string;
   readonly expectedRevisionId: string;
 }
-
 export function commitDefaultRowAppend(input: RowMutationInput): {
   readonly binding: BundleBinding;
   readonly revision: DatasetRevision;
 } {
   const current = requireCurrent(input);
   const table = current.schema.tables.find((candidate) => candidate.id === input.tableId);
-  if (!table || !table.columns.length || table.columns.some((column) => !column.nullable || usesFormula(column))) {
+  if (!table || !table.columns.length || table.columns.some((column) => !column.calculation && (!column.nullable || usesFormula(column)))) {
     throw new PigeDomainError("collection.row_not_appendable", "The Collection cannot append a default row.");
   }
+  let formulaStats: ReadonlyMap<string, FormulaProjectionStats> = new Map();
   return publishRowMutation({
     current,
     ...input,
     change: { kind: "collection_row_add" },
-    createPayload: (payloadPath) => appendNullRow(payloadPath, current, table, input),
+    createPayload: (payloadPath) => { formulaStats = appendNullRow(payloadPath, current, table, input); },
     createSchema: () => DatasetSchemaRecordSchema.parse({
       ...current.schema,
       revisionId: input.identity.revisionId,
@@ -284,10 +280,11 @@ export function commitDefaultRowAppend(input: RowMutationInput): {
         ? {
           ...candidate,
           rowCount: candidate.rowCount + 1,
-          columns: candidate.columns.map((column) => ({
-            ...column,
-            ...(column.stats ? { stats: { ...column.stats, null: column.stats.null + 1 } } : {})
-          }))
+          columns: candidate.columns.map((column) => {
+            const added = formulaStats.get(column.id);
+            return { ...column, ...(column.stats ? { stats: { ...column.stats,
+              null: column.stats.null + (added?.null ?? 1), value: column.stats.value + (added?.value ?? 0) } } : {}) };
+          })
         }
         : candidate)
     }),
@@ -298,7 +295,6 @@ export function commitDefaultRowAppend(input: RowMutationInput): {
     }
   });
 }
-
 export function commitDefaultRowUndo(input: RowMutationInput & {
   readonly beforeRevisionId: string;
   readonly undoOfOperationId: string;
@@ -432,13 +428,13 @@ function publishRowMutation(input: RowMutationInput & {
     fs.rmSync(stagedRoot, { recursive: true, force: true });
   }
 }
-
 function appendNullRow(
   payloadPath: string,
   binding: BundleBinding,
   table: DatasetSchemaRecord["tables"][number],
   input: RowMutationInput
-): void {
+): ReadonlyMap<string, FormulaProjectionStats> {
+  let formulaStats = new Map<string, FormulaProjectionStats>();
   const db = new DatabaseSync(payloadPath);
   try {
     db.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;");
@@ -451,10 +447,13 @@ function appendNullRow(
       db.prepare("INSERT INTO pige_dataset_rows VALUES (?, ?, ?, ?)").run(input.rowId, table.id, next.ordinal, next.ordinal + 1);
       const insertCell = db.prepare("INSERT INTO pige_dataset_cells VALUES (?, ?, 'null', 'pige_user_default', NULL, NULL, NULL, 'null', NULL, NULL, NULL)");
       const updateColumn = db.prepare("UPDATE pige_dataset_columns SET stats_json = ? WHERE column_id = ? AND table_id = ?");
+      for (const column of table.columns.filter((candidate) => !candidate.calculation)) insertCell.run(input.rowId, column.id);
+      formulaStats = new Map(appendFormulaCellsForNewRow(db, table, input.rowId));
       for (const column of table.columns) {
-        insertCell.run(input.rowId, column.id);
         const stats = column.stats ?? { missing: 0, empty: 0, null: 0, value: 0 };
-        if (updateColumn.run(JSON.stringify({ ...stats, null: stats.null + 1 }), column.id, table.id).changes !== 1) throw payloadInvalid();
+        const added = formulaStats.get(column.id);
+        if (updateColumn.run(JSON.stringify({ ...stats, null: stats.null + (added?.null ?? 1),
+          value: stats.value + (added?.value ?? 0) }), column.id, table.id).changes !== 1) throw payloadInvalid();
       }
       if (db.prepare("UPDATE pige_dataset_tables SET row_count = row_count + 1 WHERE table_id = ? AND row_count = ?")
         .run(table.id, table.rowCount).changes !== 1) throw payloadInvalid();
@@ -470,6 +469,7 @@ function appendNullRow(
     db.close();
   }
   syncFile(payloadPath);
+  return formulaStats;
 }
 
 function removeRow(

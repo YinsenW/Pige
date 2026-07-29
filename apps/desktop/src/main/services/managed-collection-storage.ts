@@ -24,6 +24,7 @@ import {
   type OperationRecord
 } from "@pige/schemas";
 import { createVaultRelativePathResolver } from "./vault-layout";
+import { projectCollectionFormulaColumns } from "./managed-collection-formula-storage";
 
 export interface FileRef {
   readonly path: string;
@@ -87,11 +88,6 @@ export function readCollectionSnapshot(
   const database = openReadOnlyPayload(binding.payloadPath);
   try {
     validatePayloadMeta(database, binding.manifest.datasetId, binding.revision.id);
-    const formulaCount = database.prepare([
-      "SELECT COUNT(*) AS count FROM pige_dataset_cells AS c",
-      "JOIN pige_dataset_rows AS r ON r.row_id = c.row_id",
-      "WHERE r.table_id = ? AND c.formula_json IS NOT NULL"
-    ].join(" ")).get(tableId) as { count?: unknown } | undefined;
     if (projection.rowIds && projection.rowIds.length > MAX_OPEN_ROWS) throw payloadInvalid();
     const rows = projection.rowIds
       ? projection.rowIds.map((rowId) => {
@@ -126,27 +122,24 @@ export function readCollectionSnapshot(
     });
     const totalRowCount = projection.totalRowCount ?? table.rowCount;
     if (!Number.isSafeInteger(totalRowCount) || totalRowCount < projectedRows.length) throw payloadInvalid();
+    const projectedColumns = projectCollectionFormulaColumns(columns);
     return CollectionSnapshotSchema.parse({
       datasetId: binding.manifest.datasetId,
       revisionId: binding.revision.id,
       title: binding.manifest.title,
       tableId,
       tableName: table.name,
-      columns: columns.map((column) => ({
-        columnId: column.id,
-        label: column.name,
-        logicalType: column.logicalType,
-        canRename: !columnUsesFormula(column),
-        canTrash: columns.length > 1 && !columnUsesFormula(column)
-      })),
+      columns: projectedColumns,
       rows: projectedRows,
       totalRowCount,
       returnedRowCount: projectedRows.length,
       truncated: totalRowCount > projectedRows.length,
       canAppendDefaultRow: table.columns.length <= MAX_OPEN_COLUMNS &&
-        table.columns.every((column) => column.nullable && !columnUsesFormula(column)) &&
-        formulaCount?.count === 0,
+        table.columns.every((column) => column.calculation ||
+          (column.nullable && !columnUsesImportedFormula(column))),
       canAddColumn: table.columns.length < MAX_OPEN_COLUMNS,
+      canAddFormulaColumn: table.columns.length < MAX_OPEN_COLUMNS &&
+        projectedColumns.some((column) => column.canUseAsFormulaOperand),
       views: projection.views ?? [],
       ...(projection.activeViewId ? { activeViewId: projection.activeViewId } : {})
     });
@@ -257,9 +250,14 @@ function parseCellRecord(
 }
 
 export function columnUsesFormula(column: DatasetColumn): boolean {
-  return [column.sourceType, ...(column.sourceTypes ?? [])]
+  return column.calculation !== undefined || columnUsesImportedFormula(column);
+}
+
+export function columnUsesImportedFormula(column: DatasetColumn): boolean {
+  return column.calculation === undefined && [column.sourceType, ...(column.sourceTypes ?? [])]
     .some((sourceType) => sourceType.toLowerCase().includes("formula"));
 }
+
 
 export function createNullableColumnId(tableId: string, requestId: string): string {
   return `column_${createHash("sha256")

@@ -14,11 +14,14 @@ import {
   type CollectionAddFormulaColumnRequest,
   type CollectionAddFormulaColumnResult,
   type CollectionColumnSummary,
+  type CollectionScalarValue,
   type CollectionSnapshot,
   type DatasetColumn,
   type DatasetPigeFormulaExpression,
+  type DatasetLogicalType,
   type DatasetRevision,
-  type DatasetSchemaRecord
+  type DatasetSchemaRecord,
+  type OperationRecord
 } from "@pige/schemas";
 import {
   fileRef,
@@ -28,6 +31,7 @@ import {
   payloadInvalid,
   publishImmutableFile,
   readBundle,
+  readCollectionCell,
   readJsonBounded,
   readJsonRef,
   replaceManifestCas,
@@ -37,7 +41,7 @@ import {
   validatePayloadMeta,
   writeJsonExclusive,
   writeJsonImmutable,
-  type BundleBinding
+  type BundleBinding, type CollectionCellBinding
 } from "./managed-collection-storage";
 
 const MAX_COLLECTION_COLUMNS = 32;
@@ -330,6 +334,61 @@ export function recomputeFormulaProjectionsInStagedPayload(input: {
   }
 }
 
+export function commitCollectionCellMutation(input: {
+  readonly binding: BundleBinding;
+  readonly identity: { readonly revisionId: string; readonly operationId: string };
+  readonly tableId: string;
+  readonly rowId: string;
+  readonly columnId: string;
+  readonly value: CollectionScalarValue;
+  readonly expectedRevisionId: string;
+  readonly change: { readonly kind: "collection_cell_edit" } |
+    { readonly kind: "collection_cell_undo"; readonly undoOfOperationId: string };
+  readonly createOperation: (binding: BundleBinding, revision: DatasetRevision) => OperationRecord;
+}): { readonly revision: DatasetRevision; readonly operation: OperationRecord } {
+  const current = readBundle(input.binding.vaultPath, input.binding.manifest.datasetId);
+  if (!current || current.manifest.activeRevision !== input.expectedRevisionId) {
+    throw new PigeDomainError("collection.revision_changed", "The Collection revision changed before commit.");
+  }
+  const currentCell = readCollectionCell(current, input.tableId, input.rowId, input.columnId);
+  const table = current.schema.tables.find((candidate) => candidate.id === input.tableId);
+  if (!currentCell || !table) throw new PigeDomainError("collection.cell_not_found", "The Collection cell is unavailable.");
+  const stagedRoot = path.join(current.bundlePath, ".staging", `${input.identity.revisionId}.${randomUUID()}`);
+  const payloadRelativePath = `data/revisions/${input.identity.revisionId}.sqlite`;
+  const schemaRelativePath = `schemas/${input.identity.revisionId}.json`;
+  const revisionRelativePath = `revisions/${input.identity.revisionId}.json`;
+  const stagedPayload = path.join(stagedRoot, "payload.sqlite");
+  fs.mkdirSync(stagedRoot, { recursive: true, mode: 0o700 });
+  try {
+    fs.copyFileSync(current.payloadPath, stagedPayload);
+    const formulaStats = mutateCellAndFormulas(stagedPayload, current.manifest.datasetId, current.revision.id,
+      input.identity.revisionId, table, input.rowId, currentCell, input.value);
+    const schema = nextCellSchema(current.schema, input.identity.revisionId, currentCell, input.value, formulaStats);
+    publishImmutableFile(stagedPayload, resolveBundleRelativePath(current.bundlePath, payloadRelativePath));
+    writeJsonImmutable(resolveBundleRelativePath(current.bundlePath, schemaRelativePath), schema);
+    const now = new Date().toISOString();
+    const revision = DatasetRevisionSchema.parse({
+      ...current.revision, id: input.identity.revisionId, parentRevisionId: current.revision.id,
+      schema: fileRef(current.bundlePath, schemaRelativePath),
+      payload: { ...fileRef(current.bundlePath, payloadRelativePath), format: "sqlite" },
+      operationId: input.identity.operationId,
+      change: { ...input.change, tableId: input.tableId, rowId: input.rowId, columnId: input.columnId },
+      createdAt: now
+    });
+    writeJsonImmutable(resolveBundleRelativePath(current.bundlePath, revisionRelativePath), revision);
+    replaceManifestCas(current, nextManifest(current, revision));
+    const committed = readBundle(current.vaultPath, current.manifest.datasetId);
+    if (!committed || committed.manifest.activeRevision !== revision.id) {
+      throw new PigeDomainError("collection.commit_uncertain", "The Collection commit could not be adopted.");
+    }
+    const operation = input.createOperation(committed, revision);
+    writeJsonExclusive(operationPathFor(current.vaultPath, operation.id), operation);
+    return { revision, operation };
+  } finally {
+    fs.rmSync(stagedRoot, { recursive: true, force: true });
+  }
+}
+
 function addFormulaColumnToPayload(input: {
   readonly payloadPath: string;
   readonly datasetId: string;
@@ -384,6 +443,114 @@ function addFormulaColumnToPayload(input: {
     database.close();
     syncFile(input.payloadPath);
   }
+}
+
+function mutateCellAndFormulas(
+  payloadPath: string,
+  datasetId: string,
+  beforeRevisionId: string,
+  revisionId: string,
+  table: DatasetSchemaRecord["tables"][number],
+  rowId: string,
+  cell: CollectionCellBinding,
+  value: CollectionScalarValue
+): ReadonlyMap<string, FormulaProjectionStats> {
+  const database = new DatabaseSync(payloadPath);
+  try {
+    database.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;");
+    validatePayloadMeta(database, datasetId, beforeRevisionId);
+    const encoded = encodeCellValue(value, cell.column.logicalType);
+    database.exec("BEGIN IMMEDIATE");
+    try {
+      const changed = database.prepare([
+        "UPDATE pige_dataset_cells SET state = ?, source_type = ?, lexical_raw = NULL, lexical_text = NULL,",
+        "quoted = NULL, projection_kind = ?, projection_json = ?, formula_json = NULL, source_style_json = NULL",
+        "WHERE row_id = ? AND column_id = ? AND formula_json IS NULL"
+      ].join(" ")).run(encoded.state, "pige_user_edit", encoded.projectionKind, encoded.projectionJson, rowId, cell.column.id);
+      if (changed.changes !== 1) throw new PigeDomainError("collection.cell_changed", "The Collection cell changed before commit.");
+      recomputeFormulaCellsForEditedRow(database, table, rowId);
+      const stats = readFormulaStats(database, table);
+      const updateStats = database.prepare("UPDATE pige_dataset_columns SET stats_json = ? WHERE table_id = ? AND column_id = ?");
+      for (const [columnId, formulaStats] of stats) {
+        if (updateStats.run(JSON.stringify(formulaStats), table.id, columnId).changes !== 1) throw payloadInvalid();
+      }
+      if (database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'").run(revisionId).changes !== 1) {
+        throw payloadInvalid();
+      }
+      database.exec("COMMIT");
+      assertPayloadIntegrity(database);
+      return stats;
+    } catch (caught) {
+      database.exec("ROLLBACK");
+      throw caught;
+    }
+  } finally {
+    database.close();
+    syncFile(payloadPath);
+  }
+}
+
+function readFormulaStats(
+  database: DatabaseSync,
+  table: DatasetSchemaRecord["tables"][number]
+): ReadonlyMap<string, FormulaProjectionStats> {
+  const result = new Map<string, FormulaProjectionStats>();
+  const count = database.prepare([
+    "SELECT state, COUNT(*) AS count FROM pige_dataset_cells AS c",
+    "JOIN pige_dataset_rows AS r ON r.row_id = c.row_id",
+    "WHERE r.table_id = ? AND c.column_id = ? GROUP BY state"
+  ].join(" "));
+  for (const column of table.columns.filter(isPigeFormulaColumn)) {
+    const stats = mutableStats();
+    for (const row of count.all(table.id, column.id) as Array<{ state?: unknown; count?: unknown }>) {
+      if ((row.state !== "null" && row.state !== "value") || typeof row.count !== "number" || !Number.isSafeInteger(row.count)) {
+        throw payloadInvalid();
+      }
+      stats[row.state] = row.count;
+    }
+    if (stats.null + stats.value !== table.rowCount) throw payloadInvalid();
+    result.set(column.id, { ...stats });
+  }
+  return result;
+}
+
+function encodeCellValue(value: CollectionScalarValue, logicalType: DatasetLogicalType) {
+  if (value === null) return { state: "null" as const, projectionKind: "null", projectionJson: null };
+  if (logicalType === "string") return {
+    state: value === "" ? "empty" as const : "value" as const,
+    projectionKind: "text", projectionJson: JSON.stringify({ kind: "text", value })
+  };
+  const projectionKind = logicalType === "number" ? "real" : logicalType;
+  if (!["integer", "number", "boolean", "date", "datetime"].includes(logicalType)) {
+    throw new PigeDomainError("collection.type_mismatch", "The Collection cell type is not editable.");
+  }
+  return { state: "value" as const, projectionKind, projectionJson: JSON.stringify({ kind: projectionKind, value }) };
+}
+
+function nextCellSchema(
+  current: DatasetSchemaRecord,
+  revisionId: string,
+  cell: CollectionCellBinding,
+  value: CollectionScalarValue,
+  formulaStats: ReadonlyMap<string, FormulaProjectionStats>
+): DatasetSchemaRecord {
+  const oldState = normalizedState(cell.state);
+  const newState = value === null ? "null" : value === "" && cell.column.logicalType === "string" ? "empty" : "value";
+  return DatasetSchemaRecordSchema.parse({
+    ...current, revisionId, createdAt: new Date().toISOString(),
+    tables: current.tables.map((table) => ({ ...table, columns: table.columns.map((column) => {
+      const calculatedStats = formulaStats.get(column.id);
+      if (calculatedStats) return { ...column, stats: calculatedStats };
+      if (column.id !== cell.column.id || !column.stats || oldState === newState) return column;
+      return { ...column, stats: { ...column.stats,
+        [oldState]: Math.max(0, column.stats[oldState] - 1), [newState]: column.stats[newState] + 1 } };
+    }) }))
+  });
+}
+
+function normalizedState(value: string): "missing" | "empty" | "null" | "value" {
+  if (value === "missing" || value === "empty" || value === "null" || value === "value") return value;
+  throw payloadInvalid();
 }
 
 function evaluateFormulaCell(

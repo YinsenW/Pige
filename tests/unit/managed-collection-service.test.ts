@@ -232,6 +232,127 @@ describe("ManagedCollectionService", () => {
     });
   });
 
+  it("creates a numeric formula column, recomputes edits and rows atomically, and preserves column Undo policy", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionService(port);
+    const initial = required(readBundle(fixture.vaultPath, readManifest(fixture.bundlePath).datasetId));
+    const table = required(initial.schema.tables[0]);
+    const countColumn = required(table.columns.find((column) => column.logicalType === "integer"));
+    const firstRowId = readFirstRowId(initial.payloadPath);
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "collection_request_formulaaddabcdef",
+      activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId,
+      tableId: table.id,
+      expectedRevisionId: initial.revision.id,
+      label: "Double count",
+      expression: {
+        kind: "binary" as const,
+        operator: "multiply" as const,
+        left: { kind: "column" as const, columnId: countColumn.id },
+        right: { kind: "literal" as const, value: 2 }
+      }
+    };
+
+    const added = await service.addFormulaColumn(request);
+    expect(added).toMatchObject({
+      status: "committed",
+      snapshot: {
+        canAppendDefaultRow: true,
+        canAddFormulaColumn: true,
+        columns: expect.arrayContaining([
+          expect.objectContaining({ columnId: countColumn.id, canTrash: false, canUseAsFormulaOperand: true }),
+          expect.objectContaining({
+            columnId: expect.any(String), label: "Double count", logicalType: "number",
+            canRename: true, canTrash: true, canUseAsFormulaOperand: false,
+            calculation: { kind: "pige_numeric_formula", schemaVersion: 1, expression: request.expression }
+          })
+        ])
+      }
+    });
+    if (added.status !== "committed") throw new Error("Formula column did not commit");
+    expect(required(added.snapshot.rows.find((row) => row.rowId === firstRowId)).cells)
+      .toContainEqual({ columnId: added.columnId, value: 6, editable: false, readOnlyReason: "formula" });
+    await expect(service.addFormulaColumn(request)).resolves.toEqual(added);
+    await expect(service.addFormulaColumn({ ...request, expression: { kind: "literal", value: 1 } }))
+      .rejects.toMatchObject({ code: "collection.request_conflict" });
+
+    const edited = await service.editCell({
+      apiVersion: 1,
+      requestId: "collection_request_formulaeditabcdef",
+      activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId,
+      tableId: table.id,
+      rowId: firstRowId,
+      columnId: countColumn.id,
+      expectedRevisionId: added.snapshot.revisionId,
+      value: 4
+    });
+    expect(edited.status).toBe("committed");
+    if (edited.status !== "committed") throw new Error("Formula source edit did not commit");
+    const afterEdit = await service.open({
+      apiVersion: 1, requestId: "collection_request_formulaopenabcdef",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId, tableId: table.id
+    });
+    expect(afterEdit).toMatchObject({ status: "ready", snapshot: { revisionId: edited.revisionId } });
+    if (afterEdit.status !== "ready") throw new Error("Formula Collection did not reopen");
+    expect(required(afterEdit.snapshot.rows.find((row) => row.rowId === firstRowId)).cells)
+      .toContainEqual({ columnId: added.columnId, value: 8, editable: false, readOnlyReason: "formula" });
+
+    const appended = await service.appendDefaultRow({
+      apiVersion: 1, requestId: "collection_request_formulaappendabc",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId,
+      tableId: table.id, expectedRevisionId: edited.revisionId
+    });
+    expect(appended).toMatchObject({ status: "committed", snapshot: { canAppendDefaultRow: true } });
+    if (appended.status !== "committed") throw new Error("Formula row append did not commit");
+    expect(required(appended.snapshot.rows.find((row) => row.rowId === appended.rowId)).cells)
+      .toContainEqual({ columnId: added.columnId, value: null, editable: false, readOnlyReason: "formula" });
+
+    await expect(service.trashColumn({
+      apiVersion: 1, requestId: "collection_request_formulaguardabcd",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId, tableId: table.id,
+      expectedRevisionId: appended.snapshot.revisionId, columnId: countColumn.id
+    })).resolves.toMatchObject({ status: "ineligible", snapshot: { revisionId: appended.snapshot.revisionId } });
+    const renamed = await service.renameColumn({
+      apiVersion: 1, requestId: "collection_request_formularenameabcd",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId, tableId: table.id,
+      expectedRevisionId: appended.snapshot.revisionId, columnId: added.columnId, label: "Twice count"
+    });
+    expect(renamed).toMatchObject({ status: "committed", snapshot: { columns: expect.arrayContaining([
+      expect.objectContaining({ columnId: added.columnId, label: "Twice count" })
+    ]) } });
+    if (renamed.status !== "committed") throw new Error("Formula column rename did not commit");
+
+    const activity = new KnowledgeActivityService(port, service);
+    const renameActivity = required(activity.list({ limit: 20 }).activities.find(
+      (entry) => entry.kind === "rename_collection_column" && entry.target.revisionId === renamed.snapshot.revisionId
+    ));
+    const renameUndo = await activity.undo({ operationId: renameActivity.operationId, expectedRevisionId: renamed.snapshot.revisionId });
+    expect(renameUndo.status).toBe("undone");
+    if (renameUndo.status !== "undone") throw new Error("Formula rename Undo failed");
+    const trashed = await service.trashColumn({
+      apiVersion: 1, requestId: "collection_request_formulatrashabcd",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId, tableId: table.id,
+      expectedRevisionId: renameUndo.revisionId, columnId: added.columnId
+    });
+    expect(trashed).toMatchObject({ status: "committed" });
+    if (trashed.status !== "committed") throw new Error("Formula column trash did not commit");
+    const trashActivity = required(activity.list({ limit: 20 }).activities.find(
+      (entry) => entry.kind === "trash_collection_column" && entry.target.revisionId === trashed.snapshot.revisionId
+    ));
+    const trashUndo = await activity.undo({ operationId: trashActivity.operationId, expectedRevisionId: trashed.snapshot.revisionId });
+    expect(trashUndo.status).toBe("undone");
+    if (trashUndo.status !== "undone") throw new Error("Formula trash Undo failed");
+    const restored = required(readBundle(fixture.vaultPath, initial.manifest.datasetId));
+    expect(required(restored.schema.tables[0]).columns).toContainEqual(expect.objectContaining({
+      id: added.columnId, name: "Double count", calculation: expect.objectContaining({ kind: "pige_numeric_formula" })
+    }));
+  });
+
   it("adds nullable columns across all editable types, adopts replay, and restores the prior schema through Activity", async () => {
     const fixture = await makeCollectionFixture();
     const vault = loadVaultSummary(fixture.vaultPath);
@@ -275,7 +396,10 @@ describe("ManagedCollectionService", () => {
       snapshot: {
         revisionId: expect.any(String),
         columns: expect.arrayContaining([
-          { columnId: expect.any(String), label: "Notes", logicalType: "string", canRename: true, canTrash: true }
+          expect.objectContaining({
+            columnId: expect.any(String), label: "Notes", logicalType: "string",
+            canRename: true, canTrash: true, canUseAsFormulaOperand: false
+          })
         ]),
         totalRowCount: initialRows.length,
         returnedRowCount: initialRows.length,
@@ -426,7 +550,11 @@ describe("ManagedCollectionService", () => {
       expect(added).toMatchObject({ status: "committed", snapshot: { canAddColumn: true } });
       if (added.status !== "committed") throw new Error(`Collection ${logicalType} column did not commit`);
       expect(added.snapshot.columns).toEqual(expect.arrayContaining([
-        { columnId: expect.any(String), label: `${logicalType} value`, logicalType, canRename: true, canTrash: true }
+        expect.objectContaining({
+          columnId: expect.any(String), label: `${logicalType} value`, logicalType,
+          canRename: true, canTrash: true,
+          canUseAsFormulaOperand: logicalType === "integer" || logicalType === "number"
+        })
       ]));
       for (const row of added.snapshot.rows) {
         expect(row.cells.find((cell) => cell.columnId === added.columnId)).toEqual({
@@ -516,13 +644,14 @@ describe("ManagedCollectionService", () => {
       columnId: column.id,
       snapshot: {
         revisionId: expect.any(String),
-        columns: expect.arrayContaining([{
+        columns: expect.arrayContaining([expect.objectContaining({
           columnId: column.id,
           label: "Display name",
           logicalType: column.logicalType,
           canRename: true,
-          canTrash: true
-        }]),
+          canTrash: true,
+          canUseAsFormulaOperand: false
+        })]),
         rows: initialRows
       }
     });
