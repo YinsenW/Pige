@@ -3231,6 +3231,20 @@ export const BackupReconnectDependencyResultSchema = z.object({
   status: z.enum(["resolved", "cancelled", "stale", "not_found", "failed"])
 }).strict();
 
+export const BACKUP_CONTINUE_INCOMPLETE_CHANNEL = "backup.continueIncomplete" as const;
+export const BackupContinueIncompleteRequestIdSchema = z.string()
+  .regex(/^backupcontinuereq_[a-z0-9]{8,64}$/);
+export const BackupContinueIncompleteRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: BackupContinueIncompleteRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  waitingJobId: JobIdSchema,
+  expectedJobUpdatedAt: z.string().datetime({ offset: true })
+}).strict();
+export const BackupContinueIncompleteResultSchema = BackupContinueIncompleteRequestSchema.extend({
+  status: z.enum(["continued", "cancelled", "stale", "not_found", "ineligible", "failed"])
+}).strict();
+
 export const ExternalManagedCopyRootBindingSchema = z.object({
   rootId: RootBindingIdSchema,
   vaultId: VaultIdSchema,
@@ -5722,6 +5736,7 @@ export const JobRefSchema = z.object({
     "package",
     "tool",
     "backup",
+    "root_binding",
     "external_uri"
   ]),
   id: z.string().min(1).optional(),
@@ -7533,6 +7548,9 @@ export type JobStage = z.infer<typeof JobStageSchema>;
 export type JobState = z.infer<typeof JobStateSchema>;
 export type BackupReconnectDependencyRequest = z.infer<typeof BackupReconnectDependencyRequestSchema>;
 export type BackupReconnectDependencyResult = z.infer<typeof BackupReconnectDependencyResultSchema>;
+export type BackupContinueIncompleteRequestId = z.infer<typeof BackupContinueIncompleteRequestIdSchema>;
+export type BackupContinueIncompleteRequest = z.infer<typeof BackupContinueIncompleteRequestSchema>;
+export type BackupContinueIncompleteResult = z.infer<typeof BackupContinueIncompleteResultSchema>;
 export type ReferencedOriginalReconnectRequestId = z.infer<typeof ReferencedOriginalReconnectRequestIdSchema>;
 export type ReferencedOriginalReconnectRequest = z.infer<typeof ReferencedOriginalReconnectRequestSchema>;
 export type ReferencedOriginalReconnectJobProjection = z.infer<

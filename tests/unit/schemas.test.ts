@@ -8,6 +8,8 @@ import {
   AgentSubmitTurnResultSchema,
   AppearanceSettingsSummarySchema,
   AppearanceThemeMutationResultSchema,
+  BackupContinueIncompleteRequestSchema,
+  BackupContinueIncompleteResultSchema,
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
   ReferencedOriginalReconnectRequestSchema,
@@ -2998,6 +3000,33 @@ describe("schemas", () => {
       expect(BackupReconnectDependencyResultSchema.parse({ ...request, status })).toEqual({ ...request, status });
     }
     expect(() => BackupReconnectDependencyResultSchema.parse({
+      ...request,
+      status: "failed",
+      path: "/private/source-root",
+      error: { code: "raw" }
+    })).toThrow();
+  });
+
+  it("keeps explicit incomplete Backup continuation currentness-bound and body-free", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "backupcontinuereq_abcdefgh",
+      activeVaultId: "vault_20260709_abcdefgh",
+      waitingJobId: "job_20260709_abcdefgh",
+      expectedJobUpdatedAt: "2026-07-29T01:02:03.000Z"
+    } as const;
+    expect(BackupContinueIncompleteRequestSchema.parse(request)).toEqual(request);
+    for (const privateField of ["rootId", "sourceId", "sourcePath", "sourceBody", "rawError"] as const) {
+      expect(() => BackupContinueIncompleteRequestSchema.parse({ ...request, [privateField]: "private" }))
+        .toThrow();
+    }
+    for (const status of [
+      "continued", "cancelled", "stale", "not_found", "ineligible", "failed"
+    ] as const) {
+      expect(BackupContinueIncompleteResultSchema.parse({ ...request, status }))
+        .toEqual({ ...request, status });
+    }
+    expect(() => BackupContinueIncompleteResultSchema.parse({
       ...request,
       status: "failed",
       path: "/private/source-root",

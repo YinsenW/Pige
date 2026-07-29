@@ -17,6 +17,34 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("freezes one explicit pathless incomplete Backup continuation channel", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const backupApi = contractsSource.slice(
+      contractsSource.indexOf("readonly backup: {"),
+      contractsSource.indexOf("readonly system: {")
+    );
+
+    expect(schemasSource).toContain(
+      'BACKUP_CONTINUE_INCOMPLETE_CHANNEL = "backup.continueIncomplete"'
+    );
+    expect(schemasSource).toContain("BackupContinueIncompleteRequestSchema");
+    expect(schemasSource).toContain("expectedJobUpdatedAt: z.string().datetime({ offset: true })");
+    expect(schemasSource).toContain('"continued", "cancelled", "stale", "not_found", "ineligible", "failed"');
+    expect(schemasSource).toContain('"root_binding"');
+    expect(contractsSource).toContain("readonly canContinueIncomplete: boolean;");
+    expect(backupApi).toContain("readonly continueIncomplete: (");
+    expect(backupApi).toContain("request: BackupContinueIncompleteRequest");
+    expect(backupApi).toContain(") => Promise<BackupContinueIncompleteResult>;");
+    expect(preloadSource).toContain("BackupContinueIncompleteRequestSchema.parse(request)");
+    expect(preloadSource).toContain("BACKUP_CONTINUE_INCOMPLETE_CHANNEL");
+    expect(preloadSource).toContain("Invalid incomplete Backup response identity.");
+    for (const privateField of ["sourcePath", "absolutePath", "rootId", "sourceBody", "rawError"]) {
+      expect(backupApi).not.toContain(privateField);
+    }
+  });
+
   it("freezes one pathless currentness-bound referenced-original reconnect channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
