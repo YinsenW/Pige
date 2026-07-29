@@ -195,8 +195,12 @@ import type {
   SupportBundleExportResult,
   SupportBundlePreview,
   ToolchainHealth,
+  UpdateApplyRequest,
+  UpdateApplyResult,
   UpdateCheckRequest,
   UpdateCheckResult,
+  UpdateDownloadRequest,
+  UpdateDownloadResult,
   UpdateStatusEvent,
   UpdateSummary,
   UpdateSourceStoragePolicyRequest,
@@ -343,8 +347,12 @@ import {
   TaskInteractionOpenRequestSchema,
   TaskInteractionOpenResultSchema,
   TaskInteractionPendingResultSchema,
+  UpdateApplyRequestSchema,
+  UpdateApplyResultSchema,
   UpdateCheckRequestSchema,
   UpdateCheckResultSchema,
+  UpdateDownloadRequestSchema,
+  UpdateDownloadResultSchema,
   UpdateStatusEventSchema,
   UpdateSummarySchema,
   SkillDiscardStagedRequestSchema,
@@ -1548,6 +1556,14 @@ const api: PigeDesktopApi = {
     check: async (request: UpdateCheckRequest): Promise<UpdateCheckResult> => {
       const parsedRequest = UpdateCheckRequestSchema.parse(request);
       return UpdateCheckResultSchema.parse(await ipcRenderer.invoke("updates.check", parsedRequest));
+    },
+    download: async (request: UpdateDownloadRequest): Promise<UpdateDownloadResult> => {
+      const parsedRequest = UpdateDownloadRequestSchema.parse(request);
+      return UpdateDownloadResultSchema.parse(await ipcRenderer.invoke("updates.download", parsedRequest));
+    },
+    apply: async (request: UpdateApplyRequest): Promise<UpdateApplyResult> => {
+      const parsedRequest = UpdateApplyRequestSchema.parse(request);
+      return UpdateApplyResultSchema.parse(await ipcRenderer.invoke("updates.apply", parsedRequest));
     },
     onStatusChanged: (listener: (event: UpdateStatusEvent) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, value: unknown): void => {

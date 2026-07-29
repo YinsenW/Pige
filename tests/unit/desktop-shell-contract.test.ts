@@ -1559,13 +1559,17 @@ describe("desktop shell build contract", () => {
     expect(mainSource).not.toMatch(/recordEvent\([\s\S]{0,240}message:\s*caught\.message/);
   });
 
-  it("exposes only the parsed body-free Update Service check foundation", () => {
+  it("exposes the parsed body-free signed update lifecycle", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const serviceSource = fs.readFileSync(
       path.resolve("apps/desktop/src/main/services/update-service.ts"),
+      "utf8"
+    );
+    const adapterSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/electron-updater-adapter.ts"),
       "utf8"
     );
 
@@ -1578,14 +1582,20 @@ describe("desktop shell build contract", () => {
     expect(schemasSource).toContain('export const UpdateCapabilitySchema = z.enum([');
     expect(mainSource).toContain('ipcMain.handle("updates.summary"');
     expect(mainSource).toContain('ipcMain.handle("updates.check"');
+    expect(mainSource).toContain('ipcMain.handle("updates.download"');
+    expect(mainSource).toContain('ipcMain.handle("updates.apply"');
     expect(mainSource).toContain('browserWindow.webContents.send("updates.statusChanged", parsed)');
     expect(preloadSource).toContain('ipcRenderer.invoke("updates.summary")');
     expect(preloadSource).toContain('ipcRenderer.invoke("updates.check", parsedRequest)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("updates.download", parsedRequest)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("updates.apply", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.on("updates.statusChanged", handler)');
     expect(serviceSource).toContain("class NoNetworkUpdateCheckAdapter");
     expect(serviceSource).not.toContain("electron-updater");
     expect(serviceSource).not.toContain("fetch(");
     expect(serviceSource).not.toContain("https://");
+    expect(adapterSource).toContain('from "electron-updater"');
+    expect(adapterSource).not.toContain("feedURL");
     expect(preloadSource).not.toContain("feedUrl");
     expect(contractsSource).not.toContain("feedUrl");
   });
