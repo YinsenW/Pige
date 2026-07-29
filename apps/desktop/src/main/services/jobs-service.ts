@@ -79,6 +79,7 @@ import {
   type ProcessQueuedOcrRequest,
   type QueuedOcrJob
 } from "./ocr-job-executor";
+import { OcrLanguagePreferenceService } from "./ocr-language-preference-service";
 import {
   JobCancellationError,
   type JobCancellationBoundary,
@@ -242,6 +243,7 @@ export class JobsService {
   readonly #indexRebuildExecutor: IndexRebuildJobExecutor;
   readonly #legacyAgentIngestExecutor: LegacyAgentIngestJobExecutor;
   readonly #ocrExecutor: OcrJobExecutor;
+  readonly #ocrLanguagePreferences: OcrLanguagePreferenceService;
   readonly #jobRecordStores = new Map<string, JobRecordStore>();
   readonly #jobExecutionCoordinators = new Map<string, JobExecutionCoordinator>();
   readonly #activeExecutions = new Map<string, AbortController>();
@@ -257,7 +259,8 @@ export class JobsService {
     executors: JobClassExecutorRegistry = createJobClassExecutorRegistry(),
     sourcePages: SourcePageService = new SourcePageService(),
     ingressSnapshots: IngressSnapshotService = ingressSnapshotService,
-    semanticIndex?: ConstructorParameters<typeof IndexRebuildJobExecutor>[2]
+    semanticIndex?: ConstructorParameters<typeof IndexRebuildJobExecutor>[2],
+    ocrLanguagePreferences: OcrLanguagePreferenceService = new OcrLanguagePreferenceService()
   ) {
     this.#vaults = vaults;
     this.#sourcePages = sourcePages;
@@ -265,6 +268,7 @@ export class JobsService {
     this.#database = database;
     this.#documentParser = documentParser;
     this.#ocr = ocr;
+    this.#ocrLanguagePreferences = ocrLanguagePreferences;
     this.#datasets = datasets;
     this.#executors = executors;
     this.#ingressSnapshots = ingressSnapshots;
@@ -2538,7 +2542,8 @@ export class JobsService {
       currentParent.job,
       sourceFile.sourceRecord,
       request,
-      capability.ready ? "queued" : "waiting_dependency"
+      capability.ready ? "queued" : "waiting_dependency",
+      this.#ocrLanguagePreferences
     );
     const reused = child.state === "completed" || child.state === "completed_with_warnings";
     if (reused) {
@@ -3033,7 +3038,8 @@ export class JobsService {
             vaultPath,
             runningJob,
             refreshedSource,
-            ocrCapability
+            ocrCapability,
+            this.#ocrLanguagePreferences
           );
           ocrWaitingSourceId = refreshedSource.id;
         }
@@ -5519,7 +5525,8 @@ function ensureAgentOcrToolJob(
   parentJob: JobRecord,
   sourceRecord: SourceRecord,
   request: AgentIngestOcrToolRequest,
-  state: Extract<JobState, "queued" | "waiting_dependency">
+  state: Extract<JobState, "queued" | "waiting_dependency">,
+  languagePreferences: OcrLanguagePreferenceService
 ): JobRecord {
   const sourceRevision = sourceInputRevision(sourceRecord);
   const actionDigest = createAgentToolActionDigest({
@@ -5549,7 +5556,7 @@ function ensureAgentOcrToolJob(
     ...(state === "waiting_dependency"
       ? { waitingDependency: localToolWaitingDependency(request.toolId) }
       : {}),
-    inputRefs: createAgentToolInputRefs({
+    inputRefs: languagePreferences.mergeJobRef(createAgentToolInputRefs({
       sourceRecord,
       sourceRevision,
       toolId: request.toolId,
@@ -5557,7 +5564,7 @@ function ensureAgentOcrToolJob(
       canonicalInputHash: request.canonicalInputHash,
       catalogHash: request.catalogHash,
       provenanceHash
-    }),
+    }), sourceRecord),
     message: state === "queued"
       ? sourceRecord.kind === "image_file"
         ? "Agent selected bounded OCR for the verified preserved image; durable OCR child queued."
@@ -6005,7 +6012,8 @@ function ensureOcrWaitingJob(
   vaultPath: string,
   parseJob: JobRecord,
   sourceRecord: SourceRecord,
-  capability: OcrSourceCapability
+  capability: OcrSourceCapability,
+  languagePreferences: OcrLanguagePreferenceService
 ): void {
   ensureParserOrOcrFollowUpJob(
     store,
@@ -6014,7 +6022,8 @@ function ensureOcrWaitingJob(
     sourceRecord,
     "ocr",
     capability.ready ? "queued" : "waiting_dependency",
-    capability.message
+    capability.message,
+    languagePreferences
   );
 }
 
@@ -6025,7 +6034,8 @@ function ensureParserOrOcrFollowUpJob(
   sourceRecord: SourceRecord,
   jobClass: "parse" | "ocr",
   state: JobState,
-  message: string
+  message: string,
+  languagePreferences?: OcrLanguagePreferenceService
 ): void {
   const jobId = createParserOrOcrJobId(sourceRecord.id, jobClass);
   const now = new Date().toISOString();
@@ -6042,6 +6052,9 @@ function ensureParserOrOcrFollowUpJob(
       : {}),
     ...(parentJob.captureId ? { captureId: parentJob.captureId } : {}),
     ...(parentJob.conversationEventId ? { conversationEventId: parentJob.conversationEventId } : {}),
+    ...(jobClass === "ocr" && languagePreferences
+      ? { inputRefs: languagePreferences.mergeJobRef(undefined, sourceRecord) }
+      : {}),
     message
   }));
 }

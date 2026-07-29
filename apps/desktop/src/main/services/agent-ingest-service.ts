@@ -136,6 +136,7 @@ export interface AgentIngestCapabilitySnapshot {
   readonly parserToolchainReady: boolean;
   readonly datasetToolchainReady?: boolean;
   readonly ocrEngines: AgentRuntimePolicyContext["localCapabilities"]["ocrEngines"];
+  readonly ocrLanguageHints?: readonly string[];
   readonly speechInputAvailable: boolean;
   readonly embeddingModelInstalled: boolean;
   readonly lexicalSearchAvailable: boolean;

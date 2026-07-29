@@ -8,6 +8,11 @@ import { JobRecordSchema, SourceRecordSchema, type JobRecord } from "@pige/schem
 import { JobsService, type JobsVaultPort } from "../../apps/desktop/src/main/services/jobs-service";
 import { OcrArtifactService } from "../../apps/desktop/src/main/services/ocr-artifact-service";
 import { OcrService, type NativeImageOcrAdapterPort, type OcrPort } from "../../apps/desktop/src/main/services/ocr-service";
+import {
+  OcrLanguagePreferenceService,
+  type OcrLanguagePreferenceState,
+  type OcrLanguagePreferenceStorePort
+} from "../../apps/desktop/src/main/services/ocr-language-preference-service";
 import type { NativeOcrResult } from "../../apps/desktop/src/main/services/ocr-types";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
@@ -19,6 +24,31 @@ afterEach(() => {
 });
 
 describe("OCR executor integration", () => {
+  it("uses the durable Job language binding instead of rereading changed settings", async () => {
+    const fixture = makeVault("OcrLanguageBinding");
+    const captured = await preserveImage(fixture, "bound-language.png");
+    const sourcePath = requireValue(findFiles(
+      path.join(fixture.vaultPath, ".pige", "source-records"),
+      `${captured.sourceId}.json`
+    )[0]);
+    const source = SourceRecordSchema.parse(JSON.parse(fs.readFileSync(sourcePath, "utf8")));
+    const store = new OcrPreferenceStore({ revision: 1, preference: "ko" });
+    const preferences = new OcrLanguagePreferenceService(store);
+    const queuedPath = jobPath(fixture.vaultPath, captured.ocrJobId);
+    const queued = readJob(queuedPath);
+    writeJob(queuedPath, JobRecordSchema.parse({
+      ...queued,
+      inputRefs: preferences.mergeJobRef(queued.inputRefs, source)
+    }));
+    store.state = { revision: 2, preference: "fr" };
+    const adapter = new StaticOcrAdapter();
+    const jobs = new JobsService(fixture.vaultPort, undefined, undefined, undefined, new OcrService(adapter));
+
+    expect(await jobs.ocrExecutor().process({ jobIds: [captured.ocrJobId] }))
+      .toMatchObject({ processed: 1, completed: 1, failed: 0 });
+    expect(adapter.preferredLanguages).toEqual([["ko-KR"]]);
+  });
+
   it("persists Paddle identity and rejects mismatched or unknown OCR identities", async () => {
     const fixture = makeVault("PaddleIdentity");
     const captured = await preserveImage(fixture, "paddle.png");
@@ -197,6 +227,7 @@ interface VaultFixture {
 
 class StaticOcrAdapter implements NativeImageOcrAdapterPort {
   calls = 0;
+  readonly preferredLanguages: string[][] = [];
 
   constructor(readonly result: NativeOcrResult = ocrResult("macos")) {}
 
@@ -204,9 +235,22 @@ class StaticOcrAdapter implements NativeImageOcrAdapterPort {
     return true;
   }
 
-  async recognize(): Promise<NativeOcrResult> {
+  async recognize(_inputPath: string, preferredLanguages: readonly string[]): Promise<NativeOcrResult> {
     this.calls += 1;
+    this.preferredLanguages.push([...preferredLanguages]);
     return this.result;
+  }
+}
+
+class OcrPreferenceStore implements OcrLanguagePreferenceStorePort {
+  constructor(public state: OcrLanguagePreferenceState) {}
+
+  read(): OcrLanguagePreferenceState {
+    return this.state;
+  }
+
+  mutate(): { readonly status: "stale"; readonly state: OcrLanguagePreferenceState } {
+    return { status: "stale", state: this.state };
   }
 }
 

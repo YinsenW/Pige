@@ -10,6 +10,7 @@ export interface BuildAgentRuntimePolicyContextOptions {
   readonly localDatabaseStatus?: AgentRuntimePolicyContext["localCapabilities"]["localDatabase"];
   readonly parserToolchainReady?: boolean;
   readonly ocrEngines?: AgentRuntimePolicyContext["localCapabilities"]["ocrEngines"];
+  readonly ocrLanguageHints?: readonly string[];
   readonly speechInputAvailable?: boolean;
   readonly embeddingModelInstalled?: boolean;
   readonly lexicalSearchAvailable?: boolean;
@@ -55,7 +56,7 @@ export function buildAgentRuntimePolicyContext(
       appLocale: manifest.default_locale,
       generatedKnowledgeLanguage: "preserve_source" as const,
       preserveSourceLanguage: true,
-      ocrLanguageHints: [manifest.default_locale]
+      ocrLanguageHints: options.ocrLanguageHints ?? [manifest.default_locale]
     },
     retrieval: {
       lexicalSearchAvailable: options.lexicalSearchAvailable ?? false,

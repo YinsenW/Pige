@@ -237,6 +237,7 @@ import {
   NoteMarkdownEditorService
 } from "./services/note-markdown-editor-service";
 import { OcrService } from "./services/ocr-service";
+import { OcrLanguagePreferenceService } from "./services/ocr-language-preference-service";
 import { MacOSSpeechAdapter } from "./services/macos-speech-adapter";
 import { ProposalService } from "./services/proposal-service";
 import { SourceOriginalReconnectService } from "./services/source-original-reconnect-service";
@@ -338,6 +339,7 @@ let documentParserService: DocumentParserService | undefined;
 let datasetQueryService: DatasetQueryService | undefined;
 let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
+let ocrLanguagePreferenceService: OcrLanguagePreferenceService | undefined;
 let speechService: SpeechService | undefined;
 let updateService: UpdateService | undefined;
 let skillRegistryService: SkillRegistryService | undefined;
@@ -1001,7 +1003,8 @@ const getJobsService = (): JobsService => {
       getJobClassExecutorRegistry(),
       undefined,
       undefined,
-      getLocalRagEngineService()
+      getLocalRagEngineService(),
+      getOcrLanguagePreferenceService()
     );
   }
   return jobsService;
@@ -1417,12 +1420,18 @@ const getAgentCapabilitySnapshot = (): AgentIngestCapabilitySnapshot => {
       getDatasetService().canMaterialize("xlsx_file") &&
       getDatasetService().canMaterialize("sqlite_file"),
     ocrEngines: imageOcrReady && process.platform === "darwin" ? ["apple_vision"] : [],
+    ocrLanguageHints: getOcrLanguagePreferenceService().policyLanguageHints(),
     speechInputAvailable: false,
     embeddingModelInstalled: getLocalSemanticRetrievalService().embeddingModelInstalled(),
     lexicalSearchAvailable: localDatabaseStatus === "ready",
     vectorSearchAvailable: vaultPath ? getLocalRagEngineService().availableNow(vaultPath) : false,
     rerankerAvailable: false
   };
+};
+
+const getOcrLanguagePreferenceService = (): OcrLanguagePreferenceService => {
+  ocrLanguagePreferenceService ??= new OcrLanguagePreferenceService();
+  return ocrLanguagePreferenceService;
 };
 
 const getLibraryService = (): LibraryService => {

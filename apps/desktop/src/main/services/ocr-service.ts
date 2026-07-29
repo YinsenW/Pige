@@ -31,6 +31,7 @@ import {
 import { createVerifiedSourceFileSnapshotAsync } from "./source-file-access";
 import { createVerifiedFileSnapshot } from "./verified-file-snapshot";
 import { JobCancellationError, type JobExecutionControl } from "./job-execution-control";
+import { resolveOcrJobLanguageHints } from "./ocr-language-preference-service";
 
 export interface OcrPort {
   canOcr(sourceKind: SourceKind): boolean;
@@ -193,7 +194,7 @@ export class OcrService implements OcrPort {
     try {
       const result = await this.#adapter.recognize(
         snapshot.absolutePath,
-        preferredLanguages(sourceRecord),
+        resolveOcrJobLanguageHints(job),
         control?.signal
       );
       control?.throwIfCancellationRequested();
@@ -286,7 +287,7 @@ export class OcrService implements OcrPort {
           locator: page.locator,
           result: await this.#adapter.recognize(
             pageSnapshot.absolutePath,
-            preferredLanguages(sourceRecord),
+            resolveOcrJobLanguageHints(job),
             control?.signal
           )
         });
@@ -363,7 +364,7 @@ export class OcrService implements OcrPort {
         const result = await recognizePrivateMedia(
           this.#adapter,
           item,
-          preferredLanguages(sourceRecord),
+          resolveOcrJobLanguageHints(job),
           control?.signal
         );
         results.push({
@@ -392,10 +393,6 @@ export class OcrService implements OcrPort {
     control?.markDurableCheckpoint("pptx_media_ocr_commit_started");
     return this.#pptxArtifacts.persist(vaultPath, sourceRecord, sourceRecordPath, job, results);
   }
-}
-
-function preferredLanguages(sourceRecord: SourceRecord): readonly string[] {
-  return typeof sourceRecord.metadata.locale === "string" ? [sourceRecord.metadata.locale] : [];
 }
 
 function hasOcrMetadataArtifact(sourceRecord: SourceRecord, suffix: string): boolean {
