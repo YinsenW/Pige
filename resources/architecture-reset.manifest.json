@@ -172,25 +172,6 @@
       ]
     },
     {
-      "id": "permission.yolo",
-      "disposition": "DELETE",
-      "targetPhase": "AR1",
-      "token": "YOLO",
-      "maximumMatches": 41,
-      "allowedPaths": [
-        "apps/desktop/src/main/index.ts",
-        "apps/desktop/src/main/services/permission-settings-service.ts",
-        "apps/desktop/src/main/services/permission-yolo-confirmation-registry.ts",
-        "apps/desktop/src/renderer/src/locales/de/messages.json",
-        "apps/desktop/src/renderer/src/locales/en/messages.json",
-        "apps/desktop/src/renderer/src/locales/fr/messages.json",
-        "apps/desktop/src/renderer/src/locales/ja/messages.json",
-        "apps/desktop/src/renderer/src/locales/ko/messages.json",
-        "apps/desktop/src/renderer/src/locales/zh-Hans/messages.json",
-        "packages/schemas/src/index.ts"
-      ]
-    },
-    {
       "id": "model.egress_approval",
       "disposition": "DELETE",
       "targetPhase": "AR1",
@@ -232,12 +213,8 @@
   "implementationInventory": {
     "DELETE": [
       ["apps/desktop/src/main/services/model-egress-approval-service.ts", "AR1", "Development", "12-hash/one-shot approval owner is replaced by Provider Connect/select plus Send."],
-      ["apps/desktop/src/main/services/permission-settings-service.ts", "AR1", "Development", "Saved grants and ordinary permission defaults are removed."],
-      ["apps/desktop/src/main/services/permission-yolo-confirmation-registry.ts", "AR1", "Development", "YOLO is not a product mode."],
       ["tests/unit/model-egress-approval-service.test.ts", "AR1", "Development", "Tests an implementation intentionally deleted."],
       ["tests/unit/model-egress-job-recovery.test.ts", "AR1", "Development", "Approval waiting/recovery is no longer a Job lifecycle."],
-      ["tests/unit/permission-settings-service.test.ts", "AR1", "Development", "Tests removed saved-grant/default modes."],
-      ["tests/unit/permission-yolo-confirmation-registry.test.ts", "AR1", "Development", "Tests removed YOLO mode."],
       ["tests/unit/permission-broker-job-recovery.test.ts", "AR1", "Development", "Ordinary permission waiting/recovery is removed."],
       ["apps/desktop/src/main/services/home-agent-turn-lifecycle.ts", "AR2", "Development", "Host turn/repair shadow lifecycle is replaced by upstream Pi events and one durable projection owner."]
       ,["apps/desktop/src/main/services/model-egress-policy.ts", "AR1", "Development", "Provider payload classification, redaction, and blocking are deleted."],
@@ -264,6 +241,9 @@
       ["tests/unit/agent-led-ingest-retrieval.test.ts", "AR2", "Development", "Prove Pi chooses capabilities rather than a fixed Host chain."]
     ],
     "KEEP": [
+      ["apps/desktop/src/main/services/permission-policy-store.ts", "AR1", "Development", "Durable Ask Every Time, scoped grants, and explicit Full Access policy remain Main-owned and cannot weaken hard boundaries."],
+      ["apps/desktop/src/main/services/permission-policy-grant-record.ts", "AR1", "Development", "Exact scoped-grant identity and audit linkage remain durable and fail closed."],
+      ["apps/desktop/src/main/services/permission-full-access-service.ts", "AR1", "Development", "Explicit double-confirmed Full Access suppresses only eligible routine prompts; protected authority and safety boundaries remain confirmed or blocked."],
       ["apps/desktop/src/main/services/agent-ingest-tool-registry.ts", "AR2", "Development", "Typed capability catalog; it must not choose semantic order."],
       ["apps/desktop/src/main/services/retrieval-evidence-boundary.ts", "AR2", "Development", "Host owns scope, character/token budget, revision/exact evidence identity, persistence-safe index/cache/search-display projection and citation metadata. Provider-bound selected evidence is re-read from source truth and sent exact/ephemeral without classification, trimming, redaction or rewriting; persistence projections never replace it as model context."],
       ["apps/desktop/src/main/services/job-record-store.ts", "AR3", "Development", "Durable Job identity and storage remain Host-owned."],
