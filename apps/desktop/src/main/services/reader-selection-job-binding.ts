@@ -14,6 +14,10 @@ import {
 } from "@pige/schemas";
 import type { ResolveJobReviewInput } from "./job-execution-coordinator";
 import {
+  assertReaderSelectionCreateNoteJobBinding,
+  createReaderSelectionCreateNoteJobRef
+} from "./reader-selection-create-note-service";
+import {
   readCurrentNoteEvidenceBinding,
   readCurrentNoteSelectionEvidenceBinding,
   type CurrentNoteEvidenceBinding
@@ -25,6 +29,7 @@ export interface ReaderSelectionJobScope {
   readonly selection?: ReaderSelectionIdentity;
   readonly transformAction?: ReaderSelectionTransformAction;
   readonly linkAction?: "link";
+  readonly createNoteAction?: "create_note";
 }
 
 export interface ReaderSelectionTurnContext {
@@ -32,6 +37,7 @@ export interface ReaderSelectionTurnContext {
   readonly currentNoteReadAction?: ReaderSelectionReadAction;
   readonly currentNoteTransformAction?: ReaderSelectionTransformAction;
   readonly currentNoteLinkAction?: "link";
+  readonly currentNoteCreateNoteAction?: "create_note";
 }
 
 type JobRef = NonNullable<JobRecord["inputRefs"]>[number];
@@ -81,13 +87,13 @@ export function validateReaderSelectionTurnContext(input: {
       "A Reader selection action requires the exact current-note scope."
     );
   }
-  if ((context.currentNoteReadAction || context.currentNoteTransformAction || context.currentNoteLinkAction) && !context.currentNoteSelection) {
+  if ((context.currentNoteReadAction || context.currentNoteTransformAction || context.currentNoteLinkAction || context.currentNoteCreateNoteAction) && !context.currentNoteSelection) {
     throw new PigeDomainError(
       "agent_runtime.turn_binding_invalid",
       "A Reader selection presentation requires an exact selection identity."
     );
   }
-  if ([context.currentNoteReadAction, context.currentNoteTransformAction, context.currentNoteLinkAction]
+  if ([context.currentNoteReadAction, context.currentNoteTransformAction, context.currentNoteLinkAction, context.currentNoteCreateNoteAction]
     .filter(Boolean).length > 1) {
     throw new PigeDomainError(
       "agent_runtime.turn_binding_invalid",
@@ -132,6 +138,9 @@ export function createReaderSelectionJobScope(
       : {}),
     ...(context.currentNoteSelection && context.currentNoteLinkAction
       ? { linkAction: context.currentNoteLinkAction }
+      : {}),
+    ...(context.currentNoteSelection && context.currentNoteCreateNoteAction
+      ? { createNoteAction: context.currentNoteCreateNoteAction }
       : {})
   };
 }
@@ -261,7 +270,8 @@ export function isValidReaderSelectionJobScope(
       ["translate", "polish", "expand"].includes(scope.transformAction)
     )) &&
     (scope.linkAction === undefined || (scope.selection !== undefined && scope.linkAction === "link")) &&
-    !(scope.transformAction && scope.linkAction) &&
+    (scope.createNoteAction === undefined || (scope.selection !== undefined && scope.createNoteAction === "create_note")) &&
+    [scope.transformAction, scope.linkAction, scope.createNoteAction].filter(Boolean).length <= 1 &&
     !hasSourceBinding;
 }
 
@@ -277,7 +287,8 @@ export function createReaderSelectionJobRefs(scope: ReaderSelectionJobScope): Jo
     ...(scope.selection && scope.transformAction
       ? [createTransformRef(scope.selection, scope.transformAction)]
       : []),
-    ...(scope.selection && scope.linkAction ? [createLinkRef(scope.selection)] : [])
+    ...(scope.selection && scope.linkAction ? [createLinkRef(scope.selection)] : []),
+    ...(scope.selection && scope.createNoteAction ? [createReaderSelectionCreateNoteJobRef(scope.selection)] : [])
   ];
 }
 
@@ -286,6 +297,7 @@ export function assertReaderSelectionJobBinding(
   scope: ReaderSelectionJobScope | undefined
 ): void {
   const refs = inputRefs ?? [];
+  assertReaderSelectionCreateNoteJobBinding(refs, scope?.selection, scope?.createNoteAction === "create_note");
   const scopeRefs = refs.filter((ref) => ref.role === SCOPE_ROLE);
   const selectionRefs = refs.filter((ref) => ref.role === SELECTION_ROLE);
   const transformRefs = refs.filter((ref) => ref.role === TRANSFORM_ROLE);

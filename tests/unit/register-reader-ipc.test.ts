@@ -30,6 +30,9 @@ function makeHarness(notes: Partial<NotesService>) {
     },
     getReaderSelectionProposalService: () => {
       throw new Error("Reader proposal service was not expected.");
+    },
+    getReaderSelectionCreateNoteService: () => {
+      throw new Error("Reader create-note service was not expected.");
     }
   });
   return handlers;
@@ -49,6 +52,7 @@ describe("registerReaderIpc", () => {
       "readerSelection.submitAction",
       "readerSelection.submitLink",
       "readerSelection.submitTransform",
+      "readerSelection.submitCreateNote",
       "readerSelection.currentProposal",
       "readerSelection.decideProposal"
     ]);

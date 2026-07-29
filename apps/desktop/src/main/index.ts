@@ -204,6 +204,10 @@ import {
 } from "./services/agent-turn-publication";
 import { ReaderSelectionActionService } from "./services/reader-selection-action-service";
 import {
+  ReaderSelectionCreateNoteActionService,
+  ReaderSelectionCreateNoteProposalService
+} from "./services/reader-selection-create-note-service";
+import {
   applyReaderSelectionLink,
   readReaderSelectionLinkOperation
 } from "./services/reader-selection-link-service";
@@ -323,6 +327,8 @@ let noteMarkdownEditorActivityAdapter: NoteMarkdownEditorActivityAdapter | undef
 let noteMarkdownEditorService: NoteMarkdownEditorService | undefined;
 let readerSelectionActionService: ReaderSelectionActionService | undefined;
 let readerSelectionProposalService: ReaderSelectionProposalService | undefined;
+let readerSelectionCreateNoteProposalService: ReaderSelectionCreateNoteProposalService | undefined;
+let readerSelectionCreateNoteActionService: ReaderSelectionCreateNoteActionService | undefined;
 let proposalService: ProposalService | undefined;
 let retrievalService: RetrievalService | undefined;
 let localSemanticRetrievalService: LocalSemanticRetrievalService | undefined;
@@ -1357,7 +1363,18 @@ const getHomeAgentService = (): HomeAgentService => {
             pageContentHash: result.operation.after!.id,
             targetPageId: result.targetPageId
           } : undefined;
-        }
+        },
+        publishCreateNote: ({ job, selection, selectedText, title, body, modelProfileId }) =>
+          getReaderSelectionCreateNoteProposalService().stage({
+            job,
+            selection,
+            selectedText,
+            title,
+            body,
+            modelProfileId
+          }),
+        readCreateNotePublication: (input) =>
+          getReaderSelectionCreateNoteProposalService().readPublication(input)
       },
       {
         toolsForTurn: (turn) => [getTaskExecutionPlanRunner().toolForExplicitHomeTurn({
@@ -1493,10 +1510,33 @@ const getReaderSelectionProposalService = (): ReaderSelectionProposalService => 
           replacement,
           action
         }).operation
-      }
+      },
+      getReaderSelectionCreateNoteProposalService()
     );
   }
   return readerSelectionProposalService;
+};
+
+const getReaderSelectionCreateNoteProposalService = (): ReaderSelectionCreateNoteProposalService => {
+  readerSelectionCreateNoteProposalService ??= new ReaderSelectionCreateNoteProposalService(
+    getVaultService(),
+    {
+      readAgentTurnJob: (jobId) => getJobsService().readAgentTurnJob(jobId),
+      resolveAgentTurnReview: (input) => getJobsService().resolveAgentTurnReview(input)
+    },
+    undefined,
+    (vaultPath) => getLocalDatabaseService().rebuild(vaultPath)
+  );
+  return readerSelectionCreateNoteProposalService;
+};
+
+const getReaderSelectionCreateNoteActionService = (): ReaderSelectionCreateNoteActionService => {
+  readerSelectionCreateNoteActionService ??= new ReaderSelectionCreateNoteActionService(
+    getVaultService(),
+    getHomeAgentService(),
+    getReaderSelectionCreateNoteProposalService()
+  );
+  return readerSelectionCreateNoteActionService;
 };
 
 const getProposalService = (): ProposalService => {
@@ -2404,7 +2444,8 @@ registerReaderIpc({
   ipcMain,
   getNotesService,
   getReaderSelectionActionService,
-  getReaderSelectionProposalService
+  getReaderSelectionProposalService,
+  getReaderSelectionCreateNoteService: getReaderSelectionCreateNoteActionService
 });
 registerCurrentNoteAppendIpc({
   ipcMain,

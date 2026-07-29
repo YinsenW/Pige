@@ -4426,6 +4426,91 @@ SYNTHETIC_DISTRACTOR_BODY
     expect(readReaderSelectionPublicationIntent(fixture.vaultPath, awaitingReview)).toBeUndefined();
   });
 
+  it("stages one Reader create-note proposal through the exact selection-bound tool", async () => {
+    const fixture = makeFixture();
+    const selected = "CREATE_NOTE_SELECTION";
+    writeKnowledgePage(fixture.vaultPath, [], selected);
+    const markdown = fs.readFileSync(path.join(fixture.vaultPath, "wiki", "launch.md"), "utf8");
+    const character = markdown.indexOf(selected);
+    const start = Buffer.byteLength(markdown.slice(0, character), "utf8");
+    const selectedBytes = Buffer.from(selected);
+    const selection = {
+      pageId: HOME_PAGE_ID,
+      pageContentHash: `sha256:${createHash("sha256").update(markdown).digest("hex")}`,
+      span: { unit: "utf8_bytes" as const, start, endExclusive: start + selectedBytes.length },
+      selectedContentHash: `sha256:${createHash("sha256").update(selectedBytes).digest("hex")}`
+    };
+    const jobs = new JobsService(fixture.vaults);
+    const proposal = {
+      proposalId: "proposal_20260729_readercreate12",
+      action: "create_note" as const,
+      state: "ready" as const,
+      revision: 1,
+      lines: [{ kind: "added" as const, text: "Created note" }]
+    };
+    const publishCreateNote = vi.fn(() => proposal);
+    const service = new TestHomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      {
+        run: async (request) => {
+          const readTool = request.tools.find((tool) => tool.name === "pige_read_current_note");
+          const createTool = request.tools.find((tool) => tool.name === "pige_create_note_from_reader_selection");
+          if (!readTool || !createTool) throw new Error("Missing Reader create-note tools.");
+          const signal = new AbortController().signal;
+          await request.beforeModelTurn?.();
+          await readTool.execute({}, signal, { toolCallId: "pi_tool_create_note_read", signal });
+          await createTool.execute({ title: "Created note", body: "A bounded standalone note." }, signal, {
+            toolCallId: "pi_tool_create_note_stage",
+            signal
+          });
+          return makeRuntimeResult(request, [readTool.name, createTool.name], {
+            answer: "The note is ready for review.",
+            citationRefs: []
+          });
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        publish: vi.fn(),
+        readPublication: vi.fn(),
+        publishLink: vi.fn(),
+        readLinkPublication: vi.fn(),
+        publishCreateNote,
+        readCreateNotePublication: vi.fn(() => proposal)
+      }
+    );
+
+    const result = await service.submitTurn({
+      text: "Create a standalone note from this selection.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260729_readercreate12"
+    }, {
+      currentNoteSelection: selection,
+      currentNoteCreateNoteAction: "create_note"
+    });
+
+    expect(result).toMatchObject({ state: "waiting", error: { code: "agent_runtime.review_required" } });
+    expect(publishCreateNote).toHaveBeenCalledWith(expect.objectContaining({
+      selection,
+      selectedText: selected,
+      title: "Created note",
+      body: "A bounded standalone note."
+    }));
+    expect(jobs.readAgentTurnJob(result.jobId!)).toMatchObject({
+      state: "awaiting_review",
+      proposalIds: [proposal.proposalId]
+    });
+  });
+
   it("does not stage a durable Reader review before final assistant publication succeeds", async () => {
     const fixture = makeFixture();
     const selected = "SELECTED_REVIEW_FAILURE_PASSAGE";

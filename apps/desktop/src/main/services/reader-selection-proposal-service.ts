@@ -39,6 +39,10 @@ const MAX_PREVIEW_LINES = 8;
 const MAX_PREVIEW_LINE_CHARACTERS = 160;
 const REVIEW_REPLACEMENT_BYTES = 4 * 1024;
 
+export function readerSelectionContentRestricted(message: string): PigeDomainError {
+  return new PigeDomainError("agent_ingest.update_content_restricted", message);
+}
+
 const ReaderSelectionProposalRecordSchema = z.object({
   schemaVersion: z.literal(1),
   proposalId: ReaderSelectionProposalIdSchema,
@@ -81,19 +85,27 @@ export interface ReaderSelectionProposalWriterPort {
   }): OperationRecord;
 }
 
+export interface ReaderSelectionCreateNoteProposalPort {
+  get(request: ReaderSelectionProposalGetRequest): ReaderSelectionProposalGetResult | undefined;
+  decide(request: ReaderSelectionProposalDecisionRequest): ReaderSelectionProposalDecisionResult | undefined;
+}
+
 export class ReaderSelectionProposalService {
   readonly #vaults: ReaderSelectionProposalVaultPort;
   readonly #jobs: ReaderSelectionProposalJobPort;
   readonly #writer: ReaderSelectionProposalWriterPort;
+  readonly #createNotes: ReaderSelectionCreateNoteProposalPort | undefined;
 
   constructor(
     vaults: ReaderSelectionProposalVaultPort,
     jobs: ReaderSelectionProposalJobPort,
-    writer: ReaderSelectionProposalWriterPort
+    writer: ReaderSelectionProposalWriterPort,
+    createNotes?: ReaderSelectionCreateNoteProposalPort
   ) {
     this.#vaults = vaults;
     this.#jobs = jobs;
     this.#writer = writer;
+    this.#createNotes = createNotes;
   }
 
   shouldRequireReview(selection: ReaderSelectionIdentity, replacement: string): boolean {
@@ -115,13 +127,10 @@ export class ReaderSelectionProposalService {
       throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The Reader proposal Job binding is invalid.");
     }
     if (Buffer.byteLength(input.replacement, "utf8") > MAX_REPLACEMENT_BYTES) {
-      throw new PigeDomainError("agent_ingest.update_content_restricted", "The Reader transform replacement is too large.");
+      throw readerSelectionContentRestricted("The Reader transform replacement is too large.");
     }
     if (containsRestrictedModelContent(input.replacement)) {
-      throw new PigeDomainError(
-        "agent_ingest.update_content_restricted",
-        "The Reader transform replacement contains restricted content."
-      );
+      throw readerSelectionContentRestricted("The Reader transform replacement contains restricted content.");
     }
     const proposalId = createReaderSelectionProposalId(input.job.id);
     const intentHash = createReaderSelectionPublicationIntentHash(
@@ -158,6 +167,8 @@ export class ReaderSelectionProposalService {
   }
 
   get(request: ReaderSelectionProposalGetRequest): ReaderSelectionProposalGetResult {
+    const createNote = this.#createNotes?.get(request);
+    if (createNote) return createNote;
     const current = this.#vaults.current();
     const vaultPath = this.#vaults.activeVaultPath();
     if (!current || !vaultPath) return { apiVersion: 1, status: "unavailable", reason: "vault_changed" };
@@ -206,6 +217,8 @@ export class ReaderSelectionProposalService {
   }
 
   decide(request: ReaderSelectionProposalDecisionRequest): ReaderSelectionProposalDecisionResult {
+    const createNote = this.#createNotes?.decide(request);
+    if (createNote) return createNote;
     try {
       return this.#decide(request);
     } catch (caught) {

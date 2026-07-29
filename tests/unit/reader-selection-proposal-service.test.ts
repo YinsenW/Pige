@@ -15,6 +15,43 @@ afterEach(() => {
 });
 
 describe("Reader selection proposal service", () => {
+  it("delegates create-note proposal reads and decisions without changing transform storage", () => {
+    const fixture = makeFixture();
+    const createNote = {
+      get: vi.fn(() => ({
+        apiVersion: 1 as const,
+        status: "available" as const,
+        proposal: {
+          proposalId: "proposal_20260718_createnote12",
+          action: "create_note" as const,
+          state: "ready" as const,
+          revision: 1,
+          lines: []
+        }
+      })),
+      decide: vi.fn(() => ({ apiVersion: 1 as const, status: "stale" as const }))
+    };
+    const service = new ReaderSelectionProposalService(
+      fixture.vaults,
+      { readAgentTurnJob: () => fixture.job, resolveAgentTurnReview: (input) => input.job },
+      { apply: () => ({ id: "op_20260718_unusedwriter" }) as OperationRecord },
+      createNote
+    );
+
+    expect(service.get({ apiVersion: 1, proposalId: "proposal_20260718_createnote12" })).toMatchObject({
+      status: "available",
+      proposal: { action: "create_note" }
+    });
+    expect(service.decide({
+      apiVersion: 1,
+      proposalId: "proposal_20260718_createnote12",
+      expectedRevision: 1,
+      decision: "approve"
+    })).toEqual({ apiVersion: 1, status: "stale" });
+    expect(createNote.get).toHaveBeenCalledOnce();
+    expect(createNote.decide).toHaveBeenCalledOnce();
+  });
+
   it("projects only bounded safe preview lines and keeps private mutation identity out of the DTO", () => {
     const fixture = makeFixture();
     const service = makeService(fixture);
