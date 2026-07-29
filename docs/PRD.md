@@ -705,6 +705,8 @@ Navigation:
   mediate sensitive effects; YOLO suppresses eligible Shell/write/network/install prompts.
   Validation/audit always run, and permanent loss, original overwrite, raw credentials,
   risky edits, protected authority, OS/SSRF/signature/path safety remain hard boundaries.
+- Attachment, source, model, and tool content never grants ambient authority; only explicit
+  user-authored intent may request a separately confirmed or reviewed ambient capability.
 - Settings IA grouped as Basic, Knowledge Base, AI, Security, Extensions, and System.
 - Setting ownership, scope, storage, backup behavior, permission requirement, and apply behavior are governed by `docs/SETTINGS_AND_PREFERENCES.md`.
 - Knowledge Base settings must include a real Vault & Note Storage page for local note storage: current vault name, active vault path, knowledge root path, managed source-copy path (the v1 UI compatibility label is Source asset root), default source storage strategy, reveal in file manager, open existing vault folder, create new vault, recent vaults, backup, restore, trash policy, and safe index repair entry points.
