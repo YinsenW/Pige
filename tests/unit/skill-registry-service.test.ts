@@ -49,6 +49,7 @@ describe("SkillRegistryService", () => {
       apiVersion: 1,
       revision: 3,
       invalidManifestCount: 0,
+      restorableSkills: [],
       skills: [{
         id: "paper-reading",
         name: "Paper Reading",
@@ -404,9 +405,100 @@ describe("SkillRegistryService", () => {
     const trashEntry = path.join(root, "skills", "trash", request.requestId);
     expect(fs.readFileSync(path.join(trashEntry, "skill", "SKILL.md"), "utf8")).toBe(source);
     expect(JSON.parse(fs.readFileSync(path.join(trashEntry, ".pige-uninstall.json"), "utf8")))
-      .toMatchObject({ state: "committed", skillId: "trash-me", committedRegistryRevision: 4 });
+      .toMatchObject({
+        schemaVersion: 2,
+        state: "committed",
+        skillId: "trash-me",
+        committedRegistryRevision: 4,
+        bundleSha256: digest(source),
+        installReceiptSha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u)
+      });
     expect(fs.existsSync(path.join(root, "skills", "installed", "trash-me"))).toBe(false);
     expect(new SkillRegistryService(root).uninstall(request)).toMatchObject({ status: "committed" });
+  });
+
+  it("projects only a verified v2 trash candidate and restores it disabled with exact CAS", () => {
+    const root = createRoot();
+    const source = manifest({
+      id: "restore-me", name: "Restore Me", version: "1", description: "A recoverable local workflow.",
+      capabilities: ["read_current_source"], body: "## Procedure\n\nRead only."
+    });
+    seedInstalledSkill(root, source, true);
+    const service = new SkillRegistryService(root);
+    expect(service.uninstall(lifecycleRequest("restore-me", 3))).toMatchObject({ status: "committed" });
+    const trashed = readySummary(service);
+    expect(trashed).toMatchObject({
+      revision: 4,
+      skills: [],
+      restorableSkills: [{ skillId: "restore-me", name: "Restore Me", canRestore: true }]
+    });
+    const candidate = trashed.restorableSkills[0]!;
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "skill_lifecycle_request_restore0123456789abcdef",
+      activeVaultId: "vault_20260728_skilltest",
+      restoreContextId: candidate.restoreContextId,
+      skillId: candidate.skillId,
+      expectedRegistryRevision: trashed.revision
+    };
+    expect(service.restore({ ...request, expectedRegistryRevision: 3 })).toMatchObject({ status: "stale" });
+    expect(service.restore({ ...request, restoreContextId: `skill_restore_context_v2_${"0".repeat(48)}` }))
+      .toMatchObject({ status: "not_found" });
+    expect(service.restore(request)).toMatchObject({
+      status: "committed",
+      registry: { revision: 5, restorableSkills: [], skills: [{ id: "restore-me", enabled: false }] }
+    });
+    expect(fs.readFileSync(path.join(root, "skills", "installed", "restore-me", "SKILL.md"), "utf8")).toBe(source);
+    expect(service.restore(request)).toMatchObject({ status: "committed", registry: { revision: 5 } });
+  });
+
+  it("retains legacy and tampered uninstall trash without projecting restore authority", () => {
+    const root = createRoot();
+    seedInstalledSkill(root, manifest({
+      id: "legacy-trash", name: "Legacy Trash", version: "1", description: "Legacy private trash.",
+      capabilities: ["read_current_source"], body: "## Procedure\n\nRead only."
+    }), false);
+    const request = lifecycleRequest("legacy-trash", 3);
+    expect(new SkillRegistryService(root).uninstall(request)).toMatchObject({ status: "committed" });
+    const receiptPath = path.join(root, "skills", "trash", request.requestId, ".pige-uninstall.json");
+    const receipt = JSON.parse(fs.readFileSync(receiptPath, "utf8")) as Record<string, unknown>;
+    delete receipt.bundleSha256;
+    delete receipt.installReceiptSha256;
+    receipt.schemaVersion = 1;
+    fs.writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
+    expect(readySummary(new SkillRegistryService(root))).toMatchObject({ restorableSkills: [] });
+    expect(fs.existsSync(path.join(root, "skills", "trash", request.requestId, "skill"))).toBe(true);
+  });
+
+  it("adopts an exact prepared restore after a crash without duplicating the Skill", () => {
+    const root = createRoot();
+    seedInstalledSkill(root, manifest({
+      id: "restore-crash", name: "Restore Crash", version: "1", description: "Crash-safe restore.",
+      capabilities: ["read_current_source"], body: "## Procedure\n\nRead only."
+    }), true);
+    const service = new SkillRegistryService(root);
+    expect(service.uninstall(lifecycleRequest("restore-crash", 3))).toMatchObject({ status: "committed" });
+    const summary = readySummary(service);
+    const candidate = summary.restorableSkills[0]!;
+    const rename = fs.renameSync.bind(fs);
+    const spy = vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      if (String(from).includes(".registry.") && String(to).endsWith("registry.json")) throw new Error("crash");
+      return rename(from, to);
+    });
+    expect(service.restore({
+      apiVersion: 1,
+      requestId: "skill_lifecycle_request_restorecrash0123456789",
+      activeVaultId: "vault_20260728_skilltest",
+      restoreContextId: candidate.restoreContextId,
+      skillId: candidate.skillId,
+      expectedRegistryRevision: summary.revision
+    })).toMatchObject({ status: "failed" });
+    spy.mockRestore();
+    expect(readySummary(new SkillRegistryService(root, { recoverOrphanedMutationLock: true }))).toMatchObject({
+      revision: 5,
+      restorableSkills: [],
+      skills: [{ id: "restore-crash", enabled: false }]
+    });
   });
 
   it("finishes the exact uninstall CAS after a crash moved the Skill but did not write registry state", () => {
@@ -795,18 +887,15 @@ function seedInstalledSkill(
   const directory = path.join(root, "skills", "installed", parsed.id);
   fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(path.join(directory, "SKILL.md"), source);
-  if (parsed.kind === "external_web") {
-    fs.writeFileSync(path.join(directory, ".pige-install.json"), `${JSON.stringify({
-      schemaVersion: 1,
-      requestId: "skillreq_seed0123456789abc",
-      stagingId: "skillstage_0123456789abcdef0123456789abcdef",
-      manifestSha256: digest(source),
-      bundleSha256: digest(source),
-      enabled: false,
-      source: "local_markdown",
-      warnings: []
-    })}\n`, "utf8");
-  }
+  fs.writeFileSync(path.join(directory, ".pige-install.json"), `${JSON.stringify({
+    schemaVersion: 1,
+    requestId: "skillreq_seed0123456789abc",
+    stagingId: "skillstage_0123456789abcdef0123456789abcdef",
+    manifestSha256: digest(source),
+    bundleSha256: digest(source),
+    enabled,
+    ...(parsed.kind === "external_web" ? { source: "local_markdown", warnings: [] } : {})
+  })}\n`, "utf8");
   const registryPath = path.join(root, "skills", "registry.json");
   const existing = fs.existsSync(registryPath)
     ? SkillRegistryFileSchema.parse(JSON.parse(fs.readFileSync(registryPath, "utf8")))

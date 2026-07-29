@@ -154,18 +154,19 @@ export function requireInstalledExternalDisclosure(loaded: Parameters<typeof pro
   return disclosure;
 }
 
-export interface SkillUninstallReceipt {
-  readonly schemaVersion: 1;
-  readonly state: "prepared" | "committed";
-  readonly requestId: string;
-  readonly activeVaultId: string;
-  readonly skillId: string;
+export interface SkillUninstallReceiptV1 {
+  readonly schemaVersion: 1; readonly state: "prepared" | "committed";
+  readonly requestId: string; readonly activeVaultId: string; readonly skillId: string;
   readonly expectedRegistryRevision: number;
   readonly committedRegistryRevision?: number;
-  readonly record: SkillRegistryRecord;
-  readonly manifestSha256: string;
-  readonly createdAt: string;
+  readonly record: SkillRegistryRecord; readonly manifestSha256: string; readonly createdAt: string;
 }
+
+export interface SkillUninstallReceiptV2 extends Omit<SkillUninstallReceiptV1, "schemaVersion"> {
+  readonly schemaVersion: 2; readonly bundleSha256: string; readonly installReceiptSha256: string;
+}
+
+export type SkillUninstallReceipt = SkillUninstallReceiptV1 | SkillUninstallReceiptV2;
 
 export interface SkillUpdateReceipt {
   readonly schemaVersion: 1;
@@ -181,24 +182,6 @@ export interface SkillUpdateReceipt {
   readonly newVersion: string;
   readonly enabled: boolean;
   readonly createdAt: string;
-}
-
-export function lifecycleRequestIdentity(request: {
-  readonly requestId: string;
-  readonly activeVaultId: string;
-  readonly skillId: string;
-}) {
-  return { apiVersion: 1 as const, requestId: request.requestId, activeVaultId: request.activeVaultId, skillId: request.skillId };
-}
-
-export function matchesUninstallRequest(receipt: SkillUninstallReceipt, request: {
-  readonly requestId: string;
-  readonly activeVaultId: string;
-  readonly skillId: string;
-  readonly expectedRegistryRevision: number;
-}): boolean {
-  return receipt.requestId === request.requestId && receipt.activeVaultId === request.activeVaultId &&
-    receipt.skillId === request.skillId && receipt.expectedRegistryRevision === request.expectedRegistryRevision;
 }
 
 export class SkillRegistryLifecycleStore {
@@ -270,29 +253,29 @@ export class SkillRegistryLifecycleStore {
   }
 
   prepareUninstall(input: {
-    readonly requestId: string;
-    readonly activeVaultId: string;
-    readonly expectedRegistryRevision: number;
-    readonly record: SkillRegistryRecord;
-    readonly createdAt: string;
+    readonly requestId: string; readonly activeVaultId: string; readonly expectedRegistryRevision: number;
+    readonly record: SkillRegistryRecord; readonly createdAt: string;
   }): SkillUninstallReceipt {
     this.prepare();
     const requestId = SkillLifecycleRequestIdSchema.parse(input.requestId);
     const record = SkillRegistryRecordSchema.parse(input.record);
     const existing = this.readUninstallReceipt(requestId);
-    const manifestSha256 = existing?.manifestSha256 ?? this.readInstalled(record.id).sha256;
+    const snapshot = existing ? undefined : this.readInstalled(record.id);
+    const installReceipt = existing ? undefined : this.readInstallReceipt(record.id);
+    const manifestSha256 = existing?.manifestSha256 ?? snapshot!.sha256;
     if (manifestSha256 !== record.manifestSha256) throw lifecycleError("skill.manifest_changed");
-    const expected: SkillUninstallReceipt = {
-      schemaVersion: 1,
-      state: "prepared",
-      requestId,
-      activeVaultId: input.activeVaultId,
-      skillId: record.id,
+    const base = {
+      state: "prepared", requestId, activeVaultId: input.activeVaultId, skillId: record.id,
       expectedRegistryRevision: input.expectedRegistryRevision,
-      record,
-      manifestSha256,
-      createdAt: input.createdAt
-    };
+      record, manifestSha256, createdAt: input.createdAt
+    } as const;
+    const expected: SkillUninstallReceipt = installReceipt &&
+      installReceipt.manifestSha256 === snapshot!.sha256 && installReceipt.bundleSha256 === snapshot!.bundleSha256
+      ? {
+          ...base, schemaVersion: 2, bundleSha256: snapshot!.bundleSha256,
+          installReceiptSha256: digestStableJson(installReceipt)
+        }
+      : { ...base, schemaVersion: 1 };
     const receipt = existing ?? this.#publishUninstallReceipt(expected);
     if (!sameUninstallIntent(receipt, expected)) throw lifecycleError("skill.uninstall_receipt_conflict");
     this.ensureTrashed(receipt);
@@ -312,12 +295,16 @@ export class SkillRegistryLifecycleStore {
   }
 
   listPreparedUninstalls(): readonly SkillUninstallReceipt[] {
+    return this.listUninstallReceipts().filter((receipt) => receipt.state === "prepared");
+  }
+
+  listUninstallReceipts(): readonly SkillUninstallReceipt[] {
     this.prepare();
     const receipts: SkillUninstallReceipt[] = [];
     for (const entry of fs.readdirSync(this.#trashRoot, { withFileTypes: true })) {
       if (!entry.isDirectory() || entry.isSymbolicLink() || !SkillLifecycleRequestIdSchema.safeParse(entry.name).success) continue;
       const receipt = this.readUninstallReceipt(entry.name);
-      if (receipt?.state === "prepared") receipts.push(receipt);
+      if (receipt) receipts.push(receipt);
     }
     return receipts.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   }
@@ -532,7 +519,7 @@ export class SkillRegistryLifecycleStore {
   }
 }
 
-function readManifestDirectory(parentRoot: string, directory: string): InstalledSkillSnapshot {
+export function readManifestDirectory(parentRoot: string, directory: string): InstalledSkillSnapshot {
   assertChildDirectory(parentRoot, directory);
   const files = readBundleTree(directory);
   const manifest = files.find((file) => file.relativePath === "SKILL.md");
@@ -606,7 +593,7 @@ function fsyncTree(root: string): void {
   for (const directory of directories.reverse()) fsyncDirectory(directory);
 }
 
-function parseInstallReceipt(source: string): SkillInstallReceipt {
+export function parseInstallReceipt(source: string): SkillInstallReceipt {
   const record = parseJsonObject(source, "skill.install_receipt_invalid");
   const keys = Object.keys(record).sort().join(",");
   const legacyKeys = ["bundleSha256,enabled,manifestSha256,requestId,schemaVersion,stagingId",
@@ -643,16 +630,22 @@ function parseInstallReceipt(source: string): SkillInstallReceipt {
 
 function parseUninstallReceipt(source: string): SkillUninstallReceipt {
   const record = parseJsonObject(source, "skill.uninstall_receipt_invalid");
-  const expectedKeys = record.state === "committed"
+  const v2 = record.schemaVersion === 2;
+  const baseKeys = record.state === "committed"
     ? "activeVaultId,committedRegistryRevision,createdAt,expectedRegistryRevision,manifestSha256,record,requestId,schemaVersion,skillId,state"
     : "activeVaultId,createdAt,expectedRegistryRevision,manifestSha256,record,requestId,schemaVersion,skillId,state";
-  if (Object.keys(record).sort().join(",") !== expectedKeys || record.schemaVersion !== 1 ||
+  const expectedKeys = v2
+    ? [...baseKeys.split(","), "bundleSha256", "installReceiptSha256"].sort().join(",")
+    : baseKeys;
+  if (Object.keys(record).sort().join(",") !== expectedKeys || (!v2 && record.schemaVersion !== 1) ||
     (record.state !== "prepared" && record.state !== "committed") ||
     !SkillLifecycleRequestIdSchema.safeParse(record.requestId).success || !VaultIdSchema.safeParse(record.activeVaultId).success ||
     !SkillIdSchema.safeParse(record.skillId).success || !Number.isSafeInteger(record.expectedRegistryRevision) ||
     Number(record.expectedRegistryRevision) < 0 || typeof record.manifestSha256 !== "string" ||
     !/^sha256:[a-f0-9]{64}$/u.test(record.manifestSha256) || typeof record.createdAt !== "string" ||
     !Number.isFinite(Date.parse(record.createdAt)) || !SkillRegistryRecordSchema.safeParse(record.record).success ||
+    (v2 && (typeof record.bundleSha256 !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(record.bundleSha256) ||
+      typeof record.installReceiptSha256 !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(record.installReceiptSha256))) ||
     (record.state === "committed" && (!Number.isSafeInteger(record.committedRegistryRevision) ||
       Number(record.committedRegistryRevision) !== Number(record.expectedRegistryRevision) + 1))) {
     throw lifecycleError("skill.uninstall_receipt_invalid");
@@ -690,7 +683,9 @@ function parseUpdateReceipt(source: string): SkillUpdateReceipt {
 function sameUninstallIntent(left: SkillUninstallReceipt, right: SkillUninstallReceipt): boolean {
   return left.requestId === right.requestId && left.activeVaultId === right.activeVaultId &&
     left.skillId === right.skillId && left.expectedRegistryRevision === right.expectedRegistryRevision &&
-    left.manifestSha256 === right.manifestSha256 && stableJson(left.record) === stableJson(right.record);
+    left.manifestSha256 === right.manifestSha256 && left.schemaVersion === right.schemaVersion &&
+    (left.schemaVersion !== 2 || (right.schemaVersion === 2 && left.bundleSha256 === right.bundleSha256 &&
+      left.installReceiptSha256 === right.installReceiptSha256)) && stableJson(left.record) === stableJson(right.record);
 }
 
 function sameUpdateIntent(left: SkillUpdateReceipt, right: SkillUpdateReceipt): boolean {
@@ -740,7 +735,7 @@ function writePrivateExport(destinationPath: string, bytes: Buffer): void {
   }
 }
 
-function writeJsonAtomic(filePath: string, value: unknown): void {
+export function writeJsonAtomic(filePath: string, value: unknown): void {
   const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   let descriptor: number | undefined;
   try {
@@ -759,7 +754,7 @@ function writeJsonAtomic(filePath: string, value: unknown): void {
   }
 }
 
-function readBoundedNoFollow(filePath: string, maximumBytes: number): string | undefined {
+export function readBoundedNoFollow(filePath: string, maximumBytes: number): string | undefined {
   let descriptor: number | undefined;
   try {
     descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
@@ -811,7 +806,7 @@ function sameDirectoryIdentity(left: fs.Stats, right: fs.Stats): boolean {
   return left.dev === right.dev && left.ino === right.ino && left.isDirectory() && right.isDirectory();
 }
 
-function fsyncDirectory(directory: string): void {
+export function fsyncDirectory(directory: string): void {
   let descriptor: number | undefined;
   try {
     descriptor = fs.openSync(directory, fs.constants.O_RDONLY);
@@ -831,7 +826,7 @@ function parseJsonObject(source: string, code: string): Record<string, unknown> 
   return value as Record<string, unknown>;
 }
 
-function stableJson(value: unknown): string {
+export function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
   if (value && typeof value === "object") {
     return `{${Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right))
@@ -839,6 +834,11 @@ function stableJson(value: unknown): string {
   }
   return JSON.stringify(value) ?? "null";
 }
+
+export function digestStableJson(value: unknown): `sha256:${string}` {
+  return `sha256:${createHash("sha256").update(stableJson(value), "utf8").digest("hex")}`;
+}
+
 
 function isPermissionCapability(value: string): boolean {
   return [

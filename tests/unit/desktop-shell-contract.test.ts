@@ -1124,6 +1124,7 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).not.toContain("readonly readExternalWeb");
     expect(preloadApi).not.toContain("readExternalWeb");
     expect(mainSource).toContain("registerSkillsIpc({");
+    expect(mainSource).toContain("restore: (request) => getSkillRegistryService().restore(request)");
     expect(handlers).toContain('options.ipcMain.handle("skills.summary"');
     expect(handlers).toContain('options.ipcMain.handle("skills.pendingStagedReviews"');
     expect(handlers).toContain("SkillPendingStagedReviewsRequestSchema.parse(request)");
