@@ -11,6 +11,7 @@ import {
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
   COLLECTION_ADD_FORMULA_COLUMN_CHANNEL,
+  COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
   COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES,
   COLLECTION_LIST_CHANNEL,
   COLLECTION_OPEN_CITATION_CHANNEL,
@@ -18,6 +19,8 @@ import {
   CollectionAddNullableColumnResultSchema,
   CollectionAddFormulaColumnRequestSchema,
   CollectionAddFormulaColumnResultSchema,
+  CollectionUpdateFormulaColumnRequestSchema,
+  CollectionUpdateFormulaColumnResultSchema,
   ConfirmationProposalSchema,
   CollectionAppendDefaultRowRequestSchema,
   CollectionAppendDefaultRowResultSchema,
@@ -41,6 +44,7 @@ import {
   DATASET_PIGE_FORMULA_MAX_NODES,
   DatasetPigeCalculationSchema,
   DatasetPigeFormulaExpressionSchema,
+  DatasetRevisionSchema,
   DatasetTableSchema,
   ExternalWebSkillHttpsOriginSchema,
   ExternalWebSkillReadRequestSchema,
@@ -416,7 +420,8 @@ describe("schemas", () => {
         logicalType: "string",
         canRename: true,
         canTrash: true,
-        canUseAsFormulaOperand: false
+        canUseAsFormulaOperand: false,
+        canEditFormula: false
       }],
       rows: [{
         rowId: "row_alphabrowse0001",
@@ -653,8 +658,8 @@ describe("schemas", () => {
       tableId: request.tableId,
       tableName: "Items",
       columns: [
-        { columnId: "column_abcdef123456", label: "Status", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false },
-        { columnId: "column_bcdefa123456", label: "Updated", logicalType: "datetime", canRename: true, canTrash: true, canUseAsFormulaOperand: false }
+        { columnId: "column_abcdef123456", label: "Status", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false, canEditFormula: false },
+        { columnId: "column_bcdefa123456", label: "Updated", logicalType: "datetime", canRename: true, canTrash: true, canUseAsFormulaOperand: false, canEditFormula: false }
       ],
       rows: [],
       totalRowCount: 0,
@@ -791,7 +796,7 @@ describe("schemas", () => {
       title: "Reading list",
       tableId: request.tableId,
       tableName: "Items",
-      columns: [{ columnId: "column_abcdef123456", label: "Notes", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false }],
+      columns: [{ columnId: "column_abcdef123456", label: "Notes", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false, canEditFormula: false }],
       rows: [],
       totalRowCount: 0,
       returnedRowCount: 0,
@@ -878,7 +883,7 @@ describe("schemas", () => {
       title: "Reading list",
       tableId: request.tableId,
       tableName: "Items",
-      columns: [{ columnId: "column_abcdef123456", label: "Title", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false }],
+      columns: [{ columnId: "column_abcdef123456", label: "Title", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false, canEditFormula: false }],
       rows: [],
       totalRowCount: 0,
       returnedRowCount: 0,
@@ -904,7 +909,7 @@ describe("schemas", () => {
         ...snapshot,
         columns: [
           ...snapshot.columns,
-          { columnId: "column_bcdefa123456", label: "Notes", logicalType: "string" as const, canRename: true, canTrash: true, canUseAsFormulaOperand: false }
+          { columnId: "column_bcdefa123456", label: "Notes", logicalType: "string" as const, canRename: true, canTrash: true, canUseAsFormulaOperand: false, canEditFormula: false }
         ],
         canAddColumn: false
       }
@@ -1067,6 +1072,7 @@ describe("schemas", () => {
       canRename: true,
       canTrash: true,
       canUseAsFormulaOperand: false,
+      canEditFormula: false,
       calculation
     } as const;
     const snapshot = {
@@ -1081,7 +1087,8 @@ describe("schemas", () => {
         logicalType: inputColumn.logicalType,
         canRename: true,
         canTrash: false,
-        canUseAsFormulaOperand: true
+        canUseAsFormulaOperand: true,
+        canEditFormula: false
       }, formulaSummary],
       rows: [],
       totalRowCount: 0,
@@ -1144,6 +1151,206 @@ describe("schemas", () => {
       status: "not_found",
       rawError: "SQLITE_BUSY"
     })).toThrow();
+
+    const updatedExpression = {
+      kind: "binary",
+      operator: "multiply",
+      left: columnExpression,
+      right: { kind: "literal", value: 3 }
+    } as const;
+    const updateRequest = {
+      apiVersion: 1,
+      requestId: "collection_request_updateformulaabc",
+      activeVaultId: request.activeVaultId,
+      datasetId: request.datasetId,
+      tableId: request.tableId,
+      columnId: formulaColumn.id,
+      expectedRevisionId: snapshot.revisionId,
+      expression: updatedExpression
+    } as const;
+    expect(COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL).toBe("collections.updateFormulaColumn");
+    expect(CollectionUpdateFormulaColumnRequestSchema.parse(updateRequest)).toEqual(updateRequest);
+    expect(CollectionUpdateFormulaColumnRequestSchema.parse({
+      ...updateRequest,
+      expression
+    }).expression).toEqual(expression);
+    for (const unsafe of [
+      { label: "Renderer-owned rename" },
+      { formula: "Amount * 3" },
+      { sql: "UPDATE private" },
+      { path: "/private/collection.sqlite" }
+    ]) {
+      expect(() => CollectionUpdateFormulaColumnRequestSchema.parse({ ...updateRequest, ...unsafe })).toThrow();
+    }
+
+    const updatedCalculation = {
+      kind: "pige_numeric_formula",
+      schemaVersion: 1,
+      expression: updatedExpression
+    } as const;
+    const updateSnapshot = {
+      ...snapshot,
+      revisionId: "dataset_rev_20260729_cdefab123456",
+      columns: [snapshot.columns[0], {
+        ...formulaSummary,
+        canEditFormula: true,
+        calculation: updatedCalculation
+      }]
+    } as const;
+    const updateIdentity = {
+      apiVersion: updateRequest.apiVersion,
+      requestId: updateRequest.requestId,
+      activeVaultId: updateRequest.activeVaultId,
+      datasetId: updateRequest.datasetId,
+      tableId: updateRequest.tableId,
+      columnId: updateRequest.columnId
+    } as const;
+    expect(CollectionUpdateFormulaColumnResultSchema.parse({
+      ...updateIdentity,
+      status: "committed",
+      operationId: "op_20260729_formulaupdate",
+      snapshot: updateSnapshot
+    })).toMatchObject({ status: "committed", columnId: formulaColumn.id });
+    expect(CollectionUpdateFormulaColumnResultSchema.parse({
+      ...updateIdentity,
+      status: "stale",
+      snapshot
+    }).status).toBe("stale");
+    for (const reason of [
+      "not_pige_formula",
+      "imported_formula",
+      "ineligible_operand",
+      "no_change"
+    ] as const) {
+      expect(CollectionUpdateFormulaColumnResultSchema.parse({
+        ...updateIdentity,
+        status: "invalid",
+        reason
+      }).reason).toBe(reason);
+    }
+    for (const status of ["not_found", "failed"] as const) {
+      expect(CollectionUpdateFormulaColumnResultSchema.parse({ ...updateIdentity, status }).status)
+        .toBe(status);
+    }
+    expect(() => CollectionUpdateFormulaColumnResultSchema.parse({
+      ...updateIdentity,
+      status: "stale",
+      snapshot: { ...snapshot, tableId: "table_other0000001" }
+    })).toThrow("request identity");
+    expect(() => CollectionUpdateFormulaColumnResultSchema.parse({
+      ...updateIdentity,
+      status: "committed",
+      operationId: "op_20260729_formulaupdate",
+      snapshot: { ...updateSnapshot, columns: [updateSnapshot.columns[0]] }
+    })).toThrow("current Pige formula column");
+    expect(() => CollectionUpdateFormulaColumnResultSchema.parse({
+      ...updateIdentity,
+      status: "failed",
+      rawError: "SQLITE_BUSY"
+    })).toThrow();
+    expect(() => CollectionAddFormulaColumnResultSchema.parse({
+      ...identity,
+      status: "stale",
+      snapshot: {
+        ...snapshot,
+        columns: [{ ...snapshot.columns[0], canEditFormula: true }, formulaSummary]
+      }
+    })).toThrow("Pige formula");
+
+    const revisionBase = {
+      schemaVersion: 1,
+      id: updateSnapshot.revisionId,
+      datasetId: request.datasetId,
+      parentRevisionId: snapshot.revisionId,
+      source: {
+        sourceId: "src_20260729_abcdef123456",
+        sourceKind: "csv_file",
+        sourceRecordHash: `sha256:${"a".repeat(64)}`,
+        sourceAssetChecksum: `sha256:${"b".repeat(64)}`,
+        sourceAssetSize: 128
+      },
+      schema: {
+        path: `schemas/${updateSnapshot.revisionId}.json`,
+        checksum: `sha256:${"c".repeat(64)}`,
+        size: 256
+      },
+      payload: {
+        path: `data/revisions/${updateSnapshot.revisionId}.sqlite`,
+        checksum: `sha256:${"d".repeat(64)}`,
+        size: 512,
+        format: "sqlite"
+      },
+      adapter: { id: "managed_collection", version: "1" },
+      writer: { id: "managed_collection_formula", version: "1" },
+      stats: {
+        tableCount: 1,
+        rowCount: 0,
+        columnCount: 2,
+        cellCount: 0,
+        retainedValueBytes: 0
+      },
+      warnings: [],
+      operationId: "op_20260729_formulaupdate",
+      createdAt: "2026-07-29T00:00:00.000Z"
+    } as const;
+    expect(DatasetRevisionSchema.parse({
+      ...revisionBase,
+      change: {
+        kind: "collection_formula_update",
+        tableId: request.tableId,
+        columnId: formulaColumn.id
+      }
+    }).change?.kind).toBe("collection_formula_update");
+    expect(DatasetRevisionSchema.parse({
+      ...revisionBase,
+      id: "dataset_rev_20260729_defabc123456",
+      parentRevisionId: updateSnapshot.revisionId,
+      payload: {
+        ...revisionBase.payload,
+        path: "data/revisions/dataset_rev_20260729_defabc123456.sqlite"
+      },
+      change: {
+        kind: "collection_formula_update_undo",
+        tableId: request.tableId,
+        columnId: formulaColumn.id,
+        undoOfOperationId: "op_20260729_formulaupdate"
+      }
+    }).change?.kind).toBe("collection_formula_update_undo");
+    expect(OperationRecordSchema.parse({
+      id: "op_20260729_formulaupdate",
+      schemaVersion: 1,
+      createdAt: "2026-07-29T00:00:00.000Z",
+      actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+      kind: "update_collection_formula",
+      targetRefs: [
+        { kind: "dataset", id: request.datasetId },
+        { kind: "table", id: request.tableId },
+        { kind: "column", id: formulaColumn.id }
+      ],
+      sourceRefs: [{ kind: "dataset", id: request.datasetId }],
+      summary: "Updated one Managed Collection formula.",
+      reversible: "yes",
+      warnings: []
+    }).kind).toBe("update_collection_formula");
+    expect(KnowledgeActivityListResultSchema.parse({
+      scannedAt: "2026-07-29T00:00:00.000Z",
+      activeVaultId: request.activeVaultId,
+      total: 1,
+      invalidOperationCount: 0,
+      activities: [{
+        operationId: "op_20260729_formulaupdate",
+        kind: "update_collection_formula",
+        createdAt: "2026-07-29T00:00:00.000Z",
+        target: {
+          kind: "collection",
+          datasetId: request.datasetId,
+          tableId: request.tableId,
+          revisionId: updateSnapshot.revisionId
+        },
+        status: "applied",
+        canUndo: true
+      }]
+    }).activities[0]?.kind).toBe("update_collection_formula");
   });
 
   it("keeps Collection column rename stable, reversible, CAS-bound, and body-free", () => {
@@ -1173,7 +1380,7 @@ describe("schemas", () => {
       title: "Reading list",
       tableId: request.tableId,
       tableName: "Items",
-      columns: [{ columnId: request.columnId, label: "Renamed notes", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false }],
+      columns: [{ columnId: request.columnId, label: "Renamed notes", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false, canEditFormula: false }],
       rows: [],
       totalRowCount: 0,
       returnedRowCount: 0,
@@ -1261,7 +1468,8 @@ describe("schemas", () => {
       logicalType: "string" as const,
       canRename: true,
       canTrash: true,
-      canUseAsFormulaOperand: false
+      canUseAsFormulaOperand: false,
+      canEditFormula: false
     };
     const snapshot = {
       datasetId: request.datasetId,
@@ -1360,7 +1568,7 @@ describe("schemas", () => {
       title: "Reading list",
       tableId: request.tableId,
       tableName: "Items",
-      columns: [{ columnId: "column_abcdef123456", label: "Notes", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false }],
+      columns: [{ columnId: "column_abcdef123456", label: "Notes", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false, canEditFormula: false }],
       rows: [currentRow],
       totalRowCount: 1,
       returnedRowCount: 1,

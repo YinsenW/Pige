@@ -1070,6 +1070,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "update_collection_cell",
     "add_collection_row",
     "add_collection_column",
+    "update_collection_formula",
     "rename_collection_column",
     "create_collection_view",
     "trash_collection_column",
@@ -3366,6 +3367,17 @@ export const DatasetRevisionSchema = z.object({
       undoOfOperationId: OperationIdSchema
     }).strict(),
     z.object({
+      kind: z.literal("collection_formula_update"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_formula_update_undo"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
       kind: z.literal("collection_column_rename"),
       tableId: TableIdSchema,
       columnId: ColumnIdSchema
@@ -3461,6 +3473,7 @@ export const CollectionRowCursorSchema = z.string().regex(/^collection_rows_[a-f
 export const COLLECTION_LIST_CHANNEL = "collections.list" as const;
 export const COLLECTION_OPEN_CITATION_CHANNEL = "collections.openCitation" as const;
 export const COLLECTION_ADD_FORMULA_COLUMN_CHANNEL = "collections.addFormulaColumn" as const;
+export const COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL = "collections.updateFormulaColumn" as const;
 export const COLLECTION_LIST_MAX_LIMIT = 50;
 export const COLLECTION_ROW_PAGE_MAX_LIMIT = 50;
 export const CollectionScalarValueSchema = DatasetQueryScalarSchema;
@@ -3528,6 +3541,7 @@ export const CollectionColumnSummarySchema = z.object({
   canRename: z.boolean(),
   canTrash: z.boolean(),
   canUseAsFormulaOperand: z.boolean(),
+  canEditFormula: z.boolean(),
   calculation: CollectionColumnCalculationSummarySchema.optional()
 }).strict().superRefine((column, context) => {
   if (
@@ -3548,9 +3562,16 @@ export const CollectionColumnSummarySchema = z.object({
       message: "Pige formula summaries must project a numeric result column."
     });
   }
+  if (column.canEditFormula && column.calculation?.kind !== "pige_numeric_formula") {
+    context.addIssue({
+      code: "custom",
+      path: ["canEditFormula"],
+      message: "Only a current losslessly representable Pige formula may be editable."
+    });
+  }
   if (
     column.calculation?.kind === "imported_cached_formula" &&
-    (column.canRename || column.canTrash || column.canUseAsFormulaOperand)
+    (column.canRename || column.canTrash || column.canUseAsFormulaOperand || column.canEditFormula)
   ) {
     context.addIssue({
       code: "custom",
@@ -3887,6 +3908,17 @@ export const CollectionAddFormulaColumnRequestSchema = z.object({
   expression: DatasetPigeFormulaExpressionSchema
 }).strict();
 
+export const CollectionUpdateFormulaColumnRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  columnId: DatasetQueryColumnIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  expression: DatasetPigeFormulaExpressionSchema
+}).strict();
+
 export const CollectionRenameColumnRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: CollectionRequestIdSchema,
@@ -4045,6 +4077,46 @@ export const CollectionAddFormulaColumnResultSchema = z.discriminatedUnion("stat
       code: "custom",
       path: ["columnId"],
       message: "Committed Collection formula columns must appear in the authoritative snapshot."
+    });
+  }
+});
+
+const CollectionUpdateFormulaColumnResultIdentitySchema = CollectionResultIdentitySchema.extend({
+  columnId: DatasetQueryColumnIdSchema
+}).strict();
+
+export const CollectionUpdateFormulaColumnResultSchema = z.discriminatedUnion("status", [
+  CollectionUpdateFormulaColumnResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionUpdateFormulaColumnResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionUpdateFormulaColumnResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionUpdateFormulaColumnResultIdentitySchema.extend({
+    status: z.literal("invalid"),
+    reason: z.enum(["not_pige_formula", "imported_formula", "ineligible_operand", "no_change"])
+  }).strict(),
+  CollectionUpdateFormulaColumnResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "committed" && result.status !== "stale") return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({
+      code: "custom",
+      path: ["snapshot"],
+      message: "Collection formula-update snapshots must match the request identity."
+    });
+  }
+  if (result.status !== "committed") return;
+  const column = result.snapshot.columns.find((candidate) => candidate.columnId === result.columnId);
+  if (column?.calculation?.kind !== "pige_numeric_formula") {
+    context.addIssue({
+      code: "custom",
+      path: ["columnId"],
+      message: "Committed formula updates must project the current Pige formula column."
     });
   }
 });
@@ -6091,6 +6163,7 @@ export const OperationRecordSchema = z.object({
     "update_collection_cell",
     "add_collection_row",
     "add_collection_column",
+    "update_collection_formula",
     "rename_collection_column",
     "create_collection_view",
     "trash_collection_column",
@@ -6593,6 +6666,8 @@ export type CollectionAddNullableColumnRequest = z.infer<typeof CollectionAddNul
 export type CollectionAddNullableColumnResult = z.infer<typeof CollectionAddNullableColumnResultSchema>;
 export type CollectionAddFormulaColumnRequest = z.infer<typeof CollectionAddFormulaColumnRequestSchema>;
 export type CollectionAddFormulaColumnResult = z.infer<typeof CollectionAddFormulaColumnResultSchema>;
+export type CollectionUpdateFormulaColumnRequest = z.infer<typeof CollectionUpdateFormulaColumnRequestSchema>;
+export type CollectionUpdateFormulaColumnResult = z.infer<typeof CollectionUpdateFormulaColumnResultSchema>;
 export type CollectionRenameColumnRequest = z.infer<typeof CollectionRenameColumnRequestSchema>;
 export type CollectionRenameColumnResult = z.infer<typeof CollectionRenameColumnResultSchema>;
 export type CollectionCreateViewRequest = z.infer<typeof CollectionCreateViewRequestSchema>;
