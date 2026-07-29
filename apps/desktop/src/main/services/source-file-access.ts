@@ -12,6 +12,23 @@ import {
 import { createVaultRelativePathResolver, readVaultManifest } from "./vault-layout";
 import { createVerifiedFileSnapshot } from "./verified-file-snapshot";
 
+export interface ManagedCopyLocatorLease {
+  readonly absolutePath: string;
+  readonly containmentRoot: string;
+  assertCurrent(): void;
+  release(): void;
+}
+
+export interface ManagedCopyLocatorResolver {
+  resolve(vaultId: string, vaultPath: string, managedCopy: NonNullable<SourceRecord["managedCopy"]>): ManagedCopyLocatorLease;
+}
+
+let managedCopyLocatorResolver: ManagedCopyLocatorResolver | undefined;
+
+export function configureManagedCopyLocatorResolver(resolver: ManagedCopyLocatorResolver | undefined): void {
+  managedCopyLocatorResolver = resolver;
+}
+
 export interface VerifiedSourceFile {
   readonly absolutePath: string;
   readonly checksum: string;
@@ -28,6 +45,21 @@ export interface VerifiedSourceTextPrefix {
   readonly complete: boolean;
 }
 
+export function readBoundedSourceFileNoFollow(filePath: string, maxBytes: number): Buffer {
+  const descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+  try {
+    const before = fs.fstatSync(descriptor);
+    const atPath = fs.lstatSync(filePath);
+    if (!before.isFile() || atPath.isSymbolicLink() || before.nlink !== 1 || before.size > maxBytes)
+      throw new PigeDomainError("source.changed", "The source is unavailable or unsafe.");
+    const bytes = fs.readFileSync(descriptor);
+    const after = fs.fstatSync(descriptor);
+    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mtimeMs !== after.mtimeMs)
+      throw new PigeDomainError("source.changed", "The source changed while it was read.");
+    return bytes;
+  } finally { fs.closeSync(descriptor); }
+}
+
 export function verifyReadableSourceFile(vaultPath: string, sourceRecord: SourceRecord): VerifiedSourceFile {
   const parsed = SourceRecordSchema.parse(sourceRecord);
   const ingress = acquireIngressSnapshot(vaultPath, parsed);
@@ -39,8 +71,14 @@ export function verifyReadableSourceFile(vaultPath: string, sourceRecord: Source
     }
   }
   if (parsed.storageStrategy === "copy_to_source_library" && parsed.managedCopy?.path) {
-    const absolutePath = resolveVaultRelativePath(vaultPath, parsed.managedCopy.path);
-    return verifyFile(absolutePath, parsed.managedCopy.size, parsed.managedCopy.checksum, "managed_copy");
+    const locator = resolveManagedCopyLocator(vaultPath, parsed);
+    try {
+      const verified = verifyFile(locator.absolutePath, parsed.managedCopy.size, parsed.managedCopy.checksum, "managed_copy");
+      locator.assertCurrent();
+      return verified;
+    } finally {
+      locator.release();
+    }
   }
   if (
     parsed.storageStrategy === "reference_original" &&
@@ -88,12 +126,14 @@ export async function verifyReadableSourceFileAsync(
     }
   }
   if (parsed.storageStrategy === "copy_to_source_library" && parsed.managedCopy?.path) {
-    return verifyFileAsync(
-      resolveVaultRelativePath(vaultPath, parsed.managedCopy.path),
-      parsed.managedCopy.size,
-      parsed.managedCopy.checksum,
-      "managed_copy"
-    );
+    const locator = resolveManagedCopyLocator(vaultPath, parsed);
+    try {
+      const verified = await verifyFileAsync(locator.absolutePath, parsed.managedCopy.size, parsed.managedCopy.checksum, "managed_copy");
+      locator.assertCurrent();
+      return verified;
+    } finally {
+      locator.release();
+    }
   }
   if (
     parsed.storageStrategy === "reference_original" &&
@@ -141,15 +181,29 @@ export async function createVerifiedSourceFileSnapshotAsync(
     };
   }
   if (parsed.storageStrategy === "copy_to_source_library" && parsed.managedCopy?.path) {
+    const locator = resolveManagedCopyLocator(vaultPath, parsed);
     const snapshot = await createVerifiedFileSnapshot({
-      sourcePath: resolveVaultRelativePath(vaultPath, parsed.managedCopy.path),
+      sourcePath: locator.absolutePath,
       expectedSize: parsed.managedCopy.size,
       expectedChecksum: parsed.managedCopy.checksum,
       unavailableCode: "source.managed_unavailable",
       integrityCode: "source.checksum_mismatch",
-      containmentRoot: vaultPath
+      containmentRoot: locator.containmentRoot
     });
-    return { ...snapshot, location: "managed_copy" };
+    try {
+      locator.assertCurrent();
+      return {
+        ...snapshot,
+        location: "managed_copy",
+        dispose: async () => {
+          try { await snapshot.dispose(); } finally { locator.release(); }
+        }
+      };
+    } catch (caught) {
+      await snapshot.dispose();
+      locator.release();
+      throw caught;
+    }
   }
   if (
     parsed.storageStrategy === "reference_original" &&
@@ -270,7 +324,7 @@ function assertIngressDescriptorMatchesSource(
     const managedCopy = sourceRecord.managedCopy;
     if (
       !managedCopy ||
-      descriptor.managedCopy?.destinationPath !== canonicalManagedCopyPath(vaultPath, managedCopy.path) ||
+      descriptor.managedCopy?.destinationPath !== canonicalManagedCopyPath(vaultPath, sourceRecord) ||
       descriptor.managedCopy.checksum !== managedCopy.checksum ||
       descriptor.managedCopy.size !== managedCopy.size
     ) throw ingressDescriptorMismatch();
@@ -305,13 +359,35 @@ function logicalLocation(sourceRecord: SourceRecord): VerifiedSourceFile["locati
   return sourceRecord.storageStrategy === "reference_original" ? "referenced_original" : "managed_copy";
 }
 
-function canonicalManagedCopyPath(vaultPath: string, managedCopyPath: string): string {
+function canonicalManagedCopyPath(vaultPath: string, sourceRecord: SourceRecord): string {
+  const locator = resolveManagedCopyLocator(vaultPath, sourceRecord);
   try {
-    return fs.realpathSync(resolveVaultRelativePath(vaultPath, managedCopyPath));
+    const canonical = fs.realpathSync(locator.absolutePath);
+    locator.assertCurrent();
+    return canonical;
   } catch (caught) {
     if (caught instanceof PigeDomainError) throw caught;
     throw ingressDescriptorMismatch();
+  } finally {
+    locator.release();
   }
+}
+
+function resolveManagedCopyLocator(vaultPath: string, sourceRecord: SourceRecord): ManagedCopyLocatorLease {
+  const managedCopy = sourceRecord.managedCopy;
+  if (!managedCopy) throw new PigeDomainError("source.managed_locator_invalid", "The managed-copy locator is missing.");
+  if (!managedCopy.rootId || managedCopy.rootId === "root_vault_managed") {
+    return {
+      absolutePath: resolveVaultRelativePath(vaultPath, managedCopy.path),
+      containmentRoot: path.resolve(vaultPath),
+      assertCurrent: () => undefined,
+      release: () => undefined
+    };
+  }
+  if (!managedCopyLocatorResolver) {
+    throw new PigeDomainError("source.managed_unavailable", "The external managed-copy root resolver is unavailable.");
+  }
+  return managedCopyLocatorResolver.resolve(readVaultManifest(vaultPath).vault_id, vaultPath, managedCopy);
 }
 
 function readTextPrefix(filePath: string, size: number, maximumBytes: number): VerifiedSourceTextPrefix {

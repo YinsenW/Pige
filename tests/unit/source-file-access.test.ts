@@ -5,7 +5,9 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { SourceRecordSchema, type SourceRecord } from "@pige/schemas";
 import { ingressSnapshotService } from "../../apps/desktop/src/main/services/ingress-snapshot-service";
+import { ManagedCopyRootService } from "../../apps/desktop/src/main/services/managed-copy-root-service";
 import {
+  configureManagedCopyLocatorResolver,
   createVerifiedSourceFileSnapshotAsync,
   readVerifiedSourceTextPrefix,
   verifyReadableSourceFile,
@@ -16,6 +18,7 @@ import { createVaultOnDisk, readVaultManifest } from "../../apps/desktop/src/mai
 const roots: string[] = [];
 
 afterEach(() => {
+  configureManagedCopyLocatorResolver(undefined);
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -57,6 +60,56 @@ describe("source file access", () => {
     expect(ingressSnapshotService.readerCount(fixture.binding)).toBe(1);
     await disposable.dispose();
     expect(ingressSnapshotService.readerCount(fixture.binding)).toBe(0);
+  });
+
+  it("resolves root-relative managed copies through the exact current machine binding", () => {
+    const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-source-root-access-")));
+    roots.push(root);
+    const userData = path.join(root, "user-data");
+    const external = path.join(root, "external");
+    fs.mkdirSync(userData);
+    fs.mkdirSync(external);
+    const vault = createVaultOnDisk({
+      parentDirectory: root,
+      vaultName: "External Vault",
+      appDataPath: path.join(root, "app-data"),
+      tempPath: path.join(root, "temp"),
+      now: new Date("2026-07-29T00:00:00.000Z")
+    });
+    const vaultPath = path.join(root, "External Vault");
+    const owner = new ManagedCopyRootService(userData);
+    const receipt = owner.bindDefault({ vaultId: vault.vaultId, selectedDirectory: external });
+    configureManagedCopyLocatorResolver({
+      resolve: (vaultId, activeVaultPath, managedCopy) => owner.resolveManagedCopy(vaultId, activeVaultPath, managedCopy)
+    });
+    const relativePath = "raw/files/example.txt";
+    const body = "external managed source";
+    fs.mkdirSync(path.dirname(path.join(external, relativePath)), { recursive: true });
+    fs.writeFileSync(path.join(external, relativePath), body, "utf8");
+    const sourceRecord = SourceRecordSchema.parse({
+      id: "src_20260729_sourceaccess1",
+      kind: "plain_text_file",
+      storageStrategy: "copy_to_source_library",
+      semanticOrchestration: "agent_turn",
+      managedCopy: {
+        path: relativePath,
+        rootId: receipt.rootId,
+        pathBasis: "root_relative",
+        checksum: checksum(body),
+        size: Buffer.byteLength(body)
+      },
+      artifacts: [],
+      metadata: {},
+      createdAt: "2026-07-29T00:00:00.000Z",
+      updatedAt: "2026-07-29T00:00:00.000Z"
+    });
+
+    expect(verifyReadableSourceFile(vaultPath, sourceRecord)).toMatchObject({
+      absolutePath: path.join(external, relativePath),
+      checksum: checksum(body),
+      size: Buffer.byteLength(body),
+      location: "managed_copy"
+    });
   });
 });
 

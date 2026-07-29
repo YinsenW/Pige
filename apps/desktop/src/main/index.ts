@@ -49,6 +49,7 @@ import type {
   UpdateStatusEvent,
   UpdateSourceStoragePolicyRequest,
   VaultMigrationApplyRequest,
+  ManagedCopyRootConfigureRequest,
   WindowLayoutRequest
 } from "@pige/contracts";
 import {
@@ -98,7 +99,10 @@ import {
   WindowLayoutStateSchema,
   VaultActionResultSchema,
   VaultMigrationApplyRequestSchema,
-  VaultMigrationApplyResultSchema
+  VaultMigrationApplyResultSchema,
+  MANAGED_COPY_ROOT_CONFIGURE_CHANNEL,
+  ManagedCopyRootConfigureRequestSchema,
+  ManagedCopyRootConfigureResultSchema
 } from "@pige/schemas";
 import { PRELOAD_ENTRY_FILENAME } from "../shared/preload-entry";
 import { registerReaderIpc } from "./register-reader-ipc";
@@ -135,6 +139,8 @@ import { BackupCoordinatorService } from "./services/backup-coordinator-service"
 import { BackupRestoreService } from "./services/backup-service";
 import { CoalescedBatchDrainer } from "./services/background-job-drainer";
 import { CaptureService } from "./services/capture-service";
+import { ManagedCopyRootService } from "./services/managed-copy-root-service";
+import { configureManagedCopyLocatorResolver } from "./services/source-file-access";
 import { type CaptureJobExecutor } from "./services/capture-job-executor";
 import { HomeAgentAttachmentService } from "./services/home-agent-attachment-service";
 import { DiagnosticsService } from "./services/diagnostics-service";
@@ -301,6 +307,7 @@ let appearanceService: AppearanceService | undefined;
 let appearanceServiceUnsubscribe: (() => void) | undefined;
 let toolchainService: ToolchainService | undefined;
 let captureService: CaptureService | undefined;
+let managedCopyRootService: ManagedCopyRootService | undefined;
 let homeAgentAttachmentService: HomeAgentAttachmentService | undefined;
 let jobsService: JobsService | undefined;
 let jobClassExecutorRegistry: JobClassExecutorRegistry | undefined;
@@ -657,7 +664,11 @@ const getVaultService = (): VaultService => {
   if (!vaultService) {
     vaultService = new VaultService(
       getLocalSettingsStore(),
-      () => getModelProviderRegistry().hasDefaultRuntimeBinding()
+      () => getModelProviderRegistry().hasDefaultRuntimeBinding(),
+      undefined,
+      undefined,
+      undefined,
+      getManagedCopyRootService()
     );
   }
   return vaultService;
@@ -822,9 +833,20 @@ const getSpeechService = (): SpeechService => {
 
 const getCaptureService = (): CaptureService => {
   if (!captureService) {
-    captureService = new CaptureService(getVaultService());
+    captureService = new CaptureService(getVaultService(), undefined, getManagedCopyRootService());
   }
   return captureService;
+};
+
+const getManagedCopyRootService = (): ManagedCopyRootService => {
+  if (!managedCopyRootService) {
+    managedCopyRootService = new ManagedCopyRootService(app.getPath("userData"));
+    configureManagedCopyLocatorResolver({
+      resolve: (vaultId, vaultPath, managedCopy) =>
+        managedCopyRootService!.resolveManagedCopy(vaultId, vaultPath, managedCopy)
+    });
+  }
+  return managedCopyRootService;
 };
 
 const getHomeAgentAttachmentService = (): HomeAgentAttachmentService => {
@@ -2495,6 +2517,16 @@ ipcMain.handle("vault.revealSourceAssetRoot", (event) => {
 ipcMain.handle("vault.updateSourceStoragePolicy", (_event, request: UpdateSourceStoragePolicyRequest) =>
   getVaultService().updateSourceStoragePolicy(request)
 );
+ipcMain.handle(MANAGED_COPY_ROOT_CONFIGURE_CHANNEL, async (event, request: ManagedCopyRootConfigureRequest) => {
+  const parentWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!parentWindow) throw new Error("No active window for managed-copy root selection.");
+  return ManagedCopyRootConfigureResultSchema.parse(
+    await getVaultService().configureManagedCopyRoot(
+      parentWindow,
+      ManagedCopyRootConfigureRequestSchema.parse(request)
+    )
+  );
+});
 ipcMain.handle("vault.removeRecent", (_event, vaultId: string) => getVaultService().removeRecent(vaultId));
 ipcMain.handle("maintenance.rebuildLocalDatabase", () => getIndexRebuildJobExecutor().request());
 ipcMain.handle("maintenance.resetLocalDatabase", async (event) => {
@@ -2754,7 +2786,11 @@ app.whenReady().then(async () => {
   );
   vaultService = new VaultService(
     getLocalSettingsStore(),
-    () => getModelProviderRegistry().hasDefaultRuntimeBinding()
+    () => getModelProviderRegistry().hasDefaultRuntimeBinding(),
+    undefined,
+    undefined,
+    undefined,
+    getManagedCopyRootService()
   );
   windowModeService = new WindowModeService(
     getLocalSettingsStore(),
@@ -2795,7 +2831,7 @@ app.whenReady().then(async () => {
   paddleRuntime.recoverStaging();
   ocrService = new OcrService(paddleRuntime.adapter);
   toolchainService = new ToolchainService(resolveToolchainManifestPath());
-  captureService = new CaptureService(getVaultService());
+  captureService = new CaptureService(getVaultService(), undefined, getManagedCopyRootService());
   homeAgentAttachmentService = new HomeAgentAttachmentService(captureService);
   jobsService = new JobsService(
     getVaultService(),

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
@@ -6,12 +6,12 @@ import {
   RootBindingIdSchema,
   SourceIdSchema,
   SourceRecordSchema,
-  VaultBindingsFileSchema,
   type BackupManifest,
   type ExternalManagedCopyRootBinding,
   type SourceRecord
 } from "@pige/schemas";
 import { readVaultManifest } from "./vault-layout";
+import { ManagedCopyRootService } from "./managed-copy-root-service";
 
 export interface BackupManagedCopyDependencyIdentity {
   readonly dependencyKind: "vault_binding" | "external_source";
@@ -91,11 +91,9 @@ export function proveManagedCopyDependency(
     const vaultPath = fs.realpathSync.native(path.resolve(vaultPathInput));
     if (readVaultManifest(vaultPath).vault_id !== vaultId) return undefined;
     const target = resolveDependency(vaultPath, dependency);
-    const binding = readBindings(userDataPathInput).roots.find((root) =>
-      root.vaultId === vaultId && root.rootId === target.rootId && root.availability === "available"
-    );
-    if (!binding || captureCanonicalDirectory(binding.absolutePath) !== binding.absolutePath) return undefined;
-    const evidence = target.records.map((record) => verifyManagedCopy(binding.absolutePath, record));
+    const binding = new ManagedCopyRootService(userDataPathInput).binding(vaultId, target.rootId);
+    if (!binding) return undefined;
+    const evidence = target.records.map((record) => verifyManagedCopy(binding.rootPath, record));
     return {
       ...dependency,
       vaultId,
@@ -105,8 +103,8 @@ export function proveManagedCopyDependency(
         dependency.dependencyKind,
         dependency.dependencyId,
         binding.rootId,
-        binding.absolutePath,
-        binding.updatedAt,
+        binding.rootPath,
+        binding.revision,
         ...evidence.sort()
       ].join("\0"))
     };
@@ -136,7 +134,7 @@ export function repairManagedCopyDependency(
   } catch {
     throw new PigeDomainError("backup.reconnect_selection_invalid", "The selected directory does not match.");
   }
-  writeBinding(userDataPathInput, vaultId, target.rootId, selectedDirectory);
+  new ManagedCopyRootService(userDataPathInput).repairBinding(vaultId, target.rootId, selectedDirectory);
   const proof = proveManagedCopyDependency(userDataPathInput, vaultPath, vaultId, dependency);
   if (!proof) throw new PigeDomainError("backup.reconnect_failed", "The repaired root failed exact readback.");
   return proof;
@@ -262,65 +260,6 @@ function verifyManagedCopy(rootPath: string, record: SourceRecord): string {
     return `${record.id}\0${managedCopy.path}\0${managedCopy.checksum}\0${managedCopy.size}`;
   } finally {
     fs.closeSync(descriptor);
-  }
-}
-
-function readBindings(userDataPathInput: string) {
-  const bindingsPath = path.join(captureCanonicalDirectory(userDataPathInput), "vault-bindings.json");
-  if (!fs.existsSync(bindingsPath)) return VaultBindingsFileSchema.parse({ schemaVersion: 1, roots: [], defaults: [] });
-  const descriptor = fs.openSync(bindingsPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
-  try {
-    const before = fs.fstatSync(descriptor);
-    const atPath = fs.lstatSync(bindingsPath);
-    if (!before.isFile() || atPath.isSymbolicLink() || before.nlink !== 1 || !sameRevision(before, atPath)) {
-      throw new PigeDomainError("backup.root_binding_registry_invalid", "The root registry is unsafe.");
-    }
-    const bytes = fs.readFileSync(descriptor);
-    if (bytes.byteLength > 4 * 1024 * 1024 || !sameRevision(before, fs.fstatSync(descriptor))) {
-      throw new PigeDomainError("backup.root_binding_registry_invalid", "The root registry changed.");
-    }
-    return VaultBindingsFileSchema.parse(JSON.parse(bytes.toString("utf8")) as unknown);
-  } finally {
-    fs.closeSync(descriptor);
-  }
-}
-
-function writeBinding(userDataPathInput: string, vaultId: string, rootId: string, absolutePath: string): void {
-  const userDataPath = captureCanonicalDirectory(userDataPathInput);
-  const bindingsPath = path.join(userDataPath, "vault-bindings.json");
-  const current = readBindings(userDataPath);
-  const now = new Date().toISOString();
-  const previous = current.roots.find((root) => root.rootId === rootId);
-  if (previous && previous.vaultId !== vaultId) {
-    throw new PigeDomainError("backup.reconnect_mismatch", "The stable root belongs to another vault.");
-  }
-  const next = VaultBindingsFileSchema.parse({
-    ...current,
-    roots: [...current.roots.filter((root) => root.rootId !== rootId), {
-      ...(previous ?? {}), rootId, vaultId, purpose: "managed_copy", absolutePath,
-      availability: "available", createdAt: previous?.createdAt ?? now, updatedAt: now
-    }].sort((left, right) => left.rootId.localeCompare(right.rootId))
-  });
-  const paths = new Set<string>();
-  for (const root of next.roots.filter((entry) => entry.vaultId === vaultId)) {
-    const key = process.platform === "win32" ? path.resolve(root.absolutePath).toLowerCase() : path.resolve(root.absolutePath);
-    if (paths.has(key)) throw new PigeDomainError("backup.root_binding_conflict", "Multiple roots use one path.");
-    paths.add(key);
-  }
-  const temporaryPath = path.join(userDataPath, `.vault-bindings.${process.pid}.${randomUUID()}.tmp`);
-  let descriptor: number | undefined;
-  try {
-    descriptor = fs.openSync(temporaryPath, "wx", 0o600);
-    fs.writeFileSync(descriptor, `${JSON.stringify(next, null, 2)}\n`, "utf8");
-    fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    fs.renameSync(temporaryPath, bindingsPath);
-    const directory = fs.openSync(userDataPath, fs.constants.O_RDONLY);
-    try { fs.fsyncSync(directory); } finally { fs.closeSync(directory); }
-  } finally {
-    if (descriptor !== undefined) fs.closeSync(descriptor);
-    fs.rmSync(temporaryPath, { force: true });
   }
 }
 
