@@ -223,6 +223,9 @@ import {
   AppearanceThemeMutationResultSchema,
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
+  COLLECTION_ADD_FORMULA_COLUMN_CHANNEL,
+  CollectionAddFormulaColumnRequestSchema,
+  CollectionAddFormulaColumnResultSchema,
   CollectionAddNullableColumnRequestSchema,
   CollectionAddNullableColumnResultSchema,
   CollectionCellEditRequestSchema,
@@ -373,6 +376,8 @@ import {
   VaultActionResultSchema
 } from "@pige/schemas";
 import type {
+  CollectionAddFormulaColumnRequest,
+  CollectionAddFormulaColumnResult,
   CollectionAddNullableColumnRequest,
   CollectionAddNullableColumnResult,
   CollectionCellEditRequest,
@@ -546,6 +551,24 @@ async function invokeCollectionAddNullableColumn(
     result.tableId !== parsedRequest.tableId
   ) {
     throw new Error("Invalid Managed Collection nullable-column response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionAddFormulaColumn(
+  request: CollectionAddFormulaColumnRequest
+): Promise<CollectionAddFormulaColumnResult> {
+  const parsedRequest = CollectionAddFormulaColumnRequestSchema.parse(request);
+  const result = CollectionAddFormulaColumnResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_ADD_FORMULA_COLUMN_CHANNEL, parsedRequest)
+  );
+  if (
+    result.requestId !== parsedRequest.requestId ||
+    result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.datasetId !== parsedRequest.datasetId ||
+    result.tableId !== parsedRequest.tableId
+  ) {
+    throw new Error("Invalid Managed Collection formula-column response identity.");
   }
   return result;
 }
@@ -1080,6 +1103,7 @@ const api: PigeDesktopApi = {
     editCell: invokeCollectionCellEdit,
     appendDefaultRow: invokeCollectionAppendDefaultRow,
     addNullableColumn: invokeCollectionAddNullableColumn,
+    addFormulaColumn: invokeCollectionAddFormulaColumn,
     renameColumn: invokeCollectionRenameColumn,
     createView: invokeCollectionCreateView,
     trashColumn: invokeCollectionTrashColumn,
