@@ -64,6 +64,28 @@ const disabledSummary = {
 function makeHarness(overrides: Record<string, unknown> = {}) {
   const handlers = new Map<string, IpcHandler>();
   const callbacks = {
+    ocrLanguagePreference: vi.fn((input: { readonly requestId: string }) => ({
+      apiVersion: 1 as const,
+      requestId: input.requestId,
+      status: "ready" as const,
+      summary: {
+        apiVersion: 1 as const,
+        revision: 2,
+        preference: { mode: "preferred" as const, language: "ja" as const },
+        appliesTo: "new_ocr_jobs" as const
+      }
+    })),
+    setOcrLanguagePreference: vi.fn((input: { readonly requestId: string }) => ({
+      apiVersion: 1 as const,
+      requestId: input.requestId,
+      status: "committed" as const,
+      summary: {
+        apiVersion: 1 as const,
+        revision: 3,
+        preference: { mode: "preferred" as const, language: "fr" as const },
+        appliesTo: "new_ocr_jobs" as const
+      }
+    })),
     paddleOcrSummary: vi.fn(() => notInstalledSummary),
     installPaddleOcr: vi.fn((input: typeof request) => ({
       apiVersion: 1 as const,
@@ -132,6 +154,8 @@ describe("registerLocalCapabilitiesIpc", () => {
     expect(source).toContain("registerLocalCapabilitiesIpc({");
     expect(source).toContain("createUnavailablePaddleOcrLifecycleService(");
     for (const callback of [
+      "ocrLanguagePreference",
+      "setOcrLanguagePreference",
       "paddleOcrSummary",
       "installPaddleOcr",
       "enablePaddleOcr",
@@ -144,8 +168,10 @@ describe("registerLocalCapabilitiesIpc", () => {
     expect(source).toContain("parser-manifests/paddleocr-local.parser.manifest.json");
   });
 
-  it("registers exactly the six managed PaddleOCR preload channels", () => {
+  it("registers the OCR preference and six managed PaddleOCR preload channels", () => {
     expect([...makeHarness().handlers.keys()]).toEqual([
+      "localCapabilities.ocrLanguagePreference",
+      "localCapabilities.setOcrLanguagePreference",
       "localCapabilities.paddleOcrSummary",
       "localCapabilities.installPaddleOcr",
       "localCapabilities.enablePaddleOcr",
@@ -157,6 +183,19 @@ describe("registerLocalCapabilitiesIpc", () => {
 
   it("strictly delegates valid summary and lifecycle requests", async () => {
     const { handlers, callbacks } = makeHarness();
+
+    const preferenceRead = { apiVersion: 1, requestId: "ocrlangreq_abcdefghijklmnop" } as const;
+    const preferenceSet = {
+      ...preferenceRead,
+      expectedRevision: 2,
+      preference: { mode: "preferred", language: "fr" }
+    } as const;
+    await expect(call(handlers, "localCapabilities.ocrLanguagePreference", preferenceRead))
+      .resolves.toMatchObject({ status: "ready", summary: { revision: 2 } });
+    await expect(call(handlers, "localCapabilities.setOcrLanguagePreference", preferenceSet))
+      .resolves.toMatchObject({ status: "committed", summary: { revision: 3 } });
+    expect(callbacks.ocrLanguagePreference).toHaveBeenCalledWith(preferenceRead);
+    expect(callbacks.setOcrLanguagePreference).toHaveBeenCalledWith(preferenceSet);
 
     await expect(call(handlers, "localCapabilities.paddleOcrSummary", { apiVersion: 1 }))
       .resolves.toEqual(notInstalledSummary);

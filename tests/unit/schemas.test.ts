@@ -105,6 +105,9 @@ import {
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   OperationRecordSchema,
+  OcrLanguagePreferenceRequestSchema,
+  OcrLanguagePreferenceResultSchema,
+  OcrLanguagePreferenceSummarySchema,
   PADDLE_OCR_ENGINE_ID,
   PaddleOcrDisableRequestSchema,
   PaddleOcrDisableResultSchema,
@@ -118,6 +121,8 @@ import {
   PaddleOcrSummarySchema,
   PaddleOcrTestRequestSchema,
   PaddleOcrTestResultSchema,
+  SetOcrLanguagePreferenceRequestSchema,
+  SetOcrLanguagePreferenceResultSchema,
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
   PiPackageCatalogQueryRequestSchema,
@@ -3864,6 +3869,91 @@ describe("schemas", () => {
     expect(settings.window?.sidebarOpen).toBe(true);
     expect(settings.dismissedFirstHomeVaultIds).toEqual(["vault_20260709_ab12cd"]);
     expect(settings.updates).toMatchObject({ revision: 2, channel: "alpha", lastCheck: { phase: "failed" } });
+  });
+
+  it("freezes machine-local OCR language preference CAS and body-free failures", () => {
+    const requestId = "ocrlangreq_20260729abcdef01";
+    const automatic = OcrLanguagePreferenceSummarySchema.parse({
+      apiVersion: 1,
+      revision: 0,
+      preference: { mode: "automatic" },
+      appliesTo: "new_ocr_jobs"
+    });
+
+    expect(OcrLanguagePreferenceRequestSchema.parse({ apiVersion: 1, requestId })).toEqual({
+      apiVersion: 1,
+      requestId
+    });
+    expect(OcrLanguagePreferenceResultSchema.parse({
+      apiVersion: 1,
+      requestId,
+      status: "ready",
+      summary: automatic
+    }).status).toBe("ready");
+
+    for (const language of ["zh-Hans", "en", "ja", "ko", "fr", "de"] as const) {
+      const request = SetOcrLanguagePreferenceRequestSchema.parse({
+        apiVersion: 1,
+        requestId,
+        expectedRevision: 4,
+        preference: { mode: "preferred", language }
+      });
+      expect(request.preference).toEqual({ mode: "preferred", language });
+    }
+
+    const preferred = OcrLanguagePreferenceSummarySchema.parse({
+      apiVersion: 1,
+      revision: 4,
+      preference: { mode: "preferred", language: "ja" },
+      appliesTo: "new_ocr_jobs"
+    });
+    expect(SetOcrLanguagePreferenceResultSchema.parse({
+      apiVersion: 1,
+      requestId,
+      status: "committed",
+      summary: preferred
+    })).toMatchObject({ status: "committed", summary: { revision: 4 } });
+    expect(SetOcrLanguagePreferenceResultSchema.parse({
+      apiVersion: 1,
+      requestId,
+      status: "stale",
+      summary: preferred
+    }).status).toBe("stale");
+
+    expect(MachineLocalSettingsSchema.parse({
+      schemaVersion: 1,
+      ocrLanguagePreference: {
+        revision: 4,
+        preference: { mode: "preferred", language: "ja" }
+      },
+      recentVaults: []
+    }).ocrLanguagePreference).toEqual({
+      revision: 4,
+      preference: { mode: "preferred", language: "ja" }
+    });
+    expect(MachineLocalSettingsSchema.parse({
+      schemaVersion: 1,
+      recentVaults: []
+    }).ocrLanguagePreference).toBeUndefined();
+
+    expect(() => SetOcrLanguagePreferenceRequestSchema.parse({
+      apiVersion: 1,
+      requestId,
+      expectedRevision: 4,
+      preference: { mode: "preferred", language: "es" }
+    })).toThrow();
+    expect(() => OcrLanguagePreferenceResultSchema.parse({
+      apiVersion: 1,
+      requestId,
+      status: "failed",
+      summary: automatic
+    })).toThrow();
+    expect(() => SetOcrLanguagePreferenceResultSchema.parse({
+      apiVersion: 1,
+      requestId,
+      status: "failed",
+      rawError: "private"
+    })).toThrow();
   });
 
   it("validates pathless Activity page and Memory target projections", () => {

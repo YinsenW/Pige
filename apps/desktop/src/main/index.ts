@@ -237,6 +237,10 @@ import {
   NoteMarkdownEditorService
 } from "./services/note-markdown-editor-service";
 import { OcrService } from "./services/ocr-service";
+import {
+  LocalSettingsOcrLanguagePreferenceStore,
+  OcrLanguagePreferenceService
+} from "./services/ocr-language-preference-service";
 import { MacOSSpeechAdapter } from "./services/macos-speech-adapter";
 import { ProposalService } from "./services/proposal-service";
 import { SourceOriginalReconnectService } from "./services/source-original-reconnect-service";
@@ -338,6 +342,7 @@ let documentParserService: DocumentParserService | undefined;
 let datasetQueryService: DatasetQueryService | undefined;
 let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
+let ocrLanguagePreferenceService: OcrLanguagePreferenceService | undefined;
 let speechService: SpeechService | undefined;
 let updateService: UpdateService | undefined;
 let skillRegistryService: SkillRegistryService | undefined;
@@ -1001,7 +1006,8 @@ const getJobsService = (): JobsService => {
       getJobClassExecutorRegistry(),
       undefined,
       undefined,
-      getLocalRagEngineService()
+      getLocalRagEngineService(),
+      getOcrLanguagePreferenceService()
     );
   }
   return jobsService;
@@ -1417,12 +1423,20 @@ const getAgentCapabilitySnapshot = (): AgentIngestCapabilitySnapshot => {
       getDatasetService().canMaterialize("xlsx_file") &&
       getDatasetService().canMaterialize("sqlite_file"),
     ocrEngines: imageOcrReady && process.platform === "darwin" ? ["apple_vision"] : [],
+    ocrLanguageHints: getOcrLanguagePreferenceService().policyLanguageHints(),
     speechInputAvailable: false,
     embeddingModelInstalled: getLocalSemanticRetrievalService().embeddingModelInstalled(),
     lexicalSearchAvailable: localDatabaseStatus === "ready",
     vectorSearchAvailable: vaultPath ? getLocalRagEngineService().availableNow(vaultPath) : false,
     rerankerAvailable: false
   };
+};
+
+const getOcrLanguagePreferenceService = (): OcrLanguagePreferenceService => {
+  ocrLanguagePreferenceService ??= new OcrLanguagePreferenceService(
+    new LocalSettingsOcrLanguagePreferenceStore(getLocalSettingsStore())
+  );
+  return ocrLanguagePreferenceService;
 };
 
 const getLibraryService = (): LibraryService => {
@@ -2417,6 +2431,8 @@ registerMemoryIpc({
 });
 registerLocalCapabilitiesIpc({
   ipcMain,
+  ocrLanguagePreference: (request) => getOcrLanguagePreferenceService().read(request),
+  setOcrLanguagePreference: (request) => getOcrLanguagePreferenceService().set(request),
   paddleOcrSummary: (request) => getPaddleOcrLifecycleService().summary(request),
   installPaddleOcr: (request) => getPaddleOcrLifecycleService().install(request),
   enablePaddleOcr: (request) => getPaddleOcrLifecycleService().enable(request),
@@ -2885,7 +2901,8 @@ app.whenReady().then(async () => {
     getJobClassExecutorRegistry(),
     undefined,
     undefined,
-    getLocalRagEngineService()
+    getLocalRagEngineService(),
+    getOcrLanguagePreferenceService()
   );
   diagnosticsService = new DiagnosticsService(app.getPath("userData"));
   const restoreRecovery = await getRestoreCoordinatorService().recoverInterrupted();

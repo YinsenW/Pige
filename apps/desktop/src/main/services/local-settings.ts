@@ -4,10 +4,12 @@ import path from "node:path";
 import {
   AppearanceMachineSettingsSchema,
   MachineLocalSettingsSchema,
+  OcrLanguagePreferenceMachineSettingsSchema,
   UpdateMachineSettingsSchema,
   type AppearanceMachineSettings,
   type Locale,
   type MachineLocalSettings,
+  type OcrLanguagePreferenceMachineSettings,
   type UpdateMachineSettings,
   type WindowPreferences
 } from "@pige/schemas";
@@ -31,6 +33,11 @@ export interface UpdateSettingsMutation {
 export interface AppearanceSettingsMutation {
   readonly status: "committed" | "stale";
   readonly settings: AppearanceMachineSettings;
+}
+
+export interface OcrLanguagePreferenceSettingsMutation {
+  readonly status: "committed" | "stale";
+  readonly settings: OcrLanguagePreferenceMachineSettings;
 }
 
 export class LocalSettingsStore {
@@ -72,6 +79,40 @@ export class LocalSettingsStore {
     return this.read().appearance ?? createDefaultAppearanceSettings();
   }
 
+  getOcrLanguagePreferenceSettings(): OcrLanguagePreferenceMachineSettings {
+    return this.read().ocrLanguagePreference ?? createDefaultOcrLanguagePreferenceSettings();
+  }
+
+  mutateOcrLanguagePreferenceSettings(
+    expectedRevision: number,
+    mutation: (settings: OcrLanguagePreferenceMachineSettings) => OcrLanguagePreferenceMachineSettings
+  ): OcrLanguagePreferenceSettingsMutation {
+    return this.#withWriterLease(() => {
+      const current = this.read();
+      const settings = current.ocrLanguagePreference ?? createDefaultOcrLanguagePreferenceSettings();
+      if (settings.revision !== expectedRevision) return { status: "stale", settings };
+      if (settings.revision === Number.MAX_SAFE_INTEGER) {
+        throw new PigeDomainError("ocr.language_preference_revision_exhausted", "The OCR language preference revision is exhausted.");
+      }
+      const candidate = OcrLanguagePreferenceMachineSettingsSchema.parse(mutation(settings));
+      const next = OcrLanguagePreferenceMachineSettingsSchema.parse({
+        ...candidate,
+        revision: settings.revision + 1
+      });
+      this.#writeUnlocked(createMachineLocalSettings({
+        activeVaultPath: current.activeVaultPath,
+        appLocale: current.appLocale,
+        appearance: current.appearance,
+        window: current.window,
+        updates: current.updates,
+        ocrLanguagePreference: next,
+        dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
+        recentVaults: current.recentVaults
+      }));
+      return { status: "committed", settings: next };
+    });
+  }
+
   mutateAppearanceSettings(
     expectedRevision: number,
     mutation: (settings: AppearanceMachineSettings) => AppearanceMachineSettings
@@ -96,6 +137,7 @@ export class LocalSettingsStore {
         appearance: nextAppearance,
         window: current.window,
         updates: current.updates,
+        ocrLanguagePreference: current.ocrLanguagePreference,
         dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
         recentVaults: current.recentVaults
       }));
@@ -131,6 +173,7 @@ export class LocalSettingsStore {
         appearance: current.appearance,
         window: current.window,
         updates: nextUpdates,
+        ocrLanguagePreference: current.ocrLanguagePreference,
         dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
         recentVaults: current.recentVaults
       }));
@@ -150,6 +193,7 @@ export class LocalSettingsStore {
         appearance: settings.appearance,
         window: settings.window,
         updates: settings.updates,
+        ocrLanguagePreference: settings.ocrLanguagePreference,
         dismissedFirstHomeVaultIds: [
           vaultId,
           ...(settings.dismissedFirstHomeVaultIds ?? []).filter((id) => id !== vaultId)
@@ -166,6 +210,7 @@ export class LocalSettingsStore {
       appearance: settings.appearance,
       window: settings.window,
       updates: settings.updates,
+      ocrLanguagePreference: settings.ocrLanguagePreference,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults
     }));
@@ -178,6 +223,7 @@ export class LocalSettingsStore {
       appearance: settings.appearance,
       window,
       updates: settings.updates,
+      ocrLanguagePreference: settings.ocrLanguagePreference,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults
     }));
@@ -211,6 +257,7 @@ export class LocalSettingsStore {
       appearance: settings.appearance,
       window: settings.window,
       updates: settings.updates,
+      ocrLanguagePreference: settings.ocrLanguagePreference,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults
     }));
@@ -223,6 +270,7 @@ export class LocalSettingsStore {
       appearance: settings.appearance,
       window: settings.window,
       updates: settings.updates,
+      ocrLanguagePreference: settings.ocrLanguagePreference,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults.filter((recent) => recent.vaultId !== vaultId)
     }));
@@ -358,6 +406,7 @@ function activateVault(
     appearance: settings.appearance,
     window: settings.window,
     updates: settings.updates,
+    ocrLanguagePreference: settings.ocrLanguagePreference,
     dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
     recentVaults: nextRecent
   });
@@ -465,6 +514,7 @@ function createMachineLocalSettings(input: {
   readonly appearance?: AppearanceMachineSettings | undefined;
   readonly window?: WindowPreferences | undefined;
   readonly updates?: UpdateMachineSettings | undefined;
+  readonly ocrLanguagePreference?: OcrLanguagePreferenceMachineSettings | undefined;
   readonly dismissedFirstHomeVaultIds?: readonly string[] | undefined;
   readonly recentVaults: RecentVaultSettings;
 }): MachineLocalSettings {
@@ -493,6 +543,10 @@ function createMachineLocalSettings(input: {
     settings.updates = input.updates;
   }
 
+  if (input.ocrLanguagePreference) {
+    settings.ocrLanguagePreference = input.ocrLanguagePreference;
+  }
+
   if (input.dismissedFirstHomeVaultIds?.length) {
     settings.dismissedFirstHomeVaultIds = [...input.dismissedFirstHomeVaultIds];
   }
@@ -511,5 +565,12 @@ function createDefaultAppearanceSettings(): AppearanceMachineSettings {
   return AppearanceMachineSettingsSchema.parse({
     revision: 0,
     themePreference: "system"
+  });
+}
+
+function createDefaultOcrLanguagePreferenceSettings(): OcrLanguagePreferenceMachineSettings {
+  return OcrLanguagePreferenceMachineSettingsSchema.parse({
+    revision: 0,
+    preference: { mode: "automatic" }
   });
 }
