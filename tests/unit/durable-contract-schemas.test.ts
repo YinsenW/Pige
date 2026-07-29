@@ -256,7 +256,7 @@ describe("durable contract schemas", () => {
     expect(JobClassSchema.parse("capture_batch")).toBe("capture_batch");
     expect(JobStateSchema.parse("waiting_dependency")).toBe("waiting_dependency");
     expect(() => JobStateSchema.parse("retired_unknown_state")).toThrow();
-    expect(() => JobStateSchema.parse("waiting_permission")).toThrow();
+    expect(JobStateSchema.parse("waiting_permission")).toBe("waiting_permission");
 
     const record = JobRecordSchema.parse({
       id: "job_20260710_abcdef12",
