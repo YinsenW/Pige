@@ -2760,6 +2760,39 @@ export const SettingPermissionRequirementSchema = z.enum([
   "explicit_warning"
 ]);
 
+export const DIAGNOSTICS_CLEAR_LOCAL_CHANNEL = "diagnostics.clearLocalDiagnostics" as const;
+export const DiagnosticsClearRequestIdSchema = z.string()
+  .regex(/^diagclearreq_[a-z0-9]{16,64}$/u);
+export const DiagnosticsHealthSchema = z.object({
+  status: z.enum(["ok", "degraded"]),
+  checkedAt: z.string().datetime({ offset: true }),
+  localOnly: z.literal(true),
+  recentErrorCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  checks: z.array(z.object({
+    id: z.string().min(1).max(64).regex(/^[a-z][a-z0-9_]*$/u),
+    status: z.enum(["ok", "warning", "error"]),
+    message: z.string().min(1).max(240)
+  }).strict()).max(32)
+}).strict();
+export const DiagnosticsClearLocalRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: DiagnosticsClearRequestIdSchema
+}).strict();
+const DiagnosticsClearLocalIdentitySchema = DiagnosticsClearLocalRequestSchema;
+export const DiagnosticsClearLocalResultSchema = z.discriminatedUnion("status", [
+  DiagnosticsClearLocalIdentitySchema.extend({
+    status: z.literal("cleared"),
+    health: DiagnosticsHealthSchema
+  }).strict(),
+  DiagnosticsClearLocalIdentitySchema.extend({
+    status: z.literal("busy"),
+    health: DiagnosticsHealthSchema
+  }).strict(),
+  DiagnosticsClearLocalIdentitySchema.extend({
+    status: z.literal("failed")
+  }).strict()
+]);
+
 function isCanonicalBcp47Tag(value: string): boolean {
   if (value === "unknown") {
     return false;
@@ -8082,6 +8115,9 @@ export type SpeechStartResult = z.infer<typeof SpeechStartResultSchema>;
 export type SpeechStopResult = z.infer<typeof SpeechStopResultSchema>;
 export type SpeechUnavailableReason = z.infer<typeof SpeechUnavailableReasonSchema>;
 export type RetrievalAnswerCitation = z.infer<typeof RetrievalAnswerCitationSchema>;
+export type DiagnosticsClearRequestId = z.infer<typeof DiagnosticsClearRequestIdSchema>;
+export type DiagnosticsClearLocalRequest = z.infer<typeof DiagnosticsClearLocalRequestSchema>;
+export type DiagnosticsClearLocalResult = z.infer<typeof DiagnosticsClearLocalResultSchema>;
 export type SettingApplyBehavior = z.infer<typeof SettingApplyBehaviorSchema>;
 export type SettingPermissionRequirement = z.infer<typeof SettingPermissionRequirementSchema>;
 export type SettingScope = z.infer<typeof SettingScopeSchema>;
