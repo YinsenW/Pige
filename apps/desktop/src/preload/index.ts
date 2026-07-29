@@ -100,6 +100,8 @@ import type {
   ReaderSelectionTransformResult,
   ReaderSelectionResolveRequest,
   ReaderSelectionResolveResult,
+  ReferencedOriginalReconnectRequest,
+  ReferencedOriginalReconnectResult,
   OnboardingStatus,
   OpenRecentVaultRequest,
   PigeDesktopApi,
@@ -233,6 +235,9 @@ import {
   AppearanceThemeMutationResultSchema,
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
+  JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
+  ReferencedOriginalReconnectRequestSchema,
+  ReferencedOriginalReconnectResultSchema,
   COLLECTION_ADD_FORMULA_COLUMN_CHANNEL,
   COLLECTION_ADD_RELATION_COLUMN_CHANNEL,
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
@@ -1023,7 +1028,14 @@ const api: PigeDesktopApi = {
     cancel: async (request: JobActionRequest): Promise<JobActionResult> =>
       ipcRenderer.invoke("jobs.cancel", request) as Promise<JobActionResult>,
     retry: async (request: JobActionRequest): Promise<JobActionResult> =>
-      ipcRenderer.invoke("jobs.retry", request) as Promise<JobActionResult>
+      ipcRenderer.invoke("jobs.retry", request) as Promise<JobActionResult>,
+    reconnectOriginalSource: async (
+      request: ReferencedOriginalReconnectRequest
+    ): Promise<ReferencedOriginalReconnectResult> =>
+      ReferencedOriginalReconnectResultSchema.parse(await ipcRenderer.invoke(
+        JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
+        ReferencedOriginalReconnectRequestSchema.parse(request)
+      ))
   },
   confirmations: {
     pending: async (): Promise<HighRiskConfirmationPendingResult> =>

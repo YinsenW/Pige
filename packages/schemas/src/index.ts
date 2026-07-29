@@ -5659,6 +5659,41 @@ export const JobStageSchema = z.enum([
   "repairing"
 ]);
 
+export const JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL = "jobs.reconnectOriginalSource" as const;
+export const ReferencedOriginalReconnectRequestIdSchema = z.string()
+  .regex(/^sourcereconnectreq_[a-z0-9]{8,64}$/);
+export const ReferencedOriginalReconnectRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: ReferencedOriginalReconnectRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  waitingJobId: JobIdSchema,
+  expectedJobUpdatedAt: z.string().datetime({ offset: true })
+}).strict();
+export const ReferencedOriginalReconnectJobProjectionSchema = z.object({
+  id: JobIdSchema,
+  class: JobClassSchema,
+  state: JobStateSchema,
+  stage: JobStageSchema.optional(),
+  sourceId: SourceIdSchema,
+  sourceDisplayName: z.string().min(1).max(512).optional(),
+  sourceKind: SourceKindSchema.optional(),
+  canReconnectDependency: z.literal(false),
+  message: z.string().min(1).max(512),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true })
+}).strict();
+const ReferencedOriginalReconnectResultIdentitySchema = ReferencedOriginalReconnectRequestSchema;
+export const ReferencedOriginalReconnectResultSchema = z.discriminatedUnion("status", [
+  ReferencedOriginalReconnectResultIdentitySchema.extend({
+    status: z.literal("reconnected"),
+    job: ReferencedOriginalReconnectJobProjectionSchema
+  }).strict(),
+  ReferencedOriginalReconnectResultIdentitySchema.extend({ status: z.literal("cancelled") }).strict(),
+  ReferencedOriginalReconnectResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  ReferencedOriginalReconnectResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  ReferencedOriginalReconnectResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+
 export const JobPrioritySchema = z.enum(["interactive", "capture", "normal", "background", "maintenance"]);
 export const JobScopeSchema = z.enum(["vault", "machine_local"]);
 
@@ -7498,6 +7533,12 @@ export type JobStage = z.infer<typeof JobStageSchema>;
 export type JobState = z.infer<typeof JobStateSchema>;
 export type BackupReconnectDependencyRequest = z.infer<typeof BackupReconnectDependencyRequestSchema>;
 export type BackupReconnectDependencyResult = z.infer<typeof BackupReconnectDependencyResultSchema>;
+export type ReferencedOriginalReconnectRequestId = z.infer<typeof ReferencedOriginalReconnectRequestIdSchema>;
+export type ReferencedOriginalReconnectRequest = z.infer<typeof ReferencedOriginalReconnectRequestSchema>;
+export type ReferencedOriginalReconnectJobProjection = z.infer<
+  typeof ReferencedOriginalReconnectJobProjectionSchema
+>;
+export type ReferencedOriginalReconnectResult = z.infer<typeof ReferencedOriginalReconnectResultSchema>;
 export type MachineLocalSettings = z.infer<typeof MachineLocalSettingsSchema>;
 export type UpdateCapability = z.infer<typeof UpdateCapabilitySchema>;
 export type UpdateChannel = z.infer<typeof UpdateChannelSchema>;

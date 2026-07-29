@@ -10,6 +10,8 @@ import {
   AppearanceThemeMutationResultSchema,
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
+  ReferencedOriginalReconnectRequestSchema,
+  ReferencedOriginalReconnectResultSchema,
   COLLECTION_ADD_FORMULA_COLUMN_CHANNEL,
   COLLECTION_ADD_RELATION_COLUMN_CHANNEL,
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
@@ -3000,6 +3002,52 @@ describe("schemas", () => {
       status: "failed",
       path: "/private/source-root",
       error: { code: "raw" }
+    })).toThrow();
+  });
+
+  it("keeps referenced-original reconnect currentness-bound, pathless, and authoritative", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "sourcereconnectreq_abcdefgh",
+      activeVaultId: "vault_20260709_abcdefgh",
+      waitingJobId: "job_20260709_abcdefgh",
+      expectedJobUpdatedAt: "2026-07-29T01:02:03.000Z"
+    } as const;
+    expect(ReferencedOriginalReconnectRequestSchema.parse(request)).toEqual(request);
+    for (const privateField of ["path", "sourcePath", "rootId", "sourceBody", "sourceId"] as const) {
+      expect(() => ReferencedOriginalReconnectRequestSchema.parse({ ...request, [privateField]: "private" }))
+        .toThrow();
+    }
+
+    const job = {
+      id: request.waitingJobId,
+      class: "parse",
+      state: "queued",
+      stage: "parsing",
+      sourceId: "src_20260709_abcdefgh",
+      sourceDisplayName: "notes.txt",
+      sourceKind: "plain_text_file",
+      canReconnectDependency: false,
+      message: "Source reconnected; processing is queued.",
+      createdAt: "2026-07-29T01:00:00.000Z",
+      updatedAt: "2026-07-29T01:03:00.000Z"
+    } as const;
+    expect(ReferencedOriginalReconnectResultSchema.parse({ ...request, status: "reconnected", job }))
+      .toEqual({ ...request, status: "reconnected", job });
+    for (const status of ["cancelled", "stale", "not_found", "failed"] as const) {
+      expect(ReferencedOriginalReconnectResultSchema.parse({ ...request, status }))
+        .toEqual({ ...request, status });
+    }
+    expect(() => ReferencedOriginalReconnectResultSchema.parse({
+      ...request,
+      status: "reconnected",
+      job: { ...job, canReconnectDependency: true }
+    })).toThrow();
+    expect(() => ReferencedOriginalReconnectResultSchema.parse({
+      ...request,
+      status: "failed",
+      path: "/private/original.txt",
+      rawError: "private"
     })).toThrow();
   });
 
