@@ -883,10 +883,12 @@ References:
 
 Status: Accepted
 Date: 2026-07-09
+Revised: 2026-07-29
 
 Decision:
 
-v0.1 should support automatic update checks through GitHub Actions-built artifacts and GitHub Releases or a GitHub-backed update feed.
+Phase 1 uses electron-updater `6.8.9` for explicit signed macOS alpha check, download and
+apply/relaunch against the Main-owned GitHub feed. Windows remains next-phase.
 
 Rationale:
 
@@ -894,9 +896,8 @@ Public alpha users need a manageable update path.
 
 Consequences:
 
-- Release engineering is part of v0.1, not post-launch cleanup.
-- Updates must not interrupt active capture, backup, restore, parsing, OCR, indexing, or destructive permissioned operations.
-- Signing/notarization state must be visible in release notes.
+- Main owns feed, signature identity, one lifecycle and risky-Job fencing.
+- Renderer sees version/progress/state only; failure leaves current app and Vault usable.
 
 References:
 
@@ -3108,10 +3109,10 @@ context without Host content classification or rewriting. Per-tool Permission li
 saved grants/YOLO, model-egress policy/approval/audit state, and waiting approval Job
 states are deleted rather than extended.
 
-Governance and validation are risk-tiered. Ordinary development uses affected tests,
-typecheck, and build; full trace/independent review/package belongs to architecture,
-security, durable-data, migration, release, merge-candidate, and main nodes. macOS is the
-foreground early platform; other platforms are explicitly qualified later.
+Governance and validation are risk-tiered. Active-development PRs use affected tests,
+typecheck, applicable build, `verify:change` and changed-owner checks, expanding only for
+the specific risk. Full macOS package/install/sign/update/backup-recovery belongs to the
+release freeze; other platforms are explicitly qualified later.
 
 Rationale:
 

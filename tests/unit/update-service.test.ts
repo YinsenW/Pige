@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UpdateStatusEvent } from "@pige/contracts";
 import { LocalSettingsStore } from "../../apps/desktop/src/main/services/local-settings";
 import {
@@ -13,6 +13,7 @@ import {
 
 const roots: string[] = [];
 const request = { apiVersion: 1, requestId: `updatereq_${"a".repeat(16)}` } as const;
+const updateVersion = "0.2.0-alpha.1";
 
 afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
@@ -171,6 +172,83 @@ describe("update service", () => {
     });
     expect(store.getUpdateSettings().lastCheck?.phase).toBe("up_to_date");
   });
+
+  it("downloads one exact available version and durably adopts ready state", async () => {
+    const adapter = new FakePackagedAdapter({ status: "available", availableVersion: updateVersion });
+    const events: UpdateStatusEvent[] = [];
+    const { service } = createServiceWithStore(adapter, events);
+    const checked = await service.check(request);
+
+    expect(service.download({
+      apiVersion: 1,
+      requestId: `updatedownloadreq_${"a".repeat(16)}`,
+      expectedRevision: checked.summary.revision,
+      version: updateVersion
+    })).toMatchObject({ status: "started", summary: { phase: "downloading" } });
+    await vi.waitFor(() => expect(service.summary()).toMatchObject({
+      phase: "ready_to_restart",
+      availableVersion: updateVersion
+    }));
+    expect(adapter.downloadVersions).toEqual([updateVersion]);
+    expect(events.some((event) => event.summary.phase === "downloading")).toBe(true);
+    expect(events.at(-1)?.summary.phase).toBe("ready_to_restart");
+  });
+
+  it("fails closed on stale download and blocks apply before updater effects", async () => {
+    const adapter = new FakePackagedAdapter({ status: "available", availableVersion: updateVersion });
+    const { service } = createServiceWithStore(adapter, [], { hasBlockingWork: () => true });
+    const checked = await service.check(request);
+    expect(service.download({
+      apiVersion: 1,
+      requestId: `updatedownloadreq_${"b".repeat(16)}`,
+      expectedRevision: checked.summary.revision - 1,
+      version: updateVersion
+    })).toMatchObject({ status: "stale" });
+    expect(adapter.downloadVersions).toEqual([]);
+
+    service.download({
+      apiVersion: 1,
+      requestId: `updatedownloadreq_${"c".repeat(16)}`,
+      expectedRevision: checked.summary.revision,
+      version: updateVersion
+    });
+    await vi.waitFor(() => expect(service.summary().phase).toBe("ready_to_restart"));
+    expect(await service.apply({
+      apiVersion: 1,
+      requestId: `updateapplyreq_${"a".repeat(16)}`,
+      expectedRevision: service.summary().revision,
+      version: updateVersion
+    })).toMatchObject({ status: "blocked", summary: { phase: "ready_to_restart" } });
+    expect(adapter.prepareVersions).toEqual([]);
+    expect(adapter.applyVersions).toEqual([]);
+  });
+
+  it("prepares and schedules one exact restart after revalidating ready state", async () => {
+    const adapter = new FakePackagedAdapter({ status: "available", availableVersion: updateVersion });
+    const scheduled: Array<() => void> = [];
+    const { service } = createServiceWithStore(adapter, [], {
+      scheduleApply: (apply) => scheduled.push(apply)
+    });
+    const checked = await service.check(request);
+    service.download({
+      apiVersion: 1,
+      requestId: `updatedownloadreq_${"d".repeat(16)}`,
+      expectedRevision: checked.summary.revision,
+      version: updateVersion
+    });
+    await vi.waitFor(() => expect(service.summary().phase).toBe("ready_to_restart"));
+
+    await expect(service.apply({
+      apiVersion: 1,
+      requestId: `updateapplyreq_${"b".repeat(16)}`,
+      expectedRevision: service.summary().revision,
+      version: updateVersion
+    })).resolves.toMatchObject({ status: "restarting", summary: { phase: "applying" } });
+    expect(adapter.prepareVersions).toEqual([updateVersion]);
+    expect(scheduled).toHaveLength(1);
+    scheduled[0]!();
+    expect(adapter.applyVersions).toEqual([updateVersion]);
+  });
 });
 
 class CountingNoNetworkAdapter extends NoNetworkUpdateCheckAdapter {
@@ -188,6 +266,11 @@ class FakePackagedAdapter implements UpdateCheckAdapter {
   checkCount = 0;
   failure: Error | undefined;
   delay: Promise<void> | undefined;
+  downloadResult = "ready" as const;
+  prepareResult = "ready" as const;
+  readonly downloadVersions: string[] = [];
+  readonly prepareVersions: string[] = [];
+  readonly applyVersions: string[] = [];
   readonly entered: Promise<void>;
   #markEntered: (() => void) | undefined;
 
@@ -203,6 +286,22 @@ class FakePackagedAdapter implements UpdateCheckAdapter {
     if (this.failure) throw this.failure;
     return this.result;
   }
+
+  async download(input: { readonly version: string; readonly onProgress: (percent: number) => void }) {
+    this.downloadVersions.push(input.version);
+    input.onProgress(42);
+    return this.downloadResult;
+  }
+
+  async prepareApply(version: string) {
+    this.prepareVersions.push(version);
+    return this.prepareResult;
+  }
+
+  apply(version: string): boolean {
+    this.applyVersions.push(version);
+    return true;
+  }
 }
 
 function createService(adapter: UpdateCheckAdapter): UpdateService {
@@ -211,7 +310,8 @@ function createService(adapter: UpdateCheckAdapter): UpdateService {
 
 function createServiceWithStore(
   adapter: UpdateCheckAdapter,
-  events: UpdateStatusEvent[] = []
+  events: UpdateStatusEvent[] = [],
+  overrides: Pick<ConstructorParameters<typeof UpdateService>[0], "hasBlockingWork" | "scheduleApply"> = {}
 ): { service: UpdateService; store: LocalSettingsStore } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-update-service-test-"));
   roots.push(root);
@@ -223,6 +323,7 @@ function createServiceWithStore(
       adapter,
       currentVersion: "0.1.0-alpha.1",
       publish: (event) => events.push(event),
+      ...overrides,
       now: () => new Date("2026-07-18T08:00:00.000Z")
     })
   };

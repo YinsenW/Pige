@@ -58,13 +58,18 @@ describe("package-impact classifier", () => {
     ]);
   });
 
-  it("keeps packageability independent from full-gates and executes the trusted base classifier", () => {
+  it("runs packageability only for an explicit release freeze", () => {
     const workflow = fs.readFileSync(path.join(root, ".github/workflows/packageability.yml"), "utf8");
-    expect(workflow).toContain("package-impact:");
-    expect(workflow).toContain("git show \"${BASE_SHA}:scripts/verify/package-impact.mjs\"");
-    expect(workflow).toContain("git diff --name-only -z \"$BASE_SHA\" \"$HEAD_SHA\"");
-    expect(workflow).toContain("package-gates");
-    expect(workflow).toContain("needs.package-impact.outputs.required == 'true'");
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).not.toContain("pull_request:");
+    expect(workflow).not.toContain("push:");
+    expect(workflow).not.toContain("package-impact:");
     expect(workflow).not.toContain("full-gates");
+    expect(workflow).toContain("default: false");
+    expect(workflow).toContain("if: inputs.include_windows == true");
+
+    const codeql = fs.readFileSync(path.join(root, ".github/workflows/codeql.yml"), "utf8");
+    expect(codeql).toContain("github.event_name != 'pull_request'");
+    expect(codeql).toContain("'full-gates'");
   });
 });

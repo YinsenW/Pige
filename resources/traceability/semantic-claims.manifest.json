@@ -2,7 +2,7 @@
   "schemaVersion": 3,
   "normalization": "NFKC + trim + collapse-whitespace; structured anchors use canonical JSON field order",
   "algorithm": "sha256-base64url(canonical claim JSON)",
-  "claimCount": 1241,
+  "claimCount": 1242,
   "claims": {
     "prdContracts": {
       "CLM-PRD-CONTRACT-AUTHORITY": "b64u:hXfFXkCbVZiIV0Ma-psmA41hHZ2LUOsdUC8ftAMdTbo",
@@ -293,7 +293,7 @@
       "CLM-REQ-PIGE-PRIV-001": "b64u:2qJdMmC5fkL6ym1KnGT-T04koAnDc9WwDdNMpM0QKK8",
       "CLM-REQ-PIGE-PROMPT-001": "b64u:TnmCbVP345DINT0nw3ZvgLSEqBQSIT0qoTAuuPp3-ko",
       "CLM-REQ-PIGE-PROMPT-002": "b64u:eqymBLZz3Yl2vW9PZH9_LlQItooyNzQFAdyjTSxHgn8",
-      "CLM-REQ-PIGE-REL-001": "b64u:UK6m6uBsxFCgXLu5XW8Pu8omAfG97GRsoIc7mGKL9eE",
+      "CLM-REQ-PIGE-REL-001": "b64u:b4x0QZ8kcpcsZvYxAf9wdtqwtuC2-7aBWz5w1hhfByg",
       "CLM-REQ-PIGE-REL-002": "b64u:LSOqInNNM5MkdgPhjdWlJfHhK3IW4yoHvInk_eyilTQ",
       "CLM-REQ-PIGE-REL-003": "b64u:bj4b_VvLS07aNl14v9CL5hGPoQz-w6cRh6SfwzfBL68",
       "CLM-REQ-PIGE-REL-004": "b64u:2KZeEtn5pERPwzUp4YpacxIlVSD7ojHehCs56FmPm4A",
@@ -576,7 +576,7 @@
       "CLM-EXT-E9-06": "b64u:BN9hhBtUwQPuLb2dxqEcpb1dVFVMEgkRa_QRQJUmETA",
       "CLM-EXT-E9-07": "b64u:G_ixAviA4jC0lyBKp7Ip6Hqous0o8CuqUC2k3YxFEXo",
       "CLM-EXT-E9-08": "b64u:O0TjU6vPelr7D3Qh6glIYOmgICOT9agf2fdkk9zBjb4",
-      "CLM-EXT-E9-09": "b64u:UKk_84weHhyHJ3DPhweWX5wDOr2S-mP_If6cA6iS4Pk",
+      "CLM-EXT-E9-09": "b64u:VC22CUN2moddRkvywrrPoC-hfGaToq30eGPJpPsfUvo",
       "CLM-EXT-E9-10": "b64u:mETchkSv9CEby0Y_kIdgVYdR0UwYZ7IxgnI5mRL0jiM",
       "CLM-EXT-E9-11": "b64u:X6N1CI11TsMxdz3_KMTKlaCNWYXoo_LRZA42sSYZ-nQ",
       "CLM-EXT-E9-12": "b64u:TXi-SST9xEEI8vdDwkfQGGbQcQQ4sfbrwCvHcJcbPIU"
@@ -1011,6 +1011,7 @@
       "CLM-EV-EV-SECURITY-POLICY": "b64u:Jj-C7QGCCCRrpnyJ68tEPENZ1U5qTAjCarn0JwYJz-Y",
       "CLM-EV-EV-SETTING-GUARD": "b64u:DtooUhx6okZOjkBjN90Jioy6_9aaHzdBsID0QbDCg8g",
       "CLM-EV-EV-SETTINGS": "b64u:FOf0fUACxfmPs9VHxnGChvN-BjsaK33gau_Cf81dVjU",
+      "CLM-EV-EV-SIGNED-UPDATER-CONTRACT": "b64u:YdJvlA1HaqgiP0eH2IBVXF_hVApoxauO5_evl7O75Qs",
       "CLM-EV-EV-SKILL-LIFECYCLE": "b64u:80OOGlEh6NaJs7pBW-hclfWQC1HGwR3KdMn2IbwgOTM",
       "CLM-EV-EV-SKILLS-SHELL-UI": "b64u:vfB9sx_aFuPnwzlXIY7zRehsLiLFHk2JcTiJtemmE3I",
       "CLM-EV-EV-SOURCE-PAGE-BASELINE": "b64u:NwR2HJ_EswGvw0Wei0OhClWjpkgOD3BkhuFW_pgweCE",
@@ -1115,7 +1116,7 @@
       "CLM-REQ-ACCEPT-PIGE-PRIV-001": "b64u:y_Y0YwO6q_VSjC1kyQyVvCfn3Z560gwGBasGzrLLupY",
       "CLM-REQ-ACCEPT-PIGE-PROMPT-001": "b64u:gt7_itlvIlqJRT_OurVcocZX736FkDZl-iGNqrAESaw",
       "CLM-REQ-ACCEPT-PIGE-PROMPT-002": "b64u:4Hr1WiDP20GcwFXgNcpDQO55OKfIVU8tkGCthSbfh8I",
-      "CLM-REQ-ACCEPT-PIGE-REL-001": "b64u:x3ZGj7rQkVhDL4Ap68VOPDoDLmiZQ4f7FR3Fa_wToCg",
+      "CLM-REQ-ACCEPT-PIGE-REL-001": "b64u:4NdEO-XKp7-0MlqXd2NvZtDf0pYuyy2B3nWl6s-euyk",
       "CLM-REQ-ACCEPT-PIGE-REL-002": "b64u:bpzTLJSH5nZ6x_E3t71HdvJlhYZo1OhsCeAmQRxBL7g",
       "CLM-REQ-ACCEPT-PIGE-REL-003": "b64u:fRfK9mEsYN4BTDE_rH5cuPiPPFzIKa0JOutuN08RtPY",
       "CLM-REQ-ACCEPT-PIGE-REL-004": "b64u:F4WV58oYgY-UExBozD-rTDQY6SAA6i7BQZ8ZtpAxFxM",
@@ -1252,7 +1253,7 @@
       "CLM-EXT-ACCEPT-E9-06": "b64u:y49q4Big3uV74pS68FtYUI9g53bdkS11Ddib_jXA-18",
       "CLM-EXT-ACCEPT-E9-07": "b64u:62wkjtR6BF25vHCRltNq99sIPo5jWv_iYwkyHoyw-GA",
       "CLM-EXT-ACCEPT-E9-08": "b64u:lUiUnVQBdJeyWaX9h5_DaH8PUa-3xK0dbgjCqoNw-Yg",
-      "CLM-EXT-ACCEPT-E9-09": "b64u:FuQEk1nVwGIi1FJNeMMXPy5ZdE2dh3AtgYZmHR8wDOw",
+      "CLM-EXT-ACCEPT-E9-09": "b64u:SOVTAsNq9oLuD9FefKEE6CJodknpnmn9-NNBOA4XDjQ",
       "CLM-EXT-ACCEPT-E9-10": "b64u:InosHszwwLYLaYLvf4FZ2EoAXzxr6O7Z6PyMI8aeDnQ",
       "CLM-EXT-ACCEPT-E9-11": "b64u:Zcbou1jRNQbgUygx7NlVHmH1jt6h3de63_L1XW0MJc4",
       "CLM-EXT-ACCEPT-E9-12": "b64u:6_ON8iOQaXTgGiEbq2vkK4x898_MpOPwq0uKFpl3z-0"

@@ -29,20 +29,17 @@ This document defines the test strategy future AI agents should follow while imp
 | Node | Required checks | Not required by default |
 | --- | --- | --- |
 | Inner implementation loop | Affected tests; typecheck; build when renderer/runtime output changes | Full trace, independent snapshot, package/distribution |
-| Ordinary PR | Affected/changed-owner tests, typecheck, build, architecture reset guard, docs links/map when docs changed | Forty-document bind, semantic-lock refresh, five-dimension score, Windows/Linux |
-| P0/architecture/security/durable-data/migration/release PR | Full tests, full governance/trace, adversarial boundary tests, real macOS Electron if visible | Deferred platform qualification unless targeted |
-| PR and `main` | `full-gates` owns full tests/governance; macOS package/download runs for package-impact or unknown PRs and every `main` push | Proven non-package-impact PR package; Windows/Linux unless targeted |
-| Platform qualification batch | Target-platform package, filesystem/process/titlebar/installer/recovery evidence | Reopening unrelated macOS feature acceptance |
+| Ordinary PR | Affected tests, typecheck, applicable build, `verify:change`, changed-owner contract/docs checks | Full test/governance/package/download/CodeQL |
+| Risk-specific PR | Only the owning full/adversarial/governance checks required by that risk | Unrelated full gates and platform qualification |
+| Release freeze | Full macOS package/install/sign/notary/update/backup-recovery and release gates | Windows/Linux qualification |
 
 An evidence-only or semantics-preserving test repair does not refresh trace, semantic
 lock, or independent review. Full gates remain available; they are scheduled at the node
 where their result is actionable.
 
-Package impact covers Electron main/preload/native/helpers; packaged resources/manifests;
-runtime dependencies/lockfiles; build, release, signing or installer scripts/config;
-package smokes; and release/security overrides. Pure docs, trace, governance, locale or
-test-fixture changes are non-impact unless they alter packaged resources or package
-verification. Unknown impact packages fail closed.
+Active-development PRs do not package, including dependency, native, build, installer,
+signing, update, release or packaged-resource changes. Package-only failures remain
+release-freeze blockers; risk-specific checks may still expand the ordinary set.
 
 ## 3. Test Pyramid
 

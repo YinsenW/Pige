@@ -457,9 +457,9 @@ These v0.1 design choices are accepted. Implementation still must pin concrete v
 - Skill/package boundary: pure Skills are Markdown; executable packages use reviewed
   scoped adapters and inherit no first-party authority. Shell defaults denied; fixed bundled
   commands or declared exact high-risk effects retain preview, limits, cancellation and log.
-- Update security: electron-builder/electron-updater with GitHub alpha feed, protected exact
-  identity/environment, channel/monotonicity, signed platforms, immutable metadata/checksums,
-  and independent downloaded-byte verification before publication.
+- Update security: electron-updater `6.8.9` is Main-only, packaged-macOS-only and fixed to
+  the GitHub alpha feed; metadata/checksum/Developer ID identity, monotonic version and
+  notarized publication must agree before ready/apply. Renderer cannot provide a feed/path.
 - Dependency vulnerability scanning: Dependabot, CodeQL, and npm audit are required CI/release gates.
 - Capability manifests map package high risk to the closed vocabulary; ordinary
   first-party authority is not grantable.

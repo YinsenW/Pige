@@ -185,7 +185,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Vault-scoped Skill enablement | Skills | `vault_portable` | Skill Registry Service | `.pige/skills/` metadata or `.pige/config.json` | Yes | `permission_broker` | New Agent runs |
 | Machine-local Skill enablement | Skills | `machine_local` | Skill Registry Service | OS app data | No | `permission_broker` | New Agent runs |
 | Pi package install records | Pi Packages | `machine_local` | Pi Package Registry Service | OS app data | No | `permission_and_confirmation` | After install/remove job |
-| Update check state | Updates & Diagnostics | `machine_local` | Update Service | `settings.json` | No | `none` | Serialized CAS; default zero-network |
+| Signed update lifecycle | Updates & Diagnostics | `machine_local` | Update Service | `settings.json` + updater cache | No | `none` | Explicit check/download/apply; CAS and risky-Job fenced |
 | Diagnostics export preferences | Updates & Diagnostics | `machine_local` | Diagnostics Service | OS app data | No | `explicit_confirmation` | Next export |
 
 If a new setting does not fit this table, update this document before implementation.

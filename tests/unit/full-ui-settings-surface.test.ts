@@ -3132,7 +3132,7 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("binds explicit update checks with stale-event and synchronous busy fences", async () => {
+  it("binds explicit signed update download and restart with exact identity and revision fences", async () => {
     const dom = createDom();
     let statusListener: ((event: {
       apiVersion: 1;
@@ -3145,6 +3145,18 @@ describe("full UI Settings surface", () => {
     const check = vi.fn((request: import("@pige/contracts").UpdateCheckRequest) =>
       new Promise<import("@pige/contracts").UpdateCheckResult>((resolve) => {
         resolveCheck = resolve;
+      })
+    );
+    let resolveDownload: ((result: import("@pige/contracts").UpdateDownloadResult) => void) | undefined;
+    const download = vi.fn((request: import("@pige/contracts").UpdateDownloadRequest) =>
+      new Promise<import("@pige/contracts").UpdateDownloadResult>((resolve) => {
+        resolveDownload = resolve;
+      })
+    );
+    const applyResolvers: Array<(result: import("@pige/contracts").UpdateApplyResult) => void> = [];
+    const apply = vi.fn((request: import("@pige/contracts").UpdateApplyRequest) =>
+      new Promise<import("@pige/contracts").UpdateApplyResult>((resolve) => {
+        applyResolvers.push(resolve);
       })
     );
     Object.defineProperty(dom.window, "pige", {
@@ -3160,6 +3172,8 @@ describe("full UI Settings surface", () => {
             phase: "idle" as const
           })),
           check,
+          download,
+          apply,
           onStatusChanged: vi.fn((listener: typeof statusListener) => {
             statusListener = listener;
             return unsubscribe;
@@ -3231,7 +3245,158 @@ describe("full UI Settings surface", () => {
       await settle(dom);
     });
     expect(panel.textContent).toContain("0.2.0");
-    expect(buttonNamed(panel, "Download update").disabled).toBe(true);
+    expect(buttonNamed(panel, "Download update").disabled).toBe(false);
+
+    await act(async () => {
+      buttonNamed(panel, "Download update").click();
+      buttonNamed(panel, "Download update").click();
+    });
+    expect(download).toHaveBeenCalledOnce();
+    const downloadRequest = download.mock.calls[0]![0];
+    expect(downloadRequest).toMatchObject({
+      apiVersion: 1,
+      expectedRevision: 3,
+      version: "0.2.0"
+    });
+    expect(downloadRequest.requestId).toMatch(/^updatedownloadreq_[a-z0-9]{32}$/);
+
+    await act(async () => {
+      statusListener?.({
+        apiVersion: 1,
+        requestId: downloadRequest.requestId,
+        sequence: 2,
+        summary: {
+          apiVersion: 1,
+          revision: 4,
+          channel: "alpha",
+          capability: "packaged_ready",
+          currentVersion: "0.1.0",
+          phase: "downloading",
+          availableVersion: "0.2.0",
+          progressPercent: 42,
+          checkedAt: "2026-07-19T08:00:00.000Z"
+        }
+      });
+      resolveDownload?.({
+        status: "started",
+        requestId: downloadRequest.requestId,
+        version: "0.2.0",
+        summary: {
+          apiVersion: 1,
+          revision: 3,
+          channel: "alpha",
+          capability: "packaged_ready",
+          currentVersion: "0.1.0",
+          phase: "available",
+          availableVersion: "0.2.0",
+          checkedAt: "2026-07-19T08:00:00.000Z"
+        }
+      });
+      await settle(dom);
+    });
+    expect(panel.textContent).toContain("42%");
+    expect(buttonNamed(panel, "Downloading…").disabled).toBe(true);
+
+    await act(async () => {
+      statusListener?.({
+        apiVersion: 1,
+        requestId: downloadRequest.requestId,
+        sequence: 3,
+        summary: {
+          apiVersion: 1,
+          revision: 5,
+          channel: "alpha",
+          capability: "packaged_ready",
+          currentVersion: "0.1.0",
+          phase: "ready_to_restart",
+          availableVersion: "0.2.0",
+          checkedAt: "2026-07-19T08:00:00.000Z",
+          readyAt: "2026-07-19T08:01:00.000Z"
+        }
+      });
+      await settle(dom);
+    });
+    expect(buttonNamed(panel, "Restart and update").disabled).toBe(false);
+
+    await act(async () => {
+      buttonNamed(panel, "Restart and update").click();
+      buttonNamed(panel, "Restart and update").click();
+    });
+    expect(apply).toHaveBeenCalledOnce();
+    const applyRequest = apply.mock.calls[0]![0];
+    expect(applyRequest).toMatchObject({ apiVersion: 1, expectedRevision: 5, version: "0.2.0" });
+    expect(applyRequest.requestId).toMatch(/^updateapplyreq_[a-z0-9]{32}$/);
+    await act(async () => {
+      applyResolvers.shift()?.({
+        status: "blocked",
+        requestId: applyRequest.requestId,
+        version: "0.2.0",
+        summary: {
+          apiVersion: 1,
+          revision: 5,
+          channel: "alpha",
+          capability: "packaged_ready",
+          currentVersion: "0.1.0",
+          phase: "ready_to_restart",
+          availableVersion: "0.2.0",
+          checkedAt: "2026-07-19T08:00:00.000Z",
+          readyAt: "2026-07-19T08:01:00.000Z"
+        }
+      });
+      await settle(dom);
+    });
+    expect(panel.textContent).toContain("downloaded update remains ready");
+    expect(buttonNamed(panel, "Restart and update").disabled).toBe(false);
+
+    await act(async () => {
+      buttonNamed(panel, "Restart and update").click();
+    });
+    const mismatchedRequest = apply.mock.calls[1]![0];
+    await act(async () => {
+      applyResolvers.shift()?.({
+        status: "restarting",
+        requestId: mismatchedRequest.requestId,
+        version: "0.3.0",
+        summary: {
+          apiVersion: 1,
+          revision: 6,
+          channel: "alpha",
+          capability: "packaged_ready",
+          currentVersion: "0.1.0",
+          phase: "applying",
+          availableVersion: "0.3.0",
+          checkedAt: "2026-07-19T08:00:00.000Z",
+          readyAt: "2026-07-19T08:01:00.000Z"
+        }
+      } as import("@pige/contracts").UpdateApplyResult);
+      await settle(dom);
+    });
+    expect(buttonNamed(panel, "Restart and update").disabled).toBe(false);
+
+    await act(async () => {
+      buttonNamed(panel, "Restart and update").click();
+    });
+    const staleRequest = apply.mock.calls[2]![0];
+    await act(async () => {
+      applyResolvers.shift()?.({
+        status: "stale",
+        requestId: staleRequest.requestId,
+        version: "0.2.0",
+        summary: {
+          apiVersion: 1,
+          revision: 6,
+          channel: "alpha",
+          capability: "packaged_ready",
+          currentVersion: "0.1.0",
+          phase: "available",
+          availableVersion: "0.2.0",
+          checkedAt: "2026-07-19T08:02:00.000Z"
+        }
+      });
+      await settle(dom);
+    });
+    expect(panel.textContent).toContain("Update status changed");
+    expect(buttonNamed(panel, "Download update").disabled).toBe(false);
 
     await act(async () => root.unmount());
     expect(unsubscribe).toHaveBeenCalledOnce();

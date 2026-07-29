@@ -43,7 +43,9 @@ import type {
   SpeechSessionRequest,
   SpeechStartRequest,
   SupportBundlePreview,
+  UpdateApplyRequest,
   UpdateCheckRequest,
+  UpdateDownloadRequest,
   UpdateStatusEvent,
   UpdateSourceStoragePolicyRequest,
   VaultMigrationApplyRequest,
@@ -84,6 +86,10 @@ import {
   SpeechStartRequestSchema,
   UpdateCheckRequestSchema,
   UpdateCheckResultSchema,
+  UpdateDownloadRequestSchema,
+  UpdateDownloadResultSchema,
+  UpdateApplyRequestSchema,
+  UpdateApplyResultSchema,
   UpdateStatusEventSchema,
   UpdateSummarySchema,
   SetLocaleRequestSchema,
@@ -253,7 +259,8 @@ import {
   TaskExecutionRecipeService,
   type TaskExecutionRecipeToolRoots
 } from "./services/task-execution-recipe-service";
-import { NoNetworkUpdateCheckAdapter, UpdateService } from "./services/update-service";
+import { ElectronUpdaterAdapter } from "./services/electron-updater-adapter";
+import { UpdateService } from "./services/update-service";
 import { SkillRegistryService } from "./services/skill-registry-service";
 import { SkillUrlInstallService } from "./services/skill-url-install-service";
 import { HomeSkillStagingToolService } from "./services/home-skill-staging-tool";
@@ -742,12 +749,34 @@ const getUpdateService = (): UpdateService => {
   if (!updateService) {
     updateService = new UpdateService({
       settings: getLocalSettingsStore(),
-      adapter: new NoNetworkUpdateCheckAdapter(),
+      adapter: new ElectronUpdaterAdapter({ isPackaged: app.isPackaged }),
       currentVersion: app.getVersion(),
-      publish: publishUpdateStatus
+      publish: publishUpdateStatus,
+      hasBlockingWork: hasUpdateBlockingWork,
+      scheduleApply: (applyUpdate) => setImmediate(applyUpdate)
     });
   }
   return updateService;
+};
+
+const hasUpdateBlockingWork = (): boolean => {
+  if (getHighRiskConfirmationService().pending().status === "pending") return true;
+  if (!getVaultService().current()) return false;
+  try {
+    return getJobsService().list({
+      states: [
+        "queued",
+        "running",
+        "waiting_dependency",
+        "awaiting_review",
+        "cancel_requested",
+        "failed_retryable"
+      ],
+      limit: 1
+    }).jobs.length > 0;
+  } catch {
+    return true;
+  }
 };
 
 const publishUpdateStatus = (event: UpdateStatusEvent): void => {
@@ -2598,6 +2627,16 @@ ipcMain.handle("updates.check", async (_event, request: UpdateCheckRequest) =>
     await getUpdateService().check(UpdateCheckRequestSchema.parse(request))
   )
 );
+ipcMain.handle("updates.download", (_event, request: UpdateDownloadRequest) =>
+  UpdateDownloadResultSchema.parse(
+    getUpdateService().download(UpdateDownloadRequestSchema.parse(request))
+  )
+);
+ipcMain.handle("updates.apply", async (_event, request: UpdateApplyRequest) =>
+  UpdateApplyResultSchema.parse(
+    await getUpdateService().apply(UpdateApplyRequestSchema.parse(request))
+  )
+);
 ipcMain.handle("system.toolchainHealth", () => getToolchainService().health());
 
 app.whenReady().then(async () => {
@@ -2674,9 +2713,11 @@ app.whenReady().then(async () => {
   });
   updateService = new UpdateService({
     settings: getLocalSettingsStore(),
-    adapter: new NoNetworkUpdateCheckAdapter(),
+    adapter: new ElectronUpdaterAdapter({ isPackaged: app.isPackaged }),
     currentVersion: app.getVersion(),
-    publish: publishUpdateStatus
+    publish: publishUpdateStatus,
+    hasBlockingWork: hasUpdateBlockingWork,
+    scheduleApply: (applyUpdate) => setImmediate(applyUpdate)
   });
   modelProviderRegistry = new ModelProviderRegistry(
     app.getPath("userData"),

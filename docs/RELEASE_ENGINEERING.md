@@ -133,7 +133,7 @@ v0.1 default choices:
 - `electron-builder@26.15.3` for packaging, signing integration, and update metadata.
 - `@electron/asar@4.2.0` only for bounded build-time ASAR inspection/extraction in
   packageability verification; it is not a packaged runtime dependency.
-- `electron-updater` for GitHub Releases based updates.
+- `electron-updater@6.8.9` (`sha512-ZhVxM9iGONUpZGI1FxdMRgJjUFXi7AYGVa5PwKlO1tV1/4zDxQmfKpXOHVztKrd6L9rLcFjERvi1Mf2vxyTkig==`) for signed macOS GitHub Releases updates.
 - GitHub Releases as v0.1 update host.
 - Native Electron `autoUpdater` remains a fallback only if the packaging stack changes.
 
@@ -141,24 +141,21 @@ Implementation must pin exact versions and update the Technical Architecture ext
 
 ## 7. Auto-Update Strategy
 
-v0.1 should support automatic updates.
+Phase 1 supports an explicit signed macOS alpha update lifecycle.
 
 Update flow:
 
-1. App periodically checks update metadata from the configured channel.
-2. If update exists, show non-intrusive update availability.
-3. Download update in background after user consent or according to setting.
-4. Verify update metadata/signature/checksum.
-5. Prompt to restart and install.
-6. Preserve open work before restart.
+1. User checks the Main-owned immutable GitHub alpha channel.
+2. User explicitly downloads; Main verifies metadata, checksum and Developer ID identity.
+3. Ready state survives restart without duplicate download/apply.
+4. User explicitly applies; Main rechecks no authoritative risky/nonterminal Job, then relaunches.
 
 Rules:
 
-- Never interrupt active capture, review, backup, restore, parsing, OCR, or index rebuild without user action.
-- Do not update while an irreversible/high-risk effect or long-running durable operation is active.
-- Store update state machine in machine-local app data.
-- Failed update should leave current app usable.
-- User can disable automatic download, but update checks remain visible in About/Settings.
+- One check/download/apply runs at a time; active capture, review, backup, restore, parsing,
+  OCR, migration, index rebuild, high-risk effect or other nonterminal durable Job blocks apply.
+- Machine-local version/revision state adopts exact updater cache state after restart.
+- Failure leaves the current app/vault usable. Renderer never sets feed/channel or sees paths.
 
 ## 8. Code Signing And Notarization
 
@@ -171,8 +168,7 @@ macOS:
 
 Windows:
 
-- Public Windows x64 requires Authenticode for app/installer; unsigned builds are internal-only.
-- Windows installer must not require admin privileges unless a selected installer format makes it unavoidable.
+- Windows hooks remain, but signing/install/update qualification is next-phase and nonblocking.
 
 Rules:
 
@@ -370,12 +366,11 @@ recovery budgets with no hidden waiver; notices, current dependency registry, sm
 backup/restore across update, and the 25-source scenario on macOS. Windows retains the same
 trust and installed-distribution gates in the next platform phase and is not claimed here.
 
-### Early macOS-first qualification
+### macOS release-freeze qualification
 
-Every `main` push runs the full macOS package plus downloaded-distribution
-check; PR packaging follows the
-fail-closed impact classifier in `QUALITY_AND_TEST_STRATEGY.md`, independently of
-`full-gates` tests/governance. Windows/Linux packaging and qualification are batched later.
+Active-development PRs and `main` do not repeat packaging. Explicit release-freeze
+dispatch owns macOS package, downloaded-distribution, install, signing/notarization,
+update and backup/restore evidence. Windows/Linux qualification is batched later.
 Portable contracts and platform adapters remain required, and no Windows/Linux support
 claim is made until that explicit qualification succeeds.
 No critical security issue may remain; current security/private-reporting, privacy,

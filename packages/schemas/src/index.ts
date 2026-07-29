@@ -2870,9 +2870,19 @@ export const UpdatePhaseSchema = z.enum([
   "checking",
   "up_to_date",
   "available",
+  "downloading",
+  "ready_to_restart",
+  "applying",
   "failed"
 ]);
 export const UpdateCheckRequestIdSchema = z.string().regex(/^updatereq_[a-z0-9]{16,64}$/u);
+export const UpdateDownloadRequestIdSchema = z.string().regex(/^updatedownloadreq_[a-z0-9]{16,64}$/u);
+export const UpdateApplyRequestIdSchema = z.string().regex(/^updateapplyreq_[a-z0-9]{16,64}$/u);
+export const UpdateRequestIdSchema = z.union([
+  UpdateCheckRequestIdSchema,
+  UpdateDownloadRequestIdSchema,
+  UpdateApplyRequestIdSchema
+]);
 export const UpdateVersionSchema = z.string()
   .min(1)
   .max(64)
@@ -2894,11 +2904,39 @@ const UpdateTerminalStateSchema = z.discriminatedUnion("phase", [
   }).strict()
 ]);
 
+export const UpdateLifecycleStateSchema = z.discriminatedUnion("phase", [
+  z.object({
+    phase: z.literal("downloading"),
+    version: UpdateVersionSchema,
+    startedAt: z.string().datetime({ offset: true })
+  }).strict(),
+  z.object({
+    phase: z.literal("ready_to_restart"),
+    version: UpdateVersionSchema,
+    readyAt: z.string().datetime({ offset: true })
+  }).strict(),
+  z.object({
+    phase: z.literal("applying"),
+    version: UpdateVersionSchema,
+    readyAt: z.string().datetime({ offset: true }),
+    startedAt: z.string().datetime({ offset: true })
+  }).strict()
+]);
+
 export const UpdateMachineSettingsSchema = z.object({
   revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   channel: UpdateChannelSchema,
-  lastCheck: UpdateTerminalStateSchema.optional()
-}).strict();
+  lastCheck: UpdateTerminalStateSchema.optional(),
+  lifecycle: UpdateLifecycleStateSchema.optional()
+}).strict().superRefine((settings, context) => {
+  if (
+    settings.lifecycle &&
+    (settings.lastCheck?.phase !== "available" ||
+      settings.lastCheck.availableVersion !== settings.lifecycle.version)
+  ) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Update lifecycle must bind the checked version." });
+  }
+});
 
 const UpdateSummaryBaseSchema = z.object({
   apiVersion: z.literal(1),
@@ -2919,6 +2957,24 @@ export const UpdateSummarySchema = z.discriminatedUnion("phase", [
     phase: z.literal("available"),
     availableVersion: UpdateVersionSchema,
     checkedAt: z.string().datetime({ offset: true })
+  }).strict(),
+  UpdateSummaryBaseSchema.extend({
+    phase: z.literal("downloading"),
+    availableVersion: UpdateVersionSchema,
+    checkedAt: z.string().datetime({ offset: true }),
+    progressPercent: z.number().finite().min(0).max(100)
+  }).strict(),
+  UpdateSummaryBaseSchema.extend({
+    phase: z.literal("ready_to_restart"),
+    availableVersion: UpdateVersionSchema,
+    checkedAt: z.string().datetime({ offset: true }),
+    readyAt: z.string().datetime({ offset: true })
+  }).strict(),
+  UpdateSummaryBaseSchema.extend({
+    phase: z.literal("applying"),
+    availableVersion: UpdateVersionSchema,
+    checkedAt: z.string().datetime({ offset: true }),
+    readyAt: z.string().datetime({ offset: true })
   }).strict(),
   UpdateSummaryBaseSchema.extend({
     phase: z.literal("failed"),
@@ -2954,9 +3010,37 @@ export const UpdateCheckResultSchema = z.discriminatedUnion("status", [
   }).strict()
 ]);
 
+export const UpdateDownloadRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: UpdateDownloadRequestIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  version: UpdateVersionSchema
+}).strict();
+
+export const UpdateDownloadResultSchema = z.object({
+  status: z.enum(["started", "already_ready", "blocked", "busy", "stale", "unavailable", "failed"]),
+  requestId: UpdateDownloadRequestIdSchema,
+  version: UpdateVersionSchema,
+  summary: UpdateSummarySchema
+}).strict();
+
+export const UpdateApplyRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: UpdateApplyRequestIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  version: UpdateVersionSchema
+}).strict();
+
+export const UpdateApplyResultSchema = z.object({
+  status: z.enum(["restarting", "blocked", "busy", "stale", "unavailable", "failed"]),
+  requestId: UpdateApplyRequestIdSchema,
+  version: UpdateVersionSchema,
+  summary: UpdateSummarySchema
+}).strict();
+
 export const UpdateStatusEventSchema = z.object({
   apiVersion: z.literal(1),
-  requestId: UpdateCheckRequestIdSchema,
+  requestId: UpdateRequestIdSchema,
   sequence: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   summary: UpdateSummarySchema
 }).strict();
@@ -7370,6 +7454,12 @@ export type UpdateCapability = z.infer<typeof UpdateCapabilitySchema>;
 export type UpdateChannel = z.infer<typeof UpdateChannelSchema>;
 export type UpdateCheckRequest = z.infer<typeof UpdateCheckRequestSchema>;
 export type UpdateCheckResult = z.infer<typeof UpdateCheckResultSchema>;
+export type UpdateDownloadRequestId = z.infer<typeof UpdateDownloadRequestIdSchema>;
+export type UpdateDownloadRequest = z.infer<typeof UpdateDownloadRequestSchema>;
+export type UpdateDownloadResult = z.infer<typeof UpdateDownloadResultSchema>;
+export type UpdateApplyRequestId = z.infer<typeof UpdateApplyRequestIdSchema>;
+export type UpdateApplyRequest = z.infer<typeof UpdateApplyRequestSchema>;
+export type UpdateApplyResult = z.infer<typeof UpdateApplyResultSchema>;
 export type UpdateMachineSettings = z.infer<typeof UpdateMachineSettingsSchema>;
 export type AppearanceThemePreference = z.infer<typeof AppearanceThemePreferenceSchema>;
 export type EffectiveAppearanceTheme = z.infer<typeof EffectiveAppearanceThemeSchema>;
