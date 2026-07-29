@@ -154,6 +154,9 @@ import {
   SkillStageUpdateRequestSchema,
   SkillStageUpdateResultSchema,
   SkillStagedSummarySchema,
+  SkillRestoreRequestSchema,
+  SkillRestoreResultSchema,
+  SkillRegistrySummarySchema,
   SkillSummarySchema,
   SkillUninstallRequestSchema,
   SourceRecordSchema,
@@ -4139,7 +4142,7 @@ describe("schemas", () => {
       enabled: true
     } as const;
     expect(SkillInstallStagedRequestSchema.parse(installRequest)).toEqual(installRequest);
-    const registry = { apiVersion: 1, revision: 5, invalidManifestCount: 0, skills: [] } as const;
+    const registry = { apiVersion: 1, revision: 5, invalidManifestCount: 0, skills: [], restorableSkills: [] } as const;
     expect(SkillInstallStagedResultSchema.parse({ status: "committed", requestId, registry }))
       .toEqual({ status: "committed", requestId, registry });
 
@@ -4602,7 +4605,13 @@ describe("schemas", () => {
       canExport: true,
       canUpdate: true
     } as const;
-    const registry = { apiVersion: 1, revision: 6, invalidManifestCount: 0, skills: [skill] } as const;
+    const registry = {
+      apiVersion: 1,
+      revision: 6,
+      invalidManifestCount: 0,
+      skills: [skill],
+      restorableSkills: []
+    } as const;
     for (const status of ["committed", "stale", "not_found"] as const) {
       expect(SkillLifecycleMutationResultSchema.parse({ ...identity, status, registry }))
         .toEqual({ ...identity, status, registry });
@@ -4692,5 +4701,59 @@ describe("schemas", () => {
       status: "committed",
       registry: { ...registry, skills: [missingUpdateEligibility] }
     })).toThrow();
+  });
+
+  it("projects only v2 restorable Skill contexts and restores through authoritative registry CAS", () => {
+    const restorable = {
+      restoreContextId: `skill_restore_context_v2_${"a".repeat(32)}`,
+      skillId: "paper-reading",
+      name: "Paper Reading",
+      version: "1.0.0",
+      kind: "pure",
+      scope: "machine_local",
+      uninstalledAt: "2026-07-29T12:00:00.000Z",
+      canRestore: true
+    } as const;
+    const registry = {
+      apiVersion: 1,
+      revision: 8,
+      invalidManifestCount: 1,
+      skills: [],
+      restorableSkills: [restorable]
+    } as const;
+    expect(SkillRegistrySummarySchema.parse(registry)).toEqual(registry);
+    for (const unsafe of [
+      { ...restorable, path: "/private/skills-trash/paper-reading" },
+      { ...restorable, manifestSha256: `sha256:${"b".repeat(64)}` },
+      { ...restorable, body: "private Skill body" },
+      { ...restorable, restoreContextId: `skill_restore_context_v1_${"a".repeat(32)}` }
+    ]) {
+      expect(() => SkillRegistrySummarySchema.parse({ ...registry, restorableSkills: [unsafe] })).toThrow();
+    }
+
+    const request = {
+      apiVersion: 1,
+      requestId: "skill_lifecycle_request_restore123456789",
+      activeVaultId: "vault_20260729_restore01",
+      restoreContextId: restorable.restoreContextId,
+      skillId: restorable.skillId,
+      expectedRegistryRevision: registry.revision
+    } as const;
+    expect(SkillRestoreRequestSchema.parse(request)).toEqual(request);
+    const identity = {
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      restoreContextId: request.restoreContextId,
+      skillId: request.skillId
+    } as const;
+    for (const status of ["committed", "stale", "not_found", "ineligible"] as const) {
+      expect(SkillRestoreResultSchema.parse({ ...identity, status, registry }))
+        .toEqual({ ...identity, status, registry });
+    }
+    expect(SkillRestoreResultSchema.parse({ ...identity, status: "failed" }))
+      .toEqual({ ...identity, status: "failed" });
+    expect(() => SkillRestoreResultSchema.parse({ ...identity, status: "failed", registry })).toThrow();
+    expect(() => SkillRestoreRequestSchema.parse({ ...request, path: "/private/trash" })).toThrow();
   });
 });
