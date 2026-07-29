@@ -8,6 +8,8 @@ import type {
   CollectionAddNullableColumnResult,
   CollectionAddFormulaColumnRequest,
   CollectionAddFormulaColumnResult,
+  CollectionUpdateFormulaColumnRequest,
+  CollectionUpdateFormulaColumnResult,
   CollectionAppendDefaultRowRequest,
   CollectionAppendDefaultRowResult,
   CollectionCellEditRequest,
@@ -243,6 +245,151 @@ describe("ManagedCollectionPanel", () => {
     expect(literal.value).toBe("2.5");
     expect(container.textContent).toContain("could not add the formula field");
     expect(dom.window.document.activeElement).toBe(name);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("losslessly prefills and commits an editable formula without taking label authority", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: CollectionUpdateFormulaColumnRequest[] = [];
+    const initial = editableFormulaSnapshot("dataset_rev_20260729_formula0002");
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { collections: { updateFormulaColumn: async (request: CollectionUpdateFormulaColumnRequest): Promise<CollectionUpdateFormulaColumnResult> => {
+        requests.push(request);
+        return {
+          ...formulaUpdateIdentity(request),
+          status: "committed",
+          operationId: "op_20260729_formula02",
+          snapshot: withUpdatedFormula(initial, request, "dataset_rev_20260729_formula0003")
+        };
+      } } }
+    });
+    await act(async () => {
+      root.render(createElement(FormulaCollectionHarness, { initialSnapshot: initial }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+
+    await click(dom, buttonNamed(container, "Edit formula: Adjusted total"));
+    const left = requireElement(container.querySelector<HTMLSelectElement>("#collection-formula-left"));
+    const operator = requireElement(container.querySelector<HTMLSelectElement>("#collection-formula-operator"));
+    const literal = requireElement(container.querySelector<HTMLInputElement>("#collection-formula-literal"));
+    expect(container.querySelector("#collection-formula-name")).toBeNull();
+    expect(left.value).toBe("column_total00001");
+    expect(operator.value).toBe("divide");
+    expect(literal.value).toBe("4");
+    expect(dom.window.document.activeElement).toBe(left);
+    await selectValue(dom, operator, "multiply");
+    await inputText(dom, literal, "3");
+    await click(dom, buttonNamed(container, "Save"));
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      activeVaultId: "vault_20260727_collection01",
+      datasetId: initial.datasetId,
+      tableId: initial.tableId,
+      columnId: "column_formula00001",
+      expectedRevisionId: initial.revisionId,
+      expression: {
+        kind: "binary",
+        operator: "multiply",
+        left: { kind: "column", columnId: "column_total00001" },
+        right: { kind: "literal", value: 3 }
+      }
+    });
+    expect(Object.keys(requests[0] ?? {}).sort()).toEqual([
+      "activeVaultId", "apiVersion", "columnId", "datasetId", "expectedRevisionId", "expression", "requestId", "tableId"
+    ]);
+    expect(container.textContent).toContain("Formula updated as a new revision.");
+    expect(container.textContent).toContain("Adjusted total");
+    expect(dom.window.document.activeElement).toBe(
+      container.querySelector('[data-collection-column-id="column_formula00001"]')
+    );
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("preserves an update draft across stale and failed results while adopting the authoritative revision", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: CollectionUpdateFormulaColumnRequest[] = [];
+    const initial = editableFormulaSnapshot("dataset_rev_20260729_formula0002");
+    const stale = { ...initial, revisionId: "dataset_rev_20260729_formula0003" };
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { collections: { updateFormulaColumn: async (request: CollectionUpdateFormulaColumnRequest): Promise<CollectionUpdateFormulaColumnResult> => {
+        requests.push(request);
+        return requests.length === 1
+          ? { ...formulaUpdateIdentity(request), status: "stale", snapshot: stale }
+          : { ...formulaUpdateIdentity(request), status: "failed" };
+      } } }
+    });
+    await act(async () => {
+      root.render(createElement(FormulaCollectionHarness, { initialSnapshot: initial }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Edit formula: Adjusted total"));
+    const left = requireElement(container.querySelector<HTMLSelectElement>("#collection-formula-left"));
+    const operator = requireElement(container.querySelector<HTMLSelectElement>("#collection-formula-operator"));
+    const literal = requireElement(container.querySelector<HTMLInputElement>("#collection-formula-literal"));
+    await selectValue(dom, operator, "subtract");
+    await inputText(dom, literal, "2.5");
+    await click(dom, buttonNamed(container, "Save"));
+
+    expect(operator.value).toBe("subtract");
+    expect(literal.value).toBe("2.5");
+    expect(container.textContent).toContain("formula draft is preserved");
+    expect(dom.window.document.activeElement).toBe(left);
+    await click(dom, buttonNamed(container, "Save"));
+    expect(requests.map((request) => request.expectedRevisionId)).toEqual([initial.revisionId, stale.revisionId]);
+    expect(operator.value).toBe("subtract");
+    expect(literal.value).toBe("2.5");
+    expect(container.textContent).toContain("could not update the formula");
+    expect(dom.window.document.activeElement).toBe(left);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("does not expose formula editing for a nested expression projected as unsupported", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const initial = editableFormulaSnapshot("dataset_rev_20260729_formula0002");
+    const unsupported: CollectionSnapshot = {
+      ...initial,
+      columns: initial.columns.map((column) => column.columnId === "column_formula00001" ? {
+        ...column,
+        canEditFormula: false,
+        calculation: {
+          kind: "pige_numeric_formula",
+          schemaVersion: 1,
+          expression: {
+            kind: "binary",
+            operator: "add",
+            left: {
+              kind: "binary",
+              operator: "multiply",
+              left: { kind: "column", columnId: "column_total00001" },
+              right: { kind: "literal", value: 2 }
+            },
+            right: { kind: "literal", value: 1 }
+          }
+        }
+      } : column)
+    };
+    await act(async () => {
+      root.render(createElement(FormulaCollectionHarness, { initialSnapshot: unsupported }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    expect(Array.from(container.querySelectorAll("button")).some((button) =>
+      button.getAttribute("aria-label") === "Edit formula: Adjusted total"
+    )).toBe(false);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -1591,8 +1738,8 @@ function collectionSnapshot(
     tableId: "table_collection01",
     tableName: "Customers",
     columns: [
-      { columnId: "column_name000001", label: "Name", logicalType: "string", canRename, canTrash: canTrashColumn, canUseAsFormulaOperand: false },
-      { columnId: "column_total00001", label: "Total", logicalType: "number", canRename: false, canTrash: false, canUseAsFormulaOperand: true }
+      { columnId: "column_name000001", label: "Name", logicalType: "string", canRename, canTrash: canTrashColumn, canUseAsFormulaOperand: false, canEditFormula: false },
+      { columnId: "column_total00001", label: "Total", logicalType: "number", canRename: false, canTrash: false, canUseAsFormulaOperand: true, canEditFormula: false }
     ],
     rows: [{
       rowId: "row_customer0001",
@@ -1637,7 +1784,7 @@ function withNullableColumn(
 ): CollectionSnapshot {
   return {
     ...snapshot,
-    columns: [...snapshot.columns, { columnId, label, logicalType, canRename: false, canTrash: false, canUseAsFormulaOperand: false }],
+    columns: [...snapshot.columns, { columnId, label, logicalType, canRename: false, canTrash: false, canUseAsFormulaOperand: false, canEditFormula: false }],
     rows: snapshot.rows.map((row) => ({
       ...row,
       cells: [...row.cells, { columnId, value: null, editable: true }]
@@ -1660,12 +1807,53 @@ function withFormulaColumn(
       canRename: true,
       canTrash: true,
       canUseAsFormulaOperand: false,
+      canEditFormula: true,
       calculation: { kind: "pige_numeric_formula", schemaVersion: 1, expression: request.expression }
     }],
     rows: snapshot.rows.map((row) => ({
       ...row,
       cells: [...row.cells, { columnId, value: 10.5, editable: false, readOnlyReason: "formula" }]
     }))
+  };
+}
+
+function editableFormulaSnapshot(revisionId: string): CollectionSnapshot {
+  const request: CollectionAddFormulaColumnRequest = {
+    apiVersion: 1,
+    requestId: "collection_request_formula_fixture01",
+    activeVaultId: "vault_20260727_collection01",
+    datasetId: "dataset_20260727_collection01",
+    tableId: "table_collection01",
+    expectedRevisionId: "dataset_rev_20260729_formula0001",
+    label: "Adjusted total",
+    expression: {
+      kind: "binary",
+      operator: "divide",
+      left: { kind: "column", columnId: "column_total00001" },
+      right: { kind: "literal", value: 4 }
+    }
+  };
+  return {
+    ...withFormulaColumn(
+      collectionSnapshot(request.expectedRevisionId, "Alpha", false, false, false, false, false, true),
+      request
+    ),
+    revisionId
+  };
+}
+
+function withUpdatedFormula(
+  snapshot: CollectionSnapshot,
+  request: CollectionUpdateFormulaColumnRequest,
+  revisionId: string
+): CollectionSnapshot {
+  return {
+    ...snapshot,
+    revisionId,
+    columns: snapshot.columns.map((column) => column.columnId === request.columnId ? {
+      ...column,
+      calculation: { kind: "pige_numeric_formula", schemaVersion: 1, expression: request.expression }
+    } : column)
   };
 }
 
@@ -1757,6 +1945,17 @@ function formulaIdentity(request: CollectionAddFormulaColumnRequest) {
     activeVaultId: request.activeVaultId,
     datasetId: request.datasetId,
     tableId: request.tableId
+  };
+}
+
+function formulaUpdateIdentity(request: CollectionUpdateFormulaColumnRequest) {
+  return {
+    apiVersion: 1 as const,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    columnId: request.columnId
   };
 }
 

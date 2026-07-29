@@ -41,6 +41,7 @@ export function ManagedCollectionColumnActions(props: {
   readonly onTrashColumn: (
     request: CollectionTrashColumnRequest
   ) => Promise<CollectionTrashColumnResult>;
+  readonly onEditFormulaColumn: (columnId: string) => void;
   readonly onAdoptSnapshot: (snapshot: CollectionSnapshot, expectedRevisionId: string) => boolean;
   readonly onBusyChange: (busy: boolean) => void;
   readonly onNotice: (notice: CollectionColumnActionNotice | null) => void;
@@ -305,6 +306,22 @@ export function ManagedCollectionColumnActions(props: {
                 {column.label}
               </button>
             ) : column.label}
+            {column.canEditFormula ? (
+              <button
+                type="button"
+                className="ghost"
+                aria-label={`${props.t("collection.editFormula")}: ${column.label}`}
+                title={props.t("collection.editFormula")}
+                disabled={props.blocked || busyColumnId !== null}
+                onClick={() => {
+                  if (props.blocked || activeRequestRef.current) return;
+                  props.onNotice(null);
+                  props.onEditFormulaColumn(column.columnId);
+                }}
+              >
+                <PigeIcon name="edit" size={13} />
+              </button>
+            ) : null}
             {column.canTrash ? (
               <button
                 type="button"

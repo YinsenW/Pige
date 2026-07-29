@@ -129,6 +129,7 @@ export function ManagedCollectionPanel(props: {
   const [columnActionsBusy, setColumnActionsBusy] = useState(false);
   const [viewControlsBusy, setViewControlsBusy] = useState(false);
   const [columnFocusRequest, setColumnFocusRequest] = useState<string | null>(null);
+  const [formulaEditRequest, setFormulaEditRequest] = useState<{ readonly columnId: string; readonly ownerKey: string; readonly revisionId: string } | null>(null);
   const [visibleRows, setVisibleRows] = useState<CollectionSnapshot["rows"]>(props.snapshot.rows);
   const [nextRowCursor, setNextRowCursor] = useState(props.nextRowCursor);
   const [rowsLoading, setRowsLoading] = useState(false);
@@ -168,7 +169,6 @@ export function ManagedCollectionPanel(props: {
   ownerKeyRef.current = ownerKey;
   snapshotRevisionRef.current = props.snapshot.revisionId;
   paginationKeyRef.current = paginationKey;
-
   useEffect(() => {
     requestSequence.current += 1;
     appendActiveRef.current = null;
@@ -189,8 +189,8 @@ export function ManagedCollectionPanel(props: {
     setColumnActionsBusy(false);
     setViewControlsBusy(false);
     setColumnFocusRequest(null);
+    setFormulaEditRequest(null);
   }, [ownerKey]);
-
   useEffect(() => {
     rowsLoadActiveRef.current = false;
     setVisibleRows(props.snapshot.rows);
@@ -198,7 +198,6 @@ export function ManagedCollectionPanel(props: {
     setRowsLoading(false);
     setRowsLoadFailed(false);
   }, [paginationKey]);
-
   useEffect(() => {
     if (edit) editorRef.current?.focus();
   }, [edit?.rowId, edit?.columnId]);
@@ -247,7 +246,6 @@ export function ManagedCollectionPanel(props: {
   useLayoutEffect(() => {
     if (rowsLoadFailed && !rowsLoading) loadMoreTriggerRef.current?.focus({ preventScroll: true });
   }, [rowsLoadFailed, rowsLoading]);
-
   useLayoutEffect(() => {
     if (busy) return;
     if (pendingColumnEditorFocusRef.current && columnDraft) {
@@ -259,11 +257,9 @@ export function ManagedCollectionPanel(props: {
     pendingColumnTriggerFocusRef.current = false;
     (columnTriggerRef.current ?? panelRef.current)?.focus();
   }, [busy, columnDraft, notice, props.snapshot.revisionId]);
-
   const restoreCellFocus = (identity: CellIdentity): void => {
     pendingFocusRef.current = identity;
   };
-
   const stopEditing = (restoreFocus: boolean): void => {
     const identity = edit;
     setEdit(null);
@@ -645,9 +641,11 @@ export function ManagedCollectionPanel(props: {
         activeVaultId={props.activeVaultId}
         snapshot={props.snapshot}
         blocked={busy || viewControlsBusy || edit !== null || columnDraft !== null}
+        requestedEdit={formulaEditRequest}
+        onEditRequestHandled={() => setFormulaEditRequest(null)}
         onAdoptSnapshot={props.onAdoptSnapshot}
         onActiveChange={(active) => { columnActionsActiveRef.current = active; setColumnActionsBusy(active); }}
-        onCommitted={setColumnFocusRequest}
+        onFocusColumn={setColumnFocusRequest}
         t={props.t}
       />
       {columnDraft ? (
@@ -733,12 +731,13 @@ export function ManagedCollectionPanel(props: {
             <ManagedCollectionColumnActions
               activeVaultId={props.activeVaultId}
               snapshot={props.snapshot}
-              blocked={busy || viewControlsBusy || edit !== null || columnDraft !== null}
+              blocked={busy || columnActionsBusy || viewControlsBusy || edit !== null || columnDraft !== null}
               hasRowActions={hasTrashActions}
               requestedFocusColumnId={columnFocusRequest}
               onFocusHandled={() => setColumnFocusRequest(null)}
               onRenameColumn={props.onRenameColumn}
               onTrashColumn={props.onTrashColumn}
+              onEditFormulaColumn={(columnId) => setFormulaEditRequest({ columnId, ownerKey, revisionId: props.snapshot.revisionId })}
               onAdoptSnapshot={props.onAdoptSnapshot}
               onBusyChange={(active) => {
                 columnActionsActiveRef.current = active;

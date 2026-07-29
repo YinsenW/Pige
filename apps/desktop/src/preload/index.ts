@@ -224,8 +224,11 @@ import {
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
   COLLECTION_ADD_FORMULA_COLUMN_CHANNEL,
+  COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
   CollectionAddFormulaColumnResultSchema,
+  CollectionUpdateFormulaColumnRequestSchema,
+  CollectionUpdateFormulaColumnResultSchema,
   CollectionAddNullableColumnRequestSchema,
   CollectionAddNullableColumnResultSchema,
   CollectionCellEditRequestSchema,
@@ -378,6 +381,8 @@ import {
 import type {
   CollectionAddFormulaColumnRequest,
   CollectionAddFormulaColumnResult,
+  CollectionUpdateFormulaColumnRequest,
+  CollectionUpdateFormulaColumnResult,
   CollectionAddNullableColumnRequest,
   CollectionAddNullableColumnResult,
   CollectionCellEditRequest,
@@ -569,6 +574,21 @@ async function invokeCollectionAddFormulaColumn(
     result.tableId !== parsedRequest.tableId
   ) {
     throw new Error("Invalid Managed Collection formula-column response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionUpdateFormulaColumn(
+  request: CollectionUpdateFormulaColumnRequest
+): Promise<CollectionUpdateFormulaColumnResult> {
+  const parsedRequest = CollectionUpdateFormulaColumnRequestSchema.parse(request);
+  const result = CollectionUpdateFormulaColumnResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.datasetId !== parsedRequest.datasetId || result.tableId !== parsedRequest.tableId ||
+      result.columnId !== parsedRequest.columnId) {
+    throw new Error("Invalid Managed Collection formula-update response identity.");
   }
   return result;
 }
@@ -1104,6 +1124,7 @@ const api: PigeDesktopApi = {
     appendDefaultRow: invokeCollectionAppendDefaultRow,
     addNullableColumn: invokeCollectionAddNullableColumn,
     addFormulaColumn: invokeCollectionAddFormulaColumn,
+    updateFormulaColumn: invokeCollectionUpdateFormulaColumn,
     renameColumn: invokeCollectionRenameColumn,
     createView: invokeCollectionCreateView,
     trashColumn: invokeCollectionTrashColumn,

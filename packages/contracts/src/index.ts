@@ -27,6 +27,8 @@ import type {
   ChangeOperation,
   CollectionAddFormulaColumnRequest,
   CollectionAddFormulaColumnResult,
+  CollectionUpdateFormulaColumnRequest,
+  CollectionUpdateFormulaColumnResult,
   CollectionAddNullableColumnRequest,
   CollectionAddNullableColumnResult,
   CollectionCellEditRequest,
@@ -956,6 +958,7 @@ export interface KnowledgeActivitySummary {
     | "update_collection_cell"
     | "add_collection_row"
     | "add_collection_column"
+    | "update_collection_formula"
     | "rename_collection_column"
     | "create_collection_view"
     | "trash_collection_column"
@@ -1708,6 +1711,9 @@ export interface PigeDesktopApi {
     readonly addFormulaColumn: (
       request: CollectionAddFormulaColumnRequest
     ) => Promise<CollectionAddFormulaColumnResult>;
+    readonly updateFormulaColumn: (
+      request: CollectionUpdateFormulaColumnRequest
+    ) => Promise<CollectionUpdateFormulaColumnResult>;
     readonly renameColumn: (
       request: CollectionRenameColumnRequest
     ) => Promise<CollectionRenameColumnResult>;

@@ -607,9 +607,9 @@ Build:
 - [B7.07 -> E7.05] Secret scanning before memory persistence.
 - [B7.08 -> E7.03] Bounded vault history reopens exact timelines; packaged proof remains.
 - [B7.09 -> E7.04] Conversation-retention compaction for successful job detail.
-- [B7.10 -> E7.06] Managed Collections: stable-ID CAS cell/row/field/view changes and one
-  schema-level numeric formula AST with atomic recomputation use existing Activity/Undo.
-  Formula editing/relations, broader views/schema, scale/platform and exception proof stay open.
+- [B7.10 -> E7.06] Managed Collections: stable-ID CAS cell/row/field/view and numeric formula
+  create/update atomically recompute with distinct Activity/Undo. Nested formula editing,
+  relations, broader views/schema, scale/platform and exception proof stay open.
 
 Deferred from this phase:
 

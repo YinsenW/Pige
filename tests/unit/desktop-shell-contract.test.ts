@@ -1197,6 +1197,7 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain('| "update_collection_cell"');
     expect(contractsSource).toContain('| "add_collection_row"');
     expect(contractsSource).toContain('| "add_collection_column"');
+    expect(contractsSource).toContain('| "update_collection_formula"');
     expect(contractsSource).toContain('| "rename_collection_column"');
     expect(contractsSource).toContain('| "trash_collection_column"');
     expect(contractsSource).toContain('| "trash_collection_row"');
@@ -1463,10 +1464,16 @@ describe("desktop shell build contract", () => {
     expect(schemasSource).toContain(
       'COLLECTION_ADD_FORMULA_COLUMN_CHANNEL = "collections.addFormulaColumn"'
     );
+    expect(schemasSource).toContain(
+      'COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL = "collections.updateFormulaColumn"'
+    );
     expect(contractsSource).toContain("readonly addFormulaColumn:");
     expect(contractsSource).toContain("CollectionAddFormulaColumnRequest");
     expect(contractsSource).toContain("Promise<CollectionAddFormulaColumnResult>");
     expect(preloadSource).toContain("addFormulaColumn: invokeCollectionAddFormulaColumn");
+    expect(contractsSource).toContain("readonly updateFormulaColumn:");
+    expect(contractsSource).toContain("CollectionUpdateFormulaColumnRequest");
+    expect(contractsSource).toContain("Promise<CollectionUpdateFormulaColumnResult>");
     expect(contractsSource).toContain("readonly renameColumn:");
     expect(contractsSource).toContain("CollectionRenameColumnRequest");
     expect(contractsSource).toContain("readonly createView:");

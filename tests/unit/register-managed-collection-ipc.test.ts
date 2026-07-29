@@ -45,6 +45,13 @@ const addColumnRequest = {
   label: "Owner",
   logicalType: "string"
 } as const;
+const updateFormulaRequest = {
+  ...openRequest,
+  requestId: "collection_request_formulaupdateipc",
+  expectedRevisionId: "dataset_rev_20260727_abcdefghijkl",
+  columnId: "column_formulaabcdef",
+  expression: { kind: "binary", operator: "multiply", left: { kind: "column", columnId: "column_operandabcdef" }, right: { kind: "literal", value: 2 } }
+} as const;
 const renameColumnRequest = {
   ...openRequest,
   requestId: "collection_request_renameabcdefghij",
@@ -82,6 +89,7 @@ function makeHarness(options: {
   readonly editCollectionCell?: (request: typeof editRequest) => unknown;
   readonly appendDefaultCollectionRow?: (request: typeof appendRequest) => unknown;
   readonly addNullableCollectionColumn?: (request: typeof addColumnRequest) => unknown;
+  readonly updateFormulaCollectionColumn?: (request: typeof updateFormulaRequest) => unknown;
   readonly renameCollectionColumn?: (request: typeof renameColumnRequest) => unknown;
   readonly createCollectionView?: (request: typeof createViewRequest) => unknown;
   readonly trashCollectionColumn?: (request: typeof trashColumnRequest) => unknown;
@@ -105,7 +113,7 @@ function makeHarness(options: {
       title: "Tasks",
       tableId: request.tableId,
       tableName: "Tasks",
-      columns: [{ columnId: "column_abcdefghijkl", label: "Task", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false }],
+      columns: [{ columnId: "column_abcdefghijkl", label: "Task", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false, canEditFormula: false }],
       rows: [{
         rowId: "row_abcdefghijkl",
         cells: [{ columnId: "column_abcdefghijkl", value: "Draft", editable: true }],
@@ -151,6 +159,10 @@ function makeHarness(options: {
     datasetId: request.datasetId,
     tableId: request.tableId,
     status: "not_found"
+  })));
+  const updateFormulaCollectionColumn = vi.fn(options.updateFormulaCollectionColumn ?? ((request) => ({
+    apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId, tableId: request.tableId, columnId: request.columnId, status: "failed"
   })));
   const trashCollectionRow = vi.fn(options.trashCollectionRow ?? ((request) => ({
     apiVersion: request.apiVersion,
@@ -200,6 +212,7 @@ function makeHarness(options: {
     editCollectionCell,
     appendDefaultCollectionRow,
     addNullableCollectionColumn,
+    updateFormulaCollectionColumn,
     renameCollectionColumn,
     createCollectionView,
     trashCollectionColumn,
@@ -213,6 +226,7 @@ function makeHarness(options: {
     editCollectionCell,
     appendDefaultCollectionRow,
     addNullableCollectionColumn,
+    updateFormulaCollectionColumn,
     renameCollectionColumn,
     createCollectionView,
     trashCollectionColumn,
@@ -230,11 +244,36 @@ describe("registerManagedCollectionIpc", () => {
       "collections.appendDefaultRow",
       "collections.addNullableColumn",
       "collections.addFormulaColumn",
+      "collections.updateFormulaColumn",
       "collections.renameColumn",
       "collections.createView",
       "collections.trashColumn",
       "collections.trashRow"
     ]);
+  });
+
+  it("strictly binds formula updates to trusted sender, vault, and exact response identity", async () => {
+    const accepted = makeHarness({ updateFormulaCollectionColumn: (request) => ({
+      apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+      datasetId: request.datasetId, tableId: request.tableId, columnId: request.columnId, status: "not_found"
+    }) });
+    await expect(accepted.handlers.get("collections.updateFormulaColumn")!(
+      { sender: {} } as IpcMainInvokeEvent, updateFormulaRequest
+    )).resolves.toMatchObject({ status: "not_found", columnId: updateFormulaRequest.columnId });
+    expect(accepted.updateFormulaCollectionColumn).toHaveBeenCalledWith(updateFormulaRequest);
+    const untrusted = makeHarness({ isTrustedSender: () => false });
+    await expect(untrusted.handlers.get("collections.updateFormulaColumn")!(
+      { sender: {} } as IpcMainInvokeEvent, updateFormulaRequest
+    )).resolves.toMatchObject({ status: "failed" });
+    expect(untrusted.updateFormulaCollectionColumn).not.toHaveBeenCalled();
+    const mismatched = makeHarness({ updateFormulaCollectionColumn: (request) => ({
+      apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+      datasetId: request.datasetId, tableId: request.tableId,
+      columnId: "column_otherformulaabc", status: "not_found"
+    }) });
+    await expect(mismatched.handlers.get("collections.updateFormulaColumn")!(
+      { sender: {} } as IpcMainInvokeEvent, updateFormulaRequest
+    )).rejects.toThrow("response identity did not match");
   });
 
   it("fences citation lookup by trusted sender, vault, and exact result identity", async () => {
@@ -311,7 +350,7 @@ describe("registerManagedCollectionIpc", () => {
           title: "Tasks",
           tableId: request.tableId,
           tableName: "Tasks",
-          columns: [{ columnId: "column_ownerabcdefghijkl", label: "Owner", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false }],
+          columns: [{ columnId: "column_ownerabcdefghijkl", label: "Owner", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false, canEditFormula: false }],
           rows: [{
             rowId: "row_abcdefghijkl",
             cells: [{ columnId: "column_ownerabcdefghijkl", value: null, editable: true }],
@@ -537,7 +576,7 @@ describe("registerManagedCollectionIpc", () => {
           title: "Tasks",
           tableId: parsed.tableId,
           tableName: "Tasks",
-          columns: [{ columnId: "column_abcdefghijkl", label: "Task", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false }],
+          columns: [{ columnId: "column_abcdefghijkl", label: "Task", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false, canEditFormula: false }],
           rows: [],
           totalRowCount: 0,
           returnedRowCount: 0,
@@ -569,7 +608,7 @@ describe("registerManagedCollectionIpc", () => {
           title: "Tasks",
           tableId: parsed.tableId,
           tableName: "Tasks",
-          columns: [{ columnId: "column_abcdefghijkl", label: "Task", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false }],
+          columns: [{ columnId: "column_abcdefghijkl", label: "Task", logicalType: "string", canRename: true, canTrash: true, canUseAsFormulaOperand: false, canEditFormula: false }],
           rows: [],
           totalRowCount: 0,
           returnedRowCount: 0,

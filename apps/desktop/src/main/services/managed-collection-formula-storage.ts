@@ -638,13 +638,11 @@ function isEligibleOperand(column: DatasetColumn): boolean {
     (column.logicalType === "integer" || column.logicalType === "number") &&
     ![column.sourceType, ...(column.sourceTypes ?? [])].some((value) => value.toLowerCase().includes("formula"));
 }
-
 function isPigeFormulaColumn(column: DatasetColumn): column is DatasetColumn & {
   readonly calculation: { readonly kind: "pige_numeric_formula"; readonly schemaVersion: 1; readonly expression: DatasetPigeFormulaExpression };
 } {
   return column.calculation?.kind === "pige_numeric_formula";
 }
-
 export function projectCollectionFormulaColumns(
   columns: readonly DatasetColumn[]
 ): readonly CollectionColumnSummary[] {
@@ -652,7 +650,8 @@ export function projectCollectionFormulaColumns(
     ? formulaReferencedColumnIds(column.calculation.expression)
     : []));
   return columns.map((column) => {
-    const pigeFormula = column.calculation?.kind === "pige_numeric_formula";
+    const calculation = column.calculation;
+    const pigeFormula = calculation?.kind === "pige_numeric_formula";
     const importedFormula = !pigeFormula && [column.sourceType, ...(column.sourceTypes ?? [])]
       .some((sourceType) => sourceType.toLowerCase().includes("formula"));
     const canUseAsFormulaOperand = isEligibleOperand(column);
@@ -663,6 +662,7 @@ export function projectCollectionFormulaColumns(
       canRename: !importedFormula,
       canTrash: columns.length > 1 && !importedFormula && !referenced.has(column.id),
       canUseAsFormulaOperand,
+      canEditFormula: pigeFormula && isBuilderRepresentable(calculation.expression),
       ...(pigeFormula
         ? { calculation: column.calculation }
         : importedFormula
@@ -671,7 +671,7 @@ export function projectCollectionFormulaColumns(
     };
   });
 }
-
+function isBuilderRepresentable(expression: DatasetPigeFormulaExpression): boolean { return expression.kind === "binary" && expression.left.kind === "column" && (expression.right.kind === "column" || expression.right.kind === "literal"); }
 function nextManifest(binding: BundleBinding, revision: DatasetRevision) {
   return DatasetManifestSchema.parse({
     ...binding.manifest,

@@ -505,9 +505,8 @@ Current Home Dataset read boundary:
   64 KiB; cursors bind vault/catalog/revision/view/boundary and drift is stale.
 - Citation Open lookup keys grant no authority; Main verifies event/bundle and returns read-only
   highlights without substitution/requery.
-- Mutations bind revision/IDs/capabilities. `addFormulaColumn` binds label plus a <=8-depth/
-  31-node numeric AST; Main owns ID, operand/trash eligibility, atomic recomputation and one
-  `add_collection_column` CAS/Undo. No raw expression, SQL, function or external ref exists.
+- Formula create/update binds revision/IDs, <=8-depth/31-node AST and Main eligibility;
+  label stays rename-owned. Distinct add/update CAS has forward Undo; no raw code/ref exists.
 
 ### 6.6 Retrieval
 
