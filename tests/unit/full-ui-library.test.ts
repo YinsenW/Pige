@@ -14,6 +14,8 @@ import type {
   NoteEditorSaveRequest,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
+  ReaderSelectionCreateNoteRequest,
+  ReaderSelectionCreateNoteResult,
   ReaderSelectionLinkRequest,
   ReaderSelectionLinkResult,
   ReaderSelectionResolveRequest,
@@ -1421,6 +1423,107 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
+  it("submits one exact create-note selection and retains the Reader on closed or review results", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: ReaderSelectionCreateNoteRequest[] = [];
+    const results: ReaderSelectionCreateNoteResult[] = [];
+    let resolveCreate!: (result: ReaderSelectionCreateNoteResult) => void;
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: readerNote(),
+        ...resolvedSelectionProps(),
+        onSubmitSelectionCreateNote: (request) => {
+          requests.push(request);
+          return new Promise((resolve) => { resolveCreate = resolve; });
+        },
+        onSelectionCreateNoteResult: (result) => results.push(result),
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    const container = requireElement(dom.window.document.querySelector<HTMLElement>("#root"));
+    const paragraph = requireElement(container.querySelector(".markdown-body p"));
+    const selectionNode = requireElement(paragraph.querySelector("[data-pige-selection-segment]")).firstChild!;
+    Object.defineProperty(dom.window, "getSelection", { configurable: true, value: () => ({
+      isCollapsed: false,
+      rangeCount: 1,
+      anchorNode: selectionNode,
+      anchorOffset: 0,
+      focusNode: selectionNode,
+      focusOffset: 8,
+      toString: () => "private selected body",
+      getRangeAt: () => ({
+        commonAncestorContainer: paragraph,
+        startContainer: selectionNode,
+        startOffset: 0,
+        endContainer: selectionNode,
+        endOffset: 8,
+        getBoundingClientRect: () => ({ left: 80, top: 90, width: 120, height: 18, right: 200, bottom: 108 })
+      })
+    }) });
+    await act(async () => {
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[data-selection-action="more"]') !== null);
+    await act(async () => {
+      requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]')).click();
+      await settle(dom);
+    });
+    const createNote = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="createNote"]'));
+    await act(async () => { createNote.click(); createNote.click(); await settle(dom); });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      apiVersion: 1,
+      action: "create_note",
+      activeVaultId: "vault_20260715_fullui01",
+      renderContextId: `notectx_${"c".repeat(32)}`,
+      locale: "en",
+      selection: { pageId: "page_20260715_reader1111", span: { unit: "utf8_bytes", start: 0, endExclusive: 8 } }
+    });
+    expect(JSON.stringify(requests[0])).not.toContain("private selected body");
+    await act(async () => {
+      resolveCreate({ apiVersion: 1, requestId: requests[0]!.requestId, status: "invalid", reason: "selection_changed" });
+      await settle(dom);
+    });
+    expect(results).toHaveLength(1);
+    expect(container.querySelector('[data-selection-more-action="createNote"]')).not.toBeNull();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(enMessages["note.selection.actionFailed"]);
+
+    await act(async () => { createNote.click(); await settle(dom); });
+    const secondRequest = requests[1]!;
+    await act(async () => {
+      resolveCreate({
+        apiVersion: 1,
+        requestId: secondRequest.requestId,
+        status: "review_required",
+        jobId: "job_20260729_createnote",
+        conversationEventId: "evt_20260729_createnote1",
+        conversationId: "conv_20260729_createnote",
+        tailEventId: "evt_20260729_createnote2",
+        proposal: {
+          proposalId: "proposal_20260729_createnote",
+          action: "create_note",
+          state: "ready",
+          revision: 1,
+          lines: [{ kind: "added", text: "Create a durable note" }]
+        }
+      });
+      await settle(dom);
+    });
+    expect(results.at(-1)?.status).toBe("review_required");
+    expect(container.querySelector('[data-selection-more-action="createNote"]')).not.toBeNull();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(enMessages["note.selection.reviewReady"]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("measures compact selection actions, dismisses on scroll, and restores exact focus ownership", async () => {
     const dom = createDom();
     Object.defineProperty(dom.window, "innerWidth", { configurable: true, value: 360 });
@@ -1728,7 +1831,7 @@ describe("full UI Library", () => {
     const menuItems = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
     expect(more.getAttribute("aria-expanded")).toBe("true");
     expect(menuItems.map((item) => item.dataset.selectionMoreAction)).toEqual([
-      "copy", "copyAsQuote", "translate", "polish", "expand"
+      "createNote", "copy", "copyAsQuote", "translate", "polish", "expand"
     ]);
     expect(dom.window.document.activeElement).toBe(menuItems[0]);
     await act(async () => {

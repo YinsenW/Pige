@@ -7,6 +7,8 @@ import type {
   NoteRenderResult,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
+  ReaderSelectionCreateNoteRequest,
+  ReaderSelectionCreateNoteResult,
   ReaderSelectionEndpoint,
   ReaderSelectionIdentity,
   ReaderSelectionLinkRequest,
@@ -93,6 +95,10 @@ export function NoteReader(props: {
   readonly onSelectionLinkApplied?: (
     result: Extract<ReaderSelectionLinkResult, { status: "applied" }>
   ) => Promise<boolean>;
+  readonly onSubmitSelectionCreateNote?: (
+    request: ReaderSelectionCreateNoteRequest
+  ) => Promise<ReaderSelectionCreateNoteResult>;
+  readonly onSelectionCreateNoteResult?: (result: ReaderSelectionCreateNoteResult) => void;
   readonly onSubmitSelectionTransform?: (request: ReaderSelectionTransformRequest) => Promise<ReaderSelectionTransformResult>;
   readonly locale?: Locale;
   readonly onSelectionActionResult?: (result: ReaderSelectionActionResult) => void;
@@ -120,6 +126,7 @@ export function NoteReader(props: {
   const selectionTextRef = useRef("");
   const selectionResolveSequence = useRef(0);
   const selectionLinkInFlightRef = useRef(false);
+  const selectionCreateNoteInFlightRef = useRef(false);
   const sourceReferenceSequence = useRef(0);
   const sourceReferenceInFlightRef = useRef<string | null>(null);
   const [sourceReferenceState, setSourceReferenceState] = useState<SourceReferenceState | null>(null);
@@ -578,6 +585,55 @@ export function NoteReader(props: {
     }
   };
 
+  const submitSelectionCreateNote = async (selection: ReaderSelectionIdentity): Promise<void> => {
+    if (selectionActionPending || selectionCreateNoteInFlightRef.current) return;
+    const resolveSequence = selectionResolveSequence.current;
+    const activeVaultId = props.activeVaultId;
+    const renderContextId = props.note.renderContextId;
+    const submitCreateNote = props.onSubmitSelectionCreateNote;
+    if (!activeVaultId || !renderContextId || !submitCreateNote) return;
+    const request: ReaderSelectionCreateNoteRequest = {
+      apiVersion: 1,
+      requestId: createReaderSelectionActionRequestId(),
+      action: "create_note",
+      activeVaultId,
+      renderContextId,
+      selection,
+      locale: props.locale ?? "en",
+      clientTurnId: createAgentClientTurnId()
+    };
+    selectionCreateNoteInFlightRef.current = true;
+    setSelectionActionPending(true);
+    setSelectionFeedback(null);
+    try {
+      const result = await submitCreateNote(request);
+      if (
+        resolveSequence !== selectionResolveSequence.current ||
+        result.requestId !== request.requestId ||
+        props.activeVaultId !== activeVaultId ||
+        props.note.renderContextId !== renderContextId ||
+        props.note.summary.pageId !== selection.pageId
+      ) return;
+      props.onSelectionCreateNoteResult?.(result);
+      setSelectionFeedback(props.t(
+        result.status === "review_required"
+          ? "note.selection.reviewReady"
+          : result.status === "waiting"
+            ? "note.selection.sentToAgent"
+            : "note.selection.actionFailed"
+      ));
+    } catch {
+      if (resolveSequence === selectionResolveSequence.current) {
+        setSelectionFeedback(props.t("note.selection.actionFailed"));
+      }
+    } finally {
+      if (resolveSequence === selectionResolveSequence.current) {
+        selectionCreateNoteInFlightRef.current = false;
+        setSelectionActionPending(false);
+      }
+    }
+  };
+
   const submitSelectionTransform = async (
     action: "translate" | "polish" | "expand",
     selection: ReaderSelectionIdentity
@@ -705,16 +761,16 @@ export function NoteReader(props: {
                   return;
                 }
                 let nextIndex: number | null = null;
-                if (event.key === "ArrowDown") nextIndex = (selectionMoreActionIndex + 1) % 5;
-                else if (event.key === "ArrowUp") nextIndex = (selectionMoreActionIndex + 4) % 5;
+                if (event.key === "ArrowDown") nextIndex = (selectionMoreActionIndex + 1) % 6;
+                else if (event.key === "ArrowUp") nextIndex = (selectionMoreActionIndex + 5) % 6;
                 else if (event.key === "Home") nextIndex = 0;
-                else if (event.key === "End") nextIndex = 4;
+                else if (event.key === "End") nextIndex = 5;
                 if (nextIndex === null) return;
                 event.preventDefault();
                 moveSelectionMoreActionFocus(nextIndex);
               }}
             >
-              {(["copy", "copyAsQuote", "translate", "polish", "expand"] as const).map((action, index) => (
+              {(["createNote", "copy", "copyAsQuote", "translate", "polish", "expand"] as const).map((action, index) => (
                 <button
                   key={action}
                   ref={(element) => {
@@ -727,6 +783,15 @@ export function NoteReader(props: {
                   data-selection-more-action={action}
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => {
+                    if (action === "createNote") {
+                      if (selectionResolution.kind === "resolved" && props.onSubmitSelectionCreateNote) {
+                        void submitSelectionCreateNote(selectionResolution.selection);
+                      } else {
+                        closeSelectionToolbar(true);
+                        props.onDevelopment("selection_actions");
+                      }
+                      return;
+                    }
                     if (action === "copy" || action === "copyAsQuote") {
                       void copySelection(action === "copyAsQuote");
                       return;
@@ -740,8 +805,8 @@ export function NoteReader(props: {
                   }}
                 >
                   {props.t(`note.selection.${action}`)}
-                  {(action === "translate" || action === "polish" || action === "expand") &&
-                  !props.onSubmitSelectionTransform ? (
+                  {((action === "translate" || action === "polish" || action === "expand") &&
+                  !props.onSubmitSelectionTransform) || (action === "createNote" && !props.onSubmitSelectionCreateNote) ? (
                     <span>{props.t("note.selection.unavailable")}</span>
                   ) : null}
                 </button>

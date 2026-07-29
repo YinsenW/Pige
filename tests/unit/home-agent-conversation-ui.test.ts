@@ -42,6 +42,12 @@ import type {
   ProposalReviewPreview,
   ProposalReviewRequest,
   ProposalReviewResult,
+  ReaderSelectionCreateNoteRequest,
+  ReaderSelectionCreateNoteResult,
+  ReaderSelectionProposalDecisionRequest,
+  ReaderSelectionProposalDecisionResult,
+  ReaderSelectionProposalPreview,
+  ReaderSelectionResolveRequest,
   ReferencedOriginalReconnectRequest,
   ReferencedOriginalReconnectResult,
   SpeechAvailabilityRequest,
@@ -320,6 +326,83 @@ describe("Home durable Agent conversation UI", () => {
     await waitFor(dom, () => container.querySelector(".proposal-review-panel") === null);
     expect(harness.proposalDecisionRequests).toHaveLength(2);
     await waitFor(dom, () => dom.window.document.activeElement === trigger);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("reviews a Reader create-note selection, retains it on reject or stale, and opens only the created note", async () => {
+    const dom = createDom(1200);
+    const harness = createHarness(undefined);
+    harness.sidebarOpen = true;
+    harness.windowMode = "expanded";
+    harness.windowLayoutWidth = 1200;
+    const renderNote = harness.renderNote;
+    harness.renderNote = async (pageId) => {
+      const note = await renderNote(pageId);
+      return pageId === "page_20260715_note0001"
+        ? { ...note, html: '<p><span data-pige-selection-segment="readerseg_aaaaaaaaaaaaaaaa">Approved reader fixture.</span></p>' }
+        : note;
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+    await openLibraryNote(dom, container, "Note A");
+    const paragraph = requireElement(container.querySelector(".markdown-body p"));
+    const selectionNode = requireElement(paragraph.querySelector("[data-pige-selection-segment]")).firstChild!;
+    Object.defineProperty(dom.window, "getSelection", { configurable: true, value: () => ({
+      isCollapsed: false,
+      rangeCount: 1,
+      anchorNode: selectionNode,
+      anchorOffset: 0,
+      focusNode: selectionNode,
+      focusOffset: 8,
+      toString: () => "private selected body",
+      getRangeAt: () => ({
+        commonAncestorContainer: paragraph,
+        startContainer: selectionNode,
+        startOffset: 0,
+        endContainer: selectionNode,
+        endOffset: 8,
+        getBoundingClientRect: () => ({ left: 80, top: 90, width: 120, height: 18, right: 200, bottom: 108 })
+      })
+    }) });
+    await act(async () => {
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[data-selection-action="more"]') !== null);
+    await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]')));
+    const createNote = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="createNote"]'));
+    await clickElement(dom, createNote);
+    await waitFor(dom, () => harness.readerCreateNoteRequests.length === 1);
+    await waitFor(dom, () => buttons(container, enMessages["note.proposal.reject"]).length === 1);
+    expect(harness.readerCreateNoteRequests[0]).toMatchObject({
+      action: "create_note",
+      activeVaultId: "vault_home_conversation",
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      selection: { pageId: "page_20260715_note0001" }
+    });
+    expect(JSON.stringify(harness.readerCreateNoteRequests[0])).not.toContain("private selected body");
+
+    harness.readerProposalDecisionMode = "rejected";
+    await clickButton(dom, container, enMessages["note.proposal.reject"]);
+    await waitFor(dom, () => harness.readerProposalDecisionRequests.length === 1);
+    expect(container.querySelector('[data-selection-more-action="createNote"]')).not.toBeNull();
+    expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
+
+    await clickElement(dom, createNote);
+    await waitFor(dom, () => harness.readerCreateNoteRequests.length === 2);
+    harness.readerProposalDecisionMode = "stale";
+    await clickButton(dom, container, enMessages["note.proposal.apply"]);
+    await waitFor(dom, () => container.textContent?.includes(enMessages["note.proposal.stale"]) === true);
+    expect(container.querySelector('[data-selection-more-action="createNote"]')).not.toBeNull();
+    expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
+
+    harness.readerProposalDecisionMode = "applied";
+    await clickButton(dom, container, enMessages["note.proposal.apply"]);
+    await waitFor(dom, () => container.querySelector(".note-reader h1")?.textContent === "Note B");
+    expect(harness.readerProposalDecisionRequests).toHaveLength(3);
+    expect(harness.noteRenderRequests).toEqual(["page_20260715_note0001", "page_20260715_note0002"]);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -4717,6 +4800,9 @@ interface ConversationHarness {
   readonly proposalReviewRequests: ProposalReviewRequest[];
   readonly proposalDecisionRequests: ProposalReviewDecisionRequest[];
   proposalDecisionMode: "applied" | "rejected" | "stale" | "conflicted" | "failed";
+  readonly readerCreateNoteRequests: ReaderSelectionCreateNoteRequest[];
+  readonly readerProposalDecisionRequests: ReaderSelectionProposalDecisionRequest[];
+  readerProposalDecisionMode: "applied" | "rejected" | "stale";
   locale: "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de";
   windowMode: "compact" | "expanded";
   readonly windowModeRequests: ("compact" | "expanded")[];
@@ -4805,6 +4891,9 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     proposalReviewRequests: [],
     proposalDecisionRequests: [],
     proposalDecisionMode: "applied",
+    readerCreateNoteRequests: [],
+    readerProposalDecisionRequests: [],
+    readerProposalDecisionMode: "applied",
     locale: "en",
     windowMode: "compact",
     windowModeRequests: [],
@@ -5363,6 +5452,66 @@ function makePigeApi(harness: ConversationHarness): object {
         } as ProposalReviewDecisionResult;
       }
     },
+    readerSelection: {
+      resolve: async (request: ReaderSelectionResolveRequest) => ({
+        apiVersion: 1 as const,
+        requestId: request.requestId,
+        status: "resolved" as const,
+        selection: {
+          pageId: request.currentPageId,
+          pageContentHash: `sha256:${"a".repeat(64)}` as const,
+          span: { unit: "utf8_bytes" as const, start: 0, endExclusive: 8 },
+          selectedContentHash: `sha256:${"b".repeat(64)}` as const
+        }
+      }),
+      submitAction: async (request: { readonly requestId: string }) => ({
+        apiVersion: 1 as const, requestId: request.requestId, status: "invalid" as const, reason: "selection_changed" as const
+      }),
+      submitLink: async (request: { readonly requestId: string }) => ({
+        apiVersion: 1 as const, requestId: request.requestId, status: "invalid" as const, reason: "selection_changed" as const
+      }),
+      submitTransform: async (request: { readonly requestId: string }) => ({
+        apiVersion: 1 as const, requestId: request.requestId, status: "invalid" as const, reason: "selection_changed" as const
+      }),
+      submitCreateNote: async (request: ReaderSelectionCreateNoteRequest): Promise<ReaderSelectionCreateNoteResult> => {
+        harness.readerCreateNoteRequests.push(request);
+        return {
+          apiVersion: 1,
+          requestId: request.requestId,
+          status: "review_required",
+          jobId: `job_20260729_createnote${harness.readerCreateNoteRequests.length}`,
+          conversationEventId: `evt_20260729_createuser${harness.readerCreateNoteRequests.length}`,
+          conversationId: `conv_20260729_createnote${harness.readerCreateNoteRequests.length}`,
+          tailEventId: `evt_20260729_createassistant${harness.readerCreateNoteRequests.length}`,
+          proposal: readerCreateNoteProposal(harness.readerCreateNoteRequests.length)
+        };
+      },
+      currentProposal: async () => ({
+        apiVersion: 1 as const,
+        status: "available" as const,
+        proposal: readerCreateNoteProposal(Math.max(1, harness.readerCreateNoteRequests.length))
+      }),
+      decideProposal: async (
+        request: ReaderSelectionProposalDecisionRequest
+      ): Promise<ReaderSelectionProposalDecisionResult> => {
+        harness.readerProposalDecisionRequests.push(request);
+        const proposal = readerCreateNoteProposal(Math.max(1, harness.readerCreateNoteRequests.length));
+        if (harness.readerProposalDecisionMode === "applied") {
+          return {
+            apiVersion: 1,
+            status: "applied",
+            proposal: { ...proposal, state: "applied" },
+            operationId: "operation_20260729_createnote",
+            createdPageId: "page_20260715_note0002"
+          };
+        }
+        return {
+          apiVersion: 1,
+          status: harness.readerProposalDecisionMode,
+          proposal: { ...proposal, state: harness.readerProposalDecisionMode === "rejected" ? "rejected" : "ready" }
+        };
+      }
+    },
     library: {
       list: async () => testLibraryList(),
       related: async ({ pageId }: { readonly pageId: string }) => testRelatedPages(pageId)
@@ -5507,6 +5656,16 @@ function testRenderedNote(pageId: string): NoteRenderResult {
       ? `<h1>${summary.title}</h1><p>Approved reader fixture. <a href="#wiki:note-b">Open Note B</a></p>`
       : `<h1>${summary.title}</h1><p>Approved reader fixture.</p>`,
     byteSize: 96
+  };
+}
+
+function readerCreateNoteProposal(sequence: number): ReaderSelectionProposalPreview {
+  return {
+    proposalId: `proposal_20260729_createnote${sequence}`,
+    action: "create_note",
+    state: "ready",
+    revision: sequence,
+    lines: [{ kind: "added", text: "Create a durable note from the selected passage" }]
   };
 }
 
