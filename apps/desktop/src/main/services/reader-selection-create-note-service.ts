@@ -32,6 +32,7 @@ import {
 import { z } from "zod";
 import {
   createGeneratedNoteExclusive,
+  pageConflict as conflict,
   readGeneratedNoteExact
 } from "./generated-note-file";
 import type { ResolveJobReviewInput } from "./job-execution-coordinator";
@@ -45,6 +46,7 @@ import {
   readCurrentNoteEvidenceBinding,
   readCurrentNoteSelectionEvidenceBinding
 } from "./retrieval-evidence-boundary";
+import { readerSelectionContentRestricted } from "./reader-selection-proposal-service";
 
 const MAX_TITLE_CHARACTERS = 120;
 const MAX_BODY_BYTES = 16 * 1024;
@@ -462,7 +464,7 @@ export class ReaderSelectionCreateNoteProposalService {
     const title = normalizeTitle(input.title);
     const body = normalizeBody(input.body);
     if (containsRestrictedModelContent(title) || containsRestrictedModelContent(body)) {
-      throw new PigeDomainError("agent_ingest.update_content_restricted", "The create-note proposal contains restricted content.");
+      throw readerSelectionContentRestricted("The create-note proposal contains restricted content.");
     }
     const proposalId = createProposalId(job.id);
     const intentHash = hashText(JSON.stringify({
@@ -667,7 +669,7 @@ function hasExactSelectionBinding(job: JobRecord, selection: ReaderSelectionIden
 function normalizeTitle(value: string): string {
   const title = value.replace(/[\u0000-\u001f\u007f]/gu, " ").replace(/\s+/gu, " ").trim();
   if (!title || Array.from(title).length > MAX_TITLE_CHARACTERS) {
-    throw new PigeDomainError("agent_ingest.update_content_restricted", "The generated note title is invalid.");
+    throw readerSelectionContentRestricted("The generated note title is invalid.");
   }
   return title;
 }
@@ -675,7 +677,7 @@ function normalizeTitle(value: string): string {
 function normalizeBody(value: string): string {
   const body = value.replace(/\r\n?/gu, "\n").trim();
   if (!body || body.includes("\0") || Buffer.byteLength(body, "utf8") > MAX_BODY_BYTES) {
-    throw new PigeDomainError("agent_ingest.update_content_restricted", "The generated note body is invalid.");
+    throw readerSelectionContentRestricted("The generated note body is invalid.");
   }
   return body;
 }
@@ -690,7 +692,7 @@ function createMarkdown(input: {
 }): string {
   const markdown = `---\nid: ${JSON.stringify(input.pageId)}\nschema_version: 1\ntitle: ${JSON.stringify(input.title)}\ntype: "note"\ncreated_at: ${JSON.stringify(input.createdAt)}\nupdated_at: ${JSON.stringify(input.createdAt)}\nstatus: "active"\nlanguage: "und"\naliases: []\ntags: []\ntopics: []\nentities: []\nsource_ids: []\nrelated_page_ids: []\nprovenance:\n  generated_by: "pige"\n  last_job_id: ${JSON.stringify(input.jobId)}\n  model_profile_id: ${JSON.stringify(input.modelProfileId)}\n  confidence: "high"\nnote:\n  note_kind: "summary"\n  review_state: "clean"\n---\n\n# ${escapeHeading(input.title)}\n\n${input.body}\n`;
   if (Buffer.byteLength(markdown, "utf8") > MAX_PAGE_BYTES || !parsePigeFrontmatter(markdown)) {
-    throw new PigeDomainError("agent_ingest.update_content_restricted", "The generated note is invalid.");
+    throw readerSelectionContentRestricted("The generated note is invalid.");
   }
   return markdown;
 }
@@ -810,10 +812,6 @@ function escapeHeading(value: string): string {
 
 function hashText(value: string): string {
   return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
-}
-
-function conflict(message: string): PigeDomainError {
-  return new PigeDomainError("agent_ingest.page_conflict", message);
 }
 
 function createProposalId(jobId: string): string {
