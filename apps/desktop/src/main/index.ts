@@ -692,6 +692,7 @@ const getBackupCoordinatorService = (): BackupCoordinatorService => {
         vaultId: input.vaultId,
         backupId: input.backupId,
         archiveDigest: input.archiveDigest,
+        ...(input.warningCodes ? { warningCodes: input.warningCodes } : {}),
         assertVaultWriterLease: input.assertVaultWriterLease
       })
     });

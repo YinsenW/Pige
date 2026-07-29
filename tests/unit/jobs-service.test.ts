@@ -288,8 +288,8 @@ describe("jobs service", () => {
       ...waitingBase,
       id: "job_20260710_backupwait1",
       waitingDependency: {
-        dependencyKind: "external_source",
-        dependencyId: "src_20260710_hiddenwait01",
+        dependencyKind: "vault_binding",
+        dependencyId: "root_20260710_hiddenwait01",
         requiredAction: "reconnect_path",
         messageKey: "errors.backup.external_managed_copy_root_missing"
       }
@@ -313,8 +313,11 @@ describe("jobs service", () => {
       ["job_20260710_backupother1", "user_backup"]
     ]));
     expect(summaries.find((job) => job.id === "job_20260710_backupwait1")?.canReconnectDependency).toBe(true);
+    expect(summaries.find((job) => job.id === "job_20260710_backupwait1")?.canContinueIncomplete).toBe(true);
     expect(summaries.filter((job) => job.id !== "job_20260710_backupwait1")
       .every((job) => job.canReconnectDependency === false)).toBe(true);
+    expect(summaries.filter((job) => job.id !== "job_20260710_backupwait1")
+      .every((job) => job.canContinueIncomplete === false)).toBe(true);
     expect(summaries.find((job) => job.id === "job_20260710_backupuser1")?.error).toEqual(expect.objectContaining({
       code: "backup.destination_changed",
       userAction: "choose_path"

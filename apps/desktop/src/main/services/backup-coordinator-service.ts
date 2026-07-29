@@ -24,6 +24,10 @@ import {
 } from "./backup-service";
 import {
   inspectBackupReconnectCandidate,
+  inspectBackupIncompleteCandidate,
+  omittedExternalManagedCopyRootIds,
+  prepareIncompleteBackupJob,
+  prepareIncompleteBackupRecovery,
   prepareBackupForDurableCompletion,
   prepareReconnectedJob,
   proveWaitingDependency,
@@ -31,6 +35,8 @@ import {
   startBackupJob,
   type BackupReconnectCandidate,
   type BackupReconnectCandidateResult,
+  type BackupIncompleteCandidate,
+  type BackupIncompleteCandidateResult,
   type BackupJobRequest,
   type BackupRecoveryResult,
   type BackupRetryResult,
@@ -62,6 +68,7 @@ export interface BackupCreatedOperationInput {
   readonly vaultId: string;
   readonly backupId: string;
   readonly archiveDigest: `sha256:${string}`;
+  readonly warningCodes?: readonly string[];
   readonly assertVaultWriterLease: () => void;
 }
 
@@ -81,6 +88,8 @@ export interface BackupCoordinatorOptions {
 
 export type {
   BackupJobRequest,
+  BackupIncompleteCandidate,
+  BackupIncompleteCandidateResult,
   BackupReconnectCandidate,
   BackupReconnectCandidateResult,
   BackupRecoveryResult,
@@ -139,6 +148,48 @@ export class BackupCoordinatorService {
     const store = this.#store(active.vaultPath);
     const snapshot = readJobIfPresent(store, jobFilePath(active.vaultPath, jobId));
     return inspectBackupReconnectCandidate(active.vaultId, activeVaultId, jobId, snapshot);
+  }
+
+  inspectIncompleteCandidate(
+    activeVaultId: string,
+    jobIdInput: string,
+    expectedJobUpdatedAt: string
+  ): BackupIncompleteCandidateResult {
+    const active = this.#captureActiveVault();
+    const jobId = parseRequestedJobId(jobIdInput);
+    const store = this.#store(active.vaultPath);
+    const snapshot = readJobIfPresent(store, jobFilePath(active.vaultPath, jobId));
+    return inspectBackupIncompleteCandidate(
+      active.vaultId,
+      activeVaultId,
+      jobId,
+      expectedJobUpdatedAt,
+      snapshot
+    );
+  }
+
+  async continueIncomplete(
+    candidate: BackupIncompleteCandidate
+  ): Promise<"continued" | "stale" | "not_found" | "ineligible" | "failed"> {
+    const active = this.#captureActiveVault();
+    const inspected = this.inspectIncompleteCandidate(
+      candidate.vaultId,
+      candidate.jobId,
+      candidate.jobUpdatedAt
+    );
+    if (inspected.status !== "ready") return inspected.status;
+    const store = this.#store(active.vaultPath);
+    const snapshot = readJobIfPresent(store, jobFilePath(active.vaultPath, candidate.jobId));
+    const queued = prepareIncompleteBackupJob(store, snapshot, candidate, this.#now());
+    if (!queued) return "stale";
+    try {
+      const binding = readBackupBinding(queued.job, active.vaultPath);
+      const result = (await this.#run(store, queued, binding)).job;
+      return result.state === "completed_with_warnings" ? "continued" : "failed";
+    } catch (caught) {
+      if (isContention(caught)) return "stale";
+      return "failed";
+    }
   }
 
   reconnectDependency(
@@ -270,6 +321,10 @@ export class BackupCoordinatorService {
         const binding = readBackupBinding(snapshot.job, active.vaultPath);
         assertActiveBinding(active, binding);
         if (snapshot.job.state === "waiting_dependency") {
+          const incomplete = prepareIncompleteBackupRecovery(store, snapshot, this.#now());
+          if (incomplete) {
+            snapshot = incomplete;
+          } else {
           const waiting = snapshot.job.waitingDependency;
           if (!proveWaitingDependency(this.#backup, active.vaultPath, active.vaultId, waiting)) {
             failed += 1;
@@ -278,6 +333,7 @@ export class BackupCoordinatorService {
           snapshot = coordinator(store, this.#now()).prepareRetry(snapshot, {
             message: "Repaired Backup recovery is queued with its original identity."
           });
+          }
         }
         const result = await this.#run(store, snapshot, binding);
         if (RECOVERABLE_STATES.has(result.job.state)) {
@@ -386,6 +442,9 @@ export class BackupCoordinatorService {
       stagingOwnerKey: binding.jobId,
       expectedDestinationFence: binding.destinationFence,
       ...expectedCheckpointDigests(job),
+      ...(omittedExternalManagedCopyRootIds(job).length > 0
+        ? { omittedExternalManagedCopyRootIds: omittedExternalManagedCopyRootIds(job) }
+        : {}),
       signal,
       ...(onPhase ? { onPhase } : {})
     };
@@ -411,18 +470,25 @@ export class BackupCoordinatorService {
       vaultId: binding.vaultId,
       backupId: binding.backupId,
       archiveDigest: inspected.archiveDigest as `sha256:${string}`,
+      ...(omittedExternalManagedCopyRootIds(snapshot.job).length > 0
+        ? { warningCodes: ["backup.external_managed_copy_omitted"] }
+        : {}),
       assertVaultWriterLease: () => this.#vault.assertWriterLease(binding.vaultPath)
     }));
-    assertOperationBinding(operation, binding, inspected);
+    assertOperationBinding(operation, binding, inspected, snapshot.job);
     snapshot = refreshSnapshot(store, snapshot);
     if (isCompleted(snapshot.job)) {
       assertCompletedJob(snapshot.job, binding, inspected, operation.id);
       return snapshot;
     }
     const backupRef = createBackupRef(binding, inspected);
+    const incomplete = omittedExternalManagedCopyRootIds(snapshot.job).length > 0;
     return coordinator(store, this.#now()).adoptDurableCompletion(snapshot, {
       checkpointId: "archive_finalized",
-      message: "Backup completed and passed exact archive inspection.",
+      ...(incomplete ? { result: "completed_with_warnings" as const } : {}),
+      message: incomplete
+        ? "Backup completed with an explicitly omitted external managed-copy root."
+        : "Backup completed and passed exact archive inspection.",
       facts: {
         stage: "backing_up",
         outputRefs: dedupeRefs([
@@ -786,8 +852,10 @@ function assertStoredCheckpoint(
 function assertOperationBinding(
   operation: OperationRecord,
   binding: BackupBinding,
-  inspected: RestoreCorePreviewResult
+  inspected: RestoreCorePreviewResult,
+  job: JobRecord
 ): void {
+  const incomplete = omittedExternalManagedCopyRootIds(job).length > 0;
   if (
     operation.kind !== "backup_created" ||
     operation.jobId !== binding.jobId ||
@@ -796,7 +864,8 @@ function assertOperationBinding(
       ref.kind === "backup" && ref.id === binding.backupId && ref.checksum === inspected.archiveDigest
     ) ||
     !operation.sourceRefs.some((ref) => ref.kind === "job" && ref.id === binding.jobId) ||
-    !operation.sourceRefs.some((ref) => ref.kind === "vault" && ref.id === binding.vaultId)
+    !operation.sourceRefs.some((ref) => ref.kind === "vault" && ref.id === binding.vaultId) ||
+    operation.warnings.includes("backup.external_managed_copy_omitted") !== incomplete
   ) {
     throw new PigeDomainError("backup.operation_conflict", "The Backup Operation conflicts with exact archive identity.");
   }
@@ -816,7 +885,8 @@ function assertCompletedJob(
     path.resolve(archiveRef.path ?? "") !== binding.destinationPath ||
     !linkedOperationId ||
     !job.operationIds?.includes(linkedOperationId) ||
-    !job.outputRefs?.some((ref) => ref.kind === "operation" && ref.id === linkedOperationId)
+    !job.outputRefs?.some((ref) => ref.kind === "operation" && ref.id === linkedOperationId) ||
+    (omittedExternalManagedCopyRootIds(job).length > 0 && job.state !== "completed_with_warnings")
   ) {
     throw new PigeDomainError("backup.job_conflict", "The completed Backup Job conflicts with exact archive identity.");
   }

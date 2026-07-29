@@ -791,6 +791,24 @@ describe("backup restore service", () => {
     });
     expect(fs.existsSync(managedBackup)).toBe(false);
     expect(listBackupStagingFiles(managedBackup)).toEqual([]);
+
+    await new BackupRestoreService().createBackup(
+      managed.vaultPath,
+      managedBackup,
+      "0.1.0-test",
+      { omittedExternalManagedCopyRootIds: ["root_external01"] }
+    );
+    const incompleteArchive = await readGeneratedBackup(managedBackup);
+    expect(incompleteArchive.manifest.externalDependencies).toContainEqual({
+      kind: "external_managed_copy_root",
+      rootId: "root_external01",
+      included: false,
+      requiredForCompleteRestore: true
+    });
+    expect(incompleteArchive.manifest.externalManagedCopies).toBeUndefined();
+    expect(incompleteArchive.manifest.files.some((file) => file.path.endsWith(
+      "/src_20260714_externalmanaged01.json"
+    ) || file.path === ".pige/source-records/src_20260714_externalmanaged01.json")).toBe(true);
   });
 
   it("repairs and rereads one exact external managed-copy binding without changing source identity", () => {

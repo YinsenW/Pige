@@ -4121,6 +4121,7 @@ function toJobSummary(vaultPath: string, job: JobRecord): JobSummary {
     ...(sourceRecord ? { sourceDisplayName: sourceRecord.original?.displayName ?? sourceRecord.kind } : {}),
     ...(backupKind ? { backupKind } : {}),
     canReconnectDependency: canReconnectDependency(job),
+    canContinueIncomplete: canContinueIncomplete(job),
     ...(job.error ? { error: job.error } : {}),
     message: job.message,
     createdAt: job.createdAt,
@@ -4134,6 +4135,13 @@ function canReconnectDependency(job: JobRecord): boolean {
   return job.class === "backup"
     ? waiting.dependencyKind === "vault_binding" || waiting.dependencyKind === "external_source"
     : isOriginalSourceReconnectWait(job);
+}
+
+function canContinueIncomplete(job: JobRecord): boolean {
+  const waiting = job.waitingDependency;
+  return job.class === "backup" && job.state === "waiting_dependency" &&
+    waiting?.dependencyKind === "vault_binding" && waiting.requiredAction === "reconnect_path" &&
+    Boolean(waiting.dependencyId);
 }
 
 function isOriginalSourceReconnectWait(job: JobRecord): boolean {
