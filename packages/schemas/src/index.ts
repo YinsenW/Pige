@@ -6417,6 +6417,10 @@ export const ReaderSelectionLinkResultSchema = z.discriminatedUnion("status", [
 ]);
 
 export const ReaderSelectionTransformActionSchema = z.enum(["translate", "polish", "expand"]);
+export const ReaderSelectionProposalActionSchema = z.union([
+  ReaderSelectionTransformActionSchema,
+  z.literal("create_note")
+]);
 export const ReaderSelectionProposalIdSchema = ProposalIdSchema;
 export const ReaderSelectionProposalStateSchema = z.enum([
   "ready",
@@ -6431,7 +6435,7 @@ export const ReaderSelectionProposalLineSchema = z.object({
 }).strict();
 export const ReaderSelectionProposalPreviewSchema = z.object({
   proposalId: ReaderSelectionProposalIdSchema,
-  action: ReaderSelectionTransformActionSchema,
+  action: ReaderSelectionProposalActionSchema,
   state: ReaderSelectionProposalStateSchema,
   revision: z.number().int().min(1),
   lines: z.array(ReaderSelectionProposalLineSchema).max(8)
@@ -6500,6 +6504,71 @@ export const ReaderSelectionTransformResultSchema = z.discriminatedUnion("status
   }).strict()
 ]);
 
+export const ReaderSelectionCreateNoteRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: ReaderSelectionActionRequestIdSchema,
+  action: z.literal("create_note"),
+  activeVaultId: VaultIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  selection: ReaderSelectionIdentitySchema,
+  locale: LocaleSchema,
+  clientTurnId: AgentClientTurnIdSchema
+}).strict();
+export const ReaderSelectionCreateNoteResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionActionRequestIdSchema,
+    status: z.literal("review_required"),
+    jobId: JobIdSchema,
+    conversationEventId: ConversationEventIdSchema,
+    conversationId: ConversationIdSchema,
+    tailEventId: ConversationEventIdSchema,
+    proposal: ReaderSelectionProposalPreviewSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionActionRequestIdSchema,
+    status: z.literal("waiting"),
+    jobId: JobIdSchema,
+    conversationEventId: ConversationEventIdSchema,
+    conversationId: ConversationIdSchema,
+    tailEventId: ConversationEventIdSchema,
+    error: PigeErrorSummarySchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionActionRequestIdSchema,
+    status: z.literal("failed"),
+    jobId: JobIdSchema.optional(),
+    conversationEventId: ConversationEventIdSchema.optional(),
+    conversationId: ConversationIdSchema.optional(),
+    tailEventId: ConversationEventIdSchema.optional(),
+    error: PigeErrorSummarySchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: ReaderSelectionActionRequestIdSchema,
+    status: z.literal("invalid"),
+    reason: z.enum([
+      "vault_unavailable",
+      "page_changed",
+      "render_context_changed",
+      "selection_changed",
+      "selection_too_large",
+      "mutation_ineligible",
+      "generated_note_invalid"
+    ])
+  }).strict()
+]).superRefine((result, context) => {
+  if (result.status === "review_required" && result.proposal.action !== "create_note") {
+    context.addIssue({
+      code: "custom",
+      path: ["proposal", "action"],
+      message: "A Reader create-note review must own a create-note proposal."
+    });
+  }
+});
+
 export const ReaderSelectionProposalGetRequestSchema = z.object({
   apiVersion: z.literal(1),
   proposalId: ReaderSelectionProposalIdSchema
@@ -6527,7 +6596,8 @@ export const ReaderSelectionProposalDecisionResultSchema = z.discriminatedUnion(
     apiVersion: z.literal(1),
     status: z.literal("applied"),
     proposal: ReaderSelectionProposalPreviewSchema,
-    operationId: OperationIdSchema
+    operationId: OperationIdSchema,
+    createdPageId: PageIdSchema.optional()
   }).strict(),
   z.object({
     apiVersion: z.literal(1),
@@ -6549,7 +6619,19 @@ export const ReaderSelectionProposalDecisionResultSchema = z.discriminatedUnion(
     status: z.literal("failed"),
     error: PigeErrorSummarySchema
   }).strict()
-]);
+]).superRefine((result, context) => {
+  if (result.status !== "applied") {
+    return;
+  }
+  const expectsCreatedPage = result.proposal.action === "create_note";
+  if (expectsCreatedPage !== (result.createdPageId !== undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: ["createdPageId"],
+      message: "Only an applied create-note proposal must return its created page identity."
+    });
+  }
+});
 
 export const VaultRevealResultSchema = z.discriminatedUnion("status", [
   z.object({
@@ -7760,8 +7842,11 @@ export type ReaderSelectionLinkResult = z.infer<typeof ReaderSelectionLinkResult
 export type ReaderSelectionIdentity = z.infer<typeof ReaderSelectionIdentitySchema>;
 export type ReaderSelectionReadAction = z.infer<typeof ReaderSelectionReadActionSchema>;
 export type ReaderSelectionTransformAction = z.infer<typeof ReaderSelectionTransformActionSchema>;
+export type ReaderSelectionProposalAction = z.infer<typeof ReaderSelectionProposalActionSchema>;
 export type ReaderSelectionTransformRequest = z.infer<typeof ReaderSelectionTransformRequestSchema>;
 export type ReaderSelectionTransformResult = z.infer<typeof ReaderSelectionTransformResultSchema>;
+export type ReaderSelectionCreateNoteRequest = z.infer<typeof ReaderSelectionCreateNoteRequestSchema>;
+export type ReaderSelectionCreateNoteResult = z.infer<typeof ReaderSelectionCreateNoteResultSchema>;
 export type ReaderSelectionProposalId = z.infer<typeof ReaderSelectionProposalIdSchema>;
 export type ReaderSelectionProposalState = z.infer<typeof ReaderSelectionProposalStateSchema>;
 export type ReaderSelectionProposalLine = z.infer<typeof ReaderSelectionProposalLineSchema>;

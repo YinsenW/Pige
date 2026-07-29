@@ -391,6 +391,9 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly submitAction: (");
     expect(contractsSource).toContain("readonly submitLink: (");
     expect(contractsSource).toContain("readonly submitTransform: (");
+    expect(contractsSource).toContain("readonly submitCreateNote: (");
+    expect(contractsSource).toContain("request: ReaderSelectionCreateNoteRequest");
+    expect(contractsSource).toContain("Promise<ReaderSelectionCreateNoteResult>");
     expect(contractsSource).toContain("readonly currentProposal: (");
     expect(contractsSource).toContain("readonly decideProposal: (");
     expect(mainSource).toContain("registerReaderIpc({");
@@ -425,6 +428,9 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('"readerSelection.submitTransform"');
     expect(preloadSource).toContain("ReaderSelectionTransformRequestSchema.parse(request)");
     expect(preloadSource).toContain("ReaderSelectionTransformResultSchema.parse(");
+    expect(preloadSource).toContain('"readerSelection.submitCreateNote"');
+    expect(preloadSource).toContain("ReaderSelectionCreateNoteRequestSchema.parse(request)");
+    expect(preloadSource).toContain("ReaderSelectionCreateNoteResultSchema.parse(");
     expect(preloadSource).toContain('"readerSelection.currentProposal"');
     expect(preloadSource).toContain('"readerSelection.decideProposal"');
     expect(contractsSource).not.toContain("ReaderSelectionText");
