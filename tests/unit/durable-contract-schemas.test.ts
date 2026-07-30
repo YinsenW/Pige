@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AgentIngestOutputSchema,
   ArtifactIdSchema,
   BackupManifestSchema,
   ConversationEventSchema,
@@ -81,6 +82,23 @@ function datasetAnswerFixture() {
 }
 
 describe("durable contract schemas", () => {
+  it("accepts supported knowledge page types while keeping legacy note output compatible", () => {
+    const output = {
+      title: "Grounded concept",
+      summary: { text: "A grounded summary.", evidenceRefs: ["ev_01"] },
+      keyPoints: [],
+      tags: [],
+      topics: [],
+      entities: [],
+      warnings: [],
+      confidence: "high" as const
+    };
+
+    expect(AgentIngestOutputSchema.parse(output).pageType).toBeUndefined();
+    expect(AgentIngestOutputSchema.parse({ ...output, pageType: "concept" }).pageType).toBe("concept");
+    expect(() => AgentIngestOutputSchema.parse({ ...output, pageType: "source" })).toThrow();
+  });
+
   it("makes current SourceRecord orchestration explicit while normalizing historical records", () => {
     const common = {
       id: "src_20260710_abcdef12",

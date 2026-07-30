@@ -7359,6 +7359,7 @@ const AgentIngestStatementSchema = z.object({
 }).strict();
 
 export const AgentIngestOutputSchema = z.object({
+  pageType: MarkdownPageTypeSchema.exclude(["source"]).optional(),
   title: z.string().trim().min(1).max(120),
   summary: AgentIngestStatementSchema,
   keyPoints: z.array(AgentIngestStatementSchema.extend({

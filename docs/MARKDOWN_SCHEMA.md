@@ -142,14 +142,19 @@ The Reader editor round-trips one exact <=4 MiB UTF-8 note without trim/normaliz
 stable `id`, required frontmatter and valid wiki links/citations. Main no-follow CAS-replaces it and
 records reversible `update_page`; drift preserves live file/draft. Source pages are ineligible.
 
-Phase 3 bridge generated notes:
+Phase 3 bridge generated knowledge pages:
 
-- Agent ingest creates retry-safe `note`/`summary` pages under `wiki/generated/YYYY/`, citing the
-  source and recording Job, model profile and confidence provenance.
+- Agent ingest creates retry-safe `note`, `summary`, `topic`, `concept`, `entity`, `claim`, or
+  `question` pages under `wiki/generated/YYYY/`, with source, Job, model and confidence
+  provenance. Main derives stable IDs and required frontmatter; model output cannot create a
+  `source` page.
 - Low-confidence/warning output marks `needs_review`; it is not approval authority.
+- Claims require grounded evidence or remain `needs_review`.
 - Summary/key points use validated evidence as canonical `[source:<source-id>#<locator>]`, never
   copied model tokens. Unknown refs fail; missing refs warn/mark review without invented locators.
-- Generated notes exclude prompts, responses, keys, paths and large source bodies.
+- Generated knowledge pages exclude prompts, responses, keys, paths and large source bodies.
+- One deterministic `create_page` Operation binds the page to its Job; retry/restart adopts the
+  same page and Operation instead of duplicating durable effects.
 
 ### 5.3 Concept Page
 
