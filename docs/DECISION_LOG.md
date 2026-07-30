@@ -4231,6 +4231,35 @@ References:
 
 `docs/SOURCE_STORAGE_STRATEGY.md`; `docs/API_AND_IPC_DESIGN.md`; `docs/JOB_OPERATION_AND_RECOVERY.md`; `docs/UI_PROTOTYPE.md`.
 
+### D-20260731-Explicit-Current-Note-Related-Retrieval
+
+Status: Accepted
+Date: 2026-07-31
+
+Decision:
+
+An explicit authored related-note request in Note Agent may register one read-only active-Vault
+retrieval tool, but only after the exact current note is inspected. Host derives the query, excludes
+the current page, confines/re-reads evidence, and publishes only citation-bound answers.
+
+Rationale:
+
+Users need related-note discovery without making every current-note turn vault-wide or allowing
+retrieved text to authorize tools and mutations.
+
+Consequences:
+
+- Neutral or quoted text keeps current-note-only scope; the related intent co-registers no append or
+  replacement mutation tool.
+- Current-note evidence remains `citation_1`; bounded related evidence uses `citation_2`–`9`.
+- Vault, current-note, or retrieved-evidence drift fails before assistant publication; retries have
+  no durable effect.
+
+References:
+
+- `docs/PRD.md`; `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`;
+  `docs/PROMPT_DESIGN.md`; `docs/UI_PROTOTYPE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

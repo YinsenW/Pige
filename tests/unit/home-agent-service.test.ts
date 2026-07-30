@@ -4184,6 +4184,7 @@ SYNTHETIC_DISTRACTOR_BODY
   it("finds bounded related notes only after reading the exact current note", async () => {
     const fixture = makeFixture();
     writeReaderLinkTargetPage(fixture.vaultPath);
+    const appendPublish = vi.fn();
     let observedQuery = "";
     let relatedModelText = "";
     const targetResult = makeReaderLinkSearchResult(fixture.vault.vaultId, "placeholder");
@@ -4223,6 +4224,18 @@ SYNTHETIC_DISTRACTOR_BODY
             grounding: "local_knowledge"
           });
         }
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        publish: appendPublish,
+        readPublication: () => undefined
       }
     );
 
@@ -4239,6 +4252,7 @@ SYNTHETIC_DISTRACTOR_BODY
     expect(relatedModelText).toContain("Related target");
     expect(relatedModelText).not.toContain('"title":"Launch plan"');
     expect(relatedModelText).not.toContain(fixture.vaultPath);
+    expect(appendPublish).not.toHaveBeenCalled();
     expect(outcome).toMatchObject({
       state: "completed",
       answer: {

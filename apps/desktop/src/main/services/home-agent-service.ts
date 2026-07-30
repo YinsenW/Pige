@@ -1286,7 +1286,7 @@ export class HomeAgentService {
     const currentNoteReplaceRegistered = currentNoteScope !== undefined && hasExplicitCurrentNoteReplaceIntent(request.text, request.locale) &&
       readerSelectionTransform === undefined && readerSelectionLink === undefined && readerSelectionCreateNote === undefined && this.#currentNoteAppends?.publishReplace !== undefined;
     const currentNoteRelatedRegistered = currentNoteScope !== undefined && hasExplicitCurrentNoteRelatedIntent(request.text, request.locale) && readerSelectionTransform === undefined && readerSelectionLink === undefined && readerSelectionCreateNote === undefined;
-    const currentNoteAppendRegistered = currentNoteScope !== undefined && !currentNoteReplaceRegistered && readerSelectionTransform === undefined &&
+    const currentNoteAppendRegistered = currentNoteScope !== undefined && !currentNoteReplaceRegistered && !currentNoteRelatedRegistered && readerSelectionTransform === undefined &&
       readerSelectionLink === undefined && readerSelectionCreateNote === undefined && this.#currentNoteAppends !== undefined;
     let readerSelectionLinkQuery = retrievalQuery;
     if (currentNoteScope) {
@@ -1740,14 +1740,9 @@ export class HomeAgentService {
           return current;
         }
       }), ...(currentNoteRelatedRegistered ? [createCurrentNoteRelatedTool({
-        activeVaultId: activeVault.vaultId, currentPageId: currentNoteScope.pageId,
-        authorize: () => { assertCurrentBindingAndVault(); evidenceLedger.assertVisible("current_note", modelTurnSequence); },
-        readCurrent: () => currentNoteEvidence ?? (() => { throw new PigeDomainError("agent_runtime.tool_input_invalid", "Read the exact current note before finding related notes."); })(),
-        search: (searchRequest) => this.#retrieval.search(searchRequest), readExact: (result) => this.#retrieval.readExactSelectedEvidence(result),
-        onResult: async (result) => {
-          searchResult = result; searchToolUsed = true;
-          evidenceLedger.record("local_search", modelTurnSequence); await authorizeCurrentModelTurn();
-        }
+        activeVaultId: activeVault.vaultId, currentPageId: currentNoteScope.pageId, authorize: () => { assertCurrentBindingAndVault(); evidenceLedger.assertVisible("current_note", modelTurnSequence); },
+        readCurrent: () => currentNoteEvidence ?? (() => { throw new PigeDomainError("agent_runtime.tool_input_invalid", "Read the exact current note before finding related notes."); })(), search: (searchRequest) => this.#retrieval.search(searchRequest), readExact: (result) => this.#retrieval.readExactSelectedEvidence(result),
+        onResult: async (result) => { searchResult = result; searchToolUsed = true; evidenceLedger.record("local_search", modelTurnSequence); await authorizeCurrentModelTurn(); }
       })] : []), ...(currentNoteAppendRegistered ? [createCurrentNoteAppendTool({
         authorize: () => {
           assertCurrentBindingAndVault();
@@ -2961,8 +2956,7 @@ function createHomeSystemPrompt(
   readerSelectionLink = false,
   currentNoteAppendAvailable = false,
   readerSelectionCreateNoteAvailable = false,
-  skillStagingAvailable = false,
-  currentNoteRelatedAvailable = false,
+  skillStagingAvailable = false, currentNoteRelatedAvailable = false,
   queryLanguage: DurableLanguage = "unknown", language: AgentRuntimePolicyContext["language"]
 ): string {
   return [
