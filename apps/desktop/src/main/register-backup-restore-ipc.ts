@@ -13,6 +13,8 @@ import type {
   BackupContinueIncompleteResult,
   BackupReconnectDependencyRequest,
   BackupReconnectDependencyResult,
+  BackupReconnectDestinationRequest,
+  BackupReconnectDestinationResult,
   BackupRestoreStatus,
   RestoreApplyRequest,
   RestoreApplyResult,
@@ -22,10 +24,13 @@ import type {
 import { PigeDomainError } from "@pige/domain";
 import {
   BACKUP_CONTINUE_INCOMPLETE_CHANNEL,
+  BACKUP_RECONNECT_DESTINATION_CHANNEL,
   BackupContinueIncompleteRequestSchema,
   BackupContinueIncompleteResultSchema,
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
+  BackupReconnectDestinationRequestSchema,
+  BackupReconnectDestinationResultSchema,
   type Locale
 } from "@pige/schemas";
 import type { BackupCoordinatorService } from "./services/backup-coordinator-service";
@@ -127,6 +132,39 @@ export function registerBackupRestoreIpc(options: RegisterBackupRestoreIpcOption
     if (selection.canceled || !selection.filePaths[0]) return result("cancelled");
     return result(options.getBackupCoordinator().reconnectDependency(
       inspected.candidate,
+      selection.filePaths[0]
+    ));
+  });
+  options.ipcMain.handle(BACKUP_RECONNECT_DESTINATION_CHANNEL, async (
+    event,
+    request: BackupReconnectDestinationRequest
+  ): Promise<BackupReconnectDestinationResult> => {
+    const parsed = BackupReconnectDestinationRequestSchema.parse(request);
+    const result = (status: BackupReconnectDestinationResult["status"]): BackupReconnectDestinationResult =>
+      BackupReconnectDestinationResultSchema.parse({ ...parsed, status });
+    const inspect = () => options.getBackupCoordinator().inspectDestinationReconnectCandidate(
+      parsed.activeVaultId,
+      parsed.waitingJobId,
+      parsed.expectedJobUpdatedAt
+    );
+    const inspected = inspect();
+    if (inspected.status !== "ready") return result(inspected.status);
+    const window = options.getWindow(event.sender);
+    if (!window) return result("failed");
+    let selection: { readonly canceled: boolean; readonly filePaths: readonly string[] };
+    try {
+      selection = await options.showOpenDialog(window, {
+        title: "Reconnect backup destination",
+        properties: ["openDirectory", "createDirectory"]
+      });
+    } catch {
+      return result("failed");
+    }
+    if (selection.canceled || !selection.filePaths[0]) return result("cancelled");
+    const current = inspect();
+    if (current.status !== "ready") return result(current.status);
+    return result(options.getBackupCoordinator().reconnectDestination(
+      current.candidate,
       selection.filePaths[0]
     ));
   });

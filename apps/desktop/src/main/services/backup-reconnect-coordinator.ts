@@ -20,9 +20,11 @@ import type {
   RestoreCorePreviewResult
 } from "./backup-service";
 import {
+  BackupManagedCopyDependencyError,
   captureBackupDestinationFence,
   canonicalizeBackupDestinationPath
 } from "./backup-service";
+import { settleBackupDestinationWait } from "./backup-destination-reconnect-service";
 import { JobExecutionCoordinator } from "./job-execution-coordinator";
 import { JobRecordStore, type JobRecordSnapshot } from "./job-record-store";
 
@@ -286,6 +288,60 @@ export function startBackupJob(
   throw new PigeDomainError("backup.job_conflict", "The Backup Job cannot start from its durable state.");
 }
 
+export function markBackupFailed(
+  store: JobRecordStore,
+  initialSnapshot: JobRecordSnapshot,
+  caught: unknown,
+  now: Date
+): JobRecordSnapshot {
+  let snapshot = initialSnapshot;
+  if (snapshot.job.state === "completed" || snapshot.job.state === "completed_with_warnings") return snapshot;
+  const owner = new JobExecutionCoordinator(store, { now: () => now });
+  if (snapshot.job.state === "failed_retryable") {
+    snapshot = owner.prepareRetry(snapshot, { message: "Backup recovery is retrying the same durable Job." });
+    snapshot = startBackupJob(store, snapshot, now);
+  }
+  if (caught instanceof BackupManagedCopyDependencyError) {
+    return owner.settle(snapshot, {
+      kind: "waiting",
+      reason: "dependency",
+      dependency: {
+        dependencyKind: caught.dependencyKind,
+        dependencyId: caught.dependencyId,
+        requiredAction: "reconnect_path",
+        messageKey: `errors.${caught.code}`
+      },
+      retryReason: caught.code,
+      requiresUserAction: true,
+      message: "Backup is waiting for a required managed source location."
+    });
+  }
+  const destinationWait = settleBackupDestinationWait(store, snapshot, caught, now);
+  if (destinationWait) return destinationWait;
+  const retryable = isRetryableFailure(caught);
+  const code = safeErrorCode(caught);
+  const error = {
+    code,
+    domain: "backup" as const,
+    messageKey: `errors.${code}`,
+    retryable,
+    severity: "error" as const,
+    userAction: retryable ? "retry" as const : "choose_path" as const
+  };
+  return owner.settle(snapshot, retryable ? {
+    kind: "requeue",
+    error: { ...error, retryable: true },
+    reason: code,
+    maxAutomaticRetries: 0,
+    requiresUserAction: true,
+    message: "Backup stopped safely and can be retried with the same identity."
+  } : {
+    kind: "failed",
+    error: { ...error, retryable: false },
+    message: "Backup stopped because its durable binding or output conflicted."
+  });
+}
+
 export function createQueuedBackupJob(
   binding: BackupBinding,
   checkpointIds: readonly string[]
@@ -424,4 +480,31 @@ function managedCopyDependency(
     (waiting.dependencyKind !== "vault_binding" && waiting.dependencyKind !== "external_source")
   ) return undefined;
   return { dependencyKind: waiting.dependencyKind, dependencyId: waiting.dependencyId };
+}
+
+function isRetryableFailure(caught: unknown): boolean {
+  if (!(caught instanceof PigeDomainError)) return true;
+  return !new Set([
+    "backup.binding_changed",
+    "backup.checkpoint_conflict",
+    "backup.destination_changed",
+    "backup.destination_exists",
+    "backup.job_conflict",
+    "backup.operation_conflict",
+    "backup.result_conflict",
+    "backup.staging_conflict",
+    "backup.vault_invalid",
+    "backup.path_inside_vault",
+    "vault.binding_changed",
+    "vault.writer_lease_lost"
+  ]).has(caught.code);
+}
+
+function safeErrorCode(caught: unknown): string {
+  const candidate = caught instanceof PigeDomainError && caught.code.startsWith("backup.")
+    ? caught.code
+    : "backup.execution_failed";
+  return /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+){1,2}$/u.test(candidate)
+    ? candidate
+    : "backup.execution_failed";
 }
