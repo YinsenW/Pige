@@ -12,6 +12,8 @@ import type {
   NoteMergeResult,
   NoteRelateRequest,
   NoteRelateResult,
+  NoteUnlinkRelationRequest,
+  NoteUnlinkRelationResult,
   NoteImportMarkdownRequest,
   NoteImportMarkdownResult,
   NoteOpenSourceReferenceRequest,
@@ -69,6 +71,9 @@ import {
   NOTE_RELATE_CHANNEL,
   NoteRelateRequestSchema,
   NoteRelateResultSchema,
+  NOTE_UNLINK_RELATION_CHANNEL,
+  NoteUnlinkRelationRequestSchema,
+  NoteUnlinkRelationResultSchema,
   NOTE_IMPORT_MARKDOWN_CHANNEL,
   NoteImportMarkdownRequestSchema,
   NoteImportMarkdownResultSchema,
@@ -559,6 +564,18 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
       ? NoteRelateResultSchema.parse(result)
       : NoteRelateResultSchema.parse({ ...parsed, status: "stale" });
+  });
+  options.ipcMain.handle(NOTE_UNLINK_RELATION_CHANNEL, async (event, request: unknown): Promise<NoteUnlinkRelationResult> => {
+    const parsed = NoteUnlinkRelationRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return NoteUnlinkRelationResultSchema.parse({ ...parsed, status: "stale" });
+    }
+    const result = await options.getNoteRelateService().unlink(ownerId, parsed);
+    if (result.status === "committed") options.onNoteRelated();
+    return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+      ? NoteUnlinkRelationResultSchema.parse(result)
+      : NoteUnlinkRelationResultSchema.parse({ ...parsed, status: "stale" });
   });
   options.ipcMain.handle("notes.resolveInlineReference", (
     event,

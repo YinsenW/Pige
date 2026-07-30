@@ -3718,7 +3718,7 @@ export function LibraryPanel(props: {
           {...(props.onReaderSelectionCreateNote ? { onSelectionCreateNoteResult: props.onReaderSelectionCreateNote } : {})}
           related={props.selectedNoteRelated}
           relatedLoadingPageId={props.noteLoadingPageId}
-          onOpenRelated={props.onOpenNote}
+          onOpenRelated={props.onOpenNote} onUnlinkRelated={window.pige.notes.unlinkRelation} onRelatedUnlinked={props.onCurrentNoteRelated ?? props.onCurrentNoteMerged}
           {...(props.onOpenSourceReference ? { onOpenSourceReference: props.onOpenSourceReference } : {})}
           {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
           {...(props.onReconnectOriginalSource ? {
@@ -6731,7 +6731,7 @@ function HomeComposer(props: {
                 onSelectionCreateNoteResult={props.onReaderSelectionCreateNote}
                 related={selectedNoteRelated}
                 relatedLoadingPageId={noteLoadingPageId}
-                onOpenRelated={openResult}
+                onOpenRelated={openResult} onUnlinkRelated={window.pige.notes.unlinkRelation} onRelatedUnlinked={adoptMergedHomeNote}
                 {...(selectedNote.renderContextId ? { onActivateInlineReference: activateInlineReference } : {})}
                 onDevelopment={props.onDevelopment}
                 t={props.t}
