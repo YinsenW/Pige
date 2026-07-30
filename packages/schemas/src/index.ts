@@ -4698,6 +4698,7 @@ export const LIBRARY_TAGS_CHANNEL = "library.tags" as const;
 export const LIBRARY_RENAME_TAG_CHANNEL = "library.renameTag" as const;
 export const LIBRARY_MERGE_TAG_CHANNEL = "library.mergeTag" as const;
 export const LIBRARY_REMOVE_TAG_CHANNEL = "library.removeTag" as const;
+export const LIBRARY_REMOVE_PAGE_TAG_CHANNEL = "library.removePageTag" as const;
 export const LIBRARY_TAGS_PAGE_SIZE_MAX = 50;
 export const LibraryTagsRequestIdSchema = z.string().regex(
   /^library_tags_request_[a-z0-9]{16,64}$/
@@ -4721,6 +4722,9 @@ export const LibraryMergeTagRequestIdSchema = z.string().regex(
 );
 export const LibraryRemoveTagRequestIdSchema = z.string().regex(
   /^library_tag_remove_request_[a-z0-9]{16,64}$/
+);
+export const LibraryRemovePageTagRequestIdSchema = z.string().regex(
+  /^library_page_tag_remove_request_[a-z0-9]{16,64}$/
 );
 
 const LibraryTagsRequestBaseShape = {
@@ -4926,6 +4930,27 @@ export const LibraryRemoveTagResultSchema = z.discriminatedUnion("status", [
     removedPageCount: z.number().int().positive().max(1_000)
   }).strict(),
   z.object({ ...LibraryRemoveTagIdentityShape, status: z.enum(["stale", "not_found", "ineligible", "failed"]) }).strict()
+]);
+
+const LibraryRemovePageTagIdentityShape = {
+  apiVersion: z.literal(1),
+  requestId: LibraryRemovePageTagRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  tag: LibraryCanonicalTagSchema,
+  pageId: PageIdSchema,
+  expectedSnapshotId: LibraryTagsSnapshotIdSchema,
+  expectedPageUpdatedAt: z.string().datetime({ offset: true })
+} as const;
+
+export const LibraryRemovePageTagRequestSchema = z.object(LibraryRemovePageTagIdentityShape).strict();
+
+export const LibraryRemovePageTagResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    ...LibraryRemovePageTagIdentityShape,
+    status: z.literal("committed"),
+    operationId: OperationIdSchema
+  }).strict(),
+  z.object({ ...LibraryRemovePageTagIdentityShape, status: z.enum(["stale", "not_found", "ineligible", "failed"]) }).strict()
 ]);
 
 export const CollectionRequestIdSchema = z.string().regex(/^collection_request_[a-z0-9]{16,64}$/);
@@ -8711,6 +8736,9 @@ export type LibraryMergeTagResult = z.infer<typeof LibraryMergeTagResultSchema>;
 export type LibraryRemoveTagRequestId = z.infer<typeof LibraryRemoveTagRequestIdSchema>;
 export type LibraryRemoveTagRequest = z.infer<typeof LibraryRemoveTagRequestSchema>;
 export type LibraryRemoveTagResult = z.infer<typeof LibraryRemoveTagResultSchema>;
+export type LibraryRemovePageTagRequestId = z.infer<typeof LibraryRemovePageTagRequestIdSchema>;
+export type LibraryRemovePageTagRequest = z.infer<typeof LibraryRemovePageTagRequestSchema>;
+export type LibraryRemovePageTagResult = z.infer<typeof LibraryRemovePageTagResultSchema>;
 export type CollectionAppendDefaultRowRequest = z.infer<typeof CollectionAppendDefaultRowRequestSchema>;
 export type CollectionAppendDefaultRowResult = z.infer<typeof CollectionAppendDefaultRowResultSchema>;
 export type CollectionAddNullableColumnRequest = z.infer<typeof CollectionAddNullableColumnRequestSchema>;

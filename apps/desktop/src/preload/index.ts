@@ -78,6 +78,8 @@ import type {
   LibraryMergeTagResult,
   LibraryRemoveTagRequest,
   LibraryRemoveTagResult,
+  LibraryRemovePageTagRequest,
+  LibraryRemovePageTagResult,
   LocalSemanticRetrievalDisableRequest,
   LocalSemanticRetrievalDisableResult,
   LocalSemanticRetrievalEnableRequest,
@@ -345,6 +347,7 @@ import {
   LIBRARY_RENAME_TAG_CHANNEL,
   LIBRARY_MERGE_TAG_CHANNEL,
   LIBRARY_REMOVE_TAG_CHANNEL,
+  LIBRARY_REMOVE_PAGE_TAG_CHANNEL,
   LibraryTagsRequestSchema,
   LibraryTagsResultSchema,
   LibraryRenameTagRequestSchema,
@@ -353,6 +356,8 @@ import {
   LibraryMergeTagResultSchema,
   LibraryRemoveTagRequestSchema,
   LibraryRemoveTagResultSchema,
+  LibraryRemovePageTagRequestSchema,
+  LibraryRemovePageTagResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   KnowledgeHealthRunRequestSchema,
@@ -732,6 +737,20 @@ async function invokeLibraryRemoveTag(request: LibraryRemoveTagRequest): Promise
     result.tag !== parsedRequest.tag || result.expectedSnapshotId !== parsedRequest.expectedSnapshotId ||
     result.expectedPageCount !== parsedRequest.expectedPageCount) {
     throw new Error("Invalid Library tag remove response identity.");
+  }
+  return result;
+}
+
+async function invokeLibraryRemovePageTag(request: LibraryRemovePageTagRequest): Promise<LibraryRemovePageTagResult> {
+  const parsedRequest = LibraryRemovePageTagRequestSchema.parse(request);
+  const result = LibraryRemovePageTagResultSchema.parse(
+    await ipcRenderer.invoke(LIBRARY_REMOVE_PAGE_TAG_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.tag !== parsedRequest.tag || result.pageId !== parsedRequest.pageId ||
+    result.expectedSnapshotId !== parsedRequest.expectedSnapshotId ||
+    result.expectedPageUpdatedAt !== parsedRequest.expectedPageUpdatedAt) {
+    throw new Error("Invalid Library page tag removal response identity.");
   }
   return result;
 }
@@ -1523,7 +1542,8 @@ const api: PigeDesktopApi = {
     tags: invokeLibraryTags,
     renameTag: invokeLibraryRenameTag,
     mergeTag: invokeLibraryMergeTag,
-    removeTag: invokeLibraryRemoveTag
+    removeTag: invokeLibraryRemoveTag,
+    removePageTag: invokeLibraryRemovePageTag
   },
   notes: {
     get: async (request: NoteGetRequest): Promise<NoteDocument> =>

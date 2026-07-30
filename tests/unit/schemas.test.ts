@@ -89,6 +89,7 @@ import {
   LIBRARY_RENAME_TAG_CHANNEL,
   LIBRARY_MERGE_TAG_CHANNEL,
   LIBRARY_REMOVE_TAG_CHANNEL,
+  LIBRARY_REMOVE_PAGE_TAG_CHANNEL,
   LIBRARY_TAGS_PAGE_SIZE_MAX,
   LibraryTagsRequestSchema,
   LibraryTagsResultSchema,
@@ -98,6 +99,8 @@ import {
   LibraryMergeTagResultSchema,
   LibraryRemoveTagRequestSchema,
   LibraryRemoveTagResultSchema,
+  LibraryRemovePageTagRequestSchema,
+  LibraryRemovePageTagResultSchema,
   ManagedCopyRootConfigureRequestSchema,
   ManagedCopyRootConfigureResultSchema,
   ManagedCopyRootSummarySchema,
@@ -991,6 +994,26 @@ describe("schemas", () => {
     })).toMatchObject({ status: "committed", removedPageCount: 3 });
     expect(() => LibraryRemoveTagResultSchema.parse({ ...request, status: "committed", removedPageCount: 3 })).toThrow();
     expect(LibraryRemoveTagResultSchema.parse({ ...request, status: "stale" })).toMatchObject({ status: "stale" });
+  });
+
+  it("binds one page tag removal to its exact tag-page snapshot", () => {
+    expect(LIBRARY_REMOVE_PAGE_TAG_CHANNEL).toBe("library.removePageTag");
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "library_page_tag_remove_request_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_pageremove",
+      tag: "Research",
+      pageId: "page_20260730_pageremove01",
+      expectedSnapshotId: `library_tags_snapshot_${"d".repeat(64)}`,
+      expectedPageUpdatedAt: "2026-07-30T12:00:00.000Z"
+    };
+    expect(LibraryRemovePageTagRequestSchema.parse(request)).toEqual(request);
+    expect(LibraryRemovePageTagResultSchema.parse({
+      ...request,
+      status: "committed",
+      operationId: "op_20260730_pageremove01"
+    })).toMatchObject({ status: "committed" });
+    expect(() => LibraryRemovePageTagResultSchema.parse({ ...request, status: "committed" })).toThrow();
   });
 
   it("opens one durable Dataset citation as an exact read-only preview with typed highlights", () => {

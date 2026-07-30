@@ -124,6 +124,7 @@ describe("desktop shell build contract", () => {
     expect(schemasSource).toContain('LIBRARY_RENAME_TAG_CHANNEL = "library.renameTag"');
     expect(schemasSource).toContain('LIBRARY_MERGE_TAG_CHANNEL = "library.mergeTag"');
     expect(schemasSource).toContain('LIBRARY_REMOVE_TAG_CHANNEL = "library.removeTag"');
+    expect(schemasSource).toContain('LIBRARY_REMOVE_PAGE_TAG_CHANNEL = "library.removePageTag"');
     expect(schemasSource).toContain("LibraryTagsRequestSchema");
     expect(schemasSource).toContain('mode: z.literal("list_tags")');
     expect(schemasSource).toContain('mode: z.literal("list_pages_for_tag")');
@@ -141,6 +142,9 @@ describe("desktop shell build contract", () => {
     expect(libraryApi).toContain(
       "readonly removeTag: (request: LibraryRemoveTagRequest) => Promise<LibraryRemoveTagResult>;"
     );
+    expect(libraryApi).toContain(
+      "readonly removePageTag: (request: LibraryRemovePageTagRequest) => Promise<LibraryRemovePageTagResult>;"
+    );
     expect(preloadSource).toContain("LibraryTagsRequestSchema.parse(request)");
     expect(preloadSource).toContain(
       "await ipcRenderer.invoke(LIBRARY_TAGS_CHANNEL, parsedRequest)"
@@ -152,6 +156,8 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain("LibraryMergeTagResultSchema.parse(");
     expect(preloadSource).toContain("LibraryRemoveTagRequestSchema.parse(request)");
     expect(preloadSource).toContain("LibraryRemoveTagResultSchema.parse(");
+    expect(preloadSource).toContain("LibraryRemovePageTagRequestSchema.parse(request)");
+    expect(preloadSource).toContain("LibraryRemovePageTagResultSchema.parse(");
     const renameHandler = mainSource.slice(
       mainSource.indexOf("ipcMain.handle(LIBRARY_RENAME_TAG_CHANNEL"),
       mainSource.indexOf("registerReaderIpc({")
@@ -166,6 +172,8 @@ describe("desktop shell build contract", () => {
       .toBeLessThan(renameHandler.indexOf("getLibraryTagRenameService().merge(parsed)"));
     expect(renameHandler).toContain("LibraryRemoveTagRequestSchema.parse(request)");
     expect(renameHandler).toContain("LibraryRemoveTagResultSchema.parse(getLibraryTagRenameService().remove(parsed))");
+    expect(renameHandler).toContain("LibraryRemovePageTagRequestSchema.parse(request)");
+    expect(renameHandler).toContain("LibraryRemovePageTagResultSchema.parse(getLibraryTagRenameService().removeFromPage(parsed))");
     expect(preloadSource).toContain("Invalid Library tags response identity.");
     for (const privateField of [
       "pagePath",
