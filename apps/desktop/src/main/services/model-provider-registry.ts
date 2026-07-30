@@ -944,7 +944,7 @@ export class ModelProviderRegistry {
       if (this.#readProviders().providers.some((provider) => provider.authSecretRef === secretRef)) return;
       this.#secrets.deleteProviderSecret(secretRef);
     } catch {
-      // The committed binding is valid; encrypted orphan cleanup remains recoverable maintenance.
+      // The committed binding is valid; machine-local orphan cleanup remains recoverable maintenance.
     }
   }
 
@@ -1390,7 +1390,7 @@ function normalizeDisplayName(value: string, fallback: string): string {
 function persistenceFailedError(): PigeDomainError {
   return new PigeDomainError(
     "model_provider.persistence_failed",
-    "Provider setup could not be saved to protected local storage."
+    "Provider setup could not be saved to machine-local app data."
   );
 }
 

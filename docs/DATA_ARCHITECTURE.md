@@ -199,8 +199,8 @@ Secrets include:
 
 Rule:
 
-- Default storage must be OS keychain or encrypted local storage.
-- Plaintext secret storage is allowed only as an explicit portable/developer mode with a strong warning and is never the default.
+- Storage is the machine-local Pige app-data credential file with local-user permissions
+  where supported. It never invokes the OS keychain and is not a portable mode.
 - Secrets are excluded from vault backup by default.
 - Secrets never appear in Markdown, SQLite, logs, crash reports, prompt records, operation records, backups, diagnostics exports, or support bundles. A redacted support bundle may contain only placeholders, secret-reference IDs, and non-sensitive metadata; user initiation is not permission to include raw secrets.
 
@@ -381,7 +381,7 @@ Source locator compatibility:
 | FTS/vector indexes | `.pige/indexes/` | No | No | Yes | No |
 | Cache files | `.pige/cache/` | No | No | Yes | No |
 | Vault runtime lease/claim state | `.pige/runtime/` | No | No | Yes; recreate empty | No |
-| API keys | OS keychain/app secret store | Yes, machine-local | No | No | Future explicit export only |
+| API keys | OS app data `secrets.json` | Yes, machine-local | No | No | Future explicit export only |
 | Local model files | OS app data | No | No | Downloadable | No |
 | Tool binaries | App bundle/app data | No | No | Reinstallable | No |
 | Machine-local Skills | OS app data `skills/` | Checksum-bound manifests | No | No | No |

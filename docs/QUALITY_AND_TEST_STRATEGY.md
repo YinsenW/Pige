@@ -246,8 +246,7 @@ Tests must verify:
 - API keys are stored only through the secret store.
 - API keys do not appear in Markdown, SQLite, logs, conversation events, operation records, diagnostics, or default backups.
 - Provider profile DTOs return secret references or redacted status only, never raw keys.
-- Plaintext portable/developer mode is off by default.
-- Enabling plaintext mode requires explicit settings action and warning.
+- Provider credentials load from non-portable machine-local app data without OS-keychain access.
 - Diagnostics export redacts provider/profile identifiers and excludes raw secrets.
 
 ## 6.1 Model Provider And Pi Agent Gates

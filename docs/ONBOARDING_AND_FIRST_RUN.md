@@ -320,7 +320,7 @@ First-run data writes:
 | Vault preferences | Settings Service | `.pige/config.json` | Yes |
 | Default `PIGE.md` | Vault Service | `PIGE.md` | Yes |
 | Provider profile | Model Provider Registry | OS app data | No by default |
-| Provider secret | Settings and Secrets Service | OS keychain/encrypted store | No |
+| Provider secret | Settings and Secrets Service | OS app data `secrets.json` | No |
 | Default model profile | Model Provider Registry | OS app data | No by default |
 
 Rules:

@@ -108,7 +108,7 @@ export const implementedSettingsRegistry: SettingsRegistrySummary = {
       page: "Models",
       scope: "secret",
       owner: "Settings and Secrets Service",
-      storage: "OS keychain/encrypted app data secret store",
+      storage: "machine-local app data credential store",
       backedUpByDefault: false,
       applyBehavior: "immediate",
       permissionRequirement: "explicit_warning"

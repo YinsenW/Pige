@@ -516,7 +516,7 @@ export function PermissionsPrivacySettingsPanel(props: {
               <strong>{props.t("privacy.apiKeyStorageTitle")}</strong>
               <span>{props.t("privacy.apiKeyStorageDescription")}</span>
             </div>
-            <span className="settings-status">{props.t("privacy.protected")}</span>
+            <span className="settings-status neutral">{props.t("privacy.localOnly")}</span>
           </div>
         </div>
       </section>

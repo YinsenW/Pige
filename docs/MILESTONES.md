@@ -88,7 +88,9 @@ Acceptance:
   Markdown, Dataset Bundles, source records, or source assets.
 - The app can report that the bundled core toolchain is ready or needs repair.
 - The app language can be switched among the six v0.1 locales without hard-coded UI text appearing in core screens.
-- The secret-storage adapter can protect a synthetic value through OS keychain or encrypted local storage without writing it to the vault; M3 proves provider API keys and the explicit portable/developer warning flow end to end.
+- The secret-storage adapter persists a synthetic value in machine-local app data without
+  OS-keychain access or Vault writes; M3 proves direct startup read, legacy reconnect,
+  owner-only file mode where supported, and backup/log exclusion end to end.
 - Machine-local settings are not written into `.pige/manifest.json` or default vault backups.
 - Default diagnostics export contains no secrets or source/note bodies and requires explicit user action.
 - API, Job, diagnostic, and UI failure records use the same stable namespaced code, localized message key, retryability, and user action; malformed or unstructured error records are rejected.

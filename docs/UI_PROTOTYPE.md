@@ -924,7 +924,7 @@ Uses your connected provider
 ```
 
 Provider/model plus Send authorizes exact bounded context; the row is informational, with
-no policy control/class indicator. Six locales are mechanical. Keep API-key secure-store
+no policy control/class indicator. Six locales are mechanical. Keep API-key local-store
 and advanced warned plaintext truth. Redaction/partial-note rows and dead egress/output/
 completion error keys stay absent; diagnostics-export redaction is separate. Voice, OCR,
 RAG, parser and toolchain health remain Local Capabilities, not Models.

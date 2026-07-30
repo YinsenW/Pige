@@ -3809,7 +3809,9 @@ describe("full UI Settings surface", () => {
     expect(container.textContent).toContain("Exact high-risk effects");
     expect(container.textContent).toContain("Confirm each effect");
     expect(container.textContent).toContain("No standing authority");
-    expect(container.textContent).toContain("Protected");
+    expect(container.textContent).toContain("Local app data");
+    expect(container.textContent).toContain("without the OS keychain");
+    expect(container.textContent).toContain("On this device");
     expect(container.textContent).not.toContain("Default mode");
     expect(container.textContent).not.toContain("Saved scoped grants");
     expect(container.textContent).not.toContain("YOLO");
