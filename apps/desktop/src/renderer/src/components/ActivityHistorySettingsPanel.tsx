@@ -11,12 +11,14 @@ export function ActivityHistorySettingsPanel(props: {
   readonly loadingMore: boolean;
   readonly loadMoreFailed: boolean;
   readonly undoingId: string | null;
+  readonly redoingId: string | null;
   readonly openingId: string | null;
   readonly blockedIds: readonly string[];
   readonly locale: Locale;
   readonly onOpen: (activity: KnowledgeActivitySummary) => Promise<void>;
   readonly onRestored?: (pageId: string) => Promise<boolean>;
   readonly onUndo: (operationId: string) => Promise<void>;
+  readonly onRedo: (operationId: string) => Promise<void>;
   readonly onLoadMore: () => Promise<boolean>;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -92,8 +94,13 @@ export function ActivityHistorySettingsPanel(props: {
                       </button>
                     ) : null}
                     {activity.canUndo ? (
-                      <button type="button" className="settings-button" aria-label={`${props.t("activity.undo")}: ${activityLabel}`} data-activity-undo-id={activity.operationId} disabled={props.undoingId !== null || props.blockedIds.includes(activity.operationId)} onClick={() => void props.onUndo(activity.operationId)}>
+                      <button type="button" className="settings-button" aria-label={`${props.t("activity.undo")}: ${activityLabel}`} data-activity-undo-id={activity.operationId} disabled={props.undoingId !== null || props.redoingId !== null || props.blockedIds.includes(activity.operationId)} onClick={() => void props.onUndo(activity.operationId)}>
                         {props.t(props.undoingId === activity.operationId ? "activity.undoing" : "activity.undo")}
+                      </button>
+                    ) : null}
+                    {activity.canRedo ? (
+                      <button type="button" className="settings-button" aria-label={`${props.t("activity.redo")}: ${activityLabel}`} data-activity-redo-id={activity.operationId} disabled={props.redoingId !== null || props.undoingId !== null || props.blockedIds.includes(activity.operationId)} onClick={() => void props.onRedo(activity.operationId)}>
+                        {props.t(props.redoingId === activity.operationId ? "activity.redoing" : "activity.redo")}
                       </button>
                     ) : null}
                   </div>

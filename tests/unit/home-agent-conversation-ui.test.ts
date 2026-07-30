@@ -5789,7 +5789,19 @@ describe("Home durable Agent conversation UI", () => {
     expect(buttonsByAriaLabel(container, "Undo: Knowledge note created: Grounded boundary (1)")).toHaveLength(1);
     const updatedRow = container.querySelector<HTMLElement>('[data-activity-row-id="op_20260712_updateactivity"]');
     expect(updatedRow?.textContent).toContain("Undone");
-    await waitFor(dom, () => dom.window.document.activeElement === updatedRow);
+    const redoLabel = "Redo: Knowledge note updated: Refined boundary (2)";
+    await waitFor(dom, () => buttonsByAriaLabel(container, redoLabel).length === 1);
+    await waitFor(dom, () => dom.window.document.activeElement === buttonsByAriaLabel(container, redoLabel)[0]);
+    await act(async () => {
+      buttonsByAriaLabel(container, redoLabel)[0]!.click();
+      buttonsByAriaLabel(container, redoLabel)[0]!.click();
+      await settle(dom);
+    });
+    await waitFor(dom, () => harness.redoOperationIds.length === 1);
+    expect(harness.redoOperationIds).toEqual(["op_20260712_updateactivity"]);
+    expect(container.textContent).toContain("Change applied again.");
+    expect(updatedRow?.textContent).toContain("Applied");
+    await waitFor(dom, () => dom.window.document.activeElement === buttonsByAriaLabel(container, updateUndoLabel)[0]);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -6031,6 +6043,7 @@ interface ConversationHarness {
   readonly speechAssetInstallRequests: SpeechAssetInstallRequest[];
   readonly speechAssetListeners: Set<(event: SpeechAssetInstallEvent) => void>;
   readonly undoOperationIds: string[];
+  readonly redoOperationIds: string[];
   readonly draftListeners: Set<(event: AgentTurnDraftEvent) => void>;
   activityUndoMode: "success" | "post_commit_reject" | "retryable_reject" | "unknown_reject";
   activityListReads: number;
@@ -6158,6 +6171,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     speechAssetInstallRequests: [],
     speechAssetListeners: new Set(),
     undoOperationIds: [],
+    redoOperationIds: [],
     draftListeners: new Set(),
     activityUndoMode: "success",
     activityListReads: 0,
@@ -6748,6 +6762,7 @@ function makePigeApi(harness: ConversationHarness): object {
                 ...activity,
                 status: "undone",
                 canUndo: false,
+                canRedo: activity.kind === "update_page",
                 undoUnavailableReason: "already_undone"
               }
             : activity);
@@ -6759,6 +6774,18 @@ function makePigeApi(harness: ConversationHarness): object {
           status: "undone",
           operationId,
           undoOperationId: "op_20260712_undofixture"
+        };
+      },
+      redo: async ({ operationId }: { readonly operationId: string }) => {
+        harness.redoOperationIds.push(operationId);
+        harness.activities = harness.activities.map((activity) => activity.operationId === operationId
+          ? { ...activity, status: "applied", canUndo: true, canRedo: false }
+          : activity);
+        return {
+          status: "redone" as const,
+          operationId,
+          undoOperationId: "op_20260712_undofixture",
+          redoOperationId: "op_20260712_redofixture"
         };
       }
     },

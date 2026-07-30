@@ -63,6 +63,8 @@
       ["model-egress-content.ts", 77, "pf"],
       ["model-runtime-binding.ts", 113, "ap"],
       ["note-archive-service.ts", 167, "r"],
+      ["note-markdown-editor-activity-ids.ts", 18, "r"],
+      ["note-markdown-editor-redo-service.ts", 201, "rd"],
       ["note-markdown-editor-service.ts", 993, "rd"],
       ["note-markdown-import-service.ts", 353, "prdf"],
       ["note-merge-service.ts", 398, "rd"],

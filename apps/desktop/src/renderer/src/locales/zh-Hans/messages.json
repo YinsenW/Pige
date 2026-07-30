@@ -1,5 +1,6 @@
 {
   "activity.alreadyUndone": "这项更改已经撤销。",
+  "activity.alreadyRedone": "这项更改已经重做。",
   "activity.createdPage": "已创建知识笔记",
   "activity.archivedPage": "已归档知识笔记",
   "activity.restoredPage": "已恢复知识笔记",
@@ -43,6 +44,10 @@
   "activity.undoFailed": "Pige 无法安全撤销这项更改。",
   "activity.undoStateUnknown": "Pige 无法确认这项更改是否已撤销。请重新打开 Pige 后再试。",
   "activity.undoing": "正在撤销...",
+  "activity.redo": "重做",
+  "activity.redoCompleted": "已再次应用这项更改。",
+  "activity.redoFailed": "Pige 无法安全重做这项更改。",
+  "activity.redoing": "正在重做...",
   "backup.appVersion": "应用版本",
   "backup.applyClone": "恢复为新仓库",
   "backup.applyReplace": "替换当前仓库",

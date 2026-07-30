@@ -31,6 +31,7 @@ import {
   readMarkdownPageContentAtSignature,
   type MarkdownFileSignatureRecord
 } from "./markdown-page-index";
+import { createUserPageUpdateRedoOperationId, createUserPageUpdateUndoOperationId } from "./note-markdown-editor-activity-ids";
 export const MAX_NOTE_MARKDOWN_EDITOR_BYTES = 4 * 1024 * 1024;
 const MAX_RENDER_BINDINGS = 64;
 const MAX_REQUEST_ID_LENGTH = 128;
@@ -342,7 +343,7 @@ export class NoteMarkdownEditorService {
     }
   }
 }
-interface UserPageUpdateBinding {
+export interface UserPageUpdateBinding {
   readonly pageId: string;
   readonly pagePath: string;
   readonly beforeHash: string;
@@ -397,8 +398,13 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
     const current = vaultPath
       ? readPrivateTextOrUndefined(vaultPath, binding.pagePath, MAX_NOTE_MARKDOWN_EDITOR_BYTES)
       : undefined;
+    const redoOperation = undoOperation && vaultPath
+      ? readOperationOrUndefined(vaultPath, createUserPageUpdateRedoOperationId(operation.id))
+      : undefined;
+    const matchingRedo = !!redoOperation && isMatchingUserPageUpdateRedo(operation, redoOperation);
     const targetMissing = !undoOperation && current === undefined;
     const contentChanged = !undoOperation && current !== undefined && hashMarkdown(current) !== binding.afterHash;
+    const canRedo = !!undoOperation && !redoOperation && current !== undefined && hashMarkdown(current) === binding.beforeHash;
     const targetLabel = current ? safePageTitle(current, binding.pageId) : undefined;
     return {
       operationId: operation.id,
@@ -408,6 +414,12 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
       target: { kind: "page", pageId: binding.pageId },
       status: undoOperation ? "undone" : "applied",
       canUndo: !undoOperation && !targetMissing && !contentChanged,
+      ...(undoOperation ? {
+        canRedo,
+        ...(!canRedo ? { redoUnavailableReason: matchingRedo
+          ? "already_redone" as const
+          : current === undefined ? "target_missing" as const : "content_changed" as const } : {})
+      } : {}),
       ...(undoOperation
         ? { undoUnavailableReason: "already_undone" as const }
         : targetMissing
@@ -570,7 +582,7 @@ function validatePortableMarkdown(markdown: string, expectedPageId: string): boo
     (reference) => reference.target.length <= MAX_REFERENCE_LENGTH && !UNSAFE_TEXT_PATTERN.test(reference.target)
   );
 }
-function validateEditableNoteMarkdown(markdown: string, expectedPageId: string): boolean {
+export function validateEditableNoteMarkdown(markdown: string, expectedPageId: string): boolean {
   return validatePortableMarkdown(markdown, expectedPageId) && isNotePageMarkdown(markdown);
 }
 function isNotePageMarkdown(markdown: string): boolean {
@@ -632,7 +644,7 @@ function validReferencePart(value: string | undefined): boolean {
   const normalized = value.normalize("NFKC").replace(/\s+/gu, " ").trim();
   return normalized.length > 0 && normalized.length <= MAX_REFERENCE_LENGTH && !UNSAFE_TEXT_PATTERN.test(normalized);
 }
-function createUpdateOperation(input: {
+export function createUpdateOperation(input: {
   readonly operationId: string;
   readonly createdAt: string;
   readonly pageId: string;
@@ -663,7 +675,7 @@ function createUpdateOperation(input: {
     warnings: []
   });
 }
-function readUserPageUpdateBinding(operation: OperationRecord): UserPageUpdateBinding | undefined {
+export function readUserPageUpdateBinding(operation: OperationRecord): UserPageUpdateBinding | undefined {
   const target = operation.targetRefs[0];
   const before = operation.before;
   const after = operation.after;
@@ -698,7 +710,7 @@ function readUserPageUpdateBinding(operation: OperationRecord): UserPageUpdateBi
     afterHash: after.id
   };
 }
-function readUserPageUpdateUndoBinding(operation: OperationRecord): {
+export function readUserPageUpdateUndoBinding(operation: OperationRecord): {
   readonly originalOperationId: string;
   readonly pageId: string;
   readonly pagePath: string;
@@ -762,7 +774,7 @@ function createUserPageUpdateUndoOperation(
     warnings: []
   });
 }
-function isMatchingUserPageUpdateUndo(original: OperationRecord, candidate: OperationRecord): boolean {
+export function isMatchingUserPageUpdateUndo(original: OperationRecord, candidate: OperationRecord): boolean {
   const originalBinding = readUserPageUpdateBinding(original);
   const undoBinding = readUserPageUpdateUndoBinding(candidate);
   return !!originalBinding && !!undoBinding &&
@@ -772,26 +784,24 @@ function isMatchingUserPageUpdateUndo(original: OperationRecord, candidate: Oper
     undoBinding.beforeHash === originalBinding.afterHash &&
     undoBinding.afterHash === originalBinding.beforeHash;
 }
-function createUserPageUpdateUndoOperationId(operationId: string): string {
-  const dateKey = /^op_(\d{8})_[a-z0-9]{8,}$/u.exec(operationId)?.[1];
-  if (!dateKey) throw new Error("The Markdown Activity operation identity is invalid.");
-  const suffix = createHash("sha256")
-    .update(`pige.note-markdown-editor.undo.v1\0${operationId}`, "utf8")
-    .digest("hex")
-    .slice(0, 16);
-  return `op_${dateKey}_${suffix}`;
+export function isMatchingUserPageUpdateRedo(original: OperationRecord, candidate: OperationRecord): boolean {
+  const originalBinding = readUserPageUpdateBinding(original);
+  const redoBinding = readUserPageUpdateBinding(candidate);
+  return !!originalBinding && !!redoBinding && candidate.id === createUserPageUpdateRedoOperationId(original.id) &&
+    redoBinding.pageId === originalBinding.pageId && redoBinding.pagePath === originalBinding.pagePath &&
+    redoBinding.beforeHash === originalBinding.beforeHash && redoBinding.afterHash === originalBinding.afterHash;
 }
-function createUserPageUpdateBeforePath(operationId: string): string {
+export function createUserPageUpdateBeforePath(operationId: string): string {
   const dateKey = /^op_(\d{8})_[a-z0-9]{8,}$/u.exec(operationId)?.[1];
   if (!dateKey) throw new Error("The Markdown Activity operation identity is invalid.");
   return `.pige/operations/${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}/${operationId}.before.md`;
 }
-function createUserPageUpdateStagedPath(operationId: string): string {
+export function createUserPageUpdateStagedPath(operationId: string): string {
   const dateKey = /^op_(\d{8})_[a-z0-9]{8,}$/u.exec(operationId)?.[1];
   if (!dateKey) throw new Error("The Markdown Activity operation identity is invalid.");
   return `.pige/operations/${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}/${operationId}.after.pending.md`;
 }
-function persistExactPrivateFile(
+export function persistExactPrivateFile(
   vaultPath: string,
   relativePath: string,
   content: string,
@@ -807,7 +817,7 @@ function persistExactPrivateFile(
     if (existing !== content) throw new Error("The Markdown Activity private identity is occupied.");
   }
 }
-function requireExactPrivateFile(
+export function requireExactPrivateFile(
   vaultPath: string,
   relativePath: string,
   expectedHash: string,
@@ -819,7 +829,7 @@ function requireExactPrivateFile(
   }
   return content;
 }
-function persistExactOperation(vaultPath: string, operation: OperationRecord): void {
+export function persistExactOperation(vaultPath: string, operation: OperationRecord): void {
   const serialized = `${JSON.stringify(OperationRecordSchema.parse(operation), null, 2)}\n`;
   persistExactPrivateFile(vaultPath, operationRelativePath(operation.id), serialized, MAX_OPERATION_BYTES);
   const current = readOperationOrUndefined(vaultPath, operation.id);
@@ -827,7 +837,7 @@ function persistExactOperation(vaultPath: string, operation: OperationRecord): v
     throw new Error("The Markdown Activity Operation could not be adopted exactly.");
   }
 }
-function readOperationOrUndefined(vaultPath: string, operationId: string): OperationRecord | undefined {
+export function readOperationOrUndefined(vaultPath: string, operationId: string): OperationRecord | undefined {
   const content = readPrivateTextOrUndefined(vaultPath, operationRelativePath(operationId), MAX_OPERATION_BYTES);
   if (content === undefined) return undefined;
   try {
@@ -836,7 +846,7 @@ function readOperationOrUndefined(vaultPath: string, operationId: string): Opera
     throw new Error("The Markdown Activity Operation is malformed.");
   }
 }
-function readUserPageUpdateOperations(vaultPath: string): readonly OperationRecord[] {
+export function readUserPageUpdateOperations(vaultPath: string): readonly OperationRecord[] {
   const root = resolvePrivateVaultPath(vaultPath, ".pige/operations");
   if (!pathStillExists(root)) return [];
   const operations: OperationRecord[] = [];
@@ -864,7 +874,7 @@ function readSafeDirectories(root: string, namePattern: RegExp): readonly string
     .map((entry) => entry.name)
     .sort((left, right) => left.localeCompare(right, "en-US"));
 }
-function readPrivateTextOrUndefined(
+export function readPrivateTextOrUndefined(
   vaultPath: string,
   relativePath: string,
   maximumBytes: number
@@ -939,7 +949,7 @@ function createRenderIdentity(input: {
 }): string {
   return hashMarkdown(`pige.note-markdown-editor.render.v1\0${input.activeVaultId}\0${input.pageId}\0${input.pagePath}\0${input.revisionId}`);
 }
-function hashMarkdown(markdown: string): string {
+export function hashMarkdown(markdown: string): string {
   return `sha256:${createHash("sha256").update(markdown, "utf8").digest("hex")}`;
 }
 function saveIdentity(request: NoteMarkdownEditorSaveRequest): {

@@ -70,6 +70,8 @@ import type {
   JobsListResult,
   KnowledgeActivityListRequest,
   KnowledgeActivityListResult,
+  KnowledgeActivityRedoRequest,
+  KnowledgeActivityRedoResult,
   KnowledgeActivityUndoRequest,
   KnowledgeActivityUndoResult,
   KnowledgeHealthRunRequest,
@@ -1798,7 +1800,9 @@ const api: PigeDesktopApi = {
   activity: {
     list: invokeKnowledgeActivityList,
     undo: async (request: KnowledgeActivityUndoRequest): Promise<KnowledgeActivityUndoResult> =>
-      ipcRenderer.invoke("activity.undo", request) as Promise<KnowledgeActivityUndoResult>
+      ipcRenderer.invoke("activity.undo", request) as Promise<KnowledgeActivityUndoResult>,
+    redo: async (request: KnowledgeActivityRedoRequest): Promise<KnowledgeActivityRedoResult> =>
+      ipcRenderer.invoke("activity.redo", request) as Promise<KnowledgeActivityRedoResult>
   },
   collections: {
     list: invokeCollectionList,

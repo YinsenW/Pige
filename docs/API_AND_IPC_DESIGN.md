@@ -476,15 +476,11 @@ base hash or Operation internals.
 
 #### 6.4.1 Knowledge Activity And Undo
 
-`activity.list` returns bounded pages in deterministic `createdAt` descending then
-`operationId` ascending order. Its opaque cursor is process-local and bound to the active
-Vault, canonical Vault path, full snapshot hash, page offset, and prior-page boundary;
-invented, restarted, cross-Vault, or changed-snapshot cursors fail stale without exposing
-paths or Operation bodies.
+`activity.list` returns bounded pages in deterministic `createdAt` descending then `operationId` ascending order. Its opaque cursor is process-local and bound to the active Vault, canonical Vault path, full snapshot hash, page offset, and prior-page boundary; invented, restarted, cross-Vault, or changed-snapshot cursors fail stale without exposing paths or Operation bodies.
 
-`activity.list` may project `{kind:"collection",datasetId,tableId,revisionId}` for cell/row/column
-updates. `activity.undo` binds its exact revision and writes forward or returns stale; page
-Undo and the body/path/hash ban remain.
+`activity.list` may project `{kind:"collection",datasetId,tableId,revisionId}` for cell/row/column updates. `activity.undo` binds its exact revision and writes forward or returns stale; page Undo and the body/path/hash ban remain.
+
+`activity.redo` is limited to an exact user-authored Markdown `update_page` that already has one matching Undo. It accepts the original Operation ID and optional expected before revision, writes one deterministic forward `update_page`, and returns only `redone`, `already_redone`, `stale`, or `not_found` without exposing page paths, Markdown, hashes, or private recovery images.
 
 ### 6.5 Library And Notes
 
