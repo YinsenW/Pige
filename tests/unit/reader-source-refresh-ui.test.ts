@@ -138,6 +138,41 @@ describe("Reader source refresh action", () => {
     expect(harness.container.textContent).toContain("Source refreshed; edited page kept.");
     await harness.unmount();
   });
+
+  it("keeps the image source action and focus after a confirmed refresh fails", async () => {
+    const onPreview = vi.fn(async (request: any) => ({
+      ...request,
+      status: "changed" as const,
+      preview: {
+        previewId: `sourcerefreshpreview_${"4".repeat(32)}`,
+        expectedSourceRevision: `sourcerefreshrev_${"5".repeat(64)}`,
+        displayName: "Evidence.png",
+        sourceKind: "image_file" as const,
+        previousSize: 2048,
+        currentSize: 4096,
+        sizeDelta: 2048,
+        affectedArtifactCount: 2,
+        refreshesSourcePage: true
+      }
+    }));
+    const onConfirm = vi.fn(async (request: any) => ({ ...request, status: "failed" as const }));
+    const harness = await mount({ onPreview, onConfirm });
+    const trigger = harness.container.querySelector<HTMLButtonElement>("button")!;
+
+    await act(async () => { trigger.click(); await settle(harness.dom); });
+    const dialog = harness.container.querySelector('[role="dialog"]')!;
+    await act(async () => {
+      [...dialog.querySelectorAll<HTMLButtonElement>("button")].at(-1)!.click();
+      await settle(harness.dom);
+      await settle(harness.dom);
+    });
+
+    expect(harness.container.querySelector('[role="dialog"]')).toBeNull();
+    expect(harness.container.textContent).toContain("Refresh failed.");
+    expect(harness.container.querySelector<HTMLButtonElement>("button")).toBe(trigger);
+    expect(harness.dom.window.document.activeElement).toBe(trigger);
+    await harness.unmount();
+  });
 });
 
 function element(overrides: Record<string, unknown> = {}) {

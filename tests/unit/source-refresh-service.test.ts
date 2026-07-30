@@ -6,6 +6,12 @@ import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JobRecordSchema, OperationRecordSchema, SourceRecordSchema, type SourceRecord } from "@pige/schemas";
 import type { DocumentParserPort } from "../../apps/desktop/src/main/services/document-parser-service";
+import {
+  OcrService,
+  type NativeImageOcrAdapterPort,
+  type OcrPort
+} from "../../apps/desktop/src/main/services/ocr-service";
+import type { NativeOcrResult } from "../../apps/desktop/src/main/services/ocr-types";
 import { ParserArtifactService } from "../../apps/desktop/src/main/services/parser-artifact-service";
 import { SourceRefreshService } from "../../apps/desktop/src/main/services/source-refresh-service";
 import { createVaultOnDisk } from "../../apps/desktop/src/main/services/vault-layout";
@@ -153,6 +159,70 @@ describe("SourceRefreshService", () => {
     }
   });
 
+  it("refreshes referenced and managed images through local OCR and restores prior evidence through Undo", async () => {
+    for (const managed of [false, true]) {
+      const fixture = makeFixture("image_file", "old-image", managed ? "managed.png" : "evidence.png", managed);
+      fs.writeFileSync(fixture.originalPath, "new-image", "utf8");
+      const service = makeService(fixture, undefined, new OcrService(new StaticOcrAdapter()));
+      const preview = await service.preview(previewRequest(fixture), () => true);
+      expect(preview).toMatchObject({ status: "changed", preview: { sourceKind: "image_file" } });
+      if (preview.status !== "changed") throw new Error("Expected changed image preview");
+
+      const result = await service.confirm({
+        ...confirmIdentity(fixture), previewId: preview.preview.previewId,
+        expectedSourceRevision: preview.preview.expectedSourceRevision
+      }, () => true);
+
+      expect(result).toMatchObject({ status: "refreshed", sourcePageConflict: false });
+      if (result.status !== "refreshed") throw new Error("Expected refreshed image result");
+      const published = readSource(fixture);
+      expect(managed ? published.managedCopy?.checksum : published.original?.checksum).toBe(checksum("new-image"));
+      expect(published.metadata).toMatchObject({ ocrStatus: "completed", sourceRefreshJobId: result.jobId });
+      expect(published.artifacts.map((artifact) => artifact.kind)).toEqual(["ocr", "metadata"]);
+      expect(readJob(fixture.vaultPath, result.jobId)).toMatchObject({ class: "ocr", state: "completed" });
+      const operation = readOperation(fixture.vaultPath, result.operationId);
+      expect(listJsonFiles(path.join(fixture.vaultPath, ".pige", "operations"))).toHaveLength(1);
+      expect(service.undo(operation)).toMatchObject({ status: "undone" });
+      expect(readSource(fixture)).toEqual(fixture.source);
+      expect(fs.existsSync(path.join(fixture.vaultPath, "artifacts", "ocr", "2026", "07", `${fixture.source.id}.txt`)))
+        .toBe(false);
+      expect(fs.existsSync(path.join(fixture.vaultPath, "artifacts", "metadata", "2026", "07", `${fixture.source.id}.ocr.json`)))
+        .toBe(false);
+    }
+  });
+
+  it("rejects image Source Record drift after preview before invoking OCR", async () => {
+    const fixture = makeFixture("image_file", "old-image", "evidence.png");
+    fs.writeFileSync(fixture.originalPath, "new-image", "utf8");
+    const ocr: OcrPort = { canOcr: () => true, ocrSource: vi.fn() };
+    const service = makeService(fixture, undefined, ocr);
+    const preview = await service.preview(previewRequest(fixture), () => true);
+    if (preview.status !== "changed") throw new Error("Expected changed image preview");
+    fs.writeFileSync(fixture.sourcePath, `${JSON.stringify(SourceRecordSchema.parse({
+      ...fixture.source,
+      metadata: { ...fixture.source.metadata, title: "Concurrent source edit" }
+    }), null, 2)}\n`, "utf8");
+
+    await expect(service.confirm({
+      ...confirmIdentity(fixture), previewId: preview.preview.previewId,
+      expectedSourceRevision: preview.preview.expectedSourceRevision
+    }, () => true)).resolves.toMatchObject({ status: "stale" });
+    expect(ocr.ocrSource).not.toHaveBeenCalled();
+    expect(listJsonFiles(path.join(fixture.vaultPath, ".pige", "jobs"))).toEqual([]);
+  });
+
+  it("keeps changed images ineligible when no local OCR capability is ready", async () => {
+    const fixture = makeFixture("image_file", "old-image", "evidence.png");
+    fs.writeFileSync(fixture.originalPath, "new-image", "utf8");
+    const ocr: OcrPort = { canOcr: () => false, ocrSource: vi.fn() };
+    const service = makeService(fixture, undefined, ocr);
+
+    await expect(service.preview(previewRequest(fixture), () => true))
+      .resolves.toMatchObject({ status: "ineligible" });
+    expect(ocr.ocrSource).not.toHaveBeenCalled();
+    expect(listJsonFiles(path.join(fixture.vaultPath, ".pige", "jobs"))).toEqual([]);
+  });
+
   it("restores the previous source revision and evidence through Activity Undo", async () => {
     const fixture = makeFixture("plain_text_file", "old evidence\n");
     fs.writeFileSync(fixture.originalPath, "new evidence\n", "utf8");
@@ -205,10 +275,45 @@ describe("SourceRefreshService", () => {
     await expect(confirming).resolves.toMatchObject({ status: "failed" });
     expect(readSource(fixture)).toEqual(fixture.source);
   });
+
+  it("rolls back an interrupted image OCR refresh after restart without replaying OCR", async () => {
+    const fixture = makeFixture("image_file", "old-image", "evidence.png");
+    fs.writeFileSync(fixture.originalPath, "new-image", "utf8");
+    const enteredOcr = deferred<void>();
+    const blockedOcr = deferred<never>();
+    const ocr: OcrPort = {
+      canOcr: () => true,
+      ocrSource: vi.fn(async () => {
+        enteredOcr.resolve();
+        return blockedOcr.promise;
+      })
+    };
+    const service = makeService(fixture, undefined, ocr);
+    const preview = await service.preview(previewRequest(fixture), () => true);
+    if (preview.status !== "changed") throw new Error("Expected changed image preview");
+    const confirming = service.confirm({
+      ...confirmIdentity(fixture), previewId: preview.preview.previewId,
+      expectedSourceRevision: preview.preview.expectedSourceRevision
+    }, () => true);
+    await enteredOcr.promise;
+    const job = listJsonFiles(path.join(fixture.vaultPath, ".pige", "jobs"))
+      .map((jobPath) => JobRecordSchema.parse(JSON.parse(fs.readFileSync(jobPath, "utf8"))))[0]!;
+    expect(job).toMatchObject({ class: "ocr", state: "running" });
+    expect(readSource(fixture).metadata.sourceRefreshInFlight).toMatch(/^op_/u);
+
+    const restarted = makeService(fixture, undefined, ocr);
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(readSource(fixture)).toEqual(fixture.source);
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
+    expect(ocr.ocrSource).toHaveBeenCalledTimes(1);
+    blockedOcr.reject(new Error("old process stopped"));
+    await expect(confirming).resolves.toMatchObject({ status: "failed" });
+    expect(readSource(fixture)).toEqual(fixture.source);
+  });
 });
 
 function makeFixture(
-  kind: "plain_text_file" | "pdf_file" | "docx_file" | "pptx_file",
+  kind: "plain_text_file" | "pdf_file" | "docx_file" | "pptx_file" | "image_file",
   body: string,
   displayName = "evidence.txt",
   managed = false
@@ -265,9 +370,34 @@ function makeFixture(
 
 function makeService(
   fixture: ReturnType<typeof makeFixture>,
-  parser: DocumentParserPort = { canParse: () => false, parseSource: vi.fn() }
+  parser: DocumentParserPort = { canParse: () => false, parseSource: vi.fn() },
+  ocr?: OcrPort
 ): SourceRefreshService {
-  return new SourceRefreshService({ current: () => fixture.vault, activeVaultPath: () => fixture.vaultPath }, parser);
+  return new SourceRefreshService(
+    { current: () => fixture.vault, activeVaultPath: () => fixture.vaultPath },
+    parser,
+    undefined,
+    ocr
+  );
+}
+
+class StaticOcrAdapter implements NativeImageOcrAdapterPort {
+  isAvailable(): boolean { return true; }
+  async recognize(): Promise<NativeOcrResult> {
+    return {
+      adapterId: "macos_vision_ocr", adapterVersion: "1.0.0",
+      engine: "macos_vision_document", engineVersion: "revision1",
+      text: "Updated image evidence", languageHints: ["en"], confidence: 0.98, warnings: [],
+      blocks: [{
+        text: "Updated image evidence", kind: "line", confidence: 0.98,
+        boundingBox: { x: 0.1, y: 0.1, width: 0.8, height: 0.1 }, languageHints: ["en"], isTitle: false
+      }],
+      image: {
+        typeIdentifier: "public.png", frameCount: 1, sourceWidth: 100, sourceHeight: 100,
+        decodedWidth: 100, decodedHeight: 100, downsampled: false
+      }
+    };
+  }
 }
 
 function successfulDocumentParser(text: string): DocumentParserPort {

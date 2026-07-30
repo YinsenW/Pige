@@ -17,6 +17,17 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("composes image source refresh with the local OCR owner", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const composition = mainSource.slice(
+      mainSource.indexOf("const getSourceRefreshService"),
+      mainSource.indexOf("const getDatasetService")
+    );
+    expect(composition).toContain("new SourceRefreshService(");
+    expect(composition).toContain("getDocumentParserService()");
+    expect(composition).toContain("getOcrService()");
+  });
+
   it("freezes one strict pathless durable conversation title mutation", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");

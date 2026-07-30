@@ -30,17 +30,25 @@ export function ReaderSourceRefreshAction(props: {
   const [pendingSourceId, setPendingSourceId] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ readonly sourceId: string; readonly value: ChangedPreview } | null>(null);
   const [notice, setNotice] = useState<{ readonly sourceId: string; readonly value: Notice } | null>(null);
+  const [restoreFocusSourceId, setRestoreFocusSourceId] = useState<string | null>(null);
 
   useEffect(() => {
     identityRef.current = identity;
     setPendingSourceId(null);
     setPreview(null);
     setNotice(null);
+    setRestoreFocusSourceId(null);
   }, [identity]);
 
   useEffect(() => {
     if (preview) cancelRef.current?.focus({ preventScroll: true });
   }, [preview]);
+
+  useEffect(() => {
+    if (!restoreFocusSourceId || pendingSourceId !== null || preview !== null) return;
+    restoreTriggerFocus(restoreFocusSourceId, triggerRefs);
+    setRestoreFocusSourceId(null);
+  }, [pendingSourceId, preview, restoreFocusSourceId]);
 
   if (!props.activeVaultId || !props.renderContextId || props.sourceIds.length === 0 ||
     !props.onPreview || !props.onConfirm) return null;
@@ -93,7 +101,7 @@ export function ReaderSourceRefreshAction(props: {
       setNotice({ sourceId, value: result.status === "refreshed"
         ? (result.sourcePageConflict ? "refreshedConflict" : "refreshed")
         : toNotice(result.status) });
-      restoreTriggerFocus(sourceId, triggerRefs);
+      setRestoreFocusSourceId(sourceId);
       if (result.status === "refreshed" && props.onRender && props.onRefreshed) {
         const render = await props.onRender(props.currentPageId);
         if (identityRef.current === startedIdentity) props.onRefreshed(render);
@@ -167,9 +175,7 @@ function closePreview(
 }
 
 function restoreTriggerFocus(sourceId: string, triggerRefs: React.RefObject<Map<string, HTMLButtonElement>>): void {
-  const focus = (): void => triggerRefs.current?.get(sourceId)?.focus({ preventScroll: true });
-  if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(focus);
-  else focus();
+  triggerRefs.current?.get(sourceId)?.focus({ preventScroll: true });
 }
 
 function sameRequestIdentity(

@@ -1365,7 +1365,12 @@ const getDocumentParserService = (): DocumentParserService => {
 };
 
 const getSourceRefreshService = (): SourceRefreshService => {
-  sourceRefreshService ??= new SourceRefreshService(getVaultService(), getDocumentParserService());
+  sourceRefreshService ??= new SourceRefreshService(
+    getVaultService(),
+    getDocumentParserService(),
+    undefined,
+    getOcrService()
+  );
   return sourceRefreshService;
 };
 
