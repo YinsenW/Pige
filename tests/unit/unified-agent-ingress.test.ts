@@ -859,6 +859,100 @@ describe("Unified Agent ingress", () => {
     expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toHaveLength(0);
   });
 
+  it("reconciles the complete ordered attachment set after restart without duplicate sources or pages", async () => {
+    const fixture = makeVault();
+    const files = ["restart-first.txt", "restart-second.txt"].map((name, ordinal) => {
+      const filePath = path.join(path.dirname(fixture.vaultPath), name);
+      fs.writeFileSync(filePath, `restart attachment ${ordinal + 1}\n`, "utf8");
+      return { ordinal, displayName: name, internalPath: filePath };
+    });
+    const stagedItems = files.map(({ ordinal, displayName }) => ({
+      kind: "file" as const,
+      ordinal,
+      displayName
+    }));
+    const models = createMutableModels(true);
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_list_attachments", args: {} },
+        { kind: "tool_call", toolName: "pige_select_attachment", args: { attachmentRef: "attachment_1" } },
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+        { kind: "tool_call", toolName: "pige_select_attachment", args: { attachmentRef: "attachment_2" } },
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+        { kind: "text", text: "Both restarted attachments remain available. [citation_11] [citation_12]" }
+      ]
+    });
+    const firstJobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, adapter));
+    const firstHome = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, firstJobs, adapter);
+    const capture = new CaptureService(fixture.vaultPort);
+    const attachments = new HomeAgentAttachmentService(capture);
+    const preparedItems = await attachments.prepare(files, stagedItems);
+    const request = {
+      schemaVersion: 1 as const,
+      text: "Compare both files after restart.",
+      inputKind: "file_drop" as const,
+      locale: "en" as const,
+      clientTurnId: "turn_20260730_multirestart01",
+      stagedItems
+    };
+    const prepared = firstHome.prepareSourceTurn(request, {
+      count: preparedItems.entries.length,
+      attachmentSetHash: preparedItems.attachmentSetHash,
+      inputChecksums: preparedItems.entries.map((entry) => entry.inputChecksum)
+    });
+    await capture.preserveFilesForAgentTurn({
+      filePaths: [files[0]!.internalPath],
+      inputKind: "file_drop",
+      userIntent: "unknown",
+      locale: "en"
+    }, {
+      jobId: prepared.jobId,
+      sourceId: prepared.sourceIds[0]!,
+      inputChecksum: preparedItems.entries[0]!.inputChecksum,
+      ordinal: 0,
+      snapshotOrdinal: 0,
+      attachmentSetHash: preparedItems.attachmentSetHash
+    });
+    expect(listFiles(path.join(fixture.vaultPath, ".pige", "source-records"), ".json")).toHaveLength(1);
+    const restartedJobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, adapter));
+    expect(restartedJobs.reconcilePendingAgentTurnSources()).toEqual({ linked: 0, waiting: 1, failed: 0 });
+
+    const restartedAttachments = new HomeAgentAttachmentService(new CaptureService(fixture.vaultPort));
+    expect(await restartedAttachments.preserve({
+      prepared: preparedItems,
+      turn: request,
+      jobId: prepared.jobId,
+      firstSourceId: prepared.sourceId
+    })).toMatchObject({ status: "preserved", sourceIds: prepared.sourceIds });
+    expect(firstJobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
+      state: "waiting_dependency",
+      stage: "capturing_source"
+    });
+
+    expect(restartedJobs.reconcilePendingAgentTurnSources()).toEqual({ linked: 1, waiting: 0, failed: 0 });
+    const restartedHome = new HomeAgentService(
+      fixture.vaultPort,
+      models,
+      neverRetrieval,
+      restartedJobs,
+      adapter
+    );
+    expect(await restartedHome.resumeWaitingTurns(20)).toEqual({
+      requeued: 0,
+      processed: 1,
+      completed: 1,
+      waiting: 0,
+      failed: 0
+    });
+
+    const citations = restartedHome.conversation()?.messages.at(-1)?.answer?.citations ?? [];
+    expect(citations.map((citation) => citation.refId)).toEqual(["citation_11", "citation_12"]);
+    expect(new Set(citations.map((citation) => citation.pageId)).size).toBe(2);
+    expect(listFiles(path.join(fixture.vaultPath, ".pige", "source-records"), ".json")).toHaveLength(2);
+    expect(listFiles(path.join(fixture.vaultPath, "sources"), ".md")).toHaveLength(2);
+    expect(restartedJobs.reconcilePendingAgentTurnSources()).toEqual({ linked: 0, waiting: 0, failed: 0 });
+  });
+
   it("keeps the same source agent_turn waiting and resumes it after the model binding becomes ready", async () => {
     const fixture = makeVault();
     const sourceFile = path.join(path.dirname(fixture.vaultPath), "waiting-source.txt");
