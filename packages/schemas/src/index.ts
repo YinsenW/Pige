@@ -1597,10 +1597,16 @@ export const NoteRevisionHistoryRevisionIdSchema = z.string().regex(/^notehistor
 export const NoteArchiveCurrentRequestIdSchema = z.string().regex(/^notearchivereq_[a-z0-9]{16,64}$/);
 export const NoteRestoreArchivedRequestIdSchema = z.string().regex(/^noterestorereq_[a-z0-9]{16,64}$/);
 export const NoteAddTagRequestIdSchema = z.string().regex(/^noteaddtagreq_[a-z0-9]{16,64}$/);
+export const NoteEditTaxonomyRequestIdSchema = z.string().regex(/^notetaxonomyreq_[a-z0-9]{16,64}$/);
 export const NoteCanonicalTagSchema = z.string().min(1).max(48).refine(
   (value) => !/[\u0000-\u001f\u007f]/u.test(value) &&
     value === value.normalize("NFKC").replace(/\s+/gu, " ").trim(),
   "Note tags must use the canonical Markdown tag representation."
+);
+export const NoteCanonicalTopicSchema = z.string().min(1).max(80).refine(
+  (value) => !/[\u0000-\u001f\u007f]/u.test(value) &&
+    value === value.normalize("NFKC").replace(/\s+/gu, " ").trim(),
+  "Note topics must use the canonical Markdown topic representation."
 );
 export const NoteTrashEligibilitySchema = z.object({
   canTrash: z.boolean(),
@@ -1616,7 +1622,9 @@ export const NoteRestoreEligibilitySchema = z.object({
 }).strict();
 export const NoteTaggingSummarySchema = z.object({
   tags: z.array(NoteCanonicalTagSchema).max(12).readonly(),
+  topics: z.array(NoteCanonicalTopicSchema).max(8).readonly().default([]),
   canAdd: z.boolean(),
+  canEdit: z.boolean().default(false),
   revision: NoteEditorRevisionSchema
 }).strict();
 export const NoteRevisionHistoryEligibilitySchema = z.object({
@@ -1727,6 +1735,7 @@ export const NOTE_TRASH_RESTORE_CHANNEL = "notes.restoreTrash" as const;
 export const NOTE_ARCHIVE_CURRENT_CHANNEL = "notes.archiveCurrent" as const;
 export const NOTE_RESTORE_ARCHIVED_CHANNEL = "notes.restoreArchived" as const;
 export const NOTE_ADD_TAG_CHANNEL = "notes.addTag" as const;
+export const NOTE_EDIT_TAXONOMY_CHANNEL = "notes.editTaxonomy" as const;
 export const NOTE_IMPORT_MARKDOWN_CHANNEL = "notes.importMarkdown" as const;
 export const NoteImportMarkdownRequestIdSchema = z.string()
   .regex(/^noteimport_[a-z0-9]{16,64}$/u);
@@ -1802,6 +1811,31 @@ export const NoteAddTagResultSchema = z.discriminatedUnion("status", [
   }).strict(),
   ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
     NoteAddTagResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+const NoteEditTaxonomyIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteEditTaxonomyRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema,
+  tags: z.array(NoteCanonicalTagSchema).max(12).readonly(),
+  topics: z.array(NoteCanonicalTopicSchema).max(8).readonly()
+}).strict();
+export const NoteEditTaxonomyRequestSchema = NoteEditTaxonomyIdentitySchema.superRefine((value, context) => {
+  for (const [field, values] of [["tags", value.tags], ["topics", value.topics]] as const) {
+    const keys = values.map((entry) => entry.normalize("NFKC").toLocaleLowerCase("en-US"));
+    if (new Set(keys).size !== keys.length) context.addIssue({ code: "custom", path: [field], message: `${field} must be unique.` });
+  }
+});
+const NoteEditTaxonomyResultIdentitySchema = NoteEditTaxonomyIdentitySchema;
+export const NoteEditTaxonomyResultSchema = z.discriminatedUnion("status", [
+  NoteEditTaxonomyResultIdentitySchema.extend({
+    status: z.literal("committed"), operationId: OperationIdSchema, render: NoteRenderResultSchema
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteEditTaxonomyResultIdentitySchema.extend({ status: z.literal(status) }).strict()
   )
 ]);
 export const NoteTrashCurrentRequestSchema = z.object({
@@ -10285,9 +10319,13 @@ export type NoteRestoreArchivedResult = z.infer<typeof NoteRestoreArchivedResult
 export type NoteRestoreEligibility = z.infer<typeof NoteRestoreEligibilitySchema>;
 export type NoteAddTagRequestId = z.infer<typeof NoteAddTagRequestIdSchema>;
 export type NoteCanonicalTag = z.infer<typeof NoteCanonicalTagSchema>;
+export type NoteCanonicalTopic = z.infer<typeof NoteCanonicalTopicSchema>;
 export type NoteTaggingSummary = z.infer<typeof NoteTaggingSummarySchema>;
 export type NoteAddTagRequest = z.infer<typeof NoteAddTagRequestSchema>;
 export type NoteAddTagResult = z.infer<typeof NoteAddTagResultSchema>;
+export type NoteEditTaxonomyRequestId = z.infer<typeof NoteEditTaxonomyRequestIdSchema>;
+export type NoteEditTaxonomyRequest = z.infer<typeof NoteEditTaxonomyRequestSchema>;
+export type NoteEditTaxonomyResult = z.infer<typeof NoteEditTaxonomyResultSchema>;
 export type NoteTrashEligibility = z.infer<typeof NoteTrashEligibilitySchema>;
 export type NoteTrashCurrentRequest = z.infer<typeof NoteTrashCurrentRequestSchema>;
 export type NoteTrashCurrentResult = z.infer<typeof NoteTrashCurrentResultSchema>;

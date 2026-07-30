@@ -41,8 +41,8 @@ import type {
   ModelProviderSettingsSummary,
   NoteArchiveCurrentRequest,
   NoteArchiveCurrentResult,
-  NoteAddTagRequest,
-  NoteAddTagResult,
+  NoteEditTaxonomyRequest,
+  NoteEditTaxonomyResult,
   NoteRestoreArchivedRequest,
   NoteRestoreArchivedResult,
   NoteOpenSourceReferenceRequest,
@@ -4932,29 +4932,29 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
-  it("adds one tag to the exact Home-opened Reader note and retains the draft on stale", async () => {
+  it("corrects tags and topics on the exact Home-opened Reader note and retains both drafts on stale", async () => {
     const dom = createDom(); const harness = createHarness(completedGroundedTimeline()); const revision = `noteeditrev_${"d".repeat(32)}`;
     let mode: "stale" | "committed" = "stale";
-    harness.renderNote = async (pageId) => ({ ...testRenderedNote(pageId), tagging: { tags: ["research"], canAdd: true, revision } });
-    harness.addTag = async (request) => mode === "stale" ? { ...request, status: "stale" } : { ...request, status: "committed",
-      operationId: "operation_home_note_add_tag", render: { ...testRenderedNote(request.currentPageId), html: "<p>Tagged Home note.</p>",
-        tagging: { tags: ["research", request.tag], canAdd: true, revision: `noteeditrev_${"e".repeat(32)}` } } };
+    harness.renderNote = async (pageId) => ({ ...testRenderedNote(pageId), tagging: { tags: ["research"], topics: ["PKM"], canAdd: true, canEdit: true, revision } });
+    harness.editTaxonomy = async (request) => mode === "stale" ? { ...request, status: "stale" } : { ...request, status: "committed",
+      operationId: "operation_home_note_taxonomy", render: { ...testRenderedNote(request.currentPageId), html: "<p>Classified Home note.</p>",
+        tagging: { tags: [...request.tags], topics: [...request.topics], canAdd: true, canEdit: true, revision: `noteeditrev_${"e".repeat(32)}` } } };
     const mount = await mountHome(dom, makePigeApi(harness));
     await clickElement(dom, requireElement(mount.container.querySelector<HTMLButtonElement>(".conversation-citations .citation-row")));
     await waitFor(dom, () => mount.container.querySelector(".note-reader") !== null);
-    await clickButtonByAriaLabel(dom, mount.container, enMessages["note.moreActions"]); await clickButton(dom, mount.container, enMessages["note.tag.add"]);
-    const input = requireElement(mount.container.querySelector<HTMLInputElement>(`input[placeholder="${enMessages["note.tag.placeholder"]}"]`));
-    await act(async () => { Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")?.set?.call(input, "  field   notes  ");
-      input.dispatchEvent(new dom.window.Event("input", { bubbles: true })); input.dispatchEvent(new dom.window.Event("change", { bubbles: true })); await settle(dom); });
-    await clickButton(dom, mount.container, enMessages["note.tag.confirm"]);
-    await waitFor(dom, () => harness.noteAddTagRequests.length === 1);
-    expect(harness.noteAddTagRequests[0]).toMatchObject({ activeVaultId: "vault_home_conversation", currentPageId: "page_20260715_note0001",
-      renderContextId: `notectx_${"a".repeat(32)}`, expectedRevision: revision, tag: "field notes" });
-    expect(mount.container.textContent).toContain(enMessages["note.tag.failed"]); expect(input.value).toBe("  field   notes  ");
-    expect(dom.window.document.activeElement).toBe(input);
-    mode = "committed"; await clickButton(dom, mount.container, enMessages["note.tag.confirm"]);
-    await waitFor(dom, () => mount.container.textContent?.includes("Tagged Home note.") === true);
-    expect(harness.noteAddTagRequests).toHaveLength(2); expect(mount.container.querySelector(".note-reader")).not.toBeNull();
+    await clickButtonByAriaLabel(dom, mount.container, enMessages["note.moreActions"]); await clickButton(dom, mount.container, enMessages["note.taxonomy.edit"]);
+    const tagsInput = requireElement(mount.container.querySelector<HTMLInputElement>(`input[placeholder="${enMessages["note.taxonomy.tagsPlaceholder"]}"]`));
+    const topicsInput = requireElement(mount.container.querySelector<HTMLInputElement>(`input[placeholder="${enMessages["note.taxonomy.topicsPlaceholder"]}"]`));
+    await act(async () => { setInput(dom, tagsInput, "  field   notes , research  "); setInput(dom, topicsInput, "PKM, Knowledge   management"); await settle(dom); });
+    await clickButton(dom, mount.container, enMessages["note.taxonomy.confirm"]);
+    await waitFor(dom, () => harness.noteEditTaxonomyRequests.length === 1);
+    expect(harness.noteEditTaxonomyRequests[0]).toMatchObject({ activeVaultId: "vault_home_conversation", currentPageId: "page_20260715_note0001",
+      renderContextId: `notectx_${"a".repeat(32)}`, expectedRevision: revision, tags: ["field notes", "research"], topics: ["PKM", "Knowledge management"] });
+    expect(mount.container.textContent).toContain(enMessages["note.taxonomy.failed"]); expect(tagsInput.value).toBe("  field   notes , research  ");
+    expect(topicsInput.value).toBe("PKM, Knowledge   management"); expect(dom.window.document.activeElement).toBe(tagsInput);
+    mode = "committed"; await clickButton(dom, mount.container, enMessages["note.taxonomy.confirm"]);
+    await waitFor(dom, () => mount.container.textContent?.includes("Classified Home note.") === true);
+    expect(harness.noteEditTaxonomyRequests).toHaveLength(2); expect(mount.container.querySelector(".note-reader")).not.toBeNull();
     await waitFor(dom, () => dom.window.document.activeElement === mount.container.querySelector(".note-reader"));
     await act(async () => mount.root.unmount()); dom.window.close();
   });
@@ -6065,7 +6065,7 @@ interface ConversationHarness {
   readonly editorSaveRequests: NoteEditorSaveRequest[];
   readonly noteTrashRequests: NoteTrashCurrentRequest[];
   readonly noteArchiveRequests: NoteArchiveCurrentRequest[];
-  readonly noteAddTagRequests: NoteAddTagRequest[];
+  readonly noteEditTaxonomyRequests: NoteEditTaxonomyRequest[];
   readonly noteRestoreRequests: NoteRestoreArchivedRequest[];
   readonly noteMergeRequests: NoteMergeRequest[];
   readonly noteRelateRequests: NoteRelateRequest[];
@@ -6074,7 +6074,7 @@ interface ConversationHarness {
   saveEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
   trashCurrent: (request: NoteTrashCurrentRequest) => Promise<NoteTrashCurrentResult>;
   archiveCurrent: (request: NoteArchiveCurrentRequest) => Promise<NoteArchiveCurrentResult>;
-  addTag: (request: NoteAddTagRequest) => Promise<NoteAddTagResult>;
+  editTaxonomy: (request: NoteEditTaxonomyRequest) => Promise<NoteEditTaxonomyResult>;
   restoreArchived: (request: NoteRestoreArchivedRequest) => Promise<NoteRestoreArchivedResult>;
   mergeCurrent: (request: NoteMergeRequest) => Promise<NoteMergeResult>;
   relateCurrent: (request: NoteRelateRequest) => Promise<NoteRelateResult>;
@@ -6200,7 +6200,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     editorSaveRequests: [],
     noteTrashRequests: [],
     noteArchiveRequests: [],
-    noteAddTagRequests: [],
+    noteEditTaxonomyRequests: [],
     noteRestoreRequests: [],
     noteMergeRequests: [],
     noteRelateRequests: [],
@@ -6224,7 +6224,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     }),
     trashCurrent: async (request) => ({ ...request, status: "failed" }),
     archiveCurrent: async (request) => ({ ...request, status: "failed" }),
-    addTag: async (request) => ({ ...request, status: "failed" }),
+    editTaxonomy: async (request) => ({ ...request, status: "failed" }),
     restoreArchived: async (request) => ({ ...request, status: "failed" }),
     mergeCurrent: async (request) => ({ ...request, status: "failed" }),
     relateCurrent: async (request) => ({ ...request, status: "failed" }),
@@ -6895,9 +6895,9 @@ function makePigeApi(harness: ConversationHarness): object {
         harness.noteArchiveRequests.push(request);
         return harness.archiveCurrent(request);
       },
-      addTag: async (request: NoteAddTagRequest) => {
-        harness.noteAddTagRequests.push(request);
-        return harness.addTag(request);
+      editTaxonomy: async (request: NoteEditTaxonomyRequest) => {
+        harness.noteEditTaxonomyRequests.push(request);
+        return harness.editTaxonomy(request);
       },
       restoreArchived: async (request: NoteRestoreArchivedRequest) => {
         harness.noteRestoreRequests.push(request);
@@ -7715,6 +7715,12 @@ async function setConversationSearchInputValue(dom: JSDOM, container: HTMLElemen
     input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
     await settle(dom);
   });
+}
+
+function setInput(dom: JSDOM, input: HTMLInputElement, value: string): void {
+  Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")?.set?.call(input, value);
+  input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
 }
 
 async function dispatchComposerKey(

@@ -24,6 +24,8 @@ import type {
   NoteRestoreArchivedResult,
   NoteAddTagRequest,
   NoteAddTagResult,
+  NoteEditTaxonomyRequest,
+  NoteEditTaxonomyResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteTrashListRequest,
@@ -81,6 +83,9 @@ import {
   NOTE_ADD_TAG_CHANNEL,
   NoteAddTagRequestSchema,
   NoteAddTagResultSchema,
+  NOTE_EDIT_TAXONOMY_CHANNEL,
+  NoteEditTaxonomyRequestSchema,
+  NoteEditTaxonomyResultSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
   NoteTrashCurrentRequestSchema,
@@ -410,6 +415,21 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
       ? result
       : NoteAddTagResultSchema.parse({ ...parsed, status: "failed" });
+  });
+  options.ipcMain.handle(NOTE_EDIT_TAXONOMY_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteEditTaxonomyRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return NoteEditTaxonomyResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    let rawResult: NoteEditTaxonomyResult;
+    try { rawResult = await options.getNoteTagService().edit(ownerId, parsed); }
+    catch { rawResult = { ...parsed, status: "failed" }; }
+    const result = NoteEditTaxonomyResultSchema.parse(rawResult);
+    if (result.status === "committed") options.onNoteRelated();
+    return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+      ? result
+      : NoteEditTaxonomyResultSchema.parse({ ...parsed, status: "failed" });
   });
   options.ipcMain.handle(NOTE_IMPORT_MARKDOWN_CHANNEL, async (event, request: unknown): Promise<NoteImportMarkdownResult> => {
     const parsed = NoteImportMarkdownRequestSchema.parse(request) as NoteImportMarkdownRequest;
