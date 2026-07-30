@@ -52,6 +52,7 @@ import {
 import { WindowModeToggle } from "./components/WindowModeToggle";
 import { useWindowControls } from "./components/useWindowControls";
 import { ReaderDocumentActions } from "./components/ReaderDocumentActions";
+import type { ReaderNoteMergeOutcome, ReaderNoteMergeTarget } from "./components/ReaderNoteMergeDialog";
 import type { ReaderInlineReferenceActivation } from "./components/ReaderInlineReferenceSurface";
 import { NoteReader, type NoteRelatedState } from "./components/NoteReader";
 import {
@@ -104,6 +105,8 @@ import type {
   NoteEditorSaveRequest,
   NoteEditorSaveResult,
   NoteRenderResult,
+  NoteMergeRequest,
+  NoteMergeResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteResolveInlineReferenceRequest,
@@ -1116,6 +1119,31 @@ export function App(): React.JSX.Element {
     } catch {
       setLibraryError(t("error.generic"));
     }
+  };
+
+  const loadNoteMergeTargets = async (currentPageId: string): Promise<readonly ReaderNoteMergeTarget[]> => {
+    const vaultId = activeVaultIdRef.current;
+    if (!vaultId) throw new Error("Note merge target owner is unavailable.");
+    const result = await window.pige.library.list({ limit: 50, pageTypes: ["note"] });
+    if (activeVaultIdRef.current !== vaultId || result.activeVaultId !== vaultId) {
+      throw new Error("Note merge target owner changed.");
+    }
+    return result.pages
+      .filter((page) => page.pageType === "note" && page.pageId !== currentPageId)
+      .map((page) => ({ pageId: page.pageId, title: page.title, updatedAt: page.updatedAt }));
+  };
+
+  const adoptMergedNote = (render: NoteRenderResult): void => {
+    const vaultId = activeVaultIdRef.current;
+    if (!vaultId || render.summary.pageType !== "note") return;
+    const requestId = ++noteOpenSequence.current;
+    inlineReferenceSequence.current += 1;
+    setSelectedNoteVaultId(vaultId);
+    setSelectedNote(render);
+    setSelectedNoteRelated("loading");
+    void loadNoteRelated(render.summary.pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
+    void Promise.allSettled([refreshLibrary(), refreshVaultState()]);
+    window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".note-reader")?.focus({ preventScroll: true }));
   };
 
   const refreshCollectionCatalog = async (append = false): Promise<void> => {
@@ -2525,6 +2553,9 @@ export function App(): React.JSX.Element {
             onOpenSourceReference={(request) => window.pige.notes.openSourceReference(request)}
             onRevealSource={(request) => window.pige.notes.revealSource(request)}
             onTrashCurrentNote={(request) => window.pige.notes.trashCurrent(request)}
+            onLoadNoteMergeTargets={loadNoteMergeTargets}
+            onMergeCurrentNote={(request) => window.pige.notes.merge(request)}
+            onCurrentNoteMerged={adoptMergedNote}
             searchFocusRequest={librarySearchFocusRequest}
             onOpenNote={openNote}
             onCloseNote={() => {
@@ -2583,6 +2614,9 @@ export function App(): React.JSX.Element {
               onOpenSourceReference={(request) => window.pige.notes.openSourceReference(request)}
               onRevealSource={(request) => window.pige.notes.revealSource(request)}
               onTrashCurrentNote={(request) => window.pige.notes.trashCurrent(request)}
+              onLoadNoteMergeTargets={loadNoteMergeTargets}
+              onMergeCurrentNote={(request) => window.pige.notes.merge(request)}
+              onCurrentNoteMerged={adoptMergedNote}
               searchFocusRequest={librarySearchFocusRequest}
               onOpenNote={openNote}
               onCloseNote={() => {
@@ -2655,6 +2689,8 @@ export function App(): React.JSX.Element {
             onOpenNoteEditor={(request) => window.pige.notes.openEditor(request)}
             onSaveNoteEditor={(request) => window.pige.notes.saveEditor(request)}
             onReloadNoteEditor={reloadNoteEditor}
+            onLoadNoteMergeTargets={loadNoteMergeTargets}
+            onMergeCurrentNote={(request) => window.pige.notes.merge(request)}
             onOpenCollection={(datasetId, tableId) => openCollection(datasetId, tableId, "home")}
             onOpenCollectionCitation={openCollectionCitation}
             draftText={homeDraftText}
@@ -3127,6 +3163,9 @@ export function LibraryPanel(props: {
   ) => Promise<NoteOpenSourceReferenceResult>;
   readonly onRevealSource?: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
   readonly onTrashCurrentNote?: (request: NoteTrashCurrentRequest) => Promise<NoteTrashCurrentResult>;
+  readonly onLoadNoteMergeTargets: (currentPageId: string) => Promise<readonly ReaderNoteMergeTarget[]>;
+  readonly onMergeCurrentNote: (request: NoteMergeRequest) => Promise<NoteMergeResult>;
+  readonly onCurrentNoteMerged: (render: NoteRenderResult) => void;
   readonly searchFocusRequest: number;
   readonly onOpenNote: (pageId: string) => Promise<void>;
   readonly onCloseNote: () => void;
@@ -3264,6 +3303,36 @@ export function LibraryPanel(props: {
       return result.status === "committed" ? "committed" : "retained";
     } catch {
       return "retained";
+    }
+  };
+
+  const mergeSelectedNote = async (target: ReaderNoteMergeTarget): Promise<ReaderNoteMergeOutcome> => {
+    const note = props.selectedNote;
+    const revision = note?.trashEligibility?.revision;
+    const activeVaultId = props.activeVaultId;
+    const renderContextId = note?.renderContextId;
+    if (!note || note.summary.pageType !== "note" || !revision || !activeVaultId || !renderContextId) {
+      return { status: "retained" };
+    }
+    const request: NoteMergeRequest = {
+      apiVersion: 1,
+      requestId: createNoteMergeRequestId(),
+      activeVaultId,
+      currentPageId: note.summary.pageId,
+      renderContextId,
+      expectedRevision: revision,
+      targetPageId: target.pageId,
+      expectedTargetUpdatedAt: target.updatedAt
+    };
+    try {
+      const result = await props.onMergeCurrentNote(request);
+      if (!noteMergeIdentityMatches(request, result) || result.status !== "committed" ||
+        result.render.summary.pageId !== request.currentPageId || result.render.summary.pageType !== "note") {
+        return { status: "retained" };
+      }
+      return { status: "committed", render: result.render };
+    } catch {
+      return { status: "retained" };
     }
   };
 
@@ -3406,9 +3475,15 @@ export function LibraryPanel(props: {
             <ReaderDocumentActions
               ownerIdentity={`${props.activeVaultId ?? ""}:${summary.pageId}:${props.selectedNote.renderContextId ?? ""}:${props.selectedNote.trashEligibility?.revision ?? ""}`}
               canMoveToTrash={props.selectedNote.trashEligibility?.canTrash === true && Boolean(props.onTrashCurrentNote)}
+              canMerge={isNoteEditorEligible(props.selectedNote) && Boolean(props.activeVaultId && props.selectedNote.renderContextId && props.selectedNote.trashEligibility?.revision)}
+              currentTitle={summary.title}
               labels={readerDocumentActionLabels(props.t)}
+              mergeLabels={readerNoteMergeLabels(props.t)}
               onMoveToTrash={trashSelectedNote}
+              onLoadMergeTargets={() => props.onLoadNoteMergeTargets(summary.pageId)}
+              onMerge={mergeSelectedNote}
               onCommitted={() => props.onCurrentNoteTrashed?.()}
+              onMergeCommitted={props.onCurrentNoteMerged}
             />
             <button
               type="button"
@@ -4279,6 +4354,8 @@ function HomeComposer(props: {
   readonly onOpenNoteEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
   readonly onSaveNoteEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
   readonly onReloadNoteEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
+  readonly onLoadNoteMergeTargets: (currentPageId: string) => Promise<readonly ReaderNoteMergeTarget[]>;
+  readonly onMergeCurrentNote: (request: NoteMergeRequest) => Promise<NoteMergeResult>;
   readonly onOpenCollection: (datasetId: string, tableId: string) => Promise<boolean>;
   readonly onOpenCollectionCitation: (
     conversationId: string,
@@ -5933,6 +6010,53 @@ function HomeComposer(props: {
     }
   };
 
+  const mergeSelectedHomeNote = async (target: ReaderNoteMergeTarget): Promise<ReaderNoteMergeOutcome> => {
+    const note = selectedNoteRef.current;
+    const activeVaultId = activeVaultIdRef.current;
+    const renderContextId = note?.renderContextId;
+    const revision = note?.trashEligibility?.revision;
+    if (!note || note.summary.pageType !== "note" || !activeVaultId || !renderContextId || !revision) {
+      return { status: "retained" };
+    }
+    const request: NoteMergeRequest = {
+      apiVersion: 1,
+      requestId: createNoteMergeRequestId(),
+      activeVaultId,
+      currentPageId: note.summary.pageId,
+      renderContextId,
+      expectedRevision: revision,
+      targetPageId: target.pageId,
+      expectedTargetUpdatedAt: target.updatedAt
+    };
+    try {
+      const result = await props.onMergeCurrentNote(request);
+      if (
+        !noteMergeIdentityMatches(request, result) ||
+        activeVaultIdRef.current !== request.activeVaultId ||
+        selectedNoteRef.current?.summary.pageId !== request.currentPageId ||
+        selectedNoteRef.current.renderContextId !== request.renderContextId ||
+        selectedNoteRef.current.trashEligibility?.revision !== request.expectedRevision ||
+        result.status !== "committed" ||
+        result.render.summary.pageId !== request.currentPageId ||
+        result.render.summary.pageType !== "note"
+      ) return { status: "retained" };
+      return { status: "committed", render: result.render };
+    } catch {
+      return { status: "retained" };
+    }
+  };
+
+  const adoptMergedHomeNote = (render: NoteRenderResult): void => {
+    const requestId = ++noteOpenSequence.current;
+    inlineReferenceSequence.current += 1;
+    editorOpenSequence.current += 1;
+    setSelectedNote(render);
+    setSelectedNoteRelated("loading");
+    void loadNoteRelated(render.summary.pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
+    void props.onHomeStateChanged();
+    window.requestAnimationFrame(() => homeSectionRef.current?.querySelector<HTMLElement>(".note-reader")?.focus({ preventScroll: true }));
+  };
+
   const activateInlineReference = async (href: string): Promise<ReaderInlineReferenceActivation> => {
     const vaultId = activeVaultIdRef.current;
     const note = selectedNoteRef.current;
@@ -6370,8 +6494,13 @@ function HomeComposer(props: {
                 <ReaderDocumentActions
                   ownerIdentity={`${props.activeVault?.vaultId ?? ""}:${selectedNote.summary.pageId}:${selectedNote.renderContextId ?? ""}:${selectedNote.trashEligibility?.revision ?? ""}`}
                   canMoveToTrash={selectedNote.trashEligibility?.canTrash === true && Boolean(props.activeVault && selectedNote.renderContextId)}
+                  canMerge={isNoteEditorEligible(selectedNote) && Boolean(props.activeVault && selectedNote.renderContextId && selectedNote.trashEligibility?.revision)}
+                  currentTitle={selectedNote.summary.title}
                   labels={readerDocumentActionLabels(props.t)}
+                  mergeLabels={readerNoteMergeLabels(props.t)}
                   onMoveToTrash={trashSelectedHomeNote}
+                  onLoadMergeTargets={() => props.onLoadNoteMergeTargets(selectedNote.summary.pageId)}
+                  onMerge={mergeSelectedHomeNote}
                   onCommitted={() => {
                     noteOpenSequence.current += 1;
                     inlineReferenceSequence.current += 1;
@@ -6381,6 +6510,7 @@ function HomeComposer(props: {
                     void props.onHomeStateChanged();
                     window.requestAnimationFrame(() => composerInputRef.current?.focus({ preventScroll: true }));
                   }}
+                  onMergeCommitted={adoptMergedHomeNote}
                 />
               </div>
               {editorOpenState === "failed" ? (
@@ -6953,6 +7083,20 @@ function createNoteTrashRequestId(): `notetrashreq_${string}` {
   return `notetrashreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
 }
 
+function createNoteMergeRequestId(): `notemergereq_${string}` {
+  return `notemergereq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function noteMergeIdentityMatches(request: NoteMergeRequest, result: NoteMergeResult): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.currentPageId === request.currentPageId &&
+    result.renderContextId === request.renderContextId &&
+    result.expectedRevision === request.expectedRevision &&
+    result.targetPageId === request.targetPageId &&
+    result.expectedTargetUpdatedAt === request.expectedTargetUpdatedAt;
+}
+
 function noteTrashCurrentIdentityMatches(
   request: NoteTrashCurrentRequest,
   result: NoteTrashCurrentResult
@@ -6975,6 +7119,21 @@ function readerDocumentActionLabels(t: (key: string) => string) {
     confirm: t("note.document.trashConfirm"),
     pending: t("note.document.trashing"),
     failed: t("note.document.trashFailed")
+  };
+}
+
+function readerNoteMergeLabels(t: (key: string) => string) {
+  return {
+    title: t("note.merge.title"),
+    description: t("note.merge.description"),
+    survivor: t("note.merge.survivor"),
+    target: t("note.merge.target"),
+    loading: t("note.merge.loading"),
+    empty: t("note.merge.empty"),
+    cancel: t("note.merge.cancel"),
+    confirm: t("note.merge.confirm"),
+    pending: t("note.merge.pending"),
+    failed: t("note.merge.failed")
   };
 }
 
