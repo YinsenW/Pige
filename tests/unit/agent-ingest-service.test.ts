@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PigeDomainError } from "@pige/domain";
+import { parsePigeFrontmatter } from "@pige/markdown";
 import {
   AgentIngestService,
   type AgentIngestModelConfigPort,
@@ -230,6 +231,101 @@ describe("agent ingest service", () => {
     expect(fs.existsSync(path.join(vaultPath, result.pagePath))).toBe(false);
     expect(activity.list().activities.find((entry) => entry.operationId === result.operationId))
       .toMatchObject({ status: "undone", canUndo: false });
+  });
+
+  it("persists stable grounded topic, concept, entity, claim, and question pages through the real Agent write path", async () => {
+    const pageTypes = ["topic", "concept", "entity", "claim", "question"] as const;
+    for (const [ordinal, pageType] of pageTypes.entries()) {
+      const { vaultPath, vault } = makeVault();
+      const captured = makeCapture(vaultPath, vault).submitText({
+        text: `Grounded evidence for one meaningful ${pageType} page.`,
+        inputKind: "typed_text",
+        userIntent: "capture",
+        locale: "en"
+      });
+      const sourceRecord = readJson<SourceRecord>(findFile(
+        path.join(vaultPath, ".pige/source-records"),
+        `${captured.sourceId}.json`
+      ));
+      const job = readJson<JobRecord>(findFile(path.join(vaultPath, ".pige/jobs"), `${captured.jobId}.json`));
+      const output = {
+        pageType,
+        title: `Lifecycle ${pageType} ${ordinal}`,
+        summary: { text: `A grounded ${pageType} summary.`, evidenceRefs: ["ev_01"] },
+        keyPoints: [{ text: "Keep a stable durable identity", evidenceRefs: ["ev_01"] }],
+        tags: ["lifecycle-facet"],
+        topics: ["Knowledge lifecycle"],
+        entities: ["Pige"],
+        warnings: [],
+        confidence: "high" as const
+      };
+      const service = new AgentIngestService(
+        makeModelPort(() => verifiedLocalRuntimeConfig),
+        new CapturingModelClient(output)
+      );
+
+      const created = await service.ingestSource(vaultPath, sourceRecord, job);
+      const markdown = fs.readFileSync(path.join(vaultPath, created.pagePath), "utf8");
+      const parsed = parsePigeFrontmatter(markdown);
+      expect(created.created).toBe(true);
+      expect(parsed?.frontmatter).toMatchObject({
+        id: created.pageId,
+        type: pageType,
+        source_ids: [captured.sourceId],
+        tags: ["lifecycle-facet"]
+      });
+      expect(markdown).toContain(`[source:${captured.sourceId}#source]`);
+      expect(readOperationFiles(vaultPath).map((entry) => OperationRecordSchema.parse(JSON.parse(entry.text))))
+        .toEqual([expect.objectContaining({
+          kind: "create_page",
+          jobId: job.id,
+          targetRefs: [expect.objectContaining({ kind: "page", id: created.pageId })]
+        })]);
+      if (pageType === "concept") expect(markdown).toContain("concept:\n  canonical_name:");
+      if (pageType === "entity") expect(markdown).toContain('entity:\n  entity_type: "other"');
+      if (pageType === "claim") {
+        expect(markdown).toContain(`evidence: ["${captured.sourceId}#source"]`);
+        expect(created.reviewRequired).toBe(false);
+      }
+      if (pageType === "question") expect(markdown).toContain('question:\n  state: "open"');
+
+      const adopted = await new AgentIngestService(
+        makeModelPort(() => verifiedLocalRuntimeConfig),
+        new CapturingModelClient(output)
+      ).ingestSource(vaultPath, sourceRecord, job);
+      expect(adopted).toMatchObject({ pageId: created.pageId, pagePath: created.pagePath, created: false });
+      expect(readOperationFiles(vaultPath)).toHaveLength(1);
+    }
+  });
+
+  it("rejects model-authored source page ownership before durable publication", async () => {
+    const { vaultPath, vault } = makeVault();
+    const captured = makeCapture(vaultPath, vault).submitText({
+      text: "A SourceRecord owner already preserves this exact input.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceRecord = readJson<SourceRecord>(findFile(
+      path.join(vaultPath, ".pige/source-records"),
+      `${captured.sourceId}.json`
+    ));
+    const job = readJson<JobRecord>(findFile(path.join(vaultPath, ".pige/jobs"), `${captured.jobId}.json`));
+    const service = new AgentIngestService(makeModelPort(() => verifiedLocalRuntimeConfig), new CapturingModelClient({
+      pageType: "source",
+      title: "Invented source page",
+      summary: { text: "The model must not own source-page creation.", evidenceRefs: ["ev_01"] },
+      keyPoints: [],
+      tags: [],
+      topics: [],
+      entities: [],
+      warnings: [],
+      confidence: "high"
+    }));
+
+    await expect(service.ingestSource(vaultPath, sourceRecord, job)).rejects.toBeDefined();
+    expect(listFiles(path.join(vaultPath, "wiki", "generated"), ".md")).toEqual([]);
+    expect(readOperationFiles(vaultPath)).toEqual([]);
   });
 
   it("never replaces an occupied deterministic create Operation with different audit facts", async () => {

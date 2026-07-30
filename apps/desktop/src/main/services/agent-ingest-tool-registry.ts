@@ -503,8 +503,8 @@ export function createAgentIngestToolRegistry(input: {
     } satisfies PigeAgentToolDescriptor] : []),
     {
       name: CREATE_KNOWLEDGE_NOTE_TOOL_NAME,
-      label: "Create grounded knowledge note",
-      description: "Validate and publish one grounded Markdown note for the current preserved source through Pige's durable write boundary.",
+      label: "Create grounded knowledge page",
+      description: "Validate and publish one grounded Markdown note, topic, concept, entity, claim, or question for the current preserved source through Pige's durable write boundary.",
       parameters: AGENT_INGEST_OUTPUT_SCHEMA,
       version: "1",
       capability: "write_generated_note",
@@ -652,6 +652,7 @@ const EVIDENCE_KEY_POINT_SCHEMA = {
 const AGENT_INGEST_OUTPUT_SCHEMA = {
   type: "object",
   properties: {
+    pageType: { type: "string", enum: ["note", "topic", "concept", "entity", "claim", "question"] },
     title: { type: "string", minLength: 1, maxLength: 120 },
     summary: EVIDENCE_STATEMENT_SCHEMA,
     keyPoints: {
