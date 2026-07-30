@@ -48,6 +48,7 @@ import {
   type AgentMemoryFocusRequest,
 } from "./components/AgentMemorySettingsPanel";
 import { ManagedCollectionCitationPanel, ManagedCollectionPanel } from "./components/ManagedCollectionPanel";
+import { collectionViewActivityMessageKey, renameCollectionView, trashCollectionView } from "./collection-view-lifecycle";
 import { LocalCapabilitiesSettingsPanel } from "./components/LocalCapabilitiesSettingsPanel";
 import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 import { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
@@ -1543,9 +1544,7 @@ export function App(): React.JSX.Element {
     }
   };
 
-  const createCollectionView = async (
-    request: CollectionCreateViewRequest
-  ): Promise<CollectionCreateViewResult> => {
+  const createCollectionView = async (request: CollectionCreateViewRequest): Promise<CollectionCreateViewResult> => {
     const result = await window.pige.collections.createView(request);
     if (collectionCreateViewIdentityMatches(request, result) && result.status === "committed") void refreshVaultState();
     return result;
@@ -2558,6 +2557,8 @@ export function App(): React.JSX.Element {
             onTrashColumn={trashCollectionColumn}
             onOpenView={openCollectionView}
             onCreateView={createCollectionView}
+            onRenameView={(request) => renameCollectionView(request, () => void refreshVaultState())}
+            onTrashView={(request) => trashCollectionView(request, () => void refreshVaultState())}
             onAppendDefaultRow={appendCollectionDefaultRow}
             onTrashRow={trashCollectionRow}
             onAdoptSnapshot={adoptCollectionSnapshot}
@@ -8187,14 +8188,12 @@ export function ActivityHistorySettingsPanel(props: {
         ) : (
           <div className="settings-card activity-history-list">
             {props.activities.map((activity, index) => {
-              const activityMessageKey = activity.kind === "update_collection_cell"
+              const activityMessageKey = collectionViewActivityMessageKey(activity.kind) ?? (activity.kind === "update_collection_cell"
                 ? "activity.updatedCollection"
                 : activity.kind === "trash_collection_row"
                   ? "activity.trashedCollectionRow"
                 : activity.kind === "trash_collection_column"
                   ? "activity.trashedCollectionColumn"
-                : activity.kind === "create_collection_view"
-                  ? "activity.createdCollectionView"
                 : activity.kind === "add_collection_lookup" ? "activity.addedCollectionLookup"
                 : activity.kind === "archive_page" ? "activity.archivedPage" : (activity.kind as string) === "restore_page" ? "activity.restoredPage"
                 : activity.kind === "update_page"
@@ -8205,7 +8204,7 @@ export function ActivityHistorySettingsPanel(props: {
                   ? "activity.trashedMemory"
                 : activity.kind === "restore_memory"
                   ? "activity.restoredMemory"
-                  : "activity.createdPage";
+                  : "activity.createdPage");
               const activityLabel = `${props.t(activityMessageKey)}${activity.targetLabel ? `: ${activity.targetLabel}` : ""} (${index + 1})`;
               const createdAt = new Date(activity.createdAt);
               const createdAtLabel = Number.isNaN(createdAt.getTime())

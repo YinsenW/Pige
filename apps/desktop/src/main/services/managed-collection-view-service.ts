@@ -7,6 +7,10 @@ import { PigeDomainError } from "@pige/domain";
 import {
   CollectionCreateViewRequestSchema,
   CollectionCreateViewResultSchema,
+  CollectionRenameViewRequestSchema,
+  CollectionRenameViewResultSchema,
+  CollectionTrashViewRequestSchema,
+  CollectionTrashViewResultSchema,
   CollectionListRequestSchema,
   CollectionListResultSchema,
   CollectionOpenRequestSchema,
@@ -17,6 +21,10 @@ import {
   ViewIdSchema,
   type CollectionCreateViewRequest,
   type CollectionCreateViewResult,
+  type CollectionRenameViewRequest,
+  type CollectionRenameViewResult,
+  type CollectionTrashViewRequest,
+  type CollectionTrashViewResult,
   type CollectionListRequest,
   type CollectionListResult,
   type CollectionOpenRequest,
@@ -85,6 +93,7 @@ const ViewRevisionSchema = z.object({
   viewId: ViewIdSchema,
   viewRevision: z.number().int().positive(),
   state: z.enum(["active", "trashed"]),
+  action: z.enum(["create", "rename", "trash", "restore"]).optional(),
   datasetId: z.string().regex(/^dataset_\d{8}_[a-z0-9]{12,}$/),
   tableId: z.string().regex(/^table_[a-z0-9]{12,}$/),
   datasetRevisionId: z.string().regex(/^dataset_rev_\d{8}_[a-z0-9]{12,}$/),
@@ -175,16 +184,26 @@ export class ManagedCollectionViewService {
     return this.#serialize(() => this.#createView(parsed));
   }
 
+  async renameView(request: CollectionRenameViewRequest): Promise<CollectionRenameViewResult> {
+    const parsed = CollectionRenameViewRequestSchema.parse(request);
+    return this.#serialize(() => this.#mutateView(parsed, "rename")) as Promise<CollectionRenameViewResult>;
+  }
+
+  async trashView(request: CollectionTrashViewRequest): Promise<CollectionTrashViewResult> {
+    const parsed = CollectionTrashViewRequestSchema.parse(request);
+    return this.#serialize(() => this.#mutateView(parsed, "trash")) as Promise<CollectionTrashViewResult>;
+  }
+
   async undoCreateView(request: CollectionViewUndoRequest): Promise<CollectionSnapshot | undefined> {
     return this.#serialize(() => this.#undoCreateView(request));
   }
 
   activitySummary(operation: OperationRecord, undoOperation?: OperationRecord): KnowledgeActivitySummary | undefined {
     const binding = this.#readActivityBinding(operation);
-    if (!binding || binding.revision.state !== "active") return undefined;
+    if (!binding || binding.revision.undoOfOperationId) return undefined;
     const undoBinding = undoOperation ? this.#readActivityBinding(undoOperation) : undefined;
     if (undoOperation && (!undoBinding || undoBinding.revision.undoOfOperationId !== operation.id ||
-        undoBinding.revision.viewId !== binding.revision.viewId || undoBinding.revision.state !== "trashed")) {
+        undoBinding.revision.viewId !== binding.revision.viewId)) {
       return undefined;
     }
     const current = readBundle(binding.bundle.vaultPath, binding.revision.datasetId);
@@ -194,12 +213,12 @@ export class ManagedCollectionViewService {
     const targetMissing = !undoOperation && !current;
     const revisionChanged = !undoOperation && !!current && (
       current.manifest.activeRevision !== binding.revision.datasetRevisionId ||
-      currentView?.revision.state !== "active" ||
+      currentView?.revision.state !== binding.revision.state ||
       currentView.revision.viewRevision !== binding.revision.viewRevision
     );
     return {
       operationId: operation.id,
-      kind: "create_collection_view",
+      kind: operation.kind as KnowledgeActivitySummary["kind"],
       createdAt: operation.createdAt,
       targetLabel: binding.revision.name,
       target: {
@@ -222,18 +241,18 @@ export class ManagedCollectionViewService {
 
   findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined {
     const binding = this.#readActivityBinding(operation);
-    if (!binding || binding.revision.state !== "active") return undefined;
+    if (!binding || binding.revision.undoOfOperationId) return undefined;
     const candidate = operations.find(({ id }) => id === createUndoOperationId(operation.id));
     const undo = candidate ? this.#readActivityBinding(candidate) : undefined;
     return undo?.revision.undoOfOperationId === operation.id &&
-      undo.revision.viewId === binding.revision.viewId && undo.revision.state === "trashed"
+      undo.revision.viewId === binding.revision.viewId
       ? candidate
       : undefined;
   }
 
   async undo(operation: OperationRecord, expectedRevisionId?: string): Promise<KnowledgeActivityUndoResult> {
     const binding = this.#readActivityBinding(operation);
-    if (!binding || binding.revision.state !== "active") return { status: "not_found", operationId: operation.id };
+    if (!binding || binding.revision.undoOfOperationId) return { status: "not_found", operationId: operation.id };
     const current = readBundle(binding.bundle.vaultPath, binding.revision.datasetId);
     if (!current) return { status: "not_found", operationId: operation.id };
     if (expectedRevisionId !== binding.revision.datasetRevisionId ||
@@ -254,18 +273,18 @@ export class ManagedCollectionViewService {
       };
     }
     const view = this.#readViews(current).find(({ pointer }) => pointer.viewId === binding.revision.viewId);
-    if (!view || view.revision.state !== "active" ||
+    if (!view || view.revision.state !== binding.revision.state ||
         view.revision.viewRevision !== binding.revision.viewRevision) {
       return { status: "stale", operationId: operation.id, currentRevisionId: current.manifest.activeRevision };
     }
-    const snapshot = await this.undoCreateView({
-      activeVaultId: this.#vaults.current()!.vaultId,
-      datasetId: binding.revision.datasetId,
-      tableId: binding.revision.tableId,
-      viewId: binding.revision.viewId,
-      expectedViewRevision: binding.revision.viewRevision
-    });
-    if (!snapshot) return { status: "not_found", operationId: operation.id };
+    let snapshot: CollectionSnapshot | undefined;
+    try {
+      snapshot = await this.#serialize(() => this.#undoView(binding, view, operation));
+    } catch (caught) {
+      if (!(caught instanceof PigeDomainError) || caught.code !== "collection.view_revision_changed") throw caught;
+      return { status: "stale", operationId: operation.id, currentRevisionId: current.manifest.activeRevision };
+    }
+    if (!snapshot) return { status: "stale", operationId: operation.id, currentRevisionId: current.manifest.activeRevision };
     return {
       status: "undone",
       operationId: operation.id,
@@ -284,7 +303,7 @@ export class ManagedCollectionViewService {
         for (const entry of this.#readViews(bundle)) {
           const operationPath = operationPathFor(vaultPath, entry.revision.operationId);
           if (fs.existsSync(operationPath)) continue;
-          const beforeRef = entry.revision.undoOfOperationId
+          const beforeRef = entry.revision.viewRevision > 1
             ? fileRef(bundle.bundlePath, viewRevisionPath(entry.revision.viewId, entry.revision.viewRevision - 1))
             : undefined;
           writeJsonExclusive(operationPath, createViewOperation(bundle, entry.revision, entry.pointer.revision, beforeRef));
@@ -329,6 +348,7 @@ export class ManagedCollectionViewService {
         viewId: stable.viewId,
         viewRevision: 1,
         state: "active",
+        action: "create",
         datasetId: request.datasetId,
         tableId: request.tableId,
         datasetRevisionId: request.expectedRevisionId,
@@ -381,28 +401,128 @@ export class ManagedCollectionViewService {
       throw new PigeDomainError("collection.view_revision_changed", "The saved view changed before Undo.");
     }
     if (entry.revision.state === "trashed") return this.#readSnapshot(binding, request.tableId);
+    const original = OperationRecordSchema.parse(readJsonBounded(
+      operationPathFor(binding.vaultPath, entry.revision.operationId), MAX_COLLECTION_JSON_BYTES
+    ));
+    const operation = this.#readActivityBinding(original);
+    return operation ? this.#undoView(operation, entry, original) : undefined;
+  }
+
+  async #undoView(
+    binding: ViewActivityBinding,
+    entry: ViewEntry,
+    original: OperationRecord
+  ): Promise<CollectionSnapshot | undefined> {
+    const originalAction = binding.revision.action ?? (binding.revision.state === "active" ? "create" : "trash");
+    const action = originalAction === "trash" ? "restore" : originalAction === "rename" ? "rename" : "trash";
+    const prior = originalAction === "rename" ? binding.beforeRevision : undefined;
+    if (originalAction === "rename" && !prior) return undefined;
     const nextRevision = entry.revision.viewRevision + 1;
-    const operationId = createUndoOperationId(entry.revision.operationId);
+    const relativePath = viewRevisionPath(entry.revision.viewId, nextRevision);
+    const revisionPath = resolveBundleRelativePath(binding.bundle.bundlePath, relativePath);
+    const existing = fs.existsSync(revisionPath)
+      ? ViewRevisionSchema.parse(readJsonBounded(revisionPath, MAX_COLLECTION_JSON_BYTES))
+      : undefined;
     const revision = ViewRevisionSchema.parse({
       ...entry.revision,
+      ...(prior ? { name: prior.name, filter: prior.filter, sort: prior.sort } : {}),
       viewRevision: nextRevision,
-      state: "trashed",
-      operationId,
-      undoOfOperationId: entry.revision.operationId,
-      createdAt: new Date().toISOString()
+      state: action === "trash" ? "trashed" : "active",
+      action,
+      requestHash: digest("pige:collection-view-undo-request:v1", original.id),
+      operationId: createUndoOperationId(original.id),
+      undoOfOperationId: original.id,
+      createdAt: existing?.createdAt ?? new Date().toISOString()
     });
-    const relativePath = viewRevisionPath(request.viewId, nextRevision);
-    writeJsonImmutable(resolveBundleRelativePath(binding.bundlePath, relativePath), revision);
-    const nextPointer = ViewPointerSchema.parse({
-      ...entry.pointer,
-      activeRevision: nextRevision,
-      revision: fileRef(binding.bundlePath, relativePath),
-      updatedAt: revision.createdAt
-    });
+    if (existing && hashCanonical(existing) !== hashCanonical(revision)) throw requestConflict();
+    if (!existing) writeJsonImmutable(revisionPath, revision);
+    const nextPointer = ViewPointerSchema.parse({ ...entry.pointer, activeRevision: revision.viewRevision,
+      revision: fileRef(binding.bundle.bundlePath, relativePath), updatedAt: revision.createdAt });
     replacePointer(entry.path, entry.bytes, nextPointer);
-    this.#writeOperation(binding, revision, nextPointer.revision, entry.pointer.revision);
-    const current = this.#requireUnchangedBinding(binding);
-    return this.#readSnapshot(current, request.tableId);
+    this.#writeOperation(binding.bundle, revision, nextPointer.revision, entry.pointer.revision);
+    const current = this.#requireUnchangedBinding(binding.bundle);
+    return this.#readSnapshot(current, revision.tableId, action === "trash" ? undefined : revision.viewId);
+  }
+
+  async #mutateView(
+    request: CollectionRenameViewRequest | CollectionTrashViewRequest,
+    action: "rename" | "trash"
+  ): Promise<CollectionRenameViewResult | CollectionTrashViewResult> {
+    const schema = action === "rename" ? CollectionRenameViewResultSchema : CollectionTrashViewResultSchema;
+    const identity = mutationResultIdentity(request);
+    const vaultPath = this.#activeVaultPath(request.activeVaultId);
+    if (!vaultPath) return schema.parse({ ...identity, status: "not_found" });
+    try {
+      const binding = readBundle(vaultPath, request.datasetId);
+      if (!binding) return schema.parse({ ...identity, status: "not_found" });
+      const entries = this.#readViews(binding);
+      const entry = entries.find(({ pointer }) => pointer.viewId === request.viewId);
+      if (!entry || entry.pointer.tableId !== request.tableId) return schema.parse({ ...identity, status: "not_found" });
+      const stable = createMutationIdentity(action, request);
+      const replay = await this.#readMutationReplay(binding, request, action, entry, stable);
+      if (replay) return schema.parse(replay);
+      const snapshot = readCollectionSnapshot(binding, request.tableId, { views: activeSummaries(entries) });
+      if (!snapshot) return schema.parse({ ...identity, status: "not_found" });
+      if (binding.manifest.activeRevision !== request.expectedRevisionId ||
+          entry.pointer.activeRevision !== request.expectedViewRevision || entry.revision.state !== "active") {
+        return schema.parse({ ...identity, status: "stale", currentViewRevision: entry.pointer.activeRevision, snapshot });
+      }
+      if (action === "rename") {
+        const normalized = normalizeName((request as CollectionRenameViewRequest).name);
+        if (entries.some(({ revision }) => revision.state === "active" && revision.viewId !== request.viewId &&
+            normalizeName(revision.name) === normalized)) return schema.parse({ ...identity, status: "duplicate", snapshot });
+      }
+      const relativePath = viewRevisionPath(request.viewId, entry.revision.viewRevision + 1);
+      const revisionPath = resolveBundleRelativePath(binding.bundlePath, relativePath);
+      const existing = fs.existsSync(revisionPath)
+        ? ViewRevisionSchema.parse(readJsonBounded(revisionPath, MAX_COLLECTION_JSON_BYTES))
+        : undefined;
+      const revision = ViewRevisionSchema.parse({
+        ...entry.revision,
+        viewRevision: entry.revision.viewRevision + 1,
+        action,
+        state: action === "trash" ? "trashed" : "active",
+        ...(action === "rename" ? { name: (request as CollectionRenameViewRequest).name } : {}),
+        requestHash: stable.requestHash,
+        operationId: stable.operationId,
+        undoOfOperationId: undefined,
+        createdAt: existing?.createdAt ?? new Date().toISOString()
+      });
+      if (existing && hashCanonical(existing) !== hashCanonical(revision)) throw requestConflict();
+      if (!existing) writeJsonImmutable(revisionPath, revision);
+      const nextPointer = ViewPointerSchema.parse({ ...entry.pointer, activeRevision: revision.viewRevision,
+        revision: fileRef(binding.bundlePath, relativePath), updatedAt: revision.createdAt });
+      replacePointer(entry.path, entry.bytes, nextPointer);
+      this.#writeOperation(binding, revision, nextPointer.revision, entry.pointer.revision);
+      const current = this.#requireUnchangedBinding(binding);
+      const currentSnapshot = await this.#readSnapshot(current, request.tableId,
+        action === "rename" ? request.viewId : undefined);
+      if (!currentSnapshot || !this.#activeVaultPath(request.activeVaultId)) return schema.parse({ ...identity, status: "failed" });
+      return schema.parse({ ...identity, status: "committed", operationId: stable.operationId, snapshot: currentSnapshot });
+    } catch (caught) {
+      if (caught instanceof PigeDomainError && caught.code === "collection.request_conflict") throw caught;
+      return schema.parse({ ...identity, status: "failed" });
+    }
+  }
+
+  async #readMutationReplay(
+    binding: BundleBinding,
+    request: CollectionRenameViewRequest | CollectionTrashViewRequest,
+    action: "rename" | "trash",
+    entry: ViewEntry,
+    stable: { readonly requestHash: string; readonly operationId: string }
+  ): Promise<Record<string, unknown> | undefined> {
+    if (entry.revision.operationId !== stable.operationId) return undefined;
+    if (entry.revision.requestHash !== stable.requestHash || entry.revision.action !== action) throw requestConflict();
+    const beforeRef = fileRef(binding.bundlePath, viewRevisionPath(entry.revision.viewId, entry.revision.viewRevision - 1));
+    const expected = createViewOperation(binding, entry.revision, entry.pointer.revision, beforeRef);
+    const operationPath = operationPathFor(binding.vaultPath, stable.operationId);
+    if (fs.existsSync(operationPath)) {
+      if (hashCanonical(OperationRecordSchema.parse(readJsonBounded(operationPath, MAX_COLLECTION_JSON_BYTES))) !==
+          hashCanonical(expected)) throw requestConflict();
+    } else writeJsonExclusive(operationPath, expected);
+    const snapshot = await this.#readSnapshot(binding, request.tableId, action === "rename" ? request.viewId : undefined);
+    return snapshot ? { ...mutationResultIdentity(request), status: "committed", operationId: stable.operationId, snapshot } : undefined;
   }
 
   async #readPagedSnapshot(
@@ -629,7 +749,8 @@ export class ManagedCollectionViewService {
   }
 
   #readActivityBinding(operation: OperationRecord): ViewActivityBinding | undefined {
-    if (operation.kind !== "create_collection_view") return undefined;
+    if (!["create_collection_view", "rename_collection_view", "trash_collection_view", "restore_collection_view"]
+      .includes(operation.kind)) return undefined;
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vaultPath) return undefined;
     const datasets = operation.targetRefs.filter((ref) => ref.kind === "dataset");
@@ -655,8 +776,12 @@ export class ManagedCollectionViewService {
         ? fileRef(bundle.bundlePath, operation.before.path.slice(prefix.length))
         : undefined;
       if (operation.before && (!beforeRef || beforeRef.checksum !== operation.before.checksum)) return undefined;
+      const beforeRevision = beforeRef ? ViewRevisionSchema.parse(readJsonBounded(
+        resolveBundleRelativePath(bundle.bundlePath, beforeRef.path), MAX_COLLECTION_JSON_BYTES
+      )) : undefined;
       const expected = createViewOperation(bundle, revision, revisionRef, beforeRef);
-      return hashCanonical(expected) === hashCanonical(operation) ? { bundle, revision } : undefined;
+      return hashCanonical(expected) === hashCanonical(operation)
+        ? { bundle, revision, ...(beforeRevision ? { beforeRevision } : {}) } : undefined;
     } catch {
       return undefined;
     }
@@ -687,6 +812,7 @@ interface ViewEntry {
 interface ViewActivityBinding {
   readonly bundle: BundleBinding;
   readonly revision: ViewRevision;
+  readonly beforeRevision?: ViewRevision;
 }
 
 function activeSummaries(entries: readonly ViewEntry[]): CollectionViewSummary[] {
@@ -694,6 +820,8 @@ function activeSummaries(entries: readonly ViewEntry[]): CollectionViewSummary[]
     viewId: revision.viewId,
     viewRevision: revision.viewRevision,
     name: revision.name,
+    canRename: true,
+    canTrash: true,
     ...(revision.filter ? { filter: revision.filter } : {}),
     ...(revision.sort ? { sort: revision.sort } : {})
   }));
@@ -714,6 +842,18 @@ function createUndoOperationId(operationId: string): string {
   const date = /^op_(\d{8})_[a-z0-9]{8,}$/u.exec(operationId)?.[1];
   if (!date) throw requestConflict();
   return `op_${date}_${digest("pige:collection-view-undo:v1", operationId).slice(7, 27)}`;
+}
+
+function createMutationIdentity(
+  action: "rename" | "trash",
+  request: CollectionRenameViewRequest | CollectionTrashViewRequest
+): { readonly requestHash: string; readonly operationId: string } {
+  const date = REVISION_DATE.exec(request.expectedRevisionId)?.[1];
+  if (!date) throw requestConflict();
+  return {
+    requestHash: digest(`pige:collection-view-${action}-request:v1`, JSON.stringify(request)),
+    operationId: `op_${date}_${digest(`pige:collection-view-${action}-operation:v1`, request.requestId).slice(7, 27)}`
+  };
 }
 
 function createViewOperation(
@@ -743,7 +883,7 @@ function createViewOperation(
     schemaVersion: 1,
     createdAt: revision.createdAt,
     actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
-    kind: "create_collection_view",
+    kind: viewOperationKind(revision),
     targetRefs: [
       { kind: "dataset", id: revision.datasetId, path: binding.bundleRelativePath },
       { kind: "table", id: revision.tableId },
@@ -757,13 +897,19 @@ function createViewOperation(
       checksum: beforeRef.checksum
     } } : {}),
     after: viewRef,
-    summary: revision.state === "active"
-      ? `Created saved Collection view ${revision.viewId}.`
-      : `Moved saved Collection view ${revision.viewId} out of the active set.`,
-    reversible: revision.state === "active" ? "yes" : "best_effort",
+    summary: `${revision.action ?? (revision.state === "active" ? "create" : "trash")} saved Collection view ${revision.viewId}.`,
+    reversible: revision.undoOfOperationId ? "best_effort" : "yes",
     rollbackHint: "Advance this saved view through another immutable view revision.",
     warnings: []
   });
+}
+
+function viewOperationKind(revision: ViewRevision): OperationRecord["kind"] {
+  const action = revision.action ?? (revision.state === "active" ? "create" : "trash");
+  if (action === "rename") return "rename_collection_view";
+  if (action === "trash") return "trash_collection_view";
+  if (action === "restore") return "restore_collection_view";
+  return "create_collection_view";
 }
 
 function replacePointer(filePath: string, expected: Buffer, next: ViewPointer): void {
@@ -802,6 +948,17 @@ function resultIdentity(request: CollectionOpenRequest | CollectionCreateViewReq
     activeVaultId: request.activeVaultId,
     datasetId: request.datasetId,
     tableId: request.tableId
+  };
+}
+
+function mutationResultIdentity(request: CollectionRenameViewRequest | CollectionTrashViewRequest) {
+  return {
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    tableId: request.tableId,
+    viewId: request.viewId
   };
 }
 

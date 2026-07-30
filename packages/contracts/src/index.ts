@@ -69,6 +69,10 @@ import type {
   CollectionCellEditResult,
   CollectionCreateViewRequest,
   CollectionCreateViewResult,
+  CollectionRenameViewRequest,
+  CollectionRenameViewResult,
+  CollectionTrashViewRequest,
+  CollectionTrashViewResult,
   CollectionListRequest,
   CollectionListResult,
   CollectionOpenCitationRequest,
@@ -1253,6 +1257,9 @@ export interface KnowledgeActivitySummary {
     | "add_collection_lookup"
     | "rename_collection_column"
     | "create_collection_view"
+    | "rename_collection_view"
+    | "trash_collection_view"
+    | "restore_collection_view"
     | "trash_collection_column"
     | "trash_collection_row"
     | "update_memory"
@@ -2073,6 +2080,12 @@ export interface PigeDesktopApi {
     readonly createView: (
       request: CollectionCreateViewRequest
     ) => Promise<CollectionCreateViewResult>;
+    readonly renameView: (
+      request: CollectionRenameViewRequest
+    ) => Promise<CollectionRenameViewResult>;
+    readonly trashView: (
+      request: CollectionTrashViewRequest
+    ) => Promise<CollectionTrashViewResult>;
     readonly trashColumn: (
       request: CollectionTrashColumnRequest
     ) => Promise<CollectionTrashColumnResult>;

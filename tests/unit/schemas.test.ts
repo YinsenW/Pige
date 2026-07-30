@@ -50,6 +50,10 @@ import {
   CollectionAppendDefaultRowResultSchema,
   CollectionCreateViewRequestSchema,
   CollectionCreateViewResultSchema,
+  CollectionRenameViewRequestSchema,
+  CollectionRenameViewResultSchema,
+  CollectionTrashViewRequestSchema,
+  CollectionTrashViewResultSchema,
   CollectionListRequestSchema,
   CollectionListResultSchema,
   CollectionOpenRequestSchema,
@@ -1284,6 +1288,45 @@ describe("schemas", () => {
       status: "ready",
       snapshot
     }).status).toBe("ready");
+
+    const mutationIdentity = { ...identity, requestId: "collection_request_viewrenameabcdef", viewId: view.viewId };
+    const renameRequest = CollectionRenameViewRequestSchema.parse({
+      ...mutationIdentity,
+      expectedRevisionId: request.expectedRevisionId,
+      expectedViewRevision: 1,
+      name: " Renamed view "
+    });
+    expect(renameRequest.name).toBe("Renamed view");
+    const renamedSnapshot = {
+      ...snapshot,
+      views: [{ ...view, viewRevision: 2, name: renameRequest.name, canRename: true, canTrash: true }]
+    };
+    expect(CollectionRenameViewResultSchema.parse({
+      ...mutationIdentity,
+      status: "committed",
+      operationId: "op_20260728_viewrename1",
+      snapshot: renamedSnapshot
+    }).status).toBe("committed");
+    expect(CollectionTrashViewRequestSchema.parse({
+      ...mutationIdentity,
+      requestId: "collection_request_viewtrashabcdefg",
+      expectedRevisionId: request.expectedRevisionId,
+      expectedViewRevision: 2
+    }).expectedViewRevision).toBe(2);
+    expect(CollectionTrashViewResultSchema.parse({
+      ...mutationIdentity,
+      requestId: "collection_request_viewtrashabcdefg",
+      status: "committed",
+      operationId: "op_20260728_viewtrash12",
+      snapshot: { ...snapshot, views: [], activeViewId: undefined }
+    }).status).toBe("committed");
+    expect(() => CollectionRenameViewRequestSchema.parse({ ...renameRequest, rawSql: "select 1" })).toThrow();
+    expect(() => CollectionRenameViewResultSchema.parse({
+      ...mutationIdentity,
+      status: "stale",
+      currentViewRevision: 1,
+      snapshot: renamedSnapshot
+    })).toThrow("current immutable view identity");
 
     for (const unsafe of [
       { path: "/private/datasets/views/view.json" },
