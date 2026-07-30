@@ -1,5 +1,6 @@
 {
   "activity.alreadyUndone": "この変更はすでに元に戻されています。",
+  "activity.alreadyRedone": "この変更はすでにやり直されています。",
   "activity.createdPage": "ナレッジノートを作成",
   "activity.archivedPage": "ナレッジノートをアーカイブ",
   "activity.restoredPage": "ナレッジノートを復元",
@@ -43,6 +44,10 @@
   "activity.undoFailed": "この変更を安全に元へ戻せませんでした。",
   "activity.undoStateUnknown": "この変更が元に戻されたか確認できません。Pige を再度開いてからお試しください。",
   "activity.undoing": "元に戻しています...",
+  "activity.redo": "やり直す",
+  "activity.redoCompleted": "変更をもう一度適用しました。",
+  "activity.redoFailed": "この変更を安全にやり直せませんでした。",
+  "activity.redoing": "やり直しています...",
   "backup.appVersion": "アプリのバージョン",
   "backup.applyClone": "新しい Vault として復元",
   "backup.applyReplace": "現在の Vault を置き換える",

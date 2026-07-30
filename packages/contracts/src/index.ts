@@ -1365,7 +1365,9 @@ export interface KnowledgeActivitySummary {
   readonly target?: KnowledgeActivityTarget;
   readonly status: "applied" | "undone";
   readonly canUndo: boolean;
+  readonly canRedo?: boolean;
   readonly undoUnavailableReason?: KnowledgeActivityUndoUnavailableReason;
+  readonly redoUnavailableReason?: "already_redone" | "content_changed" | "legacy_record" | "target_missing";
 }
 
 export interface KnowledgeActivityListResult {
@@ -1387,6 +1389,20 @@ export interface KnowledgeActivityUndoResult {
   readonly status: "undone" | "already_undone" | "stale" | "not_found";
   readonly operationId: string;
   readonly undoOperationId?: string;
+  readonly revisionId?: string;
+  readonly currentRevisionId?: string;
+}
+
+export interface KnowledgeActivityRedoRequest {
+  readonly operationId: string;
+  readonly expectedRevisionId?: string;
+}
+
+export interface KnowledgeActivityRedoResult {
+  readonly status: "redone" | "already_redone" | "stale" | "not_found";
+  readonly operationId: string;
+  readonly undoOperationId?: string;
+  readonly redoOperationId?: string;
   readonly revisionId?: string;
   readonly currentRevisionId?: string;
 }
@@ -2205,6 +2221,7 @@ export interface PigeDesktopApi {
   readonly activity: {
     readonly list: (request?: KnowledgeActivityListRequest) => Promise<KnowledgeActivityListResult>;
     readonly undo: (request: KnowledgeActivityUndoRequest) => Promise<KnowledgeActivityUndoResult>;
+    readonly redo: (request: KnowledgeActivityRedoRequest) => Promise<KnowledgeActivityRedoResult>;
   };
   readonly proposals: {
     readonly list: (request?: ProposalsListRequest) => Promise<ProposalsListResult>;

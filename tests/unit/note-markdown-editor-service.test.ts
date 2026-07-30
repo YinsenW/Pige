@@ -9,6 +9,7 @@ import {
   type NoteMarkdownEditorActivityPort,
   type NoteMarkdownEditorVaultPort
 } from "../../apps/desktop/src/main/services/note-markdown-editor-service";
+import { NoteMarkdownEditorRedoService } from "../../apps/desktop/src/main/services/note-markdown-editor-redo-service";
 
 const PAGE_ID = "page_20260727_markdowneditor";
 const VAULT_ID = "vault_20260727_markdowneditor";
@@ -345,6 +346,61 @@ describe("NoteMarkdownEditorActivityAdapter", () => {
     expect(fixture.adapter.findUndoOperation(operation, [operation, recoveredUndo])).toEqual(recoveredUndo);
     expect(fixture.adapter.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
+  });
+
+  it("redoes an exact Undo as a new reversible update and adopts an interrupted commit", () => {
+    const fixture = createAdapterFixture();
+    const committed = commitEdit(fixture);
+    const operation = readOperation(fixture.vaultPath, committed.operationId);
+    const undone = fixture.adapter.undo(operation, committed.revisionId);
+    const undo = readOperation(fixture.vaultPath, requireValue(undone.undoOperationId));
+    expect(fixture.adapter.activitySummary(operation, undo)).toMatchObject({
+      status: "undone",
+      canRedo: true
+    });
+
+    const redoService = new NoteMarkdownEditorRedoService(fixture.vaults);
+    const redone = redoService.redo({ operationId: operation.id, expectedRevisionId: operation.before?.id });
+    expect(redone).toMatchObject({
+      status: "redone",
+      operationId: operation.id,
+      undoOperationId: undo.id,
+      revisionId: operation.after?.id
+    });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(committed.markdown);
+    const redo = readOperation(fixture.vaultPath, requireValue(redone.redoOperationId));
+    expect(redo).toMatchObject({
+      kind: "update_page",
+      sourceRefs: [],
+      before: { id: operation.before?.id },
+      after: { id: operation.after?.id },
+      reversible: "yes"
+    });
+    expect(fixture.adapter.activitySummary(operation, undo)).toMatchObject({
+      status: "undone",
+      canRedo: false,
+      redoUnavailableReason: "already_redone"
+    });
+    expect(fixture.adapter.activitySummary(redo)).toMatchObject({ status: "applied", canUndo: true });
+    expect(redoService.redo({ operationId: operation.id })).toMatchObject({ status: "already_redone" });
+
+    fs.unlinkSync(operationPath(fixture.vaultPath, redo.id));
+    expect(redoService.recoverIncompleteRedos()).toEqual({ recovered: 1, failed: 0 });
+    expect(readOperation(fixture.vaultPath, redo.id)).toEqual(redo);
+    expect(redoService.recoverIncompleteRedos()).toEqual({ recovered: 0, failed: 0 });
+  });
+
+  it("fails Redo closed after current Markdown or durable history drifts", () => {
+    const fixture = createAdapterFixture();
+    const committed = commitEdit(fixture);
+    const operation = readOperation(fixture.vaultPath, committed.operationId);
+    fixture.adapter.undo(operation, committed.revisionId);
+    fs.writeFileSync(fixture.pagePath, fixture.markdown.replace("Original body.", "External body."), "utf8");
+    const redoService = new NoteMarkdownEditorRedoService(fixture.vaults);
+
+    expect(redoService.redo({ operationId: operation.id })).toMatchObject({ status: "stale" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain("External body.");
+    expect(listOperationFiles(fixture.vaultPath)).toHaveLength(2);
   });
 
   it("rejects malformed or non-user update operations without granting Activity or Undo authority", () => {

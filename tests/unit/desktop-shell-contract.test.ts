@@ -1812,13 +1812,16 @@ describe("desktop shell build contract", () => {
 
     expect(mainSource).toContain('ipcMain.handle("activity.list"');
     expect(mainSource).toContain('ipcMain.handle("activity.undo"');
+    expect(mainSource).toContain('ipcMain.handle("activity.redo"');
     expect(mainSource).toContain("recoverIncompleteUndos()");
+    expect(mainSource).toContain("recoverIncompleteRedos()");
     expect(mainSource).toContain("scheduleActivityIndexRebuild()");
     expect(mainUndoHandler).toContain("scheduleActivityIndexRebuild()");
     expect(mainUndoHandler).not.toContain("getLocalDatabaseService().rebuild");
     expect(preloadSource).toContain('"activity.list",');
     expect(preloadSource).toContain("KnowledgeActivityListResultSchema.parse");
     expect(preloadSource).toContain('ipcRenderer.invoke("activity.undo", request)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("activity.redo", request)');
     expect(contractsSource).toContain('| "update_collection_cell"');
     expect(contractsSource).toContain('| "add_collection_row"');
     expect(contractsSource).toContain('| "add_collection_column"');

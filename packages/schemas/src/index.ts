@@ -1294,10 +1294,17 @@ export const KnowledgeActivitySummarySchema = z.object({
   target: KnowledgeActivityTargetSchema.optional(),
   status: z.enum(["applied", "undone"]),
   canUndo: z.boolean(),
+  canRedo: z.boolean().optional(),
   undoUnavailableReason: z.enum([
     "already_undone",
     "content_changed",
     "revision_changed",
+    "legacy_record",
+    "target_missing"
+  ]).optional(),
+  redoUnavailableReason: z.enum([
+    "already_redone",
+    "content_changed",
     "legacy_record",
     "target_missing"
   ]).optional()

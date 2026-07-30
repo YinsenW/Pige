@@ -23,6 +23,7 @@ import type {
   JobActionResult,
   JobsListRequest,
   KnowledgeActivityListRequest,
+  KnowledgeActivityRedoRequest,
   KnowledgeActivityUndoRequest,
   LibraryListRequest,
   LibraryMergeTagRequest,
@@ -313,6 +314,7 @@ import {
   NoteMarkdownEditorService
 } from "./services/note-markdown-editor-service";
 import { NoteRevisionHistoryService } from "./services/note-revision-history-service";
+import { NoteMarkdownEditorRedoService } from "./services/note-markdown-editor-redo-service";
 import { OcrService } from "./services/ocr-service";
 import {
   LocalSettingsOcrLanguagePreferenceStore,
@@ -433,6 +435,7 @@ let sourceOriginalReconnectService: SourceOriginalReconnectService | undefined;
 let noteMarkdownEditorActivityAdapter: NoteMarkdownEditorActivityAdapter | undefined;
 let noteMarkdownEditorService: NoteMarkdownEditorService | undefined;
 let noteRevisionHistoryService: NoteRevisionHistoryService | undefined;
+let noteMarkdownEditorRedoService: NoteMarkdownEditorRedoService | undefined;
 let readerSelectionActionService: ReaderSelectionActionService | undefined;
 let readerSelectionProposalService: ReaderSelectionProposalService | undefined;
 let readerSelectionCreateNoteProposalService: ReaderSelectionCreateNoteProposalService | undefined;
@@ -1795,6 +1798,9 @@ const getNoteMarkdownEditorService = (): NoteMarkdownEditorService => {
   return noteMarkdownEditorService;
 };
 
+const getNoteMarkdownEditorRedoService = (): NoteMarkdownEditorRedoService =>
+  noteMarkdownEditorRedoService ??= new NoteMarkdownEditorRedoService(getVaultService());
+
 const getReaderSelectionActionService = (): ReaderSelectionActionService => {
   if (!readerSelectionActionService) {
     readerSelectionActionService = new ReaderSelectionActionService(
@@ -2320,14 +2326,17 @@ const resumeBackgroundJobs = (): void => {
     }
     try {
       const activityRecovery = getKnowledgeActivityService().recoverIncompleteUndos();
-      if (activityRecovery.recovered > 0) scheduleActivityIndexRebuild();
-      if (activityRecovery.recovered > 0 || activityRecovery.failed > 0) {
+      const redoRecovery = getNoteMarkdownEditorRedoService().recoverIncompleteRedos();
+      const recovered = activityRecovery.recovered + redoRecovery.recovered;
+      const failed = activityRecovery.failed + redoRecovery.failed;
+      if (recovered > 0) scheduleActivityIndexRebuild();
+      if (recovered > 0 || failed > 0) {
         getDiagnosticsService().recordEvent({
-          level: activityRecovery.failed > 0 ? "warning" : "info",
-          code: activityRecovery.failed > 0 ? "activity.recovery_incomplete" : "activity.recovery_completed",
-          message: activityRecovery.failed > 0
-            ? "Some interrupted knowledge Undo work still requires repair."
-            : "Interrupted knowledge Undo work was reconciled after startup."
+          level: failed > 0 ? "warning" : "info",
+          code: failed > 0 ? "activity.recovery_incomplete" : "activity.recovery_completed",
+          message: failed > 0
+            ? "Some interrupted knowledge history work still requires repair."
+            : "Interrupted knowledge history work was reconciled after startup."
         });
       }
     } catch {
@@ -2931,6 +2940,11 @@ ipcMain.handle("activity.undo", async (_event, request: KnowledgeActivityUndoReq
   scheduleActivityIndexRebuild();
   return result;
 });
+ipcMain.handle("activity.redo", (_event, request: KnowledgeActivityRedoRequest) => {
+  const result = getNoteMarkdownEditorRedoService().redo(request);
+  if (result.status === "redone" || result.status === "already_redone") scheduleActivityIndexRebuild();
+  return result;
+});
 ipcMain.handle("library.list", (_event, request?: LibraryListRequest) => getLibraryService().list(request));
 ipcMain.handle("library.tree", () => getLibraryService().tree());
 ipcMain.handle("library.related", (_event, request: LibraryRelatedRequest) => getLibraryService().related(request));
@@ -3402,6 +3416,7 @@ app.whenReady().then(async () => {
     collectionCitationConversationHistory
   );
   noteMarkdownEditorActivityAdapter = new NoteMarkdownEditorActivityAdapter(getVaultService());
+  noteMarkdownEditorRedoService = new NoteMarkdownEditorRedoService(getVaultService());
   noteMarkdownEditorService = new NoteMarkdownEditorService(
     getVaultService(),
     noteMarkdownEditorActivityAdapter
