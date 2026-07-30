@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type {
   AgentConversationInputPresentation,
+  ReaderSelectionCreatePageAction,
   ReaderSelectionIdentity,
   ReaderSelectionReadAction,
   ReaderSelectionTransformAction
@@ -29,7 +30,7 @@ export interface ReaderSelectionJobScope {
   readonly selection?: ReaderSelectionIdentity;
   readonly transformAction?: ReaderSelectionTransformAction;
   readonly linkAction?: "link";
-  readonly createNoteAction?: "create_note";
+  readonly createNoteAction?: ReaderSelectionCreatePageAction;
 }
 
 export interface ReaderSelectionTurnContext {
@@ -37,7 +38,7 @@ export interface ReaderSelectionTurnContext {
   readonly currentNoteReadAction?: ReaderSelectionReadAction;
   readonly currentNoteTransformAction?: ReaderSelectionTransformAction;
   readonly currentNoteLinkAction?: "link";
-  readonly currentNoteCreateNoteAction?: "create_note";
+  readonly currentNoteCreateNoteAction?: ReaderSelectionCreatePageAction;
 }
 
 type JobRef = NonNullable<JobRecord["inputRefs"]>[number];
@@ -270,7 +271,8 @@ export function isValidReaderSelectionJobScope(
       ["translate", "polish", "expand"].includes(scope.transformAction)
     )) &&
     (scope.linkAction === undefined || (scope.selection !== undefined && scope.linkAction === "link")) &&
-    (scope.createNoteAction === undefined || (scope.selection !== undefined && scope.createNoteAction === "create_note")) &&
+    (scope.createNoteAction === undefined || (scope.selection !== undefined &&
+      ["create_note", "create_claim", "create_question"].includes(scope.createNoteAction))) &&
     [scope.transformAction, scope.linkAction, scope.createNoteAction].filter(Boolean).length <= 1 &&
     !hasSourceBinding;
 }
@@ -288,7 +290,9 @@ export function createReaderSelectionJobRefs(scope: ReaderSelectionJobScope): Jo
       ? [createTransformRef(scope.selection, scope.transformAction)]
       : []),
     ...(scope.selection && scope.linkAction ? [createLinkRef(scope.selection)] : []),
-    ...(scope.selection && scope.createNoteAction ? [createReaderSelectionCreateNoteJobRef(scope.selection)] : [])
+    ...(scope.selection && scope.createNoteAction
+      ? [createReaderSelectionCreateNoteJobRef(scope.selection, scope.createNoteAction)]
+      : [])
   ];
 }
 
@@ -297,7 +301,7 @@ export function assertReaderSelectionJobBinding(
   scope: ReaderSelectionJobScope | undefined
 ): void {
   const refs = inputRefs ?? [];
-  assertReaderSelectionCreateNoteJobBinding(refs, scope?.selection, scope?.createNoteAction === "create_note");
+  assertReaderSelectionCreateNoteJobBinding(refs, scope?.selection, scope?.createNoteAction);
   const scopeRefs = refs.filter((ref) => ref.role === SCOPE_ROLE);
   const selectionRefs = refs.filter((ref) => ref.role === SELECTION_ROLE);
   const transformRefs = refs.filter((ref) => ref.role === TRANSFORM_ROLE);
