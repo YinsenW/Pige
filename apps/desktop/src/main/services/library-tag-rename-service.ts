@@ -4,12 +4,14 @@ import path from "node:path";
 import type {
   KnowledgeActivitySummary,
   KnowledgeActivityUndoResult,
+  LibraryMergeTagRequest,
+  LibraryMergeTagResult,
   LibraryRenameTagRequest,
   LibraryRenameTagResult,
   VaultSummary
 } from "@pige/contracts";
 import { createPigeTagKey, normalizePigeTag, parsePigeFrontmatter } from "@pige/markdown";
-import { LibraryRenameTagResultSchema, OperationRecordSchema, type OperationRecord } from "@pige/schemas";
+import { LibraryMergeTagResultSchema, LibraryRenameTagResultSchema, OperationRecordSchema, type OperationRecord } from "@pige/schemas";
 import { z } from "zod";
 import {
   createLibraryTagsSnapshotId,
@@ -35,7 +37,7 @@ const ReceiptItemSchema = z.object({
   afterHash: z.string().regex(/^sha256:[a-f0-9]{64}$/u)
 }).strict();
 
-const ReceiptSchema = z.object({
+const RenameReceiptSchema = z.object({
   schemaVersion: z.literal(1),
   kind: z.literal("library_tag_rename_receipt"),
   requestId: z.string().regex(/^library_tag_rename_request_[a-z0-9]{16,64}$/u),
@@ -47,6 +49,21 @@ const ReceiptSchema = z.object({
   createdAt: z.string().datetime({ offset: true }),
   items: z.array(ReceiptItemSchema).min(1).max(MAX_PAGES)
 }).strict();
+
+const MergeReceiptSchema = z.object({
+  schemaVersion: z.literal(1),
+  kind: z.literal("library_tag_merge_receipt"),
+  requestId: z.string().regex(/^library_tag_merge_request_[a-z0-9]{16,64}$/u),
+  requestDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  activeVaultId: z.string().regex(/^vault_[a-z0-9_]+$/u),
+  sourceTag: z.string().min(1).max(48),
+  targetTag: z.string().min(1).max(48),
+  operationId: z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/u),
+  createdAt: z.string().datetime({ offset: true }),
+  items: z.array(ReceiptItemSchema).min(1).max(MAX_PAGES)
+}).strict();
+
+const ReceiptSchema = z.discriminatedUnion("kind", [RenameReceiptSchema, MergeReceiptSchema]);
 
 const UndoIntentSchema = z.object({
   schemaVersion: z.literal(1),
@@ -85,7 +102,9 @@ export class LibraryTagRenameService {
     try {
       const existing = readReceipt(vaultPath, request.requestId);
       if (existing) {
-        if (existing.requestDigest !== digest(request)) return LibraryRenameTagResultSchema.parse({ ...identity, status: "stale" });
+        if (existing.kind !== "library_tag_rename_receipt" || existing.requestDigest !== digest(request)) {
+          return LibraryRenameTagResultSchema.parse({ ...identity, status: "stale" });
+        }
         completeRename(vaultPath, existing);
         return committed(identity, existing);
       }
@@ -121,12 +140,70 @@ export class LibraryTagRenameService {
           return { pageId: page.summary.pageId, signature };
         }),
         createdAt,
-        operationId
+        operationId,
+        "rename"
       );
+      if (receipt.kind !== "library_tag_rename_receipt") throw new Error("tag rename receipt kind mismatch");
       completeRename(vaultPath, receipt);
       return committed(identity, receipt);
     } catch {
       return LibraryRenameTagResultSchema.parse({ ...identity, status: "failed" });
+    }
+  }
+
+  merge(request: LibraryMergeTagRequest): LibraryMergeTagResult {
+    const identity = { ...request };
+    const vaultPath = this.#activeVaultPath(request.activeVaultId);
+    if (!vaultPath) return LibraryMergeTagResultSchema.parse({ ...identity, status: "stale" });
+    try {
+      const existing = readReceipt(vaultPath, request.requestId);
+      if (existing) {
+        if (existing.kind !== "library_tag_merge_receipt" || existing.requestDigest !== digest(request)) {
+          return LibraryMergeTagResultSchema.parse({ ...identity, status: "stale" });
+        }
+        completeRename(vaultPath, existing);
+        return committedMerge(identity, existing);
+      }
+      const scan = scanMarkdownPages(vaultPath);
+      if (scan.invalidPageCount !== 0) return LibraryMergeTagResultSchema.parse({ ...identity, status: "ineligible" });
+      const snapshot = readLibraryTagSnapshot(vaultPath);
+      const snapshotId = createLibraryTagsSnapshotId("list_tags", undefined, snapshot.tags);
+      if (snapshotId !== request.expectedSnapshotId) return LibraryMergeTagResultSchema.parse({ ...identity, status: "stale" });
+      const sourceKey = createPigeTagKey(request.sourceTag);
+      const targetKey = createPigeTagKey(request.targetTag);
+      if (!sourceKey || !targetKey || sourceKey === targetKey) {
+        return LibraryMergeTagResultSchema.parse({ ...identity, status: "ineligible" });
+      }
+      const source = snapshot.tags.find((candidate) => createPigeTagKey(candidate.tag) === sourceKey);
+      const target = snapshot.tags.find((candidate) => createPigeTagKey(candidate.tag) === targetKey);
+      if (!source || !target) return LibraryMergeTagResultSchema.parse({ ...identity, status: "not_found" });
+      if (source.pageCount !== request.expectedSourcePageCount || target.pageCount !== request.expectedTargetPageCount) {
+        return LibraryMergeTagResultSchema.parse({ ...identity, status: "stale" });
+      }
+      const affected = scan.pages.filter((page) => page.knowledge.tags.some((tag) => createPigeTagKey(tag) === sourceKey));
+      if (affected.length !== source.pageCount || affected.length > MAX_PAGES) {
+        return LibraryMergeTagResultSchema.parse({ ...identity, status: "stale" });
+      }
+      const createdAt = this.#now().toISOString();
+      const operationId = createOperationId(createdAt, request.requestId, this.#randomId());
+      const signaturesByPath = new Map(scan.files.map((signature) => [signature.absolutePath, signature]));
+      const receipt = stageReceipt(
+        vaultPath,
+        request,
+        affected.map((page) => {
+          const signature = signaturesByPath.get(page.absolutePath);
+          if (!signature) throw new Error("tag merge page signature missing");
+          return { pageId: page.summary.pageId, signature };
+        }),
+        createdAt,
+        operationId,
+        "merge"
+      );
+      if (receipt.kind !== "library_tag_merge_receipt") throw new Error("tag merge receipt kind mismatch");
+      completeRename(vaultPath, receipt);
+      return committedMerge(identity, receipt);
+    } catch {
+      return LibraryMergeTagResultSchema.parse({ ...identity, status: "failed" });
     }
   }
 
@@ -141,7 +218,7 @@ export class LibraryTagRenameService {
       operationId: operation.id,
       kind: "update_page",
       createdAt: operation.createdAt,
-      targetLabel: `${receipt.tag} → ${receipt.replacementTag}`,
+      targetLabel: `${receiptSourceTag(receipt)} → ${receiptTargetTag(receipt)}`,
       status: undone ? "undone" : "applied",
       canUndo: !undone && current,
       ...(undone ? { undoUnavailableReason: "already_undone" as const } : {}),
@@ -205,18 +282,21 @@ export class LibraryTagRenameService {
 
 function stageReceipt(
   vaultPath: string,
-  request: LibraryRenameTagRequest,
+  request: LibraryRenameTagRequest | LibraryMergeTagRequest,
   pages: readonly { readonly pageId: string; readonly signature: MarkdownFileSignatureRecord }[],
   createdAt: string,
-  operationId: string
+  operationId: string,
+  mode: "rename" | "merge"
 ): Receipt {
   let totalBytes = 0;
   const items: Receipt["items"][number][] = [];
   for (const { pageId, signature } of pages) {
     const before = Buffer.from(readMarkdownPageContentAtSignature(vaultPath, signature, MAX_PAGE_BYTES).markdown, "utf8");
     totalBytes += before.length;
-    if (totalBytes > MAX_TOTAL_BYTES) throw new Error("tag rename aggregate exceeds limit");
-    const after = Buffer.from(renameTag(before.toString("utf8"), request.tag, request.replacementTag, createdAt), "utf8");
+    if (totalBytes > MAX_TOTAL_BYTES) throw new Error("tag mutation aggregate exceeds limit");
+    const sourceTag = "tag" in request ? request.tag : request.sourceTag;
+    const targetTag = "tag" in request ? request.replacementTag : request.targetTag;
+    const after = Buffer.from(rewriteTag(before.toString("utf8"), sourceTag, targetTag, createdAt, mode), "utf8");
     const item = {
       pageId,
       pagePath: relative(vaultPath, signature.absolutePath),
@@ -229,9 +309,13 @@ function stageReceipt(
     writeExclusive(resolve(vaultPath, item.afterPath), after);
     items.push(item);
   }
-  const receipt = ReceiptSchema.parse({ schemaVersion: 1, kind: "library_tag_rename_receipt", requestId: request.requestId,
-    requestDigest: digest(request), activeVaultId: request.activeVaultId, tag: request.tag,
-    replacementTag: request.replacementTag, operationId, createdAt, items });
+  const receipt = ReceiptSchema.parse("tag" in request
+    ? { schemaVersion: 1, kind: "library_tag_rename_receipt", requestId: request.requestId,
+        requestDigest: digest(request), activeVaultId: request.activeVaultId, tag: request.tag,
+        replacementTag: request.replacementTag, operationId, createdAt, items }
+    : { schemaVersion: 1, kind: "library_tag_merge_receipt", requestId: request.requestId,
+        requestDigest: digest(request), activeVaultId: request.activeVaultId, sourceTag: request.sourceTag,
+        targetTag: request.targetTag, operationId, createdAt, items });
   writeExclusive(receiptPath(vaultPath, request.requestId), Buffer.from(JSON.stringify(receipt), "utf8"));
   return receipt;
 }
@@ -269,24 +353,43 @@ function completeUndo(vaultPath: string, receipt: Receipt, operation: OperationR
   writeOperation(vaultPath, createUndoOperation(receipt, operation, intent));
 }
 
-function renameTag(markdown: string, oldTag: string, replacementTag: string, updatedAt: string): string {
+function rewriteTag(
+  markdown: string,
+  oldTag: string,
+  replacementTag: string,
+  updatedAt: string,
+  mode: "rename" | "merge"
+): string {
   const parsed = parsePigeFrontmatter(markdown);
   if (!parsed) throw new Error("tag rename frontmatter missing");
   const oldKey = createPigeTagKey(oldTag);
   const replacement = normalizePigeTag(replacementTag);
   if (!oldKey || !replacement) throw new Error("tag rename identity invalid");
   let matched = 0;
-  const tags = (parsed.frontmatter.tags ?? []).map((tag) => {
+  const rewritten = (parsed.frontmatter.tags ?? []).map((tag) => {
     if (createPigeTagKey(tag) !== oldKey) return tag;
     matched += 1;
     return replacement;
   });
-  if (matched !== 1 || new Set(tags.map(createPigeTagKey)).size !== tags.length) throw new Error("tag rename is ambiguous");
+  const tags = mode === "merge" ? deduplicateTags(rewritten) : rewritten;
+  if (matched !== 1 || (mode === "rename" && new Set(tags.map(createPigeTagKey)).size !== tags.length)) {
+    throw new Error("tag mutation is ambiguous");
+  }
   let raw = replaceField(parsed.raw, "tags", JSON.stringify(tags));
   raw = replaceField(raw, "updated_at", JSON.stringify(updatedAt));
   const frontmatterStart = markdown.indexOf("\n") + 1;
   const frontmatterEnd = frontmatterStart + parsed.raw.length;
   return `${markdown.slice(0, frontmatterStart)}${raw}${markdown.slice(frontmatterEnd)}`;
+}
+
+function deduplicateTags(tags: readonly string[]): string[] {
+  const unique = new Map<string, string>();
+  for (const tag of tags) {
+    const key = createPigeTagKey(tag);
+    if (!key) throw new Error("tag mutation identity invalid");
+    if (!unique.has(key)) unique.set(key, tag);
+  }
+  return [...unique.values()];
 }
 
 function replaceField(raw: string, key: string, value: string): string {
@@ -302,7 +405,7 @@ function createRenameOperation(receipt: Receipt): OperationRecord {
     targetRefs: receipt.items.map((item) => ({ kind: "page" as const, id: item.pageId, checksum: item.afterHash })),
     sourceRefs: [], before: { kind: "operation", id: receipt.requestId, checksum: digest(receipt.items.map((item) => item.beforeHash)) },
     after: { kind: "operation", id: receipt.operationId, checksum: digest(receipt.items.map((item) => item.afterHash)) },
-    summary: `Renamed tag ${receipt.tag} to ${receipt.replacementTag} on ${receipt.items.length} page(s).`,
+    summary: `${receipt.kind === "library_tag_merge_receipt" ? "Merged" : "Renamed"} tag ${receiptSourceTag(receipt)} to ${receiptTargetTag(receipt)} on ${receipt.items.length} page(s).`,
     reversible: "yes", rollbackHint: "Restore every exact prior page while all renamed page revisions remain current.", warnings: []
   });
 }
@@ -312,7 +415,7 @@ function createUndoOperation(receipt: Receipt, operation: OperationRecord, inten
     id: intent.undoOperationId, schemaVersion: 1, createdAt: intent.createdAt,
     actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" }, kind: "update_page",
     targetRefs: operation.targetRefs, sourceRefs: [{ kind: "operation", id: operation.id }], before: operation.after,
-    after: operation.before, summary: `Restored tag ${receipt.tag} on ${receipt.items.length} page(s).`,
+    after: operation.before, summary: `Restored tag ${receiptSourceTag(receipt)} on ${receipt.items.length} page(s).`,
     reversible: "no", warnings: []
   });
 }
@@ -346,9 +449,22 @@ function hasAfterState(vaultPath: string, receipt: Receipt): boolean {
   return receipt.items.some((item) => fileHash(resolve(vaultPath, item.pagePath)) === item.afterHash);
 }
 
-function committed(identity: LibraryRenameTagRequest, receipt: Receipt): LibraryRenameTagResult {
+function committed(identity: LibraryRenameTagRequest, receipt: z.infer<typeof RenameReceiptSchema>): LibraryRenameTagResult {
   return LibraryRenameTagResultSchema.parse({ ...identity, status: "committed", operationId: receipt.operationId,
     renamedPageCount: receipt.items.length });
+}
+
+function committedMerge(identity: LibraryMergeTagRequest, receipt: z.infer<typeof MergeReceiptSchema>): LibraryMergeTagResult {
+  return LibraryMergeTagResultSchema.parse({ ...identity, status: "committed", operationId: receipt.operationId,
+    mergedPageCount: receipt.items.length });
+}
+
+function receiptSourceTag(receipt: Receipt): string {
+  return receipt.kind === "library_tag_rename_receipt" ? receipt.tag : receipt.sourceTag;
+}
+
+function receiptTargetTag(receipt: Receipt): string {
+  return receipt.kind === "library_tag_rename_receipt" ? receipt.replacementTag : receipt.targetTag;
 }
 
 function createOperationId(createdAt: string, requestId: string, randomId: string): string {

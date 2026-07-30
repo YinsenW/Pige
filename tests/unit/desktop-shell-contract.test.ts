@@ -154,6 +154,10 @@ describe("desktop shell build contract", () => {
     expect(renameHandler).toContain("LibraryRenameTagResultSchema.parse(getLibraryTagRenameService().rename(parsed))");
     expect(renameHandler.indexOf("LibraryRenameTagRequestSchema.parse(request)"))
       .toBeLessThan(renameHandler.indexOf("getLibraryTagRenameService().rename(parsed)"));
+    expect(renameHandler).toContain("LibraryMergeTagRequestSchema.parse(request)");
+    expect(renameHandler).toContain("LibraryMergeTagResultSchema.parse(getLibraryTagRenameService().merge(parsed))");
+    expect(renameHandler.indexOf("LibraryMergeTagRequestSchema.parse(request)"))
+      .toBeLessThan(renameHandler.indexOf("getLibraryTagRenameService().merge(parsed)"));
     expect(preloadSource).toContain("Invalid Library tags response identity.");
     for (const privateField of [
       "pagePath",
