@@ -655,9 +655,9 @@ Copy  Quote  Ask  Translate  Polish  Expand  Summarize  More
 
 Action behavior:
 
-- Copy and quote are local and instant.
-- Read/transform submits only identity; writes refresh after Operation or show <=8 safe lines.
-- Drift/failure is body-free; renderer owns no body, path, hash/span or apply authority.
+- Copy/quote stay local. Any Reader submits exact identity to the shared owner; applied reopens,
+  while review/wait uses Note Agent.
+- Closed/drift keeps Reader/selection/focus; renderer owns no body/path/hash/span/apply.
 
 ### 8.4 Structured Knowledge Surface
 
