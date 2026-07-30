@@ -18,6 +18,7 @@ import {
   LibraryTagsBrowser,
   type LibraryTagsApi,
 } from "./components/LibraryTagsBrowser";
+import { LibraryMarkdownImportAction } from "./components/LibraryMarkdownImportAction";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ConversationMarkdown } from "./components/ConversationMarkdown";
 import { ConversationHistoryPanel } from "./components/ConversationHistoryPanel";
@@ -98,6 +99,8 @@ import type {
   ModelProfileSummary,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteImportMarkdownRequest,
+  NoteImportMarkdownResult,
   NoteReconnectOriginalSourceRequest,
   NoteReconnectOriginalSourceResult,
   NoteRevealSourceRequest,
@@ -1138,6 +1141,19 @@ export function App(): React.JSX.Element {
   const adoptMergedNote = (render: NoteRenderResult): void => {
     const vaultId = activeVaultIdRef.current;
     if (!vaultId || render.summary.pageType !== "note") return;
+    const requestId = ++noteOpenSequence.current;
+    inlineReferenceSequence.current += 1;
+    setSelectedNoteVaultId(vaultId);
+    setSelectedNote(render);
+    setSelectedNoteRelated("loading");
+    void loadNoteRelated(render.summary.pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
+    void Promise.allSettled([refreshLibrary(), refreshVaultState()]);
+    window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".note-reader")?.focus({ preventScroll: true }));
+  };
+
+  const adoptImportedNote = (render: NoteRenderResult): void => {
+    const vaultId = activeVaultIdRef.current;
+    if (!vaultId || render.summary.pageType !== "note" || render.summary.status === "archived") return;
     const requestId = ++noteOpenSequence.current;
     inlineReferenceSequence.current += 1;
     setSelectedNoteVaultId(vaultId);
@@ -2560,6 +2576,8 @@ export function App(): React.JSX.Element {
             noteLoadingPageId={noteLoadingPageId}
             error={libraryError}
             onGoHome={navigateHome}
+            onImportMarkdown={importMarkdownNote}
+            onNoteImported={adoptImportedNote}
             onRefresh={async () => {
               await Promise.all([refreshLibrary(), refreshCollectionCatalog(false)]);
             }}
@@ -3174,6 +3192,8 @@ export function LibraryPanel(props: {
   readonly error: string | null;
   readonly readerBackLabel?: string;
   readonly onGoHome: () => void;
+  readonly onImportMarkdown?: (request: NoteImportMarkdownRequest) => Promise<NoteImportMarkdownResult>;
+  readonly onNoteImported?: (render: NoteRenderResult) => void;
   readonly onRefresh: () => Promise<void>;
   readonly onSearch: (request: RetrievalSearchRequest) => Promise<RetrievalSearchResult>;
   readonly onOpenSourceReference?: (
@@ -3585,6 +3605,14 @@ export function LibraryPanel(props: {
       <header className="library-header view-toolbar">
         <strong>{props.t("library.title")}</strong>
         <span className="toolbar-meta">{props.t("library.content")}</span>
+        {activeVaultId && props.onImportMarkdown && props.onNoteImported ? (
+          <LibraryMarkdownImportAction
+            activeVaultId={activeVaultId}
+            labels={libraryMarkdownImportLabels(props.t)}
+            onImport={props.onImportMarkdown}
+            onImported={props.onNoteImported}
+          />
+        ) : null}
         <button
           type="button"
           className="icon-button"
@@ -7125,6 +7153,10 @@ function createNoteReferenceRequestId(): string {
   return `noteref_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
 }
 
+function importMarkdownNote(request: NoteImportMarkdownRequest): Promise<NoteImportMarkdownResult> {
+  return window.pige.notes.importMarkdown(request);
+}
+
 function createNoteEditorRequestId(): `noteeditreq_${string}` {
   return `noteeditreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
 }
@@ -7169,6 +7201,16 @@ function readerDocumentActionLabels(t: (key: string) => string) {
     confirm: t("note.document.trashConfirm"),
     pending: t("note.document.trashing"),
     failed: t("note.document.trashFailed")
+  };
+}
+
+function libraryMarkdownImportLabels(t: (key: string) => string) {
+  return {
+    action: t("library.importMarkdown"),
+    pending: t("library.importMarkdownPending"),
+    stale: t("library.importMarkdownStale"),
+    invalid: t("library.importMarkdownInvalid"),
+    failed: t("library.importMarkdownFailed"),
   };
 }
 
