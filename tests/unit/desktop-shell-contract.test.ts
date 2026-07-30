@@ -776,6 +776,7 @@ describe("desktop shell build contract", () => {
     expect(notesApi).toContain("request: NoteRestoreArchivedRequest");
     expect(notesApi).toContain(") => Promise<NoteRestoreArchivedResult>;");
     expect(notesApi).toContain("readonly addTag: (request: NoteAddTagRequest) => Promise<NoteAddTagResult>;");
+    expect(notesApi).toContain("readonly removeTag: (request: NoteRemoveTagRequest) => Promise<NoteRemoveTagResult>;");
     for (const privateField of ["sourcePath", "originalPath", "managedCopyPath", "sourceBody", "rawError"]) {
       expect(notesApi).not.toContain(privateField);
     }

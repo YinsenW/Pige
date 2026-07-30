@@ -1678,6 +1678,7 @@ export const NoteCanonicalAliasSchema = z.string().min(1).max(120).refine(
     value === value.normalize("NFKC").replace(/\s+/gu, " ").trim(),
   "Note aliases must use the canonical Markdown alias representation."
 );
+export const NoteRemoveTagRequestIdSchema = z.string().regex(/^noteremovetagreq_[a-z0-9]{16,64}$/);
 export const NoteCanonicalTagSchema = z.string().min(1).max(48).refine(
   (value) => !/[\u0000-\u001f\u007f]/u.test(value) &&
     value === value.normalize("NFKC").replace(/\s+/gu, " ").trim(),
@@ -1833,6 +1834,7 @@ export const NOTE_ADD_TAG_CHANNEL = "notes.addTag" as const;
 export const NOTE_EDIT_TAXONOMY_CHANNEL = "notes.editTaxonomy" as const;
 export const NOTE_RENAME_CHANNEL = "notes.rename" as const;
 export const NOTE_CHANGE_ALIAS_CHANNEL = "notes.changeAlias" as const;
+export const NOTE_REMOVE_TAG_CHANNEL = "notes.removeTag" as const;
 export const NOTE_IMPORT_MARKDOWN_CHANNEL = "notes.importMarkdown" as const;
 export const NoteImportMarkdownRequestIdSchema = z.string()
   .regex(/^noteimport_[a-z0-9]{16,64}$/u);
@@ -1970,6 +1972,22 @@ export const NoteAliasChangeResultSchema = z.discriminatedUnion("status", [
   }).strict(),
   ...(["stale", "not_found", "ineligible", "conflict", "failed"] as const).map((status) =>
     NoteAliasChangeResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+export const NoteRemoveTagRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteRemoveTagRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema,
+  tag: NoteCanonicalTagSchema
+}).strict();
+const NoteRemoveTagResultIdentitySchema = NoteRemoveTagRequestSchema;
+export const NoteRemoveTagResultSchema = z.discriminatedUnion("status", [
+  NoteRemoveTagResultIdentitySchema.extend({ status: z.literal("committed"), operationId: OperationIdSchema, render: NoteRenderResultSchema }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteRemoveTagResultIdentitySchema.extend({ status: z.literal(status) }).strict()
   )
 ]);
 export const NoteTrashCurrentRequestSchema = z.object({
@@ -10526,6 +10544,9 @@ export type NoteCanonicalAlias = z.infer<typeof NoteCanonicalAliasSchema>;
 export type NoteAliasingSummary = z.infer<typeof NoteAliasingSummarySchema>;
 export type NoteAliasChangeRequest = z.infer<typeof NoteAliasChangeRequestSchema>;
 export type NoteAliasChangeResult = z.infer<typeof NoteAliasChangeResultSchema>;
+export type NoteRemoveTagRequestId = z.infer<typeof NoteRemoveTagRequestIdSchema>;
+export type NoteRemoveTagRequest = z.infer<typeof NoteRemoveTagRequestSchema>;
+export type NoteRemoveTagResult = z.infer<typeof NoteRemoveTagResultSchema>;
 export type NoteTrashEligibility = z.infer<typeof NoteTrashEligibilitySchema>;
 export type NoteTrashCurrentRequest = z.infer<typeof NoteTrashCurrentRequestSchema>;
 export type NoteTrashCurrentResult = z.infer<typeof NoteTrashCurrentResultSchema>;
