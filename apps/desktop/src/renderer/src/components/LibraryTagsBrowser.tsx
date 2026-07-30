@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   LibraryTagFacet,
+  LibraryMergeTagRequest,
+  LibraryMergeTagResult,
   LibraryRenameTagRequest,
   LibraryRenameTagResult,
   LibraryTaggedPageSummary,
@@ -11,6 +13,7 @@ import type {
 export interface LibraryTagsApi {
   readonly tags: (request: LibraryTagsRequest) => Promise<LibraryTagsResult>;
   readonly renameTag: (request: LibraryRenameTagRequest) => Promise<LibraryRenameTagResult>;
+  readonly mergeTag: (request: LibraryMergeTagRequest) => Promise<LibraryMergeTagResult>;
 }
 
 export interface LibraryTagsBrowserLabels {
@@ -34,6 +37,15 @@ export interface LibraryTagsBrowserLabels {
   readonly renameConfirm: string;
   readonly renamePending: string;
   readonly renameFailed: string;
+  readonly merge: string;
+  readonly mergeTitle: string;
+  readonly mergeDescription: string;
+  readonly mergeSource: string;
+  readonly mergeTarget: string;
+  readonly mergeCancel: string;
+  readonly mergeConfirm: string;
+  readonly mergePending: string;
+  readonly mergeFailed: string;
   readonly noteCount: (count: number) => string;
 }
 
@@ -56,6 +68,13 @@ type RenameDialogState = {
   readonly draft: string;
   readonly state: "ready" | "pending" | "failed";
 };
+type MergeDialogState = {
+  readonly sourceTag: string;
+  readonly expectedSourcePageCount: number;
+  readonly expectedSnapshotId: string;
+  readonly targetTag: string;
+  readonly state: "ready" | "pending" | "failed";
+};
 
 function createRequestId(): string {
   return `library_tags_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
@@ -63,6 +82,10 @@ function createRequestId(): string {
 
 function createRenameRequestId(): `library_tag_rename_request_${string}` {
   return `library_tag_rename_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function createMergeRequestId(): `library_tag_merge_request_${string}` {
+  return `library_tag_merge_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
 }
 
 function canonicalTag(value: string): string {
@@ -99,6 +122,7 @@ export function LibraryTagsBrowser(
   const [continuationFailedOwner, setContinuationFailedOwner] = useState<"tags" | "notes" | null>(null);
   const [focusRevision, setFocusRevision] = useState(0);
   const [renameDialog, setRenameDialog] = useState<RenameDialogState | null>(null);
+  const [mergeDialog, setMergeDialog] = useState<MergeDialogState | null>(null);
   const loadingMoreOwnerRef = useRef<"tags" | "notes" | null>(null);
   const activeVaultIdRef = useRef(props.activeVaultId);
   const selectedTagRef = useRef<string | null>(null);
@@ -111,12 +135,18 @@ export function LibraryTagsBrowser(
   const tagsHeadingRef = useRef<HTMLHeadingElement>(null);
   const tagRowRefs = useRef(new Map<string, HTMLButtonElement>());
   const renameTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const mergeTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const renameDialogRef = useRef<HTMLElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renameCancelRef = useRef<HTMLButtonElement>(null);
   const renameRequestActiveRef = useRef(false);
   const renameSequenceRef = useRef(0);
-  const pendingRenamedFocusRef = useRef<string | null>(null);
+  const mergeDialogRef = useRef<HTMLElement>(null);
+  const mergeSelectRef = useRef<HTMLSelectElement>(null);
+  const mergeCancelRef = useRef<HTMLButtonElement>(null);
+  const mergeRequestActiveRef = useRef(false);
+  const mergeSequenceRef = useRef(0);
+  const pendingTagFocusRef = useRef<string | null>(null);
   const pendingFocusRef = useRef<"tags-retry" | "notes-retry" | "tags-more" | "notes-more" | null>(null);
   activeVaultIdRef.current = props.activeVaultId;
   selectedTagRef.current = selectedTag;
@@ -180,9 +210,9 @@ export function LibraryTagsBrowser(
       });
       setTagsState("ready");
       setContinuationFailedOwner(null);
-      if (!append && pendingRenamedFocusRef.current) {
-        const renamedTag = pendingRenamedFocusRef.current;
-        pendingRenamedFocusRef.current = null;
+      if (!append && pendingTagFocusRef.current) {
+        const renamedTag = pendingTagFocusRef.current;
+        pendingTagFocusRef.current = null;
         window.requestAnimationFrame(() => {
           (tagRowRefs.current.get(renamedTag) ?? tagsHeadingRef.current)?.focus({ preventScroll: true });
         });
@@ -280,8 +310,11 @@ export function LibraryTagsBrowser(
     setContinuationFailedOwner(null);
     renameSequenceRef.current += 1;
     renameRequestActiveRef.current = false;
-    pendingRenamedFocusRef.current = null;
+    mergeSequenceRef.current += 1;
+    mergeRequestActiveRef.current = false;
+    pendingTagFocusRef.current = null;
     setRenameDialog(null);
+    setMergeDialog(null);
     void loadTags(false);
   }, [props.activeVaultId]);
 
@@ -370,10 +403,10 @@ export function LibraryTagsBrowser(
         selectedTagRef.current = null;
         setNotes([]);
         setNotesContinuation(null);
-        pendingRenamedFocusRef.current = replacementTag;
+        pendingTagFocusRef.current = replacementTag;
         await loadTags(false);
-        if (pendingRenamedFocusRef.current === replacementTag) {
-          pendingRenamedFocusRef.current = null;
+        if (pendingTagFocusRef.current === replacementTag) {
+          pendingTagFocusRef.current = null;
           window.requestAnimationFrame(() => tagsHeadingRef.current?.focus({ preventScroll: true }));
         }
         return;
@@ -396,6 +429,80 @@ export function LibraryTagsBrowser(
   const renameValid = Boolean(renameDialog) && renameReplacement.length > 0 && renameReplacement.length <= 48 &&
     !/[\u0000-\u001f\u007f]/u.test(renameReplacement) &&
     renameReplacement.toLocaleLowerCase("en-US") !== renameDialog?.tag.toLocaleLowerCase("en-US");
+
+  const openMerge = (source: LibraryTagFacet): void => {
+    const snapshotId = tagsContinuation?.snapshotId;
+    const firstTarget = tags.find((tag) => tag.tag !== source.tag && tag.pageCount > 0);
+    if (!snapshotId || source.pageCount <= 0 || !firstTarget || mergeRequestActiveRef.current) return;
+    setMergeDialog({
+      sourceTag: source.tag,
+      expectedSourcePageCount: source.pageCount,
+      expectedSnapshotId: snapshotId,
+      targetTag: firstTarget.tag,
+      state: "ready",
+    });
+    window.requestAnimationFrame(() => mergeSelectRef.current?.focus({ preventScroll: true }));
+  };
+
+  const cancelMerge = (): void => {
+    if (!mergeDialog || mergeRequestActiveRef.current) return;
+    const sourceTag = mergeDialog.sourceTag;
+    setMergeDialog(null);
+    window.requestAnimationFrame(() => mergeTriggerRefs.current.get(sourceTag)?.focus({ preventScroll: true }));
+  };
+
+  const submitMerge = async (): Promise<void> => {
+    if (!mergeDialog || mergeRequestActiveRef.current) return;
+    const target = tags.find((tag) => tag.tag === mergeDialog.targetTag && tag.tag !== mergeDialog.sourceTag);
+    if (!target || target.pageCount <= 0) return;
+    mergeRequestActiveRef.current = true;
+    const sequence = ++mergeSequenceRef.current;
+    const request: LibraryMergeTagRequest = {
+      apiVersion: 1,
+      requestId: createMergeRequestId(),
+      activeVaultId: props.activeVaultId,
+      sourceTag: mergeDialog.sourceTag,
+      targetTag: target.tag,
+      expectedSnapshotId: mergeDialog.expectedSnapshotId,
+      expectedSourcePageCount: mergeDialog.expectedSourcePageCount,
+      expectedTargetPageCount: target.pageCount,
+    };
+    setMergeDialog((current) => current ? { ...current, state: "pending" } : current);
+    try {
+      const result = await props.api.mergeTag(request);
+      if (sequence !== mergeSequenceRef.current || activeVaultIdRef.current !== request.activeVaultId) return;
+      if (!mergeIdentityMatches(request, result)) {
+        setMergeDialog((current) => current ? { ...current, state: "failed" } : current);
+        window.requestAnimationFrame(() => mergeSelectRef.current?.focus({ preventScroll: true }));
+        return;
+      }
+      if (result.status === "committed") {
+        setMergeDialog(null);
+        setSelectedTag(null);
+        selectedTagRef.current = null;
+        setNotes([]);
+        setNotesContinuation(null);
+        pendingTagFocusRef.current = request.targetTag;
+        await loadTags(false);
+        pendingTagFocusRef.current = null;
+        window.requestAnimationFrame(() => {
+          (tagRowRefs.current.get(request.targetTag) ?? tagsHeadingRef.current)?.focus({ preventScroll: true });
+        });
+        return;
+      }
+      setMergeDialog((current) => current ? { ...current, state: "failed" } : current);
+      window.requestAnimationFrame(() => mergeSelectRef.current?.focus({ preventScroll: true }));
+    } catch {
+      if (sequence === mergeSequenceRef.current && activeVaultIdRef.current === request.activeVaultId) {
+        setMergeDialog((current) => current ? { ...current, state: "failed" } : current);
+        window.requestAnimationFrame(() => mergeSelectRef.current?.focus({ preventScroll: true }));
+      }
+    } finally {
+      if (sequence === mergeSequenceRef.current && activeVaultIdRef.current === request.activeVaultId) {
+        mergeRequestActiveRef.current = false;
+      }
+    }
+  };
 
   return (
     <section className="search-group" aria-labelledby="library-tags-heading">
@@ -444,6 +551,18 @@ export function LibraryTagsBrowser(
                   onClick={() => openRename(tag)}
                 >
                   {props.labels.rename}
+                </button> : null}
+                {tag.pageCount > 0 && tagsContinuation?.snapshotId && tags.some((target) => target.tag !== tag.tag && target.pageCount > 0) ? <button
+                  ref={(element) => {
+                    if (element) mergeTriggerRefs.current.set(tag.tag, element);
+                    else mergeTriggerRefs.current.delete(tag.tag);
+                  }}
+                  type="button"
+                  className="settings-button"
+                  aria-label={`${props.labels.merge}: ${tag.tag}`}
+                  onClick={() => openMerge(tag)}
+                >
+                  {props.labels.merge}
                 </button> : null}
               </div>
             ))}
@@ -573,6 +692,70 @@ export function LibraryTagsBrowser(
           </section>
         </div>
       ) : null}
+      {mergeDialog ? (
+        <div className="confirmation-backdrop">
+          <section
+            ref={mergeDialogRef}
+            className="confirmation-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="library-tag-merge-title"
+            aria-describedby="library-tag-merge-description"
+            aria-busy={mergeDialog.state === "pending"}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && mergeDialog.state !== "pending") {
+                event.preventDefault();
+                cancelMerge();
+                return;
+              }
+              if (event.key !== "Tab") return;
+              const controls = Array.from(mergeDialogRef.current?.querySelectorAll<HTMLElement>("select:not(:disabled), button:not(:disabled)") ?? []);
+              if (controls.length === 0) return event.preventDefault();
+              const first = controls[0]!;
+              const last = controls.at(-1)!;
+              if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+              } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+              }
+            }}
+          >
+            <div className="confirmation-icon" aria-hidden="true">!</div>
+            <div className="confirmation-copy">
+              <h2 id="library-tag-merge-title">{props.labels.mergeTitle}</h2>
+              <p id="library-tag-merge-description">{props.labels.mergeDescription}</p>
+              <p><strong>{props.labels.mergeSource}</strong> {mergeDialog.sourceTag}</p>
+              <label>
+                <span>{props.labels.mergeTarget}</span>
+                <select
+                  ref={mergeSelectRef}
+                  value={mergeDialog.targetTag}
+                  disabled={mergeDialog.state === "pending"}
+                  onChange={(event) => {
+                    const targetTag = event.currentTarget.value;
+                    setMergeDialog((current) => current ? { ...current, targetTag, state: "ready" } : current);
+                  }}
+                >
+                  {tags.filter((tag) => tag.tag !== mergeDialog.sourceTag && tag.pageCount > 0).map((tag) => (
+                    <option key={tag.tag} value={tag.tag}>{tag.tag} ({props.labels.noteCount(tag.pageCount)})</option>
+                  ))}
+                </select>
+              </label>
+              {mergeDialog.state === "failed" ? <p className="error" role="alert">{props.labels.mergeFailed}</p> : null}
+            </div>
+            <div className="confirmation-actions">
+              <button ref={mergeCancelRef} type="button" className="secondary" disabled={mergeDialog.state === "pending"} onClick={cancelMerge}>
+                {props.labels.mergeCancel}
+              </button>
+              <button type="button" className="primary" disabled={mergeDialog.state === "pending"} onClick={() => void submitMerge()}>
+                {mergeDialog.state === "pending" ? props.labels.mergePending : props.labels.mergeConfirm}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -582,4 +765,12 @@ function renameIdentityMatches(request: LibraryRenameTagRequest, result: Library
     result.activeVaultId === request.activeVaultId && result.tag === request.tag &&
     result.replacementTag === request.replacementTag && result.expectedSnapshotId === request.expectedSnapshotId &&
     result.expectedPageCount === request.expectedPageCount;
+}
+
+function mergeIdentityMatches(request: LibraryMergeTagRequest, result: LibraryMergeTagResult): boolean {
+  return result.apiVersion === request.apiVersion && result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId && result.sourceTag === request.sourceTag &&
+    result.targetTag === request.targetTag && result.expectedSnapshotId === request.expectedSnapshotId &&
+    result.expectedSourcePageCount === request.expectedSourcePageCount &&
+    result.expectedTargetPageCount === request.expectedTargetPageCount;
 }
