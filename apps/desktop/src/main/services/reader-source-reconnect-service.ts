@@ -21,9 +21,14 @@ export function reconnectableOriginalSources(
   vaultPath: string,
   sourceIds: readonly string[]
 ): ReferencedOriginalReconnectCandidate[] {
-  return sourceIds.slice(0, 5)
-    .map((sourceId) => readReferencedOriginalReconnectCandidate(vaultPath, sourceId))
-    .filter((source): source is ReferencedOriginalReconnectCandidate => source !== undefined);
+  return sourceIds.slice(0, 5).flatMap((sourceId) => {
+    try {
+      const source = readReferencedOriginalReconnectCandidate(vaultPath, sourceId);
+      return source ? [source] : [];
+    } catch {
+      return [];
+    }
+  });
 }
 
 export interface ReaderSourceReconnectPicker {

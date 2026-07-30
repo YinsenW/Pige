@@ -1750,13 +1750,17 @@ export const NoteRenderPageSummarySchema = z.object({
   language: z.string().min(1).max(64).optional(),
   sourceIds: z.array(SourceIdSchema).max(1_000)
 }).strict();
+const NOTE_SOURCE_DISPLAY_NAME_UNSAFE_CHARACTER_PATTERN =
+  /[\\/\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u2028\u2029\u202a-\u202e\u2060\u2066-\u2069\ufeff]/u;
+const NOTE_SOURCE_DISPLAY_NAME_URI_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/iu;
+export const NoteSourceDisplayNameSchema = z.string().trim().min(1).max(160)
+  .refine((value) => !NOTE_SOURCE_DISPLAY_NAME_UNSAFE_CHARACTER_PATTERN.test(value))
+  .refine((value) => !NOTE_SOURCE_DISPLAY_NAME_URI_SCHEME_PATTERN.test(value));
 export const NoteSourceMetadataItemSchema = z.discriminatedUnion("status", [
   z.object({
     sourceId: SourceIdSchema,
     status: z.literal("current"),
-    displayName: z.string().min(1).max(160)
-      .refine((value) => !/[\\/\u0000-\u001f\u007f-\u009f]/u.test(value) && !/^file:/iu.test(value))
-      .optional(),
+    displayName: NoteSourceDisplayNameSchema.optional(),
     category: z.enum(["text", "web", "document", "image", "data"]),
     storage: z.enum(["managed_copy", "reference_original"]),
     extraction: z.enum(["none", "text", "ocr"])

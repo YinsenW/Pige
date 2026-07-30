@@ -4737,14 +4737,20 @@ describe("schemas", () => {
         remainingCount: 0
       }
     }).sourceMetadata?.items[0]).toMatchObject({ displayName: "receipt.png", category: "image" });
-    expect(() => NoteRenderResultSchema.parse({
-      ...render,
-      sourceMetadata: {
-        items: [{ sourceId: "src_20260730_note1234", status: "current", displayName: "/private/receipt.png",
-          category: "image", storage: "managed_copy", extraction: "ocr" }],
-        remainingCount: 0
-      }
-    })).toThrow();
+    for (const displayName of [
+      "/private/receipt.png",
+      "postgres:alice:hunter2@db.internal",
+      "safe-name\u202eexe.txt"
+    ]) {
+      expect(() => NoteRenderResultSchema.parse({
+        ...render,
+        sourceMetadata: {
+          items: [{ sourceId: "src_20260730_note1234", status: "current", displayName,
+            category: "image", storage: "managed_copy", extraction: "ocr" }],
+          remainingCount: 0
+        }
+      })).toThrow();
+    }
     expect(() => NoteRenderResultSchema.parse({
       ...render,
       trashEligibility: { ...render.trashEligibility, path: "/private/note.md" }

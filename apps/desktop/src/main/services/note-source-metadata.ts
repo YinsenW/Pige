@@ -1,5 +1,21 @@
-import type { NoteSourceMetadataSummary } from "@pige/schemas";
+import { NoteSourceDisplayNameSchema, type NoteSourceMetadataSummary } from "@pige/schemas";
+import { reconnectableOriginalSources } from "./reader-source-reconnect-service";
 import { readCurrentSourceRecordSnapshot } from "./source-file-access";
+
+export function projectReaderSourceDetails(
+  vaultPath: string,
+  sourceIds: readonly string[],
+  includeReconnect: boolean,
+) {
+  const metadata = sourceIds.length > 0 ? { sourceMetadata: projectNoteSourceMetadata(vaultPath, sourceIds) } : {};
+  if (!includeReconnect) return metadata;
+  const reconnectOriginalSources = reconnectableOriginalSources(vaultPath, sourceIds);
+  return {
+    ...metadata,
+    reconnectOriginalSourceIds: reconnectOriginalSources.map((source) => source.sourceId),
+    reconnectOriginalSources,
+  };
+}
 
 export function projectNoteSourceMetadata(
   vaultPath: string,
@@ -28,10 +44,8 @@ export function projectNoteSourceMetadata(
 }
 
 function safeDisplayName(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed && trimmed.length <= 160 && !/[\\/\u0000-\u001f\u007f-\u009f]/u.test(trimmed) && !/^file:/iu.test(trimmed)
-    ? trimmed
-    : undefined;
+  const parsed = NoteSourceDisplayNameSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 function category(kind: string): "text" | "web" | "document" | "image" | "data" {

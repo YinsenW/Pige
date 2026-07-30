@@ -35,9 +35,9 @@ import {
 } from "@pige/schemas";
 import { createMarkdownPageReferenceKeys, findMarkdownPageByIdAtSignature, normalizeMarkdownPageReferenceKey, readMarkdownPageContentAtSignature, readMarkdownPageByRelativePath } from "./markdown-page-index";
 import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
-import { reconnectableOriginalSourceIds, reconnectableOriginalSources } from "./reader-source-reconnect-service";
 import { readReferencedOriginalReconnectCandidate } from "./source-original-reconnect-service";
-import { readCurrentSourceRecordSnapshot } from "./source-file-access"; import { projectNoteSourceMetadata } from "./note-source-metadata";
+import { projectReaderSourceDetails } from "./note-source-metadata";
+import { readCurrentSourceRecordSnapshot } from "./source-file-access";
 
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16, MAX_RENDER_CONTEXT_HREFS = 128, RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
 const MAX_NOTE_RENDER_BYTES = 4 * 1024 * 1024, UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
@@ -214,8 +214,7 @@ export class NotesService {
       },
       html: rendered.html,
       byteSize: stable.document.byteSize,
-      ...(stable.document.summary.sourceIds.length > 0 ? { sourceMetadata: projectNoteSourceMetadata(vaultPath, stable.document.summary.sourceIds) } : {}),
-      ...(ownerId === undefined ? {} : { reconnectOriginalSourceIds: reconnectableOriginalSourceIds(vaultPath, stable.document.summary.sourceIds), reconnectOriginalSources: reconnectableOriginalSources(vaultPath, stable.document.summary.sourceIds) }),
+      ...projectReaderSourceDetails(vaultPath, stable.document.summary.sourceIds, ownerId !== undefined),
       ...(renderContextId ? {
         renderContextId,
         ...(stable.document.summary.pageType === "note"
@@ -802,7 +801,6 @@ export class NotesService {
     return vaultPath;
   }
 }
-
 
 function editorIdentity(request: Pick<NoteEditorOpenRequest, "apiVersion" | "requestId" | "activeVaultId" | "pageId">) {
   return {

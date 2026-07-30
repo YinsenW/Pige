@@ -852,9 +852,9 @@ export function NoteReader(props: {
           <h2>{props.t("note.sources")}</h2>
           <div className="reader-source-list">
             {summary.sourceIds.slice(0, 5).map((sourceId, index) => {
-              const sourceLabel = props.t("note.savedSource").replace("{number}", String(index + 1)); const sourceMetadata = props.note.sourceMetadata?.items.find((item) => item.sourceId === sourceId);
+              const sourceLabel = props.t("note.savedSource").replace("{number}", String(index + 1)); const projectedMetadata = props.note.sourceMetadata?.items[index]; const sourceMetadata = projectedMetadata?.sourceId === sourceId ? projectedMetadata : undefined;
               return (
-                <div key={sourceId}>
+                <div key={`${sourceId}:${index}`}>
                   <button
                     className="reader-source"
                     type="button"
