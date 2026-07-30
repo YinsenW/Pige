@@ -32,6 +32,7 @@ import { LocalCapabilitiesSettingsPanel } from "./components/LocalCapabilitiesSe
 import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 import { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
 import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
+import { GeneralSettingsPanel, type StartupDestinationApi } from "./components/GeneralSettingsPanel";
 import {
   homeConversationStateForJob,
   isTerminalConversationTurn,
@@ -118,6 +119,7 @@ import type {
   SpeechAssetInstallEvent,
   SpeechAssetInstallRequest,
   SpeechAssetInstallResult,
+  StartupDestinationSummary,
   SupportBundlePreview,
   ToolchainHealth,
   UpdateSummary,
@@ -128,6 +130,7 @@ import type {
   WindowLayoutState,
   WindowState
 } from "@pige/contracts";
+
 import {
   AGENT_AUTHORED_TEXT_MAX_CODE_POINTS,
   AGENT_LARGE_PASTE_AGGREGATE_MAX_UTF8_BYTES,
@@ -166,6 +169,10 @@ export { LocalSemanticRetrievalSettingsPanel } from "./components/LocalSemanticR
 export { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 export { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
 export { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
+const startupDestinationApi: StartupDestinationApi = {
+  load: () => window.pige.settings.startupDestination(),
+  set: (request) => window.pige.settings.setStartupDestination(request)
+};
 type View = "home" | "library" | "knowledgeTree";
 type EditableActiveCollection = {
   readonly mode: "editable";
@@ -337,6 +344,9 @@ export function App(): React.JSX.Element {
   const [windowState, setWindowState] = useState<WindowState | null>(null);
   const [windowLayoutState, setWindowLayoutState] = useState<WindowLayoutState | null>(null);
   const [view, setView] = useState<View>("home");
+  const [bootStartupDestination, setBootStartupDestination] = useState<
+    StartupDestinationSummary["destination"] | "loading" | "failed"
+  >("loading");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [developmentNotice, setDevelopmentNotice] = useState<DevelopmentNotice | null>(null);
@@ -425,6 +435,7 @@ export function App(): React.JSX.Element {
   const agentRuntimeRefreshSequence = useRef(0);
   const speechAvailabilitySequence = useRef(0);
   const vaultRefreshSequence = useRef(0);
+  const bootStartupDestinationAppliedRef = useRef(false);
   const recentVaultOpenRequestRef = useRef<string | null>(null);
   const voiceAssetInstallActiveRef = useRef(false);
   const appearanceRevisionRef = useRef(-1);
@@ -640,6 +651,9 @@ export function App(): React.JSX.Element {
       if (active) applyWindowLayoutState(nextState);
     });
     void refreshAppearance();
+    void window.pige.settings.startupDestination()
+      .then((summary) => { if (active) setBootStartupDestination(summary.destination); })
+      .catch(() => { if (active) setBootStartupDestination("failed"); });
     void window.pige.system.toolchainHealth().then(setToolchainHealth);
     void refreshVaultState();
     void refreshModels().catch(() => undefined);
@@ -649,6 +663,16 @@ export function App(): React.JSX.Element {
       unsubscribeAppearance();
     };
   }, []);
+
+  useEffect(() => {
+    if (
+      bootStartupDestinationAppliedRef.current ||
+      bootStartupDestination === "loading" ||
+      onboarding === null
+    ) return;
+    bootStartupDestinationAppliedRef.current = true;
+    if (bootStartupDestination === "library" && onboarding.activeVault) setView("library");
+  }, [bootStartupDestination, onboarding]);
 
   useLayoutEffect(() => {
     if (!appearanceSummary) return;
@@ -2588,11 +2612,11 @@ export function App(): React.JSX.Element {
               alwaysOnTop={windowState?.alwaysOnTop ?? null}
               alwaysOnTopBusy={windowControls.busy}
               onAlwaysOnTopChange={windowControls.toggleAlwaysOnTop}
+              startupDestinationApi={startupDestinationApi}
               onOpenAppearance={() => {
                 setSettingsSection("appearance");
                 setDevelopmentNotice(null);
               }}
-              onDevelopment={() => showDevelopmentCapability("settings", "window_preferences")}
               t={t}
             />
           ) : settingsSection === "appearance" ? (
@@ -7183,112 +7207,6 @@ export function SettingsSurface(props: {
         </div>
       </div>
     </div>
-  );
-}
-
-export function GeneralSettingsPanel(props: {
-  readonly alwaysOnTop: boolean | null;
-  readonly alwaysOnTopBusy: boolean;
-  readonly onAlwaysOnTopChange: () => Promise<void>;
-  readonly onOpenAppearance: () => void;
-  readonly onDevelopment: () => void;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  return (
-    <section className="settings-page settings-general" aria-labelledby="settings-general-title">
-      <header className="settings-panel-header">
-        <h1 id="settings-general-title">{props.t("settings.general.title")}</h1>
-        <p>{props.t("settings.general.subtitle")}</p>
-      </header>
-
-      <section className="settings-section" aria-labelledby="settings-general-window-title">
-        <h2 className="settings-section-title" id="settings-general-window-title">
-          {props.t("settings.general.windowSection")}
-        </h2>
-        <div className="settings-card">
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("settings.general.startupTitle")}</strong>
-              <span id="settings-general-startup-description">{props.t("settings.general.startupDescription")}</span>
-            </div>
-            <button
-              className="settings-button"
-              type="button"
-              aria-describedby="settings-general-startup-description"
-              onClick={props.onDevelopment}
-            >
-              {props.t("settings.status.development")}
-            </button>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("settings.general.defaultWindowTitle")}</strong>
-              <span>{props.t("settings.general.defaultWindowDescription")}</span>
-            </div>
-            <span className="settings-status">{props.t("settings.general.adaptive")}</span>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("settings.general.rememberWindowTitle")}</strong>
-              <span>{props.t("settings.general.rememberWindowDescription")}</span>
-            </div>
-            <span className="settings-status">{props.t("settings.general.automatic")}</span>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("settings.general.alwaysOnTop")}</strong>
-              <span id="settings-general-always-on-top-description">
-                {props.t("settings.general.alwaysOnTopDescription")}
-              </span>
-            </div>
-            <button
-              type="button"
-              className="settings-switch"
-              role="switch"
-              aria-label={props.t("settings.general.alwaysOnTop")}
-              aria-describedby="settings-general-always-on-top-description"
-              aria-checked={props.alwaysOnTop ?? false}
-              aria-busy={props.alwaysOnTopBusy || undefined}
-              disabled={props.alwaysOnTop === null || props.alwaysOnTopBusy}
-              onClick={() => void props.onAlwaysOnTopChange()}
-            />
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("settings.general.sidebarOnLaunchTitle")}</strong>
-              <span id="settings-general-sidebar-on-launch-description">
-                {props.t("settings.general.sidebarOnLaunchDescription")}
-              </span>
-            </div>
-            <span className="settings-status">{props.t("settings.general.lastState")}</span>
-          </div>
-        </div>
-      </section>
-
-      <section className="settings-section" aria-labelledby="settings-general-pige-title">
-        <h2 className="settings-section-title" id="settings-general-pige-title">
-          {props.t("settings.general.pigeSection")}
-        </h2>
-        <div className="settings-card">
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("settings.general.productTitle")}</strong>
-              <span>{props.t("settings.general.productDescription")}</span>
-            </div>
-            <span className="settings-badge">{props.t("settings.general.preAlpha")}</span>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("settings.general.appearanceTitle")}</strong>
-              <span>{props.t("settings.general.appearanceDescription")}</span>
-            </div>
-            <button className="settings-button" type="button" onClick={props.onOpenAppearance}>
-              {props.t("settings.general.openAppearance")}
-            </button>
-          </div>
-        </div>
-      </section>
-    </section>
   );
 }
 
