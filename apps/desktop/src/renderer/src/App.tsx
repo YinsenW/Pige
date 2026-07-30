@@ -81,11 +81,13 @@ import type {
   BackupRestoreStatus,
   DiagnosticsClearLocalResult,
   DiagnosticsHealth,
+  GeneratedKnowledgeLanguage,
   HomeAgentModelUsage,
   HighRiskConfirmationPendingResult,
   JobSummary,
   KnowledgeActivityListResult,
   KnowledgeActivitySummary,
+  KnowledgeLanguageMutationResult,
   KnowledgeTreeResult,
   LibraryListResult,
   LibraryRelatedResult,
@@ -1669,6 +1671,29 @@ export function App(): React.JSX.Element {
     }
   };
 
+  const updateKnowledgeLanguage = async (
+    generatedKnowledgeLanguage: GeneratedKnowledgeLanguage
+  ): Promise<KnowledgeLanguageMutationResult["status"]> => {
+    const current = appearanceSummary;
+    if (!current) return "failed";
+    try {
+      const result = await window.pige.settings.setKnowledgeLanguage({
+        generatedKnowledgeLanguage,
+        expectedRevision: current.revision
+      });
+      if (result.settings.revision < current.revision) return "failed";
+      const adopted = applyAppearanceSummary(result.settings);
+      if (!adopted) return "stale";
+      if (
+        result.status === "committed" &&
+        result.settings.generatedKnowledgeLanguage !== generatedKnowledgeLanguage
+      ) return "failed";
+      return result.status;
+    } catch {
+      return "failed";
+    }
+  };
+
   const submitFiles = async (
     files: readonly File[],
     inputKind: "file_drop" | "file_picker",
@@ -2756,11 +2781,12 @@ export function App(): React.JSX.Element {
               locale={locale}
               availableLocales={availableLocales}
               themePreference={appearanceSummary?.themePreference ?? null}
+              generatedKnowledgeLanguage={appearanceSummary?.generatedKnowledgeLanguage ?? null}
               themeBusy={appearanceThemeBusy}
               themeError={appearanceThemeError}
               onLocaleChange={updateLocale}
               onThemeChange={updateTheme}
-              onDevelopment={() => showDevelopmentCapability("settings", "appearance")}
+              onKnowledgeLanguageChange={updateKnowledgeLanguage}
               t={t}
             />
           ) : settingsSection === "capabilities" ? (
@@ -7564,21 +7590,38 @@ export function AppearanceSettingsPanel(props: {
   readonly locale: Locale;
   readonly availableLocales: readonly Locale[];
   readonly themePreference: AppearanceThemePreference | null;
+  readonly generatedKnowledgeLanguage: GeneratedKnowledgeLanguage | null;
   readonly themeBusy: boolean;
   readonly themeError: string | null;
   readonly onLocaleChange: (locale: Locale) => Promise<void>;
   readonly onThemeChange: (themePreference: AppearanceThemePreference) => Promise<boolean>;
-  readonly onDevelopment: () => void;
+  readonly onKnowledgeLanguageChange: (
+    generatedKnowledgeLanguage: GeneratedKnowledgeLanguage
+  ) => Promise<KnowledgeLanguageMutationResult["status"]>;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const themeOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const themeChoices = ["system", "light", "dark"] as const;
   const [languageBusy, setLanguageBusy] = useState(false);
   const [languageError, setLanguageError] = useState(false);
+  const [knowledgeLanguageDraft, setKnowledgeLanguageDraft] =
+    useState<GeneratedKnowledgeLanguage | null>(props.generatedKnowledgeLanguage);
+  const [knowledgeLanguageBusy, setKnowledgeLanguageBusy] = useState(false);
+  const [knowledgeLanguageNotice, setKnowledgeLanguageNotice] =
+    useState<"stale" | "failed" | null>(null);
+  const knowledgeLanguageActiveRef = useRef(false);
+  const knowledgeLanguageRetainDraftRef = useRef(false);
+  const knowledgeLanguageSelectRef = useRef<HTMLSelectElement | null>(null);
 
   useEffect(() => {
     setLanguageError(false);
   }, [props.locale]);
+
+  useEffect(() => {
+    if (!knowledgeLanguageRetainDraftRef.current) {
+      setKnowledgeLanguageDraft(props.generatedKnowledgeLanguage);
+    }
+  }, [props.generatedKnowledgeLanguage]);
 
   const changeLanguage = async (nextLocale: Locale): Promise<void> => {
     if (languageBusy || nextLocale === props.locale) return;
@@ -7590,6 +7633,40 @@ export function AppearanceSettingsPanel(props: {
       setLanguageError(true);
     } finally {
       setLanguageBusy(false);
+    }
+  };
+
+  const changeKnowledgeLanguage = async (
+    nextLanguage: GeneratedKnowledgeLanguage
+  ): Promise<void> => {
+    if (
+      props.generatedKnowledgeLanguage === null ||
+      knowledgeLanguageActiveRef.current ||
+      knowledgeLanguageBusy
+    ) return;
+    if (
+      nextLanguage === props.generatedKnowledgeLanguage &&
+      !knowledgeLanguageRetainDraftRef.current
+    ) return;
+    knowledgeLanguageActiveRef.current = true;
+    knowledgeLanguageRetainDraftRef.current = true;
+    setKnowledgeLanguageDraft(nextLanguage);
+    setKnowledgeLanguageBusy(true);
+    setKnowledgeLanguageNotice(null);
+    try {
+      const status = await props.onKnowledgeLanguageChange(nextLanguage);
+      if (status === "committed") {
+        knowledgeLanguageRetainDraftRef.current = false;
+        setKnowledgeLanguageNotice(null);
+      } else {
+        setKnowledgeLanguageNotice(status);
+      }
+    } catch {
+      setKnowledgeLanguageNotice("failed");
+    } finally {
+      knowledgeLanguageActiveRef.current = false;
+      setKnowledgeLanguageBusy(false);
+      window.setTimeout(() => knowledgeLanguageSelectRef.current?.focus(), 0);
     }
   };
 
@@ -7670,18 +7747,37 @@ export function AppearanceSettingsPanel(props: {
               <strong>{props.t("appearance.knowledgeLanguage")}</strong>
               <span id="appearance-knowledge-language-description">{props.t("appearance.knowledgeLanguageDescription")}</span>
             </div>
-            <button
-              className="settings-button"
-              type="button"
-              data-appearance-control="knowledge-language"
-              aria-label={`${props.t("appearance.knowledgeLanguage")}: ${props.t("settings.status.development")}`}
-              aria-describedby="appearance-knowledge-language-description appearance-partial-note"
-              onClick={props.onDevelopment}
+            <select
+              ref={knowledgeLanguageSelectRef}
+              className="settings-select"
+              value={knowledgeLanguageDraft ?? "preserve_source"}
+              disabled={props.generatedKnowledgeLanguage === null || knowledgeLanguageBusy}
+              aria-label={props.t("appearance.knowledgeLanguage")}
+              aria-describedby={`appearance-knowledge-language-description${knowledgeLanguageNotice
+                ? " appearance-knowledge-language-notice"
+                : ""}`}
+              onChange={(event) => void changeKnowledgeLanguage(
+                event.target.value as GeneratedKnowledgeLanguage
+              )}
             >
-              {props.t("settings.status.development")}
-            </button>
+              <option value="preserve_source">{props.t("appearance.knowledgeLanguage.preserve")}</option>
+              <option value="follow_query">{props.t("appearance.knowledgeLanguage.followQuery")}</option>
+              <option value="app_locale">{props.t("appearance.knowledgeLanguage.appLocale")}</option>
+            </select>
           </div>
         </div>
+        {knowledgeLanguageNotice ? (
+          <p
+            className={knowledgeLanguageNotice === "failed"
+              ? "settings-inline-status error"
+              : "settings-inline-status"}
+            id="appearance-knowledge-language-notice"
+            role={knowledgeLanguageNotice === "failed" ? "alert" : "status"}
+            aria-live="polite"
+          >
+            {props.t(`appearance.knowledgeLanguage.notice.${knowledgeLanguageNotice}`)}
+          </p>
+        ) : null}
         {languageError ? (
           <p className="settings-inline-status error" id="appearance-language-error" role="status">
             {props.t("appearance.languageUpdateFailed")}
