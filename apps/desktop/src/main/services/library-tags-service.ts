@@ -27,7 +27,7 @@ interface CursorBinding {
   readonly boundary: string;
 }
 
-interface TagSnapshot {
+export interface LibraryTagSnapshot {
   readonly tags: readonly LibraryTagFacet[];
   readonly pagesByTag: ReadonlyMap<string, readonly LibraryTaggedPageSummary[]>;
 }
@@ -67,11 +67,11 @@ export class LibraryTagsService {
     }
 
     try {
-      const snapshot = readTagSnapshot(vaultPath);
+      const snapshot = readLibraryTagSnapshot(vaultPath);
       const items = request.mode === "list_tags"
         ? snapshot.tags
         : snapshot.pagesByTag.get(createPigeTagKey(request.tag) ?? "") ?? [];
-      const snapshotId = createSnapshotId(request.mode, request.mode === "list_tags" ? undefined : request.tag, items);
+      const snapshotId = createLibraryTagsSnapshotId(request.mode, request.mode === "list_tags" ? undefined : request.tag, items);
       const offset = this.#resolveOffset(request, vaultPath, snapshotId, items);
       if (offset === undefined) return LibraryTagsResultSchema.parse({ ...identity, status: "stale" });
 
@@ -138,7 +138,7 @@ export class LibraryTagsService {
   }
 }
 
-function readTagSnapshot(vaultPath: string): TagSnapshot {
+export function readLibraryTagSnapshot(vaultPath: string): LibraryTagSnapshot {
   const byKey = new Map<string, { tag: string; pages: Map<string, LibraryTaggedPageSummary> }>();
   for (const page of scanMarkdownPages(vaultPath).pages) {
     const summary: LibraryTaggedPageSummary = {
@@ -169,7 +169,7 @@ function comparePages(left: LibraryTaggedPageSummary, right: LibraryTaggedPageSu
   return updated || left.pageId.localeCompare(right.pageId, "en-US");
 }
 
-function createSnapshotId(
+export function createLibraryTagsSnapshotId(
   mode: LibraryTagsRequest["mode"],
   tag: string | undefined,
   items: readonly (LibraryTagFacet | LibraryTaggedPageSummary)[]
