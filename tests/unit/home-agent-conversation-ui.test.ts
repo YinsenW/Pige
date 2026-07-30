@@ -43,6 +43,7 @@ import type {
   NoteReconnectOriginalSourceResult,
   NoteRevealSourceRequest,
   NoteRevealSourceResult,
+  NoteTrashListRequest,
   NoteEditorOpenRequest,
   NoteEditorOpenResult,
   NoteEditorSaveRequest,
@@ -6567,6 +6568,11 @@ function makePigeApi(harness: ConversationHarness): object {
       related: async ({ pageId }: { readonly pageId: string }) => testRelatedPages(pageId)
     },
     notes: {
+      listTrash: async (request: NoteTrashListRequest) => ({
+        ...request,
+        status: "ready" as const,
+        notes: []
+      }),
       render: async ({ pageId }: { readonly pageId: string }) => {
         harness.noteRenderRequests.push(pageId);
         return harness.renderNote(pageId);
