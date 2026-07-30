@@ -49,6 +49,8 @@ import type {
   ReaderSelectionCreateNoteRequest,
   ReaderSelectionCreateNoteResult,
   ReaderSelectionActionRequest,
+  ReaderSelectionTransformRequest,
+  ReaderSelectionTransformResult,
   ReaderSelectionProposalDecisionRequest,
   ReaderSelectionProposalDecisionResult,
   ReaderSelectionProposalPreview,
@@ -1344,6 +1346,128 @@ describe("Home durable Agent conversation UI", () => {
       renderContextId: `notectx_${"a".repeat(32)}`,
       href: "#wiki:note-b"
     });
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("runs Home Reader transforms through the shared applied and proposal owners", async () => {
+    const dom = createDom(1200);
+    const harness = createHarness(undefined);
+    harness.sidebarOpen = true;
+    harness.windowMode = "expanded";
+    harness.windowLayoutWidth = 1200;
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      return retrievalCompletedResult();
+    };
+    harness.readerSelectionTransform = async (request) => request.action === "translate"
+      ? {
+          apiVersion: 1,
+          requestId: request.requestId,
+          status: "applied",
+          jobId: "job_20260730_transform01",
+          conversationEventId: "evt_20260730_transform01",
+          conversationId: "conv_20260730_transform01",
+          tailEventId: "evt_20260730_transform02",
+          operationId: "operation_20260730_transform01"
+        }
+      : request.action === "polish"
+        ? {
+            apiVersion: 1,
+            requestId: request.requestId,
+            status: "review_required",
+            jobId: "job_20260730_transform02",
+            conversationEventId: "evt_20260730_transform03",
+            conversationId: "conv_20260730_transform02",
+            tailEventId: "evt_20260730_transform04",
+            proposal: {
+              proposalId: "proposal_20260730_transform02",
+              action: "polish",
+              state: "ready",
+              revision: 1,
+              lines: [{ kind: "added", text: "Reviewed replacement" }]
+            }
+          }
+        : {
+            apiVersion: 1,
+            requestId: request.requestId,
+            status: "invalid",
+            reason: "selection_changed"
+          };
+    const renderNote = harness.renderNote;
+    harness.renderNote = async (pageId) => ({
+      ...await renderNote(pageId),
+      html: '<p><span data-pige-selection-segment="readerseg_aaaaaaaaaaaaaaaa">Home transform fixture.</span></p>'
+    });
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await setTextareaValue(dom, container, "Find the Home transform fixture.");
+    await clickButtonByAriaLabel(dom, container, "Send");
+    await waitFor(dom, () => container.textContent?.includes("Local Reader result") === true);
+    await clickElement(dom, buttons(container, "Open")[0]!);
+    await waitFor(dom, () => container.querySelector(".note-reader h1")?.textContent === "Note A");
+
+    let collapsed = false;
+    let selectionNode: Node | null = null;
+    let paragraph: Element | null = null;
+    Object.defineProperty(dom.window, "getSelection", { configurable: true, value: () => ({
+      isCollapsed: collapsed,
+      rangeCount: collapsed ? 0 : 1,
+      anchorNode: selectionNode,
+      anchorOffset: 0,
+      focusNode: selectionNode,
+      focusOffset: 8,
+      toString: () => "private selected body",
+      getRangeAt: () => ({
+        commonAncestorContainer: paragraph,
+        startContainer: selectionNode,
+        startOffset: 0,
+        endContainer: selectionNode,
+        endOffset: 8,
+        getBoundingClientRect: () => ({ left: 80, top: 90, width: 120, height: 18, right: 200, bottom: 108 })
+      })
+    }) });
+    const showSelection = async (): Promise<void> => {
+      paragraph = requireElement(container.querySelector(".markdown-body p"));
+      selectionNode = requireElement(paragraph.querySelector("[data-pige-selection-segment]")).firstChild!;
+      await act(async () => {
+        collapsed = true;
+        dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+        collapsed = false;
+        dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+        await settle(dom);
+      });
+      await waitFor(dom, () => container.querySelector('[data-selection-action="more"]') !== null);
+    };
+    const runTransform = async (action: "translate" | "polish" | "expand"): Promise<void> => {
+      await showSelection();
+      await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]')));
+      await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>(`[data-selection-more-action="${action}"]`)));
+      await waitFor(dom, () => harness.readerSelectionTransformRequests.some((request) => request.action === action));
+    };
+
+    await runTransform("translate");
+    await waitFor(dom, () => harness.noteRenderRequests.length === 2);
+    expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
+    expect(harness.readerSelectionTransformRequests[0]).toMatchObject({
+      action: "translate",
+      locale: "en",
+      selection: { pageId: "page_20260715_note0001" }
+    });
+    expect(JSON.stringify(harness.readerSelectionTransformRequests[0])).not.toContain("private selected body");
+
+    await runTransform("polish");
+    await waitFor(dom, () => harness.windowLayoutRequests.some((request) => (
+      request.surface === "reader" && request.noteAgentOpen
+    )));
+    expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
+
+    await runTransform("expand");
+    await waitFor(dom, () => dom.window.document.activeElement === container.querySelector(".note-reader"));
+    expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
+    expect(harness.readerSelectionTransformRequests.map((request) => request.action)).toEqual([
+      "translate", "polish", "expand"
+    ]);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -5167,6 +5291,8 @@ interface ConversationHarness {
   proposalDecisionMode: "applied" | "rejected" | "stale" | "conflicted" | "failed";
   readonly readerCreateNoteRequests: ReaderSelectionCreateNoteRequest[];
   readonly readerSelectionActionRequests: ReaderSelectionActionRequest[];
+  readonly readerSelectionTransformRequests: ReaderSelectionTransformRequest[];
+  readerSelectionTransform: (request: ReaderSelectionTransformRequest) => Promise<ReaderSelectionTransformResult>;
   readonly readerProposalDecisionRequests: ReaderSelectionProposalDecisionRequest[];
   readerProposalDecisionMode: "applied" | "rejected" | "stale";
   locale: "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de";
@@ -5264,6 +5390,13 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     proposalDecisionMode: "applied",
     readerCreateNoteRequests: [],
     readerSelectionActionRequests: [],
+    readerSelectionTransformRequests: [],
+    readerSelectionTransform: async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "invalid",
+      reason: "selection_changed"
+    }),
     readerProposalDecisionRequests: [],
     readerProposalDecisionMode: "applied",
     locale: "en",
@@ -5865,9 +5998,10 @@ function makePigeApi(harness: ConversationHarness): object {
       submitLink: async (request: { readonly requestId: string }) => ({
         apiVersion: 1 as const, requestId: request.requestId, status: "invalid" as const, reason: "selection_changed" as const
       }),
-      submitTransform: async (request: { readonly requestId: string }) => ({
-        apiVersion: 1 as const, requestId: request.requestId, status: "invalid" as const, reason: "selection_changed" as const
-      }),
+      submitTransform: async (request: ReaderSelectionTransformRequest) => {
+        harness.readerSelectionTransformRequests.push(request);
+        return harness.readerSelectionTransform(request);
+      },
       submitCreateNote: async (request: ReaderSelectionCreateNoteRequest): Promise<ReaderSelectionCreateNoteResult> => {
         harness.readerCreateNoteRequests.push(request);
         return {
