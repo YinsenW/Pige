@@ -201,6 +201,53 @@ describe("Knowledge Activity and Undo", () => {
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.pageContent);
   });
 
+  it("pages a deterministic Activity snapshot and rejects stale or invented cursors", () => {
+    const fixture = createFixture();
+    const second = OperationRecordSchema.parse({
+      ...fixture.operation,
+      id: "op_20260712_activitypage02",
+      createdAt: "2026-07-12T12:00:02.000Z"
+    });
+    const third = OperationRecordSchema.parse({
+      ...fixture.operation,
+      id: "op_20260712_activitypage03",
+      createdAt: "2026-07-12T12:00:03.000Z"
+    });
+    writeOperation(fixture.vaultPath, second);
+    writeOperation(fixture.vaultPath, third);
+    const service = new KnowledgeActivityService(fixture.vaults);
+
+    const first = service.list({ limit: 2 });
+    expect(first).toMatchObject({
+      total: 3,
+      hasMore: true,
+      activities: [
+        { operationId: third.id },
+        { operationId: second.id }
+      ]
+    });
+    expect(first.nextCursor).toMatch(/^activity_history_[a-f0-9]{64}$/u);
+    expect(first.nextCursor).not.toContain(fixture.vaultPath);
+    const secondPage = service.list({ limit: 2, cursor: first.nextCursor! });
+    expect(secondPage).toMatchObject({
+      total: 3,
+      hasMore: false,
+      activities: [{ operationId: fixture.operation.id }]
+    });
+    expect(secondPage).not.toHaveProperty("nextCursor");
+    expect(new Set([...first.activities, ...secondPage.activities].map(({ operationId }) => operationId)).size).toBe(3);
+
+    expect(() => service.list({ cursor: `activity_history_${"0".repeat(64)}` })).toThrowError(PigeDomainError);
+    expect(() => new KnowledgeActivityService(fixture.vaults).list({ cursor: first.nextCursor! }))
+      .toThrowError(PigeDomainError);
+    writeOperation(fixture.vaultPath, OperationRecordSchema.parse({
+      ...fixture.operation,
+      id: "op_20260712_activitypage04",
+      createdAt: "2026-07-12T12:00:04.000Z"
+    }));
+    expect(() => service.list({ cursor: first.nextCursor! })).toThrowError(PigeDomainError);
+  });
+
   it("delegates body-free Memory Activity, Undo, and recovery to the Memory owner", () => {
     const fixture = createFixture();
     const memoryId = "memory_20260712_activitymemory";

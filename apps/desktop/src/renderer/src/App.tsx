@@ -48,7 +48,7 @@ import {
   type AgentMemoryFocusRequest,
 } from "./components/AgentMemorySettingsPanel";
 import { ManagedCollectionCitationPanel, ManagedCollectionPanel } from "./components/ManagedCollectionPanel";
-import { collectionViewActivityMessageKey, renameCollectionView, trashCollectionView } from "./collection-view-lifecycle";
+import { renameCollectionView, trashCollectionView } from "./collection-view-lifecycle";
 import { LocalCapabilitiesSettingsPanel } from "./components/LocalCapabilitiesSettingsPanel";
 import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 import { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
@@ -58,7 +58,7 @@ import {
   SupportBundlePreviewCard,
   supportBundlePreviewIsFullyProjected
 } from "./components/DiagnosticsWorkflowCards";
-import { NoteTrashRestorePanel } from "./components/NoteTrashRestorePanel";
+import { ActivityHistorySettingsPanel } from "./components/ActivityHistorySettingsPanel";
 import { GeneralSettingsPanel, type StartupDestinationApi } from "./components/GeneralSettingsPanel";
 import {
   homeConversationStateForJob,
@@ -452,6 +452,8 @@ export function App(): React.JSX.Element {
   const [highRiskConfirmationReading, setHighRiskConfirmationReading] = useState(false);
   const [recentJobs, setRecentJobs] = useState<readonly JobSummary[]>([]);
   const [activityList, setActivityList] = useState<KnowledgeActivityListResult | null>(null);
+  const [activityHistoryLoadingMore, setActivityHistoryLoadingMore] = useState(false);
+  const [activityHistoryLoadFailed, setActivityHistoryLoadFailed] = useState(false);
   const [activityUndoingId, setActivityUndoingId] = useState<string | null>(null);
   const [activityOpeningId, setActivityOpeningId] = useState<string | null>(null);
   const [memoryActivityFocusRequest, setMemoryActivityFocusRequest] =
@@ -477,6 +479,8 @@ export function App(): React.JSX.Element {
   const inlineReferenceSequence = useRef(0);
   const activityOpenSequence = useRef(0);
   const activityOpenInFlightRef = useRef<string | null>(null);
+  const activityHistoryLoadInFlightRef = useRef(false);
+  const activityListRef = useRef<KnowledgeActivityListResult | null>(activityList);
   const readerSelectionProposalSequence = useRef(0);
   const readerSelectionProposalDecisionInFlight = useRef(false);
   const homeReaderSelectionContextRef = useRef<HomeReaderSelectionContext | null>(null);
@@ -507,6 +511,7 @@ export function App(): React.JSX.Element {
   } | null>(null);
   const activeVaultIdRef = useRef<string | undefined>(onboarding?.activeVault?.vaultId);
   activeVaultIdRef.current = onboarding?.activeVault?.vaultId;
+  activityListRef.current = activityList;
   selectedNoteRef.current = selectedNote;
   selectedNoteVaultIdRef.current = selectedNoteVaultId;
   selectedCollectionRef.current = selectedCollection;
@@ -805,6 +810,9 @@ export function App(): React.JSX.Element {
         setNoteLoadingPageId(null);
         setNoteAgentOpen(false);
         setActivityList(null);
+        setActivityHistoryLoadingMore(false);
+        setActivityHistoryLoadFailed(false);
+        activityHistoryLoadInFlightRef.current = false;
         setActivityOpeningId(null);
         setMemoryActivityFocusRequest(null);
         activityOpenInFlightRef.current = null;
@@ -824,11 +832,11 @@ export function App(): React.JSX.Element {
         });
       }
       setBackupJobs(nextBackupJobs?.jobs.filter((job) => job.backupKind === "user_backup") ?? []);
-      const nextActivityList = nextActivities &&
-        nextActivities.activeVaultId === nextOnboarding.activeVault?.vaultId
-        ? { ...nextActivities, activities: nextActivities.activities.slice(0, 5) }
+      const nextActivityList = nextActivities?.activeVaultId === nextOnboarding.activeVault?.vaultId
+        ? nextActivities ?? null
         : null;
       setActivityList(nextActivityList);
+      setActivityHistoryLoadFailed(false);
     } catch (caught) {
       if (refreshId === vaultRefreshSequence.current) throw caught;
     }
@@ -1843,6 +1851,31 @@ export function App(): React.JSX.Element {
     setCaptureToast({ kind: "error", message: t("error.generic") });
   };
 
+  const loadMoreActivityHistory = async (): Promise<boolean> => {
+    const current = activityListRef.current;
+    const vaultId = activeVaultIdRef.current;
+    const cursor = current?.nextCursor;
+    if (!current || !vaultId || current.activeVaultId !== vaultId || !cursor || activityHistoryLoadInFlightRef.current) return false;
+    activityHistoryLoadInFlightRef.current = true;
+    setActivityHistoryLoadingMore(true);
+    setActivityHistoryLoadFailed(false);
+    try {
+      const result = await window.pige.activity.list({ limit: 20, cursor });
+      const latest = activityListRef.current;
+      if (activeVaultIdRef.current !== vaultId || latest?.activeVaultId !== vaultId || latest.nextCursor !== cursor || result.activeVaultId !== vaultId) return false;
+      const known = new Set(latest.activities.map(({ operationId }) => operationId));
+      if (result.total !== latest.total || result.activities.some(({ operationId }) => known.has(operationId))) throw new Error("activity_history_stale");
+      setActivityList({ ...result, activities: [...latest.activities, ...result.activities] });
+      return true;
+    } catch {
+      if (activeVaultIdRef.current === vaultId && activityListRef.current?.nextCursor === cursor) setActivityHistoryLoadFailed(true);
+      return false;
+    } finally {
+      activityHistoryLoadInFlightRef.current = false;
+      setActivityHistoryLoadingMore(false);
+    }
+  };
+
   const undoActivity = async (operationId: string): Promise<void> => {
     if (
       activityUndoingId ||
@@ -1885,15 +1918,15 @@ export function App(): React.JSX.Element {
         if (current.activeVaultId !== activeVaultIdRef.current) return;
         const exact = current.activities.find((activity) => activity.operationId === operationId);
         if (exact?.status === "undone") {
-          setActivityList({ ...current, activities: current.activities.slice(0, 5) });
+          setActivityList(current);
           setActivityBlockedIds((blocked) => blocked.filter((id) => id !== operationId));
           setCaptureToast({ kind: "success", message: t("activity.undoCompleted") });
         } else if (exact?.status === "applied" && exact.canUndo) {
-          setActivityList({ ...current, activities: current.activities.slice(0, 5) });
+          setActivityList(current);
           setActivityBlockedIds((blocked) => blocked.filter((id) => id !== operationId));
           setCaptureToast({ kind: "error", message: t("activity.undoFailed") });
         } else {
-          if (exact) setActivityList({ ...current, activities: current.activities.slice(0, 5) });
+          if (exact) setActivityList(current);
           setActivityBlockedIds((blocked) => Array.from(new Set([...blocked, operationId])));
           setCaptureToast({ kind: "error", message: t("activity.undoStateUnknown") });
         }
@@ -2967,11 +3000,15 @@ export function App(): React.JSX.Element {
             <ActivityHistorySettingsPanel
               activeVaultId={activeVault?.vaultId ?? null}
               activities={activityList?.activities ?? []}
+              hasMore={activityList?.hasMore === true}
+              loadingMore={activityHistoryLoadingMore}
+              loadMoreFailed={activityHistoryLoadFailed}
               undoingId={activityUndoingId} openingId={activityOpeningId}
               blockedIds={activityBlockedIds} locale={locale}
               onOpen={openActivityTarget}
               onRestored={async (pageId) => { const opened = await openNoteTarget(pageId, false); void refreshLibrary(); if (opened) { setView("library"); setSettingsOpen(false); } return opened; }}
               onUndo={undoActivity}
+              onLoadMore={loadMoreActivityHistory}
               t={t}
             />
           ) : settingsSection === "updates" || settingsSection === "diagnostics" ? (
@@ -8173,104 +8210,6 @@ function updateSummaryDescription(
     dateStyle: "medium",
     timeStyle: "short"
   }).format(date)}`;
-}
-
-export function ActivityHistorySettingsPanel(props: {
-  readonly activeVaultId?: string | null; readonly activities: readonly KnowledgeActivitySummary[];
-  readonly undoingId: string | null; readonly openingId: string | null; readonly blockedIds: readonly string[];
-  readonly locale: Locale; readonly onOpen: (activity: KnowledgeActivitySummary) => Promise<void>;
-  readonly onRestored?: (pageId: string) => Promise<boolean>;
-  readonly onUndo: (operationId: string) => Promise<void>;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  const locale = props.locale === "zh-Hans" ? "zh-CN" : props.locale;
-  return (
-    <section className="settings-page settings-history-page" aria-labelledby="settings-history-title">
-      <header className="settings-panel-header">
-        <h1 id="settings-history-title">{props.t("activity.historyTitle")}</h1>
-        <p>{props.t("activity.historySubtitle")}</p>
-      </header>
-      <NoteTrashRestorePanel activeVaultId={props.activeVaultId ?? null} locale={props.locale} onCommitted={props.onRestored ?? (async () => false)} t={props.t} />
-      <section className="settings-section" aria-labelledby="activity-recent-title">
-        <h2 className="settings-section-title" id="activity-recent-title">{props.t("activity.recent")}</h2>
-        {props.activities.length === 0 ? (
-          <div className="settings-state-copy">
-            <strong>{props.t("activity.empty")}</strong>
-            <span>{props.t("activity.emptyDescription")}</span>
-          </div>
-        ) : (
-          <div className="settings-card activity-history-list">
-            {props.activities.map((activity, index) => {
-              const activityMessageKey = collectionViewActivityMessageKey(activity.kind) ?? (activity.kind === "update_collection_cell"
-                ? "activity.updatedCollection"
-                : activity.kind === "trash_collection_row"
-                  ? "activity.trashedCollectionRow"
-                : activity.kind === "trash_collection_column"
-                  ? "activity.trashedCollectionColumn"
-                : activity.kind === "add_collection_lookup" ? "activity.addedCollectionLookup"
-                : activity.kind === "archive_page" ? "activity.archivedPage" : (activity.kind as string) === "restore_page" ? "activity.restoredPage"
-                : activity.kind === "update_page"
-                  ? "activity.updatedPage"
-                : activity.kind === "update_memory"
-                  ? "activity.updatedMemory"
-                : activity.kind === "trash_memory"
-                  ? "activity.trashedMemory"
-                : activity.kind === "restore_memory"
-                  ? "activity.restoredMemory"
-                  : "activity.createdPage");
-              const activityLabel = `${props.t(activityMessageKey)}${activity.targetLabel ? `: ${activity.targetLabel}` : ""} (${index + 1})`;
-              const createdAt = new Date(activity.createdAt);
-              const createdAtLabel = Number.isNaN(createdAt.getTime())
-                ? props.t("activity.timeUnavailable")
-                : new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(createdAt);
-              return (
-                <article
-                  className="settings-row tall activity-history-row"
-                  key={activity.operationId}
-                  aria-label={activityLabel}
-                  data-activity-row-id={activity.operationId}
-                  tabIndex={-1}
-                >
-                  <span className={`activity-row-dot${activity.status === "undone" ? " is-undone" : ""}`} aria-hidden="true" />
-                  <div className="settings-row-copy">
-                    <strong>{props.t(activityMessageKey)}{activity.targetLabel ? `: ${activity.targetLabel}` : ""}</strong>
-                    <span>{createdAtLabel} · {props.t(activity.status === "undone" ? "activity.statusUndone" : "activity.statusApplied")}</span>
-                  </div>
-                  <div className="settings-row-control">
-                    {activity.status === "applied" && activity.target ? (
-                      <button
-                        type="button"
-                        className="settings-button"
-                        aria-label={`${props.t("activity.open")}: ${activityLabel}`}
-                        data-activity-open-id={activity.operationId}
-                        disabled={props.openingId !== null}
-                        onClick={() => void props.onOpen(activity)}
-                      >
-                        {props.t("activity.open")}
-                      </button>
-                    ) : null}
-                    {activity.canUndo ? (
-                      <button
-                        type="button"
-                        className="settings-button"
-                        aria-label={`${props.t("activity.undo")}: ${activityLabel}`}
-                        data-activity-undo-id={activity.operationId}
-                        disabled={props.undoingId !== null || props.blockedIds.includes(activity.operationId)}
-                        onClick={() => void props.onUndo(activity.operationId)}
-                      >
-                        {props.t(props.undoingId === activity.operationId ? "activity.undoing" : "activity.undo")}
-                      </button>
-                    ) : null}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-        <p className="settings-note">{props.t("activity.historyNote")}</p>
-      </section>
-    </section>
-  );
 }
 
 export function SystemSettingsPanel(props: {

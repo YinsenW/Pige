@@ -1262,6 +1262,7 @@ export interface JobActionResult {
 
 export interface KnowledgeActivityListRequest {
   readonly limit?: number;
+  readonly cursor?: string;
 }
 
 export type KnowledgeActivityUndoUnavailableReason =
@@ -1332,6 +1333,8 @@ export interface KnowledgeActivityListResult {
   readonly total: number;
   readonly invalidOperationCount: number;
   readonly activities: readonly KnowledgeActivitySummary[];
+  readonly hasMore: boolean;
+  readonly nextCursor?: string;
 }
 
 export interface KnowledgeActivityUndoRequest {

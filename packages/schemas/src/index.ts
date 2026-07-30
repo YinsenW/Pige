@@ -1265,8 +1265,12 @@ export const KnowledgeActivityTargetSchema = z.union([
   KnowledgeActivityMemoryTargetSchema
 ]);
 
+export const KnowledgeActivityCursorSchema = z.string()
+  .regex(/^activity_history_[a-f0-9]{64}$/u);
+
 export const KnowledgeActivityListRequestSchema = z.object({
-  limit: z.number().int().min(1).max(20).optional()
+  limit: z.number().int().min(1).max(20).optional(),
+  cursor: KnowledgeActivityCursorSchema.optional()
 }).strict();
 
 export const KnowledgeActivitySummarySchema = z.object({
@@ -1315,8 +1319,14 @@ export const KnowledgeActivityListResultSchema = z.object({
   activeVaultId: VaultIdSchema,
   total: z.number().int().nonnegative(),
   invalidOperationCount: z.number().int().nonnegative(),
-  activities: z.array(KnowledgeActivitySummarySchema).max(20)
-}).strict();
+  activities: z.array(KnowledgeActivitySummarySchema).max(20),
+  hasMore: z.boolean(),
+  nextCursor: KnowledgeActivityCursorSchema.optional()
+}).strict().superRefine((result, context) => {
+  if (result.hasMore !== (result.nextCursor !== undefined)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["nextCursor"], message: "Activity continuation must match hasMore." });
+  }
+});
 
 export const KNOWLEDGE_HEALTH_MAX_ISSUE_SUMMARIES = 100;
 export const KNOWLEDGE_HEALTH_MAX_DUPLICATE_TOPIC_PAGES = 8;

@@ -2855,7 +2855,10 @@ ipcMain.handle("activity.list", (_event, request?: KnowledgeActivityListRequest)
   (() => {
     const parsed = KnowledgeActivityListRequestSchema.parse(request ?? {});
     return KnowledgeActivityListResultSchema.parse(
-      getKnowledgeActivityService().list(parsed.limit === undefined ? {} : { limit: parsed.limit })
+      getKnowledgeActivityService().list({
+        ...(parsed.limit === undefined ? {} : { limit: parsed.limit }),
+        ...(parsed.cursor === undefined ? {} : { cursor: parsed.cursor })
+      })
     );
   })()
 );

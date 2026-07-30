@@ -733,7 +733,10 @@ async function invokeKnowledgeActivityList(
   const parsedRequest = KnowledgeActivityListRequestSchema.parse(request ?? {});
   const parsed = KnowledgeActivityListResultSchema.parse(await ipcRenderer.invoke(
     "activity.list",
-    parsedRequest.limit === undefined ? {} : { limit: parsedRequest.limit }
+    {
+      ...(parsedRequest.limit === undefined ? {} : { limit: parsedRequest.limit }),
+      ...(parsedRequest.cursor === undefined ? {} : { cursor: parsedRequest.cursor })
+    }
   ));
   return {
     scannedAt: parsed.scannedAt,
@@ -751,7 +754,9 @@ async function invokeKnowledgeActivityList(
       ...(activity.undoUnavailableReason === undefined
         ? {}
         : { undoUnavailableReason: activity.undoUnavailableReason })
-    }))
+    })),
+    hasMore: parsed.hasMore,
+    ...(parsed.nextCursor === undefined ? {} : { nextCursor: parsed.nextCursor })
   };
 }
 

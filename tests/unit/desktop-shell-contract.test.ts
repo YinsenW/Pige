@@ -1797,6 +1797,10 @@ describe("desktop shell build contract", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const activityPanelSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/components/ActivityHistorySettingsPanel.tsx"),
+      "utf8"
+    );
     const undoHandler = rendererSource.slice(
       rendererSource.indexOf("const undoActivity"),
       rendererSource.indexOf("const handleDragEnter")
@@ -1828,10 +1832,10 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("export interface KnowledgeActivityCollectionTarget");
     expect(contractsSource).toContain("readonly expectedRevisionId?: string;");
     expect(rendererSource).toContain('window.pige.activity.list({ limit: 20 })');
-    expect(rendererSource).toContain('className="settings-page settings-history-page"');
-    expect(rendererSource).toContain('activity.kind === "update_page"');
-    expect(rendererSource).toContain('"activity.updatedPage"');
-    expect(rendererSource).toContain('"activity.createdPage"');
+    expect(activityPanelSource).toContain('className="settings-page settings-history-page"');
+    expect(activityPanelSource).toContain('activity.kind === "update_page"');
+    expect(activityPanelSource).toContain('"activity.updatedPage"');
+    expect(activityPanelSource).toContain('"activity.createdPage"');
     expect(rendererSource).toContain('onUndo={undoActivity}');
     expect(undoHandler).toContain('window.pige.activity.list({ limit: 20 })');
     expect(undoHandler).toContain('t("activity.undoStateUnknown")');

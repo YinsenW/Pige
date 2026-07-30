@@ -303,6 +303,9 @@ Behavior:
 Behavior:
 
 - Activity History is in Settings; Home keeps active attention.
+- Activity History loads bounded older pages through one Load more action. A stale or
+  failed next page preserves every visible row and returns focus to Load more; exhausting
+  history returns focus to the History heading. Existing Open and Undo behavior is unchanged.
 - Eligible pages offer Undo; reread restores truth/focus/retry or fails closed.
 - Applied rows open current-vault pages in Reader or memory in Agent & Memory by safe ID.
   Exact Edit or heading receives focus; drift/failure returns to
