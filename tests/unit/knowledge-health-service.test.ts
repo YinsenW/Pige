@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { KNOWLEDGE_HEALTH_MAX_RESULT_UTF8_BYTES, type OperationRecord } from "@pige/schemas";
 import { KnowledgeHealthService } from
   "../../apps/desktop/src/main/services/knowledge-health-service";
+import { LocalDatabaseService } from
+  "../../apps/desktop/src/main/services/local-database-service";
 import {
   NoteMarkdownEditorActivityAdapter,
   NoteMarkdownEditorService,
@@ -308,6 +310,139 @@ describe("KnowledgeHealthService", () => {
     })).toMatchObject({ status: "stale" });
   });
 
+  it("connects one explicitly selected current parent and preserves restart-safe Activity and Undo", () => {
+    const fixture = createOrphanFixture();
+    const report = fixture.service.run(fixture.vaultPath, request);
+    if (report.status !== "ready") throw new Error("Expected a ready report.");
+    const orphan = report.issues.find((issue) => issue.kind === "orphan_page");
+    if (!isRepairableOrphan(orphan)) throw new Error("Expected an eligible orphan repair.");
+    const searchRequest = {
+      ...orphanProof(report, orphan),
+      requestId: "knowledge_health_orphan_parent_search_abcdefghijklmnop",
+      query: "entry"
+    } as const;
+    const searched = fixture.service.searchOrphanParents(fixture.vaultPath, searchRequest);
+    expect(searched.status).toBe("ready");
+    if (searched.status !== "ready" || searched.parents.length !== 1) throw new Error("Expected one parent.");
+    const parent = searched.parents[0]!;
+    expect(parent.page).toEqual({ pageId: fixture.parentPageId, title: "Entry note" });
+    expect(JSON.stringify(searched)).not.toContain(fixture.vaultPath);
+    expect(JSON.stringify(searched)).not.toContain("Parent body");
+
+    const result = fixture.service.repairOrphan(fixture.vaultPath, {
+      ...orphanProof(report, orphan),
+      requestId: "knowledge_health_orphan_repair_request_abcdefghijklmnop",
+      action: "connect_orphan_to_parent",
+      sourcePageId: parent.page.pageId,
+      sourceContextId: parent.sourceContextId,
+      sourceRevision: parent.sourceRevision,
+      sourceRenderProof: parent.sourceRenderProof
+    });
+    expect(result).toMatchObject({ status: "committed", sourcePageId: fixture.parentPageId });
+    if (result.status !== "committed") throw new Error("Expected an orphan repair commit.");
+    const connected = fs.readFileSync(fixture.parentPagePath, "utf8");
+    expect(connected).toContain(`related_page_ids: ["${fixture.orphanPageId}"]`);
+    expect(connected).toContain(`](#wiki:${fixture.orphanPageId})`);
+    expect(connected).toContain("<!-- pige:managed:start knowledge-health-orphan ");
+    expect(fs.readFileSync(fixture.orphanPagePath, "utf8")).toBe(fixture.orphanMarkdown);
+    expect(JSON.stringify(result)).not.toContain(fixture.vaultPath);
+
+    const rebuilt = new LocalDatabaseService();
+    rebuilt.rebuild(fixture.vaultPath);
+    expect(rebuilt.knowledgeHealth(fixture.vaultPath)?.issues.some((issue) =>
+      issue.kind === "orphan_page" && issue.page.pageId === fixture.orphanPageId)).toBe(false);
+
+    const operation = readOperation(fixture.vaultPath, result.operationId);
+    const restarted = new NoteMarkdownEditorActivityAdapter(fixture.vaults);
+    expect(restarted.activitySummary(operation)).toMatchObject({
+      kind: "update_page", status: "applied", canUndo: true
+    });
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
+    expect(restarted.undo(operation)).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(fixture.parentPagePath, "utf8")).toBe(fixture.parentMarkdown);
+    rebuilt.rebuild(fixture.vaultPath);
+    expect(rebuilt.knowledgeHealth(fixture.vaultPath)?.issues.some((issue) =>
+      issue.kind === "orphan_page" && issue.page.pageId === fixture.orphanPageId)).toBe(true);
+  });
+
+  it("fails closed for target/parent drift and report-epoch replay without mutating either page", () => {
+    const indexDrift = createOrphanFixture();
+    const indexReport = indexDrift.service.run(indexDrift.vaultPath, request);
+    if (indexReport.status !== "ready") throw new Error("Expected a ready report.");
+    const indexOrphan = indexReport.issues.find((issue) => issue.kind === "orphan_page");
+    if (!isRepairableOrphan(indexOrphan)) throw new Error("Expected repair proof.");
+    indexDrift.setIndexGeneration("2026-07-31T12:31:00.000Z#orphanindexsuccessor");
+    expect(indexDrift.service.searchOrphanParents(indexDrift.vaultPath, {
+      ...orphanProof(indexReport, indexOrphan),
+      requestId: "knowledge_health_orphan_parent_search_indexabcdefghijk",
+      query: ""
+    })).toMatchObject({ status: "stale" });
+
+    const targetDrift = createOrphanFixture();
+    const report = targetDrift.service.run(targetDrift.vaultPath, request);
+    if (report.status !== "ready") throw new Error("Expected a ready report.");
+    const orphan = report.issues.find((issue) => issue.kind === "orphan_page");
+    if (!isRepairableOrphan(orphan)) throw new Error("Expected repair proof.");
+    const searched = targetDrift.service.searchOrphanParents(targetDrift.vaultPath, {
+      ...orphanProof(report, orphan),
+      requestId: "knowledge_health_orphan_parent_search_driftabcdefghijk",
+      query: ""
+    });
+    if (searched.status !== "ready" || searched.parents.length !== 1) throw new Error("Expected a parent.");
+    const parent = searched.parents[0]!;
+    fs.writeFileSync(targetDrift.orphanPagePath, targetDrift.orphanMarkdown.replace("Orphan body", "Changed body"));
+    const repairRequest = {
+      ...orphanProof(report, orphan),
+      requestId: "knowledge_health_orphan_repair_request_driftabcdefghijk",
+      action: "connect_orphan_to_parent" as const,
+      sourcePageId: parent.page.pageId,
+      sourceContextId: parent.sourceContextId,
+      sourceRevision: parent.sourceRevision,
+      sourceRenderProof: parent.sourceRenderProof
+    };
+    expect(targetDrift.service.repairOrphan(targetDrift.vaultPath, repairRequest))
+      .toMatchObject({ status: "stale" });
+    expect(fs.readFileSync(targetDrift.parentPagePath, "utf8")).toBe(targetDrift.parentMarkdown);
+
+    const parentDrift = createOrphanFixture();
+    const parentReport = parentDrift.service.run(parentDrift.vaultPath, request);
+    if (parentReport.status !== "ready") throw new Error("Expected a ready report.");
+    const parentOrphan = parentReport.issues.find((issue) => issue.kind === "orphan_page");
+    if (!isRepairableOrphan(parentOrphan)) throw new Error("Expected repair proof.");
+    const parentSearch = parentDrift.service.searchOrphanParents(parentDrift.vaultPath, {
+      ...orphanProof(parentReport, parentOrphan),
+      requestId: "knowledge_health_orphan_parent_search_parentabcdefghij",
+      query: ""
+    });
+    if (parentSearch.status !== "ready" || parentSearch.parents.length !== 1) throw new Error("Expected a parent.");
+    const selected = parentSearch.parents[0]!;
+    fs.writeFileSync(parentDrift.parentPagePath, parentDrift.parentMarkdown.replace("Parent body", "Changed parent"));
+    expect(parentDrift.service.repairOrphan(parentDrift.vaultPath, {
+      ...orphanProof(parentReport, parentOrphan),
+      requestId: "knowledge_health_orphan_repair_request_parentabcdefghij",
+      action: "connect_orphan_to_parent",
+      sourcePageId: selected.page.pageId,
+      sourceContextId: selected.sourceContextId,
+      sourceRevision: selected.sourceRevision,
+      sourceRenderProof: selected.sourceRenderProof
+    })).toMatchObject({ status: "stale" });
+
+    parentDrift.service.run(parentDrift.vaultPath, {
+      ...request,
+      requestId: "knowledge_health_request_orphanrerunabcde"
+    });
+    expect(parentDrift.service.repairOrphan(parentDrift.vaultPath, {
+      ...orphanProof(parentReport, parentOrphan),
+      requestId: "knowledge_health_orphan_repair_request_replayabcdefghij",
+      action: "connect_orphan_to_parent",
+      sourcePageId: selected.page.pageId,
+      sourceContextId: selected.sourceContextId,
+      sourceRevision: selected.sourceRevision,
+      sourceRenderProof: selected.sourceRenderProof
+    })).toMatchObject({ status: "not_found" });
+    expect(fs.readFileSync(parentDrift.orphanPagePath, "utf8")).toBe(parentDrift.orphanMarkdown);
+  });
+
   it("offers only the three exact forms and excludes unsafe or ambiguous occurrences", () => {
     for (const [body, target, eligible] of [
       ["[[Missing Page]]", "Missing Page", true],
@@ -434,6 +569,103 @@ function requireRepairable(issue: unknown) {
   return issue;
 }
 
+function createOrphanFixture() {
+  const vaultPath = fs.mkdtempSync(path.join(os.tmpdir(), "pige-health-orphan-"));
+  roots.push(vaultPath);
+  fs.mkdirSync(path.join(vaultPath, "wiki"), { recursive: true });
+  const orphanPageId = "page_20260731_orphantarget";
+  const parentPageId = "page_20260731_entryparent";
+  const orphanPagePath = path.join(vaultPath, "wiki", `${orphanPageId}.md`);
+  const parentPagePath = path.join(vaultPath, "wiki", `${parentPageId}.md`);
+  const orphanMarkdown = noteMarkdown(orphanPageId, "Orphan target", "Orphan body.");
+  const parentMarkdown = noteMarkdown(parentPageId, "Entry note", "Parent body.");
+  fs.writeFileSync(orphanPagePath, orphanMarkdown, "utf8");
+  fs.writeFileSync(parentPagePath, parentMarkdown, "utf8");
+  const vaults = {
+    current: () => ({ vaultId: request.activeVaultId } as never),
+    activeVaultPath: () => vaultPath
+  };
+  const activity = new NoteMarkdownEditorActivityAdapter(vaults);
+  const editor = new NoteMarkdownEditorService(vaults, activity, {
+    now: () => new Date("2026-07-31T12:30:00.000Z"),
+    randomId: () => "orphan-activity-fixture"
+  });
+  let currentIndexGeneration = indexGeneration;
+  const snapshot = () => ({
+    indexGeneration: currentIndexGeneration,
+    invalidPageCount: 0,
+    counts: {
+      totalIssueCount: 1,
+      brokenLinkPageCount: 0,
+      unresolvedLinkCount: 0,
+      orphanPageCount: 1,
+      duplicateTopicGroupCount: 0,
+      unsourcedClaimCount: 0
+    },
+    issues: [{
+      kind: "orphan_page" as const,
+      page: { pageId: orphanPageId, title: "Orphan target" }
+    }],
+    truncated: false
+  });
+  return {
+    vaultPath,
+    vaults,
+    orphanPageId,
+    parentPageId,
+    orphanPagePath,
+    parentPagePath,
+    orphanMarkdown,
+    parentMarkdown,
+    setIndexGeneration: (value: string) => { currentIndexGeneration = value; },
+    service: new KnowledgeHealthService(
+      { knowledgeHealth: snapshot },
+      () => "2026-07-31T12:30:00.000Z",
+      editor,
+      () => "orphan-context-fixture"
+    )
+  };
+}
+
+function noteMarkdown(pageId: string, title: string, body: string): string {
+  return `---\nid: ${JSON.stringify(pageId)}\nschema_version: 1\ntitle: ${JSON.stringify(title)}\ntype: "note"\ncreated_at: "2026-07-31T12:00:00.000Z"\nupdated_at: "2026-07-31T12:00:00.000Z"\nstatus: "active"\nlanguage: "en"\naliases: []\ntags: []\ntopics: []\nentities: []\nsource_ids: []\nrelated_page_ids: []\nprovenance:\n  generated_by: "user"\nnote:\n  note_kind: "user"\n  review_state: "clean"\n---\n\n# ${title}\n\n${body}\n`;
+}
+
+function isRepairableOrphan(issue: unknown): issue is {
+  readonly kind: "orphan_page";
+  readonly page: { readonly pageId: string };
+  readonly repairContextId: string;
+  readonly targetRevision: `noteeditrev_${string}`;
+  readonly targetRenderProof: `knowledge_health_render_${string}`;
+} {
+  if (!issue || typeof issue !== "object") return false;
+  const value = issue as Record<string, unknown>;
+  return value.kind === "orphan_page" && typeof value.repairContextId === "string" &&
+    typeof value.targetRevision === "string" && typeof value.targetRenderProof === "string";
+}
+
+function orphanProof(
+  report: Extract<ReturnType<KnowledgeHealthService["run"]>, { readonly status: "ready" }>,
+  issue: {
+    readonly kind: "orphan_page";
+    readonly page: { readonly pageId: string };
+    readonly repairContextId: string;
+    readonly targetRevision: `noteeditrev_${string}`;
+    readonly targetRenderProof: `knowledge_health_render_${string}`;
+  }
+) {
+  return {
+    apiVersion: 1 as const,
+    activeVaultId: report.activeVaultId,
+    reportRequestId: report.requestId,
+    indexGeneration: report.indexGeneration,
+    issueKind: "orphan_page" as const,
+    pageId: issue.page.pageId,
+    repairContextId: issue.repairContextId,
+    targetRevision: issue.targetRevision,
+    targetRenderProof: issue.targetRenderProof
+  };
+}
 function readOperation(vaultPath: string, operationId: string): OperationRecord {
   const dateKey = /^op_(\d{8})_/u.exec(operationId)?.[1];
   if (!dateKey) throw new Error("Invalid Operation identity.");

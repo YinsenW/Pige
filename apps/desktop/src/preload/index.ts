@@ -76,6 +76,10 @@ import type {
   KnowledgeHealthRepairResult,
   KnowledgeHealthTargetSearchRequest,
   KnowledgeHealthTargetSearchResult,
+  KnowledgeHealthOrphanParentSearchRequest,
+  KnowledgeHealthOrphanParentSearchResult,
+  KnowledgeHealthOrphanRepairRequest,
+  KnowledgeHealthOrphanRepairResult,
   ManagedCopyRootConfigureRequest,
   ManagedCopyRootConfigureResult,
   ManagedCopyRootSummary,
@@ -431,6 +435,10 @@ import {
   KnowledgeHealthRepairResultSchema,
   KnowledgeHealthTargetSearchRequestSchema,
   KnowledgeHealthTargetSearchResultSchema,
+  KnowledgeHealthOrphanParentSearchRequestSchema,
+  KnowledgeHealthOrphanParentSearchResultSchema,
+  KnowledgeHealthOrphanRepairRequestSchema,
+  KnowledgeHealthOrphanRepairResultSchema,
   MANAGED_COPY_ROOT_CONFIGURE_CHANNEL,
   ManagedCopyRootConfigureRequestSchema,
   ManagedCopyRootConfigureResultSchema,
@@ -2105,6 +2113,22 @@ const api: PigeDesktopApi = {
       const parsedRequest = KnowledgeHealthTargetSearchRequestSchema.parse(request);
       return KnowledgeHealthTargetSearchResultSchema.parse(
         await ipcRenderer.invoke("maintenance.searchKnowledgeHealthTargets", parsedRequest)
+      );
+    },
+    searchKnowledgeHealthOrphanParents: async (
+      request: KnowledgeHealthOrphanParentSearchRequest
+    ): Promise<KnowledgeHealthOrphanParentSearchResult> => {
+      const parsedRequest = KnowledgeHealthOrphanParentSearchRequestSchema.parse(request);
+      return KnowledgeHealthOrphanParentSearchResultSchema.parse(
+        await ipcRenderer.invoke("maintenance.searchKnowledgeHealthOrphanParents", parsedRequest)
+      );
+    },
+    repairKnowledgeHealthOrphan: async (
+      request: KnowledgeHealthOrphanRepairRequest
+    ): Promise<KnowledgeHealthOrphanRepairResult> => {
+      const parsedRequest = KnowledgeHealthOrphanRepairRequestSchema.parse(request);
+      return KnowledgeHealthOrphanRepairResultSchema.parse(
+        await ipcRenderer.invoke("maintenance.repairKnowledgeHealthOrphan", parsedRequest)
       );
     },
     repairKnowledgeHealth: async (

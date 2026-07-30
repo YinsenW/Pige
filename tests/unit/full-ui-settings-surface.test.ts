@@ -1038,6 +1038,124 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("lets the user choose one current parent for one repairable orphan", async () => {
+    const dom = createDom();
+    const repairContextId = `knowledge_health_repair_context_${"a".repeat(32)}`;
+    const targetRevision = `noteeditrev_${"b".repeat(64)}`;
+    const targetRenderProof = `knowledge_health_render_${"c".repeat(64)}`;
+    const runKnowledgeHealth = vi.fn(async (request) => ({
+      ...request,
+      status: "ready",
+      checkedAt: "2026-07-31T12:00:00.000Z",
+      indexGeneration: "index:orphan:4",
+      coverage: "complete",
+      invalidPageCount: 0,
+      counts: {
+        totalIssueCount: 1, brokenLinkPageCount: 0, unresolvedLinkCount: 0,
+        orphanPageCount: 1, duplicateTopicGroupCount: 0, unsourcedClaimCount: 0
+      },
+      issues: [{
+        kind: "orphan_page",
+        page: { pageId: "page_health_orphan_target", title: "Orphan target" },
+        repairContextId,
+        targetRevision,
+        targetRenderProof
+      }],
+      truncated: false
+    }));
+    const parent = {
+      page: { pageId: "page_health_entry_parent", title: "Entry note" },
+      pageType: "note",
+      sourceContextId: `knowledge_health_orphan_parent_context_${"d".repeat(32)}`,
+      sourceRevision: `noteeditrev_${"e".repeat(64)}`,
+      sourceRenderProof: `knowledge_health_render_${"f".repeat(64)}`
+    } as const;
+    const searchKnowledgeHealthOrphanParents = vi.fn(async (request) => ({
+      ...request, status: "ready", parents: [parent], truncated: false
+    }));
+    const repairKnowledgeHealthOrphan = vi.fn(async (request) => ({
+      ...request,
+      status: "committed",
+      revision: `noteeditrev_${"1".repeat(64)}`,
+      operationId: "op_20260731_orphanrepairui"
+    }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        maintenance: {
+          runKnowledgeHealth,
+          searchKnowledgeHealthOrphanParents,
+          repairKnowledgeHealthOrphan,
+          repairKnowledgeHealth: vi.fn(),
+          rebuildLocalDatabase: vi.fn(),
+          resetLocalDatabase: vi.fn()
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(MaintenanceSettingsPanel, {
+        activeVaultId: "vault_20260731_orphanui",
+        locale: "en",
+        error: null,
+        localDatabaseStatus: null,
+        onRefresh: vi.fn(async () => undefined),
+        onRefreshDiagnostics: vi.fn(async () => undefined),
+        onOpenPage: vi.fn(async () => true),
+        onError: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(dom.window.document, "Run Check").click();
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".maintenance-settings-page"));
+    expect(page.textContent).toContain("Orphan target");
+    await act(async () => {
+      buttonNamed(page, "Choose parent").click();
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(page, "Search pages").click();
+      await settle(dom);
+    });
+    expect(searchKnowledgeHealthOrphanParents).toHaveBeenCalledOnce();
+    const search = searchKnowledgeHealthOrphanParents.mock.calls[0]![0];
+    expect(search).toMatchObject({
+      activeVaultId: "vault_20260731_orphanui",
+      reportRequestId: expect.stringMatching(/^knowledge_health_request_/u),
+      indexGeneration: "index:orphan:4",
+      issueKind: "orphan_page",
+      pageId: "page_health_orphan_target",
+      repairContextId,
+      targetRevision,
+      targetRenderProof,
+      query: ""
+    });
+    await act(async () => {
+      buttonNamed(page, "Entry note").click();
+      await settle(dom);
+    });
+    expect(repairKnowledgeHealthOrphan).toHaveBeenCalledOnce();
+    expect(repairKnowledgeHealthOrphan.mock.calls[0]![0]).toMatchObject({
+      action: "connect_orphan_to_parent",
+      sourcePageId: parent.page.pageId,
+      sourceContextId: parent.sourceContextId,
+      sourceRevision: parent.sourceRevision,
+      sourceRenderProof: parent.sourceRenderProof,
+      pageId: "page_health_orphan_target"
+    });
+    expect(page.textContent).toContain("The parent now links to this page");
+    expect(page.textContent).toContain("No check has been run yet.");
+    expect(page.textContent).not.toContain("op_20260731");
+    expect(page.textContent).not.toContain("repair_context");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("ignores a Knowledge Health repair result after the vault identity changes", async () => {
     const dom = createDom();
     let resolveRepair!: (result: unknown) => void;
