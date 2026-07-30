@@ -399,21 +399,26 @@ export class HomeAgentService {
 
   conversationHistory(request: AgentConversationHistoryListRequest): AgentConversationHistoryListResult {
     const validated = AgentConversationHistoryListRequestSchema.parse(request);
+    const identity = {
+      apiVersion: 1 as const,
+      activeVaultId: validated.activeVaultId,
+      ...(validated.query === undefined ? {} : { query: validated.query })
+    };
+    const failed = (): AgentConversationHistoryListResult => ({ ...identity, status: "failed" });
     const activeVault = this.#vaults.current();
     const vaultPath = this.#vaults.activeVaultPath();
-    if (!activeVault || !vaultPath || activeVault.vaultId !== validated.activeVaultId) {
-      return { apiVersion: 1, activeVaultId: validated.activeVaultId, status: "failed" };
-    }
+    if (!activeVault || !vaultPath || activeVault.vaultId !== validated.activeVaultId) return failed();
+    const stillActive = (): boolean => this.#vaults.activeVaultPath() === vaultPath &&
+      this.#vaults.current()?.vaultId === validated.activeVaultId;
     try {
       const page = this.#conversationHistory.list({
         activeVaultId: validated.activeVaultId,
         vaultPath,
         ...(validated.limit === undefined ? {} : { limit: validated.limit }),
-        ...(validated.cursor === undefined ? {} : { cursor: validated.cursor })
+        ...(validated.cursor === undefined ? {} : { cursor: validated.cursor }),
+        ...(validated.query === undefined ? {} : { query: validated.query })
       });
-      if (this.#vaults.activeVaultPath() !== vaultPath || this.#vaults.current()?.vaultId !== validated.activeVaultId) {
-        return { apiVersion: 1, activeVaultId: validated.activeVaultId, status: "failed" };
-      }
+      if (!stillActive()) return failed();
       const conversations = page.conversations.map(({ latestUserEventId, ...summary }) => {
         const job = latestUserEventId
           ? this.#jobs.findAgentTurnJobByConversationEvent(latestUserEventId)
@@ -423,12 +428,9 @@ export class HomeAgentService {
           ...(job ? { latestTurnState: job.state } : {})
         };
       });
-      if (this.#vaults.activeVaultPath() !== vaultPath || this.#vaults.current()?.vaultId !== validated.activeVaultId) {
-        return { apiVersion: 1, activeVaultId: validated.activeVaultId, status: "failed" };
-      }
+      if (!stillActive()) return failed();
       return AgentConversationHistoryListResultSchema.parse({
-        apiVersion: 1,
-        activeVaultId: validated.activeVaultId,
+        ...identity,
         status: "ready",
         ...(page.currentConversationId ? { currentConversationId: page.currentConversationId } : {}),
         conversations,
@@ -436,7 +438,7 @@ export class HomeAgentService {
         ...(page.nextCursor ? { nextCursor: page.nextCursor } : {})
       });
     } catch {
-      return { apiVersion: 1, activeVaultId: validated.activeVaultId, status: "failed" };
+      return failed();
     }
   }
 

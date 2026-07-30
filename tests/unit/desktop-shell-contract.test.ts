@@ -574,20 +574,31 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("AgentConversationResultSchema.optional().parse(");
   });
 
-  it("freezes one read-only conversation-history list beside the existing open path", () => {
+  it("freezes one bounded pathless conversation-history search beside the existing open path", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const historySchemas = schemasSource.slice(
+      schemasSource.indexOf("export const AgentConversationCursorSchema"),
+      schemasSource.indexOf("export const AgentConversationMessageSchema")
+    );
     expect(contractsSource).toContain("readonly conversationHistory: (");
     expect(contractsSource).toContain("request: AgentConversationHistoryListRequest");
     expect(contractsSource).toContain(") => Promise<AgentConversationHistoryListResult>;");
     expect(contractsSource).toContain("readonly conversation: {");
     expect(contractsSource).not.toContain("readonly openConversation:");
+    expect(historySchemas).toContain("AgentConversationHistoryQuerySchema");
+    expect(historySchemas).toContain("query: AgentConversationHistoryQuerySchema.optional()");
     expect(preloadSource).toContain("AgentConversationHistoryListRequestSchema.parse(request)");
     expect(preloadSource).toContain('ipcRenderer.invoke("agent.conversationHistory", parsedRequest)');
-    expect(preloadSource).toContain("AgentConversationHistoryListResultSchema.parse(result)");
+    expect(preloadSource).toContain("AgentConversationHistoryListResultSchema.parse(");
+    expect(preloadSource).toContain("Invalid conversation history response identity.");
     expect(mainSource).toContain('ipcMain.handle("agent.conversationHistory"');
     expect(mainSource).toContain("AgentConversationHistoryListResultSchema.parse(");
+    for (const privateField of ["queryPath", "queryBody", "providerId", "modelId", "toolPayload"]) {
+      expect(historySchemas).not.toContain(privateField);
+    }
   });
 
   it("uses a CommonJS preload entry compatible with Electron sandboxed preload execution", () => {

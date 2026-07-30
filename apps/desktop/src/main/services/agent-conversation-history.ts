@@ -3,11 +3,13 @@ import fs from "node:fs";
 import path from "node:path";
 import type {
   AgentConversationHistoryCursor,
+  AgentConversationHistoryQuery,
   AgentConversationHistorySummary
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
   AgentConversationInputPresentationSchema,
+  AgentConversationHistoryQuerySchema,
   AgentConversationMetadataManifestSchema,
   AgentConversationSetTitleRequestSchema,
   AgentTurnCurrentNoteScopeSchema,
@@ -52,6 +54,7 @@ export type AgentConversationTitleMutation =
 interface HistoryCursorBinding {
   readonly activeVaultId: string;
   readonly vaultPath: string;
+  readonly query?: AgentConversationHistoryQuery;
   readonly snapshotHash: string;
   readonly offset: number;
   readonly boundaryConversationId: string;
@@ -73,11 +76,14 @@ export class AgentConversationHistory {
     readonly vaultPath: string;
     readonly limit?: number;
     readonly cursor?: AgentConversationHistoryCursor;
+    readonly query?: AgentConversationHistoryQuery;
   }): AgentConversationHistoryPage {
     const limit = validateLimit(input.limit ?? DEFAULT_PAGE_SIZE);
+    const query = input.query === undefined ? undefined : AgentConversationHistoryQuerySchema.parse(input.query);
     const vaultPath = assertSafeVaultRoot(input.vaultPath);
-    const entries = readHistoryEntries(vaultPath);
-    const snapshotHash = createSnapshotHash(entries);
+    const allEntries = readHistoryEntries(vaultPath);
+    const entries = query === undefined ? allEntries : allEntries.filter((entry) => matchesQuery(entry, query));
+    const snapshotHash = createSnapshotHash(allEntries);
     let offset = 0;
 
     if (input.cursor) {
@@ -86,6 +92,7 @@ export class AgentConversationHistory {
         !binding ||
         binding.activeVaultId !== input.activeVaultId ||
         binding.vaultPath !== vaultPath ||
+        binding.query !== query ||
         binding.snapshotHash !== snapshotHash ||
         binding.offset < 1 ||
         entries[binding.offset - 1]?.conversationId !== binding.boundaryConversationId ||
@@ -104,6 +111,7 @@ export class AgentConversationHistory {
       ? this.#registerCursor({
           activeVaultId: input.activeVaultId,
           vaultPath,
+          ...(query === undefined ? {} : { query }),
           snapshotHash,
           offset: nextOffset,
           boundaryConversationId: entries[nextOffset - 1]!.conversationId,
@@ -112,7 +120,7 @@ export class AgentConversationHistory {
       : undefined;
 
     return {
-      ...(entries[0] ? { currentConversationId: entries[0].conversationId } : {}),
+      ...(allEntries[0] ? { currentConversationId: allEntries[0].conversationId } : {}),
       conversations,
       hasMore,
       ...(nextCursor ? { nextCursor } : {})
@@ -445,6 +453,16 @@ function createSafePreview(value: string): string {
 
 function createSnapshotHash(entries: readonly AgentConversationHistoryEntry[]): string {
   return createHash("sha256").update(JSON.stringify(entries), "utf8").digest("hex");
+}
+
+function matchesQuery(entry: AgentConversationHistoryEntry, query: AgentConversationHistoryQuery): boolean {
+  const needle = normalizeSearchText(query);
+  return normalizeSearchText(entry.title ?? "").includes(needle) ||
+    normalizeSearchText(entry.safePreview).includes(needle);
+}
+
+function normalizeSearchText(value: string): string {
+  return value.normalize("NFKC").toLowerCase().replace(/\s+/gu, " ").trim();
 }
 
 function compareHistoryEntries(left: AgentConversationHistoryEntry, right: AgentConversationHistoryEntry): number {

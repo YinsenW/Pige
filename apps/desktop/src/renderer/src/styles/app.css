@@ -5690,6 +5690,29 @@ dd {
   position: relative;
 }
 
+.conversation-search-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  border-bottom: .5px solid var(--border-default);
+  padding: 12px 14px;
+  background: var(--surface-hover);
+}
+
+.conversation-search-form label {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.conversation-search-form .settings-input {
+  width: 100%;
+}
+
 .conversation-history-entry:last-child > .settings-row {
   border-bottom: 0;
 }

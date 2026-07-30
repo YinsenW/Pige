@@ -297,6 +297,118 @@ describe("AgentConversationHistory", () => {
     })).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_unavailable" }));
     expect(fs.existsSync(path.join(vaultPath, ".pige/conversations/conversations-manifest.json"))).toBe(false);
   });
+
+  it("searches only bounded title and preview projections with exact snapshot and query cursor fences", () => {
+    const vaultPath = createVaultRoot();
+    const conversations = new AgentTurnConversationStore();
+    const titled = conversations.appendUserTurn(
+      vaultPath,
+      "Budget notes",
+      { inputKind: "typed_text", locale: "en" },
+      { clientTurnId: "turn_20260731_searchtitle0001" }
+    );
+    conversations.appendAssistantTurn(
+      vaultPath,
+      titled,
+      "job_20260731_searchtitle0001",
+      "Hidden transcript phrase must not become searchable"
+    );
+    const preview = conversations.appendUserTurn(
+      vaultPath,
+      "Project follow-up",
+      { inputKind: "typed_text", locale: "en" },
+      { clientTurnId: "turn_20260731_searchpreview001" }
+    );
+    const unrelated = conversations.appendUserTurn(
+      vaultPath,
+      "Unrelated conversation",
+      { inputKind: "typed_text", locale: "en" },
+      { clientTurnId: "turn_20260731_searchother0001" }
+    );
+    const owner = new AgentConversationHistory();
+    const full = owner.list({ activeVaultId: "vault_20260731_search01", vaultPath });
+    const titledSummary = full.conversations.find((item) => item.conversationId === titled.event.conversationId)!;
+    const unrelatedSummary = full.conversations.find((item) => item.conversationId === unrelated.event.conversationId)!;
+    const titledPath = path.join(vaultPath, ".pige/conversations/2026/07", `${titled.event.conversationId}.jsonl`);
+    const titledHash = createHash("sha256").update(fs.readFileSync(titledPath)).digest("hex");
+    expect(owner.setTitle({
+      vaultPath,
+      request: {
+        apiVersion: 1,
+        requestId: "conversation_title_request_searchtitle00010",
+        activeVaultId: "vault_20260731_search01",
+        conversationId: titled.event.conversationId,
+        expectedTailEventId: titledSummary.tailEventId,
+        expectedTitleRevision: 0,
+        title: "Launch Project"
+      }
+    }).status).toBe("committed");
+
+    const firstPage = owner.list({
+      activeVaultId: "vault_20260731_search01",
+      vaultPath,
+      query: "project",
+      limit: 1
+    });
+    expect(firstPage.currentConversationId).toBe(full.currentConversationId);
+    expect(firstPage.conversations).toHaveLength(1);
+    expect(firstPage.hasMore).toBe(true);
+    const secondPage = owner.list({
+      activeVaultId: "vault_20260731_search01",
+      vaultPath,
+      query: "project",
+      limit: 1,
+      cursor: firstPage.nextCursor
+    });
+    expect([
+      firstPage.conversations[0]?.conversationId,
+      secondPage.conversations[0]?.conversationId
+    ].sort()).toEqual([titled.event.conversationId, preview.event.conversationId].sort());
+    expect(() => owner.list({
+      activeVaultId: "vault_20260731_search01",
+      vaultPath,
+      query: "other",
+      cursor: firstPage.nextCursor
+    })).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_binding_invalid" }));
+
+    expect(new AgentConversationHistory().list({
+      activeVaultId: "vault_20260731_search01",
+      vaultPath,
+      query: "LAUNCH   PROJECT"
+    }).conversations).toEqual([
+      expect.objectContaining({ conversationId: titled.event.conversationId, title: "Launch Project" })
+    ]);
+    expect(new AgentConversationHistory().list({
+      activeVaultId: "vault_20260731_search01",
+      vaultPath,
+      query: "missing"
+    })).toMatchObject({ currentConversationId: full.currentConversationId, conversations: [], hasMore: false });
+    expect(new AgentConversationHistory().list({
+      activeVaultId: "vault_20260731_search01",
+      vaultPath,
+      query: "transcript phrase"
+    }).conversations).toEqual([]);
+    expect(createHash("sha256").update(fs.readFileSync(titledPath)).digest("hex")).toBe(titledHash);
+
+    expect(owner.setTitle({
+      vaultPath,
+      request: {
+        apiVersion: 1,
+        requestId: "conversation_title_request_searchother00010",
+        activeVaultId: "vault_20260731_search01",
+        conversationId: unrelated.event.conversationId,
+        expectedTailEventId: unrelatedSummary.tailEventId,
+        expectedTitleRevision: 0,
+        title: "Another title"
+      }
+    }).status).toBe("committed");
+    expect(() => owner.list({
+      activeVaultId: "vault_20260731_search01",
+      vaultPath,
+      query: "project",
+      cursor: firstPage.nextCursor
+    })).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_binding_invalid" }));
+  });
 });
 
 function createVaultRoot(): string {

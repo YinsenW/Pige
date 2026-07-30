@@ -1255,8 +1255,13 @@ const api: PigeDesktopApi = {
       request: AgentConversationHistoryListRequest
     ): Promise<AgentConversationHistoryListResult> => {
       const parsedRequest = AgentConversationHistoryListRequestSchema.parse(request);
-      const result = await ipcRenderer.invoke("agent.conversationHistory", parsedRequest) as unknown;
-      return AgentConversationHistoryListResultSchema.parse(result);
+      const result = AgentConversationHistoryListResultSchema.parse(
+        await ipcRenderer.invoke("agent.conversationHistory", parsedRequest) as unknown
+      );
+      if (result.activeVaultId !== parsedRequest.activeVaultId || result.query !== parsedRequest.query) {
+        throw new Error("Invalid conversation history response identity.");
+      }
+      return result;
     },
     setConversationTitle: async (
       request: AgentConversationSetTitleRequest
