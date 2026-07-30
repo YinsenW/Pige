@@ -351,10 +351,11 @@ Before creation, search titles, aliases, slugs, tags, topics/concepts, entities 
 Deduplication rules:
 
 - Page identity comes from stable ID; titles, paths and slugs may change.
-- Explicit ordinary-note merge keeps current ID, unions aliases/source IDs, aliases the target ID
-  and appends losslessly. One two-page Operation plus private originals/trash supports recovery/Undo.
-- Note trash preserves exact bytes/identity privately. Settings lists safe receipts and restores
-  only a current, path-safe original; retry/restart adopts the same `restore_page` Operation.
+- Ordinary-note merge keeps current ID, unions aliases/source IDs and appends losslessly; one
+  two-page Operation/private receipt supports Undo. Trash preserves bytes/identity and restores only
+  a current path-safe original. History derives bounded summaries from intact private images;
+  exact-current restore writes one reversible revision. Retry/restart adopts `restore_page`; public
+  lifecycle data excludes Markdown/path.
 - If uncertain, preserve both pages.
 
 Multilingual rules preserve source language, add useful translated aliases, avoid duplicates caused

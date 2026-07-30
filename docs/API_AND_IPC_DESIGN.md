@@ -454,22 +454,20 @@ Undo and the body/path/hash ban remain.
 
 ### 6.5 Library And Notes
 
-Queries: `library.list/tree/related`, `notes.get/render/openEditor`,
-`notes.resolveInlineReference/openSourceReference`. Commands: `notes.saveEditor/merge/revealSource`,
-`notes.trashCurrent/listTrash/restoreTrash`.
+Queries: `library.list/tree/related`, `notes.get/render/openEditor`, `notes.listRevisionHistory`,
+`notes.openRevisionHistory`, `notes.resolveInlineReference/openSourceReference`. Commands:
+`notes.saveEditor/merge/revealSource`, `notes.trashCurrent/listTrash/restoreTrash`,
+`notes.restoreRevisionHistory`.
 
 Library returns bounded stable IDs; Notes resolves safe Markdown/HTML. `renderContextId` authorizes
 only rendering; Main retains paths, private data, prompts, secrets and unsafe content.
 
-Reader edit contract:
-
-- `openEditor` returns bounded Markdown/revision; `saveEditor` adds draft/revision and CAS-writes
-  `update_page`. Stale preserves draft/Reader; source/rich-text pages stay read-only.
-- Trash lists bounded receipt summaries after restart. Restore binds vault/page/Operation/trash
-  revision, revalidates private bytes/confinement, and returns authoritative render or body-free
-  closure without duplicating `restore_page`.
-- Merge binds both note identities/revisions, keeps current, and returns authoritative render plus
-  Operation ID; other outcomes are body/path-free.
+Reader edits are revision-fenced. `openEditor` returns bounded Markdown; `saveEditor` CAS-writes
+`update_page`, preserving stale drafts. Trash lists safe receipts; restore revalidates private bytes
+and returns authoritative render without duplicate `restore_page`. Merge binds both notes and keeps
+current. History binds render/revision, lists <=100 safe summaries and opens sanitized read-only
+previews; restore CAS-writes one `restore_page`. Source/rich-text stays read-only and closed results
+expose no body/path.
 
 Reader reference query contract:
 
