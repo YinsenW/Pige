@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
@@ -8,10 +8,15 @@ import type {
 import { PigeDomainError } from "@pige/domain";
 import {
   AgentConversationInputPresentationSchema,
+  AgentConversationMetadataManifestSchema,
+  AgentConversationSetTitleRequestSchema,
   AgentTurnCurrentNoteScopeSchema,
   ConversationEventSchema,
+  type AgentConversationMetadataManifest,
+  type AgentConversationSetTitleRequest,
   type ConversationEvent
 } from "@pige/schemas";
+import { containsRestrictedModelContent } from "./model-egress-content";
 
 const DEFAULT_PAGE_SIZE = 24;
 const MAX_PAGE_SIZE = 50;
@@ -21,10 +26,13 @@ const MAX_DISCOVERY_FILES = 256;
 const MAX_DISCOVERY_ENTRIES = 4_096;
 const MAX_DISCOVERY_BYTES = 32 * 1024 * 1024;
 const DEFAULT_CURSOR_CAPACITY = 128;
+const MAX_METADATA_BYTES = 512 * 1024;
+const METADATA_FILE_NAME = "conversations-manifest.json";
 const CONVERSATION_FILE_PATTERN = /^(conv_(\d{8})(?:_[a-z0-9]{4,})?)\.jsonl$/u;
 const UNSAFE_PREVIEW_PATTERN = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu;
 
 export interface AgentConversationHistoryEntry extends AgentConversationHistorySummary {
+  readonly titleRevision: number;
   readonly latestUserEventId?: string;
 }
 
@@ -34,6 +42,12 @@ export interface AgentConversationHistoryPage {
   readonly hasMore: boolean;
   readonly nextCursor?: AgentConversationHistoryCursor;
 }
+
+export type AgentConversationTitleMutation =
+  | { readonly status: "committed" | "stale"; readonly summary: AgentConversationHistoryEntry & {
+      readonly titleRevision: number;
+    } }
+  | { readonly status: "not_found" };
 
 interface HistoryCursorBinding {
   readonly activeVaultId: string;
@@ -47,9 +61,11 @@ interface HistoryCursorBinding {
 export class AgentConversationHistory {
   readonly #cursors = new Map<AgentConversationHistoryCursor, HistoryCursorBinding>();
   readonly #cursorCapacity: number;
+  readonly #now: () => Date;
 
-  constructor(cursorCapacity = DEFAULT_CURSOR_CAPACITY) {
+  constructor(cursorCapacity = DEFAULT_CURSOR_CAPACITY, now: () => Date = () => new Date()) {
     this.#cursorCapacity = Math.max(1, cursorCapacity);
+    this.#now = now;
   }
 
   list(input: {
@@ -125,6 +141,67 @@ export class AgentConversationHistory {
     return matches[0]?.type === "assistant_message" ? matches[0] : undefined;
   }
 
+  setTitle(input: {
+    readonly vaultPath: string;
+    readonly request: AgentConversationSetTitleRequest;
+  }): AgentConversationTitleMutation {
+    const request = AgentConversationSetTitleRequestSchema.parse(input.request);
+    if (request.title !== null && containsRestrictedModelContent(request.title)) throw unavailableHistory();
+    const vaultPath = assertSafeVaultRoot(input.vaultPath);
+    const conversationsRoot = path.join(vaultPath, ".pige", "conversations");
+    if (!assertExistingDirectoryPath(vaultPath, conversationsRoot)) return { status: "not_found" };
+    const metadata = readConversationMetadata(conversationsRoot);
+    const current = readHistoryEntries(vaultPath, metadata.manifest)
+      .find((entry) => entry.conversationId === request.conversationId);
+    if (!current) return { status: "not_found" };
+    const existing = metadata.manifest.conversations.find((entry) => entry.conversationId === request.conversationId);
+    if (current.tailEventId !== request.expectedTailEventId) {
+      return { status: "stale", summary: current };
+    }
+    if (existing?.lastRequestId === request.requestId && existing.title === request.title) {
+      return { status: "committed", summary: current };
+    }
+    if (current.titleRevision !== request.expectedTitleRevision) {
+      return { status: "stale", summary: current };
+    }
+    if ((existing?.title ?? null) === request.title) return { status: "committed", summary: current };
+    if (metadata.manifest.revision === Number.MAX_SAFE_INTEGER || (existing?.revision ?? 0) === Number.MAX_SAFE_INTEGER) {
+      throw unavailableHistory();
+    }
+    const record = {
+      conversationId: request.conversationId,
+      revision: (existing?.revision ?? 0) + 1,
+      title: request.title,
+      tailEventId: request.expectedTailEventId,
+      updatedAt: this.#now().toISOString(),
+      lastRequestId: request.requestId
+    };
+    const next: AgentConversationMetadataManifest = AgentConversationMetadataManifestSchema.parse({
+      schemaVersion: 1,
+      revision: metadata.manifest.revision + 1,
+      conversations: [
+        ...metadata.manifest.conversations.filter((entry) => entry.conversationId !== request.conversationId),
+        record
+      ].sort((left, right) => left.conversationId.localeCompare(right.conversationId, "en"))
+    });
+    try {
+      writeConversationMetadata(conversationsRoot, next, metadata.revision, () => {
+        const live = readHistoryEntries(vaultPath, metadata.manifest)
+          .find((entry) => entry.conversationId === request.conversationId);
+        if (!live || live.tailEventId !== request.expectedTailEventId) throw invalidHistoryCursor();
+      });
+    } catch (caught) {
+      if (!(caught instanceof PigeDomainError) || caught.code !== "agent_runtime.turn_binding_invalid") throw caught;
+      const live = readHistoryEntries(vaultPath).find((entry) => entry.conversationId === request.conversationId);
+      return live ? { status: "stale", summary: live } : { status: "not_found" };
+    }
+    const committed = readHistoryEntries(vaultPath).find((entry) => entry.conversationId === request.conversationId);
+    if (!committed || committed.titleRevision !== record.revision || (committed.title ?? null) !== request.title) {
+      throw unavailableHistory();
+    }
+    return { status: "committed", summary: committed };
+  }
+
   #registerCursor(binding: HistoryCursorBinding): AgentConversationHistoryCursor {
     const cursor = `conversation_history_${randomBytes(32).toString("hex")}` as AgentConversationHistoryCursor;
     this.#cursors.set(cursor, binding);
@@ -137,9 +214,14 @@ export class AgentConversationHistory {
   }
 }
 
-function readHistoryEntries(vaultPath: string): AgentConversationHistoryEntry[] {
+function readHistoryEntries(
+  vaultPath: string,
+  knownMetadata?: AgentConversationMetadataManifest
+): AgentConversationHistoryEntry[] {
   const conversationsRoot = path.join(vaultPath, ".pige", "conversations");
   if (!assertExistingDirectoryPath(vaultPath, conversationsRoot)) return [];
+  const metadata = knownMetadata ?? readConversationMetadata(conversationsRoot).manifest;
+  const titles = new Map(metadata.conversations.map((entry) => [entry.conversationId, entry]));
 
   const entries: AgentConversationHistoryEntry[] = [];
   const budget = { entries: 0, files: 0, bytes: 0 };
@@ -169,7 +251,7 @@ function readHistoryEntries(vaultPath: string): AgentConversationHistoryEntry[] 
           throw unavailableHistory();
         }
         const events = readConversationFile(filePath);
-        const entry = toHistoryEntry(conversationId, events);
+        const entry = toHistoryEntry(conversationId, events, titles.get(conversationId));
         if (entry) entries.push(entry);
       }
     }
@@ -179,7 +261,8 @@ function readHistoryEntries(vaultPath: string): AgentConversationHistoryEntry[] 
 
 function toHistoryEntry(
   conversationId: string,
-  events: readonly ConversationEvent[]
+  events: readonly ConversationEvent[],
+  metadata?: AgentConversationMetadataManifest["conversations"][number]
 ): AgentConversationHistoryEntry | undefined {
   if (events.some((event) => event.conversationId !== conversationId)) throw unavailableHistory();
   const visible = events.filter((event) => event.type === "user_message" || event.type === "assistant_message");
@@ -201,10 +284,98 @@ function toHistoryEntry(
     updatedAt: tail.createdAt,
     safePreview,
     tailEventId: tail.id,
+    ...(metadata?.title ? { title: metadata.title } : {}),
+    titleRevision: metadata?.revision ?? 0,
     ...(scope?.success ? { scope: scope.data } : {}),
     ...(inputPresentation?.success ? { inputPresentation: inputPresentation.data } : {}),
     ...(latestUser ? { latestUserEventId: latestUser.id } : {})
   };
+}
+
+interface ConversationMetadataRevision {
+  readonly dev: number;
+  readonly ino: number;
+  readonly size: number;
+  readonly mtimeMs: number;
+}
+
+function readConversationMetadata(conversationsRoot: string): {
+  readonly manifest: AgentConversationMetadataManifest;
+  readonly revision?: ConversationMetadataRevision;
+} {
+  const filePath = path.join(conversationsRoot, METADATA_FILE_NAME);
+  const stat = lstatIfExists(filePath);
+  if (!stat) return { manifest: { schemaVersion: 1, revision: 0, conversations: [] } };
+  assertPrivateRegularFileStat(stat);
+  if (stat.size <= 0 || stat.size > MAX_METADATA_BYTES) throw unavailableHistory();
+  const descriptor = openReadonly(filePath);
+  try {
+    const held = fs.fstatSync(descriptor);
+    if (!sameFileIdentity(stat, held)) throw unavailableHistory();
+    const source = new TextDecoder("utf-8", { fatal: true }).decode(fs.readFileSync(descriptor));
+    return {
+      manifest: AgentConversationMetadataManifestSchema.parse(JSON.parse(source)),
+      revision: fileRevision(held)
+    };
+  } catch (caught) {
+    if (caught instanceof PigeDomainError) throw caught;
+    throw unavailableHistory();
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function writeConversationMetadata(
+  conversationsRoot: string,
+  manifest: AgentConversationMetadataManifest,
+  expected: ConversationMetadataRevision | undefined,
+  beforeCommit: () => void
+): void {
+  const destination = path.join(conversationsRoot, METADATA_FILE_NAME);
+  const temporary = path.join(conversationsRoot, `.conversation-metadata.${randomUUID()}.tmp`);
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL |
+      (fs.constants.O_NOFOLLOW ?? 0), 0o600);
+    fs.writeFileSync(descriptor, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+    fs.fsyncSync(descriptor);
+    beforeCommit();
+    const live = lstatIfExists(destination);
+    if ((expected === undefined) !== (live === undefined) || (expected && (!live || !sameFileRevision(expected, live)))) {
+      throw invalidHistoryCursor();
+    }
+    fs.renameSync(temporary, destination);
+    fsyncDirectory(conversationsRoot);
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+    try { fs.rmSync(temporary, { force: true }); } catch { /* destination was already committed */ }
+  }
+}
+
+function fileRevision(stat: fs.Stats): ConversationMetadataRevision {
+  return { dev: stat.dev, ino: stat.ino, size: stat.size, mtimeMs: stat.mtimeMs };
+}
+
+function sameFileRevision(expected: ConversationMetadataRevision, current: fs.Stats): boolean {
+  return expected.dev === current.dev && expected.ino === current.ino && expected.size === current.size &&
+    expected.mtimeMs === current.mtimeMs && current.isFile() && !current.isSymbolicLink();
+}
+
+function sameFileIdentity(left: fs.Stats, right: fs.Stats): boolean {
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size && left.mtimeMs === right.mtimeMs;
+}
+
+function fsyncDirectory(directoryPath: string): void {
+  let descriptor: number | undefined;
+  try {
+    descriptor = fs.openSync(directoryPath, fs.constants.O_RDONLY);
+    fs.fsyncSync(descriptor);
+  } catch (caught) {
+    const code = caught instanceof Error && "code" in caught ? String(caught.code) : "";
+    if (!["EBADF", "EINVAL", "EISDIR", "ENOSYS", "ENOTSUP", "EPERM"].includes(code)) throw caught;
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
 }
 
 function readConversationFile(filePath: string): ConversationEvent[] {

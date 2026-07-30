@@ -9,6 +9,8 @@ import type {
   AgentConversationEarlierPage,
   AgentConversationHistoryListRequest,
   AgentConversationHistoryListResult,
+  AgentConversationSetTitleRequest,
+  AgentConversationSetTitleResult,
   AgentConversationInitialTimeline,
   AgentConversationTimeline,
   AppearanceSettingsSummary,
@@ -4008,6 +4010,82 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("renames the selected conversation immediately and retains the draft across a stale fence", async () => {
+    const dom = createDom();
+    const current = paginatedHomeTimeline();
+    const harness = createHarness(current);
+    harness.loadConversationHistory = async (request) => {
+      harness.conversationHistoryRequests.push(request);
+      return {
+        apiVersion: 1,
+        activeVaultId: request.activeVaultId,
+        status: "ready",
+        currentConversationId: current.conversationId,
+        conversations: [{
+          conversationId: current.conversationId,
+          updatedAt: "2026-07-12T08:00:01.000Z",
+          safePreview: "What should I remember?",
+          tailEventId: current.tailEventId,
+          titleRevision: 0
+        }],
+        hasMore: false
+      };
+    };
+    let mutation = 0;
+    harness.setConversationTitle = async (request) => {
+      harness.conversationTitleRequests.push(request);
+      mutation += 1;
+      const stale = mutation === 1;
+      return {
+        apiVersion: 1,
+        requestId: request.requestId,
+        activeVaultId: request.activeVaultId,
+        conversationId: request.conversationId,
+        status: stale ? "stale" : "committed",
+        summary: {
+          conversationId: request.conversationId,
+          updatedAt: "2026-07-12T08:00:01.000Z",
+          safePreview: "What should I remember?",
+          tailEventId: stale ? "event_20260712_newtail01" : "event_20260712_newtail01",
+          title: stale ? "Another title" : request.title ?? undefined,
+          titleRevision: stale ? 1 : 2
+        }
+      };
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    const conversationReadCount = harness.conversationRequests.length;
+    await clickButton(dom, container, enMessages["conversation.history"]);
+    await waitFor(dom, () => buttons(container, enMessages["conversation.rename"]).length === 1);
+    await clickButton(dom, container, enMessages["conversation.rename"]);
+    await setConversationTitleInputValue(dom, container, "My retained draft");
+    await clickButton(dom, container, enMessages["conversation.titleSave"]);
+    await waitFor(dom, () => container.textContent?.includes(enMessages["conversation.titleFailed"]) === true);
+
+    const input = container.querySelector<HTMLInputElement>(".conversation-title-form input");
+    expect(input?.value).toBe("My retained draft");
+    expect(harness.conversationTitleRequests[0]).toMatchObject({
+      activeVaultId: "vault_home_conversation",
+      conversationId: current.conversationId,
+      expectedTailEventId: current.tailEventId,
+      expectedTitleRevision: 0,
+      title: "My retained draft"
+    });
+    expect(harness.conversationRequests).toHaveLength(conversationReadCount);
+
+    await clickButton(dom, container, enMessages["conversation.titleSave"]);
+    await waitFor(dom, () => container.textContent?.includes("My retained draft") === true &&
+      container.querySelector(".conversation-title-form") === null);
+    expect(harness.conversationTitleRequests[1]).toMatchObject({
+      expectedTailEventId: "event_20260712_newtail01",
+      expectedTitleRevision: 1,
+      title: "My retained draft"
+    });
+    expect(harness.conversationRequests).toHaveLength(conversationReadCount);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps following the recovered conversation when its obsolete Job metadata is safely omitted", async () => {
     const dom = createDom();
     const { latestTurn: _obsoleteJob, ...recoveredTimeline } = completedTimeline();
@@ -5733,6 +5811,7 @@ interface ConversationHarness {
   readonly submitRequests: AgentSubmitTurnRequest[];
   readonly conversationRequests: AgentConversationRequest[];
   readonly conversationHistoryRequests: AgentConversationHistoryListRequest[];
+  readonly conversationTitleRequests: AgentConversationSetTitleRequest[];
   readonly collectionCitationRequests: CollectionOpenCitationRequest[];
   readonly submittedFileNames: string[][];
   readonly retryJobIds: string[];
@@ -5832,6 +5911,7 @@ interface ConversationHarness {
   installSpeechAsset: (request: SpeechAssetInstallRequest) => Promise<SpeechAssetInstallResult>;
   loadConversation: (request: AgentConversationRequest) => Promise<AgentConversationTimeline | AgentConversationEarlierPage | undefined>;
   loadConversationHistory: (request: AgentConversationHistoryListRequest) => Promise<AgentConversationHistoryListResult>;
+  setConversationTitle: (request: AgentConversationSetTitleRequest) => Promise<AgentConversationSetTitleResult>;
   openCollectionCitation: (request: CollectionOpenCitationRequest) => Promise<CollectionOpenCitationResult>;
   submitTurn: (
     request: AgentSubmitTurnRequest,
@@ -5853,6 +5933,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     submitRequests: [],
     conversationRequests: [],
     conversationHistoryRequests: [],
+    conversationTitleRequests: [],
     collectionCitationRequests: [],
     submittedFileNames: [],
     retryJobIds: [],
@@ -6030,6 +6111,13 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
         hasMore: false
       };
     },
+    setConversationTitle: async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      conversationId: request.conversationId,
+      status: "failed"
+    }),
     openCollectionCitation: async (request) => ({ ...request, status: "failed" }),
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
@@ -6291,6 +6379,7 @@ function makePigeApi(harness: ConversationHarness): object {
       runtimeStatus: () => harness.loadAgentRuntimeStatus(),
       conversation: (request: AgentConversationRequest) => harness.loadConversation(request),
       conversationHistory: (request: AgentConversationHistoryListRequest) => harness.loadConversationHistory(request),
+      setConversationTitle: (request: AgentConversationSetTitleRequest) => harness.setConversationTitle(request),
       submitTurn: (request: AgentSubmitTurnRequest, files: readonly File[] = []) => {
         harness.submittedFileNames.push(files.map((file) => file.name));
         return harness.submitTurn(request, files);
@@ -7401,6 +7490,19 @@ async function setTextareaValue(dom: JSDOM, container: HTMLElement, value: strin
     setter.call(textarea, value);
     textarea.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
     textarea.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    await settle(dom);
+  });
+}
+
+async function setConversationTitleInputValue(dom: JSDOM, container: HTMLElement, value: string): Promise<void> {
+  const input = container.querySelector<HTMLInputElement>(".conversation-title-form input");
+  if (!input) throw new Error("Conversation title input not found.");
+  const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")?.set;
+  if (!setter) throw new Error("Input setter not found.");
+  await act(async () => {
+    setter.call(input, value);
+    input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
     await settle(dom);
   });
 }

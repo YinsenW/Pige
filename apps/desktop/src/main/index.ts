@@ -158,6 +158,7 @@ import { registerLocalCapabilitiesIpc } from "./register-local-capabilities-ipc"
 import { registerDiagnosticsIpc } from "./register-diagnostics-ipc";
 import { registerCurrentNoteAppendIpc } from "./register-current-note-append-ipc";
 import { registerCurrentNoteReplaceIpc } from "./register-current-note-replace-ipc";
+import { registerConversationHistoryIpc } from "./register-conversation-history-ipc";
 import {
   AgentIngestService,
   type AgentIngestCapabilitySnapshot,
@@ -392,6 +393,7 @@ let managedCollectionService: ManagedCollectionService | undefined;
 let managedCollectionViewService: ManagedCollectionViewService | undefined;
 let managedCollectionCitationService: ManagedCollectionCitationService | undefined;
 const collectionCitationConversationHistory = new AgentConversationHistory();
+const homeConversationHistory = new AgentConversationHistory();
 let libraryService: LibraryService | undefined;
 let libraryTagsService: LibraryTagsService | undefined;
 let libraryTagRenameService: LibraryTagRenameService | undefined;
@@ -1531,7 +1533,7 @@ const getHomeAgentService = (): HomeAgentService => {
       },
       new HomeSkillStagingToolService(getSkillUrlInstallService()),
       getExternalWebSkillRuntimeService(),
-      undefined,
+      homeConversationHistory,
       new HomeAuthoredTextCaptureService(getCaptureService(), getJobsService())
     );
   }
@@ -2356,6 +2358,16 @@ ipcMain.handle("agent.conversationHistory", (_event, request: AgentConversationH
   return AgentConversationHistoryListResultSchema.parse(
     getHomeAgentService().conversationHistory(parsedRequest)
   );
+});
+registerConversationHistoryIpc({
+  ipcMain,
+  getActiveVault: () => {
+    const vault = getVaultService().current();
+    const vaultPath = getVaultService().activeVaultPath();
+    return vault && vaultPath ? { vaultId: vault.vaultId, vaultPath } : undefined;
+  },
+  assertWriterLease: (vaultPath) => getVaultService().assertWriterLease(vaultPath),
+  history: homeConversationHistory
 });
 ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
   const parsedPayload = AgentSubmitTurnIpcPayloadSchema.parse(payload);

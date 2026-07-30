@@ -7,6 +7,8 @@ import type {
   AgentConversationResult,
   AgentConversationHistoryListRequest,
   AgentConversationHistoryListResult,
+  AgentConversationSetTitleRequest,
+  AgentConversationSetTitleResult,
   AgentSubmitTurnRequest,
   AgentSubmitTurnIpcResult,
   AgentTurnDraftEvent,
@@ -300,6 +302,8 @@ import {
   AgentConversationResultSchema,
   AgentConversationHistoryListRequestSchema,
   AgentConversationHistoryListResultSchema,
+  AgentConversationSetTitleRequestSchema,
+  AgentConversationSetTitleResultSchema,
   AgentSubmitTurnIpcPayloadSchema,
   AgentSubmitTurnIpcResultSchema,
   CurrentNoteAppendProposalDecisionRequestSchema,
@@ -1253,6 +1257,19 @@ const api: PigeDesktopApi = {
       const parsedRequest = AgentConversationHistoryListRequestSchema.parse(request);
       const result = await ipcRenderer.invoke("agent.conversationHistory", parsedRequest) as unknown;
       return AgentConversationHistoryListResultSchema.parse(result);
+    },
+    setConversationTitle: async (
+      request: AgentConversationSetTitleRequest
+    ): Promise<AgentConversationSetTitleResult> => {
+      const parsedRequest = AgentConversationSetTitleRequestSchema.parse(request);
+      const result = AgentConversationSetTitleResultSchema.parse(
+        await ipcRenderer.invoke("agent.setConversationTitle", parsedRequest) as unknown
+      );
+      if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+        result.conversationId !== parsedRequest.conversationId) {
+        throw new Error("Invalid conversation title response identity.");
+      }
+      return result;
     },
     submitTurn: (async (
       request: AgentSubmitTurnRequest,

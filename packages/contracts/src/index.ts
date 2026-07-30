@@ -5,6 +5,8 @@ import type {
   AgentConversationHistoryListRequest,
   AgentConversationHistoryListResult,
   AgentConversationHistorySummary,
+  AgentConversationSetTitleRequest,
+  AgentConversationSetTitleResult,
   AgentStagedItem,
   AgentStagedLargePasteItem,
   AgentStagedItemRejectionReason,
@@ -352,6 +354,8 @@ export type {
   AgentConversationHistoryListRequest,
   AgentConversationHistoryListResult,
   AgentConversationHistorySummary,
+  AgentConversationSetTitleRequest,
+  AgentConversationSetTitleResult,
   AgentStagedItem,
   AgentStagedLargePasteItem,
   AgentStagedItemRejectionReason,
@@ -1904,6 +1908,9 @@ export interface PigeDesktopApi {
     readonly conversationHistory: (
       request: AgentConversationHistoryListRequest
     ) => Promise<AgentConversationHistoryListResult>;
+    readonly setConversationTitle: (
+      request: AgentConversationSetTitleRequest
+    ) => Promise<AgentConversationSetTitleResult>;
     readonly currentNoteAppendProposal: (
       request: CurrentNoteAppendProposalGetRequest
     ) => Promise<CurrentNoteAppendProposalGetResult>;

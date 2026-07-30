@@ -7351,6 +7351,7 @@ export const AgentConversationCursorSchema = z.string()
   .max(80);
 export const AGENT_CONVERSATION_HISTORY_PAGE_SIZE_MAX = 50;
 export const AGENT_CONVERSATION_HISTORY_PREVIEW_MAX_CODE_POINTS = 240;
+export const AGENT_CONVERSATION_TITLE_MAX_CODE_POINTS = 120;
 export const AgentConversationHistoryCursorSchema = z.string()
   .regex(/^conversation_history_[a-f0-9]{64}$/)
   .max(96);
@@ -7370,15 +7371,30 @@ const AgentConversationHistoryPreviewSchema = z.string()
     (value) => !/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(value),
     "Conversation history preview must be one safe display line."
   );
-export const AgentConversationHistorySummarySchema = z.object({
+export const AgentConversationTitleSchema = z.string()
+  .min(1)
+  .max(480)
+  .refine((value) => value === value.trim(), "Conversation titles must not have surrounding whitespace.")
+  .refine((value) => [...value].length <= AGENT_CONVERSATION_TITLE_MAX_CODE_POINTS,
+    "Conversation title exceeds the code-point limit.")
+  .refine((value) => !/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(value),
+    "Conversation titles must be one safe display line.");
+const AgentConversationHistorySummaryBaseSchema = z.object({
   conversationId: ConversationIdSchema,
   updatedAt: z.string().datetime({ offset: true }),
   safePreview: AgentConversationHistoryPreviewSchema,
   tailEventId: ConversationEventIdSchema,
   scope: AgentTurnCurrentNoteScopeSchema.optional(),
   inputPresentation: AgentConversationInputPresentationSchema.optional(),
-  latestTurnState: JobStateSchema.optional()
+  latestTurnState: JobStateSchema.optional(),
+  title: AgentConversationTitleSchema.optional(),
+  titleRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional()
 }).strict();
+export const AgentConversationHistorySummarySchema = AgentConversationHistorySummaryBaseSchema.superRefine((summary, context) => {
+  if (summary.title !== undefined && summary.titleRevision === undefined) {
+    context.addIssue({ code: "custom", path: ["titleRevision"], message: "Conversation titles require a metadata revision." });
+  }
+});
 const AgentConversationHistoryResultIdentitySchema = z.object({
   apiVersion: z.literal(1),
   activeVaultId: VaultIdSchema
@@ -7435,6 +7451,53 @@ export const AgentConversationHistoryListResultSchema = z.discriminatedUnion("st
   AgentConversationHistoryReadyResultSchema,
   AgentConversationHistoryFailedResultSchema
 ]);
+export const AgentConversationTitleRequestIdSchema = z.string()
+  .regex(/^conversation_title_request_[a-z0-9]{16,64}$/u);
+export const AgentConversationSetTitleRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: AgentConversationTitleRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  conversationId: ConversationIdSchema,
+  expectedTailEventId: ConversationEventIdSchema,
+  expectedTitleRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  title: AgentConversationTitleSchema.nullable()
+}).strict();
+const AgentConversationTitleMutationIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: AgentConversationTitleRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  conversationId: ConversationIdSchema
+}).strict();
+const AgentConversationTitleMutationSummarySchema = AgentConversationHistorySummaryBaseSchema.extend({
+  titleRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+export const AgentConversationSetTitleResultSchema = z.discriminatedUnion("status", [
+  AgentConversationTitleMutationIdentitySchema.extend({
+    status: z.literal("committed"), summary: AgentConversationTitleMutationSummarySchema
+  }).strict(),
+  AgentConversationTitleMutationIdentitySchema.extend({
+    status: z.literal("stale"), summary: AgentConversationTitleMutationSummarySchema
+  }).strict(),
+  AgentConversationTitleMutationIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  AgentConversationTitleMutationIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const AgentConversationMetadataManifestSchema = z.object({
+  schemaVersion: z.literal(1),
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  conversations: z.array(z.object({
+    conversationId: ConversationIdSchema,
+    revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    title: AgentConversationTitleSchema.nullable(),
+    tailEventId: ConversationEventIdSchema,
+    updatedAt: z.string().datetime({ offset: true }),
+    lastRequestId: AgentConversationTitleRequestIdSchema
+  }).strict()).max(512)
+}).strict().superRefine((manifest, context) => {
+  const ids = manifest.conversations.map((entry) => entry.conversationId);
+  if (new Set(ids).size !== ids.length || ids.some((id, index) => index > 0 && ids[index - 1]!.localeCompare(id, "en") >= 0)) {
+    context.addIssue({ code: "custom", path: ["conversations"], message: "Conversation metadata must use unique sorted IDs." });
+  }
+});
 export const AgentConversationMessageSchema = z.object({
   id: ConversationEventIdSchema,
   role: z.enum(["user", "assistant"]),
@@ -9142,6 +9205,10 @@ export type AgentConversationHistoryCursor = z.output<typeof AgentConversationHi
 export type AgentConversationHistoryListRequest = z.input<typeof AgentConversationHistoryListRequestSchema>;
 export type AgentConversationHistorySummary = z.output<typeof AgentConversationHistorySummarySchema>;
 export type AgentConversationHistoryListResult = z.output<typeof AgentConversationHistoryListResultSchema>;
+export type AgentConversationTitle = z.output<typeof AgentConversationTitleSchema>;
+export type AgentConversationSetTitleRequest = z.input<typeof AgentConversationSetTitleRequestSchema>;
+export type AgentConversationSetTitleResult = z.output<typeof AgentConversationSetTitleResultSchema>;
+export type AgentConversationMetadataManifest = z.output<typeof AgentConversationMetadataManifestSchema>;
 export type AgentConversationMessage = z.output<typeof AgentConversationMessageSchema>;
 export type AgentConversationTurnSummary = z.output<typeof AgentConversationTurnSummarySchema>;
 export type AgentConversationInitialRequest = z.input<typeof AgentConversationInitialRequestSchema>;
