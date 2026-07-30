@@ -696,17 +696,21 @@ Build:
 - [B9.10 -> E9.06] Six-locale coverage for release-critical workflows, including unavailable, error, permission, restore, and long-label states.
 - [B9.11 -> E9.07] Keyboard, focus, accessible-name, contrast, reduced-motion, and narrow-window accessibility baseline.
 - [B9.12 -> E9.08] Protected-tag exact-identity publication of an independently verified,
-  trusted macOS arm64 artifact; no unsigned public fallback. Windows qualification follows.
-- [B9.13 -> E9.09] Auto-update alpha channel with risky-job safeguards.
+  ad-hoc-signed macOS arm64 ZIP whose quarantined app is expected-untrusted but intact.
+  Windows qualification follows.
+- [B9.13 -> E9.09] Manual canonical GitHub prerelease download and replacement; packaged
+  v0.1 has no network update authority, and trusted automatic A→B update is deferred.
 - [B9.14 -> E9.08] Installer-size, 10,000-page/100,000-chunk scale, and idle/active-memory threshold reporting.
 - [B9.15 -> E9.08] Notices, notes, attribution, immutable metadata and platform-trust evidence.
 - [B9.16 -> E9.10] Public Alpha scenario with at least 25 mixed sources, degraded paths, restarts, backup, fresh-folder restore, and post-restore retrieval.
 - [B9.17 -> E9.11] Error-state, empty-state, privacy-copy, known-limitations, and basic-shortcut release polish.
 - [B9.18 -> E9.12] Language metadata for sources/pages/OCR/chunks/memory, source-language preservation, and query-language response behavior.
 
-Current foundations cover unsigned packageability/publication checks, Job-owned backup/
-restore, and backup-backed manifest-last v1→v2 language/domain migration with one adopted
-Operation. Phase 1 still needs trusted macOS update/scale/recovery/notes; E9.01–03/E9.12
+Current foundations cover protected ad-hoc publication and downloaded qualification,
+Job-owned backup/restore, and backup-backed manifest-last v1→v2 language/domain migration
+with one adopted Operation. The release lane now generates, candidate-binds, independently
+reverifies and publishes the real 25-source and 10,000-page/100,000-chunk reports; B9.16/E9.10
+remain partial until the next protected release publishes a passed report. E9.01–03/E9.12
 retain their residual gates.
 
 Deferred from this phase:
@@ -726,13 +730,13 @@ Exit criteria:
   rewrites never happen silently.
 - [E9.06] Core workflows pass smoke tests in `zh-Hans`, `en`, `ja`, `ko`, `fr`, and `de`, including CJK search and narrow long-label layouts.
 - [E9.07] Keyboard-only navigation, visible focus, accessible names/tooltips, readable contrast, reduced-motion behavior, and unavailable/error states pass the v0.1 accessibility baseline.
-- [E9.08] One protected alpha tag produces an attributable trusted macOS arm64 artifact whose
-  downloaded bytes and metadata are independently verified before publication; the core
+- [E9.08] One protected alpha tag produces an attributable ad-hoc-signed macOS arm64 ZIP whose
+  downloaded bytes, strict seal and expected-untrusted intact status are independently verified before publication; the core
   distributable is at or below 330,000,000 bytes excluding optional weights, packaged memory/
   recovery and 10,000-page/100,000-chunk scale pass, and notices/trust/notes are evidenced.
   Windows retains the equivalent exit in the next platform phase.
-- [E9.09] Signed macOS check/download/explicit-restart updates one alpha to the next without
-  breaking Vault data; exact revision/version adoption prevents duplicates and risky Jobs block apply.
+- [E9.09] Packaged v0.1 exposes no network update authority; users verify and manually replace
+  the app from the canonical protected-tag GitHub prerelease without changing the Vault.
 - [E9.10] The scripted Public Alpha scenario report proves at least 25 mixed sources, a degraded path, restart recovery, backup, fresh-folder restore, and continued grounded retrieval.
 - [E9.11] Public privacy/support/security copy matches actual data flows; error and empty states are localized, actionable, and do not expose secrets or private paths.
 - [E9.12] Captured sources, generated pages, OCR artifacts, chunks, and memory retain useful language metadata; source language is preserved by default, and Home retrieval can accept and answer in the query language with CJK lexical and multilingual semantic coverage.
