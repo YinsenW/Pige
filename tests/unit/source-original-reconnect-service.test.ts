@@ -53,7 +53,7 @@ function fixture() {
   const service = new SourceOriginalReconnectService({
     current: () => vault,
     activeVaultPath: () => vaultPath
-  });
+  }, () => new Date("2026-07-31T08:00:00.000Z"));
   return { root, vaultPath, vault, sourceId, body, oldPath, recordPath, service };
 }
 
@@ -62,11 +62,14 @@ describe("source original reconnect service", () => {
     const value = fixture();
     const replacement = path.join(value.root, "replacement.txt");
     fs.writeFileSync(replacement, value.body);
+    const proof = value.service.candidate(value.vault.vaultId, value.sourceId);
+    if (!proof) throw new Error("Expected one unavailable referenced source.");
 
     await expect(value.service.reconnect({
       activeVaultId: value.vault.vaultId,
-      sourceId: value.sourceId
-    }, replacement)).resolves.toBe("reconnected");
+      requestId: "sourcereconnectdirect_abcdefghijklmnop",
+      ...proof
+    }, replacement)).resolves.toMatchObject({ status: "reconnected", operationId: expect.any(String) });
 
     const committed = SourceRecordSchema.parse(JSON.parse(fs.readFileSync(value.recordPath, "utf8")));
     expect(committed.original).toMatchObject({
@@ -74,6 +77,16 @@ describe("source original reconnect service", () => {
       lastKnownSize: value.body.byteLength
     });
     expect(committed.original?.uri).toMatch(/^file:/);
+    expect(value.service.candidate(value.vault.vaultId, value.sourceId)).toBeUndefined();
+    const restarted = new SourceOriginalReconnectService({
+      current: () => value.vault,
+      activeVaultPath: () => value.vaultPath
+    });
+    expect(restarted.listUnavailable(value.vault.vaultId).sources).toEqual([]);
+    const operations = fs.readdirSync(path.join(value.vaultPath, ".pige/operations/2026/07"));
+    expect(operations).toHaveLength(1);
+    expect(JSON.parse(fs.readFileSync(path.join(value.vaultPath, ".pige/operations/2026/07", operations[0]!), "utf8")))
+      .toMatchObject({ kind: "relink_source", targetRefs: [{ kind: "source", id: value.sourceId }] });
   });
 
   it("leaves the Source Record unchanged for mismatch, symlink, or stale vault", async () => {
@@ -83,19 +96,87 @@ describe("source original reconnect service", () => {
     fs.writeFileSync(wrong, "different body\n", "utf8");
     const link = path.join(value.root, "linked.txt");
     fs.symlinkSync(wrong, link);
+    const wrongFormat = path.join(value.root, "wrong.md");
+    fs.writeFileSync(wrongFormat, value.body);
+    const proof = value.service.candidate(value.vault.vaultId, value.sourceId);
+    if (!proof) throw new Error("Expected repair proof.");
 
     await expect(value.service.reconnect({
       activeVaultId: value.vault.vaultId,
-      sourceId: value.sourceId
-    }, wrong)).resolves.toBe("failed");
+      requestId: "sourcereconnectdirect_wrongabcdefghijkl",
+      ...proof
+    }, wrong)).resolves.toEqual({ status: "mismatch" });
     await expect(value.service.reconnect({
       activeVaultId: value.vault.vaultId,
-      sourceId: value.sourceId
-    }, link)).resolves.toBe("failed");
+      requestId: "sourcereconnectdirect_linkabcdefghijklmn",
+      ...proof
+    }, link)).resolves.toEqual({ status: "failed" });
+    await expect(value.service.reconnect({
+      activeVaultId: value.vault.vaultId,
+      requestId: "sourcereconnectdirect_formatabcdefghijk",
+      ...proof
+    }, wrongFormat)).resolves.toEqual({ status: "mismatch" });
     await expect(value.service.reconnect({
       activeVaultId: "vault_20260729_changedidentity",
-      sourceId: value.sourceId
-    }, wrong)).resolves.toBe("stale");
+      requestId: "sourcereconnectdirect_vaultabcdefghijklm",
+      ...proof
+    }, wrong)).resolves.toEqual({ status: "stale" });
     expect(fs.readFileSync(value.recordPath, "utf8")).toBe(before);
+  });
+
+  it("removes its private receipt when the bound owner becomes stale after selection", async () => {
+    const value = fixture();
+    const replacement = path.join(value.root, "replacement.txt");
+    fs.writeFileSync(replacement, value.body);
+    const before = fs.readFileSync(value.recordPath, "utf8");
+    const proof = value.service.candidate(value.vault.vaultId, value.sourceId);
+    if (!proof) throw new Error("Expected repair proof.");
+    let checks = 0;
+
+    await expect(value.service.reconnect({
+      activeVaultId: value.vault.vaultId,
+      requestId: "sourcereconnectdirect_staleafterpicker",
+      ...proof
+    }, replacement, () => ++checks < 2)).resolves.toEqual({ status: "stale" });
+    expect(fs.readFileSync(value.recordPath, "utf8")).toBe(before);
+    expect(fs.readdirSync(path.join(value.vaultPath, ".pige/private/source-reconnect-receipts"))).toEqual([]);
+  });
+
+  it("never offers a referenced original that is still exactly available", () => {
+    const value = fixture();
+    fs.writeFileSync(value.oldPath, value.body);
+    expect(value.service.candidate(value.vault.vaultId, value.sourceId)).toBeUndefined();
+    expect(value.service.listUnavailable(value.vault.vaultId)).toEqual({ sources: [], truncated: false });
+  });
+
+  it("recovers the durable Operation after restart when publication was interrupted after relink", async () => {
+    const value = fixture();
+    const replacement = path.join(value.root, "replacement.txt");
+    fs.writeFileSync(replacement, value.body);
+    const proof = value.service.candidate(value.vault.vaultId, value.sourceId);
+    if (!proof) throw new Error("Expected repair proof.");
+    const operationsRoot = path.join(value.vaultPath, ".pige", "operations");
+    fs.rmSync(operationsRoot, { recursive: true, force: true });
+    fs.writeFileSync(operationsRoot, "temporarily unavailable", "utf8");
+
+    await expect(value.service.reconnect({
+      activeVaultId: value.vault.vaultId,
+      requestId: "sourcereconnectdirect_restartabcdefghij",
+      ...proof
+    }, replacement)).resolves.toEqual({ status: "failed" });
+    expect(SourceRecordSchema.parse(JSON.parse(fs.readFileSync(value.recordPath, "utf8"))).original?.path)
+      .toBe(replacement);
+    expect(fs.readdirSync(path.join(value.vaultPath, ".pige/private/source-reconnect-receipts"))).toHaveLength(1);
+
+    fs.rmSync(operationsRoot);
+    fs.mkdirSync(operationsRoot);
+    const restarted = new SourceOriginalReconnectService({
+      current: () => value.vault,
+      activeVaultPath: () => value.vaultPath
+    });
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(fs.readdirSync(path.join(value.vaultPath, ".pige/private/source-reconnect-receipts"))).toEqual([]);
+    expect(fs.readdirSync(path.join(operationsRoot, "2026/07"))).toHaveLength(1);
+    expect(restarted.candidate(value.vault.vaultId, value.sourceId)).toBeUndefined();
   });
 });

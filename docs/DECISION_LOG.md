@@ -4210,6 +4210,27 @@ References:
 - `docs/DATA_ARCHITECTURE.md`; `docs/SETTINGS_AND_PREFERENCES.md`;
   `docs/API_AND_IPC_DESIGN.md`; `docs/UI_PROTOTYPE.md`
 
+### D-20260731-Proof-Bound-Referenced-Original-Reconnect
+
+Status: Accepted
+Date: 2026-07-31
+
+Decision:
+
+Pige reconnects an unavailable referenced original only through Main-owned, proof-bound selection that verifies exact content and format before atomically relinking the current Source Record.
+
+Rationale:
+
+Stable knowledge and Job identity must survive a moved original without granting renderer path authority or allowing a same-name replacement to become evidence.
+
+Consequences:
+
+Reader and Vault & Note Storage expose only bounded eligibility and closed outcomes. Cancel, stale state, symlinks, and checksum/size/format mismatch leave durable truth unchanged. Success preserves IDs, records a path-free `relink_source` Operation, uses private receipts, and resumes only matching current waits.
+
+References:
+
+`docs/SOURCE_STORAGE_STRATEGY.md`; `docs/API_AND_IPC_DESIGN.md`; `docs/JOB_OPERATION_AND_RECOVERY.md`; `docs/UI_PROTOTYPE.md`.
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

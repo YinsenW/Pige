@@ -180,6 +180,10 @@ import {
   NoteOpenSourceReferenceResultSchema,
   NoteReconnectOriginalSourceRequestSchema,
   NoteReconnectOriginalSourceResultSchema,
+  SourceReconnectListRequestSchema,
+  SourceReconnectListResultSchema,
+  SourceReconnectRequestSchema,
+  SourceReconnectResultSchema,
   NoteRevealSourceRequestSchema,
   NoteRevealSourceResultSchema,
   OperationRecordSchema,
@@ -4277,9 +4281,10 @@ describe("schemas", () => {
       createdAt: "2026-07-29T01:00:00.000Z",
       updatedAt: "2026-07-29T01:03:00.000Z"
     } as const;
-    expect(ReferencedOriginalReconnectResultSchema.parse({ ...request, status: "reconnected", job }))
-      .toEqual({ ...request, status: "reconnected", job });
-    for (const status of ["cancelled", "stale", "not_found", "failed"] as const) {
+    const operationId = "op_20260729_sourcereconnect";
+    expect(ReferencedOriginalReconnectResultSchema.parse({ ...request, status: "reconnected", job, operationId }))
+      .toEqual({ ...request, status: "reconnected", job, operationId });
+    for (const status of ["cancelled", "stale", "not_found", "mismatch", "failed"] as const) {
       expect(ReferencedOriginalReconnectResultSchema.parse({ ...request, status }))
         .toEqual({ ...request, status });
     }
@@ -4381,14 +4386,20 @@ describe("schemas", () => {
       activeVaultId: "vault_20260730_abcdefgh",
       currentPageId: "page_20260730_current1234",
       renderContextId: "notectx_0123456789abcdef0123456789abcdef",
-      sourceId: "src_20260730_source1234"
+      sourceId: "src_20260730_source1234",
+      sourceKind: "pdf_file",
+      sourceRevision: `sourcerev_${"a".repeat(64)}`,
+      expectedAvailability: "unavailable",
+      expectedChecksum: `sha256:${"b".repeat(64)}`,
+      expectedSize: 123,
+      formatIdentity: `sourcefmt_${"c".repeat(64)}`
     } as const;
     expect(NoteReconnectOriginalSourceRequestSchema.parse(request)).toEqual(request);
     expect(() => NoteReconnectOriginalSourceRequestSchema.parse({
       ...request,
       path: "/private/replacement.pdf"
     })).toThrow();
-    for (const status of ["cancelled", "stale", "not_found", "ineligible", "failed"] as const) {
+    for (const status of ["cancelled", "stale", "not_found", "ineligible", "mismatch", "failed"] as const) {
       expect(NoteReconnectOriginalSourceResultSchema.parse({ ...request, status }))
         .toEqual({ ...request, status });
     }
@@ -4411,13 +4422,55 @@ describe("schemas", () => {
     expect(NoteReconnectOriginalSourceResultSchema.parse({
       ...request,
       status: "reconnected",
-      render
+      render,
+      operationId: "op_20260730_readerreconnect",
+      resumedJobCount: 1
     })).toMatchObject({ status: "reconnected", render: { reconnectOriginalSourceIds: [] } });
     expect(() => NoteReconnectOriginalSourceResultSchema.parse({
       ...request,
       status: "failed",
       path: "/private/replacement.pdf"
     })).toThrow();
+
+    const listRequest = {
+      apiVersion: 1,
+      requestId: "sourcereconnectlist_abcdefghijklmnop",
+      activeVaultId: request.activeVaultId
+    } as const;
+    const safeCandidate = {
+      sourceId: request.sourceId,
+      sourceKind: request.sourceKind,
+      sourceRevision: request.sourceRevision,
+      expectedAvailability: request.expectedAvailability,
+      expectedChecksum: request.expectedChecksum,
+      expectedSize: request.expectedSize,
+      formatIdentity: request.formatIdentity,
+      displayName: "Missing PDF"
+    };
+    expect(SourceReconnectListRequestSchema.parse(listRequest)).toEqual(listRequest);
+    expect(SourceReconnectListResultSchema.parse({
+      ...listRequest, status: "ready", sources: [safeCandidate], truncated: false
+    })).toMatchObject({ status: "ready", sources: [{ sourceId: request.sourceId }] });
+    const direct = {
+      apiVersion: 1,
+      requestId: "sourcereconnectdirect_abcdefghijklmnop",
+      activeVaultId: request.activeVaultId,
+      sourceId: request.sourceId,
+      sourceKind: request.sourceKind,
+      sourceRevision: request.sourceRevision,
+      expectedAvailability: request.expectedAvailability,
+      expectedChecksum: request.expectedChecksum,
+      expectedSize: request.expectedSize,
+      formatIdentity: request.formatIdentity
+    } as const;
+    expect(SourceReconnectRequestSchema.parse(direct)).toEqual(direct);
+    expect(SourceReconnectResultSchema.parse({
+      ...direct, status: "reconnected", operationId: "op_20260730_directreconnect", resumedJobCount: 2
+    })).toMatchObject({ status: "reconnected", resumedJobCount: 2 });
+    for (const privateField of ["path", "body", "rawError"] as const) {
+      expect(() => SourceReconnectRequestSchema.parse({ ...direct, [privateField]: "private" })).toThrow();
+      expect(() => SourceReconnectResultSchema.parse({ ...direct, status: "failed", [privateField]: "private" })).toThrow();
+    }
   });
 
   it("keeps note merge identity-bound and renderer path/body free", () => {

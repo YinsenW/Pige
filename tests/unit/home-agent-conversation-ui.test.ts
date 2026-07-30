@@ -1692,6 +1692,16 @@ describe("Home durable Agent conversation UI", () => {
     const dom = createDom(720);
     const harness = createHarness(undefined);
     const sourceId = "src_20260715_source001";
+    const reconnectProof = {
+      sourceId,
+      sourceKind: "plain_text_file" as const,
+      sourceRevision: `sourcerev_${"a".repeat(64)}`,
+      expectedAvailability: "unavailable" as const,
+      expectedChecksum: `sha256:${"b".repeat(64)}`,
+      expectedSize: 12,
+      formatIdentity: `sourcefmt_${"c".repeat(64)}`,
+      displayName: "source.txt"
+    };
     let sourceStatus: "not_found" | "resolved" = "not_found";
     let reconnectStatus: "stale" | "reconnected" = "stale";
     harness.submitTurn = async (request) => {
@@ -1704,7 +1714,8 @@ describe("Home durable Agent conversation UI", () => {
         ? {
             ...note,
             summary: { ...note.summary, sourceIds: [sourceId] },
-            reconnectOriginalSourceIds: [sourceId]
+            reconnectOriginalSourceIds: [sourceId],
+            reconnectOriginalSources: [reconnectProof]
           }
         : note;
     };
@@ -1721,7 +1732,8 @@ describe("Home durable Agent conversation UI", () => {
             },
             html: "<p>Reconnected source body.</p>",
             renderContextId: `notectx_${"b".repeat(32)}`,
-            reconnectOriginalSourceIds: []
+            reconnectOriginalSourceIds: [],
+            reconnectOriginalSources: []
           }
         };
     harness.openSourceReference = async (request) => sourceStatus === "resolved"
@@ -1771,7 +1783,13 @@ describe("Home durable Agent conversation UI", () => {
       activeVaultId: "vault_home_conversation",
       currentPageId: "page_20260715_note0001",
       renderContextId: `notectx_${"a".repeat(32)}`,
-      sourceId
+      sourceId,
+      sourceKind: reconnectProof.sourceKind,
+      sourceRevision: reconnectProof.sourceRevision,
+      expectedAvailability: reconnectProof.expectedAvailability,
+      expectedChecksum: reconnectProof.expectedChecksum,
+      expectedSize: reconnectProof.expectedSize,
+      formatIdentity: reconnectProof.formatIdentity
     });
     expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
     expect(container.textContent).toContain("This source changed. Review it and try again.");

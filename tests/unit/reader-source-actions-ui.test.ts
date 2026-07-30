@@ -25,6 +25,7 @@ const labels: ReaderSourceActionLabels = {
   reconnecting: "Choosing original…",
   reconnected: "Original reconnected.",
   reconnectIneligible: "This source cannot be reconnected.",
+  reconnectMismatch: "Choose the original with the same content and format.",
   reconnectFailed: "The original source could not be reconnected."
 };
 
@@ -181,6 +182,29 @@ describe("Reader source actions", () => {
     });
     expect(onReconnected).toHaveBeenCalledWith("src_20260730_reader001", render);
     expect(harness.container.textContent).toContain(labels.reconnected);
+    await harness.unmount();
+  });
+
+  it("keeps the reconnect action available after an exact-content mismatch", async () => {
+    const sourceId = "src_20260730_reader001";
+    const harness = await mount({
+      sources: [{
+        sourceId,
+        label: "Saved source 1",
+        canRevealOriginal: false,
+        canReconnectOriginal: true
+      }],
+      onRevealOriginal: vi.fn(async () => "unavailable"),
+      onReconnectOriginal: vi.fn(async () => ({ outcome: "mismatch" }))
+    });
+    const reconnect = reconnectButton(harness.container, sourceId);
+    await act(async () => {
+      reconnect.click();
+      await settle(harness.dom);
+      await settle(harness.dom);
+    });
+    expect(harness.container.querySelector('[role="status"]')?.textContent).toBe(labels.reconnectMismatch);
+    expect(reconnect.disabled).toBe(false);
     await harness.unmount();
   });
 });

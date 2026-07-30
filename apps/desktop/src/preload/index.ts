@@ -173,6 +173,10 @@ import type {
   SourceRefreshPreviewResult,
   SourceRefreshConfirmRequest,
   SourceRefreshConfirmResult,
+  SourceReconnectListRequest,
+  SourceReconnectListResult,
+  SourceReconnectRequest,
+  SourceReconnectResult,
   NoteRevealSourceRequest,
   NoteRevealSourceResult,
   NoteResolveInlineReferenceRequest,
@@ -593,6 +597,12 @@ import {
   SourceRefreshPreviewResultSchema,
   SourceRefreshConfirmRequestSchema,
   SourceRefreshConfirmResultSchema,
+  SOURCE_RECONNECTABLE_ORIGINALS_CHANNEL,
+  SOURCE_RECONNECT_ORIGINAL_CHANNEL,
+  SourceReconnectListRequestSchema,
+  SourceReconnectListResultSchema,
+  SourceReconnectRequestSchema,
+  SourceReconnectResultSchema,
   NOTE_REVEAL_SOURCE_CHANNEL,
   NoteRevealSourceRequestSchema,
   NoteRevealSourceResultSchema,
@@ -1539,6 +1549,22 @@ const api: PigeDesktopApi = {
       ReferencedOriginalReconnectResultSchema.parse(await ipcRenderer.invoke(
         JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
         ReferencedOriginalReconnectRequestSchema.parse(request)
+      ))
+  },
+  sources: {
+    reconnectableOriginals: async (
+      request: SourceReconnectListRequest
+    ): Promise<SourceReconnectListResult> =>
+      SourceReconnectListResultSchema.parse(await ipcRenderer.invoke(
+        SOURCE_RECONNECTABLE_ORIGINALS_CHANNEL,
+        SourceReconnectListRequestSchema.parse(request)
+      )),
+    reconnectOriginal: async (
+      request: SourceReconnectRequest
+    ): Promise<SourceReconnectResult> =>
+      SourceReconnectResultSchema.parse(await ipcRenderer.invoke(
+        SOURCE_RECONNECT_ORIGINAL_CHANNEL,
+        SourceReconnectRequestSchema.parse(request)
       ))
   },
   confirmations: {

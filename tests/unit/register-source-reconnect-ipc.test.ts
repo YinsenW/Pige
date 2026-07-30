@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { JobSummary } from "@pige/contracts";
-import { JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL } from "@pige/schemas";
+import {
+  JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
+  SOURCE_RECONNECTABLE_ORIGINALS_CHANNEL,
+  SOURCE_RECONNECT_ORIGINAL_CHANNEL
+} from "@pige/schemas";
 import { registerSourceReconnectIpc } from "../../apps/desktop/src/main/register-source-reconnect-ipc";
 import type { JobsService, OriginalSourceReconnectCandidate } from "../../apps/desktop/src/main/services/jobs-service";
 import type { SourceOriginalReconnectService } from "../../apps/desktop/src/main/services/source-original-reconnect-service";
@@ -18,6 +22,28 @@ const candidate: OriginalSourceReconnectCandidate = {
   jobRevision: request.expectedJobUpdatedAt,
   sourceId: "src_20260729_abcdefgh"
 };
+const proof = {
+  sourceId: candidate.sourceId,
+  sourceKind: "plain_text_file" as const,
+  sourceRevision: `sourcerev_${"a".repeat(64)}`,
+  expectedAvailability: "unavailable" as const,
+  expectedChecksum: `sha256:${"b".repeat(64)}`,
+  expectedSize: 12,
+  formatIdentity: `sourcefmt_${"c".repeat(64)}`,
+  displayName: "notes.txt"
+};
+const directRequest = {
+  apiVersion: 1 as const,
+  requestId: "sourcereconnectdirect_abcdefghijklmnop",
+  activeVaultId: request.activeVaultId,
+  sourceId: proof.sourceId,
+  sourceKind: proof.sourceKind,
+  sourceRevision: proof.sourceRevision,
+  expectedAvailability: proof.expectedAvailability,
+  expectedChecksum: proof.expectedChecksum,
+  expectedSize: proof.expectedSize,
+  formatIdentity: proof.formatIdentity
+};
 const resumedJob: JobSummary = {
   id: request.waitingJobId,
   class: "agent_turn",
@@ -33,41 +59,48 @@ const resumedJob: JobSummary = {
 };
 
 function harness(input: { readonly canceled?: boolean; readonly candidate?: OriginalSourceReconnectCandidate } = {}) {
-  let handler: ((event: { sender: { id: number } }, request: unknown) => Promise<unknown>) | undefined;
+  const handlers = new Map<string, (event: { sender: { id: number } }, request: unknown) => unknown>();
   const currentCandidate = input.candidate === undefined ? candidate : input.candidate;
   const jobs = {
     readOriginalSourceReconnectCandidate: vi.fn(() => currentCandidate),
     readJobClass: vi.fn(() => "agent_turn"),
-    resumeOriginalSourceReconnect: vi.fn(() => ({ status: "requeued", job: resumedJob }))
+    resumeOriginalSourceReconnect: vi.fn(() => ({ status: "requeued", job: resumedJob })),
+    resumeOriginalSourceReconnectsForSource: vi.fn(() => 2)
   };
+  const sourceCandidate = vi.fn(() => proof);
+  const listUnavailable = vi.fn(() => ({ sources: [proof], truncated: false }));
   const reconnect = vi.fn(async (
     _binding: unknown,
     _filePath: string,
     assertCurrent: () => boolean
-  ) => assertCurrent() ? "reconnected" : "stale");
+  ) => assertCurrent()
+    ? { status: "reconnected" as const, operationId: "op_20260729_sourcereconnect" }
+    : { status: "stale" as const });
   const showOpenDialog = vi.fn(async () => input.canceled
     ? { canceled: true, filePaths: [] }
     : { canceled: false, filePaths: ["/private/selected.txt"] });
   const resumeBackgroundJobs = vi.fn();
+  const onSourceReconnected = vi.fn();
   registerSourceReconnectIpc({
     ipcMain: {
-      handle: (channel, callback) => {
-        if (channel === JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL) handler = callback as typeof handler;
-      }
+      handle: (channel, callback) => handlers.set(channel, callback as never)
     },
     getWindow: () => ({}) as never,
     showOpenDialog,
     getJobs: () => jobs as unknown as JobsService,
-    getReconnectService: () => ({ reconnect }) as unknown as SourceOriginalReconnectService,
-    resumeBackgroundJobs
+    getReconnectService: () => ({ reconnect, candidate: sourceCandidate, listUnavailable }) as unknown as SourceOriginalReconnectService,
+    resumeBackgroundJobs,
+    onSourceReconnected
   });
-  return { handler: handler!, jobs, reconnect, showOpenDialog, resumeBackgroundJobs };
+  return { handlers, jobs, reconnect, sourceCandidate, listUnavailable, showOpenDialog,
+    resumeBackgroundJobs, onSourceReconnected };
 }
 
 describe("source reconnect IPC", () => {
   it("cancels without persistence or Job resume", async () => {
     const value = harness({ canceled: true });
-    await expect(value.handler({ sender: { id: 1 } }, request)).resolves.toEqual({
+    await expect(value.handlers.get(JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL)!({ sender: { id: 1 } }, request))
+      .resolves.toEqual({
       ...request,
       status: "cancelled"
     });
@@ -77,22 +110,45 @@ describe("source reconnect IPC", () => {
 
   it("fails stale identity before opening the file chooser", async () => {
     const value = harness({ candidate: { ...candidate, jobRevision: "2026-07-29T08:00:02.000Z" } });
-    await expect(value.handler({ sender: { id: 1 } }, request)).resolves.toMatchObject({ status: "stale" });
+    await expect(value.handlers.get(JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL)!({ sender: { id: 1 } }, request))
+      .resolves.toMatchObject({ status: "stale" });
     expect(value.showOpenDialog).not.toHaveBeenCalled();
     expect(value.reconnect).not.toHaveBeenCalled();
   });
 
   it("rebinds and resumes the same exact waiting Job with a pathless projection", async () => {
     const value = harness();
-    const result = await value.handler({ sender: { id: 1 } }, request);
+    const result = await value.handlers.get(JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL)!({ sender: { id: 1 } }, request);
     expect(result).toMatchObject({
       ...request,
       status: "reconnected",
-      job: { id: request.waitingJobId, sourceId: candidate.sourceId, canReconnectDependency: false }
+      job: { id: request.waitingJobId, sourceId: candidate.sourceId, canReconnectDependency: false },
+      operationId: "op_20260729_sourcereconnect"
     });
     expect(value.reconnect).toHaveBeenCalledOnce();
     expect(value.jobs.resumeOriginalSourceReconnect).toHaveBeenCalledWith(candidate);
     expect(value.resumeBackgroundJobs).toHaveBeenCalledOnce();
     expect(JSON.stringify(result)).not.toContain("/private/selected.txt");
+  });
+
+  it("lists only safe unavailable-source proofs and reconnects one exact Settings selection", async () => {
+    const value = harness();
+    expect(value.handlers.get(SOURCE_RECONNECTABLE_ORIGINALS_CHANNEL)!({ sender: { id: 1 } }, {
+      apiVersion: 1,
+      requestId: "sourcereconnectlist_abcdefghijklmnop",
+      activeVaultId: request.activeVaultId
+    })).toMatchObject({ status: "ready", sources: [proof] });
+    const result = await value.handlers.get(SOURCE_RECONNECT_ORIGINAL_CHANNEL)!({ sender: { id: 1 } }, directRequest);
+    expect(result).toMatchObject({
+      ...directRequest,
+      status: "reconnected",
+      operationId: "op_20260729_sourcereconnect",
+      resumedJobCount: 2
+    });
+    expect(value.jobs.resumeOriginalSourceReconnectsForSource).toHaveBeenCalledWith(proof.sourceId);
+    expect(value.resumeBackgroundJobs).toHaveBeenCalledOnce();
+    expect(value.onSourceReconnected).toHaveBeenCalledOnce();
+    expect(JSON.stringify(result)).not.toContain("/private/selected.txt");
+    expect(JSON.stringify(result)).not.toContain("body");
   });
 });

@@ -611,6 +611,7 @@ Reader foundation:
   then a bounded preview and explicit Refresh. The dialog exposes no path, keeps Reader and focus
   on closed outcomes, adopts only an authoritative commit, and explains when an edited Source Page
   was preserved while source evidence changed.
+- An unavailable referenced original offers Reconnect only from exact Main-projected eligibility. One Main picker checks identical content and format; closed outcomes keep Reader/action, while success adopts only the authoritative refreshed render.
 
 ### 8.2 Note Agent Panel
 
@@ -859,6 +860,7 @@ Required controls:
   recent-Vault heading when Forget removes its row. Active entries show status instead of mutations.
 - Unavailable external storage says “not connected” without fallback reveal. One busy,
   pathless localized surface fences storage actions and restores invoking focus.
+- A bounded Referenced originals repair list shows only unavailable, Main-projected sources and one Reconnect action per item. It exposes no raw path, checksum, size, proof, or Job internals; cancel stays quiet, mismatch retains the item/action, and success refreshes current Settings truth.
 - This page alone owns restarted user Backup, valid actions and latest completion; never
   expose raw Job/path/error or rollback children.
 - A Backup offers Reconnect only for `JobSummary.canReconnectDependency === true`; UI never

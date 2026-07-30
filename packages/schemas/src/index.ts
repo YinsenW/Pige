@@ -194,17 +194,6 @@ export const NoteRevealSourceResultSchema = z.discriminatedUnion("status", [
   NoteRevealSourceResultIdentitySchema.extend({ status: z.literal("unavailable") }).strict(),
   NoteRevealSourceResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
-export const NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL = "notes.reconnectOriginalSource" as const;
-export const NoteReconnectOriginalSourceRequestIdSchema = z.string()
-  .regex(/^notesourcereconnect_[a-z0-9]{16,64}$/);
-export const NoteReconnectOriginalSourceRequestSchema = z.object({
-  apiVersion: z.literal(1),
-  requestId: NoteReconnectOriginalSourceRequestIdSchema,
-  activeVaultId: VaultIdSchema,
-  currentPageId: PageIdSchema,
-  renderContextId: NoteRenderContextIdSchema,
-  sourceId: SourceIdSchema
-}).strict();
 export const SOURCE_REFRESH_PREVIEW_CHANNEL = "source.refresh.preview" as const;
 export const SOURCE_REFRESH_CONFIRM_CHANNEL = "source.refresh.confirm" as const;
 export const SourceRefreshRequestIdSchema = z.string().regex(/^sourcerefreshreq_[a-z0-9]{16,64}$/);
@@ -1573,6 +1562,77 @@ export const SourceKindSchema = z.enum([
   "unknown_file"
 ]);
 
+export const NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL = "notes.reconnectOriginalSource" as const;
+export const SOURCE_RECONNECTABLE_ORIGINALS_CHANNEL = "sources.reconnectableOriginals" as const;
+export const SOURCE_RECONNECT_ORIGINAL_CHANNEL = "sources.reconnectOriginal" as const;
+export const NoteReconnectOriginalSourceRequestIdSchema = z.string()
+  .regex(/^notesourcereconnect_[a-z0-9]{16,64}$/);
+export const SourceReconnectListRequestIdSchema = z.string()
+  .regex(/^sourcereconnectlist_[a-z0-9]{16,64}$/);
+export const SourceReconnectRequestIdSchema = z.string()
+  .regex(/^sourcereconnectdirect_[a-z0-9]{16,64}$/);
+export const SourceRecordRevisionSchema = z.string().regex(/^sourcerev_[a-f0-9]{64}$/);
+export const SourceFormatIdentitySchema = z.string().regex(/^sourcefmt_[a-f0-9]{64}$/);
+export const SourceContentChecksumSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+export const ReferencedOriginalReconnectProofSchema = z.object({
+  sourceId: SourceIdSchema,
+  sourceKind: SourceKindSchema,
+  sourceRevision: SourceRecordRevisionSchema,
+  expectedAvailability: z.literal("unavailable"),
+  expectedChecksum: SourceContentChecksumSchema,
+  expectedSize: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  formatIdentity: SourceFormatIdentitySchema
+}).strict();
+export const ReferencedOriginalReconnectCandidateSchema = ReferencedOriginalReconnectProofSchema.extend({
+  displayName: z.string().min(1).max(512)
+}).strict();
+export const NoteReconnectOriginalSourceRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteReconnectOriginalSourceRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  ...ReferencedOriginalReconnectProofSchema.shape
+}).strict();
+export const SourceReconnectListRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SourceReconnectListRequestIdSchema,
+  activeVaultId: VaultIdSchema
+}).strict();
+const SourceReconnectListIdentitySchema = SourceReconnectListRequestSchema;
+export const SourceReconnectListResultSchema = z.discriminatedUnion("status", [
+  SourceReconnectListIdentitySchema.extend({
+    status: z.literal("ready"),
+    sources: z.array(ReferencedOriginalReconnectCandidateSchema).max(20),
+    truncated: z.boolean()
+  }).strict(),
+  SourceReconnectListIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  SourceReconnectListIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "ready") return;
+  const sourceIds = result.sources.map((source) => source.sourceId);
+  if (new Set(sourceIds).size !== sourceIds.length) {
+    context.addIssue({ code: "custom", path: ["sources"], message: "Reconnectable sources must be unique." });
+  }
+});
+export const SourceReconnectRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SourceReconnectRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  ...ReferencedOriginalReconnectProofSchema.shape
+}).strict();
+const SourceReconnectIdentitySchema = SourceReconnectRequestSchema;
+export const SourceReconnectResultSchema = z.discriminatedUnion("status", [
+  SourceReconnectIdentitySchema.extend({
+    status: z.literal("reconnected"),
+    operationId: OperationIdSchema,
+    resumedJobCount: z.number().int().nonnegative().max(1_000)
+  }).strict(),
+  ...(["cancelled", "stale", "not_found", "ineligible", "mismatch", "failed"] as const).map((status) =>
+    SourceReconnectIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+
 export const MarkdownPageTypeSchema = z.enum(["source", "note", "concept", "entity", "topic", "claim", "question"]);
 
 export const MarkdownPageStatusSchema = z.enum([
@@ -1665,15 +1725,18 @@ export const NoteRenderResultSchema = z.object({
   restoreEligibility: NoteRestoreEligibilitySchema.optional(),
   historyEligibility: NoteRevisionHistoryEligibilitySchema.optional(),
   tagging: NoteTaggingSummarySchema.optional(),
-  reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional()
+  reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional(),
+  reconnectOriginalSources: z.array(ReferencedOriginalReconnectCandidateSchema).max(5).optional()
 }).strict();
 const NoteReconnectOriginalSourceResultIdentitySchema = NoteReconnectOriginalSourceRequestSchema;
 export const NoteReconnectOriginalSourceResultSchema = z.discriminatedUnion("status", [
   NoteReconnectOriginalSourceResultIdentitySchema.extend({
     status: z.literal("reconnected"),
-    render: NoteRenderResultSchema
+    render: NoteRenderResultSchema,
+    operationId: OperationIdSchema,
+    resumedJobCount: z.number().int().nonnegative().max(1_000)
   }).strict(),
-  ...(["cancelled", "stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+  ...(["cancelled", "stale", "not_found", "ineligible", "mismatch", "failed"] as const).map((status) =>
     NoteReconnectOriginalSourceResultIdentitySchema.extend({ status: z.literal(status) }).strict()
   )
 ]);
@@ -7893,11 +7956,13 @@ const ReferencedOriginalReconnectResultIdentitySchema = ReferencedOriginalReconn
 export const ReferencedOriginalReconnectResultSchema = z.discriminatedUnion("status", [
   ReferencedOriginalReconnectResultIdentitySchema.extend({
     status: z.literal("reconnected"),
-    job: ReferencedOriginalReconnectJobProjectionSchema
+    job: ReferencedOriginalReconnectJobProjectionSchema,
+    operationId: OperationIdSchema
   }).strict(),
   ReferencedOriginalReconnectResultIdentitySchema.extend({ status: z.literal("cancelled") }).strict(),
   ReferencedOriginalReconnectResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
   ReferencedOriginalReconnectResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  ReferencedOriginalReconnectResultIdentitySchema.extend({ status: z.literal("mismatch") }).strict(),
   ReferencedOriginalReconnectResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 
@@ -10422,6 +10487,14 @@ export type SourceRefreshPreviewRequest = z.infer<typeof SourceRefreshPreviewReq
 export type SourceRefreshPreviewResult = z.infer<typeof SourceRefreshPreviewResultSchema>;
 export type SourceRefreshConfirmRequest = z.infer<typeof SourceRefreshConfirmRequestSchema>;
 export type SourceRefreshConfirmResult = z.infer<typeof SourceRefreshConfirmResultSchema>;
+export type SourceReconnectListRequest = z.infer<typeof SourceReconnectListRequestSchema>;
+export type SourceReconnectListResult = z.infer<typeof SourceReconnectListResultSchema>;
+export type SourceReconnectRequest = z.infer<typeof SourceReconnectRequestSchema>;
+export type SourceReconnectResult = z.infer<typeof SourceReconnectResultSchema>;
+export type SourceRecordRevision = z.infer<typeof SourceRecordRevisionSchema>;
+export type SourceFormatIdentity = z.infer<typeof SourceFormatIdentitySchema>;
+export type ReferencedOriginalReconnectProof = z.infer<typeof ReferencedOriginalReconnectProofSchema>;
+export type ReferencedOriginalReconnectCandidate = z.infer<typeof ReferencedOriginalReconnectCandidateSchema>;
 export type ReaderSelectionEndpoint = z.infer<typeof ReaderSelectionEndpointSchema>;
 export type ReaderSelectionActionRequestId = z.infer<typeof ReaderSelectionActionRequestIdSchema>;
 export type ReaderSelectionActionRequest = z.infer<typeof ReaderSelectionActionRequestSchema>;

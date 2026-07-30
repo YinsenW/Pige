@@ -890,7 +890,7 @@ export function NoteReader(props: {
               getFocusRoot={() => readerRef.current}
               {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
               {...(props.note.renderContextId ? { renderContextId: props.note.renderContextId } : {})}
-              {...(props.note.reconnectOriginalSourceIds ? { reconnectOriginalSourceIds: props.note.reconnectOriginalSourceIds } : {})}
+              {...(props.note.reconnectOriginalSourceIds ? { reconnectOriginalSourceIds: props.note.reconnectOriginalSourceIds } : {})} {...(props.note.reconnectOriginalSources ? { reconnectOriginalSources: props.note.reconnectOriginalSources } : {})}
               {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
               {...(props.onReconnectOriginalSource ? { onReconnectOriginalSource: props.onReconnectOriginalSource } : {})}
               {...(props.onSourceReconnected ? { onSourceReconnected: props.onSourceReconnected } : {})}

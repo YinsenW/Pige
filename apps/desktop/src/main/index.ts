@@ -429,6 +429,7 @@ let noteTagService: NoteTagService | undefined;
 let noteMergeService: NoteMergeService | undefined;
 let noteRelateService: NoteRelateService | undefined;
 let noteMarkdownImportService: NoteMarkdownImportService | undefined;
+let sourceOriginalReconnectService: SourceOriginalReconnectService | undefined;
 let noteMarkdownEditorActivityAdapter: NoteMarkdownEditorActivityAdapter | undefined;
 let noteMarkdownEditorService: NoteMarkdownEditorService | undefined;
 let noteRevisionHistoryService: NoteRevisionHistoryService | undefined;
@@ -1758,10 +1759,23 @@ const getReaderSourceRevealService = (): ReaderSourceRevealService =>
     }
   });
 
+const getSourceOriginalReconnectService = (): SourceOriginalReconnectService => {
+  sourceOriginalReconnectService ??= new SourceOriginalReconnectService(getVaultService());
+  return sourceOriginalReconnectService;
+};
+
+const resumeSourceWaiters = (sourceId: string): number => {
+  const resumed = getJobsService().resumeOriginalSourceReconnectsForSource(sourceId);
+  if (resumed > 0) resumeBackgroundJobs();
+  scheduleActivityIndexRebuild();
+  return resumed;
+};
+
 const getReaderSourceReconnectService = (): ReaderSourceReconnectService =>
   new ReaderSourceReconnectService(
     getNotesService(),
-    new SourceOriginalReconnectService(getVaultService())
+    getSourceOriginalReconnectService(),
+    resumeSourceWaiters
   );
 
 const getNoteMarkdownEditorActivityAdapter = (): NoteMarkdownEditorActivityAdapter => {
@@ -2275,6 +2289,21 @@ const resumeBackgroundJobs = (): void => {
     getJobsService().requeueWaitingOcr();
     getJobsService().requeueWaitingAgentIngest();
     try {
+      const sourceReconnectRecovery = getSourceOriginalReconnectService().recoverIncompleteOperations();
+      if (sourceReconnectRecovery.recovered > 0) scheduleActivityIndexRebuild();
+      if (sourceReconnectRecovery.failed > 0) {
+        recordBackgroundFailure(
+          "source.reconnect_recovery_incomplete",
+          "Some interrupted source reconnect Operations still require repair."
+        );
+      }
+    } catch {
+      recordBackgroundFailure(
+        "source.reconnect_recovery_failed",
+        "Interrupted source reconnect Operations could not be inspected safely."
+      );
+    }
+    try {
       const noteImportRecovery = getNoteMarkdownImportService().recoverIncompleteImports();
       if (noteImportRecovery.recovered > 0) scheduleActivityIndexRebuild();
       if (noteImportRecovery.failed > 0) {
@@ -2646,8 +2675,9 @@ registerSourceReconnectIpc({
   getWindow: (sender) => BrowserWindow.fromWebContents(sender) ?? undefined,
   showOpenDialog: (window, options) => dialog.showOpenDialog(window, options),
   getJobs: getJobsService,
-  getReconnectService: () => new SourceOriginalReconnectService(getVaultService()),
-  resumeBackgroundJobs
+  getReconnectService: getSourceOriginalReconnectService,
+  resumeBackgroundJobs,
+  onSourceReconnected: scheduleActivityIndexRebuild
 });
 ipcMain.handle("confirmations.pending", () => {
   getPermissionFullAccessService();

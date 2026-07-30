@@ -4,7 +4,8 @@ import type {
   NoteReconnectOriginalSourceResult,
   NoteRenderResult,
   NoteRevealSourceRequest,
-  NoteRevealSourceResult
+  NoteRevealSourceResult,
+  ReferencedOriginalReconnectCandidate
 } from "@pige/contracts";
 import { ReaderSourceRefreshAction } from "./ReaderSourceRefreshAction";
 
@@ -15,6 +16,7 @@ export type ReaderSourceActionOutcome =
   | "stale"
   | "not_found"
   | "ineligible"
+  | "mismatch"
   | "unavailable"
   | "failed";
 
@@ -23,6 +25,7 @@ export interface ReaderSourceActionItem {
   readonly label: string;
   readonly canRevealOriginal: boolean;
   readonly canReconnectOriginal: boolean;
+  readonly reconnectProof?: ReferencedOriginalReconnectCandidate;
 }
 
 export interface ReaderSourceActionLabels {
@@ -38,6 +41,7 @@ export interface ReaderSourceActionLabels {
   readonly reconnecting: string;
   readonly reconnected: string;
   readonly reconnectIneligible: string;
+  readonly reconnectMismatch: string;
   readonly reconnectFailed: string;
 }
 
@@ -55,6 +59,7 @@ export function readerSourceActionLabels(t: (key: string) => string): ReaderSour
     reconnecting: t("note.reconnectOriginalSource.reconnecting"),
     reconnected: t("note.reconnectOriginalSource.reconnected"),
     reconnectIneligible: t("note.reconnectOriginalSource.ineligible"),
+    reconnectMismatch: t("note.reconnectOriginalSource.mismatch"),
     reconnectFailed: t("note.reconnectOriginalSource.failed")
   };
 }
@@ -215,6 +220,7 @@ export function ReaderSourceActionSurface(props: {
     readonly sourceLabel: string;
     readonly canRevealOriginal: boolean;
     readonly canReconnectOriginal: boolean;
+    readonly reconnectProof?: ReferencedOriginalReconnectCandidate;
   }[];
   readonly labels: ReaderSourceActionLabels;
   readonly onRevealSource?: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
@@ -230,7 +236,9 @@ export function ReaderSourceActionSurface(props: {
         sourceId: source.sourceId,
         label: source.sourceLabel,
         canRevealOriginal: source.canRevealOriginal && Boolean(props.onRevealSource),
-        canReconnectOriginal: source.canReconnectOriginal && Boolean(props.onReconnectOriginalSource)
+        canReconnectOriginal: source.canReconnectOriginal && Boolean(source.reconnectProof) &&
+          Boolean(props.onReconnectOriginalSource),
+        ...(source.reconnectProof ? { reconnectProof: source.reconnectProof } : {})
       }))}
       labels={props.labels}
       onRevealOriginal={async (sourceId) => {
@@ -250,14 +258,21 @@ export function ReaderSourceActionSurface(props: {
       {...(props.onReconnectOriginalSource ? {
         onReconnectOriginal: async (sourceId: string): Promise<ReaderSourceReconnectResponse> => {
           const { activeVaultId, currentPageId, renderContextId, onReconnectOriginalSource } = props;
-          if (!activeVaultId || !renderContextId || !onReconnectOriginalSource) return { outcome: "failed" };
+          const proof = props.sources.find((source) => source.sourceId === sourceId)?.reconnectProof;
+          if (!activeVaultId || !renderContextId || !onReconnectOriginalSource || !proof) return { outcome: "failed" };
           const request: NoteReconnectOriginalSourceRequest = {
             apiVersion: 1,
             requestId: `notesourcereconnect_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
             activeVaultId,
             currentPageId,
             renderContextId,
-            sourceId
+            sourceId,
+            sourceKind: proof.sourceKind,
+            sourceRevision: proof.sourceRevision,
+            expectedAvailability: proof.expectedAvailability,
+            expectedChecksum: proof.expectedChecksum,
+            expectedSize: proof.expectedSize,
+            formatIdentity: proof.formatIdentity
           };
           const result = await onReconnectOriginalSource(request);
           if (!reconnectResultMatches(request, result)) return { outcome: "failed" };
@@ -277,6 +292,7 @@ export function NoteReaderSourceActions(props: {
   readonly renderContextId?: string;
   readonly sourceIds: readonly string[];
   readonly reconnectOriginalSourceIds?: readonly string[];
+  readonly reconnectOriginalSources?: readonly ReferencedOriginalReconnectCandidate[];
   readonly labels: ReaderSourceActionLabels;
   readonly sourceLabel: (number: number) => string;
   readonly t: (key: string) => string;
@@ -287,13 +303,15 @@ export function NoteReaderSourceActions(props: {
 }): React.JSX.Element | null {
   const visibleSourceIds = props.sourceIds.slice(0, 5);
   const reconnectSourceIds = props.reconnectOriginalSourceIds ?? [];
+  const reconnectProofs = new Map((props.reconnectOriginalSources ?? []).map((source) => [source.sourceId, source]));
   return <><ReaderSourceActionSurface
     currentPageId={props.currentPageId}
     sources={Array.from(new Set([...visibleSourceIds, ...reconnectSourceIds.filter((id) => props.sourceIds.includes(id))])).map((sourceId) => ({
       sourceId,
       sourceLabel: props.sourceLabel(props.sourceIds.indexOf(sourceId) + 1),
       canRevealOriginal: visibleSourceIds.includes(sourceId),
-      canReconnectOriginal: reconnectSourceIds.includes(sourceId)
+      canReconnectOriginal: reconnectSourceIds.includes(sourceId) && reconnectProofs.has(sourceId),
+      ...(reconnectProofs.get(sourceId) ? { reconnectProof: reconnectProofs.get(sourceId)! } : {})
     }))}
     labels={props.labels}
     {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
@@ -327,6 +345,7 @@ export function ReaderSourceRevealAction(props: {
   readonly sourceId: string;
   readonly sourceLabel: string;
   readonly canReconnectOriginal?: boolean;
+  readonly reconnectProof?: ReferencedOriginalReconnectCandidate;
   readonly labels: ReaderSourceActionLabels;
   readonly onRevealSource?: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
   readonly onReconnectOriginalSource?: (
@@ -341,7 +360,8 @@ export function ReaderSourceRevealAction(props: {
         sourceId: props.sourceId,
         sourceLabel: props.sourceLabel,
         canRevealOriginal: true,
-        canReconnectOriginal: props.canReconnectOriginal === true
+        canReconnectOriginal: props.canReconnectOriginal === true && Boolean(props.reconnectProof),
+        ...(props.reconnectProof ? { reconnectProof: props.reconnectProof } : {})
       }]}
       labels={props.labels}
       {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
@@ -386,6 +406,7 @@ function sourceActionNotice(
   if (action === "reconnect") {
     if (outcome === "reconnected") return labels.reconnected;
     if (outcome === "ineligible") return labels.reconnectIneligible;
+    if (outcome === "mismatch") return labels.reconnectMismatch;
     if (outcome === "failed") return labels.reconnectFailed;
   }
   if (outcome === "revealed") return labels.revealed;

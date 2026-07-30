@@ -17,6 +17,7 @@ import {
 import { VaultStorageRelocationAction } from "./VaultStorageRelocationAction";
 import { VaultDisplayNameEditor } from "./VaultDisplayNameEditor";
 import { RecentVaultLifecycleActions } from "./RecentVaultLifecycleActions";
+import { ReferencedOriginalConnections } from "./ReferencedOriginalConnections";
 
 type ReadyRestorePreview = Extract<RestorePreviewResult, { readonly status: "ready" }>;
 type RestorePhase = "idle" | "previewing" | "applying" | "cancelling" | "finishing";
@@ -812,6 +813,12 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
           returnFocusRef={sourceAssetRootButtonRef}
         /></div></div>
         <label className="settings-row" htmlFor="vault-source-storage-strategy"><span className="settings-row-copy"><strong>{props.t("sourceStorage.title")}</strong><span>{props.t("sourceStorage.description")}</span></span><select className="settings-select" id="vault-source-storage-strategy" value={props.vault.defaultSourceStorageStrategy} disabled={props.busy || relocationBusy || Boolean(revealTarget)} onChange={(event) => void updatePolicy(event.target.value as SourceStorageStrategy)}><option value="copy_to_source_library">{props.t("sourceStorage.copy")}</option><option value="reference_original">{props.t("sourceStorage.reference")}</option></select></label>
+        <ReferencedOriginalConnections
+          activeVaultId={props.vault.vaultId}
+          disabled={props.busy || relocationBusy || Boolean(revealTarget)}
+          onRefresh={props.onRefresh}
+          t={props.t}
+        />
       </div>
       <div className="settings-inline-actions"><button type="button" className="settings-button" onClick={props.onOpen} disabled={props.busy || relocationBusy || Boolean(revealTarget)}>{props.t("vaultSettings.openAnother")}</button><button type="button" className="settings-button" onClick={props.onCreate} disabled={props.busy || relocationBusy || Boolean(revealTarget)}>{props.t("vaultSettings.createNew")}</button></div>
       {revealNotice ? <p className={revealNotice.kind === "error" ? "error" : "settings-note"} role="status" aria-live="polite">{revealNotice.message}</p> : null}

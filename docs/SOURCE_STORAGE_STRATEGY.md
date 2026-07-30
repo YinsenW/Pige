@@ -231,12 +231,16 @@ copies as validated binding-free `root_vault_managed` records under `raw/`, and 
 referenced originals available/missing/changed. Reconnect/migration preserves IDs and
 never infers authority from labels or paths.
 
+An unavailable `reference_original` may be reconnected only through a Main-issued proof binding the vault, Source ID/kind/revision, unavailable state, checksum, size, and format.
+Main revalidates one exact regular file, then atomically updates only that Source Record locator while preserving stable IDs. Cancel, stale state, symlink, checksum, size, or format mismatch leaves durable truth unchanged.
+A successful repair writes one path-free `relink_source` Operation, uses only private recovery receipts, and resumes every matching `waiting_dependency` Job that still proves the same Source revision.
+
 ## 8. Settings Requirements
 
 Settings > Knowledge Base > Vault & Note Storage (“仓库与笔记存储”) is a location page,
 not an implementation dashboard. It exposes vault identity/path, knowledge and managed-copy
 locations (v1 may say “Source asset root”), default strategy, backup inclusion, safe reveal,
-open/create, and Backup/Restore entry points only.
+open/create, bounded unavailable-reference repair, and Backup/Restore entry points only.
 
 Avoid showing low-level path internals, symlink mechanics, checksum details, database paths, cache folders, or parser artifact folders by default.
 

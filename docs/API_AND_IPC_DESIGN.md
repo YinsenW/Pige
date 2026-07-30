@@ -518,6 +518,8 @@ Reader reference query contract:
   returns only safe change metadata plus an opaque candidate. `source.refresh.confirm` binds that
   candidate and expected source revision, rechecks currentness, and returns only closed status,
   Job/Operation identity, and Source-Page-conflict state; Main retains every path and file body.
+- Reader original reconnect binds request/vault/page/render/source to one Main-projected unavailable `reference_original`; Settings lists only bounded safe candidates. Both renderer requests carry an opaque currentness proof and no path/body.
+  Main owns the picker and exact checksum/size/format revalidation; success returns a path-free Operation identity and, for Reader, only an authoritative refreshed render. Cancel, stale, ineligible, and mismatch are closed with no durable change.
 
 Reader selection uses queries `readerSelection.resolve`, `readerSelection.currentProposal`
 and commands `readerSelection.submitAction`, `readerSelection.submitTransform`,

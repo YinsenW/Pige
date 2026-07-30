@@ -407,6 +407,10 @@ Required `JobSummary.canReconnectDependency` is true only for parsed current
 `backup + waiting_dependency + reconnect_path + (vault_binding | external_source)`;
 otherwise fail closed; no private wait field crosses and Main re-proves the record.
 
+Referenced-original repair is separate from generic retry: Main binds an unavailable `reference_original` proof to the current Source revision and exact selected bytes/format.
+After atomic relink, one path-free `relink_source` Operation and private receipt let restart converge publication; only Jobs whose current `external_source` wait still names that Source and revision resume.
+Stale, cancelled, or mismatched repairs do not clear waiting metadata.
+
 ## 7. Idempotency Rules
 
 Jobs must be idempotent or detect already-applied side effects.
