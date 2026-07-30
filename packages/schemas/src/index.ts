@@ -1176,6 +1176,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "update_collection_formula",
     "add_collection_relation",
     "update_collection_relation_cell",
+    "add_collection_lookup",
     "rename_collection_column",
     "create_collection_view",
     "trash_collection_column",
@@ -4394,6 +4395,18 @@ export const DatasetPigeRelationSchema = z.object({
   targetDisplayColumnId: ColumnIdSchema
 }).strict();
 
+/**
+ * Pige lookup v1 follows exactly one same-table single-value relation and
+ * projects one scalar field from that relation's target table. Values remain
+ * derived; the descriptor, stable IDs and immutable Dataset revision are truth.
+ */
+export const DatasetPigeLookupSchema = z.object({
+  kind: z.literal("pige_single_lookup"),
+  schemaVersion: z.literal(1),
+  relationColumnId: ColumnIdSchema,
+  targetColumnId: ColumnIdSchema
+}).strict();
+
 /** Canonical SQLite projection_json encoding; clear is represented by JSON null. */
 export const DatasetPigeRelationCellSchema = z.object({
   kind: z.literal("pige_relation_target"),
@@ -4435,6 +4448,7 @@ export const DatasetColumnSchema = z.object({
   nullable: z.boolean(),
   calculation: DatasetPigeCalculationSchema.optional(),
   relation: DatasetPigeRelationSchema.optional(),
+  lookup: DatasetPigeLookupSchema.optional(),
   stats: z.object({
     missing: z.number().int().nonnegative(),
     empty: z.number().int().nonnegative(),
@@ -4474,11 +4488,11 @@ export const DatasetTableSchema = z.object({
   }
   const columnsById = new Map(table.columns.map((column) => [column.id, column]));
   for (const [index, column] of table.columns.entries()) {
-    if (column.calculation !== undefined && column.relation !== undefined) {
+    if ([column.calculation, column.relation, column.lookup].filter((value) => value !== undefined).length > 1) {
       context.addIssue({
         code: "custom",
         path: ["columns", index],
-        message: "Dataset columns cannot be both formulas and relations."
+        message: "Dataset columns cannot combine formula, relation, and lookup descriptors."
       });
     }
     if (column.relation !== undefined &&
@@ -4488,6 +4502,15 @@ export const DatasetTableSchema = z.object({
         code: "custom",
         path: ["columns", index, "relation"],
         message: "Pige relation columns must be nullable string-backed Pige columns."
+      });
+    }
+    if (column.lookup !== undefined &&
+        (!column.nullable || column.sourceType !== "pige.lookup.single" ||
+         !["string", "integer", "number", "boolean", "date", "datetime"].includes(column.logicalType))) {
+      context.addIssue({
+        code: "custom",
+        path: ["columns", index, "lookup"],
+        message: "Pige lookup columns must be nullable scalar Pige columns."
       });
     }
     if (!column.calculation) continue;
@@ -4505,6 +4528,7 @@ export const DatasetTableSchema = z.object({
         operand.id === column.id ||
         operand.calculation !== undefined ||
         operand.relation !== undefined ||
+        operand.lookup !== undefined ||
         datasetColumnContainsImportedFormula(operand) ||
         (operand.logicalType !== "integer" && operand.logicalType !== "number")
       ) {
@@ -4530,24 +4554,40 @@ export const DatasetSchemaRecordSchema = z.object({
   const scalarDisplayTypes = new Set(["string", "integer", "number", "boolean", "date", "datetime"]);
   for (const [tableIndex, table] of schema.tables.entries()) {
     for (const [columnIndex, column] of table.columns.entries()) {
-      if (column.relation === undefined) continue;
-      const targetTable = tablesById.get(column.relation.targetTableId);
-      const targetColumn = targetTable?.columns.find(
-        (candidate) => candidate.id === column.relation?.targetDisplayColumnId
-      );
-      if (
-        targetTable === undefined ||
-        targetColumn === undefined ||
-        targetColumn.calculation !== undefined ||
-        targetColumn.relation !== undefined ||
-        datasetColumnContainsImportedFormula(targetColumn) ||
-        !scalarDisplayTypes.has(targetColumn.logicalType)
-      ) {
-        context.addIssue({
-          code: "custom",
-          path: ["tables", tableIndex, "columns", columnIndex, "relation"],
-          message: "Pige relations require one current same-Dataset scalar display column."
-        });
+      if (column.relation !== undefined) {
+        const targetTable = tablesById.get(column.relation.targetTableId);
+        const targetColumn = targetTable?.columns.find(
+          (candidate) => candidate.id === column.relation?.targetDisplayColumnId
+        );
+        if (
+          targetTable === undefined || targetColumn === undefined ||
+          targetColumn.calculation !== undefined || targetColumn.relation !== undefined ||
+          targetColumn.lookup !== undefined || datasetColumnContainsImportedFormula(targetColumn) ||
+          !scalarDisplayTypes.has(targetColumn.logicalType)
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["tables", tableIndex, "columns", columnIndex, "relation"],
+            message: "Pige relations require one current same-Dataset scalar display column."
+          });
+        }
+      }
+      if (column.lookup !== undefined) {
+        const relationColumn = table.columns.find((candidate) => candidate.id === column.lookup?.relationColumnId);
+        const targetTable = relationColumn?.relation
+          ? tablesById.get(relationColumn.relation.targetTableId)
+          : undefined;
+        const targetColumn = targetTable?.columns.find((candidate) => candidate.id === column.lookup?.targetColumnId);
+        if (!relationColumn?.relation || !targetTable || !targetColumn ||
+            targetColumn.calculation !== undefined || targetColumn.relation !== undefined ||
+            targetColumn.lookup !== undefined || datasetColumnContainsImportedFormula(targetColumn) ||
+            !scalarDisplayTypes.has(targetColumn.logicalType) || column.logicalType !== targetColumn.logicalType) {
+          context.addIssue({
+            code: "custom",
+            path: ["tables", tableIndex, "columns", columnIndex, "lookup"],
+            message: "Pige lookups require one same-table single relation and one scalar field from its target table."
+          });
+        }
       }
     }
   }
@@ -4662,6 +4702,21 @@ export const DatasetRevisionSchema = z.object({
       columnId: ColumnIdSchema,
       targetTableId: TableIdSchema,
       targetRowId: RowIdSchema.nullable(),
+      undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_lookup_add"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      relationColumnId: ColumnIdSchema,
+      targetColumnId: ColumnIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_lookup_add_undo"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      relationColumnId: ColumnIdSchema,
+      targetColumnId: ColumnIdSchema,
       undoOfOperationId: OperationIdSchema
     }).strict(),
     z.object({
@@ -5018,10 +5073,11 @@ export const COLLECTION_ADD_FORMULA_COLUMN_CHANNEL = "collections.addFormulaColu
 export const COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL = "collections.updateFormulaColumn" as const;
 export const COLLECTION_ADD_RELATION_COLUMN_CHANNEL = "collections.addRelationColumn" as const;
 export const COLLECTION_EDIT_RELATION_CELL_CHANNEL = "collections.editRelationCell" as const;
+export const COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL = "collections.addLookupColumn" as const;
 export const COLLECTION_LIST_MAX_LIMIT = 50;
 export const COLLECTION_ROW_PAGE_MAX_LIMIT = 50;
 export const CollectionScalarValueSchema = DatasetQueryScalarSchema;
-export const CollectionCellReadOnlyReasonSchema = z.enum(["formula", "unsupported_type"]);
+export const CollectionCellReadOnlyReasonSchema = z.enum(["formula", "lookup", "unsupported_type"]);
 export const COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES = 256;
 export const COLLECTION_VIEW_NAME_MAX_UTF8_BYTES = 256;
 export const CollectionEditableLogicalTypeSchema = z.enum([
@@ -5079,6 +5135,7 @@ export const CollectionColumnCalculationSummarySchema = z.discriminatedUnion("ki
 ]);
 
 export const CollectionColumnRelationSummarySchema = DatasetPigeRelationSchema;
+export const CollectionColumnLookupSummarySchema = DatasetPigeLookupSchema;
 
 /**
  * Relation source columns may project canTrash only when the existing forward
@@ -5095,20 +5152,22 @@ export const CollectionColumnSummarySchema = z.object({
   canEditFormula: z.boolean(),
   canUseAsRelationDisplay: z.boolean().default(false),
   canEditRelation: z.boolean().default(false),
+  canUseAsLookupTarget: z.boolean().default(false),
   hasInboundRelationDescriptors: z.boolean().default(false),
   calculation: CollectionColumnCalculationSummarySchema.optional(),
-  relation: CollectionColumnRelationSummarySchema.optional()
+  relation: CollectionColumnRelationSummarySchema.optional(),
+  lookup: CollectionColumnLookupSummarySchema.optional()
 }).strict().superRefine((column, context) => {
-  if (column.calculation !== undefined && column.relation !== undefined) {
+  if ([column.calculation, column.relation, column.lookup].filter((value) => value !== undefined).length > 1) {
     context.addIssue({
       code: "custom",
       path: ["relation"],
-      message: "Collection columns cannot be both formulas and relations."
+      message: "Collection columns cannot combine formula, relation, and lookup descriptors."
     });
   }
   if (
     column.canUseAsFormulaOperand &&
-    (column.calculation !== undefined || column.relation !== undefined ||
+    (column.calculation !== undefined || column.relation !== undefined || column.lookup !== undefined ||
       (column.logicalType !== "integer" && column.logicalType !== "number"))
   ) {
     context.addIssue({
@@ -5147,13 +5206,22 @@ export const CollectionColumnSummarySchema = z.object({
     });
   }
   if (column.canUseAsRelationDisplay &&
-      (column.calculation !== undefined || column.relation !== undefined ||
+      (column.calculation !== undefined || column.relation !== undefined || column.lookup !== undefined ||
        !["string", "integer", "number", "boolean", "date", "datetime"].includes(column.logicalType))) {
     context.addIssue({
       code: "custom",
       path: ["canUseAsRelationDisplay"],
       message: "Only current scalar non-formula columns may label relation targets."
     });
+  }
+  if (column.lookup !== undefined &&
+      (column.canUseAsLookupTarget || column.canUseAsFormulaOperand || column.canEditRelation)) {
+    context.addIssue({ code: "custom", path: ["lookup"], message: "Lookup columns must remain derived and read-only." });
+  }
+  if (column.canUseAsLookupTarget &&
+      (column.calculation !== undefined || column.relation !== undefined || column.lookup !== undefined ||
+       !["string", "integer", "number", "boolean", "date", "datetime"].includes(column.logicalType))) {
+    context.addIssue({ code: "custom", path: ["canUseAsLookupTarget"], message: "Only current scalar fields may be lookup targets." });
   }
   if (column.hasInboundRelationDescriptors && column.canTrash) {
     context.addIssue({
@@ -5359,6 +5427,7 @@ export const CollectionSnapshotSchema = z.object({
   canAddColumn: z.boolean(),
   canAddFormulaColumn: z.boolean(),
   canAddRelationColumn: z.boolean().default(false),
+  canAddLookupColumn: z.boolean().default(false),
   views: z.array(CollectionViewSummarySchema).max(32),
   activeViewId: ViewIdSchema.optional()
 }).strict().superRefine((snapshot, context) => {
@@ -5378,6 +5447,29 @@ export const CollectionSnapshotSchema = z.object({
   }
   const columnIds = new Set(snapshot.columns.map(({ columnId }) => columnId));
   const columnsById = new Map(snapshot.columns.map((column) => [column.columnId, column]));
+  if (snapshot.canAddLookupColumn && !snapshot.columns.some((column) => column.relation?.kind === "pige_single_relation")) {
+    context.addIssue({ code: "custom", path: ["canAddLookupColumn"], message: "Lookup creation requires a current relation field." });
+  }
+  for (const [index, column] of snapshot.columns.entries()) {
+    if (!column.lookup) continue;
+    const relationColumn = columnsById.get(column.lookup.relationColumnId);
+    if (!relationColumn?.relation || relationColumn.canTrash) {
+      context.addIssue({
+        code: "custom", path: ["columns", index, "lookup", "relationColumnId"],
+        message: "Lookup fields require one guarded current relation field."
+      });
+      continue;
+    }
+    if (relationColumn.relation.targetTableId === snapshot.tableId) {
+      const targetColumn = columnsById.get(column.lookup.targetColumnId);
+      if (!targetColumn?.canUseAsLookupTarget || targetColumn.canTrash) {
+        context.addIssue({
+          code: "custom", path: ["columns", index, "lookup", "targetColumnId"],
+          message: "Same-table lookup targets must project lookup and trash guards."
+        });
+      }
+    }
+  }
   const referencedFormulaOperands = new Set<string>();
   for (const [index, column] of snapshot.columns.entries()) {
     if (column.calculation?.kind !== "pige_numeric_formula") continue;
@@ -5417,6 +5509,12 @@ export const CollectionSnapshotSchema = z.object({
   for (const [rowIndex, row] of snapshot.rows.entries()) {
     for (const [cellIndex, cell] of row.cells.entries()) {
       const column = columnsById.get(cell.columnId);
+      if ((column?.lookup !== undefined) !== (cell.readOnlyReason === "lookup" && !cell.editable)) {
+        context.addIssue({
+          code: "custom", path: ["rows", rowIndex, "cells", cellIndex, "readOnlyReason"],
+          message: "Lookup cells must project the strict lookup read-only reason."
+        });
+      }
       const relationValue = typeof cell.value === "object" && cell.value !== null &&
         "kind" in cell.value && cell.value.kind === "relation" ? cell.value : undefined;
       if ((column?.relation !== undefined) !== (relationValue !== undefined)) {
@@ -5617,6 +5715,19 @@ export const CollectionEditRelationCellRequestSchema = z.object({
   rowId: DatasetQueryRowIdSchema,
   columnId: DatasetQueryColumnIdSchema,
   targetRowId: DatasetQueryRowIdSchema.nullable()
+}).strict();
+
+/** Creates one read-only scalar lookup over an existing same-table relation. */
+export const CollectionAddLookupColumnRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  label: CollectionNewColumnLabelSchema,
+  relationColumnId: DatasetQueryColumnIdSchema,
+  targetColumnId: DatasetQueryColumnIdSchema
 }).strict();
 
 export const CollectionRenameColumnRequestSchema = z.object({
@@ -5910,6 +6021,35 @@ export const CollectionEditRelationCellResultSchema = z.discriminatedUnion("stat
         message: "Visible committed relation cells must match the requested target identity."
       });
     }
+  }
+});
+
+const CollectionAddLookupColumnResultIdentitySchema = CollectionResultIdentitySchema.extend({
+  relationColumnId: DatasetQueryColumnIdSchema,
+  targetColumnId: DatasetQueryColumnIdSchema
+}).strict();
+
+export const CollectionAddLookupColumnResultSchema = z.discriminatedUnion("status", [
+  CollectionAddLookupColumnResultIdentitySchema.extend({
+    status: z.literal("committed"), columnId: DatasetQueryColumnIdSchema,
+    operationId: OperationIdSchema, snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionAddLookupColumnResultIdentitySchema.extend({
+    status: z.literal("stale"), snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionAddLookupColumnResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionAddLookupColumnResultIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
+  CollectionAddLookupColumnResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "committed" && result.status !== "stale") return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({ code: "custom", path: ["snapshot"], message: "Collection lookup snapshots must match the request identity." });
+  }
+  if (result.status !== "committed") return;
+  const column = result.snapshot.columns.find((candidate) => candidate.columnId === result.columnId);
+  if (column?.lookup?.relationColumnId !== result.relationColumnId ||
+      column.lookup.targetColumnId !== result.targetColumnId) {
+    context.addIssue({ code: "custom", path: ["columnId"], message: "Committed lookup columns must project the exact descriptor." });
   }
 });
 
@@ -8263,6 +8403,7 @@ export const OperationRecordSchema = z.object({
     "update_collection_formula",
     "add_collection_relation",
     "update_collection_relation_cell",
+    "add_collection_lookup",
     "rename_collection_column",
     "create_collection_view",
     "trash_collection_column",
@@ -8766,6 +8907,7 @@ export type DatasetPigeFormulaExpression = z.infer<typeof DatasetPigeFormulaExpr
 export type DatasetPigeFormulaOperator = z.infer<typeof DatasetPigeFormulaOperatorSchema>;
 export type DatasetPigeRelation = z.infer<typeof DatasetPigeRelationSchema>;
 export type DatasetPigeRelationCell = z.infer<typeof DatasetPigeRelationCellSchema>;
+export type DatasetPigeLookup = z.infer<typeof DatasetPigeLookupSchema>;
 export type CollectionCell = z.infer<typeof CollectionCellSchema>;
 export type CollectionCellValue = z.infer<typeof CollectionCellValueSchema>;
 export type CollectionCatalogCursor = z.infer<typeof CollectionCatalogCursorSchema>;
@@ -8807,6 +8949,8 @@ export type CollectionAddRelationColumnRequest = z.infer<typeof CollectionAddRel
 export type CollectionAddRelationColumnResult = z.infer<typeof CollectionAddRelationColumnResultSchema>;
 export type CollectionEditRelationCellRequest = z.infer<typeof CollectionEditRelationCellRequestSchema>;
 export type CollectionEditRelationCellResult = z.infer<typeof CollectionEditRelationCellResultSchema>;
+export type CollectionAddLookupColumnRequest = z.infer<typeof CollectionAddLookupColumnRequestSchema>;
+export type CollectionAddLookupColumnResult = z.infer<typeof CollectionAddLookupColumnResultSchema>;
 export type CollectionRenameColumnRequest = z.infer<typeof CollectionRenameColumnRequestSchema>;
 export type CollectionRenameColumnResult = z.infer<typeof CollectionRenameColumnResultSchema>;
 export type CollectionCreateViewRequest = z.infer<typeof CollectionCreateViewRequestSchema>;
@@ -8819,6 +8963,7 @@ export type CollectionCellReadOnlyReason = z.infer<typeof CollectionCellReadOnly
 export type CollectionColumnSummary = z.infer<typeof CollectionColumnSummarySchema>;
 export type CollectionColumnCalculationSummary = z.infer<typeof CollectionColumnCalculationSummarySchema>;
 export type CollectionColumnRelationSummary = z.infer<typeof CollectionColumnRelationSummarySchema>;
+export type CollectionColumnLookupSummary = z.infer<typeof CollectionColumnLookupSummarySchema>;
 export type CollectionRelationCellValue = z.infer<typeof CollectionRelationCellValueSchema>;
 export type CollectionCitationHighlight = z.infer<typeof CollectionCitationHighlightSchema>;
 export type CollectionOpenCitationRequest = z.infer<typeof CollectionOpenCitationRequestSchema>;

@@ -318,6 +318,7 @@ import {
   COLLECTION_ADD_FORMULA_COLUMN_CHANNEL,
   COLLECTION_ADD_RELATION_COLUMN_CHANNEL,
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
+  COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL,
   COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
   CollectionAddFormulaColumnResultSchema,
@@ -325,6 +326,8 @@ import {
   CollectionAddRelationColumnResultSchema,
   CollectionEditRelationCellRequestSchema,
   CollectionEditRelationCellResultSchema,
+  CollectionAddLookupColumnRequestSchema,
+  CollectionAddLookupColumnResultSchema,
   CollectionUpdateFormulaColumnRequestSchema,
   CollectionUpdateFormulaColumnResultSchema,
   CollectionAddNullableColumnRequestSchema,
@@ -568,6 +571,8 @@ import type {
   CollectionAddRelationColumnResult,
   CollectionEditRelationCellRequest,
   CollectionEditRelationCellResult,
+  CollectionAddLookupColumnRequest,
+  CollectionAddLookupColumnResult,
   CollectionUpdateFormulaColumnRequest,
   CollectionUpdateFormulaColumnResult,
   CollectionAddNullableColumnRequest,
@@ -884,6 +889,23 @@ async function invokeCollectionEditRelationCell(
       result.rowId !== parsedRequest.rowId || result.columnId !== parsedRequest.columnId ||
       result.targetRowId !== parsedRequest.targetRowId) {
     throw new Error("Invalid Managed Collection relation-cell response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionAddLookupColumn(
+  request: CollectionAddLookupColumnRequest
+): Promise<CollectionAddLookupColumnResult> {
+  const parsedRequest = CollectionAddLookupColumnRequestSchema.parse(request);
+  const result = CollectionAddLookupColumnResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId ||
+      result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.datasetId !== parsedRequest.datasetId || result.tableId !== parsedRequest.tableId ||
+      result.relationColumnId !== parsedRequest.relationColumnId ||
+      result.targetColumnId !== parsedRequest.targetColumnId) {
+    throw new Error("Invalid Managed Collection lookup-column response identity.");
   }
   return result;
 }
@@ -1517,6 +1539,7 @@ const api: PigeDesktopApi = {
     updateFormulaColumn: invokeCollectionUpdateFormulaColumn,
     addRelationColumn: invokeCollectionAddRelationColumn,
     editRelationCell: invokeCollectionEditRelationCell,
+    addLookupColumn: invokeCollectionAddLookupColumn,
     renameColumn: invokeCollectionRenameColumn,
     createView: invokeCollectionCreateView,
     trashColumn: invokeCollectionTrashColumn,

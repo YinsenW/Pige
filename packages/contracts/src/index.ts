@@ -35,6 +35,8 @@ import type {
   CollectionAddFormulaColumnResult,
   CollectionAddRelationColumnRequest,
   CollectionAddRelationColumnResult,
+  CollectionAddLookupColumnRequest,
+  CollectionAddLookupColumnResult,
   CollectionEditRelationCellRequest,
   CollectionEditRelationCellResult,
   CollectionUpdateFormulaColumnRequest,
@@ -1217,6 +1219,7 @@ export interface KnowledgeActivitySummary {
     | "update_collection_formula"
     | "add_collection_relation"
     | "update_collection_relation_cell"
+    | "add_collection_lookup"
     | "rename_collection_column"
     | "create_collection_view"
     | "trash_collection_column"
@@ -2018,6 +2021,9 @@ export interface PigeDesktopApi {
     readonly editRelationCell: (
       request: CollectionEditRelationCellRequest
     ) => Promise<CollectionEditRelationCellResult>;
+    readonly addLookupColumn: (
+      request: CollectionAddLookupColumnRequest
+    ) => Promise<CollectionAddLookupColumnResult>;
     readonly renameColumn: (
       request: CollectionRenameColumnRequest
     ) => Promise<CollectionRenameColumnResult>;

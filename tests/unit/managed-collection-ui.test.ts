@@ -10,6 +10,8 @@ import type {
   CollectionAddFormulaColumnResult,
   CollectionAddRelationColumnRequest,
   CollectionAddRelationColumnResult,
+  CollectionAddLookupColumnRequest,
+  CollectionAddLookupColumnResult,
   CollectionEditRelationCellRequest,
   CollectionEditRelationCellResult,
   CollectionListResult,
@@ -465,6 +467,121 @@ describe("ManagedCollectionPanel", () => {
     );
     expect(Array.from(container.querySelectorAll("button")).some((button) =>
       button.getAttribute("aria-label") === "Edit cell: Company, row 1"
+    )).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("adds one relation-backed scalar lookup and renders its projected value read-only", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: CollectionAddLookupColumnRequest[] = [];
+    const base = relationSourceSnapshot("dataset_rev_20260729_lookup00001", false);
+    const relationRequest = relationAddRequest(base);
+    const initial: CollectionSnapshot = {
+      ...withRelationColumn(base, relationRequest, "row_relationtarget01", "Acme", base.revisionId),
+      canAddLookupColumn: true
+    };
+    const targetBase = relationTargetSnapshot(initial.revisionId, [relationTargetRow("row_relationtarget01", "Acme")]);
+    const target: CollectionSnapshot = {
+      ...targetBase,
+      columns: targetBase.columns.map((column) => ({ ...column, canUseAsLookupTarget: true }))
+    };
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { collections: {
+        open: async (request: CollectionOpenRequest): Promise<CollectionOpenResult> => ({
+          ...openIdentity(request), status: "ready", snapshot: target
+        }),
+        addLookupColumn: async (request: CollectionAddLookupColumnRequest): Promise<CollectionAddLookupColumnResult> => {
+          requests.push(request);
+          return {
+            apiVersion: request.apiVersion,
+            requestId: request.requestId,
+            activeVaultId: request.activeVaultId,
+            datasetId: request.datasetId,
+            tableId: request.tableId,
+            relationColumnId: request.relationColumnId,
+            targetColumnId: request.targetColumnId,
+            status: "committed",
+            columnId: "column_lookupname001",
+            operationId: "op_20260729_lookup0001",
+            snapshot: {
+              ...initial,
+              revisionId: "dataset_rev_20260729_lookup00002",
+              canAddLookupColumn: false,
+              columns: [...initial.columns.map((column) => column.columnId === request.relationColumnId
+                ? { ...column, canTrash: false }
+                : column), {
+                columnId: "column_lookupname001",
+                label: request.label,
+                logicalType: "string",
+                canRename: true,
+                canTrash: true,
+                canUseAsFormulaOperand: false,
+                canEditFormula: false,
+                canUseAsRelationDisplay: false,
+                canUseAsLookupTarget: false,
+                canEditRelation: false,
+                hasInboundRelationDescriptors: false,
+                lookup: {
+                  kind: "pige_single_lookup",
+                  schemaVersion: 1,
+                  relationColumnId: request.relationColumnId,
+                  targetColumnId: request.targetColumnId
+                }
+              }],
+              rows: initial.rows.map((row) => ({
+                ...row,
+                cells: [...row.cells, {
+                  columnId: "column_lookupname001",
+                  value: "Acme",
+                  editable: false,
+                  readOnlyReason: "lookup" as const
+                }]
+              }))
+            }
+          };
+        }
+      } }
+    });
+    await act(async () => {
+      root.render(createElement(RelationCollectionHarness, { initialSnapshot: initial }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+
+    await click(dom, buttonNamed(container, "Add lookup field"));
+    await settle(dom);
+    await inputText(dom, requireElement(container.querySelector<HTMLInputElement>("#collection-lookup-name")), "Company name");
+    expect(requireElement(container.querySelector<HTMLSelectElement>("#collection-lookup-relation")).value)
+      .toBe("column_relationlink01");
+    expect(requireElement(container.querySelector<HTMLSelectElement>("#collection-lookup-target")).value)
+      .toBe("column_relationname01");
+    await click(dom, buttonNamed(container, "Save"));
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      activeVaultId: "vault_20260727_collection01",
+      datasetId: initial.datasetId,
+      tableId: initial.tableId,
+      expectedRevisionId: initial.revisionId,
+      label: "Company name",
+      relationColumnId: "column_relationlink01",
+      targetColumnId: "column_relationname01"
+    });
+    expect(Object.keys(requests[0] ?? {}).sort()).toEqual([
+      "activeVaultId", "apiVersion", "datasetId", "expectedRevisionId", "label", "relationColumnId",
+      "requestId", "tableId", "targetColumnId"
+    ]);
+    expect(container.textContent).toContain("Lookup field added as a new revision.");
+    expect(container.textContent).toContain("Acme");
+    expect(dom.window.document.activeElement).toBe(
+      container.querySelector('[data-collection-column-id="column_lookupname001"]')
+    );
+    expect(Array.from(container.querySelectorAll("button")).some((button) =>
+      button.getAttribute("aria-label") === "Edit cell: Company name, row 1"
     )).toBe(false);
 
     await act(async () => root.unmount());

@@ -87,7 +87,7 @@ export function projectRelationColumns(
     const column = columns.find((candidate) => candidate.id === summary.columnId);
     if (!column) throw payloadInvalid();
     const relation = column.relation;
-    const scalar = !column.calculation && !relation &&
+    const scalar = !column.calculation && !relation && !column.lookup &&
       ![column.sourceType, ...(column.sourceTypes ?? [])].some((value) => value.toLowerCase().includes("formula")) &&
       ["string", "integer", "number", "boolean", "date", "datetime"].includes(column.logicalType);
     return {
@@ -180,7 +180,8 @@ export function assertRelationTrashGuards(input: {
     if (input.columnId) {
       const inbound = input.binding.schema.tables.some((table) => table.columns.some((column) =>
         column.relation?.targetTableId === input.tableId &&
-        column.relation.targetDisplayColumnId === input.columnId));
+        column.relation.targetDisplayColumnId === input.columnId) || table.columns.some((column) =>
+        column.lookup?.relationColumnId === input.columnId || column.lookup?.targetColumnId === input.columnId));
       if (inbound) throw new PigeDomainError("collection.relation_inbound", "The Collection column labels a relation.");
       validateRelationSourceColumn(database, input.binding.schema, input.tableId, input.columnId);
     }
@@ -651,7 +652,7 @@ function relationTargetId(value: unknown): string | undefined {
   return parsed.success && parsed.data ? parsed.data.targetRowId : undefined;
 }
 function isRelationDisplayColumn(column: DatasetColumn): boolean {
-  return !column.calculation && !column.relation &&
+  return !column.calculation && !column.relation && !column.lookup &&
     ![column.sourceType, ...(column.sourceTypes ?? [])].some((value) => value.toLowerCase().includes("formula")) &&
     ["string", "integer", "number", "boolean", "date", "datetime"].includes(column.logicalType);
 }

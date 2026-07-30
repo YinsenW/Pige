@@ -28,6 +28,7 @@ import {
 import { ManagedCollectionViewControls } from "./ManagedCollectionViewControls";
 import { ManagedCollectionFormulaColumnDialog } from "./ManagedCollectionFormulaColumnDialog";
 import { ManagedCollectionRelationDialog } from "./ManagedCollectionRelationDialog";
+import { ManagedCollectionLookupDialog } from "./ManagedCollectionLookupDialog";
 import {
   ManagedCollectionScalarCellEditor,
   formatCollectionCellValue,
@@ -136,7 +137,7 @@ export function ManagedCollectionPanel(props: {
   const [columnActionsBusy, setColumnActionsBusy] = useState(false);
   const [viewControlsBusy, setViewControlsBusy] = useState(false);
   const [formulaActive, setFormulaActive] = useState(false);
-  const [relationActive, setRelationActive] = useState(false);
+  const [relationActive, setRelationActive] = useState(false); const [lookupActive, setLookupActive] = useState(false);
   const [columnFocusRequest, setColumnFocusRequest] = useState<string | null>(null);
   const [cellFocusRequest, setCellFocusRequest] = useState<CellIdentity | null>(null);
   const [formulaEditRequest, setFormulaEditRequest] = useState<{ readonly columnId: string; readonly ownerKey: string; readonly revisionId: string } | null>(null);
@@ -155,7 +156,7 @@ export function ManagedCollectionPanel(props: {
   const columnLabelRef = useRef<HTMLInputElement | null>(null);
   const columnActionsActiveRef = useRef(false);
   const formulaActiveRef = useRef(false);
-  const relationActiveRef = useRef(false);
+  const relationActiveRef = useRef(false); const lookupActiveRef = useRef(false);
   const viewControlsActiveRef = useRef(false);
   const editTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
@@ -190,6 +191,7 @@ export function ManagedCollectionPanel(props: {
     columnActionsActiveRef.current = false;
     formulaActiveRef.current = false;
     relationActiveRef.current = false;
+    lookupActiveRef.current = false;
     viewControlsActiveRef.current = false;
     pendingFocusRef.current = null;
     pendingAppendFocusRef.current = false;
@@ -204,7 +206,7 @@ export function ManagedCollectionPanel(props: {
     setColumnActionsBusy(false);
     setViewControlsBusy(false);
     setFormulaActive(false);
-    setRelationActive(false);
+    setRelationActive(false); setLookupActive(false);
     setColumnFocusRequest(null);
     setCellFocusRequest(null);
     setFormulaEditRequest(null);
@@ -665,15 +667,15 @@ export function ManagedCollectionPanel(props: {
       <ManagedCollectionFormulaColumnDialog
         activeVaultId={props.activeVaultId}
         snapshot={props.snapshot}
-        blocked={busy || viewControlsBusy || relationActive || edit !== null || columnDraft !== null}
+        blocked={busy || viewControlsBusy || relationActive || lookupActive || edit !== null || columnDraft !== null}
         requestedEdit={formulaEditRequest}
         onEditRequestHandled={() => setFormulaEditRequest(null)}
         onAdoptSnapshot={props.onAdoptSnapshot}
         onActiveChange={(active) => {
           formulaActiveRef.current = active;
           setFormulaActive(active);
-          columnActionsActiveRef.current = active || relationActiveRef.current;
-          setColumnActionsBusy(active || relationActiveRef.current);
+          columnActionsActiveRef.current = active || relationActiveRef.current || lookupActiveRef.current;
+          setColumnActionsBusy(active || relationActiveRef.current || lookupActiveRef.current);
         }}
         onFocusColumn={setColumnFocusRequest}
         t={props.t}
@@ -681,17 +683,31 @@ export function ManagedCollectionPanel(props: {
       <ManagedCollectionRelationDialog
         activeVaultId={props.activeVaultId}
         snapshot={props.snapshot}
-        blocked={busy || viewControlsBusy || formulaActive || edit !== null || columnDraft !== null}
+        blocked={busy || viewControlsBusy || formulaActive || lookupActive || edit !== null || columnDraft !== null}
         requestedEdit={relationEditRequest}
         onEditRequestHandled={() => setRelationEditRequest(null)}
         onAdoptSnapshot={props.onAdoptSnapshot}
         onActiveChange={(active) => {
           relationActiveRef.current = active;
           setRelationActive(active);
-          columnActionsActiveRef.current = active || formulaActiveRef.current;
-          setColumnActionsBusy(active || formulaActiveRef.current);
+          columnActionsActiveRef.current = active || formulaActiveRef.current || lookupActiveRef.current;
+          setColumnActionsBusy(active || formulaActiveRef.current || lookupActiveRef.current);
         }}
         onFocusCell={(rowId, columnId) => setCellFocusRequest({ rowId, columnId })}
+        onFocusColumn={setColumnFocusRequest}
+        t={props.t}
+      />
+      <ManagedCollectionLookupDialog
+        activeVaultId={props.activeVaultId}
+        snapshot={props.snapshot}
+        blocked={busy || viewControlsBusy || formulaActive || relationActive || edit !== null || columnDraft !== null}
+        onAdoptSnapshot={props.onAdoptSnapshot}
+        onActiveChange={(active) => {
+          lookupActiveRef.current = active;
+          setLookupActive(active);
+          columnActionsActiveRef.current = active || formulaActiveRef.current || relationActiveRef.current;
+          setColumnActionsBusy(active || formulaActiveRef.current || relationActiveRef.current);
+        }}
         onFocusColumn={setColumnFocusRequest}
         t={props.t}
       />
