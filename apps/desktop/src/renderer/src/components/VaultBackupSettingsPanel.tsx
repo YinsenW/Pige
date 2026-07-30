@@ -10,6 +10,10 @@ import type {
   VaultSummary
 } from "@pige/contracts";
 import type { Locale, SourceStorageStrategy } from "@pige/schemas";
+import {
+  BackupDestinationReconnectAction,
+  type BackupDestinationReconnectOutcome
+} from "./BackupDestinationReconnectAction";
 
 type ReadyRestorePreview = Extract<RestorePreviewResult, { readonly status: "ready" }>;
 type RestorePhase = "idle" | "previewing" | "applying";
@@ -312,6 +316,9 @@ export function RestorePreviewPanel(props: {
 function backupJobMessageKey(job: JobSummary): string {
   if (job.state === "queued" || job.state === "running") return "backup.running";
   if (job.state === "cancel_requested") return "backup.cancelRequested";
+  if (job.state === "waiting_dependency" && job.canReconnectBackupDestination === true) {
+    return "backup.waitingDestinationReconnect";
+  }
   if (job.state === "waiting_dependency") return "backup.waitingManagedSourceReconnect";
   if (job.state === "failed_retryable" && job.error?.userAction === "retry") return "backup.failedRetryable";
   return "backup.failedFinal";
@@ -662,6 +669,22 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
     return result.status;
   };
 
+  const reconnectBackupDestination = async (): Promise<BackupDestinationReconnectOutcome> => {
+    if (!activeBackupJob || activeBackupJob.canReconnectBackupDestination !== true) return "ineligible";
+    const request = {
+      apiVersion: 1 as const,
+      requestId: `backupdestinationreconnectreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+      activeVaultId: props.vault.vaultId,
+      waitingJobId: activeBackupJob.id,
+      expectedJobUpdatedAt: activeBackupJob.updatedAt
+    };
+    const result = await window.pige.backup.reconnectDestination(request);
+    if (result.requestId !== request.requestId || result.activeVaultId !== request.activeVaultId
+      || result.waitingJobId !== request.waitingJobId
+      || result.expectedJobUpdatedAt !== request.expectedJobUpdatedAt) return "stale";
+    return result.status;
+  };
+
   const configureManagedCopyRoot = async (): Promise<ManagedCopyRootSelectionOutcome> => {
     const managedCopyRoot = props.vault.managedCopyRoot;
     if (managedCopyRoot.canConfigure !== true) return "ineligible";
@@ -757,6 +780,22 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
           {activeBackupJob.state === "queued" || activeBackupJob.state === "running" ? <button type="button" className="settings-button" disabled={backupBusy} onClick={() => void cancelBackup()}>{props.t("home.cancelJob")}</button>
             : activeBackupJob.state === "failed_retryable" && activeBackupJob.error?.userAction === "retry" ? <button type="button" className="settings-button" disabled={backupBusy} onClick={() => void retryBackup()}>{props.t("home.retryJob")}</button>
               : activeBackupJob.canReconnectDependency === true ? <button ref={reconnectButtonRef} type="button" className="settings-button" disabled={backupBusy} aria-busy={reconnectRequestActiveRef.current || undefined} onClick={() => void reconnectDependency()}>{props.t("backup.reconnectManagedSource")}</button>
+                : activeBackupJob.canReconnectBackupDestination === true ? <BackupDestinationReconnectAction
+                  identityKey={`${props.vault.vaultId}:${activeBackupJob.id}:${activeBackupJob.updatedAt}`}
+                  eligible={activeBackupJob.canReconnectBackupDestination === true}
+                  disabled={props.busy || backupBusy}
+                  labels={{
+                    action: props.t("backup.reconnectDestination"),
+                    pending: props.t("backup.reconnectDestinationChecking"),
+                    reconnected: props.t("backup.reconnectDestinationReconnected"),
+                    stale: props.t("backup.reconnectDestinationStale"),
+                    failed: props.t("backup.reconnectDestinationFailed")
+                  }}
+                  onReconnect={reconnectBackupDestination}
+                  onReconnected={props.onRefresh}
+                  onPendingChange={setBackupBusy}
+                  returnFocusRef={backupSectionRef}
+                />
                 : <BackupContinueIncompleteAction
                   identityKey={`${props.vault.vaultId}:${activeBackupJob.id}:${activeBackupJob.updatedAt}`}
                   eligible={activeBackupJob.canContinueIncomplete === true}
