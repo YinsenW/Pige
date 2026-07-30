@@ -85,6 +85,7 @@ function makeHarness(
     },
     onNoteTrashCommitted,
     onNoteArchiveCommitted,
+    onNoteRelated: onNoteArchiveCommitted,
     onNoteImported
   });
   return handlers;

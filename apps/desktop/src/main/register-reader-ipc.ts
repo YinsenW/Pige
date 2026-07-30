@@ -105,6 +105,7 @@ interface RegisterReaderIpcOptions {
   readonly getNoteMarkdownImportService: () => NoteMarkdownImportService;
   readonly onNoteTrashCommitted: () => void;
   readonly onNoteArchiveCommitted: () => void;
+  readonly onNoteRelated: () => void;
   readonly onNoteImported: () => void;
 }
 
@@ -243,7 +244,7 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       rawResult = { ...parsed, status: "failed" };
     }
     const result = NoteArchiveCurrentResultSchema.parse(rawResult);
-    if (result.status === "committed") options.onNoteArchiveCommitted();
+    if (result.status === "committed") options.onNoteRelated();
     if (notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
       return NoteArchiveCurrentResultSchema.parse({ ...parsed, status: "failed" });
     }

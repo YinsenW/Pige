@@ -2741,6 +2741,7 @@ registerReaderIpc({
   getNoteMarkdownImportService,
   onNoteTrashCommitted: scheduleActivityIndexRebuild,
   onNoteArchiveCommitted: scheduleActivityIndexRebuild,
+  onNoteRelated: scheduleActivityIndexRebuild,
   onNoteImported: scheduleActivityIndexRebuild
 });
 registerCurrentNoteAppendIpc({
