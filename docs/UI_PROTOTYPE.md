@@ -641,10 +641,10 @@ Action behavior:
 
 ### 8.4 Structured Knowledge Surface
 
-Datasets stay in Library. Authority-only paging preserves rows/focus; citations are read-only.
-Stable-ID snapshots have exact Undo. Bounded dialogs edit representable formulas, select one
-descriptor-owned row/label, or derive a read-only scalar lookup through that relation. Main owns
-eligibility and stale keeps drafts. Nested formulas, broader relations/lookups and scale/platform stay open.
+Datasets stay in Library. Bound paging preserves rows/focus; citations are read-only. Stable-ID
+snapshots have Undo. Dialogs edit representable formulas, select one relation row, or derive its
+scalar lookup; Main owns eligibility and stale keeps drafts. Views rename/trash explicitly; trashing
+the active view returns to All Rows and Activity offers restore. Broader data and proof stay open.
 
 ## 9. Sources View
 

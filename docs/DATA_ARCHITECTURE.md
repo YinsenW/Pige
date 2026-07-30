@@ -79,15 +79,15 @@ Two storage profiles share this envelope:
   created.
 
 `dataset.json` binds profile, revisions, stable IDs, integrity and compatibility. Collection
-row/field changes publish immutable SQLite/schema/Operation revisions, manifest last; views
-advance separately. Evidence, originals, old revisions and previews remain immutable.
+row/field changes publish immutable SQLite/schema/Operation revisions, manifest last. View
+rename/trash/restore uses CAS and forward Undo without changing rows. Trashing the
+active view selects All Rows. Evidence, originals, old revisions and previews stay immutable.
 
-Formula/relation/lookup descriptors are Dataset schema truth, including empty tables. Formula V1
-is a <=8-depth/31-node nullable numeric AST; invalid math is null. A single relation binds one
-same-Dataset table/scalar label column; cells store row IDs only. A lookup follows that relation
-to one scalar target field and stays derived/read-only. Target edits reproject it; null/dangling
-relations resolve null. Inbound targets block trash; descriptor changes use immutable
-schema/payload/stats CAS/forward Undo. Imports stay read-only.
+Formula/relation/lookup descriptors are schema truth, including empty tables. Formula V1 is a
+<=8-depth/31-node nullable numeric AST; invalid math is null. A relation binds one same-Dataset
+table/scalar label and stores row IDs; its scalar lookup stays derived/read-only. Target edits
+reproject it; null/dangling resolves null. Inbound targets block trash; descriptor changes use
+immutable schema/payload/stats CAS/forward Undo. Imports stay read-only.
 
 ```ts
 type DatasetEvidenceRef = {

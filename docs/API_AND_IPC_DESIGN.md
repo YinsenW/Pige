@@ -495,11 +495,12 @@ and restart convergence.
 
 Dataset boundary:
 
-- Preview/citation is checksum-bound. Pages are <=50 rows/64 KiB; cursors bind
-  vault/catalog/revision/view/boundary and drift is stale.
-- Citation keys grant no authority; Main returns read-only highlights without requery.
-- Formula/relation/lookup changes bind revision, IDs and Main eligibility. Same-Dataset relations
-  store row IDs/labels; lookups are derived/read-only. CAS/Undo is path/query-free.
+- Checksum-bound previews use <=50 rows/64 KiB; cursors bind vault/catalog/revision/view/boundary.
+  Drift is stale; citation keys yield only Main-derived read-only highlights.
+- Formula/relation/lookup writes bind revision, IDs and eligibility; relations store same-Dataset row
+  IDs/labels and lookups stay derived. CAS/Undo exposes no path/query.
+- `collections.renameView`/`collections.trashView` bind Dataset, stable view and view revision;
+  committed/stale returns the safe snapshot.
 
 ### 6.6 Retrieval
 

@@ -182,9 +182,9 @@ Dataset, and revision refs; unrelated historical Datasets cannot block or enter 
 answer context. Restart adopts that continuation without another source loop or Dataset
 revision. Dataset query stays read-only. Collection row/field mutation revalidates current
 manifest/revision/schema/payload/target, publishes immutable revision, then switches manifest last.
-Saved-view create binds stable view/revision but leaves rows/Dataset revision unchanged. Operation
-binds exact before/after identity; replay adopts exact effect, recovery only a missing Operation,
-and Undo writes forward (a created view advances to trashed). Drift is inert.
+Saved-view create/rename/trash binds view/revision without changing rows/Dataset revision. Operations
+bind before/after identity; replay adopts, recovery adds only a missing Operation, and Undo writes
+forward, including restore. Drift is inert.
 
 ## 5. Job State Machine
 
@@ -573,7 +573,7 @@ Executable operation-kind vocabulary (machine checked):
 - `create_source_record`, `update_source_record`, `relink_source`.
 - `copy_source_asset`, `move_source_asset`, `trash_source_asset`, `restore_source_asset`.
 - `create_artifact`, `trash_artifact`, `restore_artifact`.
-- `create_dataset_revision`, `update_collection_cell`, `add_collection_row`, `add_collection_column`, `update_collection_formula`, `add_collection_relation`, `add_collection_lookup`, `update_collection_relation_cell`, `rename_collection_column`, `trash_collection_row`, `trash_collection_column`, `create_collection_view`.
+- `create_dataset_revision`, `update_collection_cell`, `add_collection_row`, `add_collection_column`, `update_collection_formula`, `add_collection_relation`, `add_collection_lookup`, `update_collection_relation_cell`, `rename_collection_column`, `trash_collection_row`, `trash_collection_column`, `create_collection_view`, `rename_collection_view`, `trash_collection_view`, `restore_collection_view`.
 - `create_page`, `update_page`, `rename_page`, `archive_page`, `trash_page`, `restore_page`.
 - `trash_conversation`, `restore_conversation`.
 - `update_index`.
