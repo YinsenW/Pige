@@ -566,6 +566,31 @@ describe("desktop shell build contract", () => {
     expect(backupSource).not.toContain("appearance");
   });
 
+  it("freezes one pathless machine-local startup destination CAS interface", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const settingsApi = contractsSource.slice(
+      contractsSource.indexOf("readonly settings: {"),
+      contractsSource.indexOf("readonly updates: {")
+    );
+
+    expect(schemasSource).toContain('StartupDestinationSchema = z.enum(["home", "library"])');
+    expect(schemasSource).toContain("StartupDestinationSummarySchema");
+    expect(schemasSource).toContain("SetStartupDestinationRequestSchema");
+    expect(settingsApi).toContain("readonly startupDestination: () => Promise<StartupDestinationSummary>;");
+    expect(settingsApi).toContain("readonly setStartupDestination: (");
+    expect(settingsApi).toContain("request: SetStartupDestinationRequest");
+    expect(settingsApi).toContain(") => Promise<StartupDestinationMutationResult>;");
+    expect(preloadSource).toContain('ipcRenderer.invoke("settings.startupDestination")');
+    expect(preloadSource).toContain('"settings.setStartupDestination"');
+    expect(preloadSource).toContain("SetStartupDestinationRequestSchema.parse(request)");
+    expect(preloadSource).toContain("StartupDestinationMutationResultSchema.parse(");
+    for (const privateField of ["path", "vaultId", "activeVaultId", "openAtLogin"]) {
+      expect(settingsApi).not.toContain(privateField);
+    }
+  });
+
   it("uses one integrated title bar while preserving native platform controls", () => {
     expect(getWindowShellOptions("darwin")).toEqual({
       titleBarStyle: "hiddenInset",

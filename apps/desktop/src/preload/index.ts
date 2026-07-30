@@ -167,6 +167,7 @@ import type {
   SetDefaultModelRequest,
   UpdateModelRequest,
   SetLocaleRequest,
+  SetStartupDestinationRequest,
   SetThemeRequest,
   SetSidebarOpenRequest,
   SetWindowModeRequest,
@@ -184,6 +185,8 @@ import type {
   SpeechStartRequest,
   SpeechStartResult,
   SpeechStopResult,
+  StartupDestinationMutationResult,
+  StartupDestinationSummary,
   TaskInteractionChangedEvent,
   TaskInteractionOpenRequest,
   TaskInteractionOpenResult,
@@ -466,7 +469,10 @@ import {
   SkillRestoreResultSchema,
   SkillUninstallRequestSchema,
   SetLocaleRequestSchema,
+  SetStartupDestinationRequestSchema,
   SetThemeRequestSchema,
+  StartupDestinationMutationResultSchema,
+  StartupDestinationSummarySchema,
   WindowLayoutRequestSchema,
   WindowLayoutStateSchema,
   VaultActionResultSchema,
@@ -1731,6 +1737,17 @@ const api: PigeDesktopApi = {
     setTheme: async (request: SetThemeRequest): Promise<AppearanceThemeMutationResult> =>
       AppearanceThemeMutationResultSchema.parse(
         await ipcRenderer.invoke("settings.setTheme", SetThemeRequestSchema.parse(request))
+      ),
+    startupDestination: async (): Promise<StartupDestinationSummary> =>
+      StartupDestinationSummarySchema.parse(await ipcRenderer.invoke("settings.startupDestination")),
+    setStartupDestination: async (
+      request: SetStartupDestinationRequest
+    ): Promise<StartupDestinationMutationResult> =>
+      StartupDestinationMutationResultSchema.parse(
+        await ipcRenderer.invoke(
+          "settings.setStartupDestination",
+          SetStartupDestinationRequestSchema.parse(request)
+        )
       ),
     onAppearanceChanged: (listener: (settings: AppearanceSettingsSummary) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, value: unknown): void => {
