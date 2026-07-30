@@ -110,6 +110,34 @@ describe("NoteMarkdownImportService", () => {
     expect(NOTE_IMPORT_MARKDOWN_CHANNEL).toBe("notes.importMarkdown");
     expect(NoteImportMarkdownResultSchema.parse({ ...request, status: "failed" })).toEqual({ ...request, status: "failed" });
   });
+
+  it("recovers one durable staged import after restart and adopts it exactly once", async () => {
+    const fixture = createFixture();
+    fs.writeFileSync(fixture.sourcePath, "# Restart import\n\nRecover this exact body.\n", "utf8");
+    const service = new NoteMarkdownImportService(fixture.vaults as never, {
+      render: async ({ pageId }: { readonly pageId: string }) => renderResult(pageId)
+    } as never);
+    await service.importMarkdown("reader_owner", request, { pick: async () => fixture.sourcePath });
+    const pagePath = findFiles(fixture.vaultPath, (file) => file.includes("wiki/generated") && file.endsWith(".md"))[0]!;
+    const page = fs.readFileSync(pagePath, "utf8");
+    for (const file of findFiles(fixture.vaultPath, (candidate) =>
+      candidate === pagePath || candidate.includes(".pige/operations") || candidate.includes("note-import/receipts")
+    )) fs.rmSync(file);
+    const stagePath = path.join(
+      fixture.vaultPath,
+      ".pige/private/note-import/stages",
+      `${request.requestId}.md`
+    );
+    fs.mkdirSync(path.dirname(stagePath), { recursive: true });
+    fs.writeFileSync(stagePath, page, { encoding: "utf8", mode: 0o600 });
+
+    const restarted = new NoteMarkdownImportService(fixture.vaults as never, { render: vi.fn() } as never);
+    expect(restarted.recoverIncompleteImports()).toEqual({ recovered: 1, failed: 0 });
+    expect(fs.existsSync(stagePath)).toBe(false);
+    expect(findFiles(fixture.vaultPath, (file) => file.includes("wiki/generated") && file.endsWith(".md"))).toHaveLength(1);
+    expect(findFiles(fixture.vaultPath, (file) => file.includes(".pige/operations") && file.endsWith(".json"))).toHaveLength(1);
+    expect(restarted.recoverIncompleteImports()).toEqual({ recovered: 0, failed: 0 });
+  });
 });
 
 function createFixture() {
