@@ -8,12 +8,14 @@ import type {
   LibraryMergeTagResult,
   LibraryRemoveTagRequest,
   LibraryRemoveTagResult,
+  LibraryRemovePageTagRequest,
+  LibraryRemovePageTagResult,
   LibraryRenameTagRequest,
   LibraryRenameTagResult,
   VaultSummary
 } from "@pige/contracts";
 import { createPigeTagKey, normalizePigeTag, parsePigeFrontmatter } from "@pige/markdown";
-import { LibraryMergeTagResultSchema, LibraryRemoveTagResultSchema, LibraryRenameTagResultSchema, OperationRecordSchema, type OperationRecord } from "@pige/schemas";
+import { LibraryMergeTagResultSchema, LibraryRemovePageTagResultSchema, LibraryRemoveTagResultSchema, LibraryRenameTagResultSchema, OperationRecordSchema, type OperationRecord } from "@pige/schemas";
 import { z } from "zod";
 import {
   createLibraryTagsSnapshotId,
@@ -77,7 +79,20 @@ const RemoveReceiptSchema = z.object({
   items: z.array(ReceiptItemSchema).min(1).max(MAX_PAGES)
 }).strict();
 
-const ReceiptSchema = z.discriminatedUnion("kind", [RenameReceiptSchema, MergeReceiptSchema, RemoveReceiptSchema]);
+const PageRemoveReceiptSchema = z.object({
+  schemaVersion: z.literal(1),
+  kind: z.literal("library_page_tag_remove_receipt"),
+  requestId: z.string().regex(/^library_page_tag_remove_request_[a-z0-9]{16,64}$/u),
+  requestDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  activeVaultId: z.string().regex(/^vault_[a-z0-9_]+$/u),
+  tag: z.string().min(1).max(48),
+  pageId: z.string().regex(/^page_[a-z0-9_]+$/u),
+  operationId: z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/u),
+  createdAt: z.string().datetime({ offset: true }),
+  items: z.array(ReceiptItemSchema).length(1)
+}).strict();
+
+const ReceiptSchema = z.discriminatedUnion("kind", [RenameReceiptSchema, MergeReceiptSchema, RemoveReceiptSchema, PageRemoveReceiptSchema]);
 
 const UndoIntentSchema = z.object({
   schemaVersion: z.literal(1),
@@ -267,6 +282,50 @@ export class LibraryTagRenameService {
     }
   }
 
+  removeFromPage(request: LibraryRemovePageTagRequest): LibraryRemovePageTagResult {
+    const identity = { ...request };
+    const vaultPath = this.#activeVaultPath(request.activeVaultId);
+    if (!vaultPath) return LibraryRemovePageTagResultSchema.parse({ ...identity, status: "stale" });
+    try {
+      const existing = readReceipt(vaultPath, request.requestId);
+      if (existing) {
+        if (existing.kind !== "library_page_tag_remove_receipt" || existing.requestDigest !== digest(request)) {
+          return LibraryRemovePageTagResultSchema.parse({ ...identity, status: "stale" });
+        }
+        completeRename(vaultPath, existing);
+        return committedPageRemove(identity, existing);
+      }
+      const scan = scanMarkdownPages(vaultPath);
+      if (scan.invalidPageCount !== 0) return LibraryRemovePageTagResultSchema.parse({ ...identity, status: "ineligible" });
+      const snapshot = readLibraryTagSnapshot(vaultPath);
+      const key = createPigeTagKey(request.tag);
+      if (!key) return LibraryRemovePageTagResultSchema.parse({ ...identity, status: "ineligible" });
+      const pages = snapshot.pagesByTag.get(key);
+      if (!pages) return LibraryRemovePageTagResultSchema.parse({ ...identity, status: "not_found" });
+      if (createLibraryTagsSnapshotId("list_pages_for_tag", request.tag, pages) !== request.expectedSnapshotId) {
+        return LibraryRemovePageTagResultSchema.parse({ ...identity, status: "stale" });
+      }
+      const summary = pages.find((page) => page.pageId === request.pageId);
+      if (!summary) return LibraryRemovePageTagResultSchema.parse({ ...identity, status: "not_found" });
+      if (summary.updatedAt !== request.expectedPageUpdatedAt) {
+        return LibraryRemovePageTagResultSchema.parse({ ...identity, status: "stale" });
+      }
+      const page = scan.pages.find((candidate) => candidate.summary.pageId === request.pageId &&
+        candidate.knowledge.tags.some((tag) => createPigeTagKey(tag) === key));
+      if (!page) return LibraryRemovePageTagResultSchema.parse({ ...identity, status: "stale" });
+      const signature = scan.files.find((candidate) => candidate.absolutePath === page.absolutePath);
+      if (!signature) return LibraryRemovePageTagResultSchema.parse({ ...identity, status: "stale" });
+      const createdAt = this.#now().toISOString();
+      const operationId = createOperationId(createdAt, request.requestId, this.#randomId());
+      const receipt = stageReceipt(vaultPath, request, [{ pageId: request.pageId, signature }], createdAt, operationId, "remove");
+      if (receipt.kind !== "library_page_tag_remove_receipt") throw new Error("page tag remove receipt kind mismatch");
+      completeRename(vaultPath, receipt);
+      return committedPageRemove(identity, receipt);
+    } catch {
+      return LibraryRemovePageTagResultSchema.parse({ ...identity, status: "failed" });
+    }
+  }
+
   activitySummary(operation: OperationRecord, undo?: OperationRecord): KnowledgeActivitySummary | undefined {
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vaultPath || operation.kind !== "update_page") return undefined;
@@ -342,7 +401,7 @@ export class LibraryTagRenameService {
 
 function stageReceipt(
   vaultPath: string,
-  request: LibraryRenameTagRequest | LibraryMergeTagRequest | LibraryRemoveTagRequest,
+  request: LibraryRenameTagRequest | LibraryMergeTagRequest | LibraryRemoveTagRequest | LibraryRemovePageTagRequest,
   pages: readonly { readonly pageId: string; readonly signature: MarkdownFileSignatureRecord }[],
   createdAt: string,
   operationId: string,
@@ -376,7 +435,10 @@ function stageReceipt(
     : "sourceTag" in request ? { schemaVersion: 1, kind: "library_tag_merge_receipt", requestId: request.requestId,
         requestDigest: digest(request), activeVaultId: request.activeVaultId, sourceTag: request.sourceTag,
         targetTag: request.targetTag, operationId, createdAt, items }
-      : { schemaVersion: 1, kind: "library_tag_remove_receipt", requestId: request.requestId,
+      : "pageId" in request ? { schemaVersion: 1, kind: "library_page_tag_remove_receipt", requestId: request.requestId,
+          requestDigest: digest(request), activeVaultId: request.activeVaultId, tag: request.tag, pageId: request.pageId,
+          operationId, createdAt, items }
+        : { schemaVersion: 1, kind: "library_tag_remove_receipt", requestId: request.requestId,
           requestDigest: digest(request), activeVaultId: request.activeVaultId, tag: request.tag,
           operationId, createdAt, items });
   writeExclusive(receiptPath(vaultPath, request.requestId), Buffer.from(JSON.stringify(receipt), "utf8"));
@@ -468,7 +530,7 @@ function createRenameOperation(receipt: Receipt): OperationRecord {
     targetRefs: receipt.items.map((item) => ({ kind: "page" as const, id: item.pageId, checksum: item.afterHash })),
     sourceRefs: [], before: { kind: "operation", id: receipt.requestId, checksum: digest(receipt.items.map((item) => item.beforeHash)) },
     after: { kind: "operation", id: receipt.operationId, checksum: digest(receipt.items.map((item) => item.afterHash)) },
-    summary: receipt.kind === "library_tag_remove_receipt"
+    summary: receipt.kind === "library_tag_remove_receipt" || receipt.kind === "library_page_tag_remove_receipt"
       ? `Removed tag ${receipt.tag} from ${receipt.items.length} page(s).`
       : `${receipt.kind === "library_tag_merge_receipt" ? "Merged" : "Renamed"} tag ${receiptSourceTag(receipt)} to ${receiptTargetTag(receipt)} on ${receipt.items.length} page(s).`,
     reversible: "yes", rollbackHint: "Restore every exact prior page while all renamed page revisions remain current.", warnings: []
@@ -527,6 +589,10 @@ function committedMerge(identity: LibraryMergeTagRequest, receipt: z.infer<typeo
 function committedRemove(identity: LibraryRemoveTagRequest, receipt: z.infer<typeof RemoveReceiptSchema>): LibraryRemoveTagResult {
   return LibraryRemoveTagResultSchema.parse({ ...identity, status: "committed", operationId: receipt.operationId,
     removedPageCount: receipt.items.length });
+}
+
+function committedPageRemove(identity: LibraryRemovePageTagRequest, receipt: z.infer<typeof PageRemoveReceiptSchema>): LibraryRemovePageTagResult {
+  return LibraryRemovePageTagResultSchema.parse({ ...identity, status: "committed", operationId: receipt.operationId });
 }
 
 function receiptSourceTag(receipt: Receipt): string {

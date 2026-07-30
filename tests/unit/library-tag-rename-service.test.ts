@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { LibraryMergeTagRequest, LibraryRemoveTagRequest, LibraryRenameTagRequest, VaultSummary } from "@pige/contracts";
+import type { LibraryMergeTagRequest, LibraryRemovePageTagRequest, LibraryRemoveTagRequest, LibraryRenameTagRequest, VaultSummary } from "@pige/contracts";
 import { LibraryTagRenameService } from "../../apps/desktop/src/main/services/library-tag-rename-service";
 import { LibraryTagsService } from "../../apps/desktop/src/main/services/library-tags-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
@@ -135,6 +135,37 @@ describe("LibraryTagRenameService", () => {
     expect(fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"))).toEqual(before);
     expect(findOperations(fixture.vaultPath)).toHaveLength(0);
   });
+
+  it("removes a tag from one exact page, adopts restart, and restores it through Undo", () => {
+    const fixture = makeFixture();
+    const before = fs.readFileSync(fixture.taggedPaths[0]!, "utf8");
+    const request = removePageTagRequest(fixture);
+    const committed = fixture.service.removeFromPage(request);
+    expect(committed).toMatchObject({ status: "committed" });
+    if (committed.status !== "committed") throw new Error("page tag removal did not commit");
+    expect(fs.readFileSync(fixture.taggedPaths[0]!, "utf8")).toContain("tags: []");
+    expect(fs.readFileSync(fixture.taggedPaths[1]!, "utf8")).toMatch(/"[Oo]riginal"/u);
+    const operationFile = findOperationFiles(fixture.vaultPath).find((file) => file.endsWith(`${committed.operationId}.json`))!;
+    fs.unlinkSync(operationFile);
+    const restarted = new LibraryTagRenameService(fixture.vaults);
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(restarted.removeFromPage(request)).toEqual(committed);
+    const operation = findOperations(fixture.vaultPath).find((item) => item.id === committed.operationId)!;
+    expect(restarted.undo(operation)).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(fixture.taggedPaths[0]!, "utf8")).toBe(before);
+  });
+
+  it("fails one-page tag removal closed on page or snapshot drift", () => {
+    const fixture = makeFixture();
+    const before = fs.readFileSync(fixture.taggedPaths[0]!, "utf8");
+    expect(fixture.service.removeFromPage({
+      ...removePageTagRequest(fixture), expectedPageUpdatedAt: "2026-07-30T07:00:00.000Z"
+    })).toMatchObject({ status: "stale" });
+    writePage(fixture.vaultPath, "late-page-tag", "page_20260730_lateptag", "Late page tag", ["Original"]);
+    expect(fixture.service.removeFromPage(removePageTagRequest(fixture))).toMatchObject({ status: "stale" });
+    expect(fs.readFileSync(fixture.taggedPaths[0]!, "utf8")).toBe(before);
+    expect(findOperations(fixture.vaultPath)).toHaveLength(0);
+  });
 });
 
 function makeFixture(secondTags: readonly string[] = ["original", "Other"]) {
@@ -162,6 +193,15 @@ function makeFixture(secondTags: readonly string[] = ["original", "Other"]) {
     limit: 100
   });
   if (tags.status !== "ready" || tags.mode !== "list_tags") throw new Error("missing tag snapshot");
+  const tagPages = new LibraryTagsService(vaults).browse({
+    apiVersion: 1,
+    requestId: "library_tags_request_fedcba9876543210",
+    activeVaultId: vault.vaultId,
+    mode: "list_pages_for_tag",
+    tag: "Original",
+    limit: 100
+  });
+  if (tagPages.status !== "ready" || tagPages.mode !== "list_pages_for_tag") throw new Error("missing tag pages snapshot");
   return {
     vaultPath,
     vault,
@@ -170,6 +210,8 @@ function makeFixture(secondTags: readonly string[] = ["original", "Other"]) {
     unrelatedPath,
     unrelatedMarkdown,
     snapshotId: tags.snapshotId,
+    pageSnapshotId: tagPages.snapshotId,
+    firstPageUpdatedAt: tagPages.pages.find((page) => page.pageId === "page_20260730_first001")!.updatedAt,
     service: new LibraryTagRenameService(vaults, {
       now: () => new Date("2026-07-30T09:00:00.000Z"),
       randomId: () => "fixedtagrename"
@@ -198,6 +240,18 @@ function removeRequest(fixture: ReturnType<typeof makeFixture>): LibraryRemoveTa
     tag: "Original",
     expectedSnapshotId: fixture.snapshotId,
     expectedPageCount: 2
+  };
+}
+
+function removePageTagRequest(fixture: ReturnType<typeof makeFixture>): LibraryRemovePageTagRequest {
+  return {
+    apiVersion: 1,
+    requestId: "library_page_tag_remove_request_0123456789abcdef",
+    activeVaultId: fixture.vault.vaultId,
+    tag: "Original",
+    pageId: "page_20260730_first001",
+    expectedSnapshotId: fixture.pageSnapshotId,
+    expectedPageUpdatedAt: fixture.firstPageUpdatedAt
   };
 }
 
