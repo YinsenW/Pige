@@ -4513,6 +4513,154 @@ export const DatasetQueryScalarSchema = z.union([
   z.null()
 ]);
 
+export const LIBRARY_TAGS_CHANNEL = "library.tags" as const;
+export const LIBRARY_TAGS_PAGE_SIZE_MAX = 50;
+export const LibraryTagsRequestIdSchema = z.string().regex(
+  /^library_tags_request_[a-z0-9]{16,64}$/
+);
+export const LibraryTagsSnapshotIdSchema = z.string().regex(
+  /^library_tags_snapshot_[a-f0-9]{64}$/
+);
+export const LibraryTagsCursorSchema = z.string().regex(
+  /^library_tags_cursor_[a-f0-9]{64}$/
+);
+export const LibraryCanonicalTagSchema = z.string().min(1).max(48).refine(
+  (value) => !/[\u0000-\u001f\u007f]/u.test(value) &&
+    value === value.normalize("NFKC").replace(/\s+/gu, " ").trim(),
+  "Library tags must use the canonical Markdown tag representation."
+);
+
+const LibraryTagsRequestBaseShape = {
+  apiVersion: z.literal(1),
+  requestId: LibraryTagsRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  limit: z.number().int().min(1).max(LIBRARY_TAGS_PAGE_SIZE_MAX),
+  snapshotId: LibraryTagsSnapshotIdSchema.optional(),
+  cursor: LibraryTagsCursorSchema.optional()
+} as const;
+
+export const LibraryTagsRequestSchema = z.union([
+  z.object({
+    ...LibraryTagsRequestBaseShape,
+    mode: z.literal("list_tags")
+  }).strict(),
+  z.object({
+    ...LibraryTagsRequestBaseShape,
+    mode: z.literal("list_pages_for_tag"),
+    tag: LibraryCanonicalTagSchema
+  }).strict()
+]).superRefine((request, context) => {
+  if ((request.snapshotId === undefined) !== (request.cursor === undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: [request.snapshotId === undefined ? "snapshotId" : "cursor"],
+      message: "Library tag continuation requires both its snapshot and cursor."
+    });
+  }
+});
+
+export const LibraryTagFacetSchema = z.object({
+  tag: LibraryCanonicalTagSchema,
+  pageCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+
+export const LibraryTaggedPageSummarySchema = z.object({
+  pageId: PageIdSchema,
+  title: z.string().trim().min(1).max(240),
+  pageType: MarkdownPageTypeSchema,
+  status: MarkdownPageStatusSchema,
+  updatedAt: z.string().datetime({ offset: true })
+}).strict();
+
+const LibraryTagsListIdentityShape = {
+  apiVersion: z.literal(1),
+  requestId: LibraryTagsRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  mode: z.literal("list_tags")
+} as const;
+
+const LibraryTagPagesIdentityShape = {
+  apiVersion: z.literal(1),
+  requestId: LibraryTagsRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  mode: z.literal("list_pages_for_tag"),
+  tag: LibraryCanonicalTagSchema
+} as const;
+
+export const LibraryTagsResultSchema = z.union([
+  z.object({
+    ...LibraryTagsListIdentityShape,
+    status: z.literal("ready"),
+    snapshotId: LibraryTagsSnapshotIdSchema,
+    tags: z.array(LibraryTagFacetSchema).max(LIBRARY_TAGS_PAGE_SIZE_MAX).readonly(),
+    total: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    nextCursor: LibraryTagsCursorSchema.optional()
+  }).strict(),
+  z.object({ ...LibraryTagsListIdentityShape, status: z.literal("stale") }).strict(),
+  z.object({ ...LibraryTagsListIdentityShape, status: z.literal("failed") }).strict(),
+  z.object({
+    ...LibraryTagPagesIdentityShape,
+    status: z.literal("ready"),
+    snapshotId: LibraryTagsSnapshotIdSchema,
+    pages: z.array(LibraryTaggedPageSummarySchema).max(LIBRARY_TAGS_PAGE_SIZE_MAX).readonly(),
+    total: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    nextCursor: LibraryTagsCursorSchema.optional()
+  }).strict(),
+  z.object({ ...LibraryTagPagesIdentityShape, status: z.literal("stale") }).strict(),
+  z.object({ ...LibraryTagPagesIdentityShape, status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "ready") return;
+  const items = result.mode === "list_tags" ? result.tags : result.pages;
+  if (result.total < items.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["total"],
+      message: "Library tag browse totals must include every projected item."
+    });
+  }
+  if (result.mode === "list_tags") {
+    const keys = result.tags.map(({ tag }) => tag.toLocaleLowerCase("en-US"));
+    if (new Set(keys).size !== keys.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["tags"],
+        message: "Library tag facets must have unique canonical keys."
+      });
+    }
+    for (let index = 1; index < keys.length; index += 1) {
+      if (keys[index - 1]! >= keys[index]!) {
+        context.addIssue({
+          code: "custom",
+          path: ["tags", index],
+          message: "Library tag facets must use canonical tag-key order."
+        });
+        break;
+      }
+    }
+    return;
+  }
+  if (new Set(result.pages.map(({ pageId }) => pageId)).size !== result.pages.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["pages"],
+      message: "Library tagged page summaries must have unique stable page IDs."
+    });
+  }
+  for (let index = 1; index < result.pages.length; index += 1) {
+    const previous = result.pages[index - 1]!;
+    const current = result.pages[index]!;
+    if (previous.updatedAt < current.updatedAt ||
+        (previous.updatedAt === current.updatedAt && previous.pageId >= current.pageId)) {
+      context.addIssue({
+        code: "custom",
+        path: ["pages", index],
+        message: "Library tagged pages must use updatedAt-descending then page-ID order."
+      });
+      break;
+    }
+  }
+});
+
 export const CollectionRequestIdSchema = z.string().regex(/^collection_request_[a-z0-9]{16,64}$/);
 export const CollectionCatalogCursorSchema = z.string().regex(/^collection_catalog_[a-f0-9]{64}$/);
 export const CollectionRowCursorSchema = z.string().regex(/^collection_rows_[a-f0-9]{64}$/);
@@ -8187,6 +8335,14 @@ export type CollectionDatasetSummary = z.infer<typeof CollectionDatasetSummarySc
 export type CollectionDatasetTableSummary = z.infer<typeof CollectionDatasetTableSummarySchema>;
 export type CollectionListRequest = z.infer<typeof CollectionListRequestSchema>;
 export type CollectionListResult = z.infer<typeof CollectionListResultSchema>;
+export type LibraryTagsRequestId = z.infer<typeof LibraryTagsRequestIdSchema>;
+export type LibraryTagsSnapshotId = z.infer<typeof LibraryTagsSnapshotIdSchema>;
+export type LibraryTagsCursor = z.infer<typeof LibraryTagsCursorSchema>;
+export type LibraryCanonicalTag = z.infer<typeof LibraryCanonicalTagSchema>;
+export type LibraryTagFacet = z.infer<typeof LibraryTagFacetSchema>;
+export type LibraryTaggedPageSummary = z.infer<typeof LibraryTaggedPageSummarySchema>;
+export type LibraryTagsRequest = z.infer<typeof LibraryTagsRequestSchema>;
+export type LibraryTagsResult = z.infer<typeof LibraryTagsResultSchema>;
 export type CollectionAppendDefaultRowRequest = z.infer<typeof CollectionAppendDefaultRowRequestSchema>;
 export type CollectionAppendDefaultRowResult = z.infer<typeof CollectionAppendDefaultRowResultSchema>;
 export type CollectionAddNullableColumnRequest = z.infer<typeof CollectionAddNullableColumnRequestSchema>;

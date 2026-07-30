@@ -145,6 +145,13 @@ import type {
   JobRecord,
   JobStage,
   JobState,
+  LibraryTagFacet,
+  LibraryTaggedPageSummary,
+  LibraryTagsCursor,
+  LibraryTagsRequest,
+  LibraryTagsRequestId,
+  LibraryTagsResult,
+  LibraryTagsSnapshotId,
   MarkdownPageStatus,
   MarkdownPageType,
   ModelListStrategy,
@@ -409,6 +416,13 @@ export type {
   KnowledgeHealthRepairRequestId,
   KnowledgeHealthRepairRequest,
   KnowledgeHealthRepairResult,
+  LibraryTagFacet,
+  LibraryTaggedPageSummary,
+  LibraryTagsCursor,
+  LibraryTagsRequest,
+  LibraryTagsRequestId,
+  LibraryTagsResult,
+  LibraryTagsSnapshotId,
   ManagedCopyRootConfigureRequest,
   ManagedCopyRootConfigureResult,
   ManagedCopyRootSummary,
@@ -1967,6 +1981,7 @@ export interface PigeDesktopApi {
     readonly list: (request?: LibraryListRequest) => Promise<LibraryListResult>;
     readonly tree: () => Promise<KnowledgeTreeResult>;
     readonly related: (request: LibraryRelatedRequest) => Promise<LibraryRelatedResult>;
+    readonly tags: (request: LibraryTagsRequest) => Promise<LibraryTagsResult>;
   };
   readonly notes: {
     readonly get: (request: NoteGetRequest) => Promise<NoteDocument>;
