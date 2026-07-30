@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 225,
-  "baselineLines": 113913,
+  "baselineFileCount": 226,
+  "baselineLines": 114106,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -29,6 +29,7 @@
       ["background-job-drainer.ts", 93, "r"],
       ["backup-coordinator-service.ts", 989, "jr"],
       ["backup-destination-reconnect-service.ts", 338, "jrd"],
+      ["backup-memory-preference-service.ts", 193, "rd"],
       ["backup-reconnect-coordinator.ts", 201, "jr"],
       ["backup-service.ts", 4175, "rd"],
       ["current-note-append-service.ts", 842, "ard"],
@@ -258,7 +259,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 225,
+    "serviceOwnerCount": 226,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

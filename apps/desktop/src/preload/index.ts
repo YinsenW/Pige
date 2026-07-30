@@ -375,6 +375,14 @@ import {
   BACKUP_CONTINUE_INCOMPLETE_CHANNEL,
   BackupContinueIncompleteRequestSchema,
   BackupContinueIncompleteResultSchema,
+  BACKUP_MEMORY_PREFERENCE_STATUS_CHANNEL,
+  BACKUP_SET_MEMORY_PREFERENCE_CHANNEL,
+  BackupMemoryPreferenceSummarySchema,
+  BackupMemoryPreferenceUpdateRequestSchema,
+  BackupMemoryPreferenceUpdateResultSchema,
+  type BackupMemoryPreferenceSummary,
+  type BackupMemoryPreferenceUpdateRequest,
+  type BackupMemoryPreferenceUpdateResult,
   BACKUP_RECONNECT_DESTINATION_CHANNEL,
   BackupReconnectDestinationRequestSchema,
   BackupReconnectDestinationResultSchema,
@@ -2421,6 +2429,22 @@ const api: PigeDesktopApi = {
   backup: {
     status: async (): Promise<BackupRestoreStatus> =>
       ipcRenderer.invoke("backup.status") as Promise<BackupRestoreStatus>,
+    memoryPreferenceStatus: async (): Promise<BackupMemoryPreferenceSummary> =>
+      BackupMemoryPreferenceSummarySchema.parse(
+        await ipcRenderer.invoke(BACKUP_MEMORY_PREFERENCE_STATUS_CHANNEL)
+      ),
+    setMemoryPreference: async (
+      request: BackupMemoryPreferenceUpdateRequest
+    ): Promise<BackupMemoryPreferenceUpdateResult> => {
+      const parsedRequest = BackupMemoryPreferenceUpdateRequestSchema.parse(request);
+      const result = BackupMemoryPreferenceUpdateResultSchema.parse(
+        await ipcRenderer.invoke(BACKUP_SET_MEMORY_PREFERENCE_CHANNEL, parsedRequest)
+      );
+      if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId) {
+        throw new Error("Invalid Agent memory backup preference response identity.");
+      }
+      return result;
+    },
     create: async (): Promise<BackupCreateResult> =>
       ipcRenderer.invoke("backup.create") as Promise<BackupCreateResult>,
     reconnectDependency: async (

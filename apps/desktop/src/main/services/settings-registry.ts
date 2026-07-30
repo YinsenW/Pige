@@ -94,6 +94,17 @@ export const implementedSettingsRegistry: SettingsRegistrySummary = {
       permissionRequirement: "none"
     },
     {
+      key: "memory.includeMemoryInBackup",
+      page: "Agent & Memory",
+      scope: "vault_portable",
+      owner: "Backup Service",
+      storage: ".pige/config.json",
+      backedUpByDefault: true,
+      applyBehavior: "new_jobs",
+      permissionRequirement: "none",
+      agentPolicyEffect: "memory.includeMemoryInBackup"
+    },
+    {
       key: "models.providerProfiles",
       page: "Models",
       scope: "machine_local",

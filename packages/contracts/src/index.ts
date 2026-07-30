@@ -33,6 +33,9 @@ import type {
   KnowledgeLanguageMutationResult,
   BackupContinueIncompleteRequest,
   BackupContinueIncompleteResult,
+  BackupMemoryPreferenceSummary,
+  BackupMemoryPreferenceUpdateRequest,
+  BackupMemoryPreferenceUpdateResult,
   BackupReconnectDestinationRequest,
   BackupReconnectDestinationResult,
   BackupReconnectDependencyRequest,
@@ -2403,6 +2406,10 @@ export interface PigeDesktopApi {
   };
   readonly backup: {
     readonly status: () => Promise<BackupRestoreStatus>;
+    readonly memoryPreferenceStatus: () => Promise<BackupMemoryPreferenceSummary>;
+    readonly setMemoryPreference: (
+      request: BackupMemoryPreferenceUpdateRequest
+    ) => Promise<BackupMemoryPreferenceUpdateResult>;
     readonly create: () => Promise<BackupCreateResult>;
     readonly reconnectDependency: (
       request: BackupReconnectDependencyRequest

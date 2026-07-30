@@ -23,6 +23,46 @@ const destinationRequest = {
 } as const;
 
 describe("registerBackupRestoreIpc", () => {
+  it("binds the strict pathless Agent memory backup preference identity", async () => {
+    const handlers = new Map<string, (...args: any[]) => unknown>();
+    const summary = {
+      apiVersion: 1 as const,
+      activeVaultId: "vault_20260731_memorybackup01",
+      revision: `backupmemoryrev_${"a".repeat(64)}`,
+      includeVaultMemory: true,
+      canUpdate: true
+    };
+    const update = vi.fn(() => ({
+      apiVersion: 1 as const,
+      requestId: "backupmemoryreq_abcdefghijklmnop",
+      activeVaultId: summary.activeVaultId,
+      status: "updated" as const,
+      summary: { ...summary, revision: `backupmemoryrev_${"b".repeat(64)}`, includeVaultMemory: false }
+    }));
+    register(handlers, {
+      reconnectDependency: vi.fn(),
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      getBackupMemoryPreferenceService: () => ({ summary: () => summary, update })
+    });
+    expect(handlers.get("backup.memoryPreferenceStatus")?.({ sender: sender() })).toEqual(summary);
+    const request = {
+      apiVersion: 1,
+      requestId: "backupmemoryreq_abcdefghijklmnop",
+      activeVaultId: summary.activeVaultId,
+      expectedRevision: summary.revision,
+      includeVaultMemory: false
+    } as const;
+    expect(handlers.get("backup.setMemoryPreference")?.({ sender: sender() }, request)).toMatchObject({
+      status: "updated",
+      summary: { includeVaultMemory: false }
+    });
+    expect(() => handlers.get("backup.setMemoryPreference")?.(
+      { sender: sender() },
+      { ...request, configPath: "/private/vault/.pige/config.json" }
+    )).toThrow();
+    expect(JSON.stringify(update.mock.calls)).not.toContain("/private/");
+  });
+
   it("cancels only the exact sender-owned in-flight Restore preview without renderer path authority", async () => {
     const handlers = new Map<string, (...args: any[]) => unknown>();
     let resolveApply: ((value: { readonly status: "canceled" }) => void) | undefined;
@@ -214,6 +254,7 @@ function register(
     readonly showMessageBox?: () => Promise<{ readonly response: number }>;
     readonly getBackupService?: () => unknown;
     readonly getRestoreCoordinator?: () => unknown;
+    readonly getBackupMemoryPreferenceService?: () => unknown;
   }
 ): void {
   const candidate = {
@@ -234,6 +275,9 @@ function register(
     getLocale: () => "en",
     getDocumentsPath: () => "/documents",
     getBackupService: (overrides.getBackupService ?? (() => ({ status: () => ({}) }))) as any,
+    ...(overrides.getBackupMemoryPreferenceService
+      ? { getBackupMemoryPreferenceService: overrides.getBackupMemoryPreferenceService as any }
+      : {}),
     getBackupCoordinator: () => ({
       inspectReconnectCandidate: () => ({ status: "ready", candidate }),
       reconnectDependency: overrides.reconnectDependency,

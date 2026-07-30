@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type {
+  BackupMemoryPreferenceSummary,
   MemoryLifecycleMutationResult,
   MemoryRecordSummary,
   MemorySummary,
@@ -24,6 +25,10 @@ interface MemoryEditDraft {
 
 function createMemoryRequestId(): string {
   return `memory_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function createBackupMemoryRequestId(): string {
+  return `backupmemoryreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
 }
 
 export interface AgentMemorySettingsPanelProps {
@@ -55,6 +60,10 @@ export function AgentMemorySettingsPanel(
   );
   const [resetConfirmationOpen, setResetConfirmationOpen] = useState(false);
   const [statusKey, setStatusKey] = useState<string | null>(null);
+  const [backupPreference, setBackupPreference] = useState<BackupMemoryPreferenceSummary | null>(null);
+  const [backupPreferenceState, setBackupPreferenceState] = useState<"idle" | "loading" | "ready" | "failed">("idle");
+  const [backupPreferenceSaving, setBackupPreferenceSaving] = useState(false);
+  const [backupPreferenceStatusKey, setBackupPreferenceStatusKey] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<MemoryEditDraft | null>(null);
   const mountedRef = useRef(true);
   const activeVaultIdRef = useRef(props.activeVaultId);
@@ -71,6 +80,32 @@ export function AgentMemorySettingsPanel(
   const resetConfirmRef = useRef<HTMLButtonElement>(null);
   activeVaultIdRef.current = props.activeVaultId;
   editDraftRef.current = editDraft;
+
+  useEffect(() => {
+    const requestedVaultId = props.activeVaultId;
+    let current = true;
+    setBackupPreference(null);
+    setBackupPreferenceStatusKey(null);
+    setBackupPreferenceSaving(false);
+    if (!requestedVaultId) {
+      setBackupPreferenceState("idle");
+      return () => { current = false; };
+    }
+    const backupApi = window.pige.backup;
+    if (!backupApi?.memoryPreferenceStatus) {
+      setBackupPreferenceState("failed");
+      return () => { current = false; };
+    }
+    setBackupPreferenceState("loading");
+    void backupApi.memoryPreferenceStatus().then((next) => {
+      if (!current || activeVaultIdRef.current !== requestedVaultId || next.activeVaultId !== requestedVaultId) return;
+      setBackupPreference(next);
+      setBackupPreferenceState("ready");
+    }).catch(() => {
+      if (current && activeVaultIdRef.current === requestedVaultId) setBackupPreferenceState("failed");
+    });
+    return () => { current = false; };
+  }, [props.activeVaultId]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -456,6 +491,42 @@ export function AgentMemorySettingsPanel(
     window.setTimeout(() => resetTriggerRef.current?.focus(), 0);
   };
 
+  const toggleBackupPreference = async (): Promise<void> => {
+    const current = backupPreference;
+    if (!current || backupPreferenceSaving || !current.canUpdate) return;
+    const requestId = createBackupMemoryRequestId();
+    const requestedVaultId = current.activeVaultId;
+    setBackupPreferenceSaving(true);
+    setBackupPreferenceStatusKey(null);
+    try {
+      const result = await window.pige.backup.setMemoryPreference({
+        apiVersion: 1,
+        requestId,
+        activeVaultId: requestedVaultId,
+        expectedRevision: current.revision,
+        includeVaultMemory: !current.includeVaultMemory,
+      });
+      if (
+        activeVaultIdRef.current !== requestedVaultId ||
+        result.requestId !== requestId ||
+        result.activeVaultId !== requestedVaultId
+      ) return;
+      setBackupPreference(result.summary);
+      setBackupPreferenceStatusKey(
+        result.status === "updated"
+          ? "memory.backupPreferenceSaved"
+          : result.status === "blocked"
+            ? "memory.backupPreferenceBlocked"
+            : "memory.backupPreferenceStale",
+      );
+    } catch {
+      if (activeVaultIdRef.current === requestedVaultId)
+        setBackupPreferenceStatusKey("memory.backupPreferenceFailed");
+    } finally {
+      if (activeVaultIdRef.current === requestedVaultId) setBackupPreferenceSaving(false);
+    }
+  };
+
   const busy = pendingAction !== null;
   const displayedRecords = summary
     ? editDraft &&
@@ -476,6 +547,36 @@ export function AgentMemorySettingsPanel(
         </h1>
         <p>{props.t("memory.subtitle")}</p>
       </header>
+
+      <section className="settings-section" role="group" aria-labelledby="memory-backup-title">
+        <h2 className="settings-section-title" id="memory-backup-title">
+          {props.t("memory.backupPreferenceSection")}
+        </h2>
+        <div className="settings-card">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <strong>{props.t("memory.backupPreferenceTitle")}</strong>
+              <span id="memory-backup-preference-description">
+                {props.t("memory.backupPreferenceDescription")}
+              </span>
+              {backupPreferenceStatusKey ? (
+                <span role="status">{props.t(backupPreferenceStatusKey)}</span>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="settings-switch"
+              role="switch"
+              aria-label={props.t("memory.backupPreferenceTitle")}
+              aria-describedby="memory-backup-preference-description"
+              aria-checked={backupPreference?.includeVaultMemory ?? false}
+              aria-busy={backupPreferenceSaving || undefined}
+              disabled={backupPreferenceState !== "ready" || backupPreferenceSaving || !backupPreference?.canUpdate}
+              onClick={() => void toggleBackupPreference()}
+            />
+          </div>
+        </div>
+      </section>
 
       <section
         className="settings-section"

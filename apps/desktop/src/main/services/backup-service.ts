@@ -42,7 +42,12 @@ import {
   type BackupManagedCopyDependencyIdentity,
   type BackupManagedCopyRepairProof
 } from "./backup-managed-copy-binding";
-import { inspectAgentMemoryBackup, type AgentMemoryBackupIntegrity } from "./agent-memory-backup";
+import {
+  filterAgentMemoryBackupPaths,
+  includesAgentMemoryInBackup,
+  inspectIncludedAgentMemoryBackup,
+  type AgentMemoryBackupIntegrity
+} from "./agent-memory-backup";
 import { ManagedCopyRootService } from "./managed-copy-root-service";
 import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
 import {
@@ -344,7 +349,8 @@ interface BackupPreflightResult {
   readonly archiveSources: ReadonlyMap<string, BackupArchiveSource>;
   readonly sourceRecordChecksums: ReadonlyMap<string, string>;
   readonly domainSchemaVersions: BackupDomainSchemaVersions;
-  readonly memoryIntegrity: AgentMemoryBackupIntegrity;
+  readonly memoryIntegrity?: AgentMemoryBackupIntegrity;
+  readonly includes: BackupRestoreStatus["defaultIncludes"];
   readonly externalDependencies: BackupManifest["externalDependencies"];
   readonly externalManagedCopies: NonNullable<BackupManifest["externalManagedCopies"]>;
 }
@@ -477,14 +483,15 @@ export class BackupRestoreService {
     this.#userDataPath = options.userDataPath;
   }
 
-  status(activeVault: VaultSummary | undefined): BackupRestoreStatus {
+  status(activeVault: VaultSummary | undefined, vaultPath?: string): BackupRestoreStatus {
+    const includes = { ...DEFAULT_INCLUDES, vaultMemory: includesAgentMemoryInBackup(activeVault ? vaultPath : undefined) };
     return {
       phase: "available",
       createAvailable: Boolean(activeVault),
       restoreAvailable: true,
       ...(activeVault?.lastBackupAt ? { lastBackupAt: activeVault.lastBackupAt } : {}),
       messageKey: activeVault ? "backup.statusReady" : "backup.statusNoVault",
-      defaultIncludes: DEFAULT_INCLUDES
+      defaultIncludes: includes
     };
   }
 
@@ -1060,6 +1067,7 @@ function createBackupManifest(
   signal?: AbortSignal
 ): PreparedBackupManifest {
   const vaultManifest = readVaultManifest(vaultPath);
+  if (includesAgentMemoryInBackup(vaultPath) !== preflight.includes.vaultMemory) throw new PigeDomainError("backup.source_changed", "The Agent memory backup preference changed after preflight.");
   const preparedFiles = [...preflight.archiveSources.entries()].sort(([left], [right]) =>
     left.localeCompare(right)
   ).map(([relativePath, source]) => {
@@ -1094,12 +1102,8 @@ function createBackupManifest(
   });
   const files = preparedFiles.map(({ absolutePath: _absolutePath, identity: _identity, source: _source, ...file }) => file);
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
-  const memoryIntegrity = inspectAgentMemoryBackup(
-    vaultPath,
-    vaultManifest.vault_id,
-    preflight.relativePaths
-  );
-  if (stableManifestValue(memoryIntegrity) !== stableManifestValue(preflight.memoryIntegrity)) {
+  const memoryIntegrity = inspectIncludedAgentMemoryBackup(vaultPath, vaultManifest.vault_id, preflight.relativePaths, preflight.includes.vaultMemory);
+  if (preflight.includes.vaultMemory && stableManifestValue(memoryIntegrity) !== stableManifestValue(preflight.memoryIntegrity)) {
     throw new PigeDomainError("backup.source_changed", "Agent memory changed after backup preflight.");
   }
 
@@ -1117,10 +1121,10 @@ function createBackupManifest(
     noteCount: countFiles(path.join(vaultPath, "wiki"), (filePath) => filePath.endsWith(".md")),
     sourceCount: countFiles(path.join(vaultPath, "sources"), (filePath) => filePath.endsWith(".md")),
     conversationCount: countFiles(path.join(vaultPath, ".pige/conversations")),
-    memoryCount: memoryIntegrity.recordCount,
-    memoryIntegrity,
+    memoryCount: memoryIntegrity?.recordCount ?? 0,
+    ...(memoryIntegrity ? { memoryIntegrity } : {}),
     includesSecrets: false,
-    includes: DEFAULT_INCLUDES,
+    includes: preflight.includes,
     domainSchemaVersions: preflight.domainSchemaVersions,
     excludedRoots: [...PIGE_REBUILDABLE_ROOTS, ...PIGE_TRANSIENT_RUNTIME_ROOTS],
     externalDependencies: preflight.externalDependencies,
@@ -1158,10 +1162,12 @@ function inspectBackupPreflight(
   options: BackupCreateOptions,
   userDataPath: string | undefined
 ): BackupPreflightResult {
-  const relativePaths = collectBackupFiles(vaultPath, options);
+  const includeVaultMemory = includesAgentMemoryInBackup(vaultPath);
+  const includes = { ...DEFAULT_INCLUDES, vaultMemory: includeVaultMemory };
+  const relativePaths = filterAgentMemoryBackupPaths(vaultPath, collectBackupFiles(vaultPath, options), includeVaultMemory);
   const domainSchemaVersions = deriveBackupDomainSchemaVersions(vaultPath, relativePaths);
   const sourceVaultId = readVaultManifest(vaultPath).vault_id;
-  const memoryIntegrity = inspectAgentMemoryBackup(vaultPath, sourceVaultId, relativePaths);
+  const memoryIntegrity = inspectIncludedAgentMemoryBackup(vaultPath, sourceVaultId, relativePaths, includeVaultMemory);
   const includedPaths = new Set(relativePaths);
   const archiveSources = new Map<string, BackupArchiveSource>(relativePaths.map((relativePath) => [
     relativePath,
@@ -1297,7 +1303,8 @@ function inspectBackupPreflight(
     archiveSources,
     sourceRecordChecksums,
     domainSchemaVersions,
-    memoryIntegrity,
+    ...(memoryIntegrity ? { memoryIntegrity } : {}),
+    includes,
     externalDependencies,
     externalManagedCopies: externalManagedCopies.sort((left, right) => left.sourceId.localeCompare(right.sourceId))
   };
@@ -3149,11 +3156,7 @@ function validateExtractedRestore(
   }
   if (manifest.memoryIntegrity) {
     try {
-      const actual = inspectAgentMemoryBackup(
-        directoryPath,
-        manifest.memoryIntegrity.sourceVaultId,
-        manifest.files.map((file) => file.path)
-      );
+      const actual = inspectIncludedAgentMemoryBackup(directoryPath, manifest.memoryIntegrity.sourceVaultId, manifest.files.map((file) => file.path), true)!;
       if (
         stableManifestValue(actual) !== stableManifestValue(manifest.memoryIntegrity) ||
         actual.recordCount !== manifest.memoryCount

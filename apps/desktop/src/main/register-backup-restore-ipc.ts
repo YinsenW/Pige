@@ -26,7 +26,12 @@ import type {
 import { PigeDomainError } from "@pige/domain";
 import {
   BACKUP_CONTINUE_INCOMPLETE_CHANNEL,
+  BACKUP_MEMORY_PREFERENCE_STATUS_CHANNEL,
   BACKUP_RECONNECT_DESTINATION_CHANNEL,
+  BACKUP_SET_MEMORY_PREFERENCE_CHANNEL,
+  BackupMemoryPreferenceSummarySchema,
+  BackupMemoryPreferenceUpdateRequestSchema,
+  BackupMemoryPreferenceUpdateResultSchema,
   BackupContinueIncompleteRequestSchema,
   BackupContinueIncompleteResultSchema,
   BackupReconnectDependencyRequestSchema,
@@ -38,6 +43,7 @@ import {
   RestoreCancelResultSchema,
   type Locale
 } from "@pige/schemas";
+import type { BackupMemoryPreferenceService } from "./services/backup-memory-preference-service";
 import type { BackupCoordinatorService } from "./services/backup-coordinator-service";
 import type { BackupRestoreService } from "./services/backup-service";
 import { RestorePreviewRegistry } from "./services/restore-preview-registry";
@@ -56,10 +62,12 @@ interface RegisterBackupRestoreIpcOptions {
   }>;
   readonly showMessageBox: (window: BrowserWindow, options: MessageBoxOptions) => Promise<{ readonly response: number }>;
   readonly getActiveVault: () => VaultSummary | undefined;
+  readonly getActiveVaultPath?: () => string | undefined;
   readonly getLastBackupAt: () => string | undefined;
   readonly getLocale: () => Locale;
   readonly getDocumentsPath: () => string;
   readonly getBackupService: () => BackupRestoreService;
+  readonly getBackupMemoryPreferenceService?: () => BackupMemoryPreferenceService;
   readonly getBackupCoordinator: () => BackupCoordinatorService;
   readonly getRestoreCoordinator: () => RestoreCoordinatorService;
   readonly resumeBackgroundJobs: () => void;
@@ -82,8 +90,26 @@ export function registerBackupRestoreIpc(options: RegisterBackupRestoreIpcOption
     if (!activeVault) return options.getBackupService().status(undefined);
     const { lastBackupAt: _lastBackupAt, ...vault } = activeVault;
     const lastBackupAt = options.getLastBackupAt();
-    return options.getBackupService().status({ ...vault, ...(lastBackupAt ? { lastBackupAt } : {}) });
+    return options.getBackupService().status(
+      { ...vault, ...(lastBackupAt ? { lastBackupAt } : {}) },
+      options.getActiveVaultPath?.()
+    );
   });
+  if (options.getBackupMemoryPreferenceService) {
+    options.ipcMain.handle(BACKUP_MEMORY_PREFERENCE_STATUS_CHANNEL, () =>
+      BackupMemoryPreferenceSummarySchema.parse(options.getBackupMemoryPreferenceService!().summary())
+    );
+    options.ipcMain.handle(BACKUP_SET_MEMORY_PREFERENCE_CHANNEL, (_event, request: unknown) => {
+      const parsed = BackupMemoryPreferenceUpdateRequestSchema.parse(request);
+      const result = BackupMemoryPreferenceUpdateResultSchema.parse(
+        options.getBackupMemoryPreferenceService!().update(parsed)
+      );
+      if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId) {
+        throw new Error("Invalid Agent memory backup preference response identity.");
+      }
+      return result;
+    });
+  }
   options.ipcMain.handle("backup.create", async (event): Promise<BackupCreateResult> => {
     const activeVault = options.getActiveVault();
     if (!activeVault) throw new Error("No active vault for backup creation.");

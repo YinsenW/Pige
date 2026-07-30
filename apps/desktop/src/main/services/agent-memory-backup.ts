@@ -24,6 +24,7 @@ import {
   type StoredMemoryRecord
 } from "./agent-memory-lifecycle";
 import { containsRestrictedModelContent } from "./model-egress-content";
+import { readVaultConfig } from "./vault-layout";
 
 export type AgentMemoryBackupIntegrity = NonNullable<BackupManifest["memoryIntegrity"]>;
 
@@ -31,6 +32,46 @@ const EMPTY_REGISTRY: MemoryRegistry = { schemaVersion: 1, revision: 0, events: 
 const RECEIPT_PATH = /^(?:\.pige\/memory\/(?:edits|mutations)|\.pige\/trash\/memory)\/memory_request_[a-z0-9]{16,64}\.json$/u;
 const RESTORE_INTENT_PATH = /^\.pige\/trash\/memory\/(op_\d{8}_[a-z0-9]{8,})\.restore\.json$/u;
 const OPERATION_PATH = /^\.pige\/operations\/\d{4}\/\d{2}\/(op_\d{8}_[a-z0-9]{8,})\.json$/u;
+const MEMORY_OPERATION_KINDS = new Set(["create_memory", "update_memory", "trash_memory", "restore_memory"]);
+
+export function includesAgentMemoryInBackup(vaultPath?: string): boolean {
+  return vaultPath ? readVaultConfig(vaultPath).backup.includeVaultMemory : true;
+}
+
+export function filterAgentMemoryBackupPaths(
+  vaultPath: string,
+  relativePaths: readonly string[],
+  includeVaultMemory: boolean
+): readonly string[] {
+  return includeVaultMemory
+    ? relativePaths
+    : relativePaths.filter((relativePath) => !isAgentMemoryBackupPath(vaultPath, relativePath));
+}
+
+export function inspectIncludedAgentMemoryBackup(
+  vaultPath: string,
+  sourceVaultId: string,
+  relativePaths: readonly string[],
+  includeVaultMemory: boolean
+): AgentMemoryBackupIntegrity | undefined {
+  return includeVaultMemory ? inspectAgentMemoryBackup(vaultPath, sourceVaultId, relativePaths) : undefined;
+}
+
+export function isAgentMemoryBackupPath(vaultPath: string, relativePath: string): boolean {
+  if (relativePath.startsWith(".pige/memory/") || relativePath.startsWith(".pige/trash/memory/")) return true;
+  if (!OPERATION_PATH.test(relativePath)) return false;
+  try {
+    const candidate = readJson(vaultPath, relativePath);
+    return Boolean(
+      candidate &&
+      typeof candidate === "object" &&
+      !Array.isArray(candidate) &&
+      MEMORY_OPERATION_KINDS.has(String((candidate as Record<string, unknown>).kind))
+    );
+  } catch {
+    return false;
+  }
+}
 
 export function inspectAgentMemoryBackup(
   vaultPath: string,

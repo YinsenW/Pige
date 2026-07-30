@@ -15,6 +15,11 @@ describe("settings registry", () => {
     expect(byKey.get("sourceStorage.defaultStrategy")?.scope).toBe("vault_portable");
     expect(byKey.get("sourceStorage.defaultStrategy")?.agentPolicyEffect).toBe("sourceStorage.defaultStrategy");
     expect(byKey.get("backup.entryPoints")?.scope).toBe("derived_status");
+    expect(byKey.get("memory.includeMemoryInBackup")).toMatchObject({
+      scope: "vault_portable",
+      storage: ".pige/config.json",
+      agentPolicyEffect: "memory.includeMemoryInBackup"
+    });
     expect(byKey.get("models.providerApiKeys")?.scope).toBe("secret");
     expect(byKey.get("models.defaultPiAgentModel")?.agentPolicyEffect).toBe("model.defaultModelProfileId");
     expect([...byKey.keys()].filter((key) => key.startsWith("permissions."))).toEqual([]);
