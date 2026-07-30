@@ -25,6 +25,7 @@ import type {
   KnowledgeActivityListRequest,
   KnowledgeActivityRedoRequest,
   KnowledgeActivityUndoRequest,
+  LibraryBrowseRequest,
   LibraryListRequest,
   LibraryMergeTagRequest,
   LibraryRemoveTagRequest,
@@ -126,6 +127,9 @@ import {
   MANAGED_COPY_ROOT_CONFIGURE_CHANNEL,
   ManagedCopyRootConfigureRequestSchema,
   ManagedCopyRootConfigureResultSchema,
+  LIBRARY_BROWSE_CHANNEL,
+  LibraryBrowseRequestSchema,
+  LibraryBrowseResultSchema,
   LIBRARY_MERGE_TAG_CHANNEL,
   LibraryMergeTagRequestSchema,
   LibraryMergeTagResultSchema,
@@ -2960,6 +2964,10 @@ ipcMain.handle("activity.redo", (_event, request: KnowledgeActivityRedoRequest) 
   return result;
 });
 ipcMain.handle("library.list", (_event, request?: LibraryListRequest) => getLibraryService().list(request));
+ipcMain.handle(LIBRARY_BROWSE_CHANNEL, (_event, request: LibraryBrowseRequest) => {
+  const parsed = LibraryBrowseRequestSchema.parse(request);
+  return LibraryBrowseResultSchema.parse(getLibraryService().browse(parsed));
+});
 ipcMain.handle("library.tree", () => getLibraryService().tree());
 ipcMain.handle("library.related", (_event, request: LibraryRelatedRequest) => getLibraryService().related(request));
 ipcMain.handle("library.tags", (_event, request: LibraryTagsRequest) => {

@@ -40,6 +40,9 @@ import {
   type LocalDatabaseRebuildPort,
   type LocalDatabaseRebuildProgress
 } from "./local-database-rebuild-types";
+import { readLocalDatabaseLibraryPageSlice, type LocalDatabaseLibraryPageSlice,
+  type LocalDatabaseLibraryPageSliceRequest } from "./local-database-library-browse";
+export type { LocalDatabaseLibraryPageSlice, LocalDatabaseLibraryPageSliceRequest } from "./local-database-library-browse";
 import {
   createAmbiguityAwarePageLookup,
   normalizeLocalReference,
@@ -84,6 +87,7 @@ export interface LocalDatabaseDriver {
     callbacks?: LocalDatabaseRebuildCallbacks
   ) => LocalDatabaseRebuildResult | undefined;
   readonly listPages: (vaultPath: string, request?: LibraryListRequest) => LocalDatabasePageList | undefined;
+  readonly browseLibraryPages: (vaultPath: string, request: LocalDatabaseLibraryPageSliceRequest) => LocalDatabaseLibraryPageSlice | undefined;
   readonly relatedPages: (vaultPath: string, request: LibraryRelatedRequest) => LocalDatabaseRelatedPages | undefined;
   readonly searchPages: (vaultPath: string, request: RetrievalSearchRequest) => LocalDatabaseSearchResult | undefined;
   readonly knowledgeTree: (vaultPath: string) => KnowledgeTreeSnapshot | undefined;
@@ -129,6 +133,7 @@ export class PendingSqliteDriver implements LocalDatabaseDriver {
 
   rebuild(): undefined { return undefined; }
   listPages(): undefined { return undefined; }
+  browseLibraryPages(): undefined { return undefined; }
   searchPages(): undefined { return undefined; }
   relatedPages(): undefined { return undefined; }
   knowledgeTree(): undefined { return undefined; }
@@ -358,6 +363,16 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
         invalidPageCount: readInvalidPageCount(db),
         pages: rows.map(rowToSummary)
       };
+    } finally {
+      db.close();
+    }
+  }
+
+  browseLibraryPages(vaultPath: string, request: LocalDatabaseLibraryPageSliceRequest): LocalDatabaseLibraryPageSlice | undefined {
+    if (!this.ensureReady(vaultPath)) return undefined;
+    const db = openVaultDatabase(vaultPath);
+    try {
+      return readLocalDatabaseLibraryPageSlice(db, request, rowToSummary);
     } finally {
       db.close();
     }
@@ -725,6 +740,9 @@ export class LocalDatabaseService {
 
   listPages(vaultPath: string, request?: LibraryListRequest): LocalDatabasePageList | undefined {
     return this.#driver.listPages(vaultPath, request);
+  }
+  browseLibraryPages(vaultPath: string, request: LocalDatabaseLibraryPageSliceRequest): LocalDatabaseLibraryPageSlice | undefined {
+    return this.#driver.browseLibraryPages(vaultPath, request);
   }
   searchPages(vaultPath: string, request: RetrievalSearchRequest): LocalDatabaseSearchResult | undefined {
     return this.#driver.searchPages(vaultPath, request);

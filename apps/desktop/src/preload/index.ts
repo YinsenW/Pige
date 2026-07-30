@@ -90,6 +90,8 @@ import type {
   ManagedCopyRootConfigureResult,
   ManagedCopyRootSummary,
   KnowledgeTreeResult,
+  LibraryBrowseRequest,
+  LibraryBrowseResult,
   LibraryListRequest,
   LibraryListResult,
   LibraryRelatedRequest,
@@ -454,6 +456,9 @@ import {
   CollectionTrashRowRequestSchema,
   CollectionTrashRowResultSchema,
   LIBRARY_TAGS_CHANNEL,
+  LIBRARY_BROWSE_CHANNEL,
+  LibraryBrowseRequestSchema,
+  LibraryBrowseResultSchema,
   LIBRARY_RENAME_TAG_CHANNEL,
   LIBRARY_MERGE_TAG_CHANNEL,
   LIBRARY_REMOVE_TAG_CHANNEL,
@@ -1861,6 +1866,16 @@ const api: PigeDesktopApi = {
   library: {
     list: async (request?: LibraryListRequest): Promise<LibraryListResult> =>
       ipcRenderer.invoke("library.list", request) as Promise<LibraryListResult>,
+    browse: async (request: LibraryBrowseRequest): Promise<LibraryBrowseResult> => {
+      const parsed = LibraryBrowseRequestSchema.parse(request);
+      const result = LibraryBrowseResultSchema.parse(
+        await ipcRenderer.invoke(LIBRARY_BROWSE_CHANNEL, parsed)
+      );
+      if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId) {
+        throw new Error("Library browse response identity mismatch.");
+      }
+      return result;
+    },
     tree: async (): Promise<KnowledgeTreeResult> =>
       ipcRenderer.invoke("library.tree") as Promise<KnowledgeTreeResult>,
     related: async (request: LibraryRelatedRequest): Promise<LibraryRelatedResult> =>

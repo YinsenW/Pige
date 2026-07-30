@@ -7,6 +7,8 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   LibraryListResult,
+  LibraryBrowseRequest,
+  LibraryBrowseResult,
   LibraryMergeTagRequest,
   LibraryMergeTagResult,
   LibraryRemoveTagRequest,
@@ -55,6 +57,7 @@ import type {
 } from "@pige/contracts";
 import type { CollectionListResult } from "@pige/schemas";
 import { filterLibraryPages, LibraryPanel } from "../../apps/desktop/src/renderer/src/App";
+import { useLibraryBrowse } from "../../apps/desktop/src/renderer/src/components/useLibraryBrowse";
 import {
   LibraryTagsBrowser,
   type LibraryTagsBrowserLabels,
@@ -94,6 +97,61 @@ afterEach(() => {
 });
 
 describe("full UI Library", () => {
+  it("starts only one continuation request when load more is triggered twice in one render", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    let refresh: (() => Promise<void>) | undefined;
+    let loadMore: (() => Promise<void>) | undefined;
+    let resolveContinuation: ((result: LibraryBrowseResult) => void) | undefined;
+    const browse = vi.fn((request: LibraryBrowseRequest): Promise<LibraryBrowseResult> => {
+      if (!request.cursor) {
+        return Promise.resolve({
+          ...request,
+          status: "ready",
+          snapshotId: `library_browse_snapshot_${"a".repeat(64)}`,
+          scannedAt: "2026-07-31T08:00:00.000Z",
+          total: 2,
+          invalidPageCount: 0,
+          pages: [libraryPage("page_library_browse_first", "First", "2026-07-31T08:00:00.000Z")],
+          nextCursor: `library_browse_cursor_${"b".repeat(64)}`
+        });
+      }
+      return new Promise((resolve) => { resolveContinuation = resolve; });
+    });
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { library: { browse } }
+    });
+    function Harness(): React.JSX.Element {
+      const state = useLibraryBrowse("vault_20260731_librarybrowse", () => undefined, "Library unavailable");
+      refresh = state.refresh;
+      loadMore = state.loadMore;
+      return createElement("output", null, state.libraryList?.pages.length ?? 0);
+    }
+    await act(async () => { root.render(createElement(Harness)); await settle(dom); });
+    await act(async () => { await refresh?.(); await settle(dom); });
+    await act(async () => {
+      void loadMore?.();
+      void loadMore?.();
+      await Promise.resolve();
+    });
+    expect(browse).toHaveBeenCalledTimes(2);
+    const request = browse.mock.calls[1]![0];
+    resolveContinuation?.({
+      ...request,
+      status: "ready",
+      snapshotId: `library_browse_snapshot_${"a".repeat(64)}`,
+      scannedAt: "2026-07-31T08:01:00.000Z",
+      total: 2,
+      invalidPageCount: 0,
+      pages: [libraryPage("page_library_browse_second", "Second", "2026-07-31T07:00:00.000Z")]
+    });
+    await act(async () => { await settle(dom); });
+    expect(dom.window.document.querySelector("output")?.textContent).toBe("2");
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("confirms one archive at a time, retains focus on failure, and adopts only a committed render", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
@@ -3502,6 +3560,23 @@ function libraryList(): LibraryListResult {
       language: "en",
       sourceIds: []
     }]
+  };
+}
+
+function libraryPage(
+  pageId: string,
+  title: string,
+  updatedAt: string
+): LibraryListResult["pages"][number] {
+  return {
+    pageId,
+    title,
+    pageType: "note",
+    status: "active",
+    pagePath: `wiki/${pageId}.md`,
+    createdAt: updatedAt,
+    updatedAt,
+    sourceIds: []
   };
 }
 
