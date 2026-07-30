@@ -6,6 +6,7 @@ import { parseDocument } from "yaml";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const issueTemplateRoot = path.join(root, ".github", "ISSUE_TEMPLATE");
 const supportPolicyPath = path.join(root, "SUPPORT.md");
+const securityPolicyPath = path.join(root, "SECURITY.md");
 const FORM_TYPES = new Set(["input", "textarea", "dropdown", "checkboxes", "markdown"]);
 const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
@@ -195,8 +196,54 @@ export async function validateSupportSurface({
   assert(privateReporting, "config.yml must expose the enabled private vulnerability reporting route");
 }
 
+export async function validateSecuritySurface({
+  directory = issueTemplateRoot,
+  securityPath = securityPolicyPath,
+} = {}) {
+  await validateIssueTemplateDirectory(directory);
+  const [securityPolicy, contactSource, configSource] = await Promise.all([
+    readFile(securityPath, "utf8"),
+    readFile(path.join(directory, "security_contact_request.yml"), "utf8"),
+    readFile(path.join(directory, "config.yml"), "utf8"),
+  ]);
+
+  for (const heading of [
+    "## Reporting A Vulnerability",
+    "## In Scope",
+    "## Out Of Scope",
+    "## Maintainer Handling",
+    "## AI Agent Handling",
+  ]) {
+    assert(securityPolicy.includes(heading), `SECURITY.md is missing ${heading}`);
+  }
+  for (const statement of [
+    "Use GitHub private vulnerability reporting through",
+    "Do not open a public issue with exploit steps, secrets, private files, or user data",
+    "If that GitHub path is temporarily unavailable",
+    "Create a private fix plan that names owner, affected services, tests, release path, and disclosure timing",
+    "Publish a security advisory or release note when appropriate",
+  ]) {
+    assert(securityPolicy.includes(statement), `SECURITY.md is missing disclosure boundary: ${statement}`);
+  }
+
+  const contact = parseYaml(contactSource, "security_contact_request.yml");
+  const contactMarkdown = contact.body
+    .filter((item) => item.type === "markdown")
+    .map((item) => item.attributes.value)
+    .join("\n");
+  assert(contactMarkdown.includes("temporarily unavailable"), "security fallback must be limited to private-reporting outages");
+  assert(contactMarkdown.includes("Do not include vulnerability details"), "security fallback must prohibit public details");
+
+  const config = parseYaml(configSource, "config.yml");
+  assert(
+    config.contact_links.some((link) => link.url === "https://github.com/YinsenW/Pige/security/advisories/new"),
+    "config.yml must expose private vulnerability reporting",
+  );
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const files = await validateIssueTemplateDirectory();
   await validateSupportSurface();
+  await validateSecuritySurface();
   console.log(`public issue template verification passed (${files.length} files)`);
 }

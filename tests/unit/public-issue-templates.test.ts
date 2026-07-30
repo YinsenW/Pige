@@ -6,6 +6,7 @@ import {
   validateIssueForm,
   validateIssueTemplateConfig,
   validateIssueTemplateDirectory,
+  validateSecuritySurface,
   validateSupportSurface,
 } from "../../scripts/verify/public-issue-templates.mjs";
 
@@ -75,5 +76,30 @@ contact_links:
     const support = (await readFile(supportPath, "utf8")).replace("## Maintainer Triage", "## Triage");
     await writeFile(supportPath, support);
     await expect(validateSupportSurface({ directory, supportPath })).rejects.toThrow("missing ## Maintainer Triage");
+  });
+
+  it("verifies the public security disclosure boundary", async () => {
+    await expect(validateSecuritySurface()).resolves.toBeUndefined();
+  });
+
+  it("fails closed when private reporting or maintainer disclosure drifts", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pige-security-surface-"));
+    const directory = path.join(root, "templates");
+    await cp(path.resolve(".github/ISSUE_TEMPLATE"), directory, { recursive: true });
+    const securityPath = path.join(root, "SECURITY.md");
+    const security = (await readFile(path.resolve("SECURITY.md"), "utf8")).replace(
+      "## Maintainer Handling",
+      "## Handling",
+    );
+    await writeFile(securityPath, security);
+    await expect(validateSecuritySurface({ directory, securityPath })).rejects.toThrow("missing ## Maintainer Handling");
+
+    await writeFile(securityPath, await readFile(path.resolve("SECURITY.md"), "utf8"));
+    const configPath = path.join(directory, "config.yml");
+    const config = (await readFile(configPath, "utf8")).replace("/security/advisories/new", "/issues/new");
+    await writeFile(configPath, config);
+    await expect(validateSecuritySurface({ directory, securityPath })).rejects.toThrow(
+      "must expose private vulnerability reporting",
+    );
   });
 });
