@@ -943,6 +943,9 @@ Rules:
   and keeps the wait. Chooser owns the action—no Permission Broker; generic/Backup retry
   is `not_allowed` without private proof.
 - `backup.status` derives last completion from user Backup Jobs, never rollback/renderer state.
+- `BackupManifest.memoryIntegrity` privately binds the vault-scoped memory registry checksum,
+  revision and lifecycle/restore/Operation counts. Create rechecks it after preflight; restore
+  rederives it before publication. DTO summaries expose only the existing bounded `memoryCount`.
 - Restore picker/preview binds and validates archive, entries, bounds, checksums, schemas,
   legacy input and dependency counts without raw detail. Apply requires that ID plus
   `replace_existing` (preserve vault ID) or `clone_as_new` (mint ID/lineage), one replay-safe
