@@ -3,7 +3,7 @@
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 211,
-  "baselineLines": 105881,
+  "baselineLines": 105997,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -45,7 +45,7 @@
       ["jobs-service.ts", 6953, "japrd"],
       ["knowledge-activity-service.ts", 1661, "rd"],
       ["knowledge-health-service.ts", 341, "r"],
-      ["library-tag-rename-service.ts", 437, "rdf"],
+      ["library-tag-rename-service.ts", 553, "rdf"],
       ["local-tool-job-recorder.ts", 90, "jr"],
       ["local-semantic-retrieval-service.ts", 354, "jpr"],
       ["managed-collection-service.ts", 893, "rd"],
