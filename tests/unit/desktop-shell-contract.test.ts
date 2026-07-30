@@ -144,6 +144,34 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("freezes one Main-owned pathless Markdown note import surface", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const notesApiStart = contractsSource.indexOf("readonly notes: {");
+    const notesApi = contractsSource.slice(
+      notesApiStart,
+      contractsSource.indexOf("readonly localCapabilities: {", notesApiStart)
+    );
+    const importSchemas = schemasSource.slice(
+      schemasSource.indexOf("export const NOTE_IMPORT_MARKDOWN_CHANNEL"),
+      schemasSource.indexOf("export const NoteArchiveCurrentRequestSchema")
+    );
+    expect(importSchemas).toContain('NOTE_IMPORT_MARKDOWN_CHANNEL = "notes.importMarkdown"');
+    expect(importSchemas).toContain("activeVaultId: VaultIdSchema");
+    expect(importSchemas).toContain('["cancelled", "stale", "invalid", "failed"]');
+    expect(importSchemas).toContain("operationId: OperationIdSchema");
+    expect(importSchemas).toContain("render: NoteRenderResultSchema");
+    expect(notesApi).toContain("readonly importMarkdown: (");
+    expect(preloadSource).toContain("NoteImportMarkdownRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteImportMarkdownResultSchema.parse(");
+    for (const privateField of ["path", "body", "markdown", "checksum", "sourceId"]) {
+      expect(importSchemas).not.toContain(privateField);
+      expect(notesApi.slice(notesApi.indexOf("readonly importMarkdown:"), notesApi.indexOf("readonly archiveCurrent:")))
+        .not.toContain(privateField);
+    }
+  });
+
   it("freezes one Main-owned machine-local diagnostics clear channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");

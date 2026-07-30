@@ -8,6 +8,8 @@ import type {
   NoteEditorSaveResult,
   NoteMergeRequest,
   NoteMergeResult,
+  NoteImportMarkdownRequest,
+  NoteImportMarkdownResult,
   NoteOpenSourceReferenceRequest,
   NoteReconnectOriginalSourceRequest,
   NoteRevealSourceRequest,
@@ -33,6 +35,9 @@ import {
   NOTE_MERGE_CHANNEL,
   NoteMergeRequestSchema,
   NoteMergeResultSchema,
+  NOTE_IMPORT_MARKDOWN_CHANNEL,
+  NoteImportMarkdownRequestSchema,
+  NoteImportMarkdownResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
@@ -72,6 +77,7 @@ import type { ReaderSourceReconnectService } from "./services/reader-source-reco
 import type { NoteTrashService } from "./services/note-trash-service";
 import type { NoteArchiveService } from "./services/note-archive-service";
 import type { NoteMergeService } from "./services/note-merge-service";
+import type { NoteMarkdownImportService } from "./services/note-markdown-import-service";
 
 interface RegisterReaderIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
@@ -89,8 +95,10 @@ interface RegisterReaderIpcOptions {
   readonly getNoteTrashService: () => NoteTrashService;
   readonly getNoteArchiveService: () => NoteArchiveService;
   readonly getNoteMergeService: () => NoteMergeService;
+  readonly getNoteMarkdownImportService: () => NoteMarkdownImportService;
   readonly onNoteTrashCommitted: () => void;
   readonly onNoteArchiveCommitted: () => void;
+  readonly onNoteImported: () => void;
 }
 
 function failedEditorOpen(request: NoteEditorOpenRequest): NoteEditorOpenResult {
@@ -233,6 +241,29 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       return NoteArchiveCurrentResultSchema.parse({ ...parsed, status: "failed" });
     }
     return result;
+  });
+  options.ipcMain.handle(NOTE_IMPORT_MARKDOWN_CHANNEL, async (event, request: unknown): Promise<NoteImportMarkdownResult> => {
+    const parsed = NoteImportMarkdownRequestSchema.parse(request) as NoteImportMarkdownRequest;
+    const ownerId = trackNotesSender(event.sender);
+    const window = options.getWindow(event.sender);
+    if (event.sender.isDestroyed() || !window) {
+      return NoteImportMarkdownResultSchema.parse({ ...parsed, status: "stale" });
+    }
+    const result = await options.getNoteMarkdownImportService().importMarkdown(ownerId, parsed, {
+      pick: async () => {
+        const selection = await options.showOpenDialog(window, {
+          title: "Import Markdown note",
+          properties: ["openFile"],
+          filters: [{ name: "Markdown", extensions: ["md"] }]
+        });
+        return selection.canceled || selection.filePaths.length !== 1 ? undefined : selection.filePaths[0];
+      }
+    });
+    if (notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
+      return NoteImportMarkdownResultSchema.parse({ ...parsed, status: "stale" });
+    }
+    if (result.status === "imported") options.onNoteImported();
+    return NoteImportMarkdownResultSchema.parse(result);
   });
   options.ipcMain.handle(NOTE_MERGE_CHANNEL, async (event, request: unknown): Promise<NoteMergeResult> => {
     const parsed = NoteMergeRequestSchema.parse(request);

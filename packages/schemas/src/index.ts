@@ -1515,6 +1515,25 @@ export const NoteEditorSaveResultSchema = z.discriminatedUnion("status", [
 
 export const NOTE_TRASH_CURRENT_CHANNEL = "notes.trashCurrent" as const;
 export const NOTE_ARCHIVE_CURRENT_CHANNEL = "notes.archiveCurrent" as const;
+export const NOTE_IMPORT_MARKDOWN_CHANNEL = "notes.importMarkdown" as const;
+export const NoteImportMarkdownRequestIdSchema = z.string()
+  .regex(/^noteimport_[a-z0-9]{16,64}$/u);
+export const NoteImportMarkdownRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteImportMarkdownRequestIdSchema,
+  activeVaultId: VaultIdSchema
+}).strict();
+const NoteImportMarkdownResultIdentitySchema = NoteImportMarkdownRequestSchema;
+export const NoteImportMarkdownResultSchema = z.discriminatedUnion("status", [
+  NoteImportMarkdownResultIdentitySchema.extend({
+    status: z.literal("imported"),
+    operationId: OperationIdSchema,
+    render: NoteRenderResultSchema
+  }).strict(),
+  ...(["cancelled", "stale", "invalid", "failed"] as const).map((status) =>
+    NoteImportMarkdownResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
 export const NoteArchiveCurrentRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: NoteArchiveCurrentRequestIdSchema,
@@ -8743,6 +8762,8 @@ export type NoteInlineReferenceRequestId = z.infer<typeof NoteInlineReferenceReq
 export type NoteRenderContextId = z.infer<typeof NoteRenderContextIdSchema>;
 export type NoteRenderPageSummary = z.infer<typeof NoteRenderPageSummarySchema>;
 export type NoteRenderResult = z.infer<typeof NoteRenderResultSchema>;
+export type NoteImportMarkdownRequest = z.infer<typeof NoteImportMarkdownRequestSchema>;
+export type NoteImportMarkdownResult = z.infer<typeof NoteImportMarkdownResultSchema>;
 export type NoteEditorRequestId = z.infer<typeof NoteEditorRequestIdSchema>;
 export type NoteEditorRevision = z.infer<typeof NoteEditorRevisionSchema>;
 export type NoteEditorPortableMarkdown = z.infer<typeof NoteEditorPortableMarkdownSchema>;

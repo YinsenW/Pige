@@ -179,6 +179,94 @@ describe("full UI Library", () => {
     expect(filterLibraryPages(pages, "all", "missing")).toEqual([]);
   });
 
+  it("imports one Markdown note at a time and retains Library state and focus on closed outcomes", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: Array<{ apiVersion: 1; requestId: `noteimport_${string}`; activeVaultId: string }> = [];
+    const adopted: NoteRenderResult[] = [];
+    let resolveFirst: ((result: {
+      apiVersion: 1;
+      requestId: `noteimport_${string}`;
+      activeVaultId: string;
+      status: "cancelled";
+    }) => void) | null = null;
+    let mode: "cancelled" | "stale" | "invalid" | "failed" | "imported" = "cancelled";
+    const imported = {
+      ...readerNote(),
+      summary: {
+        ...readerNote().summary,
+        pageId: "page_20260730_import01",
+        title: "Imported field notes",
+        pageType: "note" as const,
+        status: "active" as const,
+      },
+    };
+    await act(async () => {
+      root.render(createElement(LibraryPanel, {
+        libraryList: libraryList(),
+        activeVaultId: "vault_20260715_fullui01",
+        selectedNote: null,
+        selectedNoteRelated: null,
+        noteLoadingPageId: null,
+        error: null,
+        onGoHome: () => undefined,
+        onImportMarkdown: async (request) => {
+          requests.push(request);
+          if (requests.length === 1) {
+            return new Promise((resolve) => {
+              resolveFirst = resolve;
+            });
+          }
+          return mode === "imported"
+            ? { ...request, status: "imported", operationId: "op_20260730_import01", render: imported }
+            : { ...request, status: mode };
+        },
+        onNoteImported: (render) => adopted.push(render),
+        onRefresh: async () => undefined,
+        onSearch: async () => searchResult("unused", []),
+        searchFocusRequest: 0,
+        onOpenNote: async () => undefined,
+        onCloseNote: () => undefined,
+        noteAgentOpen: false,
+        onToggleNoteAgent: () => undefined,
+        noteAgentToggleRef: { current: null },
+        developmentNotice: null,
+        onDevelopment: () => undefined,
+        t,
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const trigger = buttonWithLabel(container, "Import Markdown note");
+    await act(async () => {
+      trigger.click();
+      trigger.click();
+      await Promise.resolve();
+    });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ apiVersion: 1, activeVaultId: "vault_20260715_fullui01" });
+    expect(requests[0]?.requestId).toMatch(/^noteimport_[a-z0-9]{16,64}$/u);
+    resolveFirst?.({ ...requests[0]!, status: "cancelled" });
+    await act(async () => settle(dom));
+    expect(dom.window.document.activeElement).toBe(trigger);
+    expect(container.textContent).toContain("Alpha plan");
+
+    for (const closedStatus of ["stale", "invalid", "failed"] as const) {
+      mode = closedStatus;
+      await clickButton(dom, trigger);
+      expect(dom.window.document.activeElement).toBe(trigger);
+      expect(container.textContent).toContain(enMessages[`library.importMarkdown${closedStatus[0]!.toUpperCase()}${closedStatus.slice(1)}` as keyof typeof enMessages]);
+      expect(container.textContent).toContain("Alpha plan");
+    }
+
+    mode = "imported";
+    await clickButton(dom, trigger);
+    expect(adopted).toEqual([imported]);
+    expect(requests).toHaveLength(5);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("filters real page summaries by title and durable page type", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);

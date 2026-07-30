@@ -18,6 +18,19 @@ import {
   LibraryTagsBrowser,
   type LibraryTagsApi,
 } from "./components/LibraryTagsBrowser";
+import { LibraryMarkdownImportAction } from "./components/LibraryMarkdownImportAction";
+import {
+  LIBRARY_FAMILIES,
+  LIBRARY_RESULT_GROUPS,
+  groupLibrarySearchItems,
+  libraryBrowseItems,
+  libraryFamilyPageTypes,
+  libraryMatchReasonLabel,
+  libraryResultIconLabel,
+  type LibraryFamily,
+  type LibrarySearchState,
+} from "./components/library-panel-model";
+export { filterLibraryPages } from "./components/library-panel-model";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ConversationMarkdown } from "./components/ConversationMarkdown";
 import { ConversationHistoryPanel } from "./components/ConversationHistoryPanel";
@@ -98,6 +111,8 @@ import type {
   ModelProfileSummary,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteImportMarkdownRequest,
+  NoteImportMarkdownResult,
   NoteReconnectOriginalSourceRequest,
   NoteReconnectOriginalSourceResult,
   NoteRevealSourceRequest,
@@ -2560,6 +2575,8 @@ export function App(): React.JSX.Element {
             noteLoadingPageId={noteLoadingPageId}
             error={libraryError}
             onGoHome={navigateHome}
+            onImportMarkdown={(request) => window.pige.notes.importMarkdown(request)}
+            onNoteImported={adoptMergedNote}
             onRefresh={async () => {
               await Promise.all([refreshLibrary(), refreshCollectionCatalog(false)]);
             }}
@@ -3174,6 +3191,8 @@ export function LibraryPanel(props: {
   readonly error: string | null;
   readonly readerBackLabel?: string;
   readonly onGoHome: () => void;
+  readonly onImportMarkdown?: (request: NoteImportMarkdownRequest) => Promise<NoteImportMarkdownResult>;
+  readonly onNoteImported?: (render: NoteRenderResult) => void;
   readonly onRefresh: () => Promise<void>;
   readonly onSearch: (request: RetrievalSearchRequest) => Promise<RetrievalSearchResult>;
   readonly onOpenSourceReference?: (
@@ -3585,6 +3604,14 @@ export function LibraryPanel(props: {
       <header className="library-header view-toolbar">
         <strong>{props.t("library.title")}</strong>
         <span className="toolbar-meta">{props.t("library.content")}</span>
+        {activeVaultId && props.onImportMarkdown && props.onNoteImported ? (
+          <LibraryMarkdownImportAction
+            activeVaultId={activeVaultId}
+            t={props.t}
+            onImport={props.onImportMarkdown}
+            onImported={props.onNoteImported}
+          />
+        ) : null}
         <button
           type="button"
           className="icon-button"
@@ -3822,86 +3849,6 @@ export function LibraryPanel(props: {
       </div>
     </section>
   );
-}
-
-type LibraryFamily = "all" | "notes" | "sources" | "topics" | "tags";
-type LibraryResultGroup = "notes" | "sources" | "topics";
-type LibrarySearchState =
-  | { readonly kind: "idle" }
-  | { readonly kind: "loading"; readonly query: string; readonly family: LibraryFamily }
-  | { readonly kind: "result"; readonly query: string; readonly family: LibraryFamily; readonly result: RetrievalSearchResult }
-  | { readonly kind: "error"; readonly query: string; readonly family: LibraryFamily };
-
-const LIBRARY_FAMILIES: readonly LibraryFamily[] = ["all", "notes", "sources", "topics", "tags"];
-const LIBRARY_RESULT_GROUPS: readonly LibraryResultGroup[] = ["notes", "sources", "topics"];
-const LIBRARY_TOPIC_PAGE_TYPES = ["topic", "concept", "entity", "claim", "question"] as const;
-
-function libraryFamilyPageTypes(family: LibraryFamily): RetrievalSearchRequest["pageTypes"] | undefined {
-  if (family === "notes") return ["note"];
-  if (family === "sources") return ["source"];
-  if (family === "topics") return LIBRARY_TOPIC_PAGE_TYPES;
-  return undefined;
-}
-
-function libraryResultGroup(page: LibraryPageSummary): LibraryResultGroup {
-  if (page.pageType === "source") return "sources";
-  if (page.pageType === "note") return "notes";
-  return "topics";
-}
-
-function groupLibrarySearchItems(
-  items: readonly RetrievalSearchResultItem[]
-): Record<LibraryResultGroup, readonly RetrievalSearchResultItem[]> {
-  const groups: Record<LibraryResultGroup, RetrievalSearchResultItem[]> = {
-    notes: [],
-    sources: [],
-    topics: []
-  };
-  for (const item of items) groups[libraryResultGroup(item.summary)].push(item);
-  return groups;
-}
-
-function libraryMatchReasonLabel(
-  matchReasons: readonly string[],
-  t: (key: string) => string
-): string | null {
-  const labels: string[] = [];
-  const knownReasons = new Set<string>();
-  for (const reason of matchReasons) {
-    if (reason !== "title" && reason !== "body" && reason !== "path") continue;
-    if (knownReasons.has(reason)) continue;
-    knownReasons.add(reason);
-    labels.push(t(`library.matchReason.${reason}`));
-  }
-  return labels.length > 0 ? labels.join(" · ") : null;
-}
-
-function libraryBrowseItems(
-  pages: LibraryListResult["pages"],
-  family: LibraryFamily
-): readonly RetrievalSearchResultItem[] {
-  if (family === "tags") return [];
-  return pages
-    .filter((page) => family === "all" || libraryResultGroup(page) === family)
-    .map((summary) => ({ summary, score: 0, snippets: [], matchReasons: [] }));
-}
-
-function libraryResultIconLabel(pageType: LibraryPageSummary["pageType"]): string {
-  if (pageType === "source") return "SRC";
-  if (pageType === "note") return "MD";
-  return "#";
-}
-
-export function filterLibraryPages(
-  pages: LibraryListResult["pages"],
-  filter: "all" | "note" | "source" | "topic",
-  query: string
-): LibraryListResult["pages"] {
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  return pages.filter((page) => {
-    if (filter !== "all" && page.pageType !== filter) return false;
-    return !normalizedQuery || page.title.toLocaleLowerCase().includes(normalizedQuery);
-  });
 }
 
 export function KnowledgeTreePanel(props: {
