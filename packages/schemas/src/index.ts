@@ -4695,6 +4695,7 @@ export const DatasetQueryScalarSchema = z.union([
 ]);
 
 export const LIBRARY_TAGS_CHANNEL = "library.tags" as const;
+export const LIBRARY_RENAME_TAG_CHANNEL = "library.renameTag" as const;
 export const LIBRARY_TAGS_PAGE_SIZE_MAX = 50;
 export const LibraryTagsRequestIdSchema = z.string().regex(
   /^library_tags_request_[a-z0-9]{16,64}$/
@@ -4709,6 +4710,9 @@ export const LibraryCanonicalTagSchema = z.string().min(1).max(48).refine(
   (value) => !/[\u0000-\u001f\u007f]/u.test(value) &&
     value === value.normalize("NFKC").replace(/\s+/gu, " ").trim(),
   "Library tags must use the canonical Markdown tag representation."
+);
+export const LibraryRenameTagRequestIdSchema = z.string().regex(
+  /^library_tag_rename_request_[a-z0-9]{16,64}$/
 );
 
 const LibraryTagsRequestBaseShape = {
@@ -4841,6 +4845,32 @@ export const LibraryTagsResultSchema = z.union([
     }
   }
 });
+
+const LibraryRenameTagIdentityShape = {
+  apiVersion: z.literal(1),
+  requestId: LibraryRenameTagRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  tag: LibraryCanonicalTagSchema,
+  replacementTag: LibraryCanonicalTagSchema,
+  expectedSnapshotId: LibraryTagsSnapshotIdSchema,
+  expectedPageCount: z.number().int().positive().max(1_000)
+} as const;
+
+export const LibraryRenameTagRequestSchema = z.object(LibraryRenameTagIdentityShape).strict()
+  .refine((request) => request.tag.toLocaleLowerCase("en-US") !== request.replacementTag.toLocaleLowerCase("en-US"), {
+    path: ["replacementTag"],
+    message: "A Library tag rename must change the canonical tag key."
+  });
+
+export const LibraryRenameTagResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    ...LibraryRenameTagIdentityShape,
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    renamedPageCount: z.number().int().positive().max(1_000)
+  }).strict(),
+  z.object({ ...LibraryRenameTagIdentityShape, status: z.enum(["stale", "not_found", "ineligible", "failed"]) }).strict()
+]);
 
 export const CollectionRequestIdSchema = z.string().regex(/^collection_request_[a-z0-9]{16,64}$/);
 export const CollectionCatalogCursorSchema = z.string().regex(/^collection_catalog_[a-f0-9]{64}$/);
@@ -8616,6 +8646,9 @@ export type LibraryTagFacet = z.infer<typeof LibraryTagFacetSchema>;
 export type LibraryTaggedPageSummary = z.infer<typeof LibraryTaggedPageSummarySchema>;
 export type LibraryTagsRequest = z.infer<typeof LibraryTagsRequestSchema>;
 export type LibraryTagsResult = z.infer<typeof LibraryTagsResultSchema>;
+export type LibraryRenameTagRequestId = z.infer<typeof LibraryRenameTagRequestIdSchema>;
+export type LibraryRenameTagRequest = z.infer<typeof LibraryRenameTagRequestSchema>;
+export type LibraryRenameTagResult = z.infer<typeof LibraryRenameTagResultSchema>;
 export type CollectionAppendDefaultRowRequest = z.infer<typeof CollectionAppendDefaultRowRequestSchema>;
 export type CollectionAppendDefaultRowResult = z.infer<typeof CollectionAppendDefaultRowResultSchema>;
 export type CollectionAddNullableColumnRequest = z.infer<typeof CollectionAddNullableColumnRequestSchema>;

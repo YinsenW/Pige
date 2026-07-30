@@ -119,6 +119,7 @@ describe("desktop shell build contract", () => {
     );
 
     expect(schemasSource).toContain('LIBRARY_TAGS_CHANNEL = "library.tags"');
+    expect(schemasSource).toContain('LIBRARY_RENAME_TAG_CHANNEL = "library.renameTag"');
     expect(schemasSource).toContain("LibraryTagsRequestSchema");
     expect(schemasSource).toContain('mode: z.literal("list_tags")');
     expect(schemasSource).toContain('mode: z.literal("list_pages_for_tag")');
@@ -127,11 +128,16 @@ describe("desktop shell build contract", () => {
     expect(libraryApi).toContain(
       "readonly tags: (request: LibraryTagsRequest) => Promise<LibraryTagsResult>;"
     );
+    expect(libraryApi).toContain(
+      "readonly renameTag: (request: LibraryRenameTagRequest) => Promise<LibraryRenameTagResult>;"
+    );
     expect(preloadSource).toContain("LibraryTagsRequestSchema.parse(request)");
     expect(preloadSource).toContain(
       "await ipcRenderer.invoke(LIBRARY_TAGS_CHANNEL, parsedRequest)"
     );
     expect(preloadSource).toContain("LibraryTagsResultSchema.parse(");
+    expect(preloadSource).toContain("LibraryRenameTagRequestSchema.parse(request)");
+    expect(preloadSource).toContain("LibraryRenameTagResultSchema.parse(");
     expect(preloadSource).toContain("Invalid Library tags response identity.");
     for (const privateField of [
       "pagePath",
