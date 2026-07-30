@@ -596,6 +596,8 @@ Executable operation-kind vocabulary (machine checked):
 - `create_external_file` (reserved for the unregistered external create-only foundation).
 - `backup_created`, `restore_applied`, `migration_applied`.
 
+Manual note-title rename uses one `rename_page` Operation whose private before/after path and Markdown receipts support restart adoption and exact Undo. Publication preserves `page_id`, aliases the prior title, and rebuilds derived indexes only after durable commit; stale ownership or destination conflict publishes nothing.
+
 Lifecycle coverage:
 
 | Lifecycle area | Required operation kinds |

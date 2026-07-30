@@ -591,6 +591,7 @@ Editing mode:
   draft, Reload and focus, while Cmd/Ctrl+Enter excludes IME.
 - Merge confirms a safe target and Undo restores both. Historical preview is read-only; explicit
   restore adopts the current render. Closed states retain Reader/dialog/focus.
+- Active notes offer one Rename action beside existing document actions. The focused dialog edits only the title; conflict/stale/failure retains draft and focus, success adopts Main's authoritative render, and Activity exposes Undo. Paths, filename rules, aliases, and revision internals stay hidden.
 - Settings Trash lists safe notes and opens only Main's restored page. All mutations are recoverable;
   permanent/source deletion and restyle stay absent.
 

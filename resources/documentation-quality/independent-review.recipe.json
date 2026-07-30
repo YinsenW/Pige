@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, proof-bound referenced-original reconnect, source refresh/reimport, complete Activity history browsing, vault-portable Agent memory backup inclusion and restart-safe exact note-edit Redo.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, proof-bound source reconnect, exact active-note title rename, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion and restart-safe exact note-edit Redo.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "c91e71b0d5c927e391bca18ecd153a191e8bac23016a360fd1f2463a8fc3fe55"
+    "reviewedSha256": "950b35d6dfc1743ed4b55a347d0bdae14e1030718e363970fac4ce0f25ca0d5b"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
-    "task": "Vault v2, Alpha convergence, public governance, localized release states, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name rename, referenced-original reconnect, source refresh/reimport, Activity history browsing, Agent memory backup inclusion and exact note-edit Redo",
+    "task": "Vault v2, Alpha convergence, governance, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name, source reconnect, exact note-title rename/Redo, source refresh, Activity history and Agent memory backup",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,28 +67,28 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed durable migration, language, platform, ledger, public governance, localized-state, grounded knowledge-page, startup-destination, Vault-relocation/display-name, proof-bound referenced-original reconnect, source-refresh, Activity-history, memory-backup and exact note-edit Redo claims; Development supplied executable evidence and UI Design reported P0/P1 clear on exact UI/source HEAD bd25f60991e69e68dd4e590a19dc3711cd203dde."
+    "independence": "Planning reviewed the exact note-title lifecycle against durable identity, Markdown, API, Job, sync and UI owners; Development supplied executable service/schema/IPC evidence and UI Design P0/P1 is clear."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Paged Activity keeps one calm inverse action: exact note Undo exposes Redo, both share one in-flight lock, and completion restores focus to the newly available action."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"API, Operation, data, UI and Playbook owners agree that Redo is one pathless deterministic forward update limited to an unchanged exact note-edit Undo binding."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits; note-edit Redo adds exact service and UI evidence without promoting broader recovery or autonomous-knowledge exits."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Recovery ownership, path-free Operations, responsibility inventory and six-locale closed states are explicit and executable."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owner sections, trace inventory and service responsibility inventory absorb the bounded Redo delta without a new document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Reader/Library expose one title-only dialog; closed outcomes retain draft/focus and success adopts authoritative render with Activity Undo."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Markdown, API, Job, sync, data and UI owners agree on revision CAS, stable page identity, old-title alias and Main-owned filename mutation."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Schema, service, negative, restart, IPC and dual Reader-surface evidence bind the slice without promoting broader partial requirements/exits."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Recovery ownership, rename_page Activity, responsibility inventory and six-locale conflict recovery are explicit and executable."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owner sections, decision ledger and trace inventory absorb bounded rename/Redo deltas without a new document."}
   ],
   "verification": [
-    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Reconnect product semantics, owner routing and links remain structurally synchronized."},
-    {"command":"npm test -- <focused reconnect files> && npm run build","status":"passed","evidence":"Exact reconnect contracts, Main recovery, Reader/Settings surfaces and production bundles are executable."},
+    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Note-title rename semantics, owner routing and links remain structurally synchronized."},
+    {"command":"npm test -- <focused note-title rename files> && npm run build","status":"passed","evidence":"Exact rename contract, Main recovery, Reader/Library surfaces and production bundles are executable."},
     {"command":"npm run verify:architecture-reset && npm run verify:change","status":"passed","evidence":"Service responsibility, Main/renderer authority and change-scoped verification remain enforced."}
   ],
   "coordination": {
-    "taskId": "note-activity-redo-bind-20260731",
-    "taskTitle": "Restart-safe note Activity Redo bind",
+    "taskId": "note-title-rename-bind-20260731",
+    "taskTitle": "Bind exact note title rename lifecycle",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main owns the pathless exact-note Redo, deterministic Operation identity, before/after hash fences and startup adoption while preserving paged Activity and broader open recovery scope.",
-    "acknowledgement": "Planning binds the exact user note-edit Redo while E7.01 remains partial for other mutations, broader restore/redo and packaged platforms. UI Design reported P0/P1 clear on exact UI/source HEAD bd25f60991e69e68dd4e590a19dc3711cd203dde."
+    "compatibility": "Main owns exact revision/path/filename mutation; page identity and body remain stable, old-title links resolve through alias, and rename_page recovery converges commit/Undo.",
+    "acknowledgement": "Planning binds the implemented note-title rename slice while preserving exact note-edit Redo; referenced requirements/exits remain partial for broader scope. UI Design P0/P1 is clear."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
