@@ -13,6 +13,8 @@ import type {
   NoteRevealSourceRequest,
   NoteEditorOpenRequest,
   NoteEditorSaveRequest,
+  NoteTrashCurrentRequest,
+  NoteTrashCurrentResult,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
   ReaderSelectionCreateNoteRequest,
@@ -627,6 +629,93 @@ describe("full UI Library", () => {
       expect(container.querySelectorAll<HTMLButtonElement>('button[aria-label="Edit note"]')).toHaveLength(0);
     }
     expect(editorOpenRequests).toHaveLength(1);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("moves only an eligible current note to recoverable Trash and retains the Reader on stale", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: NoteTrashCurrentRequest[] = [];
+    let committed = 0;
+    let mode: "stale" | "committed" = "stale";
+    const note: NoteRenderResult = {
+      ...readerNote(),
+      trashEligibility: { canTrash: true, revision: `noteeditrev_${"a".repeat(32)}` }
+    };
+    const onTrashCurrentNote = async (request: NoteTrashCurrentRequest): Promise<NoteTrashCurrentResult> => {
+      requests.push(request);
+      return mode === "committed"
+        ? {
+            ...request,
+            status: "committed",
+            operationId: "operation_note_trash_library",
+            authority: {
+              pageId: request.currentPageId,
+              pageState: "trashed",
+              readerState: "closed",
+              libraryPresence: "absent",
+              canTrash: false
+            }
+          }
+        : {
+            ...request,
+            status: "stale",
+            authority: {
+              pageId: request.currentPageId,
+              pageState: "present",
+              readerState: "refresh_required",
+              libraryPresence: "present",
+              canTrash: false
+            }
+          };
+    };
+    await act(async () => {
+      root.render(createElement(LibraryPanel, {
+        libraryList: libraryList(), selectedNote: note, selectedNoteRelated: null,
+        noteLoadingPageId: null, error: null, onGoHome: () => undefined,
+        onRefresh: async () => undefined, onSearch: async () => searchResult("unused", []), searchFocusRequest: 0,
+        onOpenNote: async () => undefined, onCloseNote: () => undefined,
+        noteAgentOpen: false, onToggleNoteAgent: () => undefined, noteAgentToggleRef: { current: null },
+        developmentNotice: null, onClearDevelopment: () => undefined, onCopyNote: async () => true,
+        activeVaultId: "vault_20260715_fullui01", onTrashCurrentNote,
+        onCurrentNoteTrashed: () => { committed += 1; }, onDevelopment: () => undefined, t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await act(async () => {
+      buttonWithLabel(container, "More note actions").click();
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(container, "Move to Trash").click();
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(container, "Move to Trash").click();
+      await settle(dom);
+    });
+    expect(requests[0]).toMatchObject({
+      activeVaultId: "vault_20260715_fullui01",
+      currentPageId: note.summary.pageId,
+      renderContextId: note.renderContextId,
+      expectedRevision: note.trashEligibility?.revision
+    });
+    expect(requests[0]?.requestId).toMatch(/^notetrashreq_[a-z0-9]{16,64}$/u);
+    expect(container.querySelector(".note-reader")).not.toBeNull();
+    expect(container.textContent).toContain("The note remains open.");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Cancel"));
+    expect(committed).toBe(0);
+
+    mode = "committed";
+    await act(async () => {
+      buttonNamed(container, "Move to Trash").click();
+      await settle(dom);
+    });
+    expect(requests).toHaveLength(2);
+    expect(committed).toBe(1);
 
     await act(async () => root.unmount());
     dom.window.close();
