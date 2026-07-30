@@ -28,6 +28,8 @@ import type {
   NoteEditTaxonomyResult,
   NoteRenameRequest,
   NoteRenameResult,
+  NoteAliasChangeRequest,
+  NoteAliasChangeResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteTrashListRequest,
@@ -91,6 +93,9 @@ import {
   NOTE_RENAME_CHANNEL,
   NoteRenameRequestSchema,
   NoteRenameResultSchema,
+  NOTE_CHANGE_ALIAS_CHANNEL,
+  NoteAliasChangeRequestSchema,
+  NoteAliasChangeResultSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
   NoteTrashCurrentRequestSchema,
@@ -137,6 +142,7 @@ import type { NoteTrashService } from "./services/note-trash-service";
 import type { NoteArchiveService } from "./services/note-archive-service";
 import type { NoteTagService } from "./services/note-tag-service";
 import type { NoteRenameService } from "./services/note-rename-service";
+import type { NoteAliasService } from "./services/note-alias-service";
 import type { NoteMergeService } from "./services/note-merge-service";
 import type { NoteRelateService } from "./services/note-relate-service";
 import type { NoteMarkdownImportService } from "./services/note-markdown-import-service";
@@ -160,6 +166,7 @@ interface RegisterReaderIpcOptions {
   readonly getNoteArchiveService: () => NoteArchiveService;
   readonly getNoteTagService: () => NoteTagService;
   readonly getNoteRenameService: () => NoteRenameService;
+  readonly getNoteAliasService: () => NoteAliasService;
   readonly getNoteMergeService: () => NoteMergeService;
   readonly getNoteRelateService: () => NoteRelateService;
   readonly getNoteMarkdownImportService: () => NoteMarkdownImportService;
@@ -449,6 +456,18 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     if (result.status === "committed") options.onNoteRelated();
     return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
       ? result : NoteRenameResultSchema.parse({ ...parsed, status: "failed" });
+  });
+  options.ipcMain.handle(NOTE_CHANGE_ALIAS_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteAliasChangeRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) return NoteAliasChangeResultSchema.parse({ ...parsed, status: "failed" });
+    let rawResult: NoteAliasChangeResult;
+    try { rawResult = await options.getNoteAliasService().change(ownerId, parsed); }
+    catch { rawResult = { ...parsed, status: "failed" }; }
+    const result = NoteAliasChangeResultSchema.parse(rawResult);
+    if (result.status === "committed") options.onNoteRelated();
+    return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+      ? result : NoteAliasChangeResultSchema.parse({ ...parsed, status: "failed" });
   });
   options.ipcMain.handle(NOTE_IMPORT_MARKDOWN_CHANNEL, async (event, request: unknown): Promise<NoteImportMarkdownResult> => {
     const parsed = NoteImportMarkdownRequestSchema.parse(request) as NoteImportMarkdownRequest;

@@ -81,6 +81,9 @@ Field rules:
 - `type`: one of `source`, `note`, `concept`, `entity`, `topic`, `claim`, `question`.
 - `created_at`, `updated_at`: required ISO 8601 with timezone.
 - `status`: one of `active`, `archived`, `draft`, `needs_review`, `missing_source`, `conflict`.
+- `aliases`: optional inline array of at most 64 unique NFKC/space-normalized 1–120-character,
+  control-free names; case-insensitive dedupe. Missing is compatible; malformed, duplicate,
+  title-equal, block, or over-limit forms are invalid for explicit alias mutation.
 - `language`: BCP 47 tag when known.
 - `language_basis`: evidence basis; v2 legacy gaps are `unknown/legacy_missing`, never guessed.
 - `language_confidence`: `0` to `1`; omit only when unknown.
@@ -275,6 +278,11 @@ Internal links:
 Pige stores `page_` stable IDs in frontmatter and can resolve wiki links by title, alias, and slug. Retired `pg_` IDs are migration input only and must never be emitted.
 
 Manual active-note rename atomically updates canonical frontmatter title/`updated_at`, retains the prior title as a validated alias, and moves to a deterministic Git-friendly filename without changing `page_id`; body and unrelated frontmatter remain exact. Stale identity, malformed aliases, links/special files, or destination collision fail before mutation.
+
+Manual active-note alias management adds or removes one exact canonical alias through the atomic
+Markdown editor without changing title, path, stable ID, body, or unrelated frontmatter. Add proves
+the alias unique against governed titles, aliases, paths, slugs, and stable IDs across the current
+Vault; stale, malformed, ambiguous, duplicate, title-equal, or over-limit input changes nothing.
 
 Rules:
 

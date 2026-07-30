@@ -11,6 +11,7 @@ import type { NoteMergeService } from "../../apps/desktop/src/main/services/note
 import type { NoteArchiveService } from "../../apps/desktop/src/main/services/note-archive-service";
 import type { NoteTagService } from "../../apps/desktop/src/main/services/note-tag-service";
 import type { NoteRenameService } from "../../apps/desktop/src/main/services/note-rename-service";
+import type { NoteAliasService } from "../../apps/desktop/src/main/services/note-alias-service";
 import type { NoteMarkdownImportService } from "../../apps/desktop/src/main/services/note-markdown-import-service";
 import type { NoteRelateService } from "../../apps/desktop/src/main/services/note-relate-service";
 
@@ -41,7 +42,8 @@ function makeHarness(
   noteTagService?: Partial<NoteTagService>,
   sourceRefreshService?: Partial<SourceRefreshService>,
   onSourceRefreshed = vi.fn(),
-  noteRenameService?: Partial<NoteRenameService>
+  noteRenameService?: Partial<NoteRenameService>,
+  noteAliasService?: Partial<NoteAliasService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -90,6 +92,10 @@ function makeHarness(
       if (noteRenameService) return noteRenameService as NoteRenameService;
       throw new Error("Note rename service was not expected.");
     },
+    getNoteAliasService: () => {
+      if (noteAliasService) return noteAliasService as NoteAliasService;
+      throw new Error("Note alias service was not expected.");
+    },
     getNoteMergeService: () => {
       if (noteMergeService) return noteMergeService as NoteMergeService;
       throw new Error("Note merge service was not expected.");
@@ -131,6 +137,7 @@ describe("registerReaderIpc", () => {
       "notes.addTag",
       "notes.editTaxonomy",
       "notes.rename",
+      "notes.changeAlias",
       "notes.importMarkdown",
       "notes.merge",
       "notes.relate",
@@ -228,6 +235,31 @@ describe("registerReaderIpc", () => {
     expect(rebuilt).toHaveBeenCalledTimes(1);
     await expect(handlers.get("notes.rename")!({ sender: makeSender(49) } as IpcMainInvokeEvent, request))
       .resolves.toEqual({ ...request, status: "failed" });
+  });
+
+  it("binds one alias change to the tracked Reader owner and refreshes indexes only after commit", async () => {
+    const request = { apiVersion: 1 as const, requestId: "notealiasreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260731_aliases01", currentPageId: "page_20260731_aliases1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(32)}`, action: "add" as const, alias: "Second Name" };
+    const render = { summary: { pageId: request.currentPageId, title: "Primary", pageType: "note", status: "active",
+      pagePath: "wiki/primary.md", createdAt: "2026-07-31T10:00:00.000Z", updatedAt: "2026-07-31T12:00:00.000Z", sourceIds: [] },
+      html: "<h1>Primary</h1>", byteSize: 64, renderContextId: "notectx_fedcba9876543210fedcba9876543210",
+      aliasing: { aliases: [request.alias], canAdd: true, canRemove: true, revision: `noteeditrev_${"b".repeat(32)}` } } as const;
+    const change = vi.fn(async () => ({ ...request, status: "committed" as const,
+      operationId: "op_20260731_alias12345678", render }));
+    const refreshed = vi.fn();
+    const handlers = makeHarness({ render: vi.fn(async () => render) }, undefined, undefined, vi.fn(), undefined,
+      undefined, undefined, refreshed, undefined, vi.fn(), undefined, undefined, undefined, vi.fn(), undefined, { change });
+    const sender = makeSender(51);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: request.currentPageId });
+    await expect(handlers.get("notes.changeAlias")!({ sender } as IpcMainInvokeEvent, request))
+      .resolves.toMatchObject({ status: "committed", operationId: "op_20260731_alias12345678" });
+    expect(change).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
+    expect(refreshed).toHaveBeenCalledTimes(1);
+    await expect(handlers.get("notes.changeAlias")!({ sender: makeSender(52) } as IpcMainInvokeEvent, request))
+      .resolves.toMatchObject({ status: "failed" });
+    expect(change).toHaveBeenCalledTimes(1);
   });
 
   it("binds note relation mutation to the tracked Reader owner and refreshes Activity after commit", async () => {

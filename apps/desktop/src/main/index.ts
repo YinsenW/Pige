@@ -307,6 +307,7 @@ import { NotesService } from "./services/notes-service";
 import { NoteTrashService } from "./services/note-trash-service";
 import { NoteArchiveService } from "./services/note-archive-service";
 import { NoteTagService } from "./services/note-tag-service";
+import { NoteAliasService } from "./services/note-alias-service";
 import { NoteMergeService } from "./services/note-merge-service";
 import { NoteRenameService } from "./services/note-rename-service";
 import { NoteRelateService } from "./services/note-relate-service";
@@ -429,6 +430,7 @@ let noteTrashService: NoteTrashService | undefined;
 let conversationTrashService: ConversationTrashService | undefined;
 let noteArchiveService: NoteArchiveService | undefined;
 let noteTagService: NoteTagService | undefined;
+let noteAliasService: NoteAliasService | undefined;
 let noteMergeService: NoteMergeService | undefined;
 let noteRenameService: NoteRenameService | undefined;
 let noteRelateService: NoteRelateService | undefined;
@@ -1710,6 +1712,10 @@ const getNoteArchiveService = (): NoteArchiveService => {
 const getNoteTagService = (): NoteTagService => {
   noteTagService ??= new NoteTagService(getNotesService(), getNoteMarkdownEditorService());
   return noteTagService;
+};
+const getNoteAliasService = (): NoteAliasService => {
+  noteAliasService ??= new NoteAliasService(getNotesService(), getNoteMarkdownEditorService(), () => getVaultService().activeVaultPath());
+  return noteAliasService;
 };
 const getNoteMergeService = (): NoteMergeService => {
   noteMergeService ??= new NoteMergeService(getVaultService(), getNotesService());
@@ -3000,6 +3006,7 @@ registerReaderIpc({
   getNoteTrashService,
   getNoteArchiveService,
   getNoteTagService,
+  getNoteAliasService,
   getNoteMergeService,
   getNoteRenameService,
   getNoteRelateService,
@@ -3440,6 +3447,7 @@ app.whenReady().then(async () => {
   conversationTrashService = new ConversationTrashService(getVaultService(), collectionCitationConversationHistory);
   noteArchiveService = new NoteArchiveService(getNotesService(), noteMarkdownEditorService);
   noteTagService = new NoteTagService(getNotesService(), noteMarkdownEditorService);
+  noteAliasService = new NoteAliasService(getNotesService(), noteMarkdownEditorService, () => getVaultService().activeVaultPath());
   noteMergeService = new NoteMergeService(getVaultService(), getNotesService());
   noteRenameService = new NoteRenameService(getVaultService(), getNotesService());
   libraryTagRenameService = new LibraryTagRenameService(getVaultService());

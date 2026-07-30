@@ -355,6 +355,8 @@ Before creation, search titles, aliases, slugs, tags, topics/concepts, entities 
 Deduplication rules:
 
 - Page identity comes from stable ID; titles, paths and slugs may change.
+- Explicit active-note alias changes preserve stable identity and require one canonical alias to be
+  unambiguous across governed title, alias, path, slug, and stable-ID reference keys before add.
 - Ordinary-note merge keeps current ID, unions aliases/source IDs and appends losslessly; one
   two-page Operation/private receipt supports Undo. Trash preserves bytes/identity and restores only
   a current path-safe original. History derives bounded summaries from intact private images;
@@ -449,6 +451,8 @@ Library:
 Reader:
 
 - Show backlinks, related pages, sources, and citations.
+- Keep exact alias management behind the existing note-actions menu; show canonical aliases,
+  disable add at the 64-alias bound, and retain the draft/focus on closed outcomes.
 - Let the Note Agent explain or improve links.
 - Selection actions may review-create notes, claims or questions, ask, or apply reversible links with Undo.
 

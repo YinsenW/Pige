@@ -239,6 +239,8 @@ import type {
   NoteEditTaxonomyResult,
   NoteRenameRequest,
   NoteRenameResult,
+  NoteAliasChangeRequest,
+  NoteAliasChangeResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteTrashListRequest,
@@ -641,6 +643,8 @@ export type {
   NoteEditTaxonomyResult,
   NoteRenameRequest,
   NoteRenameResult,
+  NoteAliasChangeRequest,
+  NoteAliasChangeResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteTrashListRequest,
@@ -2288,6 +2292,7 @@ export interface PigeDesktopApi {
     readonly addTag: (request: NoteAddTagRequest) => Promise<NoteAddTagResult>;
     readonly editTaxonomy: (request: NoteEditTaxonomyRequest) => Promise<NoteEditTaxonomyResult>;
     readonly rename: (request: NoteRenameRequest) => Promise<NoteRenameResult>;
+    readonly changeAlias: (request: NoteAliasChangeRequest) => Promise<NoteAliasChangeResult>;
     readonly trashCurrent: (
       request: NoteTrashCurrentRequest
     ) => Promise<NoteTrashCurrentResult>;
