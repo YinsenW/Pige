@@ -101,6 +101,23 @@ describe("NoteTrashService", () => {
     expect(fs.readFileSync(changed.pagePath, "utf8")).toContain("External edit.");
     expect(readTrashFiles(changed.vaultPath)).toEqual([]);
 
+    const missing = createFixture();
+    const missingRender = await missing.notes.render({ pageId: missing.pageId }, missing.ownerId);
+    const missingRevision = missing.revision();
+    fs.unlinkSync(missing.pagePath);
+    expect(missing.service.trash(missing.ownerId, {
+      apiVersion: 1,
+      requestId: "notetrashreq_missing123456789",
+      activeVaultId: missing.vault.vaultId,
+      currentPageId: missing.pageId,
+      renderContextId: missingRender.renderContextId!,
+      expectedRevision: missingRevision
+    })).toMatchObject({
+      status: "not_found",
+      authority: { pageId: missing.pageId, pageState: "missing", readerState: "closed" }
+    });
+    expect(readTrashFiles(missing.vaultPath)).toEqual([]);
+
     const occupied = createFixture();
     const occupiedRender = await occupied.notes.render({ pageId: occupied.pageId }, occupied.ownerId);
     const committed = occupied.service.trash(occupied.ownerId, {
