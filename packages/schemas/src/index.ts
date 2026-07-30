@@ -7742,6 +7742,88 @@ export const ConversationRestoreResultSchema = z.discriminatedUnion("status", [
   }).strict(),
   ConversationRestoreResultIdentitySchema.extend({ status: z.enum(["stale", "not_found", "failed"]) }).strict()
 ]);
+export const AGENT_CONVERSATION_EXPORT_CHANNEL = "agent.exportConversation" as const;
+export const AGENT_CONVERSATION_EXPORT_EVENT_MAX = 4_096;
+export const AGENT_CONVERSATION_EXPORT_MAX_UTF8_BYTES = 8 * 1024 * 1024;
+export const AgentConversationExportRequestIdSchema = z.string()
+  .regex(/^conversation_export_request_[a-z0-9]{16,64}$/u);
+export const AgentConversationExportRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: AgentConversationExportRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  conversationId: ConversationIdSchema,
+  expectedTailEventId: ConversationEventIdSchema
+}).strict();
+const AgentConversationExportIdentitySchema = AgentConversationExportRequestSchema.omit({
+  expectedTailEventId: true
+});
+export const AgentConversationExportResultSchema = z.discriminatedUnion("status", [
+  AgentConversationExportIdentitySchema.extend({
+    status: z.literal("exported"),
+    tailEventId: ConversationEventIdSchema,
+    eventCount: z.number().int().positive().max(AGENT_CONVERSATION_EXPORT_EVENT_MAX)
+  }).strict(),
+  AgentConversationExportIdentitySchema.extend({
+    status: z.literal("cancelled"),
+    tailEventId: ConversationEventIdSchema
+  }).strict(),
+  AgentConversationExportIdentitySchema.extend({
+    status: z.literal("stale"),
+    currentTailEventId: ConversationEventIdSchema
+  }).strict(),
+  AgentConversationExportIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  AgentConversationExportIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+const AgentConversationExportPageCitationSchema = RetrievalAnswerCitationSchema.omit({ locator: true })
+  .extend({ kind: z.literal("page") }).strict();
+const AgentConversationExportDatasetCitationSchema = DatasetAnswerCitationSchema.omit({ locator: true }).strict();
+export const AgentConversationExportCitationSchema = z.discriminatedUnion("kind", [
+  AgentConversationExportPageCitationSchema,
+  AgentConversationExportDatasetCitationSchema
+]);
+export const AgentConversationExportEventSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("message"),
+    eventId: ConversationEventIdSchema,
+    role: z.enum(["user", "assistant"]),
+    createdAt: z.string().datetime({ offset: true }),
+    text: z.string().max(64 * 1024),
+    citations: z.array(AgentConversationExportCitationSchema).max(8).readonly()
+  }).strict(),
+  z.object({
+    kind: z.literal("source_reference"),
+    eventId: ConversationEventIdSchema,
+    eventType: z.enum(["capture_reference", "attachment_reference", "source_reference"]),
+    createdAt: z.string().datetime({ offset: true }),
+    parentEventId: ConversationEventIdSchema.optional(),
+    sourceId: SourceIdSchema,
+    displayName: SafeAttachmentDisplayNameSchema.optional(),
+    sourceKind: SourceKindSchema.optional()
+  }).strict()
+]);
+export const AgentConversationExportArtifactSchema = z.object({
+  schemaVersion: z.literal(1),
+  kind: z.literal("pige_conversation"),
+  conversationId: ConversationIdSchema,
+  tailEventId: ConversationEventIdSchema,
+  exportedAt: z.string().datetime({ offset: true }),
+  events: z.array(AgentConversationExportEventSchema)
+    .min(1)
+    .max(AGENT_CONVERSATION_EXPORT_EVENT_MAX)
+    .readonly()
+}).strict().superRefine((artifact, context) => {
+  const ids = artifact.events.map(({ eventId }) => eventId);
+  if (new Set(ids).size !== ids.length) {
+    context.addIssue({ code: "custom", path: ["events"], message: "Conversation export event identities must be unique." });
+  }
+  const tail = [...artifact.events].reverse().find(({ kind }) => kind === "message");
+  if (tail?.eventId !== artifact.tailEventId) {
+    context.addIssue({ code: "custom", path: ["tailEventId"], message: "Conversation export tail must match the final message." });
+  }
+  if (new TextEncoder().encode(JSON.stringify(artifact)).byteLength > AGENT_CONVERSATION_EXPORT_MAX_UTF8_BYTES) {
+    context.addIssue({ code: "custom", path: [], message: "Conversation export exceeds the bounded UTF-8 size." });
+  }
+});
 export const AgentConversationMessageSchema = z.object({
   id: ConversationEventIdSchema,
   role: z.enum(["user", "assistant"]),
@@ -9455,6 +9537,12 @@ export type AgentConversationHistoryCursor = z.output<typeof AgentConversationHi
 export type AgentConversationHistoryListRequest = z.input<typeof AgentConversationHistoryListRequestSchema>;
 export type AgentConversationHistorySummary = z.output<typeof AgentConversationHistorySummarySchema>;
 export type AgentConversationHistoryListResult = z.output<typeof AgentConversationHistoryListResultSchema>;
+export type AgentConversationExportRequestId = z.output<typeof AgentConversationExportRequestIdSchema>;
+export type AgentConversationExportRequest = z.input<typeof AgentConversationExportRequestSchema>;
+export type AgentConversationExportResult = z.output<typeof AgentConversationExportResultSchema>;
+export type AgentConversationExportCitation = z.output<typeof AgentConversationExportCitationSchema>;
+export type AgentConversationExportEvent = z.output<typeof AgentConversationExportEventSchema>;
+export type AgentConversationExportArtifact = z.output<typeof AgentConversationExportArtifactSchema>;
 export type ConversationRevision = z.output<typeof ConversationRevisionSchema>;
 export type ConversationTrashRequestId = z.output<typeof ConversationTrashRequestIdSchema>;
 export type ConversationTrashEntryId = z.output<typeof ConversationTrashEntryIdSchema>;

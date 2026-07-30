@@ -5,6 +5,8 @@ import type {
   AgentConversationHistoryListRequest,
   AgentConversationHistoryListResult,
   AgentConversationHistorySummary,
+  AgentConversationExportRequest,
+  AgentConversationExportResult,
   ConversationRestoreRequest,
   ConversationRestoreResult,
   ConversationTrashListRequest,
@@ -373,6 +375,8 @@ export type {
   AgentConversationHistoryListRequest,
   AgentConversationHistoryListResult,
   AgentConversationHistorySummary,
+  AgentConversationExportRequest,
+  AgentConversationExportResult,
   ConversationRestoreRequest,
   ConversationRestoreResult,
   ConversationTrashListRequest,
@@ -1945,6 +1949,9 @@ export interface PigeDesktopApi {
     readonly conversationHistory: (
       request: AgentConversationHistoryListRequest
     ) => Promise<AgentConversationHistoryListResult>;
+    readonly exportConversation: (
+      request: AgentConversationExportRequest
+    ) => Promise<AgentConversationExportResult>;
     readonly trashConversation: (
       request: ConversationTrashRequest
     ) => Promise<ConversationTrashResult>;
