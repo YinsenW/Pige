@@ -10,7 +10,13 @@ const request = {
   activeVaultId: "vault_20260730_abcdefgh",
   currentPageId: "page_20260730_current1234",
   renderContextId: "notectx_0123456789abcdef0123456789abcdef",
-  sourceId: "src_20260730_source1234"
+  sourceId: "src_20260730_source1234",
+  sourceKind: "plain_text_file",
+  sourceRevision: `sourcerev_${"a".repeat(64)}`,
+  expectedAvailability: "unavailable",
+  expectedChecksum: `sha256:${"b".repeat(64)}`,
+  expectedSize: 25,
+  formatIdentity: `sourcefmt_${"c".repeat(64)}`
 } as const;
 
 const body = Buffer.from("exact referenced bytes\n", "utf8");
@@ -32,6 +38,16 @@ const sourceRecord = SourceRecordSchema.parse({
   createdAt: "2026-07-30T08:00:00.000Z",
   updatedAt: "2026-07-30T08:00:00.000Z"
 });
+const reconnectCandidate = {
+  sourceId: request.sourceId,
+  sourceKind: request.sourceKind,
+  sourceRevision: request.sourceRevision,
+  expectedAvailability: request.expectedAvailability,
+  expectedChecksum: request.expectedChecksum,
+  expectedSize: request.expectedSize,
+  formatIdentity: request.formatIdentity,
+  displayName: "missing.txt"
+} as const;
 
 const refreshedRender = {
   summary: {
@@ -56,25 +72,39 @@ describe("reader source reconnect service", () => {
       status: "ready" as const,
       vaultPath: path.join(path.sep, "private", "vault"),
       sourceRecord,
+      reconnectCandidate,
       assertCurrent
     }));
     const render = vi.fn(async () => refreshedRender);
     const reconnect = vi.fn(async (_binding, _selectedPath, current: () => boolean) =>
-      current() ? "reconnected" as const : "stale" as const);
+      current() ? { status: "reconnected" as const, operationId: "op_20260730_readerreconnect" } : { status: "stale" as const });
     const pick = vi.fn(async () => path.join(path.sep, "private", "replacement.txt"));
     const service = new ReaderSourceReconnectService(
       { resolveSourceReveal, render } as never,
-      { reconnect }
+      { reconnect },
+      () => 2
     );
 
     await expect(service.reconnect("notes_owner_exact", request, { pick })).resolves.toEqual({
       ...request,
       status: "reconnected",
-      render: refreshedRender
+      render: refreshedRender,
+      operationId: "op_20260730_readerreconnect",
+      resumedJobCount: 2
     });
     expect(resolveSourceReveal).toHaveBeenCalledWith("notes_owner_exact", request);
     expect(reconnect).toHaveBeenCalledWith(
-      { activeVaultId: request.activeVaultId, sourceId: request.sourceId },
+      {
+        activeVaultId: request.activeVaultId,
+        requestId: request.requestId,
+        sourceId: request.sourceId,
+        sourceKind: request.sourceKind,
+        sourceRevision: request.sourceRevision,
+        expectedAvailability: request.expectedAvailability,
+        expectedChecksum: request.expectedChecksum,
+        expectedSize: request.expectedSize,
+        formatIdentity: request.formatIdentity
+      },
       path.join(path.sep, "private", "replacement.txt"),
       assertCurrent
     );
@@ -88,6 +118,7 @@ describe("reader source reconnect service", () => {
       status: "ready" as const,
       vaultPath: path.join(path.sep, "private", "vault"),
       sourceRecord,
+      reconnectCandidate,
       assertCurrent: vi.fn(() => false)
     };
     const service = new ReaderSourceReconnectService(

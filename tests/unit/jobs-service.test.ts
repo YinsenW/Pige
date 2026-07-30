@@ -394,6 +394,25 @@ describe("jobs service", () => {
       },
       message: "Waiting for the referenced original."
     }));
+    const secondJobId = "job_20260729_reconnectsource2";
+    writeJob(vaultPath, JobRecordSchema.parse({
+      schemaVersion: 1,
+      id: secondJobId,
+      class: "agent_turn",
+      state: "waiting_dependency",
+      stage: "waiting_for_path",
+      createdAt: "2026-07-29T08:00:00.000Z",
+      updatedAt: "2026-07-29T08:00:01.000Z",
+      activeVaultId: vault.vaultId,
+      sourceId,
+      waitingDependency: {
+        dependencyKind: "external_source",
+        dependencyId: sourceId,
+        requiredAction: "reconnect_path",
+        messageKey: "errors.source.external_unavailable"
+      },
+      message: "Waiting for the same referenced original."
+    }));
 
     const candidate = jobs.readOriginalSourceReconnectCandidate(jobId);
     expect(candidate).toMatchObject({ activeVaultId: vault.vaultId, waitingJobId: jobId, sourceId });
@@ -401,7 +420,10 @@ describe("jobs service", () => {
 
     fs.writeFileSync(missingPath, content);
     expect(jobs.resumeOriginalSourceReconnect(candidate!)).toMatchObject({ status: "requeued" });
+    expect(jobs.resumeOriginalSourceReconnectsForSource(sourceId)).toBe(1);
     expect(JSON.parse(fs.readFileSync(findFile(path.join(vaultPath, ".pige/jobs"), `${jobId}.json`), "utf8")).state)
+      .toBe("queued");
+    expect(JSON.parse(fs.readFileSync(findFile(path.join(vaultPath, ".pige/jobs"), `${secondJobId}.json`), "utf8")).state)
       .toBe("queued");
   });
 

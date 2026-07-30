@@ -1,14 +1,25 @@
 import type { BrowserWindow, IpcMain, OpenDialogOptions, WebContents } from "electron";
 import type {
   JobSummary,
+  ReferencedOriginalReconnectCandidate,
   ReferencedOriginalReconnectRequest,
-  ReferencedOriginalReconnectResult
+  ReferencedOriginalReconnectResult,
+  SourceReconnectListRequest,
+  SourceReconnectListResult,
+  SourceReconnectRequest,
+  SourceReconnectResult
 } from "@pige/contracts";
 import {
   JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
   ReferencedOriginalReconnectJobProjectionSchema,
   ReferencedOriginalReconnectRequestSchema,
   ReferencedOriginalReconnectResultSchema,
+  SOURCE_RECONNECTABLE_ORIGINALS_CHANNEL,
+  SOURCE_RECONNECT_ORIGINAL_CHANNEL,
+  SourceReconnectListRequestSchema,
+  SourceReconnectListResultSchema,
+  SourceReconnectRequestSchema,
+  SourceReconnectResultSchema,
   type ReferencedOriginalReconnectJobProjection
 } from "@pige/schemas";
 import type { JobsService, OriginalSourceReconnectCandidate } from "./services/jobs-service";
@@ -24,6 +35,7 @@ interface RegisterSourceReconnectIpcOptions {
   readonly getJobs: () => JobsService;
   readonly getReconnectService: () => SourceOriginalReconnectService;
   readonly resumeBackgroundJobs: () => void;
+  readonly onSourceReconnected: () => void;
 }
 
 const identity = (request: ReferencedOriginalReconnectRequest) => ({ ...request });
@@ -68,6 +80,8 @@ export function registerSourceReconnectIpc(options: RegisterSourceReconnectIpcOp
     if (!candidateMatches(initial, parsed)) {
       return ReferencedOriginalReconnectResultSchema.parse({ ...identity(parsed), status: "stale" });
     }
+    const proof = options.getReconnectService().candidate(parsed.activeVaultId, initial.sourceId);
+    if (!proof) return ReferencedOriginalReconnectResultSchema.parse({ ...identity(parsed), status: "stale" });
     const window = options.getWindow(event.sender);
     if (!window) return ReferencedOriginalReconnectResultSchema.parse({ ...identity(parsed), status: "failed" });
     const selection = await options.showOpenDialog(window, {
@@ -84,14 +98,15 @@ export function registerSourceReconnectIpc(options: RegisterSourceReconnectIpcOp
       return ReferencedOriginalReconnectResultSchema.parse({ ...identity(parsed), status: "stale" });
     }
     const repair = await options.getReconnectService().reconnect(
-      { activeVaultId: parsed.activeVaultId, sourceId: initial.sourceId },
+      { activeVaultId: parsed.activeVaultId, requestId: parsed.requestId, ...reconnectProof(proof) },
       selection.filePaths[0]!,
-      () => candidateMatches(jobs.readOriginalSourceReconnectCandidate(parsed.waitingJobId), parsed)
+      () => candidateMatches(jobs.readOriginalSourceReconnectCandidate(parsed.waitingJobId), parsed) &&
+        proofMatches(options.getReconnectService().candidate(parsed.activeVaultId, initial.sourceId), proof)
     );
-    if (repair !== "reconnected") {
+    if (repair.status !== "reconnected") {
       return ReferencedOriginalReconnectResultSchema.parse({
         ...identity(parsed),
-        status: repair === "not_found" ? "not_found" : repair === "stale" ? "stale" : "failed"
+        status: repair.status === "ineligible" ? "stale" : repair.status
       });
     }
     const resumed = jobs.resumeOriginalSourceReconnect(initial);
@@ -99,10 +114,80 @@ export function registerSourceReconnectIpc(options: RegisterSourceReconnectIpcOp
       return ReferencedOriginalReconnectResultSchema.parse({ ...identity(parsed), status: "stale" });
     }
     options.resumeBackgroundJobs();
+    options.onSourceReconnected();
     return ReferencedOriginalReconnectResultSchema.parse({
       ...identity(parsed),
       status: "reconnected",
-      job: projectJob(resumed.job)
+      job: projectJob(resumed.job),
+      operationId: repair.operationId
     });
   });
+  options.ipcMain.handle(SOURCE_RECONNECTABLE_ORIGINALS_CHANNEL, (
+    _event,
+    request: unknown
+  ): SourceReconnectListResult => {
+    const parsed = SourceReconnectListRequestSchema.parse(request);
+    try {
+      const result = options.getReconnectService().listUnavailable(parsed.activeVaultId);
+      return SourceReconnectListResultSchema.parse({ ...parsed, status: "ready", ...result });
+    } catch {
+      return SourceReconnectListResultSchema.parse({ ...parsed, status: "stale" });
+    }
+  });
+  options.ipcMain.handle(SOURCE_RECONNECT_ORIGINAL_CHANNEL, async (
+    event,
+    request: unknown
+  ): Promise<SourceReconnectResult> => {
+    const parsed = SourceReconnectRequestSchema.parse(request);
+    const reconnect = options.getReconnectService();
+    const initial = reconnect.candidate(parsed.activeVaultId, parsed.sourceId);
+    if (!initial) return SourceReconnectResultSchema.parse({ ...parsed, status: "not_found" });
+    if (!proofMatches(initial, parsed)) return SourceReconnectResultSchema.parse({ ...parsed, status: "stale" });
+    const window = options.getWindow(event.sender);
+    if (!window) return SourceReconnectResultSchema.parse({ ...parsed, status: "failed" });
+    const selection = await options.showOpenDialog(window, {
+      title: "Reconnect referenced source",
+      properties: ["openFile"]
+    });
+    if (selection.canceled || selection.filePaths.length === 0) {
+      return SourceReconnectResultSchema.parse({ ...parsed, status: "cancelled" });
+    }
+    if (selection.filePaths.length !== 1 || !proofMatches(reconnect.candidate(parsed.activeVaultId, parsed.sourceId), parsed)) {
+      return SourceReconnectResultSchema.parse({ ...parsed, status: "stale" });
+    }
+    const result = await reconnect.reconnect(
+      { activeVaultId: parsed.activeVaultId, requestId: parsed.requestId, ...reconnectProof(parsed) },
+      selection.filePaths[0]!,
+      () => proofMatches(reconnect.candidate(parsed.activeVaultId, parsed.sourceId), parsed)
+    );
+    if (result.status !== "reconnected") return SourceReconnectResultSchema.parse({ ...parsed, status: result.status });
+    const resumedJobCount = options.getJobs().resumeOriginalSourceReconnectsForSource(parsed.sourceId);
+    if (resumedJobCount > 0) options.resumeBackgroundJobs();
+    options.onSourceReconnected();
+    return SourceReconnectResultSchema.parse({
+      ...parsed,
+      status: "reconnected",
+      operationId: result.operationId,
+      resumedJobCount
+    });
+  });
+}
+
+function reconnectProof(candidate: ReferencedOriginalReconnectCandidate | SourceReconnectRequest) {
+  return {
+    sourceId: candidate.sourceId,
+    sourceKind: candidate.sourceKind,
+    sourceRevision: candidate.sourceRevision,
+    expectedAvailability: candidate.expectedAvailability,
+    expectedChecksum: candidate.expectedChecksum,
+    expectedSize: candidate.expectedSize,
+    formatIdentity: candidate.formatIdentity
+  } as const;
+}
+
+function proofMatches(
+  current: ReferencedOriginalReconnectCandidate | undefined,
+  expected: ReferencedOriginalReconnectCandidate | SourceReconnectRequest
+): boolean {
+  return !!current && JSON.stringify(reconnectProof(current)) === JSON.stringify(reconnectProof(expected));
 }

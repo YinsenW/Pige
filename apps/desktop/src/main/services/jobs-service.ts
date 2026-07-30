@@ -644,6 +644,26 @@ export class JobsService {
     return this.retry({ jobId: candidate.waitingJobId });
   }
 
+  resumeOriginalSourceReconnectsForSource(sourceId: string): number {
+    const vault = this.#vaults.current();
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!vault || !vaultPath) return 0;
+    const candidates = readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))
+      .map(({ job }) => job)
+      .filter((job) => job.sourceId === sourceId && job.activeVaultId === vault.vaultId && isOriginalSourceReconnectWait(job))
+      .map((job): OriginalSourceReconnectCandidate => ({
+        activeVaultId: vault.vaultId,
+        waitingJobId: job.id,
+        jobRevision: job.updatedAt,
+        sourceId
+      }));
+    let resumed = 0;
+    for (const candidate of candidates) {
+      if (this.resumeOriginalSourceReconnect(candidate).status === "requeued") resumed += 1;
+    }
+    return resumed;
+  }
+
   createAgentTurnJob(request: CreateAgentTurnJobRequest): JobRecord {
     const activeVault = this.#vaults.current();
     const vaultPath = this.#requireActiveVaultPath();

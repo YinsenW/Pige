@@ -1,11 +1,12 @@
 import type {
   NoteReconnectOriginalSourceRequest,
-  NoteReconnectOriginalSourceResult
+  NoteReconnectOriginalSourceResult,
+  ReferencedOriginalReconnectCandidate
 } from "@pige/contracts";
 import type { NotesService } from "./notes-service";
-import { readCurrentSourceRecordSnapshot } from "./source-file-access";
 import {
   canReconnectOriginalSource,
+  readReferencedOriginalReconnectCandidate,
   type SourceOriginalReconnectService
 } from "./source-original-reconnect-service";
 
@@ -13,10 +14,16 @@ export function reconnectableOriginalSourceIds(
   vaultPath: string,
   sourceIds: readonly string[]
 ): string[] {
-  return sourceIds.slice(0, 5).filter((sourceId) => {
-    const source = readCurrentSourceRecordSnapshot(vaultPath, sourceId);
-    return source ? canReconnectOriginalSource(source.record) : false;
-  });
+  return reconnectableOriginalSources(vaultPath, sourceIds).map((source) => source.sourceId);
+}
+
+export function reconnectableOriginalSources(
+  vaultPath: string,
+  sourceIds: readonly string[]
+): ReferencedOriginalReconnectCandidate[] {
+  return sourceIds.slice(0, 5)
+    .map((sourceId) => readReferencedOriginalReconnectCandidate(vaultPath, sourceId))
+    .filter((source): source is ReferencedOriginalReconnectCandidate => source !== undefined);
 }
 
 export interface ReaderSourceReconnectPicker {
@@ -26,13 +33,16 @@ export interface ReaderSourceReconnectPicker {
 export class ReaderSourceReconnectService {
   readonly #notes: Pick<NotesService, "resolveSourceReveal" | "render">;
   readonly #reconnect: Pick<SourceOriginalReconnectService, "reconnect">;
+  readonly #onReconnected: (sourceId: string) => number;
 
   constructor(
     notes: Pick<NotesService, "resolveSourceReveal" | "render">,
-    reconnect: Pick<SourceOriginalReconnectService, "reconnect">
+    reconnect: Pick<SourceOriginalReconnectService, "reconnect">,
+    onReconnected: (sourceId: string) => number = () => 0
   ) {
     this.#notes = notes;
     this.#reconnect = reconnect;
+    this.#onReconnected = onReconnected;
   }
 
   async reconnect(
@@ -46,6 +56,8 @@ export class ReaderSourceReconnectService {
     if (!canReconnectOriginalSource(resolved.sourceRecord)) {
       return { ...identity, status: "ineligible" };
     }
+    const candidate = resolved.reconnectCandidate;
+    if (!candidate || !sameProof(candidate, request)) return { ...identity, status: "stale" };
 
     let selectedPath: string | undefined;
     try {
@@ -57,18 +69,40 @@ export class ReaderSourceReconnectService {
     if (!resolved.assertCurrent()) return { ...identity, status: "stale" };
 
     const status = await this.#reconnect.reconnect(
-      { activeVaultId: request.activeVaultId, sourceId: request.sourceId },
+      {
+        activeVaultId: request.activeVaultId,
+        requestId: request.requestId,
+        sourceId: request.sourceId,
+        sourceKind: request.sourceKind,
+        sourceRevision: request.sourceRevision,
+        expectedAvailability: request.expectedAvailability,
+        expectedChecksum: request.expectedChecksum,
+        expectedSize: request.expectedSize,
+        formatIdentity: request.formatIdentity
+      },
       selectedPath,
       resolved.assertCurrent
     );
-    if (status !== "reconnected") return { ...identity, status };
+    if (status.status !== "reconnected") return { ...identity, status: status.status };
     try {
+      const resumedJobCount = this.#onReconnected(request.sourceId);
       const render = await this.#notes.render({ pageId: request.currentPageId }, ownerId);
       return render.renderContextId
-        ? { ...identity, status: "reconnected", render }
+        ? { ...identity, status: "reconnected", render, operationId: status.operationId, resumedJobCount }
         : { ...identity, status: "failed" };
     } catch {
       return { ...identity, status: "failed" };
     }
   }
+}
+
+function sameProof(
+  candidate: ReferencedOriginalReconnectCandidate,
+  request: NoteReconnectOriginalSourceRequest
+): boolean {
+  return candidate.sourceId === request.sourceId && candidate.sourceKind === request.sourceKind &&
+    candidate.sourceRevision === request.sourceRevision &&
+    candidate.expectedAvailability === request.expectedAvailability &&
+    candidate.expectedChecksum === request.expectedChecksum && candidate.expectedSize === request.expectedSize &&
+    candidate.formatIdentity === request.formatIdentity;
 }

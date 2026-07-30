@@ -261,6 +261,12 @@ import type {
   SourceRefreshPreviewResult,
   SourceRefreshConfirmRequest,
   SourceRefreshConfirmResult,
+  ReferencedOriginalReconnectCandidate,
+  ReferencedOriginalReconnectProof,
+  SourceReconnectListRequest,
+  SourceReconnectListResult,
+  SourceReconnectRequest,
+  SourceReconnectResult,
   NoteRevealSourceRequest,
   NoteRevealSourceResult,
   NoteResolveInlineReferenceRequest,
@@ -662,6 +668,12 @@ export type {
   SourceRefreshPreviewResult,
   SourceRefreshConfirmRequest,
   SourceRefreshConfirmResult,
+  ReferencedOriginalReconnectCandidate,
+  ReferencedOriginalReconnectProof,
+  SourceReconnectListRequest,
+  SourceReconnectListResult,
+  SourceReconnectRequest,
+  SourceReconnectResult,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
   ReaderSelectionEndpoint,
@@ -2052,6 +2064,14 @@ export interface PigeDesktopApi {
     readonly reconnectOriginalSource: (
       request: ReferencedOriginalReconnectRequest
     ) => Promise<ReferencedOriginalReconnectResult>;
+  };
+  readonly sources: {
+    readonly reconnectableOriginals: (
+      request: SourceReconnectListRequest
+    ) => Promise<SourceReconnectListResult>;
+    readonly reconnectOriginal: (
+      request: SourceReconnectRequest
+    ) => Promise<SourceReconnectResult>;
   };
   readonly confirmations: {
     readonly pending: () => Promise<HighRiskConfirmationPendingResult>;

@@ -854,7 +854,13 @@ describe("registerReaderIpc", () => {
       activeVaultId: "vault_20260730_abcdefgh",
       currentPageId: "page_20260730_current1234",
       renderContextId: "notectx_0123456789abcdef0123456789abcdef",
-      sourceId: "src_20260730_source1234"
+      sourceId: "src_20260730_source1234",
+      sourceKind: "plain_text_file",
+      sourceRevision: `sourcerev_${"a".repeat(64)}`,
+      expectedAvailability: "unavailable",
+      expectedChecksum: `sha256:${"b".repeat(64)}`,
+      expectedSize: 12,
+      formatIdentity: `sourcefmt_${"c".repeat(64)}`
     } as const;
 
     await expect(handlers.get("notes.reconnectOriginalSource")!(

@@ -33,15 +33,10 @@ import {
   SourceIdSchema,
   type SourceRecord
 } from "@pige/schemas";
-import {
-  createMarkdownPageReferenceKeys,
-  findMarkdownPageByIdAtSignature,
-  normalizeMarkdownPageReferenceKey,
-  readMarkdownPageContentAtSignature,
-  readMarkdownPageByRelativePath
-} from "./markdown-page-index";
+import { createMarkdownPageReferenceKeys, findMarkdownPageByIdAtSignature, normalizeMarkdownPageReferenceKey, readMarkdownPageContentAtSignature, readMarkdownPageByRelativePath } from "./markdown-page-index";
 import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
-import { reconnectableOriginalSourceIds } from "./reader-source-reconnect-service";
+import { reconnectableOriginalSourceIds, reconnectableOriginalSources } from "./reader-source-reconnect-service";
+import { readReferencedOriginalReconnectCandidate } from "./source-original-reconnect-service";
 import { readCurrentSourceRecordSnapshot } from "./source-file-access";
 
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16, MAX_RENDER_CONTEXT_HREFS = 128, RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
@@ -114,6 +109,7 @@ export type NotesSourceRevealResolution =
       readonly status: "ready";
       readonly vaultPath: string;
       readonly sourceRecord: SourceRecord;
+      readonly reconnectCandidate?: NonNullable<ReturnType<typeof readReferencedOriginalReconnectCandidate>>;
       assertCurrent(): boolean;
     }
   | { readonly status: "stale" | "not_found" };
@@ -219,7 +215,7 @@ export class NotesService {
       },
       html: rendered.html,
       byteSize: stable.document.byteSize,
-      ...(ownerId === undefined ? {} : { reconnectOriginalSourceIds: reconnectableOriginalSourceIds(vaultPath, stable.document.summary.sourceIds) }),
+      ...(ownerId === undefined ? {} : { reconnectOriginalSourceIds: reconnectableOriginalSourceIds(vaultPath, stable.document.summary.sourceIds), reconnectOriginalSources: reconnectableOriginalSources(vaultPath, stable.document.summary.sourceIds) }),
       ...(renderContextId ? {
         renderContextId,
         ...(stable.document.summary.pageType === "note"
@@ -459,10 +455,12 @@ export class NotesService {
     if (!context.sourceIds.has(request.sourceId)) return { status: "not_found" };
     const source = readCurrentSourceRecordSnapshot(vaultPath, request.sourceId);
     if (!source) return { status: "not_found" };
+    const reconnectCandidate = readReferencedOriginalReconnectCandidate(vaultPath, request.sourceId);
     return {
       status: "ready",
       vaultPath,
       sourceRecord: source.record,
+      ...(reconnectCandidate ? { reconnectCandidate } : {}),
       assertCurrent: () => {
         const current = this.#readRenderContext(ownerId, request.renderContextId);
         const latest = readCurrentSourceRecordSnapshot(vaultPath, request.sourceId);

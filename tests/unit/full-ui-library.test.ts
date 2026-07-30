@@ -1353,13 +1353,24 @@ describe("full UI Library", () => {
     const committedNotes: NoteRenderResult[] = [];
     const unavailable: string[] = [];
     let cleared = 0;
+    const reconnectProof = {
+      sourceId: readerNote().summary.sourceIds[0]!,
+      sourceKind: "plain_text_file" as const,
+      sourceRevision: `sourcerev_${"a".repeat(64)}`,
+      expectedAvailability: "unavailable" as const,
+      expectedChecksum: `sha256:${"b".repeat(64)}`,
+      expectedSize: 12,
+      formatIdentity: `sourcefmt_${"c".repeat(64)}`,
+      displayName: "Saved source 1"
+    };
     const note: NoteRenderResult = {
       ...readerNote(),
       summary: {
         ...readerNote().summary,
         pagePath: "wiki/generated/reader-actions.md"
       },
-      reconnectOriginalSourceIds: [readerNote().summary.sourceIds[0]!]
+      reconnectOriginalSourceIds: [readerNote().summary.sourceIds[0]!],
+      reconnectOriginalSources: [reconnectProof]
     };
     await act(async () => {
       root.render(createElement(LibraryPanel, {
@@ -1496,8 +1507,11 @@ describe("full UI Library", () => {
             render: {
               ...note,
               renderContextId: `notectx_${"e".repeat(32)}`,
-              reconnectOriginalSourceIds: []
-            }
+              reconnectOriginalSourceIds: [],
+              reconnectOriginalSources: []
+            },
+            operationId: "op_20260715_readerreconnect",
+            resumedJobCount: 0
           };
         },
         onCurrentNoteSourceReconnected: (render) => reconnectedNotes.push(render),
