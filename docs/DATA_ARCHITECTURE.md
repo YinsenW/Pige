@@ -195,6 +195,9 @@ non-active recent entry without reading, moving, or deleting Vault bytes. Reconn
 directory picker, rechecks the entry revision and selected manifest snapshot, requires the same
 stable Vault ID, and atomically replaces only that entry path; cancellation or drift changes nothing.
 
+Referenced-original reconnect receipts are private recovery state excluded from backup/export. Renderer contracts expose only bounded unavailable-source labels and opaque proofs.
+Main atomically changes the current Source Record locator only after exact checksum/size/format revalidation, preserving Source/Page/Job IDs and recording a path-free `relink_source` Operation.
+
 Rule:
 
 - Store outside the vault under OS app data.
@@ -650,6 +653,7 @@ Phase 2/3 bridge Note Reader query:
 - `notes.resolveInlineReference` projects a body-free stable page/source target from that
   context and index generation. Discarding keys/watch state changes no durable record or
   ID, and renderer receives no handles or arbitrary-path query.
+- Reader and Settings reconnect requests carry only stable identities and opaque currentness proof. Main owns file selection and returns an authoritative render or safe closed status, never the locator/body/checksum/private receipt.
 
 ### 10.4 Delete
 

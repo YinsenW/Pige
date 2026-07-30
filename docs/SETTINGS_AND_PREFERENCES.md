@@ -107,6 +107,9 @@ Rules:
   informational; payload and diagnostics redaction are fixed owner behavior, not settings.
 - Vault & Note Storage shows note/source roots separately; unavailable external sources
   never fall back to the Vault root.
+- Its Referenced originals list is derived repair state, not a persisted preference or new
+  registry row. Main alone projects bounded unavailable candidates, chooses the replacement,
+  and applies an exact proof-bound relink; renderer state never owns a path or file body.
 - Trash/archive policy follows `docs/DATA_ARCHITECTURE.md`; no setting lets any actor permanently delete durable knowledge/source evidence automatically.
 
 ## 6. Setting Registry

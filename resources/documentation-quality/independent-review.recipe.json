@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, source refresh/reimport, complete Activity history browsing and vault-portable Agent memory backup inclusion.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, proof-bound referenced-original reconnect, source refresh/reimport, complete Activity history browsing and vault-portable Agent memory backup inclusion.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "bb5e535aef6ee2c5cbc69061ebb3e9dfb5bfa2543e4fd7b26cb7913ed28b2516"
+    "reviewedSha256": "c91e71b0d5c927e391bca18ecd153a191e8bac23016a360fd1f2463a8fc3fe55"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
-    "task": "Vault v2, Alpha convergence, public governance, localized release states, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name rename, source refresh/reimport, Activity history browsing and Agent memory backup inclusion",
+    "task": "Vault v2, Alpha convergence, public governance, localized release states, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name rename, referenced-original reconnect, source refresh/reimport, Activity history browsing and Agent memory backup inclusion",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,28 +67,28 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed durable migration, language, platform, ledger, public governance, localized-state, grounded knowledge-page, startup-destination, Vault-relocation/display-name, source-refresh, Activity-history and memory-backup claims; Development supplied executable evidence and UI Design reported P0/P1 clear on exact source HEAD bb6974c496aa00f6150d3a20b8c07bdaae274e37."
+    "independence": "Planning reviewed durable migration, language, platform, ledger, public governance, localized-state, grounded knowledge-page, startup-destination, Vault-relocation/display-name, proof-bound referenced-original reconnect, source-refresh, Activity-history and memory-backup claims; Development/UI supplied executable evidence, with UI Design P0/P1 clear."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Agent & Memory adds one default-on future-Backup switch with authoritative state, active-work blocking and localized closed outcomes."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Settings, memory, data, API, UI and Operation owners agree on a pathless revision-fenced portable preference that never enters Agent prompt policy."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits; memory exclusion adds exact service, archive, IPC and UI evidence without promoting broader Backup or Settings requirements."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Public governance and localized error/empty-state recovery boundaries are executable."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owners absorb the bounded rename and memory-backup deltas without a new document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Reader/Vault reconnect and Agent-memory backup preference retain calm bounded actions, quiet cancel and localized closed outcomes."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Owners agree that reconnect is Main-owned, exact-proof-bound and stable-ID preserving, while memory backup inclusion remains portable and revision-fenced."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits; reconnect and memory preference add exact evidence without promoting broader requirements."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Recovery ownership, path-free Operations, responsibility inventory and six-locale closed states are explicit and executable."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owner sections, decision ledger and trace inventory absorb both bounded deltas without a new document."}
   ],
   "verification": [
-    {"command":"npm run verify:traceability","status":"passed","evidence":"The 102-item ledger and phase states are claim-bound."},
-    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Vault rename product semantics, owner routing, inventory and links remain structurally synchronized."},
-    {"command":"npm run verify:public-issue-templates && npm run verify:public-privacy-surface && npm run verify:localized-error-empty-states && npm run verify:independent-documentation-review","status":"passed","evidence":"Reviewed public governance and localized release-state surfaces are fail-closed."}
+    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Reconnect product semantics, owner routing and links remain structurally synchronized."},
+    {"command":"npm test -- <focused reconnect files> && npm run build","status":"passed","evidence":"Exact reconnect contracts, Main recovery, Reader/Settings surfaces and production bundles are executable."},
+    {"command":"npm run verify:architecture-reset && npm run verify:change","status":"passed","evidence":"Service responsibility, Main/renderer authority and change-scoped verification remain enforced."}
   ],
   "coordination": {
-    "taskId": "agent-memory-backup-preference-bind-20260731",
-    "taskTitle": "Vault Agent memory backup preference bind",
+    "taskId": "source-original-reconnect-bind-20260731",
+    "taskTitle": "Bind proof-bound referenced-original reconnect",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main owns the pathless preference write, fences active Vault and config revision, blocks active Backup work, excludes all memory lifecycle state when disabled, and publishes a truthful manifest.",
-    "acknowledgement": "Planning binds the Agent memory backup preference while PIGE-BACKUP-001 and E9.01 remain partial for reconnect, remaining fixtures, conversation-history exclusion, backup Operations, scans, atomicity and platforms. UI Design reported P0/P1 clear on exact source HEAD bb6974c496aa00f6150d3a20b8c07bdaae274e37."
+    "compatibility": "Main owns the chooser and exact checksum/size/format proof; atomic relink preserves Source identity, emits a path-free Operation and resumes only matching current waits.",
+    "acknowledgement": "Planning binds reconnect alongside the already accepted Agent memory backup preference; referenced requirements/exits remain partial for broader scope. UI Design P0/P1 is clear."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
