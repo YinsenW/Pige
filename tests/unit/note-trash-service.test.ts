@@ -59,10 +59,10 @@ describe("NoteTrashService", () => {
       operationId: first.operationId,
       kind: "trash_page",
       targetLabel: "Recoverable note",
-      target: { kind: "page", pageId: fixture.pageId },
       status: "applied",
       canUndo: true
     }] });
+    expect(activity.list().activities[0]).not.toHaveProperty("target");
     expect(JSON.stringify(activity.list())).not.toContain(fixture.pagePath);
 
     const restored = activity.undo({ operationId: operation.id });
@@ -77,7 +77,8 @@ describe("NoteTrashService", () => {
     expect(restarted.activitySummary(operation, undo)).toMatchObject({
       status: "undone",
       canUndo: false,
-      undoUnavailableReason: "already_undone"
+      undoUnavailableReason: "already_undone",
+      target: { kind: "page", pageId: fixture.pageId }
     });
     expect(activity.undo({ operationId: operation.id })).toEqual({
       status: "already_undone",

@@ -133,7 +133,7 @@ export class NoteTrashService {
       kind: "trash_page" as KnowledgeActivitySummary["kind"],
       createdAt: operation.createdAt,
       targetLabel: receipt.title,
-      target: { kind: "page", pageId: receipt.pageId },
+      ...(matchingUndo ? { target: { kind: "page" as const, pageId: receipt.pageId } } : {}),
       status: matchingUndo ? "undone" : "applied",
       canUndo: !matchingUndo && trashPayloadMatches(vaultPath, receipt),
       ...(!matchingUndo && !trashPayloadMatches(vaultPath, receipt) ? { undoUnavailableReason: "target_missing" as const } : {}),
