@@ -282,6 +282,25 @@ describe("durable contract schemas", () => {
     expect(record.state).toBe("waiting_dependency");
     expect(record.childJobIds).toEqual(["job_20260710_abcdef13"]);
     expect(record.checkpoints?.[0]?.state).toBe("done");
+    const compacted = JobRecordSchema.parse({
+      ...record,
+      state: "compacted",
+      stage: undefined,
+      checkpoints: undefined,
+      compaction: {
+        schemaVersion: 1,
+        compactedAt: timestamp,
+        retentionCutoff: timestamp,
+        previousState: "completed",
+        detailSha256: checksum,
+        removedCheckpointCount: 1,
+        retainedReferenceCount: 2,
+        durationMs: 42
+      }
+    });
+    expect(compacted.compaction?.previousState).toBe("completed");
+    expect(() => JobRecordSchema.parse({ ...compacted, compaction: undefined })).toThrow();
+    expect(() => JobRecordSchema.parse({ ...record, compaction: compacted.compaction })).toThrow();
     expect(() => JobRecordSchema.parse({ ...record, state: undefined, status: "queued" })).toThrow();
     expect(() => JobRecordSchema.parse({ ...record, status: "completed" })).toThrow("Unrecognized key");
     expect(() => JobRecordSchema.parse({ ...record, undocumentedLifecycleFlag: true })).toThrow("Unrecognized key");

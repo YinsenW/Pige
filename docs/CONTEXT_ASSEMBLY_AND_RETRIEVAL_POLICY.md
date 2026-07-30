@@ -474,7 +474,8 @@ Current unified Home foundation:
   leave the next assembly; current instruction, `PIGE.md`, settings and safety win. No full
   registry or private provenance enters the prompt.
 - Current follow-up uses at most 16 integrity-checked prior user/assistant messages and
-  64 KiB UTF-8; older-turn compaction/indexing remains B7.09.
+  64 KiB UTF-8. B7.09 compacts only retained successful Job execution detail; older
+  conversation events remain durable and any future event indexing is a separate owner.
 - Diagnostic prompt-snapshot artifacts exclude Provider credentials and raw bodies; this
   export hygiene does not alter the Provider payload.
 - Context pack serialization works for future remote Agent backend and Mobile Lite clients without desktop-only objects.

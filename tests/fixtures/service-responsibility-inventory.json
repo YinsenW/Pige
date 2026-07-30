@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 197,
-  "baselineLines": 101672,
+  "baselineFileCount": 198,
+  "baselineLines": 101984,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -37,6 +37,7 @@
       ["home-agent-attachment-service.ts", 358, "jrd"],
       ["home-authored-text-capture-service.ts", 281, "jard"],
       ["high-risk-confirmation-service.ts", 268, "pr"],
+      ["job-compaction-service.ts", 312, "jr"],
       ["job-class-executor-registry.ts", 98, "jr"],
       ["jobs-service.ts", 6953, "japrd"],
       ["knowledge-activity-service.ts", 1661, "rd"],
@@ -230,7 +231,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 197,
+    "serviceOwnerCount": 198,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

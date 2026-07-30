@@ -173,6 +173,7 @@ import {
   JobsService,
   type ProcessQueuedCapturesResult
 } from "./services/jobs-service";
+import { JobCompactionService } from "./services/job-compaction-service";
 import {
   type DocumentParseJobExecutor,
   type ProcessQueuedParsesResult
@@ -343,6 +344,7 @@ let captureService: CaptureService | undefined;
 let managedCopyRootService: ManagedCopyRootService | undefined;
 let homeAgentAttachmentService: HomeAgentAttachmentService | undefined;
 let jobsService: JobsService | undefined;
+let jobCompactionService: JobCompactionService | undefined;
 let jobClassExecutorRegistry: JobClassExecutorRegistry | undefined;
 let knowledgeActivityService: KnowledgeActivityService | undefined;
 let knowledgeHealthService: KnowledgeHealthService | undefined;
@@ -1074,6 +1076,11 @@ const getJobsService = (): JobsService => {
     );
   }
   return jobsService;
+};
+
+const getJobCompactionService = (): JobCompactionService => {
+  jobCompactionService ??= new JobCompactionService(getVaultService());
+  return jobCompactionService;
 };
 
 const getJobClassExecutorRegistry = (): JobClassExecutorRegistry => {
@@ -2012,6 +2019,16 @@ const resumeBackgroundJobs = (): void => {
         level: "info",
         code: "jobs.interrupted_reconciled",
         message: `Recovered ${recovery.requeued} idempotent job(s); ${recovery.failedRetryable} job(s) require explicit retry.`
+      });
+    }
+    const compaction = getJobCompactionService().compactEligible();
+    if (compaction.compacted > 0 || compaction.failed > 0) {
+      getDiagnosticsService().recordEvent({
+        level: compaction.failed > 0 ? "warning" : "info",
+        code: compaction.failed > 0 ? "jobs.compaction_incomplete" : "jobs.compaction_completed",
+        message: compaction.failed > 0
+          ? "Some retained successful Job details could not be compacted safely."
+          : `Compacted ${compaction.compacted} retained successful Job record(s).`
       });
     }
     getJobsService().requeueWaitingParses();
