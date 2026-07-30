@@ -38,6 +38,7 @@
     { "path": "scripts/verify/prd-contract-negative-cases.mjs", "sha256": "5bcbab2bd8656e98edb4901b59d770bb5398e4f44d807a2d078d2218b4101ee3" },
     { "path": "scripts/verify/prd-contract.mjs", "sha256": "142490bc2e7bf77592328e880cdb7135106e457351709c098ad6f3a8f473ce1d" },
     { "path": "scripts/verify/public-issue-templates.mjs", "sha256": "be0332e12eef96d45f1ea8410c47ff39862d3c76121d7e5be254b1102daa0f0a" },
+    { "path": "scripts/verify/public-privacy-surface.mjs", "sha256": "f66f9c8e5bb80fd328f38e462efa4c90bbc50c6934b8ff9839e94afe388257f8" },
     { "path": "scripts/verify/repository-foundation-smoke.mjs", "sha256": "0793c4b9184cc79efa5407157ccaaaae17db6d6084be9c38afa3cad69902814f" },
     { "path": "scripts/verify/source-artifacts.mjs", "sha256": "e810f395fe542b6efbe84c918b2aabc338abf9bfc41974e520514ad46b6623f7" },
     { "path": "scripts/verify/traceability-negative-cases.mjs", "sha256": "db89a40dbf0fd87c0ea62c5678462aab3fd5905ddce69fa4300c71549008cf55" },
