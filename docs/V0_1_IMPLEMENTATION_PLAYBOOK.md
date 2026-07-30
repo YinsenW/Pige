@@ -391,7 +391,7 @@ Build:
 - [B4.05 -> E4.03] Incremental index update and external-edit reconciliation.
 - [B4.06 -> E4.01] Library list from rebuildable database metadata.
 - [B4.07 -> E4.04] Graph and backlink foundations rebuildable from durable truth.
-- [B4.08 -> E4.06] Durable Markdown lifecycle for meaningful topic, concept, entity, claim, and question pages while tags remain lightweight facets.
+- [B4.08 -> E4.06] Implemented grounded Home Agent creation and restart adoption for schema-valid topic, concept, entity, claim, and question pages with stable IDs and one `create_page` Operation; tags remain lightweight facets.
 
 Deferred from this phase:
 

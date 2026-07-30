@@ -3977,6 +3977,37 @@ References:
 - `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
+### D-20260730-Grounded-Knowledge-Page-Creation
+
+Status: Accepted
+Date: 2026-07-30
+
+Decision:
+
+The grounded Home Agent write path may create schema-valid `topic`, `concept`, `entity`,
+`claim`, and `question` Markdown pages. Main owns stable page identity, type-specific
+frontmatter, grounded source citation, Job provenance, and one deterministic `create_page`
+Operation; retry and restart adopt the same durable effect. Model output cannot create a
+`source` page.
+
+Rationale:
+
+Meaningful knowledge units need durable, inspectable Markdown identities without turning
+model output into storage authority or duplicating effects during recovery.
+
+Consequences:
+
+- B4.08 and E4.06 are verified for grounded Home Agent creation and restart adoption.
+- Claims without valid evidence remain review-required, and tags remain lightweight facets.
+- Broader edit, relationship, merge, import, trash, and full lifecycle acceptance remains open
+  under PIGE-KNOW-001.
+
+References:
+
+- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
+- `docs/MARKDOWN_SCHEMA.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

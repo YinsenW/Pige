@@ -174,6 +174,15 @@ Claim rules:
 - `supports`, `contradicts`, `supersedes`, and `updates` relationships on claims require source evidence.
 - Contradiction/supersession may apply while preserving both claims, citations, and history.
 
+### 5.6 Grounded Home Agent Creation
+
+The grounded Home Agent may create one `topic`, `concept`, `entity`, `claim`, or `question`
+page from an accepted Source Record. Main validates its type and derives stable page identity,
+required frontmatter, source citation, Job provenance, and one deterministic `create_page`
+Operation. Retry/restart adopts both. Claims without valid evidence require review; model
+output cannot own a `source` page. This does not broaden relationship, merge, edit, trash, or
+import authority; tags remain lightweight facets.
+
 ## 6. Relationship Model
 
 Pige uses typed relationships internally, but Markdown remains readable.

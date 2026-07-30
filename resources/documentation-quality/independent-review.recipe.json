@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states and deterministic successful-Job compaction.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction and grounded knowledge-page creation.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "05582825de4a02ffee541998f63c2d02e66caa361917ab3b7d7bb08b7c3c806c"
+    "reviewedSha256": "66ed6cc0010e018e4ef34c3ce3cec83ec0ba1504c3612f4798c7e37955cbc8f2"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
-    "task": "Vault v2, Alpha convergence, public governance, localized release states and Job compaction",
+    "task": "Vault v2, Alpha convergence, public governance, localized release states, Job compaction and grounded knowledge pages",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,28 +67,28 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed durable migration, language, platform, ledger, public governance and localized-state claims; Development/UI supplied executable evidence."
+    "independence": "Planning reviewed durable migration, language, platform, ledger, public governance, localized-state and grounded knowledge-page claims; Development/UI supplied executable evidence."
   }],
   "dimensions": [
     {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Migration preview is pathless, warning-complete and focus-owned."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"API, migration, language, release, public governance, localized-state and Job-compaction owners share exact truth."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits; only E7.04 advances for compaction."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"API, migration, language, release, public governance, localized-state, Job-compaction and grounded knowledge-page owners share exact truth."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits; E4.06 advances only for the grounded creation and restart-adoption evidence."},
     {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Public governance and localized error/empty-state recovery boundaries are executable."},
     {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owner docs and compact trace projections absorb the delta."}
   ],
   "verification": [
     {"command":"npm run verify:traceability","status":"passed","evidence":"The 102-item ledger and phase states are claim-bound."},
-    {"command":"npm run verify:decisions","status":"passed","evidence":"Vault v2, macOS Phase 1 and deterministic successful-Job compaction decisions are synchronized."},
+    {"command":"npm run verify:decisions","status":"passed","evidence":"Vault v2, macOS Phase 1, successful-Job compaction and grounded knowledge-page creation decisions are synchronized."},
     {"command":"npm run verify:public-issue-templates && npm run verify:public-privacy-surface && npm run verify:localized-error-empty-states && npm run verify:independent-documentation-review","status":"passed","evidence":"Reviewed public governance and localized release-state surfaces are fail-closed."}
   ],
   "coordination": {
-    "taskId": "job-compaction-bind-20260730",
-    "taskTitle": "Deterministic successful-Job compaction bind",
+    "taskId": "knowledge-page-lifecycle-bind-20260730",
+    "taskTitle": "Grounded knowledge-page lifecycle bind",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Windows code/hooks remain; future/invalid vaults never activate a writer.",
-    "acknowledgement": "Planning verifies B7.09/E7.04 without promoting packaged history restart or unrelated exits."
+    "compatibility": "Existing note/source ownership remains; model output cannot claim source-page authority.",
+    "acknowledgement": "Planning verifies B4.08/E4.06 for grounded creation and restart adoption while PIGE-KNOW-001 and broader lifecycle exits remain partial."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
