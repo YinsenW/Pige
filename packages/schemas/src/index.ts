@@ -6672,15 +6672,36 @@ export const CurrentNoteAppendProposalDecisionResultSchema = z.discriminatedUnio
 
 export const ReaderSelectionActionRequestIdSchema = z.string()
   .regex(/^readerselaction_[a-z0-9]{8,64}$/);
-export const ReaderSelectionReadActionSchema = z.enum(["explain", "summarize"]);
-export const ReaderSelectionActionRequestSchema = z.object({
+export const READER_SELECTION_ASK_QUESTION_MAX_CODE_POINTS = 4_000;
+export const READER_SELECTION_ASK_QUESTION_MAX_UTF8_BYTES =
+  READER_SELECTION_ASK_QUESTION_MAX_CODE_POINTS * 4;
+export const ReaderSelectionAskQuestionSchema = z.string()
+  .trim()
+  .min(1)
+  .refine(
+    (value) => Array.from(value).length <= READER_SELECTION_ASK_QUESTION_MAX_CODE_POINTS,
+    "Reader selection questions must contain at most 4000 Unicode characters."
+  )
+  .refine(
+    (value) => new TextEncoder().encode(value).byteLength <= READER_SELECTION_ASK_QUESTION_MAX_UTF8_BYTES,
+    "Reader selection questions exceed the UTF-8 byte bound."
+  );
+export const ReaderSelectionReadActionSchema = z.enum(["explain", "summarize", "ask"]);
+const ReaderSelectionActionRequestIdentitySchema = z.object({
   apiVersion: z.literal(1),
   requestId: ReaderSelectionActionRequestIdSchema,
-  action: ReaderSelectionReadActionSchema,
   selection: ReaderSelectionIdentitySchema,
   locale: LocaleSchema,
   clientTurnId: AgentClientTurnIdSchema
 }).strict();
+export const ReaderSelectionActionRequestSchema = z.discriminatedUnion("action", [
+  ReaderSelectionActionRequestIdentitySchema.extend({ action: z.literal("explain") }).strict(),
+  ReaderSelectionActionRequestIdentitySchema.extend({ action: z.literal("summarize") }).strict(),
+  ReaderSelectionActionRequestIdentitySchema.extend({
+    action: z.literal("ask"),
+    question: ReaderSelectionAskQuestionSchema
+  }).strict()
+]);
 export const ReaderSelectionActionResultSchema = z.discriminatedUnion("status", [
   z.object({
     apiVersion: z.literal(1),

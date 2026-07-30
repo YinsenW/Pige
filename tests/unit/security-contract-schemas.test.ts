@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { HighRiskConfirmationOwner } from "@pige/contracts";
+import type { HighRiskConfirmationOwner, ReaderSelectionActionRequest } from "@pige/contracts";
 import {
   AddManualProviderRequestSchema,
   AddPresetProviderRequestSchema,
@@ -14,6 +14,7 @@ import {
   PermissionActionBindingSchema,
   PigeErrorSummarySchema,
   ProviderProfileSchema,
+  READER_SELECTION_ASK_QUESTION_MAX_CODE_POINTS,
   ReaderSelectionActionRequestSchema,
   ReaderSelectionActionResultSchema,
   ReaderSelectionLinkRequestSchema,
@@ -497,6 +498,44 @@ describe("security-sensitive shared contracts", () => {
     expect(() => ReaderSelectionActionRequestSchema.parse({
       ...request,
       action: "polish"
+    })).toThrow();
+    for (const action of ["explain", "summarize"] as const) {
+      expect(() => ReaderSelectionActionRequestSchema.parse({
+        ...request,
+        action,
+        question: "Do not accept a question for this action."
+      })).toThrow();
+    }
+    const askRequest = {
+      ...request,
+      action: "ask" as const,
+      question: "  How does this passage support the conclusion?  "
+    } satisfies ReaderSelectionActionRequest;
+    expect(ReaderSelectionActionRequestSchema.parse(askRequest)).toEqual({
+      ...askRequest,
+      question: "How does this passage support the conclusion?"
+    });
+    expect(() => ReaderSelectionActionRequestSchema.parse({
+      ...request,
+      action: "ask"
+    })).toThrow();
+    expect(() => ReaderSelectionActionRequestSchema.parse({
+      ...request,
+      action: "ask",
+      question: "   "
+    })).toThrow();
+    expect(ReaderSelectionActionRequestSchema.parse({
+      ...request,
+      action: "ask",
+      question: "问".repeat(READER_SELECTION_ASK_QUESTION_MAX_CODE_POINTS)
+    })).toMatchObject({
+      action: "ask",
+      question: "问".repeat(READER_SELECTION_ASK_QUESTION_MAX_CODE_POINTS)
+    });
+    expect(() => ReaderSelectionActionRequestSchema.parse({
+      ...request,
+      action: "ask",
+      question: "问".repeat(READER_SELECTION_ASK_QUESTION_MAX_CODE_POINTS + 1)
     })).toThrow();
     expect(ReaderSelectionActionResultSchema.parse({
       apiVersion: 1,

@@ -181,7 +181,7 @@ export class ReaderSelectionActionService {
     try {
       const turn = await this.#agent.submitTurn({
         schemaVersion: 1,
-        text: actionInstruction(request.action, request.locale),
+        text: actionInstruction(request),
         inputKind: "typed_text",
         scope: { kind: "current_note", pageId: request.selection.pageId },
         locale: request.locale,
@@ -440,12 +440,10 @@ function transformFailure(requestId: string, caught: unknown): ReaderSelectionTr
   };
 }
 
-function actionInstruction(
-  action: ReaderSelectionActionRequest["action"],
-  locale: ReaderSelectionActionRequest["locale"]
-): string {
-  const instructions = action === "explain" ? EXPLAIN_INSTRUCTIONS : SUMMARIZE_INSTRUCTIONS;
-  return instructions[locale];
+function actionInstruction(request: ReaderSelectionActionRequest): string {
+  if (request.action === "ask") return request.question;
+  const instructions = request.action === "explain" ? EXPLAIN_INSTRUCTIONS : SUMMARIZE_INSTRUCTIONS;
+  return instructions[request.locale];
 }
 
 const EXPLAIN_INSTRUCTIONS: Record<ReaderSelectionActionRequest["locale"], string> = {

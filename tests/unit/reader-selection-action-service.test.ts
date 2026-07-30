@@ -53,6 +53,41 @@ describe("Reader selection action service", () => {
     expect(JSON.stringify(result)).not.toContain("SELECTED_PRIVATE_PASSAGE");
   });
 
+  it("submits the exact authored question while keeping selected evidence Main-owned", async () => {
+    const fixture = makeFixture("Before. SELECTED_PRIVATE_PASSAGE. After.");
+    const submitTurn = vi.fn(async () => ({
+      requestId: "job_20260718_ask123456",
+      jobId: "job_20260718_ask123456",
+      conversationEventId: "evt_20260718_ask123456",
+      conversationId: "conv_20260718_ask1234",
+      tailEventId: "evt_20260718_askanswer",
+      state: "completed" as const,
+      modelUsage: "cloud" as const,
+      sourceIds: [],
+      answer: { answer: "Grounded answer", grounding: "local_knowledge" as const, citations: [] }
+    }));
+    const service = new ReaderSelectionActionService(fixture.vaults, { submitTurn });
+    const request: ReaderSelectionActionRequest = {
+      ...actionRequest(fixture.selection, "explain"),
+      action: "ask",
+      question: "How does this support the conclusion?"
+    };
+
+    await expect(service.submit(request)).resolves.toMatchObject({
+      status: "completed",
+      conversationId: "conv_20260718_ask1234"
+    });
+    expect(submitTurn.mock.calls[0]?.[0]).toMatchObject({
+      text: request.question,
+      scope: { kind: "current_note", pageId: fixture.selection.pageId }
+    });
+    expect(submitTurn.mock.calls[0]?.[1]).toMatchObject({
+      currentNoteSelection: fixture.selection,
+      currentNoteReadAction: "ask"
+    });
+    expect(JSON.stringify(submitTurn.mock.calls[0])).not.toContain("SELECTED_PRIVATE_PASSAGE");
+  });
+
   it("fails closed before Agent submission when page or selection identity changed", async () => {
     const fixture = makeFixture("Before. SELECTED_PRIVATE_PASSAGE. After.");
     const submitTurn = vi.fn();
