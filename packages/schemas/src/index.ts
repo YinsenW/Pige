@@ -6190,6 +6190,99 @@ export const JobStageSchema = z.enum([
   "repairing"
 ]);
 
+export const BACKUP_RECONNECT_DESTINATION_CHANNEL = "backup.reconnectDestination" as const;
+export const BackupDestinationReconnectContextIdSchema = z.string()
+  .regex(/^backupdestctx_[a-z0-9]{8,64}$/);
+export const BackupReconnectDestinationRequestIdSchema = z.string()
+  .regex(/^backupdestreconnectreq_[a-z0-9]{8,64}$/);
+export const BackupReconnectDestinationRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: BackupReconnectDestinationRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  waitingJobId: JobIdSchema,
+  expectedJobUpdatedAt: z.string().datetime({ offset: true }),
+  destinationContextId: BackupDestinationReconnectContextIdSchema
+}).strict();
+export const BackupDestinationReconnectNextActionSchema = z.enum([
+  "none",
+  "choose_destination",
+  "retry_same_job"
+]);
+export const BackupDestinationReconnectJobProjectionSchema = z.object({
+  id: JobIdSchema,
+  state: JobStateSchema,
+  stage: JobStageSchema.optional(),
+  updatedAt: z.string().datetime({ offset: true }),
+  canReconnectBackupDestination: z.boolean(),
+  backupDestinationReconnectContextId: BackupDestinationReconnectContextIdSchema.optional(),
+  nextAction: BackupDestinationReconnectNextActionSchema
+}).strict().superRefine((job, context) => {
+  if (job.canReconnectBackupDestination !== (job.backupDestinationReconnectContextId !== undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: ["backupDestinationReconnectContextId"],
+      message: "Backup destination reconnect context must exist exactly when reconnect is eligible."
+    });
+  }
+  if (job.canReconnectBackupDestination !== (job.nextAction === "choose_destination")) {
+    context.addIssue({
+      code: "custom",
+      path: ["nextAction"],
+      message: "Backup destination reconnect eligibility must project the exact choose-destination action."
+    });
+  }
+});
+const BackupReconnectDestinationResultIdentitySchema = BackupReconnectDestinationRequestSchema;
+const BackupReconnectDestinationJobResultSchema = BackupReconnectDestinationResultIdentitySchema.extend({
+  job: BackupDestinationReconnectJobProjectionSchema
+});
+export const BackupReconnectDestinationResultSchema = z.discriminatedUnion("status", [
+  BackupReconnectDestinationJobResultSchema.extend({ status: z.literal("resumed") }).strict(),
+  BackupReconnectDestinationJobResultSchema.extend({ status: z.literal("reconnected") }).strict(),
+  BackupReconnectDestinationJobResultSchema.extend({ status: z.literal("cancelled") }).strict(),
+  BackupReconnectDestinationResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  BackupReconnectDestinationJobResultSchema.extend({ status: z.literal("ineligible") }).strict(),
+  BackupReconnectDestinationResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  BackupReconnectDestinationJobResultSchema.extend({
+    status: z.literal("failed"),
+    failure: z.enum([
+      "picker_failed",
+      "destination_invalid",
+      "destination_unavailable",
+      "resume_failed"
+    ])
+  }).strict()
+]).superRefine((result, context) => {
+  if (!("job" in result)) return;
+  if (result.job.id !== result.waitingJobId) {
+    context.addIssue({
+      code: "custom",
+      path: ["job", "id"],
+      message: "Backup destination reconnect must return the exact requested durable Job."
+    });
+  }
+  if (
+    result.status === "cancelled" &&
+    result.job.backupDestinationReconnectContextId !== result.destinationContextId
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["job", "backupDestinationReconnectContextId"],
+      message: "A cancelled Backup destination reconnect must preserve its exact context."
+    });
+  }
+  if (
+    (result.status === "resumed" || result.status === "reconnected") &&
+    result.job.canReconnectBackupDestination
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["job", "canReconnectBackupDestination"],
+      message: "A successful Backup destination reconnect cannot retain stale reconnect authority."
+    });
+  }
+});
+
 export const JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL = "jobs.reconnectOriginalSource" as const;
 export const ReferencedOriginalReconnectRequestIdSchema = z.string()
   .regex(/^sourcereconnectreq_[a-z0-9]{8,64}$/);
@@ -7235,6 +7328,7 @@ export const WaitingDependencySummarySchema = z.object({
     "local_model",
     "runtime_capability",
     "vault_binding",
+    "backup_destination",
     "external_source"
   ]),
   dependencyId: z.string().min(1).optional(),
@@ -8179,6 +8273,10 @@ export type JobStage = z.infer<typeof JobStageSchema>;
 export type JobState = z.infer<typeof JobStateSchema>;
 export type BackupReconnectDependencyRequest = z.infer<typeof BackupReconnectDependencyRequestSchema>;
 export type BackupReconnectDependencyResult = z.infer<typeof BackupReconnectDependencyResultSchema>;
+export type BackupDestinationReconnectContextId = z.infer<typeof BackupDestinationReconnectContextIdSchema>;
+export type BackupReconnectDestinationRequest = z.infer<typeof BackupReconnectDestinationRequestSchema>;
+export type BackupReconnectDestinationResult = z.infer<typeof BackupReconnectDestinationResultSchema>;
+export type BackupDestinationReconnectJobProjection = z.infer<typeof BackupDestinationReconnectJobProjectionSchema>;
 export type BackupContinueIncompleteRequestId = z.infer<typeof BackupContinueIncompleteRequestIdSchema>;
 export type BackupContinueIncompleteRequest = z.infer<typeof BackupContinueIncompleteRequestSchema>;
 export type BackupContinueIncompleteResult = z.infer<typeof BackupContinueIncompleteResultSchema>;

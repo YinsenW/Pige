@@ -19,8 +19,12 @@ import type {
   AppearanceThemePreference,
   BackupContinueIncompleteRequest,
   BackupContinueIncompleteResult,
+  BackupDestinationReconnectContextId,
+  BackupDestinationReconnectJobProjection,
   BackupReconnectDependencyRequest,
   BackupReconnectDependencyResult,
+  BackupReconnectDestinationRequest,
+  BackupReconnectDestinationResult,
   BoundaryVerification,
   CaptureFileRejection,
   CaptureFileRejectionReason,
@@ -293,8 +297,12 @@ export type {
   AppearanceThemePreference,
   BackupContinueIncompleteRequest,
   BackupContinueIncompleteResult,
+  BackupDestinationReconnectContextId,
+  BackupDestinationReconnectJobProjection,
   BackupReconnectDependencyRequest,
   BackupReconnectDependencyResult,
+  BackupReconnectDestinationRequest,
+  BackupReconnectDestinationResult,
   ReferencedOriginalReconnectRequest,
   ReferencedOriginalReconnectResult,
   CaptureFileRejection,
@@ -1038,6 +1046,8 @@ export interface JobSummary {
   readonly sourceKind?: SourceKind;
   readonly backupKind?: "user_backup" | "restore_rollback";
   readonly canReconnectDependency: boolean;
+  readonly canReconnectBackupDestination: boolean;
+  readonly backupDestinationReconnectContextId?: BackupDestinationReconnectContextId;
   readonly canContinueIncomplete: boolean;
   readonly error?: PigeErrorSummary;
   readonly message: string;
@@ -2085,6 +2095,9 @@ export interface PigeDesktopApi {
     readonly reconnectDependency: (
       request: BackupReconnectDependencyRequest
     ) => Promise<BackupReconnectDependencyResult>;
+    readonly reconnectDestination: (
+      request: BackupReconnectDestinationRequest
+    ) => Promise<BackupReconnectDestinationResult>;
     readonly continueIncomplete: (
       request: BackupContinueIncompleteRequest
     ) => Promise<BackupContinueIncompleteResult>;

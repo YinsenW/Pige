@@ -110,6 +110,39 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("freezes a distinct pathless Backup destination reconnect channel", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const backupApi = contractsSource.slice(
+      contractsSource.indexOf("readonly backup: {"),
+      contractsSource.indexOf("readonly system: {")
+    );
+
+    expect(schemasSource).toContain(
+      'BACKUP_RECONNECT_DESTINATION_CHANNEL = "backup.reconnectDestination"'
+    );
+    expect(schemasSource).toContain("BackupReconnectDestinationRequestSchema");
+    expect(schemasSource).toContain("expectedJobUpdatedAt: z.string().datetime({ offset: true })");
+    expect(schemasSource).toContain("destinationContextId: BackupDestinationReconnectContextIdSchema");
+    expect(schemasSource).toContain('z.literal("resumed")');
+    expect(schemasSource).toContain('z.literal("reconnected")');
+    expect(schemasSource).toContain('"backup_destination"');
+    expect(contractsSource).toContain("readonly canReconnectBackupDestination: boolean;");
+    expect(contractsSource).toContain(
+      "readonly backupDestinationReconnectContextId?: BackupDestinationReconnectContextId;"
+    );
+    expect(backupApi).toContain("readonly reconnectDestination: (");
+    expect(backupApi).toContain("request: BackupReconnectDestinationRequest");
+    expect(backupApi).toContain(") => Promise<BackupReconnectDestinationResult>;");
+    expect(preloadSource).toContain("BackupReconnectDestinationRequestSchema.parse(request)");
+    expect(preloadSource).toContain("BACKUP_RECONNECT_DESTINATION_CHANNEL");
+    expect(preloadSource).toContain("Invalid Backup destination reconnect response identity.");
+    expect(backupApi).not.toContain("destinationPath");
+    expect(backupApi).not.toContain("absolutePath");
+    expect(backupApi).not.toContain("rawError");
+  });
+
   it("freezes one pathless currentness-bound referenced-original reconnect channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");

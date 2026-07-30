@@ -12,6 +12,8 @@ import {
   BackupContinueIncompleteResultSchema,
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
+  BackupReconnectDestinationRequestSchema,
+  BackupReconnectDestinationResultSchema,
   ReferencedOriginalReconnectRequestSchema,
   ReferencedOriginalReconnectResultSchema,
   COLLECTION_ADD_FORMULA_COLUMN_CHANNEL,
@@ -3201,6 +3203,71 @@ describe("schemas", () => {
       status: "failed",
       path: "/private/source-root",
       error: { code: "raw" }
+    })).toThrow();
+  });
+
+  it("freezes pathless exact-current Backup destination reconnect and same-Job outcomes", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "backupdestreconnectreq_abcdefgh",
+      activeVaultId: "vault_20260709_abcdefgh",
+      waitingJobId: "job_20260709_abcdefgh",
+      expectedJobUpdatedAt: "2026-07-30T01:02:03.000Z",
+      destinationContextId: "backupdestctx_abcdefgh"
+    } as const;
+    const eligibleJob = {
+      id: request.waitingJobId,
+      state: "waiting_dependency",
+      stage: "backing_up",
+      updatedAt: request.expectedJobUpdatedAt,
+      canReconnectBackupDestination: true,
+      backupDestinationReconnectContextId: request.destinationContextId,
+      nextAction: "choose_destination"
+    } as const;
+    const resumedJob = {
+      ...eligibleJob,
+      state: "queued",
+      canReconnectBackupDestination: false,
+      backupDestinationReconnectContextId: undefined,
+      nextAction: "none"
+    } as const;
+
+    expect(BackupReconnectDestinationRequestSchema.parse(request)).toEqual(request);
+    expect(BackupReconnectDestinationResultSchema.parse({ ...request, status: "cancelled", job: eligibleJob }))
+      .toEqual({ ...request, status: "cancelled", job: eligibleJob });
+    for (const status of ["resumed", "reconnected"] as const) {
+      expect(BackupReconnectDestinationResultSchema.parse({ ...request, status, job: resumedJob }))
+        .toEqual({ ...request, status, job: resumedJob });
+    }
+    expect(BackupReconnectDestinationResultSchema.parse({
+      ...request,
+      status: "ineligible",
+      job: { ...resumedJob, state: "failed_final" }
+    })).toMatchObject({ status: "ineligible", job: { id: request.waitingJobId } });
+    expect(BackupReconnectDestinationResultSchema.parse({ ...request, status: "stale" }))
+      .toEqual({ ...request, status: "stale" });
+    expect(BackupReconnectDestinationResultSchema.parse({ ...request, status: "not_found" }))
+      .toEqual({ ...request, status: "not_found" });
+    expect(BackupReconnectDestinationResultSchema.parse({
+      ...request,
+      status: "failed",
+      failure: "resume_failed",
+      job: { ...resumedJob, state: "failed_retryable", nextAction: "retry_same_job" }
+    })).toMatchObject({ status: "failed", failure: "resume_failed" });
+
+    for (const privateField of ["path", "absolutePath", "destinationPath", "rawError", "sourceBody"] as const) {
+      expect(() => BackupReconnectDestinationRequestSchema.parse({ ...request, [privateField]: "private" }))
+        .toThrow();
+    }
+    expect(() => BackupReconnectDestinationResultSchema.parse({
+      ...request,
+      status: "cancelled",
+      job: { ...eligibleJob, backupDestinationReconnectContextId: "backupdestctx_different" }
+    })).toThrow();
+    expect(() => BackupReconnectDestinationResultSchema.parse({
+      ...request,
+      status: "resumed",
+      job: eligibleJob
     })).toThrow();
   });
 

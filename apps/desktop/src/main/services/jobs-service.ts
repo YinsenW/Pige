@@ -4127,6 +4127,7 @@ function toJobSummary(vaultPath: string, job: JobRecord): JobSummary {
     ...(sourceRecord ? { sourceDisplayName: sourceRecord.original?.displayName ?? sourceRecord.kind } : {}),
     ...(backupKind ? { backupKind } : {}),
     canReconnectDependency: canReconnectDependency(job),
+    canReconnectBackupDestination: false,
     canContinueIncomplete: canContinueIncomplete(job),
     ...(job.error ? { error: job.error } : {}),
     message: job.message,
