@@ -598,6 +598,9 @@ Lifecycle coverage:
 
 Reader save records one `update_page` with private before/after bytes; Undo requires the after
 revision and writes prior bytes forward. Drift or missing recovery evidence preserves the live page.
+Reader merge records one `update_page` targeting both IDs. A private receipt binds originals, merged
+survivor and target trash; replay converges once. Undo requires that state, restores both originals
+and writes a deterministic forward Operation; drift preserves current bytes.
 Memory edit/enable/delete/reset commit exact revision-bound private receipts before `update_memory`
 or `trash_memory`; edit retains immutable event/provenance and secret-scans before its receipt.
 Undo writes `restore_memory`; restart adopts exact pairs, while drift/tampering preserves current

@@ -4051,6 +4051,28 @@ References:
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 - `docs/UI_PROTOTYPE.md`
 
+### D-20260730-Reversible-Note-Merge
+
+Status: Accepted
+Date: 2026-07-30
+
+Decision:
+
+Ordinary-note merge keeps current and moves its target to private recoverable trash.
+
+Rationale:
+
+Stable IDs and exact originals make it reversible.
+
+Consequences:
+
+- Main fences both revisions; one `update_page` targets both; Undo restores both.
+
+References:
+
+- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
