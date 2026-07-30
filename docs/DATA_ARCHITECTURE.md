@@ -706,6 +706,11 @@ The default should include Agent memory because it is part of the user's Pige ex
 The backup manifest binds its registry revision/checksum and exact event, record, lifecycle
 receipt, restore-intent and Operation counts. Backup and restore reject missing provenance,
 semantic tampering or count drift; restored active/disabled/trashed state remains exact.
+The vault-portable exclusion preference is read before Backup preflight and rechecked before
+manifest publication. When excluded, no `.pige/memory/`, memory trash, lifecycle receipt,
+restore intent, or memory-kind Operation enters the archive; `includes.vaultMemory` is false,
+`memoryCount` is zero, and `memoryIntegrity` is absent. Restoring that archive preserves the
+exclusion preference and creates no memory lifecycle state.
 
 Playbook/acceptance own current evidence and open work. Readable format-v1 remains legacy
 input but cannot invent domain compatibility. If `backupId` is absent, preview derives

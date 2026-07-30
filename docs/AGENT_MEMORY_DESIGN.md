@@ -63,6 +63,11 @@ projection only. Vault memory is portable and backed up unless excluded; indexes
 - Backup binds the exact registry revision/checksum, lifecycle receipts, restore intents and
   linked Operations; restore revalidates those bindings before publication. Active records
   remain recallable, disabled/trashed records stay excluded, and the bound is 1,000 records.
+  A visible vault-portable preference includes memory by default and applies to the next
+  Backup only. Disabling it removes registry/projections, memory trash, lifecycle receipts,
+  restore intents, and memory Operations from the archive while keeping the manifest truthful.
+  Preference mutation is revision-fenced, blocked during active Backup work, and recorded as
+  one pathless `change_setting` Operation; it never enters Agent prompt policy.
   Autonomous/global and semantic memory remain open.
 
 ## 5. v0.1 Scope

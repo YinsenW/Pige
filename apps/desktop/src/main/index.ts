@@ -191,6 +191,7 @@ import { AppearanceService } from "./services/appearance-service";
 import { StartupDestinationService } from "./services/startup-destination-service";
 import { BackupCoordinatorService } from "./services/backup-coordinator-service";
 import { BackupRestoreService } from "./services/backup-service";
+import { BackupMemoryPreferenceService } from "./services/backup-memory-preference-service";
 import { CoalescedBatchDrainer } from "./services/background-job-drainer";
 import { CaptureService } from "./services/capture-service";
 import { ManagedCopyRootService } from "./services/managed-copy-root-service";
@@ -386,6 +387,7 @@ let piPackageUpdateService: PiPackageUpdateService | undefined;
 let piPackageInstallTaskService: PiPackageInstallTaskService | undefined;
 let windowModeService: WindowModeService | undefined;
 let backupRestoreService: BackupRestoreService | undefined;
+let backupMemoryPreferenceService: BackupMemoryPreferenceService | undefined;
 let backupCoordinatorService: BackupCoordinatorService | undefined;
 let restoreCoordinatorService: RestoreCoordinatorService | undefined;
 let vaultStorageRelocationService: VaultStorageRelocationService | undefined;
@@ -833,6 +835,18 @@ const getBackupRestoreService = (): BackupRestoreService => {
     backupRestoreService = new BackupRestoreService({ userDataPath: app.getPath("userData") });
   }
   return backupRestoreService;
+};
+
+const getBackupMemoryPreferenceService = (): BackupMemoryPreferenceService => {
+  backupMemoryPreferenceService ??= new BackupMemoryPreferenceService({
+    vault: getVaultService(),
+    hasActiveBackupJob: () => getJobsService().list({
+      classes: ["backup"],
+      states: ["queued", "running", "cancel_requested", "waiting_dependency", "failed_retryable"],
+      limit: 1
+    }).jobs.length > 0
+  });
+  return backupMemoryPreferenceService;
 };
 
 const getBackupCoordinatorService = (): BackupCoordinatorService => {
@@ -2964,6 +2978,7 @@ registerBackupRestoreIpc({
   showOpenDialog: (window, options) => dialog.showOpenDialog(window, options),
   showMessageBox: (window, options) => dialog.showMessageBox(window, options),
   getActiveVault: () => getVaultService().current(),
+  getActiveVaultPath: () => getVaultService().activeVaultPath(),
   getLastBackupAt: () => getJobsService().list({
     classes: ["backup"],
     states: ["completed", "completed_with_warnings"],
@@ -2972,6 +2987,7 @@ registerBackupRestoreIpc({
   getLocale: () => getAppearanceService().summary().locale,
   getDocumentsPath: () => app.getPath("documents"),
   getBackupService: getBackupRestoreService,
+  getBackupMemoryPreferenceService,
   getBackupCoordinator: getBackupCoordinatorService,
   getRestoreCoordinator: getRestoreCoordinatorService,
   resumeBackgroundJobs

@@ -4775,6 +4775,45 @@ export const BackupContinueIncompleteResultSchema = BackupContinueIncompleteRequ
   status: z.enum(["continued", "cancelled", "stale", "not_found", "ineligible", "failed"])
 }).strict();
 
+export const BACKUP_MEMORY_PREFERENCE_STATUS_CHANNEL = "backup.memoryPreferenceStatus" as const;
+export const BACKUP_SET_MEMORY_PREFERENCE_CHANNEL = "backup.setMemoryPreference" as const;
+export const BackupMemoryPreferenceRevisionSchema = z.string()
+  .regex(/^backupmemoryrev_[a-f0-9]{64}$/u);
+export const BackupMemoryPreferenceSummarySchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  revision: BackupMemoryPreferenceRevisionSchema,
+  includeVaultMemory: z.boolean(),
+  canUpdate: z.boolean()
+}).strict();
+export const BackupMemoryPreferenceRequestIdSchema = z.string()
+  .regex(/^backupmemoryreq_[a-z0-9]{16,64}$/u);
+export const BackupMemoryPreferenceUpdateRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: BackupMemoryPreferenceRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  expectedRevision: BackupMemoryPreferenceRevisionSchema,
+  includeVaultMemory: z.boolean()
+}).strict();
+export const BackupMemoryPreferenceUpdateResultSchema = z.discriminatedUnion("status", [
+  BackupMemoryPreferenceUpdateRequestSchema.pick({
+    apiVersion: true,
+    requestId: true,
+    activeVaultId: true
+  }).extend({
+    status: z.literal("updated"),
+    summary: BackupMemoryPreferenceSummarySchema
+  }).strict(),
+  BackupMemoryPreferenceUpdateRequestSchema.pick({
+    apiVersion: true,
+    requestId: true,
+    activeVaultId: true
+  }).extend({
+    status: z.enum(["stale", "blocked"]),
+    summary: BackupMemoryPreferenceSummarySchema
+  }).strict()
+]);
+
 export const RESTORE_CANCEL_CHANNEL = "restore.cancel" as const;
 export const RestoreCancelRequestIdSchema = z.string()
   .regex(/^restorecancelreq_[a-z0-9]{8,64}$/);
@@ -10162,6 +10201,10 @@ export type BackupReconnectDestinationResult = z.infer<typeof BackupReconnectDes
 export type BackupContinueIncompleteRequestId = z.infer<typeof BackupContinueIncompleteRequestIdSchema>;
 export type BackupContinueIncompleteRequest = z.infer<typeof BackupContinueIncompleteRequestSchema>;
 export type BackupContinueIncompleteResult = z.infer<typeof BackupContinueIncompleteResultSchema>;
+export type BackupMemoryPreferenceRevision = z.infer<typeof BackupMemoryPreferenceRevisionSchema>;
+export type BackupMemoryPreferenceSummary = z.infer<typeof BackupMemoryPreferenceSummarySchema>;
+export type BackupMemoryPreferenceUpdateRequest = z.infer<typeof BackupMemoryPreferenceUpdateRequestSchema>;
+export type BackupMemoryPreferenceUpdateResult = z.infer<typeof BackupMemoryPreferenceUpdateResultSchema>;
 export type RestoreCancelRequestId = z.infer<typeof RestoreCancelRequestIdSchema>;
 export type RestoreCancelRequest = z.infer<typeof RestoreCancelRequestSchema>;
 export type RestoreCancelResult = z.infer<typeof RestoreCancelResultSchema>;

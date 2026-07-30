@@ -24,7 +24,8 @@ import {
   PIGE_TRANSIENT_RUNTIME_ROOTS,
   createVaultOnDisk,
   isPigeVault,
-  loadVaultSummary
+  loadVaultSummary,
+  readVaultConfig
 } from "../../apps/desktop/src/main/services/vault-layout";
 
 const tempRoots: string[] = [];
@@ -364,6 +365,46 @@ describe("backup restore service", () => {
       path.join(root, "memory-clone-second-backup.zip"),
       "0.1.0-test"
     )).resolves.toMatchObject({ status: "created", manifest: { memoryCount: 2 } });
+  });
+
+  it("honors the portable memory exclusion and restores no memory lifecycle state", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "memory-excluded.pige-backup.zip");
+    const vaultId = String(readVaultManifestFixture(vaultPath).vault_id);
+    const memory = new AgentMemoryService({ now: advancingMemoryClock() });
+    const record = rememberBackupMemory(memory, vaultPath, vaultId, "excluded");
+    expect(memory.edit(vaultPath, {
+      apiVersion: 1,
+      requestId: "memory_request_backupexcluded01",
+      activeVaultId: vaultId,
+      memoryId: record.id,
+      expectedRevision: 1,
+      title: "Excluded memory canary",
+      body: "This memory lifecycle must stay out of the archive."
+    }).status).toBe("committed");
+    const configPath = path.join(vaultPath, ".pige/config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as Record<string, any>;
+    config.backup.includeVaultMemory = false;
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+    const created = await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test");
+    const archive = await readGeneratedBackup(backupPath);
+    expect(created.manifest).toMatchObject({ memoryCount: 0, includes: { vaultMemory: false } });
+    expect(archive.manifest.memoryIntegrity).toBeUndefined();
+    expect([...archive.entries.keys()].some((entry) =>
+      entry.startsWith("vault/.pige/memory/") || entry.startsWith("vault/.pige/trash/memory/")
+    )).toBe(false);
+    expect(Buffer.concat([...archive.entries.values()]).toString("utf8")).not.toContain("Excluded memory canary");
+
+    const preview = await new BackupRestoreService().inspectRestoreArchive(backupPath);
+    const restored = await applyTestRestore(
+      new BackupRestoreService(),
+      backupPath,
+      path.join(root, "memory-excluded-restore"),
+      preview
+    );
+    expect(readVaultConfig(restored.restoredVaultPath).backup.includeVaultMemory).toBe(false);
+    expect(new AgentMemoryService().list(restored.restoredVaultPath, restored.resultVaultId).records).toEqual([]);
   });
 
   it("fails closed on missing memory provenance and semantically tampered restore state", async () => {
