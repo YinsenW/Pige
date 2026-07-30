@@ -29,6 +29,7 @@ import {
 } from "../../apps/desktop/src/renderer/src/components/LocalCapabilitiesSettingsPanel";
 import { SkillTrashRestorePanel } from "../../apps/desktop/src/renderer/src/components/SkillTrashRestorePanel";
 import { NoteTrashRestorePanel } from "../../apps/desktop/src/renderer/src/components/NoteTrashRestorePanel";
+import { ActivityHistorySettingsPanel } from "../../apps/desktop/src/renderer/src/components/ActivityHistorySettingsPanel";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 import type {
   LocalSemanticRetrievalDisableRequest,
@@ -41,6 +42,7 @@ import type {
   LocalSemanticRetrievalRemoveResult,
   LocalSemanticRetrievalStatus,
   DiagnosticsClearLocalResult,
+  KnowledgeActivitySummary,
   PaddleOcrDisableRequest,
   PaddleOcrDisableResult,
   PaddleOcrEnableRequest,
@@ -122,6 +124,7 @@ const globalKeys = [
   "CompositionEvent",
   "KeyboardEvent",
   "MouseEvent",
+  "requestAnimationFrame",
 ] as const;
 const originalDescriptors = new Map<PropertyKey, PropertyDescriptor | undefined>();
 
@@ -136,6 +139,65 @@ afterEach(() => {
 });
 
 describe("full UI Settings surface", () => {
+  it("loads older Activity once and returns focus to the history heading on the final page", async () => {
+    const dom = createDom();
+    installAnimationFrame(dom);
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const load = vi.fn(async () => { await pending; return true; });
+    const first = activitySummary("op_20260731_activityfirst01", "2026-07-31T10:00:00.000Z");
+    const older = activitySummary("op_20260731_activityolder01", "2026-07-30T10:00:00.000Z");
+    function Harness(): React.JSX.Element {
+      const [activities, setActivities] = useState<readonly KnowledgeActivitySummary[]>([first]);
+      const [hasMore, setHasMore] = useState(true);
+      return createElement(ActivityHistorySettingsPanel, {
+        activeVaultId: null, activities, hasMore, loadingMore: false, loadMoreFailed: false,
+        undoingId: null, openingId: null, blockedIds: [], locale: "en",
+        onOpen: async () => undefined, onUndo: async () => undefined,
+        onLoadMore: async () => { const loaded = await load(); if (loaded) { setActivities([first, older]); setHasMore(false); } return loaded; },
+        t
+      });
+    }
+    await act(async () => { root.render(createElement(Harness)); await settle(dom); });
+    const loadMore = buttonNamed(dom.window.document, "Load more");
+    loadMore.focus();
+    await act(async () => { loadMore.click(); loadMore.click(); await settle(dom); });
+    expect(load).toHaveBeenCalledOnce();
+    await act(async () => { release(); await pending; await settle(dom); await settle(dom); });
+    await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 10));
+    expect(dom.window.document.querySelectorAll("[data-activity-row-id]")).toHaveLength(2);
+    expect(dom.window.document.querySelector("button")?.textContent).not.toBe("Load more");
+    expect(dom.window.document.activeElement?.id).toBe("settings-history-title");
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("retains visible Activity and trigger focus when the next page fails", async () => {
+    const dom = createDom();
+    installAnimationFrame(dom);
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const first = activitySummary("op_20260731_activityfailed01", "2026-07-31T10:00:00.000Z");
+    function Harness(): React.JSX.Element {
+      const [failed, setFailed] = useState(false);
+      return createElement(ActivityHistorySettingsPanel, {
+        activeVaultId: null, activities: [first], hasMore: true, loadingMore: false, loadMoreFailed: failed,
+        undoingId: null, openingId: null, blockedIds: [], locale: "en",
+        onOpen: async () => undefined, onUndo: async () => undefined,
+        onLoadMore: async () => { setFailed(true); return false; }, t
+      });
+    }
+    await act(async () => { root.render(createElement(Harness)); await settle(dom); });
+    const loadMore = buttonNamed(dom.window.document, "Load more");
+    loadMore.focus();
+    await act(async () => { loadMore.click(); await settle(dom); await settle(dom); });
+    expect(dom.window.document.querySelectorAll("[data-activity-row-id]")).toHaveLength(1);
+    expect(dom.window.document.querySelector("[role=alert]")?.textContent).toContain("visible history was kept");
+    expect(dom.window.document.activeElement).toBe(loadMore);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps the always-on-top control inert until window truth is known", async () => {
     const dom = createDom();
     const onAlwaysOnTopChange = vi.fn(async () => undefined);
@@ -6101,6 +6163,20 @@ function createDom(): JSDOM {
   return dom;
 }
 
+function installAnimationFrame(dom: JSDOM): void {
+  const requestAnimationFrame = (callback: FrameRequestCallback): number =>
+    dom.window.setTimeout(() => callback(0), 0);
+  Object.defineProperty(dom.window, "requestAnimationFrame", {
+    configurable: true,
+    value: requestAnimationFrame
+  });
+  Object.defineProperty(globalThis, "requestAnimationFrame", {
+    configurable: true,
+    writable: true,
+    value: requestAnimationFrame
+  });
+}
+
 function installMatchMedia(dom: JSDOM, matches: boolean): void {
   Object.defineProperty(dom.window, "matchMedia", {
     configurable: true,
@@ -6351,6 +6427,18 @@ function paddleOcrApi(state: PaddleOcrLifecycleState): PaddleOcrApi {
     testPaddleOcr: unavailable,
     disablePaddleOcr: unavailable,
     removePaddleOcr: unavailable
+  };
+}
+
+function activitySummary(operationId: string, createdAt: string): KnowledgeActivitySummary {
+  return {
+    operationId,
+    kind: "update_page",
+    createdAt,
+    targetLabel: "Activity note",
+    target: { kind: "page", pageId: "page_20260731_activitynote01" },
+    status: "applied",
+    canUndo: true
   };
 }
 

@@ -20,6 +20,7 @@ import {
   readAgentPageUpdateOperationBinding
 } from "./agent-page-update-service";
 import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
+import { KnowledgeActivityHistory } from "./knowledge-activity-history";
 export interface KnowledgeActivityVaultPort {
   current(): VaultSummary | undefined;
   activeVaultPath(): string | undefined;
@@ -45,8 +46,6 @@ interface GeneratedIndexUpdate {
   readonly originalContent: string;
   readonly content: string;
 }
-const DEFAULT_ACTIVITY_LIMIT = 5;
-const MAX_ACTIVITY_LIMIT = 20;
 const MAX_OPERATION_SCAN_ENTRIES = 10_000;
 const MAX_OPERATION_BYTES = 256 * 1024;
 const MAX_OPERATION_SCAN_BYTES = 64 * 1024 * 1024;
@@ -57,7 +56,7 @@ const GENERATED_PAGE_PATH = /^wiki\/generated\/\d{4}\/page_\d{8}_[a-z0-9]{8,}\.m
 const OPERATION_ID = /^op_\d{8}_[a-z0-9]{8,}$/u;
 const CONTENT_HASH = /^sha256:[a-f0-9]{64}$/u;
 export class KnowledgeActivityService {
-  readonly #vaults: KnowledgeActivityVaultPort; readonly #collections: KnowledgeActivityCollectionPort | undefined; readonly #editor: KnowledgeActivityEditorPort | undefined; readonly #memory: KnowledgeActivityMemoryPort | undefined; readonly #pages: KnowledgeActivityPageLifecyclePort | undefined; readonly #sources: KnowledgeActivitySourcePort | undefined;
+  readonly #vaults: KnowledgeActivityVaultPort; readonly #collections: KnowledgeActivityCollectionPort | undefined; readonly #editor: KnowledgeActivityEditorPort | undefined; readonly #memory: KnowledgeActivityMemoryPort | undefined; readonly #pages: KnowledgeActivityPageLifecyclePort | undefined; readonly #sources: KnowledgeActivitySourcePort | undefined; readonly #history = new KnowledgeActivityHistory();
   constructor(vaults: KnowledgeActivityVaultPort, collections?: KnowledgeActivityCollectionPort, editor?: KnowledgeActivityEditorPort, memory?: KnowledgeActivityMemoryPort, pages?: KnowledgeActivityPageLifecyclePort, sources?: KnowledgeActivitySourcePort) {
     this.#vaults = vaults; this.#collections = collections; this.#editor = editor; this.#memory = memory; this.#pages = pages; this.#sources = sources;
   }
@@ -69,28 +68,17 @@ export class KnowledgeActivityService {
     const vaultPath = this.#requireActiveVaultPath();
     const scan = readOperationRecords(vaultPath);
     const undoByOperationId = createUndoOperationMap(scan.operations);
-    const activities = scan.operations
-      .filter((operation) => !!this.#sources?.activitySummary(operation, this.#sources.findUndoOperation(operation, scan.operations)) || !!this.#pages?.activitySummary(operation, this.#pages.findUndoOperation(operation, scan.operations)) || !!this.#memory?.activitySummary(operation, this.#memory.findUndoOperation(operation, scan.operations)) || !!this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations)) || isKnowledgeActivityOperation(operation) || (
-        isCollectionActivityOperation(operation) && !!this.#collections?.activitySummary(
-          operation, this.#collections.findUndoOperation(operation, scan.operations)
-        )))
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.id.localeCompare(right.id));
-    return {
-      scannedAt: new Date().toISOString(),
-      activeVaultId: activeVault.vaultId,
-      total: activities.length,
+    return this.#history.list({
+      request, activeVaultId: activeVault.vaultId, vaultPath,
+      operations: scan.operations,
       invalidOperationCount: scan.invalidOperationCount,
-      activities: activities
-        .slice(0, clampLimit(request.limit))
-        .map((operation) => {
-          const source = this.#sources?.activitySummary(operation, this.#sources.findUndoOperation(operation, scan.operations)); const page = this.#pages?.activitySummary(operation, this.#pages.findUndoOperation(operation, scan.operations)); const memory = this.#memory?.activitySummary(operation, this.#memory.findUndoOperation(operation, scan.operations)); const editor = this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations));
-          if (source) return source; if (page) return page; if (memory) return memory; if (editor) return editor;
-          if (isCollectionActivityOperation(operation) && this.#collections) {
-            return this.#collections.activitySummary(operation, this.#collections.findUndoOperation(operation, scan.operations))!;
-          }
-          return toActivitySummary(vaultPath, operation, undoByOperationId.get(operation.id));
-        })
-    };
+      summarize: (operation) => {
+        const source = this.#sources?.activitySummary(operation, this.#sources.findUndoOperation(operation, scan.operations)); const page = this.#pages?.activitySummary(operation, this.#pages.findUndoOperation(operation, scan.operations)); const memory = this.#memory?.activitySummary(operation, this.#memory.findUndoOperation(operation, scan.operations)); const editor = this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations));
+        if (source) return source; if (page) return page; if (memory) return memory; if (editor) return editor;
+        if (isCollectionActivityOperation(operation) && this.#collections) return this.#collections.activitySummary(operation, this.#collections.findUndoOperation(operation, scan.operations));
+        return isKnowledgeActivityOperation(operation) ? toActivitySummary(vaultPath, operation, undoByOperationId.get(operation.id)) : undefined;
+      }
+    });
   }
   undo(request: KnowledgeActivityUndoRequest): KnowledgeActivityUndoResult | Promise<KnowledgeActivityUndoResult> {
     if (
@@ -1569,14 +1557,6 @@ function resolveVaultPath(vaultPath: string, relativePath: string): string {
 
 function hashBytes(value: Buffer | string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
-}
-
-function clampLimit(value: number | undefined): number {
-  if (value === undefined) return DEFAULT_ACTIVITY_LIMIT;
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new PigeDomainError("activity.invalid_limit", "The Activity list limit is invalid.");
-  }
-  return Math.min(value, MAX_ACTIVITY_LIMIT);
 }
 
 function boundedSummary(value: string): string {
