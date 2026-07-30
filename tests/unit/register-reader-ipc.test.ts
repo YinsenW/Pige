@@ -89,6 +89,7 @@ function makeHarness(
       if (noteMarkdownImportService) return noteMarkdownImportService as NoteMarkdownImportService;
       throw new Error("Note Markdown import service was not expected.");
     },
+    getNoteRevisionHistoryService: () => notes as unknown as import("../../apps/desktop/src/main/services/note-revision-history-service").NoteRevisionHistoryService,
     onNoteTrashCommitted,
     onNoteArchiveCommitted,
     onNoteRelated: onNoteArchiveCommitted,
@@ -105,6 +106,9 @@ describe("registerReaderIpc", () => {
       "notes.render",
       "notes.openEditor",
       "notes.saveEditor",
+      "notes.listRevisionHistory",
+      "notes.openRevisionHistory",
+      "notes.restoreRevisionHistory",
       "notes.trashCurrent",
       "notes.listTrash",
       "notes.restoreTrash",
@@ -536,6 +540,52 @@ describe("registerReaderIpc", () => {
     vi.mocked(sender.isDestroyed).mockReturnValueOnce(false).mockReturnValueOnce(true);
     await expect(handlers.get("notes.saveEditor")!({ sender } as IpcMainInvokeEvent, saveRequest))
       .resolves.toEqual({ ...identity, status: "failed" });
+  });
+
+  it("binds history list, open, and restore to one tracked Reader owner and refreshes after commit", async () => {
+    const renderContextId = `notectx_${"c".repeat(32)}`;
+    const expectedRevision = `noteeditrev_${"a".repeat(64)}`;
+    const historicalRevision = `notehistoryrev_${"b".repeat(64)}`;
+    const identity = {
+      apiVersion: 1 as const,
+      requestId: "notehistoryreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260731_historyipc",
+      pageId: "page_20260731_historyipc",
+      renderContextId,
+      expectedRevision
+    };
+    const renderResult = {
+      summary: {
+        pageId: identity.pageId, title: "History", pageType: "note", status: "active",
+        pagePath: "wiki/history.md", createdAt: "2026-07-31T10:00:00.000Z",
+        updatedAt: "2026-07-31T11:00:00.000Z", sourceIds: []
+      },
+      html: "<p>Current</p>", byteSize: 12, renderContextId,
+      historyEligibility: { canBrowse: true, revision: expectedRevision }
+    } as const;
+    const render = vi.fn().mockResolvedValue(renderResult);
+    const listForRenderer = vi.fn().mockReturnValue({
+      ...identity, status: "ready", currentRevision: expectedRevision,
+      revisions: [{ revisionId: historicalRevision, createdAt: "2026-07-30T10:00:00.000Z", origin: "user", isCurrent: false, canOpen: true }]
+    });
+    const openForRenderer = vi.fn().mockResolvedValue({
+      ...identity, revisionId: historicalRevision, status: "opened",
+      revision: { revisionId: historicalRevision, createdAt: "2026-07-30T10:00:00.000Z", origin: "user", isCurrent: false, canOpen: true },
+      currentRevision: expectedRevision, html: "<p>Earlier</p>", byteSize: 12
+    });
+    const restoreForRenderer = vi.fn().mockResolvedValue({
+      ...identity, revisionId: historicalRevision, status: "committed",
+      operationId: "op_20260731_historyrestore", revision: `noteeditrev_${"d".repeat(64)}`, render: renderResult
+    });
+    const refreshed = vi.fn();
+    const handlers = makeHarness({ render, listForRenderer, openForRenderer, restoreForRenderer } as unknown as Partial<NotesService>, undefined, undefined, vi.fn(), undefined, undefined, undefined, refreshed);
+    const sender = makeSender(73);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: identity.pageId });
+    expect(handlers.get("notes.listRevisionHistory")!({ sender } as IpcMainInvokeEvent, identity)).toMatchObject({ status: "ready" });
+    await expect(handlers.get("notes.openRevisionHistory")!({ sender } as IpcMainInvokeEvent, { ...identity, revisionId: historicalRevision })).resolves.toMatchObject({ status: "opened" });
+    await expect(handlers.get("notes.restoreRevisionHistory")!({ sender } as IpcMainInvokeEvent, { ...identity, revisionId: historicalRevision })).resolves.toMatchObject({ status: "committed" });
+    expect(refreshed).toHaveBeenCalledTimes(1);
+    expect(listForRenderer).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), identity);
   });
 
   it("returns body-free stale before a renderer owns a render context", () => {

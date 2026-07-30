@@ -71,6 +71,7 @@ export interface NoteMarkdownEditorSaveRequest {
   readonly expectedRevisionId: string;
   readonly renderIdentity: string;
   readonly markdown: string;
+  readonly operationId?: string;
 }
 export type NoteMarkdownEditorSaveResult =
   | {
@@ -920,6 +921,9 @@ function createOperationId(
   request: NoteMarkdownEditorSaveRequest,
   afterRevisionId: string
 ): string {
+  if (request.operationId && /^op_\d{8}_[a-z0-9]{8,}$/u.test(request.operationId)) {
+    return request.operationId;
+  }
   const dateKey = now.toISOString().slice(0, 10).replace(/-/gu, "");
   const suffix = createHash("sha256")
     .update(`${request.requestId}\0${request.activeVaultId}\0${request.pageId}\0${request.expectedRevisionId}\0${afterRevisionId}\0${randomId}`)
