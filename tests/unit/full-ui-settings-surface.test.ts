@@ -58,6 +58,8 @@ import type {
   PiPackageInstallRequest,
   PiPackageInstallResult,
   PiPackageRegistrySummary,
+  PiPackageRestoreRequest,
+  PiPackageRestoreResult,
   PiPackageRollbackRequest,
   PiPackageRollbackResult,
   PiPackageSetPinnedRequest,
@@ -2654,6 +2656,97 @@ describe("full UI Settings surface", () => {
     const secondRemove = requireElement(page.querySelector<HTMLButtonElement>(`[data-package-remove-id="${secondPackage.packageId}"]`));
     expect(dom.window.document.activeElement).toBe(secondRemove);
     expect(page.textContent).toContain("The package was removed.");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("restores one exact Pi package recovery candidate and adopts its disabled authoritative row", async () => {
+    const dom = createDom();
+    const candidate = {
+      restoreContextId: `pi_package_restore_context_v1_${"a".repeat(48)}` as const,
+      packageId: "pkg_aaaaaaaaaaaaaaaaaaaaaaaa" as const,
+      packageName: "restorable-package",
+      version: "1.2.3",
+      integrity: `sha512-${"A".repeat(86)}==` as const,
+      packageTypes: ["extension" as const],
+      dependencyCount: 0,
+      pinned: true,
+      rollbackTarget: { rollbackId: "pi_package_rollback_abcdefghijklmnop" as const, targetVersion: "1.1.0" },
+      uninstalledAt: "2026-07-30T00:00:00.000Z",
+      canRestore: true as const
+    };
+    const initial = piPackageRegistry(8, [], [candidate]);
+    const restoredRegistry = piPackageRegistry(9, [piPackage(candidate.packageId, candidate.packageName, {
+      version: candidate.version,
+      pinned: candidate.pinned,
+      canUpdate: false,
+      canRollback: false,
+      rollbackTarget: null
+    })]);
+    let settleRestore!: (result: PiPackageRestoreResult) => void;
+    const restore = vi.fn((_request: PiPackageRestoreRequest) => new Promise<PiPackageRestoreResult>((resolve) => {
+      settleRestore = resolve;
+    }));
+    const api: PiPackagesApi = {
+      summary: async () => ({ status: "ready", registry: initial }),
+      catalogQuery: emptyPiPackageCatalogQuery,
+      install: vi.fn(),
+      uninstall: vi.fn(),
+      restore,
+      update: vi.fn(),
+      rollback: vi.fn(),
+      setPinned: vi.fn()
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(PiPackagesSettingsPanel, { api, t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+    const row = requireElement(page.querySelector<HTMLElement>(`[data-package-restore-context="${candidate.restoreContextId}"]`));
+    expect(page.textContent).toContain("Recently removed");
+    expect(row.textContent).toContain("Pinned");
+    expect(row.textContent).not.toContain(candidate.integrity);
+
+    await act(async () => {
+      buttonNamed(row, "Restore").click();
+      await settle(dom);
+    });
+    expect(restore).toHaveBeenCalledOnce();
+    const request = restore.mock.calls[0]![0];
+    expect(request).toEqual({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^pi_package_restore_request_[a-f0-9]{32}$/u),
+      expectedRegistryRevision: 8,
+      restoreContextId: candidate.restoreContextId,
+      packageId: candidate.packageId,
+      version: candidate.version,
+      integrity: candidate.integrity,
+      pinned: true,
+      rollbackTarget: candidate.rollbackTarget
+    });
+    expect(buttonNamed(row, "Restoring…").disabled).toBe(true);
+    await act(async () => {
+      settleRestore({
+        apiVersion: 1,
+        requestId: request.requestId,
+        restoreContextId: request.restoreContextId,
+        packageId: request.packageId,
+        version: request.version,
+        integrity: request.integrity,
+        pinned: request.pinned,
+        rollbackTarget: request.rollbackTarget,
+        status: "committed",
+        registry: restoredRegistry
+      });
+      await settle(dom);
+    });
+    expect(page.querySelector(`[data-package-restore-context="${candidate.restoreContextId}"]`)).toBeNull();
+    const installed = requireElement(page.querySelector<HTMLElement>(`[data-package-id="${candidate.packageId}"]`));
+    expect(installed.textContent).toContain("Installed · Disabled");
+    expect(dom.window.document.activeElement).toBe(installed);
+    expect(page.textContent).toContain("The package was restored and remains disabled.");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -5683,9 +5776,10 @@ function textareaValue(dom: JSDOM, input: HTMLTextAreaElement, value: string): v
 
 function piPackageRegistry(
   revision: number,
-  packages: PiPackageRegistrySummary["packages"] = []
+  packages: PiPackageRegistrySummary["packages"] = [],
+  restorablePackages?: NonNullable<PiPackageRegistrySummary["restorablePackages"]>
 ): PiPackageRegistrySummary {
-  return { apiVersion: 1, revision, packages };
+  return { apiVersion: 1, revision, packages, ...(restorablePackages ? { restorablePackages } : {}) };
 }
 
 function piPackageCatalogEntry(): PiPackageCatalogEntry {

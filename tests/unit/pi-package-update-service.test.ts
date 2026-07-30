@@ -8,6 +8,7 @@ import {
   PiPackageManagerService, type PiPackageRecord
 } from "../../apps/desktop/src/main/services/pi-package-manager-service";
 import { hashPiPackageTree } from "../../apps/desktop/src/main/services/pi-package-lifecycle-store";
+import { PiPackageRestoreService } from "../../apps/desktop/src/main/services/pi-package-restore-service";
 import { PiPackageUpdateService } from "../../apps/desktop/src/main/services/pi-package-update-service";
 
 const PACKAGE_NAME = "pige-update-fixture";
@@ -153,6 +154,63 @@ describe("PiPackageUpdateService", () => {
       packageId: "pkg_ffffffffffffffffffffffff", expectedRegistryRevision: 4 })).resolves.toMatchObject({
       status: "not_found", registry: { revision: 4 }
     });
+  });
+
+  it("restores exact pin and offline rollback eligibility from private uninstall ownership", async () => {
+    const fixture = await createFixture();
+    const service = createService(fixture);
+    await expect(service.update(updateRequest(fixture))).resolves.toMatchObject({
+      status: "committed", registry: { revision: 2, packages: [{ version: "2.0.0", canRollback: true }] }
+    });
+    await expect(service.setPinned({
+      apiVersion: 1, requestId: PIN_REQUEST_ID, packageId: PACKAGE_ID,
+      expectedRegistryRevision: 2, pinned: true
+    })).resolves.toMatchObject({ status: "committed", registry: { revision: 3, packages: [{ pinned: true }] } });
+    const restoreService = new PiPackageRestoreService({ manager: fixture.manager });
+    const removed = await restoreService.uninstall({
+      apiVersion: 1,
+      requestId: "pi_package_uninstall_request_restorepinned001",
+      packageId: PACKAGE_ID,
+      expectedRegistryRevision: 3
+    });
+    if (removed.status !== "removed") throw new Error("Expected pinned package removal.");
+    const candidate = removed.registry.restorablePackages?.[0];
+    expect(candidate).toMatchObject({
+      packageId: PACKAGE_ID,
+      version: "2.0.0",
+      pinned: true,
+      rollbackTarget: { rollbackId: ROLLBACK_ID, targetVersion: "1.0.0" }
+    });
+    if (!candidate) throw new Error("Expected pinned restorable package.");
+    const fetches = fixture.fetchImpl.mock.calls.length;
+    const restored = await restoreService.restore({
+      apiVersion: 1,
+      requestId: "pi_package_restore_request_restorepinned001",
+      expectedRegistryRevision: 4,
+      restoreContextId: candidate.restoreContextId,
+      packageId: candidate.packageId,
+      version: candidate.version,
+      integrity: candidate.integrity,
+      pinned: candidate.pinned,
+      rollbackTarget: candidate.rollbackTarget
+    });
+    expect(restored).toMatchObject({
+      status: "committed",
+      registry: { revision: 5, packages: [{ version: "2.0.0", pinned: true, canUpdate: false, canRollback: false }] }
+    });
+    const afterRestore = new PiPackageUpdateService({ manager: createManager(fixture) });
+    await expect(afterRestore.setPinned({
+      apiVersion: 1,
+      requestId: "pi_package_pin_request_restoreunpinning01",
+      packageId: PACKAGE_ID,
+      expectedRegistryRevision: 5,
+      pinned: false
+    })).resolves.toMatchObject({
+      status: "committed",
+      registry: { revision: 6, packages: [{ pinned: false, canRollback: true,
+        rollbackTarget: { rollbackId: ROLLBACK_ID, targetVersion: "1.0.0" } }] }
+    });
+    expect(fixture.fetchImpl).toHaveBeenCalledTimes(fetches);
   });
 });
 

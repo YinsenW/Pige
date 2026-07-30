@@ -35,6 +35,17 @@ const uninstallRequest = {
   expectedRegistryRevision: registry.revision,
   packageId: registry.packages[0].packageId
 } as const;
+const restoreRequest = {
+  apiVersion: 1,
+  requestId: "pi_package_restore_request_abcdefghijklmnop",
+  expectedRegistryRevision: registry.revision + 1,
+  restoreContextId: `pi_package_restore_context_v1_${"a".repeat(48)}`,
+  packageId: registry.packages[0].packageId,
+  version: registry.packages[0].version,
+  integrity: "sha512-ycjtInVV9csP+mR3L6gXgPJOsMGQej80ltkqbJhK0Gy3Mc8BgYvPrdQ0HXTFSGeDzr+//V51CYVK9KcgWti+VA==",
+  pinned: false,
+  rollbackTarget: null
+} as const;
 const catalogRequest = {
   apiVersion: 1,
   requestId: "pi_package_catalog_request_abcdefghijklmnop",
@@ -79,6 +90,7 @@ function makeHarness(overrides: {
   readonly install?: (value: typeof request) => unknown;
   readonly confirmUninstall?: (value: typeof uninstallRequest) => unknown;
   readonly uninstall?: (value: typeof uninstallRequest) => unknown;
+  readonly restore?: (value: typeof restoreRequest) => unknown;
   readonly confirmUpdate?: (value: typeof updateRequest) => unknown;
   readonly update?: (value: typeof updateRequest) => unknown;
   readonly confirmRollback?: (value: typeof rollbackRequest) => unknown;
@@ -108,6 +120,12 @@ function makeHarness(overrides: {
     packageId: value.packageId,
     registry: { ...registry, revision: registry.revision + 1, packages: [] },
     status: "removed"
+  })));
+  const restore = vi.fn(overrides.restore ?? ((value) => ({
+    apiVersion: 1, requestId: value.requestId, restoreContextId: value.restoreContextId,
+    packageId: value.packageId, version: value.version, integrity: value.integrity,
+    pinned: value.pinned, rollbackTarget: value.rollbackTarget,
+    registry: { ...registry, revision: value.expectedRegistryRevision + 1 }, status: "committed"
   })));
   const confirmUpdate = vi.fn((_sender, value) => overrides.confirmUpdate?.(value) ?? true);
   const update = vi.fn(overrides.update ?? ((value) => ({
@@ -141,13 +159,14 @@ function makeHarness(overrides: {
     install,
     confirmUninstall,
     uninstall,
+    restore,
     confirmUpdate,
     update,
     confirmRollback,
     rollback,
     setPinned
   });
-  return { handlers, summary, catalogQuery, install, confirmUninstall, uninstall,
+  return { handlers, summary, catalogQuery, install, confirmUninstall, uninstall, restore,
     confirmUpdate, update, confirmRollback, rollback, setPinned };
 }
 
@@ -156,7 +175,7 @@ describe("registerPiPackagesIpc", () => {
     const harness = makeHarness();
     expect([...harness.handlers.keys()]).toEqual([
       "piPackages.summary", "piPackages.catalogQuery", "piPackages.install", "piPackages.uninstall",
-      "piPackages.update", "piPackages.rollback", "piPackages.setPinned"
+      "piPackages.restore", "piPackages.update", "piPackages.rollback", "piPackages.setPinned"
     ]);
 
     await expect(call(harness, "piPackages.summary")).resolves.toEqual({ status: "ready", registry });
@@ -167,6 +186,43 @@ describe("registerPiPackagesIpc", () => {
     });
     expect(harness.install).toHaveBeenCalledOnce();
     expect(harness.install).toHaveBeenCalledWith(request);
+  });
+
+  it("restores only the exact pathless receipt binding and fences sender drift", async () => {
+    const harness = makeHarness();
+    await expect(call(harness, "piPackages.restore", restoreRequest)).resolves.toMatchObject({
+      status: "committed",
+      requestId: restoreRequest.requestId,
+      restoreContextId: restoreRequest.restoreContextId,
+      packageId: restoreRequest.packageId,
+      version: restoreRequest.version,
+      integrity: restoreRequest.integrity,
+      pinned: false,
+      rollbackTarget: null,
+      registry: { revision: restoreRequest.expectedRegistryRevision + 1 }
+    });
+    expect(harness.restore).toHaveBeenCalledWith(restoreRequest);
+
+    const malformed = makeHarness();
+    await expect(call(malformed, "piPackages.restore", { ...restoreRequest, path: "/private/trash" })).rejects.toThrow();
+    expect(malformed.restore).not.toHaveBeenCalled();
+
+    let reads = 0;
+    const changed = makeHarness({ getActiveVaultId: () => reads++ === 0
+      ? "vault_20260728_packages" : "vault_20260728_other" });
+    const failed = await call(changed, "piPackages.restore", restoreRequest);
+    expect(failed).toEqual({
+      apiVersion: 1,
+      requestId: restoreRequest.requestId,
+      restoreContextId: restoreRequest.restoreContextId,
+      packageId: restoreRequest.packageId,
+      version: restoreRequest.version,
+      integrity: restoreRequest.integrity,
+      pinned: restoreRequest.pinned,
+      rollbackTarget: restoreRequest.rollbackTarget,
+      status: "failed"
+    });
+    expect(JSON.stringify(failed)).not.toMatch(/path|body|private/u);
   });
 
   it("returns only strict local catalog results and fails closed across sender or identity drift", async () => {
