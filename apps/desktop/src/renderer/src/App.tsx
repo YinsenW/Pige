@@ -2030,18 +2030,27 @@ export function App(): React.JSX.Element {
 
   const revealReaderSelectionTransform = (result: ReaderSelectionTransformResult): void => {
     const vaultId = activeVaultIdRef.current;
-    const pageId = selectedNoteRef.current?.summary.pageId;
-    if (!vaultId || !pageId || selectedNoteVaultIdRef.current !== vaultId) return;
+    if (!vaultId) return;
+    const selected = selectedNoteRef.current;
+    const homeContext = homeReaderSelectionContextRef.current;
+    const selectedOwner = selected && selectedNoteVaultIdRef.current === vaultId;
+    const owner = selectedOwner
+      ? { vaultId, pageId: selected.summary.pageId }
+      : homeContext?.vaultId === vaultId
+        ? homeContext
+        : null;
+    if (!owner) return;
     if (result.status === "applied") {
       setReaderSelectionProposal(null);
-      void openNoteTarget(pageId);
+      if (selectedOwner) void openNoteTarget(owner.pageId);
       return;
     }
     if (result.status === "review_required") {
-      setReaderSelectionProposal({ vaultId, pageId, preview: result.proposal });
+      setReaderSelectionProposal({ vaultId, pageId: owner.pageId, preview: result.proposal });
     } else if (result.status !== "waiting" && !(result.status === "failed" && result.conversationId)) {
       return;
     }
+    if (!selectedOwner) setHomeReaderSelectionAgentActive(true);
     setNoteAgentExternalRevision((current) => current + 1);
     void requestWindowLayout({
       apiVersion: 1,
@@ -2609,6 +2618,8 @@ export function App(): React.JSX.Element {
             recentJobs={recentJobs}
             locale={locale}
             onReaderSelectionAction={revealReaderSelectionAction}
+            onSubmitReaderSelectionTransform={submitReaderSelectionTransform}
+            onReaderSelectionTransform={revealReaderSelectionTransform}
             onReaderSelectionCreateNote={revealReaderSelectionCreateNote}
             onReaderSelectionContextChange={(context) => {
               setHomeReaderSelectionContext(context);
@@ -4233,6 +4244,8 @@ function HomeComposer(props: {
   readonly recentJobs: readonly JobSummary[];
   readonly locale: Locale;
   readonly onReaderSelectionAction: (result: ReaderSelectionActionResult) => void;
+  readonly onSubmitReaderSelectionTransform: (request: ReaderSelectionTransformRequest) => Promise<ReaderSelectionTransformResult>;
+  readonly onReaderSelectionTransform: (result: ReaderSelectionTransformResult) => void;
   readonly onReaderSelectionCreateNote: (result: ReaderSelectionCreateNoteResult) => void;
   readonly onReaderSelectionContextChange: (context: HomeReaderSelectionContext | null) => void;
   readonly onOpenNoteEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
@@ -4365,6 +4378,13 @@ function HomeComposer(props: {
   const editorOpenerRef = useRef<HTMLButtonElement | null>(null);
   const inlineReferenceSequence = useRef(0);
   const selectedNoteRef = useRef<NoteRenderResult | null>(selectedNote);
+  const readerSelectionTransformOwnerRef = useRef<{
+    readonly requestId: string;
+    readonly activeVaultId: string;
+    readonly pageId: string;
+    readonly renderContextId: string;
+    readonly inFlight: boolean;
+  } | null>(null);
   const modelSwitcherRef = useRef<HTMLButtonElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const modelOptionRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -5766,6 +5786,53 @@ function HomeComposer(props: {
     await openResultTarget(pageId);
   };
 
+  const submitHomeReaderSelectionTransform = async (
+    request: ReaderSelectionTransformRequest
+  ): Promise<ReaderSelectionTransformResult> => {
+    const note = selectedNoteRef.current;
+    const activeVaultId = activeVaultIdRef.current;
+    const renderContextId = note?.renderContextId;
+    if (
+      readerSelectionTransformOwnerRef.current?.inFlight ||
+      !note ||
+      !activeVaultId ||
+      !renderContextId ||
+      request.selection.pageId !== note.summary.pageId
+    ) throw new Error("Reader selection transform owner is unavailable.");
+    const owner = {
+      requestId: request.requestId,
+      activeVaultId,
+      pageId: note.summary.pageId,
+      renderContextId,
+      inFlight: true
+    };
+    readerSelectionTransformOwnerRef.current = owner;
+    try {
+      const result = await props.onSubmitReaderSelectionTransform(request);
+      if (readerSelectionTransformOwnerRef.current === owner) {
+        readerSelectionTransformOwnerRef.current = { ...owner, inFlight: false };
+      }
+      return result;
+    } catch (error) {
+      if (readerSelectionTransformOwnerRef.current === owner) readerSelectionTransformOwnerRef.current = null;
+      throw error;
+    }
+  };
+
+  const revealHomeReaderSelectionTransform = (result: ReaderSelectionTransformResult): void => {
+    const owner = readerSelectionTransformOwnerRef.current;
+    readerSelectionTransformOwnerRef.current = null;
+    if (
+      !owner ||
+      result.requestId !== owner.requestId ||
+      activeVaultIdRef.current !== owner.activeVaultId ||
+      selectedNoteRef.current?.summary.pageId !== owner.pageId ||
+      selectedNoteRef.current.renderContextId !== owner.renderContextId
+    ) return;
+    props.onReaderSelectionTransform(result);
+    if (result.status === "applied") void openResultTarget(owner.pageId);
+  };
+
   const openEditor = async (): Promise<void> => {
     const note = selectedNoteRef.current;
     const activeVaultId = activeVaultIdRef.current;
@@ -6289,6 +6356,7 @@ function HomeComposer(props: {
                   onResolveSelection: resolveReaderSelection,
                   onSubmitSelectionAction: submitReaderSelectionAction,
                   onSubmitSelectionLink: submitReaderSelectionLink,
+                  onSubmitSelectionTransform: submitHomeReaderSelectionTransform,
                   onSubmitSelectionCreateNote: submitReaderSelectionCreateNote,
                   onSelectionLinkApplied: async (result: Extract<ReaderSelectionLinkResult, { status: "applied" }>) =>
                     openResultTarget(result.currentPageId),
@@ -6298,6 +6366,7 @@ function HomeComposer(props: {
                 } : {})}
                 locale={props.locale}
                 onSelectionActionResult={props.onReaderSelectionAction}
+                onSelectionTransformResult={revealHomeReaderSelectionTransform}
                 onSelectionCreateNoteResult={props.onReaderSelectionCreateNote}
                 related={selectedNoteRelated}
                 relatedLoadingPageId={noteLoadingPageId}
