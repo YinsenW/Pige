@@ -31,7 +31,7 @@ describe("Knowledge Activity and Undo", () => {
       schemaVersion: 1,
       createdAt: "2026-07-28T12:00:00.000Z",
       actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
-      kind: "create_collection_view",
+      kind: "trash_collection_view",
       targetRefs: [
         { kind: "dataset", id: "dataset_20260728_activity123456" },
         { kind: "table", id: "table_activity123456" },
@@ -56,7 +56,7 @@ describe("Knowledge Activity and Undo", () => {
         candidate.targetRefs.some((ref) => ref.kind === "table" && ref.id === "table_activity123456") &&
         candidate.targetRefs.some((ref) => ref.kind === "view" && ref.id === "view_activity123456") ? {
         operationId: candidate.id,
-        kind: "create_collection_view",
+        kind: "trash_collection_view",
         createdAt: candidate.createdAt,
         targetLabel: "Reading list",
         target: {
@@ -77,7 +77,7 @@ describe("Knowledge Activity and Undo", () => {
     const listed = service.list({ limit: 20 });
     expect(listed.activities).toContainEqual(expect.objectContaining({
       operationId: operation.id,
-      kind: "create_collection_view",
+      kind: "trash_collection_view",
       targetLabel: "Reading list",
       target: {
         kind: "collection",

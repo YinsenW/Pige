@@ -8,6 +8,10 @@ import type {
   CollectionCellEditResult,
   CollectionCreateViewRequest,
   CollectionCreateViewResult,
+  CollectionRenameViewRequest,
+  CollectionRenameViewResult,
+  CollectionTrashViewRequest,
+  CollectionTrashViewResult,
   CollectionOpenResult,
   CollectionOpenCitationResult,
   CollectionRenameColumnRequest,
@@ -107,23 +111,17 @@ export function ManagedCollectionPanel(props: {
   readonly snapshot: CollectionSnapshot;
   readonly nextRowCursor?: string;
   readonly onClose: () => void;
-  readonly onAppendDefaultRow: (
-    request: CollectionAppendDefaultRowRequest
-  ) => Promise<CollectionAppendDefaultRowResult>;
+  readonly onAppendDefaultRow: (request: CollectionAppendDefaultRowRequest) => Promise<CollectionAppendDefaultRowResult>;
   readonly onTrashRow: (request: CollectionTrashRowRequest) => Promise<CollectionTrashRowResult>;
-  readonly onAddNullableColumn: (
-    request: CollectionAddNullableColumnRequest
-  ) => Promise<CollectionAddNullableColumnResult>;
-  readonly onRenameColumn: (
-    request: CollectionRenameColumnRequest
-  ) => Promise<CollectionRenameColumnResult>;
-  readonly onTrashColumn: (
-    request: CollectionTrashColumnRequest
-  ) => Promise<CollectionTrashColumnResult>;
+  readonly onAddNullableColumn: (request: CollectionAddNullableColumnRequest) => Promise<CollectionAddNullableColumnResult>;
+  readonly onRenameColumn: (request: CollectionRenameColumnRequest) => Promise<CollectionRenameColumnResult>;
+  readonly onTrashColumn: (request: CollectionTrashColumnRequest) => Promise<CollectionTrashColumnResult>;
   readonly onOpenView: (viewId?: string) => Promise<CollectionSnapshot | null>;
   readonly onCreateView: (
     request: CollectionCreateViewRequest
   ) => Promise<CollectionCreateViewResult>;
+  readonly onRenameView: (request: CollectionRenameViewRequest) => Promise<CollectionRenameViewResult>;
+  readonly onTrashView: (request: CollectionTrashViewRequest) => Promise<CollectionTrashViewResult>;
   readonly onAdoptSnapshot: (snapshot: CollectionSnapshot, expectedRevisionId: string) => boolean;
   readonly onEditCell: (request: CollectionCellEditRequest) => Promise<CollectionCellEditResult>;
   readonly onReload: () => Promise<CollectionSnapshot | null>;
@@ -657,6 +655,8 @@ export function ManagedCollectionPanel(props: {
         blocked={busy || columnActionsBusy || edit !== null || columnDraft !== null}
         onOpenView={props.onOpenView}
         onCreateView={props.onCreateView}
+        onRenameView={props.onRenameView}
+        onTrashView={props.onTrashView}
         onAdoptSnapshot={props.onAdoptSnapshot}
         onBusyChange={(active) => {
           viewControlsActiveRef.current = active;

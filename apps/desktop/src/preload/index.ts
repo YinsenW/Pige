@@ -361,6 +361,8 @@ import {
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
   COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL,
   COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
+  COLLECTION_RENAME_VIEW_CHANNEL,
+  COLLECTION_TRASH_VIEW_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
   CollectionAddFormulaColumnResultSchema,
   CollectionAddRelationColumnRequestSchema,
@@ -377,6 +379,10 @@ import {
   CollectionCellEditResultSchema,
   CollectionCreateViewRequestSchema,
   CollectionCreateViewResultSchema,
+  CollectionRenameViewRequestSchema,
+  CollectionRenameViewResultSchema,
+  CollectionTrashViewRequestSchema,
+  CollectionTrashViewResultSchema,
   CollectionOpenCitationRequestSchema,
   CollectionOpenCitationResultSchema,
   CollectionOpenRequestSchema,
@@ -632,6 +638,10 @@ import type {
   CollectionCellEditResult,
   CollectionCreateViewRequest,
   CollectionCreateViewResult,
+  CollectionRenameViewRequest,
+  CollectionRenameViewResult,
+  CollectionTrashViewRequest,
+  CollectionTrashViewResult,
   CollectionOpenCitationRequest,
   CollectionOpenCitationResult,
   CollectionOpenRequest,
@@ -1014,6 +1024,40 @@ async function invokeCollectionCreateView(
   ) {
     throw new Error("Invalid Managed Collection view-creation response identity.");
   }
+  return result;
+}
+
+async function invokeCollectionRenameView(
+  request: CollectionRenameViewRequest
+): Promise<CollectionRenameViewResult> {
+  const parsedRequest = CollectionRenameViewRequestSchema.parse(request);
+  const result = CollectionRenameViewResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_RENAME_VIEW_CHANNEL, parsedRequest)
+  );
+  if (
+    result.requestId !== parsedRequest.requestId ||
+    result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.datasetId !== parsedRequest.datasetId ||
+    result.tableId !== parsedRequest.tableId ||
+    result.viewId !== parsedRequest.viewId
+  ) throw new Error("Invalid Managed Collection view-rename response identity.");
+  return result;
+}
+
+async function invokeCollectionTrashView(
+  request: CollectionTrashViewRequest
+): Promise<CollectionTrashViewResult> {
+  const parsedRequest = CollectionTrashViewRequestSchema.parse(request);
+  const result = CollectionTrashViewResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_TRASH_VIEW_CHANNEL, parsedRequest)
+  );
+  if (
+    result.requestId !== parsedRequest.requestId ||
+    result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.datasetId !== parsedRequest.datasetId ||
+    result.tableId !== parsedRequest.tableId ||
+    result.viewId !== parsedRequest.viewId
+  ) throw new Error("Invalid Managed Collection view-trash response identity.");
   return result;
 }
 
@@ -1610,6 +1654,8 @@ const api: PigeDesktopApi = {
     addLookupColumn: invokeCollectionAddLookupColumn,
     renameColumn: invokeCollectionRenameColumn,
     createView: invokeCollectionCreateView,
+    renameView: invokeCollectionRenameView,
+    trashView: invokeCollectionTrashView,
     trashColumn: invokeCollectionTrashColumn,
     trashRow: invokeCollectionTrashRow
   },

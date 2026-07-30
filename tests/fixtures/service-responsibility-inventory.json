@@ -3,7 +3,7 @@
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 220,
-  "baselineLines": 110594,
+  "baselineLines": 110847,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -52,7 +52,7 @@
       ["local-semantic-retrieval-service.ts", 354, "jpr"],
       ["managed-collection-service.ts", 893, "rd"],
       ["managed-collection-citation-service.ts", 159, "rf"],
-      ["managed-collection-view-service.ts", 733, "rdf"],
+      ["managed-collection-view-service.ts", 986, "rdf"],
       ["local-tool-manager-service.ts", 1254, "prd"],
       ["paddle-ocr-bundle-materializer.ts", 642, "prd"],
       ["paddle-ocr-lifecycle-service.ts", 673, "jprd"],

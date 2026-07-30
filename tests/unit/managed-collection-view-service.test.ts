@@ -310,6 +310,117 @@ describe("ManagedCollectionViewService", () => {
       expectedViewRevision: 1
     })).rejects.toMatchObject({ code: "collection.view_revision_changed" });
   }, 30_000);
+
+  it("renames and trashes one owned view with exact CAS, All Rows fallback, and restart-safe restore", async () => {
+    const fixture = await makeFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionViewService(port, directExecutor);
+    const manifest = readManifest(fixture.bundlePath);
+    const schema = DatasetSchemaRecordSchema.parse(readJson(path.join(fixture.bundlePath, manifest.schema.path)));
+    const table = required(schema.tables[0]);
+    const manifestBytes = fs.readFileSync(path.join(fixture.bundlePath, "dataset.json"));
+    const payloadBytes = fs.readFileSync(path.join(fixture.bundlePath, manifest.payload.path));
+    const created = await service.createView({
+      apiVersion: 1,
+      requestId: "collection_request_lifecyclecreate01",
+      activeVaultId: vault.vaultId,
+      datasetId: manifest.datasetId,
+      tableId: table.id,
+      expectedRevisionId: manifest.activeRevision,
+      name: "Original"
+    });
+    if (created.status !== "committed") throw new Error("View creation failed");
+    const renameRequest = {
+      apiVersion: 1 as const,
+      requestId: "collection_request_lifecyclerename01",
+      activeVaultId: vault.vaultId,
+      datasetId: manifest.datasetId,
+      tableId: table.id,
+      expectedRevisionId: manifest.activeRevision,
+      viewId: created.viewId,
+      expectedViewRevision: 1,
+      name: "Renamed"
+    };
+    const renamed = await service.renameView(renameRequest);
+    expect(renamed).toMatchObject({
+      status: "committed",
+      snapshot: { activeViewId: created.viewId, views: [{
+        viewId: created.viewId, viewRevision: 2, name: "Renamed", canRename: true, canTrash: true
+      }] }
+    });
+    if (renamed.status !== "committed") throw new Error("View rename failed");
+    await expect(new ManagedCollectionViewService(port, directExecutor).renameView(renameRequest)).resolves.toEqual(renamed);
+    const renameOperation = OperationRecordSchema.parse(readJson(findFile(
+      path.join(fixture.vaultPath, ".pige/operations"), `${renamed.operationId}.json`
+    )));
+    expect(renameOperation).toMatchObject({ kind: "rename_collection_view", reversible: "yes" });
+    expect(service.activitySummary(renameOperation)).toMatchObject({
+      kind: "rename_collection_view", targetLabel: "Renamed", canUndo: true
+    });
+    await expect(service.trashView({
+      apiVersion: 1,
+      requestId: "collection_request_lifecycletrashstale",
+      activeVaultId: vault.vaultId,
+      datasetId: manifest.datasetId,
+      tableId: table.id,
+      expectedRevisionId: manifest.activeRevision,
+      viewId: created.viewId,
+      expectedViewRevision: 1
+    })).resolves.toMatchObject({
+      status: "stale",
+      currentViewRevision: 2,
+      snapshot: { views: [{ viewId: created.viewId, name: "Renamed" }] }
+    });
+    const trashed = await service.trashView({
+      apiVersion: 1,
+      requestId: "collection_request_lifecycletrash001",
+      activeVaultId: vault.vaultId,
+      datasetId: manifest.datasetId,
+      tableId: table.id,
+      expectedRevisionId: manifest.activeRevision,
+      viewId: created.viewId,
+      expectedViewRevision: 2
+    });
+    expect(trashed).toMatchObject({
+      status: "committed",
+      snapshot: { totalRowCount: 3, views: [] }
+    });
+    if (trashed.status !== "committed") throw new Error("View trash failed");
+    const trashOperation = OperationRecordSchema.parse(readJson(findFile(
+      path.join(fixture.vaultPath, ".pige/operations"), `${trashed.operationId}.json`
+    )));
+    expect(trashOperation).toMatchObject({ kind: "trash_collection_view", reversible: "yes" });
+    expect(service.activitySummary(trashOperation)).toMatchObject({
+      kind: "trash_collection_view", targetLabel: "Renamed", canUndo: true
+    });
+    const restarted = new ManagedCollectionViewService(port, directExecutor);
+    const restored = await restarted.undo(trashOperation, manifest.activeRevision);
+    expect(restored).toMatchObject({ status: "undone", revisionId: manifest.activeRevision });
+    if (restored.status !== "undone") throw new Error("View restore failed");
+    const restoreOperation = OperationRecordSchema.parse(readJson(findFile(
+      path.join(fixture.vaultPath, ".pige/operations"), `${restored.undoOperationId}.json`
+    )));
+    expect(restoreOperation).toMatchObject({ kind: "restore_collection_view", reversible: "best_effort" });
+    expect(restarted.activitySummary(trashOperation, restoreOperation)).toMatchObject({
+      status: "undone", canUndo: false, undoUnavailableReason: "already_undone"
+    });
+    await expect(new ManagedCollectionViewService(port, directExecutor).open({
+      apiVersion: 1,
+      requestId: "collection_request_lifecycleopen0001",
+      activeVaultId: vault.vaultId,
+      datasetId: manifest.datasetId,
+      tableId: table.id,
+      viewId: created.viewId
+    })).resolves.toMatchObject({
+      status: "ready",
+      snapshot: { activeViewId: created.viewId, views: [{ viewRevision: 4, name: "Renamed" }] }
+    });
+    fs.rmSync(findFile(path.join(fixture.vaultPath, ".pige/operations"), `${restored.undoOperationId}.json`));
+    expect(new ManagedCollectionViewService(port, directExecutor).recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(fs.readFileSync(path.join(fixture.bundlePath, "dataset.json"))).toEqual(manifestBytes);
+    expect(fs.readFileSync(path.join(fixture.bundlePath, manifest.payload.path))).toEqual(payloadBytes);
+  }, 30_000);
 });
 
 async function makeFixture(rowCount = 3) {

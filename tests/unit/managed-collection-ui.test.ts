@@ -25,6 +25,10 @@ import type {
   CollectionCellEditResult,
   CollectionCreateViewRequest,
   CollectionCreateViewResult,
+  CollectionRenameViewRequest,
+  CollectionRenameViewResult,
+  CollectionTrashViewRequest,
+  CollectionTrashViewResult,
   CollectionCitationHighlight,
   DatasetQueryPreview,
   CollectionRenameColumnRequest,
@@ -1483,6 +1487,62 @@ describe("ManagedCollectionPanel", () => {
     dom.window.close();
   });
 
+  it("renames the active owned view with exact CAS and falls back to All rows after trash", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const initialView = { ...savedView("view_20260728_lifecycle01", "Original"), canRename: true, canTrash: true };
+    const concurrentView = { ...initialView, viewRevision: 2, name: "Server name" };
+    const renamedView = { ...initialView, viewRevision: 3, name: "My name" };
+    const base = collectionSnapshot("dataset_rev_20260728_revision0001", "Alpha");
+    const renameRequests: CollectionRenameViewRequest[] = [];
+    const trashRequests: CollectionTrashViewRequest[] = [];
+    await act(async () => {
+      root.render(createElement(CollectionViewHarness, {
+        initialSnapshot: withViews(base, [initialView], initialView.viewId),
+        onOpen: async () => null,
+        onCreate: notFoundCreateViewResult,
+        onRename: async (request) => {
+          renameRequests.push(request);
+          return renameRequests.length === 1
+            ? { ...viewMutationIdentity(request), status: "stale", currentViewRevision: 2,
+              snapshot: withViews(base, [concurrentView], concurrentView.viewId) }
+            : { ...viewMutationIdentity(request), status: "committed", operationId: "op_20260728_viewrename01",
+              snapshot: withViews(base, [renamedView], renamedView.viewId) };
+        },
+        onTrash: async (request) => {
+          trashRequests.push(request);
+          return { ...viewMutationIdentity(request), status: "committed", operationId: "op_20260728_viewtrash001",
+            snapshot: withViews(base, []) };
+        }
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Rename"));
+    const name = requireElement(container.querySelector<HTMLInputElement>("#collection-view-rename"));
+    await inputText(dom, name, "My name");
+    await click(dom, buttonNamed(container, "Save"));
+    expect(renameRequests[0]).toMatchObject({
+      expectedRevisionId: base.revisionId, viewId: initialView.viewId, expectedViewRevision: 1, name: "My name"
+    });
+    expect(name.value).toBe("My name");
+    await click(dom, buttonNamed(container, "Save"));
+    expect(renameRequests[1]).toMatchObject({ expectedViewRevision: 2, name: "My name" });
+    expect(container.textContent).toContain("View renamed as a new revision.");
+
+    await click(dom, buttonNamed(container, "Move to trash"));
+    expect(trashRequests).toEqual([expect.objectContaining({
+      expectedRevisionId: base.revisionId, viewId: initialView.viewId, expectedViewRevision: 3
+    })]);
+    const selector = requireElement(container.querySelector<HTMLSelectElement>("#collection-view-select"));
+    expect(selector.value).toBe("");
+    expect(Array.from(selector.options).map((option) => option.textContent)).toEqual(["All rows"]);
+    expect(container.textContent).toContain("View moved to trash. All rows are shown.");
+    expect(dom.window.document.activeElement).toBe(selector);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("adopts a stale append snapshot, retries its exact revision, and focuses the authoritative new row", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
@@ -1857,7 +1917,7 @@ describe("ManagedCollectionPanel", () => {
     dom.window.close();
   });
 
-  it("labels a created collection view and keeps forward Undo available through Activity", async () => {
+  it("labels a trashed collection view and keeps forward Undo available through Activity", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
     const undone: string[] = [];
@@ -1865,7 +1925,7 @@ describe("ManagedCollectionPanel", () => {
       root.render(createElement(ActivityHistorySettingsPanel, {
         activities: [{
           operationId: "op_20260728_collectionview01",
-          kind: "create_collection_view",
+          kind: "trash_collection_view",
           createdAt: "2026-07-28T08:00:00.000Z",
           targetLabel: "Priority items",
           target: {
@@ -1888,7 +1948,7 @@ describe("ManagedCollectionPanel", () => {
       await settle(dom);
     });
     const container = dom.window.document.querySelector("#root")!;
-    expect(container.textContent).toContain("Collection view created: Priority items");
+    expect(container.textContent).toContain("Collection view moved to trash: Priority items");
     await click(dom, buttonNamed(container, "Undo"));
     expect(undone).toEqual(["op_20260728_collectionview01"]);
 
@@ -2137,6 +2197,8 @@ function CollectionViewHarness(props: {
   readonly initialSnapshot: CollectionSnapshot;
   readonly onOpen: (viewId?: string) => Promise<CollectionSnapshot | null>;
   readonly onCreate: (request: CollectionCreateViewRequest) => Promise<CollectionCreateViewResult>;
+  readonly onRename?: (request: CollectionRenameViewRequest) => Promise<CollectionRenameViewResult>;
+  readonly onTrash?: (request: CollectionTrashViewRequest) => Promise<CollectionTrashViewResult>;
 }): React.JSX.Element {
   const [snapshot, setSnapshot] = useState(props.initialSnapshot);
   return createElement(ManagedCollectionPanel, {
@@ -2152,6 +2214,8 @@ function CollectionViewHarness(props: {
       return next;
     },
     onCreateView: props.onCreate,
+    onRenameView: props.onRename ?? notFoundRenameViewResult,
+    onTrashView: props.onTrash ?? notFoundTrashViewResult,
     onAppendDefaultRow: notFoundAppendResult,
     onTrashRow: notFoundTrashResult,
     onAdoptSnapshot: (next, expectedRevisionId) => {
@@ -2415,7 +2479,7 @@ function savedView(
   filter: CollectionViewSummary["filter"] = { operator: "is_null", columnId: "column_name000001" },
   sort: CollectionViewSummary["sort"] = { columnId: "column_name000001", direction: "asc" }
 ): CollectionViewSummary {
-  return { viewId, viewRevision: 1, name, filter, sort };
+  return { viewId, viewRevision: 1, name, filter, sort, canRename: true, canTrash: true };
 }
 
 function withViews(
@@ -2676,6 +2740,10 @@ function createViewIdentity(request: CollectionCreateViewRequest) {
   };
 }
 
+function viewMutationIdentity(request: CollectionRenameViewRequest | CollectionTrashViewRequest) {
+  return { ...createViewIdentity(request), viewId: request.viewId };
+}
+
 async function notFoundAppendResult(
   request: CollectionAppendDefaultRowRequest
 ): Promise<CollectionAppendDefaultRowResult> {
@@ -2721,6 +2789,18 @@ async function notFoundCreateViewResult(
   request: CollectionCreateViewRequest
 ): Promise<CollectionCreateViewResult> {
   return { ...createViewIdentity(request), status: "not_found" };
+}
+
+async function notFoundRenameViewResult(
+  request: CollectionRenameViewRequest
+): Promise<CollectionRenameViewResult> {
+  return { ...viewMutationIdentity(request), status: "not_found" };
+}
+
+async function notFoundTrashViewResult(
+  request: CollectionTrashViewRequest
+): Promise<CollectionTrashViewResult> {
+  return { ...viewMutationIdentity(request), status: "not_found" };
 }
 
 function committedResult(
