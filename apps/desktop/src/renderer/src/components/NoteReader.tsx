@@ -1,11 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
-  LibraryRelatedPage,
-  LibraryRelatedResult,
-  NoteOpenSourceReferenceRequest,
-  NoteOpenSourceReferenceResult,
-  NoteReconnectOriginalSourceRequest,
-  NoteReconnectOriginalSourceResult,
+  LibraryRelatedPage, LibraryRelatedResult,
+  NoteOpenSourceReferenceRequest, NoteOpenSourceReferenceResult,
+  NoteReconnectOriginalSourceRequest, NoteReconnectOriginalSourceResult,
   NoteRenderResult,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
@@ -21,21 +18,9 @@ import type {
   ReaderSelectionTransformResult
 } from "@pige/contracts";
 import type { Locale } from "@pige/schemas";
-import {
-  ReaderInlineReferenceSurface,
-  type ReaderInlineReferenceActivation
-} from "./ReaderInlineReferenceSurface";
-import {
-  ReaderSourceActionSurface,
-  ReaderSourceRevealAction,
-  readerSourceActionLabels
-} from "./ReaderSourceActions";
-import {
-  ReaderSelectionAskDialog,
-  createReaderSelectionActionRequestId,
-  createReaderSelectionAgentTurnId,
-  useReaderSelectionAskState
-} from "./ReaderSelectionAskDialog";
+import { ReaderInlineReferenceSurface, type ReaderInlineReferenceActivation } from "./ReaderInlineReferenceSurface";
+import { NoteReaderSourceActions, ReaderSourceRevealAction, readerSourceActionLabels } from "./ReaderSourceActions";
+import { ReaderSelectionAskDialog, createReaderSelectionActionRequestId, createReaderSelectionAgentTurnId, useReaderSelectionAskState } from "./ReaderSelectionAskDialog";
 export type NoteRelatedState = LibraryRelatedResult | "loading" | "unavailable" | null;
 
 function readerSelectionEndpoint(
@@ -897,40 +882,18 @@ export function NoteReader(props: {
                 </div>
               );
             })}
-            <ReaderSourceActionSurface
+            <NoteReaderSourceActions
               currentPageId={summary.pageId}
-              sources={Array.from(new Set([
-                ...summary.sourceIds.slice(0, 5),
-                ...(props.note.reconnectOriginalSourceIds ?? []).filter((sourceId) =>
-                  summary.sourceIds.includes(sourceId)
-                )
-              ])).map((sourceId) => ({
-                sourceId,
-                sourceLabel: props.t("note.savedSource").replace(
-                  "{number}",
-                  String(summary.sourceIds.indexOf(sourceId) + 1)
-                ),
-                canRevealOriginal: summary.sourceIds.slice(0, 5).includes(sourceId),
-                canReconnectOriginal: props.note.reconnectOriginalSourceIds?.includes(sourceId) === true
-              }))}
+              sourceIds={summary.sourceIds}
               labels={readerSourceActionLabels(props.t)}
+              sourceLabel={(number) => props.t("note.savedSource").replace("{number}", String(number))}
+              getFocusRoot={() => readerRef.current}
               {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
               {...(props.note.renderContextId ? { renderContextId: props.note.renderContextId } : {})}
+              {...(props.note.reconnectOriginalSourceIds ? { reconnectOriginalSourceIds: props.note.reconnectOriginalSourceIds } : {})}
               {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
-              {...(props.onReconnectOriginalSource ? {
-                onReconnectOriginalSource: props.onReconnectOriginalSource
-              } : {})}
-              {...(props.onSourceReconnected ? {
-                onReconnected: (reconnectedSourceId: string, render: NoteRenderResult) => {
-                  props.onSourceReconnected?.(render);
-                  window.requestAnimationFrame(() => {
-                    const sourceTrigger = readerRef.current?.querySelector<HTMLElement>(
-                      `[data-reader-source-open="${reconnectedSourceId}"]`
-                    );
-                    (sourceTrigger ?? readerRef.current)?.focus({ preventScroll: true });
-                  });
-                }
-              } : {})}
+              {...(props.onReconnectOriginalSource ? { onReconnectOriginalSource: props.onReconnectOriginalSource } : {})}
+              {...(props.onSourceReconnected ? { onSourceReconnected: props.onSourceReconnected } : {})}
             />
           </div>
           {summary.sourceIds.length > 5 ? (

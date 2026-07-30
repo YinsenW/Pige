@@ -270,6 +270,44 @@ export function ReaderSourceActionSurface(props: {
   );
 }
 
+export function NoteReaderSourceActions(props: {
+  readonly activeVaultId?: string;
+  readonly currentPageId: string;
+  readonly renderContextId?: string;
+  readonly sourceIds: readonly string[];
+  readonly reconnectOriginalSourceIds?: readonly string[];
+  readonly labels: ReaderSourceActionLabels;
+  readonly sourceLabel: (number: number) => string;
+  readonly getFocusRoot: () => HTMLElement | null;
+  readonly onRevealSource?: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
+  readonly onReconnectOriginalSource?: (request: NoteReconnectOriginalSourceRequest) => Promise<NoteReconnectOriginalSourceResult>;
+  readonly onSourceReconnected?: (render: NoteRenderResult) => void;
+}): React.JSX.Element | null {
+  const visibleSourceIds = props.sourceIds.slice(0, 5);
+  const reconnectSourceIds = props.reconnectOriginalSourceIds ?? [];
+  return <ReaderSourceActionSurface
+    currentPageId={props.currentPageId}
+    sources={Array.from(new Set([...visibleSourceIds, ...reconnectSourceIds.filter((id) => props.sourceIds.includes(id))])).map((sourceId) => ({
+      sourceId,
+      sourceLabel: props.sourceLabel(props.sourceIds.indexOf(sourceId) + 1),
+      canRevealOriginal: visibleSourceIds.includes(sourceId),
+      canReconnectOriginal: reconnectSourceIds.includes(sourceId)
+    }))}
+    labels={props.labels}
+    {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
+    {...(props.renderContextId ? { renderContextId: props.renderContextId } : {})}
+    {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
+    {...(props.onReconnectOriginalSource ? { onReconnectOriginalSource: props.onReconnectOriginalSource } : {})}
+    {...(props.onSourceReconnected ? { onReconnected: (sourceId: string, render: NoteRenderResult) => {
+      props.onSourceReconnected?.(render);
+      window.requestAnimationFrame(() => {
+        const root = props.getFocusRoot();
+        (root?.querySelector<HTMLElement>(`[data-reader-source-open="${sourceId}"]`) ?? root)?.focus({ preventScroll: true });
+      });
+    } } : {})}
+  />;
+}
+
 export function ReaderSourceRevealAction(props: {
   readonly activeVaultId?: string;
   readonly currentPageId: string;
