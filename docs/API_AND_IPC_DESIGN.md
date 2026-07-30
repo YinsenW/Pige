@@ -196,7 +196,8 @@ Current renderer/preload commands include `onboarding.dismissFirstHome`,
 `vault.storageRelocationStatus`, and `vault.relocateStorage`.
 
 Commands: `vault.create`, `vault.open`, `vault.applyMigration`, `onboarding.complete`,
-`vault.renameDisplayName`, `vault.updateSourceStoragePolicy`, `vault.removeRecent`,
+`vault.renameDisplayName`, `vault.updateSourceStoragePolicy`, `vault.forgetRecent`,
+`vault.reconnectRecent`,
 `maintenance.rebuildLocalDatabase`,
 `maintenance.resetLocalDatabase`, `maintenance.runKnowledgeHealth`, and
 `maintenance.repairKnowledgeHealthDuplicateTopic`.
@@ -258,6 +259,13 @@ type OnboardingStatus = {
 ```
 
 `vault.openRecent` takes `{ vaultId }` and returns `VaultActionResult`; main revalidates the binding.
+`vault.recent` projects a path display plus an opaque revision for each machine-local entry.
+`vault.forgetRecent` and `vault.reconnectRecent` bind request ID, stable Vault ID, and that exact
+revision; neither accepts a renderer path. Forget is limited to a non-active entry and deletes no
+Vault bytes. Reconnect opens one Main-owned directory picker, rechecks the entry after selection,
+requires one compatible manifest with the same Vault ID and unchanged snapshot, rejects duplicate
+bindings, and atomically updates only the machine-local entry. Results are identity-echoed and
+body/path-free; cancel, stale, active, mismatch, not-found, or failure preserves current state.
 `pathDisplay` is never authority and failures return no path.
 
 Open distinguishes current/migration/future/invalid; `vault.applyMigration` binds request,

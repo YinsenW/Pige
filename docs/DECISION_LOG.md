@@ -4182,6 +4182,34 @@ References:
 - `docs/MARKDOWN_SCHEMA.md`; `docs/KNOWLEDGE_MODEL_AND_LINKING.md`;
   `docs/API_AND_IPC_DESIGN.md`; `docs/UI_PROTOTYPE.md`
 
+### D-20260731-Recent-Vault-Forget-And-Reconnect
+
+Status: Accepted
+Date: 2026-07-31
+
+Decision:
+
+Vault & Note Storage may forget one exact non-active recent entry or reconnect it to a moved
+directory while preserving its stable Vault ID. Both mutations are pathless from the renderer and
+revision-fenced in Main.
+
+Rationale:
+
+Recent entries are machine-local conveniences; users need to repair or remove stale bindings
+without granting renderer filesystem authority or risking Vault data.
+
+Consequences:
+
+- Forget removes only OS app-data state and never reads, moves, or deletes the Vault.
+- Reconnect owns one directory picker, requires an unchanged matching manifest, and replaces only
+  the exact recent binding; active, stale, mismatch, cancel, and failure leave current state intact.
+- Recent bindings remain excluded from Vault backup and do not change portable manifest identity.
+
+References:
+
+- `docs/DATA_ARCHITECTURE.md`; `docs/SETTINGS_AND_PREFERENCES.md`;
+  `docs/API_AND_IPC_DESIGN.md`; `docs/UI_PROTOTYPE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
