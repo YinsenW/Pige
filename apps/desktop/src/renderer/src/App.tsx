@@ -3627,8 +3627,8 @@ export function LibraryPanel(props: {
                 type="button"
                 data-reader-action="edit"
                 className={`icon-button${props.onOpenNoteEditor ? "" : " prototype-action"}`}
-                aria-label={props.t("note.edit")}
-                title={props.t("note.edit")}
+                aria-label={props.t(summary.pageType === "source" ? "note.editor.title" : "note.edit")}
+                title={props.t(summary.pageType === "source" ? "note.editor.title" : "note.edit")}
                 aria-busy={editorOpenState === "opening"}
                 disabled={editorOpenState === "opening" || !props.selectedNote.renderContextId}
                 onClick={props.onOpenNoteEditor ? () => void openEditor() : () => showReaderDevelopment("document_actions")}
@@ -7334,7 +7334,7 @@ function readerNoteMergeLabels(t: (key: string) => string) {
 }
 
 function isNoteEditorEligible(note: NoteRenderResult): boolean {
-  return note.summary.pageType === "note" && note.summary.status !== "archived";
+  return (note.summary.pageType === "note" || note.summary.pageType === "source") && note.summary.status !== "archived";
 }
 
 function noteEditorOpenMatches(request: NoteEditorOpenRequest, result: NoteEditorOpenResult): boolean {

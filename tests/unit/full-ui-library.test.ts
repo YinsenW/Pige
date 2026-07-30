@@ -1665,9 +1665,25 @@ describe("full UI Library", () => {
         }));
         await settle(dom);
       });
-      expect(container.querySelectorAll<HTMLButtonElement>('button[aria-label="Edit note"]')).toHaveLength(0);
+      if (pageType === "source") {
+        const sourceEdit = buttonWithLabel(container, "Edit Markdown");
+        await act(async () => {
+          sourceEdit.click();
+          await settle(dom);
+        });
+        expect(editorOpenRequests.at(-1)).toMatchObject({
+          activeVaultId: "vault_20260715_fullui01",
+          pageId: readOnlyPage.summary.pageId,
+          renderContextId: readOnlyPage.renderContextId
+        });
+        expect(container.querySelector(".note-reader h1")?.textContent).toBe(readOnlyPage.summary.title);
+        expect(buttonWithLabel(container, "Edit Markdown").disabled).toBe(false);
+      } else {
+        expect(container.querySelectorAll<HTMLButtonElement>('button[aria-label="Edit note"]')).toHaveLength(0);
+        expect(container.querySelectorAll<HTMLButtonElement>('button[aria-label="Edit Markdown"]')).toHaveLength(0);
+      }
     }
-    expect(editorOpenRequests).toHaveLength(1);
+    expect(editorOpenRequests).toHaveLength(2);
 
     await act(async () => root.unmount());
     dom.window.close();

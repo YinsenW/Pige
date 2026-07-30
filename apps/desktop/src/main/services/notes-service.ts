@@ -238,7 +238,7 @@ export class NotesService {
     if (!this.#editor || !context || !this.#matchesEditorContext(ownerId, context, request)) {
       return { ...identity, status: "stale" };
     }
-    if (context.pageType !== "note") return { ...identity, status: "failed" };
+    if (context.pageType !== "note" && context.pageType !== "source") return { ...identity, status: "failed" };
     const opened = this.#editor.open({ activeVaultId: request.activeVaultId, pageId: request.pageId });
     if (opened.status === "not_found") return { ...identity, status: "not_found" };
     if (
@@ -268,7 +268,7 @@ export class NotesService {
     if (!this.#editor || !context || !binding || !this.#matchesEditorContext(ownerId, context, request)) {
       return { ...identity, status: "stale", revision: request.expectedRevision };
     }
-    if (context.pageType !== "note") {
+    if (context.pageType !== "note" && context.pageType !== "source") {
       return { ...identity, status: "invalid", reason: "unsupported_page_type" };
     }
     if (publicEditorRevision(binding.privateRevision) !== request.expectedRevision) {
