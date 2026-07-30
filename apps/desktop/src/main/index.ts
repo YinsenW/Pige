@@ -166,6 +166,7 @@ import { registerPiPackagesIpc } from "./register-pi-packages-ipc";
 import { registerLocalCapabilitiesIpc } from "./register-local-capabilities-ipc";
 import { registerDiagnosticsIpc } from "./register-diagnostics-ipc";
 import { registerConversationExportIpc } from "./register-conversation-export-ipc";
+import { registerVaultStorageRelocationIpc } from "./register-vault-storage-relocation-ipc";
 import { registerCurrentNoteAppendIpc } from "./register-current-note-append-ipc";
 import { registerCurrentNoteReplaceIpc } from "./register-current-note-replace-ipc";
 import { registerConversationHistoryIpc } from "./register-conversation-history-ipc";
@@ -319,6 +320,7 @@ import { SourceOriginalReconnectService } from "./services/source-original-recon
 import { ReaderSourceReconnectService } from "./services/reader-source-reconnect-service";
 import { installRendererNavigationGuard } from "./services/renderer-navigation-guard";
 import { RestoreCoordinatorService } from "./services/restore-coordinator-service";
+import { VaultStorageRelocationService } from "./services/vault-storage-relocation-service";
 import { writeBackupCreatedOperation } from "./services/restore-job-store";
 import { handleRetrievalSearchIpc } from "./services/retrieval-search-ipc";
 import { RetrievalService } from "./services/retrieval-service";
@@ -383,6 +385,7 @@ let windowModeService: WindowModeService | undefined;
 let backupRestoreService: BackupRestoreService | undefined;
 let backupCoordinatorService: BackupCoordinatorService | undefined;
 let restoreCoordinatorService: RestoreCoordinatorService | undefined;
+let vaultStorageRelocationService: VaultStorageRelocationService | undefined;
 let agentRuntimeService: AgentRuntimeService | undefined;
 let agentIngestService: AgentIngestService | undefined;
 let homeAgentService: HomeAgentService | undefined;
@@ -867,6 +870,23 @@ const getRestoreCoordinatorService = (): RestoreCoordinatorService => {
     });
   }
   return restoreCoordinatorService;
+};
+
+const getVaultStorageRelocationService = (): VaultStorageRelocationService => {
+  if (!vaultStorageRelocationService) {
+    vaultStorageRelocationService = new VaultStorageRelocationService({
+      userDataPath: app.getPath("userData"),
+      vaultService: getVaultService(),
+      pathSafety: { appDataPath: app.getPath("appData"), tempPath: app.getPath("temp") },
+      pauseMutableWork: pauseMutableWorkForRestore,
+      activeJobStates: () => getJobsService().list({
+        states: ["running", "cancel_requested"],
+        limit: 1
+      }).jobs.map(({ state }) => state),
+      onBindingSwitched: initializeActiveDatabase
+    });
+  }
+  return vaultStorageRelocationService;
 };
 
 const getAgentRuntimeService = (): AgentRuntimeService => {
@@ -3020,6 +3040,12 @@ ipcMain.handle(MANAGED_COPY_ROOT_CONFIGURE_CHANNEL, async (event, request: Manag
     )
   );
 });
+registerVaultStorageRelocationIpc({
+  ipcMain,
+  parentWindow: (sender) => BrowserWindow.fromWebContents(sender) ?? undefined,
+  status: () => getVaultStorageRelocationService().status(),
+  relocate: (parentWindow, request) => getVaultStorageRelocationService().relocate(parentWindow, request)
+});
 ipcMain.handle("vault.removeRecent", (_event, vaultId: string) => getVaultService().removeRecent(vaultId));
 ipcMain.handle("maintenance.rebuildLocalDatabase", () => getIndexRebuildJobExecutor().request());
 ipcMain.handle("maintenance.resetLocalDatabase", async (event) => {
@@ -3359,6 +3385,18 @@ app.whenReady().then(async () => {
       message: restoreRecovery.failed > 0
         ? "Some interrupted Restore Jobs still require repair."
         : "Interrupted Restore Jobs were reconciled from durable checkpoints."
+    });
+  }
+  const relocationRecovery = await getVaultStorageRelocationService().recoverInterrupted();
+  if (relocationRecovery.recovered > 0 || relocationRecovery.failed > 0) {
+    diagnosticsService.recordEvent({
+      level: relocationRecovery.failed > 0 ? "warning" : "info",
+      code: relocationRecovery.failed > 0
+        ? "vault.relocation_recovery_incomplete"
+        : "vault.relocation_recovery_completed",
+      message: relocationRecovery.failed > 0
+        ? "Some interrupted Vault relocations kept their original Vault active."
+        : "Interrupted Vault relocation receipts were reconciled."
     });
   }
   initializeActiveDatabase();

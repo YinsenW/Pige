@@ -4414,6 +4414,40 @@ export const ManagedCopyRootConfigureResultSchema = z.discriminatedUnion("status
   ManagedCopyRootConfigureResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 
+export const VAULT_STORAGE_RELOCATION_STATUS_CHANNEL = "vault.storageRelocationStatus" as const;
+export const VAULT_STORAGE_RELOCATE_CHANNEL = "vault.relocateStorage" as const;
+export const VaultStorageRelocationRevisionSchema = z.string()
+  .regex(/^vaultrelocationrev_[a-f0-9]{64}$/u);
+export const VaultStorageRelocationRequestIdSchema = z.string()
+  .regex(/^vaultrelocatereq_[a-z0-9]{16,64}$/u);
+export const VaultStorageRelocationStatusSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("ready"),
+    activeVaultId: VaultIdSchema,
+    revision: VaultStorageRelocationRevisionSchema
+  }).strict(),
+  z.object({ apiVersion: z.literal(1), status: z.literal("unavailable") }).strict()
+]);
+export const VaultStorageRelocationRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: VaultStorageRelocationRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  expectedRevision: VaultStorageRelocationRevisionSchema
+}).strict();
+const VaultStorageRelocationResultIdentitySchema = VaultStorageRelocationRequestSchema;
+export const VaultStorageRelocationResultSchema = z.discriminatedUnion("status", [
+  VaultStorageRelocationResultIdentitySchema.extend({
+    status: z.literal("relocated"),
+    revision: VaultStorageRelocationRevisionSchema
+  }).strict(),
+  VaultStorageRelocationResultIdentitySchema.extend({
+    status: z.enum(["cancelled", "stale", "blocked_active_work", "destination_exists"]),
+    currentRevision: VaultStorageRelocationRevisionSchema
+  }).strict(),
+  VaultStorageRelocationResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+
 const WaitingDependencyCountsProjectionSchema = z.object({
   modelProvider: z.number().int().nonnegative(),
   localTool: z.number().int().nonnegative(),
@@ -10346,6 +10380,11 @@ export type ManagedCopyRootSummary = z.infer<typeof ManagedCopyRootSummarySchema
 export type ManagedCopyRootConfigureRequestId = z.infer<typeof ManagedCopyRootConfigureRequestIdSchema>;
 export type ManagedCopyRootConfigureRequest = z.infer<typeof ManagedCopyRootConfigureRequestSchema>;
 export type ManagedCopyRootConfigureResult = z.infer<typeof ManagedCopyRootConfigureResultSchema>;
+export type VaultStorageRelocationRevision = z.infer<typeof VaultStorageRelocationRevisionSchema>;
+export type VaultStorageRelocationStatus = z.infer<typeof VaultStorageRelocationStatusSchema>;
+export type VaultStorageRelocationRequestId = z.infer<typeof VaultStorageRelocationRequestIdSchema>;
+export type VaultStorageRelocationRequest = z.infer<typeof VaultStorageRelocationRequestSchema>;
+export type VaultStorageRelocationResult = z.infer<typeof VaultStorageRelocationResultSchema>;
 export type WindowLayoutMode = z.infer<typeof WindowLayoutModeSchema>;
 export type WindowLayoutRequest = z.infer<typeof WindowLayoutRequestSchema>;
 export type WindowLayoutState = z.infer<typeof WindowLayoutStateSchema>;
