@@ -14,6 +14,7 @@ import type {
   NoteMergeResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteReconnectOriginalSourceRequest,
   NoteRevealSourceRequest,
   NoteEditorOpenRequest,
   NoteEditorSaveRequest,
@@ -588,17 +589,20 @@ describe("full UI Library", () => {
     const opened: string[] = [];
     const sourceRequests: NoteOpenSourceReferenceRequest[] = [];
     const sourceRevealRequests: NoteRevealSourceRequest[] = [];
+    const sourceReconnectRequests: NoteReconnectOriginalSourceRequest[] = [];
+    const reconnectedNotes: NoteRenderResult[] = [];
     const editorOpenRequests: NoteEditorOpenRequest[] = [];
     const editorSaveRequests: NoteEditorSaveRequest[] = [];
     const committedNotes: NoteRenderResult[] = [];
     const unavailable: string[] = [];
     let cleared = 0;
-    const note = {
+    const note: NoteRenderResult = {
       ...readerNote(),
       summary: {
         ...readerNote().summary,
         pagePath: "wiki/generated/reader-actions.md"
-      }
+      },
+      reconnectOriginalSourceIds: [readerNote().summary.sourceIds[0]!]
     };
     await act(async () => {
       root.render(createElement(LibraryPanel, {
@@ -667,6 +671,8 @@ describe("full UI Library", () => {
           sourceRevealRequests.push(request);
           return { ...request, status: "revealed" };
         },
+        onReconnectOriginalSource: async (request) => ({ ...request, status: "cancelled" }),
+        onCurrentNoteSourceReconnected: (render) => reconnectedNotes.push(render),
         onDevelopment: (capability) => unavailable.push(capability),
         t
       }));
@@ -725,6 +731,19 @@ describe("full UI Library", () => {
           sourceRevealRequests.push(request);
           return { ...request, status: "revealed" };
         },
+        onReconnectOriginalSource: async (request) => {
+          sourceReconnectRequests.push(request);
+          return {
+            ...request,
+            status: "reconnected",
+            render: {
+              ...note,
+              renderContextId: `notectx_${"e".repeat(32)}`,
+              reconnectOriginalSourceIds: []
+            }
+          };
+        },
+        onCurrentNoteSourceReconnected: (render) => reconnectedNotes.push(render),
         onDevelopment: (capability) => unavailable.push(capability), t
       }));
       await settle(dom);
@@ -751,6 +770,22 @@ describe("full UI Library", () => {
     });
     expect(container.textContent).toContain("Original opened.");
     expect(dom.window.document.activeElement).toBe(revealSource);
+    const reconnectSource = requireElement(container.querySelector<HTMLButtonElement>(
+      `[data-reader-source-reconnect="${note.summary.sourceIds[0]}"]`
+    ));
+    reconnectSource.focus();
+    await act(async () => {
+      reconnectSource.click();
+      await settle(dom);
+    });
+    expect(sourceReconnectRequests[0]).toMatchObject({
+      activeVaultId: "vault_20260715_fullui01",
+      currentPageId: note.summary.pageId,
+      renderContextId: note.renderContextId,
+      sourceId: note.summary.sourceIds[0]
+    });
+    expect(reconnectedNotes.at(-1)?.renderContextId).toBe(`notectx_${"e".repeat(32)}`);
+    expect(container.textContent).toContain("Original reconnected.");
     await act(async () => {
       sourceButtons[0]!.click();
       await settle(dom);

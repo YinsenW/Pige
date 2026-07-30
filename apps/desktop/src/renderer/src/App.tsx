@@ -98,6 +98,8 @@ import type {
   ModelProfileSummary,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteReconnectOriginalSourceRequest,
+  NoteReconnectOriginalSourceResult,
   NoteRevealSourceRequest,
   NoteRevealSourceResult,
   NoteEditorOpenRequest,
@@ -1144,6 +1146,18 @@ export function App(): React.JSX.Element {
     void loadNoteRelated(render.summary.pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
     void Promise.allSettled([refreshLibrary(), refreshVaultState()]);
     window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".note-reader")?.focus({ preventScroll: true }));
+  };
+
+  const adoptReconnectedNote = (render: NoteRenderResult): void => {
+    const vaultId = activeVaultIdRef.current;
+    if (!vaultId || selectedNoteRef.current?.summary.pageId !== render.summary.pageId) return;
+    const requestId = ++noteOpenSequence.current;
+    inlineReferenceSequence.current += 1;
+    setSelectedNoteVaultId(vaultId);
+    setSelectedNote(render);
+    setSelectedNoteRelated("loading");
+    void loadNoteRelated(render.summary.pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
+    void refreshLibrary();
   };
 
   const refreshCollectionCatalog = async (append = false): Promise<void> => {
@@ -2552,6 +2566,8 @@ export function App(): React.JSX.Element {
             onSearch={(request) => window.pige.retrieval.search(request)}
             onOpenSourceReference={(request) => window.pige.notes.openSourceReference(request)}
             onRevealSource={(request) => window.pige.notes.revealSource(request)}
+            onReconnectOriginalSource={(request) => window.pige.notes.reconnectOriginalSource(request)}
+            onCurrentNoteSourceReconnected={adoptReconnectedNote}
             onTrashCurrentNote={(request) => window.pige.notes.trashCurrent(request)}
             onLoadNoteMergeTargets={loadNoteMergeTargets}
             onMergeCurrentNote={(request) => window.pige.notes.merge(request)}
@@ -2613,6 +2629,8 @@ export function App(): React.JSX.Element {
               onSearch={(request) => window.pige.retrieval.search(request)}
               onOpenSourceReference={(request) => window.pige.notes.openSourceReference(request)}
               onRevealSource={(request) => window.pige.notes.revealSource(request)}
+              onReconnectOriginalSource={(request) => window.pige.notes.reconnectOriginalSource(request)}
+              onCurrentNoteSourceReconnected={adoptReconnectedNote}
               onTrashCurrentNote={(request) => window.pige.notes.trashCurrent(request)}
               onLoadNoteMergeTargets={loadNoteMergeTargets}
               onMergeCurrentNote={(request) => window.pige.notes.merge(request)}
@@ -3162,10 +3180,14 @@ export function LibraryPanel(props: {
     request: NoteOpenSourceReferenceRequest
   ) => Promise<NoteOpenSourceReferenceResult>;
   readonly onRevealSource?: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
+  readonly onReconnectOriginalSource?: (
+    request: NoteReconnectOriginalSourceRequest
+  ) => Promise<NoteReconnectOriginalSourceResult>;
   readonly onTrashCurrentNote?: (request: NoteTrashCurrentRequest) => Promise<NoteTrashCurrentResult>;
   readonly onLoadNoteMergeTargets: (currentPageId: string) => Promise<readonly ReaderNoteMergeTarget[]>;
   readonly onMergeCurrentNote: (request: NoteMergeRequest) => Promise<NoteMergeResult>;
   readonly onCurrentNoteMerged: (render: NoteRenderResult) => void;
+  readonly onCurrentNoteSourceReconnected?: (render: NoteRenderResult) => void;
   readonly searchFocusRequest: number;
   readonly onOpenNote: (pageId: string) => Promise<void>;
   readonly onCloseNote: () => void;
@@ -3525,6 +3547,12 @@ export function LibraryPanel(props: {
           onOpenRelated={props.onOpenNote}
           {...(props.onOpenSourceReference ? { onOpenSourceReference: props.onOpenSourceReference } : {})}
           {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
+          {...(props.onReconnectOriginalSource ? {
+            onReconnectOriginalSource: props.onReconnectOriginalSource
+          } : {})}
+          {...(props.onCurrentNoteSourceReconnected ? {
+            onSourceReconnected: props.onCurrentNoteSourceReconnected
+          } : {})}
           onOpenSourcePage={props.onOpenNote}
           {...(props.onActivateInlineReference ? { onActivateInlineReference: props.onActivateInlineReference } : {})}
           onDevelopment={showReaderDevelopment}
@@ -6057,6 +6085,17 @@ function HomeComposer(props: {
     window.requestAnimationFrame(() => homeSectionRef.current?.querySelector<HTMLElement>(".note-reader")?.focus({ preventScroll: true }));
   };
 
+  const adoptReconnectedHomeSource = (render: NoteRenderResult): void => {
+    if (selectedNoteRef.current?.summary.pageId !== render.summary.pageId) return;
+    const requestId = ++noteOpenSequence.current;
+    inlineReferenceSequence.current += 1;
+    editorOpenSequence.current += 1;
+    setSelectedNote(render);
+    setSelectedNoteRelated("loading");
+    void loadNoteRelated(render.summary.pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
+    void props.onHomeStateChanged();
+  };
+
   const activateInlineReference = async (href: string): Promise<ReaderInlineReferenceActivation> => {
     const vaultId = activeVaultIdRef.current;
     const note = selectedNoteRef.current;
@@ -6531,6 +6570,8 @@ function HomeComposer(props: {
                     openResultTarget(result.currentPageId),
                   onOpenSourceReference: (request) => window.pige.notes.openSourceReference(request),
                   onRevealSource: (request) => window.pige.notes.revealSource(request),
+                  onReconnectOriginalSource: (request) => window.pige.notes.reconnectOriginalSource(request),
+                  onSourceReconnected: adoptReconnectedHomeSource,
                   onOpenSourcePage: openResult
                 } : {})}
                 locale={props.locale}
