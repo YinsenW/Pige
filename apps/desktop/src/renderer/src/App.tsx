@@ -3779,6 +3779,15 @@ export function LibraryPanel(props: {
             loadMore: props.t("library.tagsLoadMore"),
             loadingMore: props.t("library.tagsLoadingMore"),
             open: props.t("library.tagsOpen"),
+            rename: props.t("library.tagRename"),
+            renameTitle: props.t("library.tagRenameTitle"),
+            renameDescription: props.t("library.tagRenameDescription"),
+            renameCurrent: props.t("library.tagRenameCurrent"),
+            renameReplacement: props.t("library.tagRenameReplacement"),
+            renameCancel: props.t("library.tagRenameCancel"),
+            renameConfirm: props.t("library.tagRenameConfirm"),
+            renamePending: props.t("library.tagRenamePending"),
+            renameFailed: props.t("library.tagRenameFailed"),
             noteCount: (count) => `${count} ${props.t("library.tagsPages")}`,
           }}
           onOpenNote={props.onOpenNote}

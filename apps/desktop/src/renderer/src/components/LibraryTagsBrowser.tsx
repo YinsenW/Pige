@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   LibraryTagFacet,
+  LibraryRenameTagRequest,
+  LibraryRenameTagResult,
   LibraryTaggedPageSummary,
   LibraryTagsRequest,
   LibraryTagsResult,
@@ -8,6 +10,7 @@ import type {
 
 export interface LibraryTagsApi {
   readonly tags: (request: LibraryTagsRequest) => Promise<LibraryTagsResult>;
+  readonly renameTag: (request: LibraryRenameTagRequest) => Promise<LibraryRenameTagResult>;
 }
 
 export interface LibraryTagsBrowserLabels {
@@ -22,6 +25,15 @@ export interface LibraryTagsBrowserLabels {
   readonly loadMore: string;
   readonly loadingMore: string;
   readonly open: string;
+  readonly rename: string;
+  readonly renameTitle: string;
+  readonly renameDescription: string;
+  readonly renameCurrent: string;
+  readonly renameReplacement: string;
+  readonly renameCancel: string;
+  readonly renameConfirm: string;
+  readonly renamePending: string;
+  readonly renameFailed: string;
   readonly noteCount: (count: number) => string;
 }
 
@@ -37,9 +49,24 @@ type Continuation = {
   readonly snapshotId: string;
   readonly nextCursor?: string;
 };
+type RenameDialogState = {
+  readonly tag: string;
+  readonly expectedPageCount: number;
+  readonly expectedSnapshotId: string;
+  readonly draft: string;
+  readonly state: "ready" | "pending" | "failed";
+};
 
 function createRequestId(): string {
   return `library_tags_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function createRenameRequestId(): `library_tag_rename_request_${string}` {
+  return `library_tag_rename_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function canonicalTag(value: string): string {
+  return value.normalize("NFKC").replace(/\s+/gu, " ").trim();
 }
 
 function mergeTags(
@@ -71,6 +98,7 @@ export function LibraryTagsBrowser(
   const [loadingMoreOwner, setLoadingMoreOwner] = useState<"tags" | "notes" | null>(null);
   const [continuationFailedOwner, setContinuationFailedOwner] = useState<"tags" | "notes" | null>(null);
   const [focusRevision, setFocusRevision] = useState(0);
+  const [renameDialog, setRenameDialog] = useState<RenameDialogState | null>(null);
   const loadingMoreOwnerRef = useRef<"tags" | "notes" | null>(null);
   const activeVaultIdRef = useRef(props.activeVaultId);
   const selectedTagRef = useRef<string | null>(null);
@@ -80,6 +108,15 @@ export function LibraryTagsBrowser(
   const notesRetryRef = useRef<HTMLButtonElement>(null);
   const tagsLoadMoreRef = useRef<HTMLButtonElement>(null);
   const notesLoadMoreRef = useRef<HTMLButtonElement>(null);
+  const tagsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const tagRowRefs = useRef(new Map<string, HTMLButtonElement>());
+  const renameTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const renameDialogRef = useRef<HTMLElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const renameCancelRef = useRef<HTMLButtonElement>(null);
+  const renameRequestActiveRef = useRef(false);
+  const renameSequenceRef = useRef(0);
+  const pendingRenamedFocusRef = useRef<string | null>(null);
   const pendingFocusRef = useRef<"tags-retry" | "notes-retry" | "tags-more" | "notes-more" | null>(null);
   activeVaultIdRef.current = props.activeVaultId;
   selectedTagRef.current = selectedTag;
@@ -143,6 +180,13 @@ export function LibraryTagsBrowser(
       });
       setTagsState("ready");
       setContinuationFailedOwner(null);
+      if (!append && pendingRenamedFocusRef.current) {
+        const renamedTag = pendingRenamedFocusRef.current;
+        pendingRenamedFocusRef.current = null;
+        window.requestAnimationFrame(() => {
+          (tagRowRefs.current.get(renamedTag) ?? tagsHeadingRef.current)?.focus({ preventScroll: true });
+        });
+      }
     } catch {
       if (sequence !== tagsSequenceRef.current || activeVaultIdRef.current !== vaultId) return;
       if (append) setContinuationFailedOwner("tags");
@@ -234,6 +278,10 @@ export function LibraryTagsBrowser(
     loadingMoreOwnerRef.current = null;
     setLoadingMoreOwner(null);
     setContinuationFailedOwner(null);
+    renameSequenceRef.current += 1;
+    renameRequestActiveRef.current = false;
+    pendingRenamedFocusRef.current = null;
+    setRenameDialog(null);
     void loadTags(false);
   }, [props.activeVaultId]);
 
@@ -261,9 +309,97 @@ export function LibraryTagsBrowser(
     else if (selectedTag) void loadNotes(selectedTag, true);
   };
 
+  const openRename = (tag: LibraryTagFacet): void => {
+    const snapshotId = tagsContinuation?.snapshotId;
+    if (!snapshotId || tag.pageCount <= 0 || renameRequestActiveRef.current) return;
+    setRenameDialog({
+      tag: tag.tag,
+      expectedPageCount: tag.pageCount,
+      expectedSnapshotId: snapshotId,
+      draft: tag.tag,
+      state: "ready",
+    });
+    window.requestAnimationFrame(() => {
+      renameInputRef.current?.focus({ preventScroll: true });
+      renameInputRef.current?.select();
+    });
+  };
+
+  const cancelRename = (): void => {
+    if (!renameDialog || renameRequestActiveRef.current) return;
+    const tag = renameDialog.tag;
+    setRenameDialog(null);
+    window.requestAnimationFrame(() => renameTriggerRefs.current.get(tag)?.focus({ preventScroll: true }));
+  };
+
+  const submitRename = async (): Promise<void> => {
+    if (!renameDialog || renameRequestActiveRef.current) return;
+    const replacementTag = canonicalTag(renameDialog.draft);
+    if (
+      !replacementTag ||
+      replacementTag.length > 48 ||
+      /[\u0000-\u001f\u007f]/u.test(replacementTag) ||
+      replacementTag.toLocaleLowerCase("en-US") === renameDialog.tag.toLocaleLowerCase("en-US")
+    ) return;
+    renameRequestActiveRef.current = true;
+    const sequence = ++renameSequenceRef.current;
+    const request: LibraryRenameTagRequest = {
+      apiVersion: 1,
+      requestId: createRenameRequestId(),
+      activeVaultId: props.activeVaultId,
+      tag: renameDialog.tag,
+      replacementTag,
+      expectedSnapshotId: renameDialog.expectedSnapshotId,
+      expectedPageCount: renameDialog.expectedPageCount,
+    };
+    setRenameDialog((current) => current ? { ...current, state: "pending" } : current);
+    try {
+      const result = await props.api.renameTag(request);
+      if (
+        sequence !== renameSequenceRef.current ||
+        activeVaultIdRef.current !== request.activeVaultId
+      ) return;
+      if (!renameIdentityMatches(request, result)) {
+        setRenameDialog((current) => current ? { ...current, state: "failed" } : current);
+        window.requestAnimationFrame(() => renameInputRef.current?.focus({ preventScroll: true }));
+        return;
+      }
+      if (result.status === "committed") {
+        setRenameDialog(null);
+        setSelectedTag(null);
+        selectedTagRef.current = null;
+        setNotes([]);
+        setNotesContinuation(null);
+        pendingRenamedFocusRef.current = replacementTag;
+        await loadTags(false);
+        if (pendingRenamedFocusRef.current === replacementTag) {
+          pendingRenamedFocusRef.current = null;
+          window.requestAnimationFrame(() => tagsHeadingRef.current?.focus({ preventScroll: true }));
+        }
+        return;
+      }
+      setRenameDialog((current) => current ? { ...current, state: "failed" } : current);
+      window.requestAnimationFrame(() => renameInputRef.current?.focus({ preventScroll: true }));
+    } catch {
+      if (sequence === renameSequenceRef.current && activeVaultIdRef.current === request.activeVaultId) {
+        setRenameDialog((current) => current ? { ...current, state: "failed" } : current);
+        window.requestAnimationFrame(() => renameInputRef.current?.focus({ preventScroll: true }));
+      }
+    } finally {
+      if (sequence === renameSequenceRef.current && activeVaultIdRef.current === request.activeVaultId) {
+        renameRequestActiveRef.current = false;
+      }
+    }
+  };
+
+  const renameReplacement = canonicalTag(renameDialog?.draft ?? "");
+  const renameValid = Boolean(renameDialog) && renameReplacement.length > 0 && renameReplacement.length <= 48 &&
+    !/[\u0000-\u001f\u007f]/u.test(renameReplacement) &&
+    renameReplacement.toLocaleLowerCase("en-US") !== renameDialog?.tag.toLocaleLowerCase("en-US");
+
   return (
     <section className="search-group" aria-labelledby="library-tags-heading">
-      <h2 id="library-tags-heading">{props.labels.title}</h2>
+      <h2 ref={tagsHeadingRef} id="library-tags-heading" tabIndex={-1}>{props.labels.title}</h2>
       {tagsState === "loading" ? (
         <p role="status" aria-busy="true">{props.labels.loading}</p>
       ) : tagsState === "failed" ? (
@@ -283,6 +419,10 @@ export function LibraryTagsBrowser(
             {tags.map((tag) => (
               <div key={tag.tag} role="listitem">
                 <button
+                  ref={(element) => {
+                    if (element) tagRowRefs.current.set(tag.tag, element);
+                    else tagRowRefs.current.delete(tag.tag);
+                  }}
                   type="button"
                   className="search-result"
                   aria-pressed={selectedTag === tag.tag}
@@ -293,6 +433,18 @@ export function LibraryTagsBrowser(
                     <span>{props.labels.noteCount(tag.pageCount)}</span>
                   </span>
                 </button>
+                {tag.pageCount > 0 && tagsContinuation?.snapshotId ? <button
+                  ref={(element) => {
+                    if (element) renameTriggerRefs.current.set(tag.tag, element);
+                    else renameTriggerRefs.current.delete(tag.tag);
+                  }}
+                  type="button"
+                  className="settings-button"
+                  aria-label={`${props.labels.rename}: ${tag.tag}`}
+                  onClick={() => openRename(tag)}
+                >
+                  {props.labels.rename}
+                </button> : null}
               </div>
             ))}
           </div>
@@ -360,6 +512,74 @@ export function LibraryTagsBrowser(
           )}
         </section>
       ) : null}
+      {renameDialog ? (
+        <div className="confirmation-backdrop">
+          <section
+            ref={renameDialogRef}
+            className="confirmation-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="library-tag-rename-title"
+            aria-describedby="library-tag-rename-description"
+            aria-busy={renameDialog.state === "pending"}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && renameDialog.state !== "pending") {
+                event.preventDefault();
+                cancelRename();
+                return;
+              }
+              if (event.key !== "Tab") return;
+              const controls = Array.from(renameDialogRef.current?.querySelectorAll<HTMLElement>("input:not(:disabled), button:not(:disabled)") ?? []);
+              if (controls.length === 0) return event.preventDefault();
+              const first = controls[0]!;
+              const last = controls.at(-1)!;
+              if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+              } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+              }
+            }}
+          >
+            <div className="confirmation-icon" aria-hidden="true">!</div>
+            <div className="confirmation-copy">
+              <h2 id="library-tag-rename-title">{props.labels.renameTitle}</h2>
+              <p id="library-tag-rename-description">{props.labels.renameDescription}</p>
+              <p><strong>{props.labels.renameCurrent}</strong> {renameDialog.tag}</p>
+              <label>
+                <span>{props.labels.renameReplacement}</span>
+                <input
+                  ref={renameInputRef}
+                  value={renameDialog.draft}
+                  maxLength={48}
+                  disabled={renameDialog.state === "pending"}
+                  onChange={(event) => {
+                    const draft = event.currentTarget.value;
+                    setRenameDialog((current) => current ? { ...current, draft, state: "ready" } : current);
+                  }}
+                />
+              </label>
+              {renameDialog.state === "failed" ? <p className="error" role="alert">{props.labels.renameFailed}</p> : null}
+            </div>
+            <div className="confirmation-actions">
+              <button ref={renameCancelRef} type="button" className="secondary" disabled={renameDialog.state === "pending"} onClick={cancelRename}>
+                {props.labels.renameCancel}
+              </button>
+              <button type="button" className="primary" disabled={renameDialog.state === "pending" || !renameValid} onClick={() => void submitRename()}>
+                {renameDialog.state === "pending" ? props.labels.renamePending : props.labels.renameConfirm}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
+}
+
+function renameIdentityMatches(request: LibraryRenameTagRequest, result: LibraryRenameTagResult): boolean {
+  return result.apiVersion === request.apiVersion && result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId && result.tag === request.tag &&
+    result.replacementTag === request.replacementTag && result.expectedSnapshotId === request.expectedSnapshotId &&
+    result.expectedPageCount === request.expectedPageCount;
 }
