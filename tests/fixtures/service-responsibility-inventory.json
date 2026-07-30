@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 206,
-  "baselineLines": 104765,
+  "baselineFileCount": 208,
+  "baselineLines": 104933,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -56,6 +56,7 @@
       ["vault-migration-service.ts", 400, "jrd"],
       ["model-egress-content.ts", 77, "pf"],
       ["model-runtime-binding.ts", 113, "ap"],
+      ["note-archive-service.ts", 94, "r"],
       ["note-markdown-editor-service.ts", 973, "rd"],
       ["note-merge-service.ts", 398, "rd"],
       ["note-trash-service.ts", 710, "rd"],
@@ -73,6 +74,7 @@
       ["reader-selection-create-note-service.ts", 973, "jrd"],
       ["reader-selection-link-service.ts", 587, "rd"],
       ["reader-selection-proposal-service.ts", 505, "jrd"],
+      ["reader-source-reconnect-service.ts", 74, "pr"],
       ["reader-source-reveal-service.ts", 39, "p"],
       ["renderer-navigation-guard.ts", 10, "p"],
       ["restore-coordinator-service.ts", 1015, "jr"],
@@ -239,7 +241,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 206,
+    "serviceOwnerCount": 208,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

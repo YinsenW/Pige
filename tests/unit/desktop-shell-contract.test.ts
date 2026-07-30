@@ -540,6 +540,7 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly openSourceReference:");
     expect(contractsSource).toContain("readonly revealSource:");
     expect(contractsSource).toContain("readonly trashCurrent:");
+    expect(contractsSource).toContain("readonly archiveCurrent:");
     expect(contractsSource).toContain("readonly openEditor:");
     expect(contractsSource).toContain("readonly saveEditor:");
     expect(mainSource).toContain("registerReaderIpc({");
@@ -568,6 +569,9 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain("NOTE_TRASH_CURRENT_CHANNEL");
     expect(preloadSource).toContain("NoteTrashCurrentRequestSchema.parse(request)");
     expect(preloadSource).toContain("NoteTrashCurrentResultSchema.parse(");
+    expect(preloadSource).toContain("NOTE_ARCHIVE_CURRENT_CHANNEL");
+    expect(preloadSource).toContain("NoteArchiveCurrentRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteArchiveCurrentResultSchema.parse(");
     expect(preloadSource).toContain('ipcRenderer.invoke(\n          "notes.openEditor"');
     expect(preloadSource).toContain("NoteEditorOpenRequestSchema.parse(request)");
     expect(preloadSource).toContain("NoteEditorOpenResultSchema.parse(");
@@ -585,6 +589,8 @@ describe("desktop shell build contract", () => {
     expect(notesApi).toContain(") => Promise<NoteRevealSourceResult>;");
     expect(notesApi).toContain("request: NoteTrashCurrentRequest");
     expect(notesApi).toContain(") => Promise<NoteTrashCurrentResult>;");
+    expect(notesApi).toContain("request: NoteArchiveCurrentRequest");
+    expect(notesApi).toContain(") => Promise<NoteArchiveCurrentResult>;");
     for (const privateField of ["sourcePath", "originalPath", "managedCopyPath", "sourceBody", "rawError"]) {
       expect(notesApi).not.toContain(privateField);
     }

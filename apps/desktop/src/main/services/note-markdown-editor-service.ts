@@ -166,7 +166,7 @@ export class NoteMarkdownEditorService {
       return { status: "failed" };
     }
   }
-  save(request: NoteMarkdownEditorSaveRequest): NoteMarkdownEditorSaveResult {
+  save(request: NoteMarkdownEditorSaveRequest, operationKind: "update_page" | "archive_page" = "update_page"): NoteMarkdownEditorSaveResult {
     const identity = saveIdentity(request);
     if (!isValidSaveRequest(request)) return { status: "invalid", ...identity };
     if (!validatePortableMarkdown(request.markdown, request.pageId)) {
@@ -211,7 +211,8 @@ export class NoteMarkdownEditorService {
       pageId: binding.pageId,
       pagePath: binding.pagePath,
       beforeRevisionId: binding.revisionId,
-      afterRevisionId
+      afterRevisionId,
+      operationKind
     });
     let committedSignature: MarkdownFileSignatureRecord;
     try {
@@ -400,7 +401,7 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
     const targetLabel = current ? safePageTitle(current, binding.pageId) : undefined;
     return {
       operationId: operation.id,
-      kind: "update_page",
+      kind: operation.kind as "update_page" | "archive_page",
       createdAt: operation.createdAt,
       ...(targetLabel ? { targetLabel } : {}),
       target: { kind: "page", pageId: binding.pageId },
@@ -637,6 +638,7 @@ function createUpdateOperation(input: {
   readonly pagePath: string;
   readonly beforeRevisionId: string;
   readonly afterRevisionId: string;
+  readonly operationKind: "update_page" | "archive_page";
 }): OperationRecord {
   const dateKey = /^op_(\d{8})_/u.exec(input.operationId)?.[1] ?? "19700101";
   const beforePath = `.pige/operations/${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}/${input.operationId}.before.md`;
@@ -645,12 +647,12 @@ function createUpdateOperation(input: {
     schemaVersion: 1,
     createdAt: input.createdAt,
     actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
-    kind: "update_page",
+    kind: input.operationKind,
     targetRefs: [{ kind: "page", id: input.pageId, path: input.pagePath }],
     sourceRefs: [],
     before: { kind: "page", id: input.beforeRevisionId, path: beforePath },
     after: { kind: "page", id: input.afterRevisionId, path: input.pagePath },
-    summary: "Edited a Markdown knowledge page.",
+    summary: input.operationKind === "archive_page" ? "Archived a Markdown knowledge page." : "Edited a Markdown knowledge page.",
     reversible: "yes",
     rollbackHint: "Restore the exact private before-image while the current page revision still matches.",
     warnings: []
@@ -661,7 +663,7 @@ function readUserPageUpdateBinding(operation: OperationRecord): UserPageUpdateBi
   const before = operation.before;
   const after = operation.after;
   if (
-    operation.kind !== "update_page" ||
+    (operation.kind !== "update_page" && operation.kind !== "archive_page") ||
     operation.actor.kind !== "user" ||
     operation.actor.runtimeKind !== "desktop_local" ||
     operation.sourceRefs.length !== 0 ||

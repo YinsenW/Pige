@@ -1167,6 +1167,7 @@ export const KnowledgeActivitySummarySchema = z.object({
   kind: z.enum([
     "create_page",
     "update_page",
+    "archive_page",
     "trash_page",
     "update_collection_cell",
     "add_collection_row",
@@ -1408,8 +1409,13 @@ export const NOTE_EDITOR_MAX_RENDERED_HTML_UTF8_BYTES = 8 * 1024 * 1024;
 export const NoteEditorRequestIdSchema = z.string().regex(/^noteeditreq_[a-z0-9]{8,64}$/);
 export const NoteEditorRevisionSchema = z.string().regex(/^noteeditrev_[a-z0-9]{32,64}$/);
 export const NoteTrashCurrentRequestIdSchema = z.string().regex(/^notetrashreq_[a-z0-9]{16,64}$/);
+export const NoteArchiveCurrentRequestIdSchema = z.string().regex(/^notearchivereq_[a-z0-9]{16,64}$/);
 export const NoteTrashEligibilitySchema = z.object({
   canTrash: z.boolean(),
+  revision: NoteEditorRevisionSchema
+}).strict();
+export const NoteArchiveEligibilitySchema = z.object({
+  canArchive: z.boolean(),
   revision: NoteEditorRevisionSchema
 }).strict();
 export const NoteEditorPortableMarkdownSchema = z.string()
@@ -1442,6 +1448,7 @@ export const NoteRenderResultSchema = z.object({
   byteSize: z.number().int().nonnegative().max(NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES),
   renderContextId: NoteRenderContextIdSchema.optional(),
   trashEligibility: NoteTrashEligibilitySchema.optional(),
+  archiveEligibility: NoteArchiveEligibilitySchema.optional(),
   reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional()
 }).strict();
 const NoteReconnectOriginalSourceResultIdentitySchema = NoteReconnectOriginalSourceRequestSchema;
@@ -1507,6 +1514,26 @@ export const NoteEditorSaveResultSchema = z.discriminatedUnion("status", [
 ]);
 
 export const NOTE_TRASH_CURRENT_CHANNEL = "notes.trashCurrent" as const;
+export const NOTE_ARCHIVE_CURRENT_CHANNEL = "notes.archiveCurrent" as const;
+export const NoteArchiveCurrentRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteArchiveCurrentRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema
+}).strict();
+const NoteArchiveCurrentResultIdentitySchema = NoteArchiveCurrentRequestSchema;
+export const NoteArchiveCurrentResultSchema = z.discriminatedUnion("status", [
+  NoteArchiveCurrentResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    render: NoteRenderResultSchema
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteArchiveCurrentResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
 export const NoteTrashCurrentRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: NoteTrashCurrentRequestIdSchema,
@@ -8725,6 +8752,9 @@ export type NoteEditorOpenResult = z.infer<typeof NoteEditorOpenResultSchema>;
 export type NoteEditorSaveRequest = z.infer<typeof NoteEditorSaveRequestSchema>;
 export type NoteEditorSaveResult = z.infer<typeof NoteEditorSaveResultSchema>;
 export type NoteTrashCurrentRequestId = z.infer<typeof NoteTrashCurrentRequestIdSchema>;
+export type NoteArchiveCurrentRequestId = z.infer<typeof NoteArchiveCurrentRequestIdSchema>;
+export type NoteArchiveCurrentRequest = z.infer<typeof NoteArchiveCurrentRequestSchema>;
+export type NoteArchiveCurrentResult = z.infer<typeof NoteArchiveCurrentResultSchema>;
 export type NoteTrashEligibility = z.infer<typeof NoteTrashEligibilitySchema>;
 export type NoteTrashCurrentRequest = z.infer<typeof NoteTrashCurrentRequestSchema>;
 export type NoteTrashCurrentResult = z.infer<typeof NoteTrashCurrentResultSchema>;

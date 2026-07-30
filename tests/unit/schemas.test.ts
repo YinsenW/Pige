@@ -121,6 +121,8 @@ import {
   NoteMergeRequestSchema,
   NoteMergeResultSchema,
   NoteRenderResultSchema,
+  NoteArchiveCurrentRequestSchema,
+  NoteArchiveCurrentResultSchema,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
   NoteOpenSourceReferenceRequestSchema,
@@ -3749,6 +3751,25 @@ describe("schemas", () => {
     expect(() => NoteMergeRequestSchema.parse({ ...request, targetPageId: request.currentPageId })).toThrow();
     expect(() => NoteMergeResultSchema.parse({ ...request, status: "failed", path: "/private/note.md" })).toThrow();
     expect(() => NoteMergeResultSchema.parse({ ...request, status: "failed", markdown: "private body" })).toThrow();
+  });
+
+  it("keeps current-note archive revision-bound and path/body-free", () => {
+    const identity = {
+      apiVersion: 1,
+      requestId: "notearchivereq_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_abcdefgh",
+      currentPageId: "page_20260730_current1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(32)}`
+    } as const;
+    expect(NoteArchiveCurrentRequestSchema.parse(identity)).toEqual(identity);
+    for (const status of ["stale", "not_found", "ineligible", "failed"] as const) {
+      expect(NoteArchiveCurrentResultSchema.parse({ ...identity, status })).toEqual({ ...identity, status });
+    }
+    for (const privateField of ["pagePath", "markdown", "contentHash", "sourceId", "rawError"] as const) {
+      expect(() => NoteArchiveCurrentRequestSchema.parse({ ...identity, [privateField]: "private" })).toThrow();
+      expect(() => NoteArchiveCurrentResultSchema.parse({ ...identity, status: "failed", [privateField]: "private" })).toThrow();
+    }
   });
 
   it("keeps current-note trash revision-bound, pathless, and Activity-restorable", () => {

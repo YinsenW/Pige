@@ -7,6 +7,7 @@ import type { ReaderSourceRevealService } from "../../apps/desktop/src/main/serv
 import type { ReaderSourceReconnectService } from "../../apps/desktop/src/main/services/reader-source-reconnect-service";
 import type { NoteTrashService } from "../../apps/desktop/src/main/services/note-trash-service";
 import type { NoteMergeService } from "../../apps/desktop/src/main/services/note-merge-service";
+import type { NoteArchiveService } from "../../apps/desktop/src/main/services/note-archive-service";
 
 type IpcHandler = (event: IpcMainInvokeEvent, request?: unknown) => unknown;
 
@@ -26,7 +27,9 @@ function makeHarness(
   noteTrashService?: Partial<NoteTrashService>,
   onNoteTrashCommitted = vi.fn(),
   noteMergeService?: Partial<NoteMergeService>,
-  reconnectService?: Partial<ReaderSourceReconnectService>
+  reconnectService?: Partial<ReaderSourceReconnectService>,
+  noteArchiveService?: Partial<NoteArchiveService>,
+  onNoteArchiveCommitted = vi.fn()
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -59,11 +62,16 @@ function makeHarness(
       if (noteTrashService) return noteTrashService as NoteTrashService;
       throw new Error("Note trash service was not expected.");
     },
+    getNoteArchiveService: () => {
+      if (noteArchiveService) return noteArchiveService as NoteArchiveService;
+      throw new Error("Note archive service was not expected.");
+    },
     getNoteMergeService: () => {
       if (noteMergeService) return noteMergeService as NoteMergeService;
       throw new Error("Note merge service was not expected.");
     },
-    onNoteTrashCommitted
+    onNoteTrashCommitted,
+    onNoteArchiveCommitted
   });
   return handlers;
 }
@@ -77,6 +85,7 @@ describe("registerReaderIpc", () => {
       "notes.openEditor",
       "notes.saveEditor",
       "notes.trashCurrent",
+      "notes.archiveCurrent",
       "notes.merge",
       "notes.resolveInlineReference",
       "notes.openSourceReference",
@@ -90,6 +99,57 @@ describe("registerReaderIpc", () => {
       "readerSelection.currentProposal",
       "readerSelection.decideProposal"
     ]);
+  });
+
+  it("binds current-note archive to the tracked Reader owner and refreshes Activity only after commit", async () => {
+    const identity = {
+      apiVersion: 1 as const,
+      requestId: "notearchivereq_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_abcdefgh",
+      currentPageId: "page_20260730_archivenote1",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(32)}`
+    };
+    const renderResult = {
+      summary: {
+        pageId: identity.currentPageId,
+        title: "Archived note",
+        pageType: "note",
+        status: "archived",
+        pagePath: "wiki/archive-note.md",
+        createdAt: "2026-07-30T10:00:00.000Z",
+        updatedAt: "2026-07-30T12:00:00.000Z",
+        sourceIds: []
+      },
+      html: "<h1>Archived note</h1>",
+      byteSize: 64,
+      renderContextId: "notectx_fedcba9876543210fedcba9876543210",
+      trashEligibility: { canTrash: true, revision: `noteeditrev_${"b".repeat(32)}` },
+      archiveEligibility: { canArchive: false, revision: `noteeditrev_${"b".repeat(32)}` }
+    };
+    const archive = vi.fn(async () => ({
+      ...identity,
+      status: "committed" as const,
+      operationId: "op_20260730_archivenote1234",
+      render: renderResult
+    }));
+    const refreshed = vi.fn();
+    const handlers = makeHarness(
+      { render: vi.fn(async () => renderResult) },
+      undefined,
+      undefined,
+      vi.fn(),
+      undefined,
+      undefined,
+      { archive },
+      refreshed
+    );
+    const sender = makeSender(34);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: identity.currentPageId });
+    await expect(handlers.get("notes.archiveCurrent")!({ sender } as IpcMainInvokeEvent, identity))
+      .resolves.toMatchObject({ status: "committed", operationId: "op_20260730_archivenote1234" });
+    expect(archive).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), identity);
+    expect(refreshed).toHaveBeenCalledTimes(1);
   });
 
   it("binds current-note trash to the tracked Reader owner and refreshes only after commit", async () => {
