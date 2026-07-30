@@ -598,15 +598,10 @@ Lifecycle coverage:
 | Index/job maintenance | update index, compact job, repair record |
 | Backup/restore/migration | backup created, restore applied, migration applied |
 
-Reader save records one `update_page` with private before/after bytes; Undo requires the after
-revision and writes prior bytes forward. Drift or missing recovery evidence preserves the live page.
-Reader merge records one `update_page` targeting both IDs. A private receipt binds originals, merged
-survivor and target trash; replay converges once. Undo requires that state, restores both originals
-and writes a deterministic forward Operation; drift preserves current bytes.
-Memory edit/enable/delete/reset commit exact revision-bound private receipts before `update_memory`
-or `trash_memory`; edit retains immutable event/provenance and secret-scans before its receipt.
-Undo writes `restore_memory`; restart adopts exact pairs, while drift/tampering preserves current
-memory and later atoms.
+Reader save writes one `update_page` with private before/after bytes; Undo checks its after revision
+and writes forward. Merge uses one two-page receipt/Operation; replay/Undo restore exact originals.
+Drift preserves live bytes. Memory mutations likewise commit revision-bound private receipts before
+`update_memory`/`trash_memory`; Undo writes `restore_memory`, and restart adopts exact pairs.
 
 Rules:
 
@@ -623,6 +618,8 @@ Rules:
   fall through to generic page updates.
 - `create_page.after` binds result hash/path; `trash_page` binds unchanged live `before`
   and private-trash `after`; later edits are never signed retroactively.
+- Public note restore binds the exact trash receipt/revision, restores original bytes/path only
+  when free/current, and restart adopts one forward `restore_page` Operation.
 - Rollback is best effort and must check current file hashes before applying.
 
 ## 13. Crash Recovery

@@ -106,6 +106,8 @@ describe("registerReaderIpc", () => {
       "notes.openEditor",
       "notes.saveEditor",
       "notes.trashCurrent",
+      "notes.listTrash",
+      "notes.restoreTrash",
       "notes.archiveCurrent",
       "notes.restoreArchived",
       "notes.addTag",
@@ -334,6 +336,41 @@ describe("registerReaderIpc", () => {
     expect(unowned.get("notes.trashCurrent")!({ sender: makeSender(32) } as IpcMainInvokeEvent, identity))
       .toEqual({ ...identity, status: "failed" });
     expect(trash).toHaveBeenCalledTimes(2);
+  });
+
+  it("lists pathless Trash summaries and restores one through the tracked Reader", async () => {
+    const activeVaultId = "vault_20260730_abcdefgh";
+    const pageId = "page_20260730_trashrestore1";
+    const trashOperationId = "op_20260730_trashrestore1234";
+    const expectedTrashRevision = `notetrashrev_${"a".repeat(64)}` as const;
+    const list = vi.fn(() => ({
+      apiVersion: 1 as const, requestId: "notetrashlistreq_abcdefghijklmnop", activeVaultId,
+      status: "ready" as const,
+      notes: [{ trashOperationId, expectedTrashRevision, pageId, title: "Restore me",
+        trashedAt: "2026-07-30T12:00:00.000Z", canRestore: true as const }]
+    }));
+    const restore = vi.fn(() => ({ status: "committed" as const, operationId: "op_20260730_restored123456" }));
+    const render = vi.fn(async () => ({
+      summary: { pageId, title: "Restore me", pageType: "note" as const, status: "active" as const,
+        pagePath: "wiki/restore-me.md", createdAt: "2026-07-30T10:00:00.000Z",
+        updatedAt: "2026-07-30T12:00:00.000Z", sourceIds: [] },
+      html: "<h1>Restore me</h1>", byteSize: 64,
+      renderContextId: "notectx_fedcba9876543210fedcba9876543210"
+    }));
+    const refreshed = vi.fn();
+    const handlers = makeHarness({ render }, undefined, { list, restore }, refreshed);
+    const sender = makeSender(41);
+    const listRequest = { apiVersion: 1 as const, requestId: "notetrashlistreq_abcdefghijklmnop", activeVaultId };
+    expect(handlers.get("notes.listTrash")!({ sender } as IpcMainInvokeEvent, listRequest))
+      .toMatchObject({ status: "ready", notes: [{ pageId, title: "Restore me" }] });
+    const restoreRequest = { apiVersion: 1 as const, requestId: "notetrashrestorereq_abcdefghijklmnop",
+      activeVaultId, pageId, trashOperationId, expectedTrashRevision };
+    await expect(handlers.get("notes.restoreTrash")!({ sender } as IpcMainInvokeEvent, restoreRequest))
+      .resolves.toMatchObject({ status: "committed", operationId: "op_20260730_restored123456",
+        render: { summary: { pageId } } });
+    expect(restore).toHaveBeenCalledWith(restoreRequest);
+    expect(render).toHaveBeenCalledWith({ pageId }, expect.stringMatching(/^notes_owner_/u));
+    expect(refreshed).toHaveBeenCalledTimes(1);
   });
 
   it("renders authoritative survivor state only after a tracked note merge commits", async () => {

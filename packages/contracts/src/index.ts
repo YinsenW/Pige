@@ -208,6 +208,11 @@ import type {
   NoteAddTagResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
+  NoteTrashListRequest,
+  NoteTrashListResult,
+  NoteTrashRestoreRequest,
+  NoteTrashRestoreResult,
+  NoteTrashSummary,
   NoteRenderContextId,
   NoteRenderResult,
   NoteOpenSourceReferenceRequest,
@@ -550,6 +555,11 @@ export type {
   NoteAddTagResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
+  NoteTrashListRequest,
+  NoteTrashListResult,
+  NoteTrashRestoreRequest,
+  NoteTrashRestoreResult,
+  NoteTrashSummary,
   NoteRenderResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
@@ -2104,6 +2114,8 @@ export interface PigeDesktopApi {
     readonly trashCurrent: (
       request: NoteTrashCurrentRequest
     ) => Promise<NoteTrashCurrentResult>;
+    readonly listTrash: (request: NoteTrashListRequest) => Promise<NoteTrashListResult>;
+    readonly restoreTrash: (request: NoteTrashRestoreRequest) => Promise<NoteTrashRestoreResult>;
     readonly resolveInlineReference: (
       request: NoteResolveInlineReferenceRequest
     ) => Promise<NoteResolveInlineReferenceResult>;

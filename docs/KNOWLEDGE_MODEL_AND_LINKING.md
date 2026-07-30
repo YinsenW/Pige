@@ -346,16 +346,16 @@ Pause only for:
 
 ## 9. Canonicalization And Deduplication
 
-Before creating a page, tag or relationship, search titles, aliases, slug variants, tags,
-topics/concepts, entity names and high-ranking semantic matches.
+Before creation, search titles, aliases, slugs, tags, topics/concepts, entities and strong matches.
 
 Deduplication rules:
 
 - Page identity comes from stable ID; titles, paths and slugs may change.
-- Prefer aliases. An explicit ordinary-note merge keeps the current page ID, unions aliases and
-  source IDs, retains the target page ID as an alias, and losslessly appends its body.
-- The merge Operation targets both pages; private before-images and the recoverable target trash
-  make crash adoption and exact Undo possible. If uncertain, preserve both instead.
+- Explicit ordinary-note merge keeps current ID, unions aliases/source IDs, aliases the target ID
+  and appends losslessly. One two-page Operation plus private originals/trash supports recovery/Undo.
+- Note trash preserves exact bytes/identity privately. Settings lists safe receipts and restores
+  only a current, path-safe original; retry/restart adopts the same `restore_page` Operation.
+- If uncertain, preserve both pages.
 
 Multilingual rules preserve source language, add useful translated aliases, avoid duplicates caused
 only by language, and resolve supported-language aliases when indexes allow.

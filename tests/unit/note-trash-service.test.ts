@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { NoteTrashService } from "../../apps/desktop/src/main/services/note-trash-service";
 import { NoteMarkdownEditorService } from "../../apps/desktop/src/main/services/note-markdown-editor-service";
 import { NotesService } from "../../apps/desktop/src/main/services/notes-service";
@@ -15,6 +15,123 @@ afterEach(() => {
 });
 
 describe("NoteTrashService", () => {
+  it("lists pathless recoverable notes after restart and restores one exact receipt into Reader truth", async () => {
+    const fixture = createFixture();
+    const rendered = await fixture.notes.render({ pageId: fixture.pageId }, fixture.ownerId);
+    const trashed = fixture.service.trash(fixture.ownerId, {
+      apiVersion: 1,
+      requestId: "notetrashreq_publicrestore12345",
+      activeVaultId: fixture.vault.vaultId,
+      currentPageId: fixture.pageId,
+      renderContextId: rendered.renderContextId!,
+      expectedRevision: fixture.revision()
+    });
+    expect(trashed.status).toBe("committed");
+
+    const restarted = new NoteTrashService(fixture.vaults, fixture.notes);
+    const listed = restarted.list({
+      apiVersion: 1,
+      requestId: "notetrashlistreq_afterrestart1234",
+      activeVaultId: fixture.vault.vaultId
+    });
+    expect(listed).toMatchObject({ status: "ready", notes: [{
+      pageId: fixture.pageId,
+      title: "Recoverable note",
+      trashOperationId: trashed.operationId,
+      expectedTrashRevision: expect.stringMatching(/^notetrashrev_[a-f0-9]{64}$/u),
+      canRestore: true
+    }] });
+    expect(JSON.stringify(listed)).not.toContain(fixture.vaultPath);
+    expect(JSON.stringify(listed)).not.toContain("Keep these exact bytes");
+    if (listed.status !== "ready" || !listed.notes[0]) throw new Error("Expected one recoverable note.");
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "notetrashrestorereq_afterrestart1234",
+      activeVaultId: fixture.vault.vaultId,
+      pageId: listed.notes[0].pageId,
+      trashOperationId: listed.notes[0].trashOperationId,
+      expectedTrashRevision: listed.notes[0].expectedTrashRevision
+    };
+    const restored = restarted.restore(request);
+    expect(restored).toMatchObject({ status: "committed", operationId: expect.stringMatching(/^op_\d{8}_[a-f0-9]{16}$/u) });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.content);
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain("src_20260730_recoverable01");
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain("[[Linked note]]");
+    expect(restarted.list({
+      apiVersion: 1,
+      requestId: "notetrashlistreq_afterrestore1234",
+      activeVaultId: request.activeVaultId
+    }))
+      .toMatchObject({ status: "ready", notes: [] });
+    expect(new NoteTrashService(fixture.vaults, fixture.notes).restore(request)).toEqual(restored);
+  });
+
+  it("fails missing, tampered, active-vault, and reoccupied-path restore candidates closed", async () => {
+    const fixture = createFixture();
+    const rendered = await fixture.notes.render({ pageId: fixture.pageId }, fixture.ownerId);
+    fixture.service.trash(fixture.ownerId, {
+      apiVersion: 1, requestId: "notetrashreq_failclosed123456", activeVaultId: fixture.vault.vaultId,
+      currentPageId: fixture.pageId, renderContextId: rendered.renderContextId!, expectedRevision: fixture.revision()
+    });
+    const listed = fixture.service.list({ apiVersion: 1, requestId: "notetrashlistreq_failclosed123456",
+      activeVaultId: fixture.vault.vaultId });
+    if (listed.status !== "ready" || !listed.notes[0]) throw new Error("Expected one recoverable note.");
+    const request = { apiVersion: 1 as const, requestId: "notetrashrestorereq_failclosed123456",
+      activeVaultId: fixture.vault.vaultId, pageId: fixture.pageId,
+      trashOperationId: listed.notes[0].trashOperationId, expectedTrashRevision: listed.notes[0].expectedTrashRevision };
+    expect(fixture.service.restore({ ...request, activeVaultId: "vault_20260730_wrongactive" }))
+      .toMatchObject({ status: "failed" });
+    const receiptRoot = path.join(fixture.vaultPath, ".pige", "trash", "note-receipts");
+    const receiptPath = path.join(receiptRoot, fs.readdirSync(receiptRoot)[0]!);
+    const receiptBytes = fs.readFileSync(receiptPath, "utf8");
+    const receipt = JSON.parse(receiptBytes);
+    fs.writeFileSync(receiptPath, `${JSON.stringify({ ...receipt, contentHash: `sha256:${"c".repeat(64)}` }, null, 2)}\n`, "utf8");
+    expect(fixture.service.restore(request)).toMatchObject({ status: "stale" });
+    fs.writeFileSync(receiptPath, receiptBytes, "utf8");
+    fs.writeFileSync(fixture.pagePath, "Unrelated replacement.\n", "utf8");
+    expect(fixture.service.restore(request)).toMatchObject({ status: "stale" });
+    fs.unlinkSync(fixture.pagePath);
+    const trashRoot = path.join(fixture.vaultPath, ".pige", "trash", "pages", request.trashOperationId);
+    const trashPath = path.join(trashRoot, fs.readdirSync(trashRoot)[0]!);
+    fs.appendFileSync(trashPath, "\nTampered.\n", "utf8");
+    expect(fixture.service.restore(request)).toMatchObject({ status: "not_found" });
+    fs.unlinkSync(trashPath);
+    expect(fixture.service.restore(request)).toMatchObject({ status: "not_found" });
+  });
+
+  it("adopts a prepared public restore after restart without duplicating its Operation", async () => {
+    const fixture = createFixture();
+    const rendered = await fixture.notes.render({ pageId: fixture.pageId }, fixture.ownerId);
+    const trashed = fixture.service.trash(fixture.ownerId, {
+      apiVersion: 1, requestId: "notetrashreq_restorecrash1234", activeVaultId: fixture.vault.vaultId,
+      currentPageId: fixture.pageId, renderContextId: rendered.renderContextId!, expectedRevision: fixture.revision()
+    });
+    expect(trashed.status).toBe("committed");
+    const listed = fixture.service.list({ apiVersion: 1, requestId: "notetrashlistreq_restorecrash1234",
+      activeVaultId: fixture.vault.vaultId });
+    if (listed.status !== "ready" || !listed.notes[0]) throw new Error("Expected one recoverable note.");
+    const request = { apiVersion: 1 as const, requestId: "notetrashrestorereq_restorecrash1234",
+      activeVaultId: fixture.vault.vaultId, pageId: fixture.pageId,
+      trashOperationId: listed.notes[0].trashOperationId, expectedTrashRevision: listed.notes[0].expectedTrashRevision };
+    const openSync = fs.openSync.bind(fs);
+    const spy = vi.spyOn(fs, "openSync").mockImplementation(((filePath: fs.PathLike, flags: fs.OpenMode, mode?: fs.Mode) => {
+      if (String(filePath).includes(`${path.sep}.pige${path.sep}operations${path.sep}`) &&
+        !String(filePath).endsWith(`${request.trashOperationId}.json`)) throw new Error("crash before restore Operation");
+      return openSync(filePath, flags, mode);
+    }) as typeof fs.openSync);
+    expect(fixture.service.restore(request)).toMatchObject({ status: "failed" });
+    spy.mockRestore();
+    expect(fs.existsSync(fixture.pagePath)).toBe(true);
+    expect(readTrashFiles(fixture.vaultPath)).toEqual([fixture.content]);
+
+    const restarted = new NoteTrashService(fixture.vaults, fixture.notes);
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.content);
+    expect(readTrashFiles(fixture.vaultPath)).toEqual([]);
+    expect(restarted.restore(request)).toMatchObject({ status: "committed" });
+    expect(readOperationKinds(fixture.vaultPath).filter((kind) => kind === "restore_page")).toHaveLength(1);
+  });
+
   it("moves one exact rendered note to recoverable trash and restores it through Activity after restart", async () => {
     const fixture = createFixture();
     const rendered = await fixture.notes.render({ pageId: fixture.pageId }, fixture.ownerId);
@@ -152,7 +269,7 @@ function createFixture() {
   const vault = loadVaultSummary(vaultPath);
   const pageId = "page_20260730_recoverablenote";
   const pagePath = path.join(vaultPath, "wiki", "recoverable-note.md");
-  const content = `---\nid: "${pageId}"\nschema_version: 1\ntitle: "Recoverable note"\ntype: "note"\ncreated_at: "2026-07-30T12:00:00.000Z"\nupdated_at: "2026-07-30T12:00:00.000Z"\nstatus: "active"\naliases: []\nsource_ids: []\n---\n\n# Recoverable note\n\nKeep these exact bytes.\n`;
+  const content = `---\nid: "${pageId}"\nschema_version: 1\ntitle: "Recoverable note"\ntype: "note"\ncreated_at: "2026-07-30T12:00:00.000Z"\nupdated_at: "2026-07-30T12:00:00.000Z"\nstatus: "active"\naliases: []\nsource_ids: ["src_20260730_recoverable01"]\n---\n\n# Recoverable note\n\nKeep these exact bytes and [[Linked note]].\n`;
   fs.writeFileSync(pagePath, content, { encoding: "utf8", mode: 0o600 });
   const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
   const editor = new NoteMarkdownEditorService(vaults, { recordPageUpdate: () => undefined });
@@ -198,4 +315,12 @@ function readOperation(vaultPath: string, operationId: string) {
     dateKey.slice(4, 6),
     `${operationId}.json`
   ), "utf8"));
+}
+
+function readOperationKinds(vaultPath: string): string[] {
+  const root = path.join(vaultPath, ".pige", "operations");
+  return fs.readdirSync(root).flatMap((year) => fs.readdirSync(path.join(root, year)).flatMap((month) =>
+    fs.readdirSync(path.join(root, year, month)).map((name) => JSON.parse(
+      fs.readFileSync(path.join(root, year, month, name), "utf8")
+    ).kind as string)));
 }

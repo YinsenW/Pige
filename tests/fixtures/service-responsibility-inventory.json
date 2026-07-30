@@ -3,7 +3,7 @@
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 219,
-  "baselineLines": 109536,
+  "baselineLines": 109736,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -63,7 +63,7 @@
       ["note-markdown-import-service.ts", 353, "prdf"],
       ["note-merge-service.ts", 398, "rd"],
       ["note-relate-service.ts", 158, "r"],
-      ["note-trash-service.ts", 710, "rd"],
+      ["note-trash-service.ts", 910, "rd"],
       ["notes-service.ts", 999, "prf"],
       ["ocr-language-preference-service.ts", 282, "aprd"],
       ["permission-broker-service.ts", 947, "prd"],

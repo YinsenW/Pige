@@ -28,6 +28,7 @@ import {
   type SpeechAssetApi
 } from "../../apps/desktop/src/renderer/src/components/LocalCapabilitiesSettingsPanel";
 import { SkillTrashRestorePanel } from "../../apps/desktop/src/renderer/src/components/SkillTrashRestorePanel";
+import { NoteTrashRestorePanel } from "../../apps/desktop/src/renderer/src/components/NoteTrashRestorePanel";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 import type {
   LocalSemanticRetrievalDisableRequest,
@@ -79,6 +80,9 @@ import type {
   SkillStageUpdateRequest,
   SkillStageUpdateResult,
   SkillUninstallRequest,
+  NoteTrashListRequest,
+  NoteTrashRestoreRequest,
+  NoteTrashRestoreResult,
   SpeechAssetInstallEvent,
   SpeechAvailabilityResult
 } from "@pige/contracts";
@@ -1080,6 +1084,92 @@ describe("full UI Settings surface", () => {
     expect(page.textContent).not.toContain("Broken reference removed");
     expect(runKnowledgeHealth).toHaveBeenCalledOnce();
 
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("browses pathless note Trash after restart and opens one restored page through Library", async () => {
+    const dom = createDom();
+    const container = requireElement(dom.window.document.querySelector<HTMLElement>("#root"));
+    const root = createRoot(container);
+    const activeVaultId = "vault_20260731_notetrashui";
+    const note = {
+      trashOperationId: "op_20260731_trashnoteui1234",
+      expectedTrashRevision: `notetrashrev_${"a".repeat(64)}` as const,
+      pageId: "page_20260731_restorenoteui",
+      title: "Restore after restart",
+      trashedAt: "2026-07-31T08:00:00.000Z",
+      canRestore: true as const
+    };
+    const listTrash = vi.fn(async (request: NoteTrashListRequest) => ({ ...request, status: "ready" as const, notes: [note] }));
+    let mode: "stale" | "wrong_render" | "committed" = "stale";
+    const restoreTrash = vi.fn(async (request: NoteTrashRestoreRequest): Promise<NoteTrashRestoreResult> => mode === "stale"
+      ? { ...request, status: "stale" }
+      : { ...request, status: "committed", operationId: "op_20260731_restorenoteui12", render: {
+        summary: { pageId: mode === "wrong_render" ? "page_20260731_wrongrestoreui" : note.pageId,
+          title: note.title, pageType: "note", status: "active",
+          pagePath: "wiki/restored.md", createdAt: "2026-07-31T07:00:00.000Z",
+          updatedAt: "2026-07-31T08:00:00.000Z", sourceIds: [] },
+        html: "<h1>Restore after restart</h1>", byteSize: 64,
+        renderContextId: "notectx_0123456789abcdef0123456789abcdef"
+      } });
+    const opened: string[] = [];
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: {
+      notes: { listTrash, restoreTrash }, vault: { current: async () => ({ vaultId: activeVaultId }) }
+    } });
+    await act(async () => {
+      root.render(createElement(NoteTrashRestorePanel, { activeVaultId, locale: "en",
+        onCommitted: async (pageId) => { opened.push(pageId); return true; }, t }));
+      await settle(dom); await settle(dom);
+    });
+    expect(listTrash).toHaveBeenCalledWith(expect.objectContaining({ activeVaultId }));
+    expect(container.textContent).toContain(note.title);
+    const restore = buttonNamed(container, `Restore: ${note.title}`);
+    await act(async () => { restore.click(); await settle(dom); await settle(dom); });
+    expect(container.textContent).toContain("changed");
+    expect(container.querySelector("[data-restorable-note-id]")).not.toBeNull();
+    mode = "wrong_render";
+    await act(async () => { restore.click(); await settle(dom); await settle(dom); });
+    expect(opened).toEqual([]);
+    expect(container.querySelector("[data-restorable-note-id]")).not.toBeNull();
+    expect(container.textContent).toContain("could not restore");
+    mode = "committed";
+    await act(async () => { restore.click(); await settle(dom); await settle(dom); });
+    expect(restoreTrash).toHaveBeenLastCalledWith(expect.objectContaining({
+      activeVaultId, pageId: note.pageId, trashOperationId: note.trashOperationId,
+      expectedTrashRevision: note.expectedTrashRevision
+    }));
+    expect(opened).toEqual([note.pageId]);
+    expect(container.querySelector("[data-restorable-note-id]")).toBeNull();
+    expect(container.textContent).toContain("restored and opened");
+    expect(dom.window.document.activeElement).toBe(container.querySelector("[aria-labelledby='activity-trash-title']"));
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps recoverable-note load failures distinct and retries only the exact current vault request", async () => {
+    const dom = createDom();
+    const container = requireElement(dom.window.document.querySelector<HTMLElement>("#root"));
+    const root = createRoot(container);
+    const activeVaultId = "vault_20260731_notetrashretry";
+    let returnWrongIdentity = true;
+    const listTrash = vi.fn(async (request: NoteTrashListRequest) => returnWrongIdentity
+      ? { ...request, requestId: "notetrashlistreq_wrongidentity1234", status: "ready" as const, notes: [] }
+      : { ...request, status: "ready" as const, notes: [] });
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: {
+      notes: { listTrash, restoreTrash: vi.fn() }, vault: { current: async () => ({ vaultId: activeVaultId }) }
+    } });
+    await act(async () => {
+      root.render(createElement(NoteTrashRestorePanel, { activeVaultId, locale: "en",
+        onCommitted: async () => false, t }));
+      await settle(dom); await settle(dom);
+    });
+    expect(container.textContent).toContain("could not check recoverable notes");
+    expect(container.textContent).not.toContain("No recoverable notes");
+    returnWrongIdentity = false;
+    await act(async () => { buttonNamed(container, "Try again").click(); await settle(dom); await settle(dom); });
+    expect(listTrash).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("No recoverable notes");
     await act(async () => root.unmount());
     dom.window.close();
   });
