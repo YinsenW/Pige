@@ -150,7 +150,8 @@ output never enter Job/conversation records.
 
 Jobs may have parent-child structure:
 
-- A multi-file drop creates one parent `capture_batch` job and one child job per source.
+- One multi-file `agent_turn` parent owns ordered source refs; restart waits for and
+  atomically links the complete set without duplicate pages.
 - New sources require top-level `agent_turn | capture_only`. Missing-field old records
   normalize to `legacy_agent_ingest`, the sole compatibility parent; unknown values fail.
 - Pi-selected parse/OCR/Dataset children bind parent plus Pi run/call provenance and

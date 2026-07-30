@@ -233,8 +233,7 @@ conversation, tasks, knowledge requests, and source-bearing inputs:
 - Web links.
 - PDF, Word, and PowerPoint files.
 - Images and screenshots with OCR.
-- Multi-file drops as later v0.1 phase work; P0 requires the whole window to accept a
-  file drop, while batch size and scheduling are owned by the phase plan.
+- Bounded whole-window multi-file drops submit one ordered Agent turn.
 
 File gestures have one visible distinction. Releasing a whole-window drop immediately
 submits those files as one Agent turn. Choosing files from the composer attachment picker
@@ -242,7 +241,8 @@ only stages removable local chips; it creates no Job, source, conversation event
 call, or network work until Send or a valid Enter. Submit atomically binds the exact
 authored query and staged attachments to one Agent turn and one parent Job. Attachment-
 only submit adds only the minimal organize intent. A rejected submit preserves the exact
-query and chips; idempotent retry cannot duplicate the turn or source preservation.
+query and chips; idempotent retry cannot duplicate the turn or source preservation. A
+failed drop keeps its order/turn identity for explicit retry without consuming the draft.
 
 Paste uses the same submit boundary. Exact clipboard text remains ordinary composer text
 only when insertion keeps the composer within 8,000 Unicode code points, without trim or

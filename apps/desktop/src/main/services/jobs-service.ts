@@ -1137,12 +1137,25 @@ export class JobsService {
       ) {
         continue;
       }
-      const sourceRecordFile = readSourceRecordFile(vaultPath, jobFile.job.sourceId);
-      if (!sourceRecordFile) {
+      const sourceRefs = jobFile.job.inputRefs?.filter((ref) => ref.role === "agent_turn_source") ?? [];
+      const sourceIds = sourceRefs.length > 0
+        ? sourceRefs.map((ref) => ref.id).filter((sourceId): sourceId is string => sourceId !== undefined)
+        : [jobFile.job.sourceId];
+      const sourceRecordFiles = sourceIds.map((sourceId) => readSourceRecordFile(vaultPath, sourceId));
+      if (sourceIds.length !== Math.max(sourceRefs.length, 1) || sourceRecordFiles.some((record) => !record)) {
         waiting += 1;
         continue;
       }
-      if (sourceRecordFile.sourceRecord.metadata.agentTurnJobId !== jobFile.job.id) {
+      const attachmentSetHash = jobFile.job.inputRefs
+        ?.find((ref) => ref.role === "agent_turn_attachment_set")?.checksum;
+      const bindingChanged = sourceRecordFiles.some((record, ordinal) => {
+        if (!record || record.sourceRecord.metadata.agentTurnJobId !== jobFile.job.id) return true;
+        if (!attachmentSetHash) return sourceIds.length !== 1 || record.sourceRecord.id !== jobFile.job.sourceId;
+        return record.sourceRecord.metadata.agentTurnAttachmentOrdinal !== ordinal ||
+          record.sourceRecord.metadata.agentTurnAttachmentSetHash !== attachmentSetHash ||
+          record.sourceRecord.original?.checksum !== sourceRefs[ordinal]?.checksum;
+      });
+      if (bindingChanged) {
         this.#markJobFailedFinal(
           jobFile.path,
           jobFile.job,
@@ -1151,7 +1164,11 @@ export class JobsService {
         failed += 1;
         continue;
       }
-      this.attachAgentTurnSource(jobFile.job.id, jobFile.job.sourceId);
+      if (attachmentSetHash) {
+        this.attachAgentTurnSources(jobFile.job.id, sourceIds, attachmentSetHash);
+      } else {
+        this.attachAgentTurnSource(jobFile.job.id, sourceIds[0]!);
+      }
       linked += 1;
     }
     return { linked, waiting, failed };

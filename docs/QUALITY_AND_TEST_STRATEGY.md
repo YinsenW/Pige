@@ -320,6 +320,8 @@ Tests must verify:
   composer picker selection/removal causes zero Job/source/conversation/model/network
   effects until Send. Send/valid Enter atomically binds exact text plus ordered staged
   attachments to one parent Agent Job; attachment-only submit adds the minimal intent.
+  Failure preserves draft/files/order/turn identity for duplicate-free retry; restart
+  re-links every ordered Source/Page before tool use.
 - Large-paste contract tests load `resources/large-paste-boundary.manifest.json` and cover
   exact Unicode code-point edges (including surrogate pairs), no trim/normalization,
   ordinary insertion versus whole-payload staging, the eight-item mixed order, multiple
