@@ -1603,6 +1603,65 @@ describe("ManagedCollectionPanel", () => {
     dom.window.close();
   });
 
+  it("labels every Memory lifecycle Activity and forwards its exact safe target", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const opened: string[] = [];
+    await act(async () => {
+      root.render(createElement(ActivityHistorySettingsPanel, {
+        activities: [
+          {
+            operationId: "op_20260730_memoryupdate01",
+            kind: "update_memory",
+            createdAt: "2026-07-30T08:00:00.000Z",
+            targetLabel: "Concise summaries",
+            target: { kind: "memory", memoryId: "memory_20260730_concisesummaries" },
+            status: "applied",
+            canUndo: true,
+          },
+          {
+            operationId: "op_20260730_memorytrash01",
+            kind: "trash_memory",
+            createdAt: "2026-07-30T08:01:00.000Z",
+            targetLabel: "Review preference",
+            target: { kind: "memory", memoryId: "memory_20260730_reviewpreference" },
+            status: "applied",
+            canUndo: true,
+          },
+          {
+            operationId: "op_20260730_memoryrestore01",
+            kind: "restore_memory",
+            createdAt: "2026-07-30T08:02:00.000Z",
+            targetLabel: "Writing style",
+            target: { kind: "memory", memoryId: "memory_20260730_writingstyle" },
+            status: "applied",
+            canUndo: false,
+          },
+        ],
+        undoingId: null,
+        openingId: null,
+        blockedIds: [],
+        locale: "en",
+        onOpen: async (activity) => { opened.push(activity.operationId); },
+        onUndo: async () => undefined,
+        t,
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    expect(container.textContent).toContain("Memory updated: Concise summaries");
+    expect(container.textContent).toContain("Memory moved to trash: Review preference");
+    expect(container.textContent).toContain("Memory restored: Writing style");
+    const exactOpen = requireElement(container.querySelector<HTMLButtonElement>(
+      '[data-activity-open-id="op_20260730_memoryupdate01"]',
+    ));
+    await click(dom, exactOpen);
+    expect(opened).toEqual(["op_20260730_memoryupdate01"]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("labels a trashed collection row and keeps forward Undo available through Activity", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);

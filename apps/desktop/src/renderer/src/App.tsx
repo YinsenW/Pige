@@ -26,7 +26,10 @@ import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDia
 import { PermissionsPrivacySettingsPanel } from "./components/PermissionsPrivacySettingsPanel";
 import { VaultMigrationDialog } from "./components/VaultMigrationDialog";
 import { TaskExecutionInteractionStatus } from "./components/TaskExecutionInteraction";
-import { AgentMemorySettingsPanel } from "./components/AgentMemorySettingsPanel";
+import {
+  AgentMemorySettingsPanel,
+  type AgentMemoryFocusRequest,
+} from "./components/AgentMemorySettingsPanel";
 import { ManagedCollectionCitationPanel, ManagedCollectionPanel } from "./components/ManagedCollectionPanel";
 import { LocalCapabilitiesSettingsPanel } from "./components/LocalCapabilitiesSettingsPanel";
 import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
@@ -403,6 +406,8 @@ export function App(): React.JSX.Element {
   const [activityList, setActivityList] = useState<KnowledgeActivityListResult | null>(null);
   const [activityUndoingId, setActivityUndoingId] = useState<string | null>(null);
   const [activityOpeningId, setActivityOpeningId] = useState<string | null>(null);
+  const [memoryActivityFocusRequest, setMemoryActivityFocusRequest] =
+    useState<AgentMemoryFocusRequest | null>(null);
   const [activityBlockedIds, setActivityBlockedIds] = useState<readonly string[]>([]);
   const [libraryList, setLibraryList] = useState<LibraryListResult | null>(null);
   const [collectionCatalog, setCollectionCatalog] = useState<CollectionListResult | null>(null);
@@ -751,6 +756,7 @@ export function App(): React.JSX.Element {
         setNoteAgentOpen(false);
         setActivityList(null);
         setActivityOpeningId(null);
+        setMemoryActivityFocusRequest(null);
         activityOpenInFlightRef.current = null;
       }
       setOnboarding(nextOnboarding);
@@ -1023,6 +1029,12 @@ export function App(): React.JSX.Element {
   };
 
   const closeSettings = (): void => {
+    if (memoryActivityFocusRequest) {
+      activityOpenSequence.current += 1;
+      activityOpenInFlightRef.current = null;
+      setActivityOpeningId(null);
+      setMemoryActivityFocusRequest(null);
+    }
     setSettingsOpen(false);
     setDevelopmentNotice(null);
     void refreshVaultState().catch(() => {
@@ -1747,13 +1759,22 @@ export function App(): React.JSX.Element {
       activityOpenInFlightRef.current ||
       !originVaultId ||
       originVaultId !== activeVaultIdRef.current ||
-      !target ||
-      target.kind === "memory"
+      !target
     ) return;
     const requestId = activityOpenSequence.current + 1;
     activityOpenSequence.current = requestId;
     activityOpenInFlightRef.current = activity.operationId;
     setActivityOpeningId(activity.operationId);
+    if (target.kind === "memory") {
+      setMemoryActivityFocusRequest({
+        activeVaultId: originVaultId,
+        operationId: activity.operationId,
+        ...(target.memoryId ? { memoryId: target.memoryId } : {}),
+      });
+      setSettingsSection("memory");
+      setDevelopmentNotice(null);
+      return;
+    }
     const opened = target.kind === "page"
       ? await openNoteTarget(target.pageId, false)
       : await openCollection(target.datasetId, target.tableId, "library");
@@ -1773,6 +1794,40 @@ export function App(): React.JSX.Element {
     setSettingsOpen(false);
     activityOpenInFlightRef.current = null;
     setActivityOpeningId(null);
+  };
+
+  const settleMemoryActivityFocus = (
+    operationId: string,
+    outcome: "focused" | "missing" | "failed",
+  ): void => {
+    const request = memoryActivityFocusRequest;
+    if (
+      !request ||
+      request.operationId !== operationId ||
+      request.activeVaultId !== activeVaultIdRef.current ||
+      activityOpenInFlightRef.current !== operationId
+    ) return;
+    const currentActivity = activityList?.activities.find(
+      (candidate) => candidate.operationId === operationId,
+    );
+    if (
+      activityList?.activeVaultId !== request.activeVaultId ||
+      currentActivity?.target?.kind !== "memory" ||
+      currentActivity.target.memoryId !== request.memoryId
+    ) {
+      activityOpenInFlightRef.current = null;
+      setActivityOpeningId(null);
+      setMemoryActivityFocusRequest(null);
+      setSettingsSection("history");
+      if (currentActivity) restoreActivityOpenFocus(operationId);
+      return;
+    }
+    activityOpenInFlightRef.current = null;
+    setActivityOpeningId(null);
+    setMemoryActivityFocusRequest(null);
+    if (outcome !== "failed") return;
+    setSettingsSection("history");
+    restoreActivityOpenFocus(operationId);
   };
 
   const handleDragEnter = (event: DragEvent<HTMLElement>): void => {
@@ -2570,6 +2625,12 @@ export function App(): React.JSX.Element {
           availableLocales={availableLocales}
           developmentNotice={developmentNotice?.surface === "settings" ? developmentNotice : null}
           onSectionChange={(section) => {
+            if (memoryActivityFocusRequest) {
+              activityOpenSequence.current += 1;
+              activityOpenInFlightRef.current = null;
+              setActivityOpeningId(null);
+              setMemoryActivityFocusRequest(null);
+            }
             setSettingsSection(section);
             setDevelopmentNotice(null);
           }}
@@ -2681,6 +2742,8 @@ export function App(): React.JSX.Element {
           ) : settingsSection === "memory" ? (
             <AgentMemorySettingsPanel
               activeVaultId={activeVault?.vaultId ?? null}
+              focusRequest={memoryActivityFocusRequest}
+              onFocusRequestSettled={settleMemoryActivityFocus}
               t={t}
             />
           ) : settingsSection === "privacy" ? (
@@ -2797,6 +2860,21 @@ function restoreActivityFocus(operationId: string): void {
       .find((element) => element.dataset.activityRowId === operationId);
     const composer = document.querySelector<HTMLTextAreaElement>('[data-home-composer="true"]');
     (undoButton ?? activityRow ?? composer)?.focus();
+  }, 0);
+}
+
+function restoreActivityOpenFocus(operationId: string): void {
+  window.setTimeout(() => {
+    const openButton = Array.from(
+      document.querySelectorAll<HTMLButtonElement>("[data-activity-open-id]"),
+    ).find(
+      (element) =>
+        element.dataset.activityOpenId === operationId && !element.disabled,
+    );
+    const activityRow = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-activity-row-id]"),
+    ).find((element) => element.dataset.activityRowId === operationId);
+    (openButton ?? activityRow)?.focus();
   }, 0);
 }
 
@@ -7680,6 +7758,12 @@ export function ActivityHistorySettingsPanel(props: {
                   ? "activity.createdCollectionView"
                 : activity.kind === "update_page"
                   ? "activity.updatedPage"
+                : activity.kind === "update_memory"
+                  ? "activity.updatedMemory"
+                : activity.kind === "trash_memory"
+                  ? "activity.trashedMemory"
+                : activity.kind === "restore_memory"
+                  ? "activity.restoredMemory"
                   : "activity.createdPage";
               const activityLabel = `${props.t(activityMessageKey)}${activity.targetLabel ? `: ${activity.targetLabel}` : ""} (${index + 1})`;
               const createdAt = new Date(activity.createdAt);

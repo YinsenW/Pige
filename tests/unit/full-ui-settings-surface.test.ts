@@ -4924,6 +4924,116 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("focuses an authoritative Memory Activity target and falls back to the panel heading", async () => {
+    const dom = createDom();
+    const summary = memorySummary(4, "active");
+    const settled = vi.fn();
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        memory: {
+          list: vi.fn(async () => summary),
+          disable: vi.fn(),
+          edit: vi.fn(),
+          enable: vi.fn(),
+          delete: vi.fn(),
+          export: vi.fn(),
+          reset: vi.fn(),
+        },
+      },
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(AgentMemorySettingsPanel, {
+        activeVaultId: summary.activeVaultId,
+        focusRequest: {
+          activeVaultId: summary.activeVaultId,
+          operationId: "op_20260730_memoryopen01",
+          memoryId: "memory_20260727_concisestyle",
+        },
+        onFocusRequestSettled: settled,
+        t,
+      }));
+      await settle(dom);
+    });
+
+    expect(dom.window.document.activeElement).toBe(
+      buttonNamed(dom.window.document, "Edit: Concise source summaries"),
+    );
+    expect(settled).toHaveBeenLastCalledWith(
+      "op_20260730_memoryopen01",
+      "focused",
+    );
+
+    await act(async () => {
+      root.render(createElement(AgentMemorySettingsPanel, {
+        activeVaultId: summary.activeVaultId,
+        focusRequest: {
+          activeVaultId: summary.activeVaultId,
+          operationId: "op_20260730_memorymissing01",
+          memoryId: "memory_20260730_missingrecord",
+        },
+        onFocusRequestSettled: settled,
+        t,
+      }));
+      await settle(dom);
+    });
+    const heading = requireElement(dom.window.document.querySelector<HTMLHeadingElement>(
+      "#settings-memory-title",
+    ));
+    expect(dom.window.document.activeElement).toBe(heading);
+    expect(settled).toHaveBeenLastCalledWith(
+      "op_20260730_memorymissing01",
+      "missing",
+    );
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("reports a Memory Activity load failure without stealing invoking focus", async () => {
+    const dom = createDom();
+    const origin = dom.window.document.createElement("button");
+    origin.textContent = "Open memory activity";
+    dom.window.document.body.append(origin);
+    origin.focus();
+    const settled = vi.fn();
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        memory: {
+          list: vi.fn(async () => Promise.reject(new Error("unavailable"))),
+        },
+      },
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(AgentMemorySettingsPanel, {
+        activeVaultId: "vault_20260727_memoryfixture",
+        focusRequest: {
+          activeVaultId: "vault_20260727_memoryfixture",
+          operationId: "op_20260730_memoryfailed01",
+          memoryId: "memory_20260727_concisestyle",
+        },
+        onFocusRequestSettled: settled,
+        t,
+      }));
+      await settle(dom);
+    });
+
+    expect(settled).toHaveBeenCalledWith(
+      "op_20260730_memoryfailed01",
+      "failed",
+    );
+    expect(dom.window.document.activeElement).toBe(origin);
+    expect(dom.window.document.querySelector('[role="alert"]')?.textContent).toContain(
+      "Memory unavailable",
+    );
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("manages the reversible vault memory lifecycle with exact CAS and quiet cancellation", async () => {
     const dom = createDom();
     const activeSummary = memorySummary(4, "active");

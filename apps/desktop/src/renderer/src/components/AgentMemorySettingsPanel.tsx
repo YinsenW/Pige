@@ -28,7 +28,18 @@ function createMemoryRequestId(): string {
 
 export interface AgentMemorySettingsPanelProps {
   readonly activeVaultId: string | null;
+  readonly focusRequest?: AgentMemoryFocusRequest | null;
+  readonly onFocusRequestSettled?: (
+    operationId: string,
+    outcome: "focused" | "missing" | "failed",
+  ) => void;
   readonly t: Translate;
+}
+
+export interface AgentMemoryFocusRequest {
+  readonly activeVaultId: string;
+  readonly operationId: string;
+  readonly memoryId?: string;
 }
 
 export function AgentMemorySettingsPanel(
@@ -53,6 +64,8 @@ export function AgentMemorySettingsPanel(
   const editCompositionRef = useRef(false);
   const editTitleRef = useRef<HTMLInputElement>(null);
   const editTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const panelHeadingRef = useRef<HTMLHeadingElement>(null);
+  const settledFocusRequestRef = useRef<string | null>(null);
   const restoreEditFocusRef = useRef<string | null>(null);
   const resetTriggerRef = useRef<HTMLButtonElement>(null);
   const resetConfirmRef = useRef<HTMLButtonElement>(null);
@@ -114,6 +127,38 @@ export function AgentMemorySettingsPanel(
   useEffect(() => {
     if (resetConfirmationOpen) resetConfirmRef.current?.focus();
   }, [resetConfirmationOpen]);
+
+  useEffect(() => {
+    const request = props.focusRequest;
+    if (!request) {
+      settledFocusRequestRef.current = null;
+      return;
+    }
+    if (request.activeVaultId !== props.activeVaultId) return;
+    const requestKey = `${request.activeVaultId}:${request.operationId}:${request.memoryId ?? "missing"}`;
+    if (settledFocusRequestRef.current === requestKey) return;
+    if (readState === "failed") {
+      settledFocusRequestRef.current = requestKey;
+      props.onFocusRequestSettled?.(request.operationId, "failed");
+      return;
+    }
+    if (readState !== "ready" || summary?.activeVaultId !== request.activeVaultId) return;
+    settledFocusRequestRef.current = requestKey;
+    const exactTrigger = request.memoryId
+      ? editTriggerRefs.current.get(request.memoryId)
+      : undefined;
+    (exactTrigger ?? panelHeadingRef.current)?.focus();
+    props.onFocusRequestSettled?.(
+      request.operationId,
+      exactTrigger ? "focused" : "missing",
+    );
+  }, [
+    props.activeVaultId,
+    props.focusRequest,
+    props.onFocusRequestSettled,
+    readState,
+    summary,
+  ]);
 
   useEffect(() => {
     if (editDraft) {
@@ -426,7 +471,9 @@ export function AgentMemorySettingsPanel(
       aria-labelledby="settings-memory-title"
     >
       <header className="settings-panel-header">
-        <h1 id="settings-memory-title">{props.t("memory.title")}</h1>
+        <h1 ref={panelHeadingRef} id="settings-memory-title" tabIndex={-1}>
+          {props.t("memory.title")}
+        </h1>
         <p>{props.t("memory.subtitle")}</p>
       </header>
 
