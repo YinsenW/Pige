@@ -220,6 +220,45 @@ describe("registerSkillsIpc", () => {
     expect(publishRegistryChanged).toHaveBeenCalledTimes(1);
   });
 
+  it("owns the installed local update picker and never projects its selected path", async () => {
+    const showOpenDialog = vi.fn(async () => ({ canceled: false, filePaths: ["/tmp/reviewed-update.zip"] }));
+    const stageUpdate = vi.fn((request, selectedPath) => ({
+      apiVersion: 1 as const,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      skillId: request.skillId,
+      status: "cancelled" as const
+    }));
+    const ready = register({ resolveUpdateSource: () => "local_zip", showOpenDialog, stageUpdate });
+    const request = lifecycleRequest();
+    const result = await ready.handlers.get("skills.stageUpdate")?.({ sender: {} }, request);
+    expect(result).toEqual({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      skillId: request.skillId,
+      status: "cancelled"
+    });
+    expect(showOpenDialog).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      properties: ["openFile"],
+      filters: [{ name: "ZIP archive", extensions: ["zip"] }]
+    }));
+    expect(stageUpdate).toHaveBeenCalledWith(request, "/tmp/reviewed-update.zip");
+    expect(JSON.stringify(result)).not.toContain("/tmp/reviewed-update.zip");
+
+    const cancelledStage = vi.fn();
+    const cancelled = register({
+      resolveUpdateSource: () => "local_markdown",
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      stageUpdate: cancelledStage
+    });
+    expect(await cancelled.handlers.get("skills.stageUpdate")?.({ sender: {} }, request))
+      .toMatchObject({ status: "cancelled" });
+    expect(cancelledStage).not.toHaveBeenCalled();
+    await expect(ready.handlers.get("skills.stageUpdate")?.({ sender: {} }, { ...request, path: "/tmp/forbidden.zip" }))
+      .rejects.toThrow();
+  });
+
   it("rejects malformed requests and mismatched service identities before publication", async () => {
     const { handlers, publishRegistryChanged } = register({
       stageFromUrl: () => ({ status: "invalid", requestId: "skillreq_ffffffffffffffff", reason: "manifest_invalid" })

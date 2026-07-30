@@ -8,8 +8,6 @@ import {
   ConversationEventIdSchema,
   deriveSkillDataBoundaries,
   JobIdSchema,
-  SkillCapabilityListSchema,
-  SkillDataBoundaryListSchema,
   SkillDiscardStagedRequestSchema,
   SkillDiscardStagedResultSchema,
   SkillInstallStagedRequestSchema,
@@ -53,6 +51,8 @@ import {
   SkillRegistryService
 } from "./skill-registry-service";
 import {
+  isSkillUpdateStageRecord,
+  projectPureSkillUpdateReview,
   type SkillStagedInstallCandidate,
   type SkillStagedUpdateBinding,
   type SkillUpdateTarget,
@@ -97,6 +97,7 @@ interface SkillUrlStageRecord extends SkillStageRecordBase {
 
 interface SkillLocalMarkdownStageRecord extends SkillStageRecordBase {
   readonly sourceKind: "local_markdown" | "local_zip";
+  readonly update?: SkillUpdateTarget;
 }
 
 type SkillStageRecord = SkillUrlStageRecord | SkillLocalMarkdownStageRecord;
@@ -375,6 +376,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
 
   async stageUpdate(
     requestInput: SkillStageUpdateRequest,
+    selectedPath?: string,
     signal: AbortSignal = new AbortController().signal
   ): Promise<SkillStageUpdateResult> {
     const request = SkillStageUpdateRequestSchema.parse(requestInput);
@@ -387,7 +389,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       signal.throwIfAborted();
       const existing = this.#readCandidate(stagingId);
       if (existing) {
-        if (isLocalMarkdownRecord(existing.record) || !existing.record.update ||
+        if (!existing.record.update ||
           !sameUpdateBinding(existing.record.update, target)) return updateFailed(identity);
         if (!isExpired(existing.record.expiresAt, this.#now())) {
           return SkillStageUpdateResultSchema.parse({ ...identity, status: "ready", staged: this.#project(existing) });
@@ -395,55 +397,90 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
         this.#removeStage(stagingId, existing.record.manifestSha256, existing.record.bundleSha256);
       }
 
-      const snapshot = await this.#fetcher.fetchSnapshot(target.sourceUrl, signal);
-      signal.throwIfAborted();
-      const finalSourceUrl = SkillInstallUrlSchema.safeParse(snapshot.finalUrl);
-      if (!finalSourceUrl.success || finalSourceUrl.data !== target.sourceUrl || !isMarkdownContentType(snapshot.contentType)) {
-        return updateFailed(identity);
+      let bundle: SkillZipBundle;
+      let sourceUrl: string | undefined;
+      if (target.sourceKind) {
+        if (!selectedPath) return updateFailed(identity);
+        const selectedKind = target.sourceKind === "local_file"
+          ? path.extname(selectedPath).toLocaleLowerCase("en-US") === ".zip" ? "local_zip" : "local_markdown"
+          : target.sourceKind;
+        if (selectedKind === "local_markdown") {
+          const bytes = readSelectedMarkdown(selectedPath);
+          bundle = { ...singleManifestBundle(bytes), manifestBytes: bytes, manifestSha256: digest(bytes) };
+        } else {
+          bundle = await this.#zipStage.readSelectedArchive(selectedPath);
+        }
+      } else {
+        const snapshot = await this.#fetcher.fetchSnapshot(target.sourceUrl, signal);
+        signal.throwIfAborted();
+        const finalSourceUrl = SkillInstallUrlSchema.safeParse(snapshot.finalUrl);
+        if (!finalSourceUrl.success || finalSourceUrl.data !== target.sourceUrl || !isMarkdownContentType(snapshot.contentType)) {
+          return updateFailed(identity);
+        }
+        const bytes = Buffer.from(snapshot.rawContent, "utf8");
+        if (bytes.length === 0 || bytes.length > SKILL_URL_STAGE_MAX_UTF8_BYTES ||
+          snapshot.rawContent.includes("\uFFFD") || containsRestrictedModelContent(snapshot.rawContent)) {
+          return updateFailed(identity);
+        }
+        bundle = { ...singleManifestBundle(bytes), manifestBytes: bytes, manifestSha256: digest(bytes) };
+        sourceUrl = target.sourceUrl;
       }
-      const bytes = Buffer.from(snapshot.rawContent, "utf8");
-      if (bytes.length === 0 || bytes.length > SKILL_URL_STAGE_MAX_UTF8_BYTES ||
-        snapshot.rawContent.includes("\uFFFD") || containsRestrictedModelContent(snapshot.rawContent)) {
-        return updateFailed(identity);
-      }
-      const manifest = parseSkillManifest(snapshot.rawContent);
+      const source = decodeUtf8(bundle.manifestBytes);
+      if (containsRestrictedModelContent(source)) return updateFailed(identity);
+      const manifest = parseSkillManifest(source);
       assertSkillManifestRendererSafe(manifest);
       const expectedKind = target.kind === "external_web" ? "external_web" : "pure";
       if (manifest.id !== target.skillId || manifest.scope !== "machine_local" || manifest.kind !== expectedKind ||
-        manifest.sourceUrl !== target.sourceUrl || !manifest.updatedAt) return updateFailed(identity);
-      const manifestSha256 = digest(bytes);
+        manifest.sourceUrl !== sourceUrl || !manifest.updatedAt) return updateFailed(identity);
+      const manifestSha256 = bundle.manifestSha256;
       const refreshed = this.#registry.resolveUpdateTarget(request);
       if (refreshed.status === "result") return refreshed.result;
       if (!sameUpdateTarget(refreshed.target, target)) return updateFailed(identity);
-      if (manifestSha256 === target.installedManifestSha256) {
+      if (target.sourceKind
+        ? bundle.bundleSha256 === target.installedBundleSha256
+        : manifestSha256 === target.installedManifestSha256) {
         return this.#registry.stageUpdateResult(request, "current");
       }
       if (manifest.version === target.installedVersion ||
         Date.parse(manifest.updatedAt) <= Date.parse(target.installedUpdatedAt)) return updateFailed(identity);
 
-      const bundle = singleManifestBundle(bytes);
       const now = this.#now();
-      const record: SkillStageRecord = {
+      const baseRecord: SkillStageRecordBase = {
         schemaVersion: STAGE_SCHEMA_VERSION,
         requestId: request.requestId,
         stagingId,
-        requestSourceUrl: target.sourceUrl,
-        finalSourceUrl: target.sourceUrl,
         manifestSha256,
         bundleSha256: bundle.bundleSha256,
         files: projectFiles(bundle.files),
         createdAt: now.toISOString(),
-        expiresAt: new Date(now.getTime() + STAGE_TTL_MS).toISOString(),
+        expiresAt: new Date(now.getTime() + STAGE_TTL_MS).toISOString()
+      };
+      const record: SkillStageRecord = target.sourceKind ? {
+        ...baseRecord,
+        sourceKind: target.sourceKind === "local_file"
+          ? path.extname(selectedPath!).toLocaleLowerCase("en-US") === ".zip" ? "local_zip" : "local_markdown"
+          : target.sourceKind,
+        update: target
+      } : {
+        ...baseRecord,
+        requestSourceUrl: target.sourceUrl,
+        finalSourceUrl: target.sourceUrl,
         update: target
       };
       this.#publishStage(record, bundle.files);
       const staged = this.#readCandidate(stagingId);
-      if (!staged || isLocalMarkdownRecord(staged.record) || staged.record.manifestSha256 !== manifestSha256 ||
+      if (!staged || staged.record.manifestSha256 !== manifestSha256 ||
         !staged.record.update || !sameUpdateBinding(staged.record.update, target)) return updateFailed(identity);
       return SkillStageUpdateResultSchema.parse({ ...identity, status: "ready", staged: this.#project(staged) });
     } catch {
       return updateFailed(identity);
     }
+  }
+
+  resolveUpdateSource(requestInput: SkillStageUpdateRequest): "https" | "local_markdown" | "local_zip" | "local_file" | undefined {
+    const resolution = this.#registry.resolveUpdateTarget(SkillStageUpdateRequestSchema.parse(requestInput));
+    if (resolution.status !== "ready") return undefined;
+    return resolution.target.sourceKind ?? "https";
   }
 
   installStaged(requestInput: SkillInstallStagedRequest): SkillInstallStagedResult {
@@ -474,7 +511,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       bytes: current.bytes,
       files: current.files,
       warnings: this.#warnings(current),
-      ...(!isLocalMarkdownRecord(current.record) && current.record.update ? { update: current.record.update } : {})
+      ...(current.record.update ? { update: current.record.update } : {})
     };
   }
 
@@ -490,7 +527,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       stagingId: candidate.record.stagingId,
       manifestSha256: candidate.record.manifestSha256,
       bundleSha256: candidate.record.bundleSha256,
-      registryRevision: (!isLocalMarkdownRecord(candidate.record) ? candidate.record.update?.expectedRegistryRevision : undefined) ??
+      registryRevision: candidate.record.update?.expectedRegistryRevision ??
         this.#registry.currentRevision(),
       expiresAt: candidate.record.expiresAt,
       ...(!isLocalMarkdownRecord(candidate.record) ? { sourceUrl: candidate.record.finalSourceUrl } : {}),
@@ -505,6 +542,9 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       ...(manifest.kind === "external_web" ? { source: stageSource(candidate.record) } : {}),
       ...(!isLocalMarkdownRecord(candidate.record) && candidate.record.update?.kind === "external_web" ? {
         externalUpdateReview: externalUpdateReview(candidate.record.update, manifest)
+      } : {}),
+      ...(candidate.record.update && candidate.record.update.kind !== "external_web" ? {
+        pureUpdateReview: projectPureSkillUpdateReview(candidate.record.update, candidate.record.files)
       } : {}),
       ...(manifest.runtime ? { runtime: manifest.runtime } : {}),
       ...(manifest.author ? { author: manifest.author } : {}),
@@ -641,9 +681,15 @@ function parseStageRecord(bytes: Buffer): SkillStageRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw stageInvalid();
   const record = value as Record<string, unknown>;
   const keys = Object.keys(record).sort().join(",");
-  const isLocal = keys === "bundleSha256,createdAt,expiresAt,files,manifestSha256,requestId,schemaVersion,sourceKind,stagingId" &&
+  const isLocal = [
+    "bundleSha256,createdAt,expiresAt,files,manifestSha256,requestId,schemaVersion,sourceKind,stagingId",
+    "bundleSha256,createdAt,expiresAt,files,manifestSha256,requestId,schemaVersion,sourceKind,stagingId,update"
+  ].includes(keys) &&
     (record.sourceKind === "local_markdown" || record.sourceKind === "local_zip") && typeof record.requestId === "string" &&
-    /^skillreq_[a-z0-9]{16,64}$/u.test(record.requestId);
+    (/^skillreq_[a-z0-9]{16,64}$/u.test(record.requestId) || isSkillUpdateStageRecord(record)) &&
+    (record.update === undefined || [record.sourceKind, "local_file"].includes(
+      String((record.update as Record<string, unknown>).sourceKind)
+    ));
   let chatBindingValid = true;
   if (record.chat !== undefined) {
     try {
@@ -658,7 +704,7 @@ function parseStageRecord(bytes: Buffer): SkillStageRecord {
     "bundleSha256,createdAt,expiresAt,files,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId,update"
   ].includes(keys) &&
     (SkillStageFromUrlRequestSchema.safeParse({ apiVersion: 1, requestId: record.requestId, sourceUrl: record.requestSourceUrl }).success ||
-      isUpdateRecord(record)) && SkillInstallUrlSchema.safeParse(record.finalSourceUrl).success &&
+      isSkillUpdateStageRecord(record)) && SkillInstallUrlSchema.safeParse(record.finalSourceUrl).success &&
     chatBindingValid &&
     !(record.chat !== undefined && record.update !== undefined);
   if (
@@ -924,32 +970,7 @@ function sameUpdateBinding(left: SkillStagedUpdateBinding, right: SkillStagedUpd
 }
 
 function sameUpdateTarget(left: SkillUpdateTarget, right: SkillUpdateTarget): boolean {
-  return left.sourceUrl === right.sourceUrl && sameUpdateBinding(left, right);
-}
-
-function isUpdateRecord(record: Record<string, unknown>): boolean {
-  if (!record.update || typeof record.update !== "object" || Array.isArray(record.update)) return false;
-  const update = record.update as Record<string, unknown>;
-  const keys = Object.keys(update).sort().join(",");
-  const pureKeys = "activeVaultId,enabled,expectedRegistryRevision,installedManifestSha256,installedUpdatedAt,installedVersion,skillId,sourceUrl";
-  const externalKeys = "activeVaultId,enabled,expectedRegistryRevision,installedBundleSha256,installedCapabilities,installedDataBoundaries,installedInstallReceiptSha256,installedManifestSha256,installedUpdatedAt,installedVersion,kind,skillId,sourceUrl";
-  const external = keys === externalKeys && update.kind === "external_web";
-  return (keys === pureKeys || external) &&
-    SkillStageUpdateRequestSchema.safeParse({
-      apiVersion: 1,
-      requestId: record.requestId,
-      activeVaultId: update.activeVaultId,
-      skillId: update.skillId,
-      expectedRegistryRevision: update.expectedRegistryRevision
-    }).success && update.sourceUrl === record.requestSourceUrl && update.sourceUrl === record.finalSourceUrl &&
-    SkillInstallUrlSchema.safeParse(update.sourceUrl).success && typeof update.enabled === "boolean" &&
-    typeof update.installedManifestSha256 === "string" && /^sha256:[a-f0-9]{64}$/u.test(update.installedManifestSha256) &&
-    typeof update.installedVersion === "string" && typeof update.installedUpdatedAt === "string" &&
-    (!external || (typeof update.installedBundleSha256 === "string" && /^sha256:[a-f0-9]{64}$/u.test(update.installedBundleSha256) &&
-      typeof update.installedInstallReceiptSha256 === "string" && /^sha256:[a-f0-9]{64}$/u.test(update.installedInstallReceiptSha256) &&
-      SkillCapabilityListSchema.safeParse(update.installedCapabilities).success &&
-      SkillDataBoundaryListSchema.safeParse(update.installedDataBoundaries).success)) &&
-    Number.isFinite(Date.parse(update.installedUpdatedAt));
+  return left.sourceUrl === right.sourceUrl && left.sourceKind === right.sourceKind && sameUpdateBinding(left, right);
 }
 
 function externalUpdateReview(update: SkillStagedUpdateBinding, manifest: SkillManifest) {

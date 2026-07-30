@@ -78,8 +78,13 @@ interface RegisterSkillsIpcOptions {
     sourcePath: string
   ) => SkillStageFromZipResult | Promise<SkillStageFromZipResult>;
   readonly stageUpdate: (
-    request: SkillStageUpdateRequest
+    request: SkillStageUpdateRequest,
+    sourcePath?: string
   ) => SkillStageUpdateResult | Promise<SkillStageUpdateResult>;
+  readonly resolveUpdateSource?: (
+    request: SkillStageUpdateRequest
+  ) => "https" | "local_markdown" | "local_zip" | "local_file" | undefined |
+    Promise<"https" | "local_markdown" | "local_zip" | "local_file" | undefined>;
   readonly installStaged: (
     request: SkillInstallStagedRequest
   ) => SkillInstallStagedResult | Promise<SkillInstallStagedResult>;
@@ -186,11 +191,34 @@ export function registerSkillsIpc(options: RegisterSkillsIpcOptions): void {
       return zipStatus(parsed, "failed");
     }
   });
-  options.ipcMain.handle("skills.stageUpdate", async (_event, request: unknown) => {
+  options.ipcMain.handle("skills.stageUpdate", async (event, request: unknown) => {
     const parsed = SkillStageUpdateRequestSchema.parse(request);
     if (!hasActiveVault(options, parsed.activeVaultId)) return stageUpdateFailed(parsed);
-    const result = SkillStageUpdateResultSchema.parse(await options.stageUpdate(parsed));
+    let sourcePath: string | undefined;
+    try {
+      const source = await options.resolveUpdateSource?.(parsed) ?? "https";
+      if (source === "local_markdown" || source === "local_zip" || source === "local_file") {
+        const window = options.getWindow(event.sender);
+        if (!window) return stageUpdateFailed(parsed);
+        const selection = await options.showOpenDialog(window, {
+          title: source === "local_markdown" ? "Update Skill from Markdown"
+            : source === "local_zip" ? "Update Skill from ZIP" : "Update Skill from File",
+          properties: ["openFile"],
+          filters: source === "local_markdown" ? [{ name: "Markdown", extensions: ["md"] }]
+            : source === "local_zip" ? [{ name: "ZIP archive", extensions: ["zip"] }]
+              : [{ name: "Skill file", extensions: ["md", "zip"] }]
+        });
+        if (!hasActiveVault(options, parsed.activeVaultId)) return stageUpdateFailed(parsed);
+        if (selection.canceled) return stageUpdateStatus(parsed, "cancelled");
+        if (selection.filePaths.length !== 1) return stageUpdateFailed(parsed);
+        sourcePath = selection.filePaths[0];
+      }
+    } catch {
+      return stageUpdateFailed(parsed);
+    }
+    const result = SkillStageUpdateResultSchema.parse(await options.stageUpdate(parsed, sourcePath));
     assertInstalledIdentity(parsed, result);
+    if (!hasActiveVault(options, parsed.activeVaultId)) return stageUpdateFailed(parsed);
     return result;
   });
   options.ipcMain.handle("skills.installStaged", async (_event, request: unknown) => {
@@ -313,12 +341,16 @@ function assertInstalledIdentity(
 }
 
 function stageUpdateFailed(request: SkillStageUpdateRequest): SkillStageUpdateResult {
+  return stageUpdateStatus(request, "failed");
+}
+
+function stageUpdateStatus(request: SkillStageUpdateRequest, status: "cancelled" | "failed"): SkillStageUpdateResult {
   return SkillStageUpdateResultSchema.parse({
     apiVersion: request.apiVersion,
     requestId: request.requestId,
     activeVaultId: request.activeVaultId,
     skillId: request.skillId,
-    status: "failed"
+    status
   });
 }
 

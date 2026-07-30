@@ -723,11 +723,11 @@ Events:
 - `settings.appearanceChanged`
 - `memory.changed`
 
-Skill IPC is body/path-free. Main owns fenced `.md`/`.zip` pickers; results expose safe metadata only.
-ZIP adds `invalid` and one non-executing Markdown/JSON bundle. Eligibility gates UI; HTTPS update
-binds source/base/revision. External/Web update revalidates the reviewed origin/manifest, discloses
-capability drift, commits disabled and adopts once. Pure update preserves enablement. Both trash
-prior bytes and CAS-adopt; restore revalidates private trash and returns disabled.
+Skill IPC is body/path-free. Main owns `.md`/`.zip` pickers; ZIP adds `invalid` and one inert bundle.
+`skills.stageUpdate` binds installed/base/registry identity: HTTPS reuses its origin; local pure Skills
+use a matching Main-picked file. Safe review precedes CAS trash/adoption. Pure updates preserve
+enablement; External/Web revalidates origin/manifest/capabilities and commits disabled. Restore
+returns disabled from verified trash.
 
 Pi Package IPC is path/body-free and `summary` authoritative. `catalogQuery` returns reviewed
 identity/disclosure. Install/uninstall/update/rollback confirm; pin/unpin and receipt-owned restore

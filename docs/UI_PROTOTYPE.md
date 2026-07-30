@@ -981,7 +981,8 @@ Staged: review identity, files, capabilities, boundary and warnings
 
 Main pickers cancel quietly; invalid ZIP closes and `ready` reuses review/`Install`. Explicit
 authored chat adds one HTTPS review adopted only here. No path/body appears. Actions require
-eligibility; Update binds vault/Skill/revision, uninstall confirms and export is pathless.
+eligibility; Update binds vault/Skill/revision and stages an HTTPS or Main-picked matching local
+source for the same review. Failure retains installed state; uninstall confirms and export is pathless.
 
 Focused high-risk dialog target:
 

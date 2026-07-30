@@ -391,11 +391,11 @@ export class SkillRegistryLifecycleStore {
       enabled: input.enabled,
       createdAt: input.createdAt
     } as const;
-    const externalUpdate = input.files !== undefined || input.installReceipt !== undefined;
+    const fullTreeUpdate = input.files !== undefined || input.installReceipt !== undefined;
     let expected: SkillUpdateReceipt = base;
-    if (externalUpdate) {
+    if (fullTreeUpdate) {
       if (!input.files || !input.installReceipt || skillBundleSha256(input.files) !== input.installReceipt.bundleSha256 ||
-        input.installReceipt.manifestSha256 !== input.newManifestSha256 || input.installReceipt.enabled ||
+        input.installReceipt.manifestSha256 !== input.newManifestSha256 || input.installReceipt.enabled !== input.enabled ||
         input.installReceipt.requestId !== requestId || input.installReceipt.stagingId !== input.stagingId) {
         throw lifecycleError("skill.update_payload_changed");
       }
@@ -487,6 +487,10 @@ export class SkillRegistryLifecycleStore {
     const expectedBundle = side === "old" ? receipt.oldBundleSha256 : receipt.newBundleSha256;
     const expectedInstallReceipt = side === "old" ? receipt.oldInstallReceiptSha256 : receipt.newInstallReceiptSha256;
     if (snapshot.bundleSha256 !== expectedBundle || digestStableJson(installReceipt) !== expectedInstallReceipt) {
+      throw lifecycleError("skill.update_payload_changed");
+    }
+    if (side === "new" && (installReceipt.enabled !== receipt.enabled ||
+      (receipt.enabled && installReceipt.source !== "local_markdown" && installReceipt.source !== "local_zip"))) {
       throw lifecycleError("skill.update_payload_changed");
     }
   }
@@ -671,7 +675,7 @@ export function parseInstallReceipt(source: string): SkillInstallReceipt {
       : [];
     const sourceUrl = record.sourceUrl === undefined ? undefined : SkillInstallUrlSchema.safeParse(record.sourceUrl);
     const remote = parsedSource.success && parsedSource.data === "https";
-    if (!parsedSource.success || record.enabled || parsedWarnings.length !== (record.warnings as unknown[]).length ||
+    if (!parsedSource.success || (remote && record.enabled) || parsedWarnings.length !== (record.warnings as unknown[]).length ||
       parsedWarnings.some((warning) => !warning.success) ||
       new Set(record.warnings as unknown[]).size !== (record.warnings as unknown[]).length ||
       remote !== Boolean(sourceUrl?.success) ||
@@ -738,7 +742,7 @@ function parseUpdateReceipt(source: string): SkillUpdateReceipt {
   const parsed = record as unknown as SkillUpdateReceipt;
   if (parsed.skillId !== parsed.oldRecord.id ||
     (parsed.schemaVersion === 1 && parsed.enabled !== parsed.oldRecord.enabled) ||
-    (parsed.schemaVersion === 2 && parsed.enabled !== false) ||
+    (parsed.schemaVersion === 2 && parsed.enabled !== false && parsed.enabled !== parsed.oldRecord.enabled) ||
     parsed.newManifestSha256 === parsed.oldRecord.manifestSha256) throw lifecycleError("skill.update_receipt_invalid");
   return parsed;
 }
