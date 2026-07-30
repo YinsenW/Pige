@@ -310,6 +310,7 @@ import { PiPackageUpdateService } from "./services/pi-package-update-service";
 import { PiPackageInstallTaskService } from "./services/pi-package-install-task-service";
 import { NotesService } from "./services/notes-service";
 import { NoteTrashService } from "./services/note-trash-service";
+import { NoteTrashRedoService } from "./services/note-trash-redo-service";
 import { NoteArchiveService } from "./services/note-archive-service";
 import { NoteTagService } from "./services/note-tag-service";
 import { NoteAliasService } from "./services/note-alias-service";
@@ -433,6 +434,7 @@ let libraryTagRenameService: LibraryTagRenameService | undefined;
 let libraryTopicRenameService: LibraryTopicRenameService | undefined;
 let notesService: NotesService | undefined;
 let noteTrashService: NoteTrashService | undefined;
+let noteTrashRedoService: NoteTrashRedoService | undefined;
 let conversationTrashService: ConversationTrashService | undefined;
 let noteArchiveService: NoteArchiveService | undefined;
 let noteTagService: NoteTagService | undefined;
@@ -1717,6 +1719,8 @@ const getNoteTrashService = (): NoteTrashService => {
   noteTrashService ??= new NoteTrashService(getVaultService(), getNotesService());
   return noteTrashService;
 };
+const getNoteTrashRedoService = (): NoteTrashRedoService =>
+  noteTrashRedoService ??= new NoteTrashRedoService(getVaultService());
 const getConversationTrashService = (): ConversationTrashService => {
   conversationTrashService ??= new ConversationTrashService(getVaultService(), collectionCitationConversationHistory);
   return conversationTrashService;
@@ -1768,7 +1772,11 @@ const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePo
   const tagRename = getLibraryTagRenameService();
   const topicRename = getLibraryTopicRenameService();
   return {
-    activitySummary: (operation, undo) => duplicateTopics.activitySummary(operation, undo) ?? rename.activitySummary(operation, undo) ?? topicRename.activitySummary(operation, undo) ?? tagRename.activitySummary(operation, undo) ?? merge.activitySummary(operation, undo) ?? trash.activitySummary(operation, undo),
+    activitySummary: (operation, undo) => {
+      const summary = duplicateTopics.activitySummary(operation, undo) ?? rename.activitySummary(operation, undo) ?? topicRename.activitySummary(operation, undo) ?? tagRename.activitySummary(operation, undo) ?? merge.activitySummary(operation, undo) ?? trash.activitySummary(operation, undo);
+      const redo = summary && getNoteTrashRedoService().activityState(operation, undo);
+      return summary && redo ? { ...summary, ...redo } : summary;
+    },
     findUndoOperation: (operation, operations) => duplicateTopics.findUndoOperation(operation, operations) ?? rename.findUndoOperation(operation, operations) ?? topicRename.findUndoOperation(operation, operations) ?? tagRename.findUndoOperation(operation, operations) ?? merge.findUndoOperation(operation, operations) ?? trash.findUndoOperation(operation, operations),
     undo: (operation) => duplicateTopics.activitySummary(operation) ? duplicateTopics.undo(operation) : rename.activitySummary(operation) ? rename.undo(operation) : topicRename.activitySummary(operation) ? topicRename.undo(operation) : tagRename.activitySummary(operation) ? tagRename.undo(operation) : merge.activitySummary(operation) ? merge.undo(operation) : trash.undo(operation),
     recoverIncompleteOperations: () => {
@@ -2359,8 +2367,9 @@ const resumeBackgroundJobs = (): void => {
     try {
       const activityRecovery = getKnowledgeActivityService().recoverIncompleteUndos();
       const redoRecovery = getNoteMarkdownEditorRedoService().recoverIncompleteRedos();
-      const recovered = activityRecovery.recovered + redoRecovery.recovered;
-      const failed = activityRecovery.failed + redoRecovery.failed;
+      const trashRedoRecovery = getNoteTrashRedoService().recoverIncompleteRedos();
+      const recovered = activityRecovery.recovered + redoRecovery.recovered + trashRedoRecovery.recovered;
+      const failed = activityRecovery.failed + redoRecovery.failed + trashRedoRecovery.failed;
       if (recovered > 0) scheduleActivityIndexRebuild();
       if (recovered > 0 || failed > 0) {
         getDiagnosticsService().recordEvent({
@@ -2973,7 +2982,10 @@ ipcMain.handle("activity.undo", async (_event, request: KnowledgeActivityUndoReq
   return result;
 });
 ipcMain.handle("activity.redo", (_event, request: KnowledgeActivityRedoRequest) => {
-  const result = getNoteMarkdownEditorRedoService().redo(request);
+  const trashResult = getNoteTrashRedoService().redo(request);
+  const result = trashResult.status === "not_found"
+    ? getNoteMarkdownEditorRedoService().redo(request)
+    : trashResult;
   if (result.status === "redone" || result.status === "already_redone") scheduleActivityIndexRebuild();
   return result;
 });
@@ -3467,6 +3479,7 @@ app.whenReady().then(async () => {
     getNotesService()
   );
   noteTrashService = new NoteTrashService(getVaultService(), getNotesService());
+  noteTrashRedoService = new NoteTrashRedoService(getVaultService());
   conversationTrashService = new ConversationTrashService(getVaultService(), collectionCitationConversationHistory);
   noteArchiveService = new NoteArchiveService(getNotesService(), noteMarkdownEditorService);
   noteTagService = new NoteTagService(getNotesService(), noteMarkdownEditorService);

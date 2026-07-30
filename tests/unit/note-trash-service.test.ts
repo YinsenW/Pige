@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NoteTrashService } from "../../apps/desktop/src/main/services/note-trash-service";
+import { NoteTrashRedoService } from "../../apps/desktop/src/main/services/note-trash-redo-service";
 import { NoteMarkdownEditorService } from "../../apps/desktop/src/main/services/note-markdown-editor-service";
 import { NotesService } from "../../apps/desktop/src/main/services/notes-service";
 import { KnowledgeActivityService } from "../../apps/desktop/src/main/services/knowledge-activity-service";
@@ -204,6 +205,76 @@ describe("NoteTrashService", () => {
     });
   });
 
+  it("redoes an undone note trash as one new recoverable Activity and can undo it again", async () => {
+    const fixture = createFixture();
+    const original = await trashAndUndo(fixture, "notetrashreq_redohappypath1234");
+    const redo = new NoteTrashRedoService(fixture.vaults, {
+      now: () => new Date("2026-07-30T12:01:00.000Z")
+    });
+
+    expect(redo.activityState(original.trash, original.undo)).toEqual({ canRedo: true });
+    const result = redo.redo({ operationId: original.trash.id });
+    expect(result).toMatchObject({
+      status: "redone",
+      operationId: original.trash.id,
+      undoOperationId: original.undo.id,
+      redoOperationId: expect.stringMatching(/^op_20260730_[a-f0-9]{16}$/u)
+    });
+    expect(fs.existsSync(fixture.pagePath)).toBe(false);
+    expect(readTrashFiles(fixture.vaultPath)).toEqual([fixture.content]);
+    expect(redo.redo({ operationId: original.trash.id })).toEqual({ ...result, status: "already_redone" });
+    expect(redo.activityState(original.trash, original.undo)).toEqual({
+      canRedo: false,
+      redoUnavailableReason: "already_redone"
+    });
+
+    const redoneOperation = readOperation(fixture.vaultPath, result.redoOperationId!);
+    expect(fixture.service.activitySummary(redoneOperation, undefined)).toMatchObject({
+      status: "applied",
+      canUndo: true,
+      targetLabel: "Recoverable note"
+    });
+    expect(fixture.service.undo(redoneOperation)).toMatchObject({
+      status: "undone",
+      operationId: redoneOperation.id
+    });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.content);
+  });
+
+  it("fails note trash Redo closed when the restored note changed", async () => {
+    const fixture = createFixture();
+    const original = await trashAndUndo(fixture, "notetrashreq_redodrift1234567");
+    fs.appendFileSync(fixture.pagePath, "\nExternal change.\n", "utf8");
+    const redo = new NoteTrashRedoService(fixture.vaults);
+
+    expect(redo.activityState(original.trash, original.undo)).toEqual({
+      canRedo: false,
+      redoUnavailableReason: "content_changed"
+    });
+    expect(redo.redo({ operationId: original.trash.id })).toMatchObject({ status: "stale" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain("External change.");
+    expect(readTrashFiles(fixture.vaultPath)).toEqual([]);
+  });
+
+  it("adopts a prepared note trash Redo after restart without duplicating its effect", async () => {
+    const fixture = createFixture();
+    const original = await trashAndUndo(fixture, "notetrashreq_redorestart12345");
+    const interrupted = new NoteTrashRedoService(fixture.vaults, {
+      now: () => new Date("2026-07-30T12:01:00.000Z"),
+      afterReceiptPersisted: () => { throw new Error("simulated process exit"); }
+    });
+    expect(interrupted.redo({ operationId: original.trash.id })).toMatchObject({ status: "stale" });
+    expect(fs.existsSync(fixture.pagePath)).toBe(true);
+
+    const restarted = new NoteTrashRedoService(fixture.vaults);
+    expect(restarted.recoverIncompleteRedos()).toEqual({ recovered: 1, failed: 0 });
+    expect(fs.existsSync(fixture.pagePath)).toBe(false);
+    expect(readTrashFiles(fixture.vaultPath)).toEqual([fixture.content]);
+    expect(restarted.redo({ operationId: original.trash.id })).toMatchObject({ status: "already_redone" });
+    expect(fixture.service.recoverIncompleteOperations()).toEqual({ recovered: 2, failed: 0 });
+    expect(readOperationKinds(fixture.vaultPath).filter((kind) => kind === "trash_page")).toHaveLength(2);
+  });
+
   it("fails stale without replacing a note that changed or reoccupied its original path", async () => {
     const changed = createFixture();
     const rendered = await changed.notes.render({ pageId: changed.pageId }, changed.ownerId);
@@ -293,6 +364,23 @@ function createFixture() {
       return `noteeditrev_${opened.revisionId.slice("sha256:".length)}`;
     }
   };
+}
+
+async function trashAndUndo(fixture: ReturnType<typeof createFixture>, requestId: string) {
+  const rendered = await fixture.notes.render({ pageId: fixture.pageId }, fixture.ownerId);
+  const result = fixture.service.trash(fixture.ownerId, {
+    apiVersion: 1,
+    requestId,
+    activeVaultId: fixture.vault.vaultId,
+    currentPageId: fixture.pageId,
+    renderContextId: rendered.renderContextId!,
+    expectedRevision: fixture.revision()
+  });
+  if (result.status !== "committed" || !result.operationId) throw new Error("The note was not trashed.");
+  const trash = readOperation(fixture.vaultPath, result.operationId);
+  const undone = fixture.service.undo(trash);
+  if (undone.status !== "undone" || !undone.undoOperationId) throw new Error("The note trash was not undone.");
+  return { trash, undo: readOperation(fixture.vaultPath, undone.undoOperationId) };
 }
 
 function readTrashFiles(vaultPath: string): string[] {

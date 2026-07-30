@@ -1852,6 +1852,8 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain('ipcMain.handle("activity.list"');
     expect(mainSource).toContain('ipcMain.handle("activity.undo"');
     expect(mainSource).toContain('ipcMain.handle("activity.redo"');
+    expect(mainUndoHandler).toContain("getNoteTrashRedoService().redo(request)");
+    expect(mainUndoHandler).toContain('trashResult.status === "not_found"');
     expect(mainSource).toContain("recoverIncompleteUndos()");
     expect(mainSource).toContain("recoverIncompleteRedos()");
     expect(mainSource).toContain("scheduleActivityIndexRebuild()");
