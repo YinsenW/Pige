@@ -786,9 +786,9 @@ Main trunk: Local-first
 
 ## 12. Knowledge Health
 
-Settings > Index & Maintenance owns the report. Eligible single broken links offer Remove
-or explicit Retarget to one existing page; commit reruns, other states preserve report/focus.
-No guessed target, model/network repair, body, path or raw error.
+Settings > Index & Maintenance owns the report. Eligible broken links offer Remove/Retarget;
+eligible orphans offer explicit selection of one current parent. Commit reruns; other states
+preserve report/focus. No guessed target, model/network repair, body, path or raw error.
 
 ## 13. Settings
 

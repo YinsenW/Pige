@@ -2675,6 +2675,13 @@ registerKnowledgeHealthIpc({
   runKnowledgeHealth: (vaultPath, request) => getKnowledgeHealthService().run(vaultPath, request),
   searchKnowledgeHealthTargets: (vaultPath, request) =>
     getKnowledgeHealthService().searchTargets(vaultPath, request),
+  searchKnowledgeHealthOrphanParents: (vaultPath, request) =>
+    getKnowledgeHealthService().searchOrphanParents(vaultPath, request),
+  repairKnowledgeHealthOrphan: (vaultPath, request) => {
+    const result = getKnowledgeHealthService().repairOrphan(vaultPath, request);
+    if (result.status === "committed") scheduleActivityIndexRebuild();
+    return result;
+  },
   repairKnowledgeHealth: (vaultPath, request) => getKnowledgeHealthService().repair(vaultPath, request)
 });
 registerLocalSemanticRetrievalIpc({

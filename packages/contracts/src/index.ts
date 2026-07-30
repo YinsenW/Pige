@@ -129,6 +129,11 @@ import type {
   KnowledgeHealthTargetCandidate,
   KnowledgeHealthTargetSearchRequest,
   KnowledgeHealthTargetSearchResult,
+  KnowledgeHealthOrphanParentCandidate,
+  KnowledgeHealthOrphanParentSearchRequest,
+  KnowledgeHealthOrphanParentSearchResult,
+  KnowledgeHealthOrphanRepairRequest,
+  KnowledgeHealthOrphanRepairResult,
   Locale,
   ManagedCopyRootConfigureRequest,
   ManagedCopyRootConfigureResult,
@@ -534,6 +539,11 @@ export type {
   KnowledgeHealthTargetCandidate,
   KnowledgeHealthTargetSearchRequest,
   KnowledgeHealthTargetSearchResult,
+  KnowledgeHealthOrphanParentCandidate,
+  KnowledgeHealthOrphanParentSearchRequest,
+  KnowledgeHealthOrphanParentSearchResult,
+  KnowledgeHealthOrphanRepairRequest,
+  KnowledgeHealthOrphanRepairResult,
   LibraryTagFacet,
   LibraryTaggedPageSummary,
   LibraryTagsCursor,
@@ -2274,6 +2284,12 @@ export interface PigeDesktopApi {
     readonly searchKnowledgeHealthTargets: (
       request: KnowledgeHealthTargetSearchRequest
     ) => Promise<KnowledgeHealthTargetSearchResult>;
+    readonly searchKnowledgeHealthOrphanParents: (
+      request: KnowledgeHealthOrphanParentSearchRequest
+    ) => Promise<KnowledgeHealthOrphanParentSearchResult>;
+    readonly repairKnowledgeHealthOrphan: (
+      request: KnowledgeHealthOrphanRepairRequest
+    ) => Promise<KnowledgeHealthOrphanRepairResult>;
     readonly repairKnowledgeHealth: (
       request: KnowledgeHealthRepairRequest
     ) => Promise<KnowledgeHealthRepairResult>;

@@ -1276,10 +1276,16 @@ export const KnowledgeHealthRepairRequestIdSchema = z.string()
   .regex(/^knowledge_health_repair_request_[a-z0-9]{16,64}$/);
 export const KnowledgeHealthTargetSearchRequestIdSchema = z.string()
   .regex(/^knowledge_health_target_search_[a-z0-9]{16,64}$/);
+export const KnowledgeHealthOrphanParentSearchRequestIdSchema = z.string()
+  .regex(/^knowledge_health_orphan_parent_search_[a-z0-9]{16,64}$/);
+export const KnowledgeHealthOrphanRepairRequestIdSchema = z.string()
+  .regex(/^knowledge_health_orphan_repair_request_[a-z0-9]{16,64}$/);
 export const KnowledgeHealthRepairContextIdSchema = z.string()
   .regex(/^knowledge_health_repair_context_[a-z0-9]{32,64}$/);
 export const KnowledgeHealthTargetContextIdSchema = z.string()
   .regex(/^knowledge_health_target_context_[a-z0-9]{32,64}$/);
+export const KnowledgeHealthOrphanParentContextIdSchema = z.string()
+  .regex(/^knowledge_health_orphan_parent_context_[a-z0-9]{32,64}$/);
 export const KnowledgeHealthOccurrenceIdSchema = z.string()
   .regex(/^knowledge_health_occurrence_[a-f0-9]{64}$/);
 export const KnowledgeHealthRenderProofSchema = z.string()
@@ -1320,7 +1326,10 @@ const KnowledgeHealthBrokenLinkIssueSchema = z.object({
 });
 const KnowledgeHealthOrphanPageIssueSchema = z.object({
   kind: z.literal("orphan_page"),
-  page: KnowledgeHealthPageRefSchema
+  page: KnowledgeHealthPageRefSchema,
+  repairContextId: KnowledgeHealthRepairContextIdSchema.optional(),
+  targetRevision: KnowledgeHealthPageRevisionSchema.optional(),
+  targetRenderProof: KnowledgeHealthRenderProofSchema.optional()
 }).strict();
 const KnowledgeHealthDuplicateTopicIssueSchema = z.object({
   kind: z.literal("duplicate_topic"),
@@ -1345,6 +1354,16 @@ export const KnowledgeHealthIssueSummarySchema = z.discriminatedUnion("kind", [
       path: ["repairContextId"],
       message: "A repair context requires exactly one unresolved link."
     });
+  }
+  if (issue.kind === "orphan_page") {
+    const proofs = [issue.repairContextId, issue.targetRevision, issue.targetRenderProof];
+    if (proofs.some((value) => value !== undefined) && proofs.some((value) => value === undefined)) {
+      context.addIssue({
+        code: "custom",
+        path: ["repairContextId"],
+        message: "An orphan repair context requires complete target proof."
+      });
+    }
   }
   if (issue.kind === "duplicate_topic") {
     const pageIds = issue.pages.map(({ pageId }) => pageId);
@@ -1943,6 +1962,84 @@ const KnowledgeHealthRepairProofFields = {
   sourceRenderProof: KnowledgeHealthRenderProofSchema,
   occurrenceId: KnowledgeHealthOccurrenceIdSchema
 } as const;
+
+export const KNOWLEDGE_HEALTH_MAX_ORPHAN_PARENT_CANDIDATES = 20;
+const KnowledgeHealthOrphanTargetProofFields = {
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  reportRequestId: KnowledgeHealthRequestIdSchema,
+  indexGeneration: KnowledgeHealthIndexGenerationSchema,
+  issueKind: z.literal("orphan_page"),
+  pageId: PageIdSchema,
+  repairContextId: KnowledgeHealthRepairContextIdSchema,
+  targetRevision: KnowledgeHealthPageRevisionSchema,
+  targetRenderProof: KnowledgeHealthRenderProofSchema
+} as const;
+export const KnowledgeHealthOrphanParentCandidateSchema = z.object({
+  page: KnowledgeHealthPageRefSchema,
+  pageType: z.literal("note"),
+  sourceContextId: KnowledgeHealthOrphanParentContextIdSchema,
+  sourceRevision: KnowledgeHealthPageRevisionSchema,
+  sourceRenderProof: KnowledgeHealthRenderProofSchema
+}).strict();
+export const KnowledgeHealthOrphanParentSearchRequestSchema = z.object({
+  ...KnowledgeHealthOrphanTargetProofFields,
+  requestId: KnowledgeHealthOrphanParentSearchRequestIdSchema,
+  query: z.string().max(120).refine(
+    (value) => !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(value),
+    "Knowledge Health parent search contains unsafe control text."
+  )
+}).strict();
+const KnowledgeHealthOrphanParentSearchIdentitySchema = KnowledgeHealthOrphanParentSearchRequestSchema;
+export const KnowledgeHealthOrphanParentSearchResultSchema = z.discriminatedUnion("status", [
+  KnowledgeHealthOrphanParentSearchIdentitySchema.extend({
+    status: z.literal("ready"),
+    parents: z.array(KnowledgeHealthOrphanParentCandidateSchema)
+      .max(KNOWLEDGE_HEALTH_MAX_ORPHAN_PARENT_CANDIDATES),
+    truncated: z.boolean()
+  }).strict(),
+  KnowledgeHealthOrphanParentSearchIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  KnowledgeHealthOrphanParentSearchIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  KnowledgeHealthOrphanParentSearchIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "ready") return;
+  const pageIds = result.parents.map((parent) => parent.page.pageId);
+  const contextIds = result.parents.map((parent) => parent.sourceContextId);
+  if (new Set(pageIds).size !== pageIds.length || new Set(contextIds).size !== contextIds.length ||
+    pageIds.includes(result.pageId)) {
+    context.addIssue({ code: "custom", path: ["parents"], message: "Orphan parent choices must be distinct." });
+  }
+});
+const KnowledgeHealthOrphanRepairIdentitySchema = z.object({
+  ...KnowledgeHealthOrphanTargetProofFields,
+  requestId: KnowledgeHealthOrphanRepairRequestIdSchema,
+  action: z.literal("connect_orphan_to_parent"),
+  sourcePageId: PageIdSchema,
+  sourceContextId: KnowledgeHealthOrphanParentContextIdSchema,
+  sourceRevision: KnowledgeHealthPageRevisionSchema,
+  sourceRenderProof: KnowledgeHealthRenderProofSchema
+}).strict();
+function validateKnowledgeHealthOrphanRepair(
+  request: z.infer<typeof KnowledgeHealthOrphanRepairIdentitySchema>,
+  context: z.RefinementCtx
+): void {
+  if (request.sourcePageId === request.pageId) {
+    context.addIssue({ code: "custom", path: ["sourcePageId"], message: "An orphan cannot parent itself." });
+  }
+}
+export const KnowledgeHealthOrphanRepairRequestSchema = KnowledgeHealthOrphanRepairIdentitySchema
+  .superRefine(validateKnowledgeHealthOrphanRepair);
+export const KnowledgeHealthOrphanRepairResultSchema = z.discriminatedUnion("status", [
+  KnowledgeHealthOrphanRepairIdentitySchema.extend({
+    status: z.literal("committed"),
+    revision: NoteEditorRevisionSchema,
+    operationId: OperationIdSchema
+  }).strict(),
+  KnowledgeHealthOrphanRepairIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  KnowledgeHealthOrphanRepairIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  KnowledgeHealthOrphanRepairIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
+  KnowledgeHealthOrphanRepairIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => validateKnowledgeHealthOrphanRepair(result, context));
 export const KnowledgeHealthTargetCandidateSchema = z.object({
   page: KnowledgeHealthPageRefSchema,
   pageType: z.literal("note"),
@@ -9749,8 +9846,11 @@ export type KnowledgeActivityListResult = z.infer<typeof KnowledgeActivityListRe
 export type KnowledgeHealthRequestId = z.infer<typeof KnowledgeHealthRequestIdSchema>;
 export type KnowledgeHealthRepairRequestId = z.infer<typeof KnowledgeHealthRepairRequestIdSchema>;
 export type KnowledgeHealthTargetSearchRequestId = z.infer<typeof KnowledgeHealthTargetSearchRequestIdSchema>;
+export type KnowledgeHealthOrphanParentSearchRequestId = z.infer<typeof KnowledgeHealthOrphanParentSearchRequestIdSchema>;
+export type KnowledgeHealthOrphanRepairRequestId = z.infer<typeof KnowledgeHealthOrphanRepairRequestIdSchema>;
 export type KnowledgeHealthRepairContextId = z.infer<typeof KnowledgeHealthRepairContextIdSchema>;
 export type KnowledgeHealthTargetContextId = z.infer<typeof KnowledgeHealthTargetContextIdSchema>;
+export type KnowledgeHealthOrphanParentContextId = z.infer<typeof KnowledgeHealthOrphanParentContextIdSchema>;
 export type KnowledgeHealthOccurrenceId = z.infer<typeof KnowledgeHealthOccurrenceIdSchema>;
 export type KnowledgeHealthRenderProof = z.infer<typeof KnowledgeHealthRenderProofSchema>;
 export type KnowledgeHealthPageRevision = z.infer<typeof KnowledgeHealthPageRevisionSchema>;
@@ -9765,6 +9865,11 @@ export type KnowledgeHealthRunResult = z.infer<typeof KnowledgeHealthRunResultSc
 export type KnowledgeHealthTargetCandidate = z.infer<typeof KnowledgeHealthTargetCandidateSchema>;
 export type KnowledgeHealthTargetSearchRequest = z.infer<typeof KnowledgeHealthTargetSearchRequestSchema>;
 export type KnowledgeHealthTargetSearchResult = z.infer<typeof KnowledgeHealthTargetSearchResultSchema>;
+export type KnowledgeHealthOrphanParentCandidate = z.infer<typeof KnowledgeHealthOrphanParentCandidateSchema>;
+export type KnowledgeHealthOrphanParentSearchRequest = z.infer<typeof KnowledgeHealthOrphanParentSearchRequestSchema>;
+export type KnowledgeHealthOrphanParentSearchResult = z.infer<typeof KnowledgeHealthOrphanParentSearchResultSchema>;
+export type KnowledgeHealthOrphanRepairRequest = z.infer<typeof KnowledgeHealthOrphanRepairRequestSchema>;
+export type KnowledgeHealthOrphanRepairResult = z.infer<typeof KnowledgeHealthOrphanRepairResultSchema>;
 export type KnowledgeHealthRepairRequest = z.infer<typeof KnowledgeHealthRepairRequestSchema>;
 export type KnowledgeHealthRepairResult = z.infer<typeof KnowledgeHealthRepairResultSchema>;
 export type JobCheckpoint = z.infer<typeof JobCheckpointSchema>;

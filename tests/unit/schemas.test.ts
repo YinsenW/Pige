@@ -102,6 +102,10 @@ import {
   KnowledgeHealthRepairResultSchema,
   KnowledgeHealthTargetSearchRequestSchema,
   KnowledgeHealthTargetSearchResultSchema,
+  KnowledgeHealthOrphanParentSearchRequestSchema,
+  KnowledgeHealthOrphanParentSearchResultSchema,
+  KnowledgeHealthOrphanRepairRequestSchema,
+  KnowledgeHealthOrphanRepairResultSchema,
   LIBRARY_TAGS_CHANNEL,
   LIBRARY_RENAME_TAG_CHANNEL,
   LIBRARY_MERGE_TAG_CHANNEL,
@@ -2975,6 +2979,108 @@ describe("schemas", () => {
         targets: [{ ...target, ...unsafe }],
         truncated: false
       })).toThrow();
+    }
+  });
+
+  it("binds one orphan target to one explicitly selected current parent without body or path authority", () => {
+    const targetProof = {
+      apiVersion: 1,
+      activeVaultId: "vault_20260731_orphan",
+      reportRequestId: "knowledge_health_request_orphanabcdefghijkl",
+      indexGeneration: "2026-07-31T12:00:00.000Z#orphanindexabcd",
+      issueKind: "orphan_page",
+      pageId: "page_20260731_orphantarget",
+      repairContextId: `knowledge_health_repair_context_${"a".repeat(32)}`,
+      targetRevision: `noteeditrev_${"b".repeat(64)}`,
+      targetRenderProof: `knowledge_health_render_${"c".repeat(64)}`
+    } as const;
+    const reportIssue = {
+      kind: "orphan_page",
+      page: { pageId: targetProof.pageId, title: "Orphan target" },
+      repairContextId: targetProof.repairContextId,
+      targetRevision: targetProof.targetRevision,
+      targetRenderProof: targetProof.targetRenderProof
+    } as const;
+    expect(KnowledgeHealthRunResultSchema.parse({
+      apiVersion: 1,
+      requestId: targetProof.reportRequestId,
+      activeVaultId: targetProof.activeVaultId,
+      status: "ready",
+      checkedAt: "2026-07-31T12:01:00.000Z",
+      indexGeneration: targetProof.indexGeneration,
+      coverage: "complete",
+      invalidPageCount: 0,
+      counts: {
+        totalIssueCount: 1, brokenLinkPageCount: 0, unresolvedLinkCount: 0,
+        orphanPageCount: 1, duplicateTopicGroupCount: 0, unsourcedClaimCount: 0
+      },
+      issues: [reportIssue],
+      truncated: false
+    })).toMatchObject({ issues: [reportIssue] });
+    expect(() => KnowledgeHealthRunResultSchema.parse({
+      apiVersion: 1,
+      requestId: targetProof.reportRequestId,
+      activeVaultId: targetProof.activeVaultId,
+      status: "ready",
+      checkedAt: "2026-07-31T12:01:00.000Z",
+      indexGeneration: targetProof.indexGeneration,
+      coverage: "complete",
+      invalidPageCount: 0,
+      counts: {
+        totalIssueCount: 1, brokenLinkPageCount: 0, unresolvedLinkCount: 0,
+        orphanPageCount: 1, duplicateTopicGroupCount: 0, unsourcedClaimCount: 0
+      },
+      issues: [{ ...reportIssue, targetRevision: undefined }],
+      truncated: false
+    })).toThrow();
+
+    const search = {
+      ...targetProof,
+      requestId: "knowledge_health_orphan_parent_search_abcdefghijklmnop",
+      query: "entry"
+    } as const;
+    expect(KnowledgeHealthOrphanParentSearchRequestSchema.parse(search)).toEqual(search);
+    const parent = {
+      page: { pageId: "page_20260731_entryparent", title: "Entry note" },
+      pageType: "note",
+      sourceContextId: `knowledge_health_orphan_parent_context_${"d".repeat(32)}`,
+      sourceRevision: `noteeditrev_${"e".repeat(64)}`,
+      sourceRenderProof: `knowledge_health_render_${"f".repeat(64)}`
+    } as const;
+    expect(KnowledgeHealthOrphanParentSearchResultSchema.parse({
+      ...search,
+      status: "ready",
+      parents: [parent],
+      truncated: false
+    })).toMatchObject({ status: "ready", parents: [parent] });
+    const repair = {
+      ...targetProof,
+      requestId: "knowledge_health_orphan_repair_request_abcdefghijklmnop",
+      action: "connect_orphan_to_parent",
+      sourcePageId: parent.page.pageId,
+      sourceContextId: parent.sourceContextId,
+      sourceRevision: parent.sourceRevision,
+      sourceRenderProof: parent.sourceRenderProof
+    } as const;
+    expect(KnowledgeHealthOrphanRepairRequestSchema.parse(repair)).toEqual(repair);
+    expect(KnowledgeHealthOrphanRepairResultSchema.parse({
+      ...repair,
+      status: "committed",
+      revision: `noteeditrev_${"1".repeat(64)}`,
+      operationId: "op_20260731_orphanrepair123"
+    })).toMatchObject({ status: "committed" });
+    expect(() => KnowledgeHealthOrphanRepairRequestSchema.parse({
+      ...repair,
+      sourcePageId: repair.pageId
+    })).toThrow();
+    for (const unsafe of [{ path: "/private/vault/wiki/entry.md" }, { body: "Parent body" }]) {
+      expect(() => KnowledgeHealthOrphanParentSearchResultSchema.parse({
+        ...search,
+        status: "ready",
+        parents: [{ ...parent, ...unsafe }],
+        truncated: false
+      })).toThrow();
+      expect(() => KnowledgeHealthOrphanRepairRequestSchema.parse({ ...repair, ...unsafe })).toThrow();
     }
   });
 
