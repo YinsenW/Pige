@@ -99,7 +99,7 @@ export function ActivityHistorySettingsPanel(props: {
                       </button>
                     ) : null}
                     {activity.canRedo ? (
-                      <button type="button" className="settings-button" aria-label={`${props.t("activity.redo")}: ${activityLabel}`} data-activity-redo-id={activity.operationId} disabled={props.redoingId !== null || props.undoingId !== null} onClick={() => void props.onRedo(activity.operationId)}>
+                      <button type="button" className="settings-button" aria-label={`${props.t("activity.redo")}: ${activityLabel}`} data-activity-redo-id={activity.operationId} disabled={props.redoingId !== null || props.undoingId !== null || props.blockedIds.includes(activity.operationId)} onClick={() => void props.onRedo(activity.operationId)}>
                         {props.t(props.redoingId === activity.operationId ? "activity.redoing" : "activity.redo")}
                       </button>
                     ) : null}

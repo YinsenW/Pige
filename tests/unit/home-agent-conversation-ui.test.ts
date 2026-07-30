@@ -5792,7 +5792,11 @@ describe("Home durable Agent conversation UI", () => {
     const redoLabel = "Redo: Knowledge note updated: Refined boundary (2)";
     await waitFor(dom, () => buttonsByAriaLabel(container, redoLabel).length === 1);
     await waitFor(dom, () => dom.window.document.activeElement === buttonsByAriaLabel(container, redoLabel)[0]);
-    await clickElement(dom, buttonsByAriaLabel(container, redoLabel)[0]!);
+    await act(async () => {
+      buttonsByAriaLabel(container, redoLabel)[0]!.click();
+      buttonsByAriaLabel(container, redoLabel)[0]!.click();
+      await settle(dom);
+    });
     await waitFor(dom, () => harness.redoOperationIds.length === 1);
     expect(harness.redoOperationIds).toEqual(["op_20260712_updateactivity"]);
     expect(container.textContent).toContain("Change applied again.");

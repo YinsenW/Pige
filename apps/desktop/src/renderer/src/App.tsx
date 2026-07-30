@@ -456,6 +456,7 @@ export function App(): React.JSX.Element {
   const [activityHistoryLoadFailed, setActivityHistoryLoadFailed] = useState(false);
   const [activityUndoingId, setActivityUndoingId] = useState<string | null>(null);
   const [activityRedoingId, setActivityRedoingId] = useState<string | null>(null);
+  const activityMutationInFlightRef = useRef<string | null>(null);
   const [activityOpeningId, setActivityOpeningId] = useState<string | null>(null);
   const [memoryActivityFocusRequest, setMemoryActivityFocusRequest] =
     useState<AgentMemoryFocusRequest | null>(null);
@@ -1878,12 +1879,12 @@ export function App(): React.JSX.Element {
 
   const undoActivity = async (operationId: string): Promise<void> => {
     if (
-      activityUndoingId ||
-      activityRedoingId ||
+      activityMutationInFlightRef.current ||
       !activityList ||
       activityList.activeVaultId !== activeVaultIdRef.current
     ) return;
     const activity = activityList?.activities.find((candidate) => candidate.operationId === operationId);
+    activityMutationInFlightRef.current = operationId;
     setActivityUndoingId(operationId);
     try {
       const result = await window.pige.activity.undo({
@@ -1936,15 +1937,17 @@ export function App(): React.JSX.Element {
         setCaptureToast({ kind: "error", message: t("activity.undoStateUnknown") });
       }
     } finally {
+      if (activityMutationInFlightRef.current === operationId) activityMutationInFlightRef.current = null;
       setActivityUndoingId(null);
       restoreActivityFocus(operationId);
     }
   };
 
   const redoActivity = async (operationId: string): Promise<void> => {
-    if (activityUndoingId || activityRedoingId || activityList?.activeVaultId !== activeVaultIdRef.current) return;
+    if (activityMutationInFlightRef.current || activityList?.activeVaultId !== activeVaultIdRef.current) return;
     const activity = activityList?.activities.find((candidate) => candidate.operationId === operationId);
-    if (!activity?.canRedo) return;
+    if (!activity?.canRedo || activityBlockedIds.includes(operationId)) return;
+    activityMutationInFlightRef.current = operationId;
     setActivityRedoingId(operationId);
     try {
       const result = await window.pige.activity.redo({ operationId });
@@ -1958,6 +1961,7 @@ export function App(): React.JSX.Element {
         selectedNoteRef.current?.summary.pageId === activity.target.pageId) await openNoteTarget(activity.target.pageId, false);
     } catch { setCaptureToast({ kind: "error", message: t("activity.redoFailed") });
     } finally {
+      if (activityMutationInFlightRef.current === operationId) activityMutationInFlightRef.current = null;
       setActivityRedoingId(null); restoreActivityFocus(operationId);
     }
   };
@@ -3121,8 +3125,9 @@ function restoreActivityFocus(operationId: string): void {
       .find((element) => element.dataset.activityUndoId === operationId && !element.disabled);
     const activityRow = Array.from(document.querySelectorAll<HTMLElement>("[data-activity-row-id]"))
       .find((element) => element.dataset.activityRowId === operationId);
+    const activityTitle = document.querySelector<HTMLElement>("#settings-history-title");
     const composer = document.querySelector<HTMLTextAreaElement>('[data-home-composer="true"]');
-    (redoButton ?? undoButton ?? activityRow ?? composer)?.focus();
+    (redoButton ?? undoButton ?? activityRow ?? activityTitle ?? composer)?.focus();
   }, 0);
 }
 
