@@ -8,6 +8,8 @@ import type {
   NoteEditorSaveResult,
   NoteMergeRequest,
   NoteMergeResult,
+  NoteRelateRequest,
+  NoteRelateResult,
   NoteImportMarkdownRequest,
   NoteImportMarkdownResult,
   NoteOpenSourceReferenceRequest,
@@ -35,6 +37,9 @@ import {
   NOTE_MERGE_CHANNEL,
   NoteMergeRequestSchema,
   NoteMergeResultSchema,
+  NOTE_RELATE_CHANNEL,
+  NoteRelateRequestSchema,
+  NoteRelateResultSchema,
   NOTE_IMPORT_MARKDOWN_CHANNEL,
   NoteImportMarkdownRequestSchema,
   NoteImportMarkdownResultSchema,
@@ -77,6 +82,7 @@ import type { ReaderSourceReconnectService } from "./services/reader-source-reco
 import type { NoteTrashService } from "./services/note-trash-service";
 import type { NoteArchiveService } from "./services/note-archive-service";
 import type { NoteMergeService } from "./services/note-merge-service";
+import type { NoteRelateService } from "./services/note-relate-service";
 import type { NoteMarkdownImportService } from "./services/note-markdown-import-service";
 
 interface RegisterReaderIpcOptions {
@@ -95,9 +101,11 @@ interface RegisterReaderIpcOptions {
   readonly getNoteTrashService: () => NoteTrashService;
   readonly getNoteArchiveService: () => NoteArchiveService;
   readonly getNoteMergeService: () => NoteMergeService;
+  readonly getNoteRelateService: () => NoteRelateService;
   readonly getNoteMarkdownImportService: () => NoteMarkdownImportService;
   readonly onNoteTrashCommitted: () => void;
   readonly onNoteArchiveCommitted: () => void;
+  readonly onNoteRelated: () => void;
   readonly onNoteImported: () => void;
 }
 
@@ -236,7 +244,7 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       rawResult = { ...parsed, status: "failed" };
     }
     const result = NoteArchiveCurrentResultSchema.parse(rawResult);
-    if (result.status === "committed") options.onNoteArchiveCommitted();
+    if (result.status === "committed") options.onNoteRelated();
     if (notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
       return NoteArchiveCurrentResultSchema.parse({ ...parsed, status: "failed" });
     }
@@ -281,6 +289,18 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     } catch {
       return NoteMergeResultSchema.parse({ ...parsed, status: "failed" });
     }
+  });
+  options.ipcMain.handle(NOTE_RELATE_CHANNEL, async (event, request: unknown): Promise<NoteRelateResult> => {
+    const parsed = NoteRelateRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return NoteRelateResultSchema.parse({ ...parsed, status: "stale" });
+    }
+    const result = await options.getNoteRelateService().relate(ownerId, parsed);
+    if (result.status === "committed") options.onNoteArchiveCommitted();
+    return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+      ? NoteRelateResultSchema.parse(result)
+      : NoteRelateResultSchema.parse({ ...parsed, status: "stale" });
   });
   options.ipcMain.handle("notes.resolveInlineReference", (
     event,
