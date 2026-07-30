@@ -2,11 +2,13 @@ import type { IpcMain, IpcMainInvokeEvent } from "electron";
 import { readFileSync } from "node:fs";
 import {
   PADDLE_OCR_ENGINE_ID,
+  TOOLCHAIN_REPAIR_CHANNEL,
   PaddleOcrDisableResultSchema,
   PaddleOcrEnableResultSchema,
   PaddleOcrInstallResultSchema,
   PaddleOcrRemoveResultSchema,
-  PaddleOcrTestResultSchema
+  PaddleOcrTestResultSchema,
+  ToolchainRepairResultSchema
 } from "@pige/schemas";
 import { describe, expect, it, vi } from "vitest";
 import { registerLocalCapabilitiesIpc } from
@@ -18,6 +20,13 @@ const request = {
   apiVersion: 1,
   requestId: "paddleocr_abcdefghijklmnop",
   expectedRevision: 4
+} as const;
+
+const toolchainRepairRequest = {
+  apiVersion: 1,
+  requestId: "toolchain_repair_request_abcdefghijklmnop",
+  expectedHealthId: `toolchain_health_${"a".repeat(64)}`,
+  expectedMissingRequiredToolIds: ["git", "uv"]
 } as const;
 
 const notInstalledSummary = {
@@ -136,6 +145,10 @@ function makeHarness(overrides: Record<string, unknown> = {}) {
       status: "committed" as const,
       summary: { ...notInstalledSummary, revision: 7 }
     })),
+    repairToolchain: vi.fn((input: typeof toolchainRepairRequest) => ({
+      ...input,
+      status: "opened" as const
+    })),
     ...overrides
   };
 
@@ -161,14 +174,15 @@ describe("registerLocalCapabilitiesIpc", () => {
       "enablePaddleOcr",
       "testPaddleOcr",
       "disablePaddleOcr",
-      "removePaddleOcr"
+      "removePaddleOcr",
+      "repairToolchain"
     ]) {
       expect(source).toContain(`${callback}:`);
     }
     expect(source).toContain("parser-manifests/paddleocr-local.parser.manifest.json");
   });
 
-  it("registers the OCR preference and six managed PaddleOCR preload channels", () => {
+  it("registers OCR, managed PaddleOCR, and bundled-toolchain repair channels", () => {
     expect([...makeHarness().handlers.keys()]).toEqual([
       "localCapabilities.ocrLanguagePreference",
       "localCapabilities.setOcrLanguagePreference",
@@ -177,7 +191,8 @@ describe("registerLocalCapabilitiesIpc", () => {
       "localCapabilities.enablePaddleOcr",
       "localCapabilities.testPaddleOcr",
       "localCapabilities.disablePaddleOcr",
-      "localCapabilities.removePaddleOcr"
+      "localCapabilities.removePaddleOcr",
+      TOOLCHAIN_REPAIR_CHANNEL
     ]);
   });
 
@@ -215,6 +230,9 @@ describe("registerLocalCapabilitiesIpc", () => {
       expect(callback).toHaveBeenCalledWith(request);
     }
     expect(callbacks.paddleOcrSummary).toHaveBeenCalledWith({ apiVersion: 1 });
+    await expect(call(handlers, TOOLCHAIN_REPAIR_CHANNEL, toolchainRepairRequest))
+      .resolves.toEqual({ ...toolchainRepairRequest, status: "opened" });
+    expect(callbacks.repairToolchain).toHaveBeenCalledWith(toolchainRepairRequest);
   });
 
   it("rejects malformed requests before invoking lifecycle services", async () => {
@@ -236,6 +254,11 @@ describe("registerLocalCapabilitiesIpc", () => {
       expect(callback).not.toHaveBeenCalled();
     }
     expect(callbacks.paddleOcrSummary).not.toHaveBeenCalled();
+    await expect(call(handlers, TOOLCHAIN_REPAIR_CHANNEL, {
+      ...toolchainRepairRequest,
+      expectedMissingRequiredToolIds: ["uv", "git"]
+    })).rejects.toThrow();
+    expect(callbacks.repairToolchain).not.toHaveBeenCalled();
   });
 
   it("fails closed on malformed service results while preserving request identity", async () => {
@@ -254,6 +277,11 @@ describe("registerLocalCapabilitiesIpc", () => {
         engineId: PADDLE_OCR_ENGINE_ID,
         status: "failed",
         rawError: "/private/paddleocr"
+      })),
+      repairToolchain: vi.fn(() => ({
+        ...toolchainRepairRequest,
+        requestId: "toolchain_repair_request_ffffffffffffffff",
+        status: "opened"
       }))
     });
 
@@ -263,6 +291,8 @@ describe("registerLocalCapabilitiesIpc", () => {
       .resolves.toEqual(failedResult());
     await expect(call(handlers, "localCapabilities.removePaddleOcr", request))
       .resolves.toEqual(failedResult());
+    await expect(call(handlers, TOOLCHAIN_REPAIR_CHANNEL, toolchainRepairRequest))
+      .resolves.toEqual({ ...toolchainRepairRequest, status: "failed" });
   });
 
   it("returns schema-valid body-free failures when mutation services throw", async () => {
@@ -291,6 +321,15 @@ describe("registerLocalCapabilitiesIpc", () => {
       expect(JSON.stringify(result)).not.toMatch(/error|summary|path|url|private/u);
     }
     expect(failure).toHaveBeenCalledTimes(5);
+
+    const toolchainFailure = vi.fn(() => {
+      throw new Error("private URL and path");
+    });
+    const toolchainHarness = makeHarness({ repairToolchain: toolchainFailure });
+    const result = await call(toolchainHarness.handlers, TOOLCHAIN_REPAIR_CHANNEL, toolchainRepairRequest);
+    expect(result).toEqual({ ...toolchainRepairRequest, status: "failed" });
+    expect(ToolchainRepairResultSchema.parse(result)).toEqual(result);
+    expect(JSON.stringify(result)).not.toMatch(/error|path|url|private/u);
   });
 });
 

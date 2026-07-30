@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import type { ToolchainHealth, ToolchainToolStatus } from "@pige/contracts";
 import { ToolchainManifestSchema } from "@pige/schemas";
+import { toolchainRepairEligibility } from "./toolchain-repair-service";
 
 export class ToolchainService {
   readonly #manifestPath: string;
@@ -36,11 +37,13 @@ export class ToolchainService {
     });
 
     const missingRequired = tools.some((tool) => tool.required && tool.status === "missing");
-    return {
+    const health: ToolchainHealth = {
       status: missingRequired ? "needs_repair" : "ready",
       checkedAt: new Date().toISOString(),
       tools
     };
+    const repair = toolchainRepairEligibility(health);
+    return repair ? { ...health, repair } : health;
   }
 }
 

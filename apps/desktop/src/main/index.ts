@@ -46,6 +46,7 @@ import type {
   SpeechCancelRequest,
   SpeechSessionRequest,
   SpeechStartRequest,
+  ToolchainRepairRequest,
   SupportBundlePreview,
   UpdateApplyRequest,
   UpdateCheckRequest,
@@ -298,6 +299,7 @@ import {
 import { guardSettingAction, type SettingActionConfirmation } from "./services/setting-action-guard";
 import { getSettingsRegistry } from "./services/settings-registry";
 import { ToolchainService } from "./services/toolchain-service";
+import { ToolchainRepairService } from "./services/toolchain-repair-service";
 import { SpeechService } from "./services/speech-service";
 import { TaskProcessSessionService } from "./services/task-process-session-service";
 import {
@@ -351,6 +353,7 @@ let appearanceService: AppearanceService | undefined;
 let startupDestinationService: StartupDestinationService | undefined;
 let appearanceServiceUnsubscribe: (() => void) | undefined;
 let toolchainService: ToolchainService | undefined;
+let toolchainRepairService: ToolchainRepairService | undefined;
 let captureService: CaptureService | undefined;
 let managedCopyRootService: ManagedCopyRootService | undefined;
 let homeAgentAttachmentService: HomeAgentAttachmentService | undefined;
@@ -902,6 +905,14 @@ const getToolchainService = (): ToolchainService => {
     toolchainService = new ToolchainService(resolveToolchainManifestPath());
   }
   return toolchainService;
+};
+
+const getToolchainRepairService = (): ToolchainRepairService => {
+  toolchainRepairService ??= new ToolchainRepairService({
+    health: () => getToolchainService().health(),
+    openReleases: (url) => shell.openExternal(url)
+  });
+  return toolchainRepairService;
 };
 
 const getSpeechService = (): SpeechService => {
@@ -2602,7 +2613,8 @@ registerLocalCapabilitiesIpc({
   enablePaddleOcr: (request) => getPaddleOcrLifecycleService().enable(request),
   testPaddleOcr: (request) => getPaddleOcrLifecycleService().test(request),
   disablePaddleOcr: (request) => getPaddleOcrLifecycleService().disable(request),
-  removePaddleOcr: (request) => getPaddleOcrLifecycleService().remove(request)
+  removePaddleOcr: (request) => getPaddleOcrLifecycleService().remove(request),
+  repairToolchain: (request: ToolchainRepairRequest) => getToolchainRepairService().repair(request)
 });
 ipcMain.handle("activity.list", (_event, request?: KnowledgeActivityListRequest) =>
   (() => {
