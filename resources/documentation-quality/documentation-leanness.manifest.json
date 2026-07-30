@@ -9,12 +9,12 @@
   },
   "budgets": {
     "maximumMarkdownFiles": 56,
-    "maximumMarkdownLines": 23820,
-    "maximumMarkdownWords": 163500,
-    "maximumMarkdownBytes": 1240048,
+    "maximumMarkdownLines": 23774,
+    "maximumMarkdownWords": 161108,
+    "maximumMarkdownBytes": 1240161,
     "maximumAlwaysReadWords": 3700,
-    "maximumTraceManifestLines": 5500,
-    "maximumTraceManifestBytes": 260024
+    "maximumTraceManifestLines": 237,
+    "maximumTraceManifestBytes": 259900
   },
   "fileCountPolicy": {
     "mode": "reviewed_ratchet",

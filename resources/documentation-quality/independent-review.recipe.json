@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, proof-bound source reconnect, exact active-note title rename, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion and restart-safe exact note-edit Redo.",
+    "scope": "Existing reviewed Vault v2/Alpha convergence scope through exact active-note title rename/Redo, plus explainable Knowledge Tree density.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "effc7cd92316330b1f40ecdf1213bdf276ded1c56986df230cce45788a1aab38"
+    "reviewedSha256": "0527019118e4afd130abbbb848bd651da7cd1e9639e2043c217843c32e0f5d13"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
-    "task": "Vault v2, Alpha convergence, governance, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name, source reconnect, exact note-title rename/Redo, source refresh, Activity history and Agent memory backup",
+    "task": "Bind exact active-note title rename/Redo and explainable Knowledge Tree density into the reviewed Alpha baseline",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,28 +67,28 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed the exact note-title lifecycle against durable identity, Markdown, API, Job, sync and UI owners; Development supplied executable service/schema/IPC evidence and UI Design P0/P1 is clear."
+    "independence": "Planning retained the reviewed Alpha baseline including exact active-note title rename/Redo and bound density claims; Development supplied executable evidence; UI Design returned P0/P1 CLEAR at exact fix/source HEAD 75c6144b0825b227d6303ff58cc7fa653b2a9741 with UI+i18n 7/7."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Reader/Library expose one title-only dialog; closed outcomes retain draft/focus and success adopts authoritative render with Activity Undo."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Markdown, API, Job, sync, data and UI owners agree on revision CAS, stable page identity, old-title alias and Main-owned filename mutation."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Schema, service, negative, restart, IPC and dual Reader-surface evidence bind the slice without promoting broader partial requirements/exits."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Recovery ownership, rename_page Activity, responsibility inventory and six-locale conflict recovery are explicit and executable."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owner sections, decision ledger and trace inventory absorb bounded rename/Redo deltas without a new document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"No new mode; exact counts, navigation, keyboard tree and localized detail remain."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Owners agree on density bands, weight/density sizing and durable leaf count."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Density evidence narrows B6.14/E6.09 without promoting open scale/a11y/package proof."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Bands, review outline, exact a11y detail and six locales are executable."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owners and trace absorb the delta."}
   ],
   "verification": [
-    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Note-title rename semantics, owner routing and links remain structurally synchronized."},
-    {"command":"npm test -- <focused note-title rename files> && npm run build","status":"passed","evidence":"Exact rename contract, Main recovery, Reader/Library surfaces and production bundles are executable."},
-    {"command":"npm run verify:architecture-reset && npm run verify:change","status":"passed","evidence":"Service responsibility, Main/renderer authority and change-scoped verification remain enforced."}
+    {"command":"node scripts/verify/independent-documentation-review.mjs && npm run verify:documentation-leanness && npm run verify:prd-contract && npm run verify:doc-map","status":"passed","evidence":"Knowledge Tree density semantics, trace evidence, owner routing and the bounded documentation ratchet remain synchronized."},
+    {"command":"npx vitest run tests/unit/knowledge-tree-ui.test.ts && npm run typecheck && npm run build","status":"passed","evidence":"Exact density, count, review-needed and accessible-description contracts plus production bundles are executable."},
+    {"command":"npm run verify:architecture-reset && npm run verify:change","status":"passed","evidence":"Existing Local Database ownership, renderer confinement and change-scoped verification remain enforced."}
   ],
   "coordination": {
-    "taskId": "note-title-rename-bind-20260731",
-    "taskTitle": "Bind exact note title rename lifecycle",
+    "taskId": "knowledge-tree-density-bind-20260731",
+    "taskTitle": "Explainable Knowledge Tree density bind",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main owns exact revision/path/filename mutation; page identity and body remain stable, old-title links resolve through alias, and rename_page recovery converges commit/Undo.",
-    "acknowledgement": "Planning binds the implemented note-title rename slice while preserving exact note-edit Redo; referenced requirements/exits remain partial for broader scope. UI Design P0/P1 is clear."
+    "compatibility": "Renderer-only density derives from existing body-free tree metrics, creates no durable owner, and keeps exact count text plus accessible detail authoritative over color and size.",
+    "acknowledgement": "Planning binds the Knowledge Tree density slice while E6.09 remains partial for dense-scale, assistive-technology and signed packaged visual acceptance. UI Design returned P0/P1 CLEAR on exact fix/source HEAD 75c6144b0825b227d6303ff58cc7fa653b2a9741; Knowledge Tree UI+i18n passed 7/7."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [

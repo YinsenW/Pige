@@ -51,12 +51,20 @@ describe("Knowledge Tree renderer", () => {
     expect(rootNode.getAttribute("aria-level")).toBe("2");
     expect(rootNode.getAttribute("aria-selected")).toBe("true");
     expect(rootNode.getAttribute("tabindex")).toBe("0");
+    expect(rootNode.getAttribute("aria-description")).toBe(
+      "Local-first. Weight 9. 2 fragments, 3 sources, 5 leaves. Evidence density 5."
+    );
+    expect(rootNode.dataset.knowledgeDensity).toBe("5");
+    expect(rootNode.dataset.knowledgeLeafCount).toBe("5");
+    expect(rootNode.classList.contains("density-2")).toBe(true);
     const meter = mount.container.querySelector<HTMLMeterElement>("meter.knowledge-tree-weight");
     expect(meter?.value).toBe(9);
     expect(meter?.max).toBe(9);
     expect(meter?.getAttribute("aria-label")).toBe("Weight: 9");
     expect(mount.container.textContent).toContain("Weight: 9");
     expect(mount.container.textContent).toContain("Sources: 3");
+    expect(mount.container.textContent).toContain("Leaves 5");
+    expect(mount.container.textContent).toContain("Evidence density 5");
 
     const moreActions = buttonNamed(mount.container, "More Knowledge Tree actions");
     expect(moreActions.dataset.knowledgeAction).toBe("more");
@@ -82,6 +90,9 @@ describe("Knowledge Tree renderer", () => {
     expect(mount.container.textContent).not.toContain("src_private_internal_01");
 
     const conceptNode = treeItemNamed(mount.container, "Lexical retrieval");
+    expect(conceptNode.dataset.knowledgeDensity).toBe("1");
+    expect(conceptNode.dataset.knowledgeLeafCount).toBe("1");
+    expect(conceptNode.classList.contains("density-1")).toBe(true);
     await click(dom, conceptNode);
     expect(conceptNode.getAttribute("aria-selected")).toBe("true");
     const openConcept = buttonNamed(mount.container, "Open");
@@ -135,6 +146,46 @@ describe("Knowledge Tree renderer", () => {
     expect(treeItems.filter((item) => item.getAttribute("tabindex") === "0")).toHaveLength(1);
     expect(treeItems.every((item) => ["0", "-1"].includes(item.getAttribute("tabindex") ?? ""))).toBe(true);
     for (const button of mount.container.querySelectorAll<HTMLButtonElement>("button")) expect(button.tabIndex).toBeGreaterThanOrEqual(0);
+
+    await unmount(dom, mount.root);
+  });
+
+  it("deepens dense evidence leaves and outlines review-needed growth without hiding exact counts", async () => {
+    const dom = createDom();
+    const base = readyTree();
+    const domain = base.roots[0]!;
+    const topic = domain.children[0]!;
+    const concept = topic.children[0]!;
+    const denseConcept = {
+      ...concept,
+      status: "needs_review" as const,
+      metrics: {
+        ...concept.metrics,
+        fragmentPageCount: 6,
+        sourceCount: 4,
+        leafCount: 10,
+        weight: 11
+      }
+    };
+    const tree = {
+      ...base,
+      roots: [{
+        ...domain,
+        children: [{ ...topic, children: [denseConcept, ...topic.children.slice(1)] }]
+      }]
+    };
+    const mount = await mountTree(dom, tree, async () => undefined);
+    const dense = treeItemNamed(mount.container, "Lexical retrieval");
+    const sparse = treeItemNamed(mount.container, "Source evidence");
+
+    expect(dense.dataset.knowledgeDensity).toBe("10");
+    expect(dense.dataset.knowledgeLeafCount).toBe("10");
+    expect(dense.classList.contains("density-3")).toBe(true);
+    expect(dense.classList.contains("needs-review")).toBe(true);
+    expect(Number(dense.querySelector("circle:not(.knowledge-map-pulse)")?.getAttribute("r")))
+      .toBeGreaterThan(Number(sparse.querySelector("circle:not(.knowledge-map-pulse)")?.getAttribute("r")));
+    expect(dense.getAttribute("aria-description")).toContain("6 fragments, 4 sources, 10 leaves. Evidence density 10.");
+    expect(dense.getAttribute("aria-description")).toContain("Needs review.");
 
     await unmount(dom, mount.root);
   });

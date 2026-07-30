@@ -6717,6 +6717,10 @@ dd {
 .knowledge-map-node.level-1 { color: var(--knowledge-node-strong); }
 .knowledge-map-node.level-3,
 .knowledge-map-node.level-4 { color: var(--knowledge-node-soft); }
+.knowledge-map-node:not(.level-0).density-0 { color: var(--knowledge-node-soft); }
+.knowledge-map-node:not(.level-0).density-1 { color: var(--knowledge-node-base); }
+.knowledge-map-node:not(.level-0).density-2 { color: var(--knowledge-node-strong); }
+.knowledge-map-node:not(.level-0).density-3 { color: var(--knowledge-node-root); }
 .knowledge-map-node.is-dimmed { opacity: .14; }
 .knowledge-map-node circle:not(.knowledge-map-pulse) {
   fill: currentColor;
@@ -6725,6 +6729,11 @@ dd {
   vector-effect: non-scaling-stroke;
   transition: r 240ms cubic-bezier(.16, 1, .3, 1), fill 240ms ease, filter 240ms ease;
 }
+.knowledge-map-node.needs-review circle:not(.knowledge-map-pulse) {
+  color: var(--knowledge-node-soft);
+  stroke: var(--warning);
+  stroke-dasharray: 2 2;
+}
 .knowledge-map-node:hover circle:not(.knowledge-map-pulse),
 .knowledge-map-node:focus-visible circle:not(.knowledge-map-pulse) {
   fill: var(--knowledge-node-hover);
@@ -6732,6 +6741,8 @@ dd {
 }
 .knowledge-map-node:focus-visible circle:not(.knowledge-map-pulse) { stroke: var(--focus); stroke-width: 2.4; }
 .knowledge-map-node.active circle:not(.knowledge-map-pulse) { fill: var(--knowledge-node-active); stroke: var(--surface); stroke-width: 1.8; }
+.knowledge-map-node.needs-review.active circle:not(.knowledge-map-pulse) { stroke: var(--warning); }
+.knowledge-map-node.needs-review:focus-visible circle:not(.knowledge-map-pulse) { stroke: var(--focus); stroke-dasharray: 2 2; }
 
 .knowledge-map-label {
   fill: var(--text-primary);

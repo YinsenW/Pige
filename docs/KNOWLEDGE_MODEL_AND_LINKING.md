@@ -367,45 +367,9 @@ only by language, and resolve supported-language aliases when indexes allow.
 
 ## 10. Knowledge Tree
 
-Knowledge Tree is a semantic exploration surface, not a file tree and not a separate storage system.
+Knowledge Tree is a derived semantic explorer, never a file tree/store. Topic/concept pages, typed relationships, sources/citations, page/chunk/recency, claims/questions, and tentative growth form domain trunks, topic/concept/project/question/entity branches, and knowledge-fragment leaves. Weight drives trunk/branch thickness; leaf count is fragmented quantity; leaf size/color express density/importance/evidence/freshness/confidence; `needs_review` or weak sourcing stays outlined/muted. It requires no v0.1 taxonomy; autonomous link changes use Activity/Undo and exceptional conflicts may use proposals.
 
-It is derived from:
-
-- Topic and concept pages.
-- `broader_than`, `narrower_than`, `part_of`, `related_to`, and `has_topic` relationships.
-- Source counts and citation density.
-- Page counts, chunk counts, and update recency.
-- Claim/question density.
-- Tentative growth relationships.
-
-Visual model:
-
-- Trunk: top-level knowledge domains or topic clusters.
-- Branches: topics, concepts, projects, recurring questions, or entity clusters.
-- Leaves: notes, claims, source fragments, examples, snippets, or accepted insights.
-
-Visual encoding:
-
-- Trunk thickness represents total domain weight.
-- Branch thickness represents topic/concept weight.
-- Leaf count represents fragmented knowledge quantity.
-- Leaf size represents local density or importance.
-- Leaf color depth represents evidence density, freshness, or confidence.
-- Muted or outlined leaves represent `needs_review` or weakly sourced knowledge.
-
-Rules:
-
-- Knowledge Tree should help the user see where knowledge is growing.
-- It should not require manual taxonomy management in v0.1.
-- Autonomous relationship changes appear in compact Activity with provenance and Undo.
-- Exceptional conflicts may appear as proposals; rejection is recorded to avoid repetition.
-
-The current bounded public slice rebuilds one read-only semantic tree from durable
-Markdown through the Local Database Service. It exposes deterministic domain/topic/
-concept/source nodes, weight and fragment/source/leaf counts, plus supporting-page
-navigation. Missing indexes return a typed degraded empty state; the renderer never reads
-the vault directly. Broader relationship inputs, health, editing, manual taxonomy, force
-graphs, incremental/10k proof, and packaged-platform parity remain open.
+The bounded read-only slice rebuilds durable Markdown through Local Database Service into body-free domain/topic/concept/source aggregates and supporting-page links; missing indexes degrade typed-empty and renderer never reads vault. Evidence density is `fragmentPageCount + sourceCount` in `0`, `1–2`, `3–5`, `6+`; domain/topic size uses weight, deeper size uses relative density, exact leaf count never depth, and `needs_review` outlines without replacing text/a11y detail. Broader inputs, health/editing/taxonomy/force graph, incremental/10k, and packaged parity remain open.
 
 ## 11. Retrieval And Ranking
 

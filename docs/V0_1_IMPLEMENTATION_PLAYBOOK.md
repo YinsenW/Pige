@@ -518,78 +518,48 @@ Exit criteria:
 
 ## 11. Phase 6: Home Conversation, Local Knowledge, RAG, And Reader
 
-Context pack: `docs/PRD.md` retrieval and reader sections; `docs/PROMPT_DESIGN.md`;
-`docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`; `docs/DATA_ARCHITECTURE.md`;
-`docs/MARKDOWN_SCHEMA.md`; `docs/KNOWLEDGE_MODEL_AND_LINKING.md`;
-`docs/UI_PROTOTYPE.md`; `docs/PERFORMANCE_AND_RELIABILITY.md`; `docs/I18N_DESIGN.md`.
+Context pack: `docs/PRD.md` retrieval/reader; `docs/PROMPT_DESIGN.md`; `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`; `docs/DATA_ARCHITECTURE.md`; `docs/MARKDOWN_SCHEMA.md`; `docs/KNOWLEDGE_MODEL_AND_LINKING.md`; `docs/UI_PROTOTYPE.md`; `docs/PERFORMANCE_AND_RELIABILITY.md`; `docs/I18N_DESIGN.md`.
 
 Build:
 
-- [B6.01 -> E6.01] Unified Home conversation UI with safe draft replacement and optional local retrieval.
-- [B6.02 -> E6.01] Ranked lexical and metadata results.
-- [B6.03 -> E6.04] Grounded citations when evidence is used; no fabricated citations for general answers.
-- [B6.04 -> E6.03] Optional bounded Context Pack for Home, Note Agent, and selection actions.
-- [B6.05 -> E6.02] Explicit Qwen3 embedding-model download, verification, disable/remove, and status flow.
-- [B6.06 -> E6.02] Local RAG engine integration.
-- [B6.07 -> E6.02] Chunk indexing and rebuild status.
-- [B6.08 -> E6.05] Safe Reader, local Markdown copy and focus-safe unavailable selection controls; edit/reveal and keyboard/long-page proof remain.
-- [B6.09 -> E6.07] Backlinks and related pages beyond the current basic Reader rail.
-- [B6.10 -> E6.06] Note Agent side panel with note-scoped context.
-- [B6.11 -> E6.06] Note Agent and selection actions with reversible autonomous mutations, Activity/Undo, and exception-only review.
-- [B6.12 -> E6.07] Simple explainable Knowledge Tree with rebuildable domain/topic/concept/source aggregates and source-backed navigation.
-- [B6.13 -> E6.08] Source-preserving Markdown editing with valid frontmatter, links, citations, and IME-safe input.
-- [B6.14 -> E6.09] Knowledge Tree visual semantics: domain/topic branch weight and fragment leaf quantity/density remain explainable, accessible, and source-backed.
-- [B6.15 -> E6.10] Executable retrieval, linking, and summarization regression fixtures for ranking, grounding, citations, related pages, and insufficient evidence.
-- [B6.16 -> E6.11] Bounded local Dataset inspection/query and table view with exact
-  revision/schema/row/range/aggregate evidence refs; whole Dataset payloads stay local.
+- [B6.01 -> E6.01] Home chat, safe drafts, optional retrieval.
+- [B6.02 -> E6.01] Lexical/metadata rank.
+- [B6.03 -> E6.04] Evidence-only citations.
+- [B6.04 -> E6.03] Bounded Home/Note/selection Context Pack.
+- [B6.05 -> E6.02] Explicit Qwen3 download lifecycle.
+- [B6.06 -> E6.02] Local RAG.
+- [B6.07 -> E6.02] Chunk index/rebuild.
+- [B6.08 -> E6.05] Safe Reader/copy/focus; edit/reveal/keyboard/long-page proof open.
+- [B6.09 -> E6.07] Backlinks/related pages.
+- [B6.10 -> E6.06] Note Agent.
+- [B6.11 -> E6.06] Scoped actions, autonomous Activity/Undo, exceptional review.
+- [B6.12 -> E6.07] Rebuildable explainable tree/navigation.
+- [B6.13 -> E6.08] Source-preserving Markdown/IME edit.
+- [B6.14 -> E6.09] Accessible source-backed weight/density.
+- [B6.15 -> E6.10] Retrieval/linking/summary regressions.
+- [B6.16 -> E6.11] Bounded local Dataset query/table and exact refs.
 
-Current Home has durable chat, optional cited retrieval, wait/resume, bounded transcript,
-follow-up/retry/cancel, IME-safe Enter and safe draft replacement. Pi final pass-through
-and optional known-ref citation projection replace terminal/citation repair. B6.05 has the
-single verified Qwen3 asset lifecycle; B6.07 has deterministic body-free chunks, rebuild
-and 10,000-page/100,000-chunk warm lexical evidence. B6.06 freezes one prebuilt local
-runtime, derived vector DB and fail-lexical `semantic_hybrid` path; implementation,
-reranking, packaged platforms and broader recovery remain open, so E6.02 stays partial.
-
-B6.10 current-note timeline/citations/wait/egress and B6.11 Reader read/transform/review/recovery
-work; an inspect-gated cited append contract is frozen. Implementation, broader mutation, platforms
-and evidence remain, so E6.06 and PIGE-UI-005 stay planned.
-
-B6.16 covers bounded query/citations, recovery, Library paging and historical citation Open.
-Cursors/lookups fence vault, event, revision and payload; drift never appends, substitutes or
-requeries. E6.11 stays planned for analytics, scale, signed platforms and broader recovery.
-
-B6.12/B6.14 current evidence covers the main-owned `library.tree` bridge, rebuildable
-Markdown-derived semantic hierarchy, deterministic weight/fragment/source/leaf metrics,
-localized loading/empty/degraded/error states, keyboard disclosures, and source-backed
-Note Reader navigation. E6.07 remains partial and E6.09 remains planned
-pending broader aggregate semantics, 10k/incremental and packaged-platform parity, plus
-the remaining visual-density and accessibility matrix.
+Current Home proves durable cited chat/control/IME/final projection; B6.05/B6.07 prove one Qwen3 lifecycle, body-free rebuild, and 10k/100k warm lexical scale; runtime/vector/hybrid/rerank/package/recovery gaps keep E6.02 partial. B6.10/B6.11 prove cited current-note and Reader action/recovery; broader mutation/platform proof keeps E6.06/PIGE-UI-005 planned. B6.16 proves fenced bounded queries/citations/paging/Open; analytics/scale/package/recovery gaps keep E6.11 planned. B6.12/B6.14 prove main-owned rebuildable tree, exact weight/fragment/source/leaf/density text, fixed bands, review outline, keyboard and Reader navigation; aggregate/10k/incremental/package/a11y/signed-visual gaps keep E6.07/E6.09 partial.
 
 Deferred from this phase:
 
-- [D6.01] Advanced dashboards; deferred beyond v0.1.
-- [D6.02] Force-directed graph visualization and dense graph analytics; deferred beyond v0.1. The simple Knowledge Tree is B6.12.
-- [D6.03] User-configured embedding providers; v0.1 owns a local retrieval pack.
+- [D6.01] Advanced dashboards.
+- [D6.02] Force/dense graph analytics; B6.12 stays simple.
+- [D6.03] User embedding providers; v0.1 stays local.
 
 Exit criteria:
 
-- [E6.01] Home supports ordinary Agent conversation with or without retrieval; selected
-  local evidence stays ranked and cited, provisional text stays visibly non-authoritative
-  until final validation, recoverable validation is repaired inside Pi rather than exposed
-  as a user retry, and explicit no-model search remains distinct from Agent synthesis.
-- [E6.02] Semantic retrieval works after an explicit verified local-model download and index rebuild; disable/remove leaves lexical fallback intact.
-- [E6.03] Model calls receive selected snippets, policy/budget metadata, and citation refs, not the full vault or unbounded conversation history.
-- [E6.04] Retrieval fixtures pass expected top-result, grounded-summary, citation-coverage, and insufficient-evidence checks.
-- [E6.05] Note reader is sanitized, source-safe, keyboard reachable, and within the long-page rendering budget.
-- [E6.06] Note Agent/selection actions stay scoped; eligible mutations auto-apply with Operations/Undo, exceptional boundaries preview, copy stays local, and translation remains an action.
-- [E6.07] Backlinks, related pages, and Knowledge Tree aggregates rebuild from durable truth and navigate to supporting pages; no advanced graph analytics are exposed.
-- [E6.08] Markdown editing preserves valid frontmatter, clean portable source, wiki links, citations, IME composition, and external-edit conflict safety.
-- [E6.09] Knowledge Tree visual weight and density encodings are deterministic, keyboard/screen-reader interpretable, and traceable to rebuildable source-backed aggregates without exposing advanced graph analytics.
-- [E6.10] Retrieval, linking, and summarization fixtures enforce ranking, grounding, citation coverage, related-page, and insufficient-evidence thresholds without accepting a narrower ingest-only report.
-- [E6.11] Natural-language Dataset questions execute only validated bounded local query
-  plans and return deterministic result hashes/citations; stale revisions, oversized
-  results, unsupported queries, and untrusted cells fail or narrow visibly.
+- [E6.01] Home with/without retrieval keeps evidence ranked/cited, provisional text non-authoritative, Pi repair internal, and no-model search distinct.
+- [E6.02] Verified local-model retrieval; disable/remove preserves lexical fallback.
+- [E6.03] Calls get selected cited snippets plus policy/budget, never whole vault/unbounded chat.
+- [E6.04] Retrieval ranking/grounding/citation/insufficiency fixtures pass.
+- [E6.05] Reader is sanitized, source-safe, keyboard/long-page safe.
+- [E6.06] Scoped actions auto-apply eligible Operations/Undo; exceptions preview; copy local; translation explicit.
+- [E6.07] Durable backlinks/related/tree rebuild and navigate; no advanced graph.
+- [E6.08] Editing preserves frontmatter/source/links/citations/IME/external-conflict safety.
+- [E6.09] Tree weight/density is deterministic, keyboard/a11y-readable, source-backed, non-advanced.
+- [E6.10] Retrieval/linking/summary thresholds exceed ingest-only proof.
+- [E6.11] Bounded local Dataset plans return deterministic hashes/citations; stale/oversized/unsupported/untrusted narrows/fails visibly.
 
 ## 12. Phase 7: Autonomous Knowledge, Memory, And Conversation Polish
 
