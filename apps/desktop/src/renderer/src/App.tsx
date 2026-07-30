@@ -81,6 +81,7 @@ import type {
   KnowledgeActivitySummary,
   KnowledgeTreeResult,
   LibraryListResult,
+  LibraryRelatedResult,
   LibraryPageSummary,
   LocalDatabaseStatus,
   ModelProviderSettingsSummary,
@@ -2467,6 +2468,7 @@ export function App(): React.JSX.Element {
               noteLoadingPageId={noteLoadingPageId}
               onGoHome={navigateHome}
               onRefresh={refreshKnowledgeTree}
+              onLoadRelated={(pageId) => window.pige.library.related({ pageId, limit: 8 })}
               onOpenNote={async (pageId, focusKey) => {
                 knowledgeTreeReturnFocusKey.current = focusKey;
                 await openNote(pageId);
@@ -3594,6 +3596,7 @@ export function KnowledgeTreePanel(props: {
   readonly noteLoadingPageId: string | null;
   readonly onGoHome: () => void;
   readonly onRefresh: () => Promise<void>;
+  readonly onLoadRelated: (pageId: string) => Promise<LibraryRelatedResult>;
   readonly onOpenNote: (pageId: string, focusKey: string) => Promise<void>;
   readonly developmentNotice: DevelopmentNotice | null;
   readonly onDevelopment: (capability: DevelopmentCapability) => void;
@@ -3660,7 +3663,9 @@ export function KnowledgeTreePanel(props: {
           </p>
           <KnowledgeTreeMap
             roots={roots}
+            activeVaultId={props.tree.activeVaultId}
             noteLoadingPageId={props.noteLoadingPageId}
+            onLoadRelated={props.onLoadRelated}
             onOpenNote={props.onOpenNote}
             t={props.t}
           />

@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { KnowledgeTreeResult } from "@pige/contracts";
+import type { KnowledgeTreeResult, LibraryRelatedResult } from "@pige/contracts";
 import { KnowledgeTreePanel } from "../../apps/desktop/src/renderer/src/App";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 
@@ -62,7 +62,7 @@ describe("Knowledge Tree renderer", () => {
     expect(moreActions.dataset.knowledgeAction).toBe("more");
     await click(dom, moreActions);
     expect(mount.container.querySelector("#knowledge-map-status")?.textContent)
-      .toBe("Evidence, backlinks, and relationship suggestions are still in development.");
+      .toBe("This Knowledge Tree action is not available.");
     expect(opened).toEqual([]);
 
     const personalKnowledge = treeItemNamed(mount.container, "Personal knowledge");
@@ -71,7 +71,7 @@ describe("Knowledge Tree renderer", () => {
     expect(openUnavailableTopic.dataset.knowledgeAction).toBe("open-topic");
     await click(dom, openUnavailableTopic);
     expect(mount.container.querySelector("#knowledge-map-status")?.textContent)
-      .toBe("Evidence, backlinks, and relationship suggestions are still in development.");
+      .toBe("This Knowledge Tree action is not available.");
     expect(opened).toEqual([]);
 
     const topicNode = treeItemNamed(mount.container, "Local RAG");
@@ -136,6 +136,68 @@ describe("Knowledge Tree renderer", () => {
     expect(treeItems.every((item) => ["0", "-1"].includes(item.getAttribute("tabindex") ?? ""))).toBe(true);
     for (const button of mount.container.querySelectorAll<HTMLButtonElement>("button")) expect(button.tabIndex).toBeGreaterThanOrEqual(0);
 
+    await unmount(dom, mount.root);
+  });
+
+  it("adopts related pages only for the exact selected navigable node and opens returned page identities", async () => {
+    const dom = createDom();
+    const requests: string[] = [];
+    const pending = new Map<string, ReturnType<typeof deferred<LibraryRelatedResult>>>();
+    const opened: Array<{ readonly pageId: string; readonly focusKey: string }> = [];
+    const mount = await mountTree(
+      dom,
+      readyTree(),
+      async (pageId, focusKey) => { opened.push({ pageId, focusKey }); },
+      (pageId) => {
+        requests.push(pageId);
+        if (pageId === "page_20260713_note0001") return Promise.reject(new Error("private index failure"));
+        const request = deferred<LibraryRelatedResult>();
+        pending.set(pageId, request);
+        return request.promise;
+      }
+    );
+    expect(requests).toEqual(["page_20260713_domain01"]);
+    expect(mount.container.textContent).toContain("Loading related pages…");
+
+    await click(dom, treeItemNamed(mount.container, "Local RAG"));
+    await click(dom, treeItemNamed(mount.container, "Lexical retrieval"));
+    expect(requests).toEqual([
+      "page_20260713_domain01",
+      "page_20260713_topic001",
+      "page_20260713_concept01"
+    ]);
+    await act(async () => {
+      pending.get("page_20260713_domain01")?.resolve(relatedResult("page_20260713_domain01", "Wrong old relation"));
+      pending.get("page_20260713_concept01")?.resolve(relatedResult("page_20260713_concept01", "Exact related note"));
+      await settle(dom);
+    });
+    expect(mount.container.textContent).toContain("Exact related note");
+    expect(mount.container.textContent).toContain("Exact backlink note");
+    expect(mount.container.textContent).toContain("Outgoing links");
+    expect(mount.container.textContent).toContain("Backlinks");
+    expect(mount.container.textContent).not.toContain("Wrong old relation");
+    expect(mount.container.textContent).not.toContain("wiki/private-related.md");
+    expect(mount.container.textContent).not.toContain("heading:private");
+
+    const relatedOpen = buttonNamed(mount.container, "Open: Exact related note");
+    relatedOpen.focus();
+    await click(dom, relatedOpen);
+    expect(opened).toEqual([{
+      pageId: "page_20260713_related01",
+      focusKey: "root-0-child-0-child-0-node:outgoing:page_20260713_related01"
+    }]);
+
+    const rankingNote = treeItemNamed(mount.container, "Ranking note");
+    await click(dom, rankingNote);
+    await waitFor(dom, () => mount.container.textContent?.includes("Related pages are temporarily unavailable.") === true);
+    expect(rankingNote.getAttribute("aria-selected")).toBe("true");
+    expect(dom.window.document.activeElement).toBe(rankingNote);
+    expect(mount.container.textContent).not.toContain("private index failure");
+
+    const sourceOnly = treeItemNamed(mount.container, "Source evidence");
+    await click(dom, sourceOnly);
+    expect(requests).toHaveLength(4);
+    expect(buttonNamed(mount.container, "Open").dataset.knowledgeAction).toBe("open-topic");
     await unmount(dom, mount.root);
   });
 
@@ -215,6 +277,7 @@ describe("Knowledge Tree renderer", () => {
         noteLoadingPageId: null,
         onGoHome: () => undefined,
         onRefresh: async () => undefined,
+        onLoadRelated: async (pageId) => emptyRelatedResult(pageId),
         onOpenNote: async () => undefined,
         developmentNotice: null,
         onDevelopment: () => undefined,
@@ -363,7 +426,8 @@ function t(key: string): string {
 async function mountTree(
   dom: JSDOM,
   tree: KnowledgeTreeResult,
-  onOpenNote: (pageId: string, focusKey: string) => Promise<void>
+  onOpenNote: (pageId: string, focusKey: string) => Promise<void>,
+  onLoadRelated: (pageId: string) => Promise<LibraryRelatedResult> = async (pageId) => emptyRelatedResult(pageId)
 ): Promise<{ readonly root: Root; readonly container: HTMLElement }> {
   const container = dom.window.document.getElementById("root");
   if (!container) throw new Error("Missing test root.");
@@ -375,6 +439,7 @@ async function mountTree(
       noteLoadingPageId: null,
       onGoHome: () => undefined,
       onRefresh: async () => undefined,
+      onLoadRelated,
       onOpenNote,
       developmentNotice: null,
       onDevelopment: () => undefined,
@@ -383,6 +448,62 @@ async function mountTree(
     await settle(dom);
   });
   return { root, container };
+}
+
+function emptyRelatedResult(pageId: string): LibraryRelatedResult {
+  return {
+    queriedAt: "2026-07-13T09:05:00.000Z",
+    activeVaultId: "vault_20260713_treefixture",
+    pageId,
+    totalOutgoing: 0,
+    totalBacklinks: 0,
+    invalidPageCount: 0,
+    outgoing: [],
+    backlinks: [],
+    degraded: false
+  };
+}
+
+function relatedResult(pageId: string, title: string): LibraryRelatedResult {
+  return {
+    ...emptyRelatedResult(pageId),
+    totalOutgoing: 1,
+    totalBacklinks: 1,
+    outgoing: [{
+      relation: "outgoing",
+      target: "heading:private",
+      summary: {
+        pageId: "page_20260713_related01",
+        title,
+        pageType: "note",
+        status: "active",
+        pagePath: "wiki/private-related.md",
+        createdAt: "2026-07-13T09:00:00.000Z",
+        updatedAt: "2026-07-13T09:00:00.000Z",
+        sourceIds: []
+      }
+    }],
+    backlinks: [{
+      relation: "backlink",
+      target: "heading:private-backlink",
+      summary: {
+        pageId: "page_20260713_backlink01",
+        title: "Exact backlink note",
+        pageType: "note",
+        status: "active",
+        pagePath: "wiki/private-backlink.md",
+        createdAt: "2026-07-13T09:00:00.000Z",
+        updatedAt: "2026-07-13T09:00:00.000Z",
+        sourceIds: []
+      }
+    }]
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => { resolve = next; });
+  return { promise, resolve };
 }
 
 function createDom(): JSDOM {
@@ -447,6 +568,14 @@ async function keyDown(dom: JSDOM, element: Element, key: string): Promise<void>
     element.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
     await settle(dom);
   });
+}
+
+async function waitFor(dom: JSDOM, predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if (predicate()) return;
+    await act(async () => settle(dom));
+  }
+  throw new Error("Timed out waiting for Knowledge Tree state.");
 }
 
 async function wheel(dom: JSDOM, element: Element, deltaY: number): Promise<void> {

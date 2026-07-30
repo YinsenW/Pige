@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent
 } from "react";
-import type { KnowledgeTreeNode, KnowledgeTreePageRef } from "@pige/contracts";
+import type { KnowledgeTreeNode, KnowledgeTreePageRef, LibraryRelatedPage, LibraryRelatedResult } from "@pige/contracts";
 import { PigeIcon } from "./PigeIcon";
 
 type TreeMode = "tree" | "network" | "list";
@@ -48,9 +48,13 @@ type PointerDrag = {
   readonly panY: number;
 };
 
+type KnowledgeTreeRelatedState = LibraryRelatedResult | "loading" | "unavailable" | null;
+
 export function KnowledgeTreeMap(props: {
   readonly roots: readonly KnowledgeTreeNode[];
+  readonly activeVaultId: string;
   readonly noteLoadingPageId: string | null;
+  readonly onLoadRelated: (pageId: string) => Promise<LibraryRelatedResult>;
   readonly onOpenNote: (pageId: string, focusKey: string) => Promise<void>;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -64,12 +68,46 @@ export function KnowledgeTreeMap(props: {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [viewportAnnouncement, setViewportAnnouncement] = useState<ViewportAnnouncement | null>(null);
+  const [related, setRelated] = useState<{ readonly owner: string; readonly value: KnowledgeTreeRelatedState }>({
+    owner: "",
+    value: null
+  });
   const nodeRefs = useRef(new Map<string, SVGGElement>());
   const pointerDragRef = useRef<PointerDrag | null>(null);
   const searchOriginRef = useRef<string | null>(null);
+  const relatedSequenceRef = useRef(0);
+  const relatedOwnerRef = useRef("");
+  const onLoadRelatedRef = useRef(props.onLoadRelated);
   const active = visual.byId.get(activeId) ?? visual.nodes[0];
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const transform = `translate(${pan.x} ${pan.y}) scale(${zoom})`;
+  onLoadRelatedRef.current = props.onLoadRelated;
+  relatedOwnerRef.current = `${props.activeVaultId}:${active?.id ?? ""}:${active?.pageId ?? ""}`;
+
+  useEffect(() => {
+    const pageId = active?.pageId;
+    const owner = `${props.activeVaultId}:${active?.id ?? ""}:${pageId ?? ""}`;
+    const sequence = relatedSequenceRef.current + 1;
+    relatedSequenceRef.current = sequence;
+    if (!pageId) {
+      setRelated({ owner, value: null });
+      return;
+    }
+    setRelated({ owner, value: "loading" });
+    void onLoadRelatedRef.current(pageId).then((result) => {
+      if (
+        sequence !== relatedSequenceRef.current ||
+        relatedOwnerRef.current !== owner ||
+        result.activeVaultId !== props.activeVaultId ||
+        result.pageId !== pageId
+      ) return;
+      setRelated({ owner, value: result });
+    }).catch(() => {
+      if (sequence === relatedSequenceRef.current && relatedOwnerRef.current === owner) {
+        setRelated({ owner, value: "unavailable" });
+      }
+    });
+  }, [active?.id, active?.pageId, props.activeVaultId]);
 
   const nodeInteractive = (node: VisualNode): boolean => {
     if (mode === "list" && node.level >= 3) return false;
@@ -403,6 +441,15 @@ export function KnowledgeTreeMap(props: {
               {props.t("knowledgeTree.open")}
             </button>
           )}
+          {active.pageId && active.focusKey ? (
+            <KnowledgeTreeRelatedPanel
+              state={related.owner === relatedOwnerRef.current ? related.value : "loading"}
+              ownerFocusKey={active.focusKey}
+              noteLoadingPageId={props.noteLoadingPageId}
+              onOpenNote={props.onOpenNote}
+              t={props.t}
+            />
+          ) : null}
         </aside>
       ) : null}
 
@@ -501,6 +548,98 @@ export function KnowledgeTreeMap(props: {
         </button>
       </div>
     </div>
+  );
+}
+
+function KnowledgeTreeRelatedPanel(props: {
+  readonly state: KnowledgeTreeRelatedState;
+  readonly ownerFocusKey: string;
+  readonly noteLoadingPageId: string | null;
+  readonly onOpenNote: (pageId: string, focusKey: string) => Promise<void>;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  if (props.state === "loading" || props.state === "unavailable") {
+    return (
+      <section className="related-group" aria-live="polite" aria-busy={props.state === "loading"}>
+        <h3>{props.t("knowledgeTree.related")}</h3>
+        <p className="related-empty">
+          {props.t(props.state === "loading" ? "knowledgeTree.relatedLoading" : "knowledgeTree.relatedUnavailable")}
+        </p>
+      </section>
+    );
+  }
+  if (!props.state || props.state.degraded) {
+    return (
+      <section className="related-group" aria-live="polite">
+        <h3>{props.t("knowledgeTree.related")}</h3>
+        <p className="related-empty">{props.t(props.state?.degraded ? "knowledgeTree.relatedUnavailable" : "knowledgeTree.relatedEmpty")}</p>
+      </section>
+    );
+  }
+  const total = props.state.outgoing.length + props.state.backlinks.length;
+  if (total === 0) {
+    return (
+      <section className="related-group" aria-live="polite">
+        <h3>{props.t("knowledgeTree.related")}</h3>
+        <p className="related-empty">{props.t("knowledgeTree.relatedEmpty")}</p>
+      </section>
+    );
+  }
+  return (
+    <section className="related-group" aria-label={props.t("knowledgeTree.related")}>
+      <KnowledgeTreeRelatedGroup
+        title={props.t("knowledgeTree.outgoing")}
+        pages={props.state.outgoing}
+        ownerFocusKey={props.ownerFocusKey}
+        noteLoadingPageId={props.noteLoadingPageId}
+        onOpenNote={props.onOpenNote}
+        t={props.t}
+      />
+      <KnowledgeTreeRelatedGroup
+        title={props.t("knowledgeTree.backlinks")}
+        pages={props.state.backlinks}
+        ownerFocusKey={props.ownerFocusKey}
+        noteLoadingPageId={props.noteLoadingPageId}
+        onOpenNote={props.onOpenNote}
+        t={props.t}
+      />
+    </section>
+  );
+}
+
+function KnowledgeTreeRelatedGroup(props: {
+  readonly title: string;
+  readonly pages: readonly LibraryRelatedPage[];
+  readonly ownerFocusKey: string;
+  readonly noteLoadingPageId: string | null;
+  readonly onOpenNote: (pageId: string, focusKey: string) => Promise<void>;
+  readonly t: (key: string) => string;
+}): React.JSX.Element | null {
+  if (props.pages.length === 0) return null;
+  return (
+    <section className="related-group">
+      <h3>{props.title}</h3>
+      <div className="related-list">
+        {props.pages.map(({ relation, summary }) => {
+          const focusKey = `${props.ownerFocusKey}:${relation}:${summary.pageId}`;
+          return (
+            <article className="related-row" key={`${relation}:${summary.pageId}`}>
+              <div><strong>{summary.title}</strong></div>
+              <button
+                type="button"
+                className="ghost"
+                data-knowledge-open-key={focusKey}
+                aria-label={`${props.t("note.open")}: ${summary.title}`}
+                disabled={props.noteLoadingPageId === summary.pageId}
+                onClick={() => void props.onOpenNote(summary.pageId, focusKey)}
+              >
+                {props.noteLoadingPageId === summary.pageId ? props.t("note.opening") : props.t("note.open")}
+              </button>
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
