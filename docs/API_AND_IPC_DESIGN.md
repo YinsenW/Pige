@@ -561,8 +561,9 @@ Picker selection/removal remains renderer-local, pathless and side-effect-free. 
 submits exact text, ordered staged identities, active vault and one client-turn identity;
 Main accepts one parent `agent_turn`/Job before clear, and exact retry adopts it. Global
 `file_drop` submits only its ordered drop with a separate client-turn identity and no
-conversation pair; it never consumes the draft. Attachment-only intent appears only on
-accepted submit.
+conversation pair; it never consumes the draft. Failure or IPC rejection retains that
+order/turn identity for explicit retry or removal, never automatic resubmit. Attachment-
+only intent appears only on accepted submit.
 
 `resources/large-paste-boundary.manifest.json` is the machine-readable cross-layer owner
 for staged paste constants. `AgentSubmitTurnRequest` retains an ordinary authored-text

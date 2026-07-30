@@ -276,6 +276,8 @@ Behavior:
   identity; it neither consumes nor clears existing text or staged chips.
 - Multi-file drops are one bounded ordered submission. Preservation checkpoints or child
   work exist only for reliability; Pi chooses all subsequent semantic tools.
+- Failure keeps order/turn identity for explicit retry without clearing the draft,
+  auto-retrying, or duplicating sources.
 - Unsupported files are preserved when possible and reported with clear warnings.
 
 ### 4.3 Activity State
