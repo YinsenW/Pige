@@ -55,7 +55,7 @@
     "scope": "Existing reviewed Vault v2/Alpha convergence scope through exact active-note title rename/Redo, plus explainable Knowledge Tree density.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "4fec7138e2b5baafc27e166693b2ef50329770dd13df362ee8b9a7a537b24ed6"
+    "reviewedSha256": "0527019118e4afd130abbbb848bd651da7cd1e9639e2043c217843c32e0f5d13"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
