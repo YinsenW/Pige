@@ -211,7 +211,7 @@ import {
 } from "./services/job-class-executor-registry";
 import { LibraryService } from "./services/library-service";
 import { LibraryTagsService } from "./services/library-tags-service";
-import { KnowledgeActivityService, type KnowledgeActivityCollectionPort } from "./services/knowledge-activity-service";
+import { KnowledgeActivityService, type KnowledgeActivityCollectionPort, type KnowledgeActivityPageLifecyclePort } from "./services/knowledge-activity-service";
 import { KnowledgeHealthService } from "./services/knowledge-health-service";
 import { ManagedCollectionService } from "./services/managed-collection-service";
 import { ManagedCollectionViewService } from "./services/managed-collection-view-service";
@@ -274,6 +274,7 @@ import { PiPackageUpdateService } from "./services/pi-package-update-service";
 import { PiPackageInstallTaskService } from "./services/pi-package-install-task-service";
 import { NotesService } from "./services/notes-service";
 import { NoteTrashService } from "./services/note-trash-service";
+import { NoteMergeService } from "./services/note-merge-service";
 import {
   NoteMarkdownEditorActivityAdapter,
   NoteMarkdownEditorService
@@ -377,6 +378,7 @@ let libraryService: LibraryService | undefined;
 let libraryTagsService: LibraryTagsService | undefined;
 let notesService: NotesService | undefined;
 let noteTrashService: NoteTrashService | undefined;
+let noteMergeService: NoteMergeService | undefined;
 let noteMarkdownEditorActivityAdapter: NoteMarkdownEditorActivityAdapter | undefined;
 let noteMarkdownEditorService: NoteMarkdownEditorService | undefined;
 let readerSelectionActionService: ReaderSelectionActionService | undefined;
@@ -1592,6 +1594,24 @@ const getNoteTrashService = (): NoteTrashService => {
   noteTrashService ??= new NoteTrashService(getVaultService(), getNotesService());
   return noteTrashService;
 };
+const getNoteMergeService = (): NoteMergeService => {
+  noteMergeService ??= new NoteMergeService(getVaultService(), getNotesService());
+  return noteMergeService;
+};
+const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePort => {
+  const trash = getNoteTrashService();
+  const merge = getNoteMergeService();
+  return {
+    activitySummary: (operation, undo) => merge.activitySummary(operation, undo) ?? trash.activitySummary(operation, undo),
+    findUndoOperation: (operation, operations) => merge.findUndoOperation(operation, operations) ?? trash.findUndoOperation(operation, operations),
+    undo: (operation) => merge.activitySummary(operation) ? merge.undo(operation) : trash.undo(operation),
+    recoverIncompleteOperations: () => {
+      const mergeResult = merge.recoverIncompleteOperations();
+      const trashResult = trash.recoverIncompleteOperations();
+      return { recovered: mergeResult.recovered + trashResult.recovered, failed: mergeResult.failed + trashResult.failed };
+    }
+  };
+};
 
 const getReaderSourceRevealService = (): ReaderSourceRevealService =>
   new ReaderSourceRevealService(getNotesService(), {
@@ -1710,7 +1730,7 @@ const getKnowledgeActivityService = (): KnowledgeActivityService => {
       createManagedCollectionActivityPort(),
       getNoteMarkdownEditorActivityAdapter(),
       getAgentMemoryService(),
-      getNoteTrashService()
+      createNotePageLifecycleActivityPort()
     );
   }
   return knowledgeActivityService;
@@ -2668,6 +2688,7 @@ registerReaderIpc({
   getReaderSelectionCreateNoteService: getReaderSelectionCreateNoteActionService,
   getReaderSourceRevealService,
   getNoteTrashService,
+  getNoteMergeService,
   onNoteTrashCommitted: scheduleActivityIndexRebuild
 });
 registerCurrentNoteAppendIpc({
@@ -3162,12 +3183,13 @@ app.whenReady().then(async () => {
     noteMarkdownEditorActivityAdapter
   );
   noteTrashService = new NoteTrashService(getVaultService(), getNotesService());
+  noteMergeService = new NoteMergeService(getVaultService(), getNotesService());
   knowledgeActivityService = new KnowledgeActivityService(
     getVaultService(),
     createManagedCollectionActivityPort(),
     noteMarkdownEditorActivityAdapter,
     getAgentMemoryService(),
-    noteTrashService
+    createNotePageLifecycleActivityPort()
   );
   agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
     snapshot: getAgentCapabilitySnapshot

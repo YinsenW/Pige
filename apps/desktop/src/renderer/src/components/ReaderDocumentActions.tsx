@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { PigeIcon } from "./PigeIcon";
+import {
+  ReaderNoteMergeDialog,
+  type ReaderNoteMergeLabels,
+  type ReaderNoteMergeOutcome,
+  type ReaderNoteMergeTarget
+} from "./ReaderNoteMergeDialog";
 
 export type ReaderDocumentTrashOutcome = "committed" | "retained";
 
@@ -18,14 +24,21 @@ export interface ReaderDocumentActionLabels {
 export interface ReaderDocumentActionsProps {
   readonly ownerIdentity: string;
   readonly canMoveToTrash: boolean;
+  readonly canMerge: boolean;
+  readonly currentTitle: string;
   readonly labels: ReaderDocumentActionLabels;
+  readonly mergeLabels: ReaderNoteMergeLabels;
   readonly onMoveToTrash: () => Promise<ReaderDocumentTrashOutcome>;
+  readonly onLoadMergeTargets: () => Promise<readonly ReaderNoteMergeTarget[]>;
+  readonly onMerge: (target: ReaderNoteMergeTarget) => Promise<ReaderNoteMergeOutcome>;
   readonly onCommitted: () => void;
+  readonly onMergeCommitted: (render: import("@pige/contracts").NoteRenderResult) => void;
 }
 
 export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.JSX.Element | null {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const requestSequenceRef = useRef(0);
@@ -33,6 +46,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
   const ownerIdentityRef = useRef(props.ownerIdentity);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const actionRef = useRef<HTMLButtonElement>(null);
+  const mergeActionRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   ownerIdentityRef.current = props.ownerIdentity;
@@ -42,19 +56,20 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
     requestActiveRef.current = false;
     setMenuOpen(false);
     setConfirmOpen(false);
+    setMergeOpen(false);
     setPending(false);
     setFailed(false);
-  }, [props.ownerIdentity, props.canMoveToTrash]);
+  }, [props.ownerIdentity, props.canMoveToTrash, props.canMerge]);
 
   useEffect(() => {
-    if (menuOpen) actionRef.current?.focus({ preventScroll: true });
+    if (menuOpen) (props.canMerge ? mergeActionRef.current : actionRef.current)?.focus({ preventScroll: true });
   }, [menuOpen]);
 
   useEffect(() => {
     if (confirmOpen) cancelRef.current?.focus({ preventScroll: true });
   }, [confirmOpen]);
 
-  if (!props.canMoveToTrash) return null;
+  if (!props.canMoveToTrash && !props.canMerge) return null;
 
   const restoreTriggerFocus = (): void => {
     window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
@@ -125,19 +140,49 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
           restoreTriggerFocus();
         }}
       >
-        <button
-          ref={actionRef}
-          type="button"
-          role="menuitem"
-          onClick={() => {
-            setMenuOpen(false);
-            setConfirmOpen(true);
-            setFailed(false);
-          }}
-        >
-          {props.labels.moveToTrash}
-        </button>
+        {props.canMerge ? (
+          <button
+            ref={mergeActionRef}
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              setMergeOpen(true);
+            }}
+          >
+            {props.mergeLabels.title}
+          </button>
+        ) : null}
+        {props.canMoveToTrash ? (
+          <button
+            ref={actionRef}
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              setConfirmOpen(true);
+              setFailed(false);
+            }}
+          >
+            {props.labels.moveToTrash}
+          </button>
+        ) : null}
       </div>
+    ) : null}
+    {mergeOpen ? (
+      <ReaderNoteMergeDialog
+        ownerIdentity={props.ownerIdentity}
+        currentTitle={props.currentTitle}
+        returnFocusRef={triggerRef}
+        labels={props.mergeLabels}
+        onLoadTargets={props.onLoadMergeTargets}
+        onMerge={props.onMerge}
+        onCancel={() => setMergeOpen(false)}
+        onCommitted={(render) => {
+          setMergeOpen(false);
+          props.onMergeCommitted(render);
+        }}
+      />
     ) : null}
     {confirmOpen ? (
       <div className="confirmation-backdrop">

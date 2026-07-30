@@ -454,40 +454,29 @@ Undo and the body/path/hash ban remain.
 
 ### 6.5 Library And Notes
 
-Queries:
+Queries are `library.list`, `library.tree`, `library.related`, `notes.get`, `notes.render`,
+`notes.openEditor`, `notes.resolveInlineReference` and `notes.openSourceReference`. Commands are
+`notes.saveEditor`, `notes.merge`, `notes.revealSource` and `notes.trashCurrent`.
 
-- `library.list`
-- `library.tree`
-- `library.related`
-- `notes.get`
-- `notes.render`
-- `notes.openEditor`
-- `notes.resolveInlineReference`
-- `notes.openSourceReference`
-
-Commands:
-
-- `notes.saveEditor`
-- `notes.revealSource`
-- `notes.trashCurrent`
-
-Library queries return bounded stable-ID summaries without renderer file access. Notes resolve IDs
-to safe Markdown/HTML. `renderContextId` authorizes rendering only; Main retains paths,
-private data, prompts, secrets, raw frontmatter/script and unsafe links.
+Library returns bounded stable-ID summaries; Notes resolves safe Markdown/HTML. `renderContextId`
+only authorizes rendering; Main retains paths, private data, prompts, secrets, raw frontmatter/script
+and unsafe links.
 
 Reader edit contract:
 
-- `openEditor` binds request/vault/page/render and returns bounded Markdown plus revision;
-  `saveEditor` adds revision/draft. Main revalidates and CAS-writes `update_page`. Stale preserves
-  draft/Reader; failures are body-free. Source pages, merge, rich text and private details are absent.
+- `openEditor` binds request/vault/page/render and returns bounded Markdown/revision; `saveEditor`
+  adds revision/draft. Main CAS-writes `update_page`; stale preserves draft/Reader. Source pages,
+  rich text and private details are absent; failures are body-free.
+- `notes.merge` binds request/vault/current page/render/revision plus target page/`updatedAt`.
+  Main revalidates two editable notes, keeps current, and returns its authoritative render plus
+  Operation ID on `committed`; other outcomes are body/path-free.
 
 Reader reference query contract:
 
-- `notes.openSourceReference` accepts exact request/vault/page/render/source identity. Only
-  `resolved` adds `target.pageId`; body-free `unresolved | not_found | stale | mismatch | changed`
-  retains Reader and grants no authority.
-- `notes.revealSource` revalidates that identity and reveals only its asset through Main;
-  renderer responses contain no path or body.
+- `notes.openSourceReference` accepts request/vault/page/render/source. Only `resolved` adds
+  `target.pageId`; body-free `unresolved | not_found | stale | mismatch | changed` retains Reader
+  and grants no authority.
+- `notes.revealSource` revalidates it and Main reveals only that asset; results contain no path/body.
 
 Reader selection uses queries `readerSelection.resolve`, `readerSelection.currentProposal`
 and commands `readerSelection.submitAction`, `readerSelection.submitTransform`,

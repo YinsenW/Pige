@@ -5,6 +5,7 @@ import { registerReaderIpc } from "../../apps/desktop/src/main/register-reader-i
 import type { NotesService } from "../../apps/desktop/src/main/services/notes-service";
 import type { ReaderSourceRevealService } from "../../apps/desktop/src/main/services/reader-source-reveal-service";
 import type { NoteTrashService } from "../../apps/desktop/src/main/services/note-trash-service";
+import type { NoteMergeService } from "../../apps/desktop/src/main/services/note-merge-service";
 
 type IpcHandler = (event: IpcMainInvokeEvent, request?: unknown) => unknown;
 
@@ -22,7 +23,8 @@ function makeHarness(
   notes: Partial<NotesService>,
   revealService?: Partial<ReaderSourceRevealService>,
   noteTrashService?: Partial<NoteTrashService>,
-  onNoteTrashCommitted = vi.fn()
+  onNoteTrashCommitted = vi.fn(),
+  noteMergeService?: Partial<NoteMergeService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -49,6 +51,10 @@ function makeHarness(
       if (noteTrashService) return noteTrashService as NoteTrashService;
       throw new Error("Note trash service was not expected.");
     },
+    getNoteMergeService: () => {
+      if (noteMergeService) return noteMergeService as NoteMergeService;
+      throw new Error("Note merge service was not expected.");
+    },
     onNoteTrashCommitted
   });
   return handlers;
@@ -63,6 +69,7 @@ describe("registerReaderIpc", () => {
       "notes.openEditor",
       "notes.saveEditor",
       "notes.trashCurrent",
+      "notes.merge",
       "notes.resolveInlineReference",
       "notes.openSourceReference",
       "notes.revealSource",
@@ -136,6 +143,47 @@ describe("registerReaderIpc", () => {
     expect(unowned.get("notes.trashCurrent")!({ sender: makeSender(32) } as IpcMainInvokeEvent, identity))
       .toEqual({ ...identity, status: "failed" });
     expect(trash).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders authoritative survivor state only after a tracked note merge commits", async () => {
+    const renderContextId = "notectx_0123456789abcdef0123456789abcdef";
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "notemergereq_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_abcdefgh",
+      currentPageId: "page_20260730_mergesurvivor",
+      renderContextId,
+      expectedRevision: `noteeditrev_${"a".repeat(64)}`,
+      targetPageId: "page_20260730_mergeabsorbed",
+      expectedTargetUpdatedAt: "2026-07-30T10:00:00.000Z"
+    };
+    const renderResult = {
+      summary: {
+        pageId: request.currentPageId, title: "Merged note", pageType: "note", status: "active",
+        pagePath: "wiki/merged.md", createdAt: "2026-07-30T09:00:00.000Z",
+        updatedAt: "2026-07-30T10:01:00.000Z", sourceIds: []
+      },
+      html: "<h1>Merged note</h1>", byteSize: 100, renderContextId,
+      trashEligibility: { canTrash: true, revision: `noteeditrev_${"b".repeat(64)}` }
+    } as const;
+    const render = vi.fn().mockResolvedValue(renderResult);
+    const merge = vi.fn().mockReturnValue({ status: "committed", operationId: "op_20260730_notemerge123456" });
+    const refreshed = vi.fn();
+    const handlers = makeHarness({ render }, undefined, undefined, refreshed, { merge });
+    const sender = makeSender(41);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: request.currentPageId });
+
+    await expect(handlers.get("notes.merge")!({ sender } as IpcMainInvokeEvent, request)).resolves.toMatchObject({
+      ...request, status: "committed", operationId: "op_20260730_notemerge123456", render: renderResult
+    });
+    expect(merge).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
+    expect(render).toHaveBeenLastCalledWith({ pageId: request.currentPageId }, expect.stringMatching(/^notes_owner_/u));
+    expect(refreshed).toHaveBeenCalledTimes(1);
+
+    const unowned = makeHarness({}, undefined, undefined, refreshed, { merge });
+    await expect(unowned.get("notes.merge")!({ sender: makeSender(42) } as IpcMainInvokeEvent, request))
+      .resolves.toEqual({ ...request, status: "stale" });
+    expect(merge).toHaveBeenCalledTimes(1);
   });
 
   it("fails a Reader link closed before Agent submission without a tracked render owner", async () => {

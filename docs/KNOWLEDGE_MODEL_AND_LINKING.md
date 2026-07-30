@@ -346,30 +346,19 @@ Pause only for:
 
 ## 9. Canonicalization And Deduplication
 
-Before creating a new page, tag, or relationship, the Agent should search:
-
-- Exact title.
-- Aliases.
-- Slug variants.
-- Existing tags.
-- Existing topics and concepts.
-- Related entity names.
-- High-ranking semantic matches.
+Before creating a page, tag or relationship, search titles, aliases, slug variants, tags,
+topics/concepts, entity names and high-ranking semantic matches.
 
 Deduplication rules:
 
-- Page identity comes from stable ID, not title or path.
-- Slugs can change; IDs do not.
-- Alias additions are safer than page merges.
-- A merge records both pages, aliases, evidence, affected links, and recovery facts.
-- If uncertain, preserve both and mark the relationship tentative instead of silently merging.
+- Page identity comes from stable ID; titles, paths and slugs may change.
+- Prefer aliases. An explicit ordinary-note merge keeps the current page ID, unions aliases and
+  source IDs, retains the target page ID as an alias, and losslessly appends its body.
+- The merge Operation targets both pages; private before-images and the recoverable target trash
+  make crash adoption and exact Undo possible. If uncertain, preserve both instead.
 
-Multilingual rules:
-
-- Preserve source language.
-- Add aliases for common translations when useful.
-- Do not create separate duplicate concept pages only because the source language differs.
-- Retrieval should resolve aliases across supported languages when indexes allow.
+Multilingual rules preserve source language, add useful translated aliases, avoid duplicates caused
+only by language, and resolve supported-language aliases when indexes allow.
 
 ## 10. Knowledge Tree
 

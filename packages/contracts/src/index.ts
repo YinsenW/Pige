@@ -170,6 +170,8 @@ import type {
   NoteEditorRevision,
   NoteEditorSaveRequest,
   NoteEditorSaveResult,
+  NoteMergeRequest,
+  NoteMergeResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteRenderContextId,
@@ -464,6 +466,8 @@ export type {
   NoteEditorRevision,
   NoteEditorSaveRequest,
   NoteEditorSaveResult,
+  NoteMergeRequest,
+  NoteMergeResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteRenderResult,
@@ -2020,6 +2024,7 @@ export interface PigeDesktopApi {
     readonly render: (request: NoteRenderRequest) => Promise<NoteRenderResult>;
     readonly openEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
     readonly saveEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
+    readonly merge: (request: NoteMergeRequest) => Promise<NoteMergeResult>;
     readonly trashCurrent: (
       request: NoteTrashCurrentRequest
     ) => Promise<NoteTrashCurrentResult>;

@@ -1552,6 +1552,35 @@ export const NoteTrashCurrentResultSchema = z.discriminatedUnion("status", [
   }
 });
 
+export const NOTE_MERGE_CHANNEL = "notes.merge" as const;
+export const NoteMergeRequestIdSchema = z.string().regex(/^notemergereq_[a-z0-9]{16,64}$/u);
+export const NoteMergeRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteMergeRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema,
+  targetPageId: PageIdSchema,
+  expectedTargetUpdatedAt: z.string().datetime({ offset: true })
+}).strict().superRefine((request, context) => {
+  if (request.currentPageId === request.targetPageId) {
+    context.addIssue({ code: "custom", path: ["targetPageId"], message: "A note cannot be merged into itself." });
+  }
+});
+const NoteMergeResultIdentitySchema = NoteMergeRequestSchema;
+export const NoteMergeResultSchema = z.discriminatedUnion("status", [
+  NoteMergeResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict()
+  }).strict(),
+  NoteMergeResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  NoteMergeResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  NoteMergeResultIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
+  NoteMergeResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+
 export const KnowledgeHealthRepairRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: KnowledgeHealthRepairRequestIdSchema,
@@ -8677,6 +8706,9 @@ export type NoteTrashCurrentRequestId = z.infer<typeof NoteTrashCurrentRequestId
 export type NoteTrashEligibility = z.infer<typeof NoteTrashEligibilitySchema>;
 export type NoteTrashCurrentRequest = z.infer<typeof NoteTrashCurrentRequestSchema>;
 export type NoteTrashCurrentResult = z.infer<typeof NoteTrashCurrentResultSchema>;
+export type NoteMergeRequestId = z.infer<typeof NoteMergeRequestIdSchema>;
+export type NoteMergeRequest = z.infer<typeof NoteMergeRequestSchema>;
+export type NoteMergeResult = z.infer<typeof NoteMergeResultSchema>;
 export type NoteResolveInlineReferenceRequest = z.infer<typeof NoteResolveInlineReferenceRequestSchema>;
 export type NoteResolveInlineReferenceResult = z.infer<typeof NoteResolveInlineReferenceResultSchema>;
 export type NoteSourceReferenceRequestId = z.infer<typeof NoteSourceReferenceRequestIdSchema>;

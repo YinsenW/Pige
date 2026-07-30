@@ -576,57 +576,49 @@ Reader requirements:
 
 ### 8.1 Markdown Rendering And Editing Surface
 
-The note surface should borrow the calm, high-legibility feel of excellent Markdown readers and artifact-style renderers while staying unmistakably simple.
+The note surface is a calm, legible Markdown reader.
 
 Reading mode:
 
-- Default to rendered reading, not source text.
-- Keep the note body unframed; avoid placing the whole document inside a card.
-- Use a comfortable text column, clear heading scale, balanced spacing, and quiet link styling.
-- In full-screen mode, keep prose at a readable measure and use surplus width for side context rather than stretching paragraphs.
-- Render headings, paragraphs, lists, task lists, blockquotes, tables, code blocks, inline code, links, images, wiki links, and source citations.
-- Make wiki links and source citations visually distinct but not loud.
-- Keep frontmatter hidden by default and represented through compact metadata.
-- Keep code blocks and tables inside stable scroll containers so they do not stretch or break the layout.
-- Add copy controls to code blocks and selection actions to normal text.
-- Constrain images to the reading column and show captions or source references when present.
+- Default to unframed rendering with hidden frontmatter, compact metadata, readable measure and
+  surplus width reserved for context.
+- Render headings, prose, lists/tasks, quotes, tables, code, links, images, wiki links and citations;
+  distinguish wiki/citation evidence without visual noise.
+- Constrain tables/code/images to stable scroll or reading bounds. Code has Copy; prose has selection
+  actions; images show captions/source references when present.
 
 Editing mode:
 
-- An eligible note has one Edit action and plain Markdown textarea; source pages and rich text stay read-only.
-- Save validates exact draft/frontmatter/page ID/links/citations and adopts refreshed render. Stale
-  keeps Reader/draft with Reload and no merge. Cancel restores focus; Cmd/Ctrl+Enter excludes IME.
-- Undo writes prior bytes forward; Notes add recoverable Trash/Undo, but not source/permanent deletion, restyle, reveal or merge.
+- Eligible notes have one plain-Markdown Edit action; source pages and rich text stay read-only.
+- Save validates draft/frontmatter/IDs/links/citations and adopts Main's render. Stale retains the
+  draft with Reload; Cancel restores focus and Cmd/Ctrl+Enter excludes IME.
+- An ordinary note may merge one eligible note into itself after confirming its safe summary.
+  Failure/stale retains Reader/selection/focus; commit adopts Main's survivor and Undo restores both.
+- Trash and merge are recoverable; source/permanent deletion, restyle and raw reveal stay absent.
 
-Phase 2/3 bridge:
+Reader foundation:
 
-- Library rows open a minimal reader with hidden frontmatter and compact metadata.
-- Rendering supports GFM, sanitized HTML, Pige links, overflow and confined relative raster images;
-  remote/protocol/traversal resources and Electron navigation are denied.
-
-Current Phase 4 reader context foundation:
-
-- `library.related` exposes stable-ID links/backlinks without paths/bodies; the context rail is
-  right-side when wide and below Markdown when narrow.
-- Metadata supplies the sole H1; only an equal normalized leading body H1 hides. Internal links
-  retain typed href resolution; saved-source rows call the strict source-open query, never fake hrefs.
-- Only `resolved.target.pageId` navigates; closed states retain Reader with body-free status.
-  `NoteReader` adds no reveal/reconnect/filesystem/Agent/permission/event navigation.
+- Library rows open a GFM/sanitized-HTML reader. Confined relative images/Pige links work;
+  remote/protocol/traversal resources and Electron navigation do not.
+- Metadata owns the sole H1; only an equal normalized body H1 hides. Typed internal/source links use
+  strict resolution, and only `resolved.target.pageId` navigates.
+- `library.related` returns path/body-free stable-ID links/backlinks, right-side when wide and below
+  when narrow. Closed states retain Reader; no reconnect/filesystem/Agent/permission/event authority.
 
 ### 8.2 Note Agent Panel
 
 When a note is open, the right side can host a contextual Agent panel.
 
-Wide layout is Library | Reader | Note Agent; narrow uses the existing drawer/below-Reader rule.
-The panel shows scoped chat, related facts and actions without internals.
+Wide layout is Library | Reader | Note Agent; narrow uses a drawer/below-Reader. It shows scoped
+chat, related facts and actions without internals.
 
 Current production boundary:
 
-- Exact current-note owns timeline/citations/wait/egress; stale ownership and drafts fail closed.
-- Replace requires same-turn review. Apply refreshes Library/Home Reader; closed results retain
-  Reader/draft/review/focus. Activity owns Undo; renderer owns no target.
-- Selection uses exact identity/action presentation; writes gain Operation/Undo or bounded review.
-- Attachments, related/backlinks, memory and other mutations remain unavailable; reads do not write.
+- Current note owns timeline/citations/wait/egress; stale ownership/drafts fail closed.
+- Replace needs same-turn review; apply refreshes Library/Home Reader, closed results retain state,
+  Activity owns Undo and renderer no target.
+- Selection binds identity/action; writes gain Operation/Undo or bounded review. Other mutations stay
+  unavailable and reads never write.
 
 ### 8.3 Selection Actions
 

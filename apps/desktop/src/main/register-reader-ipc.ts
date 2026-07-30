@@ -6,6 +6,8 @@ import type {
   NoteEditorOpenResult,
   NoteEditorSaveRequest,
   NoteEditorSaveResult,
+  NoteMergeRequest,
+  NoteMergeResult,
   NoteOpenSourceReferenceRequest,
   NoteRevealSourceRequest,
   NoteRenderRequest,
@@ -25,6 +27,9 @@ import {
   NoteEditorOpenResultSchema,
   NoteEditorSaveRequestSchema,
   NoteEditorSaveResultSchema,
+  NOTE_MERGE_CHANNEL,
+  NoteMergeRequestSchema,
+  NoteMergeResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   NoteRevealSourceRequestSchema,
@@ -55,6 +60,7 @@ import type { ReaderSelectionProposalService } from "./services/reader-selection
 import type { ReaderSelectionCreateNoteActionService } from "./services/reader-selection-create-note-service";
 import type { ReaderSourceRevealService } from "./services/reader-source-reveal-service";
 import type { NoteTrashService } from "./services/note-trash-service";
+import type { NoteMergeService } from "./services/note-merge-service";
 
 interface RegisterReaderIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
@@ -64,6 +70,7 @@ interface RegisterReaderIpcOptions {
   readonly getReaderSelectionCreateNoteService: () => ReaderSelectionCreateNoteActionService;
   readonly getReaderSourceRevealService: () => ReaderSourceRevealService;
   readonly getNoteTrashService: () => NoteTrashService;
+  readonly getNoteMergeService: () => NoteMergeService;
   readonly onNoteTrashCommitted: () => void;
 }
 
@@ -188,6 +195,23 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       return NoteTrashCurrentResultSchema.parse({ ...parsed, status: "failed" });
     }
     return result;
+  });
+  options.ipcMain.handle(NOTE_MERGE_CHANNEL, async (event, request: unknown): Promise<NoteMergeResult> => {
+    const parsed = NoteMergeRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) return NoteMergeResultSchema.parse({ ...parsed, status: "stale" });
+    const result = options.getNoteMergeService().merge(ownerId, parsed);
+    if (result.status !== "committed") return NoteMergeResultSchema.parse({ ...parsed, status: result.status });
+    try {
+      const render = await options.getNotesService().render({ pageId: parsed.currentPageId }, ownerId);
+      if (!render.renderContextId || notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
+        return NoteMergeResultSchema.parse({ ...parsed, status: "failed" });
+      }
+      options.onNoteTrashCommitted();
+      return NoteMergeResultSchema.parse({ ...parsed, status: "committed", operationId: result.operationId, render });
+    } catch {
+      return NoteMergeResultSchema.parse({ ...parsed, status: "failed" });
+    }
   });
   options.ipcMain.handle("notes.resolveInlineReference", (
     event,
