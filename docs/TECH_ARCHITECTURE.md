@@ -457,7 +457,7 @@ Vault location and note storage rule:
 - "Open another vault" changes the active vault after service shutdown/startup checks.
 - "Create new vault" initializes `PIGE.md`, `index.md`, `log.md`, `.pige/manifest.json`, and the default folders.
 - "Reveal in Finder/File Explorer" never grants renderer filesystem access; it asks the main process to reveal the path.
-- Moving the active vault is not a silent settings mutation in v0.1. Use a future migration wizard if Pige performs the move itself.
+- Moving the active vault is never a silent settings mutation. Main owns folder selection and explicit confirmation, fences active Jobs and writes, copies every durable byte without transient runtime state, verifies checksum and Vault identity, then atomically switches the machine-local binding. The original Vault is retained. A machine-local receipt lets restart either adopt the exact verified destination or keep the original binding; renderer IPC remains pathless.
 
 ### 5.2 Source Fetch Service
 

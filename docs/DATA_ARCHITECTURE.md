@@ -183,6 +183,12 @@ Examples:
 - Global user/device memory if introduced later.
 - App update state.
 
+Active-Vault relocation changes only the machine-local binding after a Main-selected,
+explicitly confirmed full copy passes checksum and stable-ID verification. Active Jobs and
+writes fence the operation; the original Vault is never deleted. Machine-local receipts are
+excluded from Vault backup and let restart adopt only the exact published destination or
+retain the original binding.
+
 Rule:
 
 - Store outside the vault under OS app data.

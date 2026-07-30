@@ -123,7 +123,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Always-on-top preference | General/Home | `machine_local` | Window Service | OS app data | No | `none` | Immediate |
 | Sidebar visibility | General/Home | `machine_local` | Window Service | OS app data | No | `none` | Immediate |
 | Startup destination (`home` or `library`) | General | `machine_local` | Settings Service, Vault Runtime Service, Renderer | OS app data | No | `none` | Next launch, after active-vault restoration |
-| Active vault path | Vault & Note Storage | `machine_local` | Vault Runtime Service | OS app data | No | `permission_and_confirmation` | Safe user switch or restore-owned exact binding CAS after destination commit |
+| Active vault path | Vault & Note Storage | `machine_local` | Vault Runtime Service | OS app data plus machine-local relocation receipt while in flight | No | `permission_and_confirmation` | Safe user switch, confirmed copy-verify-relocate binding CAS, or restore-owned exact binding CAS after destination commit |
 | Recent vault list | Vault & Note Storage | `machine_local` | Vault Runtime Service | OS app data | No | `none` | Immediate |
 | First-Home guide dismissal | Home | `machine_vault_binding` | Vault Runtime Service | OS app data keyed by `vault_id` | No | `none` | Immediate after explicit Connect/continue choice; older settings default to showing it |
 | Vault ID | Vault & Note Storage | `vault_identity` | Vault Runtime Service | `.pige/manifest.json` | Yes | `explicit_confirmation` | Immutable after creation unless migration |
@@ -171,7 +171,7 @@ This compact index mirrors every entry currently returned by `settings.registry`
 | `window.layoutMode` | `none` | Validated window-mode IPC |
 | `window.alwaysOnTop` | `none` | Validated window preference IPC |
 | `window.sidebarOpen` | `none` | Validated window preference IPC |
-| `vault.activePath` | `permission_and_confirmation` | Main-process native folder selection plus safe vault switch |
+| `vault.activePath` | `permission_and_confirmation` | Main-process native folder selection plus safe switch; relocation additionally fences active work, confirms, verifies the full copy, atomically changes the binding, and retains the original Vault |
 | `vault.recentVaults` | `none` | Main-process recent-vault store |
 | `vault.id` | `explicit_confirmation` | Main-process create/open vault workflow; immutable after creation |
 | `sourceStorage.defaultStrategy` | `none` | Capture Service reads the active vault value for every new file capture |

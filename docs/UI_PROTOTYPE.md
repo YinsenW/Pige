@@ -854,8 +854,10 @@ Required controls:
   `backup.reconnectManagedSourceUnavailable`. Extract only this presentation/fencing to
   `components/VaultBackupSettingsPanel.tsx`; preserve layout and unrelated behavior.
 - Show available schema/content counts and warn on nested/system locations. Keep storage
-  controls here; hide database/cache/parser/checksum/symlink internals. Vault move remains
-  unavailable until preflight, backup, verified copy and rollback exist.
+  controls here; hide database/cache/parser/checksum/symlink internals. Move Vault uses one
+  Main picker and explicit confirmation, blocks during active work, switches only after a
+  verified full copy, and states that the original folder is retained. Stale/cancel/failure
+  keeps current Settings truth; no renderer state carries a filesystem path.
 
 Reset Local Search Database is a repair action under Index & Maintenance. It deletes only
 rebuildable `.pige` indexes/caches and recreates them from Markdown, Dataset Bundles,
