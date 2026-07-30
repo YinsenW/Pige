@@ -3,6 +3,7 @@ import type { SkillExportResult, SkillLifecycleMutationResult, SkillStageInvalid
   SkillStagedSummary, SkillRegistryQueryResult, SkillRegistrySummary, SkillSummary } from "@pige/contracts";
 import { PigeIcon } from "./PigeIcon";
 import { SkillTrashRestorePanel, formatSkillByteSize } from "./SkillTrashRestorePanel";
+import { ExternalSkillUpdateDiff } from "./ExternalSkillUpdateDiff";
 
 type InstalledLifecycleKind = "disable" | "enable" | "export" | "uninstall" | "update";
 
@@ -395,7 +396,8 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
       }
       if (result.status === "ready") {
         setInstallOpen(true);
-        setCurrentStagedReview({ kind: "update", staged: result.staged, skillId: skill.id, enabled: skill.enabled });
+        setCurrentStagedReview({ kind: "update", staged: result.staged, skillId: skill.id,
+          enabled: result.staged.kind === "external_web" ? false : skill.enabled });
         return;
       }
       if (result.status === "failed") {
@@ -874,6 +876,7 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
                     <span>{props.t("skills.scope.machine_local")}</span>
                   </div>
                   <SkillDisclosure skill={stagedReview.staged} t={props.t} />
+                  {stagedReview.kind === "update" ? <ExternalSkillUpdateDiff staged={stagedReview.staged} t={props.t} /> : null}
                 </div>
                 <div className="settings-row-control skill-registry-control">
                   <button

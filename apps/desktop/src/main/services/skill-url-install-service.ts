@@ -8,6 +8,8 @@ import {
   ConversationEventIdSchema,
   deriveSkillDataBoundaries,
   JobIdSchema,
+  SkillCapabilityListSchema,
+  SkillDataBoundaryListSchema,
   SkillDiscardStagedRequestSchema,
   SkillDiscardStagedResultSchema,
   SkillInstallStagedRequestSchema,
@@ -406,7 +408,8 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       }
       const manifest = parseSkillManifest(snapshot.rawContent);
       assertSkillManifestRendererSafe(manifest);
-      if (manifest.id !== target.skillId || manifest.scope !== "machine_local" || manifest.kind !== "pure" ||
+      const expectedKind = target.kind === "external_web" ? "external_web" : "pure";
+      if (manifest.id !== target.skillId || manifest.scope !== "machine_local" || manifest.kind !== expectedKind ||
         manifest.sourceUrl !== target.sourceUrl || !manifest.updatedAt) return updateFailed(identity);
       const manifestSha256 = digest(bytes);
       const refreshed = this.#registry.resolveUpdateTarget(request);
@@ -470,6 +473,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       manifest: current.manifest,
       bytes: current.bytes,
       files: current.files,
+      warnings: this.#warnings(current),
       ...(!isLocalMarkdownRecord(current.record) && current.record.update ? { update: current.record.update } : {})
     };
   }
@@ -481,10 +485,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
   #project(candidate: ReadStageCandidate): SkillStagedSummary {
     const manifest = candidate.manifest;
     if (!isStagedSkillKind(manifest.kind)) throw stageInvalid();
-    const warnings = [
-      ...(!isLocalMarkdownRecord(candidate.record) ? ["untrusted_remote_source" as const] : []),
-      ...(this.#registry.hasTriggerOverlap(manifest) ? ["trigger_overlap" as const] : [])
-    ];
+    const warnings = this.#warnings(candidate);
     return {
       stagingId: candidate.record.stagingId,
       manifestSha256: candidate.record.manifestSha256,
@@ -502,12 +503,22 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       capabilities: manifest.capabilities,
       dataBoundaries: manifest.kind === "pure" ? ["local"] : [...deriveSkillDataBoundaries(manifest.capabilities)],
       ...(manifest.kind === "external_web" ? { source: stageSource(candidate.record) } : {}),
+      ...(!isLocalMarkdownRecord(candidate.record) && candidate.record.update?.kind === "external_web" ? {
+        externalUpdateReview: externalUpdateReview(candidate.record.update, manifest)
+      } : {}),
       ...(manifest.runtime ? { runtime: manifest.runtime } : {}),
       ...(manifest.author ? { author: manifest.author } : {}),
       ...(manifest.license ? { license: manifest.license } : {}),
       files: [...candidate.record.files],
       warnings
     };
+  }
+
+  #warnings(candidate: ReadStageCandidate): SkillStagedSummary["warnings"] {
+    return [
+      ...(!isLocalMarkdownRecord(candidate.record) ? ["untrusted_remote_source" as const] : []),
+      ...(this.#registry.hasTriggerOverlap(candidate.manifest) ? ["trigger_overlap" as const] : [])
+    ];
   }
 
   #publishStage(
@@ -919,8 +930,11 @@ function sameUpdateTarget(left: SkillUpdateTarget, right: SkillUpdateTarget): bo
 function isUpdateRecord(record: Record<string, unknown>): boolean {
   if (!record.update || typeof record.update !== "object" || Array.isArray(record.update)) return false;
   const update = record.update as Record<string, unknown>;
-  return Object.keys(update).sort().join(",") ===
-      "activeVaultId,enabled,expectedRegistryRevision,installedManifestSha256,installedUpdatedAt,installedVersion,skillId,sourceUrl" &&
+  const keys = Object.keys(update).sort().join(",");
+  const pureKeys = "activeVaultId,enabled,expectedRegistryRevision,installedManifestSha256,installedUpdatedAt,installedVersion,skillId,sourceUrl";
+  const externalKeys = "activeVaultId,enabled,expectedRegistryRevision,installedBundleSha256,installedCapabilities,installedDataBoundaries,installedInstallReceiptSha256,installedManifestSha256,installedUpdatedAt,installedVersion,kind,skillId,sourceUrl";
+  const external = keys === externalKeys && update.kind === "external_web";
+  return (keys === pureKeys || external) &&
     SkillStageUpdateRequestSchema.safeParse({
       apiVersion: 1,
       requestId: record.requestId,
@@ -931,7 +945,28 @@ function isUpdateRecord(record: Record<string, unknown>): boolean {
     SkillInstallUrlSchema.safeParse(update.sourceUrl).success && typeof update.enabled === "boolean" &&
     typeof update.installedManifestSha256 === "string" && /^sha256:[a-f0-9]{64}$/u.test(update.installedManifestSha256) &&
     typeof update.installedVersion === "string" && typeof update.installedUpdatedAt === "string" &&
+    (!external || (typeof update.installedBundleSha256 === "string" && /^sha256:[a-f0-9]{64}$/u.test(update.installedBundleSha256) &&
+      typeof update.installedInstallReceiptSha256 === "string" && /^sha256:[a-f0-9]{64}$/u.test(update.installedInstallReceiptSha256) &&
+      SkillCapabilityListSchema.safeParse(update.installedCapabilities).success &&
+      SkillDataBoundaryListSchema.safeParse(update.installedDataBoundaries).success)) &&
     Number.isFinite(Date.parse(update.installedUpdatedAt));
+}
+
+function externalUpdateReview(update: SkillStagedUpdateBinding, manifest: SkillManifest) {
+  if (update.kind !== "external_web" || !update.installedBundleSha256 ||
+    !update.installedCapabilities || !update.installedDataBoundaries) throw stageInvalid();
+  const nextBoundaries = deriveSkillDataBoundaries(manifest.capabilities);
+  return {
+    kind: "external_web" as const,
+    previousVersion: update.installedVersion,
+    previousManifestSha256: update.installedManifestSha256,
+    previousBundleSha256: update.installedBundleSha256,
+    addedCapabilities: manifest.capabilities.filter((value) => !update.installedCapabilities!.includes(value)),
+    removedCapabilities: update.installedCapabilities.filter((value) => !manifest.capabilities.includes(value)),
+    addedDataBoundaries: nextBoundaries.filter((value) => !update.installedDataBoundaries!.includes(value)),
+    removedDataBoundaries: update.installedDataBoundaries.filter((value) => !nextBoundaries.includes(value)),
+    finalEnabled: false as const
+  };
 }
 
 function stageError(code: string, message: string): PigeDomainError {

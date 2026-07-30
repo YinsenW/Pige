@@ -363,6 +363,185 @@ describe("SkillUrlInstallService", () => {
     expect(fetchSnapshot).toHaveBeenCalledTimes(2);
   });
 
+  it("reviews an exact External/Web source update, discloses capability drift, and commits it disabled", async () => {
+    const root = createRoot();
+    const sourceUrl = "https://example.com/SKILL.md";
+    const initial = externalSkillMarkdown({
+      sourceUrl,
+      version: "1",
+      updatedAt: "2026-07-29T10:00:00.000Z",
+      capabilities: ["external_network"],
+      dataBoundary: ["network"],
+      runtimeOrigin: "https://api.example.com"
+    });
+    const updated = externalSkillMarkdown({
+      sourceUrl,
+      version: "2",
+      updatedAt: "2026-07-30T10:00:00.000Z",
+      capabilities: ["external_network", "use_brokered_credential"],
+      dataBoundary: ["network", "brokered_credential"]
+    });
+    const fetchSnapshot = vi.fn().mockResolvedValueOnce(snapshot(initial)).mockResolvedValueOnce(snapshot(updated));
+    const registry = new SkillRegistryService(root);
+    const service = new SkillUrlInstallService({ appDataRoot: root, registry, fetcher: { fetchSnapshot } });
+    const first = await service.stageFromUrl({ apiVersion: 1, requestId, sourceUrl });
+    if (first.status !== "ready") throw new Error("Expected initial External/Web stage.");
+    expect(service.installStaged({
+      apiVersion: 1, requestId, stagingId: first.staged.stagingId,
+      manifestSha256: first.staged.manifestSha256, bundleSha256: first.staged.bundleSha256,
+      expectedRegistryRevision: 0, enabled: false
+    })).toMatchObject({ status: "committed", registry: { skills: [{ canUpdate: true, canEnable: true }] } });
+    expect(registry.enable({
+      apiVersion: 1,
+      requestId: "skill_lifecycle_request_externalenable012345",
+      activeVaultId: "vault_20260730_externalupdate",
+      skillId: "web-research",
+      expectedRegistryRevision: 1
+    })).toMatchObject({ status: "committed", registry: { revision: 2, skills: [{ enabled: true }] } });
+
+    const staged = await service.stageUpdate({
+      apiVersion: 1,
+      requestId: "skill_lifecycle_request_externalupdate01234",
+      activeVaultId: "vault_20260730_externalupdate",
+      skillId: "web-research",
+      expectedRegistryRevision: 2
+    });
+    expect(staged).toMatchObject({ status: "ready", staged: {
+      kind: "external_web",
+      version: "2",
+      externalUpdateReview: {
+        previousVersion: "1",
+        addedCapabilities: ["use_brokered_credential"],
+        removedCapabilities: [],
+        addedDataBoundaries: ["brokered_credential"],
+        removedDataBoundaries: [],
+        finalEnabled: false
+      }
+    } });
+    if (staged.status !== "ready") throw new Error("Expected External/Web update review.");
+    expect(service.installStaged({
+      apiVersion: 1,
+      requestId: "skillreq_externalupdate012345",
+      stagingId: staged.staged.stagingId,
+      manifestSha256: staged.staged.manifestSha256,
+      bundleSha256: staged.staged.bundleSha256,
+      expectedRegistryRevision: staged.staged.registryRevision,
+      enabled: true
+    })).toMatchObject({ status: "failed" });
+    expect(service.installStaged({
+      apiVersion: 1,
+      requestId: "skillreq_externalupdate012345",
+      stagingId: staged.staged.stagingId,
+      manifestSha256: staged.staged.manifestSha256,
+      bundleSha256: staged.staged.bundleSha256,
+      expectedRegistryRevision: staged.staged.registryRevision,
+      enabled: false
+    })).toMatchObject({ status: "committed", registry: {
+      revision: 3,
+      skills: [{ id: "web-research", version: "2", enabled: false, canEnable: false, canUpdate: true }]
+    } });
+    expect(fs.readFileSync(path.join(root, "skills", "installed", "web-research", "SKILL.md"), "utf8")).toBe(updated);
+    expect(fs.readFileSync(path.join(
+      root, "skills", "trash", "updates", "skillreq_externalupdate012345", "skill", "SKILL.md"
+    ), "utf8")).toBe(initial);
+    expect(JSON.parse(fs.readFileSync(path.join(
+      root, "skills", "installed", "web-research", ".pige-install.json"
+    ), "utf8"))).toMatchObject({ enabled: false, source: "https", sourceUrl });
+  });
+
+  it("fails External/Web source and receipt drift closed before publishing an update review", async () => {
+    const root = createRoot();
+    const sourceUrl = "https://example.com/SKILL.md";
+    const initial = externalSkillMarkdown({
+      sourceUrl, version: "1", updatedAt: "2026-07-29T10:00:00.000Z",
+      capabilities: ["external_network"], dataBoundary: ["network"]
+    });
+    const updated = externalSkillMarkdown({
+      sourceUrl, version: "2", updatedAt: "2026-07-30T10:00:00.000Z",
+      capabilities: ["external_network"], dataBoundary: ["network"]
+    });
+    const registry = new SkillRegistryService(root);
+    const fetchSnapshot = vi.fn().mockResolvedValueOnce(snapshot(initial)).mockResolvedValueOnce({
+      ...snapshot(updated), finalUrl: "https://other.example/SKILL.md"
+    });
+    const service = new SkillUrlInstallService({ appDataRoot: root, registry, fetcher: { fetchSnapshot } });
+    const first = await service.stageFromUrl({ apiVersion: 1, requestId, sourceUrl });
+    if (first.status !== "ready") throw new Error("Expected initial External/Web stage.");
+    service.installStaged({
+      apiVersion: 1, requestId, stagingId: first.staged.stagingId,
+      manifestSha256: first.staged.manifestSha256, bundleSha256: first.staged.bundleSha256,
+      expectedRegistryRevision: 0, enabled: false
+    });
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "skill_lifecycle_request_externaldrift012345",
+      activeVaultId: "vault_20260730_externaldrift",
+      skillId: "web-research",
+      expectedRegistryRevision: 1
+    };
+    expect(await service.stageUpdate(request)).toMatchObject({ status: "failed" });
+    const receiptPath = path.join(root, "skills", "installed", "web-research", ".pige-install.json");
+    const receipt = JSON.parse(fs.readFileSync(receiptPath, "utf8"));
+    fs.writeFileSync(receiptPath, `${JSON.stringify({ ...receipt, sourceUrl: "https://other.example/SKILL.md" })}\n`, "utf8");
+    expect(await new SkillUrlInstallService({ appDataRoot: root, registry, fetcher: { fetchSnapshot } }).stageUpdate(request))
+      .toMatchObject({ status: "not_found" });
+    expect(fs.readdirSync(path.join(root, "skills", "staging"))).toEqual([]);
+  });
+
+  it("adopts one prepared External/Web update after restart without re-enabling it", async () => {
+    const root = createRoot();
+    const sourceUrl = "https://example.com/SKILL.md";
+    const initial = externalSkillMarkdown({
+      sourceUrl, version: "1", updatedAt: "2026-07-29T10:00:00.000Z",
+      capabilities: ["external_network"], dataBoundary: ["network"], runtimeOrigin: "https://api.example.com"
+    });
+    const updated = externalSkillMarkdown({
+      sourceUrl, version: "2", updatedAt: "2026-07-30T10:00:00.000Z",
+      capabilities: ["external_network"], dataBoundary: ["network"], runtimeOrigin: "https://api.example.com"
+    });
+    const fetchSnapshot = vi.fn().mockResolvedValueOnce(snapshot(initial)).mockResolvedValueOnce(snapshot(updated));
+    const registry = new SkillRegistryService(root);
+    const service = new SkillUrlInstallService({ appDataRoot: root, registry, fetcher: { fetchSnapshot } });
+    const first = await service.stageFromUrl({ apiVersion: 1, requestId, sourceUrl });
+    if (first.status !== "ready") throw new Error("Expected initial External/Web stage.");
+    service.installStaged({
+      apiVersion: 1, requestId, stagingId: first.staged.stagingId,
+      manifestSha256: first.staged.manifestSha256, bundleSha256: first.staged.bundleSha256,
+      expectedRegistryRevision: 0, enabled: false
+    });
+    const staged = await service.stageUpdate({
+      apiVersion: 1,
+      requestId: "skill_lifecycle_request_externalrestart0123",
+      activeVaultId: "vault_20260730_externalrestart",
+      skillId: "web-research",
+      expectedRegistryRevision: 1
+    });
+    if (staged.status !== "ready") throw new Error("Expected External/Web update review.");
+    const rename = fs.renameSync.bind(fs);
+    const spy = vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      if (String(from).includes(".registry.") && String(to).endsWith("registry.json")) throw new Error("crash");
+      return rename(from, to);
+    });
+    expect(service.installStaged({
+      apiVersion: 1,
+      requestId: "skillreq_externalrestart012345",
+      stagingId: staged.staged.stagingId,
+      manifestSha256: staged.staged.manifestSha256,
+      bundleSha256: staged.staged.bundleSha256,
+      expectedRegistryRevision: 1,
+      enabled: false
+    })).toMatchObject({ status: "failed" });
+    spy.mockRestore();
+    const restarted = new SkillRegistryService(root, { recoverOrphanedMutationLock: true });
+    expect(restarted.summary()).toMatchObject({ status: "ready", registry: {
+      revision: 2,
+      skills: [{ id: "web-research", version: "2", enabled: false, canEnable: true, canUpdate: true }]
+    } });
+    expect(JSON.parse(fs.readFileSync(path.join(
+      root, "skills", "trash", "updates", "skillreq_externalrestart012345", ".pige-update.json"
+    ), "utf8"))).toMatchObject({ schemaVersion: 2, state: "committed", committedRegistryRevision: 2 });
+  });
+
   it("fails a staged update closed after registry drift without replacing installed bytes", async () => {
     const root = createRoot();
     const initial = skillMarkdown({ version: "1", updatedAt: "2026-07-27T10:00:00.000Z", sourceUrl: "https://example.com/SKILL.md" });
@@ -489,21 +668,27 @@ function skillMarkdown(overrides: {
 
 function externalSkillMarkdown(overrides: {
   readonly sourceUrl?: string;
+  readonly version?: string;
+  readonly updatedAt?: string;
+  readonly capabilities?: readonly string[];
   readonly dataBoundary?: readonly string[];
+  readonly runtimeOrigin?: string;
 } = {}): string {
+  const capabilities = overrides.capabilities ?? ["external_network", "use_brokered_credential"];
   return [
     "---",
     "id: web-research",
     "name: Web Research",
-    "version: 1",
+    `version: ${overrides.version ?? "1"}`,
     "description: Review public sources with declared capabilities.",
     "scope: machine_local",
     "kind: external_web",
     ...(overrides.sourceUrl ? [`sourceUrl: ${overrides.sourceUrl}`] : []),
+    ...(overrides.updatedAt ? [`updatedAt: ${overrides.updatedAt}`] : []),
     "capabilities:",
-    "  - external_network",
-    "  - use_brokered_credential",
+    ...capabilities.map((capability) => `  - ${capability}`),
     `dataBoundary: [${(overrides.dataBoundary ?? ["network", "brokered_credential"]).join(", ")}]`,
+    ...(overrides.runtimeOrigin ? ["runtime:", "  adapter: pige_readonly_https_v1", `  origin: ${overrides.runtimeOrigin}`] : []),
     "---",
     "",
     "## Procedure",
