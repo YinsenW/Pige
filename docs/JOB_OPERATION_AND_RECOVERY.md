@@ -606,6 +606,8 @@ Drift preserves live bytes. Memory mutations likewise commit revision-bound priv
 `update_memory`/`trash_memory`; Undo writes `restore_memory`, and restart adopts exact pairs.
 Conversation trash/restore binds exact JSONL hash/revision/private receipt; startup adopts one
 Operation, while conflicts preserve current history and never replay Provider work.
+Knowledge Health unlink/retarget reuses reversible `update_page`; its receipt binds report,
+index, source/target revision and exact occurrence, so restart adopts once and drift is inert.
 
 Rules:
 
