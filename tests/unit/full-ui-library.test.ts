@@ -4,9 +4,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import fs from "node:fs";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   LibraryListResult,
+  LibraryTagsRequest,
+  LibraryTagsResult,
   NoteRenderResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
@@ -30,6 +32,10 @@ import type {
 } from "@pige/contracts";
 import type { CollectionListResult } from "@pige/schemas";
 import { filterLibraryPages, LibraryPanel } from "../../apps/desktop/src/renderer/src/App";
+import {
+  LibraryTagsBrowser,
+  type LibraryTagsBrowserLabels,
+} from "../../apps/desktop/src/renderer/src/components/LibraryTagsBrowser";
 import { NoteReader } from "../../apps/desktop/src/renderer/src/components/NoteReader";
 import type { ReaderInlineReferenceActivation } from "../../apps/desktop/src/renderer/src/components/ReaderInlineReferenceSurface";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
@@ -332,6 +338,169 @@ describe("full UI Library", () => {
       await delay(dom, 150);
     });
     expect(requests).toEqual([]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps bounded Tag rows, exact page opens, one-flight paging, and failure focus", async () => {
+    const dom = createDom();
+    Object.defineProperty(dom.window, "requestAnimationFrame", {
+      configurable: true,
+      value: (callback: FrameRequestCallback) =>
+        dom.window.setTimeout(() => callback(0), 0),
+    });
+    const labels: LibraryTagsBrowserLabels = {
+      title: "Tags",
+      loading: "Loading tags",
+      empty: "No tags",
+      failed: "Tags unavailable",
+      retry: "Try again",
+      notesLoading: "Loading tagged notes",
+      notesEmpty: "No tagged notes",
+      notesFailed: "Tagged notes unavailable",
+      loadMore: "Load more",
+      loadingMore: "Loading more",
+      open: "Open",
+      noteCount: (count) => `${count} notes`,
+    };
+    const opened: string[] = [];
+    const requests: LibraryTagsRequest[] = [];
+    let resolveLoadMore!: (result: LibraryTagsResult) => void;
+    let pagesContinuationAttempt = 0;
+    const snapshotId = `library_tags_snapshot_${"a".repeat(64)}`;
+    const cursor = `library_tags_cursor_${"b".repeat(64)}`;
+    const api = {
+      tags: vi.fn((request: LibraryTagsRequest): Promise<LibraryTagsResult> => {
+        requests.push(request);
+        if (request.mode === "list_tags") {
+          return Promise.resolve({
+            apiVersion: 1,
+            requestId: request.requestId,
+            activeVaultId: request.activeVaultId,
+            mode: "list_tags",
+            status: "ready",
+            snapshotId,
+            tags: [{ tag: "research", pageCount: 2 }],
+            total: 1,
+          });
+        }
+        if (!request.cursor) {
+          return Promise.resolve({
+            apiVersion: 1,
+            requestId: request.requestId,
+            activeVaultId: request.activeVaultId,
+            mode: "list_pages_for_tag",
+            tag: request.tag,
+            status: "ready",
+            snapshotId,
+            pages: [{
+              pageId: "page_20260730_research01",
+              title: "Research brief",
+              pageType: "note",
+              status: "active",
+              updatedAt: "2026-07-30T08:00:00.000Z",
+            }],
+            total: 2,
+            nextCursor: cursor,
+          });
+        }
+        pagesContinuationAttempt += 1;
+        if (pagesContinuationAttempt === 1) {
+          return new Promise<LibraryTagsResult>((resolve) => {
+            resolveLoadMore = resolve;
+          });
+        }
+        return Promise.resolve({
+          apiVersion: 1,
+          requestId: request.requestId,
+          activeVaultId: request.activeVaultId,
+          mode: "list_pages_for_tag",
+          tag: request.tag,
+          status: "ready",
+          snapshotId,
+          pages: [{
+            pageId: "page_20260730_research02",
+            title: "Source review",
+            pageType: "source",
+            status: "active",
+            updatedAt: "2026-07-30T08:01:00.000Z",
+          }],
+          total: 2,
+        });
+      }),
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(LibraryTagsBrowser, {
+        activeVaultId: "vault_20260730_librarytags",
+        api,
+        labels,
+        onOpenNote: async (pageId) => { opened.push(pageId); },
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await act(async () => {
+      buttonNamed(container, "research2 notes").click();
+      await settle(dom);
+    });
+    expect(requests[1]).toMatchObject({
+      mode: "list_pages_for_tag",
+      tag: "research",
+      activeVaultId: "vault_20260730_librarytags",
+      limit: 50,
+    });
+    const firstNote = Array.from(container.querySelectorAll<HTMLButtonElement>("button.search-result"))
+      .find((button) => button.textContent?.includes("Research brief"));
+    expect(firstNote).toBeTruthy();
+    await act(async () => {
+      firstNote!.click();
+      await settle(dom);
+    });
+    expect(opened).toEqual(["page_20260730_research01"]);
+
+    const loadMoreButton = buttonNamed(container, "Load more");
+    await act(async () => {
+      loadMoreButton.click();
+      loadMoreButton.click();
+      await settle(dom);
+    });
+    expect(requests).toHaveLength(3);
+    expect(requests[2]).toMatchObject({
+      mode: "list_pages_for_tag",
+      tag: "research",
+      snapshotId,
+      cursor,
+    });
+    expect(container.textContent).toContain("Research brief");
+    const continuationRequest = requests[2]!;
+    resolveLoadMore({
+      apiVersion: 1,
+      requestId: continuationRequest.requestId,
+      activeVaultId: continuationRequest.activeVaultId,
+      mode: "list_pages_for_tag",
+      tag: "research",
+      status: "stale",
+    });
+    await act(async () => {
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(dom.window.document.activeElement).toBe(loadMoreButton);
+    expect(container.textContent).toContain("Research brief");
+    expect(container.textContent).toContain("Tagged notes unavailable");
+
+    await act(async () => {
+      loadMoreButton.click();
+      await settle(dom);
+    });
+    expect(requests).toHaveLength(4);
+    expect(container.textContent).toContain("Source review");
+    expect(new Set(Array.from(container.querySelectorAll("button.search-result strong"))
+      .map((element) => element.textContent))).toEqual(
+        new Set(["research", "Research brief", "Source review"]),
+      );
 
     await act(async () => root.unmount());
     dom.window.close();

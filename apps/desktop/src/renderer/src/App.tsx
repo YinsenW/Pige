@@ -14,6 +14,10 @@ import {
 } from "react";
 import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
 import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
+import {
+  LibraryTagsBrowser,
+  type LibraryTagsApi,
+} from "./components/LibraryTagsBrowser";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ConversationMarkdown } from "./components/ConversationMarkdown";
 import { ConversationHistoryPanel } from "./components/ConversationHistoryPanel";
@@ -2397,6 +2401,7 @@ export function App(): React.JSX.Element {
         ) : view === "library" && activeVault ? (
           <LibraryPanel
             libraryList={libraryList}
+            tagsApi={window.pige.library}
             collectionCatalog={collectionCatalog}
             collectionCatalogLoading={collectionCatalogLoading}
             onRefreshCollectionCatalog={() => refreshCollectionCatalog(false)}
@@ -3000,6 +3005,7 @@ function LibrarySidebarTree(props: {
 
 export function LibraryPanel(props: {
   readonly libraryList: LibraryListResult | null;
+  readonly tagsApi?: LibraryTagsApi;
   readonly collectionCatalog?: CollectionListResult | null;
   readonly collectionCatalogLoading?: boolean;
   readonly onRefreshCollectionCatalog?: () => Promise<void>;
@@ -3493,6 +3499,26 @@ export function LibraryPanel(props: {
             <p>{props.t("library.loadingDescription")}</p>
           </div>
         </section>
+      ) : family === "tags" && activeVaultId && props.tagsApi ? (
+        <LibraryTagsBrowser
+          activeVaultId={activeVaultId}
+          api={props.tagsApi}
+          labels={{
+            title: props.t("library.tagsTitle"),
+            loading: props.t("library.tagsLoading"),
+            empty: props.t("library.tagsEmpty"),
+            failed: props.t("library.tagsFailed"),
+            retry: props.t("library.tagsRetry"),
+            notesLoading: props.t("library.tagNotesLoading"),
+            notesEmpty: props.t("library.tagNotesEmpty"),
+            notesFailed: props.t("library.tagNotesFailed"),
+            loadMore: props.t("library.tagsLoadMore"),
+            loadingMore: props.t("library.tagsLoadingMore"),
+            open: props.t("library.tagsOpen"),
+            noteCount: (count) => `${count} ${props.t("library.tagsPages")}`,
+          }}
+          onOpenNote={props.onOpenNote}
+        />
       ) : family === "tags" ? (
         <section className="library-state inline-unavailable" role="status" aria-live="polite">
           <div className="state-copy">
