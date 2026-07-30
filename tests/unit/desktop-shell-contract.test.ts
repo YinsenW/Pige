@@ -20,8 +20,8 @@ describe("desktop shell build contract", () => {
   it("freezes one Main-owned machine-local diagnostics clear channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
-    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const diagnosticsApi = contractsSource.slice(
       contractsSource.indexOf("readonly diagnostics: {"),
       contractsSource.indexOf("readonly models: {")
@@ -569,6 +569,7 @@ describe("desktop shell build contract", () => {
   it("freezes one pathless machine-local startup destination CAS interface", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const settingsApi = contractsSource.slice(
       contractsSource.indexOf("readonly settings: {"),
@@ -586,6 +587,10 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('"settings.setStartupDestination"');
     expect(preloadSource).toContain("SetStartupDestinationRequestSchema.parse(request)");
     expect(preloadSource).toContain("StartupDestinationMutationResultSchema.parse(");
+    expect(mainSource).toContain('ipcMain.handle("settings.startupDestination"');
+    expect(mainSource).toContain('ipcMain.handle("settings.setStartupDestination"');
+    expect(mainSource).toContain("SetStartupDestinationRequestSchema.parse(request)");
+    expect(mainSource).toContain("StartupDestinationMutationResultSchema.parse(");
     for (const privateField of ["path", "vaultId", "activeVaultId", "openAtLogin"]) {
       expect(settingsApi).not.toContain(privateField);
     }
