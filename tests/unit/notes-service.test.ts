@@ -79,6 +79,9 @@ function writeSourceRecord(input: {
   readonly sourceId: string;
   readonly pageId?: string;
   readonly pagePath?: string;
+  readonly kind?: "text" | "image_file";
+  readonly displayName?: string;
+  readonly artifacts?: readonly { readonly id: string; readonly kind: "ocr" | "extracted_text"; readonly path: string }[];
 }): void {
   const dateKey = /^src_(\d{8})_/u.exec(input.sourceId)?.[1];
   if (!dateKey) throw new Error("Test source ID is invalid.");
@@ -94,13 +97,13 @@ function writeSourceRecord(input: {
   fs.writeFileSync(recordPath, JSON.stringify({
     schemaVersion: 1,
     id: input.sourceId,
-    kind: "text",
+    kind: input.kind ?? "text",
     storageStrategy: "reference_original",
     semanticOrchestration: "agent_turn",
     ...(input.pageId ? { knowledgePageId: input.pageId } : {}),
     ...(input.pagePath ? { knowledgePagePath: input.pagePath } : {}),
-    original: { uri: `pige-test://${input.sourceId}` },
-    artifacts: [],
+    original: { uri: `pige-test://${input.sourceId}`, ...(input.displayName ? { displayName: input.displayName } : {}) },
+    artifacts: input.artifacts ?? [],
     metadata: {},
     createdAt: "2026-07-09T12:00:00.000Z",
     updatedAt: "2026-07-09T12:00:00.000Z"
@@ -133,6 +136,40 @@ afterEach(() => {
 });
 
 describe("notes service", () => {
+  it("projects bounded pathless source metadata and marks missing records unavailable", async () => {
+    const { vaultPath, vault } = makeVault();
+    const pageId = "page_20260709_metadata123";
+    const sourceId = "src_20260709_metadata1234";
+    const missingSourceId = "src_20260709_missing1234";
+    writePage({ vaultPath, fileName: "metadata.md", pageId, title: "Metadata", sourceIds: [sourceId, missingSourceId] });
+    writeSourceRecord({
+      vaultPath,
+      sourceId,
+      pageId: "page_20260709_source1234",
+      pagePath: "sources/source.md",
+      kind: "image_file",
+      displayName: "receipt.png",
+      artifacts: [{ id: "art_20260709_metadata1234", kind: "ocr", path: "artifacts/private-ocr.txt" }],
+    });
+
+    const rendered = await makeNotes(vaultPath, vault).render({ pageId }, OWNER_ID);
+    expect(rendered.sourceMetadata).toEqual({
+      items: [
+        {
+          sourceId,
+          status: "current",
+          displayName: "receipt.png",
+          category: "image",
+          storage: "reference_original",
+          extraction: "ocr",
+        },
+        { sourceId: missingSourceId, status: "unavailable" },
+      ],
+      remainingCount: 0,
+    });
+    expect(JSON.stringify(rendered.sourceMetadata)).not.toMatch(/private-ocr|pige-test|checksum|path/iu);
+  });
+
   it("opens and commits an owner-bound editor session with a refreshed canonical render", async () => {
     const { vaultPath, vault } = makeVault();
     const pageId = "page_20260709_editable1234";

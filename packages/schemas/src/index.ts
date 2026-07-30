@@ -1750,6 +1750,23 @@ export const NoteRenderPageSummarySchema = z.object({
   language: z.string().min(1).max(64).optional(),
   sourceIds: z.array(SourceIdSchema).max(1_000)
 }).strict();
+export const NoteSourceMetadataItemSchema = z.discriminatedUnion("status", [
+  z.object({
+    sourceId: SourceIdSchema,
+    status: z.literal("current"),
+    displayName: z.string().min(1).max(160)
+      .refine((value) => !/[\\/\u0000-\u001f\u007f-\u009f]/u.test(value) && !/^file:/iu.test(value))
+      .optional(),
+    category: z.enum(["text", "web", "document", "image", "data"]),
+    storage: z.enum(["managed_copy", "reference_original"]),
+    extraction: z.enum(["none", "text", "ocr"])
+  }).strict(),
+  z.object({ sourceId: SourceIdSchema, status: z.literal("unavailable") }).strict()
+]);
+export const NoteSourceMetadataSummarySchema = z.object({
+  items: z.array(NoteSourceMetadataItemSchema).max(5),
+  remainingCount: z.number().int().nonnegative().max(995)
+}).strict();
 export const NoteRenderResultSchema = z.object({
   summary: NoteRenderPageSummarySchema,
   html: NoteRenderedHtmlSchema,
@@ -1763,6 +1780,7 @@ export const NoteRenderResultSchema = z.object({
   aliasing: NoteAliasingSummarySchema.optional(),
   tagging: NoteTaggingSummarySchema.optional(),
   topicRenameEligibility: TopicRenameEligibilitySchema.optional(),
+  sourceMetadata: NoteSourceMetadataSummarySchema.optional(),
   reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional(),
   reconnectOriginalSources: z.array(ReferencedOriginalReconnectCandidateSchema).max(5).optional()
 }).strict();
@@ -10629,6 +10647,8 @@ export type NoteInlineReferenceTarget = z.infer<typeof NoteInlineReferenceTarget
 export type NoteInlineReferenceRequestId = z.infer<typeof NoteInlineReferenceRequestIdSchema>;
 export type NoteRenderContextId = z.infer<typeof NoteRenderContextIdSchema>;
 export type NoteRenderPageSummary = z.infer<typeof NoteRenderPageSummarySchema>;
+export type NoteSourceMetadataItem = z.infer<typeof NoteSourceMetadataItemSchema>;
+export type NoteSourceMetadataSummary = z.infer<typeof NoteSourceMetadataSummarySchema>;
 export type NoteRenderResult = z.infer<typeof NoteRenderResultSchema>;
 export type NoteImportMarkdownRequest = z.infer<typeof NoteImportMarkdownRequestSchema>;
 export type NoteImportMarkdownResult = z.infer<typeof NoteImportMarkdownResultSchema>;
