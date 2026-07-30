@@ -759,6 +759,9 @@ Restore execution contract:
 - Checkpoint at least `manifest_validated`, `destination_reserved`, `archive_extracted`, `durable_domains_migrated`, `external_dependencies_reconciled`, `vault_identity_finalized`, `destination_committed`, and `indexes_rebuilt`.
 - All extraction/migration occurs in a staging directory outside the active vault. The final destination becomes visible only after checksums, schema compatibility, mode-specific identity, and binding rules pass.
 - A crash/retry reconciles the durable job with the staging marker and hashes; it never deletes the active vault or treats an unvalidated staging directory as restored.
+- `restore.cancel` binds preview/mode/active owner: before `destination_committed` it
+  cancels the same Job at a safe checkpoint; later it returns `too_late`. Retry/restart
+  adopts that one outcome.
 - Successful commit writes one body-free `restore_applied` Operation in the restored
   vault. `Operation.jobId` points to the machine-local Restore Job, while that Job's
   `operationIds`/`outputRefs` point back to the Operation. Retry and restart reuse both

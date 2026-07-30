@@ -495,7 +495,8 @@ Rules:
 - Canceling a source-bound parent retains each ingress snapshot until every child is
   terminal/adopted and no retry/recovery reader remains; cancellation is not cleanup proof.
 - Canceling backup removes incomplete temp archives when safe.
-- Canceling restore before apply leaves the original vault untouched. Canceling during apply must finish a safe checkpoint or stop with a recovery report.
+- Restore cancellation preserves the original vault and stops the exact preview/mode Job
+  at a safe pre-commit checkpoint; committed output wins as `too_late`.
 - Canceling a job with applied operations does not roll back automatically; Undo/repair is a separate operation flow.
 - Cleanup, cancellation, and compaction must follow the data lifecycle matrix in `docs/DATA_ARCHITECTURE.md`; they cannot become hidden deletion paths for durable knowledge or source evidence.
 
