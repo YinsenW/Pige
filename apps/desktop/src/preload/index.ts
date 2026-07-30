@@ -86,6 +86,10 @@ import type {
   KnowledgeHealthOrphanParentSearchResult,
   KnowledgeHealthOrphanRepairRequest,
   KnowledgeHealthOrphanRepairResult,
+  KnowledgeHealthClaimSourceSearchRequest,
+  KnowledgeHealthClaimSourceSearchResult,
+  KnowledgeHealthClaimSourceRepairRequest,
+  KnowledgeHealthClaimSourceRepairResult,
   ManagedCopyRootConfigureRequest,
   ManagedCopyRootConfigureResult,
   ManagedCopyRootSummary,
@@ -494,6 +498,10 @@ import {
   KnowledgeHealthOrphanParentSearchResultSchema,
   KnowledgeHealthOrphanRepairRequestSchema,
   KnowledgeHealthOrphanRepairResultSchema,
+  KnowledgeHealthClaimSourceSearchRequestSchema,
+  KnowledgeHealthClaimSourceSearchResultSchema,
+  KnowledgeHealthClaimSourceRepairRequestSchema,
+  KnowledgeHealthClaimSourceRepairResultSchema,
   MANAGED_COPY_ROOT_CONFIGURE_CHANNEL,
   ManagedCopyRootConfigureRequestSchema,
   ManagedCopyRootConfigureResultSchema,
@@ -2399,6 +2407,22 @@ const api: PigeDesktopApi = {
       const parsedRequest = KnowledgeHealthDuplicateTopicRepairRequestSchema.parse(request);
       return KnowledgeHealthDuplicateTopicRepairResultSchema.parse(
         await ipcRenderer.invoke("maintenance.repairKnowledgeHealthDuplicateTopic", parsedRequest)
+      );
+    },
+    searchKnowledgeHealthClaimSources: async (
+      request: KnowledgeHealthClaimSourceSearchRequest
+    ): Promise<KnowledgeHealthClaimSourceSearchResult> => {
+      const parsedRequest = KnowledgeHealthClaimSourceSearchRequestSchema.parse(request);
+      return KnowledgeHealthClaimSourceSearchResultSchema.parse(
+        await ipcRenderer.invoke("maintenance.searchKnowledgeHealthClaimSources", parsedRequest)
+      );
+    },
+    repairKnowledgeHealthUnsourcedClaim: async (
+      request: KnowledgeHealthClaimSourceRepairRequest
+    ): Promise<KnowledgeHealthClaimSourceRepairResult> => {
+      const parsedRequest = KnowledgeHealthClaimSourceRepairRequestSchema.parse(request);
+      return KnowledgeHealthClaimSourceRepairResultSchema.parse(
+        await ipcRenderer.invoke("maintenance.repairKnowledgeHealthUnsourcedClaim", parsedRequest)
       );
     }
   },

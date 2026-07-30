@@ -1338,12 +1338,18 @@ export const KnowledgeHealthOrphanParentSearchRequestIdSchema = z.string()
   .regex(/^knowledge_health_orphan_parent_search_[a-z0-9]{16,64}$/);
 export const KnowledgeHealthOrphanRepairRequestIdSchema = z.string()
   .regex(/^knowledge_health_orphan_repair_request_[a-z0-9]{16,64}$/);
+export const KnowledgeHealthClaimSourceSearchRequestIdSchema = z.string()
+  .regex(/^knowledge_health_claim_source_search_[a-z0-9]{16,64}$/);
+export const KnowledgeHealthClaimSourceRepairRequestIdSchema = z.string()
+  .regex(/^knowledge_health_claim_source_repair_[a-z0-9]{16,64}$/);
 export const KnowledgeHealthRepairContextIdSchema = z.string()
   .regex(/^knowledge_health_repair_context_[a-z0-9]{32,64}$/);
 export const KnowledgeHealthTargetContextIdSchema = z.string()
   .regex(/^knowledge_health_target_context_[a-z0-9]{32,64}$/);
 export const KnowledgeHealthOrphanParentContextIdSchema = z.string()
   .regex(/^knowledge_health_orphan_parent_context_[a-z0-9]{32,64}$/);
+export const KnowledgeHealthClaimSourceContextIdSchema = z.string()
+  .regex(/^knowledge_health_claim_source_context_[a-z0-9]{32,64}$/);
 export const KnowledgeHealthOccurrenceIdSchema = z.string()
   .regex(/^knowledge_health_occurrence_[a-f0-9]{64}$/);
 export const KnowledgeHealthRenderProofSchema = z.string()
@@ -1404,7 +1410,10 @@ const KnowledgeHealthDuplicateTopicIssueSchema = z.object({
 }).strict();
 const KnowledgeHealthUnsourcedClaimIssueSchema = z.object({
   kind: z.literal("unsourced_claim"),
-  page: KnowledgeHealthPageRefSchema
+  page: KnowledgeHealthPageRefSchema,
+  repairContextId: KnowledgeHealthRepairContextIdSchema.optional(),
+  claimRevision: KnowledgeHealthPageRevisionSchema.optional(),
+  claimRenderProof: KnowledgeHealthRenderProofSchema.optional()
 }).strict();
 export const KnowledgeHealthIssueSummarySchema = z.discriminatedUnion("kind", [
   KnowledgeHealthBrokenLinkIssueSchema,
@@ -1454,6 +1463,12 @@ export const KnowledgeHealthIssueSummarySchema = z.discriminatedUnion("kind", [
         proofIds.some((pageId, index) => pageId !== issue.pages[index]?.pageId)) {
         context.addIssue({ code: "custom", path: ["pageProofs"], message: "Duplicate-topic repair requires two ordered current page proofs." });
       }
+    }
+  }
+  if (issue.kind === "unsourced_claim") {
+    const proofs = [issue.repairContextId, issue.claimRevision, issue.claimRenderProof];
+    if (proofs.some((value) => value !== undefined) && proofs.some((value) => value === undefined)) {
+      context.addIssue({ code: "custom", path: ["repairContextId"], message: "Claim repair proof must be complete." });
     }
   }
 });
@@ -2453,6 +2468,61 @@ export const KnowledgeHealthDuplicateTopicRepairResultSchema = z.discriminatedUn
   KnowledgeHealthDuplicateTopicRepairIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
   KnowledgeHealthDuplicateTopicRepairIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
   KnowledgeHealthDuplicateTopicRepairIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+
+export const KNOWLEDGE_HEALTH_MAX_CLAIM_SOURCE_CANDIDATES = 20;
+const KnowledgeHealthClaimProofFields = {
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  reportRequestId: KnowledgeHealthRequestIdSchema,
+  indexGeneration: KnowledgeHealthIndexGenerationSchema,
+  issueKind: z.literal("unsourced_claim"),
+  pageId: PageIdSchema,
+  repairContextId: KnowledgeHealthRepairContextIdSchema,
+  claimRevision: KnowledgeHealthPageRevisionSchema,
+  claimRenderProof: KnowledgeHealthRenderProofSchema
+} as const;
+export const KnowledgeHealthClaimSourceCandidateSchema = z.object({
+  sourceContextId: KnowledgeHealthClaimSourceContextIdSchema,
+  page: KnowledgeHealthPageRefSchema
+}).strict();
+export const KnowledgeHealthClaimSourceSearchRequestSchema = z.object({
+  ...KnowledgeHealthClaimProofFields,
+  requestId: KnowledgeHealthClaimSourceSearchRequestIdSchema,
+  query: z.string().max(120).refine(
+    (value) => !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(value),
+    "Knowledge Health source search contains unsafe control text."
+  )
+}).strict();
+const KnowledgeHealthClaimSourceSearchIdentitySchema = KnowledgeHealthClaimSourceSearchRequestSchema;
+export const KnowledgeHealthClaimSourceSearchResultSchema = z.discriminatedUnion("status", [
+  KnowledgeHealthClaimSourceSearchIdentitySchema.extend({
+    status: z.literal("ready"),
+    sources: z.array(KnowledgeHealthClaimSourceCandidateSchema)
+      .max(KNOWLEDGE_HEALTH_MAX_CLAIM_SOURCE_CANDIDATES),
+    truncated: z.boolean()
+  }).strict(),
+  KnowledgeHealthClaimSourceSearchIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  KnowledgeHealthClaimSourceSearchIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  KnowledgeHealthClaimSourceSearchIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+const KnowledgeHealthClaimSourceRepairIdentitySchema = z.object({
+  ...KnowledgeHealthClaimProofFields,
+  requestId: KnowledgeHealthClaimSourceRepairRequestIdSchema,
+  action: z.literal("bind_claim_source"),
+  sourceContextId: KnowledgeHealthClaimSourceContextIdSchema
+}).strict();
+export const KnowledgeHealthClaimSourceRepairRequestSchema = KnowledgeHealthClaimSourceRepairIdentitySchema;
+export const KnowledgeHealthClaimSourceRepairResultSchema = z.discriminatedUnion("status", [
+  KnowledgeHealthClaimSourceRepairIdentitySchema.extend({
+    status: z.literal("committed"),
+    revision: NoteEditorRevisionSchema,
+    operationId: OperationIdSchema
+  }).strict(),
+  KnowledgeHealthClaimSourceRepairIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  KnowledgeHealthClaimSourceRepairIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  KnowledgeHealthClaimSourceRepairIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
+  KnowledgeHealthClaimSourceRepairIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 
 export const ProviderKindSchema = z.enum([
@@ -10606,6 +10676,11 @@ export type KnowledgeHealthRepairRequest = z.infer<typeof KnowledgeHealthRepairR
 export type KnowledgeHealthRepairResult = z.infer<typeof KnowledgeHealthRepairResultSchema>;
 export type KnowledgeHealthDuplicateTopicRepairRequest = z.infer<typeof KnowledgeHealthDuplicateTopicRepairRequestSchema>;
 export type KnowledgeHealthDuplicateTopicRepairResult = z.infer<typeof KnowledgeHealthDuplicateTopicRepairResultSchema>;
+export type KnowledgeHealthClaimSourceCandidate = z.infer<typeof KnowledgeHealthClaimSourceCandidateSchema>;
+export type KnowledgeHealthClaimSourceSearchRequest = z.infer<typeof KnowledgeHealthClaimSourceSearchRequestSchema>;
+export type KnowledgeHealthClaimSourceSearchResult = z.infer<typeof KnowledgeHealthClaimSourceSearchResultSchema>;
+export type KnowledgeHealthClaimSourceRepairRequest = z.infer<typeof KnowledgeHealthClaimSourceRepairRequestSchema>;
+export type KnowledgeHealthClaimSourceRepairResult = z.infer<typeof KnowledgeHealthClaimSourceRepairResultSchema>;
 export type JobCheckpoint = z.infer<typeof JobCheckpointSchema>;
 export type JobRef = z.infer<typeof JobRefSchema>;
 export type JobRecord = z.infer<typeof JobRecordSchema>;

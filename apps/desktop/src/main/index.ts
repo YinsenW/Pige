@@ -246,6 +246,7 @@ import { NoteMarkdownImportService } from "./services/note-markdown-import-servi
 import { KnowledgeActivityService, type KnowledgeActivityCollectionPort, type KnowledgeActivityPageLifecyclePort } from "./services/knowledge-activity-service";
 import { KnowledgeHealthService } from "./services/knowledge-health-service";
 import { KnowledgeHealthDuplicateTopicService } from "./services/knowledge-health-duplicate-topic-service";
+import { KnowledgeHealthUnsourcedClaimService } from "./services/knowledge-health-unsourced-claim-service";
 import { ManagedCollectionService } from "./services/managed-collection-service";
 import { ManagedCollectionViewService } from "./services/managed-collection-view-service";
 import { ManagedCollectionCitationService } from "./services/managed-collection-citation-service";
@@ -421,6 +422,7 @@ let jobClassExecutorRegistry: JobClassExecutorRegistry | undefined;
 let knowledgeActivityService: KnowledgeActivityService | undefined;
 let knowledgeHealthService: KnowledgeHealthService | undefined;
 let knowledgeHealthDuplicateTopicService: KnowledgeHealthDuplicateTopicService | undefined;
+let knowledgeHealthUnsourcedClaimService: KnowledgeHealthUnsourcedClaimService | undefined;
 let managedCollectionService: ManagedCollectionService | undefined;
 let managedCollectionViewService: ManagedCollectionViewService | undefined;
 let managedCollectionCitationService: ManagedCollectionCitationService | undefined;
@@ -2057,6 +2059,16 @@ const getKnowledgeHealthService = (): KnowledgeHealthService => {
   return knowledgeHealthService;
 };
 
+const getKnowledgeHealthUnsourcedClaimService = (): KnowledgeHealthUnsourcedClaimService => {
+  knowledgeHealthUnsourcedClaimService ??= new KnowledgeHealthUnsourcedClaimService(
+    getLocalDatabaseService(),
+    new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), {
+      allowClaim: true
+    })
+  );
+  return knowledgeHealthUnsourcedClaimService;
+};
+
 const getIndexRebuildJobExecutor = (): IndexRebuildJobExecutor =>
   getJobsService().indexRebuildExecutor();
 
@@ -2812,7 +2824,11 @@ registerKnowledgeHealthIpc({
     const vaultPath = getVaultService().activeVaultPath();
     return vault && vaultPath ? { vaultId: vault.vaultId, vaultPath } : undefined;
   },
-  runKnowledgeHealth: (vaultPath, request) => getKnowledgeHealthService().run(vaultPath, request),
+  runKnowledgeHealth: (vaultPath, request) => getKnowledgeHealthUnsourcedClaimService().project(
+    vaultPath,
+    request,
+    getKnowledgeHealthService().run(vaultPath, request)
+  ),
   searchKnowledgeHealthTargets: (vaultPath, request) =>
     getKnowledgeHealthService().searchTargets(vaultPath, request),
   searchKnowledgeHealthOrphanParents: (vaultPath, request) =>
@@ -2824,6 +2840,13 @@ registerKnowledgeHealthIpc({
   },
   repairKnowledgeHealthDuplicateTopic: (vaultPath, request) => {
     const result = getKnowledgeHealthDuplicateTopicService().repair(vaultPath, request);
+    if (result.status === "committed") scheduleActivityIndexRebuild();
+    return result;
+  },
+  searchKnowledgeHealthClaimSources: (vaultPath, request) =>
+    getKnowledgeHealthUnsourcedClaimService().search(vaultPath, request),
+  repairKnowledgeHealthUnsourcedClaim: (vaultPath, request) => {
+    const result = getKnowledgeHealthUnsourcedClaimService().repair(vaultPath, request);
     if (result.status === "committed") scheduleActivityIndexRebuild();
     return result;
   },

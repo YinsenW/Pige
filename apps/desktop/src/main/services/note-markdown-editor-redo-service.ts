@@ -23,11 +23,11 @@ import {
   readUserPageUpdateOperations,
   readUserPageUpdateUndoBinding,
   requireExactPrivateFile,
-  validateEditableMarkdown,
+  preservesActivityMarkdownOwnership,
+  validateActivityMarkdown,
   type NoteMarkdownEditorVaultPort,
   type UserPageUpdateBinding
 } from "./note-markdown-editor-service";
-import { preservesEditableMarkdownOwnership } from "./markdown-source-editor-policy";
 import {
   createUserPageUpdateRedoOperationId,
   createUserPageUpdateUndoOperationId
@@ -139,8 +139,8 @@ export class NoteMarkdownEditorRedoService {
       MAX_NOTE_MARKDOWN_EDITOR_BYTES
     );
     if (
-      !validateEditableMarkdown(after, binding.pageId) ||
-      !preservesEditableMarkdownOwnership(before, after)
+      !validateActivityMarkdown(after, binding.pageId) ||
+      !preservesActivityMarkdownOwnership(before, after)
     ) {
       throw new Error("The Markdown Redo after-image is invalid.");
     }
