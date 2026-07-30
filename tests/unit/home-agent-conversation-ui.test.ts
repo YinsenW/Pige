@@ -5441,6 +5441,7 @@ function testAppearanceSummary(locale: AppearanceSettingsSummary["locale"]): App
     availableLocales: [locale],
     themePreference: "system",
     effectiveTheme: "light",
+    generatedKnowledgeLanguage: "preserve_source",
     revision: 0
   };
 }

@@ -1932,7 +1932,9 @@ export class HomeAgentService {
           currentNoteAppendRegistered,
           readerSelectionCreateNote !== undefined,
           skillStagingTools.length > 0,
-          request.sourceLanguage
+          request.sourceLanguage,
+          policy.language.generatedKnowledgeLanguage,
+          policy.language.appLocale
         ),
         userPrompt: createHomeUserPrompt(query, recalledMemories),
         history,
@@ -2961,7 +2963,9 @@ function createHomeSystemPrompt(
   currentNoteAppendAvailable = false,
   readerSelectionCreateNoteAvailable = false,
   skillStagingAvailable = false,
-  queryLanguage: DurableLanguage = "unknown"
+  queryLanguage: DurableLanguage = "unknown",
+  generatedKnowledgeLanguage: AgentRuntimePolicyContext["language"]["generatedKnowledgeLanguage"] = "preserve_source",
+  appLocale: AgentRuntimePolicyContext["language"]["appLocale"] = "en"
 ): string {
   return [
     "You are Pige, a general-purpose personal Agent with optional local-knowledge augmentation.",
@@ -2989,6 +2993,11 @@ function createHomeSystemPrompt(
     queryLanguage === "unknown"
       ? "Answer in the language of the current user instruction when it is clear; otherwise use the configured app language."
       : `Answer in ${queryLanguage}, the durable language of the current user instruction, unless that instruction explicitly requests another language.`,
+    generatedKnowledgeLanguage === "app_locale"
+      ? `Write any newly generated durable knowledge in the configured app language ${appLocale}; never translate preserved source bodies.`
+      : generatedKnowledgeLanguage === "follow_query"
+        ? "Write any newly generated durable knowledge in the current user instruction language when clear; otherwise preserve the source language."
+        : "Preserve the source language in newly generated durable knowledge unless the user explicitly requests translation.",
     ...(memoryWritingAvailable ? [
       "Call pige_remember_preference only when the user explicitly asks Pige to remember a stable preference. Never save source facts, credentials, or inferred personal claims."
     ] : []),

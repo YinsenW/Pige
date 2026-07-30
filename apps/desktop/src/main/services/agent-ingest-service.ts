@@ -137,6 +137,8 @@ export interface AgentIngestCapabilitySnapshot {
   readonly datasetToolchainReady?: boolean;
   readonly ocrEngines: AgentRuntimePolicyContext["localCapabilities"]["ocrEngines"];
   readonly ocrLanguageHints?: readonly string[];
+  readonly appLocale?: AgentRuntimePolicyContext["language"]["appLocale"];
+  readonly generatedKnowledgeLanguage?: AgentRuntimePolicyContext["language"]["generatedKnowledgeLanguage"];
   readonly speechInputAvailable: boolean;
   readonly embeddingModelInstalled: boolean;
   readonly lexicalSearchAvailable: boolean;
@@ -925,7 +927,7 @@ export class AgentIngestService {
     };
 
     await authorizeCurrentModelTurn();
-    const systemPrompt = createSystemPrompt(proposalStageAvailable) + (proposalStageAvailable
+    const systemPrompt = `${createSystemPrompt(proposalStageAvailable)}\n${knowledgeLanguageInstruction(policy.language)}` + (proposalStageAvailable
       ? "\nUse pige_stage_knowledge_note_proposal when the generated note should wait for explicit human review. Staging does not apply or publish the proposed Markdown."
       : "");
     const userPrompt = createUserPrompt(currentPromptContext, hooks.userTurn);
@@ -2298,6 +2300,16 @@ function createSystemPrompt(proposalStageAvailable: boolean): string {
     "Use only evidence refs supplied by pige_inspect_source. Never place citation syntax inside statement text.",
     "confidence must be one of: low, medium, high."
   ].join("\n");
+}
+
+function knowledgeLanguageInstruction(language: AgentRuntimePolicyContext["language"]): string {
+  if (language.generatedKnowledgeLanguage === "app_locale") {
+    return `Write newly generated durable knowledge in the configured app language ${language.appLocale}; do not translate preserved source bodies.`;
+  }
+  if (language.generatedKnowledgeLanguage === "follow_query") {
+    return "Write newly generated durable knowledge in the current user's request language when clear; otherwise preserve the source language.";
+  }
+  return "Preserve the source language in newly generated durable knowledge unless the user explicitly requests translation.";
 }
 
 function createUserPrompt(

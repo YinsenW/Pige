@@ -1,13 +1,17 @@
 import {
   AppearanceSettingsSummarySchema,
   AppearanceThemeMutationResultSchema,
+  KnowledgeLanguageMutationResultSchema,
   type AppearanceMachineSettings,
   type AppearanceSettingsSummary,
   type AppearanceThemeMutationResult,
   type AppearanceThemePreference,
   type EffectiveAppearanceTheme,
+  type GeneratedKnowledgeLanguage,
+  type KnowledgeLanguageMutationResult,
   type Locale,
   type SetLocaleRequest,
+  type SetKnowledgeLanguageRequest,
   type SetThemeRequest
 } from "@pige/schemas";
 import { LocalSettingsStore } from "./local-settings";
@@ -82,6 +86,27 @@ export class AppearanceService {
     }
   }
 
+  setKnowledgeLanguage(request: SetKnowledgeLanguageRequest): KnowledgeLanguageMutationResult {
+    try {
+      const result = this.#settings.mutateAppearanceSettings(request.expectedRevision, (current) => ({
+        ...current,
+        generatedKnowledgeLanguage: request.generatedKnowledgeLanguage
+      }));
+      const next = this.#project(result.settings);
+      const changed = !sameSummary(this.#current, next);
+      this.#current = next;
+      if (changed) this.#publish(next);
+      return KnowledgeLanguageMutationResultSchema.parse({ status: result.status, settings: next });
+    } catch {
+      try {
+        this.#current = this.#project(this.#settings.getAppearanceSettings());
+      } catch {
+        // Preserve the last authoritative projection when machine-local settings cannot be reread.
+      }
+      return KnowledgeLanguageMutationResultSchema.parse({ status: "failed", settings: this.#current });
+    }
+  }
+
   onChanged(listener: (summary: AppearanceSettingsSummary) => void): () => void {
     if (this.#disposed) return () => undefined;
     this.#listeners.add(listener);
@@ -144,6 +169,7 @@ export class AppearanceService {
       availableLocales: [...PIGE_AVAILABLE_LOCALES],
       themePreference: appearance.themePreference,
       effectiveTheme: this.#effectiveTheme(),
+      generatedKnowledgeLanguage: resolveGeneratedKnowledgeLanguage(appearance),
       revision: appearance.revision
     });
   }
@@ -167,5 +193,10 @@ function sameSummary(left: AppearanceSettingsSummary, right: AppearanceSettingsS
   return left.revision === right.revision &&
     left.locale === right.locale &&
     left.themePreference === right.themePreference &&
-    left.effectiveTheme === right.effectiveTheme;
+    left.effectiveTheme === right.effectiveTheme &&
+    left.generatedKnowledgeLanguage === right.generatedKnowledgeLanguage;
+}
+
+function resolveGeneratedKnowledgeLanguage(settings: AppearanceMachineSettings): GeneratedKnowledgeLanguage {
+  return settings.generatedKnowledgeLanguage ?? "preserve_source";
 }

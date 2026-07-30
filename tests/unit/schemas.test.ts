@@ -8,6 +8,7 @@ import {
   AgentSubmitTurnResultSchema,
   AppearanceSettingsSummarySchema,
   AppearanceThemeMutationResultSchema,
+  KnowledgeLanguageMutationResultSchema,
   BackupContinueIncompleteRequestSchema,
   BackupContinueIncompleteResultSchema,
   BackupReconnectDestinationRequestSchema,
@@ -166,6 +167,7 @@ import {
   RetrievalSearchResultSchema,
   SetStartupDestinationRequestSchema,
   SetThemeRequestSchema,
+  SetKnowledgeLanguageRequestSchema,
   StartupDestinationMutationResultSchema,
   StartupDestinationSummarySchema,
   SkillDiscardStagedRequestSchema,
@@ -4574,6 +4576,7 @@ describe("schemas", () => {
       availableLocales: ["en", "zh-Hans"],
       themePreference: "system",
       effectiveTheme: "dark",
+      generatedKnowledgeLanguage: "preserve_source",
       revision: 4
     });
     expect(SetThemeRequestSchema.parse({ themePreference: "light", expectedRevision: 4 })).toEqual({
@@ -4581,6 +4584,14 @@ describe("schemas", () => {
       expectedRevision: 4
     });
     expect(AppearanceThemeMutationResultSchema.parse({ status: "stale", settings: summary }).status).toBe("stale");
+    expect(SetKnowledgeLanguageRequestSchema.parse({
+      generatedKnowledgeLanguage: "follow_query",
+      expectedRevision: 4
+    })).toEqual({ generatedKnowledgeLanguage: "follow_query", expectedRevision: 4 });
+    expect(KnowledgeLanguageMutationResultSchema.parse({
+      status: "committed",
+      settings: { ...summary, generatedKnowledgeLanguage: "follow_query", revision: 5 }
+    }).status).toBe("committed");
     expect(MachineLocalSettingsSchema.parse({
       schemaVersion: 1,
       appearance: { revision: 4, themePreference: "system" },
@@ -4592,6 +4603,10 @@ describe("schemas", () => {
       themePreference: "dark",
       expectedRevision: 4,
       rawCss: "body{}"
+    })).toThrow();
+    expect(() => SetKnowledgeLanguageRequestSchema.parse({
+      generatedKnowledgeLanguage: "model_choice",
+      expectedRevision: 4
     })).toThrow();
   });
 

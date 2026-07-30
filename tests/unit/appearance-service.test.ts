@@ -61,9 +61,62 @@ describe("appearance service", () => {
       locale: "en",
       themePreference: "system",
       effectiveTheme: "light",
+      generatedKnowledgeLanguage: "preserve_source",
       revision: 0
     });
     expect(nativeTheme.themeSource).toBe("system");
+  });
+
+  it("persists knowledge language with the shared appearance CAS and publishes authority", () => {
+    const { root, service, store } = makeService();
+    const listener = vi.fn();
+    service.onChanged(listener);
+
+    expect(service.setKnowledgeLanguage({
+      generatedKnowledgeLanguage: "follow_query",
+      expectedRevision: 0
+    })).toMatchObject({
+      status: "committed",
+      settings: { generatedKnowledgeLanguage: "follow_query", revision: 1 }
+    });
+    expect(store.getAppearanceSettings()).toEqual({
+      revision: 1,
+      themePreference: "system",
+      generatedKnowledgeLanguage: "follow_query"
+    });
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({
+      generatedKnowledgeLanguage: "follow_query",
+      revision: 1
+    }));
+
+    expect(service.setKnowledgeLanguage({
+      generatedKnowledgeLanguage: "app_locale",
+      expectedRevision: 0
+    })).toMatchObject({
+      status: "stale",
+      settings: { generatedKnowledgeLanguage: "follow_query", revision: 1 }
+    });
+
+    const restarted = new AppearanceService(new LocalSettingsStore(root), "en-US", new FakeNativeTheme());
+    expect(restarted.summary()).toMatchObject({ generatedKnowledgeLanguage: "follow_query", revision: 1 });
+    restarted.dispose();
+  });
+
+  it("returns authoritative knowledge-language failure without mutating machine settings", () => {
+    const { root, service, store } = makeService();
+    const lease = acquireVaultWriterLease(root);
+    try {
+      expect(service.setKnowledgeLanguage({
+        generatedKnowledgeLanguage: "app_locale",
+        expectedRevision: 0
+      })).toEqual({
+        status: "failed",
+        settings: expect.objectContaining({ generatedKnowledgeLanguage: "preserve_source", revision: 0 })
+      });
+      expect(store.getAppearanceSettings()).toEqual({ revision: 0, themePreference: "system" });
+    } finally {
+      lease.release();
+    }
   });
 
   it("persists explicit themes, applies native themeSource, and rejects stale writes", () => {

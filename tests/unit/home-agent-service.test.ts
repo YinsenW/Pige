@@ -105,6 +105,51 @@ afterEach(() => {
 });
 
 describe("Home Pi Agent service", () => {
+  it("applies the bound knowledge-language preference to new Home Agent turns", async () => {
+    const fixture = makeFixture();
+    let systemPrompt = "";
+    const runtime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        systemPrompt = request.systemPrompt;
+        return makeRuntimeResult(request, undefined, {
+          answer: "La réponse reste conversationnelle.",
+          citationRefs: [],
+          grounding: "general"
+        });
+      }
+    };
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      runtime,
+      { snapshot: () => ({
+        localDatabaseStatus: "ready",
+        parserToolchainReady: true,
+        ocrEngines: [],
+        speechInputAvailable: false,
+        embeddingModelInstalled: false,
+        lexicalSearchAvailable: true,
+        vectorSearchAvailable: false,
+        rerankerAvailable: false,
+        appLocale: "fr",
+        generatedKnowledgeLanguage: "app_locale"
+      }) }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "When is the launch?",
+      inputKind: "typed_text",
+      locale: "en",
+      clientTurnId: "turn_20260730_knowledgelang01"
+    });
+
+    expect(outcome).toMatchObject({ state: "completed" });
+    expect(systemPrompt).toContain("newly generated durable knowledge in the configured app language fr");
+    expect(systemPrompt).toContain("never translate preserved source bodies");
+  });
+
   it("keeps all five citation namespaces disjoint and rejects conflicting identities", () => {
     const currentNote: RetrievalAnswerCitation = {
       refId: "citation_1",

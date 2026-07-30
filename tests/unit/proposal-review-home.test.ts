@@ -92,6 +92,7 @@ function makePigeApi(awaitingReview: boolean, calls: ProposalApiCalls): object {
         availableLocales: ["en"],
         themePreference: "system",
         effectiveTheme: "light",
+        generatedKnowledgeLanguage: "preserve_source",
         revision: 0
       }),
       onAppearanceChanged: () => () => undefined
