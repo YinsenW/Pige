@@ -561,10 +561,10 @@ requeries. E6.11 stays planned for analytics, scale, signed platforms and broade
 
 B6.12/B6.14 current evidence covers the main-owned `library.tree` bridge, rebuildable
 Markdown-derived semantic hierarchy, deterministic weight/fragment/source/leaf metrics,
-localized loading/empty/degraded/error states, keyboard disclosures, and source-backed
-Note Reader navigation. E6.07 remains partial and E6.09 remains planned
-pending broader aggregate semantics, 10k/incremental and packaged-platform parity, plus
-the remaining visual-density and accessibility matrix.
+localized loading/empty/degraded/error states, fixed density bands, exact count descriptions,
+review-needed outlines, keyboard disclosures, and source-backed Note Reader navigation.
+E6.07 and E6.09 remain partial pending broader aggregate semantics, 10k/incremental and
+packaged-platform parity, plus assistive-technology and signed visual acceptance.
 
 Deferred from this phase:
 

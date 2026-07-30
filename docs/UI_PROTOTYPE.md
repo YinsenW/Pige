@@ -771,6 +771,7 @@ Current bounded slice:
   data owner.
 - Native meters and adjacent text state exact weight, fragment, source, and leaf counts;
   color or thickness is never the only explanation.
+- Node detail and screen-reader description state exact weight, fragment, source, leaf, and evidence-density values. Density is fragments plus sources with fixed `0`, `1–2`, `3–5`, and `6+` color bands; review-needed growth keeps a distinct outline. Domain/topic size follows weight, deeper node size follows relative density, and leaf count never uses depth.
 - Navigable nodes open the confined Reader. Selection loads bounded outgoing/backlink groups and
   opens only returned page IDs; drift/failure preserves tree/focus. Synthetic topics stay unavailable.
   Back restores invoking tree focus; opaque source IDs show only `Source evidence`.

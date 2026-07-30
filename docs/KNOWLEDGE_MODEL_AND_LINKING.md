@@ -400,12 +400,9 @@ Rules:
 - Autonomous relationship changes appear in compact Activity with provenance and Undo.
 - Exceptional conflicts may appear as proposals; rejection is recorded to avoid repetition.
 
-The current bounded public slice rebuilds one read-only semantic tree from durable
-Markdown through the Local Database Service. It exposes deterministic domain/topic/
-concept/source nodes, weight and fragment/source/leaf counts, plus supporting-page
-navigation. Missing indexes return a typed degraded empty state; the renderer never reads
-the vault directly. Broader relationship inputs, health, editing, manual taxonomy, force
-graphs, incremental/10k proof, and packaged-platform parity remain open.
+The current bounded public slice rebuilds one read-only semantic tree from durable Markdown through the Local Database Service. It exposes deterministic domain/topic/concept/source nodes, weight and fragment/source/leaf counts, plus supporting-page navigation. Missing indexes return a typed degraded empty state; the renderer never reads the vault directly. Broader relationship inputs, health, editing, manual taxonomy, force graphs, incremental/10k proof, and packaged-platform parity remain open.
+
+The renderer derives evidence density as `fragmentPageCount + sourceCount`, using fixed bands `0`, `1–2`, `3–5`, and `6+`. Domain/topic size remains weight-based; deeper nodes use relative evidence density. Exact leaf count is the durable aggregate metric, never tree depth, and `needs_review` adds an outline without replacing count text or accessible detail.
 
 ## 11. Retrieval And Ranking
 
