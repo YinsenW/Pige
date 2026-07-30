@@ -454,42 +454,38 @@ Undo and the body/path/hash ban remain.
 
 ### 6.5 Library And Notes
 
-Queries are `library.list`, `library.tree`, `library.related`, `notes.get`, `notes.render`,
-`notes.openEditor`, `notes.resolveInlineReference` and `notes.openSourceReference`. Commands are
-`notes.saveEditor`, `notes.merge`, `notes.revealSource` and `notes.trashCurrent`.
+Queries: `library.list/tree/related`, `notes.get/render/openEditor`,
+`notes.resolveInlineReference/openSourceReference`. Commands: `notes.saveEditor/merge/revealSource`,
+`notes.trashCurrent/listTrash/restoreTrash`.
 
-Library returns bounded stable-ID summaries; Notes resolves safe Markdown/HTML. `renderContextId`
-only authorizes rendering; Main retains paths, private data, prompts, secrets, raw frontmatter/script
-and unsafe links.
+Library returns bounded stable IDs; Notes resolves safe Markdown/HTML. `renderContextId` authorizes
+only rendering; Main retains paths, private data, prompts, secrets and unsafe content.
 
 Reader edit contract:
 
-- `openEditor` binds request/vault/page/render and returns bounded Markdown/revision; `saveEditor`
-  adds revision/draft. Main CAS-writes `update_page`; stale preserves draft/Reader. Source pages,
-  rich text and private details are absent; failures are body-free.
-- `notes.merge` binds request/vault/current page/render/revision plus target page/`updatedAt`.
-  Main revalidates two editable notes, keeps current, and returns its authoritative render plus
-  Operation ID on `committed`; other outcomes are body/path-free.
+- `openEditor` returns bounded Markdown/revision; `saveEditor` adds draft/revision and CAS-writes
+  `update_page`. Stale preserves draft/Reader; source/rich-text pages stay read-only.
+- Trash lists bounded receipt summaries after restart. Restore binds vault/page/Operation/trash
+  revision, revalidates private bytes/confinement, and returns authoritative render or body-free
+  closure without duplicating `restore_page`.
+- Merge binds both note identities/revisions, keeps current, and returns authoritative render plus
+  Operation ID; other outcomes are body/path-free.
 
 Reader reference query contract:
 
-- `notes.openSourceReference` accepts request/vault/page/render/source. Only `resolved` adds
-  `target.pageId`; body-free `unresolved | not_found | stale | mismatch | changed` retains Reader
-  and grants no authority.
-- `notes.revealSource` revalidates it and Main reveals only that asset; results contain no path/body.
+- `openSourceReference` binds request/vault/page/render/source; only `resolved` adds target page ID.
+  Other states retain Reader. `revealSource` revalidates and reveals only that asset, path/body-free.
 
 Reader selection uses queries `readerSelection.resolve`, `readerSelection.currentProposal`
 and commands `readerSelection.submitAction`, `readerSelection.submitTransform`,
 `readerSelection.submitLink`, `readerSelection.submitCreateNote`, `readerSelection.decideProposal`:
 
-- `resolve` binds vault/page/render/offsets; success returns a <=64 KiB span plus hashes. Actions bind
-  it and locale/client turn; Main owns instructions, CAS and apply.
-- Link has no renderer target: Pi selects an opaque ref; Main fences pages and publishes one
-  reversible `update_page`. Drift fails closed; recovery adopts one effect.
-- `create_note | create_claim | create_question` reuse one selection review; applied navigation
-  requires the authoritative matching page type.
-- Preview exposes opaque identity/state/revision and <=8 lines of <=160 characters. Decisions bind
-  revision; private proposal details stay Main-only. Activity owns Undo.
+- `resolve` binds vault/page/render/offsets and returns <=64 KiB plus hashes. Actions bind it and
+  locale/client turn; Main owns instructions/CAS/apply.
+- Link has no renderer target: Pi chooses an opaque ref; Main publishes reversible `update_page`.
+- `create_note | create_claim | create_question` share review; navigation requires matching page type.
+- Preview exposes opaque identity/state/revision and <=8 lines of <=160 characters; decisions bind
+  revision, private details stay Main-only, and Activity owns Undo.
 
 Current-note append/replace stay under `agent.submitTurn`, accept <=16 KiB and cite `citation_1`.
 Replace needs authored intent plus same-turn read and always enters review.

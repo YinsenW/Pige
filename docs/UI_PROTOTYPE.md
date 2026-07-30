@@ -595,6 +595,8 @@ Editing mode:
 - An ordinary note may merge one eligible note into itself after confirming its safe summary.
   Failure/stale retains Reader/selection/focus; commit adopts Main's survivor and Undo restores both.
 - Trash and merge are recoverable; source/permanent deletion, restyle and raw reveal stay absent.
+- Settings Trash lists safe recoverable notes; one-flight Restore opens only Main's matching
+  authoritative page, while stale/failure retains the row and focus.
 
 Reader foundation:
 
