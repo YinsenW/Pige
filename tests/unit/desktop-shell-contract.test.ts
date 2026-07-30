@@ -172,6 +172,28 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("freezes one current-Reader-bound whole-note relation surface", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const notesApiStart = contractsSource.indexOf("readonly notes: {");
+    const notesApi = contractsSource.slice(notesApiStart, contractsSource.indexOf("readonly localCapabilities: {", notesApiStart));
+    const relationSchemas = schemasSource.slice(
+      schemasSource.indexOf("export const NOTE_RELATE_CHANNEL"),
+      schemasSource.indexOf("export const KnowledgeHealthRepairRequestSchema"),
+    );
+    expect(relationSchemas).toContain('NOTE_RELATE_CHANNEL = "notes.relate"');
+    expect(relationSchemas).toContain("renderContextId: NoteRenderContextIdSchema");
+    expect(relationSchemas).toContain("expectedRevision: NoteEditorRevisionSchema");
+    expect(relationSchemas).toContain("expectedTargetUpdatedAt: z.string().datetime({ offset: true })");
+    expect(notesApi).toContain("readonly relate: (request: NoteRelateRequest) => Promise<NoteRelateResult>;");
+    expect(preloadSource).toContain("NoteRelateRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteRelateResultSchema.parse(");
+    for (const privateField of ["absolutePath", "pagePath", "body", "markdown", "checksum", "relationType"]) {
+      expect(relationSchemas).not.toContain(privateField);
+    }
+  });
+
   it("freezes one Main-owned machine-local diagnostics clear channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");

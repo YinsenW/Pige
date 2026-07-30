@@ -9,6 +9,7 @@ import type { NoteTrashService } from "../../apps/desktop/src/main/services/note
 import type { NoteMergeService } from "../../apps/desktop/src/main/services/note-merge-service";
 import type { NoteArchiveService } from "../../apps/desktop/src/main/services/note-archive-service";
 import type { NoteMarkdownImportService } from "../../apps/desktop/src/main/services/note-markdown-import-service";
+import type { NoteRelateService } from "../../apps/desktop/src/main/services/note-relate-service";
 
 type IpcHandler = (event: IpcMainInvokeEvent, request?: unknown) => unknown;
 
@@ -32,7 +33,8 @@ function makeHarness(
   noteArchiveService?: Partial<NoteArchiveService>,
   onNoteArchiveCommitted = vi.fn(),
   noteMarkdownImportService?: Partial<NoteMarkdownImportService>,
-  onNoteImported = vi.fn()
+  onNoteImported = vi.fn(),
+  noteRelateService?: Partial<NoteRelateService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -73,6 +75,10 @@ function makeHarness(
       if (noteMergeService) return noteMergeService as NoteMergeService;
       throw new Error("Note merge service was not expected.");
     },
+    getNoteRelateService: () => {
+      if (noteRelateService) return noteRelateService as NoteRelateService;
+      throw new Error("Note relate service was not expected.");
+    },
     getNoteMarkdownImportService: () => {
       if (noteMarkdownImportService) return noteMarkdownImportService as NoteMarkdownImportService;
       throw new Error("Note Markdown import service was not expected.");
@@ -96,6 +102,7 @@ describe("registerReaderIpc", () => {
       "notes.archiveCurrent",
       "notes.importMarkdown",
       "notes.merge",
+      "notes.relate",
       "notes.resolveInlineReference",
       "notes.openSourceReference",
       "notes.revealSource",
@@ -108,6 +115,34 @@ describe("registerReaderIpc", () => {
       "readerSelection.currentProposal",
       "readerSelection.decideProposal"
     ]);
+  });
+
+  it("binds note relation mutation to the tracked Reader owner and refreshes Activity after commit", async () => {
+    const request = {
+      apiVersion: 1 as const, requestId: "noterelatereq_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_abcdefgh", currentPageId: "page_20260730_relatesource",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(64)}`, targetPageId: "page_20260730_relatetarget",
+      expectedTargetUpdatedAt: "2026-07-30T10:00:00.000Z",
+    };
+    const render = {
+      summary: { pageId: request.currentPageId, title: "Related", pageType: "note", status: "active",
+        pagePath: "wiki/related.md", createdAt: "2026-07-30T09:00:00.000Z",
+        updatedAt: "2026-07-30T11:00:00.000Z", sourceIds: [] },
+      html: "<h1>Related</h1>", byteSize: 64,
+      renderContextId: "notectx_fedcba9876543210fedcba9876543210",
+    } as const;
+    const relate = vi.fn(async () => ({ ...request, status: "committed" as const,
+      operationId: "op_20260730_noterelate12345", render }));
+    const refreshed = vi.fn();
+    const handlers = makeHarness({ render: vi.fn(async () => render) }, undefined, undefined, vi.fn(),
+      undefined, undefined, undefined, refreshed, undefined, vi.fn(), { relate });
+    const sender = makeSender(43);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: request.currentPageId });
+    await expect(handlers.get("notes.relate")!({ sender } as IpcMainInvokeEvent, request))
+      .resolves.toMatchObject({ ...request, status: "committed", operationId: "op_20260730_noterelate12345" });
+    expect(relate).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
+    expect(refreshed).toHaveBeenCalledTimes(1);
   });
 
   it("binds current-note archive to the tracked Reader owner and refreshes Activity only after commit", async () => {

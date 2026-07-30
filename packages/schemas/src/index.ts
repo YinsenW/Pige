@@ -1649,6 +1649,34 @@ export const NoteMergeResultSchema = z.discriminatedUnion("status", [
   NoteMergeResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 
+export const NOTE_RELATE_CHANNEL = "notes.relate" as const;
+export const NoteRelateRequestIdSchema = z.string().regex(/^noterelatereq_[a-z0-9]{16,64}$/u);
+export const NoteRelateRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteRelateRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema,
+  targetPageId: PageIdSchema,
+  expectedTargetUpdatedAt: z.string().datetime({ offset: true })
+}).strict().superRefine((request, context) => {
+  if (request.currentPageId === request.targetPageId) {
+    context.addIssue({ code: "custom", path: ["targetPageId"], message: "A note cannot relate to itself." });
+  }
+});
+const NoteRelateResultIdentitySchema = NoteRelateRequestSchema;
+export const NoteRelateResultSchema = z.discriminatedUnion("status", [
+  NoteRelateResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict()
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteRelateResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+
 export const KnowledgeHealthRepairRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: KnowledgeHealthRepairRequestIdSchema,
@@ -8782,6 +8810,9 @@ export type NoteTrashCurrentResult = z.infer<typeof NoteTrashCurrentResultSchema
 export type NoteMergeRequestId = z.infer<typeof NoteMergeRequestIdSchema>;
 export type NoteMergeRequest = z.infer<typeof NoteMergeRequestSchema>;
 export type NoteMergeResult = z.infer<typeof NoteMergeResultSchema>;
+export type NoteRelateRequestId = z.infer<typeof NoteRelateRequestIdSchema>;
+export type NoteRelateRequest = z.infer<typeof NoteRelateRequestSchema>;
+export type NoteRelateResult = z.infer<typeof NoteRelateResultSchema>;
 export type NoteResolveInlineReferenceRequest = z.infer<typeof NoteResolveInlineReferenceRequestSchema>;
 export type NoteResolveInlineReferenceResult = z.infer<typeof NoteResolveInlineReferenceResultSchema>;
 export type NoteSourceReferenceRequestId = z.infer<typeof NoteSourceReferenceRequestIdSchema>;

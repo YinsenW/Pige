@@ -277,6 +277,7 @@ import { NotesService } from "./services/notes-service";
 import { NoteTrashService } from "./services/note-trash-service";
 import { NoteArchiveService } from "./services/note-archive-service";
 import { NoteMergeService } from "./services/note-merge-service";
+import { NoteRelateService } from "./services/note-relate-service";
 import {
   NoteMarkdownEditorActivityAdapter,
   NoteMarkdownEditorService
@@ -383,6 +384,7 @@ let notesService: NotesService | undefined;
 let noteTrashService: NoteTrashService | undefined;
 let noteArchiveService: NoteArchiveService | undefined;
 let noteMergeService: NoteMergeService | undefined;
+let noteRelateService: NoteRelateService | undefined;
 let noteMarkdownImportService: NoteMarkdownImportService | undefined;
 let noteMarkdownEditorActivityAdapter: NoteMarkdownEditorActivityAdapter | undefined;
 let noteMarkdownEditorService: NoteMarkdownEditorService | undefined;
@@ -1607,6 +1609,14 @@ const getNoteMergeService = (): NoteMergeService => {
   noteMergeService ??= new NoteMergeService(getVaultService(), getNotesService());
   return noteMergeService;
 };
+const getNoteRelateService = (): NoteRelateService => {
+  noteRelateService ??= new NoteRelateService(
+    getNotesService(),
+    getNoteMarkdownEditorService(),
+    () => getVaultService().activeVaultPath(),
+  );
+  return noteRelateService;
+};
 const getNoteMarkdownImportService = (): NoteMarkdownImportService => {
   noteMarkdownImportService ??= new NoteMarkdownImportService(getVaultService(), getNotesService());
   return noteMarkdownImportService;
@@ -2727,6 +2737,7 @@ registerReaderIpc({
   getNoteTrashService,
   getNoteArchiveService,
   getNoteMergeService,
+  getNoteRelateService,
   getNoteMarkdownImportService,
   onNoteTrashCommitted: scheduleActivityIndexRebuild,
   onNoteArchiveCommitted: scheduleActivityIndexRebuild,
@@ -3226,6 +3237,11 @@ app.whenReady().then(async () => {
   noteTrashService = new NoteTrashService(getVaultService(), getNotesService());
   noteArchiveService = new NoteArchiveService(getNotesService(), noteMarkdownEditorService);
   noteMergeService = new NoteMergeService(getVaultService(), getNotesService());
+  noteRelateService = new NoteRelateService(
+    getNotesService(),
+    noteMarkdownEditorService,
+    () => getVaultService().activeVaultPath(),
+  );
   noteMarkdownImportService = new NoteMarkdownImportService(getVaultService(), getNotesService());
   knowledgeActivityService = new KnowledgeActivityService(
     getVaultService(),
