@@ -172,6 +172,8 @@ import type {
   NoteEditorSaveResult,
   NoteMergeRequest,
   NoteMergeResult,
+  NoteArchiveCurrentRequest,
+  NoteArchiveCurrentResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteRenderContextId,
@@ -470,6 +472,8 @@ export type {
   NoteEditorSaveResult,
   NoteMergeRequest,
   NoteMergeResult,
+  NoteArchiveCurrentRequest,
+  NoteArchiveCurrentResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteRenderResult,
@@ -1164,6 +1168,7 @@ export interface KnowledgeActivitySummary {
   readonly kind:
     | "create_page"
     | "update_page"
+    | "archive_page"
     | "trash_page"
     | "update_collection_cell"
     | "add_collection_row"
@@ -2030,6 +2035,9 @@ export interface PigeDesktopApi {
     readonly openEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
     readonly saveEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
     readonly merge: (request: NoteMergeRequest) => Promise<NoteMergeResult>;
+    readonly archiveCurrent: (
+      request: NoteArchiveCurrentRequest
+    ) => Promise<NoteArchiveCurrentResult>;
     readonly trashCurrent: (
       request: NoteTrashCurrentRequest
     ) => Promise<NoteTrashCurrentResult>;
