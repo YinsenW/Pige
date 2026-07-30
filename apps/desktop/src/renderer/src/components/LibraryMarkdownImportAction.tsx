@@ -6,20 +6,19 @@ import type {
 } from "@pige/contracts";
 import { PigeIcon } from "./PigeIcon";
 
-export interface LibraryMarkdownImportLabels {
-  readonly action: string;
-  readonly pending: string;
-  readonly stale: string;
-  readonly invalid: string;
-  readonly failed: string;
-}
-
 export function LibraryMarkdownImportAction(props: {
   readonly activeVaultId: string;
-  readonly labels: LibraryMarkdownImportLabels;
+  readonly t: (key: string) => string;
   readonly onImport: (request: NoteImportMarkdownRequest) => Promise<NoteImportMarkdownResult>;
   readonly onImported: (render: NoteRenderResult) => void;
 }): React.JSX.Element {
+  const labels = {
+    action: props.t("library.importMarkdown"),
+    pending: props.t("library.importMarkdownPending"),
+    stale: props.t("library.importMarkdownStale"),
+    invalid: props.t("library.importMarkdownInvalid"),
+    failed: props.t("library.importMarkdownFailed"),
+  };
   const [state, setState] = useState<"idle" | "pending" | "stale" | "invalid" | "failed">("idle");
   const sequenceRef = useRef(0);
   const requestActiveRef = useRef(false);
@@ -77,7 +76,7 @@ export function LibraryMarkdownImportAction(props: {
   };
 
   const feedback = state === "stale" || state === "invalid" || state === "failed"
-    ? props.labels[state]
+    ? labels[state]
     : null;
 
   return (
@@ -86,8 +85,8 @@ export function LibraryMarkdownImportAction(props: {
         ref={triggerRef}
         type="button"
         className="icon-button"
-        title={props.labels.action}
-        aria-label={props.labels.action}
+        title={labels.action}
+        aria-label={labels.action}
         aria-busy={state === "pending"}
         disabled={state === "pending"}
         onClick={() => void importMarkdown()}
@@ -95,7 +94,7 @@ export function LibraryMarkdownImportAction(props: {
         <PigeIcon name={state === "pending" ? "loading" : "fileText"} size={16} />
       </button>
       {state === "pending" ? (
-        <span className="toolbar-meta" role="status">{props.labels.pending}</span>
+        <span className="toolbar-meta" role="status">{labels.pending}</span>
       ) : feedback ? (
         <span className="toolbar-meta" role="alert">{feedback}</span>
       ) : null}
