@@ -681,6 +681,7 @@ Commands:
 - `settings.getPage`
 - `settings.setLocale`
 - `settings.setTheme`
+- `settings.setKnowledgeLanguage`
 - `settings.setStartupDestination`
 - `agentPolicy.preview`
 - `agent.runtimeStatus`
@@ -782,14 +783,13 @@ Rules:
 
 - Settings APIs return redacted page DTOs, not raw storage files.
 - Appearance IPC has one canonical schema owner. `settings.appearance` returns strict
-  `{apiVersion:1,locale,availableLocales,themePreference,effectiveTheme,revision}`;
-  `settings.setLocale({locale})` stores the machine-local locale override and returns that
-  summary; `settings.setTheme({themePreference,expectedRevision})` returns
-  `committed | stale | failed` plus the authoritative summary. Theme preference is
-  `system | light | dark`, effective theme is `light | dark`, and no appearance value is
-  written to the vault. `settings.appearanceChanged` emits the same strict summary after
-  an applied theme-preference or effective system-theme change; preload validates the
-  event and drops malformed payloads.
+  `{apiVersion:1,locale,availableLocales,themePreference,effectiveTheme,generatedKnowledgeLanguage,revision}`;
+  `setLocale` returns it, while `setTheme({themePreference,expectedRevision})` and
+  `setKnowledgeLanguage({generatedKnowledgeLanguage,expectedRevision})` return
+  `committed | stale | failed` with authoritative settings. Theme is `system | light | dark`;
+  knowledge language is `preserve_source | follow_query | app_locale`, permission-free,
+  unbacked and new-Job-only. Appearance never enters the vault. `appearanceChanged` emits
+  the same validated summary; preload drops malformed payloads.
 - Startup IPC is path/vault-free CAS (`committed | stale | failed`) and applies after next-launch vault restoration.
 - Secret writes use dedicated secret handling and return secret references only.
 - Provider create is write-only, authorized by the disclosed Settings Connect/Save

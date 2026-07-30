@@ -148,6 +148,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Setting or state | Page | Scope | Owner | Storage | Backup | Permission requirement | Apply behavior |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | App language | Appearance & Language | `machine_local` | Settings Service, I18N Service | OS app data | No | `none` | Apply immediately when practical |
+| Generated knowledge language | Appearance & Language | `machine_local` | Appearance Service, Agent Orchestrator | OS app data | No | `none` | New Agent jobs |
 | Theme | Appearance & Language | `machine_local` | Settings Service, Renderer | OS app data | No | `none` | Immediate |
 | Window sizes and layout mode | General | `machine_local` | Window Service | OS app data | No | `none` | Next/open window or immediate resize |
 | Always-on-top preference | General/Home | `machine_local` | Window Service | OS app data | No | `none` | Immediate |
@@ -231,6 +232,7 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 | Default Pi Agent model | `model.defaultModelProfileId` | Yes | Model Provider Registry, Agent Orchestrator | New model calls |
 | Provider profile metadata | protocol-bound availability and internal `model.cloudBoundary` | Yes, redacted | Model Provider Registry | New model calls |
 | App language | `language.appLocale` | Yes | I18N Service, Renderer | UI immediately; generated text only when policy says so |
+| Generated knowledge language | `language.generatedKnowledgeLanguage` | Yes | Appearance Service, Agent Orchestrator | New Agent jobs; source bodies remain untranslated |
 | OCR language hints | `language.ocrLanguageHints` | Maybe | OCR Service | New OCR jobs |
 | Agent behavior preferences | Workflow-specific policy fields | Yes | Agent Orchestrator | New Agent jobs |
 | Memory enabled state | `memory.vaultMemoryEnabled` | Yes | Agent Memory Service | New memory reads/writes |
