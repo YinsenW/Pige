@@ -173,6 +173,9 @@ import {
   NOTE_RENAME_CHANNEL,
   NoteRenameRequestSchema,
   NoteRenameResultSchema,
+  NOTE_CHANGE_ALIAS_CHANNEL,
+  NoteAliasChangeRequestSchema,
+  NoteAliasChangeResultSchema,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
   NoteTrashListRequestSchema,
@@ -4588,6 +4591,25 @@ describe("schemas", () => {
     for (const privateField of ["pagePath", "oldPath", "newPath", "markdown", "contentHash", "rawError"] as const) {
       expect(() => NoteRenameRequestSchema.parse({ ...identity, [privateField]: "private" })).toThrow();
       expect(() => NoteRenameResultSchema.parse({ ...identity, status: "failed", [privateField]: "private" })).toThrow();
+    }
+  });
+
+  it("keeps one note alias change canonical, revision-bound, and renderer-path-free", () => {
+    expect(NOTE_CHANGE_ALIAS_CHANNEL).toBe("notes.changeAlias");
+    const identity = { apiVersion: 1, requestId: "notealiasreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260731_aliases01", currentPageId: "page_20260731_aliases1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(32)}`, action: "add", alias: "Second Name" } as const;
+    expect(NoteAliasChangeRequestSchema.parse(identity)).toEqual(identity);
+    for (const action of ["add", "remove"] as const) for (const status of ["stale", "not_found", "ineligible", "conflict", "failed"] as const) {
+      expect(NoteAliasChangeResultSchema.parse({ ...identity, action, status })).toEqual({ ...identity, action, status });
+    }
+    for (const alias of [" Second Name ", "", "bad\nname", "x".repeat(121), "bad\u202ename"]) {
+      expect(() => NoteAliasChangeRequestSchema.parse({ ...identity, alias })).toThrow();
+    }
+    for (const privateField of ["pagePath", "markdown", "contentHash", "rawError"] as const) {
+      expect(() => NoteAliasChangeRequestSchema.parse({ ...identity, [privateField]: "private" })).toThrow();
+      expect(() => NoteAliasChangeResultSchema.parse({ ...identity, status: "failed", [privateField]: "private" })).toThrow();
     }
   });
 

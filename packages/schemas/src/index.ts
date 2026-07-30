@@ -1667,10 +1667,16 @@ export const NoteRestoreArchivedRequestIdSchema = z.string().regex(/^noterestore
 export const NoteAddTagRequestIdSchema = z.string().regex(/^noteaddtagreq_[a-z0-9]{16,64}$/);
 export const NoteEditTaxonomyRequestIdSchema = z.string().regex(/^notetaxonomyreq_[a-z0-9]{16,64}$/);
 export const NoteRenameRequestIdSchema = z.string().regex(/^noterenamereq_[a-z0-9]{16,64}$/);
+export const NoteAliasChangeRequestIdSchema = z.string().regex(/^notealiasreq_[a-z0-9]{16,64}$/);
 export const NoteCanonicalTitleSchema = z.string().min(1).max(120).refine(
   (value) => !/[\u0000-\u001f\u007f]/u.test(value) &&
     value === value.normalize("NFKC").replace(/\s+/gu, " ").trim(),
   "Note titles must use the canonical Markdown title representation."
+);
+export const NoteCanonicalAliasSchema = z.string().min(1).max(120).refine(
+  (value) => !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(value) &&
+    value === value.normalize("NFKC").replace(/\s+/gu, " ").trim(),
+  "Note aliases must use the canonical Markdown alias representation."
 );
 export const NoteCanonicalTagSchema = z.string().min(1).max(48).refine(
   (value) => !/[\u0000-\u001f\u007f]/u.test(value) &&
@@ -1696,6 +1702,12 @@ export const NoteRestoreEligibilitySchema = z.object({
 }).strict();
 export const NoteRenameEligibilitySchema = z.object({
   canRename: z.boolean(),
+  revision: NoteEditorRevisionSchema
+}).strict();
+export const NoteAliasingSummarySchema = z.object({
+  aliases: z.array(NoteCanonicalAliasSchema).max(64).readonly(),
+  canAdd: z.boolean(),
+  canRemove: z.boolean(),
   revision: NoteEditorRevisionSchema
 }).strict();
 export const NoteTaggingSummarySchema = z.object({
@@ -1743,6 +1755,7 @@ export const NoteRenderResultSchema = z.object({
   restoreEligibility: NoteRestoreEligibilitySchema.optional(),
   historyEligibility: NoteRevisionHistoryEligibilitySchema.optional(),
   renameEligibility: NoteRenameEligibilitySchema.optional(),
+  aliasing: NoteAliasingSummarySchema.optional(),
   tagging: NoteTaggingSummarySchema.optional(),
   reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional(),
   reconnectOriginalSources: z.array(ReferencedOriginalReconnectCandidateSchema).max(5).optional()
@@ -1819,6 +1832,7 @@ export const NOTE_RESTORE_ARCHIVED_CHANNEL = "notes.restoreArchived" as const;
 export const NOTE_ADD_TAG_CHANNEL = "notes.addTag" as const;
 export const NOTE_EDIT_TAXONOMY_CHANNEL = "notes.editTaxonomy" as const;
 export const NOTE_RENAME_CHANNEL = "notes.rename" as const;
+export const NOTE_CHANGE_ALIAS_CHANNEL = "notes.changeAlias" as const;
 export const NOTE_IMPORT_MARKDOWN_CHANNEL = "notes.importMarkdown" as const;
 export const NoteImportMarkdownRequestIdSchema = z.string()
   .regex(/^noteimport_[a-z0-9]{16,64}$/u);
@@ -1937,6 +1951,25 @@ export const NoteRenameResultSchema = z.discriminatedUnion("status", [
   }).strict(),
   ...(["stale", "not_found", "ineligible", "conflict", "failed"] as const).map((status) =>
     NoteRenameResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+export const NoteAliasChangeRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteAliasChangeRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema,
+  action: z.enum(["add", "remove"]),
+  alias: NoteCanonicalAliasSchema
+}).strict();
+const NoteAliasChangeResultIdentitySchema = NoteAliasChangeRequestSchema;
+export const NoteAliasChangeResultSchema = z.discriminatedUnion("status", [
+  NoteAliasChangeResultIdentitySchema.extend({
+    status: z.literal("committed"), operationId: OperationIdSchema, render: NoteRenderResultSchema
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "conflict", "failed"] as const).map((status) =>
+    NoteAliasChangeResultIdentitySchema.extend({ status: z.literal(status) }).strict()
   )
 ]);
 export const NoteTrashCurrentRequestSchema = z.object({
@@ -10488,6 +10521,11 @@ export type NoteCanonicalTitle = z.infer<typeof NoteCanonicalTitleSchema>;
 export type NoteRenameEligibility = z.infer<typeof NoteRenameEligibilitySchema>;
 export type NoteRenameRequest = z.infer<typeof NoteRenameRequestSchema>;
 export type NoteRenameResult = z.infer<typeof NoteRenameResultSchema>;
+export type NoteAliasChangeRequestId = z.infer<typeof NoteAliasChangeRequestIdSchema>;
+export type NoteCanonicalAlias = z.infer<typeof NoteCanonicalAliasSchema>;
+export type NoteAliasingSummary = z.infer<typeof NoteAliasingSummarySchema>;
+export type NoteAliasChangeRequest = z.infer<typeof NoteAliasChangeRequestSchema>;
+export type NoteAliasChangeResult = z.infer<typeof NoteAliasChangeResultSchema>;
 export type NoteTrashEligibility = z.infer<typeof NoteTrashEligibilitySchema>;
 export type NoteTrashCurrentRequest = z.infer<typeof NoteTrashCurrentRequestSchema>;
 export type NoteTrashCurrentResult = z.infer<typeof NoteTrashCurrentResultSchema>;

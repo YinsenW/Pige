@@ -23,6 +23,8 @@ import type {
   NoteEditTaxonomyResult,
   NoteRenameRequest,
   NoteRenameResult,
+  NoteAliasChangeRequest,
+  NoteAliasChangeResult,
   NoteRestoreArchivedRequest,
   NoteRestoreArchivedResult,
   NoteRenderResult,
@@ -1850,6 +1852,43 @@ describe("full UI Library", () => {
     expect(input.value).toBe("  Renamed   Library Note  ");
     mode = "committed"; await clickButton(dom, buttonNamed(container, "Rename")); await waitFor(dom, () => adopted.length === 1);
     expect(adopted[0]?.summary.title).toBe("Renamed Library Note"); expect(container.querySelector(".note-reader")).not.toBeNull();
+    await act(async () => root.unmount()); dom.window.close();
+  });
+
+  it("adds and removes one exact Library Reader alias while retaining an ambiguous draft", async () => {
+    const dom = createDom(), root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: NoteAliasChangeRequest[] = [], adopted: NoteRenderResult[] = []; let mode: "conflict" | "committed" = "conflict";
+    let selected: NoteRenderResult = { ...readerNote(), aliasing: { aliases: [], canAdd: true, canRemove: false,
+      revision: `noteeditrev_${"a".repeat(32)}` } };
+    const onChangeNoteAlias = async (request: NoteAliasChangeRequest): Promise<NoteAliasChangeResult> => {
+      requests.push(request); if (mode === "conflict") return { ...request, status: "conflict" };
+      const aliases = request.action === "add" ? [request.alias] : [];
+      return { ...request, status: "committed", operationId: `op_20260731_aliasui${requests.length}12345`, render: { ...selected,
+        renderContextId: `notectx_${(requests.length === 2 ? "b" : "c").repeat(32)}`,
+        aliasing: { aliases, canAdd: true, canRemove: aliases.length > 0, revision: `noteeditrev_${"b".repeat(32)}` } } };
+    };
+    const renderPanel = (): void => root.render(createElement(LibraryPanel, { libraryList: libraryList(), selectedNote: selected,
+      selectedNoteRelated: null, noteLoadingPageId: null, error: null, onGoHome: () => undefined, onRefresh: async () => undefined,
+      onSearch: async () => searchResult("unused", []), searchFocusRequest: 0, onOpenNote: async () => undefined, onCloseNote: () => undefined,
+      noteAgentOpen: false, onToggleNoteAgent: () => undefined, noteAgentToggleRef: { current: null }, developmentNotice: null,
+      onClearDevelopment: () => undefined, onCopyNote: async () => true, activeVaultId: "vault_20260715_fullui01", onChangeNoteAlias,
+      onCurrentNoteAliasChanged: (render) => { adopted.push(render); selected = render; renderPanel(); }, onDevelopment: () => undefined, t }));
+    await act(async () => { renderPanel(); await settle(dom); }); const container = dom.window.document.querySelector("#root")!;
+    await clickButton(dom, buttonWithLabel(container, "More note actions")); await clickButton(dom, buttonNamed(container, "Manage aliases"));
+    const input = requireElement(container.querySelector<HTMLInputElement>(".confirmation-dialog input"));
+    await inputText(dom, input, "  Second   Name  ");
+    await waitFor(dom, () => !buttonNamed(container, "Add alias").disabled);
+    await clickButton(dom, buttonNamed(container, "Add alias"));
+    expect(requests[0]).toMatchObject({ action: "add", alias: "Second Name", expectedRevision: `noteeditrev_${"a".repeat(32)}` });
+    expect(JSON.stringify(requests[0])).not.toMatch(/path|markdown|contentHash/iu);
+    expect(container.textContent).toContain("The alias was not changed. Your entry is preserved; review it and try again.");
+    expect(input.value).toBe("  Second   Name  "); mode = "committed";
+    await clickButton(dom, buttonNamed(container, "Add alias")); await waitFor(dom, () => adopted.length === 1);
+    expect(adopted[0]?.aliasing?.aliases).toEqual(["Second Name"]);
+    await clickButton(dom, buttonWithLabel(container, "More note actions")); await clickButton(dom, buttonNamed(container, "Manage aliases"));
+    await clickButton(dom, buttonNamed(container, "Remove")); await waitFor(dom, () => adopted.length === 2);
+    expect(requests.at(-1)).toMatchObject({ action: "remove", alias: "Second Name" });
+    expect(adopted[1]?.aliasing?.aliases).toEqual([]);
     await act(async () => root.unmount()); dom.window.close();
   });
 
