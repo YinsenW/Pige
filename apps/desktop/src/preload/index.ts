@@ -133,6 +133,10 @@ import type {
   NoteAddTagResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
+  NoteTrashListRequest,
+  NoteTrashListResult,
+  NoteTrashRestoreRequest,
+  NoteTrashRestoreResult,
   NoteDocument,
   NoteGetRequest,
   NoteOpenSourceReferenceRequest,
@@ -483,6 +487,12 @@ import {
   NOTE_TRASH_CURRENT_CHANNEL,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
+  NOTE_TRASH_LIST_CHANNEL,
+  NOTE_TRASH_RESTORE_CHANNEL,
+  NoteTrashListRequestSchema,
+  NoteTrashListResultSchema,
+  NoteTrashRestoreRequestSchema,
+  NoteTrashRestoreResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
@@ -1660,6 +1670,14 @@ const api: PigeDesktopApi = {
           NOTE_TRASH_CURRENT_CHANNEL,
           NoteTrashCurrentRequestSchema.parse(request)
         )
+      ),
+    listTrash: async (request: NoteTrashListRequest): Promise<NoteTrashListResult> =>
+      NoteTrashListResultSchema.parse(
+        await ipcRenderer.invoke(NOTE_TRASH_LIST_CHANNEL, NoteTrashListRequestSchema.parse(request))
+      ),
+    restoreTrash: async (request: NoteTrashRestoreRequest): Promise<NoteTrashRestoreResult> =>
+      NoteTrashRestoreResultSchema.parse(
+        await ipcRenderer.invoke(NOTE_TRASH_RESTORE_CHANNEL, NoteTrashRestoreRequestSchema.parse(request))
       ),
     resolveInlineReference: async (
       request: NoteResolveInlineReferenceRequest

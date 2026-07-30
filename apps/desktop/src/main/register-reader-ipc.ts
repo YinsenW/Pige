@@ -24,6 +24,10 @@ import type {
   NoteAddTagResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
+  NoteTrashListRequest,
+  NoteTrashListResult,
+  NoteTrashRestoreRequest,
+  NoteTrashRestoreResult,
   NoteResolveInlineReferenceRequest,
   ReaderSelectionActionRequest,
   ReaderSelectionCreateNoteRequest,
@@ -67,6 +71,12 @@ import {
   NoteResolveInlineReferenceResultSchema,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
+  NOTE_TRASH_LIST_CHANNEL,
+  NOTE_TRASH_RESTORE_CHANNEL,
+  NoteTrashListRequestSchema,
+  NoteTrashListResultSchema,
+  NoteTrashRestoreRequestSchema,
+  NoteTrashRestoreResultSchema,
   ReaderSelectionActionRequestSchema,
   ReaderSelectionActionResultSchema,
   ReaderSelectionCreateNoteRequestSchema,
@@ -242,6 +252,34 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       return NoteTrashCurrentResultSchema.parse({ ...parsed, status: "failed" });
     }
     return result;
+  });
+  options.ipcMain.handle(NOTE_TRASH_LIST_CHANNEL, (_event, request: unknown): NoteTrashListResult => {
+    const parsed = NoteTrashListRequestSchema.parse(request);
+    try {
+      return NoteTrashListResultSchema.parse(options.getNoteTrashService().list(parsed));
+    } catch {
+      return NoteTrashListResultSchema.parse({ ...parsed, status: "failed" });
+    }
+  });
+  options.ipcMain.handle(NOTE_TRASH_RESTORE_CHANNEL, async (event, request: unknown): Promise<NoteTrashRestoreResult> => {
+    const parsed = NoteTrashRestoreRequestSchema.parse(request);
+    const ownerId = trackNotesSender(event.sender);
+    if (event.sender.isDestroyed()) return NoteTrashRestoreResultSchema.parse({ ...parsed, status: "failed" });
+    const restored = options.getNoteTrashService().restore(parsed);
+    if (restored.status !== "committed") return NoteTrashRestoreResultSchema.parse({ ...parsed, status: restored.status });
+    try {
+      const render = await options.getNotesService().render({ pageId: parsed.pageId }, ownerId);
+      if (!render.renderContextId || render.summary.pageId !== parsed.pageId ||
+        notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
+        return NoteTrashRestoreResultSchema.parse({ ...parsed, status: "failed" });
+      }
+      options.onNoteTrashCommitted();
+      return NoteTrashRestoreResultSchema.parse({
+        ...parsed, status: "committed", operationId: restored.operationId, render
+      });
+    } catch {
+      return NoteTrashRestoreResultSchema.parse({ ...parsed, status: "failed" });
+    }
   });
   options.ipcMain.handle(NOTE_ARCHIVE_CURRENT_CHANNEL, async (event, request: unknown) => {
     const parsed = NoteArchiveCurrentRequestSchema.parse(request);

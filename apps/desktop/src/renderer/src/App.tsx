@@ -57,6 +57,7 @@ import {
   SupportBundlePreviewCard,
   supportBundlePreviewIsFullyProjected
 } from "./components/DiagnosticsWorkflowCards";
+import { NoteTrashRestorePanel } from "./components/NoteTrashRestorePanel";
 import { GeneralSettingsPanel, type StartupDestinationApi } from "./components/GeneralSettingsPanel";
 import {
   homeConversationStateForJob,
@@ -2962,12 +2963,12 @@ export function App(): React.JSX.Element {
             />
           ) : settingsSection === "history" ? (
             <ActivityHistorySettingsPanel
+              activeVaultId={activeVault?.vaultId ?? null}
               activities={activityList?.activities ?? []}
-              undoingId={activityUndoingId}
-              openingId={activityOpeningId}
-              blockedIds={activityBlockedIds}
-              locale={locale}
+              undoingId={activityUndoingId} openingId={activityOpeningId}
+              blockedIds={activityBlockedIds} locale={locale}
               onOpen={openActivityTarget}
+              onRestored={async (pageId) => { const opened = await openNoteTarget(pageId, false); if (opened) { setView("library"); setSettingsOpen(false); void refreshLibrary(); } return opened; }}
               onUndo={undoActivity}
               t={t}
             />
@@ -8161,12 +8162,10 @@ function updateSummaryDescription(
 }
 
 export function ActivityHistorySettingsPanel(props: {
-  readonly activities: readonly KnowledgeActivitySummary[];
-  readonly undoingId: string | null;
-  readonly openingId: string | null;
-  readonly blockedIds: readonly string[];
-  readonly locale: Locale;
-  readonly onOpen: (activity: KnowledgeActivitySummary) => Promise<void>;
+  readonly activeVaultId?: string | null; readonly activities: readonly KnowledgeActivitySummary[];
+  readonly undoingId: string | null; readonly openingId: string | null; readonly blockedIds: readonly string[];
+  readonly locale: Locale; readonly onOpen: (activity: KnowledgeActivitySummary) => Promise<void>;
+  readonly onRestored?: (pageId: string) => Promise<boolean>;
   readonly onUndo: (operationId: string) => Promise<void>;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -8177,6 +8176,7 @@ export function ActivityHistorySettingsPanel(props: {
         <h1 id="settings-history-title">{props.t("activity.historyTitle")}</h1>
         <p>{props.t("activity.historySubtitle")}</p>
       </header>
+      <NoteTrashRestorePanel activeVaultId={props.activeVaultId ?? null} locale={props.locale} onCommitted={props.onRestored ?? (async () => false)} t={props.t} />
       <section className="settings-section" aria-labelledby="activity-recent-title">
         <h2 className="settings-section-title" id="activity-recent-title">{props.t("activity.recent")}</h2>
         {props.activities.length === 0 ? (

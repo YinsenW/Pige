@@ -6,10 +6,20 @@ import type {
   KnowledgeActivityUndoResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
+  NoteTrashListRequest,
+  NoteTrashListResult,
+  NoteTrashRestoreRequest,
+  NoteTrashSummary,
   VaultSummary
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import { OperationRecordSchema, type OperationRecord } from "@pige/schemas";
+import { parsePigeFrontmatter } from "@pige/markdown";
+import {
+  NoteTrashListRequestSchema,
+  NoteTrashRestoreRequestSchema,
+  OperationRecordSchema,
+  type OperationRecord
+} from "@pige/schemas";
 import { flushDirectoryWhereSupported } from "./durable-directory-sync";
 import type { NotesTrashResolution } from "./notes-service";
 
@@ -35,6 +45,9 @@ export interface NoteTrashTargetPort {
 
 export type NoteTrashRequest = NoteTrashCurrentRequest;
 export type NoteTrashResult = NoteTrashCurrentResult;
+export type NoteTrashRestoreOutcome =
+  | { readonly status: "committed"; readonly operationId: string }
+  | { readonly status: "stale" | "not_found" | "failed" };
 
 interface NoteTrashReceipt {
   readonly schemaVersion: 1;
@@ -48,6 +61,17 @@ interface NoteTrashReceipt {
   readonly trashPagePath: string;
   readonly contentHash: string;
   readonly title: string;
+  readonly createdAt: string;
+}
+
+interface NoteTrashRestoreIntent {
+  readonly schemaVersion: 1;
+  readonly kind: "note_trash_restore_intent";
+  readonly requestId: string;
+  readonly activeVaultId: string;
+  readonly pageId: string;
+  readonly trashOperationId: string;
+  readonly expectedTrashRevision: string;
   readonly createdAt: string;
 }
 
@@ -118,6 +142,67 @@ export class NoteTrashService {
     }
   }
 
+  list(request: NoteTrashListRequest): NoteTrashListResult {
+    const identity = { apiVersion: 1 as const, requestId: request.requestId, activeVaultId: request.activeVaultId };
+    if (!NoteTrashListRequestSchema.safeParse(request).success) return { ...identity, status: "failed" };
+    const scope = this.#scope(request.activeVaultId);
+    if (!scope) return { ...identity, status: "failed" };
+    try {
+      const notes = readAllReceipts(scope.vaultPath).flatMap((receipt): NoteTrashSummary[] => {
+        const candidate = restorableCandidate(scope.vaultPath, receipt);
+        return candidate ? [candidate] : [];
+      }).sort((left, right) => right.trashedAt.localeCompare(left.trashedAt) ||
+        left.trashOperationId.localeCompare(right.trashOperationId));
+      return { ...identity, status: "ready", notes };
+    } catch {
+      return { ...identity, status: "failed" };
+    }
+  }
+
+  restore(request: NoteTrashRestoreRequest): NoteTrashRestoreOutcome {
+    if (!NoteTrashRestoreRequestSchema.safeParse(request).success) return { status: "failed" };
+    const scope = this.#scope(request.activeVaultId);
+    if (!scope) return { status: "failed" };
+    try {
+      const replay = readRestoreIntentByRequest(scope.vaultPath, request.requestId);
+      if (replay) {
+        if (!matchesRestoreIntent(replay, request)) return { status: "stale" };
+        return this.#completeRestoreIntent(scope.vaultPath, replay);
+      }
+      const receipt = readReceiptByOperation(scope.vaultPath, request.trashOperationId);
+      if (!receipt) return { status: "not_found" };
+      if (receipt.activeVaultId !== request.activeVaultId || receipt.pageId !== request.pageId ||
+        trashRevision(receipt) !== request.expectedTrashRevision) return { status: "stale" };
+      const trashOperation = readOperation(scope.vaultPath, receipt.operationId);
+      if (!trashOperation || !matchesTrashOperation(receipt, trashOperation)) return { status: "stale" };
+      const existingRestore = readOperation(scope.vaultPath, restoreOperationId(receipt.operationId));
+      if (existingRestore) {
+        if (!matchesRestoreOperation(receipt, trashOperation, existingRestore)) return { status: "stale" };
+        this.#finishRestoreCleanup(scope.vaultPath, receipt, existingRestore);
+        return { status: "committed", operationId: existingRestore.id };
+      }
+      if (pathExists(resolveVaultRelative(scope.vaultPath, receipt.originalPagePath))) return { status: "stale" };
+      if (!pathExists(resolveVaultRelative(scope.vaultPath, receipt.trashPagePath))) return { status: "not_found" };
+      if (!restorableCandidate(scope.vaultPath, receipt)) return { status: "not_found" };
+      const intent: NoteTrashRestoreIntent = {
+        schemaVersion: 1,
+        kind: "note_trash_restore_intent",
+        requestId: request.requestId,
+        activeVaultId: request.activeVaultId,
+        pageId: request.pageId,
+        trashOperationId: request.trashOperationId,
+        expectedTrashRevision: request.expectedTrashRevision,
+        createdAt: this.#now().toISOString()
+      };
+      writeRestoreIntentExclusive(scope.vaultPath, intent);
+      return this.#completeRestoreIntent(scope.vaultPath, intent);
+    } catch (caught) {
+      if (caught instanceof PigeDomainError && caught.code === "note_trash.stale") return { status: "stale" };
+      if (caught instanceof PigeDomainError && caught.code === "note_trash.not_found") return { status: "not_found" };
+      return { status: "failed" };
+    }
+  }
+
   activitySummary(
     operation: OperationRecord,
     undo: OperationRecord | undefined
@@ -178,7 +263,18 @@ export class NoteTrashService {
     if (!vaultPath) return { recovered: 0, failed: 0 };
     let recovered = 0;
     let failed = 0;
+    const intendedOperations = new Set<string>();
+    for (const intent of readAllRestoreIntents(vaultPath)) {
+      intendedOperations.add(intent.trashOperationId);
+      try {
+        if (this.#completeRestoreIntent(vaultPath, intent).status !== "committed") throw staleError();
+        recovered += 1;
+      } catch {
+        failed += 1;
+      }
+    }
     for (const receipt of readAllReceipts(vaultPath)) {
+      if (intendedOperations.has(receipt.operationId)) continue;
       try {
         const restore = readOperation(vaultPath, restoreOperationId(receipt.operationId));
         if (restore) {
@@ -194,6 +290,23 @@ export class NoteTrashService {
       }
     }
     return { recovered, failed };
+  }
+
+  #completeRestoreIntent(vaultPath: string, intent: NoteTrashRestoreIntent): NoteTrashRestoreOutcome {
+    const receipt = readReceiptByOperation(vaultPath, intent.trashOperationId);
+    if (!receipt) return { status: "not_found" };
+    if (receipt.activeVaultId !== intent.activeVaultId || receipt.pageId !== intent.pageId ||
+      trashRevision(receipt) !== intent.expectedTrashRevision) return { status: "stale" };
+    const trashOperation = readOperation(vaultPath, receipt.operationId);
+    if (!trashOperation || !matchesTrashOperation(receipt, trashOperation)) return { status: "stale" };
+    const existingRestore = readOperation(vaultPath, restoreOperationId(receipt.operationId));
+    if (existingRestore) {
+      if (!matchesRestoreOperation(receipt, trashOperation, existingRestore)) return { status: "stale" };
+      this.#finishRestoreCleanup(vaultPath, receipt, existingRestore);
+      return { status: "committed", operationId: existingRestore.id };
+    }
+    const restored = this.#restore(vaultPath, receipt, trashOperation);
+    return { status: "committed", operationId: restored.id };
   }
 
   #completeTrash(vaultPath: string, receipt: NoteTrashReceipt): void {
@@ -427,6 +540,55 @@ function readAllReceipts(vaultPath: string): NoteTrashReceipt[] {
   return entries.map((entry) => readReceipt(path.join(root, entry.name))).filter((value): value is NoteTrashReceipt => !!value);
 }
 
+function writeRestoreIntentExclusive(vaultPath: string, intent: NoteTrashRestoreIntent): void {
+  const intentPath = restoreIntentPathForRequest(vaultPath, intent.requestId);
+  ensureSafeDirectory(vaultPath, path.dirname(intentPath));
+  try {
+    writeJsonExclusive(intentPath, intent);
+  } catch (caught) {
+    if (!isErrno(caught, "EEXIST")) throw caught;
+    const existing = readRestoreIntent(intentPath);
+    if (!existing || JSON.stringify(existing) !== JSON.stringify(intent)) throw operationConflict();
+  }
+}
+
+function readRestoreIntentByRequest(vaultPath: string, requestId: string): NoteTrashRestoreIntent | undefined {
+  return readRestoreIntent(restoreIntentPathForRequest(vaultPath, requestId));
+}
+
+function readAllRestoreIntents(vaultPath: string): NoteTrashRestoreIntent[] {
+  const root = restoreIntentRoot(vaultPath);
+  if (!pathExists(root)) return [];
+  ensureSafeDirectory(vaultPath, root);
+  const entries = fs.readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && !entry.isSymbolicLink() && /^intent_[a-f0-9]{32}\.json$/u.test(entry.name))
+    .sort((left, right) => left.name.localeCompare(right.name));
+  if (entries.length > MAX_RECEIPTS) throw new PigeDomainError("note_trash.receipt_limit", "Too many note restore intents exist.");
+  return entries.map((entry) => readRestoreIntent(path.join(root, entry.name))).filter((value): value is NoteTrashRestoreIntent => !!value);
+}
+
+function readRestoreIntent(filePath: string): NoteTrashRestoreIntent | undefined {
+  if (!pathExists(filePath)) return undefined;
+  const value = JSON.parse(readBoundedFile(filePath, MAX_RECEIPT_BYTES).toString("utf8")) as Partial<NoteTrashRestoreIntent>;
+  if (Object.keys(value).sort().join(",") !==
+      "activeVaultId,createdAt,expectedTrashRevision,kind,pageId,requestId,schemaVersion,trashOperationId" ||
+    value.schemaVersion !== 1 || value.kind !== "note_trash_restore_intent" ||
+    typeof value.requestId !== "string" || !/^notetrashrestorereq_[a-z0-9]{16,64}$/u.test(value.requestId) ||
+    typeof value.activeVaultId !== "string" || typeof value.pageId !== "string" ||
+    typeof value.trashOperationId !== "string" || !OPERATION_ID.test(value.trashOperationId) ||
+    typeof value.expectedTrashRevision !== "string" || !/^notetrashrev_[a-f0-9]{64}$/u.test(value.expectedTrashRevision) ||
+    typeof value.createdAt !== "string" || !Number.isFinite(Date.parse(value.createdAt))) {
+    throw new PigeDomainError("note_trash.restore_intent_invalid", "The note restore intent is invalid.");
+  }
+  return value as NoteTrashRestoreIntent;
+}
+
+function matchesRestoreIntent(intent: NoteTrashRestoreIntent, request: NoteTrashRestoreRequest): boolean {
+  return intent.requestId === request.requestId && intent.activeVaultId === request.activeVaultId &&
+    intent.pageId === request.pageId && intent.trashOperationId === request.trashOperationId &&
+    intent.expectedTrashRevision === request.expectedTrashRevision;
+}
+
 function readReceipt(filePath: string): NoteTrashReceipt | undefined {
   if (!pathExists(filePath)) return undefined;
   const bytes = readBoundedFile(filePath, MAX_RECEIPT_BYTES);
@@ -641,6 +803,14 @@ function receiptRoot(vaultPath: string): string {
   return path.join(vaultPath, ".pige", "trash", "note-receipts");
 }
 
+function restoreIntentRoot(vaultPath: string): string {
+  return path.join(vaultPath, ".pige", "trash", "note-restore-intents");
+}
+
+function restoreIntentPathForRequest(vaultPath: string, requestId: string): string {
+  return path.join(restoreIntentRoot(vaultPath), `intent_${createHash("sha256").update(requestId).digest("hex").slice(0, 32)}.json`);
+}
+
 function receiptPathForRequest(vaultPath: string, requestId: string): string {
   return path.join(receiptRoot(vaultPath), `receipt_${createHash("sha256").update(requestId).digest("hex").slice(0, 32)}.json`);
 }
@@ -669,6 +839,36 @@ function trashPayloadMatches(vaultPath: string, receipt: NoteTrashReceipt): bool
   } catch {
     return false;
   }
+}
+
+function restorableCandidate(vaultPath: string, receipt: NoteTrashReceipt): NoteTrashSummary | undefined {
+  if (pathExists(resolveVaultRelative(vaultPath, receipt.originalPagePath))) return undefined;
+  const trashOperation = readOperation(vaultPath, receipt.operationId);
+  if (!trashOperation || !matchesTrashOperation(receipt, trashOperation) ||
+    readOperation(vaultPath, restoreOperationId(receipt.operationId))) return undefined;
+  const payload = readVerifiedFile(vaultPath, resolveVaultRelative(vaultPath, receipt.trashPagePath), 1);
+  if (hashBytes(payload.bytes) !== receipt.contentHash) return undefined;
+  const markdown = payload.bytes.toString("utf8");
+  if (markdown.includes("\uFFFD")) return undefined;
+  const parsed = parsePigeFrontmatter(markdown)?.frontmatter;
+  if (parsed?.id !== receipt.pageId || parsed.type !== "note" || boundedTitle(parsed.title ?? "") !== receipt.title) {
+    return undefined;
+  }
+  return {
+    trashOperationId: receipt.operationId,
+    expectedTrashRevision: trashRevision(receipt),
+    pageId: receipt.pageId,
+    title: receipt.title,
+    trashedAt: receipt.createdAt,
+    canRestore: true
+  };
+}
+
+function trashRevision(receipt: NoteTrashReceipt): `notetrashrev_${string}` {
+  return `notetrashrev_${createHash("sha256")
+    .update("pige.note.trash.restore-revision.v1\0", "utf8")
+    .update(JSON.stringify(receipt), "utf8")
+    .digest("hex")}`;
 }
 
 function assertHash(bytes: Uint8Array, expected: string): void {

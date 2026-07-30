@@ -1468,6 +1468,9 @@ export const NOTE_EDITOR_MAX_RENDERED_HTML_UTF8_BYTES = 8 * 1024 * 1024;
 export const NoteEditorRequestIdSchema = z.string().regex(/^noteeditreq_[a-z0-9]{8,64}$/);
 export const NoteEditorRevisionSchema = z.string().regex(/^noteeditrev_[a-z0-9]{32,64}$/);
 export const NoteTrashCurrentRequestIdSchema = z.string().regex(/^notetrashreq_[a-z0-9]{16,64}$/);
+export const NoteTrashListRequestIdSchema = z.string().regex(/^notetrashlistreq_[a-z0-9]{16,64}$/);
+export const NoteTrashRestoreRequestIdSchema = z.string().regex(/^notetrashrestorereq_[a-z0-9]{16,64}$/);
+export const NoteTrashRevisionSchema = z.string().regex(/^notetrashrev_[a-f0-9]{64}$/);
 export const NoteArchiveCurrentRequestIdSchema = z.string().regex(/^notearchivereq_[a-z0-9]{16,64}$/);
 export const NoteRestoreArchivedRequestIdSchema = z.string().regex(/^noterestorereq_[a-z0-9]{16,64}$/);
 export const NoteAddTagRequestIdSchema = z.string().regex(/^noteaddtagreq_[a-z0-9]{16,64}$/);
@@ -1591,6 +1594,8 @@ export const NoteEditorSaveResultSchema = z.discriminatedUnion("status", [
 ]);
 
 export const NOTE_TRASH_CURRENT_CHANNEL = "notes.trashCurrent" as const;
+export const NOTE_TRASH_LIST_CHANNEL = "notes.listTrash" as const;
+export const NOTE_TRASH_RESTORE_CHANNEL = "notes.restoreTrash" as const;
 export const NOTE_ARCHIVE_CURRENT_CHANNEL = "notes.archiveCurrent" as const;
 export const NOTE_RESTORE_ARCHIVED_CHANNEL = "notes.restoreArchived" as const;
 export const NOTE_ADD_TAG_CHANNEL = "notes.addTag" as const;
@@ -1737,6 +1742,47 @@ export const NoteTrashCurrentResultSchema = z.discriminatedUnion("status", [
     });
   }
 });
+
+export const NoteTrashSummarySchema = z.object({
+  trashOperationId: OperationIdSchema,
+  expectedTrashRevision: NoteTrashRevisionSchema,
+  pageId: PageIdSchema,
+  title: z.string().min(1).max(120),
+  trashedAt: z.string().datetime({ offset: true }),
+  canRestore: z.literal(true)
+}).strict();
+export const NoteTrashListRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteTrashListRequestIdSchema,
+  activeVaultId: VaultIdSchema
+}).strict();
+const NoteTrashListResultIdentitySchema = NoteTrashListRequestSchema;
+export const NoteTrashListResultSchema = z.discriminatedUnion("status", [
+  NoteTrashListResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    notes: z.array(NoteTrashSummarySchema).max(10_000).readonly()
+  }).strict(),
+  NoteTrashListResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const NoteTrashRestoreRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteTrashRestoreRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  pageId: PageIdSchema,
+  trashOperationId: OperationIdSchema,
+  expectedTrashRevision: NoteTrashRevisionSchema
+}).strict();
+const NoteTrashRestoreResultIdentitySchema = NoteTrashRestoreRequestSchema;
+export const NoteTrashRestoreResultSchema = z.discriminatedUnion("status", [
+  NoteTrashRestoreResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    render: NoteRenderResultSchema
+  }).strict(),
+  ...(["stale", "not_found", "failed"] as const).map((status) =>
+    NoteTrashRestoreResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
 
 export const NOTE_MERGE_CHANNEL = "notes.merge" as const;
 export const NoteMergeRequestIdSchema = z.string().regex(/^notemergereq_[a-z0-9]{16,64}$/u);
@@ -9379,6 +9425,9 @@ export type NoteEditorOpenResult = z.infer<typeof NoteEditorOpenResultSchema>;
 export type NoteEditorSaveRequest = z.infer<typeof NoteEditorSaveRequestSchema>;
 export type NoteEditorSaveResult = z.infer<typeof NoteEditorSaveResultSchema>;
 export type NoteTrashCurrentRequestId = z.infer<typeof NoteTrashCurrentRequestIdSchema>;
+export type NoteTrashListRequestId = z.infer<typeof NoteTrashListRequestIdSchema>;
+export type NoteTrashRestoreRequestId = z.infer<typeof NoteTrashRestoreRequestIdSchema>;
+export type NoteTrashRevision = z.infer<typeof NoteTrashRevisionSchema>;
 export type NoteArchiveCurrentRequestId = z.infer<typeof NoteArchiveCurrentRequestIdSchema>;
 export type NoteArchiveCurrentRequest = z.infer<typeof NoteArchiveCurrentRequestSchema>;
 export type NoteArchiveCurrentResult = z.infer<typeof NoteArchiveCurrentResultSchema>;
@@ -9394,6 +9443,11 @@ export type NoteAddTagResult = z.infer<typeof NoteAddTagResultSchema>;
 export type NoteTrashEligibility = z.infer<typeof NoteTrashEligibilitySchema>;
 export type NoteTrashCurrentRequest = z.infer<typeof NoteTrashCurrentRequestSchema>;
 export type NoteTrashCurrentResult = z.infer<typeof NoteTrashCurrentResultSchema>;
+export type NoteTrashSummary = z.infer<typeof NoteTrashSummarySchema>;
+export type NoteTrashListRequest = z.infer<typeof NoteTrashListRequestSchema>;
+export type NoteTrashListResult = z.infer<typeof NoteTrashListResultSchema>;
+export type NoteTrashRestoreRequest = z.infer<typeof NoteTrashRestoreRequestSchema>;
+export type NoteTrashRestoreResult = z.infer<typeof NoteTrashRestoreResultSchema>;
 export type NoteMergeRequestId = z.infer<typeof NoteMergeRequestIdSchema>;
 export type NoteMergeRequest = z.infer<typeof NoteMergeRequestSchema>;
 export type NoteMergeResult = z.infer<typeof NoteMergeResultSchema>;

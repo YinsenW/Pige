@@ -148,6 +148,10 @@ import {
   NoteAddTagResultSchema,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
+  NoteTrashListRequestSchema,
+  NoteTrashListResultSchema,
+  NoteTrashRestoreRequestSchema,
+  NoteTrashRestoreResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   NoteReconnectOriginalSourceRequestSchema,
@@ -4203,6 +4207,21 @@ describe("schemas", () => {
       ...render,
       trashEligibility: { ...render.trashEligibility, path: "/private/note.md" }
     })).toThrow();
+    const trashListRequest = { apiVersion: 1 as const, requestId: "notetrashlistreq_abcdefghijklmnop",
+      activeVaultId: identity.activeVaultId };
+    const trashSummary = { trashOperationId: committed.operationId,
+      expectedTrashRevision: `notetrashrev_${"b".repeat(64)}` as const, pageId: identity.currentPageId,
+      title: "Current note", trashedAt: "2026-07-30T10:02:00.000Z", canRestore: true as const };
+    expect(NoteTrashListRequestSchema.parse(trashListRequest)).toEqual(trashListRequest);
+    expect(NoteTrashListResultSchema.parse({ ...trashListRequest, status: "ready", notes: [trashSummary] }))
+      .toMatchObject({ status: "ready", notes: [{ pageId: identity.currentPageId }] });
+    const restoreRequest = { apiVersion: 1 as const, requestId: "notetrashrestorereq_abcdefghijklmnop",
+      activeVaultId: identity.activeVaultId, pageId: identity.currentPageId,
+      trashOperationId: trashSummary.trashOperationId, expectedTrashRevision: trashSummary.expectedTrashRevision };
+    expect(NoteTrashRestoreRequestSchema.parse(restoreRequest)).toEqual(restoreRequest);
+    expect(NoteTrashRestoreResultSchema.parse({ ...restoreRequest, status: "committed",
+      operationId: "op_20260730_restorenote1234", render })).toMatchObject({ status: "committed" });
+    expect(() => NoteTrashRestoreRequestSchema.parse({ ...restoreRequest, trashPath: "/private/trash.md" })).toThrow();
     expect(KnowledgeActivitySummarySchema.parse({
       operationId: committed.operationId,
       kind: "trash_page",
