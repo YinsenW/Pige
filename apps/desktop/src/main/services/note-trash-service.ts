@@ -1,7 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { KnowledgeActivitySummary, KnowledgeActivityUndoResult, VaultSummary } from "@pige/contracts";
+import type {
+  KnowledgeActivitySummary,
+  KnowledgeActivityUndoResult,
+  NoteTrashCurrentRequest,
+  NoteTrashCurrentResult,
+  VaultSummary
+} from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import { OperationRecordSchema, type OperationRecord } from "@pige/schemas";
 import { flushDirectoryWhereSupported } from "./durable-directory-sync";
@@ -27,28 +33,8 @@ export interface NoteTrashTargetPort {
   }): NotesTrashResolution;
 }
 
-export interface NoteTrashRequest {
-  readonly requestId: string;
-  readonly activeVaultId: string;
-  readonly pageId: string;
-  readonly renderContextId: string;
-  readonly expectedRevision: string;
-}
-
-export type NoteTrashResult =
-  | {
-      readonly status: "committed";
-      readonly requestId: string;
-      readonly activeVaultId: string;
-      readonly pageId: string;
-      readonly operationId: string;
-    }
-  | {
-      readonly status: "stale" | "not_found" | "ineligible" | "failed";
-      readonly requestId: string;
-      readonly activeVaultId: string;
-      readonly pageId: string;
-    };
+export type NoteTrashRequest = NoteTrashCurrentRequest;
+export type NoteTrashResult = NoteTrashCurrentResult;
 
 interface NoteTrashReceipt {
   readonly schemaVersion: 1;
@@ -87,19 +73,24 @@ export class NoteTrashService {
     const identity = resultIdentity(request);
     if (!validRequest(request)) return { ...identity, status: "failed" };
     const scope = this.#scope(request.activeVaultId);
-    if (!scope) return { ...identity, status: "stale" };
+    if (!scope) return { ...identity, status: "failed" };
     try {
       const existing = readReceiptByRequest(scope.vaultPath, request.requestId);
       if (existing) {
         if (existing.requestDigest !== requestDigest(request) || existing.activeVaultId !== request.activeVaultId) {
-          return { ...identity, status: "stale" };
+          return closedResult(request, "stale");
         }
         this.#completeTrash(scope.vaultPath, existing);
-        return { ...identity, status: "committed", operationId: existing.operationId };
+        return committedResult(request, existing.operationId);
       }
-      const target = this.#targets.resolveTrashTarget(ownerId, request);
-      if (target.status !== "ready") return { ...identity, status: target.status };
-      if (!target.assertCurrent()) return { ...identity, status: "stale" };
+      const target = this.#targets.resolveTrashTarget(ownerId, {
+        activeVaultId: request.activeVaultId,
+        pageId: request.currentPageId,
+        renderContextId: request.renderContextId,
+        expectedRevision: request.expectedRevision
+      });
+      if (target.status !== "ready") return closedResult(request, target.status);
+      if (!target.assertCurrent()) return closedResult(request, "stale");
       const createdAt = this.#now().toISOString();
       const operationId = createOperationId(createdAt, request, target.pageContentHash, this.#randomId());
       const receipt: NoteTrashReceipt = {
@@ -108,7 +99,7 @@ export class NoteTrashService {
         requestId: request.requestId,
         requestDigest: requestDigest(request),
         activeVaultId: request.activeVaultId,
-        pageId: request.pageId,
+        pageId: request.currentPageId,
         operationId,
         originalPagePath: normalizePagePath(scope.vaultPath, target.absolutePath, target.pagePath),
         trashPagePath: trashRelativePath(operationId, target.pagePath),
@@ -119,9 +110,11 @@ export class NoteTrashService {
       writeReceiptExclusive(scope.vaultPath, receipt);
       if (!target.assertCurrent()) throw staleError();
       this.#completeTrash(scope.vaultPath, receipt);
-      return { ...identity, status: "committed", operationId };
+      return committedResult(request, operationId);
     } catch (caught) {
-      return { ...identity, status: caught instanceof PigeDomainError && caught.code === "note_trash.stale" ? "stale" : "failed" };
+      return caught instanceof PigeDomainError && caught.code === "note_trash.stale"
+        ? closedResult(request, "stale")
+        : { ...identity, status: "failed" };
     }
   }
 
@@ -226,12 +219,17 @@ export class NoteTrashService {
     assertHash(trash.bytes, receipt.contentHash);
     if (originalExists) {
       const original = readVerifiedFile(vaultPath, originalPath, 2);
-      if (!sameFile(original.stat, trash.stat) || hashBytes(original.bytes) !== receipt.contentHash) throw staleError();
+      if (!sameInode(original.stat, trash.stat) || hashBytes(original.bytes) !== receipt.contentHash) throw staleError();
     } else {
       fs.linkSync(trashPath, originalPath);
       flushDirectoryWhereSupported(path.dirname(originalPath));
       const original = readVerifiedFile(vaultPath, originalPath, 2);
-      if (!sameFile(original.stat, trash.stat) || hashBytes(original.bytes) !== receipt.contentHash) throw staleError();
+      const linkedTrash = readVerifiedFile(vaultPath, trashPath, 2);
+      if (
+        !sameInode(original.stat, linkedTrash.stat) ||
+        hashBytes(original.bytes) !== receipt.contentHash ||
+        hashBytes(linkedTrash.bytes) !== receipt.contentHash
+      ) throw staleError();
     }
     const restore = commitOperationExclusive(vaultPath, createRestoreOperation(receipt, trashOperation));
     this.#finishRestoreCleanup(vaultPath, receipt, restore);
@@ -253,7 +251,7 @@ export class NoteTrashService {
       return;
     }
     const trash = readVerifiedFile(vaultPath, trashPath, 2);
-    if (!sameFile(original.stat, trash.stat) || hashBytes(trash.bytes) !== receipt.contentHash) throw staleError();
+    if (!sameInode(original.stat, trash.stat) || hashBytes(trash.bytes) !== receipt.contentHash) throw staleError();
     removeVerifiedLink(vaultPath, trashPath, originalPath, trash.stat, receipt.contentHash);
   }
 
@@ -282,7 +280,7 @@ function moveToTrash(vaultPath: string, receipt: NoteTrashReceipt): void {
     assertHash(trash.bytes, receipt.contentHash);
     if (sourceExists) {
       const source = readVerifiedFile(vaultPath, sourcePath, 2);
-      if (!sameFile(source.stat, trash.stat) || hashBytes(source.bytes) !== receipt.contentHash) throw staleError();
+      if (!sameInode(source.stat, trash.stat) || hashBytes(source.bytes) !== receipt.contentHash) throw staleError();
       removeVerifiedLink(vaultPath, sourcePath, trashPath, source.stat, receipt.contentHash);
     } else if (pathExists(quarantinePathFor(sourcePath, trashPath))) {
       removeVerifiedLink(vaultPath, sourcePath, trashPath, trash.stat, receipt.contentHash);
@@ -293,9 +291,14 @@ function moveToTrash(vaultPath: string, receipt: NoteTrashReceipt): void {
   assertHash(source.bytes, receipt.contentHash);
   fs.linkSync(sourcePath, trashPath);
   flushDirectoryWhereSupported(path.dirname(trashPath));
+  const linkedSource = readVerifiedFile(vaultPath, sourcePath, 2);
   const trash = readVerifiedFile(vaultPath, trashPath, 2);
-  if (!sameFile(source.stat, trash.stat) || hashBytes(trash.bytes) !== receipt.contentHash) throw staleError();
-  removeVerifiedLink(vaultPath, sourcePath, trashPath, source.stat, receipt.contentHash);
+  if (
+    !sameInode(linkedSource.stat, trash.stat) ||
+    hashBytes(linkedSource.bytes) !== receipt.contentHash ||
+    hashBytes(trash.bytes) !== receipt.contentHash
+  ) throw staleError();
+  removeVerifiedLink(vaultPath, sourcePath, trashPath, linkedSource.stat, receipt.contentHash);
 }
 
 function removeVerifiedLink(
@@ -317,7 +320,7 @@ function removeVerifiedLink(
     flushDirectoryWhereSupported(path.dirname(quarantinePath));
   }
   const quarantined = readVerifiedFile(vaultPath, quarantinePath, 2);
-  if (!sameFile(expected, quarantined.stat) || hashBytes(quarantined.bytes) !== expectedHash) {
+  if (!sameInode(expected, quarantined.stat) || hashBytes(quarantined.bytes) !== expectedHash) {
     if (!pathExists(sourcePath)) {
       try { fs.linkSync(quarantinePath, sourcePath); flushDirectoryWhereSupported(path.dirname(sourcePath)); } catch { /* Preserve the unexpected file in quarantine. */ }
     }
@@ -441,7 +444,7 @@ function readReceipt(filePath: string): NoteTrashReceipt | undefined {
 }
 
 function commitOperationExclusive(vaultPath: string, operation: OperationRecord): OperationRecord {
-  const operationPath = path.join(vaultPath, ".pige", "operations", `${operation.id}.json`);
+  const operationPath = operationPathFor(vaultPath, operation.id);
   ensureSafeDirectory(vaultPath, path.dirname(operationPath));
   try {
     writeJsonExclusive(operationPath, operation);
@@ -455,9 +458,22 @@ function commitOperationExclusive(vaultPath: string, operation: OperationRecord)
 }
 
 function readOperation(vaultPath: string, operationId: string): OperationRecord | undefined {
-  const operationPath = path.join(vaultPath, ".pige", "operations", `${operationId}.json`);
+  const operationPath = operationPathFor(vaultPath, operationId);
   if (!pathExists(operationPath)) return undefined;
   return OperationRecordSchema.parse(JSON.parse(readBoundedFile(operationPath, 256 * 1024).toString("utf8")));
+}
+
+function operationPathFor(vaultPath: string, operationId: string): string {
+  const dateKey = OPERATION_ID.exec(operationId)?.[1];
+  if (!dateKey) throw operationConflict();
+  return path.join(
+    vaultPath,
+    ".pige",
+    "operations",
+    dateKey.slice(0, 4),
+    dateKey.slice(4, 6),
+    `${operationId}.json`
+  );
 }
 
 function writeJsonExclusive(filePath: string, value: unknown): void {
@@ -543,17 +559,82 @@ function normalizePagePath(vaultPath: string, absolutePath: string, relativePath
 }
 
 function validRequest(request: NoteTrashRequest): boolean {
-  return !!request && typeof request.requestId === "string" && request.requestId.length >= 8 && request.requestId.length <= 128 &&
-    typeof request.activeVaultId === "string" && typeof request.pageId === "string" &&
+  return !!request && request.apiVersion === 1 && typeof request.requestId === "string" && /^notetrashreq_[a-z0-9]{16,64}$/u.test(request.requestId) &&
+    typeof request.activeVaultId === "string" && typeof request.currentPageId === "string" &&
     typeof request.renderContextId === "string" && NOTE_REVISION.test(request.expectedRevision);
 }
 
 function requestDigest(request: NoteTrashRequest): string {
-  return hashText([request.requestId, request.activeVaultId, request.pageId, request.renderContextId, request.expectedRevision].join("\0"));
+  return hashText([request.requestId, request.activeVaultId, request.currentPageId, request.renderContextId, request.expectedRevision].join("\0"));
 }
 
 function resultIdentity(request: NoteTrashRequest) {
-  return { requestId: request?.requestId ?? "", activeVaultId: request?.activeVaultId ?? "", pageId: request?.pageId ?? "" } as const;
+  return {
+    apiVersion: 1 as const,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    currentPageId: request.currentPageId,
+    renderContextId: request.renderContextId,
+    expectedRevision: request.expectedRevision
+  };
+}
+
+function committedResult(request: NoteTrashRequest, operationId: string): NoteTrashResult {
+  return {
+    ...resultIdentity(request),
+    status: "committed",
+    operationId,
+    authority: {
+      pageId: request.currentPageId,
+      pageState: "trashed",
+      readerState: "closed",
+      libraryPresence: "absent",
+      canTrash: false
+    }
+  };
+}
+
+function closedResult(
+  request: NoteTrashRequest,
+  status: "stale" | "not_found" | "ineligible"
+): NoteTrashResult {
+  if (status === "stale") {
+    return {
+      ...resultIdentity(request),
+      status,
+      authority: {
+        pageId: request.currentPageId,
+        pageState: "present",
+        readerState: "refresh_required",
+        libraryPresence: "present",
+        canTrash: false
+      }
+    };
+  }
+  if (status === "not_found") {
+    return {
+      ...resultIdentity(request),
+      status,
+      authority: {
+        pageId: request.currentPageId,
+        pageState: "missing",
+        readerState: "closed",
+        libraryPresence: "absent",
+        canTrash: false
+      }
+    };
+  }
+  return {
+    ...resultIdentity(request),
+    status,
+    authority: {
+      pageId: request.currentPageId,
+      pageState: "present",
+      readerState: "preserved",
+      libraryPresence: "present",
+      canTrash: false
+    }
+  };
 }
 
 function receiptRoot(vaultPath: string): string {
@@ -610,6 +691,10 @@ function boundedTitle(value: string): string {
 
 function sameFile(left: fs.Stats, right: fs.Stats): boolean {
   return left.dev === right.dev && left.ino === right.ino && left.size === right.size && left.mtimeMs === right.mtimeMs && left.ctimeMs === right.ctimeMs;
+}
+
+function sameInode(left: fs.Stats, right: fs.Stats): boolean {
+  return left.dev === right.dev && left.ino === right.ino;
 }
 
 function pathExists(filePath: string): boolean {

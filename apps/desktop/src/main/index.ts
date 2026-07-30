@@ -262,6 +262,7 @@ import { PiPackageManagerService } from "./services/pi-package-manager-service";
 import { PiPackageUpdateService } from "./services/pi-package-update-service";
 import { PiPackageInstallTaskService } from "./services/pi-package-install-task-service";
 import { NotesService } from "./services/notes-service";
+import { NoteTrashService } from "./services/note-trash-service";
 import {
   NoteMarkdownEditorActivityAdapter,
   NoteMarkdownEditorService
@@ -360,6 +361,7 @@ let managedCollectionCitationService: ManagedCollectionCitationService | undefin
 const collectionCitationConversationHistory = new AgentConversationHistory();
 let libraryService: LibraryService | undefined;
 let notesService: NotesService | undefined;
+let noteTrashService: NoteTrashService | undefined;
 let noteMarkdownEditorActivityAdapter: NoteMarkdownEditorActivityAdapter | undefined;
 let noteMarkdownEditorService: NoteMarkdownEditorService | undefined;
 let readerSelectionActionService: ReaderSelectionActionService | undefined;
@@ -1541,6 +1543,11 @@ const getNotesService = (): NotesService => {
   return notesService;
 };
 
+const getNoteTrashService = (): NoteTrashService => {
+  noteTrashService ??= new NoteTrashService(getVaultService(), getNotesService());
+  return noteTrashService;
+};
+
 const getReaderSourceRevealService = (): ReaderSourceRevealService =>
   new ReaderSourceRevealService(getNotesService(), {
     reveal: (absolutePath) => {
@@ -1657,7 +1664,8 @@ const getKnowledgeActivityService = (): KnowledgeActivityService => {
       getVaultService(),
       createManagedCollectionActivityPort(),
       getNoteMarkdownEditorActivityAdapter(),
-      getAgentMemoryService()
+      getAgentMemoryService(),
+      getNoteTrashService()
     );
   }
   return knowledgeActivityService;
@@ -2608,7 +2616,9 @@ registerReaderIpc({
   getReaderSelectionActionService,
   getReaderSelectionProposalService,
   getReaderSelectionCreateNoteService: getReaderSelectionCreateNoteActionService,
-  getReaderSourceRevealService
+  getReaderSourceRevealService,
+  getNoteTrashService,
+  onNoteTrashCommitted: scheduleActivityIndexRebuild
 });
 registerCurrentNoteAppendIpc({
   ipcMain,
@@ -3086,11 +3096,13 @@ app.whenReady().then(async () => {
     getVaultService(),
     noteMarkdownEditorActivityAdapter
   );
+  noteTrashService = new NoteTrashService(getVaultService(), getNotesService());
   knowledgeActivityService = new KnowledgeActivityService(
     getVaultService(),
     createManagedCollectionActivityPort(),
     noteMarkdownEditorActivityAdapter,
-    getAgentMemoryService()
+    getAgentMemoryService(),
+    noteTrashService
   );
   agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
     snapshot: getAgentCapabilitySnapshot

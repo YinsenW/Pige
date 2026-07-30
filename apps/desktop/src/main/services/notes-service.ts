@@ -221,7 +221,17 @@ export class NotesService {
       },
       html: rendered.html,
       byteSize: stable.document.byteSize,
-      ...(renderContextId ? { renderContextId } : {})
+      ...(renderContextId ? {
+        renderContextId,
+        ...(stable.document.summary.pageType === "note"
+          ? {
+              trashEligibility: {
+                canTrash: true as const,
+                revision: publicEditorRevision(stable.pageContentHash)
+              }
+            }
+          : {})
+      } : {})
     };
   }
 
@@ -466,7 +476,6 @@ export class NotesService {
       }
     };
   }
-
   resolveTrashTarget(ownerId: string, input: {
     readonly activeVaultId: string;
     readonly pageId: string;
@@ -483,9 +492,18 @@ export class NotesService {
       context.vaultPath !== vaultPath ||
       context.pageId !== input.pageId ||
       this.#ownerEpochs.get(ownerId) !== context.ownerEpoch ||
-      publicEditorRevision(context.pageContentHash) !== input.expectedRevision ||
-      !this.#matchesCurrentPage(context)
+      publicEditorRevision(context.pageContentHash) !== input.expectedRevision
     ) return { status: "stale" };
+    if (!this.#matchesCurrentPage(context)) {
+      try {
+        fs.lstatSync(context.absolutePath);
+      } catch (caught) {
+        if (typeof caught === "object" && caught !== null && "code" in caught && caught.code === "ENOENT") {
+          return { status: "not_found" };
+        }
+      }
+      return { status: "stale" };
+    }
     if (context.pageType !== "note") return { status: "ineligible" };
     const title = parsePigeFrontmatter(context.markdown)?.frontmatter.title?.replace(/\s+/gu, " ").trim();
     if (!title) return { status: "ineligible" };
@@ -506,7 +524,6 @@ export class NotesService {
       }
     };
   }
-
   resolveSelection(
     ownerId: string,
     request: ReaderSelectionResolveRequest
