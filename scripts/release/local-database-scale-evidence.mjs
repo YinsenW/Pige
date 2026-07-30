@@ -3,7 +3,8 @@ import path from "node:path";
 
 const root = process.cwd();
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-run(npm, ["run", "build"]);
+const skipBuild = process.env.PIGE_SCALE_SKIP_BUILD === "1";
+if (!skipBuild) run(npm, ["run", "build"]);
 const baselineRevision = execFileSync("git", ["rev-parse", "HEAD"], {
   cwd: root,
   encoding: "utf8",

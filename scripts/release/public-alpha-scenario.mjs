@@ -128,6 +128,7 @@ export function derivePublicAlphaReport(observation, metadata) {
     recipeSha256: metadata.recipeSha256,
     platform: metadata.platform,
     buildId: metadata.buildId,
+    ...(metadata.release ? { release: metadata.release } : {}),
     runId: observation.runId,
     observationSha256: metadata.observationSha256,
     scenarioId: observation.scenarioId,
@@ -168,8 +169,9 @@ export function assertPublicAlphaScenarioReport(report) {
 
 export function runPublicAlphaScenario(options = {}) {
   const root = options.root ?? process.cwd();
-  const platform = options.platform ?? `${process.platform}-${process.arch}`;
+  const platform = options.platform ?? process.env.PIGE_REPORT_PLATFORM ?? `${process.platform}-${process.arch}`;
   const buildId = options.buildId ?? resolveBuildId(root);
+  const release = resolveReleaseIdentity(buildId);
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "pige-public-alpha-observation-"));
   const observationPath = path.join(temporaryRoot, "observation.json");
   try {
@@ -182,6 +184,7 @@ export function runPublicAlphaScenario(options = {}) {
       buildId,
       generatedAt: options.generatedAt ?? new Date().toISOString(),
       observationSha256,
+      release,
       recipeSha256: crypto.createHash("sha256")
         .update(fs.readFileSync(path.join(root, PUBLIC_ALPHA_SCENARIO_RECIPE))).digest("hex")
     });
@@ -192,6 +195,17 @@ export function runPublicAlphaScenario(options = {}) {
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });
   }
+}
+
+function resolveReleaseIdentity(buildId) {
+  const tag = process.env.PIGE_RELEASE_TAG;
+  const commit = process.env.PIGE_RELEASE_COMMIT;
+  if (tag === undefined && commit === undefined) return undefined;
+  if (!/^v0\.[1-9]\d*\.\d+-alpha\.[1-9]\d*$/u.test(tag ?? "") ||
+      !/^[a-f0-9]{40}$/u.test(commit ?? "") || commit !== buildId) {
+    throw new Error("Public Alpha release identity is incomplete or does not match the build.");
+  }
+  return { tag, commit, buildId };
 }
 
 function runScenarioHarness(root, observationPath) {
