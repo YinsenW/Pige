@@ -8,6 +8,7 @@ import {
   type ReaderDocumentActionLabels,
   type ReaderDocumentTrashOutcome
 } from "../../apps/desktop/src/renderer/src/components/ReaderDocumentActions";
+import type { ReaderNoteMergeOutcome, ReaderNoteMergeTarget } from "../../apps/desktop/src/renderer/src/components/ReaderNoteMergeDialog";
 
 const globals = ["window", "document", "navigator", "Node", "HTMLElement", "Event", "MouseEvent", "KeyboardEvent"] as const;
 const originals = new Map<PropertyKey, PropertyDescriptor | undefined>();
@@ -21,6 +22,18 @@ const labels: ReaderDocumentActionLabels = {
   confirm: "Move to Trash",
   pending: "Moving…",
   failed: "The note was not moved."
+};
+const mergeLabels = {
+  title: "Merge notes",
+  description: "The current note stays.",
+  survivor: "Keep:",
+  target: "Merge this note into it",
+  loading: "Loading notes…",
+  empty: "No notes",
+  cancel: "Cancel",
+  confirm: "Merge notes",
+  pending: "Merging…",
+  failed: "Both notes remain unchanged."
 };
 
 afterEach(() => {
@@ -95,9 +108,15 @@ describe("Reader document actions", () => {
       harness.root.render(createElement(ReaderDocumentActions, {
         ownerIdentity: "vault_1:page_2:render_2:revision_2",
         canMoveToTrash: true,
+        canMerge: false,
+        currentTitle: "Current note",
         labels,
+        mergeLabels,
         onMoveToTrash,
-        onCommitted
+        onLoadMergeTargets: async () => [],
+        onMerge: async () => ({ status: "retained" }),
+        onCommitted,
+        onMergeCommitted: () => undefined
       }));
       await settle(harness.dom);
     });
@@ -127,11 +146,60 @@ describe("Reader document actions", () => {
     expect(harness.container.querySelector('[role="alertdialog"]')).toBeNull();
     await harness.unmount();
   });
+
+  it("loads safe targets, single-flights merge, and retains the selected target on failure", async () => {
+    const pending = deferred<ReaderNoteMergeOutcome>();
+    const targets: readonly ReaderNoteMergeTarget[] = [{
+      pageId: "page_target",
+      title: "Target note",
+      updatedAt: "2026-07-30T09:00:00.000Z"
+    }];
+    const onMerge = vi.fn(async () => pending.promise);
+    const harness = await mount({
+      canMoveToTrash: false,
+      canMerge: true,
+      onMoveToTrash: vi.fn(),
+      onLoadMergeTargets: vi.fn(async () => targets),
+      onMerge
+    });
+    const trigger = button(harness.container, "More actions");
+    trigger.focus();
+    await click(harness.dom, trigger);
+    await click(harness.dom, button(harness.container, "Merge notes"));
+    await settle(harness.dom);
+    expect(harness.container.querySelector("select")?.value).toBe("page_target");
+    const confirm = button(harness.container, "Merge notes");
+    await act(async () => {
+      confirm.click();
+      confirm.click();
+      await settle(harness.dom);
+    });
+    expect(onMerge).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      pending.resolve({ status: "retained" });
+      await pending.promise;
+      await settle(harness.dom);
+    });
+    expect(harness.container.querySelector('[role="alert"]')?.textContent).toBe(mergeLabels.failed);
+    expect(harness.container.querySelector("select")?.value).toBe("page_target");
+    expect(harness.dom.window.document.activeElement).toBe(harness.container.querySelector("select"));
+    await act(async () => {
+      harness.container.querySelector('[role="alertdialog"]')?.dispatchEvent(
+        new harness.dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+      );
+      await settle(harness.dom);
+    });
+    expect(harness.dom.window.document.activeElement).toBe(trigger);
+    await harness.unmount();
+  });
 });
 
 async function mount(props: {
   readonly canMoveToTrash: boolean;
+  readonly canMerge?: boolean;
   readonly onMoveToTrash: () => Promise<ReaderDocumentTrashOutcome>;
+  readonly onLoadMergeTargets?: () => Promise<readonly ReaderNoteMergeTarget[]>;
+  readonly onMerge?: (target: ReaderNoteMergeTarget) => Promise<ReaderNoteMergeOutcome>;
   readonly onCommitted?: () => void;
 }) {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: "http://localhost/" });
@@ -141,9 +209,15 @@ async function mount(props: {
     root.render(createElement(ReaderDocumentActions, {
       ownerIdentity: "vault_1:page_1:render_1:revision_1",
       canMoveToTrash: props.canMoveToTrash,
+      canMerge: props.canMerge ?? false,
+      currentTitle: "Current note",
       labels,
+      mergeLabels,
       onMoveToTrash: props.onMoveToTrash,
-      onCommitted: props.onCommitted ?? (() => undefined)
+      onLoadMergeTargets: props.onLoadMergeTargets ?? (async () => []),
+      onMerge: props.onMerge ?? (async () => ({ status: "retained" })),
+      onCommitted: props.onCommitted ?? (() => undefined),
+      onMergeCommitted: () => undefined
     }));
     await settle(dom);
   });

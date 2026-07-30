@@ -10,6 +10,8 @@ import type {
   LibraryTagsRequest,
   LibraryTagsResult,
   NoteRenderResult,
+  NoteMergeRequest,
+  NoteMergeResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
   NoteRevealSourceRequest,
@@ -886,6 +888,82 @@ describe("full UI Library", () => {
     expect(requests).toHaveLength(2);
     expect(committed).toBe(1);
 
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("merges one selected ordinary note into the current Reader and adopts only the authoritative render", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: NoteMergeRequest[] = [];
+    const adopted: NoteRenderResult[] = [];
+    let mode: "stale" | "committed" = "stale";
+    const note: NoteRenderResult = {
+      ...readerNote(),
+      trashEligibility: { canTrash: true, revision: `noteeditrev_${"a".repeat(32)}` }
+    };
+    const target = libraryList().pages.find((page) => page.pageId !== note.summary.pageId && page.pageType === "note")!;
+    const committedRender: NoteRenderResult = {
+      ...note,
+      html: "<p>Merged authoritative body</p>",
+      trashEligibility: { canTrash: true, revision: `noteeditrev_${"b".repeat(32)}` }
+    };
+    const onMergeCurrentNote = async (request: NoteMergeRequest): Promise<NoteMergeResult> => {
+      requests.push(request);
+      return mode === "committed"
+        ? { ...request, status: "committed", operationId: "operation_note_merge_library", render: committedRender }
+        : { ...request, status: "stale" };
+    };
+    await act(async () => {
+      root.render(createElement(LibraryPanel, {
+        libraryList: libraryList(), selectedNote: note, selectedNoteRelated: null,
+        noteLoadingPageId: null, error: null, onGoHome: () => undefined,
+        onRefresh: async () => undefined, onSearch: async () => searchResult("unused", []), searchFocusRequest: 0,
+        onOpenNote: async () => undefined, onCloseNote: () => undefined,
+        noteAgentOpen: false, onToggleNoteAgent: () => undefined, noteAgentToggleRef: { current: null },
+        developmentNotice: null, onClearDevelopment: () => undefined, onCopyNote: async () => true,
+        activeVaultId: "vault_20260715_fullui01",
+        onLoadNoteMergeTargets: async () => [{ pageId: target.pageId, title: target.title, updatedAt: target.updatedAt }],
+        onMergeCurrentNote,
+        onCurrentNoteMerged: (render) => adopted.push(render),
+        onDevelopment: () => undefined, t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const trigger = buttonWithLabel(container, "More note actions");
+    trigger.focus();
+    await act(async () => {
+      trigger.click();
+      await settle(dom);
+      buttonNamed(container, "Merge notes").click();
+      await settle(dom);
+    });
+    expect(container.querySelector("select")?.value).toBe(target.pageId);
+    await act(async () => {
+      buttonNamed(container, "Merge notes").click();
+      await settle(dom);
+    });
+    expect(requests[0]).toMatchObject({
+      activeVaultId: "vault_20260715_fullui01",
+      currentPageId: note.summary.pageId,
+      renderContextId: note.renderContextId,
+      expectedRevision: note.trashEligibility?.revision,
+      targetPageId: target.pageId,
+      expectedTargetUpdatedAt: target.updatedAt
+    });
+    expect(requests[0]?.requestId).toMatch(/^notemergereq_[a-z0-9]{16,64}$/u);
+    expect(adopted).toHaveLength(0);
+    expect(container.querySelector(".note-reader")).not.toBeNull();
+    expect(container.querySelector("select")?.value).toBe(target.pageId);
+
+    mode = "committed";
+    await act(async () => {
+      buttonNamed(container, "Merge notes").click();
+      await settle(dom);
+    });
+    expect(requests).toHaveLength(2);
+    expect(adopted).toEqual([committedRender]);
     await act(async () => root.unmount());
     dom.window.close();
   });
