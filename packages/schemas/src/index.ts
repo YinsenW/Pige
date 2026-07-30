@@ -4499,9 +4499,63 @@ export const MachineLocalSettingsSchema = z.object({
   )
 });
 
+export const RecentVaultRevisionSchema = z.string()
+  .regex(/^recentvaultrev_[a-f0-9]{64}$/u);
+export const RecentVaultSummaryProjectionSchema = z.object({
+  vaultId: VaultIdSchema,
+  name: z.string().min(1),
+  pathDisplay: z.string().min(1),
+  schemaVersion: z.number().int().positive(),
+  lastOpenedAt: z.string().datetime({ offset: true }),
+  revision: RecentVaultRevisionSchema
+}).strict();
+
 export const OpenRecentVaultRequestSchema = z.object({
   vaultId: VaultIdSchema
 }).strict();
+
+export const VAULT_FORGET_RECENT_CHANNEL = "vault.forgetRecent" as const;
+export const VAULT_RECONNECT_RECENT_CHANNEL = "vault.reconnectRecent" as const;
+export const RecentVaultForgetRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: z.string().regex(/^recentvaultforgetreq_[a-z0-9]{16,64}$/u),
+  vaultId: VaultIdSchema,
+  expectedRevision: RecentVaultRevisionSchema
+}).strict();
+export const RecentVaultForgetResultSchema = z.discriminatedUnion("status", [
+  RecentVaultForgetRequestSchema.extend({ status: z.literal("forgotten") }).strict(),
+  RecentVaultForgetRequestSchema.extend({
+    status: z.literal("stale"), currentRevision: RecentVaultRevisionSchema
+  }).strict(),
+  RecentVaultForgetRequestSchema.extend({
+    status: z.literal("active"), currentRevision: RecentVaultRevisionSchema
+  }).strict(),
+  RecentVaultForgetRequestSchema.extend({ status: z.literal("not_found") }).strict(),
+  RecentVaultForgetRequestSchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const RecentVaultReconnectRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: z.string().regex(/^recentvaultreconnectreq_[a-z0-9]{16,64}$/u),
+  vaultId: VaultIdSchema,
+  expectedRevision: RecentVaultRevisionSchema
+}).strict();
+export const RecentVaultReconnectResultSchema = z.discriminatedUnion("status", [
+  RecentVaultReconnectRequestSchema.extend({
+    status: z.literal("reconnected"), revision: RecentVaultRevisionSchema
+  }).strict(),
+  RecentVaultReconnectRequestSchema.extend({
+    status: z.literal("cancelled"), currentRevision: RecentVaultRevisionSchema
+  }).strict(),
+  RecentVaultReconnectRequestSchema.extend({
+    status: z.literal("stale"), currentRevision: RecentVaultRevisionSchema
+  }).strict(),
+  RecentVaultReconnectRequestSchema.extend({
+    status: z.literal("active"), currentRevision: RecentVaultRevisionSchema
+  }).strict(),
+  RecentVaultReconnectRequestSchema.extend({ status: z.literal("not_found") }).strict(),
+  RecentVaultReconnectRequestSchema.extend({ status: z.literal("mismatch") }).strict(),
+  RecentVaultReconnectRequestSchema.extend({ status: z.literal("failed") }).strict()
+]);
 
 const VaultCountsProjectionSchema = z.object({
   notes: z.number().int().nonnegative(),
@@ -10628,6 +10682,11 @@ export type VaultMetadataSummary = z.infer<typeof VaultMetadataSummarySchema>;
 export type VaultRenameDisplayNameRequestId = z.infer<typeof VaultRenameDisplayNameRequestIdSchema>;
 export type VaultRenameDisplayNameRequest = z.infer<typeof VaultRenameDisplayNameRequestSchema>;
 export type VaultRenameDisplayNameResult = z.infer<typeof VaultRenameDisplayNameResultSchema>;
+export type RecentVaultRevision = z.infer<typeof RecentVaultRevisionSchema>;
+export type RecentVaultForgetRequest = z.infer<typeof RecentVaultForgetRequestSchema>;
+export type RecentVaultForgetResult = z.infer<typeof RecentVaultForgetResultSchema>;
+export type RecentVaultReconnectRequest = z.infer<typeof RecentVaultReconnectRequestSchema>;
+export type RecentVaultReconnectResult = z.infer<typeof RecentVaultReconnectResultSchema>;
 export type SourceStorageRevision = z.infer<typeof SourceStorageRevisionSchema>;
 export type ManagedCopyRootSummary = z.infer<typeof ManagedCopyRootSummarySchema>;
 export type ManagedCopyRootConfigureRequestId = z.infer<typeof ManagedCopyRootConfigureRequestIdSchema>;

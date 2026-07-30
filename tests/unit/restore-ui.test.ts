@@ -250,7 +250,7 @@ describe("First-run onboarding UI", () => {
 
     await advanceToVault(dom, container);
     const open = buttonByAriaLabel(container, `Open: ${recent.name}`);
-    const remove = buttonByAriaLabel(container, `Remove: ${recent.name}`);
+    const remove = buttonByAriaLabel(container, `Forget: ${recent.name}`);
     open.focus();
     await act(async () => {
       open.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
@@ -1396,7 +1396,12 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
       applyMigration: (request: VaultMigrationApplyRequest) => harness.applyMigration(request),
       create: async () => ({ status: "canceled" as const }),
       open: async () => ({ status: "canceled" as const }),
-      removeRecent: async () => [],
+      forgetRecent: async (request) => ({ ...request, status: "forgotten" as const }),
+      reconnectRecent: async (request) => ({
+        ...request,
+        status: "cancelled" as const,
+        currentRevision: request.expectedRevision
+      }),
       dismissFirstHomeGuide: async () => harness.onboarding,
       revealKnowledgeRoot: async () => harness.revealStorageRoot("knowledge_root"),
       revealSourceAssetRoot: async () => harness.revealStorageRoot("source_asset_root"),
@@ -1636,7 +1641,8 @@ function recentVaultSummary(): RecentVaultSummary {
     name: "Restore UI Vault",
     pathDisplay: "~/Documents/Pige Vault",
     schemaVersion: 1,
-    lastOpenedAt: "2026-07-14T08:00:00.000Z"
+    lastOpenedAt: "2026-07-14T08:00:00.000Z",
+    revision: `recentvaultrev_${"a".repeat(64)}`
   };
 }
 

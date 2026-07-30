@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -14,7 +14,12 @@ import {
   type UpdateMachineSettings,
   type WindowPreferences
 } from "@pige/schemas";
-import type { RecentVaultSummary, VaultSummary } from "@pige/contracts";
+import type {
+  RecentVaultForgetRequest,
+  RecentVaultReconnectRequest,
+  RecentVaultSummary,
+  VaultSummary
+} from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import { hasObjectErrorCode as isErrno } from "./object-error-code";
 import { acquireVaultWriterLease } from "./vault-writer-lease";
@@ -26,6 +31,21 @@ export interface RecentVaultBinding {
   readonly vaultId: string;
   readonly vaultPath: string;
 }
+
+export interface RecentVaultSnapshot extends RecentVaultBinding {
+  readonly revision: RecentVaultSummary["revision"];
+  readonly isActive: boolean;
+}
+
+export type RecentVaultForgetStoreMutation =
+  | { readonly status: "forgotten" }
+  | { readonly status: "stale" | "active"; readonly currentRevision: RecentVaultSummary["revision"] }
+  | { readonly status: "not_found" | "failed" };
+
+export type RecentVaultReconnectStoreMutation =
+  | { readonly status: "reconnected"; readonly revision: RecentVaultSummary["revision"] }
+  | { readonly status: "stale" | "active"; readonly currentRevision: RecentVaultSummary["revision"] }
+  | { readonly status: "not_found" | "failed" };
 
 export interface UpdateSettingsMutation {
   readonly status: "committed" | "stale";
@@ -308,19 +328,73 @@ export class LocalSettingsStore {
     }));
   }
 
-  removeRecentVault(vaultId: string): RecentVaultSummary[] {
-    const nextSettings = this.#mutate((settings) => createMachineLocalSettings({
-      activeVaultPath: settings.activeVaultPath,
-      appLocale: settings.appLocale,
-      appearance: settings.appearance,
-      startupDestination: settings.startupDestination,
-      window: settings.window,
-      updates: settings.updates,
-      ocrLanguagePreference: settings.ocrLanguagePreference,
-      dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
-      recentVaults: settings.recentVaults.filter((recent) => recent.vaultId !== vaultId)
-    }));
-    return this.toRecentVaultSummaries(nextSettings);
+  recentVaultSnapshot(vaultId: string): RecentVaultSnapshot | undefined {
+    const settings = this.read();
+    const record = exactRecentVaultRecord(settings.recentVaults, vaultId);
+    return record ? {
+      vaultId,
+      vaultPath: path.resolve(record.path),
+      revision: createRecentVaultRevision(record),
+      isActive: isActiveRecentRecord(settings.activeVaultPath, record)
+    } : undefined;
+  }
+
+  forgetRecentVault(
+    request: RecentVaultForgetRequest,
+    activeVaultId?: string
+  ): RecentVaultForgetStoreMutation {
+    return this.#withWriterLease(() => {
+      const settings = this.read();
+      const record = exactRecentVaultRecord(settings.recentVaults, request.vaultId);
+      if (!record) return { status: "not_found" };
+      const currentRevision = createRecentVaultRevision(record);
+      if (currentRevision !== request.expectedRevision) return { status: "stale", currentRevision };
+      if (activeVaultId === request.vaultId || isActiveRecentRecord(settings.activeVaultPath, record)) {
+        return { status: "active", currentRevision };
+      }
+      this.#writeUnlocked(withRecentVaults(
+        settings,
+        settings.recentVaults.filter((recent) => recent.vaultId !== request.vaultId)
+      ));
+      return { status: "forgotten" };
+    });
+  }
+
+  reconnectRecentVault(
+    request: RecentVaultReconnectRequest,
+    selectedVaultPath: string,
+    summary: VaultSummary,
+    activeVaultId?: string
+  ): RecentVaultReconnectStoreMutation {
+    return this.#withWriterLease(() => {
+      const settings = this.read();
+      const record = exactRecentVaultRecord(settings.recentVaults, request.vaultId);
+      if (!record) return { status: "not_found" };
+      const currentRevision = createRecentVaultRevision(record);
+      if (currentRevision !== request.expectedRevision) return { status: "stale", currentRevision };
+      if (activeVaultId === request.vaultId || isActiveRecentRecord(settings.activeVaultPath, record)) {
+        return { status: "active", currentRevision };
+      }
+      const selectedPath = path.resolve(selectedVaultPath);
+      if (
+        summary.vaultId !== request.vaultId ||
+        settings.recentVaults.some((recent) =>
+          recent.vaultId !== request.vaultId && path.resolve(recent.path) === selectedPath
+        )
+      ) return { status: "failed" };
+      const replacement = {
+        vaultId: record.vaultId,
+        name: summary.name,
+        path: selectedPath,
+        schemaVersion: summary.schemaVersion,
+        lastOpenedAt: record.lastOpenedAt
+      };
+      this.#writeUnlocked(withRecentVaults(
+        settings,
+        settings.recentVaults.map((recent) => recent.vaultId === request.vaultId ? replacement : recent)
+      ));
+      return { status: "reconnected", revision: createRecentVaultRevision(replacement) };
+    });
   }
 
   resolveRecentVaultBinding(vaultId: string): RecentVaultBinding {
@@ -363,7 +437,8 @@ export class LocalSettingsStore {
       name: recent.name,
       pathDisplay: recent.path,
       schemaVersion: recent.schemaVersion,
-      lastOpenedAt: recent.lastOpenedAt
+      lastOpenedAt: recent.lastOpenedAt,
+      revision: createRecentVaultRevision(recent)
     }));
   }
 
@@ -456,6 +531,51 @@ function activateVault(
     ocrLanguagePreference: settings.ocrLanguagePreference,
     dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
     recentVaults: nextRecent
+  });
+}
+
+function exactRecentVaultRecord(
+  recentVaults: RecentVaultSettings,
+  vaultId: string
+): RecentVaultSettings[number] | undefined {
+  const matches = recentVaults.filter((recent) => recent.vaultId === vaultId);
+  if (matches.length > 1) {
+    throw new PigeDomainError("vault.recent_ambiguous", "The recent vault identity is ambiguous.");
+  }
+  return matches[0];
+}
+
+function createRecentVaultRevision(record: RecentVaultSettings[number]): `recentvaultrev_${string}` {
+  return `recentvaultrev_${createHash("sha256").update(JSON.stringify({
+    vaultId: record.vaultId,
+    name: record.name,
+    path: path.resolve(record.path),
+    schemaVersion: record.schemaVersion,
+    lastOpenedAt: record.lastOpenedAt
+  })).digest("hex")}`;
+}
+
+function isActiveRecentRecord(
+  activeVaultPath: string | undefined,
+  record: RecentVaultSettings[number]
+): boolean {
+  return Boolean(activeVaultPath && path.resolve(activeVaultPath) === path.resolve(record.path));
+}
+
+function withRecentVaults(
+  settings: MachineLocalSettings,
+  recentVaults: RecentVaultSettings
+): MachineLocalSettings {
+  return createMachineLocalSettings({
+    activeVaultPath: settings.activeVaultPath,
+    appLocale: settings.appLocale,
+    appearance: settings.appearance,
+    startupDestination: settings.startupDestination,
+    window: settings.window,
+    updates: settings.updates,
+    ocrLanguagePreference: settings.ocrLanguagePreference,
+    dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
+    recentVaults
   });
 }
 

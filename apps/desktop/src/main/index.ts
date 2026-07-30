@@ -171,6 +171,7 @@ import { registerCurrentNoteAppendIpc } from "./register-current-note-append-ipc
 import { registerCurrentNoteReplaceIpc } from "./register-current-note-replace-ipc";
 import { registerConversationHistoryIpc } from "./register-conversation-history-ipc";
 import { registerVaultMetadataIpc } from "./register-vault-metadata-ipc";
+import { registerVaultRecentIpc } from "./register-vault-recent-ipc";
 import {
   AgentIngestService,
   type AgentIngestCapabilitySnapshot,
@@ -3093,7 +3094,9 @@ registerVaultStorageRelocationIpc({
   status: () => getVaultStorageRelocationService().status(),
   relocate: (parentWindow, request) => getVaultStorageRelocationService().relocate(parentWindow, request)
 });
-ipcMain.handle("vault.removeRecent", (_event, vaultId: string) => getVaultService().removeRecent(vaultId));
+registerVaultRecentIpc({ ipcMain, parentWindow: (sender) => BrowserWindow.fromWebContents(sender) ?? undefined,
+  forgetRecent: (request) => getVaultService().forgetRecent(request),
+  reconnectRecent: (parentWindow, request) => getVaultService().reconnectRecent(parentWindow, request) });
 ipcMain.handle("maintenance.rebuildLocalDatabase", () => getIndexRebuildJobExecutor().request());
 ipcMain.handle("maintenance.resetLocalDatabase", async (event) => {
   await confirmSettingAction(event.sender, ["maintenance.localDatabaseReset"], {

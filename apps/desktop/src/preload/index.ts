@@ -223,6 +223,10 @@ import type {
   ProposalGetResult,
   ProposalsListRequest,
   ProposalsListResult,
+  RecentVaultForgetRequest,
+  RecentVaultForgetResult,
+  RecentVaultReconnectRequest,
+  RecentVaultReconnectResult,
   RecentVaultSummary,
   RetrievalSearchRequest,
   RetrievalSearchResult,
@@ -613,6 +617,8 @@ import {
   ReaderSelectionResolveRequestSchema,
   ReaderSelectionResolveResultSchema,
   OpenRecentVaultRequestSchema,
+  VAULT_FORGET_RECENT_CHANNEL,
+  VAULT_RECONNECT_RECENT_CHANNEL,
   VAULT_APPLY_MIGRATION_CHANNEL,
   VAULT_RENAME_DISPLAY_NAME_CHANNEL,
   SpeechAvailabilityRequestSchema,
@@ -691,7 +697,12 @@ import {
   VaultMigrationApplyRequestSchema,
   VaultMigrationApplyResultSchema,
   VaultRenameDisplayNameRequestSchema,
-  VaultRenameDisplayNameResultSchema
+  VaultRenameDisplayNameResultSchema,
+  RecentVaultForgetRequestSchema,
+  RecentVaultForgetResultSchema,
+  RecentVaultReconnectRequestSchema,
+  RecentVaultReconnectResultSchema,
+  RecentVaultSummaryProjectionSchema
 } from "@pige/schemas";
 import type {
   CollectionAddFormulaColumnRequest,
@@ -1226,6 +1237,16 @@ function projectVaultSummary(vault: {
     ...(vault.counts ? { counts: vault.counts } : {}),
     ...(vault.lastBackupAt ? { lastBackupAt: vault.lastBackupAt } : {})
   };
+}
+
+function sameRecentMutationIdentity(
+  request: RecentVaultForgetRequest | RecentVaultReconnectRequest,
+  result: RecentVaultForgetResult | RecentVaultReconnectResult
+): boolean {
+  return result.apiVersion === request.apiVersion &&
+    result.requestId === request.requestId &&
+    result.vaultId === request.vaultId &&
+    result.expectedRevision === request.expectedRevision;
 }
 
 function projectOnboarding(onboarding: {
@@ -2134,7 +2155,7 @@ const api: PigeDesktopApi = {
     current: async (): Promise<VaultSummary | undefined> =>
       ipcRenderer.invoke("vault.current") as Promise<VaultSummary | undefined>,
     recent: async (): Promise<readonly RecentVaultSummary[]> =>
-      ipcRenderer.invoke("vault.recent") as Promise<readonly RecentVaultSummary[]>,
+      RecentVaultSummaryProjectionSchema.array().max(8).parse(await ipcRenderer.invoke("vault.recent")),
     onboardingStatus: async (): Promise<OnboardingStatus> =>
       ipcRenderer.invoke("onboarding.status") as Promise<OnboardingStatus>,
     dismissFirstHomeGuide: async (): Promise<OnboardingStatus> =>
@@ -2210,8 +2231,18 @@ const api: PigeDesktopApi = {
       }
       return result;
     },
-    removeRecent: async (vaultId: string): Promise<readonly RecentVaultSummary[]> =>
-      ipcRenderer.invoke("vault.removeRecent", vaultId) as Promise<readonly RecentVaultSummary[]>
+    forgetRecent: async (request: RecentVaultForgetRequest): Promise<RecentVaultForgetResult> => {
+      const parsed = RecentVaultForgetRequestSchema.parse(request);
+      const result = RecentVaultForgetResultSchema.parse(await ipcRenderer.invoke(VAULT_FORGET_RECENT_CHANNEL, parsed));
+      if (!sameRecentMutationIdentity(parsed, result)) throw new Error("Invalid recent-Vault forget response identity.");
+      return result;
+    },
+    reconnectRecent: async (request: RecentVaultReconnectRequest): Promise<RecentVaultReconnectResult> => {
+      const parsed = RecentVaultReconnectRequestSchema.parse(request);
+      const result = RecentVaultReconnectResultSchema.parse(await ipcRenderer.invoke(VAULT_RECONNECT_RECENT_CHANNEL, parsed));
+      if (!sameRecentMutationIdentity(parsed, result)) throw new Error("Invalid recent-Vault reconnect response identity.");
+      return result;
+    }
   },
   maintenance: {
     rebuildLocalDatabase: async (): Promise<LocalDatabaseRebuildResult> =>

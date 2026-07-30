@@ -4,6 +4,10 @@ import type {
   CreateVaultRequest,
   OnboardingStatus,
   OpenRecentVaultRequest,
+  RecentVaultForgetRequest,
+  RecentVaultForgetResult,
+  RecentVaultReconnectRequest,
+  RecentVaultReconnectResult,
   RecentVaultSummary,
   UpdateSourceStoragePolicyRequest,
   ManagedCopyRootConfigureRequest,
@@ -346,9 +350,77 @@ export class VaultService {
     return resetRebuildableVaultStorage(this.#requireActiveVaultPath());
   }
 
-  removeRecent(vaultId: string): RecentVaultSummary[] {
+  forgetRecent(request: RecentVaultForgetRequest): RecentVaultForgetResult {
     this.#assertNoRestoreTransition();
-    return this.#settings.removeRecentVault(vaultId);
+    if (this.#activeVault) this.#assertActiveWriterLease();
+    try {
+      return { ...request, ...this.#settings.forgetRecentVault(request, this.#activeVault?.vaultId) };
+    } catch {
+      return { ...request, status: "failed" };
+    }
+  }
+
+  async reconnectRecent(
+    parentWindow: BrowserWindow,
+    request: RecentVaultReconnectRequest
+  ): Promise<RecentVaultReconnectResult> {
+    this.#assertNoRestoreTransition();
+    if (this.#activeVault) this.#assertActiveWriterLease();
+    try {
+      const initial = this.#settings.recentVaultSnapshot(request.vaultId);
+      if (!initial) return { ...request, status: "not_found" };
+      if (initial.revision !== request.expectedRevision) {
+        return { ...request, status: "stale", currentRevision: initial.revision };
+      }
+      if (initial.isActive || this.#activeVault?.vaultId === request.vaultId) {
+        return { ...request, status: "active", currentRevision: initial.revision };
+      }
+      const selection = await dialog.showOpenDialog(parentWindow, {
+        title: "Reconnect a Pige vault",
+        defaultPath: app.getPath("documents"),
+        properties: ["openDirectory"]
+      });
+      const current = this.#settings.recentVaultSnapshot(request.vaultId);
+      if (!current) return { ...request, status: "not_found" };
+      if (current.revision !== request.expectedRevision) {
+        return { ...request, status: "stale", currentRevision: current.revision };
+      }
+      if (current.isActive || this.#activeVault?.vaultId === request.vaultId) {
+        return { ...request, status: "active", currentRevision: current.revision };
+      }
+      if (selection.canceled || selection.filePaths.length === 0) {
+        return { ...request, status: "cancelled", currentRevision: current.revision };
+      }
+      const selectedPath = selection.filePaths[0];
+      if (!selectedPath) return { ...request, status: "cancelled", currentRevision: current.revision };
+      const inspection = inspectVaultCompatibility(selectedPath);
+      if (inspection.status === "invalid") return { ...request, status: "failed" };
+      const selectedVaultId = inspection.status === "unsupported_newer"
+        ? inspection.vaultId
+        : inspection.manifest.vault_id;
+      if (selectedVaultId !== request.vaultId) return { ...request, status: "mismatch" };
+      if (inspection.status === "unsupported_newer" || !isPigeVault(selectedPath)) {
+        return { ...request, status: "failed" };
+      }
+      const summary = loadVaultSummary(selectedPath);
+      const verified = inspectVaultCompatibility(selectedPath);
+      if (verified.status === "invalid" || verified.status === "unsupported_newer") {
+        return { ...request, status: "failed" };
+      }
+      if (verified.manifest.vault_id !== request.vaultId) return { ...request, status: "mismatch" };
+      if (verified.snapshotId !== inspection.snapshotId) return { ...request, status: "failed" };
+      return {
+        ...request,
+        ...this.#settings.reconnectRecentVault(
+          request,
+          selectedPath,
+          summary,
+          this.#activeVault?.vaultId
+        )
+      };
+    } catch {
+      return { ...request, status: "failed" };
+    }
   }
 
   beginRestoreTransition(input: {
