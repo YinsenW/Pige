@@ -508,6 +508,7 @@ Commands:
 - `agent.trashConversation`
 - `agent.restoreConversation`
 - `agent.exportConversation`
+- `agent.setConversationTitle`
 - `agent.ask`
 - `retrieval.ask`
 - `retrieval.saveAnswer`
@@ -542,12 +543,12 @@ kinds reject it. Home snapshots `canFollowUp`; stale/mixed identity fails before
 never falls back. `agent.conversation` returns <=100 bounded messages, exact tail,
 `canFollowUp` and safe latest Job without paths, Provider data or raw errors.
 
-`agent.conversationHistory` returns <=50 ordered safe summaries; opening reuses
-`agent.conversation`, the sole follow-up authority. Its cursor binds vault/snapshot/boundary.
-Trash binds vault/conversation/revision and moves exact JSONL to private storage with one
-Operation; pathless restore binds opaque identity/revision. `Current` rereads durable truth and
-restart never replays work. Export binds vault/conversation/tail, rereads JSONL and writes one
-Main-selected JSON file; pathless stale/cancel/failure changes no history.
+`agent.conversationHistory` returns <=50 safe summaries; open reuses `agent.conversation`, the
+sole follow-up authority. Cursors bind vault/snapshot/boundary. Trash/restore bind revision and
+opaque identity around exact JSONL; restart never replays work. `agent.setConversationTitle`
+binds vault/conversation/tail/title revision and atomically updates only
+`conversations-manifest.json`; stale returns authority. Export rechecks the tail and writes one
+Main-selected JSON; pathless stale/cancel/failure changes no history.
 
 Picker selection/removal remains renderer-local, pathless and side-effect-free. Send
 submits exact text, ordered staged identities, active vault and one client-turn identity;

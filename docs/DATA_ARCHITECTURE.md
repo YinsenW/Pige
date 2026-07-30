@@ -444,7 +444,8 @@ Compaction rules:
 
 Pige should keep complete conversation history without duplicating large source content.
 
-Storage is `.pige/conversations/conversations-manifest.json` plus dated append-only JSONL.
+Storage is `.pige/conversations/conversations-manifest.json` plus dated append-only JSONL;
+bounded title metadata lives only in the manifest.
 
 Event types:
 
@@ -465,8 +466,8 @@ Rules:
 - Trash moves exact JSONL with revision/hash receipt; restore requires the free original identity
   and restart adopts once without Provider replay. Public inventory is preview/opaque-ID only.
 - File refs carry ID/name/kind; bodies/paths/checksums stay in Source Records. Saved answers live once
-  as pages. Export rereads one tail into Main-selected reference-based JSON, excluding paths, source
-  bodies, secrets and model/tool internals.
+  as pages. Export rereads one tail into Main-selected reference JSON without paths, source bodies,
+  secrets or model/tool internals.
 - Prompts/raw responses stay out. Selection stores strict presentation only; Jobs/proposals/
   Operations own review/apply, and restart neither refetches nor calls Provider.
 - Conversation records are not the knowledge source of truth; they are the activity history.
