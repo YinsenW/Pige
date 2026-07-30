@@ -1896,6 +1896,8 @@
   "vaultSettings.managedCopyRoot.failed": "Pige가 소스 저장소를 업데이트하지 못했습니다.",
   "vaultSettings.managedCopyRoot.futureOnly": "향후 관리 복사본에만 적용됩니다. 기존 소스는 이동되지 않습니다.",
   "vaultSettings.rename.description": "표시 이름만 변경합니다. Vault ID와 저장 위치는 그대로 유지됩니다.",
+  "vaultSettings.rename.cancel": "취소",
+  "vaultSettings.rename.edit": "이름 바꾸기",
   "vaultSettings.rename.failed": "이 Vault의 이름을 바꾸지 못했습니다. 초안은 유지되었습니다.",
   "vaultSettings.rename.label": "Vault 이름",
   "vaultSettings.rename.notFound": "활성 Vault가 변경되었습니다. 초안은 유지되었습니다.",

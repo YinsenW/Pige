@@ -1894,6 +1894,8 @@
   "vaultSettings.managedCopyRoot.failed": "Pige 无法更新来源存储。",
   "vaultSettings.managedCopyRoot.futureOnly": "仅影响今后创建的托管副本；现有来源不会移动。",
   "vaultSettings.rename.description": "只更改显示名称；Vault 标识和存储位置保持不变。",
+  "vaultSettings.rename.cancel": "取消",
+  "vaultSettings.rename.edit": "重命名",
   "vaultSettings.rename.failed": "Pige 无法重命名此 Vault，草稿已保留。",
   "vaultSettings.rename.label": "Vault 名称",
   "vaultSettings.rename.notFound": "当前 Vault 已更改，草稿已保留。",

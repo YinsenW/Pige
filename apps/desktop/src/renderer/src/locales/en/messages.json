@@ -1894,6 +1894,8 @@
   "vaultSettings.managedCopyRoot.failed": "Pige could not update source storage.",
   "vaultSettings.managedCopyRoot.futureOnly": "Applies to future managed copies only. Existing sources are not moved.",
   "vaultSettings.rename.description": "Changes only the display name. The Vault identity and storage location stay the same.",
+  "vaultSettings.rename.cancel": "Cancel",
+  "vaultSettings.rename.edit": "Rename",
   "vaultSettings.rename.failed": "Pige could not rename this Vault. Your draft was kept.",
   "vaultSettings.rename.label": "Vault name",
   "vaultSettings.rename.notFound": "The active Vault changed. Your draft was kept.",

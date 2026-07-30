@@ -27,6 +27,7 @@ describe("Vault display-name Settings editor", () => {
     const container = requireElement(dom.window.document.querySelector<HTMLElement>("#root"));
     const root = createRoot(container);
     const requests: unknown[] = [];
+    const pendingChanges: boolean[] = [];
     let refreshes = 0;
     installRename(dom, async (request) => {
       requests.push(request);
@@ -45,17 +46,19 @@ describe("Vault display-name Settings editor", () => {
       root.render(createElement(VaultDisplayNameEditor, {
         vault,
         disabled: false,
+        onPendingChange: (pending) => { pendingChanges.push(pending); },
         onRefresh: async () => { refreshes += 1; },
         t
       }));
       await settle(dom);
     });
-
+    const edit = button(container, "Rename");
+    await click(dom, edit);
     const input = requireElement(container.querySelector<HTMLInputElement>("#vault-display-name"));
     await change(dom, input, "Project Atlas");
     const save = button(container, "Save name");
     await click(dom, save);
-    await waitFor(dom, () => refreshes === 1 && dom.window.document.activeElement === save);
+    await waitFor(dom, () => refreshes === 1 && dom.window.document.activeElement === button(container, "Rename"));
 
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({
@@ -67,6 +70,7 @@ describe("Vault display-name Settings editor", () => {
     expect(String((requests[0] as { requestId: string }).requestId)).toMatch(/^vaultrenamereq_[a-z0-9]{16,64}$/u);
     expect(input.value).toBe("Project Atlas");
     expect(container.textContent).toContain("Vault name updated.");
+    expect(pendingChanges).toEqual([true, false]);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -81,6 +85,7 @@ describe("Vault display-name Settings editor", () => {
     const render = (): void => root.render(createElement(VaultDisplayNameEditor, {
       vault,
       disabled: false,
+      onPendingChange: () => undefined,
       onRefresh: async () => {
         vault = makeVault(vault.vaultId, "Elsewhere", "d");
         render();
@@ -97,6 +102,7 @@ describe("Vault display-name Settings editor", () => {
       }
     }));
     await act(async () => { render(); await settle(dom); });
+    await click(dom, button(container, "Rename"));
     const input = requireElement(container.querySelector<HTMLInputElement>("#vault-display-name"));
     await change(dom, input, "My retained draft");
     await click(dom, button(container, "Save name"));
@@ -107,8 +113,43 @@ describe("Vault display-name Settings editor", () => {
 
     vault = makeVault("vault_20260731_renameui3", "Second Vault", "e");
     await act(async () => { render(); await settle(dom); });
-    expect(input.value).toBe("Second Vault");
+    expect(container.querySelector("#vault-display-name")).toBeNull();
+    expect(container.textContent).toContain("Second Vault");
     expect(container.textContent).not.toContain("changed elsewhere");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("cancels with Escape, discards the draft, and restores the rename trigger focus", async () => {
+    const dom = createDom();
+    const { createRoot } = await import("react-dom/client");
+    const container = requireElement(dom.window.document.querySelector<HTMLElement>("#root"));
+    const root = createRoot(container);
+    installRename(dom, vi.fn());
+    await act(async () => {
+      root.render(createElement(VaultDisplayNameEditor, {
+        vault: makeVault("vault_20260731_renameui4", "Original", "f"),
+        disabled: false,
+        onPendingChange: () => undefined,
+        onRefresh: async () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+
+    const edit = button(container, "Rename");
+    await click(dom, edit);
+    const input = requireElement(container.querySelector<HTMLInputElement>("#vault-display-name"));
+    await change(dom, input, "Discard me");
+    await act(async () => {
+      input.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => dom.window.document.activeElement === button(container, "Rename"));
+
+    expect(container.querySelector("#vault-display-name")).toBeNull();
+    expect(container.textContent).toContain("Original");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -147,6 +188,8 @@ function t(key: string): string {
   return ({
     "vaultSettings.rename.label": "Vault name",
     "vaultSettings.rename.description": "Display only",
+    "vaultSettings.rename.cancel": "Cancel",
+    "vaultSettings.rename.edit": "Rename",
     "vaultSettings.rename.save": "Save name",
     "vaultSettings.rename.saving": "Saving…",
     "vaultSettings.rename.renamed": "Vault name updated.",

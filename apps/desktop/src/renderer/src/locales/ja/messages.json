@@ -1896,6 +1896,8 @@
   "vaultSettings.managedCopyRoot.failed": "Pige はソースストレージを更新できませんでした。",
   "vaultSettings.managedCopyRoot.futureOnly": "今後の管理コピーにのみ適用されます。既存のソースは移動されません。",
   "vaultSettings.rename.description": "表示名だけを変更します。Vault の識別子と保存場所は変わりません。",
+  "vaultSettings.rename.cancel": "キャンセル",
+  "vaultSettings.rename.edit": "名前を変更",
   "vaultSettings.rename.failed": "この Vault の名前を変更できませんでした。下書きは保持されています。",
   "vaultSettings.rename.label": "Vault 名",
   "vaultSettings.rename.notFound": "現在の Vault が変わりました。下書きは保持されています。",

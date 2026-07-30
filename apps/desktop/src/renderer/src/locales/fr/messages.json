@@ -1896,6 +1896,8 @@
   "vaultSettings.managedCopyRoot.failed": "Pige n’a pas pu mettre à jour le stockage des sources.",
   "vaultSettings.managedCopyRoot.futureOnly": "S’applique uniquement aux futures copies gérées. Les sources existantes ne sont pas déplacées.",
   "vaultSettings.rename.description": "Modifie uniquement le nom affiché. L’identité du coffre et son emplacement restent inchangés.",
+  "vaultSettings.rename.cancel": "Annuler",
+  "vaultSettings.rename.edit": "Renommer",
   "vaultSettings.rename.failed": "Pige n’a pas pu renommer ce coffre. Votre brouillon a été conservé.",
   "vaultSettings.rename.label": "Nom du coffre",
   "vaultSettings.rename.notFound": "Le coffre actif a changé. Votre brouillon a été conservé.",

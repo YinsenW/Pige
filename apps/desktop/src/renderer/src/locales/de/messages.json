@@ -1896,6 +1896,8 @@
   "vaultSettings.managedCopyRoot.failed": "Pige konnte den Quellspeicher nicht aktualisieren.",
   "vaultSettings.managedCopyRoot.futureOnly": "Gilt nur für künftige verwaltete Kopien. Vorhandene Quellen werden nicht verschoben.",
   "vaultSettings.rename.description": "Ändert nur den Anzeigenamen. Vault-Identität und Speicherort bleiben gleich.",
+  "vaultSettings.rename.cancel": "Abbrechen",
+  "vaultSettings.rename.edit": "Umbenennen",
   "vaultSettings.rename.failed": "Pige konnte diesen Vault nicht umbenennen. Dein Entwurf wurde beibehalten.",
   "vaultSettings.rename.label": "Vault-Name",
   "vaultSettings.rename.notFound": "Der aktive Vault hat sich geändert. Dein Entwurf wurde beibehalten.",
