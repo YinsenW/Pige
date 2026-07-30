@@ -9,6 +9,8 @@ import type {
   LibraryListResult,
   LibraryTagsRequest,
   LibraryTagsResult,
+  NoteArchiveCurrentRequest,
+  NoteArchiveCurrentResult,
   NoteRenderResult,
   NoteMergeRequest,
   NoteMergeResult,
@@ -40,6 +42,7 @@ import {
   type LibraryTagsBrowserLabels,
 } from "../../apps/desktop/src/renderer/src/components/LibraryTagsBrowser";
 import { NoteReader } from "../../apps/desktop/src/renderer/src/components/NoteReader";
+import { ReaderDocumentActions } from "../../apps/desktop/src/renderer/src/components/ReaderDocumentActions";
 import type { ReaderInlineReferenceActivation } from "../../apps/desktop/src/renderer/src/components/ReaderInlineReferenceSurface";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 
@@ -70,6 +73,79 @@ afterEach(() => {
 });
 
 describe("full UI Library", () => {
+  it("confirms one archive at a time, retains focus on failure, and adopts only a committed render", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    let mode: "retained" | "committed" = "retained";
+    let calls = 0;
+    const adopted: NoteRenderResult[] = [];
+    const archived = {
+      ...readerNote(),
+      summary: { ...readerNote().summary, status: "archived" as const }
+    };
+    await act(async () => {
+      root.render(createElement(ReaderDocumentActions, {
+        ownerIdentity: "vault_1:page_1:render_1:revision_1",
+        canMoveToTrash: false,
+        canMerge: false,
+        canArchive: true,
+        currentTitle: "Reader note",
+        labels: {
+          more: "More note actions", menu: "Note actions", moveToTrash: "Move to Trash",
+          title: "Move this note to Trash?", description: "Trash description", cancel: "Cancel",
+          confirm: "Move to Trash", pending: "Moving…", failed: "Trash failed"
+        },
+        archiveLabels: {
+          action: "Archive", title: "Archive this note?", description: "Archive description",
+          cancel: "Cancel", confirm: "Archive", pending: "Archiving…", failed: "Archive failed"
+        },
+        mergeLabels: {
+          title: "Merge", description: "Merge description", survivor: "Keep", target: "Target",
+          loading: "Loading", empty: "Empty", cancel: "Cancel", confirm: "Merge",
+          pending: "Merging", failed: "Merge failed"
+        },
+        onMoveToTrash: async () => "retained",
+        onLoadMergeTargets: async () => [],
+        onMerge: async () => ({ status: "retained" }),
+        onArchive: async () => {
+          calls += 1;
+          return mode === "committed"
+            ? { status: "committed", render: archived }
+            : { status: "retained" };
+        },
+        onCommitted: () => undefined,
+        onMergeCommitted: () => undefined,
+        onArchiveCommitted: (render) => adopted.push(render)
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await act(async () => {
+      buttonWithLabel(container, "More note actions").click();
+      await settle(dom);
+      buttonNamed(container, "Archive").click();
+      await settle(dom);
+    });
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Cancel"));
+    await act(async () => {
+      buttonNamed(container, "Archive").click();
+      buttonNamed(container, "Archive").click();
+      await settle(dom);
+    });
+    expect(calls).toBe(1);
+    expect(container.textContent).toContain("Archive failed");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Cancel"));
+    mode = "committed";
+    await act(async () => {
+      buttonNamed(container, "Archive").click();
+      await settle(dom);
+    });
+    expect(calls).toBe(2);
+    expect(adopted).toEqual([archived]);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("lets the selection menu escape its toolbar while the menu owns internal scrolling", () => {
     const styles = fs.readFileSync(
       path.resolve("apps/desktop/src/renderer/src/styles/app.css"),
@@ -923,6 +999,80 @@ describe("full UI Library", () => {
     expect(requests).toHaveLength(2);
     expect(committed).toBe(1);
 
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("archives only the exact eligible Reader note and adopts the authoritative read-only render", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: NoteArchiveCurrentRequest[] = [];
+    const adopted: NoteRenderResult[] = [];
+    let mode: "stale" | "committed" = "stale";
+    let selected: NoteRenderResult = {
+      ...readerNote(),
+      archiveEligibility: { canArchive: true, revision: `noteeditrev_${"a".repeat(32)}` }
+    };
+    const onArchiveCurrentNote = async (
+      request: NoteArchiveCurrentRequest
+    ): Promise<NoteArchiveCurrentResult> => {
+      requests.push(request);
+      return mode === "committed"
+        ? {
+            ...request,
+            status: "committed",
+            operationId: "operation_note_archive_library",
+            render: {
+              ...selected,
+              summary: { ...selected.summary, status: "archived" },
+              renderContextId: `notectx_${"b".repeat(32)}`,
+              archiveEligibility: { canArchive: false, revision: `noteeditrev_${"b".repeat(32)}` }
+            }
+          }
+        : { ...request, status: "stale" };
+    };
+    const renderPanel = (): void => {
+      root.render(createElement(LibraryPanel, {
+        libraryList: libraryList(), selectedNote: selected, selectedNoteRelated: null,
+        noteLoadingPageId: null, error: null, onGoHome: () => undefined,
+        onRefresh: async () => undefined, onSearch: async () => searchResult("unused", []), searchFocusRequest: 0,
+        onOpenNote: async () => undefined, onCloseNote: () => undefined,
+        noteAgentOpen: false, onToggleNoteAgent: () => undefined, noteAgentToggleRef: { current: null },
+        developmentNotice: null, onClearDevelopment: () => undefined, onCopyNote: async () => true,
+        activeVaultId: "vault_20260715_fullui01", onArchiveCurrentNote,
+        onCurrentNoteArchived: (render) => {
+          adopted.push(render);
+          selected = render;
+          renderPanel();
+        },
+        onDevelopment: () => undefined, t
+      }));
+    };
+    await act(async () => {
+      renderPanel();
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await clickButton(dom, buttonWithLabel(container, "More note actions"));
+    await clickButton(dom, buttonNamed(container, "Archive"));
+    await clickButton(dom, buttonNamed(container, "Archive"));
+    expect(requests[0]).toMatchObject({
+      activeVaultId: "vault_20260715_fullui01",
+      currentPageId: selected.summary.pageId,
+      renderContextId: `notectx_${"c".repeat(32)}`,
+      expectedRevision: `noteeditrev_${"a".repeat(32)}`
+    });
+    expect(requests[0]?.requestId).toMatch(/^notearchivereq_[a-z0-9]{16,64}$/u);
+    expect(container.querySelector(".note-reader")).not.toBeNull();
+    expect(container.textContent).toContain("The note remains active. Review it and try again.");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Cancel"));
+    mode = "committed";
+    await clickButton(dom, buttonNamed(container, "Archive"));
+    await waitFor(dom, () => adopted.length === 1);
+    expect(adopted[0]?.summary.status).toBe("archived");
+    expect(container.querySelector(".note-reader")).not.toBeNull();
+    expect(container.querySelector('[data-reader-action="edit"]')).toBeNull();
+    expect(container.querySelector('[data-reader-action="more"]')).toBeNull();
     await act(async () => root.unmount());
     dom.window.close();
   });
@@ -2548,6 +2698,13 @@ function buttonWithLabel(container: ParentNode, label: string): HTMLButtonElemen
     .find((candidate) => candidate.getAttribute("aria-label") === label);
   if (!button) throw new Error(`Missing button with label: ${label}`);
   return button;
+}
+
+async function clickButton(dom: JSDOM, button: HTMLButtonElement): Promise<void> {
+  await act(async () => {
+    button.click();
+    await settle(dom);
+  });
 }
 
 async function inputText(dom: JSDOM, input: HTMLInputElement | HTMLTextAreaElement, value: string): Promise<void> {
