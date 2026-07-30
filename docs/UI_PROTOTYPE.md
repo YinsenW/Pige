@@ -596,7 +596,7 @@ Editing mode:
 - An eligible note has one Edit action and plain Markdown textarea; source pages and rich text stay read-only.
 - Save validates exact draft/frontmatter/page ID/links/citations and adopts refreshed render. Stale
   keeps Reader/draft with Reload and no merge. Cancel restores focus; Cmd/Ctrl+Enter excludes IME.
-- Undo writes prior bytes forward. No restyle, reveal, page lifecycle or merge UI is added.
+- Undo writes prior bytes forward; Notes add recoverable Trash/Undo, but not source/permanent deletion, restyle, reveal or merge.
 
 Phase 2/3 bridge:
 

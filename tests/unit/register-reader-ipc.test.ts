@@ -4,6 +4,7 @@ import type { IpcMain, IpcMainInvokeEvent, WebContents } from "electron";
 import { registerReaderIpc } from "../../apps/desktop/src/main/register-reader-ipc";
 import type { NotesService } from "../../apps/desktop/src/main/services/notes-service";
 import type { ReaderSourceRevealService } from "../../apps/desktop/src/main/services/reader-source-reveal-service";
+import type { NoteTrashService } from "../../apps/desktop/src/main/services/note-trash-service";
 
 type IpcHandler = (event: IpcMainInvokeEvent, request?: unknown) => unknown;
 
@@ -17,7 +18,12 @@ function makeSender(id: number): WebContents {
   } as unknown as WebContents;
 }
 
-function makeHarness(notes: Partial<NotesService>, revealService?: Partial<ReaderSourceRevealService>) {
+function makeHarness(
+  notes: Partial<NotesService>,
+  revealService?: Partial<ReaderSourceRevealService>,
+  noteTrashService?: Partial<NoteTrashService>,
+  onNoteTrashCommitted = vi.fn()
+) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
     ipcMain: {
@@ -38,7 +44,12 @@ function makeHarness(notes: Partial<NotesService>, revealService?: Partial<Reade
     getReaderSourceRevealService: () => {
       if (revealService) return revealService as ReaderSourceRevealService;
       throw new Error("Reader source reveal service was not expected.");
-    }
+    },
+    getNoteTrashService: () => {
+      if (noteTrashService) return noteTrashService as NoteTrashService;
+      throw new Error("Note trash service was not expected.");
+    },
+    onNoteTrashCommitted
   });
   return handlers;
 }
@@ -51,6 +62,7 @@ describe("registerReaderIpc", () => {
       "notes.render",
       "notes.openEditor",
       "notes.saveEditor",
+      "notes.trashCurrent",
       "notes.resolveInlineReference",
       "notes.openSourceReference",
       "notes.revealSource",
@@ -62,6 +74,68 @@ describe("registerReaderIpc", () => {
       "readerSelection.currentProposal",
       "readerSelection.decideProposal"
     ]);
+  });
+
+  it("binds current-note trash to the tracked Reader owner and refreshes only after commit", async () => {
+    const renderContextId = "notectx_0123456789abcdef0123456789abcdef";
+    const expectedRevision = `noteeditrev_${"a".repeat(32)}`;
+    const identity = {
+      apiVersion: 1,
+      requestId: "notetrashreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_abcdefgh",
+      currentPageId: "page_20260730_trashnote123",
+      renderContextId,
+      expectedRevision
+    } as const;
+    const render = vi.fn().mockResolvedValue({
+      summary: {
+        pageId: identity.currentPageId,
+        title: "Trash note",
+        pageType: "note",
+        status: "active",
+        pagePath: "wiki/trash-note.md",
+        createdAt: "2026-07-30T10:00:00.000Z",
+        updatedAt: "2026-07-30T10:00:00.000Z",
+        sourceIds: []
+      },
+      html: "<h1>Trash note</h1>",
+      byteSize: 20,
+      renderContextId,
+      trashEligibility: { canTrash: true, revision: expectedRevision }
+    });
+    const trash = vi.fn().mockReturnValue({
+      ...identity,
+      status: "committed",
+      operationId: "op_20260730_trashnote1234",
+      authority: {
+        pageId: identity.currentPageId,
+        pageState: "trashed",
+        readerState: "closed",
+        libraryPresence: "absent",
+        canTrash: false
+      }
+    });
+    const refreshed = vi.fn();
+    const handlers = makeHarness({ render }, undefined, { trash }, refreshed);
+    const sender = makeSender(31);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: identity.currentPageId });
+
+    expect(handlers.get("notes.trashCurrent")!({ sender } as IpcMainInvokeEvent, identity))
+      .toMatchObject({ status: "committed", operationId: "op_20260730_trashnote1234" });
+    expect(trash).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), identity);
+    expect(refreshed).toHaveBeenCalledTimes(1);
+
+    const detachedSender = makeSender(33);
+    await handlers.get("notes.render")!({ sender: detachedSender } as IpcMainInvokeEvent, { pageId: identity.currentPageId });
+    vi.mocked(detachedSender.isDestroyed).mockReturnValueOnce(false).mockReturnValueOnce(true);
+    expect(handlers.get("notes.trashCurrent")!({ sender: detachedSender } as IpcMainInvokeEvent, identity))
+      .toEqual({ ...identity, status: "failed" });
+    expect(refreshed).toHaveBeenCalledTimes(2);
+
+    const unowned = makeHarness({}, undefined, { trash }, refreshed);
+    expect(unowned.get("notes.trashCurrent")!({ sender: makeSender(32) } as IpcMainInvokeEvent, identity))
+      .toEqual({ ...identity, status: "failed" });
+    expect(trash).toHaveBeenCalledTimes(2);
   });
 
   it("fails a Reader link closed before Agent submission without a tracked render owner", async () => {

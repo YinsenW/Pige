@@ -9,6 +9,8 @@ import type {
   NoteOpenSourceReferenceRequest,
   NoteRevealSourceRequest,
   NoteRenderRequest,
+  NoteTrashCurrentRequest,
+  NoteTrashCurrentResult,
   NoteResolveInlineReferenceRequest,
   ReaderSelectionActionRequest,
   ReaderSelectionCreateNoteRequest,
@@ -29,6 +31,8 @@ import {
   NoteRevealSourceResultSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
+  NoteTrashCurrentRequestSchema,
+  NoteTrashCurrentResultSchema,
   ReaderSelectionActionRequestSchema,
   ReaderSelectionActionResultSchema,
   ReaderSelectionCreateNoteRequestSchema,
@@ -50,6 +54,7 @@ import type { ReaderSelectionActionService } from "./services/reader-selection-a
 import type { ReaderSelectionProposalService } from "./services/reader-selection-proposal-service";
 import type { ReaderSelectionCreateNoteActionService } from "./services/reader-selection-create-note-service";
 import type { ReaderSourceRevealService } from "./services/reader-source-reveal-service";
+import type { NoteTrashService } from "./services/note-trash-service";
 
 interface RegisterReaderIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
@@ -58,6 +63,8 @@ interface RegisterReaderIpcOptions {
   readonly getReaderSelectionProposalService: () => ReaderSelectionProposalService;
   readonly getReaderSelectionCreateNoteService: () => ReaderSelectionCreateNoteActionService;
   readonly getReaderSourceRevealService: () => ReaderSourceRevealService;
+  readonly getNoteTrashService: () => NoteTrashService;
+  readonly onNoteTrashCommitted: () => void;
 }
 
 function failedEditorOpen(request: NoteEditorOpenRequest): NoteEditorOpenResult {
@@ -162,6 +169,25 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
       ? result
       : failedEditorSave(parsed);
+  });
+  options.ipcMain.handle("notes.trashCurrent", (event, request: unknown) => {
+    const parsed = NoteTrashCurrentRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return NoteTrashCurrentResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    let rawResult: NoteTrashCurrentResult;
+    try {
+      rawResult = options.getNoteTrashService().trash(ownerId, parsed);
+    } catch {
+      rawResult = { ...parsed, status: "failed" };
+    }
+    const result = NoteTrashCurrentResultSchema.parse(rawResult);
+    if (result.status === "committed") options.onNoteTrashCommitted();
+    if (notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
+      return NoteTrashCurrentResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    return result;
   });
   options.ipcMain.handle("notes.resolveInlineReference", (
     event,

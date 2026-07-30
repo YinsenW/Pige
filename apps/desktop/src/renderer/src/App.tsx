@@ -44,6 +44,7 @@ import {
 } from "./components/HomeConversationTurnState";
 import { WindowModeToggle } from "./components/WindowModeToggle";
 import { useWindowControls } from "./components/useWindowControls";
+import { ReaderDocumentActions } from "./components/ReaderDocumentActions";
 import type { ReaderInlineReferenceActivation } from "./components/ReaderInlineReferenceSurface";
 import { NoteReader, type NoteRelatedState } from "./components/NoteReader";
 import {
@@ -93,6 +94,8 @@ import type {
   NoteEditorSaveRequest,
   NoteEditorSaveResult,
   NoteRenderResult,
+  NoteTrashCurrentRequest,
+  NoteTrashCurrentResult,
   NoteResolveInlineReferenceRequest,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
@@ -2365,6 +2368,7 @@ export function App(): React.JSX.Element {
             onSearch={(request) => window.pige.retrieval.search(request)}
             onOpenSourceReference={(request) => window.pige.notes.openSourceReference(request)}
             onRevealSource={(request) => window.pige.notes.revealSource(request)}
+            onTrashCurrentNote={(request) => window.pige.notes.trashCurrent(request)}
             searchFocusRequest={librarySearchFocusRequest}
             onOpenNote={openNote}
             onCloseNote={() => {
@@ -2372,6 +2376,14 @@ export function App(): React.JSX.Element {
               inlineReferenceSequence.current += 1;
               setSelectedNote(null);
               setSelectedNoteRelated(null);
+            }}
+            onCurrentNoteTrashed={() => {
+              noteOpenSequence.current += 1;
+              inlineReferenceSequence.current += 1;
+              setSelectedNote(null);
+              setSelectedNoteRelated(null);
+              void Promise.allSettled([refreshLibrary(), refreshVaultState()]);
+              setLibrarySearchFocusRequest((current) => current + 1);
             }}
             noteAgentOpen={noteAgentOpen}
             onToggleNoteAgent={toggleNoteAgent}
@@ -2414,6 +2426,7 @@ export function App(): React.JSX.Element {
               onSearch={(request) => window.pige.retrieval.search(request)}
               onOpenSourceReference={(request) => window.pige.notes.openSourceReference(request)}
               onRevealSource={(request) => window.pige.notes.revealSource(request)}
+              onTrashCurrentNote={(request) => window.pige.notes.trashCurrent(request)}
               searchFocusRequest={librarySearchFocusRequest}
               onOpenNote={openNote}
               onCloseNote={() => {
@@ -2421,6 +2434,14 @@ export function App(): React.JSX.Element {
                 inlineReferenceSequence.current += 1;
                 setSelectedNote(null);
                 setSelectedNoteRelated(null);
+                restoreKnowledgeTreeFocus(knowledgeTreeReturnFocusKey.current);
+              }}
+              onCurrentNoteTrashed={() => {
+                noteOpenSequence.current += 1;
+                inlineReferenceSequence.current += 1;
+                setSelectedNote(null);
+                setSelectedNoteRelated(null);
+                void Promise.allSettled([refreshLibrary(), refreshVaultState()]);
                 restoreKnowledgeTreeFocus(knowledgeTreeReturnFocusKey.current);
               }}
               noteAgentOpen={noteAgentOpen}
@@ -2916,9 +2937,11 @@ export function LibraryPanel(props: {
     request: NoteOpenSourceReferenceRequest
   ) => Promise<NoteOpenSourceReferenceResult>;
   readonly onRevealSource?: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
+  readonly onTrashCurrentNote?: (request: NoteTrashCurrentRequest) => Promise<NoteTrashCurrentResult>;
   readonly searchFocusRequest: number;
   readonly onOpenNote: (pageId: string) => Promise<void>;
   readonly onCloseNote: () => void;
+  readonly onCurrentNoteTrashed?: () => void;
   readonly noteAgentOpen: boolean;
   readonly onToggleNoteAgent: () => void;
   readonly noteAgentToggleRef: RefObject<HTMLButtonElement | null>;
@@ -3028,6 +3051,31 @@ export function LibraryPanel(props: {
     const copied = await props.onCopyNote(pageId);
     if (requestId !== readerActionSequence.current) return;
     setReaderActionState(copied ? "copied" : "copy_failed");
+  };
+
+  const trashSelectedNote = async (): Promise<"committed" | "retained"> => {
+    const note = props.selectedNote;
+    const eligibility = note?.trashEligibility;
+    const activeVaultId = props.activeVaultId;
+    const renderContextId = note?.renderContextId;
+    if (!note || !eligibility?.canTrash || !activeVaultId || !renderContextId || !props.onTrashCurrentNote) {
+      return "retained";
+    }
+    const request: NoteTrashCurrentRequest = {
+      apiVersion: 1,
+      requestId: createNoteTrashRequestId(),
+      activeVaultId,
+      currentPageId: note.summary.pageId,
+      renderContextId,
+      expectedRevision: eligibility.revision
+    };
+    try {
+      const result = await props.onTrashCurrentNote(request);
+      if (!noteTrashCurrentIdentityMatches(request, result)) return "retained";
+      return result.status === "committed" ? "committed" : "retained";
+    } catch {
+      return "retained";
+    }
   };
 
   useEffect(() => {
@@ -3166,16 +3214,13 @@ export function LibraryPanel(props: {
             >
               <PigeIcon name="copy" size={16} />
             </button>
-            <button
-              type="button"
-              data-reader-action="more"
-              className="icon-button prototype-action"
-              aria-label={props.t("note.moreActions")}
-              title={props.t("note.moreActions")}
-              onClick={() => showReaderDevelopment("document_actions")}
-            >
-              <PigeIcon name="more" size={16} />
-            </button>
+            <ReaderDocumentActions
+              ownerIdentity={`${props.activeVaultId ?? ""}:${summary.pageId}:${props.selectedNote.renderContextId ?? ""}:${props.selectedNote.trashEligibility?.revision ?? ""}`}
+              canMoveToTrash={props.selectedNote.trashEligibility?.canTrash === true && Boolean(props.onTrashCurrentNote)}
+              labels={readerDocumentActionLabels(props.t)}
+              onMoveToTrash={trashSelectedNote}
+              onCommitted={() => props.onCurrentNoteTrashed?.()}
+            />
             <button
               type="button"
               className="icon-button"
@@ -5579,6 +5624,35 @@ function HomeComposer(props: {
     }
   };
 
+  const trashSelectedHomeNote = async (): Promise<"committed" | "retained"> => {
+    const note = selectedNoteRef.current;
+    const eligibility = note?.trashEligibility;
+    const activeVaultId = activeVaultIdRef.current;
+    const renderContextId = note?.renderContextId;
+    if (!note || !eligibility?.canTrash || !activeVaultId || !renderContextId) return "retained";
+    const request: NoteTrashCurrentRequest = {
+      apiVersion: 1,
+      requestId: createNoteTrashRequestId(),
+      activeVaultId,
+      currentPageId: note.summary.pageId,
+      renderContextId,
+      expectedRevision: eligibility.revision
+    };
+    try {
+      const result = await window.pige.notes.trashCurrent(request);
+      if (
+        !noteTrashCurrentIdentityMatches(request, result) ||
+        activeVaultIdRef.current !== activeVaultId ||
+        selectedNoteRef.current?.summary.pageId !== request.currentPageId ||
+        selectedNoteRef.current.renderContextId !== request.renderContextId ||
+        selectedNoteRef.current.trashEligibility?.revision !== request.expectedRevision
+      ) return "retained";
+      return result.status === "committed" ? "committed" : "retained";
+    } catch {
+      return "retained";
+    }
+  };
+
   const activateInlineReference = async (href: string): Promise<ReaderInlineReferenceActivation> => {
     const vaultId = activeVaultIdRef.current;
     const note = selectedNoteRef.current;
@@ -6013,6 +6087,21 @@ function HomeComposer(props: {
                     {props.t("note.edit")}
                   </button>
                 ) : null}
+                <ReaderDocumentActions
+                  ownerIdentity={`${props.activeVault?.vaultId ?? ""}:${selectedNote.summary.pageId}:${selectedNote.renderContextId ?? ""}:${selectedNote.trashEligibility?.revision ?? ""}`}
+                  canMoveToTrash={selectedNote.trashEligibility?.canTrash === true && Boolean(props.activeVault && selectedNote.renderContextId)}
+                  labels={readerDocumentActionLabels(props.t)}
+                  onMoveToTrash={trashSelectedHomeNote}
+                  onCommitted={() => {
+                    noteOpenSequence.current += 1;
+                    inlineReferenceSequence.current += 1;
+                    editorOpenSequence.current += 1;
+                    setSelectedNote(null);
+                    setSelectedNoteRelated(null);
+                    void props.onHomeStateChanged();
+                    window.requestAnimationFrame(() => composerInputRef.current?.focus({ preventScroll: true }));
+                  }}
+                />
               </div>
               {editorOpenState === "failed" ? (
                 <p className="reader-action-status copy_failed" role="status" aria-live="polite">
@@ -6576,6 +6665,35 @@ function createNoteReferenceRequestId(): string {
 
 function createNoteEditorRequestId(): `noteeditreq_${string}` {
   return `noteeditreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function createNoteTrashRequestId(): `notetrashreq_${string}` {
+  return `notetrashreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function noteTrashCurrentIdentityMatches(
+  request: NoteTrashCurrentRequest,
+  result: NoteTrashCurrentResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.currentPageId === request.currentPageId &&
+    result.renderContextId === request.renderContextId &&
+    result.expectedRevision === request.expectedRevision;
+}
+
+function readerDocumentActionLabels(t: (key: string) => string) {
+  return {
+    more: t("note.moreActions"),
+    menu: t("note.document.actions"),
+    moveToTrash: t("note.document.moveToTrash"),
+    title: t("note.document.trashTitle"),
+    description: t("note.document.trashDescription"),
+    cancel: t("note.document.trashCancel"),
+    confirm: t("note.document.trashConfirm"),
+    pending: t("note.document.trashing"),
+    failed: t("note.document.trashFailed")
+  };
 }
 
 function isNoteEditorEligible(note: NoteRenderResult): boolean {
