@@ -84,6 +84,6 @@ describe("toolchain repair service", () => {
 });
 
 function serviceHealthIdentity(missingToolIds: readonly string[]): string {
-  const sorted = [...missingToolIds].sort((left, right) => left.localeCompare(right));
+  const sorted = [...missingToolIds].sort();
   return `toolchain_health_${createHash("sha256").update(JSON.stringify(sorted)).digest("hex")}`;
 }

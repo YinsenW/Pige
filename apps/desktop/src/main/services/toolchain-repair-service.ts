@@ -43,7 +43,7 @@ export function toolchainRepairEligibility(health: ToolchainHealth): ToolchainRe
   const missingRequiredToolIds = health.tools
     .filter((tool) => tool.required && tool.status === "missing")
     .map((tool) => tool.id)
-    .sort((left, right) => left.localeCompare(right));
+    .sort();
   if (missingRequiredToolIds.length === 0) return undefined;
   const digest = createHash("sha256")
     .update(JSON.stringify(missingRequiredToolIds))
