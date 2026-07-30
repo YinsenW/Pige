@@ -186,6 +186,13 @@ Saved-view create/rename/trash binds view/revision without changing rows/Dataset
 bind before/after identity; replay adopts, recovery adds only a missing Operation, and Undo writes
 forward, including restore. Drift is inert.
 
+A confirmed Markdown/TXT/PDF/DOCX/PPTX source refresh creates one parse Job bound to the
+opaque preview candidate and expected source revision. Confirmation rechecks candidate
+currentness before the Job records before/after receipts and publishes one
+`update_source_record` Operation. Restart adopts or rolls back the same transaction;
+Activity Undo restores the before receipt. Source-page conflicts preserve edited Markdown,
+and index refresh is scheduled only after the durable source commit.
+
 ## 5. Job State Machine
 
 Required canonical states:

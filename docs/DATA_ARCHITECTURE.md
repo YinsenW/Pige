@@ -582,6 +582,13 @@ Capture must prioritize preservation over intelligence.
 
 The source-record sidecar is committed atomically before any source-page projection. A later source-page write records/checks the sidecar version/hash through the job checkpoint. If projection refresh conflicts with user-edited Markdown, Pige preserves the page, keeps the sidecar authoritative for asset resolution, and stages repair instead of performing an ambiguous two-way merge.
 
+A confirmed source revision refresh binds one immutable preview candidate and rechecks
+its current file and Source Record revision before work. The parse Job checkpoints
+before/after receipts, publishes one `update_source_record` Operation, and can roll back
+or resume after restart. Activity Undo restores the prior evidence revision; rebuildable
+index refresh starts only after the durable commit. A Source Page edit conflict is
+reported without replacing the edited page.
+
 Phase 2 Home status can be rebuilt from `.pige/jobs/` plus source records. The read model may show source display names and job states, but not source paths, managed copy paths, file bodies, prompts, or model responses.
 
 Capture may create a minimal direct-text or metadata-only source projection and store its

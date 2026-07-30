@@ -604,6 +604,10 @@ Reader foundation:
   strict resolution, and only `resolved.target.pageId` navigates.
 - `library.related` returns path/body-free stable-ID links/backlinks, right-side when wide and below
   when narrow. Closed states retain Reader; no reconnect/filesystem/Agent/permission/event authority.
+- Eligible referenced or managed Markdown/TXT/PDF/DOCX/PPTX sources offer Check for updates,
+  then a bounded preview and explicit Refresh. The dialog exposes no path, keeps Reader and focus
+  on closed outcomes, adopts only an authoritative commit, and explains when an edited Source Page
+  was preserved while source evidence changed.
 
 ### 8.2 Note Agent Panel
 
