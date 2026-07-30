@@ -100,6 +100,8 @@ import type {
   NoteEditorOpenResult,
   NoteEditorSaveRequest,
   NoteEditorSaveResult,
+  NoteTrashCurrentRequest,
+  NoteTrashCurrentResult,
   NoteDocument,
   NoteGetRequest,
   NoteOpenSourceReferenceRequest,
@@ -380,6 +382,9 @@ import {
   NoteEditorOpenResultSchema,
   NoteEditorSaveRequestSchema,
   NoteEditorSaveResultSchema,
+  NOTE_TRASH_CURRENT_CHANNEL,
+  NoteTrashCurrentRequestSchema,
+  NoteTrashCurrentResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   NOTE_REVEAL_SOURCE_CHANNEL,
@@ -1397,6 +1402,13 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke(
           "notes.saveEditor",
           NoteEditorSaveRequestSchema.parse(request)
+        )
+      ),
+    trashCurrent: async (request: NoteTrashCurrentRequest): Promise<NoteTrashCurrentResult> =>
+      NoteTrashCurrentResultSchema.parse(
+        await ipcRenderer.invoke(
+          NOTE_TRASH_CURRENT_CHANNEL,
+          NoteTrashCurrentRequestSchema.parse(request)
         )
       ),
     resolveInlineReference: async (

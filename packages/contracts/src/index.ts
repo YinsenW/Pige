@@ -156,6 +156,8 @@ import type {
   NoteEditorRevision,
   NoteEditorSaveRequest,
   NoteEditorSaveResult,
+  NoteTrashCurrentRequest,
+  NoteTrashCurrentResult,
   NoteRenderContextId,
   NoteRenderResult,
   NoteOpenSourceReferenceRequest,
@@ -429,6 +431,8 @@ export type {
   NoteEditorRevision,
   NoteEditorSaveRequest,
   NoteEditorSaveResult,
+  NoteTrashCurrentRequest,
+  NoteTrashCurrentResult,
   NoteRenderResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
@@ -1112,6 +1116,7 @@ export interface KnowledgeActivitySummary {
   readonly kind:
     | "create_page"
     | "update_page"
+    | "trash_page"
     | "update_collection_cell"
     | "add_collection_row"
     | "add_collection_column"
@@ -1968,6 +1973,9 @@ export interface PigeDesktopApi {
     readonly render: (request: NoteRenderRequest) => Promise<NoteRenderResult>;
     readonly openEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
     readonly saveEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
+    readonly trashCurrent: (
+      request: NoteTrashCurrentRequest
+    ) => Promise<NoteTrashCurrentResult>;
     readonly resolveInlineReference: (
       request: NoteResolveInlineReferenceRequest
     ) => Promise<NoteResolveInlineReferenceResult>;

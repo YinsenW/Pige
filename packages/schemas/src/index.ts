@@ -1142,6 +1142,7 @@ export const KnowledgeActivitySummarySchema = z.object({
   kind: z.enum([
     "create_page",
     "update_page",
+    "trash_page",
     "update_collection_cell",
     "add_collection_row",
     "add_collection_column",
@@ -1381,6 +1382,11 @@ export const NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES = 4 * 1024 * 1024;
 export const NOTE_EDITOR_MAX_RENDERED_HTML_UTF8_BYTES = 8 * 1024 * 1024;
 export const NoteEditorRequestIdSchema = z.string().regex(/^noteeditreq_[a-z0-9]{8,64}$/);
 export const NoteEditorRevisionSchema = z.string().regex(/^noteeditrev_[a-z0-9]{32,64}$/);
+export const NoteTrashCurrentRequestIdSchema = z.string().regex(/^notetrashreq_[a-z0-9]{16,64}$/);
+export const NoteTrashEligibilitySchema = z.object({
+  canTrash: z.boolean(),
+  revision: NoteEditorRevisionSchema
+}).strict();
 export const NoteEditorPortableMarkdownSchema = z.string()
   .max(NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES)
   .refine(
@@ -1409,7 +1415,8 @@ export const NoteRenderResultSchema = z.object({
   summary: NoteRenderPageSummarySchema,
   html: NoteRenderedHtmlSchema,
   byteSize: z.number().int().nonnegative().max(NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES),
-  renderContextId: NoteRenderContextIdSchema.optional()
+  renderContextId: NoteRenderContextIdSchema.optional(),
+  trashEligibility: NoteTrashEligibilitySchema.optional()
 }).strict();
 const NoteEditorResultIdentitySchema = z.object({
   apiVersion: z.literal(1),
@@ -1462,6 +1469,74 @@ export const NoteEditorSaveResultSchema = z.discriminatedUnion("status", [
   NoteEditorResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
   NoteEditorResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
+
+export const NOTE_TRASH_CURRENT_CHANNEL = "notes.trashCurrent" as const;
+export const NoteTrashCurrentRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteTrashCurrentRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema
+}).strict();
+const NoteTrashCurrentResultIdentitySchema = NoteTrashCurrentRequestSchema;
+const NoteTrashCurrentCommittedAuthoritySchema = z.object({
+  pageId: PageIdSchema,
+  pageState: z.literal("trashed"),
+  readerState: z.literal("closed"),
+  libraryPresence: z.literal("absent"),
+  canTrash: z.literal(false)
+}).strict();
+const NoteTrashCurrentStaleAuthoritySchema = z.object({
+  pageId: PageIdSchema,
+  pageState: z.literal("present"),
+  readerState: z.literal("refresh_required"),
+  libraryPresence: z.literal("present"),
+  canTrash: z.literal(false)
+}).strict();
+const NoteTrashCurrentIneligibleAuthoritySchema = z.object({
+  pageId: PageIdSchema,
+  pageState: z.literal("present"),
+  readerState: z.literal("preserved"),
+  libraryPresence: z.literal("present"),
+  canTrash: z.literal(false)
+}).strict();
+const NoteTrashCurrentMissingAuthoritySchema = z.object({
+  pageId: PageIdSchema,
+  pageState: z.literal("missing"),
+  readerState: z.literal("closed"),
+  libraryPresence: z.literal("absent"),
+  canTrash: z.literal(false)
+}).strict();
+export const NoteTrashCurrentResultSchema = z.discriminatedUnion("status", [
+  NoteTrashCurrentResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    authority: NoteTrashCurrentCommittedAuthoritySchema
+  }).strict(),
+  NoteTrashCurrentResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    authority: NoteTrashCurrentStaleAuthoritySchema
+  }).strict(),
+  NoteTrashCurrentResultIdentitySchema.extend({
+    status: z.literal("not_found"),
+    authority: NoteTrashCurrentMissingAuthoritySchema
+  }).strict(),
+  NoteTrashCurrentResultIdentitySchema.extend({
+    status: z.literal("ineligible"),
+    authority: NoteTrashCurrentIneligibleAuthoritySchema
+  }).strict(),
+  NoteTrashCurrentResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status === "failed") return;
+  if (result.authority.pageId !== result.currentPageId) {
+    context.addIssue({
+      code: "custom",
+      path: ["authority", "pageId"],
+      message: "Note trash authority must match the requested current page."
+    });
+  }
+});
 
 export const KnowledgeHealthRepairRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -8291,6 +8366,10 @@ export type NoteEditorOpenRequest = z.infer<typeof NoteEditorOpenRequestSchema>;
 export type NoteEditorOpenResult = z.infer<typeof NoteEditorOpenResultSchema>;
 export type NoteEditorSaveRequest = z.infer<typeof NoteEditorSaveRequestSchema>;
 export type NoteEditorSaveResult = z.infer<typeof NoteEditorSaveResultSchema>;
+export type NoteTrashCurrentRequestId = z.infer<typeof NoteTrashCurrentRequestIdSchema>;
+export type NoteTrashEligibility = z.infer<typeof NoteTrashEligibilitySchema>;
+export type NoteTrashCurrentRequest = z.infer<typeof NoteTrashCurrentRequestSchema>;
+export type NoteTrashCurrentResult = z.infer<typeof NoteTrashCurrentResultSchema>;
 export type NoteResolveInlineReferenceRequest = z.infer<typeof NoteResolveInlineReferenceRequestSchema>;
 export type NoteResolveInlineReferenceResult = z.infer<typeof NoteResolveInlineReferenceResultSchema>;
 export type NoteSourceReferenceRequestId = z.infer<typeof NoteSourceReferenceRequestIdSchema>;
