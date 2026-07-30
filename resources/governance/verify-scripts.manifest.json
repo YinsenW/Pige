@@ -23,6 +23,7 @@
     { "path": "scripts/verify/independent-documentation-review.mjs", "sha256": "d56b79223f4655cb48986c77b47598b13671fc06cb2c23e4b46b89bfdf7f484e" },
     { "path": "scripts/verify/large-paste-boundary.mjs", "sha256": "55ba792e3171b78aa7055730917cf507c73de1ec9312b68a0608c4697b611b0c" },
     { "path": "scripts/verify/local-database-rebuild-worker-smoke.mjs", "sha256": "6b1351fa22d461eec35589a5d7fbecdadd0efcd04464bf7e41d4e84020f6b88a" },
+    { "path": "scripts/verify/localized-error-empty-states.mjs", "sha256": "b3b2bfd6186e4ab7e1a428678cb27a781f5629b03e33818828dfb56d7dc2f499" },
     { "path": "scripts/verify/macos-speech-helper-smoke.mjs", "sha256": "35d8b1c43b7c1c105a3e529543b506aa8ed6091ed68d59fabdb419f58f021413" },
     { "path": "scripts/verify/macos-vision-ocr-helper-smoke.mjs", "sha256": "66accf0bb7409f5341697ec08b76c0b1150d295b6bf2ff66518440f14f61a2d2" },
     { "path": "scripts/verify/markdown-links.mjs", "sha256": "c0ff15c1865da722626a065272199d64cde7a8cade0dbbcac25215cd91f8c02a" },
