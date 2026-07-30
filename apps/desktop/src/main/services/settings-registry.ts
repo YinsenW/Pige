@@ -101,8 +101,7 @@ export const implementedSettingsRegistry: SettingsRegistrySummary = {
       storage: ".pige/config.json",
       backedUpByDefault: true,
       applyBehavior: "new_jobs",
-      permissionRequirement: "none",
-      agentPolicyEffect: "memory.includeMemoryInBackup"
+      permissionRequirement: "none"
     },
     {
       key: "models.providerProfiles",

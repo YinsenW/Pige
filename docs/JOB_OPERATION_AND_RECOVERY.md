@@ -615,6 +615,9 @@ binds JSONL hash/revision/receipt without Provider replay. Conversation export r
 before external write and creates no Job/Operation. Knowledge Health repair uses reversible
 `update_page` bound to report/index and exact source/target, orphan/parent, or duplicate-topic
 survivor/absorbed proofs; duplicate-topic restart adopts one receipt and Undo restores both pages.
+Memory backup inclusion changes only outside active Backup work, commits the revision-fenced
+vault config before one pathless `change_setting` Operation, and rolls config back if that
+Operation cannot be published. The preference affects new Backup Jobs only.
 
 Rules:
 

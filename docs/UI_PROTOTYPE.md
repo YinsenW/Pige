@@ -982,6 +982,11 @@ revision CAS and retain the list on stale/not-found. Activity Open binds vault/o
 ID and focuses exact Edit or heading. Export uses Main save dialog; cancel is quiet; results
 pathless. No permanent erase, autonomous/global memory or new permission control ships.
 
+One simple switch, **Include Agent memory in backups**, defaults on and controls future
+Backups only. It loads from the active Vault, disables while Backup work is active or a save
+is pending, and adopts only the exact vault/request/revision response. Stale, blocked, or failed
+saves keep the authoritative switch state and show a compact localized status.
+
 ### Skills Settings
 
 ```txt

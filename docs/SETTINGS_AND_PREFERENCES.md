@@ -180,6 +180,7 @@ This compact index mirrors every entry currently returned by `settings.registry`
 | `vault.id` | `explicit_confirmation` | Main-process create/open vault workflow; immutable after creation |
 | `sourceStorage.defaultStrategy` | `none` | Capture Service reads the active vault value for every new file capture |
 | `backup.entryPoints` | `none` | Derived read-only status |
+| `memory.includeMemoryInBackup` | `none` | Revision-fenced active-Vault config write; active Backup work blocks mutation and the next Backup reads the durable choice |
 | `models.providerProfiles` | `explicit_confirmation` | Disclosed Settings Connect/Save gesture plus probe before create; native confirmation remains for provider deletion |
 | `models.providerApiKeys` | `explicit_warning` | Connect writes only after the disclosed gesture and probe; native confirmation remains for revision-fenced credential replacement |
 | `models.manualModelIds` | `none` | Validated as part of the confirmed provider workflow |

@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, source refresh/reimport and complete Activity history browsing.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, source refresh/reimport, complete Activity history browsing and vault-portable Agent memory backup inclusion.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "a41dfeb4de4000cdd3cd95cd021021c0d3378778f9d29680dc726b1ff064d1bc"
+    "reviewedSha256": "bb5e535aef6ee2c5cbc69061ebb3e9dfb5bfa2543e4fd7b26cb7913ed28b2516"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
-    "task": "Vault v2, Alpha convergence, public governance, localized release states, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name rename, source refresh/reimport and Activity history browsing",
+    "task": "Vault v2, Alpha convergence, public governance, localized release states, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name rename, source refresh/reimport, Activity history browsing and Agent memory backup inclusion",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,14 +67,14 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed durable migration, language, platform, ledger, public governance, localized-state, grounded knowledge-page, startup-destination, Vault-relocation/display-name, source-refresh and Activity-history claims; Development/UI supplied executable evidence, with UI Design P0/P1 clear."
+    "independence": "Planning reviewed durable migration, language, platform, ledger, public governance, localized-state, grounded knowledge-page, startup-destination, Vault-relocation/display-name, source-refresh, Activity-history and memory-backup claims; Development supplied executable evidence and UI Design reported P0/P1 clear on exact source HEAD bb6974c496aa00f6150d3a20b8c07bdaae274e37."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Vault rename is one calm inline action with Cancel/Escape focus recovery and a mutual-exclusion lock against relocation."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"PRD, Settings, data, API, sync and UI owners agree that display-name CAS is pathless, portable and does not change Vault ID or path."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits; Vault rename adds exact schema, service, UI and backup evidence without promoting broader Vault requirements."},
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Agent & Memory adds one default-on future-Backup switch with authoritative state, active-work blocking and localized closed outcomes."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Settings, memory, data, API, UI and Operation owners agree on a pathless revision-fenced portable preference that never enters Agent prompt policy."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits; memory exclusion adds exact service, archive, IPC and UI evidence without promoting broader Backup or Settings requirements."},
     {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Public governance and localized error/empty-state recovery boundaries are executable."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owner sections, decision ledger and trace inventory absorb the bounded Vault rename delta without a new document."}
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owners absorb the bounded rename and memory-backup deltas without a new document."}
   ],
   "verification": [
     {"command":"npm run verify:traceability","status":"passed","evidence":"The 102-item ledger and phase states are claim-bound."},
@@ -82,13 +82,13 @@
     {"command":"npm run verify:public-issue-templates && npm run verify:public-privacy-surface && npm run verify:localized-error-empty-states && npm run verify:independent-documentation-review","status":"passed","evidence":"Reviewed public governance and localized release-state surfaces are fail-closed."}
   ],
   "coordination": {
-    "taskId": "vault-display-name-bind-20260731",
-    "taskTitle": "Bind path-independent Vault display-name rename",
+    "taskId": "agent-memory-backup-preference-bind-20260731",
+    "taskTitle": "Vault Agent memory backup preference bind",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main owns strict pathless metadata-revision CAS; display rename preserves Vault ID/path/unknown manifest fields and is mutually exclusive with relocation while pending.",
-    "acknowledgement": "Planning binds the implemented Vault display-name slice while PIGE-VAULT-005 and E1.04 remain partial for external managed-copy setup and broader create acceptance. UI Design P0/P1 is clear."
+    "compatibility": "Main owns the pathless preference write, fences active Vault and config revision, blocks active Backup work, excludes all memory lifecycle state when disabled, and publishes a truthful manifest.",
+    "acknowledgement": "Planning binds the Agent memory backup preference while PIGE-BACKUP-001 and E9.01 remain partial for reconnect, remaining fixtures, conversation-history exclusion, backup Operations, scans, atomicity and platforms. UI Design reported P0/P1 clear on exact source HEAD bb6974c496aa00f6150d3a20b8c07bdaae274e37."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [

@@ -904,6 +904,8 @@ Rules:
 Commands:
 
 - `backup.status`
+- `backup.memoryPreferenceStatus`
+- `backup.setMemoryPreference`
 - `backup.create`
 - `backup.reconnectDependency`
 - `restore.preview`
@@ -917,6 +919,9 @@ failed`. `@pige/schemas` owns strict runtime shapes and contracts export inferre
 
 Rules:
 
+- Memory preference status returns only active Vault ID, revision, inclusion and update
+  availability. Mutation binds API/request/Vault/revision, carries no path, blocks during
+  active Backup work, and returns `updated | stale | blocked` with authoritative status.
 - `backup.create` uses a trusted main-process save dialog, persists one durable Backup Job
   before scan, and returns only after cancellation or exact terminal completion.
 - Missing/rebound roots return body-free `backup.dependency_waiting`; no path is exposed.
