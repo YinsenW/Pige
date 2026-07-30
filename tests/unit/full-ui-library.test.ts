@@ -2827,7 +2827,7 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
-  it("submits one exact create-note selection and retains the Reader on closed or review results", async () => {
+  it("submits exact create-page selections and retains the Reader on closed or review results", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
     const requests: ReaderSelectionCreateNoteRequest[] = [];
@@ -2879,7 +2879,8 @@ describe("full UI Library", () => {
       requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]')).click();
       await settle(dom);
     });
-    const createNote = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="createNote"]'));
+    await clickButton(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="createNote"]')));
+    const createNote = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-create-action="create_note"]'));
     await act(async () => { createNote.click(); createNote.click(); await settle(dom); });
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({
@@ -2896,11 +2897,15 @@ describe("full UI Library", () => {
       await settle(dom);
     });
     expect(results).toHaveLength(1);
-    expect(container.querySelector('[data-selection-more-action="createNote"]')).not.toBeNull();
+    expect(container.querySelector('[data-selection-action="more"]')).not.toBeNull();
     expect(container.querySelector('[role="status"]')?.textContent).toBe(enMessages["note.selection.actionFailed"]);
+    expect(dom.window.document.activeElement).toBe(container.querySelector('[data-selection-action="more"]'));
 
-    await act(async () => { createNote.click(); await settle(dom); });
+    await clickButton(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]')));
+    await clickButton(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="createNote"]')));
+    await clickButton(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-create-action="create_claim"]')));
     const secondRequest = requests[1]!;
+    expect(secondRequest.action).toBe("create_claim");
     await act(async () => {
       resolveCreate({
         apiVersion: 1,
@@ -2912,7 +2917,7 @@ describe("full UI Library", () => {
         tailEventId: "evt_20260729_createnote2",
         proposal: {
           proposalId: "proposal_20260729_createnote",
-          action: "create_note",
+          action: "create_claim",
           state: "ready",
           revision: 1,
           lines: [{ kind: "added", text: "Create a durable note" }]
@@ -2921,7 +2926,7 @@ describe("full UI Library", () => {
       await settle(dom);
     });
     expect(results.at(-1)?.status).toBe("review_required");
-    expect(container.querySelector('[data-selection-more-action="createNote"]')).not.toBeNull();
+    expect(container.querySelector('[data-selection-action="more"]')).not.toBeNull();
     expect(container.querySelector('[role="status"]')?.textContent).toBe(enMessages["note.selection.reviewReady"]);
 
     await act(async () => root.unmount());
