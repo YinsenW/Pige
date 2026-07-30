@@ -6971,6 +6971,90 @@ export const CurrentNoteAppendProposalDecisionResultSchema = z.discriminatedUnio
   }).strict()
 ]);
 
+export const CurrentNoteReplaceProposalIdSchema = ProposalIdSchema;
+export const CurrentNoteReplaceProposalStateSchema = z.enum([
+  "ready",
+  "resolving",
+  "applied",
+  "rejected",
+  "conflicted"
+]);
+export const CurrentNoteReplaceProposalLineSchema = z.object({
+  kind: z.enum(["context", "removed", "added"]),
+  text: z.string().min(1).max(160)
+}).strict();
+export const CurrentNoteReplaceProposalPreviewSchema = z.object({
+  proposalId: CurrentNoteReplaceProposalIdSchema,
+  kind: z.literal("replace_current_note"),
+  state: CurrentNoteReplaceProposalStateSchema,
+  revision: z.number().int().min(1),
+  activeVaultId: VaultIdSchema,
+  jobId: JobIdSchema,
+  lines: z.array(CurrentNoteReplaceProposalLineSchema).max(8)
+}).strict();
+export const CurrentNoteReplaceProposalGetRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  jobId: JobIdSchema,
+  proposalId: CurrentNoteReplaceProposalIdSchema
+}).strict();
+export const CurrentNoteReplaceProposalGetResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("available"),
+    proposal: CurrentNoteReplaceProposalPreviewSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("stale")
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("not_found")
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("failed"),
+    error: PigeErrorSummarySchema
+  }).strict()
+]);
+export const CurrentNoteReplaceProposalDecisionRequestSchema = CurrentNoteReplaceProposalGetRequestSchema.extend({
+  expectedRevision: z.number().int().min(1),
+  decision: z.enum(["approve", "reject"])
+}).strict();
+export const CurrentNoteReplaceProposalDecisionResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("applied"),
+    proposal: CurrentNoteReplaceProposalPreviewSchema.extend({ state: z.literal("applied") }),
+    operationId: OperationIdSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("rejected"),
+    proposal: CurrentNoteReplaceProposalPreviewSchema.extend({ state: z.literal("rejected") })
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("conflicted"),
+    proposal: CurrentNoteReplaceProposalPreviewSchema.extend({ state: z.literal("conflicted") })
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("stale"),
+    proposal: CurrentNoteReplaceProposalPreviewSchema.optional()
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("not_found")
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("failed"),
+    error: PigeErrorSummarySchema
+  }).strict()
+]);
+
 export const ReaderSelectionActionRequestIdSchema = z.string()
   .regex(/^readerselaction_[a-z0-9]{8,64}$/);
 export const READER_SELECTION_ASK_QUESTION_MAX_CODE_POINTS = 4_000;
@@ -8372,6 +8456,14 @@ export type CurrentNoteAppendProposalGetRequest = z.infer<typeof CurrentNoteAppe
 export type CurrentNoteAppendProposalGetResult = z.infer<typeof CurrentNoteAppendProposalGetResultSchema>;
 export type CurrentNoteAppendProposalDecisionRequest = z.infer<typeof CurrentNoteAppendProposalDecisionRequestSchema>;
 export type CurrentNoteAppendProposalDecisionResult = z.infer<typeof CurrentNoteAppendProposalDecisionResultSchema>;
+export type CurrentNoteReplaceProposalId = z.infer<typeof CurrentNoteReplaceProposalIdSchema>;
+export type CurrentNoteReplaceProposalState = z.infer<typeof CurrentNoteReplaceProposalStateSchema>;
+export type CurrentNoteReplaceProposalLine = z.infer<typeof CurrentNoteReplaceProposalLineSchema>;
+export type CurrentNoteReplaceProposalPreview = z.infer<typeof CurrentNoteReplaceProposalPreviewSchema>;
+export type CurrentNoteReplaceProposalGetRequest = z.infer<typeof CurrentNoteReplaceProposalGetRequestSchema>;
+export type CurrentNoteReplaceProposalGetResult = z.infer<typeof CurrentNoteReplaceProposalGetResultSchema>;
+export type CurrentNoteReplaceProposalDecisionRequest = z.infer<typeof CurrentNoteReplaceProposalDecisionRequestSchema>;
+export type CurrentNoteReplaceProposalDecisionResult = z.infer<typeof CurrentNoteReplaceProposalDecisionResultSchema>;
 export type CaptureFileRejection = z.output<typeof CaptureFileRejectionSchema>;
 export type CaptureFileRejectionReason = z.output<typeof CaptureFileRejectionReasonSchema>;
 export type AgentAnswerCitation = z.infer<typeof AgentAnswerCitationSchema>;

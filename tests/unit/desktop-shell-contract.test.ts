@@ -17,6 +17,44 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("freezes one pathless current-note replacement proposal surface", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const replaceSchemas = schemasSource.slice(
+      schemasSource.indexOf("export const CurrentNoteReplaceProposalIdSchema"),
+      schemasSource.indexOf("export const ReaderSelectionActionRequestIdSchema")
+    );
+    const agentApi = contractsSource.slice(
+      contractsSource.indexOf("readonly agent: {"),
+      contractsSource.indexOf("readonly jobs: {")
+    );
+
+    expect(replaceSchemas).toContain('kind: z.literal("replace_current_note")');
+    expect(replaceSchemas).toContain('kind: z.enum(["context", "removed", "added"])');
+    expect(replaceSchemas).toContain("text: z.string().min(1).max(160)");
+    expect(replaceSchemas).toContain("lines: z.array(CurrentNoteReplaceProposalLineSchema).max(8)");
+    expect(replaceSchemas).toContain('status: z.literal("not_found")');
+    expect(agentApi).toContain("readonly currentNoteReplaceProposal: (");
+    expect(agentApi).toContain("request: CurrentNoteReplaceProposalGetRequest");
+    expect(agentApi).toContain("readonly decideCurrentNoteReplaceProposal: (");
+    expect(agentApi).toContain("request: CurrentNoteReplaceProposalDecisionRequest");
+    expect(preloadSource).toContain('ipcRenderer.invoke(\n        "agent.currentNoteReplaceProposal"');
+    expect(preloadSource).toContain('ipcRenderer.invoke(\n        "agent.decideCurrentNoteReplaceProposal"');
+    expect(preloadSource).toContain("CurrentNoteReplaceProposalGetRequestSchema.parse(request)");
+    expect(preloadSource).toContain("CurrentNoteReplaceProposalDecisionRequestSchema.parse(request)");
+    for (const privateField of [
+      "pageId",
+      "renderContextId",
+      "replacementMarkdown",
+      "pagePath",
+      "contentHash",
+      "rawRefs"
+    ]) {
+      expect(replaceSchemas).not.toContain(privateField);
+    }
+  });
+
   it("freezes one Main-owned pathless bundled-toolchain repair action", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");

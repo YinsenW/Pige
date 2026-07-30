@@ -53,6 +53,10 @@ import {
   CollectionTrashRowRequestSchema,
   CollectionTrashRowResultSchema,
   CurrentNoteAppendProposalDecisionResultSchema,
+  CurrentNoteReplaceProposalDecisionRequestSchema,
+  CurrentNoteReplaceProposalDecisionResultSchema,
+  CurrentNoteReplaceProposalGetRequestSchema,
+  CurrentNoteReplaceProposalGetResultSchema,
   ConversationEventSchema,
   DATASET_PIGE_FORMULA_MAX_DEPTH,
   DATASET_PIGE_FORMULA_MAX_NODES,
@@ -417,6 +421,76 @@ describe("schemas", () => {
       proposal: { ...proposal, state: "applied" },
       operationId: "op_20260728_schemaappend01"
     })).toMatchObject({ status: "applied", proposal: { state: "applied" } });
+  });
+
+  it("keeps current-note replacement review pathless and proposal-bound", () => {
+    const request = {
+      apiVersion: 1,
+      activeVaultId: "vault_20260730_schemareplace",
+      jobId: "job_20260730_schemareplace01",
+      proposalId: "proposal_20260730_schemareplace01"
+    } as const;
+    expect(CurrentNoteReplaceProposalGetRequestSchema.parse(request)).toEqual(request);
+    expect(() => CurrentNoteReplaceProposalGetRequestSchema.parse({
+      ...request,
+      pageId: "page_20260730_schemareplace01"
+    })).toThrow();
+
+    const proposal = {
+      proposalId: request.proposalId,
+      kind: "replace_current_note",
+      state: "ready",
+      revision: 1,
+      activeVaultId: request.activeVaultId,
+      jobId: request.jobId,
+      lines: [
+        { kind: "removed", text: "Old safe line" },
+        { kind: "added", text: "New safe line" }
+      ]
+    } as const;
+    expect(CurrentNoteReplaceProposalGetResultSchema.parse({
+      apiVersion: 1,
+      status: "available",
+      proposal
+    })).toMatchObject({ status: "available", proposal: { kind: "replace_current_note" } });
+    expect(() => CurrentNoteReplaceProposalGetResultSchema.parse({
+      apiVersion: 1,
+      status: "available",
+      proposal: { ...proposal, body: "private replacement" }
+    })).toThrow();
+    expect(() => CurrentNoteReplaceProposalGetResultSchema.parse({
+      apiVersion: 1,
+      status: "available",
+      proposal: { ...proposal, lines: Array.from({ length: 9 }, () => proposal.lines[0]) }
+    })).toThrow();
+    expect(() => CurrentNoteReplaceProposalGetResultSchema.parse({
+      apiVersion: 1,
+      status: "available",
+      proposal: { ...proposal, lines: [{ kind: "added", text: "x".repeat(161) }] }
+    })).toThrow();
+
+    const decision = { ...request, expectedRevision: 1, decision: "approve" } as const;
+    expect(CurrentNoteReplaceProposalDecisionRequestSchema.parse(decision)).toEqual(decision);
+    expect(() => CurrentNoteReplaceProposalDecisionRequestSchema.parse({
+      ...decision,
+      replacementMarkdown: "renderer-authored body"
+    })).toThrow();
+    expect(() => CurrentNoteReplaceProposalDecisionResultSchema.parse({
+      apiVersion: 1,
+      status: "applied",
+      proposal,
+      operationId: "op_20260730_schemareplace01"
+    })).toThrow();
+    expect(CurrentNoteReplaceProposalDecisionResultSchema.parse({
+      apiVersion: 1,
+      status: "applied",
+      proposal: { ...proposal, state: "applied" },
+      operationId: "op_20260730_schemareplace01"
+    })).toMatchObject({ status: "applied", proposal: { state: "applied" } });
+    expect(CurrentNoteReplaceProposalDecisionResultSchema.parse({
+      apiVersion: 1,
+      status: "not_found"
+    })).toEqual({ apiVersion: 1, status: "not_found" });
   });
 
   it("binds Reader selection create-note review to one created page identity", () => {
