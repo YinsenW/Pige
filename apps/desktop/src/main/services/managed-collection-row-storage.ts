@@ -454,9 +454,10 @@ function appendNullRow(
       db.prepare("INSERT INTO pige_dataset_rows VALUES (?, ?, ?, ?)").run(input.rowId, table.id, next.ordinal, next.ordinal + 1);
       const insertCell = db.prepare("INSERT INTO pige_dataset_cells VALUES (?, ?, 'null', 'pige_user_default', NULL, NULL, NULL, 'null', NULL, NULL, NULL)");
       const insertRelationCell = db.prepare("INSERT INTO pige_dataset_cells VALUES (?, ?, 'null', 'pige.relation.single', NULL, NULL, NULL, 'pige_relation_target_v1', 'null', NULL, NULL)");
+      const insertLookupCell = db.prepare("INSERT INTO pige_dataset_cells VALUES (?, ?, 'null', 'pige.lookup.single', NULL, NULL, NULL, 'pige_lookup_derived_v1', 'null', NULL, NULL)");
       const updateColumn = db.prepare("UPDATE pige_dataset_columns SET stats_json = ? WHERE column_id = ? AND table_id = ?");
       for (const column of table.columns.filter((candidate) => !candidate.calculation)) {
-        (column.relation ? insertRelationCell : insertCell).run(input.rowId, column.id);
+        (column.relation ? insertRelationCell : column.lookup ? insertLookupCell : insertCell).run(input.rowId, column.id);
       }
       formulaStats = new Map(appendFormulaCellsForNewRow(db, table, input.rowId));
       for (const column of table.columns) {

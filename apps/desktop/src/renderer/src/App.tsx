@@ -8233,6 +8233,7 @@ export function ActivityHistorySettingsPanel(props: {
                   ? "activity.trashedCollectionColumn"
                 : activity.kind === "create_collection_view"
                   ? "activity.createdCollectionView"
+                : activity.kind === "add_collection_lookup" ? "activity.addedCollectionLookup"
                 : activity.kind === "archive_page" ? "activity.archivedPage" : (activity.kind as string) === "restore_page" ? "activity.restoredPage"
                 : activity.kind === "update_page"
                   ? "activity.updatedPage"

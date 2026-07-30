@@ -1327,6 +1327,164 @@ describe("ManagedCollectionService", () => {
       (cell) => cell.columnId === added.columnId
     )?.value).toEqual({ kind: "relation", targetRowId: null, displayLabel: null });
   });
+
+  it("creates one relation-backed scalar lookup, keeps it derived and read-only, and undoes forward", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionService(port);
+    const initial = required(readBundle(fixture.vaultPath, readManifest(fixture.bundlePath).datasetId));
+    const table = required(initial.schema.tables[0]);
+    const nameColumn = required(table.columns.find((column) => column.logicalType === "string"));
+    const countColumn = required(table.columns.find((column) => column.logicalType === "integer"));
+    const [targetRowId, sourceRowId] = readRowIds(initial.payloadPath);
+    if (!targetRowId || !sourceRowId) throw new Error("Missing lookup rows");
+    const initialPayload = fs.readFileSync(initial.payloadPath);
+    const relation = await service.addRelationColumn({
+      apiVersion: 1, requestId: "collection_request_lookuprelationadd", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: initial.revision.id,
+      label: "Person", targetTableId: table.id, targetDisplayColumnId: nameColumn.id
+    });
+    if (relation.status !== "committed") throw new Error("Lookup relation was not created");
+    const linked = await service.editRelationCell({
+      apiVersion: 1, requestId: "collection_request_lookuprelationedit", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: relation.snapshot.revisionId,
+      rowId: sourceRowId, columnId: relation.columnId, targetRowId
+    });
+    if (linked.status !== "committed") throw new Error("Lookup relation target was not selected");
+    const request = {
+      apiVersion: 1 as const, requestId: "collection_request_lookupaddabcdefg", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: linked.snapshot.revisionId,
+      label: "Person count", relationColumnId: relation.columnId, targetColumnId: countColumn.id
+    };
+    const added = await service.addLookupColumn(request);
+    expect(added).toMatchObject({
+      status: "committed",
+      snapshot: {
+        revisionId: expect.any(String),
+        rows: expect.arrayContaining([expect.objectContaining({ rowId: sourceRowId, cells: expect.arrayContaining([
+          expect.objectContaining({ value: 3, editable: false, readOnlyReason: "lookup" })
+        ]) })])
+      }
+    });
+    if (added.status !== "committed") throw new Error("Lookup was not created");
+    expect(added.snapshot.columns.find((column) => column.columnId === relation.columnId)).toMatchObject({ canTrash: false });
+    expect(added.snapshot.columns.find((column) => column.columnId === countColumn.id)).toMatchObject({
+      canTrash: false, canUseAsLookupTarget: true
+    });
+    expect(added.snapshot.columns.find((column) => column.columnId === added.columnId)).toMatchObject({
+      label: "Person count", logicalType: "integer", canUseAsLookupTarget: false,
+      lookup: { kind: "pige_single_lookup", relationColumnId: relation.columnId, targetColumnId: countColumn.id }
+    });
+    await expect(service.editCell({
+      apiVersion: 1, requestId: "collection_request_lookupreadonlyab", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: added.snapshot.revisionId,
+      rowId: sourceRowId, columnId: added.columnId, value: 77
+    })).resolves.toMatchObject({ status: "not_editable" });
+    expect(fs.readFileSync(initial.payloadPath)).toEqual(initialPayload);
+    const revision = DatasetRevisionSchema.parse(readJson(path.join(
+      fixture.bundlePath, readManifest(fixture.bundlePath).revision.path
+    )));
+    expect(revision).toMatchObject({
+      id: added.snapshot.revisionId, parentRevisionId: linked.snapshot.revisionId,
+      change: { kind: "collection_lookup_add", tableId: table.id, columnId: added.columnId,
+        relationColumnId: relation.columnId, targetColumnId: countColumn.id }
+    });
+    const lookupPayloadPath = path.join(fixture.bundlePath, revision.payload.path);
+    const lookupPayloadBytes = fs.readFileSync(lookupPayloadPath);
+    const restarted = new ManagedCollectionService(port);
+    await expect(restarted.addLookupColumn(request)).resolves.toEqual(added);
+    await expect(restarted.addLookupColumn({
+      ...request, requestId: "collection_request_lookupstaleabcdef"
+    })).resolves.toMatchObject({ status: "stale", snapshot: { revisionId: added.snapshot.revisionId } });
+
+    const activity = new KnowledgeActivityService(port, restarted);
+    const lookupActivity = required(activity.list({ limit: 20 }).activities.find(
+      (candidate) => candidate.kind === "add_collection_lookup"
+    ));
+    expect(lookupActivity).toMatchObject({ operationId: added.operationId, canUndo: true, status: "applied" });
+    const undone = await activity.undo({ operationId: added.operationId, expectedRevisionId: added.snapshot.revisionId });
+    expect(undone).toMatchObject({ status: "undone" });
+    if (undone.status !== "undone") throw new Error("Lookup was not undone");
+    const afterUndo = await restarted.open({
+      apiVersion: 1, requestId: "collection_request_lookupundoopenab", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id
+    });
+    expect(afterUndo).toMatchObject({ status: "ready", snapshot: { revisionId: undone.revisionId } });
+    if (afterUndo.status !== "ready") throw new Error("Lookup Undo did not reopen");
+    expect(afterUndo.snapshot.columns.some((column) => column.columnId === added.columnId)).toBe(false);
+    expect(fs.readFileSync(lookupPayloadPath)).toEqual(lookupPayloadBytes);
+    expect(DatasetRevisionSchema.parse(readJson(path.join(
+      fixture.bundlePath, readManifest(fixture.bundlePath).revision.path
+    ))).change).toMatchObject({
+      kind: "collection_lookup_add_undo", columnId: added.columnId,
+      relationColumnId: relation.columnId, targetColumnId: countColumn.id,
+      undoOfOperationId: added.operationId
+    });
+
+    const recreated = await restarted.addLookupColumn({
+      ...request, requestId: "collection_request_lookuprecreateabc", expectedRevisionId: afterUndo.snapshot.revisionId
+    });
+    if (recreated.status !== "committed") throw new Error("Lookup was not recreated");
+    const targetEdit = await restarted.editCell({
+      apiVersion: 1, requestId: "collection_request_lookuptargetedit", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: recreated.snapshot.revisionId,
+      rowId: targetRowId, columnId: countColumn.id, value: 9
+    });
+    if (targetEdit.status !== "committed") throw new Error("Lookup target was not edited");
+    const refreshed = await restarted.open({
+      apiVersion: 1, requestId: "collection_request_lookuprefreshabcd", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id
+    });
+    expect(refreshed).toMatchObject({ status: "ready", snapshot: { rows: expect.arrayContaining([
+      expect.objectContaining({ rowId: sourceRowId, cells: expect.arrayContaining([
+        expect.objectContaining({ columnId: recreated.columnId, value: 9, editable: false, readOnlyReason: "lookup" })
+      ]) })
+    ]) } });
+    if (refreshed.status !== "ready") throw new Error("Lookup did not refresh");
+    const alternateTarget = await restarted.editCell({
+      apiVersion: 1, requestId: "collection_request_lookupalternatev", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: refreshed.snapshot.revisionId,
+      rowId: sourceRowId, columnId: countColumn.id, value: 11
+    });
+    if (alternateTarget.status !== "committed") throw new Error("Alternate lookup target was not edited");
+    const relinked = await restarted.editRelationCell({
+      apiVersion: 1, requestId: "collection_request_lookuprelinkself", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: alternateTarget.revisionId,
+      rowId: sourceRowId, columnId: relation.columnId, targetRowId: sourceRowId
+    });
+    expect(relinked).toMatchObject({ status: "committed", snapshot: { rows: expect.arrayContaining([
+      expect.objectContaining({ rowId: sourceRowId, cells: expect.arrayContaining([
+        expect.objectContaining({ columnId: recreated.columnId, value: 11, editable: false, readOnlyReason: "lookup" })
+      ]) })
+    ]) } });
+    if (relinked.status !== "committed") throw new Error("Lookup relation was not relinked");
+    const cleared = await restarted.editRelationCell({
+      apiVersion: 1, requestId: "collection_request_lookupclearrelabc", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: relinked.snapshot.revisionId,
+      rowId: sourceRowId, columnId: relation.columnId, targetRowId: null
+    });
+    expect(cleared).toMatchObject({ status: "committed", snapshot: { rows: expect.arrayContaining([
+      expect.objectContaining({ rowId: sourceRowId, cells: expect.arrayContaining([
+        expect.objectContaining({ columnId: recreated.columnId, value: null, editable: false, readOnlyReason: "lookup" })
+      ]) })
+    ]) } });
+    if (cleared.status !== "committed") throw new Error("Lookup relation was not cleared");
+    const current = required(readBundle(fixture.vaultPath, initial.manifest.datasetId));
+    const database = new DatabaseSync(current.payloadPath);
+    try {
+      database.prepare(
+        "UPDATE pige_dataset_cells SET state = 'value', projection_json = ? WHERE row_id = ? AND column_id = ?"
+      ).run(JSON.stringify({ kind: "pige_relation_target", schemaVersion: 1, targetRowId: "row_danglinglookup01" }),
+        sourceRowId, relation.columnId);
+    } finally {
+      database.close();
+    }
+    await expect(restarted.open({
+      apiVersion: 1, requestId: "collection_request_lookupdanglingxx", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id
+    })).resolves.toMatchObject({ status: "failed" });
+  });
 });
 
 async function makeCollectionFixture() {

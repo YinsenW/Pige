@@ -19,6 +19,7 @@ import {
   ReferencedOriginalReconnectResultSchema,
   COLLECTION_ADD_FORMULA_COLUMN_CHANNEL,
   COLLECTION_ADD_RELATION_COLUMN_CHANNEL,
+  COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL,
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
   COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
   COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES,
@@ -30,6 +31,7 @@ import {
   CollectionAddFormulaColumnResultSchema,
   CollectionAddRelationColumnRequestSchema,
   CollectionAddRelationColumnResultSchema,
+  CollectionAddLookupColumnRequestSchema,
   CollectionEditRelationCellRequestSchema,
   CollectionEditRelationCellResultSchema,
   CollectionRelationCellValueSchema,
@@ -64,6 +66,7 @@ import {
   DatasetPigeFormulaExpressionSchema,
   DatasetPigeRelationCellSchema,
   DatasetPigeRelationSchema,
+  DatasetPigeLookupSchema,
   DatasetRevisionSchema,
   DatasetSchemaRecordSchema,
   DatasetTableSchema,
@@ -2280,6 +2283,84 @@ describe("schemas", () => {
         canUndo: true
       }))
     }).activities).toHaveLength(2);
+  });
+
+  it("freezes a same-Dataset single-relation scalar lookup and rejects broader authority", () => {
+    const relation = {
+      kind: "pige_single_relation", schemaVersion: 1,
+      targetTableId: "table_lookuptarget01", targetDisplayColumnId: "column_lookupname001"
+    } as const;
+    const lookup = {
+      kind: "pige_single_lookup", schemaVersion: 1,
+      relationColumnId: "column_lookuprelation01", targetColumnId: "column_lookupcount001"
+    } as const;
+    expect(COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL).toBe("collections.addLookupColumn");
+    expect(DatasetPigeLookupSchema.parse(lookup)).toEqual(lookup);
+    expect(() => DatasetPigeLookupSchema.parse({ ...lookup, aggregate: "sum" })).toThrow();
+
+    const sourceColumn = {
+      id: "column_lookupsource01", name: "Person", ordinal: 0,
+      sourceType: "sqlite.text", logicalType: "string", nullable: true
+    } as const;
+    const relationColumn = {
+      id: lookup.relationColumnId, name: "Company", ordinal: 1,
+      sourceType: "pige.relation.single", logicalType: "string", nullable: true, relation
+    } as const;
+    const lookupColumn = {
+      id: "column_lookupvalue001", name: "Company count", ordinal: 2,
+      sourceType: "pige.lookup.single", logicalType: "integer", nullable: true, lookup
+    } as const;
+    const targetName = {
+      id: relation.targetDisplayColumnId, name: "Name", ordinal: 0,
+      sourceType: "sqlite.text", logicalType: "string", nullable: true
+    } as const;
+    const targetCount = {
+      id: lookup.targetColumnId, name: "Count", ordinal: 1,
+      sourceType: "sqlite.integer", logicalType: "integer", nullable: true
+    } as const;
+    const schema = {
+      schemaVersion: 1,
+      datasetId: "dataset_20260729_lookup000001",
+      revisionId: "dataset_rev_20260729_lookup000001",
+      tables: [{
+        id: "table_lookupsource01", name: "People", sourceLocator: "table:people",
+        ordinal: 0, rowCount: 1, columnCount: 3,
+        columns: [sourceColumn, relationColumn, lookupColumn]
+      }, {
+        id: relation.targetTableId, name: "Companies", sourceLocator: "table:companies",
+        ordinal: 1, rowCount: 1, columnCount: 2, columns: [targetName, targetCount]
+      }],
+      createdAt: "2026-07-29T00:00:00.000Z"
+    } as const;
+    expect(DatasetSchemaRecordSchema.parse(schema).tables[0]?.columns[2]?.lookup).toEqual(lookup);
+    expect(() => DatasetSchemaRecordSchema.parse({
+      ...schema,
+      tables: [{ ...schema.tables[0], columns: [sourceColumn, relationColumn, {
+        ...lookupColumn, lookup: { ...lookup, relationColumnId: "column_lookupmissing01" }
+      }] }, schema.tables[1]]
+    })).toThrow("same-table single relation");
+    expect(() => DatasetSchemaRecordSchema.parse({
+      ...schema,
+      tables: [schema.tables[0], { ...schema.tables[1], columns: [targetName, {
+        ...targetCount, sourceType: "pige.lookup.single", lookup
+      }] }]
+    })).toThrow("same-table single relation");
+
+    const request = {
+      apiVersion: 1, requestId: "collection_request_lookupschema0001",
+      activeVaultId: "vault_20260729_lookup001", datasetId: schema.datasetId,
+      tableId: schema.tables[0].id, expectedRevisionId: schema.revisionId,
+      label: " Company count ", relationColumnId: lookup.relationColumnId,
+      targetColumnId: lookup.targetColumnId
+    } as const;
+    expect(CollectionAddLookupColumnRequestSchema.parse(request).label).toBe("Company count");
+    for (const unsafe of [
+      { targetDatasetId: "dataset_20260729_outside000001" },
+      { aggregate: "sum" },
+      { multiple: true },
+      { query: "SELECT *" },
+      { path: "/private/lookup.sqlite" }
+    ]) expect(() => CollectionAddLookupColumnRequestSchema.parse({ ...request, ...unsafe })).toThrow();
   });
 
   it("keeps Collection column rename stable, reversible, CAS-bound, and body-free", () => {
