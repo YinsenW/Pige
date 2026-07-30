@@ -46,6 +46,7 @@ import type {
   ProposalReviewResult,
   ReaderSelectionCreateNoteRequest,
   ReaderSelectionCreateNoteResult,
+  ReaderSelectionActionRequest,
   ReaderSelectionProposalDecisionRequest,
   ReaderSelectionProposalDecisionResult,
   ReaderSelectionProposalPreview,
@@ -405,6 +406,70 @@ describe("Home durable Agent conversation UI", () => {
     await waitFor(dom, () => container.querySelector(".note-reader h1")?.textContent === "Note B");
     expect(harness.readerProposalDecisionRequests).toHaveLength(3);
     expect(harness.noteRenderRequests).toEqual(["page_20260715_note0001", "page_20260715_note0002"]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("asks about an exact Reader selection and opens the existing Note Agent conversation owner", async () => {
+    const dom = createDom(1200);
+    const harness = createHarness(undefined);
+    harness.sidebarOpen = true;
+    harness.windowMode = "expanded";
+    harness.windowLayoutWidth = 1200;
+    const renderNote = harness.renderNote;
+    harness.renderNote = async (pageId) => {
+      const note = await renderNote(pageId);
+      return pageId === "page_20260715_note0001"
+        ? { ...note, html: '<p><span data-pige-selection-segment="readerseg_aaaaaaaaaaaaaaaa">Reader Ask fixture.</span></p>' }
+        : note;
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+    await openLibraryNote(dom, container, "Note A");
+    const paragraph = requireElement(container.querySelector(".markdown-body p"));
+    const selectionNode = requireElement(paragraph.querySelector("[data-pige-selection-segment]")).firstChild!;
+    Object.defineProperty(dom.window, "getSelection", { configurable: true, value: () => ({
+      isCollapsed: false,
+      rangeCount: 1,
+      anchorNode: selectionNode,
+      anchorOffset: 0,
+      focusNode: selectionNode,
+      focusOffset: 8,
+      toString: () => "private selected body",
+      getRangeAt: () => ({
+        commonAncestorContainer: paragraph,
+        startContainer: selectionNode,
+        startOffset: 0,
+        endContainer: selectionNode,
+        endOffset: 8,
+        getBoundingClientRect: () => ({ left: 80, top: 90, width: 120, height: 18, right: 200, bottom: 108 })
+      })
+    }) });
+    await act(async () => {
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[data-selection-action="more"]') !== null);
+    await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]')));
+    await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="ask"]')));
+    const question = requireElement(container.querySelector<HTMLInputElement>("#reader-selection-ask-question"));
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")?.set;
+      setter?.call(question, "  Why is this important?  ");
+      question.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+      await settle(dom);
+    });
+    await clickButton(dom, container, enMessages["note.selection.askSubmit"]);
+    await waitFor(dom, () => harness.readerSelectionActionRequests.length === 1);
+    expect(harness.readerSelectionActionRequests[0]).toMatchObject({
+      action: "ask",
+      question: "Why is this important?",
+      selection: { pageId: "page_20260715_note0001" }
+    });
+    expect(JSON.stringify(harness.readerSelectionActionRequests[0])).not.toContain("private selected body");
+    await waitFor(dom, () => container.querySelector(".note-agent") !== null);
+    expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -4939,6 +5004,7 @@ interface ConversationHarness {
   readonly proposalDecisionRequests: ProposalReviewDecisionRequest[];
   proposalDecisionMode: "applied" | "rejected" | "stale" | "conflicted" | "failed";
   readonly readerCreateNoteRequests: ReaderSelectionCreateNoteRequest[];
+  readonly readerSelectionActionRequests: ReaderSelectionActionRequest[];
   readonly readerProposalDecisionRequests: ReaderSelectionProposalDecisionRequest[];
   readerProposalDecisionMode: "applied" | "rejected" | "stale";
   locale: "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de";
@@ -5032,6 +5098,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     proposalDecisionRequests: [],
     proposalDecisionMode: "applied",
     readerCreateNoteRequests: [],
+    readerSelectionActionRequests: [],
     readerProposalDecisionRequests: [],
     readerProposalDecisionMode: "applied",
     locale: "en",
@@ -5606,9 +5673,18 @@ function makePigeApi(harness: ConversationHarness): object {
           selectedContentHash: `sha256:${"b".repeat(64)}` as const
         }
       }),
-      submitAction: async (request: { readonly requestId: string }) => ({
-        apiVersion: 1 as const, requestId: request.requestId, status: "invalid" as const, reason: "selection_changed" as const
-      }),
+      submitAction: async (request: ReaderSelectionActionRequest) => {
+        harness.readerSelectionActionRequests.push(request);
+        return {
+          apiVersion: 1 as const,
+          requestId: request.requestId,
+          status: "completed" as const,
+          jobId: "job_20260730_readerask01",
+          conversationEventId: "evt_20260730_readerask01",
+          conversationId: "conv_20260730_readerask01",
+          tailEventId: "evt_20260730_readerask02"
+        };
+      },
       submitLink: async (request: { readonly requestId: string }) => ({
         apiVersion: 1 as const, requestId: request.requestId, status: "invalid" as const, reason: "selection_changed" as const
       }),

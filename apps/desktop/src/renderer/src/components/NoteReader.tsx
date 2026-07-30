@@ -24,18 +24,13 @@ import {
   type ReaderInlineReferenceActivation
 } from "./ReaderInlineReferenceSurface";
 import { ReaderSourceRevealAction, readerSourceActionLabels } from "./ReaderSourceActions";
-
+import {
+  ReaderSelectionAskDialog,
+  createReaderSelectionActionRequestId,
+  createReaderSelectionAgentTurnId,
+  useReaderSelectionAskState
+} from "./ReaderSelectionAskDialog";
 export type NoteRelatedState = LibraryRelatedResult | "loading" | "unavailable" | null;
-
-function createAgentClientTurnId(now = new Date()): string {
-  const date = [
-    now.getUTCFullYear().toString().padStart(4, "0"),
-    (now.getUTCMonth() + 1).toString().padStart(2, "0"),
-    now.getUTCDate().toString().padStart(2, "0")
-  ].join("");
-  const opaqueId = window.crypto.randomUUID().replaceAll("-", "").toLowerCase();
-  return `turn_${date}_${opaqueId}`;
-}
 
 function readerSelectionEndpoint(
   reader: HTMLElement | null,
@@ -60,22 +55,6 @@ function readerSelectionEndpoint(
 
 function createReaderSelectionRequestId(): string {
   return `readerselreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
-}
-
-function resolveReaderSelection(request: ReaderSelectionResolveRequest): Promise<ReaderSelectionResolveResult> {
-  return window.pige.readerSelection.resolve(request);
-}
-
-function submitReaderSelectionAction(request: ReaderSelectionActionRequest): Promise<ReaderSelectionActionResult> {
-  return window.pige.readerSelection.submitAction(request);
-}
-
-function submitReaderSelectionTransform(request: ReaderSelectionTransformRequest): Promise<ReaderSelectionTransformResult> {
-  return window.pige.readerSelection.submitTransform(request);
-}
-
-function createReaderSelectionActionRequestId(): string {
-  return `readerselaction_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
 }
 
 function createSourceReferenceRequestId(): string {
@@ -152,6 +131,8 @@ export function NoteReader(props: {
   const [selectionMorePlacement, setSelectionMorePlacement] = useState<"above" | "below">("below");
   const [selectionFeedback, setSelectionFeedback] = useState<string | null>(null);
   const [selectionActionPending, setSelectionActionPending] = useState(false);
+  const selectionAsk = useReaderSelectionAskState(selectionFocusTransition, () =>
+    selectionToolbarRef.current?.querySelector<HTMLButtonElement>('[data-selection-action="more"]')?.focus({ preventScroll: true }));
   const [selectionResolution, setSelectionResolution] = useState<
     | { readonly kind: "copy_only" }
     | { readonly kind: "checking" }
@@ -162,6 +143,7 @@ export function NoteReader(props: {
     sourceReferenceSequence.current += 1;
     sourceReferenceInFlightRef.current = null;
     selectionLinkInFlightRef.current = false;
+    selectionAsk.clear();
     setSourceReferenceState(null);
     setSelectionActionPending(false);
   }, [props.activeVaultId, props.note.renderContextId, summary.pageId]);
@@ -321,6 +303,7 @@ export function NoteReader(props: {
       if (selectionChanged) {
         selectionMoreOpenRef.current = false;
         setSelectionMoreOpen(false);
+        selectionAsk.clear();
         setSelectionFeedback(null);
       }
       setSelectionPosition({ left: Math.max(12, anchor.left), top: Math.max(12, anchor.top) });
@@ -520,7 +503,7 @@ export function NoteReader(props: {
         action,
         selection,
         locale: props.locale ?? "en",
-        clientTurnId: createAgentClientTurnId()
+        clientTurnId: createReaderSelectionAgentTurnId()
       });
       if (resolveSequence !== selectionResolveSequence.current) return;
       closeSelectionToolbar(true);
@@ -554,7 +537,7 @@ export function NoteReader(props: {
       renderContextId,
       selection,
       locale: props.locale ?? "en",
-      clientTurnId: createAgentClientTurnId()
+      clientTurnId: createReaderSelectionAgentTurnId()
     };
     selectionLinkInFlightRef.current = true;
     setSelectionActionPending(true);
@@ -602,7 +585,7 @@ export function NoteReader(props: {
       renderContextId,
       selection,
       locale: props.locale ?? "en",
-      clientTurnId: createAgentClientTurnId()
+      clientTurnId: createReaderSelectionAgentTurnId()
     };
     selectionCreateNoteInFlightRef.current = true;
     setSelectionActionPending(true);
@@ -652,7 +635,7 @@ export function NoteReader(props: {
         action,
         selection,
         locale: props.locale ?? "en",
-        clientTurnId: createAgentClientTurnId()
+        clientTurnId: createReaderSelectionAgentTurnId()
       });
       if (resolveSequence !== selectionResolveSequence.current) return;
       closeSelectionToolbar(true);
@@ -678,10 +661,23 @@ export function NoteReader(props: {
   const selectionActions = selectionResolution.kind === "resolved"
     ? (["explain", "summarize", "link", "more"] as const)
     : (["copy", "copyAsQuote"] as const);
-
+  const selectionMoreActions = ["ask", "createNote", "copy", "copyAsQuote", "translate", "polish", "expand"] as const;
   return (
     <article className="note-reader" ref={readerRef} tabIndex={-1}>
-      {selectionAnchor && selectionPosition ? (
+      {selectionAnchor && selectionPosition ? <>
+        <ReaderSelectionAskDialog
+          identityKey={selectionAsk.current ? `${selectionAsk.current.selection.pageId}:${selectionAsk.current.selection.pageContentHash}:${selectionAsk.current.selection.selectedContentHash}:${selectionAsk.current.selection.span.start}:${selectionAsk.current.selection.span.endExclusive}` : "reader-selection-ask-closed"}
+          open={selectionAsk.current?.open === true}
+          selection={selectionAsk.current?.selection ?? null}
+          locale={props.locale ?? "en"}
+          position={{ left: selectionPosition.left, top: selectionPosition.top }}
+          onSubmitAction={props.onSubmitSelectionAction ?? (() => Promise.reject(new Error("Reader selection actions are unavailable.")))}
+          onActionResult={(result) => props.onSelectionActionResult?.(result)}
+          onSent={selectionAsk.clear}
+          onCancel={selectionAsk.close}
+          t={props.t}
+        />
+        {selectionAsk.current?.open !== true ? (
         <div
           ref={selectionToolbarRef}
           className="selection-toolbar visible"
@@ -763,16 +759,16 @@ export function NoteReader(props: {
                   return;
                 }
                 let nextIndex: number | null = null;
-                if (event.key === "ArrowDown") nextIndex = (selectionMoreActionIndex + 1) % 6;
-                else if (event.key === "ArrowUp") nextIndex = (selectionMoreActionIndex + 5) % 6;
+                if (event.key === "ArrowDown") nextIndex = (selectionMoreActionIndex + 1) % selectionMoreActions.length;
+                else if (event.key === "ArrowUp") nextIndex = (selectionMoreActionIndex - 1 + selectionMoreActions.length) % selectionMoreActions.length;
                 else if (event.key === "Home") nextIndex = 0;
-                else if (event.key === "End") nextIndex = 5;
+                else if (event.key === "End") nextIndex = selectionMoreActions.length - 1;
                 if (nextIndex === null) return;
                 event.preventDefault();
                 moveSelectionMoreActionFocus(nextIndex);
               }}
             >
-              {(["createNote", "copy", "copyAsQuote", "translate", "polish", "expand"] as const).map((action, index) => (
+              {selectionMoreActions.map((action, index) => (
                 <button
                   key={action}
                   ref={(element) => {
@@ -785,6 +781,17 @@ export function NoteReader(props: {
                   data-selection-more-action={action}
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => {
+                    if (action === "ask") {
+                      if (selectionResolution.kind === "resolved" && props.onSubmitSelectionAction) {
+                        selectionMoreOpenRef.current = false;
+                        setSelectionMoreOpen(false);
+                        selectionAsk.open(selectionResolution.selection);
+                      } else {
+                        closeSelectionToolbar(true);
+                        props.onDevelopment("selection_actions");
+                      }
+                      return;
+                    }
                     if (action === "createNote") {
                       if (selectionResolution.kind === "resolved" && props.onSubmitSelectionCreateNote) {
                         void submitSelectionCreateNote(selectionResolution.selection);
@@ -815,8 +822,8 @@ export function NoteReader(props: {
               ))}
             </div>
           ) : null}
-        </div>
-      ) : null}
+        </div>) : null}
+      </> : null}
       {selectionFeedback ? (
         <p className="reader-selection-feedback" role="status" aria-live="polite" aria-atomic="true">
           {selectionFeedback}

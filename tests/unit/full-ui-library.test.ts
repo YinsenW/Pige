@@ -1320,6 +1320,82 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
+  it("asks from the Library Reader and retains the exact question and focus after a closed result", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const actionRequests: ReaderSelectionActionRequest[] = [];
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: readerNote(),
+        ...resolvedSelectionProps(),
+        onSubmitSelectionAction: async (request) => {
+          actionRequests.push(request);
+          return actionRequests.length === 1
+            ? { apiVersion: 1, requestId: request.requestId, status: "invalid", reason: "selection_changed" }
+            : {
+                apiVersion: 1,
+                requestId: request.requestId,
+                status: "completed",
+                jobId: "job_20260730_readerask01",
+                conversationEventId: "evt_20260730_readerask01",
+                conversationId: "conv_20260730_readerask01",
+                tailEventId: "evt_20260730_readerask02"
+              };
+        },
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    const container = requireElement(dom.window.document.querySelector<HTMLElement>("#root"));
+    const paragraph = requireElement(container.querySelector(".markdown-body p"));
+    const selectionNode = requireElement(paragraph.querySelector("[data-pige-selection-segment]")).firstChild!;
+    Object.defineProperty(dom.window, "getSelection", { configurable: true, value: () => ({
+      isCollapsed: false,
+      rangeCount: 1,
+      anchorNode: selectionNode,
+      anchorOffset: 0,
+      focusNode: selectionNode,
+      focusOffset: 8,
+      toString: () => "private selected body",
+      getRangeAt: () => ({
+        commonAncestorContainer: paragraph,
+        startContainer: selectionNode,
+        startOffset: 0,
+        endContainer: selectionNode,
+        endOffset: 8,
+        getBoundingClientRect: () => ({ left: 80, top: 90, width: 120, height: 18, right: 200, bottom: 108 })
+      })
+    }) });
+    await act(async () => {
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[data-selection-action="more"]') !== null);
+    await act(async () => {
+      requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]')).click();
+      await settle(dom);
+      requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="ask"]')).click();
+      await settle(dom);
+    });
+    const question = requireElement(container.querySelector<HTMLInputElement>("#reader-selection-ask-question"));
+    await waitFor(dom, () => dom.window.document.activeElement === question);
+    await inputText(dom, question, "  Why does this matter?  ");
+    await act(async () => {
+      requireElement(question.closest("form")?.querySelector<HTMLButtonElement>('button[type="submit"]')).click();
+      await settle(dom);
+    });
+    expect(actionRequests[0]).toMatchObject({ action: "ask", question: "Why does this matter?" });
+    expect(JSON.stringify(actionRequests[0])).not.toContain("private selected body");
+    await waitFor(dom, () => dom.window.document.activeElement === question);
+    expect(question.value).toBe("  Why does this matter?  ");
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("links an exact resolved selection, preserves it on a closed result, and refreshes only after apply", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
@@ -1857,7 +1933,7 @@ describe("full UI Library", () => {
     const menuItems = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
     expect(more.getAttribute("aria-expanded")).toBe("true");
     expect(menuItems.map((item) => item.dataset.selectionMoreAction)).toEqual([
-      "createNote", "copy", "copyAsQuote", "translate", "polish", "expand"
+      "ask", "createNote", "copy", "copyAsQuote", "translate", "polish", "expand"
     ]);
     expect(dom.window.document.activeElement).toBe(menuItems[0]);
     await act(async () => {
