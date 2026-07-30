@@ -444,7 +444,11 @@ function createSourceBody(sourceText: SourceTextPreview | undefined): string {
     return `${createFence(sourceText.text, "text")}\n`;
   }
 
-  const completeLocation = sourceText.origin === "artifact" ? "extracted text artifact" : "managed source copy";
+  const completeLocation = sourceText.origin === "artifact"
+    ? "extracted text artifact"
+    : sourceText.origin === "refresh_input"
+      ? "confirmed refresh evidence"
+      : "managed source copy";
   return `Source text is longer than the inline preview limit. The complete body is preserved in the ${completeLocation}.\n\n${createFence(`${sourceText.text.slice(0, PREVIEW_LIMIT).trimEnd()}\n...`, "text")}\n`;
 }
 
@@ -475,7 +479,7 @@ function trimTitle(title: string): string {
 interface SourceTextPreview {
   readonly text: string;
   readonly complete: boolean;
-  readonly origin: "artifact" | "managed_copy";
+  readonly origin: "artifact" | "managed_copy" | "refresh_input";
 }
 
 function readManagedSourceText(vaultPath: string, sourceRecord: SourceRecord): SourceTextPreview | undefined {
@@ -484,9 +488,11 @@ function readManagedSourceText(vaultPath: string, sourceRecord: SourceRecord): S
     artifact.kind === "extracted_text" || artifact.kind === "ocr"
   )?.path;
   if (!extractedTextPath) {
-    if (!sourceRecord.managedCopy) return undefined;
+    const hasRefreshInput = typeof sourceRecord.metadata.sourceRefreshInput === "object" &&
+      sourceRecord.metadata.sourceRefreshInput !== null;
+    if (!sourceRecord.managedCopy && !hasRefreshInput) return undefined;
     const preview = readVerifiedSourceTextPrefix(vaultPath, sourceRecord, SOURCE_READ_LIMIT_BYTES);
-    return preview ? { ...preview, origin: "managed_copy" } : undefined;
+    return preview ? { ...preview, origin: hasRefreshInput ? "refresh_input" : "managed_copy" } : undefined;
   }
   const absolutePath = resolveVaultRelativePath(vaultPath, extractedTextPath);
   const preview = readOptionalRegularTextPrefix(vaultPath, absolutePath, SOURCE_READ_LIMIT_BYTES);

@@ -318,6 +318,7 @@ import { MacOSSpeechAdapter } from "./services/macos-speech-adapter";
 import { ProposalService } from "./services/proposal-service";
 import { SourceOriginalReconnectService } from "./services/source-original-reconnect-service";
 import { ReaderSourceReconnectService } from "./services/reader-source-reconnect-service";
+import { SourceRefreshService } from "./services/source-refresh-service";
 import { installRendererNavigationGuard } from "./services/renderer-navigation-guard";
 import { RestoreCoordinatorService } from "./services/restore-coordinator-service";
 import { VaultStorageRelocationService } from "./services/vault-storage-relocation-service";
@@ -435,6 +436,7 @@ let localSemanticRetrievalService: LocalSemanticRetrievalService | undefined;
 let localSemanticEmbeddingRuntime: LocalSemanticEmbeddingRuntime | undefined;
 let localRagEngineService: LocalRagEngineService | undefined;
 let documentParserService: DocumentParserService | undefined;
+let sourceRefreshService: SourceRefreshService | undefined;
 let datasetQueryService: DatasetQueryService | undefined;
 let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
@@ -1330,6 +1332,11 @@ const getDocumentParserService = (): DocumentParserService => {
   return documentParserService;
 };
 
+const getSourceRefreshService = (): SourceRefreshService => {
+  sourceRefreshService ??= new SourceRefreshService(getVaultService(), getDocumentParserService());
+  return sourceRefreshService;
+};
+
 const getDatasetService = (): DatasetService => {
   if (!datasetService) datasetService = new DatasetService(new DatasetIngestWorkerService());
   return datasetService;
@@ -1839,7 +1846,8 @@ const getKnowledgeActivityService = (): KnowledgeActivityService => {
       createManagedCollectionActivityPort(),
       getNoteMarkdownEditorActivityAdapter(),
       getAgentMemoryService(),
-      createNotePageLifecycleActivityPort()
+      createNotePageLifecycleActivityPort(),
+      getSourceRefreshService()
     );
   }
   return knowledgeActivityService;
@@ -2899,6 +2907,7 @@ registerReaderIpc({
   getReaderSelectionCreateNoteService: getReaderSelectionCreateNoteActionService,
   getReaderSourceRevealService,
   getReaderSourceReconnectService,
+  getSourceRefreshService,
   getNoteTrashService,
   getNoteArchiveService,
   getNoteTagService,
@@ -2909,7 +2918,8 @@ registerReaderIpc({
   onNoteTrashCommitted: scheduleActivityIndexRebuild,
   onNoteArchiveCommitted: scheduleActivityIndexRebuild,
   onNoteRelated: scheduleActivityIndexRebuild,
-  onNoteImported: scheduleActivityIndexRebuild
+  onNoteImported: scheduleActivityIndexRebuild,
+  onSourceRefreshed: scheduleActivityIndexRebuild
 });
 registerCurrentNoteAppendIpc({
   ipcMain,
@@ -3344,17 +3354,19 @@ app.whenReady().then(async () => {
     () => getVaultService().activeVaultPath(),
   );
   noteMarkdownImportService = new NoteMarkdownImportService(getVaultService(), getNotesService());
+  documentParserService = new DocumentParserService();
+  sourceRefreshService = undefined;
   knowledgeActivityService = new KnowledgeActivityService(
     getVaultService(),
     createManagedCollectionActivityPort(),
     noteMarkdownEditorActivityAdapter,
     getAgentMemoryService(),
-    createNotePageLifecycleActivityPort()
+    createNotePageLifecycleActivityPort(),
+    getSourceRefreshService()
   );
   agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
     snapshot: getAgentCapabilitySnapshot
   }, undefined, undefined, createAgentIngestRetrievalPort(), createAgentIngestProposalPort());
-  documentParserService = new DocumentParserService();
   datasetService = new DatasetService(new DatasetIngestWorkerService());
   const paddleRuntime = getPaddleOcrRuntimeComposition();
   paddleRuntime.recoverStaging();

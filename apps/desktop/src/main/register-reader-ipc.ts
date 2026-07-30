@@ -14,6 +14,8 @@ import type {
   NoteImportMarkdownResult,
   NoteOpenSourceReferenceRequest,
   NoteReconnectOriginalSourceRequest,
+  SourceRefreshPreviewRequest,
+  SourceRefreshConfirmRequest,
   NoteRevealSourceRequest,
   NoteRenderRequest,
   NoteArchiveCurrentRequest,
@@ -62,6 +64,12 @@ import {
   NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
   NoteReconnectOriginalSourceRequestSchema,
   NoteReconnectOriginalSourceResultSchema,
+  SOURCE_REFRESH_PREVIEW_CHANNEL,
+  SOURCE_REFRESH_CONFIRM_CHANNEL,
+  SourceRefreshPreviewRequestSchema,
+  SourceRefreshPreviewResultSchema,
+  SourceRefreshConfirmRequestSchema,
+  SourceRefreshConfirmResultSchema,
   NoteRevealSourceRequestSchema,
   NoteRevealSourceResultSchema,
   NOTE_ARCHIVE_CURRENT_CHANNEL,
@@ -114,6 +122,7 @@ import type { ReaderSelectionProposalService } from "./services/reader-selection
 import type { ReaderSelectionCreateNoteActionService } from "./services/reader-selection-create-note-service";
 import type { ReaderSourceRevealService } from "./services/reader-source-reveal-service";
 import type { ReaderSourceReconnectService } from "./services/reader-source-reconnect-service";
+import type { SourceRefreshService } from "./services/source-refresh-service";
 import type { NoteTrashService } from "./services/note-trash-service";
 import type { NoteArchiveService } from "./services/note-archive-service";
 import type { NoteTagService } from "./services/note-tag-service";
@@ -130,6 +139,7 @@ interface RegisterReaderIpcOptions {
   readonly getReaderSelectionCreateNoteService: () => ReaderSelectionCreateNoteActionService;
   readonly getReaderSourceRevealService: () => ReaderSourceRevealService;
   readonly getReaderSourceReconnectService: () => ReaderSourceReconnectService;
+  readonly getSourceRefreshService: () => SourceRefreshService;
   readonly getWindow: (sender: WebContents) => BrowserWindow | undefined;
   readonly showOpenDialog: (window: BrowserWindow, options: OpenDialogOptions) => Promise<{
     readonly canceled: boolean;
@@ -146,6 +156,7 @@ interface RegisterReaderIpcOptions {
   readonly onNoteArchiveCommitted: () => void;
   readonly onNoteRelated: () => void;
   readonly onNoteImported: () => void;
+  readonly onSourceRefreshed: () => void;
 }
 
 function failedEditorOpen(request: NoteEditorOpenRequest): NoteEditorOpenResult {
@@ -510,6 +521,34 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       return NoteReconnectOriginalSourceResultSchema.parse({ ...parsed, status: "stale" });
     }
     return NoteReconnectOriginalSourceResultSchema.parse(result);
+  });
+  options.ipcMain.handle(SOURCE_REFRESH_PREVIEW_CHANNEL, async (event, request: SourceRefreshPreviewRequest) => {
+    const parsed = SourceRefreshPreviewRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    const contextCurrent = (): boolean => ownerId !== undefined && !event.sender.isDestroyed() &&
+      notesTrackedSenders.get(event.sender.id) === ownerId && options.getNotesService().isRenderContextCurrent(ownerId, {
+        activeVaultId: parsed.activeVaultId,
+        pageId: parsed.currentPageId,
+        renderContextId: parsed.renderContextId
+      });
+    return SourceRefreshPreviewResultSchema.parse(
+      await options.getSourceRefreshService().preview(parsed, contextCurrent)
+    );
+  });
+  options.ipcMain.handle(SOURCE_REFRESH_CONFIRM_CHANNEL, async (event, request: SourceRefreshConfirmRequest) => {
+    const parsed = SourceRefreshConfirmRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    const contextCurrent = (): boolean => ownerId !== undefined && !event.sender.isDestroyed() &&
+      notesTrackedSenders.get(event.sender.id) === ownerId && options.getNotesService().isRenderContextCurrent(ownerId, {
+        activeVaultId: parsed.activeVaultId,
+        pageId: parsed.currentPageId,
+        renderContextId: parsed.renderContextId
+      });
+    const result = SourceRefreshConfirmResultSchema.parse(
+      await options.getSourceRefreshService().confirm(parsed, contextCurrent)
+    );
+    if (result.status === "refreshed") options.onSourceRefreshed();
+    return result;
   });
   options.ipcMain.handle("readerSelection.resolve", (event, request: ReaderSelectionResolveRequest) => {
     const parsed = ReaderSelectionResolveRequestSchema.parse(request);

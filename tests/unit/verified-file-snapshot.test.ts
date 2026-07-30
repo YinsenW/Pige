@@ -3,7 +3,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createVerifiedFileSnapshot } from "../../apps/desktop/src/main/services/verified-file-snapshot";
+import {
+  createObservedFileSnapshot,
+  createVerifiedFileSnapshot
+} from "../../apps/desktop/src/main/services/verified-file-snapshot";
 
 const roots: string[] = [];
 
@@ -67,6 +70,23 @@ describe("verified file snapshot", () => {
       unavailableCode: "snapshot.unavailable",
       integrityCode: "snapshot.changed"
     })).rejects.toMatchObject({ code: "snapshot.changed" });
+  });
+
+  it("observes an unrecorded current revision when containment is the filesystem root", async () => {
+    const root = makeRoot();
+    const sourcePath = path.join(root, "changed.txt");
+    const bytes = Buffer.from("new revision");
+    fs.writeFileSync(sourcePath, bytes);
+
+    const snapshot = await createObservedFileSnapshot({
+      sourcePath,
+      unavailableCode: "snapshot.unavailable",
+      integrityCode: "snapshot.changed",
+      containmentRoot: path.parse(sourcePath).root,
+      maximumSize: 1024
+    });
+    expect(snapshot).toMatchObject({ checksum: checksum(bytes), size: bytes.length });
+    await snapshot.dispose();
   });
 });
 

@@ -19,6 +19,10 @@ export interface ManagedCopyLocatorLease {
   release(): void;
 }
 
+export interface SourceRefreshLocatorLease extends ManagedCopyLocatorLease {
+  readonly location: VerifiedSourceFile["location"];
+}
+
 export interface ManagedCopyLocatorResolver {
   resolve(vaultId: string, vaultPath: string, managedCopy: NonNullable<SourceRecord["managedCopy"]>): ManagedCopyLocatorLease;
 }
@@ -106,6 +110,10 @@ export function readBoundedSourceFileNoFollow(filePath: string, maxBytes: number
 
 export function verifyReadableSourceFile(vaultPath: string, sourceRecord: SourceRecord): VerifiedSourceFile {
   const parsed = SourceRecordSchema.parse(sourceRecord);
+  const refreshInput = resolveRefreshInput(vaultPath, parsed);
+  if (refreshInput) {
+    return verifyFile(refreshInput.absolutePath, refreshInput.size, refreshInput.checksum, refreshInput.location);
+  }
   const ingress = acquireIngressSnapshot(vaultPath, parsed);
   if (ingress) {
     try {
@@ -194,6 +202,10 @@ export async function verifyReadableSourceFileAsync(
   sourceRecord: SourceRecord
 ): Promise<VerifiedSourceFile> {
   const parsed = SourceRecordSchema.parse(sourceRecord);
+  const refreshInput = resolveRefreshInput(vaultPath, parsed);
+  if (refreshInput) {
+    return verifyFileAsync(refreshInput.absolutePath, refreshInput.size, refreshInput.checksum, refreshInput.location);
+  }
   const ingress = await acquireIngressSnapshotAsync(vaultPath, parsed);
   if (ingress) {
     try {
@@ -252,6 +264,18 @@ export async function createVerifiedSourceFileSnapshotAsync(
   sourceRecord: SourceRecord
 ): Promise<VerifiedSourceFileSnapshot> {
   const parsed = SourceRecordSchema.parse(sourceRecord);
+  const refreshInput = resolveRefreshInput(vaultPath, parsed);
+  if (refreshInput) {
+    const snapshot = await createVerifiedFileSnapshot({
+      sourcePath: refreshInput.absolutePath,
+      expectedSize: refreshInput.size,
+      expectedChecksum: refreshInput.checksum,
+      unavailableCode: "source.refresh_input_unavailable",
+      integrityCode: "source.refresh_input_changed",
+      containmentRoot: refreshInput.containmentRoot
+    });
+    return { ...snapshot, location: refreshInput.location };
+  }
   const ingress = await acquireIngressSnapshotAsync(vaultPath, parsed);
   if (ingress) {
     return {
@@ -317,6 +341,20 @@ export function readVerifiedSourceTextPrefix(
     throw new PigeDomainError("source.read_invalid", "The source preview byte limit is invalid.");
   }
   const parsed = SourceRecordSchema.parse(sourceRecord);
+  const refreshInput = resolveRefreshInput(vaultPath, parsed);
+  if (refreshInput) {
+    try {
+      const verified = verifyFile(
+        refreshInput.absolutePath,
+        refreshInput.size,
+        refreshInput.checksum,
+        refreshInput.location
+      );
+      return readTextPrefix(verified.absolutePath, verified.size, maximumBytes);
+    } catch {
+      return undefined;
+    }
+  }
   const ingress = acquireIngressSnapshot(vaultPath, parsed);
   if (ingress) {
     try {
@@ -470,6 +508,66 @@ function resolveManagedCopyLocator(vaultPath: string, sourceRecord: SourceRecord
     throw new PigeDomainError("source.managed_unavailable", "The external managed-copy root resolver is unavailable.");
   }
   return managedCopyLocatorResolver.resolve(readVaultManifest(vaultPath).vault_id, vaultPath, managedCopy);
+}
+
+/** Main-only locator for observing a potentially changed linked source. */
+export function acquireSourceRefreshLocator(
+  vaultPath: string,
+  sourceRecord: SourceRecord
+): SourceRefreshLocatorLease {
+  const parsed = SourceRecordSchema.parse(sourceRecord);
+  if (parsed.storageStrategy === "copy_to_source_library" && parsed.managedCopy?.path) {
+    const locator = resolveManagedCopyLocator(vaultPath, parsed);
+    return { ...locator, location: "managed_copy" };
+  }
+  if (parsed.storageStrategy === "reference_original" && parsed.original?.path) {
+    if (!path.isAbsolute(parsed.original.path)) {
+      throw new PigeDomainError("source.reference_invalid", "The referenced original path is not absolute.");
+    }
+    return {
+      absolutePath: path.resolve(parsed.original.path),
+      containmentRoot: path.parse(path.resolve(parsed.original.path)).root,
+      location: "referenced_original",
+      assertCurrent: () => undefined,
+      release: () => undefined
+    };
+  }
+  throw new PigeDomainError("source.refresh_ineligible", "This source has no refreshable linked file.");
+}
+
+interface RefreshInputLocator {
+  readonly absolutePath: string;
+  readonly containmentRoot: string;
+  readonly checksum: string;
+  readonly size: number;
+  readonly location: VerifiedSourceFile["location"];
+}
+
+function resolveRefreshInput(vaultPath: string, sourceRecord: SourceRecord): RefreshInputLocator | undefined {
+  const value = sourceRecord.metadata.sourceRefreshInput;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const input = value as Record<string, unknown>;
+  if (
+    typeof input.path !== "string" ||
+    typeof input.checksum !== "string" ||
+    !/^sha256:[a-f0-9]{64}$/u.test(input.checksum) ||
+    typeof input.size !== "number" ||
+    !Number.isSafeInteger(input.size) ||
+    input.size < 0 ||
+    (input.location !== "managed_copy" && input.location !== "referenced_original")
+  ) return undefined;
+  const privateRoot = path.resolve(vaultPath, ".pige", "private", "source-refresh-receipts");
+  const absolutePath = resolveVaultRelativePath(vaultPath, input.path);
+  if (!absolutePath.startsWith(`${privateRoot}${path.sep}`)) {
+    throw new PigeDomainError("source.refresh_input_changed", "The private refresh input escaped its owner root.");
+  }
+  return {
+    absolutePath,
+    containmentRoot: privateRoot,
+    checksum: input.checksum,
+    size: input.size,
+    location: input.location
+  };
 }
 
 function readTextPrefix(filePath: string, size: number, maximumBytes: number): VerifiedSourceTextPrefix {

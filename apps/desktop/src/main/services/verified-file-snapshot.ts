@@ -20,8 +20,35 @@ export interface VerifiedFileSnapshotInput {
   readonly containmentRoot?: string;
 }
 
+export interface ObservedFileSnapshotInput {
+  readonly sourcePath: string;
+  readonly unavailableCode: string;
+  readonly integrityCode: string;
+  readonly containmentRoot?: string;
+  readonly maximumSize?: number;
+}
+
 export async function createVerifiedFileSnapshot(
   input: VerifiedFileSnapshotInput
+): Promise<VerifiedFileSnapshot> {
+  return createFileSnapshot(input, input.expectedChecksum, input.expectedSize);
+}
+
+/**
+ * Copies one unknown current file revision into a private immutable snapshot.
+ * The caller learns only the observed checksum/size and must bind those facts
+ * to a later confirmation before publishing them as a new durable revision.
+ */
+export async function createObservedFileSnapshot(
+  input: ObservedFileSnapshotInput
+): Promise<VerifiedFileSnapshot> {
+  return createFileSnapshot(input);
+}
+
+async function createFileSnapshot(
+  input: ObservedFileSnapshotInput,
+  expectedChecksum?: string,
+  expectedSize?: number
 ): Promise<VerifiedFileSnapshot> {
   let source: fs.promises.FileHandle | undefined;
   let destination: fs.promises.FileHandle | undefined;
@@ -39,7 +66,10 @@ export async function createVerifiedFileSnapshot(
 
     const pathStatBefore = await fs.promises.lstat(sourcePath).catch(() => undefined);
     if (!pathStatBefore?.isFile() || pathStatBefore.isSymbolicLink()) throw unavailableError(input);
-    if (pathStatBefore.size !== input.expectedSize) throw integrityError(input);
+    if (expectedSize !== undefined && pathStatBefore.size !== expectedSize) throw integrityError(input);
+    if (input.maximumSize !== undefined && pathStatBefore.size > input.maximumSize) {
+      throw new PigeDomainError(input.integrityCode, "The observed input exceeds the supported refresh size.");
+    }
 
     const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0);
     source = await fs.promises.open(sourcePath, flags).catch(() => undefined);
@@ -49,7 +79,7 @@ export async function createVerifiedFileSnapshot(
       !descriptorStatBefore.isFile() ||
       descriptorStatBefore.dev !== pathStatBefore.dev ||
       descriptorStatBefore.ino !== pathStatBefore.ino ||
-      descriptorStatBefore.size !== input.expectedSize
+      (expectedSize !== undefined && descriptorStatBefore.size !== expectedSize)
     ) throw integrityError(input);
 
     temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pige-verified-input-"));
@@ -103,9 +133,9 @@ export async function createVerifiedFileSnapshot(
     ) throw integrityError(input);
 
     const checksum = `sha256:${hash.digest("hex")}`;
-    if (checksum !== input.expectedChecksum) throw integrityError(input);
+    if (expectedChecksum !== undefined && checksum !== expectedChecksum) throw integrityError(input);
     const destinationStat = await destination.stat();
-    if (!destinationStat.isFile() || destinationStat.size !== input.expectedSize) throw integrityError(input);
+    if (!destinationStat.isFile() || destinationStat.size !== descriptorStatBefore.size) throw integrityError(input);
     await destination.close();
     destination = undefined;
     await source.close();
@@ -117,7 +147,7 @@ export async function createVerifiedFileSnapshot(
     return {
       absolutePath: snapshotPath,
       checksum,
-      size: input.expectedSize,
+      size: descriptorStatBefore.size,
       dispose: async () => {
         await fs.promises.rm(ownedDirectory, { recursive: true, force: true });
       }
@@ -134,16 +164,17 @@ export async function createVerifiedFileSnapshot(
   }
 }
 
-function unavailableError(input: VerifiedFileSnapshotInput): PigeDomainError {
+function unavailableError(input: ObservedFileSnapshotInput): PigeDomainError {
   return new PigeDomainError(input.unavailableCode, "The verified input file is unavailable.");
 }
 
-function integrityError(input: VerifiedFileSnapshotInput): PigeDomainError {
+function integrityError(input: ObservedFileSnapshotInput): PigeDomainError {
   return new PigeDomainError(input.integrityCode, "The verified input file changed while its immutable snapshot was created.");
 }
 
 function isContainedPath(candidate: string, root: string): boolean {
-  return candidate === root || candidate.startsWith(`${root}${path.sep}`);
+  const boundary = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+  return candidate === root || candidate.startsWith(boundary);
 }
 
 function safeExtension(filePath: string): string {

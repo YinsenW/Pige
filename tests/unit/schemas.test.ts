@@ -255,6 +255,8 @@ import {
   SkillRegistrySummarySchema,
   SkillSummarySchema,
   SkillUninstallRequestSchema,
+  SourceRefreshConfirmResultSchema,
+  SourceRefreshPreviewResultSchema,
   SourceRecordSchema,
   TaskExecutionPlanSchema,
   TaskExecutionPlanSummarySchema,
@@ -289,6 +291,45 @@ import {
 } from "@pige/schemas";
 
 describe("schemas", () => {
+  it("keeps source refresh previews renderer-safe and confirmation identity revision-bound", () => {
+    const identity = {
+      apiVersion: 1 as const,
+      requestId: "sourcerefreshreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260731_abcdefgh",
+      currentPageId: "page_20260731_current1234",
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      sourceId: "src_20260731_source1234"
+    };
+    const preview = {
+      ...identity,
+      status: "changed" as const,
+      preview: {
+        previewId: `sourcerefreshpreview_${"b".repeat(32)}`,
+        expectedSourceRevision: `sourcerefreshrev_${"c".repeat(64)}`,
+        displayName: "source.txt",
+        sourceKind: "plain_text_file" as const,
+        previousSize: 10,
+        currentSize: 12,
+        sizeDelta: 2,
+        affectedArtifactCount: 1,
+        refreshesSourcePage: true
+      }
+    };
+    expect(SourceRefreshPreviewResultSchema.parse(preview)).toEqual(preview);
+    expect(() => SourceRefreshPreviewResultSchema.parse({ ...preview, path: "/private/source.txt" })).toThrow();
+    expect(() => SourceRefreshPreviewResultSchema.parse({
+      ...preview,
+      preview: { ...preview.preview, checksum: `sha256:${"d".repeat(64)}` }
+    })).toThrow();
+    expect(SourceRefreshConfirmResultSchema.parse({
+      ...identity,
+      requestId: "sourcerefreshreq_qrstuvwxyzabcdef",
+      previewId: preview.preview.previewId,
+      expectedSourceRevision: preview.preview.expectedSourceRevision,
+      status: "stale"
+    })).toMatchObject({ status: "stale", expectedSourceRevision: preview.preview.expectedSourceRevision });
+  });
+
   it("keeps machine-local diagnostics clear pathless, bounded, and all-or-current", () => {
     const request = {
       apiVersion: 1,

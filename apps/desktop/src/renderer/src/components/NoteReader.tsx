@@ -886,7 +886,7 @@ export function NoteReader(props: {
               currentPageId={summary.pageId}
               sourceIds={summary.sourceIds}
               labels={readerSourceActionLabels(props.t)}
-              sourceLabel={(number) => props.t("note.savedSource").replace("{number}", String(number))}
+              sourceLabel={(number) => props.t("note.savedSource").replace("{number}", String(number))} t={props.t}
               getFocusRoot={() => readerRef.current}
               {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
               {...(props.note.renderContextId ? { renderContextId: props.note.renderContextId } : {})}

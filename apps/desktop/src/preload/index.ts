@@ -165,6 +165,10 @@ import type {
   NoteOpenSourceReferenceResult,
   NoteReconnectOriginalSourceRequest,
   NoteReconnectOriginalSourceResult,
+  SourceRefreshPreviewRequest,
+  SourceRefreshPreviewResult,
+  SourceRefreshConfirmRequest,
+  SourceRefreshConfirmResult,
   NoteRevealSourceRequest,
   NoteRevealSourceResult,
   NoteResolveInlineReferenceRequest,
@@ -560,6 +564,12 @@ import {
   NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
   NoteReconnectOriginalSourceRequestSchema,
   NoteReconnectOriginalSourceResultSchema,
+  SOURCE_REFRESH_PREVIEW_CHANNEL,
+  SOURCE_REFRESH_CONFIRM_CHANNEL,
+  SourceRefreshPreviewRequestSchema,
+  SourceRefreshPreviewResultSchema,
+  SourceRefreshConfirmRequestSchema,
+  SourceRefreshConfirmResultSchema,
   NOTE_REVEAL_SOURCE_CHANNEL,
   NoteRevealSourceRequestSchema,
   NoteRevealSourceResultSchema,
@@ -1887,6 +1897,18 @@ const api: PigeDesktopApi = {
           NoteReconnectOriginalSourceRequestSchema.parse(request)
         )
       )
+  },
+  sourceRefresh: {
+    preview: async (request: SourceRefreshPreviewRequest): Promise<SourceRefreshPreviewResult> =>
+      SourceRefreshPreviewResultSchema.parse(await ipcRenderer.invoke(
+        SOURCE_REFRESH_PREVIEW_CHANNEL,
+        SourceRefreshPreviewRequestSchema.parse(request)
+      )),
+    confirm: async (request: SourceRefreshConfirmRequest): Promise<SourceRefreshConfirmResult> =>
+      SourceRefreshConfirmResultSchema.parse(await ipcRenderer.invoke(
+        SOURCE_REFRESH_CONFIRM_CHANNEL,
+        SourceRefreshConfirmRequestSchema.parse(request)
+      ))
   },
   readerSelection: {
     resolve: async (
