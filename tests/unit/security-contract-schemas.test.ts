@@ -17,6 +17,8 @@ import {
   READER_SELECTION_ASK_QUESTION_MAX_CODE_POINTS,
   ReaderSelectionActionRequestSchema,
   ReaderSelectionActionResultSchema,
+  ReaderSelectionCreateNoteRequestSchema,
+  ReaderSelectionCreateNoteResultSchema,
   ReaderSelectionLinkRequestSchema,
   ReaderSelectionLinkResultSchema,
   ReaderSelectionProposalDecisionRequestSchema,
@@ -672,6 +674,54 @@ describe("security-sensitive shared contracts", () => {
       proposal: { ...proposal, state: "applied", revision: 3 },
       operationId: "op_20260710_abcdef12"
     })).toMatchObject({ status: "applied" });
+  });
+
+  it("keeps Reader create-page actions closed and returns page authority only after review", () => {
+    const selection = {
+      pageId: "page_20260710_abcdef12",
+      pageContentHash: `sha256:${"a".repeat(64)}`,
+      span: { unit: "utf8_bytes" as const, start: 12, endExclusive: 24 },
+      selectedContentHash: `sha256:${"b".repeat(64)}`
+    };
+    for (const [index, action] of (["create_note", "create_claim", "create_question"] as const).entries()) {
+      const request = {
+        apiVersion: 1 as const,
+        requestId: `readerselaction_abcdef123456789${index}`,
+        action,
+        activeVaultId: "vault_20260710_abcdef12",
+        renderContextId: `notectx_${"c".repeat(32)}`,
+        selection,
+        locale: "en" as const,
+        clientTurnId: "turn_20260710_abcdefghijkl"
+      };
+      expect(ReaderSelectionCreateNoteRequestSchema.parse(request)).toEqual(request);
+      expect(ReaderSelectionCreateNoteResultSchema.parse({
+        apiVersion: 1,
+        requestId: request.requestId,
+        status: "review_required",
+        jobId: "job_20260710_abcdef12",
+        conversationEventId: "evt_20260710_abcdef12",
+        conversationId: "conv_20260710_abcd",
+        tailEventId: "evt_20260710_bcdef123",
+        proposal: {
+          proposalId: "proposal_20260710_readerpage",
+          action,
+          state: "ready",
+          revision: 1,
+          lines: [{ kind: "added", text: "Bounded preview" }]
+        }
+      })).toMatchObject({ status: "review_required", proposal: { action } });
+    }
+    expect(() => ReaderSelectionCreateNoteRequestSchema.parse({
+      apiVersion: 1,
+      requestId: "readerselaction_abcdef1234567899",
+      action: "create_concept",
+      activeVaultId: "vault_20260710_abcdef12",
+      renderContextId: `notectx_${"c".repeat(32)}`,
+      selection,
+      locale: "en",
+      clientTurnId: "turn_20260710_abcdefghijkl"
+    })).toThrow();
   });
 
   it("binds current permission actions to an exact versioned actor and hashed input identity", () => {

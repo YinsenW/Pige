@@ -7494,9 +7494,14 @@ export const ReaderSelectionLinkResultSchema = z.discriminatedUnion("status", [
 ]);
 
 export const ReaderSelectionTransformActionSchema = z.enum(["translate", "polish", "expand"]);
+export const ReaderSelectionCreatePageActionSchema = z.enum([
+  "create_note",
+  "create_claim",
+  "create_question"
+]);
 export const ReaderSelectionProposalActionSchema = z.union([
   ReaderSelectionTransformActionSchema,
-  z.literal("create_note")
+  ReaderSelectionCreatePageActionSchema
 ]);
 export const ReaderSelectionProposalIdSchema = ProposalIdSchema;
 export const ReaderSelectionProposalStateSchema = z.enum([
@@ -7584,7 +7589,7 @@ export const ReaderSelectionTransformResultSchema = z.discriminatedUnion("status
 export const ReaderSelectionCreateNoteRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: ReaderSelectionActionRequestIdSchema,
-  action: z.literal("create_note"),
+  action: ReaderSelectionCreatePageActionSchema,
   activeVaultId: VaultIdSchema,
   renderContextId: NoteRenderContextIdSchema,
   selection: ReaderSelectionIdentitySchema,
@@ -7637,11 +7642,11 @@ export const ReaderSelectionCreateNoteResultSchema = z.discriminatedUnion("statu
     ])
   }).strict()
 ]).superRefine((result, context) => {
-  if (result.status === "review_required" && result.proposal.action !== "create_note") {
+  if (result.status === "review_required" && !ReaderSelectionCreatePageActionSchema.safeParse(result.proposal.action).success) {
     context.addIssue({
       code: "custom",
       path: ["proposal", "action"],
-      message: "A Reader create-note review must own a create-note proposal."
+      message: "A Reader create-page review must own a create-page proposal."
     });
   }
 });
@@ -7700,12 +7705,12 @@ export const ReaderSelectionProposalDecisionResultSchema = z.discriminatedUnion(
   if (result.status !== "applied") {
     return;
   }
-  const expectsCreatedPage = result.proposal.action === "create_note";
+  const expectsCreatedPage = ReaderSelectionCreatePageActionSchema.safeParse(result.proposal.action).success;
   if (expectsCreatedPage !== (result.createdPageId !== undefined)) {
     context.addIssue({
       code: "custom",
       path: ["createdPageId"],
-      message: "Only an applied create-note proposal must return its created page identity."
+      message: "Only an applied create-page proposal must return its created page identity."
     });
   }
 });
@@ -9021,6 +9026,7 @@ export type ReaderSelectionLinkResult = z.infer<typeof ReaderSelectionLinkResult
 export type ReaderSelectionIdentity = z.infer<typeof ReaderSelectionIdentitySchema>;
 export type ReaderSelectionReadAction = z.infer<typeof ReaderSelectionReadActionSchema>;
 export type ReaderSelectionTransformAction = z.infer<typeof ReaderSelectionTransformActionSchema>;
+export type ReaderSelectionCreatePageAction = z.infer<typeof ReaderSelectionCreatePageActionSchema>;
 export type ReaderSelectionProposalAction = z.infer<typeof ReaderSelectionProposalActionSchema>;
 export type ReaderSelectionTransformRequest = z.infer<typeof ReaderSelectionTransformRequestSchema>;
 export type ReaderSelectionTransformResult = z.infer<typeof ReaderSelectionTransformResultSchema>;
