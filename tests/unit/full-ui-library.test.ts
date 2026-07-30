@@ -1432,7 +1432,15 @@ describe("full UI Library", () => {
         pagePath: "wiki/generated/reader-actions.md"
       },
       reconnectOriginalSourceIds: [readerNote().summary.sourceIds[0]!],
-      reconnectOriginalSources: [reconnectProof]
+      reconnectOriginalSources: [reconnectProof],
+      sourceMetadata: {
+        items: [
+          { sourceId: readerNote().summary.sourceIds[0]!, status: "current", displayName: "receipt.png",
+            category: "image", storage: "reference_original", extraction: "ocr" },
+          { sourceId: readerNote().summary.sourceIds[1]!, status: "unavailable" },
+        ],
+        remainingCount: 0,
+      }
     };
     await act(async () => {
       root.render(createElement(LibraryPanel, {
@@ -1584,7 +1592,9 @@ describe("full UI Library", () => {
 
     const sourceButtons = container.querySelectorAll<HTMLButtonElement>(".reader-source");
     expect(sourceButtons).toHaveLength(2);
-    expect(container.textContent).toContain("Saved source 1");
+    expect(container.textContent).toContain("receipt.png");
+    expect(container.textContent).toContain("Image · Referenced original · OCR text");
+    expect(container.textContent).toContain("Source details unavailable");
     expect(container.textContent).not.toContain("source_private_0001");
     expect(container.textContent).not.toContain("/Users/example/private.md");
     const revealSource = requireElement(container.querySelector<HTMLButtonElement>(

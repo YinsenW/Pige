@@ -35,8 +35,8 @@ import {
 } from "@pige/schemas";
 import { createMarkdownPageReferenceKeys, findMarkdownPageByIdAtSignature, normalizeMarkdownPageReferenceKey, readMarkdownPageContentAtSignature, readMarkdownPageByRelativePath } from "./markdown-page-index";
 import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
-import { reconnectableOriginalSourceIds, reconnectableOriginalSources } from "./reader-source-reconnect-service";
 import { readReferencedOriginalReconnectCandidate } from "./source-original-reconnect-service";
+import { projectReaderSourceDetails } from "./note-source-metadata";
 import { readCurrentSourceRecordSnapshot } from "./source-file-access";
 
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16, MAX_RENDER_CONTEXT_HREFS = 128, RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
@@ -214,7 +214,7 @@ export class NotesService {
       },
       html: rendered.html,
       byteSize: stable.document.byteSize,
-      ...(ownerId === undefined ? {} : { reconnectOriginalSourceIds: reconnectableOriginalSourceIds(vaultPath, stable.document.summary.sourceIds), reconnectOriginalSources: reconnectableOriginalSources(vaultPath, stable.document.summary.sourceIds) }),
+      ...projectReaderSourceDetails(vaultPath, stable.document.summary.sourceIds, ownerId !== undefined),
       ...(renderContextId ? {
         renderContextId,
         ...(stable.document.summary.pageType === "note"

@@ -79,32 +79,32 @@ function writeSourceRecord(input: {
   readonly sourceId: string;
   readonly pageId?: string;
   readonly pagePath?: string;
+  readonly kind?: "text" | "image_file";
+  readonly displayName?: string;
+  readonly artifacts?: readonly { readonly id: string; readonly kind: "ocr" | "extracted_text"; readonly path: string }[];
 }): void {
-  const dateKey = /^src_(\d{8})_/u.exec(input.sourceId)?.[1];
-  if (!dateKey) throw new Error("Test source ID is invalid.");
-  const recordPath = path.join(
-    input.vaultPath,
-    ".pige",
-    "source-records",
-    dateKey.slice(0, 4),
-    dateKey.slice(4, 6),
-    `${input.sourceId}.json`
-  );
+  const recordPath = sourceRecordPath(input.vaultPath, input.sourceId);
   fs.mkdirSync(path.dirname(recordPath), { recursive: true });
   fs.writeFileSync(recordPath, JSON.stringify({
     schemaVersion: 1,
     id: input.sourceId,
-    kind: "text",
+    kind: input.kind ?? "text",
     storageStrategy: "reference_original",
     semanticOrchestration: "agent_turn",
     ...(input.pageId ? { knowledgePageId: input.pageId } : {}),
     ...(input.pagePath ? { knowledgePagePath: input.pagePath } : {}),
-    original: { uri: `pige-test://${input.sourceId}` },
-    artifacts: [],
+    original: { uri: `pige-test://${input.sourceId}`, ...(input.displayName ? { displayName: input.displayName } : {}) },
+    artifacts: input.artifacts ?? [],
     metadata: {},
     createdAt: "2026-07-09T12:00:00.000Z",
     updatedAt: "2026-07-09T12:00:00.000Z"
   }), "utf8");
+}
+
+function sourceRecordPath(vaultPath: string, sourceId: string): string {
+  const dateKey = /^src_(\d{8})_/u.exec(sourceId)?.[1];
+  if (!dateKey) throw new Error("Test source ID is invalid.");
+  return path.join(vaultPath, ".pige", "source-records", dateKey.slice(0, 4), dateKey.slice(4, 6), `${sourceId}.json`);
 }
 
 const OWNER_ID = "notes_owner_test";
@@ -133,6 +133,88 @@ afterEach(() => {
 });
 
 describe("notes service", () => {
+  it("projects five current SourceRecord summaries while retaining failures and omitting unsafe names", async () => {
+    const { vaultPath, vault } = makeVault();
+    const pageId = "page_20260709_metadata123";
+    const sourceId = "src_20260709_metadata1234";
+    const missingSourceId = "src_20260709_missing1234";
+    const credentialSourceId = "src_20260709_credential12";
+    const mismatchedSourceId = "src_20260709_mismatch123";
+    const anotherMissingSourceId = "src_20260709_missing5678";
+    const overflowSourceId = "src_20260709_overflow123";
+    const secondOverflowSourceId = "src_20260709_overflow456";
+    writePage({
+      vaultPath,
+      fileName: "metadata.md",
+      pageId,
+      title: "Metadata",
+      sourceIds: [
+        sourceId,
+        missingSourceId,
+        credentialSourceId,
+        mismatchedSourceId,
+        anotherMissingSourceId,
+        overflowSourceId,
+        secondOverflowSourceId,
+      ],
+    });
+    writeSourceRecord({
+      vaultPath,
+      sourceId,
+      pageId: "page_20260709_source1234",
+      pagePath: "sources/source.md",
+      kind: "image_file",
+      displayName: "receipt.png",
+      artifacts: [{ id: "art_20260709_metadata1234", kind: "ocr", path: "artifacts/private-ocr.txt" }],
+    });
+    writeSourceRecord({
+      vaultPath,
+      sourceId: credentialSourceId,
+      displayName: "postgres:alice:hunter2@db.internal",
+      artifacts: [{ id: "art_20260709_credential12", kind: "extracted_text", path: "artifacts/private-text.txt" }],
+    });
+    writeSourceRecord({ vaultPath, sourceId: mismatchedSourceId, displayName: "must-not-render.txt" });
+    const mismatchedRecordPath = sourceRecordPath(vaultPath, mismatchedSourceId);
+    const mismatchedRecord = JSON.parse(fs.readFileSync(mismatchedRecordPath, "utf8")) as Record<string, unknown>;
+    fs.writeFileSync(mismatchedRecordPath, JSON.stringify({
+      ...mismatchedRecord,
+      id: "src_20260709_different123",
+    }), "utf8");
+    writeSourceRecord({ vaultPath, sourceId: overflowSourceId, displayName: "overflow-secret.txt" });
+
+    const rendered = await makeNotes(vaultPath, vault).render({ pageId }, OWNER_ID);
+    expect(rendered.sourceMetadata).toEqual({
+      items: [
+        {
+          sourceId,
+          status: "current",
+          displayName: "receipt.png",
+          category: "image",
+          storage: "reference_original",
+          extraction: "ocr",
+        },
+        { sourceId: missingSourceId, status: "unavailable" },
+        {
+          sourceId: credentialSourceId,
+          status: "current",
+          category: "text",
+          storage: "reference_original",
+          extraction: "text",
+        },
+        { sourceId: mismatchedSourceId, status: "unavailable" },
+        { sourceId: anotherMissingSourceId, status: "unavailable" },
+      ],
+      remainingCount: 2,
+    });
+    expect(rendered.reconnectOriginalSourceIds).toEqual(
+      rendered.reconnectOriginalSources?.map((source) => source.sourceId)
+    );
+    expect(rendered.reconnectOriginalSourceIds).not.toContain(mismatchedSourceId);
+    expect(JSON.stringify(rendered.sourceMetadata)).not.toMatch(
+      /private-ocr|private-text|pige-test|checksum|path|hunter2|db\.internal|must-not-render|overflow-secret/iu
+    );
+  });
+
   it("opens and commits an owner-bound editor session with a refreshed canonical render", async () => {
     const { vaultPath, vault } = makeVault();
     const pageId = "page_20260709_editable1234";

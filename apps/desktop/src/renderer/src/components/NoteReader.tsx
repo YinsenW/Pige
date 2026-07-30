@@ -18,7 +18,7 @@ import type {
 } from "@pige/contracts";
 import type { Locale } from "@pige/schemas";
 import { ReaderInlineReferenceSurface, type ReaderInlineReferenceActivation } from "./ReaderInlineReferenceSurface";
-import { NoteReaderSourceActions, ReaderSourceRevealAction, readerSourceActionLabels } from "./ReaderSourceActions";
+import { NoteReaderSourceActions, ReaderSourceRevealAction, readerSourceActionLabels } from "./ReaderSourceActions"; import { ReaderSourceMetadata } from "./ReaderSourceMetadata";
 import { ReaderSelectionAskDialog, createReaderSelectionActionRequestId, createReaderSelectionAgentTurnId, useReaderSelectionAskState } from "./ReaderSelectionAskDialog"; import { ReaderSelectionCreateChooser } from "./ReaderSelectionCreateChooser";
 export type NoteRelatedState = LibraryRelatedResult | "loading" | "unavailable" | null;
 
@@ -852,9 +852,9 @@ export function NoteReader(props: {
           <h2>{props.t("note.sources")}</h2>
           <div className="reader-source-list">
             {summary.sourceIds.slice(0, 5).map((sourceId, index) => {
-              const sourceLabel = props.t("note.savedSource").replace("{number}", String(index + 1));
+              const sourceLabel = props.t("note.savedSource").replace("{number}", String(index + 1)); const projectedMetadata = props.note.sourceMetadata?.items[index]; const sourceMetadata = projectedMetadata?.sourceId === sourceId ? projectedMetadata : undefined;
               return (
-                <div key={sourceId}>
+                <div key={`${sourceId}:${index}`}>
                   <button
                     className="reader-source"
                     type="button"
@@ -866,7 +866,7 @@ export function NoteReader(props: {
                   >
                     <span className="reader-source-icon" aria-hidden="true">SRC</span>
                     <span className="reader-source-copy">
-                      <strong>{sourceLabel}</strong>
+                      <ReaderSourceMetadata fallbackLabel={sourceLabel} metadata={sourceMetadata} t={props.t} />
                       <span
                         role={sourceReferenceState?.sourceId === sourceId ? "status" : undefined}
                         aria-live={sourceReferenceState?.sourceId === sourceId ? "polite" : undefined}
