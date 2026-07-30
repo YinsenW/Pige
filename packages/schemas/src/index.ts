@@ -277,7 +277,7 @@ export const AgentTurnCurrentNoteScopeSchema = z.object({
 export const AgentConversationInputPresentationSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("reader_selection_action"),
-    action: z.enum(["explain", "summarize", "link"])
+    action: z.enum(["explain", "summarize", "ask", "link"])
   }).strict(),
   z.object({
     kind: z.literal("reader_selection_transform"),
@@ -6672,15 +6672,27 @@ export const CurrentNoteAppendProposalDecisionResultSchema = z.discriminatedUnio
 
 export const ReaderSelectionActionRequestIdSchema = z.string()
   .regex(/^readerselaction_[a-z0-9]{8,64}$/);
-export const ReaderSelectionReadActionSchema = z.enum(["explain", "summarize"]);
-export const ReaderSelectionActionRequestSchema = z.object({
+export const ReaderSelectionReadActionSchema = z.enum(["explain", "summarize", "ask"]);
+export const READER_SELECTION_ASK_QUESTION_MAX_CODE_POINTS = AGENT_AUTHORED_TEXT_MAX_CODE_POINTS;
+export const ReaderSelectionAskQuestionSchema = z.string().trim().min(1).refine(
+  (value) => [...value].length <= READER_SELECTION_ASK_QUESTION_MAX_CODE_POINTS,
+  "A Reader selection question exceeds the Unicode code-point limit."
+);
+const ReaderSelectionActionRequestBaseSchema = z.object({
   apiVersion: z.literal(1),
   requestId: ReaderSelectionActionRequestIdSchema,
-  action: ReaderSelectionReadActionSchema,
   selection: ReaderSelectionIdentitySchema,
   locale: LocaleSchema,
   clientTurnId: AgentClientTurnIdSchema
-}).strict();
+});
+export const ReaderSelectionActionRequestSchema = z.discriminatedUnion("action", [
+  ReaderSelectionActionRequestBaseSchema.extend({ action: z.literal("explain") }).strict(),
+  ReaderSelectionActionRequestBaseSchema.extend({ action: z.literal("summarize") }).strict(),
+  ReaderSelectionActionRequestBaseSchema.extend({
+    action: z.literal("ask"),
+    question: ReaderSelectionAskQuestionSchema
+  }).strict()
+]);
 export const ReaderSelectionActionResultSchema = z.discriminatedUnion("status", [
   z.object({
     apiVersion: z.literal(1),

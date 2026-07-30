@@ -488,6 +488,7 @@ describe("desktop shell build contract", () => {
 
   it("keeps Reader selection identity resolution main-owned and schema-validated", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const readerIpcSource = fs.readFileSync(
       path.resolve("apps/desktop/src/main/register-reader-ipc.ts"),
@@ -498,6 +499,13 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly readerSelection: {");
     expect(contractsSource).toContain("readonly resolve: (");
     expect(contractsSource).toContain("readonly submitAction: (");
+    expect(schemasSource).toContain('ReaderSelectionReadActionSchema = z.enum(["explain", "summarize", "ask"])');
+    expect(schemasSource).toContain("question: ReaderSelectionAskQuestionSchema");
+    expect(schemasSource).toContain("READER_SELECTION_ASK_QUESTION_MAX_CODE_POINTS");
+    expect(schemasSource).toContain('status: z.literal("completed")');
+    expect(schemasSource).toContain('status: z.literal("waiting")');
+    expect(schemasSource).toContain('status: z.literal("failed")');
+    expect(schemasSource).toContain('status: z.literal("invalid")');
     expect(contractsSource).toContain("readonly submitLink: (");
     expect(contractsSource).toContain("readonly submitTransform: (");
     expect(contractsSource).toContain("readonly submitCreateNote: (");

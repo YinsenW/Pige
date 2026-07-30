@@ -152,6 +152,9 @@ import {
   PiPackageUpdateRequestSchema,
   PiPackageUpdateResultSchema,
   RequirementIdSchema,
+  READER_SELECTION_ASK_QUESTION_MAX_CODE_POINTS,
+  ReaderSelectionActionRequestSchema,
+  ReaderSelectionActionResultSchema,
   ReaderSelectionCreateNoteRequestSchema,
   ReaderSelectionCreateNoteResultSchema,
   ReaderSelectionProposalDecisionResultSchema,
@@ -469,6 +472,46 @@ describe("schemas", () => {
       ...appliedTransform,
       createdPageId: "page_20260729_creatednote01"
     })).toThrow();
+  });
+
+  it("binds Reader selection Ask to one bounded authored question without changing result states", () => {
+    expect(READER_SELECTION_ASK_QUESTION_MAX_CODE_POINTS).toBe(8_000);
+    const selection = {
+      pageId: "page_20260730_selectionask01",
+      pageContentHash: `sha256:${"a".repeat(64)}`,
+      span: { unit: "utf8_bytes", start: 4, endExclusive: 28 },
+      selectedContentHash: `sha256:${"b".repeat(64)}`
+    } as const;
+    const request = {
+      apiVersion: 1,
+      requestId: "readerselaction_selectionask01",
+      action: "ask",
+      question: "How does this claim relate to the rest of the note?",
+      selection,
+      locale: "en",
+      clientTurnId: "turn_20260730_selectionask01"
+    } as const;
+    expect(ReaderSelectionActionRequestSchema.parse(request)).toEqual(request);
+    expect(() => ReaderSelectionActionRequestSchema.parse({ ...request, question: "   " })).toThrow();
+    expect(() => ReaderSelectionActionRequestSchema.parse({
+      ...request,
+      question: "x".repeat(8_001)
+    })).toThrow();
+    expect(ReaderSelectionActionRequestSchema.parse({
+      ...request,
+      question: "💡".repeat(8_000)
+    })).toMatchObject({ action: "ask" });
+    expect(() => ReaderSelectionActionRequestSchema.parse({
+      ...request,
+      action: "explain"
+    })).toThrow();
+    expect(() => ReaderSelectionActionRequestSchema.parse({
+      ...request,
+      question: undefined
+    })).toThrow();
+
+    expect(ReaderSelectionActionResultSchema.options.map((option) => option.shape.status.value))
+      .toEqual(["completed", "waiting", "failed", "invalid"]);
   });
 
   it("keeps Dataset discovery and Collection row paging bounded, ordered, and body-free", () => {
