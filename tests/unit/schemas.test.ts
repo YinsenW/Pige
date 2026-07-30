@@ -15,6 +15,9 @@ import {
   BackupReconnectDestinationResultSchema,
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
+  RESTORE_CANCEL_CHANNEL,
+  RestoreCancelRequestSchema,
+  RestoreCancelResultSchema,
   ReferencedOriginalReconnectRequestSchema,
   ReferencedOriginalReconnectResultSchema,
   COLLECTION_ADD_FORMULA_COLUMN_CHANNEL,
@@ -3762,6 +3765,31 @@ describe("schemas", () => {
       ...request,
       status: "failed",
       path: "/private/source-root",
+      error: { code: "raw" }
+    })).toThrow();
+  });
+
+  it("keeps in-flight Restore cancellation preview-bound and pathless", () => {
+    expect(RESTORE_CANCEL_CHANNEL).toBe("restore.cancel");
+    const request = {
+      apiVersion: 1,
+      requestId: "restorecancelreq_abcdefgh",
+      previewId: `sha256:${"a".repeat(64)}`,
+      mode: "clone_as_new"
+    } as const;
+    expect(RestoreCancelRequestSchema.parse(request)).toEqual(request);
+    for (const privateField of ["path", "backupPath", "destinationPath", "jobId", "rawError"] as const) {
+      expect(() => RestoreCancelRequestSchema.parse({ ...request, [privateField]: "private" })).toThrow();
+    }
+    for (const status of [
+      "cancel_requested", "cancelled", "too_late", "stale", "not_found", "failed"
+    ] as const) {
+      expect(RestoreCancelResultSchema.parse({ ...request, status })).toEqual({ ...request, status });
+    }
+    expect(() => RestoreCancelResultSchema.parse({
+      ...request,
+      status: "failed",
+      path: "/private/restore",
       error: { code: "raw" }
     })).toThrow();
   });

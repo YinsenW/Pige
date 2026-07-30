@@ -29,6 +29,7 @@ import {
 } from "./backup-service";
 import { JobRecordStore, type JobRecordSnapshot } from "./job-record-store";
 import { JobExecutionCoordinator } from "./job-execution-coordinator";
+import { RestoreCancellationController, type RestoreCancellationStatus } from "./restore-cancellation-controller";
 import type { ApplyingRestorePreview } from "./restore-preview-registry";
 import {
   createRestoreJobError,
@@ -87,6 +88,7 @@ export class RestoreCoordinatorService {
   readonly #rebuildIndexes: (vaultPath: string) => Promise<LocalDatabaseRebuildResult>;
   readonly #jobs: RestoreJobStore;
   readonly #ownsJobStore: boolean;
+  readonly #cancellation: RestoreCancellationController;
   #running = false;
 
   constructor(options: RestoreCoordinatorOptions) {
@@ -97,7 +99,7 @@ export class RestoreCoordinatorService {
     this.#vaults = options.vaultService;
     this.#pauseMutableWork = options.pauseMutableWork;
     this.#rebuildIndexes = options.rebuildIndexes;
-    this.#jobs = options.jobStore ?? new RestoreJobStore(this.#userDataPath);
+    this.#jobs = options.jobStore ?? new RestoreJobStore(this.#userDataPath); this.#cancellation = new RestoreCancellationController(this.#jobs);
     this.#ownsJobStore = options.jobStore === undefined;
   }
 
@@ -163,11 +165,13 @@ export class RestoreCoordinatorService {
       }
       snapshot = this.#jobs.prepareExplicitRetry(snapshot);
       const binding = this.#jobs.binding(snapshot);
-      return await this.#run(snapshot, binding, destinationIdentity);
+      return this.#cancellation.run(command.preview.previewId, command.preview.mode, snapshot.job.id, (signal) => this.#run(snapshot, binding, destinationIdentity, signal));
     } finally {
       this.#running = false;
     }
   }
+
+  cancel(previewId: string, mode: RestoreApplyCommand["preview"]["mode"]): RestoreCancellationStatus { return this.#cancellation.cancel(previewId, mode); }
 
   async recoverInterrupted(): Promise<{ readonly recovered: number; readonly failed: number }> {
     if (this.#running) return { recovered: 0, failed: 0 };
@@ -209,11 +213,8 @@ export class RestoreCoordinatorService {
     }
   }
 
-  async #run(
-    initialSnapshot: JobRecordSnapshot,
-    binding: RestoreJobBinding,
-    destinationIdentity: RestoreDestinationIdentity
-  ): Promise<RestoreApplyResult> {
+  async #run(initialSnapshot: JobRecordSnapshot, binding: RestoreJobBinding,
+    destinationIdentity: RestoreDestinationIdentity, signal?: AbortSignal): Promise<RestoreApplyResult> {
     let snapshot = initialSnapshot;
     let transition: VaultRestoreTransition | undefined;
     let transitionCommitted = false;
@@ -263,6 +264,7 @@ export class RestoreCoordinatorService {
           resultVaultId: binding.resultVaultId,
           destinationIdentity,
           pathSafety: this.#pathSafety,
+          ...(signal ? { signal } : {}),
           onPhase: async (event: RestoreCoreCheckpointEvent) => {
             snapshot = this.#recordCoreCheckpoint(snapshot, binding, event);
           }
@@ -339,6 +341,7 @@ export class RestoreCoordinatorService {
           // A changed machine binding is not safe to overwrite during failure cleanup.
         }
       }
+      if (this.#cancellation.settleIfRequested(snapshot.job.id)) return { status: "canceled" };
       try {
         this.#jobs.markFailed(snapshot, {
           error: createRestoreJobError(caught instanceof PigeDomainError ? caught.code : undefined, isRetryableRestoreFailure(caught)),

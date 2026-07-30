@@ -23,6 +23,49 @@ const destinationRequest = {
 } as const;
 
 describe("registerBackupRestoreIpc", () => {
+  it("cancels only the exact sender-owned in-flight Restore preview without renderer path authority", async () => {
+    const handlers = new Map<string, (...args: any[]) => unknown>();
+    let resolveApply: ((value: { readonly status: "canceled" }) => void) | undefined;
+    const apply = vi.fn(() => new Promise<{ readonly status: "canceled" }>((resolve) => { resolveApply = resolve; }));
+    const cancel = vi.fn(() => "cancel_requested" as const);
+    let picker = 0;
+    register(handlers, {
+      reconnectDependency: vi.fn(),
+      getBackupService: () => ({
+        inspectRestoreArchive: async () => restoreArchivePreview,
+        status: () => ({})
+      }),
+      getRestoreCoordinator: () => ({ apply, cancel }),
+      showOpenDialog: async () => ({
+        canceled: false,
+        filePaths: [picker++ === 0 ? "/private/main-only-backup.zip" : "/private/main-only-destination"]
+      })
+    });
+    const owner = sender();
+    const preview = await handlers.get("restore.preview")?.({ sender: owner }) as { readonly previewId: string };
+    const applyPromise = handlers.get("restore.apply")?.(
+      { sender: owner },
+      { previewId: preview.previewId, mode: "clone_as_new" }
+    ) as Promise<unknown>;
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    const cancelRequest = {
+      apiVersion: 1,
+      requestId: "restorecancelreq_abcdefgh",
+      previewId: preview.previewId,
+      mode: "clone_as_new"
+    } as const;
+
+    expect(handlers.get("restore.cancel")?.({ sender: sender(8) }, cancelRequest))
+      .toEqual({ ...cancelRequest, status: "stale" });
+    expect(handlers.get("restore.cancel")?.({ sender: owner }, cancelRequest))
+      .toEqual({ ...cancelRequest, status: "cancel_requested" });
+    expect(cancel).toHaveBeenCalledWith(preview.previewId, "clone_as_new");
+    expect(JSON.stringify(cancel.mock.calls)).not.toMatch(/backupPath|destinationPath|jobId/u);
+
+    resolveApply?.({ status: "canceled" });
+    await expect(applyPromise).resolves.toEqual({ status: "canceled" });
+  });
+
   it("returns only the strict resolved identity after Main-owned repair and same-Job resume", async () => {
     const handlers = new Map<string, (...args: any[]) => unknown>();
     const reconnectDependency = vi.fn(() => "resolved" as const);
@@ -155,8 +198,8 @@ const destinationCandidate = {
   dependencyId: "backup_destination:0123456789abcdef"
 } as const;
 
-function sender() {
-  return { id: 7, once: vi.fn(), isDestroyed: () => false };
+function sender(id = 7) {
+  return { id, once: vi.fn(), isDestroyed: () => false };
 }
 
 function register(
@@ -169,6 +212,8 @@ function register(
     readonly inspectIncompleteCandidate?: () => unknown;
     readonly showOpenDialog: () => Promise<{ readonly canceled: boolean; readonly filePaths: readonly string[] }>;
     readonly showMessageBox?: () => Promise<{ readonly response: number }>;
+    readonly getBackupService?: () => unknown;
+    readonly getRestoreCoordinator?: () => unknown;
   }
 ): void {
   const candidate = {
@@ -188,7 +233,7 @@ function register(
     getLastBackupAt: () => undefined,
     getLocale: () => "en",
     getDocumentsPath: () => "/documents",
-    getBackupService: () => ({ status: () => ({}) }) as any,
+    getBackupService: (overrides.getBackupService ?? (() => ({ status: () => ({}) }))) as any,
     getBackupCoordinator: () => ({
       inspectReconnectCandidate: () => ({ status: "ready", candidate }),
       reconnectDependency: overrides.reconnectDependency,
@@ -203,7 +248,38 @@ function register(
       })),
       continueIncomplete: overrides.continueIncomplete ?? vi.fn(async () => "continued" as const)
     }) as any,
-    getRestoreCoordinator: () => ({}) as any,
+    getRestoreCoordinator: (overrides.getRestoreCoordinator ?? (() => ({}))) as any,
     resumeBackgroundJobs: vi.fn()
   });
 }
+
+const restoreArchivePreview = {
+  backupPath: "/private/main-only-backup.zip",
+  archivePreviewToken: `sha256:${"a".repeat(64)}`,
+  archiveDigest: `sha256:${"b".repeat(64)}`,
+  backupId: "backup_20260731_ipccancel01",
+  backupIdSource: "manifest" as const,
+  sourceVaultId: "vault_20260731_ipccancel01",
+  invalidFileCount: 0,
+  warnings: [],
+  manifest: {
+    schemaVersion: 1,
+    backupId: "backup_20260731_ipccancel01",
+    sourceVaultId: "vault_20260731_ipccancel01",
+    createdAt: "2026-07-31T00:00:00.000Z",
+    appVersion: "0.1.0-test",
+    vaultSchemaVersion: 2,
+    includes: {
+      markdownKnowledge: true,
+      sourceRecords: true,
+      managedSourceCopies: true,
+      conversations: true,
+      vaultMemory: true,
+      trash: true,
+      rebuildableDatabaseCache: false,
+      secrets: false
+    },
+    counts: { notes: 0, sources: 0, managedSourceCopies: 0, conversations: 0, memories: 0, trashEntries: 0 },
+    files: []
+  }
+};

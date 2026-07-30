@@ -1082,6 +1082,9 @@ describe("desktop shell build contract", () => {
     expect(preloadRestoreApi).toContain("mode: request.mode");
     expect(preloadRestoreApi).toContain("projectRestorePreviewResult(result)");
     expect(preloadRestoreApi).toContain("projectRestoreApplyResult(result)");
+    expect(preloadRestoreApi).toContain("RestoreCancelRequestSchema.parse(request)");
+    expect(preloadRestoreApi).toContain("ipcRenderer.invoke(RESTORE_CANCEL_CHANNEL, parsedRequest)");
+    expect(preloadRestoreApi).toContain("Invalid Restore cancellation response identity.");
     expect(preloadRestoreApi).not.toContain("backupPath");
     expect(preloadRestoreApi).not.toContain("previewToken");
     expect(applyProjector).toContain('return { status: "restored", jobId: result.jobId };');
@@ -1101,6 +1104,9 @@ describe("desktop shell build contract", () => {
     expect(mainSource).not.toContain('ipcMain.handle("restore.apply"');
     expect(backupRestoreIpcSource).toContain('options.ipcMain.handle("restore.preview"');
     expect(backupRestoreIpcSource).toContain('options.ipcMain.handle("restore.apply"');
+    expect(backupRestoreIpcSource).toContain("options.ipcMain.handle(RESTORE_CANCEL_CHANNEL");
+    expect(backupRestoreIpcSource).toContain("previews.isApplying(event.sender.id, parsed)");
+    expect(backupRestoreIpcSource).toContain("options.getRestoreCoordinator().cancel(parsed.previewId, parsed.mode)");
     expect(backupRestoreIpcSource).toContain("options.getRestoreCoordinator().apply({");
     expect(mainSource).toContain("getRestoreCoordinatorService().recoverInterrupted()");
     expect(backupRestoreIpcSource).toContain("RESTORE_NATIVE_COPY[options.getLocale()]");

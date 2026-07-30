@@ -25,6 +25,8 @@ import type {
   BackupReconnectDestinationResult,
   BackupReconnectDependencyRequest,
   BackupReconnectDependencyResult,
+  RestoreCancelRequest,
+  RestoreCancelResult,
   BoundaryVerification,
   CaptureFileRejection,
   CaptureFileRejectionReason,
@@ -365,6 +367,8 @@ export type {
   BackupReconnectDestinationResult,
   BackupReconnectDependencyRequest,
   BackupReconnectDependencyResult,
+  RestoreCancelRequest,
+  RestoreCancelResult,
   ReferencedOriginalReconnectRequest,
   ReferencedOriginalReconnectResult,
   CaptureFileRejection,
@@ -2252,6 +2256,7 @@ export interface PigeDesktopApi {
     ) => Promise<BackupContinueIncompleteResult>;
     readonly previewRestore: () => Promise<RestorePreviewResult>;
     readonly applyRestore: (request: RestoreApplyRequest) => Promise<RestoreApplyResult>;
+    readonly cancelRestore: (request: RestoreCancelRequest) => Promise<RestoreCancelResult>;
   };
   readonly system: {
     readonly toolchainHealth: () => Promise<ToolchainHealth>;

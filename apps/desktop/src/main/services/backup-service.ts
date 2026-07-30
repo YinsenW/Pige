@@ -272,6 +272,7 @@ export interface RestoreCoreApplyInput {
   readonly resultVaultId: string;
   readonly destinationIdentity: RestoreDestinationIdentity;
   readonly pathSafety: VaultPathSafetyOptions;
+  readonly signal?: AbortSignal;
   readonly onPhase?: RestoreCorePhaseReporter;
 }
 
@@ -864,11 +865,14 @@ export class BackupRestoreService {
     const binding = createRestoreApplyBinding(input, destinationCoordinates);
     const archive = openRestoreArchive(backupPath);
     let staging: RestoreStagingHandle | undefined;
+    let reservation: RestorePublicationReservationHandle | undefined;
+    let destinationCommitted = false;
     try {
+      throwIfBackupAborted(input.signal);
       assertRestorePreviewMatches(backupPath, archive.initialSnapshot, input.archivePreviewToken);
       assertArchiveDigest(archive.initialSnapshot, input.archiveDigest);
       const sourceManifest = await readBackupManifest(archive.descriptor);
-      const validation = await validateBackupZip(archive.descriptor, sourceManifest);
+      const validation = await validateBackupZip(archive.descriptor, sourceManifest, input.signal);
       await readAndAssertArchivedVaultManifest(archive.descriptor, sourceManifest);
       await readAndAssertArchivedExternalManagedCopies(archive.descriptor, sourceManifest);
       const snapshotAfterValidation = snapshotRestoreArchive(archive);
@@ -893,20 +897,22 @@ export class BackupRestoreService {
         countUnresolvedExternalDependencies(sourceManifest)
       );
       await reportRestoreCorePhase(input.onPhase, checkpointContext, "manifest_validated");
+      throwIfBackupAborted(input.signal);
       assertCurrentRestoreDestinationCoordinates(destinationCoordinates, input.pathSafety);
-      const reservedPublication = reserveRestorePublication(
+      reservation = reserveRestorePublication(
         destinationCoordinates,
         input.pathSafety,
         binding
       );
       await reportRestoreCorePhase(input.onPhase, checkpointContext, "destination_reserved");
+      throwIfBackupAborted(input.signal);
       staging = createRestoreStagingDirectory(
         destinationCoordinates.parentPath,
         destinationCoordinates,
         input.pathSafety,
         binding
       );
-      await extractBackupVault(archive.descriptor, sourceManifest, staging);
+      await extractBackupVault(archive.descriptor, sourceManifest, staging, input.signal);
       const snapshotAfterExtraction = snapshotRestoreArchive(archive);
       assertSameRestoreArchive(
         snapshotAfterValidation,
@@ -922,6 +928,7 @@ export class BackupRestoreService {
       }
       validateExtractedRestore(staging.path, sourceManifest, [RESTORE_STAGING_MARKER]);
       await reportRestoreCorePhase(input.onPhase, checkpointContext, "archive_extracted");
+      throwIfBackupAborted(input.signal);
 
       materializeExternalManagedCopies(staging, sourceManifest);
       const materializedManifest = materializeRestoreIdentity(
@@ -932,7 +939,9 @@ export class BackupRestoreService {
         input.resultVaultId
       );
       await reportRestoreCorePhase(input.onPhase, checkpointContext, "durable_domains_migrated");
+      throwIfBackupAborted(input.signal);
       await reportRestoreCorePhase(input.onPhase, checkpointContext, "external_dependencies_reconciled");
+      throwIfBackupAborted(input.signal);
       for (const rebuildableRoot of PIGE_REBUILDABLE_ROOTS) {
         ensureRestoreStagingDirectory(path.join(staging.path, rebuildableRoot), staging);
       }
@@ -941,12 +950,14 @@ export class BackupRestoreService {
       }
       validateExtractedRestore(staging.path, materializedManifest, [RESTORE_STAGING_MARKER]);
       await reportRestoreCorePhase(input.onPhase, checkpointContext, "vault_identity_finalized");
+      throwIfBackupAborted(input.signal);
 
       const publication = acquireRestorePublication(
-        reservedPublication,
+        reservation,
         materializedManifest
       );
       publishValidatedRestore(staging.path, materializedManifest, publication);
+      destinationCommitted = true;
       await reportRestoreCorePhase(input.onPhase, checkpointContext, "destination_committed");
       releaseRestorePublication(publication);
 
@@ -965,6 +976,9 @@ export class BackupRestoreService {
     } finally {
       fs.closeSync(archive.descriptor);
       if (staging) removeOwnedRestoreStagingDirectory(staging);
+      if (input.signal?.aborted && reservation && !destinationCommitted) {
+        releaseCancelledRestoreReservation(reservation);
+      }
     }
   }
 
@@ -2299,12 +2313,14 @@ function publishAdoptedBackupStaging(
 async function extractBackupVault(
   source: string | number,
   manifest: BackupManifest,
-  staging: RestoreStagingHandle
+  staging: RestoreStagingHandle,
+  signal?: AbortSignal
 ): Promise<void> {
   const manifestFiles = new Set(manifest.files.map((file) => file.path));
   const zipFile = await openBackupZip(source);
   try {
     for await (const entry of zipFile.eachEntry()) {
+      throwIfBackupAborted(signal);
       assertSafeZipEntryName(entry.fileName);
       if (entry.fileName === BACKUP_MANIFEST_FILE || entry.fileName.endsWith("/")) continue;
       const relativePath = toVaultRelativeEntryPath(entry.fileName);
@@ -2315,7 +2331,10 @@ async function extractBackupVault(
       ensureRestoreStagingDirectory(path.dirname(targetPath), staging);
       assertRestoreStagingIdentity(staging);
       try {
-        await pipeline(await zipFile.openReadStreamPromise(entry), fs.createWriteStream(targetPath, { flags: "wx" }));
+        const input = await zipFile.openReadStreamPromise(entry);
+        const output = fs.createWriteStream(targetPath, { flags: "wx" });
+        if (signal) await pipeline(input, output, { signal });
+        else await pipeline(input, output);
       } catch (caught) {
         assertRestoreStagingIdentity(staging);
         throw caught;
@@ -3503,6 +3522,15 @@ function releaseRestorePublication(publication: RestorePublicationHandle): void 
   removeOwnedRestoreFile(publication.sidecarPath, publication.sidecarIdentity, reservationBody);
   fsyncDirectoryBestEffort(publication.destinationPath);
   fsyncDirectoryBestEffort(path.dirname(publication.destinationPath));
+}
+
+function releaseCancelledRestoreReservation(reservation: RestorePublicationReservationHandle): void {
+  removeOwnedRestoreFile(
+    reservation.sidecarPath,
+    reservation.sidecarIdentity,
+    serializeRestoreReservation(reservation.reservation)
+  );
+  fsyncDirectoryBestEffort(path.dirname(reservation.sidecarPath));
 }
 
 function requireRestoreManifestFile(manifest: BackupManifest, filePath: string): BackupManifestFile {

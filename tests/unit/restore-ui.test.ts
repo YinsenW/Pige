@@ -20,6 +20,8 @@ import type {
   RecentVaultSummary,
   RestoreApplyRequest,
   RestoreApplyResult,
+  RestoreCancelRequest,
+  RestoreCancelResult,
   RestorePreviewResult,
   VaultActionResult,
   VaultMigrationApplyRequest,
@@ -489,7 +491,80 @@ describe("Restore identity UI", () => {
     dom.window.close();
   });
 
-  it("shows explicit replace ownership in Vault settings and restores focus after cancellation", async () => {
+  it("stops an in-flight Restore once and requires a new preview before retry", async () => {
+    const dom = createDom();
+    const harness = createHarness(blockedOnboarding(), cloneOnlyPreview());
+    let resolveApply: ((result: RestoreApplyResult) => void) | undefined;
+    harness.applyRestore = (request) => {
+      harness.applyRequests.push(request);
+      return new Promise((resolve) => { resolveApply = resolve; });
+    };
+    harness.cancelRestore = async (request) => {
+      harness.cancelRestoreRequests.push(request);
+      return { ...request, status: "cancel_requested" };
+    };
+    const { container, root } = await mountApp(dom, makePigeApi(harness));
+
+    await advanceToVault(dom, container);
+    await click(dom, button(container, "Restore Backup"));
+    await waitFor(dom, () => container.textContent?.includes("Restore preview") ?? false);
+    await click(dom, button(container, "Restore as New Vault"));
+    const cancel = button(container, "Cancel");
+    expect(cancel.disabled).toBe(false);
+
+    await act(async () => {
+      cancel.click();
+      cancel.click();
+      await settle(dom);
+    });
+    expect(harness.cancelRestoreRequests).toHaveLength(1);
+    expect(harness.cancelRestoreRequests[0]).toMatchObject({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^restorecancelreq_[a-z0-9]{8,64}$/u),
+      previewId: "restore-preview-clone",
+      mode: "clone_as_new"
+    });
+    expect(JSON.stringify(harness.cancelRestoreRequests[0])).not.toMatch(/path|jobId|rawError/u);
+    expect(container.textContent).toContain("Stopping restore safely...");
+
+    await act(async () => { resolveApply?.({ status: "canceled" }); await settle(dom); });
+    await waitFor(dom, () => dom.window.document.activeElement === button(container, "Restore Backup"));
+    expect(container.textContent).not.toContain("Restore preview");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("disables an invalid repeated cancel after Restore publication is already committed", async () => {
+    const dom = createDom();
+    const harness = createHarness(blockedOnboarding(), cloneOnlyPreview());
+    let resolveApply: ((result: RestoreApplyResult) => void) | undefined;
+    harness.applyRestore = (request) => {
+      harness.applyRequests.push(request);
+      return new Promise((resolve) => { resolveApply = resolve; });
+    };
+    harness.cancelRestore = async (request) => {
+      harness.cancelRestoreRequests.push(request);
+      return { ...request, status: "too_late" };
+    };
+    const { container, root } = await mountApp(dom, makePigeApi(harness));
+
+    await advanceToVault(dom, container);
+    await click(dom, button(container, "Restore Backup"));
+    await waitFor(dom, () => container.textContent?.includes("Restore preview") ?? false);
+    await click(dom, button(container, "Restore as New Vault"));
+    await click(dom, button(container, "Cancel"));
+
+    await waitFor(dom, () => container.textContent?.includes("already committed") ?? false);
+    expect(button(container, "Cancel").disabled).toBe(true);
+    expect(harness.cancelRestoreRequests).toHaveLength(1);
+
+    await act(async () => { resolveApply?.({ status: "canceled" }); await settle(dom); });
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("shows explicit replace ownership in Vault settings and requires a new preview after cancellation", async () => {
     const dom = createDom();
     const harness = createHarness(readyOnboarding(), bothModesPreview());
     harness.applyRestore = async (request) => {
@@ -527,10 +602,6 @@ describe("Restore identity UI", () => {
       previewId: "restore-preview-both",
       mode: "replace_existing"
     }]);
-    await waitFor(dom, () => dom.window.document.activeElement === apply);
-    expect(container.textContent).toContain("Restore preview");
-
-    await click(dom, button(container, "← Back to Vault & Note Storage"));
     await waitFor(dom, () => container.querySelector(".settings-vault-page") !== null);
     await waitFor(dom, () => dom.window.document.activeElement === button(container, "Restore Backup"));
     expect(container.querySelector(".settings-restore-page")).toBeNull();
@@ -1153,6 +1224,7 @@ interface RestoreHarness {
   readonly migrationRequests: VaultMigrationApplyRequest[];
   readonly preview: RestorePreviewResult;
   readonly applyRequests: RestoreApplyRequest[];
+  readonly cancelRestoreRequests: RestoreCancelRequest[];
   jobs: JobSummary[];
   readonly retryJobIds: string[];
   readonly cancelJobIds: string[];
@@ -1174,6 +1246,7 @@ interface RestoreHarness {
   lastBackupAt?: string;
   localDatabaseStatus: LocalDatabaseStatus | null;
   applyRestore: (request: RestoreApplyRequest) => Promise<RestoreApplyResult>;
+  cancelRestore: (request: RestoreCancelRequest) => Promise<RestoreCancelResult>;
   openRecent: (request: OpenRecentVaultRequest) => Promise<VaultActionResult>;
   applyMigration: (request: VaultMigrationApplyRequest) => Promise<VaultMigrationApplyResult>;
   revealStorageRoot: (target: VaultRevealTarget) => Promise<VaultRevealResult>;
@@ -1191,6 +1264,7 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
     migrationRequests: [],
     preview,
     applyRequests: [],
+    cancelRestoreRequests: [],
     jobs: [],
     retryJobIds: [],
     cancelJobIds: [],
@@ -1219,6 +1293,10 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
     applyRestore: async (request) => {
       harness.applyRequests.push(request);
       return { status: "canceled" };
+    },
+    cancelRestore: async (request) => {
+      harness.cancelRestoreRequests.push(request);
+      return { ...request, status: "cancel_requested" };
     },
     openRecent: async (request) => {
       harness.openRecentRequests.push(request);
@@ -1353,6 +1431,7 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
       }),
       previewRestore: async () => harness.preview,
       applyRestore: (request: RestoreApplyRequest) => harness.applyRestore(request),
+      cancelRestore: (request: RestoreCancelRequest) => harness.cancelRestore(request),
       create: async () => ({ status: "canceled" }),
       reconnectDependency: (request: { readonly requestId: string; readonly activeVaultId: string; readonly waitingJobId: string }) =>
         harness.reconnectDependency(request),

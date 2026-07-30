@@ -194,6 +194,8 @@ import type {
   RetrievalSearchResult,
   RestoreApplyRequest,
   RestoreApplyResult,
+  RestoreCancelRequest,
+  RestoreCancelResult,
   RestoreMode,
   RestorePreviewWarning,
   RestorePreviewResult,
@@ -328,6 +330,9 @@ import {
   BACKUP_RECONNECT_DESTINATION_CHANNEL,
   BackupReconnectDestinationRequestSchema,
   BackupReconnectDestinationResultSchema,
+  RESTORE_CANCEL_CHANNEL,
+  RestoreCancelRequestSchema,
+  RestoreCancelResultSchema,
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
   JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
@@ -2177,6 +2182,18 @@ const api: PigeDesktopApi = {
         mode: request.mode
       }) as RestoreApplyResult;
       return projectRestoreApplyResult(result);
+    },
+    cancelRestore: async (request: RestoreCancelRequest): Promise<RestoreCancelResult> => {
+      const parsedRequest = RestoreCancelRequestSchema.parse(request);
+      const result = RestoreCancelResultSchema.parse(
+        await ipcRenderer.invoke(RESTORE_CANCEL_CHANNEL, parsedRequest)
+      );
+      if (
+        result.requestId !== parsedRequest.requestId ||
+        result.previewId !== parsedRequest.previewId ||
+        result.mode !== parsedRequest.mode
+      ) throw new Error("Invalid Restore cancellation response identity.");
+      return result;
     }
   },
   system: {
