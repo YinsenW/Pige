@@ -3946,6 +3946,37 @@ References:
 - `docs/SYNC_CONFLICT_AND_MIGRATION.md`
 - `docs/I18N_DESIGN.md`
 
+### D-20260730-Deterministic-Successful-Job-Compaction
+
+Status: Accepted
+Date: 2026-07-30
+
+Decision:
+
+After startup recovery, Pige may compact only settled `completed` and
+`completed_with_warnings` Job execution detail older than 90 days. It first writes one
+deterministic `compact_job` Operation and then compare-and-swaps the Job. On restart, an
+exact existing Operation supplies the authoritative compaction time and target checksum.
+
+Rationale:
+
+Retention must control Job-record growth without weakening attribution, decisions,
+history, recovery identity, or durable user evidence.
+
+Consequences:
+
+- Event, source, page, proposal, Operation, permission, policy, summary, warning, timing,
+  progress, and privacy references survive; only settled execution detail is removed.
+- Recent, unresolved, failed, drifting, or incompletely audited Jobs fail closed.
+- Compaction never deletes conversation events, source records, pages, proposals,
+  Operations, permission decisions, or user files.
+
+References:
+
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

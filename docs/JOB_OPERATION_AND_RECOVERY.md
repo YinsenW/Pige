@@ -688,6 +688,22 @@ Compacted job record keeps:
 - Performance metrics summary.
 - Link to related conversation event.
 
+The v0.1 owner runs after startup recovery and considers only `completed` or
+`completed_with_warnings` Jobs whose `finishedAt` is beyond the 90-day retention
+window. Every child Job, proposal, and permission request must already have a settled
+durable counterpart. The compactor writes one deterministic `compact_job` Operation
+before a compare-and-swap Job transition. If startup finds that Operation after an
+interruption, its original `createdAt` is authoritative for the compacted timestamp,
+retention cutoff, and resulting checksum, so restart adopts the same effect rather than
+creating another Operation.
+
+Compaction retains event, source, page, child-Job, proposal, Operation, permission
+decision, policy, summary, warning, timing, progress, and privacy references. It removes
+only stage, checkpoint, retry, cancellation, and waiting-dependency execution detail.
+Recent, failed, unresolved, externally changed, or incompletely audited Jobs remain
+unchanged. This Job-detail retention does not delete or rewrite conversation events,
+source records, pages, proposals, permission decisions, Operations, or user files.
+
 ## 15. UI Surfaces
 
 Home:

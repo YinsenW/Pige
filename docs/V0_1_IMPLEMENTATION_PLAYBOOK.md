@@ -605,7 +605,9 @@ Build:
 - [B7.06 -> E7.02] Memory inspection, edit, disable, delete, export, and reset.
 - [B7.07 -> E7.05] Secret scanning before memory persistence.
 - [B7.08 -> E7.03] Bounded vault history reopens exact timelines; packaged proof remains.
-- [B7.09 -> E7.04] Conversation-retention compaction for successful job detail.
+- [B7.09 -> E7.04] Implemented deterministic 90-day compaction for settled successful
+  Job detail with exact reference retention, `compact_job` attribution, CAS drift
+  rejection, and Operation-first restart adoption; conversation events remain intact.
 - [B7.10 -> E7.06] Managed Collections: stable-ID CAS cell/row/field/view, formula create/update and
   one same-Dataset row relation use distinct Activity/Undo. Nested formula, relation breadth,
   broader schema, scale/platform and exception proof stay open.

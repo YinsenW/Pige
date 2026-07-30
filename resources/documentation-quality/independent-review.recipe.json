@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-29T00:00:00Z",
+  "reviewedAt": "2026-07-30T00:00:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public support/security/privacy governance and localized release states.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states and deterministic successful-Job compaction.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "fb1365718c2ed10b7063d16dab049072eca584b666e89cd9917f118d754c64c2"
+    "reviewedSha256": "05582825de4a02ffee541998f63c2d02e66caa361917ab3b7d7bb08b7c3c806c"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
-    "task": "Vault v2, Alpha convergence, public governance and localized release states",
+    "task": "Vault v2, Alpha convergence, public governance, localized release states and Job compaction",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -71,24 +71,24 @@
   }],
   "dimensions": [
     {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Migration preview is pathless, warning-complete and focus-owned."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"API, migration, language, release, public governance and localized-state owners share exact truth."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"API, migration, language, release, public governance, localized-state and Job-compaction owners share exact truth."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits; only E7.04 advances for compaction."},
     {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Public governance and localized error/empty-state recovery boundaries are executable."},
     {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owner docs and compact trace projections absorb the delta."}
   ],
   "verification": [
     {"command":"npm run verify:traceability","status":"passed","evidence":"The 102-item ledger and phase states are claim-bound."},
-    {"command":"npm run verify:decisions","status":"passed","evidence":"Vault v2 and macOS Phase 1 decisions are synchronized."},
+    {"command":"npm run verify:decisions","status":"passed","evidence":"Vault v2, macOS Phase 1 and deterministic successful-Job compaction decisions are synchronized."},
     {"command":"npm run verify:public-issue-templates && npm run verify:public-privacy-surface && npm run verify:localized-error-empty-states && npm run verify:independent-documentation-review","status":"passed","evidence":"Reviewed public governance and localized release-state surfaces are fail-closed."}
   ],
   "coordination": {
-    "taskId": "vault-v2-alpha-convergence-20260729",
-    "taskTitle": "Vault v2 migration and Alpha convergence",
+    "taskId": "job-compaction-bind-20260730",
+    "taskTitle": "Deterministic successful-Job compaction bind",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
     "compatibility": "Windows code/hooks remain; future/invalid vaults never activate a writer.",
-    "acknowledgement": "Planning binds PR A without claiming remaining packaged exits."
+    "acknowledgement": "Planning verifies B7.09/E7.04 without promoting packaged history restart or unrelated exits."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
