@@ -2001,5 +2001,14 @@
   "vaultMigration.domain.ocr_artifacts": "Métadonnées OCR",
   "vaultMigration.domain.conversation_events": "Conversations",
   "vaultMigration.domain.memory": "Mémoire",
-  "vaultMigration.domain.rebuildable_chunks": "Index locaux"
+  "vaultMigration.domain.rebuildable_chunks": "Index locaux",
+  "topic.rename.action": "Renommer le sujet",
+  "topic.rename.title": "Renommer le sujet",
+  "topic.rename.description": "Modifiez le titre de ce sujet. Les liens existants conservent son identité stable.",
+  "topic.rename.field": "Titre du sujet",
+  "topic.rename.cancel": "Annuler",
+  "topic.rename.confirm": "Renommer",
+  "topic.rename.saving": "Renommage…",
+  "topic.rename.stale": "Ce sujet a changé. Votre titre est conservé ; vérifiez-le et réessayez.",
+  "topic.rename.failed": "Pige n’a pas pu renommer ce sujet. Rien n’a été modifié."
 }

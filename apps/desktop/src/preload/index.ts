@@ -100,6 +100,8 @@ import type {
   LibraryTagsResult,
   LibraryRenameTagRequest,
   LibraryRenameTagResult,
+  LibraryRenameTopicRequest,
+  LibraryRenameTopicResult,
   LibraryMergeTagRequest,
   LibraryMergeTagResult,
   LibraryRemoveTagRequest,
@@ -467,6 +469,9 @@ import {
   LibraryTagsResultSchema,
   LibraryRenameTagRequestSchema,
   LibraryRenameTagResultSchema,
+  LIBRARY_RENAME_TOPIC_CHANNEL,
+  LibraryRenameTopicRequestSchema,
+  LibraryRenameTopicResultSchema,
   LibraryMergeTagRequestSchema,
   LibraryMergeTagResultSchema,
   LibraryRemoveTagRequestSchema,
@@ -906,6 +911,23 @@ async function invokeLibraryRenameTag(request: LibraryRenameTagRequest): Promise
     result.expectedPageCount !== parsedRequest.expectedPageCount) {
     throw new Error("Invalid Library tag rename response identity.");
   }
+  return result;
+}
+
+async function invokeLibraryRenameTopic(request: LibraryRenameTopicRequest): Promise<LibraryRenameTopicResult> {
+  const parsedRequest = LibraryRenameTopicRequestSchema.parse(request);
+  const result = LibraryRenameTopicResultSchema.parse(
+    await ipcRenderer.invoke(LIBRARY_RENAME_TOPIC_CHANNEL, parsedRequest)
+  );
+  if (
+    result.requestId !== parsedRequest.requestId ||
+    result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.pageId !== parsedRequest.pageId ||
+    result.expectedUpdatedAt !== parsedRequest.expectedUpdatedAt ||
+    result.expectedRevision !== parsedRequest.expectedRevision ||
+    result.expectedTitle !== parsedRequest.expectedTitle ||
+    result.title !== parsedRequest.title
+  ) throw new Error("Invalid Library Topic rename response identity.");
   return result;
 }
 
@@ -1882,6 +1904,7 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("library.related", request) as Promise<LibraryRelatedResult>,
     tags: invokeLibraryTags,
     renameTag: invokeLibraryRenameTag,
+    renameTopic: invokeLibraryRenameTopic,
     mergeTag: invokeLibraryMergeTag,
     removeTag: invokeLibraryRemoveTag,
     removePageTag: invokeLibraryRemovePageTag

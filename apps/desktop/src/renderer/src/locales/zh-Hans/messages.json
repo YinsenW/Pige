@@ -1999,5 +1999,14 @@
   "vaultMigration.domain.ocr_artifacts": "OCR 元数据",
   "vaultMigration.domain.conversation_events": "对话",
   "vaultMigration.domain.memory": "记忆",
-  "vaultMigration.domain.rebuildable_chunks": "本地索引"
+  "vaultMigration.domain.rebuildable_chunks": "本地索引",
+  "topic.rename.action": "重命名主题",
+  "topic.rename.title": "重命名主题",
+  "topic.rename.description": "更改此主题的标题。现有链接仍使用其稳定标识。",
+  "topic.rename.field": "主题标题",
+  "topic.rename.cancel": "取消",
+  "topic.rename.confirm": "重命名",
+  "topic.rename.saving": "正在重命名…",
+  "topic.rename.stale": "此主题已更改。你输入的标题仍保留，请检查后重试。",
+  "topic.rename.failed": "Pige 无法重命名此主题，未做任何更改。"
 }

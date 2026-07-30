@@ -1722,6 +1722,10 @@ export const NoteRevisionHistoryEligibilitySchema = z.object({
   canBrowse: z.boolean(),
   revision: NoteEditorRevisionSchema
 }).strict();
+export const TopicRenameEligibilitySchema = z.object({
+  canRename: z.boolean(),
+  revision: NoteEditorRevisionSchema
+}).strict();
 export const NoteEditorPortableMarkdownSchema = z.string()
   .max(NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES)
   .refine(
@@ -1758,6 +1762,7 @@ export const NoteRenderResultSchema = z.object({
   renameEligibility: NoteRenameEligibilitySchema.optional(),
   aliasing: NoteAliasingSummarySchema.optional(),
   tagging: NoteTaggingSummarySchema.optional(),
+  topicRenameEligibility: TopicRenameEligibilitySchema.optional(),
   reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional(),
   reconnectOriginalSources: z.array(ReferencedOriginalReconnectCandidateSchema).max(5).optional()
 }).strict();
@@ -5810,6 +5815,7 @@ export const LIBRARY_RENAME_TAG_CHANNEL = "library.renameTag" as const;
 export const LIBRARY_MERGE_TAG_CHANNEL = "library.mergeTag" as const;
 export const LIBRARY_REMOVE_TAG_CHANNEL = "library.removeTag" as const;
 export const LIBRARY_REMOVE_PAGE_TAG_CHANNEL = "library.removePageTag" as const;
+export const LIBRARY_RENAME_TOPIC_CHANNEL = "library.renameTopic" as const;
 export const LIBRARY_TAGS_PAGE_SIZE_MAX = 50;
 export const LIBRARY_BROWSE_PAGE_SIZE_MAX = 50;
 export const LibraryBrowseRequestIdSchema = z.string().regex(
@@ -5909,6 +5915,9 @@ export const LibraryRemoveTagRequestIdSchema = z.string().regex(
 );
 export const LibraryRemovePageTagRequestIdSchema = z.string().regex(
   /^library_page_tag_remove_request_[a-z0-9]{16,64}$/
+);
+export const LibraryRenameTopicRequestIdSchema = z.string().regex(
+  /^library_topic_rename_request_[a-z0-9]{16,64}$/
 );
 
 const LibraryTagsRequestBaseShape = {
@@ -6135,6 +6144,36 @@ export const LibraryRemovePageTagResultSchema = z.discriminatedUnion("status", [
     operationId: OperationIdSchema
   }).strict(),
   z.object({ ...LibraryRemovePageTagIdentityShape, status: z.enum(["stale", "not_found", "ineligible", "failed"]) }).strict()
+]);
+
+const LibraryRenameTopicIdentityShape = {
+  apiVersion: z.literal(1),
+  requestId: LibraryRenameTopicRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  pageId: PageIdSchema,
+  expectedUpdatedAt: z.string().datetime({ offset: true }),
+  expectedRevision: NoteEditorRevisionSchema,
+  expectedTitle: z.string().trim().min(1).max(240),
+  title: z.string().trim().min(1).max(240)
+} as const;
+
+export const LibraryRenameTopicRequestSchema = z.object(LibraryRenameTopicIdentityShape).strict()
+  .refine((request) => request.expectedTitle !== request.title, {
+    path: ["title"],
+    message: "A Topic rename must change the title."
+  });
+
+export const LibraryRenameTopicResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    ...LibraryRenameTopicIdentityShape,
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict()
+  }).strict(),
+  z.object({
+    ...LibraryRenameTopicIdentityShape,
+    status: z.enum(["stale", "not_found", "ineligible", "conflict", "failed"])
+  }).strict()
 ]);
 
 export const CollectionRequestIdSchema = z.string().regex(/^collection_request_[a-z0-9]{16,64}$/);
@@ -10356,6 +10395,9 @@ export type LibraryTagsResult = z.infer<typeof LibraryTagsResultSchema>;
 export type LibraryRenameTagRequestId = z.infer<typeof LibraryRenameTagRequestIdSchema>;
 export type LibraryRenameTagRequest = z.infer<typeof LibraryRenameTagRequestSchema>;
 export type LibraryRenameTagResult = z.infer<typeof LibraryRenameTagResultSchema>;
+export type LibraryRenameTopicRequestId = z.infer<typeof LibraryRenameTopicRequestIdSchema>;
+export type LibraryRenameTopicRequest = z.infer<typeof LibraryRenameTopicRequestSchema>;
+export type LibraryRenameTopicResult = z.infer<typeof LibraryRenameTopicResultSchema>;
 export type LibraryMergeTagRequestId = z.infer<typeof LibraryMergeTagRequestIdSchema>;
 export type LibraryMergeTagRequest = z.infer<typeof LibraryMergeTagRequestSchema>;
 export type LibraryMergeTagResult = z.infer<typeof LibraryMergeTagResultSchema>;

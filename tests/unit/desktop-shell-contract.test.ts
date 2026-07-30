@@ -152,6 +152,7 @@ describe("desktop shell build contract", () => {
     expect(schemasSource).toContain('LIBRARY_MERGE_TAG_CHANNEL = "library.mergeTag"');
     expect(schemasSource).toContain('LIBRARY_REMOVE_TAG_CHANNEL = "library.removeTag"');
     expect(schemasSource).toContain('LIBRARY_REMOVE_PAGE_TAG_CHANNEL = "library.removePageTag"');
+    expect(schemasSource).toContain('LIBRARY_RENAME_TOPIC_CHANNEL = "library.renameTopic"');
     expect(schemasSource).toContain("LibraryTagsRequestSchema");
     expect(schemasSource).toContain('mode: z.literal("list_tags")');
     expect(schemasSource).toContain('mode: z.literal("list_pages_for_tag")');
@@ -172,6 +173,9 @@ describe("desktop shell build contract", () => {
     expect(libraryApi).toContain(
       "readonly removePageTag: (request: LibraryRemovePageTagRequest) => Promise<LibraryRemovePageTagResult>;"
     );
+    expect(libraryApi).toContain(
+      "readonly renameTopic: (request: LibraryRenameTopicRequest) => Promise<LibraryRenameTopicResult>;"
+    );
     expect(preloadSource).toContain("LibraryTagsRequestSchema.parse(request)");
     expect(preloadSource).toContain(
       "await ipcRenderer.invoke(LIBRARY_TAGS_CHANNEL, parsedRequest)"
@@ -185,12 +189,17 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain("LibraryRemoveTagResultSchema.parse(");
     expect(preloadSource).toContain("LibraryRemovePageTagRequestSchema.parse(request)");
     expect(preloadSource).toContain("LibraryRemovePageTagResultSchema.parse(");
+    expect(preloadSource).toContain("LibraryRenameTopicRequestSchema.parse(request)");
+    expect(preloadSource).toContain("LibraryRenameTopicResultSchema.parse(");
     const renameHandler = mainSource.slice(
       mainSource.indexOf("ipcMain.handle(LIBRARY_RENAME_TAG_CHANNEL"),
       mainSource.indexOf("registerReaderIpc({")
     );
     expect(renameHandler).toContain("LibraryRenameTagRequestSchema.parse(request)");
     expect(renameHandler).toContain("LibraryRenameTagResultSchema.parse(getLibraryTagRenameService().rename(parsed))");
+    expect(renameHandler).toContain("ipcMain.handle(LIBRARY_RENAME_TOPIC_CHANNEL");
+    expect(renameHandler).toContain("LibraryRenameTopicRequestSchema.parse(request)");
+    expect(renameHandler).toContain("getLibraryTopicRenameService().rename(String(event.sender.id), parsed)");
     expect(renameHandler.indexOf("LibraryRenameTagRequestSchema.parse(request)"))
       .toBeLessThan(renameHandler.indexOf("getLibraryTagRenameService().rename(parsed)"));
     expect(renameHandler).toContain("LibraryMergeTagRequestSchema.parse(request)");
