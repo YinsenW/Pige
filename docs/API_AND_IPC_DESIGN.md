@@ -266,11 +266,11 @@ type LocalDatabaseStatus = {
 };
 ```
 
-`maintenance.runKnowledgeHealth` returns a strict body-free generation report; complete
-coverage may give one missing link an opaque context for unlink or explicit retarget.
-`maintenance.repairKnowledgeHealth` binds vault/generation/page/action/context and, for
-retarget, one existing target page ID. `committed` adds safe revision/Operation ID;
-other states stay body-free. Main re-proves report/index/source/target/occurrence currentness.
+`maintenance.runKnowledgeHealth` returns a body-free report. Complete coverage may bind one
+broken link for unlink/retarget, or one orphan plus an explicitly selected current parent for
+`connect_orphan_to_parent`. Repair/search requests bind vault, report/index and opaque page
+proofs; Main re-proves both pages immediately before reversible `update_page`. Only committed
+results add safe revision/Operation IDs; other states stay body-free.
 
 Rules:
 

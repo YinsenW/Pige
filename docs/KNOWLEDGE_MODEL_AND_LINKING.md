@@ -436,11 +436,10 @@ Rebuild indexes Markdown pages, facets, relations, citations, aliases and backli
 resolve unique-or-ambiguous; unresolved targets grant no renderer access. Reader navigation
 binds the generation and returns one stable target or body-free failure.
 
-Derived/body-free Health treats invalid Markdown as partial. Complete coverage plus one safe
-missing local reference may offer `unlink_broken_reference` or user-selected
-`retarget_broken_reference`. Main re-proves report/index/source/target/occurrence, rewrites
-only that exact link with deterministic Markdown, and records reversible `update_page`.
-Images, frontmatter, complex/multiple/ambiguous references and other repairs stay open.
+Derived/body-free Health treats invalid Markdown as partial. Complete coverage may offer exact
+unlink/retarget, or `connect_orphan_to_parent` after the user selects one current note. Main
+re-proves report/index and both page proofs, writes only deterministic bounded metadata/link
+changes, and records reversible `update_page`. Ambiguous/complex and other repairs stay open.
 
 B6.12: rev2 rebuilds on first query. Body-free tree resolves ID/title/alias; root topic→domain; `has_topic`>`links_to`; primary=stable, others=related, cycles=cut, depth=iterative; Unassigned. weight=structural+fragment+unique-source; leaf=fragment-ref+source-leaf; sourcePages≠fragments. No public DTO/IPC/UI.
 
