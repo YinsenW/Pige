@@ -51,7 +51,7 @@ import {
 } from "./components/HomeConversationTurnState";
 import { WindowModeToggle } from "./components/WindowModeToggle";
 import { useWindowControls } from "./components/useWindowControls";
-import { ReaderDocumentActions } from "./components/ReaderDocumentActions";
+import { ReaderDocumentActions, readerDocumentArchiveLabels, submitReaderNoteArchive, type ReaderNoteArchiveSubmit } from "./components/ReaderDocumentActions";
 import type { ReaderNoteMergeOutcome, ReaderNoteMergeTarget } from "./components/ReaderNoteMergeDialog";
 import type { ReaderInlineReferenceActivation } from "./components/ReaderInlineReferenceSurface";
 import { NoteReader, type NoteRelatedState } from "./components/NoteReader";
@@ -96,8 +96,6 @@ import type {
   LocalDatabaseStatus,
   ModelProviderSettingsSummary,
   ModelProfileSummary,
-  NoteArchiveCurrentRequest,
-  NoteArchiveCurrentResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
   NoteReconnectOriginalSourceRequest,
@@ -1160,23 +1158,6 @@ export function App(): React.JSX.Element {
     setSelectedNoteRelated("loading");
     void loadNoteRelated(render.summary.pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
     void refreshLibrary();
-  };
-
-  const adoptArchivedNote = (render: NoteRenderResult): void => {
-    const vaultId = activeVaultIdRef.current;
-    if (
-      !vaultId ||
-      render.summary.status !== "archived" ||
-      selectedNoteRef.current?.summary.pageId !== render.summary.pageId
-    ) return;
-    const requestId = ++noteOpenSequence.current;
-    inlineReferenceSequence.current += 1;
-    setSelectedNoteVaultId(vaultId);
-    setSelectedNote(render);
-    setSelectedNoteRelated("loading");
-    void loadNoteRelated(render.summary.pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
-    void Promise.allSettled([refreshLibrary(), refreshVaultState()]);
-    window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".note-reader")?.focus({ preventScroll: true }));
   };
 
   const refreshCollectionCatalog = async (append = false): Promise<void> => {
@@ -2586,9 +2567,7 @@ export function App(): React.JSX.Element {
             onOpenSourceReference={(request) => window.pige.notes.openSourceReference(request)}
             onRevealSource={(request) => window.pige.notes.revealSource(request)}
             onReconnectOriginalSource={(request) => window.pige.notes.reconnectOriginalSource(request)}
-            onCurrentNoteSourceReconnected={adoptReconnectedNote}
-            onArchiveCurrentNote={(request) => window.pige.notes.archiveCurrent(request)}
-            onCurrentNoteArchived={adoptArchivedNote}
+            onCurrentNoteSourceReconnected={adoptReconnectedNote} onArchiveCurrentNote={(request) => window.pige.notes.archiveCurrent(request)} onCurrentNoteArchived={adoptMergedNote}
             onTrashCurrentNote={(request) => window.pige.notes.trashCurrent(request)}
             onLoadNoteMergeTargets={loadNoteMergeTargets}
             onMergeCurrentNote={(request) => window.pige.notes.merge(request)}
@@ -2651,9 +2630,7 @@ export function App(): React.JSX.Element {
               onOpenSourceReference={(request) => window.pige.notes.openSourceReference(request)}
               onRevealSource={(request) => window.pige.notes.revealSource(request)}
               onReconnectOriginalSource={(request) => window.pige.notes.reconnectOriginalSource(request)}
-              onCurrentNoteSourceReconnected={adoptReconnectedNote}
-              onArchiveCurrentNote={(request) => window.pige.notes.archiveCurrent(request)}
-              onCurrentNoteArchived={adoptArchivedNote}
+              onCurrentNoteSourceReconnected={adoptReconnectedNote} onArchiveCurrentNote={(request) => window.pige.notes.archiveCurrent(request)} onCurrentNoteArchived={adoptMergedNote}
               onTrashCurrentNote={(request) => window.pige.notes.trashCurrent(request)}
               onLoadNoteMergeTargets={loadNoteMergeTargets}
               onMergeCurrentNote={(request) => window.pige.notes.merge(request)}
@@ -3206,15 +3183,12 @@ export function LibraryPanel(props: {
   readonly onReconnectOriginalSource?: (
     request: NoteReconnectOriginalSourceRequest
   ) => Promise<NoteReconnectOriginalSourceResult>;
-  readonly onArchiveCurrentNote?: (
-    request: NoteArchiveCurrentRequest
-  ) => Promise<NoteArchiveCurrentResult>;
+  readonly onArchiveCurrentNote?: ReaderNoteArchiveSubmit; readonly onCurrentNoteArchived?: (render: NoteRenderResult) => void;
   readonly onTrashCurrentNote?: (request: NoteTrashCurrentRequest) => Promise<NoteTrashCurrentResult>;
   readonly onLoadNoteMergeTargets: (currentPageId: string) => Promise<readonly ReaderNoteMergeTarget[]>;
   readonly onMergeCurrentNote: (request: NoteMergeRequest) => Promise<NoteMergeResult>;
   readonly onCurrentNoteMerged: (render: NoteRenderResult) => void;
   readonly onCurrentNoteSourceReconnected?: (render: NoteRenderResult) => void;
-  readonly onCurrentNoteArchived?: (render: NoteRenderResult) => void;
   readonly searchFocusRequest: number;
   readonly onOpenNote: (pageId: string) => Promise<void>;
   readonly onCloseNote: () => void;
@@ -3354,39 +3328,7 @@ export function LibraryPanel(props: {
       return "retained";
     }
   };
-
-  const archiveSelectedNote = async (): Promise<
-    | { readonly status: "committed"; readonly render: NoteRenderResult }
-    | { readonly status: "retained" }
-  > => {
-    const note = props.selectedNote;
-    const eligibility = note?.archiveEligibility;
-    const activeVaultId = props.activeVaultId;
-    const renderContextId = note?.renderContextId;
-    if (!note || !eligibility?.canArchive || !activeVaultId || !renderContextId || !props.onArchiveCurrentNote) {
-      return { status: "retained" };
-    }
-    const request: NoteArchiveCurrentRequest = {
-      apiVersion: 1,
-      requestId: createNoteArchiveRequestId(),
-      activeVaultId,
-      currentPageId: note.summary.pageId,
-      renderContextId,
-      expectedRevision: eligibility.revision
-    };
-    try {
-      const result = await props.onArchiveCurrentNote(request);
-      if (
-        !noteArchiveCurrentIdentityMatches(request, result) ||
-        result.status !== "committed" ||
-        result.render.summary.pageId !== request.currentPageId ||
-        result.render.summary.status !== "archived"
-      ) return { status: "retained" };
-      return { status: "committed", render: result.render };
-    } catch {
-      return { status: "retained" };
-    }
-  };
+  const archiveSelectedNote = () => submitReaderNoteArchive({ note: props.selectedNote, activeVaultId: props.activeVaultId, submit: props.onArchiveCurrentNote });
 
   const mergeSelectedNote = async (target: ReaderNoteMergeTarget): Promise<ReaderNoteMergeOutcome> => {
     const note = props.selectedNote;
@@ -3558,18 +3500,16 @@ export function LibraryPanel(props: {
               ownerIdentity={`${props.activeVaultId ?? ""}:${summary.pageId}:${props.selectedNote.renderContextId ?? ""}:${props.selectedNote.trashEligibility?.revision ?? ""}:${props.selectedNote.archiveEligibility?.revision ?? ""}`}
               canMoveToTrash={props.selectedNote.trashEligibility?.canTrash === true && Boolean(props.onTrashCurrentNote)}
               canMerge={isNoteEditorEligible(props.selectedNote) && Boolean(props.activeVaultId && props.selectedNote.renderContextId && props.selectedNote.trashEligibility?.revision)}
-              canArchive={props.selectedNote.archiveEligibility?.canArchive === true && Boolean(props.onArchiveCurrentNote)}
+              canArchive={props.selectedNote.archiveEligibility?.canArchive === true && Boolean(props.onArchiveCurrentNote)} archiveLabels={readerDocumentArchiveLabels(props.t)}
               currentTitle={summary.title}
               labels={readerDocumentActionLabels(props.t)}
-              archiveLabels={readerDocumentArchiveLabels(props.t)}
               mergeLabels={readerNoteMergeLabels(props.t)}
               onMoveToTrash={trashSelectedNote}
-              onArchive={archiveSelectedNote}
+              onArchive={archiveSelectedNote} onArchiveCommitted={props.onCurrentNoteArchived ?? props.onCurrentNoteMerged}
               onLoadMergeTargets={() => props.onLoadNoteMergeTargets(summary.pageId)}
               onMerge={mergeSelectedNote}
               onCommitted={() => props.onCurrentNoteTrashed?.()}
               onMergeCommitted={props.onCurrentNoteMerged}
-              onArchiveCommitted={(render) => props.onCurrentNoteArchived?.(render)}
             />
             <button
               type="button"
@@ -6102,42 +6042,8 @@ function HomeComposer(props: {
     }
   };
 
-  const archiveSelectedHomeNote = async (): Promise<
-    | { readonly status: "committed"; readonly render: NoteRenderResult }
-    | { readonly status: "retained" }
-  > => {
-    const note = selectedNoteRef.current;
-    const eligibility = note?.archiveEligibility;
-    const activeVaultId = activeVaultIdRef.current;
-    const renderContextId = note?.renderContextId;
-    if (!note || !eligibility?.canArchive || !activeVaultId || !renderContextId) {
-      return { status: "retained" };
-    }
-    const request: NoteArchiveCurrentRequest = {
-      apiVersion: 1,
-      requestId: createNoteArchiveRequestId(),
-      activeVaultId,
-      currentPageId: note.summary.pageId,
-      renderContextId,
-      expectedRevision: eligibility.revision
-    };
-    try {
-      const result = await window.pige.notes.archiveCurrent(request);
-      if (
-        !noteArchiveCurrentIdentityMatches(request, result) ||
-        activeVaultIdRef.current !== request.activeVaultId ||
-        selectedNoteRef.current?.summary.pageId !== request.currentPageId ||
-        selectedNoteRef.current.renderContextId !== request.renderContextId ||
-        selectedNoteRef.current.archiveEligibility?.revision !== request.expectedRevision ||
-        result.status !== "committed" ||
-        result.render.summary.pageId !== request.currentPageId ||
-        result.render.summary.status !== "archived"
-      ) return { status: "retained" };
-      return { status: "committed", render: result.render };
-    } catch {
-      return { status: "retained" };
-    }
-  };
+  const archiveSelectedHomeNote = () => submitReaderNoteArchive({ note: selectedNoteRef.current, activeVaultId: activeVaultIdRef.current,
+    submit: (request) => window.pige.notes.archiveCurrent(request), currentNote: () => selectedNoteRef.current });
 
   const mergeSelectedHomeNote = async (target: ReaderNoteMergeTarget): Promise<ReaderNoteMergeOutcome> => {
     const note = selectedNoteRef.current;
@@ -6176,21 +6082,6 @@ function HomeComposer(props: {
   };
 
   const adoptMergedHomeNote = (render: NoteRenderResult): void => {
-    const requestId = ++noteOpenSequence.current;
-    inlineReferenceSequence.current += 1;
-    editorOpenSequence.current += 1;
-    setSelectedNote(render);
-    setSelectedNoteRelated("loading");
-    void loadNoteRelated(render.summary.pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
-    void props.onHomeStateChanged();
-    window.requestAnimationFrame(() => homeSectionRef.current?.querySelector<HTMLElement>(".note-reader")?.focus({ preventScroll: true }));
-  };
-
-  const adoptArchivedHomeNote = (render: NoteRenderResult): void => {
-    if (
-      render.summary.status !== "archived" ||
-      selectedNoteRef.current?.summary.pageId !== render.summary.pageId
-    ) return;
     const requestId = ++noteOpenSequence.current;
     inlineReferenceSequence.current += 1;
     editorOpenSequence.current += 1;
@@ -6650,13 +6541,12 @@ function HomeComposer(props: {
                   ownerIdentity={`${props.activeVault?.vaultId ?? ""}:${selectedNote.summary.pageId}:${selectedNote.renderContextId ?? ""}:${selectedNote.trashEligibility?.revision ?? ""}:${selectedNote.archiveEligibility?.revision ?? ""}`}
                   canMoveToTrash={selectedNote.trashEligibility?.canTrash === true && Boolean(props.activeVault && selectedNote.renderContextId)}
                   canMerge={isNoteEditorEligible(selectedNote) && Boolean(props.activeVault && selectedNote.renderContextId && selectedNote.trashEligibility?.revision)}
-                  canArchive={selectedNote.archiveEligibility?.canArchive === true && Boolean(props.activeVault && selectedNote.renderContextId)}
+                  canArchive={selectedNote.archiveEligibility?.canArchive === true && Boolean(props.activeVault && selectedNote.renderContextId)} archiveLabels={readerDocumentArchiveLabels(props.t)}
                   currentTitle={selectedNote.summary.title}
                   labels={readerDocumentActionLabels(props.t)}
-                  archiveLabels={readerDocumentArchiveLabels(props.t)}
                   mergeLabels={readerNoteMergeLabels(props.t)}
                   onMoveToTrash={trashSelectedHomeNote}
-                  onArchive={archiveSelectedHomeNote}
+                  onArchive={archiveSelectedHomeNote} onArchiveCommitted={adoptMergedHomeNote}
                   onLoadMergeTargets={() => props.onLoadNoteMergeTargets(selectedNote.summary.pageId)}
                   onMerge={mergeSelectedHomeNote}
                   onCommitted={() => {
@@ -6669,7 +6559,6 @@ function HomeComposer(props: {
                     window.requestAnimationFrame(() => composerInputRef.current?.focus({ preventScroll: true }));
                   }}
                   onMergeCommitted={adoptMergedHomeNote}
-                  onArchiveCommitted={adoptArchivedHomeNote}
                 />
               </div>
               {editorOpenState === "failed" ? (
@@ -7248,10 +7137,6 @@ function createNoteMergeRequestId(): `notemergereq_${string}` {
   return `notemergereq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
 }
 
-function createNoteArchiveRequestId(): `notearchivereq_${string}` {
-  return `notearchivereq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
-}
-
 function noteMergeIdentityMatches(request: NoteMergeRequest, result: NoteMergeResult): boolean {
   return result.requestId === request.requestId &&
     result.activeVaultId === request.activeVaultId &&
@@ -7273,17 +7158,6 @@ function noteTrashCurrentIdentityMatches(
     result.expectedRevision === request.expectedRevision;
 }
 
-function noteArchiveCurrentIdentityMatches(
-  request: NoteArchiveCurrentRequest,
-  result: NoteArchiveCurrentResult
-): boolean {
-  return result.requestId === request.requestId &&
-    result.activeVaultId === request.activeVaultId &&
-    result.currentPageId === request.currentPageId &&
-    result.renderContextId === request.renderContextId &&
-    result.expectedRevision === request.expectedRevision;
-}
-
 function readerDocumentActionLabels(t: (key: string) => string) {
   return {
     more: t("note.moreActions"),
@@ -7295,18 +7169,6 @@ function readerDocumentActionLabels(t: (key: string) => string) {
     confirm: t("note.document.trashConfirm"),
     pending: t("note.document.trashing"),
     failed: t("note.document.trashFailed")
-  };
-}
-
-function readerDocumentArchiveLabels(t: (key: string) => string) {
-  return {
-    action: t("note.document.archive"),
-    title: t("note.document.archiveTitle"),
-    description: t("note.document.archiveDescription"),
-    cancel: t("note.document.archiveCancel"),
-    confirm: t("note.document.archiveConfirm"),
-    pending: t("note.document.archiving"),
-    failed: t("note.document.archiveFailed")
   };
 }
 
@@ -8372,8 +8234,7 @@ export function ActivityHistorySettingsPanel(props: {
                   ? "activity.trashedCollectionColumn"
                 : activity.kind === "create_collection_view"
                   ? "activity.createdCollectionView"
-                : activity.kind === "archive_page"
-                  ? "activity.archivedPage"
+                : activity.kind === "archive_page" ? "activity.archivedPage"
                 : activity.kind === "update_page"
                   ? "activity.updatedPage"
                 : activity.kind === "update_memory"

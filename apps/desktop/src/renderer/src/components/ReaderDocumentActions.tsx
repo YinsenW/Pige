@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { NoteArchiveCurrentRequest, NoteArchiveCurrentResult, NoteRenderResult } from "@pige/contracts";
 import { PigeIcon } from "./PigeIcon";
 import {
   ReaderNoteMergeDialog,
@@ -9,8 +10,9 @@ import {
 
 export type ReaderDocumentTrashOutcome = "committed" | "retained";
 export type ReaderDocumentArchiveOutcome =
-  | { readonly status: "committed"; readonly render: import("@pige/contracts").NoteRenderResult }
+  | { readonly status: "committed"; readonly render: NoteRenderResult }
   | { readonly status: "retained" };
+export type ReaderNoteArchiveSubmit = (request: NoteArchiveCurrentRequest) => Promise<NoteArchiveCurrentResult>;
 
 export interface ReaderDocumentActionLabels {
   readonly more: string;
@@ -32,6 +34,60 @@ export interface ReaderDocumentArchiveLabels {
   readonly confirm: string;
   readonly pending: string;
   readonly failed: string;
+}
+
+export async function submitReaderNoteArchive(input: {
+  readonly note: NoteRenderResult | null | undefined;
+  readonly activeVaultId: string | null | undefined;
+  readonly submit: ReaderNoteArchiveSubmit | null | undefined;
+  readonly currentNote?: () => NoteRenderResult | null | undefined;
+}): Promise<ReaderDocumentArchiveOutcome> {
+  const eligibility = input.note?.archiveEligibility;
+  const renderContextId = input.note?.renderContextId;
+  if (!input.note || !eligibility?.canArchive || !input.activeVaultId || !renderContextId || !input.submit) {
+    return { status: "retained" };
+  }
+  const request: NoteArchiveCurrentRequest = {
+    apiVersion: 1,
+    requestId: `notearchivereq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+    activeVaultId: input.activeVaultId,
+    currentPageId: input.note.summary.pageId,
+    renderContextId,
+    expectedRevision: eligibility.revision
+  };
+  try {
+    const result = await input.submit(request);
+    if (
+      !archiveIdentityMatches(request, result) ||
+      (input.currentNote && !archiveRequestMatchesNote(request, input.currentNote())) ||
+      result.status !== "committed" ||
+      result.render.summary.pageId !== request.currentPageId ||
+      result.render.summary.status !== "archived"
+    ) return { status: "retained" };
+    return { status: "committed", render: result.render };
+  } catch {
+    return { status: "retained" };
+  }
+}
+
+function archiveRequestMatchesNote(request: NoteArchiveCurrentRequest, note: NoteRenderResult | null | undefined): boolean {
+  return note?.summary.pageId === request.currentPageId && note.renderContextId === request.renderContextId &&
+    note.archiveEligibility?.revision === request.expectedRevision;
+}
+
+export function readerDocumentArchiveLabels(t: (key: string) => string): ReaderDocumentArchiveLabels {
+  return {
+    action: t("note.document.archive"), title: t("note.document.archiveTitle"),
+    description: t("note.document.archiveDescription"), cancel: t("note.document.archiveCancel"),
+    confirm: t("note.document.archiveConfirm"), pending: t("note.document.archiving"),
+    failed: t("note.document.archiveFailed")
+  };
+}
+
+function archiveIdentityMatches(request: NoteArchiveCurrentRequest, result: NoteArchiveCurrentResult): boolean {
+  return result.requestId === request.requestId && result.activeVaultId === request.activeVaultId &&
+    result.currentPageId === request.currentPageId && result.renderContextId === request.renderContextId &&
+    result.expectedRevision === request.expectedRevision;
 }
 
 export interface ReaderDocumentActionsProps {
