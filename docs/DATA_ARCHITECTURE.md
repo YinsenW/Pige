@@ -82,10 +82,12 @@ Two storage profiles share this envelope:
 row/field changes publish immutable SQLite/schema/Operation revisions, manifest last; views
 advance separately. Evidence, originals, old revisions and previews remain immutable.
 
-Formula/relation descriptors are Dataset schema truth, including empty tables. Formula V1 is a
-<=8-depth/31-node nullable numeric AST; invalid math is null. A single relation binds one
-same-Dataset table/scalar label column; cells store row IDs only. Inbound targets block trash;
-source-relation trash and changes use immutable schema/payload/stats CAS/forward Undo. Imports stay read-only.
+Formula/relation/lookup descriptors are Dataset schema truth, including empty tables. Formula V1
+is a <=8-depth/31-node nullable numeric AST; invalid math is null. A single relation binds one
+same-Dataset table/scalar label column; cells store row IDs only. A lookup follows that relation
+to one scalar target field and stays derived/read-only. Target edits reproject it; null/dangling
+relations resolve null. Inbound targets block trash; descriptor changes use immutable
+schema/payload/stats CAS/forward Undo. Imports stay read-only.
 
 ```ts
 type DatasetEvidenceRef = {

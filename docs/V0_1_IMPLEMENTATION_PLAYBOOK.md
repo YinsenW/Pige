@@ -608,9 +608,9 @@ Build:
 - [B7.09 -> E7.04] Implemented deterministic 90-day compaction for settled successful
   Job detail with exact reference retention, `compact_job` attribution, CAS drift
   rejection, and Operation-first restart adoption; conversation events remain intact.
-- [B7.10 -> E7.06] Managed Collections: stable-ID CAS cell/row/field/view, formula create/update and
-  one same-Dataset row relation use distinct Activity/Undo. Nested formula, relation breadth,
-  broader schema, scale/platform and exception proof stay open.
+- [B7.10 -> E7.06] Managed Collections: stable-ID CAS cell/row/field/view, formula create/update,
+  one same-Dataset row relation and its read-only scalar lookup use distinct Activity/Undo.
+  Nested formula, relation/lookup breadth, broader schema, scale/platform and exceptions stay open.
 
 Deferred from this phase:
 

@@ -501,8 +501,8 @@ Dataset boundary:
 - Preview/citation is checksum-bound. Pages are <=50 rows/64 KiB; cursors bind
   vault/catalog/revision/view/boundary and drift is stale.
 - Citation keys grant no authority; Main returns read-only highlights without requery.
-- Formula/relation changes bind revision, IDs and Main eligibility. Relations are same-Dataset;
-  cells store row IDs/labels. CAS/Undo is path/query-free.
+- Formula/relation/lookup changes bind revision, IDs and Main eligibility. Same-Dataset relations
+  store row IDs/labels; lookups are derived/read-only. CAS/Undo is path/query-free.
 
 ### 6.6 Retrieval
 
