@@ -190,6 +190,8 @@ import type {
   NoteImportMarkdownResult,
   NoteArchiveCurrentRequest,
   NoteArchiveCurrentResult,
+  NoteRestoreArchivedRequest,
+  NoteRestoreArchivedResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteRenderContextId,
@@ -506,6 +508,8 @@ export type {
   NoteImportMarkdownResult,
   NoteArchiveCurrentRequest,
   NoteArchiveCurrentResult,
+  NoteRestoreArchivedRequest,
+  NoteRestoreArchivedResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteRenderResult,
@@ -2078,6 +2082,9 @@ export interface PigeDesktopApi {
     readonly archiveCurrent: (
       request: NoteArchiveCurrentRequest
     ) => Promise<NoteArchiveCurrentResult>;
+    readonly restoreArchived: (
+      request: NoteRestoreArchivedRequest
+    ) => Promise<NoteRestoreArchivedResult>;
     readonly trashCurrent: (
       request: NoteTrashCurrentRequest
     ) => Promise<NoteTrashCurrentResult>;

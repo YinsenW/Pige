@@ -135,6 +135,8 @@ import {
   NoteRenderResultSchema,
   NoteArchiveCurrentRequestSchema,
   NoteArchiveCurrentResultSchema,
+  NoteRestoreArchivedRequestSchema,
+  NoteRestoreArchivedResultSchema,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
   NoteOpenSourceReferenceRequestSchema,
@@ -3869,6 +3871,25 @@ describe("schemas", () => {
     for (const privateField of ["pagePath", "markdown", "contentHash", "sourceId", "rawError"] as const) {
       expect(() => NoteArchiveCurrentRequestSchema.parse({ ...identity, [privateField]: "private" })).toThrow();
       expect(() => NoteArchiveCurrentResultSchema.parse({ ...identity, status: "failed", [privateField]: "private" })).toThrow();
+    }
+  });
+
+  it("keeps archived-note restore revision-bound and path/body-free", () => {
+    const identity = {
+      apiVersion: 1,
+      requestId: "noterestorereq_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_abcdefgh",
+      currentPageId: "page_20260730_current1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(32)}`
+    } as const;
+    expect(NoteRestoreArchivedRequestSchema.parse(identity)).toEqual(identity);
+    for (const status of ["stale", "not_found", "ineligible", "failed"] as const) {
+      expect(NoteRestoreArchivedResultSchema.parse({ ...identity, status })).toEqual({ ...identity, status });
+    }
+    for (const privateField of ["pagePath", "markdown", "contentHash", "sourceId", "rawError"] as const) {
+      expect(() => NoteRestoreArchivedRequestSchema.parse({ ...identity, [privateField]: "private" })).toThrow();
+      expect(() => NoteRestoreArchivedResultSchema.parse({ ...identity, status: "failed", [privateField]: "private" })).toThrow();
     }
   });
 
