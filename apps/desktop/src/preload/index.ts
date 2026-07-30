@@ -74,6 +74,8 @@ import type {
   LibraryTagsResult,
   LibraryRenameTagRequest,
   LibraryRenameTagResult,
+  LibraryMergeTagRequest,
+  LibraryMergeTagResult,
   LocalSemanticRetrievalDisableRequest,
   LocalSemanticRetrievalDisableResult,
   LocalSemanticRetrievalEnableRequest,
@@ -339,10 +341,13 @@ import {
   CollectionTrashRowResultSchema,
   LIBRARY_TAGS_CHANNEL,
   LIBRARY_RENAME_TAG_CHANNEL,
+  LIBRARY_MERGE_TAG_CHANNEL,
   LibraryTagsRequestSchema,
   LibraryTagsResultSchema,
   LibraryRenameTagRequestSchema,
   LibraryRenameTagResultSchema,
+  LibraryMergeTagRequestSchema,
+  LibraryMergeTagResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   KnowledgeHealthRunRequestSchema,
@@ -694,6 +699,21 @@ async function invokeLibraryRenameTag(request: LibraryRenameTagRequest): Promise
     result.expectedSnapshotId !== parsedRequest.expectedSnapshotId ||
     result.expectedPageCount !== parsedRequest.expectedPageCount) {
     throw new Error("Invalid Library tag rename response identity.");
+  }
+  return result;
+}
+
+async function invokeLibraryMergeTag(request: LibraryMergeTagRequest): Promise<LibraryMergeTagResult> {
+  const parsedRequest = LibraryMergeTagRequestSchema.parse(request);
+  const result = LibraryMergeTagResultSchema.parse(
+    await ipcRenderer.invoke(LIBRARY_MERGE_TAG_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.sourceTag !== parsedRequest.sourceTag || result.targetTag !== parsedRequest.targetTag ||
+    result.expectedSnapshotId !== parsedRequest.expectedSnapshotId ||
+    result.expectedSourcePageCount !== parsedRequest.expectedSourcePageCount ||
+    result.expectedTargetPageCount !== parsedRequest.expectedTargetPageCount) {
+    throw new Error("Invalid Library tag merge response identity.");
   }
   return result;
 }
@@ -1483,7 +1503,8 @@ const api: PigeDesktopApi = {
     related: async (request: LibraryRelatedRequest): Promise<LibraryRelatedResult> =>
       ipcRenderer.invoke("library.related", request) as Promise<LibraryRelatedResult>,
     tags: invokeLibraryTags,
-    renameTag: invokeLibraryRenameTag
+    renameTag: invokeLibraryRenameTag,
+    mergeTag: invokeLibraryMergeTag
   },
   notes: {
     get: async (request: NoteGetRequest): Promise<NoteDocument> =>
