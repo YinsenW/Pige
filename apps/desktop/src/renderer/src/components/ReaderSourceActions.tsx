@@ -6,6 +6,7 @@ import type {
   NoteRevealSourceRequest,
   NoteRevealSourceResult
 } from "@pige/contracts";
+import { ReaderSourceRefreshAction } from "./ReaderSourceRefreshAction";
 
 export type ReaderSourceActionOutcome =
   | "revealed"
@@ -278,6 +279,7 @@ export function NoteReaderSourceActions(props: {
   readonly reconnectOriginalSourceIds?: readonly string[];
   readonly labels: ReaderSourceActionLabels;
   readonly sourceLabel: (number: number) => string;
+  readonly t: (key: string) => string;
   readonly getFocusRoot: () => HTMLElement | null;
   readonly onRevealSource?: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
   readonly onReconnectOriginalSource?: (request: NoteReconnectOriginalSourceRequest) => Promise<NoteReconnectOriginalSourceResult>;
@@ -285,7 +287,7 @@ export function NoteReaderSourceActions(props: {
 }): React.JSX.Element | null {
   const visibleSourceIds = props.sourceIds.slice(0, 5);
   const reconnectSourceIds = props.reconnectOriginalSourceIds ?? [];
-  return <ReaderSourceActionSurface
+  return <><ReaderSourceActionSurface
     currentPageId={props.currentPageId}
     sources={Array.from(new Set([...visibleSourceIds, ...reconnectSourceIds.filter((id) => props.sourceIds.includes(id))])).map((sourceId) => ({
       sourceId,
@@ -305,7 +307,17 @@ export function NoteReaderSourceActions(props: {
         (root?.querySelector<HTMLElement>(`[data-reader-source-open="${sourceId}"]`) ?? root)?.focus({ preventScroll: true });
       });
     } } : {})}
-  />;
+  />
+    <ReaderSourceRefreshAction currentPageId={props.currentPageId} sourceIds={props.sourceIds}
+      sourceLabel={props.sourceLabel} t={props.t}
+      {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
+      {...(props.renderContextId ? { renderContextId: props.renderContextId } : {})}
+      onPreview={(request) => window.pige.sourceRefresh.preview(request)}
+      onConfirm={(request) => window.pige.sourceRefresh.confirm(request)}
+      onRender={(pageId) => window.pige.notes.render({ pageId })}
+      {...(props.onSourceReconnected ? { onRefreshed: props.onSourceReconnected } : {})}
+    />
+  </>;
 }
 
 export function ReaderSourceRevealAction(props: {

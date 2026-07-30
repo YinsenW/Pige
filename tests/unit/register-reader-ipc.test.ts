@@ -5,6 +5,7 @@ import { registerReaderIpc } from "../../apps/desktop/src/main/register-reader-i
 import type { NotesService } from "../../apps/desktop/src/main/services/notes-service";
 import type { ReaderSourceRevealService } from "../../apps/desktop/src/main/services/reader-source-reveal-service";
 import type { ReaderSourceReconnectService } from "../../apps/desktop/src/main/services/reader-source-reconnect-service";
+import type { SourceRefreshService } from "../../apps/desktop/src/main/services/source-refresh-service";
 import type { NoteTrashService } from "../../apps/desktop/src/main/services/note-trash-service";
 import type { NoteMergeService } from "../../apps/desktop/src/main/services/note-merge-service";
 import type { NoteArchiveService } from "../../apps/desktop/src/main/services/note-archive-service";
@@ -36,7 +37,9 @@ function makeHarness(
   noteMarkdownImportService?: Partial<NoteMarkdownImportService>,
   onNoteImported = vi.fn(),
   noteRelateService?: Partial<NoteRelateService>,
-  noteTagService?: Partial<NoteTagService>
+  noteTagService?: Partial<NoteTagService>,
+  sourceRefreshService?: Partial<SourceRefreshService>,
+  onSourceRefreshed = vi.fn()
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -62,6 +65,10 @@ function makeHarness(
     getReaderSourceReconnectService: () => {
       if (reconnectService) return reconnectService as ReaderSourceReconnectService;
       throw new Error("Reader source reconnect service was not expected.");
+    },
+    getSourceRefreshService: () => {
+      if (sourceRefreshService) return sourceRefreshService as SourceRefreshService;
+      throw new Error("Source refresh service was not expected.");
     },
     getWindow: () => ({}) as never,
     showOpenDialog: async () => ({ canceled: false, filePaths: ["/private/replacement.txt"] }),
@@ -93,7 +100,8 @@ function makeHarness(
     onNoteTrashCommitted,
     onNoteArchiveCommitted,
     onNoteRelated: onNoteArchiveCommitted,
-    onNoteImported
+    onNoteImported,
+    onSourceRefreshed
   });
   return handlers;
 }
@@ -122,6 +130,8 @@ describe("registerReaderIpc", () => {
       "notes.openSourceReference",
       "notes.revealSource",
       "notes.reconnectOriginalSource",
+      "source.refresh.preview",
+      "source.refresh.confirm",
       "readerSelection.resolve",
       "readerSelection.submitAction",
       "readerSelection.submitLink",
@@ -731,6 +741,61 @@ describe("registerReaderIpc", () => {
     expect(reveal).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
     await expect(handlers.get("notes.revealSource")!({ sender: makeSender(16) } as IpcMainInvokeEvent, request))
       .resolves.toEqual({ ...request, status: "stale" });
+  });
+
+  it("binds source refresh to the current Reader context and refreshes Activity only after commit", async () => {
+    const identity = {
+      apiVersion: 1 as const,
+      requestId: "sourcerefreshreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260731_abcdefgh",
+      currentPageId: "page_20260731_current1234",
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      sourceId: "src_20260731_source1234"
+    };
+    const render = vi.fn().mockResolvedValue({
+      summary: {
+        pageId: identity.currentPageId, title: "Current", pageType: "note", pagePath: "wiki/current.md",
+        sourceIds: [identity.sourceId], status: "active", updatedAt: "2026-07-31T12:00:00.000Z"
+      },
+      html: "<p>Current</p>", byteSize: 7, renderContextId: identity.renderContextId
+    });
+    const previewId = `sourcerefreshpreview_${"b".repeat(32)}`;
+    const revision = `sourcerefreshrev_${"c".repeat(64)}`;
+    const preview = vi.fn(async (request: typeof identity) => ({
+      ...request,
+      status: "changed" as const,
+      preview: {
+        previewId, expectedSourceRevision: revision, displayName: "source.txt", sourceKind: "plain_text_file" as const,
+        previousSize: 10, currentSize: 12, sizeDelta: 2, affectedArtifactCount: 1, refreshesSourcePage: true
+      }
+    }));
+    const confirm = vi.fn(async (request: typeof identity & { previewId: string; expectedSourceRevision: string }) => ({
+      ...request,
+      status: "refreshed" as const,
+      operationId: "op_20260731_refresh1234",
+      jobId: "job_20260731_refresh1234",
+      sourceRevision: `sourcerefreshrev_${"d".repeat(64)}`,
+      sourcePageConflict: false
+    }));
+    const onSourceRefreshed = vi.fn();
+    const handlers = makeHarness(
+      { render, isRenderContextCurrent: vi.fn(() => true) } as Partial<NotesService>,
+      undefined, undefined, vi.fn(), undefined, undefined, undefined, vi.fn(), undefined, vi.fn(), undefined, undefined,
+      { preview, confirm }, onSourceRefreshed
+    );
+    const sender = makeSender(31);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: identity.currentPageId });
+
+    await expect(handlers.get("source.refresh.preview")!({ sender } as IpcMainInvokeEvent, identity))
+      .resolves.toMatchObject({ status: "changed", preview: { previewId } });
+    expect(onSourceRefreshed).not.toHaveBeenCalled();
+    const confirmRequest = {
+      ...identity, requestId: "sourcerefreshreq_qrstuvwxyzabcdef", previewId, expectedSourceRevision: revision
+    };
+    await expect(handlers.get("source.refresh.confirm")!({ sender } as IpcMainInvokeEvent, confirmRequest))
+      .resolves.toMatchObject({ status: "refreshed", operationId: "op_20260731_refresh1234" });
+    expect(confirm).toHaveBeenCalledWith(confirmRequest, expect.any(Function));
+    expect(onSourceRefreshed).toHaveBeenCalledTimes(1);
   });
 
   it("binds source reconnect to the tracked Reader owner and Main-owned picker", async () => {

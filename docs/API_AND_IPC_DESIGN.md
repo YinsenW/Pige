@@ -481,6 +481,10 @@ Reader reference query contract:
 
 - `openSourceReference` binds request/vault/page/render/source; only `resolved` adds target page ID.
   Other states retain Reader. `revealSource` revalidates and reveals only that asset, path/body-free.
+- `source.refresh.preview` checks a referenced or managed Markdown/TXT/PDF/DOCX/PPTX source and
+  returns only safe change metadata plus an opaque candidate. `source.refresh.confirm` binds that
+  candidate and expected source revision, rechecks currentness, and returns only closed status,
+  Job/Operation identity, and Source-Page-conflict state; Main retains every path and file body.
 
 Reader selection uses queries `readerSelection.resolve`, `readerSelection.currentProposal`
 and commands `readerSelection.submitAction`, `readerSelection.submitTransform`,

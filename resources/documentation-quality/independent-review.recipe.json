@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination and recoverable active-Vault relocation.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation and recoverable source refresh/reimport.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "c31e023f7d5505a2a9fe4d2b36e990cc11b620fd1584493a07aee3b3793c27a6"
+    "reviewedSha256": "90cad84f3d8c641634da796b5c070aa768162ccec4f2b80bc179f1d0bf21e4e2"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
-    "task": "Vault v2, Alpha convergence, public governance, localized release states, Job compaction, grounded knowledge pages, startup destination and active-Vault relocation",
+    "task": "Vault v2, Alpha convergence, public governance, localized release states, Job compaction, grounded knowledge pages, startup destination, active-Vault relocation and source refresh/reimport",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,14 +67,14 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed durable migration, language, platform, ledger, public governance, localized-state, grounded knowledge-page, startup-destination and Vault-relocation claims; Development/UI supplied executable evidence, with UI Design P0/P1 clear."
+    "independence": "Planning reviewed durable migration, language, platform, ledger, public governance, localized-state, grounded knowledge-page, startup-destination, Vault-relocation and source-refresh claims; Development/UI supplied executable evidence, with UI Design P0/P1 clear."
   }],
   "dimensions": [
     {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Migration preview is pathless, warning-complete and focus-owned."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Vault/storage, API, Settings and UI owners agree on pathless confirmed relocation, verified-copy binding switch, original preservation and receipt recovery."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits; Vault relocation adds exact evidence without promoting broader Settings requirements."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"PRD, API, data, UI and Job owners agree on pathless preview/confirm refresh, exact-candidate recheck, edited Source Page preservation, receipt recovery and durable commit before index refresh."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits; source refresh adds exact service, IPC and UI evidence without promoting broader ingest requirements."},
     {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Public governance and localized error/empty-state recovery boundaries are executable."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owners absorb the delta; the Markdown byte cap ratchets narrowly to 1,218,800."}
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owners absorb the delta; the Markdown byte cap ratchets narrowly to 1,220,833 and the trace byte cap to 252,127."}
   ],
   "verification": [
     {"command":"npm run verify:traceability","status":"passed","evidence":"The 102-item ledger and phase states are claim-bound."},
@@ -82,13 +82,13 @@
     {"command":"npm run verify:public-issue-templates && npm run verify:public-privacy-surface && npm run verify:localized-error-empty-states && npm run verify:independent-documentation-review","status":"passed","evidence":"Reviewed public governance and localized release-state surfaces are fail-closed."}
   ],
   "coordination": {
-    "taskId": "vault-storage-relocation-bind-20260731",
-    "taskTitle": "Recoverable active-Vault relocation bind",
+    "taskId": "source-refresh-reimport-bind-20260731",
+    "taskTitle": "Recoverable source refresh and reimport bind",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The machine-local binding changes only after verified copy and explicit confirmation; the original Vault remains intact and renderer IPC remains pathless.",
-    "acknowledgement": "Planning binds the Vault relocation slice while PIGE-VAULT-005 and E1.04 remain partial for external managed-copy binding setup and broader acceptance. UI Design P0/P1 is clear."
+    "compatibility": "Main owns the pathless preview/confirm boundary, rechecks the exact candidate before work, preserves an edited Source Page, and refreshes indexes only after the durable source commit.",
+    "acknowledgement": "Planning binds the source refresh/reimport slice while PIGE-INGEST-003 and E5.01 remain partial for complete locators and degraded paths, packaging, cross-process CAS/parent-swap, and cross-file commits. UI Design P0/P1 is clear."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [

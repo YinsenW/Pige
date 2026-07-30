@@ -315,6 +315,12 @@ v0.1 supports exactly two source-storage outcomes:
 - Pige retains a verified reference to an original file that remains in the user's
   location.
 
+Referenced or managed Markdown, TXT, PDF, DOCX, and PPTX sources may be refreshed only
+through Check for updates, a bounded pathless preview, and explicit confirmation. The
+confirmation rechecks the immutable candidate before publishing; if an edited Source
+Page conflicts, Pige preserves that page and refreshes only the authoritative source
+evidence and derived artifacts.
+
 A filesystem link is not a v0.1 storage strategy. The user-visible `source asset root`
 setting is the compatibility name for the managed-copy location; it is independently
 configurable from the knowledge root. Derived artifacts remain under the portable

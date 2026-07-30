@@ -250,6 +250,10 @@ import type {
   NoteOpenSourceReferenceResult,
   NoteReconnectOriginalSourceRequest,
   NoteReconnectOriginalSourceResult,
+  SourceRefreshPreviewRequest,
+  SourceRefreshPreviewResult,
+  SourceRefreshConfirmRequest,
+  SourceRefreshConfirmResult,
   NoteRevealSourceRequest,
   NoteRevealSourceResult,
   NoteResolveInlineReferenceRequest,
@@ -632,6 +636,13 @@ export type {
   NoteReconnectOriginalSourceRequestId,
   NoteReconnectOriginalSourceRequest,
   NoteReconnectOriginalSourceResult,
+  SourceRefreshRequestId,
+  SourceRefreshPreviewId,
+  SourceRefreshRevision,
+  SourceRefreshPreviewRequest,
+  SourceRefreshPreviewResult,
+  SourceRefreshConfirmRequest,
+  SourceRefreshConfirmResult,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
   ReaderSelectionEndpoint,
@@ -1276,7 +1287,6 @@ export interface KnowledgeActivityMemoryTarget {
   readonly kind: "memory";
   readonly memoryId?: MemoryRecordId | undefined;
 }
-
 export type KnowledgeActivityTarget =
   | KnowledgeActivityPageTarget
   | KnowledgeActivityCollectionTarget
@@ -1306,7 +1316,8 @@ export interface KnowledgeActivitySummary {
     | "trash_collection_row"
     | "update_memory"
     | "trash_memory"
-    | "restore_memory";
+    | "restore_memory"
+    | "update_source_record";
   readonly createdAt: string;
   readonly targetLabel?: string;
   readonly target?: KnowledgeActivityTarget;
@@ -2227,6 +2238,10 @@ export interface PigeDesktopApi {
     readonly reconnectOriginalSource: (
       request: NoteReconnectOriginalSourceRequest
     ) => Promise<NoteReconnectOriginalSourceResult>;
+  };
+  readonly sourceRefresh: {
+    readonly preview: (request: SourceRefreshPreviewRequest) => Promise<SourceRefreshPreviewResult>;
+    readonly confirm: (request: SourceRefreshConfirmRequest) => Promise<SourceRefreshConfirmResult>;
   };
   readonly localCapabilities: {
     readonly ocrLanguagePreference: (

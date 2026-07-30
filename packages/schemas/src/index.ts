@@ -205,6 +205,57 @@ export const NoteReconnectOriginalSourceRequestSchema = z.object({
   renderContextId: NoteRenderContextIdSchema,
   sourceId: SourceIdSchema
 }).strict();
+export const SOURCE_REFRESH_PREVIEW_CHANNEL = "source.refresh.preview" as const;
+export const SOURCE_REFRESH_CONFIRM_CHANNEL = "source.refresh.confirm" as const;
+export const SourceRefreshRequestIdSchema = z.string().regex(/^sourcerefreshreq_[a-z0-9]{16,64}$/);
+export const SourceRefreshPreviewIdSchema = z.string().regex(/^sourcerefreshpreview_[a-f0-9]{32}$/);
+export const SourceRefreshRevisionSchema = z.string().regex(/^sourcerefreshrev_[a-f0-9]{64}$/);
+export const SourceRefreshIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SourceRefreshRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  sourceId: SourceIdSchema
+}).strict();
+export const SourceRefreshPreviewRequestSchema = SourceRefreshIdentitySchema;
+const SourceRefreshPreviewResultIdentitySchema = SourceRefreshIdentitySchema;
+export const SourceRefreshPreviewResultSchema = z.discriminatedUnion("status", [
+  SourceRefreshPreviewResultIdentitySchema.extend({
+    status: z.literal("changed"),
+    preview: z.object({
+      previewId: SourceRefreshPreviewIdSchema,
+      expectedSourceRevision: SourceRefreshRevisionSchema,
+      displayName: z.string().min(1).max(160),
+      sourceKind: z.enum(["markdown_file", "plain_text_file", "pdf_file", "docx_file", "pptx_file"]),
+      previousSize: z.number().int().nonnegative(),
+      currentSize: z.number().int().nonnegative(),
+      sizeDelta: z.number().int(),
+      affectedArtifactCount: z.number().int().nonnegative().max(10_000),
+      refreshesSourcePage: z.boolean()
+    }).strict()
+  }).strict(),
+  ...(["unchanged", "stale", "not_found", "ineligible", "unavailable", "failed"] as const).map((status) =>
+    SourceRefreshPreviewResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+export const SourceRefreshConfirmRequestSchema = SourceRefreshIdentitySchema.extend({
+  previewId: SourceRefreshPreviewIdSchema,
+  expectedSourceRevision: SourceRefreshRevisionSchema
+}).strict();
+const SourceRefreshConfirmResultIdentitySchema = SourceRefreshConfirmRequestSchema;
+export const SourceRefreshConfirmResultSchema = z.discriminatedUnion("status", [
+  SourceRefreshConfirmResultIdentitySchema.extend({
+    status: z.literal("refreshed"),
+    operationId: z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/),
+    jobId: z.string().regex(/^job_\d{8}_[a-z0-9]{8,}$/),
+    sourceRevision: SourceRefreshRevisionSchema,
+    sourcePageConflict: z.boolean()
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "unavailable", "failed"] as const).map((status) =>
+    SourceRefreshConfirmResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
 export const ReaderSelectionRequestIdSchema = z.string().regex(/^readerselreq_[a-z0-9]{8,64}$/);
 export const ReaderSelectionSegmentIdSchema = z.string().regex(/^readerseg_[a-f0-9]{16}$/);
 export const ReaderSelectionEndpointSchema = z.object({
@@ -1208,7 +1259,6 @@ export const KnowledgeActivityMemoryTargetSchema = z.object({
   kind: z.literal("memory"),
   memoryId: MemoryRecordIdSchema.optional()
 }).strict();
-
 export const KnowledgeActivityTargetSchema = z.union([
   KnowledgeActivityPageTargetSchema,
   KnowledgeActivityCollectionTargetSchema,
@@ -1243,7 +1293,8 @@ export const KnowledgeActivitySummarySchema = z.object({
     "trash_collection_row",
     "update_memory",
     "trash_memory",
-    "restore_memory"
+    "restore_memory",
+    "update_source_record"
   ]),
   createdAt: z.string().datetime({ offset: true }),
   targetLabel: z.string().min(1).max(120).optional(),
@@ -10121,6 +10172,13 @@ export type NoteRevealSourceResult = z.infer<typeof NoteRevealSourceResultSchema
 export type NoteReconnectOriginalSourceRequestId = z.infer<typeof NoteReconnectOriginalSourceRequestIdSchema>;
 export type NoteReconnectOriginalSourceRequest = z.infer<typeof NoteReconnectOriginalSourceRequestSchema>;
 export type NoteReconnectOriginalSourceResult = z.infer<typeof NoteReconnectOriginalSourceResultSchema>;
+export type SourceRefreshRequestId = z.infer<typeof SourceRefreshRequestIdSchema>;
+export type SourceRefreshPreviewId = z.infer<typeof SourceRefreshPreviewIdSchema>;
+export type SourceRefreshRevision = z.infer<typeof SourceRefreshRevisionSchema>;
+export type SourceRefreshPreviewRequest = z.infer<typeof SourceRefreshPreviewRequestSchema>;
+export type SourceRefreshPreviewResult = z.infer<typeof SourceRefreshPreviewResultSchema>;
+export type SourceRefreshConfirmRequest = z.infer<typeof SourceRefreshConfirmRequestSchema>;
+export type SourceRefreshConfirmResult = z.infer<typeof SourceRefreshConfirmResultSchema>;
 export type ReaderSelectionEndpoint = z.infer<typeof ReaderSelectionEndpointSchema>;
 export type ReaderSelectionActionRequestId = z.infer<typeof ReaderSelectionActionRequestIdSchema>;
 export type ReaderSelectionActionRequest = z.infer<typeof ReaderSelectionActionRequestSchema>;
